@@ -14,7 +14,7 @@ import openjiuwen_studio.core.manager.plugin as mgr
 # 插件相关模型
 from openjiuwen_studio.schemas.plugin import (
     PluginCreate, PluginId, PluginInfoResponse, PluginApiBase,
-    PluginApiInfoResponse, PluginListTool, PluginApiInfo, PluginListResponse,
+    PluginApiInfoResponse, PluginListTool, PluginApiInfo, PluginApiInfoCreate, PluginListResponse,
     PluginList, PluginInfo, PluginToolId, ToolId, PluginCodeBase,
     PluginCodeInfo, PluginCodeInfoResponse, PluginPublishResponse, PluginPublish, PluginPublishListResponse,
     PluginPublishInfoResponse
@@ -40,12 +40,28 @@ async def plugin_create(
         ResponseModel[PluginId]: Creation result
     """
     try:
-        logger.info(f"plugin create start")
+        logger.info(f"🔧 Plugin create start")
+        logger.info(f"   Request data: {request.model_dump()}")
+        logger.info(f"   User: {current_user.get('email', 'unknown')}")
         res = mgr.plugin_create(request, current_user)
+        logger.info(f"✅ Plugin create successful")
         return handle_response(res)
     except ValidationError as e:
-        logger.error(f"Plugin create failed, error: {e.errors()}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request validation failed") from e
+        logger.error(f"❌ Plugin create validation failed")
+        logger.error(f"   Errors: {e.errors()}")
+        logger.error(f"   Request data: {request.model_dump() if hasattr(request, 'model_dump') else 'N/A'}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Request validation failed: {e.errors()}"
+        ) from e
+    except Exception as e:
+        logger.error(f"❌ Plugin create failed with unexpected error: {str(e)}")
+        import traceback
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}"
+        ) from e
 
 
 @plugin_router.post("/get", response_model=ResponseModel[PluginInfoResponse])
@@ -259,7 +275,7 @@ async def plugin_publish_delete(
 
 @plugin_router.post("/create_api", response_model=ResponseModel[Dict])
 async def plugin_create_api(
-        request: PluginApiBase,
+        request: PluginApiInfoCreate,
         current_user: dict = Depends(get_current_user)
 ):
     """
@@ -273,11 +289,25 @@ async def plugin_create_api(
         ResponseModel[Dict]: Creation result
     """
     try:
-        logger.info(f"plugin create_api start")
+        logger.info(f"🔧 Plugin create_api start")
+        logger.info(f"   Request data: {request.model_dump()}")
+        logger.info(f"   User: {current_user.get('email', 'unknown')}")
         res = mgr.plugin_create_api(request, current_user)
+        logger.info(f"✅ Plugin create_api successful")
         return handle_response(res)
     except ValidationError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request validation failed") from e
+        logger.error(f"❌ Plugin create_api validation failed")
+        logger.error(f"   Errors: {e.errors()}")
+        logger.error(f"   Request: {request.model_dump() if hasattr(request, 'model_dump') else request}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Request validation failed: {e.errors()}"
+        ) from e
+    except Exception as e:
+        logger.error(f"❌ Plugin create_api error: {str(e)}")
+        import traceback
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @plugin_router.post("/update_api", response_model=ResponseModel[Dict])
@@ -296,11 +326,25 @@ async def plugin_update_api(
         ResponseModel[Dict]: Update result
     """
     try:
-        logger.info(f"plugin update_api start")
+        logger.info(f"🔧 Plugin update_api start")
+        logger.info(f"   Request data: {request.model_dump()}")
+        logger.info(f"   User: {current_user.get('email', 'unknown')}")
         res = mgr.plugin_update_api(request, current_user)
+        logger.info(f"✅ Plugin update_api successful")
         return handle_response(res)
     except ValidationError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request validation failed") from e
+        logger.error(f"❌ Plugin update_api validation failed")
+        logger.error(f"   Errors: {e.errors()}")
+        logger.error(f"   Request: {request.model_dump() if hasattr(request, 'model_dump') else request}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Request validation failed: {e.errors()}"
+        ) from e
+    except Exception as e:
+        logger.error(f"❌ Plugin update_api error: {str(e)}")
+        import traceback
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
 @plugin_router.post("/delete_api", response_model=ResponseModel[Dict])

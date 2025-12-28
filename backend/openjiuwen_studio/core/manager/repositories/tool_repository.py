@@ -120,5 +120,47 @@ class ToolRepository():
                     res.data[idx].pop("tool_version")
             return res.model_dump(exclude_none=True)
 
+    @with_exception_handling
+    def tool_update_available(self, tool_id: str, space_id: str, available: bool, plugin_version: str = None) -> dict:
+        """
+        更新工具的可用状态
+
+        Args:
+            tool_id: 工具ID
+            space_id: 空间ID
+            available: 工具是否可用
+            plugin_version: 插件版本（可选，默认使用 __version_none__）
+
+        Returns:
+            dict: 更新结果
+        """
+        with get_db_jw() as db:
+            tool_db = JiuwenBaseRepository(db, ToolBaseDB)
+
+            if not tool_id or not space_id:
+                return ResponseModel(
+                    code=status.HTTP_400_BAD_REQUEST,
+                    message="tool_id and space_id are required"
+                ).model_dump(exclude_none=True)
+
+            find_id = {
+                "tool_id": tool_id,
+                "space_id": space_id,
+            }
+
+            # 如果没有提供 plugin_version，使用默认值
+            if not plugin_version:
+                plugin_version = ToolBaseDB.__version_none__
+            find_id["plugin_version"] = plugin_version
+            find_id = ToolBaseDB.filter_invalid_keys(find_id)
+
+            # 只更新 available 字段和 update_time
+            update_data = {
+                "available": available,
+                "update_time": milliseconds()
+            }
+
+            return tool_db.update_dl_in_sql(find_id=find_id, update_dl=update_data).model_dump(exclude_none=True)
+
 
 tool_repository = ToolRepository()

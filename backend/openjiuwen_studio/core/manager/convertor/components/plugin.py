@@ -38,8 +38,9 @@ param_type_mapping = {
     ParamType.PARAM_TYPE_STRING: "string",
     ParamType.PARAM_TYPE_INT: "integer",
     ParamType.PARAM_TYPE_BOOL: "boolean",
-    ParamType.PARAM_TYPE_LIST: "array",
-    ParamType.PARAM_TYPE_FLOAT: "number",
+    ParamType.PARAM_TYPE_ARRAY_STRING: "array",
+    ParamType.PARAM_TYPE_ARRAY_INT: "array",
+    ParamType.PARAM_TYPE_ARRAY_BOOL: "array",
     ParamType.PARAM_TYPE_OBJECT: "object",
 }
 

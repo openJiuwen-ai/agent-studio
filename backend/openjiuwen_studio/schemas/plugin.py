@@ -12,13 +12,48 @@ class PluginType(IntEnum):
     PLUGIN_TYPE_CLOUD_CODE = 2,
 
 
+class ParamType(IntEnum):
+    PARAM_TYPE_STRING = 1,
+    PARAM_TYPE_INT = 2,
+    PARAM_TYPE_BOOL = 3,
+    PARAM_TYPE_ARRAY_STRING = 4,
+    PARAM_TYPE_ARRAY_INT = 5,
+    PARAM_TYPE_ARRAY_BOOL = 6,
+    PARAM_TYPE_OBJECT = 7,
+
+
+class ParamSendMethod(IntEnum):
+    PARAM_SEND_METHOD_NONE = 0,
+    PARAM_SEND_METHOD_HEADER = 1,
+    PARAM_SEND_METHOD_QUERY = 2,
+    PARAM_SEND_METHOD_BODY = 3,
+
+
+class Priority(IntEnum):
+    PRIORITY_PLUGIN = 1,
+    PRIORITY_TOOL = 2,
+
+
+class PluginRequestParam(BaseModel):
+    name: str = Field(..., alias="name")
+    desc: Optional[str] = Field("", alias="desc")
+    type: ParamType = Field(..., alias="type")
+    is_required: bool = Field(..., alias="is_required")
+    value: str = Field("", alias="value")
+    is_runtime: bool = Field(..., alias="is_runtime")
+    input_method: ParamSendMethod = Field(..., alias="input_method")
+    priority: Priority = Field(..., alias="priority")
+
+
 class PluginCreate(BaseModel):
     name: str = Field(..., alias="name")
     desc: str = Field(..., alias="desc")
+    desc_mk: Optional[str] = Field("", alias="desc_mk")
     space_id: str = Field(alias="space_id")
     plugin_type: PluginType = Field(..., alias="plugin_type")
     url: Optional[str] = Field("", alias="url")
     icon_uri: Optional[str] = Field("", alias="icon_uri")
+    request_params: Optional[List[PluginRequestParam]] = Field([], alias="request_params")
 
 
 class PluginId(BaseModel):
@@ -45,9 +80,22 @@ class PluginPublish(PluginId):
 class PluginInfo(PluginBase):
     name: str = Field(..., alias="name")
     desc: str = Field(..., alias="desc")
+    desc_mk: Optional[str] = Field("", alias="desc_mk")
     published: bool = Field(False, alias="published")
     url: Optional[str] = Field("", alias="url")
     icon_uri: Optional[str] = Field("", alias="icon_uri")
+    request_params: Optional[List[PluginRequestParam]] = Field([], alias="request_params")
+
+    class Config:
+        populate_by_name = True
+
+    @classmethod
+    def from_db_with_mapping(cls, data: Dict[str, Any]) -> "PluginInfo":
+        """从数据库数据创建对象，将 inputs 字段映射为 request_params"""
+        # 如果数据中有 inputs 字段，映射到 request_params
+        if "inputs" in data and data["inputs"] is not None:
+            data["request_params"] = data.pop("inputs")
+        return cls(**data)
 
 
 class PluginInfoResponse(BaseModel):
@@ -82,13 +130,6 @@ class PluginApiMethod(IntEnum):
     PLUGIN_API_METHOD_DELETE = 4,
 
 
-class ParamSendMethod(IntEnum):
-    PARAM_SEND_METHOD_NONE = 0
-    PARAM_SEND_METHOD_HEADER = 1,
-    PARAM_SEND_METHOD_QUERY = 2,
-    PARAM_SEND_METHOD_BODY = 3,
-
-
 class PluginApiBase(PluginBase):
     name: str = Field(..., alias="name")
     desc: str = Field(..., alias="desc")
@@ -101,13 +142,6 @@ class PluginListTool(PluginId):
     size: Optional[int] = Field(0, alias="size")
 
 
-class ParamType(IntEnum):
-    PARAM_TYPE_STRING = 1,
-    PARAM_TYPE_INT = 2,
-    PARAM_TYPE_BOOL = 3,
-    PARAM_TYPE_LIST = 4,
-    PARAM_TYPE_FLOAT = 5,
-    PARAM_TYPE_OBJECT = 6,
 
 
 class PluginToolParam(BaseModel):
@@ -116,6 +150,10 @@ class PluginToolParam(BaseModel):
     type: ParamType = Field(..., alias="type")
     is_required: Optional[bool] = Field(False, alias="is_required")
     method: Optional[ParamSendMethod] = Field(ParamSendMethod.PARAM_SEND_METHOD_NONE, alias="method")
+    is_runtime: Optional[bool] = Field(True, alias="is_runtime")
+    value: Optional[str] = Field("", alias="value")
+    input_method: Optional[ParamSendMethod] = Field(ParamSendMethod.PARAM_SEND_METHOD_QUERY, alias="input_method")
+    priority: Optional[Priority] = Field(Priority.PRIORITY_TOOL, alias="priority")
 
 
 class PluginApiHeader(BaseModel):
@@ -128,6 +166,14 @@ class PluginApiInfo(PluginApiBase):
     request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
     response_params: Optional[List[PluginToolParam]] = Field([], alias="response_params")
     headers: Optional[List[PluginApiHeader]] = Field([], alias="headers")
+    available: Optional[bool] = Field(True, alias="available")
+
+
+class PluginApiInfoCreate(PluginApiBase):
+    request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
+    response_params: Optional[List[PluginToolParam]] = Field([], alias="response_params")
+    headers: Optional[List[PluginApiHeader]] = Field([], alias="headers")
+    available: Optional[bool] = Field(True, alias="available")
 
 
 class PluginApiInfoDB(PluginApiInfo):

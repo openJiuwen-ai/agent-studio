@@ -8,8 +8,8 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from typing import Any
 
-from sqlalchemy import (JSON, BigInteger, ForeignKey, ForeignKeyConstraint,
-                        Index, Integer, String, UniqueConstraint)
+from sqlalchemy import (JSON, BigInteger, Boolean, ForeignKey, ForeignKeyConstraint,
+                        Index, Integer, String, Text, UniqueConstraint)
 from sqlalchemy.orm import (Mapped, declarative_mixin,
                             declared_attr, mapped_column, relationship)
 
@@ -26,6 +26,7 @@ class PluginDBMixin:
 
     name: Mapped[str | None] = mapped_column(String(255), nullable=True, name="plugin_name")
     desc: Mapped[str | None] = mapped_column(String(512), nullable=True, name="desc")
+    desc_mk: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     url: Mapped[str | None] = mapped_column(String(512), nullable=True, default=None)
     space_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     icon_uri: Mapped[str | None] = mapped_column(String(512), nullable=True, default=None)
@@ -33,6 +34,7 @@ class PluginDBMixin:
 
     # 通用 JSON，MySQL/PostgreSQL/SQLite 均支持
     tools: Mapped[list[dict] | None] = mapped_column(JSON, default=None, nullable=True)
+    inputs: Mapped[list[dict] | None] = mapped_column(JSON, default=None, nullable=True, name="inputs")
     _rest_: Mapped[dict | None] = mapped_column(JSON, default=None, nullable=True)
 
     create_time: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -155,6 +157,7 @@ class ToolBaseDB(Base, DBFunBase):
 
     input_parameters: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, default=None, nullable=True)
     output_parameters: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, default=None, nullable=True)
+    available: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     _rest_: Mapped[dict | None] = mapped_column(JSON, default=None, nullable=True)
 
     create_time: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
