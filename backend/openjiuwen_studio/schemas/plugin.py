@@ -92,10 +92,18 @@ class PluginInfo(PluginBase):
     @classmethod
     def from_db_with_mapping(cls, data: Dict[str, Any]) -> "PluginInfo":
         """从数据库数据创建对象，将 inputs 字段映射为 request_params"""
+        # 如果数据是 Pydantic 模型对象，先转换为字典
+        if hasattr(data, 'model_dump'):
+            data_dict = data.model_dump()
+        elif hasattr(data, 'dict'):
+            data_dict = data.dict()
+        else:
+            data_dict = data
+
         # 如果数据中有 inputs 字段，映射到 request_params
-        if "inputs" in data and data["inputs"] is not None:
-            data["request_params"] = data.pop("inputs")
-        return cls(**data)
+        if "inputs" in data_dict and data_dict["inputs"] is not None:
+            data_dict["request_params"] = data_dict.pop("inputs")
+        return cls(**data_dict)
 
 
 class PluginInfoResponse(BaseModel):

@@ -147,7 +147,15 @@ def plugin_update(
             code=get_result.code,
             message=get_result.message,
         )
-    plugin = PluginBaseDBPd(**(get_result.data))
+    # Handle both dict and Pydantic model types
+    data = get_result.data
+    if hasattr(data, 'model_dump'):
+        data_dict = data.model_dump()
+    elif hasattr(data, 'dict'):
+        data_dict = data.dict()
+    else:
+        data_dict = data
+    plugin = PluginBaseDBPd(**data_dict)
     update_dict = {
         "name": req.name,
         "desc": req.desc,

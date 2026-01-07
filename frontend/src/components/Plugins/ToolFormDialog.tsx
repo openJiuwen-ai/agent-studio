@@ -80,8 +80,8 @@ const ToolFormDialog: React.FC<ToolFormDialogProps> = ({ open, loading = false, 
                 fullWidth
                 required
                 placeholder={t('plugins.pluginConfig.toolNameExample', '例如：获取用户信息、查询天气数据')}
-                helperText={`${t('plugins.pluginConfig.toolNameHelper', `建议使用简洁明了的名称，便于识别和使用`)} (${form.name.length}/20)`}
-                inputProps={{ maxLength: 20 }}
+                helperText={`${t('plugins.pluginConfig.toolNameHelper', `建议使用简洁明了的名称，便于识别和使用`)} (${form.name.length}/128)`}
+                inputProps={{ maxLength: 128 }}
               />
             </div>
 
@@ -98,8 +98,8 @@ const ToolFormDialog: React.FC<ToolFormDialogProps> = ({ open, loading = false, 
                 multiline
                 rows={3}
                 placeholder={t('plugins.pluginConfig.toolDescriptionPlaceholder', '详细描述工具的功能、用途、参数说明等...')}
-                helperText={`${t('plugins.pluginConfig.toolDescriptionHelper', `建议包含：主要功能、输入参数、输出结果、使用示例等信息`)} (${form.description.length}/40)`}
-                inputProps={{ maxLength: 40 }}
+                helperText={`${t('plugins.pluginConfig.toolDescriptionHelper', `建议包含：主要功能、输入参数、输出结果、使用示例等信息`)} (${form.description.length}/256)`}
+                inputProps={{ maxLength: 256 }}
               />
             </div>
           </div>

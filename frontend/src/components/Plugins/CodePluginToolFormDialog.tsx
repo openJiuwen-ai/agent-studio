@@ -160,8 +160,8 @@ const CodePluginToolFormDialog: React.FC<CodePluginToolFormDialogProps> = ({ ope
               fullWidth
               required
               placeholder={t('plugins.pluginConfig.toolNameExample', '例如：获取用户信息、查询天气数据')}
-              helperText={`${t('plugins.pluginConfig.toolNameHelper', '建议使用简洁明了的名称，便于识别和使用')} (${form.name.length}/20)`}
-              inputProps={{ maxLength: 20 }}
+              helperText={`${t('plugins.pluginConfig.toolNameHelper', '建议使用简洁明了的名称，便于识别和使用')} (${form.name.length}/128)`}
+              inputProps={{ maxLength: 128 }}
             />
           </div>
 
@@ -181,8 +181,8 @@ const CodePluginToolFormDialog: React.FC<CodePluginToolFormDialogProps> = ({ ope
               multiline
               rows={3}
               placeholder={t('plugins.tools.descriptionTooltip', '详细描述工具的功能、用途、参数说明等...')}
-              helperText={`${t('plugins.tools.descriptionHelper', '建议包含：主要功能、输入参数、输出结果、使用示例等信息')} (${form.description.length}/40)`}
-              inputProps={{ maxLength: 40 }}
+              helperText={`${t('plugins.tools.descriptionHelper', '建议包含：主要功能、输入参数、输出结果、使用示例等信息')} (${form.description.length}/256)`}
+              inputProps={{ maxLength: 256 }}
             />
           </div>
 
@@ -196,7 +196,11 @@ const CodePluginToolFormDialog: React.FC<CodePluginToolFormDialogProps> = ({ ope
             </label>
             <FormControl fullWidth required>
               <InputLabel>{t('plugins.pluginConfig.runtimeEnvironment', '运行时环境')}</InputLabel>
-              <Select value={form.runtime} onChange={e => onFormChange('runtime', e.target.value)} label={t('plugins.pluginConfig.runtimeEnvironment', '运行时环境')}>
+              <Select
+                value={form.runtime}
+                onChange={e => onFormChange('runtime', e.target.value)}
+                label={t('plugins.pluginConfig.runtimeEnvironment', '运行时环境')}
+              >
                 {runtimeOptions.map(option => (
                   <MenuItem key={option.value} value={option.value}>
                     <div className="flex flex-col space-y-1 py-1">
@@ -225,7 +229,9 @@ const CodePluginToolFormDialog: React.FC<CodePluginToolFormDialogProps> = ({ ope
                   <div>
                     <strong>Node.js:</strong> {t('plugins.pluginConfig.nodejsSuitableFor', '适合Web API开发、实时通信、前端构建工具、微服务等场景')}
                   </div>
-                  <div className="text-blue-600 text-xs mt-2">💡 {t('plugins.pluginConfig.runtimeSelectionHelper', '选择合适的运行时环境有助于获得最佳性能和兼容性')}</div>
+                  <div className="text-blue-600 text-xs mt-2">
+                    💡 {t('plugins.pluginConfig.runtimeSelectionHelper', '选择合适的运行时环境有助于获得最佳性能和兼容性')}
+                  </div>
                 </div>
               </div>
             </div>
@@ -245,7 +251,9 @@ const CodePluginToolFormDialog: React.FC<CodePluginToolFormDialogProps> = ({ ope
               <div className="flex items-center space-x-2">
                 <Chip label={`${t('plugins.pluginConfig.language', '语言')}: ${form.codeLanguage === 'javascript' ? 'JavaScript' : 'Python'}`} size="small" />
                 <Chip label={t('plugins.pluginConfig.syntaxHighlighting', '语法高亮')} size="small" variant="outlined" />
-                {selectedTemplate && <Chip label={`${t('plugins.pluginConfig.template', '模板')}: ${selectedTemplate}`} size="small" variant="outlined" className="text-xs" />}
+                {selectedTemplate && (
+                  <Chip label={`${t('plugins.pluginConfig.template', '模板')}: ${selectedTemplate}`} size="small" variant="outlined" className="text-xs" />
+                )}
               </div>
             </div>
 
@@ -316,7 +324,11 @@ const CodePluginToolFormDialog: React.FC<CodePluginToolFormDialogProps> = ({ ope
                 <div className="bg-gray-50 border-b border-gray-200 p-3">
                   <FormControl size="small" className="min-w-32">
                     <InputLabel>{t('plugins.pluginConfig.programmingLanguage', '编程语言')}</InputLabel>
-                    <Select value={form.codeLanguage} label={t('plugins.pluginConfig.programmingLanguage', '编程语言')} onChange={e => handleCodeLanguageChange(e.target.value as 'python' | 'javascript')}>
+                    <Select
+                      value={form.codeLanguage}
+                      label={t('plugins.pluginConfig.programmingLanguage', '编程语言')}
+                      onChange={e => handleCodeLanguageChange(e.target.value as 'python' | 'javascript')}
+                    >
                       <MenuItem value="python">Python</MenuItem>
                       <MenuItem value="javascript">JavaScript</MenuItem>
                     </Select>
@@ -360,14 +372,18 @@ const CodePluginToolFormDialog: React.FC<CodePluginToolFormDialogProps> = ({ ope
                   {form.codeLanguage === 'python' ? (
                     <>
                       <div>
-                        • {t('plugins.pluginConfig.pythonTips1', '确保导出')} <code className="bg-blue-100 px-1 rounded">main()</code> {t('plugins.pluginConfig.pythonTips2', '函数作为入口点')}
+                        • {t('plugins.pluginConfig.pythonTips1', '确保导出')} <code className="bg-blue-100 px-1 rounded">main()</code>{' '}
+                        {t('plugins.pluginConfig.pythonTips2', '函数作为入口点')}
                       </div>
                       <div>• {t('plugins.pluginConfig.pythonTips3', '使用标准库函数，避免依赖需要额外安装的包')}</div>
                       <div>• {t('plugins.pluginConfig.pythonTips4', '返回JSON序列化的数据结构，便于API调用')}</div>
                     </>
                   ) : (
                     <>
-                      <div>• {t('plugins.pluginConfig.jsTips1', '确保导出')} <code className="bg-blue-100 px-1 rounded">main</code> {t('plugins.pluginConfig.jsTips2', '函数作为入口点')}</div>
+                      <div>
+                        • {t('plugins.pluginConfig.jsTips1', '确保导出')} <code className="bg-blue-100 px-1 rounded">main</code>{' '}
+                        {t('plugins.pluginConfig.jsTips2', '函数作为入口点')}
+                      </div>
                       <div>• {t('plugins.pluginConfig.jsTips3', '使用CommonJS模块系统（require/module.exports）')}</div>
                       <div>• {t('plugins.pluginConfig.jsTips4', '避免使用ES6模块语法，除非项目支持')}</div>
                       <div>• {t('plugins.pluginConfig.jsTips5', '返回JSON可序列化的数据结构')}</div>

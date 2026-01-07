@@ -52,10 +52,10 @@ const PluginVersionPage: React.FC = () => {
   const [pluginConfigData, setPluginConfigData] = useState<Record<string, unknown> | null>(null)
   const { snackbar, showSuccess, showError, closeSnackbar } = useUnifiedSnackbar()
 
-  // Configuration form state
   const [configForm, setConfigForm] = useState({
     name: '',
     desc: '',
+    desc_mk: '',
     icon_uri: '',
     url: '',
     authMethod: 'none',
@@ -125,7 +125,7 @@ const PluginVersionPage: React.FC = () => {
 
   // Handle name change
   const handleNameChange = useCallback((name: string) => {
-    if (name.length <= 20) {
+    if (name.length <= 128) {
       setConfigForm(prev => ({ ...prev, name }))
     }
   }, [])
@@ -183,6 +183,7 @@ const PluginVersionPage: React.FC = () => {
       setConfigForm({
         name: versionData.plugin_info.name || '',
         desc: versionData.plugin_info.desc || '',
+        desc_mk: versionData.plugin_info.desc_mk || '',
         icon_uri: versionData.plugin_info.icon_uri || '☁️',
         url: versionData.plugin_info.url || '',
         authMethod: 'none',
@@ -214,7 +215,7 @@ const PluginVersionPage: React.FC = () => {
       console.error(t('plugins.message.getVersionInfoFailed', '获取插件版本信息失败'), versionError)
       showError(t('plugins.message.getVersionInfoFailed', '获取插件版本信息失败，请稍后重试'))
     } else if (versionDataResponse && versionDataResponse.code !== 200) {
-      showError(`${t('plugins.message.getVersionInfoFailed', '获取插件版本信息失败')}: ${versionDataResponse.message}`) 
+      showError(`${t('plugins.message.getVersionInfoFailed', '获取插件版本信息失败')}: ${versionDataResponse.message}`)
     }
   }, [versionDataResponse, versionLoading, versionError, plugin_id, version])
 
@@ -236,6 +237,7 @@ const PluginVersionPage: React.FC = () => {
         plugin_version: pluginConfigData.plugin_version,
         name: configForm.name,
         desc: configForm.desc,
+        desc_mk: configForm.desc_mk,
         plugin_type: pluginConfigData.plugin_type,
         published: pluginConfigData.published,
         url: configForm.url,
@@ -255,6 +257,7 @@ const PluginVersionPage: React.FC = () => {
           ...prev,
           name: configForm.name,
           desc: configForm.desc,
+          desc_mk: configForm.desc_mk,
           url: configForm.url,
           icon_uri: configForm.icon_uri,
         }))
@@ -279,7 +282,8 @@ const PluginVersionPage: React.FC = () => {
       }
     } catch (error: unknown) {
       console.error(t('plugins.errors.savePluginVersionConfigFailed', '保存插件版本配置失败'), error)
-      const errorMessage = error?.response?.data?.message || error?.message || t('plugins.errors.savePluginVersionConfigFailed', '保存插件版本配置失败，请稍后重试')
+      const errorMessage =
+        error?.response?.data?.message || error?.message || t('plugins.errors.savePluginVersionConfigFailed', '保存插件版本配置失败，请稍后重试')
       showError(errorMessage)
     }
   }, [
@@ -288,6 +292,7 @@ const PluginVersionPage: React.FC = () => {
     pluginConfigData,
     configForm.name,
     configForm.desc,
+    configForm.desc_mk,
     configForm.url,
     configForm.icon_uri,
     getDefaultSpaceId,

@@ -38,6 +38,7 @@ import {
   usePluginGetCode,
   usePluginDeleteCode,
   useExecutePlugin,
+  ParamSendMethod,
 } from '@test-agentstudio/api-client'
 
 interface ToolParameter {
@@ -171,7 +172,7 @@ const ToolConfigurationPage: React.FC = () => {
     name: '',
     description: '',
     type: 'string',
-    method: 0,
+    method: ParamSendMethod.NONE,
     is_required: false,
   })
 
@@ -1091,8 +1092,8 @@ const ToolConfigurationPage: React.FC = () => {
                     value={tool.name}
                     onChange={e => setTool({ ...tool, name: e.target.value })}
                     placeholder={t('plugins.tools.namePlaceholder', '请输入工具名称...')}
-                    helperText={t('plugins.tools.nameHelper', '建议使用简洁明了的名称 ({{count}}/20)', { count: tool.name.length })}
-                    inputProps={{ maxLength: 20 }}
+                    helperText={t('plugins.tools.nameHelper', '建议使用简洁明了的名称 ({{count}}/128)', { count: tool.name.length })}
+                    inputProps={{ maxLength: 128 }}
                   />
                 </div>
                 {pluginType === 'code' ? (
@@ -1194,10 +1195,10 @@ const ToolConfigurationPage: React.FC = () => {
                   value={tool.description}
                   onChange={e => setTool({ ...tool, description: e.target.value })}
                   placeholder={t('plugins.toolConfig.toolDescriptionPlaceholder', '请输入工具描述...')}
-                  helperText={t('plugins.toolConfig.toolDescriptionHelper', '详细描述工具的功能、用途和参数 ({{count}}/40)', {
+                  helperText={t('plugins.toolConfig.toolDescriptionHelper', '详细描述工具的功能、用途和参数 ({{count}}/256)', {
                     count: tool.description.length,
                   })}
-                  inputProps={{ maxLength: 40 }}
+                  inputProps={{ maxLength: 256 }}
                 />
               </div>
             </div>
@@ -1233,7 +1234,7 @@ const ToolConfigurationPage: React.FC = () => {
                               {param.name}
                             </Typography>
                             <Chip label={param.type} size="small" />
-                            <Chip label={getMethodLabel(param.method)} size="small" variant="outlined" />
+                            {pluginType === 'api' && <Chip label={getMethodLabel(param.method)} size="small" variant="outlined" />}
                           </div>
                           <Typography variant="body2" color="text.secondary" className="mt-1">
                             {param.description}
@@ -1653,8 +1654,8 @@ const ToolConfigurationPage: React.FC = () => {
                 value={parameterForm.name}
                 onChange={e => handleParameterFormChange('name', e.target.value)}
                 placeholder={t('plugins.toolConfig.parameterNameHelper', '请输入参数名称...')}
-                helperText={`${t('plugins.toolConfig.parameterName', '参数名称')} (${parameterForm.name.length}/20)`}
-                inputProps={{ maxLength: 20 }}
+                helperText={`${t('plugins.toolConfig.parameterName', '参数名称')} (${parameterForm.name.length}/128)`}
+                inputProps={{ maxLength: 128 }}
               />
             </div>
             <div>
@@ -1668,12 +1669,42 @@ const ToolConfigurationPage: React.FC = () => {
                 value={parameterForm.description}
                 onChange={e => handleParameterFormChange('description', e.target.value)}
                 placeholder={t('plugins.toolConfig.parameterDescriptionHelper', '请输入参数描述...')}
-                helperText={`${t('plugins.toolConfig.parameterDescription', '参数描述')} (${parameterForm.description.length}/40)`}
-                inputProps={{ maxLength: 40 }}
+                helperText={`${t('plugins.toolConfig.parameterDescription', '参数描述')} (${parameterForm.description.length}/256)`}
+                inputProps={{ maxLength: 256 }}
               />
             </div>
             {isInputDialogOpen ? (
-              <div className="grid grid-cols-2 gap-4">
+              pluginType === 'api' ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Typography variant="subtitle2" className="mb-2">
+                      参数类型
+                    </Typography>
+                    <FormControl fullWidth>
+                      <Select value={parameterForm.type} onChange={e => handleParameterFormChange('type', e.target.value)}>
+                        <MenuItem value="string">字符串</MenuItem>
+                        <MenuItem value="number">数字</MenuItem>
+                        <MenuItem value="boolean">布尔值</MenuItem>
+                        <MenuItem value="array">数组</MenuItem>
+                        <MenuItem value="object">对象</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </div>
+                  <div>
+                    <Typography variant="subtitle2" className="mb-2">
+                      传入方法
+                    </Typography>
+                    <FormControl fullWidth>
+                      <Select value={parameterForm.method} onChange={e => handleParameterFormChange('method', e.target.value)}>
+                        <MenuItem value={0}>无</MenuItem>
+                        <MenuItem value={1}>Header参数</MenuItem>
+                        <MenuItem value={2}>Query参数</MenuItem>
+                        {tool.method !== 1 && <MenuItem value={3}>Body参数</MenuItem>}
+                      </Select>
+                    </FormControl>
+                  </div>
+                </div>
+              ) : (
                 <div>
                   <Typography variant="subtitle2" className="mb-2">
                     参数类型
@@ -1688,20 +1719,7 @@ const ToolConfigurationPage: React.FC = () => {
                     </Select>
                   </FormControl>
                 </div>
-                <div>
-                  <Typography variant="subtitle2" className="mb-2">
-                    传入方法
-                  </Typography>
-                  <FormControl fullWidth>
-                    <Select value={parameterForm.method} onChange={e => handleParameterFormChange('method', e.target.value)}>
-                      <MenuItem value={0}>无</MenuItem>
-                      <MenuItem value={1}>Header参数</MenuItem>
-                      <MenuItem value={2}>Query参数</MenuItem>
-                      {tool.method !== 1 && <MenuItem value={3}>Body参数</MenuItem>}
-                    </Select>
-                  </FormControl>
-                </div>
-              </div>
+              )
             ) : (
               <div>
                 <Typography variant="subtitle2" className="mb-2">
