@@ -345,6 +345,10 @@ const PluginManagementPage: React.FC = () => {
                       desc: param.description || key,
                       type: param.type === 'string' ? 1 : param.type === 'integer' ? 2 : param.type === 'boolean' ? 3 : 1,
                       is_required: param.required || false,
+                      is_runtime: false,
+                      value: '',
+                      input_method: 0,
+                      priority: 1,
                     }))
                   : []
 

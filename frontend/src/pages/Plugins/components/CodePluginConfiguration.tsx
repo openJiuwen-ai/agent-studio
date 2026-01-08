@@ -379,17 +379,24 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
         value: '',
         is_runtime: true,
         input_method: 0,
-        priority: 1,
+        priority: Priority.PLUGIN,
       })
     }
     setIsParameterDialogOpen(true)
   }
 
   const handleParameterFormChange = (field: string, value: any) => {
-    setParameterForm(prev => ({
-      ...prev,
-      [field]: value,
-    }))
+    setParameterForm(prev => {
+      const newState = {
+        ...prev,
+        [field]: value,
+      }
+      // When is_runtime is set to true (非运行时参数 unchecked), clear the value
+      if (field === 'is_runtime' && value === true) {
+        newState.value = ''
+      }
+      return newState
+    })
   }
 
   const handleSaveParameter = async () => {
@@ -898,9 +905,23 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
         <DialogContent>
           <div className="space-y-4 mt-2">
             <div>
-              <Typography variant="subtitle2" className="mb-2">
-                参数名称 <span className="text-red-500 ml-1">*</span>
-              </Typography>
+              <div className="flex items-center justify-between mb-2">
+                <Typography variant="subtitle2">
+                  参数名称 <span className="text-red-500 ml-1">*</span>
+                </Typography>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="is_required"
+                    checked={parameterForm.is_required}
+                    onChange={e => handleParameterFormChange('is_required', e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                  />
+                  <label htmlFor="is_required" className="text-sm font-medium text-gray-700 cursor-pointer whitespace-nowrap">
+                    必选参数
+                  </label>
+                </div>
+              </div>
               <TextField
                 fullWidth
                 value={parameterForm.name}
@@ -942,34 +963,36 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
               </FormControl>
             </div>
             <div>
-              <Typography variant="subtitle2" className="mb-2">
-                默认值
-              </Typography>
-              <TextField
-                fullWidth
-                value={parameterForm.value}
-                onChange={e => handleParameterFormChange('value', e.target.value)}
-                placeholder="请输入默认值..."
-                helperText="可选的默认值"
-              />
-            </div>
-            <div>
               <div className="flex items-center space-x-2">
                 <input
                   type="checkbox"
-                  id="is_required"
-                  checked={parameterForm.is_required}
-                  onChange={e => handleParameterFormChange('is_required', e.target.checked)}
+                  id="is_runtime"
+                  checked={!parameterForm.is_runtime}
+                  onChange={e => handleParameterFormChange('is_runtime', !e.target.checked)}
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <label htmlFor="is_required" className="text-sm font-medium text-gray-700 cursor-pointer">
-                  必选参数
+                <label htmlFor="is_runtime" className="text-sm font-medium text-gray-700 cursor-pointer">
+                  非运行时参数
                 </label>
               </div>
               <Typography variant="caption" className="text-gray-500 mt-1 block">
-                勾选后该参数为必填项
+                勾选后需要设置参数默认值
               </Typography>
             </div>
+            {!parameterForm.is_runtime && (
+              <div>
+                <Typography variant="subtitle2" className="mb-2">
+                  默认值
+                </Typography>
+                <TextField
+                  fullWidth
+                  value={parameterForm.value}
+                  onChange={e => handleParameterFormChange('value', e.target.value)}
+                  placeholder="请输入默认值..."
+                  helperText="非运行时参数的默认值"
+                />
+              </div>
+            )}
           </div>
         </DialogContent>
         <DialogActions>

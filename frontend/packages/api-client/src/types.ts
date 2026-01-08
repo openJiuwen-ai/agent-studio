@@ -1673,13 +1673,6 @@ export enum ParamType {
   OBJECT = 7,
 }
 
-// 插件输入方法枚举
-export enum InputMethod {
-  HEADER = 1,
-  QUERY = 2,
-  BODY = 3,
-}
-
 // 插件参数优先级枚举
 export enum Priority {
   TOOL = 0,
@@ -1817,7 +1810,7 @@ export interface PluginRequestParam {
   is_required: boolean
   value: string
   is_runtime: boolean
-  input_method: InputMethod | number
+  input_method: ParamSendMethod | number
   priority: Priority | number
 }
 
@@ -1829,7 +1822,6 @@ export interface PluginApiParam {
   method?: ParamSendMethod
   is_runtime?: boolean
   value?: string
-  input_method?: InputMethod | number
   priority?: Priority | number
 }
 
