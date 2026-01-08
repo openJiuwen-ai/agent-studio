@@ -14,7 +14,7 @@ from openjiuwen_studio.schemas.node import Node
 from openjiuwen_studio.core.manager.convertor.components.common import input_params_convert, exception_config_convert
 from openjiuwen_studio.core.common.dsl import ComponentType
 from openjiuwen_studio.schemas.plugin import PluginApiInfo, PluginApiHeader, PluginToolParam, ParamType, \
-    PluginApiMethod, PluginId, PluginToolId, PluginType, PluginCodeInfo, ParamSendMethod
+    PluginApiMethod, PluginId, PluginToolId, PluginType, PluginCodeInfo, ParamSendMethod, Priority
 from openjiuwen_studio.schemas.plugin import PluginPublishInfo
 
 plugin_type_mapping = {
@@ -61,6 +61,8 @@ def _plugin_tool_param_convert(params: List[PluginToolParam]) -> List[dsl.Param]
             type=param_type_mapping.get(param.type),
             required=param.is_required,
             method=param_send_method_type_mapping.get(param.method),
+            default_value=param.value,
+            runtime=param.is_runtime,
         )
         converted_params.append(converted_param)
 
@@ -74,15 +76,44 @@ def _plugin_api_header_convert(headers: List[PluginApiHeader]) -> Dict[str, Any]
     return converted_header
 
 
-def plugin_api_tool_convert(url: str, api_info: Dict[str, Any]) -> Dict[str, Any]:
+def _merge_plugin_params(request_params: List[PluginToolParam], plugin_params: List[PluginToolParam]) -> List[
+    PluginToolParam]:
+    """
+    合并两个参数列表，当存在相同name的参数时，根据priority决定使用哪个：
+    """
+    merged_params: Dict[str, PluginToolParam] = {}
+
+    for param in request_params:
+        merged_params[param.name] = param
+
+    # 然后处理 plugin_params，根据priority决定是否覆盖
+    if not plugin_params:
+        return list(merged_params.values())
+
+    for param in plugin_params:
+        if param.name in merged_params:
+            if param.priority == Priority.PRIORITY_PLUGIN:
+                merged_params[param.name] = param
+        else:
+            merged_params[param.name] = param
+
+    return list(merged_params.values())
+
+
+def plugin_api_tool_convert(plugin_info, api_info: Dict[str, Any]) -> Dict[str, Any]:
+    plugin_params: List[PluginToolParam] = []
+    if hasattr(plugin_info, "inputs") and plugin_info.inputs:
+        for i in plugin_info.inputs:
+            plugin_params.append(PluginToolParam(**i))
     api = PluginApiInfo(**api_info)
+    merged_params = _merge_plugin_params(api.request_params, plugin_params)
     convert_api = dsl.RestfulApiSchema(
         tool_id=api.tool_id,
         name=api.name,
         description=api.desc,
-        path=url + api.path,
+        path=plugin_info.url + api.path,
         method=api_method_mapping.get(api.method),
-        params=_plugin_tool_param_convert(api.request_params),
+        params=_plugin_tool_param_convert(merged_params),
         response=_plugin_tool_param_convert(api.response_params),
         headers=_plugin_api_header_convert(api.headers),
     )

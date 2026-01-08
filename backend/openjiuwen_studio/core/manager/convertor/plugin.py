@@ -11,9 +11,9 @@ from openjiuwen_studio.models.plugin import PluginBaseDBPd
 from openjiuwen_studio.schemas.plugin import PluginType
 
 
-def _plugin_api_tools_convert(url: str, api_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _plugin_api_tools_convert(plugin_info, api_info: Dict[str, Any]) -> List[Dict[str, Any]]:
     api_tools: List[Dict[str, Any]] = []
-    convert_api = plugin_api_tool_convert(url, api_info)
+    convert_api = plugin_api_tool_convert(plugin_info, api_info)
     api_tools.append(convert_api)
 
     return api_tools
@@ -27,23 +27,16 @@ def _plugin_code_tools_convert(code_info: Dict[str, Any]) -> List[Dict[str, Any]
     return code_tools
 
 
-def _plugin_tool_convert(plugin_info: PluginBaseDBPd, tool: Dict[str, Any]) -> List[Dict[str, Any]]:
-    if plugin_info.plugin_type == PluginType.PLUGIN_TYPE_CLOUD_API:
-        return _plugin_api_tools_convert(plugin_info.url, tool)
-    else:
-        return _plugin_code_tools_convert(tool)
-
-
 def plugin_tool_convert(plugin_info, tool: Dict[str, Any]) -> List[Dict[str, Any]]:
     if plugin_info.plugin_type == PluginType.PLUGIN_TYPE_CLOUD_API:
-        return _plugin_api_tools_convert(plugin_info.url, tool)
+        return _plugin_api_tools_convert(plugin_info, tool)
     else:
         return _plugin_code_tools_convert(tool)
 
 
 def plugin_convert(plugin_info: PluginBaseDBPd, tool: Dict[str, Any]) -> dsl.Plugin:
     try:
-        convert_tools = _plugin_tool_convert(plugin_info, tool)
+        convert_tools = plugin_tool_convert(plugin_info, tool)
 
         return dsl.Plugin(
             plugin_id=plugin_info.plugin_id,

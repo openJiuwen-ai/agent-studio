@@ -30,19 +30,19 @@ class ParamSendMethod(IntEnum):
 
 
 class Priority(IntEnum):
+    PRIORITY_TOOL = 0,
     PRIORITY_PLUGIN = 1,
-    PRIORITY_TOOL = 2,
 
 
-class PluginRequestParam(BaseModel):
+class PluginToolParam(BaseModel):
     name: str = Field(..., alias="name")
     desc: Optional[str] = Field("", alias="desc")
     type: ParamType = Field(..., alias="type")
-    is_required: bool = Field(..., alias="is_required")
-    value: str = Field("", alias="value")
-    is_runtime: bool = Field(..., alias="is_runtime")
-    input_method: ParamSendMethod = Field(..., alias="input_method")
-    priority: Priority = Field(..., alias="priority")
+    is_required: Optional[bool] = Field(False, alias="is_required")
+    method: Optional[ParamSendMethod] = Field(ParamSendMethod.PARAM_SEND_METHOD_NONE, alias="method")
+    is_runtime: Optional[bool] = Field(True, alias="is_runtime")
+    value: Optional[str] = Field("", alias="value")
+    priority: Optional[Priority] = Field(Priority.PRIORITY_TOOL, alias="priority")
 
 
 class PluginCreate(BaseModel):
@@ -53,7 +53,7 @@ class PluginCreate(BaseModel):
     plugin_type: PluginType = Field(..., alias="plugin_type")
     url: Optional[str] = Field("", alias="url")
     icon_uri: Optional[str] = Field("", alias="icon_uri")
-    request_params: Optional[List[PluginRequestParam]] = Field([], alias="request_params")
+    request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
 
 
 class PluginId(BaseModel):
@@ -84,7 +84,7 @@ class PluginInfo(PluginBase):
     published: bool = Field(False, alias="published")
     url: Optional[str] = Field("", alias="url")
     icon_uri: Optional[str] = Field("", alias="icon_uri")
-    request_params: Optional[List[PluginRequestParam]] = Field([], alias="request_params")
+    request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
 
     class Config:
         populate_by_name = True
@@ -148,20 +148,6 @@ class PluginApiBase(PluginBase):
 class PluginListTool(PluginId):
     page: Optional[int] = Field(0, alias="page")
     size: Optional[int] = Field(0, alias="size")
-
-
-
-
-class PluginToolParam(BaseModel):
-    name: str = Field(..., alias="name")
-    desc: Optional[str] = Field("", alias="desc")
-    type: ParamType = Field(..., alias="type")
-    is_required: Optional[bool] = Field(False, alias="is_required")
-    method: Optional[ParamSendMethod] = Field(ParamSendMethod.PARAM_SEND_METHOD_NONE, alias="method")
-    is_runtime: Optional[bool] = Field(True, alias="is_runtime")
-    value: Optional[str] = Field("", alias="value")
-    input_method: Optional[ParamSendMethod] = Field(ParamSendMethod.PARAM_SEND_METHOD_QUERY, alias="input_method")
-    priority: Optional[Priority] = Field(Priority.PRIORITY_TOOL, alias="priority")
 
 
 class PluginApiHeader(BaseModel):
