@@ -38,6 +38,7 @@ import {
   usePluginGetCode,
   usePluginDeleteCode,
   useExecutePlugin,
+  usePlugin,
   ParamSendMethod,
   Priority,
 } from '@test-agentstudio/api-client'
@@ -47,12 +48,11 @@ interface ToolParameter {
   name: string
   description: string
   type: string
-  method: string
+  method: number
   is_required?: boolean
   is_runtime?: boolean
   value?: string
-  input_method?: number
-  priority?: number
+  priority?: numbe
 }
 
 interface HeaderConfig {
@@ -181,7 +181,6 @@ const ToolConfigurationPage: React.FC = () => {
     is_required: false,
     is_runtime: false,
     value: '',
-    input_method: ParamSendMethod.NONE,
     priority: Priority.TOOL,
   })
 
@@ -210,6 +209,17 @@ const ToolConfigurationPage: React.FC = () => {
 
   // Use different API hooks based on plugin type
   const { data: apiData, isLoading: isLoadingApi, error: apiError } = pluginType === 'code' ? usePluginGetCode(apiRequest!) : usePluginGetApi(apiRequest!)
+
+  // Fetch plugin info to get plugin-level request_params
+  const pluginGetRequest =
+    plugin_id && spaceId
+      ? {
+          space_id: spaceId,
+          plugin_id,
+          plugin_version: undefined,
+        }
+      : null
+  const { data: pluginData } = usePlugin(pluginGetRequest!)
 
   // Transform API data to Tool interface when data is loaded
   useEffect(() => {
@@ -250,7 +260,7 @@ const ToolConfigurationPage: React.FC = () => {
             name: param.name,
             description: param.desc || '',
             type: mapNumberToString(param.type),
-            method: param.method || 1,
+            method: param.method,
             is_required: param.is_required,
           })) || [],
         output_parameters:
@@ -259,7 +269,7 @@ const ToolConfigurationPage: React.FC = () => {
             name: param.name,
             description: param.desc || '',
             type: mapNumberToString(param.type),
-            method: param.method || 1,
+            method: param.method,
             is_required: param.is_required,
           })) || [],
         headers:
@@ -372,13 +382,25 @@ const ToolConfigurationPage: React.FC = () => {
   }
 
   const getTypedTestParameters = (): Record<string, ParameterValue> => {
-    if (!tool) return testParameters
-
     const typedParameters: Record<string, ParameterValue> = {}
-    tool.input_parameters.forEach(param => {
-      const stringValue = testParameters[param.name] || ''
-      typedParameters[param.name] = convertParameterToCorrectType(stringValue, param.type)
-    })
+
+    // First, add plugin-level parameters with their default values if not provided
+    if (pluginData?.data?.plugin_info?.request_params) {
+      pluginData.data.plugin_info.request_params.forEach(param => {
+        const stringValue = testParameters[param.name] || param.value || ''
+        const typeString = typeof param.type === 'number' ? mapNumberToString(param.type) : param.type
+        typedParameters[param.name] = convertParameterToCorrectType(stringValue, typeString)
+      })
+    }
+
+    // Then, add tool-level parameters (which will override plugin params with same name if any)
+    if (tool?.input_parameters) {
+      tool.input_parameters.forEach(param => {
+        const stringValue = testParameters[param.name] || ''
+        typedParameters[param.name] = convertParameterToCorrectType(stringValue, param.type)
+      })
+    }
+
     return typedParameters
   }
 
@@ -515,7 +537,7 @@ const ToolConfigurationPage: React.FC = () => {
         is_required: param.is_required ?? false,
         value: param.value || '',
         is_runtime: param.is_runtime ?? false,
-        input_method: parseInt(param.method) || ParamSendMethod.NONE,
+        method: parseInt(param.method) || ParamSendMethod.NONE,
         priority: Priority.TOOL,
       }))
 
@@ -581,7 +603,6 @@ const ToolConfigurationPage: React.FC = () => {
         is_required: isInput ? parameter.is_required || false : false,
         is_runtime: isInput ? parameter.is_runtime || false : false,
         value: isInput ? parameter.value || '' : '',
-        input_method: parameter.input_method ?? (parseInt(parameter.method) || ParamSendMethod.NONE),
         priority: parameter.priority ?? Priority.TOOL,
       })
     } else {
@@ -593,7 +614,6 @@ const ToolConfigurationPage: React.FC = () => {
         is_required: false,
         is_runtime: false,
         value: '',
-        input_method: ParamSendMethod.NONE,
         priority: Priority.TOOL,
       })
     }
@@ -619,7 +639,6 @@ const ToolConfigurationPage: React.FC = () => {
       is_required: parameterForm.is_required,
       is_runtime: isInput ? parameterForm.is_runtime : undefined,
       value: isInput ? parameterForm.value : undefined,
-      input_method: isInput ? parameterForm.input_method : undefined,
       priority: isInput ? parameterForm.priority : undefined,
     }
 
@@ -1894,41 +1913,93 @@ const ToolConfigurationPage: React.FC = () => {
                 </Typography>
               </div>
 
-              {tool?.input_parameters && tool.input_parameters.length > 0 ? (
-                <div className="space-y-4">
-                  {tool.input_parameters.map(param => (
-                    <div key={param.id} className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Typography variant="subtitle2" className="font-medium">
-                          {param.name}
-                        </Typography>
-                        <Chip label={param.type} size="small" variant="outlined" />
-                      </div>
-                      <Typography variant="body2" color="text.secondary" className="text-sm">
-                        {param.description}
+              <div className="space-y-6">
+                {/* Plugin-level Parameters */}
+                {pluginData?.data?.plugin_info?.request_params && pluginData.data.plugin_info.request_params.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <Typography variant="subtitle1" className="font-medium text-blue-600">
+                        {t('plugins.toolConfig.pluginParams', '插件参数')}
                       </Typography>
-                      <TextField
-                        fullWidth
-                        size="small"
-                        value={testParameters[param.name] || ''}
-                        onChange={e => handleTestParameterChange(param.name, e.target.value)}
-                        placeholder={`请输入${param.name}...`}
-                        multiline={param.type === 'object'}
-                        rows={param.type === 'object' ? 3 : 1}
-                      />
+                      <Chip label={`${pluginData.data.plugin_info.request_params.length}`} size="small" color="primary" />
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-gray-50 rounded-lg p-6 text-center">
-                  <Typography variant="body1" color="text.secondary">
-                    {t('plugins.toolConfig.noInputParams', '该工具没有输入参数')}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('plugins.toolConfig.canExecuteTest', '可以直接执行测试')}
-                  </Typography>
-                </div>
-              )}
+                    {pluginData.data.plugin_info.request_params.map((param, index) => {
+                      const typeString = typeof param.type === 'number' ? mapNumberToString(param.type) : param.type
+                      return (
+                        <div key={`plugin-param-${index}`} className="space-y-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex items-center space-x-2">
+                            <Typography variant="subtitle2" className="font-medium">
+                              {param.name}
+                            </Typography>
+                            <Chip label={typeString} size="small" variant="outlined" color="primary" />
+                            {param.is_required && <Chip label="必填" size="small" color="error" variant="outlined" />}
+                          </div>
+                          <Typography variant="body2" color="text.secondary" className="text-sm">
+                            {param.desc || '暂无描述'}
+                          </Typography>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            value={testParameters[param.name] || param.value || ''}
+                            onChange={e => handleTestParameterChange(param.name, e.target.value)}
+                            placeholder={`请输入${param.name}...`}
+                            multiline={typeString === 'object'}
+                            rows={typeString === 'object' ? 3 : 1}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Tool-level Parameters */}
+                {tool?.input_parameters && tool.input_parameters.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <Typography variant="subtitle1" className="font-medium text-green-600">
+                        {t('plugins.toolConfig.toolParams', '工具参数')}
+                      </Typography>
+                      <Chip label={`${tool.input_parameters.length}`} size="small" color="success" />
+                    </div>
+                    {tool.input_parameters.map(param => (
+                      <div key={param.id} className="space-y-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex items-center space-x-2">
+                          <Typography variant="subtitle2" className="font-medium">
+                            {param.name}
+                          </Typography>
+                          <Chip label={param.type} size="small" variant="outlined" color="success" />
+                          {param.is_required && <Chip label="必填" size="small" color="error" variant="outlined" />}
+                        </div>
+                        <Typography variant="body2" color="text.secondary" className="text-sm">
+                          {param.description}
+                        </Typography>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          value={testParameters[param.name] || ''}
+                          onChange={e => handleTestParameterChange(param.name, e.target.value)}
+                          placeholder={`请输入${param.name}...`}
+                          multiline={param.type === 'object'}
+                          rows={param.type === 'object' ? 3 : 1}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* No parameters message */}
+                {(!pluginData?.data?.plugin_info?.request_params || pluginData.data.plugin_info.request_params.length === 0) &&
+                  (!tool?.input_parameters || tool.input_parameters.length === 0) && (
+                    <div className="bg-gray-50 rounded-lg p-6 text-center">
+                      <Typography variant="body1" color="text.secondary">
+                        {t('plugins.toolConfig.noInputParams', '该工具没有输入参数')}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {t('plugins.toolConfig.canExecuteTest', '可以直接执行测试')}
+                      </Typography>
+                    </div>
+                  )}
+              </div>
 
               <div className="pt-4 border-t">
                 <Button

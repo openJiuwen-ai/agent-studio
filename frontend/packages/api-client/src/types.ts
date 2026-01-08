@@ -1810,7 +1810,6 @@ export interface PluginRequestParam {
   is_required: boolean
   value: string
   is_runtime: boolean
-  input_method: ParamSendMethod | number
   priority: Priority | number
 }
 
