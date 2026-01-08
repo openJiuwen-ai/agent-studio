@@ -331,6 +331,7 @@ class Param(BaseModel):
     default_value: Optional[str] = Field(default=None)
     visible: Optional[bool] = Field(default=True)
     method: Optional[str] = Field(default="")
+    runtime: Optional[bool] = Field(default=True)
 
 
 class PluginCodeConfig(CodeConfig):

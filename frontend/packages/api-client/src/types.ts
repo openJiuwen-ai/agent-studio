@@ -1682,8 +1682,8 @@ export enum InputMethod {
 
 // 插件参数优先级枚举
 export enum Priority {
+  TOOL = 0,
   PLUGIN = 1,
-  TOOL = 2,
 }
 
 export interface PluginCreateRequest {
