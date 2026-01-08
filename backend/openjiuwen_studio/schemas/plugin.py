@@ -228,6 +228,22 @@ class PluginPublishInfo(PluginInfo):
     version_desc: Optional[str] = Field("", alias="version_desc")
     tools: List[Dict] = Field(..., alias="tools")
 
+    @classmethod
+    def from_db_with_mapping(cls, data: Dict[str, Any]) -> "PluginPublishInfo":
+        """从数据库数据创建对象，将 inputs 字段映射为 request_params"""
+        # 如果数据是 Pydantic 模型对象，先转换为字典
+        if hasattr(data, 'model_dump'):
+            data_dict = data.model_dump()
+        elif hasattr(data, 'dict'):
+            data_dict = data.dict()
+        else:
+            data_dict = data
+
+        # 如果数据中有 inputs 字段，映射到 request_params
+        if "inputs" in data_dict and data_dict["inputs"] is not None:
+            data_dict["request_params"] = data_dict.pop("inputs")
+        return cls(**data_dict)
+
 
 class PluginPublishInfoResponse(BaseModel):
     plugin_info: PluginPublishInfo = Field(..., alias="plugin_info")
