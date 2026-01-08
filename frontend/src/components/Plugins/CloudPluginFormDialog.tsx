@@ -6,6 +6,7 @@ import { Info } from 'lucide-react'
 interface CloudPluginForm {
   name: string
   description: string
+  desc_mk?: string
   url: string
 }
 
@@ -98,8 +99,8 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
               fullWidth
               required
               placeholder={t('plugins.dialog.cloudPluginForm.namePlaceholder')}
-              helperText={`${t('plugins.dialog.cloudPluginForm.nameHelperText')} (${form.name.length}/20)`}
-              inputProps={{ maxLength: 20 }}
+              helperText={`${t('plugins.dialog.cloudPluginForm.nameHelperText')} (${form.name.length}/128)`}
+              inputProps={{ maxLength: 128 }}
             />
           </div>
 
@@ -116,8 +117,24 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
               multiline
               rows={3}
               placeholder={t('plugins.dialog.cloudPluginForm.descriptionPlaceholder')}
-              helperText={`${t('plugins.dialog.cloudPluginForm.descriptionHelperText')} (${form.description.length}/40)`}
-              inputProps={{ maxLength: 40 }}
+              helperText={`${t('plugins.dialog.cloudPluginForm.descriptionHelperText')} (${form.description.length}/258)`}
+              inputProps={{ maxLength: 258 }}
+            />
+          </div>
+
+          {/* Plugin Markdown Description */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700 flex items-center">
+              插件详情 <span className="text-gray-400 ml-1">(可选)</span>
+            </label>
+            <TextField
+              value={form.desc_mk || ''}
+              onChange={e => onFormChange('desc_mk', e.target.value)}
+              fullWidth
+              multiline
+              rows={6}
+              placeholder="支持Markdown格式的详细描述..."
+              helperText={`使用Markdown语法编写富文本描述 (${(form.desc_mk || '').length}字符)`}
             />
           </div>
 

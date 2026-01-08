@@ -13,6 +13,7 @@ import IDEPluginFormDialog from '../../components/Plugins/IDEPluginFormDialog'
 import MarketPluginList from '../../components/Plugins/MarketPluginList'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '../../Common/UnifiedSnackbar'
 import { usePluginMarketConfigs } from '../../hooks/usePluginMarketConfigs'
+import ReactMarkdown from 'react-markdown'
 import {
   Plug,
   Plus,
@@ -124,6 +125,7 @@ const PluginManagementPage: React.FC = () => {
       plugin_version: pluginInfo.plugin_version || '',
       name: pluginInfo.name || pluginInfo.plugin_name || '',
       desc: pluginInfo.desc || pluginInfo.description || pluginInfo.plugin_desc || '',
+      desc_mk: pluginInfo.desc_mk || '',
       plugin_type: pluginInfo.plugin_type || 1,
       published: pluginInfo.published || false,
       url: pluginInfo.url || '',
@@ -447,6 +449,7 @@ const PluginManagementPage: React.FC = () => {
         const request = {
           name: cloudPluginForm.name.trim(),
           desc: cloudPluginForm.description.trim(),
+          desc_mk: cloudPluginForm.desc_mk?.trim(),
           space_id: getDefaultSpaceId(),
           plugin_type: 1, // Cloud plugin type
           url: cloudPluginForm.url.trim(), // Add URL field from API configuration
@@ -494,6 +497,7 @@ const PluginManagementPage: React.FC = () => {
         plugin_type: 2, // Code plugin type (IDE plugin)
         name: idePluginForm.name.trim(),
         desc: idePluginForm.description.trim(),
+        desc_mk: idePluginForm.desc_mk?.trim(),
         icon_uri: '💻',
       }
 
@@ -1045,6 +1049,16 @@ const PluginManagementPage: React.FC = () => {
                   </Typography>
                   <Typography variant="body1">{selectedPlugin.desc}</Typography>
                 </div>
+                {selectedPlugin.desc_mk && (
+                  <div>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      插件详情
+                    </Typography>
+                    <div className="prose prose-sm max-w-none p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <ReactMarkdown>{selectedPlugin.desc_mk}</ReactMarkdown>
+                    </div>
+                  </div>
+                )}
                 <div>
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                     {t('plugins.url')}

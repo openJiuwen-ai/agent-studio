@@ -53,13 +53,14 @@ const PluginConfigurationPage: React.FC = () => {
   const [pluginConfigData, setPluginConfigData] = useState<Record<string, unknown> | null>(null)
   const { snackbar, showSuccess, showError, closeSnackbar } = useUnifiedSnackbar()
 
-  // Configuration form state
   const [configForm, setConfigForm] = useState({
     name: '',
     desc: '',
+    desc_mk: '',
     icon_uri: '',
     url: '',
     authMethod: 'none',
+    request_params: [] as any[],
   })
 
   // Icon options for selection - diversified without similar types
@@ -123,7 +124,7 @@ const PluginConfigurationPage: React.FC = () => {
 
   // Handle name change
   const handleNameChange = (name: string) => {
-    if (name.length <= 20) {
+    if (name.length <= 128) {
       setConfigForm(prev => ({ ...prev, name }))
     }
   }
@@ -187,9 +188,11 @@ const PluginConfigurationPage: React.FC = () => {
         setConfigForm({
           name: response.data.plugin_info.name || '',
           desc: response.data.plugin_info.desc || '',
+          desc_mk: response.data.plugin_info.desc_mk || '',
           icon_uri: response.data.plugin_info.icon_uri || '☁️',
           url: response.data.plugin_info.url || '',
           authMethod: 'none',
+          request_params: response.data.plugin_info.request_params || [],
         })
 
         // Create plugin object from the response data
@@ -253,10 +256,12 @@ const PluginConfigurationPage: React.FC = () => {
         plugin_version: pluginConfigData.plugin_version,
         name: configForm.name,
         desc: configForm.desc,
+        desc_mk: configForm.desc_mk,
         plugin_type: pluginConfigData.plugin_type,
         published: pluginConfigData.published,
         url: configForm.url,
         icon_uri: configForm.icon_uri,
+        request_params: configForm.request_params,
       }
 
       console.log('Updating plugin configuration:', updateRequest)
@@ -272,6 +277,7 @@ const PluginConfigurationPage: React.FC = () => {
           ...prev,
           name: configForm.name,
           desc: configForm.desc,
+          desc_mk: configForm.desc_mk,
           url: configForm.url,
           icon_uri: configForm.icon_uri,
         }))
@@ -305,7 +311,7 @@ const PluginConfigurationPage: React.FC = () => {
     // Validate required fields
     const validation = validateForm()
     if (!validation.isValid) {
-     showError(validation.errors[0])
+      showError(validation.errors[0])
       return
     }
 
