@@ -39,6 +39,7 @@ import {
   usePluginDeleteCode,
   useExecutePlugin,
   ParamSendMethod,
+  Priority,
 } from '@test-agentstudio/api-client'
 
 interface ToolParameter {
@@ -48,6 +49,10 @@ interface ToolParameter {
   type: string
   method: string
   is_required?: boolean
+  is_runtime?: boolean
+  value?: string
+  input_method?: number
+  priority?: number
 }
 
 interface HeaderConfig {
@@ -174,6 +179,10 @@ const ToolConfigurationPage: React.FC = () => {
     type: 'string',
     method: ParamSendMethod.NONE,
     is_required: false,
+    is_runtime: false,
+    value: '',
+    input_method: ParamSendMethod.NONE,
+    priority: Priority.TOOL,
   })
 
   const { user } = useAuthStore()
@@ -504,7 +513,10 @@ const ToolConfigurationPage: React.FC = () => {
         desc: param.description,
         type: mapTypeToNumber(param.type),
         is_required: param.is_required ?? false,
-        method: parseInt(param.method) || 0,
+        value: param.value || '',
+        is_runtime: param.is_runtime ?? false,
+        input_method: parseInt(param.method) || ParamSendMethod.NONE,
+        priority: Priority.TOOL,
       }))
 
     if (pluginType === 'code') {
@@ -545,10 +557,17 @@ const ToolConfigurationPage: React.FC = () => {
   }
 
   const handleParameterFormChange = (field: keyof typeof parameterForm, value: string | boolean) => {
-    setParameterForm(prev => ({
-      ...prev,
-      [field]: value,
-    }))
+    setParameterForm(prev => {
+      const newState = {
+        ...prev,
+        [field]: value,
+      }
+      // When is_runtime is set to true (非运行时参数 unchecked), clear the value
+      if (field === 'is_runtime' && value === true) {
+        newState.value = ''
+      }
+      return newState
+    })
   }
 
   const openParameterDialog = (parameter: ToolParameter | null = null, isInput: boolean) => {
@@ -560,14 +579,22 @@ const ToolConfigurationPage: React.FC = () => {
         type: parameter.type,
         method: parameter.method,
         is_required: isInput ? parameter.is_required || false : false,
+        is_runtime: isInput ? parameter.is_runtime || false : false,
+        value: isInput ? parameter.value || '' : '',
+        input_method: parameter.input_method ?? (parseInt(parameter.method) || ParamSendMethod.NONE),
+        priority: parameter.priority ?? Priority.TOOL,
       })
     } else {
       setParameterForm({
         name: '',
         description: '',
         type: 'string',
-        method: 0,
+        method: ParamSendMethod.NONE,
         is_required: false,
+        is_runtime: false,
+        value: '',
+        input_method: ParamSendMethod.NONE,
+        priority: Priority.TOOL,
       })
     }
     if (isInput) {
@@ -590,6 +617,10 @@ const ToolConfigurationPage: React.FC = () => {
       type: parameterForm.type,
       method: parameterForm.method,
       is_required: parameterForm.is_required,
+      is_runtime: isInput ? parameterForm.is_runtime : undefined,
+      value: isInput ? parameterForm.value : undefined,
+      input_method: isInput ? parameterForm.input_method : undefined,
+      priority: isInput ? parameterForm.priority : undefined,
     }
 
     if (tool) {
@@ -1646,9 +1677,25 @@ const ToolConfigurationPage: React.FC = () => {
         <DialogContent>
           <div className="space-y-4 mt-2">
             <div>
-              <Typography variant="subtitle2" className="mb-2">
-                {t('plugins.toolConfig.parameterName', '参数名称')} <span className="text-red-500 ml-1">*</span>
-              </Typography>
+              <div className="flex items-center justify-between mb-2">
+                <Typography variant="subtitle2">
+                  {t('plugins.toolConfig.parameterName', '参数名称')} <span className="text-red-500 ml-1">*</span>
+                </Typography>
+                {isInputDialogOpen && (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="is_required"
+                      checked={parameterForm.is_required}
+                      onChange={e => handleParameterFormChange('is_required', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                    />
+                    <label htmlFor="is_required" className="text-sm font-medium text-gray-700 cursor-pointer whitespace-nowrap">
+                      {t('plugins.toolConfig.isRequired', '必选参数')}
+                    </label>
+                  </div>
+                )}
+              </div>
               <TextField
                 fullWidth
                 value={parameterForm.name}
@@ -1737,23 +1784,39 @@ const ToolConfigurationPage: React.FC = () => {
               </div>
             )}
             {isInputDialogOpen && (
-              <div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="is_required"
-                    checked={parameterForm.is_required}
-                    onChange={e => handleParameterFormChange('is_required', e.target.checked)}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <label htmlFor="is_required" className="text-sm font-medium text-gray-700 cursor-pointer">
-                    {t('plugins.toolConfig.isRequired', '必选参数')}
-                  </label>
+              <>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="is_runtime"
+                      checked={!parameterForm.is_runtime}
+                      onChange={e => handleParameterFormChange('is_runtime', !e.target.checked)}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="is_runtime" className="text-sm font-medium text-gray-700 cursor-pointer">
+                      非运行时参数
+                    </label>
+                  </div>
+                  <Typography variant="caption" className="text-gray-500 mt-1 block">
+                    勾选后需要设置参数默认值
+                  </Typography>
                 </div>
-                <Typography variant="caption" className="text-gray-500 mt-1 block">
-                  {t('plugins.toolConfig.isRequiredHelper', '勾选后该参数为必填项')}
-                </Typography>
-              </div>
+                {!parameterForm.is_runtime && (
+                  <div>
+                    <Typography variant="subtitle2" className="mb-2">
+                      默认值
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      value={parameterForm.value}
+                      onChange={e => handleParameterFormChange('value', e.target.value)}
+                      placeholder="请输入默认值..."
+                      helperText="非运行时参数的默认值"
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
         </DialogContent>
