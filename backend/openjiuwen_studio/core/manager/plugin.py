@@ -398,8 +398,10 @@ def _input_parameters_to_request_params(input_parameters: List[Dict[str, Any]]) 
             desc=param.get('description', ''),
             type=param_type,
             is_required=param.get('required', False),
-            runtime=param.get('runtime', True),
+            is_runtime=param.get('runtime', True),
             value=param.get('value', ''),
+            method=param.get('method', 0),
+            priority=param.get('priority', 0),
         )
         request_params.append(request_param)
 
