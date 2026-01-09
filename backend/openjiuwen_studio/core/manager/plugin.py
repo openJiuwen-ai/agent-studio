@@ -372,8 +372,9 @@ def _plugin_input_output_parameters(params: List[PluginToolParam]) -> List[Dict[
             method=param.method
         )
         param_dict = input.model_dump()
-        param_dict['runtime'] = param.runtime if hasattr(param, 'runtime') else True
+        param_dict['runtime'] = param.is_runtime if hasattr(param, 'is_runtime') else True
         param_dict['value'] = param.value if hasattr(param, 'value') else ""
+        param_dict['priority'] = param.priority if hasattr(param, 'priority') else 0
         input_output_params.append(param_dict)
 
     return input_output_params
