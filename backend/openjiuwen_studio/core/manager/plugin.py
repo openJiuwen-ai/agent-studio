@@ -803,12 +803,14 @@ def plugin_publish(
         "plugin_id": req.plugin_id,
         "name": plugin_info.name,
         "desc": plugin_info.desc,
+        "desc_mk": plugin_info.desc_mk,
         "plugin_version": req.plugin_version,
         "version_desc": req.version_desc,
         "url": plugin_info.url,
         "icon_uri": plugin_info.icon_uri,
         "plugin_type": plugin_info.plugin_type,
         "space_id": req.space_id,
+        "inputs": plugin_info.inputs,
         "tools": tool_list,
         "create_time": milliseconds(),
         "update_time": milliseconds()
@@ -867,7 +869,8 @@ def plugin_publish_list(
     infos: List[PluginPublishInfo] = []
     if list_result.data is not None:
         for info_dict in list_result.data:
-            info = PluginPublishInfo(**info_dict)
+            # 使用 from_db_with_mapping 将 inputs 映射为 request_params
+            info = PluginPublishInfo.from_db_with_mapping(info_dict)
             infos.append(info)
     return ResponseModel(
         code=status.HTTP_200_OK,
@@ -892,10 +895,12 @@ def plugin_publish_get(
             code=canvas_result.code,
             message=canvas_result.message,
         )
+    # 使用 from_db_with_mapping 将 inputs 映射为 request_params
+    plugin_info = PluginPublishInfo.from_db_with_mapping(canvas_result.data)
     return ResponseModel(
         code=status.HTTP_200_OK,
         message="get publish plugin success",
-        data=PluginPublishInfoResponse(plugin_info=PluginPublishInfo(**canvas_result.data))
+        data=PluginPublishInfoResponse(plugin_info=plugin_info)
     )
 
 
