@@ -347,7 +347,7 @@ const PluginManagementPage: React.FC = () => {
                       is_required: param.required || false,
                       is_runtime: false,
                       value: '',
-                      input_method: 0,
+                      method: 0,
                       priority: 1,
                     }))
                   : []

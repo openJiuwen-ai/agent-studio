@@ -155,7 +155,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
     is_required: false,
     value: '',
     is_runtime: true,
-    input_method: ParamSendMethod.NONE,
+    method: ParamSendMethod.NONE,
     priority: Priority.PLUGIN,
   })
 
@@ -399,7 +399,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
         is_required: param.is_required,
         value: param.value || '',
         is_runtime: param.is_runtime,
-        input_method: param.input_method,
+        method: param.method ?? ParamSendMethod.NONE,
         priority: param.priority,
       })
     } else {
@@ -411,7 +411,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
         is_required: false,
         value: '',
         is_runtime: true,
-        input_method: 0,
+        method: 0,
         priority: Priority.PLUGIN,
       })
     }
@@ -445,7 +445,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
       is_required: parameterForm.is_required,
       value: parameterForm.value,
       is_runtime: parameterForm.is_runtime,
-      input_method: parameterForm.input_method,
+      method: parameterForm.method,
       priority: parameterForm.priority,
     }
 
@@ -886,7 +886,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                                 {param.name}
                               </Typography>
                               <Chip label={getParamTypeName(param.type)} size="small" />
-                              <Chip label={getInputMethodName(param.input_method)} size="small" variant="outlined" />
+                              <Chip label={getInputMethodName(param.method)} size="small" variant="outlined" />
                               {param.is_required && <Chip label="必选" size="small" color="error" variant="outlined" />}
                             </div>
                             <Typography variant="body2" color="text.secondary" className="mt-1">
@@ -1088,7 +1088,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                   传入方法
                 </Typography>
                 <FormControl fullWidth>
-                  <Select value={parameterForm.input_method} onChange={e => handleParameterFormChange('input_method', e.target.value)}>
+                  <Select value={parameterForm.method} onChange={e => handleParameterFormChange('method', e.target.value)}>
                     <MenuItem value={0}>无</MenuItem>
                     <MenuItem value={1}>Header参数</MenuItem>
                     <MenuItem value={2}>Query参数</MenuItem>
