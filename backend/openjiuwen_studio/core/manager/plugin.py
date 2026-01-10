@@ -327,9 +327,6 @@ def plugin_create_api(
 
     logger.info(f"create plugin api info: {req}")
 
-    # Get available value from request (default True if not provided)
-    available = req.available if hasattr(req, 'available') and req.available is not None else True
-
     api_info = PluginApiInfo(
         space_id=req.space_id,
         plugin_id=req.plugin_id,
@@ -339,7 +336,7 @@ def plugin_create_api(
         desc=req.desc,
         path=req.path,
         method=req.method,
-        available=available,
+        available=False,
         request_params=req.request_params if hasattr(req, 'request_params') else [],
         response_params=req.response_params if hasattr(req, 'response_params') else [],
         headers=req.headers if hasattr(req, 'headers') else [],
@@ -620,6 +617,7 @@ def plugin_create_code(
         desc=req.desc,
         language=req.language,
         code=req.code,
+        available=False,
     )
 
     res = tool_repository.tool_create(code_info.model_dump())
@@ -680,11 +678,19 @@ def plugin_get_code(
             message="plugin id is not match",
         )
 
+    # tool is already a dict from database, not a Pydantic model
+    tool_dict = tool if isinstance(tool, dict) else tool.model_dump()
+
+    # Convert input_parameters to request_params with runtime and value
+    if 'input_parameters' in tool_dict and tool_dict['input_parameters']:
+        request_params = _input_parameters_to_request_params(tool_dict['input_parameters'])
+        tool_dict['request_params'] = [param.model_dump() for param in request_params]
+
     return ResponseModel(
         code=status.HTTP_200_OK,
         message="get plugin code success",
         data=PluginCodeInfoResponse(
-            code_info=[PluginCodeInfo(**(tool if isinstance(tool, dict) else tool.model_dump()))],
+            code_info=[PluginCodeInfo(**tool_dict)],
             total=1,
         )
     )
