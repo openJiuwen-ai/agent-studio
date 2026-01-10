@@ -405,6 +405,11 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
       return
     }
 
+    if (!parameterForm.is_runtime && !parameterForm.value.trim()) {
+      showError('非运行时参数必须设置默认值')
+      return
+    }
+
     const newParam = {
       name: parameterForm.name.trim(),
       desc: parameterForm.desc.trim(),
@@ -759,9 +764,11 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <Typography variant="h6">输入参数配置</Typography>
-                  <Button variant="outlined" startIcon={<Plus className="w-4 h-4" />} onClick={() => openParameterDialog(null)}>
-                    添加输入参数
-                  </Button>
+                  {!isReadOnly && (
+                    <Button variant="outlined" startIcon={<Plus className="w-4 h-4" />} onClick={() => openParameterDialog(null)}>
+                      添加输入参数
+                    </Button>
+                  )}
                 </div>
 
                 {configForm.request_params?.length === 0 ? (
@@ -769,9 +776,11 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
                     <Typography variant="body1" color="text.secondary">
                       暂无输入参数
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" className="mt-1">
-                      点击"添加输入参数"开始配置
-                    </Typography>
+                    {!isReadOnly && (
+                      <Typography variant="body2" color="text.secondary" className="mt-1">
+                        点击"添加输入参数"开始配置
+                      </Typography>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -796,14 +805,16 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
                               </Typography>
                             )}
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <IconButton size="small" onClick={() => openParameterDialog(param)} title="编辑参数">
-                              <Edit className="w-4 h-4" />
-                            </IconButton>
-                            <IconButton size="small" onClick={() => handleDeleteParameter(index)} title="删除参数">
-                              <Trash2 className="w-4 h-4" />
-                            </IconButton>
-                          </div>
+                          {!isReadOnly && (
+                            <div className="flex items-center space-x-2">
+                              <IconButton size="small" onClick={() => openParameterDialog(param)} title="编辑参数">
+                                <Edit className="w-4 h-4" />
+                              </IconButton>
+                              <IconButton size="small" onClick={() => handleDeleteParameter(index)} title="删除参数">
+                                <Trash2 className="w-4 h-4" />
+                              </IconButton>
+                            </div>
+                          )}
                         </div>
                       </Card>
                     ))}
@@ -982,7 +993,7 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
             {!parameterForm.is_runtime && (
               <div>
                 <Typography variant="subtitle2" className="mb-2">
-                  默认值
+                  默认值 <span className="text-red-500 ml-1">*</span>
                 </Typography>
                 <TextField
                   fullWidth
@@ -990,6 +1001,7 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
                   onChange={e => handleParameterFormChange('value', e.target.value)}
                   placeholder="请输入默认值..."
                   helperText="非运行时参数的默认值"
+                  required
                 />
               </div>
             )}

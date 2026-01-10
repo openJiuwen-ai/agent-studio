@@ -59,6 +59,7 @@ const PluginVersionPage: React.FC = () => {
     icon_uri: '',
     url: '',
     authMethod: 'none',
+    request_params: [] as any[],
   })
 
   // Read-only display state
@@ -187,6 +188,7 @@ const PluginVersionPage: React.FC = () => {
         icon_uri: versionData.plugin_info.icon_uri || '☁️',
         url: versionData.plugin_info.url || '',
         authMethod: 'none',
+        request_params: versionData.plugin_info.request_params || [],
       })
 
       // Create plugin object from the version data

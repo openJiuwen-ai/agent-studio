@@ -179,7 +179,7 @@ const ToolConfigurationPage: React.FC = () => {
     type: 'string',
     method: ParamSendMethod.NONE,
     is_required: false,
-    is_runtime: false,
+    is_runtime: true,
     value: '',
     priority: Priority.TOOL,
   })
@@ -260,8 +260,11 @@ const ToolConfigurationPage: React.FC = () => {
             name: param.name,
             description: param.desc || '',
             type: mapNumberToString(param.type),
-            method: param.method,
+            method: param.method ?? ParamSendMethod.NONE,
             is_required: param.is_required,
+            is_runtime: param.is_runtime,
+            value: param.value || '',
+            priority: param.priority ?? Priority.TOOL,
           })) || [],
         output_parameters:
           targetApiInfo.response_params?.map(param => ({
@@ -269,8 +272,6 @@ const ToolConfigurationPage: React.FC = () => {
             name: param.name,
             description: param.desc || '',
             type: mapNumberToString(param.type),
-            method: param.method,
-            is_required: param.is_required,
           })) || [],
         headers:
           targetApiInfo.headers?.map(header => ({
@@ -612,7 +613,7 @@ const ToolConfigurationPage: React.FC = () => {
         type: 'string',
         method: ParamSendMethod.NONE,
         is_required: false,
-        is_runtime: false,
+        is_runtime: true,
         value: '',
         priority: Priority.TOOL,
       })
@@ -627,6 +628,11 @@ const ToolConfigurationPage: React.FC = () => {
   const handleSaveParameter = async (isInput: boolean) => {
     if (!parameterForm.name.trim() || !parameterForm.description.trim()) {
       setSnackbar({ open: true, message: t('plugins.toolConfig.fillNameAndDescription', '请填写参数名称和描述'), severity: 'error' })
+      return
+    }
+
+    if (isInput && !parameterForm.is_runtime && !parameterForm.value.trim()) {
+      setSnackbar({ open: true, message: t('plugins.toolConfig.nonRuntimeNeedsDefaultValue', '非运行时参数必须设置默认值'), severity: 'error' })
       return
     }
 
@@ -1285,10 +1291,16 @@ const ToolConfigurationPage: React.FC = () => {
                             </Typography>
                             <Chip label={param.type} size="small" />
                             {pluginType === 'api' && <Chip label={getMethodLabel(param.method)} size="small" variant="outlined" />}
+                            {param.is_required && <Chip label="必选" size="small" color="error" variant="outlined" />}
                           </div>
                           <Typography variant="body2" color="text.secondary" className="mt-1">
                             {param.description}
                           </Typography>
+                          {param.value && (
+                            <Typography variant="caption" color="text.secondary" className="mt-1">
+                              默认值: {param.value}
+                            </Typography>
+                          )}
                         </div>
                         <div className="flex items-center space-x-2">
                           <IconButton size="small" onClick={() => openParameterDialog(param, true)} title={t('plugins.toolConfig.editParameter', '编辑参数')}>
@@ -1340,10 +1352,16 @@ const ToolConfigurationPage: React.FC = () => {
                               {param.name}
                             </Typography>
                             <Chip label={param.type} size="small" />
+                            {param.is_required && <Chip label="必选" size="small" color="error" variant="outlined" />}
                           </div>
                           <Typography variant="body2" color="text.secondary" className="mt-1">
                             {param.description}
                           </Typography>
+                          {param.value && (
+                            <Typography variant="caption" color="text.secondary" className="mt-1">
+                              默认值: {param.value}
+                            </Typography>
+                          )}
                         </div>
                         <div className="flex items-center space-x-2">
                           <IconButton size="small" onClick={() => openParameterDialog(param, false)} title={t('plugins.toolConfig.editParameter', '编辑参数')}>
@@ -1824,7 +1842,7 @@ const ToolConfigurationPage: React.FC = () => {
                 {!parameterForm.is_runtime && (
                   <div>
                     <Typography variant="subtitle2" className="mb-2">
-                      默认值
+                      默认值 <span className="text-red-500 ml-1">*</span>
                     </Typography>
                     <TextField
                       fullWidth
@@ -1832,6 +1850,7 @@ const ToolConfigurationPage: React.FC = () => {
                       onChange={e => handleParameterFormChange('value', e.target.value)}
                       placeholder="请输入默认值..."
                       helperText="非运行时参数的默认值"
+                      required
                     />
                   </div>
                 )}
