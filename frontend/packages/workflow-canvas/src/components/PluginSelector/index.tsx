@@ -165,6 +165,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
   // 处理版本选择变化
   const handleVersionChange = (pluginId: string, version: string) => {
     setSelectedVersions(prev => new Map(prev).set(pluginId, version))
+
     // 每次点击具体版本的时候都会调用对应的接口
     // 点插件版本时，都调用一次publish_get，点draft的时候，都调用一次list_api
     loadPluginTools(pluginId, version)
@@ -185,6 +186,23 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
       let tools: PluginApiInfo[] = []
 
       if (version === 'draft') {
+        // 对于draft版本，需要调用get接口获取最新的插件信息
+        try {
+          const response = await PluginService.getPlugin({
+            space_id: spaceId,
+            plugin_id: pluginId,
+          })
+
+          if (response.code === 200 && response.data?.plugin_info) {
+            const freshPluginInfo = response.data.plugin_info
+            // 更新插件列表中的插件信息
+            setPluginList(prev => prev.map(plugin => (plugin.plugin_id === pluginId ? freshPluginInfo : plugin)))
+            console.log(`Updated plugin info for draft version: ${pluginId}`)
+          }
+        } catch (error) {
+          console.warn(`Failed to load plugin info for ${pluginId}, continuing with tools loading:`, error)
+        }
+
         // 对于draft版本，需要根据插件类型选择不同的API
         const plugin = pluginList.find(p => p.plugin_id === pluginId)
 
@@ -239,8 +257,18 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
           plugin_version: version,
         })
 
-        if (response.code === 200 && response.data?.plugin_info?.tools) {
-          tools = response.data.plugin_info.tools
+        if (response.code === 200 && response.data?.plugin_info) {
+          tools = response.data.plugin_info.tools || []
+
+          // IMPORTANT: 保存插件级别的request_params到plugin对象中
+          // 这样publish版本也能像draft版本一样正确显示插件级别参数
+          if (response.data.plugin_info.request_params) {
+            setPluginList(prev =>
+              prev.map(plugin => (plugin.plugin_id === pluginId ? { ...plugin, request_params: response.data.plugin_info.request_params } : plugin)),
+            )
+            console.log(`Updated plugin ${pluginId} with plugin-level request_params from publish version ${version}`)
+          }
+
           console.log(`Loaded ${tools.length} published tools for plugin ${pluginId}, version ${version}`)
         } else {
           console.warn(`No published tools found for plugin ${pluginId}, version ${version}, response:`, response)

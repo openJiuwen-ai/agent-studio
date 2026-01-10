@@ -61,19 +61,6 @@ const getParameterType = (type: number): string => {
 
 // 格式化插件输入参数
 const formatPluginInputs = (toolInfo: PluginApiInfo | null | undefined, plugin: PluginInfo, selectedVersion?: string) => {
-  if (!toolInfo || !toolInfo.request_params || toolInfo.request_params.length === 0) {
-    return {
-      inputParameters: {},
-      pluginParam: {
-        toolID: toolInfo?.tool_id || '',
-        toolName: toolInfo?.name || '',
-        pluginID: plugin.plugin_id,
-        pluginName: plugin.name || `Plugin ${plugin.plugin_id.slice(-5)}`,
-        pluginVersion: selectedVersion || plugin.plugin_version || '',
-      },
-    }
-  }
-
   const formattedInputs: Record<string, unknown> = {
     inputParameters: {},
     pluginParam: {
@@ -85,19 +72,42 @@ const formatPluginInputs = (toolInfo: PluginApiInfo | null | undefined, plugin: 
     },
   }
 
-  // 处理API请求参数
-  toolInfo.request_params.forEach(param => {
-    const paramName = param.name
-    const paramType = getParameterType(param.type)
+  // 处理插件级别的运行时参数
+  if (plugin.request_params && plugin.request_params.length > 0) {
+    plugin.request_params
+      .filter(p => p.is_runtime !== false)
+      .forEach(param => {
+        const paramName = param.name
+        const paramType = getParameterType(param.type)
 
-    formattedInputs.inputParameters[paramName] = {
-      type: 'constant',
-      content: '',
-      schema: {
-        type: paramType,
-      },
-    }
-  })
+        formattedInputs.inputParameters[paramName] = {
+          type: 'constant',
+          content: '',
+          schema: {
+            type: paramType,
+          },
+        }
+      })
+  }
+
+  // 处理工具级别的运行时参数
+  if (toolInfo?.request_params && toolInfo.request_params.length > 0) {
+    toolInfo.request_params
+      .filter(p => p.is_runtime !== false)
+      .forEach(param => {
+        const paramName = param.name
+        const paramType = getParameterType(param.type)
+
+        // 如果工具参数和插件参数同名，工具参数会覆盖插件参数
+        formattedInputs.inputParameters[paramName] = {
+          type: 'constant',
+          content: '',
+          schema: {
+            type: paramType,
+          },
+        }
+      })
+  }
 
   return formattedInputs
 }
