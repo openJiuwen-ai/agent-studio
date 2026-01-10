@@ -496,12 +496,42 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
     }
   }
 
-  const handleDeleteParameter = (index: number) => {
-    setConfigForm(prev => ({
-      ...prev,
-      request_params: prev.request_params.filter((_, i) => i !== index),
-    }))
-    showSuccess('参数删除成功')
+  const handleDeleteParameter = async (index: number) => {
+    const updatedRequestParams = configForm.request_params.filter((_, i) => i !== index)
+
+    try {
+      // Call plugin update API immediately
+      const updateRequest = {
+        space_id: getDefaultSpaceId(),
+        plugin_id,
+        plugin_version: pluginConfigData?.plugin_version,
+        name: configForm.name,
+        desc: configForm.desc,
+        desc_mk: configForm.desc_mk,
+        plugin_type: pluginConfigData?.plugin_type,
+        published: pluginConfigData?.published,
+        url: configForm.url,
+        icon_uri: configForm.icon_uri,
+        request_params: updatedRequestParams,
+      }
+
+      const response = await updatePluginApi.mutateAsync(updateRequest)
+
+      if (response.code === 200) {
+        // Update local state only after successful API call
+        setConfigForm(prev => ({
+          ...prev,
+          request_params: updatedRequestParams,
+        }))
+        showSuccess('参数删除成功')
+      } else {
+        showError(`参数删除失败: ${response.message || '未知错误'}`)
+      }
+    } catch (error: unknown) {
+      console.error('删除参数失败:', error)
+      const errorMessage = error?.response?.data?.message || error?.message || '网络错误，请稍后重试'
+      showError(errorMessage)
+    }
   }
 
   if (loading) {
@@ -815,7 +845,11 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                               >
                                 {t('plugins.pluginConfig.path', '路径')}: {tool.path || '/'}
                               </Typography>
-                              <Chip label={t('plugins.pluginConfig.enabled', '启用')} size="small" color="success" />
+                              <Chip
+                                label={tool.available ? t('plugins.pluginConfig.enabled', '启用') : t('plugins.pluginConfig.disabled', '禁用')}
+                                size="small"
+                                color={tool.available ? 'success' : 'default'}
+                              />
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">

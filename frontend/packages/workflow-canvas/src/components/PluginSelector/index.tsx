@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Typography, Button, IconButton, CircularProgress, MenuItem, Select, SelectChangeEvent } from '@mui/material'
+import { Typography, Button, IconButton, CircularProgress, MenuItem, Select, SelectChangeEvent, Chip } from '@mui/material'
 import { X } from 'lucide-react'
 import { PluginService, PluginInfo, PluginApiInfo, PluginApiMethod } from '@test-agentstudio/api-client'
 import { getDefaultSpaceId } from '../../../../../src/utils/spaceUtils'
@@ -165,6 +165,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
   // 处理版本选择变化
   const handleVersionChange = (pluginId: string, version: string) => {
     setSelectedVersions(prev => new Map(prev).set(pluginId, version))
+
     // 每次点击具体版本的时候都会调用对应的接口
     // 点插件版本时，都调用一次publish_get，点draft的时候，都调用一次list_api
     loadPluginTools(pluginId, version)
@@ -185,6 +186,23 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
       let tools: PluginApiInfo[] = []
 
       if (version === 'draft') {
+        // 对于draft版本，需要调用get接口获取最新的插件信息
+        try {
+          const response = await PluginService.getPlugin({
+            space_id: spaceId,
+            plugin_id: pluginId,
+          })
+
+          if (response.code === 200 && response.data?.plugin_info) {
+            const freshPluginInfo = response.data.plugin_info
+            // 更新插件列表中的插件信息
+            setPluginList(prev => prev.map(plugin => (plugin.plugin_id === pluginId ? freshPluginInfo : plugin)))
+            console.log(`Updated plugin info for draft version: ${pluginId}`)
+          }
+        } catch (error) {
+          console.warn(`Failed to load plugin info for ${pluginId}, continuing with tools loading:`, error)
+        }
+
         // 对于draft版本，需要根据插件类型选择不同的API
         const plugin = pluginList.find(p => p.plugin_id === pluginId)
 
@@ -239,8 +257,18 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
           plugin_version: version,
         })
 
-        if (response.code === 200 && response.data?.plugin_info?.tools) {
-          tools = response.data.plugin_info.tools
+        if (response.code === 200 && response.data?.plugin_info) {
+          tools = response.data.plugin_info.tools || []
+
+          // IMPORTANT: 保存插件级别的request_params到plugin对象中
+          // 这样publish版本也能像draft版本一样正确显示插件级别参数
+          if (response.data.plugin_info.request_params) {
+            setPluginList(prev =>
+              prev.map(plugin => (plugin.plugin_id === pluginId ? { ...plugin, request_params: response.data.plugin_info.request_params } : plugin)),
+            )
+            console.log(`Updated plugin ${pluginId} with plugin-level request_params from publish version ${version}`)
+          }
+
           console.log(`Loaded ${tools.length} published tools for plugin ${pluginId}, version ${version}`)
         } else {
           console.warn(`No published tools found for plugin ${pluginId}, version ${version}, response:`, response)
@@ -307,6 +335,11 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
   }
 
   const handleToolSelect = (pluginId: string, tool: PluginApiInfo) => {
+    // Prevent selection if tool is disabled
+    if (tool.available === false) {
+      return
+    }
+
     setSelectedTools(prev => {
       const newMap = new Map(prev)
       const currentTools = newMap.get(pluginId) || new Set()
@@ -423,11 +456,16 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                           <div className="space-y-1">
                                             {tools.map(tool => {
                                               const isSelected = selectedTools.get(plugin.plugin_id)?.has(tool.tool_id)
+                                              const isDisabled = tool.available === false
                                               return (
                                                 <div
                                                   key={tool.tool_id}
-                                                  className={`rounded p-2 text-xs cursor-pointer transition-colors ${
-                                                    isSelected ? 'bg-blue-100 border border-blue-300' : 'bg-gray-50 hover:bg-gray-100'
+                                                  className={`rounded p-2 text-xs transition-colors ${
+                                                    isDisabled
+                                                      ? 'bg-gray-100 opacity-60 cursor-not-allowed'
+                                                      : isSelected
+                                                        ? 'bg-blue-100 border border-blue-300 cursor-pointer'
+                                                        : 'bg-gray-50 hover:bg-gray-100 cursor-pointer'
                                                   }`}
                                                   onClick={e => {
                                                     e.stopPropagation()
@@ -435,15 +473,29 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                                   }}
                                                 >
                                                   <div className="flex items-center justify-between">
-                                                    <Typography variant="caption" className="font-medium">
+                                                    <Typography variant="caption" className={`font-medium ${isDisabled ? 'text-gray-500' : ''}`}>
                                                       {tool.name || tool.tool_id}
                                                     </Typography>
                                                     <div className="flex items-center space-x-1">
+                                                      <Chip
+                                                        label={
+                                                          tool.available === true
+                                                            ? t('plugins.pluginConfig.enabled', '启用')
+                                                            : t('plugins.pluginConfig.disabled', '禁用')
+                                                        }
+                                                        size="small"
+                                                        color={tool.available === true ? 'success' : 'default'}
+                                                        sx={{ height: 18, fontSize: '0.65rem', '& .MuiChip-label': { px: 0.5 } }}
+                                                      />
                                                       {isSelected && <span className="bg-blue-500 text-white text-xs px-1 py-0.5 rounded">✓</span>}
                                                     </div>
                                                   </div>
                                                   {tool.desc && (
-                                                    <Typography variant="caption" color="textSecondary" className="mt-1 block">
+                                                    <Typography
+                                                      variant="caption"
+                                                      color="textSecondary"
+                                                      className={`mt-1 block ${isDisabled ? 'text-gray-400' : ''}`}
+                                                    >
                                                       {tool.desc}
                                                     </Typography>
                                                   )}

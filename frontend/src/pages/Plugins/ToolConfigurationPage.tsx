@@ -388,7 +388,8 @@ const ToolConfigurationPage: React.FC = () => {
     // First, add plugin-level parameters with their default values if not provided
     if (pluginData?.data?.plugin_info?.request_params) {
       pluginData.data.plugin_info.request_params.forEach(param => {
-        const stringValue = testParameters[param.name] || param.value || ''
+        // 如果是非运行时参数(is_runtime为false)，使用默认值；否则使用用户输入或默认值
+        const stringValue = param.is_runtime === false ? param.value || '' : testParameters[param.name] || param.value || ''
         const typeString = typeof param.type === 'number' ? mapNumberToString(param.type) : param.type
         typedParameters[param.name] = convertParameterToCorrectType(stringValue, typeString)
       })
@@ -397,7 +398,8 @@ const ToolConfigurationPage: React.FC = () => {
     // Then, add tool-level parameters (which will override plugin params with same name if any)
     if (tool?.input_parameters) {
       tool.input_parameters.forEach(param => {
-        const stringValue = testParameters[param.name] || ''
+        // 如果是非运行时参数(is_runtime为false)，使用默认值；否则使用用户输入
+        const stringValue = param.is_runtime === false ? param.value || '' : testParameters[param.name] || ''
         typedParameters[param.name] = convertParameterToCorrectType(stringValue, param.type)
       })
     }
@@ -875,11 +877,14 @@ const ToolConfigurationPage: React.FC = () => {
     setTestResults('')
     setTestError('')
 
-    // 初始化参数值
+    // 初始化参数值 - 只初始化运行时参数(is_runtime: true 或 undefined)
     const initialParams: Record<string, string> = {}
     if (tool?.input_parameters) {
       tool.input_parameters.forEach(param => {
-        initialParams[param.name] = ''
+        // 只为运行时参数初始化空值
+        if (param.is_runtime !== false) {
+          initialParams[param.name] = ''
+        }
       })
     }
     setTestParameters(initialParams)
@@ -890,6 +895,35 @@ const ToolConfigurationPage: React.FC = () => {
       ...prev,
       [paramName]: value,
     }))
+  }
+
+  const validateRequiredParameters = (): { isValid: boolean; missingParams: string[] } => {
+    const missing: string[] = []
+
+    // Check plugin-level required runtime parameters
+    pluginData?.data?.plugin_info?.request_params
+      ?.filter(p => p.is_runtime !== false && p.is_required)
+      ?.forEach(param => {
+        const paramValue = testParameters[param.name]
+        if (!paramValue || paramValue.trim() === '') {
+          missing.push(param.name)
+        }
+      })
+
+    // Check tool-level required runtime parameters
+    tool?.input_parameters
+      ?.filter(p => p.is_runtime !== false && p.is_required)
+      ?.forEach(param => {
+        const paramValue = testParameters[param.name]
+        if (!paramValue || paramValue.trim() === '') {
+          missing.push(param.name)
+        }
+      })
+
+    return {
+      isValid: missing.length === 0,
+      missingParams: missing,
+    }
   }
 
   const handleExecuteTest = async () => {
@@ -1933,76 +1967,98 @@ const ToolConfigurationPage: React.FC = () => {
               </div>
 
               <div className="space-y-6">
-                {/* Plugin-level Parameters */}
-                {pluginData?.data?.plugin_info?.request_params && pluginData.data.plugin_info.request_params.length > 0 && (
+                {/* Plugin-level Parameters - 只显示运行时参数 */}
+                {pluginData?.data?.plugin_info?.request_params && pluginData.data.plugin_info.request_params.filter(p => p.is_runtime !== false).length > 0 && (
                   <div className="space-y-4">
                     <div className="flex items-center space-x-2">
                       <Typography variant="subtitle1" className="font-medium text-blue-600">
                         {t('plugins.toolConfig.pluginParams', '插件参数')}
                       </Typography>
-                      <Chip label={`${pluginData.data.plugin_info.request_params.length}`} size="small" color="primary" />
+                      <Chip label={`${pluginData.data.plugin_info.request_params.filter(p => p.is_runtime !== false).length}`} size="small" color="primary" />
                     </div>
-                    {pluginData.data.plugin_info.request_params.map((param, index) => {
-                      const typeString = typeof param.type === 'number' ? mapNumberToString(param.type) : param.type
-                      return (
-                        <div key={`plugin-param-${index}`} className="space-y-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                          <div className="flex items-center space-x-2">
-                            <Typography variant="subtitle2" className="font-medium">
-                              {param.name}
+                    {pluginData.data.plugin_info.request_params
+                      .filter(p => p.is_runtime !== false)
+                      .map((param, index) => {
+                        const typeString = typeof param.type === 'number' ? mapNumberToString(param.type) : param.type
+                        const paramValue = testParameters[param.name] || ''
+                        const isRequiredAndEmpty = param.is_required && (!paramValue || paramValue.trim() === '')
+                        return (
+                          <div
+                            key={`plugin-param-${index}`}
+                            className={`space-y-2 p-3 rounded-lg border ${isRequiredAndEmpty ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-200'}`}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <Typography variant="subtitle2" className={`font-medium ${isRequiredAndEmpty ? 'text-red-700' : ''}`}>
+                                {param.name}
+                                {param.is_required && <span className="text-red-500 ml-1">*</span>}
+                              </Typography>
+                              <Chip label={typeString} size="small" variant="outlined" color="primary" />
+                              {param.is_required && <Chip label="必填" size="small" color="error" variant="outlined" />}
+                            </div>
+                            <Typography variant="body2" color="text.secondary" className="text-sm">
+                              {param.desc || '暂无描述'}
                             </Typography>
-                            <Chip label={typeString} size="small" variant="outlined" color="primary" />
-                            {param.is_required && <Chip label="必填" size="small" color="error" variant="outlined" />}
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={paramValue}
+                              onChange={e => handleTestParameterChange(param.name, e.target.value)}
+                              placeholder={`请输入${param.name}...`}
+                              multiline={typeString === 'object'}
+                              rows={typeString === 'object' ? 3 : 1}
+                              error={isRequiredAndEmpty}
+                              helperText={isRequiredAndEmpty ? '此参数为必填项' : ''}
+                            />
                           </div>
-                          <Typography variant="body2" color="text.secondary" className="text-sm">
-                            {param.desc || '暂无描述'}
-                          </Typography>
-                          <TextField
-                            fullWidth
-                            size="small"
-                            value={testParameters[param.name] || param.value || ''}
-                            onChange={e => handleTestParameterChange(param.name, e.target.value)}
-                            placeholder={`请输入${param.name}...`}
-                            multiline={typeString === 'object'}
-                            rows={typeString === 'object' ? 3 : 1}
-                          />
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
                   </div>
                 )}
 
-                {/* Tool-level Parameters */}
-                {tool?.input_parameters && tool.input_parameters.length > 0 && (
+                {/* Tool-level Parameters - 只显示运行时参数 */}
+                {tool?.input_parameters && tool.input_parameters.filter(p => p.is_runtime !== false).length > 0 && (
                   <div className="space-y-4">
                     <div className="flex items-center space-x-2">
                       <Typography variant="subtitle1" className="font-medium text-green-600">
                         {t('plugins.toolConfig.toolParams', '工具参数')}
                       </Typography>
-                      <Chip label={`${tool.input_parameters.length}`} size="small" color="success" />
+                      <Chip label={`${tool.input_parameters.filter(p => p.is_runtime !== false).length}`} size="small" color="success" />
                     </div>
-                    {tool.input_parameters.map(param => (
-                      <div key={param.id} className="space-y-2 p-3 bg-green-50 rounded-lg border border-green-200">
-                        <div className="flex items-center space-x-2">
-                          <Typography variant="subtitle2" className="font-medium">
-                            {param.name}
-                          </Typography>
-                          <Chip label={param.type} size="small" variant="outlined" color="success" />
-                          {param.is_required && <Chip label="必填" size="small" color="error" variant="outlined" />}
-                        </div>
-                        <Typography variant="body2" color="text.secondary" className="text-sm">
-                          {param.description}
-                        </Typography>
-                        <TextField
-                          fullWidth
-                          size="small"
-                          value={testParameters[param.name] || ''}
-                          onChange={e => handleTestParameterChange(param.name, e.target.value)}
-                          placeholder={`请输入${param.name}...`}
-                          multiline={param.type === 'object'}
-                          rows={param.type === 'object' ? 3 : 1}
-                        />
-                      </div>
-                    ))}
+                    {tool.input_parameters
+                      .filter(p => p.is_runtime !== false)
+                      .map(param => {
+                        const paramValue = testParameters[param.name] || ''
+                        const isRequiredAndEmpty = param.is_required && (!paramValue || paramValue.trim() === '')
+                        return (
+                          <div
+                            key={param.id}
+                            className={`space-y-2 p-3 rounded-lg border ${isRequiredAndEmpty ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-200'}`}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <Typography variant="subtitle2" className={`font-medium ${isRequiredAndEmpty ? 'text-red-700' : ''}`}>
+                                {param.name}
+                                {param.is_required && <span className="text-red-500 ml-1">*</span>}
+                              </Typography>
+                              <Chip label={param.type} size="small" variant="outlined" color="success" />
+                              {param.is_required && <Chip label="必填" size="small" color="error" variant="outlined" />}
+                            </div>
+                            <Typography variant="body2" color="text.secondary" className="text-sm">
+                              {param.description}
+                            </Typography>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={paramValue}
+                              onChange={e => handleTestParameterChange(param.name, e.target.value)}
+                              placeholder={`请输入${param.name}...`}
+                              multiline={param.type === 'object'}
+                              rows={param.type === 'object' ? 3 : 1}
+                              error={isRequiredAndEmpty}
+                              helperText={isRequiredAndEmpty ? '此参数为必填项' : ''}
+                            />
+                          </div>
+                        )
+                      })}
                   </div>
                 )}
 
@@ -2020,16 +2076,35 @@ const ToolConfigurationPage: React.FC = () => {
                   )}
               </div>
 
-              <div className="pt-4 border-t">
-                <Button
-                  variant="contained"
-                  onClick={handleExecuteTest}
-                  disabled={isTestRunning || executePluginMutation.isPending}
-                  fullWidth
-                  startIcon={isTestRunning || executePluginMutation.isPending ? <CircularProgress size={16} /> : <Settings className="w-4 h-4" />}
-                >
-                  {isTestRunning || executePluginMutation.isPending ? t('common.buttons.executing', '执行中...') : t('common.buttons.executeTest', '执行测试')}
-                </Button>
+              <div className="pt-4 border-t space-y-3">
+                {(() => {
+                  const { isValid, missingParams } = validateRequiredParameters()
+                  return (
+                    <>
+                      {!isValid && missingParams.length > 0 && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                          <Typography variant="body2" color="error" className="font-medium">
+                            {t('plugins.toolConfig.missingRequiredParams', '缺少必填参数')}
+                          </Typography>
+                          <Typography variant="caption" color="error">
+                            {t('plugins.toolConfig.pleaseFillRequiredParams', '请填写以下必填参数')}: {missingParams.join(', ')}
+                          </Typography>
+                        </div>
+                      )}
+                      <Button
+                        variant="contained"
+                        onClick={handleExecuteTest}
+                        disabled={isTestRunning || executePluginMutation.isPending || !isValid}
+                        fullWidth
+                        startIcon={isTestRunning || executePluginMutation.isPending ? <CircularProgress size={16} /> : <Settings className="w-4 h-4" />}
+                      >
+                        {isTestRunning || executePluginMutation.isPending
+                          ? t('common.buttons.executing', '执行中...')
+                          : t('common.buttons.executeTest', '执行测试')}
+                      </Button>
+                    </>
+                  )
+                })()}
               </div>
             </div>
 
