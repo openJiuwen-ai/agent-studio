@@ -767,16 +767,21 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
                                 <Edit className="w-4 h-4" />
                               </IconButton>
                             )}
-                            {!isReadOnly && (
-                              <IconButton
-                                size="small"
-                                onClick={() => handleDeleteTool(tool)}
-                                title={t('plugins.pluginConfig.deleteTool', '删除工具')}
-                                disabled={deleteToolApi.isLoading}
-                              >
-                                {deleteToolApi.isLoading ? <CircularProgress size={16} /> : <Trash2 className="w-4 h-4 text-red-500 hover:text-red-700" />}
-                              </IconButton>
-                            )}
+                            {!isReadOnly &&
+                              (deleteToolApi.isLoading ? (
+                                <Button
+                                  size="small"
+                                  disabled
+                                  startIcon={<CircularProgress size={14} />}
+                                  sx={{ minWidth: 'auto', fontSize: '0.75rem', padding: '4px 8px' }}
+                                >
+                                  删除中
+                                </Button>
+                              ) : (
+                                <IconButton size="small" onClick={() => handleDeleteTool(tool)} title={t('plugins.pluginConfig.deleteTool', '删除工具')}>
+                                  <Trash2 className="w-4 h-4 text-red-500 hover:text-red-700" />
+                                </IconButton>
+                              ))}
                           </div>
                         </div>
                       </Card>

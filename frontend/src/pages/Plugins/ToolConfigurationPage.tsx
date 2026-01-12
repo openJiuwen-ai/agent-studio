@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/useAuthStore'
 import { ENV_CONFIG } from '../../config/environment'
-import { ArrowLeft, Save, Plus, Trash2, Settings, Code, FileText, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Settings, Code, FileText, RotateCcw, CheckCircle, XCircle } from 'lucide-react'
 import { validateToolPath, getPathHelpText } from '../../utils/validationUtils'
 import { copyToClipboard } from '../../utils/prompts/utils'
 import {
@@ -71,6 +71,7 @@ interface Tool {
   input_parameters: ToolParameter[]
   output_parameters: ToolParameter[]
   headers: HeaderConfig[]
+  available?: boolean
 }
 
 type ParameterValue = string | number | boolean | string[] | object | undefined
@@ -278,6 +279,7 @@ const ToolConfigurationPage: React.FC = () => {
             key: header.name,
             value: header.value,
           })) || [],
+        available: targetApiInfo.available,
       }
 
       setTool(transformedTool)
@@ -1110,6 +1112,12 @@ const ToolConfigurationPage: React.FC = () => {
                 {tool.description}
               </Typography>
               <div className="flex items-center space-x-4 mt-2">
+                <Chip
+                  label={tool.available ? t('plugins.pluginConfig.enabled', '启用') : t('plugins.pluginConfig.disabled', '禁用')}
+                  size="small"
+                  color={tool.available ? 'success' : 'default'}
+                  icon={tool.available ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                />
                 {pluginType === 'code' ? (
                   <>
                     <Chip label={`${t('plugins.toolConfig.language', '语言')}: ${tool.language || 'python'}`} size="small" />
@@ -1950,9 +1958,6 @@ const ToolConfigurationPage: React.FC = () => {
             <span>
               {t('plugins.toolConfig.testTool', '测试工具')}: {tool?.name}
             </span>
-            <IconButton onClick={() => setTestDialogOpen(false)}>
-              <Settings className="w-4 h-4" />
-            </IconButton>
           </div>
         </DialogTitle>
         <DialogContent>

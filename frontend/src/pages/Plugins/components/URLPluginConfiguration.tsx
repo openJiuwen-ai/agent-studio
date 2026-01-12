@@ -755,7 +755,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                         value={configForm.url}
                         onChange={e => handleUrlChange(e.target.value)}
                         placeholder={t('plugins.pluginConfig.serviceUrlPlaceholder', '请输入API服务地址')}
-                        helperText={t('plugins.pluginConfig.serviceUrlHelper', '输入插件提供的服务地址，例如：https://api.example.com')}
+                        helperText={t('plugins.pluginConfig.serviceUrlHelper', '输入插件提供的服务地址，例如：http://api.example.com')}
                         error={!!urlError}
                         disabled={isReadOnly}
                         InputProps={{
@@ -869,16 +869,21 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                                 <Edit className="w-4 h-4" />
                               </IconButton>
                             )}
-                            {!isReadOnly && (
-                              <IconButton
-                                size="small"
-                                onClick={() => handleDeleteTool(tool)}
-                                title={t('plugins.pluginConfig.deleteTool', '删除工具')}
-                                disabled={deleteToolApi.isLoading}
-                              >
-                                {deleteToolApi.isLoading ? <CircularProgress size={16} /> : <Trash2 className="w-4 h-4 text-red-500 hover:text-red-700" />}
-                              </IconButton>
-                            )}
+                            {!isReadOnly &&
+                              (deleteToolApi.isLoading ? (
+                                <Button
+                                  size="small"
+                                  disabled
+                                  startIcon={<CircularProgress size={14} />}
+                                  sx={{ minWidth: 'auto', fontSize: '0.75rem', padding: '4px 8px' }}
+                                >
+                                  删除中
+                                </Button>
+                              ) : (
+                                <IconButton size="small" onClick={() => handleDeleteTool(tool)} title={t('plugins.pluginConfig.deleteTool', '删除工具')}>
+                                  <Trash2 className="w-4 h-4 text-red-500 hover:text-red-700" />
+                                </IconButton>
+                              ))}
                           </div>
                         </div>
                       </Card>

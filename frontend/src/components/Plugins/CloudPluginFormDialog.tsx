@@ -148,7 +148,7 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
               onChange={e => onFormChange('url', e.target.value)}
               fullWidth
               required
-              placeholder={t('plugins.dialog.cloudPluginForm.textPlaceholder')}
+              placeholder={t('plugins.dialog.cloudPluginForm.urlPlaceholder')}
               helperText={
                 form.url && !isUrlValid
                   ? t('plugins.dialog.cloudPluginForm.urlInvalid')

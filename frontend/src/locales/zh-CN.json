@@ -1629,7 +1629,7 @@
     "title": "插件管理",
     "subtitle": "管理和扩展系统功能的插件生态系统",
     "installPlugin": "安装插件",
-    "searchPlaceholder": "搜索插件名称、描述或标签...",
+    "searchPlaceholder": "搜索插件名称、描述",
     "tabs": {
       "installed": "已安装",
       "market": "市场",
@@ -1720,7 +1720,7 @@
         "create": "创建插件",
         "saving": "保存中...",
         "saveChanges": "保存更改",
-        "urlInvalid": "请输入有效的HTTP或HTTPS地址",
+        "urlInvalid": "请输入有效的HTTP地址",
         "urlHelper": "请提供完整的API服务地址，包含协议(http)"
       },
       "idePlugin": {
@@ -1986,7 +1986,7 @@
       "apiConfig": "API配置",
       "serviceUrl": "服务地址",
       "serviceUrlPlaceholder": "请输入API服务地址",
-      "serviceUrlHelper": "输入插件提供的服务地址，例如：https://api.example.com",
+      "serviceUrlHelper": "输入插件提供的服务地址，例如：http://api.example.com",
       "apiToolsList": "API工具列表",
       "loadingTools": "加载工具列表...",
       "loadFailed": "加载工具列表失败",

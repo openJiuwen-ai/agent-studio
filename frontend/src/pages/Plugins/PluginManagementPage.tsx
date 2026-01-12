@@ -257,31 +257,40 @@ const PluginManagementPage: React.FC = () => {
           const response = await deletePluginMutation.mutateAsync(request)
 
           if (response.code === 200) {
-            // Refresh plugin list to get latest data from server
-            await queryClient.invalidateQueries({
+            // Close dialog immediately after successful deletion
+            setDeleteDialog({ isOpen: false, plugin: null })
+            // Refresh plugin list in background
+            queryClient.invalidateQueries({
               queryKey: ['pluginList', currentSpaceId],
               exact: false, // Match all queries starting with ['pluginList', currentSpaceId]
             })
-            // Explicitly refetch to update the UI immediately
-            await refetchPluginList()
+            refetchPluginList()
             showSuccess(t('plugins.messages.pluginDeleted', { name: deleteDialog.plugin.name }))
+            return
           } else {
             showError(t('plugins.errors.deleteFailed') + ': ' + (response.message || t('plugins.errors.unknownError')))
           }
         } else {
           // For non-cloud plugins, refresh the list
-          await queryClient.invalidateQueries({
+          // Close dialog immediately
+          setDeleteDialog({ isOpen: false, plugin: null })
+          // Refresh plugin list in background
+          queryClient.invalidateQueries({
             queryKey: ['pluginList', currentSpaceId],
             exact: false, // Match all queries starting with ['pluginList', currentSpaceId]
           })
-          await refetchPluginList()
+          refetchPluginList()
           showSuccess(t('plugins.messages.pluginDeleted', { name: deleteDialog.plugin.name }))
+          return
         }
       } catch (error) {
         console.error(t('plugins.messages.deleteFailed'), error)
         showError(t('plugins.messages.deleteFailed'))
       } finally {
-        setDeleteDialog({ isOpen: false, plugin: null })
+        // Close dialog in case of error
+        if (deleteDialog.isOpen) {
+          setDeleteDialog({ isOpen: false, plugin: null })
+        }
       }
     }
   }
@@ -1217,9 +1226,17 @@ const PluginManagementPage: React.FC = () => {
           <DialogContentText>{t('plugins.dialog.deleteConfirmMessage', { name: deleteDialog.plugin?.name })}</DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialog({ isOpen: false, plugin: null })}>{t('common.buttons.cancel')}</Button>
-          <Button onClick={handleDeletePlugin} color="error" variant="contained">
-            {t('common.buttons.delete')}
+          <Button onClick={() => setDeleteDialog({ isOpen: false, plugin: null })} disabled={deletePluginMutation.isLoading}>
+            {t('common.buttons.cancel')}
+          </Button>
+          <Button
+            onClick={handleDeletePlugin}
+            color="error"
+            variant="contained"
+            disabled={deletePluginMutation.isLoading}
+            startIcon={deletePluginMutation.isLoading ? <CircularProgress size={16} /> : null}
+          >
+            {deletePluginMutation.isLoading ? t('common.buttons.deleting', '删除中...') : t('common.buttons.delete')}
           </Button>
         </DialogActions>
       </Dialog>

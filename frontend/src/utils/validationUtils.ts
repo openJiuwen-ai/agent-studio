@@ -146,7 +146,7 @@ export const validateHttpUrl = (url: string): { isValid: boolean; error: string 
   } catch (error) {
     return {
       isValid: false,
-      error: '请输入有效的URL格式，例如：https://api.example.com',
+      error: '请输入有效的URL格式，例如：http://api.example.com',
     }
   }
 }
@@ -166,5 +166,5 @@ export const validateHttpUrlRealtime = (url: string): string => {
  * @returns URL格式说明
  */
 export const getHttpUrlHelpText = (): string => {
-  return '服务地址必须以http://或https://开头，例如：https://api.example.com'
+  return '服务地址必须以http://或https://开头，例如：http://api.example.com'
 }
