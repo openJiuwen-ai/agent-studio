@@ -133,10 +133,13 @@ class PluginManager:
     ) -> Dict[str, Any]:
         tool = await self.get_compiled_tool(plugin_id, tool_id, space_id, version, current_user)
         data = await tool.ainvoke(inputs)
-        if data.get("error"):
-            plugin_tool_update_available(tool_id, space_id, True, version)
-        else:
-            plugin_tool_update_available(tool_id, space_id, False, version)
+        available = True
+        if data.get("errCode"):
+            available = False
+        available_res = plugin_tool_update_available(tool_id, space_id, available, version)
+        if available_res.code != status.HTTP_200_OK:
+            data["errCode"] = available_res.code
+            data["errMessage"] = available_res.message
         return PluginManager.result_convert(data)
 
     @staticmethod

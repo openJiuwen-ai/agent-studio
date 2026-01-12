@@ -105,6 +105,9 @@ def plugin_api_tool_convert(plugin_info, api_info: Dict[str, Any]) -> Dict[str, 
     if hasattr(plugin_info, "inputs") and plugin_info.inputs:
         for i in plugin_info.inputs:
             plugin_params.append(PluginToolParam(**i))
+    elif hasattr(plugin_info, "request_params") and plugin_info.request_params:
+        for i in plugin_info.request_params:
+            plugin_params.append(i)
     api = PluginApiInfo(**api_info)
     merged_params = _merge_plugin_params(api.request_params, plugin_params)
     convert_api = dsl.RestfulApiSchema(
@@ -146,9 +149,9 @@ def plugin_code_tool_convert(code_info: Dict[str, Any]) -> Dict[str, Any]:
     return convert_code.model_dump()
 
 
-def plugin_tool_convert(plugin_info: PluginBaseDBPd, tool: Dict[str, Any]) -> Dict[str, Any]:
+def plugin_tool_convert(plugin_info, tool: Dict[str, Any]) -> Dict[str, Any]:
     if plugin_info.plugin_type == PluginType.PLUGIN_TYPE_CLOUD_API:
-        return plugin_api_tool_convert(plugin_info.url, tool)
+        return plugin_api_tool_convert(plugin_info, tool)
     else:
         return plugin_code_tool_convert(tool)
 
@@ -188,7 +191,8 @@ def _plugin_config_convert(node: Node, space_id: str) -> Dict:
             raise ValueError(f"get plugin publish failed, code: {get_result.code}, error: {get_result.message}")
         if get_result.data is None:
             raise ValueError(f"fetch plugin failed with version: {plugin_param.plugin_version}")
-
+        if get_result.data.get("inputs") and get_result.data.get("inputs"):
+            get_result.data["request_params"] = get_result.data.get("inputs")
         plugin_publish_info = PluginPublishInfo(**get_result.data)
         tools = plugin_publish_info.tools
         tool_info = None
@@ -201,18 +205,9 @@ def _plugin_config_convert(node: Node, space_id: str) -> Dict:
             raise ValueError(
                 f"tool_id {plugin_param.tool_id} not found in plugin publish version {plugin_param.plugin_version}")
 
-        plugin_info = PluginBaseDBPd(
-            plugin_id=plugin_publish_info.plugin_id,
-            plugin_type=plugin_publish_info.plugin_type,
-            name=plugin_publish_info.name,
-            desc=plugin_publish_info.desc,
-            url=plugin_publish_info.url,
-            plugin_version=plugin_publish_info.plugin_version,
-        )
-
         configs = dsl.ToolCompConfig(
-            type=plugin_type_mapping[plugin_info.plugin_type],
-            tool=plugin_tool_convert(plugin_info, tool_info),
+            type=plugin_type_mapping[plugin_publish_info.plugin_type],
+            tool=plugin_tool_convert(plugin_publish_info, tool_info),
             exception_config=exception_conf,
         )
     return configs.model_dump()
