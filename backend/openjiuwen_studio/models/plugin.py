@@ -157,7 +157,7 @@ class ToolBaseDB(Base, DBFunBase):
 
     input_parameters: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, default=None, nullable=True)
     output_parameters: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, default=None, nullable=True)
-    available: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    available: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     _rest_: Mapped[dict | None] = mapped_column(JSON, default=None, nullable=True)
 
     create_time: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

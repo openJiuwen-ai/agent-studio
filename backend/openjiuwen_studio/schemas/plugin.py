@@ -160,14 +160,14 @@ class PluginApiInfo(PluginApiBase):
     request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
     response_params: Optional[List[PluginToolParam]] = Field([], alias="response_params")
     headers: Optional[List[PluginApiHeader]] = Field([], alias="headers")
-    available: Optional[bool] = Field(True, alias="available")
+    available: Optional[bool] = Field(False, alias="available")
 
 
 class PluginApiInfoCreate(PluginApiBase):
     request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
     response_params: Optional[List[PluginToolParam]] = Field([], alias="response_params")
     headers: Optional[List[PluginApiHeader]] = Field([], alias="headers")
-    available: Optional[bool] = Field(True, alias="available")
+    available: Optional[bool] = Field(False, alias="available")
 
 
 class PluginApiInfoDB(PluginApiInfo):
@@ -191,6 +191,7 @@ class PluginCodeInfo(PluginCodeBase):
     tool_id: str = Field(..., alias="tool_id")
     request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
     response_params: Optional[List[PluginToolParam]] = Field([], alias="response_params")
+    available: Optional[bool] = Field(False, alias="available")
 
 
 class PluginCodeInfoDB(PluginCodeInfo):
