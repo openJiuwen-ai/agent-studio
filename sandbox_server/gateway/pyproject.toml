@@ -11,6 +11,7 @@ dependencies = [
     "uvicorn>=0.38.0",
     "httpx==0.28.1",
     "pyyaml==6.0.3",
+    "pyseccomp==0.1.2",
     "python-dotenv==1.1.1",
 ]
 

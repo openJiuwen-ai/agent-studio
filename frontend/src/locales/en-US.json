@@ -1599,7 +1599,19 @@
         "testFailed": "Test failed, please check configuration",
         "testSuccess": "Test successful! Model: {{model}}, Vector dimension: {{dimension}}, Tokens used: {{tokens}}",
         "disableFailed": "Failed to disable Embedding model",
-        "modelDisabled": "Model disabled"
+        "modelDisabled": "Model disabled",
+        "testError": {
+          "modelNameInvalid": "Embedding model '{{modelName}}' model name is invalid: {{detail}}",
+          "apiKeyInvalid": "Embedding model '{{modelName}}' API key is invalid: {{detail}}",
+          "apiUrlInvalid": "Embedding model '{{modelName}}' API URL is invalid: {{detail}}",
+          "requestParamsInvalid": "Embedding model '{{modelName}}' request parameters are invalid: {{detail}}",
+          "apiServerError": "Embedding model '{{modelName}}' API server error: {{detail}}",
+          "configInvalid": "Embedding model '{{modelName}}' configuration is invalid: {{detail}}",
+          "apiCallFailed": "Embedding model '{{modelName}}' API call failed: {{detail}}",
+          "insufficientQuota": "Embedding model '{{modelName}}' insufficient quota: {{detail}}",
+          "modelNotActive": "Embedding model '{{modelName}}' is not active",
+          "unknownError": "Embedding model test failed: {{detail}}"
+        }
       },
       "tagsLimit": "Tag count cannot exceed 10",
       "apiKeyEditHint": "Currently showing masked key. Leave empty to keep unchanged, enter new key to update",

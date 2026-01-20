@@ -146,27 +146,24 @@ export const formMeta: FormMeta<FlowNodeJSON> = {
 
             const cacheKey = `${workflowId}-${spaceId}-${value === 'draft' ? 'draft' : value}`
 
+            // Clear cache to ensure we get the latest data
+            canvasDetailCache.delete(cacheKey)
+
             let wfDetail: any
             let nodesList: any[]
 
-            if (canvasDetailCache.has(cacheKey)) {
-              const cachedData = canvasDetailCache.get(cacheKey)
-              wfDetail = cachedData.wfDetail
-              nodesList = cachedData.nodesList
-            } else {
-              const requestParams: any = { workflow_id: workflowId, space_id: spaceId }
-              if (value && value !== 'draft') {
-                requestParams.version = value
-              }
-
-              const response = await WorkflowService.getWorkflowCanvas(requestParams)
-              wfDetail = response?.data?.workflow || {}
-              const fullSchema = wfDetail?.schema ? JSON.parse(wfDetail.schema) : {}
-              nodesList = Array.isArray(fullSchema?.nodes) ? fullSchema.nodes : []
-
-              const result = { wfDetail, fullSchema, nodesList }
-              canvasDetailCache.set(cacheKey, result)
+            const requestParams: any = { workflow_id: workflowId, space_id: spaceId }
+            if (value && value !== 'draft') {
+              requestParams.version = value
             }
+
+            const response = await WorkflowService.getWorkflowCanvas(requestParams)
+            wfDetail = response?.data?.workflow || {}
+            const fullSchema = wfDetail?.schema ? JSON.parse(wfDetail.schema) : {}
+            nodesList = Array.isArray(fullSchema?.nodes) ? fullSchema.nodes : []
+
+            const result = { wfDetail, fullSchema, nodesList }
+            canvasDetailCache.set(cacheKey, result)
 
             const startNode = nodesList.find((n: any) => String(n?.type) === '1')
             const startSchema = startNode?.data?.outputs

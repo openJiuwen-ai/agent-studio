@@ -1,7 +1,9 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from openjiuwen_studio.routers import (auth, models, users, agents, workflows, execution, space,
                                        related_member, plugin, tags, knowledge_base, embedding_models, prompt_router,
                                        prompt_debug_router, prompt_tuning_router, prompt_llm_router)
+from openjiuwen_studio.core.common.language_thread_context import (set_language, clear_language, 
+                                                                   get_highest_priority_language)
 
 api_router = APIRouter()
 
@@ -46,3 +48,20 @@ def router_register(app: FastAPI):
             "docs": "/api/docs",
             "health": "/api/health"
         }
+    
+    @app.middleware("http")
+    async def process_header_language(request: Request, call_next):
+        accept_language = request.headers.get("accept-language", "cn")
+        accept_language_list = get_highest_priority_language(accept_language)
+        if accept_language_list:
+            language = accept_language_list[0]
+        else:
+            """ Default to 'cn' if no valid language is found in accept-language header """
+            language = "cn"
+
+        set_language(language)
+        try:
+            response = await call_next(request)
+            return response
+        finally:
+            clear_language()

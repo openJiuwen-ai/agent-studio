@@ -8,24 +8,23 @@ import { Select } from '@douyinfe/semi-ui'
 
 import { OutputFormat } from './type'
 import { useTranslation } from '../../i18n'
-import { t } from '../../i18n'
 import { useIsSidebar } from '../../hooks'
-
-const FORMAT_OPTIONS = [
-  { value: OutputFormat.TEXT, labelKey: t('workflowCanvas.nodes.llm.outputFormat.text') },
-  { value: OutputFormat.MARKDOWN, labelKey: t('workflowCanvas.nodes.llm.outputFormat.markdown') },
-  { value: OutputFormat.JSON, labelKey: t('workflowCanvas.nodes.llm.outputFormat.json') },
-]
-
-const FORMAT_LABEL_MAP: Record<OutputFormat, string> = {
-  [OutputFormat.TEXT]: t('workflowCanvas.nodes.llm.outputFormat.text'),
-  [OutputFormat.MARKDOWN]: t('workflowCanvas.nodes.llm.outputFormat.markdown'),
-  [OutputFormat.JSON]: t('workflowCanvas.nodes.llm.outputFormat.json'),
-}
 
 export function LLMOutputFormatSelector() {
   const { t } = useTranslation()
   const isSidebar = useIsSidebar()
+
+  const FORMAT_OPTIONS = [
+    { value: OutputFormat.TEXT, labelKey: 'workflowCanvas.nodes.llm.outputFormat.text' as const },
+    { value: OutputFormat.MARKDOWN, labelKey: 'workflowCanvas.nodes.llm.outputFormat.markdown' as const },
+    { value: OutputFormat.JSON, labelKey: 'workflowCanvas.nodes.llm.outputFormat.json' as const },
+  ]
+
+  const FORMAT_LABEL_MAP: Record<OutputFormat, string> = {
+    [OutputFormat.TEXT]: t('workflowCanvas.nodes.llm.outputFormat.text'),
+    [OutputFormat.MARKDOWN]: t('workflowCanvas.nodes.llm.outputFormat.markdown'),
+    [OutputFormat.JSON]: t('workflowCanvas.nodes.llm.outputFormat.json'),
+  }
 
   return (
     <Field name="output_format">

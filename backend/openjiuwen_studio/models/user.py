@@ -30,7 +30,7 @@ class UserDB(Base, DBFunBase):
     user_unique_name: Mapped[str] = mapped_column(String(128), default="", nullable=False)
     username: Mapped[str] = mapped_column(String(128), default="", nullable=False, name="user_name")
     password: Mapped[str] = mapped_column(String(128), default="", nullable=False)
-    session_key: Mapped[str] = mapped_column(String(256), default="", nullable=False)
+    session_key: Mapped[str] = mapped_column(String(512), default="", nullable=False)
     role_type: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     user_verified: Mapped[int] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[int] = mapped_column(Boolean, default=False, nullable=False)

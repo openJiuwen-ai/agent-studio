@@ -2,6 +2,7 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 from enum import Enum
+from openjiuwen_studio.core.common.language_thread_context import get_language
 
 BASE_CODE = 200000
 
@@ -193,8 +194,9 @@ class StatusCode(Enum):
         return self.value[0]
 
     @property
-    def errmsg(self, language='cn'):
-        if language == 'cn':
+    def errmsg(self):
+        language = get_language()
+        if language == 'zh-cn' or language == 'zh':
             return self.value[1]
         else:
             return self.value[2]

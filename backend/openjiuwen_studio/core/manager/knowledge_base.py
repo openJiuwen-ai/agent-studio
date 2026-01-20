@@ -1331,7 +1331,8 @@ async def process_single_document(
         parsing_strategy,
         segmentation_strategy,
         indexing_strategy,
-        process_info: dict
+        process_info: dict,
+        file_name: str = None
 ):
     """在后台异步处理单个文档"""
     try:
@@ -1339,7 +1340,8 @@ async def process_single_document(
 
         # 1. 解析文件
         try:
-            file_name = Path(file_path).name
+            if not file_name:
+                file_name = Path(file_path).name
             documents = await _parse_file(file_path, parsing_strategy, doc_id, file_name=file_name)
         except Exception as parse_error:
             logger.error(f"[DOC_PROCESS_BG] File parsing failed - Doc ID: {doc_id}, KB ID: {kb_id}", exc_info=True)
@@ -1435,7 +1437,7 @@ async def _process_documents_sequentially(
     for idx, doc_info in enumerate(documents, 1):
         doc_id = doc_info.get("doc_id")
         file_path = doc_info.get("file_path")
-
+        doc_name = doc_info.get("name")
         try:
             logger.info(
                 f"[DOC_PROCESS_SEQ] Processing document {idx}/{len(documents)} - "
@@ -1459,12 +1461,13 @@ async def _process_documents_sequentially(
                 parsing_strategy=parsing_strategy,
                 segmentation_strategy=segmentation_strategy,
                 indexing_strategy=indexing_strategy,
-                process_info=process_info
+                process_info=process_info,
+                file_name=doc_name
             )
 
             logger.info(
                 f"[DOC_PROCESS_SEQ] Completed document {idx}/{len(documents)} - "
-                f"Doc ID: {doc_id}, Task ID: {task_id}"
+                f"Doc ID: {doc_id}, Name: {doc_name}, Task ID: {task_id}"
             )
 
         except Exception as e:
@@ -2360,11 +2363,12 @@ async def document_process(
                         f"[DOC_PROCESS] Failed to update FAILED status - Doc ID: {doc_id}, Error: {str(update_error)}"
                     )
                 continue
-
+            doc_name = doc_result.data.get("name")
             # 收集有效文档信息
             valid_documents.append({
                 "doc_id": doc_id,
-                "file_path": file_path
+                "file_path": file_path,
+                "name": doc_name
             })
             processed_count += 1
             logger.info(f"[DOC_PROCESS] Document validated and status updated to PROCESSING - Doc ID: {doc_id}")

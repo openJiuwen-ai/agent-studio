@@ -35,7 +35,7 @@ def validate_title(node: Node) -> None:
     if not node.data.title or node.data.title.strip() == "":
         raise JiuWenComponentException(
             error_code=StatusCode.COMPONENT_CONFIG_INVALID.code,
-            message=f"[{node.data.title or '组件'}] 标题不能为空",
+            message=f"[{node.data.title or 'node'}] title is empty, please check!",
             component_id=node.id,
             component_type=int(node.type),
             error_stage="validate"
@@ -58,7 +58,7 @@ def validate_model(node: Node) -> None:
     if node.data.inputs is None:
         raise JiuWenComponentException(
             error_code=StatusCode.LLM_COMPONENT_CONFIG_INVALID.code,
-            message=f"[{component_name}] 未配置模型，请在组件中选择模型",
+            message=f"[{component_name}] model config is empty, please check!",
             component_id=node.id,
             component_type=int(node.type),
             error_stage="validate"
@@ -68,7 +68,7 @@ def validate_model(node: Node) -> None:
     if llm_param is None:
         raise JiuWenComponentException(
             error_code=StatusCode.LLM_COMPONENT_CONFIG_INVALID.code,
-            message=f"[{component_name}] 未配置模型，请在组件中选择模型",
+            message=f"[{component_name}] model config is empty, please check!",
             component_id=node.id,
             component_type=int(node.type),
             error_stage="validate"
@@ -77,7 +77,7 @@ def validate_model(node: Node) -> None:
     if llm_param.model is None or llm_param.model.id is None or llm_param.model.id == "":
         raise JiuWenComponentException(
             error_code=StatusCode.LLM_COMPONENT_CONFIG_INVALID.code,
-            message=f"[{component_name}] 未配置模型，请在组件中选择模型",
+            message=f"[{component_name}] model config is empty, please check!",
             component_id=node.id,
             component_type=int(node.type),
             error_stage="validate"
@@ -109,7 +109,8 @@ def validate_input_parameters(node: Node, all_nodes: list[Node]) -> None:
             if source_node_id not in node_ids:
                 raise JiuWenComponentException(
                     error_code=StatusCode.COMPONENT_CONFIG_INVALID.code,
-                    message=f"[{node.data.title or '组件'}] 引用的节点 {source_node_id} 不存在",
+                    message=(f"[{node.data.title or 'node'}] ref parameter [{param_name}] "
+                             f"source node [{source_node_id}] not found, please check!"),
                     component_id=node.id,
                     component_type=int(node.type),
                     error_stage="validate"
@@ -126,7 +127,8 @@ def validate_input_parameters(node: Node, all_nodes: list[Node]) -> None:
             if isinstance(content, str) and content.strip() == "":
                 raise JiuWenComponentException(
                     error_code=StatusCode.COMPONENT_CONFIG_INVALID.code,
-                    message=f"[{node.data.title or '组件'}] 参数 {param_name} 不能为空",
+                    message=(f"[{node.data.title or 'node'}] parameter [{param_name}] "
+                             f"is empty, please check!"),
                     component_id=node.id,
                     component_type=int(node.type),
                     error_stage="validate"

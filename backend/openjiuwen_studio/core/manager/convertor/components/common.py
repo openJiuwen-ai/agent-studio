@@ -15,8 +15,9 @@ def outputs_convert(outputs: Outputs) -> Dict[str, str]:
     result: Dict[str, str] = {}
     if outputs.type == "object":
         for key, value in outputs.properties.items():
-            if value.type == "ref":
-                result[key] = base_value_convert(value)
+            base_value = BaseValue(**value)
+            if base_value.type == "ref":
+                result[key] = base_value_convert(base_value)
             else:
                 result[key] = "${" + key + "}"
 

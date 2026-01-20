@@ -1119,7 +1119,7 @@ const ToolConfigurationPage: React.FC = () => {
             )
           }
         },
-        timeout: 30000, // 30秒超时
+        timeout: undefined, // 移除超时限制
       })
     } catch (error: unknown) {
       console.error('测试执行失败:', error)

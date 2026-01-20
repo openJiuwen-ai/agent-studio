@@ -758,22 +758,93 @@ const ModelsPage: React.FC = () => {
         severity: 'success',
       })
     } catch (error: any) {
-      console.error('Embedding 模型测试失败:', error)
-      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || t('models.messages.embeddingModel.testFailed')
+      // 提取错误信息
+      const errorDetail = error?.detail || error?.response?.data?.detail || error?.message || ''
+      
+      // 解析后端错误信息并映射到国际化key
+      const parseError = (errorText: string): string => {
+        if (!errorText || typeof errorText !== 'string') {
+          return t('models.messages.embeddingModel.testFailed')
+        }
+        
+        // 提取模型名
+        const modelNameMatch = errorText.match(/Embedding model '([^']+)'/i)
+        const modelName = modelNameMatch ? modelNameMatch[1] : ''
+        
+        // 检查是否是模型未启用
+        if (errorText.toLowerCase().includes('is not active') || errorText.toLowerCase().includes('not active')) {
+          return t('models.messages.embeddingModel.testError.modelNotActive', { modelName })
+        }
+        
+        // 提取错误类型和详情
+        let errorType = 'unknownError'
+        let detail = ''
+        
+        // 提取冒号后的详情部分
+        const colonIndex = errorText.indexOf(':')
+        if (colonIndex > 0) {
+          detail = errorText.substring(colonIndex + 1).trim()
+        }
+        
+        if (errorText.includes('model name') && errorText.includes('is invalid')) {
+          errorType = 'modelNameInvalid'
+        } else if (errorText.includes('API key') && errorText.includes('is invalid')) {
+          errorType = 'apiKeyInvalid'
+        } else if (errorText.includes('API URL') && errorText.includes('is invalid')) {
+          errorType = 'apiUrlInvalid'
+        } else if (errorText.includes('request parameters') && errorText.includes('is invalid')) {
+          errorType = 'requestParamsInvalid'
+        } else if (errorText.includes('API server') && errorText.includes('error')) {
+          errorType = 'apiServerError'
+        } else if (errorText.includes('configuration') && errorText.includes('is invalid')) {
+          errorType = 'configInvalid'
+        } else if (errorText.includes('insufficient quota') && errorText.includes('is invalid')) {
+          errorType = 'insufficientQuota'
+        } else if (errorText.includes('API call failed')) {
+          errorType = 'apiCallFailed'
+        }
+        
+        // 如果没有提取到详情，使用整个错误文本
+        if (!detail) {
+          detail = errorText
+        }
+        
+        // 使用国际化模板
+        const i18nKey = `models.messages.embeddingModel.testError.${errorType}` as const
+        return t(i18nKey, { modelName, detail })
+      }
+      
+      const errorMessage = parseError(errorDetail)
+      
+      // 检查错误信息是否已经包含 "模型已禁用" 或 "inactive"
+      const isModelDisabledError = errorDetail.toLowerCase().includes('inactive') || 
+                                    errorDetail.toLowerCase().includes('disabled') ||
+                                    errorDetail.includes('模型已禁用') ||
+                                    errorDetail.includes('已禁用') ||
+                                    errorDetail.toLowerCase().includes('is not active')
 
-      // 测试失败，自动禁用该 Embedding 模型
-      try {
-        await toggleEmbeddingStatusMutation.mutateAsync({ id: modelId, spaceId: user?.spaceId || '' })
+      // 如果模型没有被禁用，测试失败后自动禁用该 Embedding 模型
+      if (!isModelDisabledError) {
+        try {
+          await toggleEmbeddingStatusMutation.mutateAsync({ id: modelId, spaceId: user?.spaceId || '' })
+          setSnackbar({
+            open: true,
+            message: errorMessage,
+            severity: 'error',
+          })
+        } catch (disableError) {
+          console.error('禁用 Embedding 模型失败:', disableError)
+          setSnackbar({
+            open: true,
+            message: errorMessage,
+            severity: 'error',
+          })
+        }
+      } else {
+        // 如果模型已经被禁用，直接显示错误信息，不尝试禁用
         setSnackbar({
           open: true,
-          message: `${t('models.messages.embeddingModel.testFailed')}: ${errorMessage}。${t('models.messages.embeddingModel.modelDisabled')}。`,
-          severity: 'error',
-        })
-      } catch (disableError) {
-        console.error('禁用 Embedding 模型失败:', disableError)
-        setSnackbar({
-          open: true,
-          message: `${t('models.messages.embeddingModel.testFailed')}: ${errorMessage}。${t('models.messages.embeddingModel.disableFailed')}，请手动禁用。`,
+          message: errorMessage,
           severity: 'error',
         })
       }

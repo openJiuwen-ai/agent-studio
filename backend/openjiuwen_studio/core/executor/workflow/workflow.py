@@ -71,7 +71,7 @@ def set_comp_with_stream(
     # 实现逻辑与方式1相同
     if wait_for_all is None:
         wait_for_all = False
-    comp_ability=[]
+    comp_ability = []
     if response_mode is not None and "streaming" == response_mode:
         if inputs_schema:
             comp_ability = [ComponentAbility.STREAM]
@@ -196,7 +196,9 @@ class Workflow:
                     compiled_comp = End()
                     # 没有配置时，直接使用原始输入
                     batch_inputs_schema = comp.inputs
-                logger.debug(f"set_end_comp inputs_schema: {batch_inputs_schema}, stream_inputs_schema: {stream_inputs_schema}, response_mode: {response_mode}")
+                logger.debug(f"set_end_comp inputs_schema: {batch_inputs_schema}, "
+                             f"stream_inputs_schema: {stream_inputs_schema}, "
+                             f"response_mode: {response_mode}")
                 flow.set_end_comp(comp.id, compiled_comp, inputs_schema=batch_inputs_schema,
                                   stream_inputs_schema=stream_inputs_schema, response_mode=response_mode)
             else:
@@ -249,7 +251,7 @@ class Workflow:
         # 1. 处理空组件
         if comp.type in self.EMPTY_COMPONENT_TYPES:
             return EmptyComponent()
-        
+
         # 2. 处理BREAK组件
         if comp.type == ComponentType.COMPONENT_TYPE_BREAK:
             return BreakComponent()
@@ -344,12 +346,10 @@ class Workflow:
 
             if isinstance(target_id, list):
                 for tid in target_id:
-                    logger.debug(
-                        f"add_stream_connection source_id: {source_id}, target_id: {tid}")
+                    logger.debug(f"add_stream_connection source_id: {source_id}, target_id: {tid}")
                     flow.add_stream_connection(source_id, tid)
             else:
-                logger.debug(
-                    f"add_stream_connection source_id: {source_id}, target_id: {target_id}")
+                logger.debug(f"add_stream_connection source_id: {source_id}, target_id: {target_id}")
                 flow.add_stream_connection(source_id, target_id)
 
         return flow
@@ -357,13 +357,11 @@ class Workflow:
     async def do_add_connection(self, flow, source, target):
         skip_connection = False
         for source_id, target_id in self.need_stream_output_comp.items():
-            if (source == source_id) and (
-                    target == target_id or target in target_id):
+            if (source == source_id) and (target == target_id or target in target_id):
                 skip_connection = True
                 break
         if not skip_connection:
-            logger.debug(
-                f"add_connection source: {source}, target: {target}")
+            logger.debug(f"add_connection source: {source}, target: {target}")
             flow.add_connection(source, target)
         return flow
 
@@ -377,11 +375,22 @@ class Workflow:
             # 只有非分支连接需要被添加到flow中
             if conn.branch_id:
                 continue
-            if isinstance(conn.source, list):
-                for sid in conn.source:
-                    flow = await self.do_add_connection(flow, sid, conn.target)
+            # 检查 conn.source 是否包含 self.need_stream_output_comp 中的任何 key
+            source_list = conn.source if isinstance(conn.source, list) else [conn.source]
+            need_stream_sources = set(self.need_stream_output_comp.keys())
+            has_stream_source = bool(set(source_list) & need_stream_sources)
+
+            if has_stream_source:
+                # 如果 source 在 need_stream_output_comp 中，需要遍历出没有加过add_stream_connection的连接
+                if isinstance(conn.source, list):
+                    for sid in conn.source:
+                        flow = await self.do_add_connection(flow, sid, conn.target)
+                else:
+                    flow = await self.do_add_connection(flow, conn.source, conn.target)
             else:
-                flow = await self.do_add_connection(flow, conn.source, conn.target)
+                # 如果 source 不在 need_stream_output_comp 中，直接添加连接
+                logger.debug(f"add_connection source: {conn.source}, target: {conn.target}")
+                flow.add_connection(conn.source, conn.target)
         return flow
 
     async def _create_exec_sub_workflow_component(

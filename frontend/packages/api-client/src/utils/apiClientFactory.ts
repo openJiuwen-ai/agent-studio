@@ -1,14 +1,19 @@
-import { createApiClientInstance, TokenProvider, AuthStateUpdater } from '../client'
+import { createApiClientInstance, TokenProvider, AuthStateUpdater, LanguageProvider } from '../client'
 import { AxiosInstance } from 'axios'
 
 // 全局token提供者
 let globalTokenProvider: TokenProvider | null = null
 let globalAuthStateUpdater: AuthStateUpdater | null = null
+let globalLanguageProvider: LanguageProvider | null = null
 let globalApiClient: AxiosInstance | null = null
 let isInitialized: boolean = false
 
 // 设置全局token提供者
-export const setGlobalTokenProvider = (tokenProvider: TokenProvider, authStateUpdater: AuthStateUpdater) => {
+export const setGlobalTokenProvider = (
+  tokenProvider: TokenProvider,
+  authStateUpdater: AuthStateUpdater,
+  languageProvider?: LanguageProvider
+) => {
   try {
     const currentToken = tokenProvider()
 
@@ -20,10 +25,13 @@ export const setGlobalTokenProvider = (tokenProvider: TokenProvider, authStateUp
     // 更新全局引用
     globalTokenProvider = tokenProvider
     globalAuthStateUpdater = authStateUpdater
+    if (languageProvider) {
+      globalLanguageProvider = languageProvider
+    }
 
     // 只有在必要时才重新创建API客户端
     if (tokenChanged || !globalApiClient || providerChanged) {
-      globalApiClient = createApiClientInstance(globalTokenProvider, globalAuthStateUpdater)
+      globalApiClient = createApiClientInstance(globalTokenProvider, globalAuthStateUpdater, globalLanguageProvider || undefined)
       isInitialized = true
     }
   } catch (error) {
@@ -56,7 +64,7 @@ export const getApiClient = (): AxiosInstance => {
         }
       }
     }
-    globalApiClient = createApiClientInstance(globalTokenProvider, globalAuthStateUpdater)
+    globalApiClient = createApiClientInstance(globalTokenProvider, globalAuthStateUpdater, globalLanguageProvider || undefined)
     isInitialized = true
   }
   return globalApiClient

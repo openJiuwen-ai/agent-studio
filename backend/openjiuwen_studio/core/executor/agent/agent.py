@@ -231,6 +231,7 @@ class Agent:
                     raise JiuWenExecuteException(
                         error_code=StatusCode.WORKFLOW_RUNNER_ERROR.code,
                         message=StatusCode.WORKFLOW_RUNNER_ERROR.errmsg.format(
-                            msg=f"工作流 '{workflow.name}' 中的end组件开启了流式输出但输出模版为空，请检查配置"
-                        )
+                                msg=str(f"workflow '{workflow.name}' end node stream_output is enabled "
+                                        f"but response_template is empty")
+                            )
                     )

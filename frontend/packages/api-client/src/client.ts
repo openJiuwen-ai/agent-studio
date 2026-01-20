@@ -77,8 +77,15 @@ const renewToken = async (authStateUpdater: AuthStateUpdater): Promise<string | 
   }
 }
 
+// 语言获取函数类型
+export type LanguageProvider = () => string | null
+
 // 创建axios实例
-const createApiClient = (tokenProvider?: TokenProvider, authStateUpdater?: AuthStateUpdater): AxiosInstance => {
+const createApiClient = (
+  tokenProvider?: TokenProvider,
+  authStateUpdater?: AuthStateUpdater,
+  languageProvider?: LanguageProvider
+): AxiosInstance => {
   const client = axios.create({
     baseURL: API_CONFIG.BASE_URL,
     timeout: API_CONFIG.TIMEOUT,
@@ -98,6 +105,14 @@ const createApiClient = (tokenProvider?: TokenProvider, authStateUpdater?: AuthS
         }
       } else {
         console.log('⚠️ Request Interceptor: No token provider available')
+      }
+
+      // 添加Accept-Language header
+      if (languageProvider) {
+        const language = languageProvider()
+        if (language) {
+          config.headers['Accept-Language'] = language
+        }
       }
 
       // 添加请求ID用于追踪
@@ -425,8 +440,12 @@ const performTokenRenewal = async (authStateUpdater: AuthStateUpdater) => {
 }
 
 // 创建API客户端实例的工厂函数
-export const createApiClientInstance = (tokenProvider?: TokenProvider, authStateUpdater?: AuthStateUpdater) => {
-  return createApiClient(tokenProvider, authStateUpdater)
+export const createApiClientInstance = (
+  tokenProvider?: TokenProvider,
+  authStateUpdater?: AuthStateUpdater,
+  languageProvider?: LanguageProvider
+) => {
+  return createApiClient(tokenProvider, authStateUpdater, languageProvider)
 }
 
 // 默认的API客户端实例（不包含认证）

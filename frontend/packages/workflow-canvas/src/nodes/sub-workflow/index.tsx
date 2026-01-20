@@ -36,7 +36,6 @@ export const handleWorkflowNodesSelection = (
       data: {
         title: workflowInfo.title,
         workflowId: workflowInfo.id,
-        workflow: workflowInfo.workflow, // 保存完整的工作流对象
       },
     }
 
@@ -198,7 +197,6 @@ const buildNodeForWorkflow = async (workflow: { id: string; title: string; workf
         },
         required: ['output'],
       },
-      workflow: wfDetail,
     },
   }
 }

@@ -31,10 +31,11 @@ class BaseValue(BaseType):
     content: Optional[Any] = Field(None, alias="content")
     extra: Optional[Extra] = Field(None, alias="extra")
     schema: Optional[BaseType] = Field(None, alias="schema")
+    items: Optional[Dict] = Field(None, alias="items")
 
 
 class Outputs(BaseType):
-    properties: Dict[str, BaseValue] = Field(..., alias="properties")
+    properties: Dict[str, Dict] = Field(..., alias="properties")
     required: Optional[List[Any]] = Field([], alias="required")
 
 

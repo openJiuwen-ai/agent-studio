@@ -62,7 +62,7 @@ class UserOutputCompCompiler(BaseCompCompiler):
             raise JiuWenExecuteException(
                 StatusCode.USER_OUTPUT_COMP_COMPILER_ERROR.code,
                 StatusCode.USER_OUTPUT_COMP_COMPILER_ERROR.errmsg.format(
-                    msg="节点数据 <useroutput_comp_config_dict> 为空"),
+                    msg=f"node [{self.node_id}] data is empty, please check!"),
                 node_id=self.node_id
             )
         output_config = UserOutputConfig.model_validate(self.useroutput_comp_config_dict)

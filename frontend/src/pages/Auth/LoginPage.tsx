@@ -296,11 +296,16 @@ const LoginPage: React.FC = () => {
                   <input
                     {...register('username', {
                       required: t('auth.login.usernamePlaceholder'),
+                      maxLength: {
+                        value: 50,
+                        message: '邮箱长度不能超过50个字符',
+                      },
                       pattern: {
                         value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
                         message: t('auth.login.invalidEmailFormat'),
                       },
                     })}
+                    maxLength={50}
                     type="text"
                     id="username"
                     className="input-field w-full"

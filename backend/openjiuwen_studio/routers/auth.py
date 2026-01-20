@@ -146,31 +146,34 @@ async def register_internal(username: str):
         # 创建新用户（不需要密码，使用空字符串作为默认密码）
         default_password = ""
         user_db = create_user_db(username, default_password, RoleType.COMMON_USER)
-        space_db = create_space_db(user_db)
 
-        # 创建到数据库
-        ret = user_repository.create_user_tbl(user_info={**user_db.dict(), 'role_type': user_db.role_type.value})
-        if ret["code"] != status.HTTP_200_OK:
-            raise HTTPException(status_code=500, detail="Failed to sign up")
-
-        ret = user_repository.create_space_tbl(space_db={**space_db.dict(), 'role_type': space_db.role_type.value})
-        if ret["code"] != status.HTTP_200_OK:
-            raise HTTPException(status_code=500, detail="Failed to sign up")
-
-        pre_install(space_db.space_id)
-
-        # 创建token并返回（与登录接口格式一致）
         access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
         access_token = create_access_token(
             data={"sub": user_db.email},
             expires_delta=access_token_expires
         )
-
         refresh_token = create_refresh_token(data={"sub": user_db.email})
-
-        # Update session key in database
         encrypted_access_token = security_utils.encrypt_api_key(access_token)
-        user_repository.update_session_key(user_db.email, encrypted_access_token)
+
+        # 插 user 时直接带 session_key
+        ret = user_repository.create_user_tbl(
+            user_info={
+                **user_db.dict(),
+                "role_type": user_db.role_type.value,
+                "session_key": encrypted_access_token,
+            }
+        )
+        if ret["code"] != status.HTTP_200_OK:
+            raise HTTPException(status_code=500, detail="Failed to sign up")
+
+        space_db = create_space_db(user_db)
+        ret = user_repository.create_space_tbl(
+            space_db={**space_db.dict(), "role_type": space_db.role_type.value}
+        )
+        if ret["code"] != status.HTTP_200_OK:
+            raise HTTPException(status_code=500, detail="Failed to sign up")
+
+        pre_install(space_db.space_id)
 
         user_response = create_user_response(user_db, False)
         return {

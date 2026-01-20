@@ -1,6 +1,7 @@
 import React from 'react'
 import { ApiClientProvider } from '@test-agentstudio/api-client'
 import { useAuthStore } from '../stores/useAuthStore'
+import i18n from '../i18n'
 import App from '../App'
 
 const AppWrapper: React.FC = () => {
@@ -26,6 +27,11 @@ const AppWrapper: React.FC = () => {
   const tokenProvider = React.useCallback(() => {
     return finalToken
   }, [finalToken])
+
+  // 创建语言提供者
+  const languageProvider = React.useCallback(() => {
+    return i18n.language || 'zh-CN'
+  }, [i18n.language])
 
   // 创建认证状态更新器
   const authStateUpdater = React.useCallback(
@@ -55,7 +61,11 @@ const AppWrapper: React.FC = () => {
   }
 
   return (
-    <ApiClientProvider tokenProvider={tokenProvider} authStateUpdater={authStateUpdater()}>
+    <ApiClientProvider
+      tokenProvider={tokenProvider}
+      authStateUpdater={authStateUpdater()}
+      languageProvider={languageProvider}
+    >
       <App />
     </ApiClientProvider>
   )

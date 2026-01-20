@@ -22,7 +22,7 @@ class VariableMergeCompCompiler(BaseCompCompiler):
             raise JiuWenExecuteException(
                 StatusCode.VARIABLE_MERGE_COMP_COMPILER_ERROR.code,
                 StatusCode.VARIABLE_MERGE_COMP_COMPILER_ERROR.errmsg.format(
-                    msg="节点数据 <comp_config_dict> 为空"),
+                    msg=f"node [{self.node_id}] is empty, please check!"),
                 node_id=self.node_id
             )
         merge_config = VariMergeConfig.model_validate(self.comp_config_dict)

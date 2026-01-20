@@ -1,11 +1,12 @@
 import React, { createContext, useContext, ReactNode, useEffect, useState, useRef } from 'react'
-import { TokenProvider, AuthStateUpdater } from '../client'
+import { TokenProvider, AuthStateUpdater, LanguageProvider } from '../client'
 import { setGlobalTokenProvider } from '../utils/apiClientFactory'
 
 // API客户端上下文类型
 interface ApiClientContextType {
   tokenProvider: TokenProvider
   authStateUpdater: AuthStateUpdater
+  languageProvider?: LanguageProvider
 }
 
 // 创建上下文
@@ -16,10 +17,16 @@ interface ApiClientProviderProps {
   children: ReactNode
   tokenProvider: TokenProvider
   authStateUpdater: AuthStateUpdater
+  languageProvider?: LanguageProvider
 }
 
 // API客户端Provider组件
-export const ApiClientProvider: React.FC<ApiClientProviderProps> = ({ children, tokenProvider, authStateUpdater }) => {
+export const ApiClientProvider: React.FC<ApiClientProviderProps> = ({
+  children,
+  tokenProvider,
+  authStateUpdater,
+  languageProvider
+}) => {
   // 使用 ref 来追踪初始化状态，避免触发重渲染
   const initializedRef = useRef(false)
 
@@ -29,7 +36,7 @@ export const ApiClientProvider: React.FC<ApiClientProviderProps> = ({ children, 
       const token = tokenProvider() || ''
       // 在初始化 state 时同步设置 global provider
       // 这是安全的，因为它只在组件挂载时执行一次
-      setGlobalTokenProvider(tokenProvider, authStateUpdater)
+      setGlobalTokenProvider(tokenProvider, authStateUpdater, languageProvider)
       initializedRef.current = true
       return token
     } catch (error) {
@@ -45,17 +52,18 @@ export const ApiClientProvider: React.FC<ApiClientProviderProps> = ({ children, 
     // 只有token真正变化时才更新
     if (currentToken !== lastToken) {
       try {
-        setGlobalTokenProvider(tokenProvider, authStateUpdater)
+        setGlobalTokenProvider(tokenProvider, authStateUpdater, languageProvider)
         setLastToken(currentToken || '')
       } catch (error) {
         console.error('Failed to update global provider:', error)
       }
     }
-  }, [tokenProvider, authStateUpdater, lastToken])
+  }, [tokenProvider, authStateUpdater, languageProvider, lastToken])
 
   const contextValue: ApiClientContextType = {
     tokenProvider,
     authStateUpdater,
+    languageProvider,
   }
 
   return <ApiClientContext.Provider value={contextValue}>{children}</ApiClientContext.Provider>

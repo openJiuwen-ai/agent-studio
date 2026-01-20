@@ -11,7 +11,7 @@ from openjiuwen_studio.core.manager.convertor.components.common import outputs_c
 from openjiuwen_studio.core.manager.model_manager.managers import ModelConfigManager
 from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
 from openjiuwen_studio.models.model_config import ModelConfig
-from openjiuwen_studio.schemas.node import Node, Outputs
+from openjiuwen_studio.schemas.node import Node, Outputs, BaseValue
 from openjiuwen_studio.schemas.model_config import ModelParameters
 
 response_format_mapping = {
@@ -33,11 +33,61 @@ def get_model_config(model_id: int, space_id: str) -> ModelConfig:
     return model
 
 
+def _llm_output_config_object_convert(is_first: bool, outputs: Outputs) -> Dict[str, Any]:
+    result: Dict[str, Any] = {}
+    if outputs.type != "object":
+        return result
+
+    if is_first:
+        for key, value in outputs.properties.items():
+            base_value = BaseValue(**value)
+            required = False
+            if key in outputs.required:
+                required = True
+            if base_value.type == "object":
+                result[key] = {
+                    "type": base_value.type,
+                    "description": base_value.description,
+                    "properties": _llm_output_config_object_convert(False, Outputs(**value))
+                }
+            else:
+                result[key] = {"type": base_value.type, "description": base_value.description, "required": required}
+    else:
+        for key, value in outputs.properties.items():
+            base_value = BaseValue(**value)
+            if base_value.type == "object":
+                result[key] = {"type": base_value.type, "description": base_value.description,
+                               "properties": _llm_output_config_object_convert(False, Outputs(**value))}
+            else:
+                result[key] = {"type": base_value.type, "description": base_value.description}
+        result["required"] = outputs.required
+    return result
+
+
 def _llm_output_config_convert(outputs: Outputs) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
     if outputs.type == "object":
         for key, value in outputs.properties.items():
-            result[key] = {"type": value.type, "description": value.description, "required": True}
+            base_value = BaseValue(**value)
+            required = False
+            if key in outputs.required:
+                required = True
+            if base_value.type == "object":
+                result[key] = {
+                    "type": base_value.type,
+                    "description": base_value.description,
+                    "properties": _llm_output_config_object_convert(True, Outputs(**value)),
+                    "required": required
+                }
+            elif base_value.type == "array":
+                result[key] = {
+                    "type": base_value.type,
+                    "description": base_value.description,
+                    "items": base_value.items,
+                    "required": required
+                }
+            else:
+                result[key] = {"type": base_value.type, "description": base_value.description, "required": required}
 
     return result
 

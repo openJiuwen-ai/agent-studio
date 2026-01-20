@@ -512,15 +512,13 @@ export const useExecutePlugin = () => {
       onEvent,
       onError,
       onComplete,
-      timeout,
     }: {
       request: PluginExecuteRequest
       onEvent: PluginExecutionEventHandler
       onError?: (error: Error) => void
       onComplete?: () => void
-      timeout?: number
     }) => {
-      return PluginService.executePlugin(request, onEvent, onError, onComplete, timeout)
+      return PluginService.executePlugin(request, onEvent, onError, onComplete)
     },
     {
       onSuccess: (closeConnection, variables) => {

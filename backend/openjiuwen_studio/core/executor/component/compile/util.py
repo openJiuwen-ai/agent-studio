@@ -26,7 +26,7 @@ def get_targets(node_id: str, branch_id: str, workflow_connections: List[Connect
             raise JiuWenExecuteException(
                 StatusCode.COMPONENT_COMPILE_ERROR.code,
                 StatusCode.COMPONENT_COMPILE_ERROR.errmsg.format(
-                    msg=f"组件 [{node_id}] 的分支 <branch_id>: {branch_id} 为空，请检查"),
+                    msg=f"node [{node_id}] branch [{branch_id}] is empty, please check!"),
                 node_id=node_id
             )
     return results

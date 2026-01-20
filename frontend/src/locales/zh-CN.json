@@ -1579,7 +1579,19 @@
         "testFailed": "测试失败，请检查配置",
         "testSuccess": "测试成功！模型: {{model}}，向量维度: {{dimension}}，Token 使用: {{tokens}}",
         "disableFailed": "禁用 Embedding 模型失败",
-        "modelDisabled": "模型已禁用"
+        "modelDisabled": "模型已禁用",
+        "testError": {
+          "modelNameInvalid": "Embedding 模型 '{{modelName}}' 的模型名称无效：{{detail}}",
+          "apiKeyInvalid": "Embedding 模型 '{{modelName}}' 的 API 密钥无效：{{detail}}",
+          "apiUrlInvalid": "Embedding 模型 '{{modelName}}' 的 API 地址无效：{{detail}}",
+          "requestParamsInvalid": "Embedding 模型 '{{modelName}}' 的请求参数无效：{{detail}}",
+          "apiServerError": "Embedding 模型 '{{modelName}}' 的 API 服务器错误：{{detail}}",
+          "configInvalid": "Embedding 模型 '{{modelName}}' 的配置无效：{{detail}}",
+          "apiCallFailed": "Embedding 模型 '{{modelName}}' API 调用失败：{{detail}}",
+          "insufficientQuota": "Embedding 模型 '{{modelName}}' 配额不足：{{detail}}",
+          "modelNotActive": "Embedding 模型 '{{modelName}}' 未启用",
+          "unknownError": "Embedding 模型测试失败：{{detail}}"
+        }
       },
       "tagsLimit": "标签数量不能超过10个",
       "apiKeyEditHint": "当前显示的是脱敏的密钥，留空则不更新，输入新密钥则更新",

@@ -204,12 +204,9 @@ export class PluginService {
     const baseURL = apiClient.defaults.baseURL || ''
 
     try {
-      // 创建 AbortController 用于超时控制
+      // 创建 AbortController 用于请求取消
       const controller = new AbortController()
-      const timeoutMs = timeout || API_CONFIG.STREAM_TIMEOUT
-      const timeoutId = setTimeout(() => {
-        controller.abort()
-      }, timeoutMs)
+      // 移除超时限制，允许插件长时间运行
 
       // 使用 fetch POST 请求进行 SSE 流式响应
       const response = await fetch(`${baseURL}${API_ENDPOINTS.EXECUTION.PLUGIN}`, {
@@ -224,9 +221,6 @@ export class PluginService {
         credentials: 'include',
         signal: controller.signal,
       })
-
-      // 请求成功，清除超时定时器
-      clearTimeout(timeoutId)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)

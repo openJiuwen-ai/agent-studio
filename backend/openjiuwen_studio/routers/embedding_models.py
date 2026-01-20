@@ -9,6 +9,11 @@ from openjiuwen_studio.core.manager.model_manager.managers.embedding_model_confi
     EmbeddingModelConfigManager
 from openjiuwen_studio.core.manager.model_manager.managers.embedding_model_test_manager import \
     EmbeddingModelTester
+from openjiuwen_studio.core.exceptions import (
+    ModelConfigNotFoundError,
+    ModelTestError,
+    ValidationError
+)
 from openjiuwen_studio.routers.auth import get_current_user
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.schemas.embedding_model_config import (
@@ -223,16 +228,26 @@ async def test_embedding_model_config(
             data=api_response
         )
         
+    except ModelConfigNotFoundError as e:
+        # 模型配置不存在，透传错误信息
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ModelTestError as e:
+        # 模型测试失败，透传错误信息（包含详细的配置问题，如 API key、model name、URL 等）
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except ValidationError as e:
+        # 数据验证失败，透传错误信息
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except ValueError as e:
         if "not found" in str(e).lower():
-            raise HTTPException(status_code=404, detail="Embedding model configuration not found") from e
+            raise HTTPException(status_code=404, detail=str(e)) from e
         else:
-            raise HTTPException(status_code=400, detail="Invalid test request parameters") from e
+            raise HTTPException(status_code=400, detail=str(e)) from e
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error testing embedding model configuration: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error") from e
+        logger.error(f"Error testing embedding model configuration: {str(e)}", exc_info=True)
+        # 透传异常信息，而不是通用的 "Internal server error"
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @embedding_models_router.post("/toggle", response_model=ResponseModel[EmbeddingModelConfigResponse])

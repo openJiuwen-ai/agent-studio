@@ -309,27 +309,25 @@ const KnowledgeBaseFormDialog: React.FC<KnowledgeBaseFormDialogProps> = ({ open,
             testRequest: { text: t('knowledgeBases.form.testText') },
           })
         } catch (testError: any) {
-          // 测试失败，禁用该模型
-          console.error('Embedding 模型测试失败，正在禁用模型:', testError)
-          try {
-            await toggleEmbeddingModelStatusMutation.mutateAsync({
-              id: selectedModelId,
-              spaceId: user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID,
-            })
-            // 禁用成功后，设置错误并阻止创建
-            setErrors({
-              embedding_model_config_id: t('knowledgeBases.form.testFailed'),
-            })
-            setIsLoading(false)
-            return
-          } catch (toggleError) {
-            console.error('禁用 Embedding 模型失败:', toggleError)
-            setErrors({
-              embedding_model_config_id: t('knowledgeBases.form.testFailedDisableFailed'),
-            })
-            setIsLoading(false)
-            return
-          }
+          // 测试失败，提取错误信息并阻止创建，但不自动禁用模型
+          console.error('Embedding 模型测试失败:', testError)
+          // 提取错误信息
+          // embeddingModelService.handleError 返回的是 error.response.data，所以 error 对象本身就是响应体
+          // 同时也要兼容原始的 axios error 格式
+          const errorMessage = testError?.detail || 
+                              testError?.message || 
+                              testError?.error ||
+                              testError?.response?.data?.detail || 
+                              testError?.response?.data?.message || 
+                              testError?.response?.data?.error ||
+                              t('knowledgeBases.form.testFailed')
+          
+          // 设置错误信息并阻止创建
+          setErrors({
+            embedding_model_config_id: errorMessage,
+          })
+          setIsLoading(false)
+          return
         }
 
         // 测试通过，继续创建知识库 - 使用V2 API

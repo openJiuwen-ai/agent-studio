@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from app.sandbox import SandboxConfig, get_sandbox
+from app.util import get_base_code, parse_result
 from openjiuwen_sandbox_gateway.app.gateway import remote_python, remote_javascript
 
 
@@ -17,7 +18,7 @@ app = FastAPI()
 
 arch = sys.platform
 if arch == "linux" and ENABLE_LINUX_SANDBOX:
-    config = SandboxConfig()
+    config = SandboxConfig.init_from_file(os.path.join(os.path.dirname(__file__), './conf/sandbox_config.yaml'))
 
 
 @app.post("/run")
@@ -42,7 +43,13 @@ async def run_sandbox(data: dict):
         result = {"return": None, "error": f"Unsupported language: {lang}"}
 
     sandbox = get_sandbox(config)
-    result = sandbox.run(code, inputs, lang, timeout)
+    base_code = get_base_code(inputs, lang)
+    exec_res = sandbox.run(code, base_code, lang, timeout)
+
+    if exec_res.retcode == 0:
+        result = {"return": parse_result(exec_res.stdout), "error": None}
+    else:
+        result = {"return": "", "error": exec_res.stderr}
     return result
 
 

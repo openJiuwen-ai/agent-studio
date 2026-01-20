@@ -22,7 +22,7 @@ class UserInputCompCompiler(BaseCompCompiler):
             raise JiuWenExecuteException(
                 StatusCode.USER_INPUT_COMP_COMPILER_ERROR.code,
                 StatusCode.USER_INPUT_COMP_COMPILER_ERROR.errmsg.format(
-                    msg="节点数据 <userinput_comp_config_dict> 为空"),
+                    msg=f"node [{self.node_id}] is empty, please check!"),
                 node_id=self.node_id
             )
         userinputs_config = UserInputsConfig.model_validate(self.userinput_comp_config_dict)
