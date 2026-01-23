@@ -8,6 +8,7 @@ from openjiuwen_studio.core.manager.repositories import BaseRepository
 from openjiuwen_studio.models.embedding_model_config import EmbeddingModelConfig
 from openjiuwen_studio.models.knowledge_base import KnowledgeBaseDB
 from openjiuwen_studio.schemas.embedding_model_config import EmbeddingProtocol
+from openjiuwen.core.common.logging import logger
 
 
 class EmbeddingModelConfigRepository(BaseRepository[EmbeddingModelConfig]):
