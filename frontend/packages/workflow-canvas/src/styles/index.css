@@ -81,3 +81,15 @@
   justify-content: center;
   align-items: center;
 }
+
+/* Prevent Chrome translation from interfering with React components */
+.notranslate,
+[class*='Mui'],
+[class*='Mui'] *,
+[translate='no'] {
+  translate: none !important;
+  -webkit-translate: none !important;
+  -moz-translate: none !important;
+  -ms-translate: none !important;
+  -o-translate: none !important;
+}

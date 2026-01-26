@@ -58,6 +58,12 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
     if (open) {
       loadPlugins()
     }
+
+    return () => {
+      // Cleanup: Clear any pending timeouts or intervals
+      setLoadingVersions(new Set())
+      setLoadingTools(new Set())
+    }
   }, [open])
 
   const loadPlugins = async () => {
@@ -128,9 +134,12 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
 
         // 自动加载默认版本的工具列表
         // 确保无论是发布版本还是draft版本，都会调用对应的接口获取工具列表
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
           loadPluginTools(pluginId, defaultVersion)
         }, 100) // 添加小延迟确保状态更新完成
+
+        // Store timeout ID for cleanup (simplified approach)
+        return () => clearTimeout(timeoutId)
       }
     } catch (error) {
       console.error(`Failed to load versions for plugin ${pluginId}:`, error)
@@ -149,9 +158,12 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
         setSelectedVersions(prev => new Map(prev).set(pluginId, 'draft'))
 
         // 自动加载draft版本的工具列表
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
           loadPluginTools(pluginId, 'draft')
         }, 100) // 添加小延迟确保状态更新完成
+
+        // Store timeout ID for cleanup
+        return () => clearTimeout(timeoutId)
       }
     } finally {
       setLoadingVersions(prev => {
@@ -364,8 +376,8 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" translate="no">
+      <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col notranslate">
         <div className="flex justify-between items-center mb-4">
           <div>
             <Typography variant="h6">{t('workflowCanvas.pluginSelector.selectPluginTools')}</Typography>
@@ -410,6 +422,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                   {t('workflowCanvas.pluginSelector.version')}:
                                 </Typography>
                                 <Select
+                                  key={`plugin-select-${plugin.plugin_id}`}
                                   size="small"
                                   value={selectedVersions.get(plugin.plugin_id) || 'draft'}
                                   onChange={(e: SelectChangeEvent) => {
@@ -422,15 +435,52 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                     minWidth: 120,
                                     fontSize: '0.75rem',
                                     height: 24,
+                                    position: 'relative',
+                                    zIndex: 10000,
                                   }}
                                   disabled={loadingVersions.has(plugin.plugin_id)}
+                                  className="notranslate"
+                                  MenuProps={{
+                                    disablePortal: true,
+                                    anchorOrigin: {
+                                      vertical: 'bottom',
+                                      horizontal: 'left',
+                                    },
+                                    transformOrigin: {
+                                      vertical: 'top',
+                                      horizontal: 'left',
+                                    },
+                                    PaperProps: {
+                                      sx: {
+                                        translate: 'no',
+                                        position: 'relative',
+                                        zIndex: 9999,
+                                      },
+                                      className: 'notranslate',
+                                    },
+                                    MenuListProps: {
+                                      className: 'notranslate',
+                                    },
+                                  }}
                                 >
                                   {pluginVersions.get(plugin.plugin_id)?.map(version => (
-                                    <MenuItem key={version.plugin_version} value={version.plugin_version} sx={{ fontSize: '0.75rem' }}>
+                                    <MenuItem
+                                      key={version.plugin_version}
+                                      value={version.plugin_version}
+                                      sx={{ fontSize: '0.75rem' }}
+                                      translate="no"
+                                      className="notranslate"
+                                    >
                                       {version.plugin_version} {version.plugin_version === 'draft' ? `(${t('workflowCanvas.pluginSelector.draft')})` : ''}
                                     </MenuItem>
                                   )) || [
-                                    <MenuItem key="draft" value="draft" sx={{ fontSize: '0.75rem' }}>
+                                    <MenuItem
+                                      key="draft"
+                                      value="draft"
+                                      sx={{ fontSize: '0.75rem' }}
+                                      translate="no"
+                                      className="notranslate"
+                                    >
                                       {t('workflowCanvas.pluginSelector.selectVersion')}
                                     </MenuItem>,
                                   ]}
