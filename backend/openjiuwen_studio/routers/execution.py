@@ -3,7 +3,7 @@ from pydantic import ValidationError
 
 from fastapi import APIRouter, HTTPException, Request, status, Depends
 from openjiuwen.core.common.exception.exception import JiuWenBaseException
-from openjiuwen.core.common.logging import logger, set_thread_session
+from openjiuwen.core.common.logging import logger, set_thread_session, get_thread_session
 from openjiuwen.core.runtime.interaction.interactive_input import InteractiveInput
 from pydantic import BaseModel, Field
 from sse_starlette import EventSourceResponse
