@@ -5,7 +5,8 @@ import json
 import os
 import uuid
 from typing import Any, Callable, Dict, List
-
+from enum import Enum
+from pydantic import BaseModel
 from fastapi import status
 from openjiuwen.core.common.logging import logger
 from packaging import version
@@ -411,6 +412,50 @@ def _plugin_update_tool(
     # 从已获取的 tool 对象中获取 plugin_version，确保更新时能正确找到记录
     if 'plugin_version' not in req or not req.get('plugin_version'):
         req['plugin_version'] = tool_version if tool_version else ToolBaseDB.__version_none__
+
+    # 确保req中如果没有修改，则不修改available的状态
+    # 将 tool 转换为 dict
+    if not isinstance(tool, dict):
+        tool_dict = tool.to_dict() if hasattr(tool, 'to_dict') else tool.model_dump()
+    else:
+        tool_dict = tool.copy()
+
+    # 需要对比的字段
+    need_compare_fields = {'name', 'desc', 'input_parameters', 'output_parameters', 'plugin_id', 'plugin_type',
+                           'plugin_version', 'space_id', 'tool_id', 'headers', 'method', 'path', 'request_params',
+                           'response_params'}
+
+    def to_plain(val: Any) -> Any:
+        # IntEnum/Enum -> int/基础值
+        if isinstance(val, Enum):
+            return val.value
+        # Pydantic Model -> dict
+        if isinstance(val, BaseModel):
+            return to_plain(val.model_dump())
+        if isinstance(val, dict):
+            return {k: to_plain(v) for k, v in val.items()}
+        if isinstance(val, list):
+            return [to_plain(v) for v in val]
+        return val
+
+    # 创建用于比较的字典（指定字段）
+    def normalize_for_db_comparison(data: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = {}
+        for key in need_compare_fields:
+            if key in data:
+                normalized[key] = to_plain(data[key])
+        return normalized
+
+    tool_normalized = normalize_for_db_comparison(tool_dict)
+    req_normalized = normalize_for_db_comparison(req)
+
+    # 比较 req 和 tool 的内容
+    if tool_normalized != req_normalized:
+        # 内容不一致，设置 available=False
+        req['available'] = False
+    else:
+        # 内容一致，保持 available 不变（从数据库中获取的值）
+        req['available'] = tool_dict.get('available', False)
 
     res = tool_repository.tool_save(req)
     result = ResponseModel(**res)
