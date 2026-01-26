@@ -67,11 +67,7 @@ generate_config_file() {
 
 # ==== Generates all project config files by their template file ===
 generate_config_files() {
-    local nginx_template_file=${CONFIG["NGINX_TEMPLE_FILE"]}
-    local nginx_dir="${CONFIG["CONFIG_DIR"]}/.nginx-files"
-    local nginx_file="${nginx_dir}/nginx.conf.${DEPLOY_VARS["NAME_SUFFIX"]}"
     declare -A ALL_VARS
-
     for key in "${!DEPLOY_VARS[@]}"; do
         ALL_VARS["${key}"]="${DEPLOY_VARS[$key]}"
     done
@@ -80,6 +76,19 @@ generate_config_files() {
         ALL_VARS["${key}"]="${RUNTIME_VARS[$key]}"
     done
 
+    local memory_data_path=${RUNTIME_VARS["MEMORY_DATA_PATH"]}
+    local backend_path=${DEPLOY_VARS["BACKEND_PATH"]}
+    local memory_data_abs_path=""
+    if [[ "${memory_data_path}" =~ ^/ ]]; then
+        memory_data_abs_path="${memory_data_path}"
+    else
+        memory_data_abs_path="${backend_path}/${memory_data_path}"
+    fi
+    ALL_VARS["MEMORY_DATA_ABS_PATH"]=${memory_data_abs_path}
+
+    local nginx_template_file=${CONFIG["NGINX_TEMPLE_FILE"]}
+    local nginx_dir="${CONFIG["CONFIG_DIR"]}/.nginx-files"
+    local nginx_file="${nginx_dir}/nginx.conf.${DEPLOY_VARS["NAME_SUFFIX"]}"
     mkdir -p ${nginx_dir}
     generate_config_file ${nginx_template_file} ${nginx_file} "ALL_VARS"
 

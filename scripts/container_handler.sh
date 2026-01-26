@@ -99,7 +99,7 @@ wait_for_mysql() {
     while true; do
         # Core check: Execute test SQL to verify MySQL is ready (connect + run simple query)
         # Use docker exec to run "SELECT 1" - success means MySQL is fully ready
-        if docker exec -i "${mysql_container}" mysql -u root -p"${db_password}" -e "SELECT 1" 2>/dev/null; then
+        if docker exec -i "${mysql_container}" mysql -u root -p"${db_password}" -h 127.0.0.1 -e "SELECT 1" 2>/dev/null; then
             success "MySQL container [${mysql_container}] is fully ready!"
             return 0  # Exit function - MySQL is ready
         fi
@@ -118,8 +118,7 @@ create_db_if_not_exist() {
     local db_password=${DEPLOY_VARS["DB_ROOT_PASSWORD"]}
 
     info "Checking if database [${agent_db} ${ops_db}] is ready"
-    info "docker exec -i ${mysql_container} mysql -u root -p${db_password}"
-    docker exec -i "${mysql_container}" mysql -u root -p"${db_password}" << EOF
+    docker exec -i "${mysql_container}" mysql -u root -p"${db_password}" -h 127.0.0.1 << EOF
 CREATE DATABASE IF NOT EXISTS ${agent_db} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS ${ops_db} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 EOF
