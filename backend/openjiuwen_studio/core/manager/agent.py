@@ -1389,6 +1389,26 @@ def _update_workflow_ids_in_json(data: Any, workflow_id_map: Dict[str, str]) -> 
         return data
 
 
+def _update_plugin_ids_in_json(data: Any, plugin_id_map: Dict[str, str]) -> Any:
+    """递归更新JSON中的plugin_id"""
+    if isinstance(data, dict):
+        new_data = {}
+        for k, v in data.items():
+            # 检查值是否为旧插件ID
+            if k == "pluginID" or k == "plugin_id":
+                if isinstance(v, str) and v in plugin_id_map:
+                    new_data[k] = plugin_id_map[v]
+                else:
+                    new_data[k] = v
+            else:
+                new_data[k] = _update_plugin_ids_in_json(v, plugin_id_map)
+        return new_data
+    elif isinstance(data, list):
+        return [_update_plugin_ids_in_json(item, plugin_id_map) for item in data]
+    else:
+        return data
+
+
 def _create_plugin_and_tools(
     space_id: str, plugin_tpl: dict, tool_id_map: Dict[str, str]
 ) -> tuple[str, list[str]]:
@@ -1405,7 +1425,7 @@ def _create_plugin_and_tools(
         desc=plugin_tpl.get("desc"),
         space_id=space_id,
         plugin_type=plugin_tpl.get("plugin_type", PluginType.PLUGIN_TYPE_CLOUD_API),
-        url=os.environ.get("VITE_PLUGIN_SERVICE_URL") or plugin_tpl.get("url") or "",
+        url=plugin_tpl.get("url") or "",
         icon_uri=plugin_tpl.get("icon_uri") or "",
     )
 
@@ -3123,6 +3143,7 @@ async def _agent_import_core(
 
         # 3. 导入 Workflows
         workflow_id_map = {}
+        workflow_name_map = {}
 
         # 使用反向迭代，先处理子工作流，再处理父工作流
         reversed_workflows = list(reversed(dependencies.workflows))
@@ -3133,17 +3154,27 @@ async def _agent_import_core(
                 continue
 
             # 0. 先尝试更新 schema 中的依赖引用 (使用已有的 map)
-            if "schema" in wf_data and wf_data["schema"] and workflow_id_map:
+            if "schema" in wf_data and wf_data["schema"]:
                 try:
                     schema_obj = json.loads(wf_data["schema"])
-                    new_schema_obj = _update_workflow_ids_in_json(
-                        schema_obj, workflow_id_map
-                    )
+                    updated_schema = schema_obj
+                    
+                    # 更新工作流ID引用
+                    if workflow_id_map:
+                        updated_schema = _update_workflow_ids_in_json(
+                            updated_schema, workflow_id_map
+                        )
+                    
+                    # 更新插件ID引用
+                    if plugin_id_map:
+                        updated_schema = _update_plugin_ids_in_json(
+                            updated_schema, plugin_id_map
+                        )
 
                     # 如果 schema 发生变化，更新 wf_data
-                    if new_schema_obj != schema_obj:
+                    if updated_schema != schema_obj:
                         wf_data["schema"] = json.dumps(
-                            new_schema_obj, ensure_ascii=False
+                            updated_schema, ensure_ascii=False
                         )
                         logger.info(
                             f"[AGENT_IMPORT] Updated schema for workflow {old_wf_id} with new dependencies"
@@ -3174,6 +3205,7 @@ async def _agent_import_core(
                     workflow_id_map[old_wf_id] = new_wf_id
                     wf_data["workflow_id"] = new_wf_id
                     wf_data["name"] = f"{wf_data.get('name')}_copy"
+                    workflow_name_map[old_wf_id] = wf_data["name"]
                     
                     # 创建新工作流
                     wf_data["space_id"] = space_id
@@ -3305,6 +3337,14 @@ async def _agent_import_core(
                             wf["id"] = new_id
                         if "workflow_id" in wf:
                             wf["workflow_id"] = new_id
+                        
+                        # Update name if it was changed (copy created)
+                        if old_ref_id in workflow_name_map:
+                            new_name = workflow_name_map[old_ref_id]
+                            if "name" in wf:
+                                wf["name"] = new_name
+                            if "workflow_name" in wf:
+                                wf["workflow_name"] = new_name
 
             # Update configs
             if "configs" in agent_data and agent_data["configs"]:
@@ -3372,29 +3412,33 @@ async def _agent_import_core(
                         message=StatusCode.AGENT_IMPORT_AGENT_CREATE_ERROR.errmsg.format(msg=save_res.message)
                     )
             else:
-                # 不覆盖，重新生成ID
+                # 不覆盖，创建副本：生成新的agent_id
                 new_agent_id = str(uuid.uuid4())
                 agent_data["agent_id"] = new_agent_id
-                agent_data["agent_name"] = f"{agent_data.get('agent_name')}_copy"
+                # 更新agent_name，添加_copy后缀
+                agent_data["agent_name"] = f"{agent_data.get('agent_name', 'agent')}_copy"
                 agent_data["space_id"] = space_id
                 agent_data["create_time"] = milliseconds()
                 agent_data["update_time"] = milliseconds()
-                # 清除版本信息，确保是 Draft
+                # 确保没有 agent_version (Draft)
                 agent_data.pop("agent_version", None)
 
-                final_agent_id = new_agent_id
-
+                logger.info(f"[AGENT_IMPORT] Creating agent copy with new ID {new_agent_id} (original: {old_agent_id})")
                 agent_obj = AgentBaseDBPd(**agent_data)
                 create_res = agent_repository.create_agent_db(agent_obj)
+
                 if create_res.code != status.HTTP_200_OK:
+                    # 捕获 IntegrityError: ID已存在但不在当前space下
                     logger.error(
-                        f"[AGENT_IMPORT] Failed to create copy agent: {create_res.message}"
+                        f"[AGENT_IMPORT] Failed to create agent copy: {create_res.message}"
                     )
                     rollback_resources(created_resources)
                     return ResponseModel(
                         code=StatusCode.AGENT_IMPORT_AGENT_CREATE_ERROR.code,
                         message=StatusCode.AGENT_IMPORT_AGENT_CREATE_ERROR.errmsg.format(msg=create_res.message)
                     )
+
+                final_agent_id = new_agent_id
         else:
             # 直接生成新的agent_id，避免全局冲突
             new_agent_id = str(uuid.uuid4())

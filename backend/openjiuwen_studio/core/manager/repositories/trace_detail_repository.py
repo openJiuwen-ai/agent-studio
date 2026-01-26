@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import status
 
-from openjiuwen_studio.core.database import jiuwen_db_logger
+from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
 from openjiuwen_studio.models.trace_detail import TraceDetailDB
@@ -26,7 +26,7 @@ def with_exception_handling(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            jiuwen_db_logger.error(f"Trace detail repository error: {str(e)}")
+            logger.error(f"Trace detail repository error: {str(e)}")
             return ResponseModel(
                 code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=f"Operation failed: {str(e)}",

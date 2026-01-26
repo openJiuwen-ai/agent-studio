@@ -6,7 +6,8 @@ from fastapi import status
 from sqlalchemy import func, literal
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import jiuwen_db_logger, milliseconds
+from openjiuwen.core.common.logging import logger
+from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import (
     get_db_jw, get_val_from_dict)
@@ -33,8 +34,8 @@ class AgentRepository():
             try:
                 return func(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error("Error: agent db data preprocessing error")
-                jiuwen_db_logger.debug(f"Exception details: {type(e).__name__}", exc_info=True)
+                logger.error("Error: agent db data preprocessing error")
+                logger.debug(f"Exception details: {type(e).__name__}", exc_info=True)
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST, 
                                      message=f"Error: agent db data preprocessing error: {type(e).__name__}")
         return wrapper
@@ -446,20 +447,20 @@ class AgentRepository():
 
                             if update_result.code == status.HTTP_200_OK:
                                 updated_count += 1
-                                jiuwen_db_logger.info(
+                                logger.info(
                                     f"[KB_DELETE] Removed KB {kb_id} from agent {agent_id} (draft version)"
                                 )
                             else:
                                 failed_count += 1
                                 error_msg = f"Failed to update agent {agent_id} (draft): {update_result.message}"
                                 errors.append(error_msg)
-                                jiuwen_db_logger.error(f"[KB_DELETE] {error_msg}")
+                                logger.error(f"[KB_DELETE] {error_msg}")
 
                     except Exception as e:
                         failed_count += 1
                         error_msg = f"Error processing agent {agent_data.get('agent_id', 'unknown')} (draft): {str(e)}"
                         errors.append(error_msg)
-                        jiuwen_db_logger.error(f"[KB_DELETE] {error_msg}", exc_info=True)
+                        logger.error(f"[KB_DELETE] {error_msg}", exc_info=True)
 
             # 查询并更新publish版本的agent
             agent_publish_db = JiuwenBaseRepository(db, agent.AgentPublishDB)
@@ -501,7 +502,7 @@ class AgentRepository():
 
                             if update_result.code == status.HTTP_200_OK:
                                 updated_count += 1
-                                jiuwen_db_logger.info(
+                                logger.info(
                                     f"[KB_DELETE] Removed KB {kb_id} from agent {agent_id} "
                                     f"(publish version: {agent_version})"
                                 )
@@ -512,7 +513,7 @@ class AgentRepository():
                                     f"(publish): {update_result.message}"
                                 )
                                 errors.append(error_msg)
-                                jiuwen_db_logger.error(f"[KB_DELETE] {error_msg}")
+                                logger.error(f"[KB_DELETE] {error_msg}")
 
                     except Exception as e:
                         failed_count += 1
@@ -521,7 +522,7 @@ class AgentRepository():
                             f"(publish): {str(e)}"
                         )
                         errors.append(error_msg)
-                        jiuwen_db_logger.error(f"[KB_DELETE] {error_msg}", exc_info=True)
+                        logger.error(f"[KB_DELETE] {error_msg}", exc_info=True)
 
             return ResponseModel(
                 code=status.HTTP_200_OK,

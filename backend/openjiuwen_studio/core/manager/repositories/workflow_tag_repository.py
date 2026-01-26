@@ -5,7 +5,8 @@ from fastapi import status
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import jiuwen_db_logger, milliseconds
+from openjiuwen.core.common.logging import logger
+from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import (
     JiuwenBaseRepository, get_db_jw, get_val_from_dict)
 from openjiuwen_studio.models.tag import TagDB, workflow_tag_association
@@ -24,7 +25,7 @@ class WorkflowTagRepository:
             try:
                 return func_(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error(f"Error: workflow-tag db data processing failed, {str(e)}")
+                logger.error(f"Error: workflow-tag db data processing failed, {str(e)}")
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message=f"Error: workflow-tag db data processing failed, {str(e)}"
@@ -44,7 +45,7 @@ class WorkflowTagRepository:
         """
         with get_db_jw() as db:
             if not workflow_data:
-                jiuwen_db_logger.debug(f"No tag data to register: \ndata: {workflow_data}")
+                logger.debug(f"No tag data to register: \ndata: {workflow_data}")
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message="No tag data to register"
@@ -91,7 +92,7 @@ class WorkflowTagRepository:
                 ).model_dump(exclude_none=True)
             except Exception as e:
                 db.rollback()
-                jiuwen_db_logger.error(f"Tag association creation failed: {str(e)}")
+                logger.error(f"Tag association creation failed: {str(e)}")
                 return ResponseModel(
                     code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     message=f"Tag association creation failed: {str(e)}"
@@ -146,10 +147,10 @@ class WorkflowTagRepository:
                 ).fetchall()
 
                 tag_list = []
-                jiuwen_db_logger.info(f"Found {len(tags_result)} tags for tag_ids: {tag_ids}")
+                logger.info(f"Found {len(tags_result)} tags for tag_ids: {tag_ids}")
 
                 for tag_row in tags_result:
-                    jiuwen_db_logger.info(f"Processing tag: {tag_row}, type: {type(tag_row)}")
+                    logger.info(f"Processing tag: {tag_row}, type: {type(tag_row)}")
                     # Extract TagDB object from Row
                     tag = tag_row[0]  # First element in the row is the TagDB object
                     tag_dict = {
@@ -173,7 +174,7 @@ class WorkflowTagRepository:
                 ).model_dump(exclude_none=True)
 
             except Exception as e:
-                jiuwen_db_logger.error(f"Error getting workflow tags: {str(e)}")
+                logger.error(f"Error getting workflow tags: {str(e)}")
                 return ResponseModel(
                     code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     message=f"Error getting workflow tags: {str(e)}"
@@ -220,7 +221,7 @@ class WorkflowTagRepository:
                 ).model_dump(exclude_none=True)
             except Exception as e:
                 db.rollback()
-                jiuwen_db_logger.error(f"Error removing workflow tags: {str(e)}")
+                logger.error(f"Error removing workflow tags: {str(e)}")
                 return ResponseModel(
                     code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     message=f"Error removing workflow tags: {str(e)}"
@@ -265,7 +266,7 @@ class WorkflowTagRepository:
                 ).model_dump(exclude_none=True)
             except Exception as e:
                 db.rollback()
-                jiuwen_db_logger.error("Error removing tag association")
+                logger.error("Error removing tag association")
                 return ResponseModel(
                     code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     message=f"Error removing tag association: {str(e)}"
@@ -302,10 +303,10 @@ class WorkflowTagRepository:
                     workflow_tag_association.c.tag_id.in_(tag_ids)
                 ).distinct()
 
-                jiuwen_db_logger.info(f"Executing tag search query for space_id: {space_id}, tag_ids: {tag_ids}")
+                logger.info(f"Executing tag search query for space_id: {space_id}, tag_ids: {tag_ids}")
                 associations = db.execute(query).fetchall()
                 workflow_ids = [assoc[0] for assoc in associations]
-                jiuwen_db_logger.info(f"Tag search returned {len(workflow_ids)} workflow IDs")
+                logger.info(f"Tag search returned {len(workflow_ids)} workflow IDs")
 
                 return ResponseModel(
                     code=status.HTTP_200_OK,
@@ -314,7 +315,7 @@ class WorkflowTagRepository:
                 ).model_dump(exclude_none=True)
 
             except Exception as e:
-                jiuwen_db_logger.error(
+                logger.error(
                     f"Error finding workflows by tags for space_id {space_id}, tag_ids {tag_ids}: {str(e)}")
                 return ResponseModel(
                     code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -374,7 +375,7 @@ class WorkflowTagRepository:
                 )
 
         except Exception as e:
-            jiuwen_db_logger.error(f"Error getting tag association: {str(e)}")
+            logger.error(f"Error getting tag association: {str(e)}")
             return ResponseModel(
                 code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=f"Error getting association: {str(e)}"

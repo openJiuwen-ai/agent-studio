@@ -13,7 +13,8 @@ from openjiuwen.core.stream.base import OutputSchema
 from openjiuwen.core.tracer.span import TraceAgentSpan, TraceWorkflowSpan
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import jiuwen_db_logger, milliseconds
+from openjiuwen.core.common.logging import logger
+from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import (
     get_db_jw, get_val_from_dict)
@@ -61,7 +62,7 @@ class AgentExecutionRepository():
                 return func(self, *args, **kwargs)
             except Exception as e:
                 error_log = f"Error: agent execution db data preprocessing error, {str(e)}"
-                jiuwen_db_logger.error(error_log)
+                logger.error(error_log)
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST, message=error_log)
         return wrapper
     
@@ -181,7 +182,7 @@ class AgentExecutionRepository():
                 else:
                     # 还处理中的组件中无法找到父节点，说明存在错误
                     error_msg = "Can't find the parent loop_component of this component"
-                    jiuwen_db_logger.debug(error_msg)
+                    logger.debug(error_msg)
                     raise ValueError(error_msg)
             else:
                 # 一般组件
@@ -220,7 +221,7 @@ class AgentExecutionRepository():
                     _component_process_over(log, component_execute_info)
                 else:
                     warn_msg = f"Can't find this component from running components, invoke_id: {log.invoke_id}"
-                    jiuwen_db_logger.warning(warn_msg)
+                    logger.warning(warn_msg)
                     component_execute_info = InvokeExecuteInfo(
                         invoke_id=log.invoke_id,
                         invoke_name=log.name,
@@ -308,7 +309,7 @@ class AgentExecutionRepository():
     ) -> ResponseModel[AgentExecutionDB | None]:
         # 数据校验
         if not log_data:
-            jiuwen_db_logger.debug("No log_data to register")
+            logger.debug("No log_data to register")
             return ResponseModel(code=status.HTTP_400_BAD_REQUEST, message="No log_data to register")
         
         # 数据库查询agent是否存在
@@ -348,7 +349,7 @@ class AgentExecutionRepository():
         trace_id_set = list(set([log.trace_id for log in log_data]))
         trace_id = trace_id_set[0]
         if len(trace_id_set) != 1 or not trace_id:
-            jiuwen_db_logger.debug(f"Trace_id in log_data is not unique or empty, trace_id_set: {trace_id_set}")
+            logger.debug(f"Trace_id in log_data is not unique or empty, trace_id_set: {trace_id_set}")
             return ResponseModel(code=status.HTTP_400_BAD_REQUEST, message="Trace_id in log_data is not unique or empty.")
         
         # 构造AgentExecutionDB模型数据信息

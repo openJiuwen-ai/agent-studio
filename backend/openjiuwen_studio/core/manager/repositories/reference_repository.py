@@ -4,7 +4,8 @@ from typing import Callable
 from fastapi import status
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import jiuwen_db_logger, milliseconds
+from openjiuwen.core.common.logging import logger
+from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import (
     get_db_jw, get_val_from_dict)
@@ -22,8 +23,8 @@ class ReferenceRepository():
             try:
                 return func(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error("Error: Reference data processing failed")
-                jiuwen_db_logger.debug(f"Reference processing exception: {type(e).__name__}", exc_info=True)
+                logger.error("Error: Reference data processing failed")
+                logger.debug(f"Reference processing exception: {type(e).__name__}", exc_info=True)
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message=f"Error: Reference db data could not be processed: {type(e).__name__}").model_dump(exclude_none=True)
@@ -48,7 +49,7 @@ class ReferenceRepository():
         with get_db_jw() as db:
             reference_db = JiuwenBaseRepository(db, ReferenceDB)
             if not reference_data:
-                jiuwen_db_logger.debug(f"No reference data to register: \ndata: {reference_data}")
+                logger.debug(f"No reference data to register: \ndata: {reference_data}")
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message="No reference data to register"

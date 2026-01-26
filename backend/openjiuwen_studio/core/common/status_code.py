@@ -48,8 +48,8 @@ class StatusCode(Enum):
     AGENT_IMPORT_KB_ERROR = (BASE_CODE + 1037, "导入知识库失败: {msg}", "failed to import knowledge base: {msg}")
     AGENT_IMPORT_PROMPT_ERROR = (BASE_CODE + 1038, "导入提示词模板失败: {msg}", "failed to import prompt template: {msg}")
     AGENT_IMPORT_AGENT_CREATE_ERROR = (BASE_CODE + 1039, 
-                                       "创建智能体失败: {msg}", 
-                                       "failed to create agent from import data: {msg}")
+                                          "创建智能体失败: {msg}", 
+                                          "failed to create agent from import data: {msg}")
 
     # Workflow模块 2001~2999
     WORKFLOW_DL_FETCH_FAILED = (BASE_CODE + 2001, "获取工作流描述语言失败: {msg}",

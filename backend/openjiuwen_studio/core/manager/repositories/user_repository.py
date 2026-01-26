@@ -4,7 +4,7 @@ from typing import Callable, List, Optional, Union
 from fastapi import status
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import jiuwen_db_logger
+from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import (
     get_db_jw, get_val_from_dict)
@@ -27,7 +27,7 @@ class UserRepository():
             try:
                 return func(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error(f"Error: user&space db data preprocessing failed: {str(e)}")
+                logger.error(f"Error: user&space db data preprocessing failed: {str(e)}")
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST, 
                     message=f"Error: user&space db data preprocessing failed: {str(e)}"

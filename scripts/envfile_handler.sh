@@ -178,7 +178,7 @@ process_env_file() {
             else
                 load_env_from_file "${arg_env_file}"
             fi
-            generate_ssl_certs .ssl-dirs/${DEPLOY_VARS["SSL_DIR_NAME"]}
+            generate_ssl_certs conf/.ssl-dirs/ssl-${DEPLOY_VARS["NAME_SUFFIX"]}
             ;;
     
         down|stop)

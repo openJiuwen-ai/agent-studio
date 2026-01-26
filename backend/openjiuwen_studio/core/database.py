@@ -1,5 +1,3 @@
-import logging
-import logging.config
 import time
 from pathlib import Path
 
@@ -13,7 +11,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 from openjiuwen.core.common.logging import logger
-from openjiuwen_studio.core.common.config import config as jiuwen_config
 from openjiuwen_studio.core.config import settings
 
 
@@ -59,17 +56,6 @@ def get_milliseconds() -> int:
 
 
 milliseconds = get_milliseconds
-
-
-# 初始化logging工具
-def init_log():
-    db_logconf = jiuwen_config.db.log.raw_config
-    logging.config.dictConfig(db_logconf)
-    db_logger = logging.getLogger('db_manager')
-    return db_logger
-
-
-jiuwen_db_logger = init_log()
 
 
 class LazyMinioClient:

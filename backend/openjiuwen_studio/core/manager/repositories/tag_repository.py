@@ -5,7 +5,8 @@ from fastapi import status
 from sqlalchemy import and_, bindparam, func, or_
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import jiuwen_db_logger, milliseconds
+from openjiuwen.core.common.logging import logger
+from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import (
     JiuwenBaseRepository, get_db_jw, get_val_from_dict)
 from openjiuwen_studio.models.tag import TagDB
@@ -24,8 +25,8 @@ class TagRepository:
             try:
                 return func_(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error("Error: Tag db data processing failed")
-                jiuwen_db_logger.debug(f"Tag db processing exception: {type(e).__name__}", exc_info=True)
+                logger.error("Error: Tag db data processing failed")
+                logger.debug(f"Tag db processing exception: {type(e).__name__}", exc_info=True)
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message=f"Error: Tag db data could not be processed: {type(e).__name__}"
@@ -46,7 +47,7 @@ class TagRepository:
             tag_db = JiuwenBaseRepository(db, TagDB)
 
             if not tag_data:
-                jiuwen_db_logger.debug(f"No tag data to register: \ndata: {tag_data}")
+                logger.debug(f"No tag data to register: \ndata: {tag_data}")
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message="No tag data to register"
@@ -169,7 +170,7 @@ class TagRepository:
             tag_db = JiuwenBaseRepository(db, TagDB)
 
             if not tag_data:
-                jiuwen_db_logger.debug("No tag data to update")
+                logger.debug("No tag data to update")
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message="No tag data to update"
@@ -343,8 +344,8 @@ class TagRepository:
                 ).model_dump(exclude_none=True)
 
             except Exception as e:
-                jiuwen_db_logger.error("Searching tags failed")
-                jiuwen_db_logger.debug(f"Tag search exception: {type(e).__name__}", exc_info=True)
+                logger.error("Searching tags failed")
+                logger.debug(f"Tag search exception: {type(e).__name__}", exc_info=True)
                 return ResponseModel(
                     code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     message=f"Searching tags failed: {type(e).__name__}"

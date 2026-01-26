@@ -123,6 +123,7 @@ export class WorkflowExecutor {
     }
 
     this.statusManager.removeWaitingForInput(input.node_id)
+    this.eventConverter.removeWaitingForInputNode(input.node_id)
     this.isExecuting = true
 
     try {
@@ -255,6 +256,9 @@ export class WorkflowExecutor {
         })
       } else if (status === 'waiting_for_input') {
         this.statusManager.addWaitingForInput(nodeId)
+        this.statusManager.setNodeStatus(nodeId, NodeExecutionStatus.RUNNING, {
+          inputs: executionEvent.inputs,
+        })
       }
     }
 

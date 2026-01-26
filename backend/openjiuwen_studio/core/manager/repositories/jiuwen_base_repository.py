@@ -8,7 +8,8 @@ from sqlalchemy import (String, Text, Unicode, asc, between, desc, inspect,
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import SessionLocal, jiuwen_db_logger
+from openjiuwen.core.common.logging import logger
+from openjiuwen_studio.core.database import SessionLocal
 from openjiuwen_studio.core.manager.repositories import BaseRepository
 from openjiuwen_studio.models.db_fun_base import DBFunBase
 from openjiuwen_studio.schemas.common import ResponseModel
@@ -70,16 +71,14 @@ class JiuwenBaseRepository(BaseRepository[DBFunBase]):
             try:
                 return func(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error(f"message: DB error: {str(e)}")
+                logger.error(f"message: DB error: {str(e)}")
                 if "find_id" in kwargs:
                     if "dl" in kwargs:
-                        jiuwen_db_logger.error(
+                        logger.error(
                             f"db_table_name: {self._model_class.__tablename__}, find_ids: {kwargs['find_id']}, dl: {kwargs['dl']}")
                     else:
-                        jiuwen_db_logger.error(
+                        logger.error(
                             f"db_table_name: {self._model_class.__tablename__}, find_ids: {kwargs['find_id']}")
-                else:
-                    jiuwen_db_logger.error(f"db_table_name: {self._model_class.__tablename__}")
                 return ResponseModel(code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"DB error: {str(e)}")
         return wrapper
 
@@ -321,7 +320,7 @@ class JiuwenBaseRepository(BaseRepository[DBFunBase]):
             if self.exists(**find_id):
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST, message="This db already exists")
         if not dl:
-            jiuwen_db_logger.debug(
+            logger.debug(
                 f"No valid data to register: \nsql_table_name: {self._model_class.__tablename__}, find_ids: {find_id}, dl: {dl}")
             return ResponseModel(code=status.HTTP_400_BAD_REQUEST, message="No valid data to register")
         dl_with_rest = dl if isinstance(dl, self._model_class) else \
@@ -364,7 +363,7 @@ class JiuwenBaseRepository(BaseRepository[DBFunBase]):
             return ResponseModel(code=status.HTTP_200_OK, message="Dl bulk register successfully.")
         except SQLAlchemyError as e:
             self.db.rollback()
-            jiuwen_db_logger.error(f"Failed to bulk create records: {str(e)}")
+            logger.error(f"Failed to bulk create records: {str(e)}")
             raise
 
     '''
@@ -402,7 +401,7 @@ class JiuwenBaseRepository(BaseRepository[DBFunBase]):
         if verify_res.code != status.HTTP_200_OK:
             return verify_res
         if not update_dl:
-            jiuwen_db_logger.debug(f"No valid data to update: ")
+            logger.debug(f"No valid data to update: ")
             return ResponseModel(code=status.HTTP_400_BAD_REQUEST, message="No valid data to update")
         update_dl = self._model_class._json_with_rest(update_dl, exclude_invalid=True, exclude_rest=False)
         mapper = inspect(self._model_class)
@@ -472,7 +471,7 @@ class JiuwenBaseRepository(BaseRepository[DBFunBase]):
                 # 数据转换并保存
                 update_res = self._update_dl_in_sql_directly(update_find_id, prkey_rest, commit=False)
                 if update_res.code != status.HTTP_200_OK:
-                    jiuwen_db_logger.error(f"Update error: sql_table_name: {self._model_class.__tablename__}")
+                    logger.error(f"Update error: sql_table_name: {self._model_class.__tablename__}")
             self.db.commit()
         return update_res
 

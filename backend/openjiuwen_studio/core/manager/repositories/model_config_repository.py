@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import jiuwen_db_logger
+from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.manager.repositories import BaseRepository
 from openjiuwen_studio.models.model_config import ModelConfig
 from openjiuwen_studio.schemas.model_config import ModelProvider
@@ -274,7 +274,7 @@ class ModelConfigRepository(BaseRepository[ModelConfig]):
                 self.db.commit()
                 self.db.refresh(model)
             except Exception as e:
-                jiuwen_db_logger.error(f"Failed to update usage stats for model {model_id}: {e}")
+                logger.error(f"Failed to update usage stats for model {model_id}: {e}")
                 self.db.rollback()
                 raise
         return model
@@ -296,7 +296,7 @@ class ModelConfigRepository(BaseRepository[ModelConfig]):
                 self.db.commit()
                 self.db.refresh(model)
             except Exception as e:
-                jiuwen_db_logger.error(f"Failed to toggle stats for model {model_id}: {e}")
+                logger.error(f"Failed to toggle stats for model {model_id}: {e}")
                 self.db.rollback()
                 raise
         return model

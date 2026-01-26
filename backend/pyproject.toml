@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "openjiuwen-studio"
 version = "0.1.1"
 description = "OpenJiuwen Studio offers an all-in-one AI Agent development platform"
-requires-python = "==3.11.4"
+requires-python = ">=3.11.4"
 dependencies = [
     "fastapi==0.115.11",
     "uvicorn[standard]>=0.35",

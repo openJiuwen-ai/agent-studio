@@ -1083,7 +1083,7 @@ const ToolConfigurationPage: React.FC = () => {
     }
 
     // Get tool parameter names to filter out plugin parameters with the same name
-    const toolParamNames = new Set(tool?.input_parameters?.filter(p => p.is_runtime !== false).map(p => p.name) || [])
+    const toolParamNames = new Set(tool?.input_parameters?.map(p => p.name) || [])
 
     // Check plugin-level required runtime parameters (excluding those with same name as tool parameters)
     pluginData?.data?.plugin_info?.request_params
@@ -2200,7 +2200,7 @@ const ToolConfigurationPage: React.FC = () => {
               <div className="space-y-6">
                 {/* Plugin-level Parameters - 只显示运行时参数，且排除与工具参数同名的参数 */}
                 {pluginData?.data?.plugin_info?.request_params && (() => {
-                  const toolParamNames = new Set(tool?.input_parameters?.filter(p => p.is_runtime !== false).map(p => p.name) || [])
+                  const toolParamNames = new Set(tool?.input_parameters?.map(p => p.name) || [])
                   const visiblePluginParams = pluginData.data.plugin_info.request_params.filter(p =>
                     p.is_runtime !== false && !toolParamNames.has(p.name)
                   )
@@ -2212,7 +2212,7 @@ const ToolConfigurationPage: React.FC = () => {
                         {t('plugins.toolConfig.pluginParams', '插件参数')}
                       </Typography>
                       <Chip label={`${(() => {
-                        const toolParamNames = new Set(tool?.input_parameters?.filter(p => p.is_runtime !== false).map(p => p.name) || [])
+                        const toolParamNames = new Set(tool?.input_parameters?.map(p => p.name) || [])
                         return pluginData.data.plugin_info.request_params.filter(p =>
                           p.is_runtime !== false && !toolParamNames.has(p.name)
                         ).length
@@ -2220,7 +2220,7 @@ const ToolConfigurationPage: React.FC = () => {
                     </div>
                     {pluginData.data.plugin_info.request_params
                       .filter(p => {
-                        const toolParamNames = new Set(tool?.input_parameters?.filter(p => p.is_runtime !== false).map(p => p.name) || [])
+                        const toolParamNames = new Set(tool?.input_parameters?.map(p => p.name) || [])
                         return p.is_runtime !== false && !toolParamNames.has(p.name)
                       })
                       .map((param, index) => {

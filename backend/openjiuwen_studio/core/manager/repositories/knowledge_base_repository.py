@@ -4,7 +4,8 @@ from fastapi import status
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import jiuwen_db_logger, milliseconds
+from openjiuwen.core.common.logging import logger
+from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
 from openjiuwen_studio.models import knowledge_base as kb_models
@@ -24,8 +25,8 @@ class KnowledgeBaseRepository:
             try:
                 return func_(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error("Error: knowledge base db data preprocessing error")
-                jiuwen_db_logger.debug(f"Exception details: {type(e).__name__}", exc_info=True)
+                logger.error("Error: knowledge base db data preprocessing error")
+                logger.debug(f"Exception details: {type(e).__name__}", exc_info=True)
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message=f"Error: knowledge base db data preprocessing error: {type(e).__name__}"
@@ -42,7 +43,7 @@ class KnowledgeBaseRepository:
         with get_db_jw(db_session) as db:
             kb_db = JiuwenBaseRepository(db, kb_models.KnowledgeBaseDB)
             if not kb_data:
-                jiuwen_db_logger.debug(f"No knowledge base data to register: \ndata: {kb_data}")
+                logger.debug(f"No knowledge base data to register: \ndata: {kb_data}")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST, message="No knowledge base data to register")
             
             find_id = {
@@ -183,7 +184,7 @@ class KnowledgeBaseRepository:
         with get_db_jw(db_session) as db:
             doc_db = JiuwenBaseRepository(db, kb_doc_models.KnowledgeBaseDocumentDB)
             if not doc_data:
-                jiuwen_db_logger.debug(f"No document data to register: \ndata: {doc_data}")
+                logger.debug(f"No document data to register: \ndata: {doc_data}")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST, message="No document data to register")
             
             find_id = {

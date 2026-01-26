@@ -1,21 +1,21 @@
-# 脚本概述
+# Openjiuwen Agent Studio 部署工具使用手册
 
-scripts/service.sh 是 Jiuwen Agent Studio 一站式部署工具，支持多架构交叉编译（如在 AMD 架构平台编译 ARM 架构镜像）、配置集中化管理，可一键完成服务的编译、部署、卸载等操作，操作简洁且高效。
+本脚本是 Openjiuwen Agent Studio 一站式自动化容器部署工具，与本地部署方式存在本质差异 —— 全程基于容器化技术实现，不依赖本地系统环境配置，彻底规避本地部署的环境冲突、版本兼容等问题。本工具实现单机单点部署，支持配置集中化管理、多实例隔离部署，可一键完成服务的部署、启停、卸载等全生命周期操作，操作简洁高效，无需复杂的手动配置。
 
 ## 部署目录说明
 
 ```bash
 scripts/
-├── .env                            # 脚本运行的部署相关的环境变量文件（自动生成）
+├── .env                            # 脚本运行的部署相关的环境变量文件（自动生成）（启动的最近的那套实例服务）
 ├── .env.custom                     # 用户自定义变量覆盖文件（用户手动修改，优先级最高，用于覆盖默认变量）
 ├── .env.deploy.default             # 部署相关默认变量文件（禁止修改）
 ├── .env.runtime.default            # 运行时相关默认变量文件（禁止修改）
 ├── .envs/                          # 多实例服务变量文件归档目录（自动生成）
-│   ├── env.deploy.<五位随机串>     # 某实例的部署变量备份文件（记录该实例的部署配置）
-│   ├── env.runtime.<五位随机串>    # 某实例的运行时变量文件（直接挂载到容器的环境变量文件）
+│   ├── env.deploy.<五位随机标识>     # 某实例的部署变量备份文件（记录该实例的部署配置，按五位随机串区分实例）
+│   ├── env.runtime.<五位随机标识>    # 某实例的运行时变量文件（直接挂载到容器的环境变量文件）
 │   └── ...                         # 其他服务实例的变量文件
 ├── .ssl-dirs/                      # 多实例前端服务SSL证书存储目录（自动生成）
-│   ├── ssl-<五位随机串>/           # 某前端服务实例的SSL证书目录（自动生成）
+│   ├── ssl-<五位随机标识>/           # 某前端服务实例的SSL证书目录（自动生成）
 │   │   ├── certificate.crt         # SSL公钥证书（供Nginx配置HTTPS）（自动生成）
 │   │   └── private.key             # SSL私钥文件（禁止泄露）（自动生成）
 │   └── ...                         # 其他前端实例的证书目录
@@ -34,7 +34,7 @@ scripts/
 │   ├── docker-plugin.yml           # 当前实例的Plugin Server容器最终配置文件（自动生成）
 │   ├── nginx.template.conf         # Nginx通用配置模板
 │   └── .nginx-files/               # 多实例Nginx配置文件目录（自动生成）
-│       ├── nginx.conf-<五位随机串> # 某前端实例的Nginx最终配置文件（自动生成）
+│       ├── nginx.conf-<五位随机标识> # 某前端实例的Nginx最终配置文件（自动生成）
 │       └── ...                     # 其他实例的Nginx配置文件（自动生成）
 ├── examples/                       # 后端业务示例配置目录
 ├── logs/                           # 脚本运行日志与服务日志归档目录（自动生成）
@@ -49,339 +49,385 @@ scripts/
 ├── global_vars.sh                  # 全局变量定义脚本
 ├── envfile_handler.sh              # 环境文件处理脚本
 ├── ports_handler.sh                # 端口管理脚本
+├── cmd.sh                          # 命令封装脚本
 └── template_handler.sh             # 模板渲染脚本
 ```
 
-本脚本支持多实例部署，所有配置按「五位随机串」区分不同服务实例；
+本脚本原生支持多实例隔离部署能力，所有服务实例均通过「五位随机标识」做唯一标识，不同实例的配置、容器、数据卷、日志完全隔离，互不干扰，可在同一台服务器上部署多套独立的 Agent Studio 服务。所有配置按「五位随机标识」区分不同服务实例；
 
-脚本运行依赖环境变量配置：.env.deploy.default 和.env.runtime.default 为默认环境变量文件（内置基础默认值，请勿修改）；如需自定义配置，可在 .env.custom 中配置变量以覆写默认值；
-
-对于启停(up/down)功能，无需拉取完整项目代码，仅需下载 scripts 目录即可执行启停操作。
-
-服务启动时，系统会自动整合配置（.env.deploy.default + .env.custom），并生成最终生效的 .env 文件（该文件是当前服务运行的核心配置）, 并将该.env 文件备份成.envs/env.deploy.<五位随机串>（该文件是对应服务启动、运行和重启的核心配置，请勿删除）。 同时，也会整合配置（.env.runtime.default + .env.custom），并生成.envs/env.runtime.<五位随机串>，此文件会作为前后端容器的环境变量文件。
+脚本运行依赖环境变量配置：`.env.deploy.default` 和`.env.runtime.default` 为默认环境变量文件（内置基础默认值，请勿修改）；如需自定义配置，可在`.env.custom`中配置变量以覆写默认值；
 
 ## 核心功能
 
-- 一键启停 /卸载 Jiuwen Agent Studio 完整容器集群（包含 MySQL、Milvus 等依赖服务）
-- 独立启停 / 卸载 指定的一个或多个组件服务（MySQL、Milvus、Plugin Server、 Sandbox Server、 JiuWen 组件服务）
+✅ 基础核心能力
 
-注意，启动时，自动创建服务依赖的网络、数据卷；停止时，只是停掉容器，并不删除容器；卸载时，会删除容器、集群网络，但不会删除数据卷；如需清理数据，需手动删除对应数据卷。
+- 一键启停 / 卸载 Agent Studio 完整服务体系，包含 MySQL、Etcd、MinIO、Milvus、前端、后端、插件服务、沙箱服务等所有依赖组件；
+- 独立启停 / 卸载指定的单个或多个组件服务，支持精准运维，组件包含：mysql、milvus、jiuwen、plugin、sandbox；
+- 自动创建服务运行所需的 Docker 网络、数据卷，无需手动初始化环境；
+- 自动检测并分配未占用端口，避免端口冲突问题，也支持手动指定端口配置；
+- 多实例隔离部署，实例间配置、容器、数据完全隔离，支持多套服务共存。
 
-```
-#
-# 进入脚本目录
-cd scripts
+✅ 容器 / 资源生命周期规则
 
-# 一键启动全套全新服务：请根据实际部署环境需求，在 .env.custom 文件中配置需自定义的变量
-./service.sh up
+为保障数据安全与运维灵活性，脚本对容器、网络、数据卷的生命周期做标准化管理，规则如下：
 
-# 如需重启已有服务
-./service.sh up -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
+- 启动（up）：自动创建 Docker 网络、数据卷，拉取 / 启动所有容器，容器状态为运行中；
+- 停止（stop）：仅停止运行中的容器，不删除容器、网络、数据卷，重启时可快速恢复服务，数据不丢失；
+- 卸载（down）：停止并删除所有相关容器、Docker 集群网络，保留所有数据卷，保障数据安全；
+- 数据清理：如需清理服务数据，需手动删除对应的数据卷，脚本不会自动清理任何持久化数据。
 
-# 一键停止.env文件指定的服务（最近一次启动的服务）
-./service.sh stop
+## 使用说明
 
-# 一键停止指定的服务
-./service.sh stop down -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-
-# 一键卸载.env文件指定的服务（停止并删除容器）（最近一次启动的服务）
-./service.sh down
-
-# 一键卸载指定的服务（停止并删除容器）
-./service.sh down -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-```
-
-## 独立启停/卸载指定的一个或多个组件服务
+✔️ **参数说明**
 
 ```
-# 进入脚本目录
-cd scripts
+$ ./service.sh --help
+用法: ./service.sh [模块] [命令] [选项]
 
-# 启动指定的某个组件服务（MYSQL/MILVUS/JIUWEN/PLUGIN)：请根据实际部署环境需求，在 .env.custom 文件中配置需自定义的变量
-./service.sh mysql up
-./service.sh milvus up
-./service.sh jiuwen up
-./service.sh plugin up
-./service.sh sandbox up
+命令:
+  up        启动服务
+  down      停止服务并彻底清理相关资源
+  stop      临时暂停运行中的服务（可重新启动）
 
-# 如需重启已有组件服务
-./service.sh mysql up -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh milvus up -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh jiuwen up -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh plugin up -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh sandbox up -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
+选项:
+  -h,--help  显示此帮助信息并立即退出
+  -f,--file  指定.env配置文件的路径（适用于已存在的服务）
+  -n,--new   强制启动全新的服务实例（忽略已存在的.env文件,自动生成全新配置）
 
-# 一键停止.env文件指定的组件服务（最近一次启动的组件服务）
-./service.sh mysql stop
-./service.sh milvus stop
-./service.sh jiuwen stop
-./service.sh plugin stop
-./service.sh sandbox stop
-
-# 一键停止指定的组件服务
-./service.sh mysql stop -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh milvus stop -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh jiuwen stop -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh plugin stop -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh sandbox stop -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-
-# 一键卸载.env文件指定的组件服务（停止并删除容器）
-./service.sh mysql down
-./service.sh milvus down
-./service.sh jiuwen down
-./service.sh plugin down
-./service.sh sandbox down
-
-# 一键卸载指定的组件服务（停止并删除容器）
-./service.sh mysql down -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh milvus down -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh jiuwen down -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh plugin down -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh sandbox down -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
+模块（适用于 service.sh/cluster.sh，可选参数）:
+  milvus    部署 Milvus 模块
+  jiuwen    部署 Jiuwen 模块
+  mysql     部署 MySQL 模块
+  plugin    部署插件模块
+  sandbox   部署沙箱模块
+注意: 未指定任何模块时，默认部署所有模块
 ```
 
-除此之外，可以支持一次启动/停止/卸载任意数量的组件比如：
+✔️ **完整服务 一键运维指令**
+
+1. 一键启动全新完整服务
 
 ```
-./service.sh milvus mysql plugin jiuwen up
-./service.sh milvus plugin sandbox jiuwen down
-./service.sh milvus mysql plugin sandbox jiuwen stop
-
-./service.sh milvus mysql plugin jiuwen up -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh milvus plugin sandbox jiuwen down -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-./service.sh milvus mysql plugin sandbox jiuwen stop -f <之前启动时脚本自动备份的配置文件：.envs/env.deploy.<五位随机串>文件>
-
+# 自动整合配置、生成新实例标识、启动全套服务（首次部署推荐使用）
+# 如需自定义配置，请先在当前目录的.env.custom文件中配置相关变量后再执行
+$ ./service.sh up -n
 ```
 
-# 附录
+- 若需全新部署全套服务，建议添加 -n 参数执行启动命令。该参数将忽略现有配置文件，重新生成全新的标准化配置后启动服务。
+- 若只是需要重新初始化完整服务，并且十分确定历史启动残留的`.env`配置文件准确无误，可以不加-n 参数，继续沿用老配置信息。
+
+2. 重启指定的已有服务实例
+
+```
+# 通过脚本自动备份的配置文件，精准重启指定的服务实例
+$ ./service.sh up -f .envs/env.deploy.<五位随机标识>
+```
+
+3. 一键停止当前生效的服务实例
+
+```
+# 停止最近一次启动的服务（默认读取当前目录的 .env 配置文件）
+$ ./service.sh stop
+
+# 精准停止指定的服务实例
+$ ./service.sh stop -f .envs/env.deploy.<五位随机标识>
+```
+
+4. 一键卸载当前生效的服务实例
+
+```
+# 停止并删除所有容器、清理集群网络，保留所有数据卷（读取当前目录 .env 文件）
+$ ./service.sh down
+
+# 精准卸载指定的服务实例
+$ ./service.sh down -f .envs/env.deploy.<五位随机标识>
+```
+
+✔️ **指定组件 独立运维指令**
+支持对单个组件进行精准启停 / 卸载，也支持同时对任意数量的组件进行批量运维，组件名称固定支持：mysql、milvus、jiuwen、plugin、sandbox，指令格式统一、灵活易用，单点 / 集群完全通用。
+
+1. 独立启动指定组件（全新实例 / 已有实例）
+
+```
+# 启动单个组件（全新实例，自动生成配置）
+$ ./service.sh mysql up -n
+$ ./service.sh milvus up -n
+$ ./service.sh jiuwen up -n
+$ ./service.sh plugin up -n
+$ ./service.sh sandbox up -n
+
+# 重启指定的已有组件实例
+$ ./service.sh mysql up -f .envs/env.deploy.<五位随机标识>
+$ ./service.sh milvus up -f .envs/env.deploy.<五位随机标识>
+```
+
+2. 独立停止指定组件（当前实例 / 指定实例）
+
+```
+# 停止单个组件（当前生效的服务实例）
+$ ./service.sh mysql stop
+$ ./service.sh milvus stop
+$ ./service.sh sandbox stop
+
+# 停止指定的组件实例
+$ ./service.sh mysql stop -f .envs/env.deploy.<五位随机标识>
+$ ./service.sh jiuwen stop -f .envs/env.deploy.<五位随机标识>
+```
+
+3. 独立卸载指定组件（当前实例 / 指定实例）
+
+```
+# 卸载单个组件（停止并删除对应容器，保留数据卷）
+$ ./service.sh mysql down
+$ ./service.sh plugin down
+$ ./service.sh milvus down
+
+# 卸载指定的组件实例
+$ ./service.sh milvus down -f .envs/env.deploy.<五位随机标识>
+$ ./service.sh sandbox down -f .envs/env.deploy.<五位随机标识>
+```
+
+✔️ **多组件 批量运维指令（高效推荐）**
+支持一次指定任意数量的组件，执行批量启动 / 停止 / 卸载操作，指令格式简洁，大幅提升运维效率，所有组合均支持指定备份配置文件，单点 / 集群通用，是日常运维的最优选择：
+
+```
+# 批量启动多个组件（全新实例）
+$ ./service.sh milvus mysql plugin jiuwen up -n
+
+# 批量重启多个指定组件实例
+$ ./service.sh milvus mysql sandbox up -f .envs/env.deploy.<五位随机标识>
+
+# 批量停止多个组件
+$ ./service.sh milvus plugin jiuwen stop
+
+# 批量卸载多个指定组件实例
+$ ./service.sh mysql milvus plugin sandbox down -f .envs/env.deploy.<五位随机标识>
+
+```
 
 ## 变量说明
 
+✅ 配置文件分类：部署类变量(deploy) + 运行时类变量(runtime)，两类配置分离管理，职责清晰；
+✅ 部署类变量：其默认值定义于 `.env.deploy.default`;
+✅ 运行类变量：其默认值定义于 `.env.runtime.default`；
+✅ 所有变量均可在当前目录的 `.env.custom`文件中配置，优先级最高，用于覆盖默认配置，无特殊需求请勿修改默认值；
+✅ 注释为 #变量名=值 的为脚本自动分配的默认值，无需手动配置；无注释的为固定配置项，按需修改即可。
+
+**部署类变量的处理**
+服务第一次启动时，本工具会自动整合部署类变量的配置，也就是`.env.deploy.default` + `.env.custom`，并生成最终生效的 `.env` 文件（该文件是当前服务运行的核心配置）, 并将该`.env` 文件备份成`.envs/env.deploy.<五位随机标识>`， 该文件是对应服务启动、运行和重启的核心配置，请勿删除。
+
+> 注意，多次启动之后， `.env` 文件记录的是启动的最近的那套实例服务的配置。
+
+**运行类变量的处理**
+服务第一次启动时，本工具也会自动整合运行类变量的配置， 也就是`.env.runtime.default` + `.env.custom`，并生成`.envs/env.runtime.<五位随机标识>`，此文件会作为前后端容器的环境变量文件。
+
+✔️ **补充说明**
+
+- 所有配置变量均为 按需配置，对于没有定义的变量，脚本将自动使用内置默认值，不影响服务运行；
+- 多实例部署场景下，所有实例的端口、容器名、数据卷名均由脚本自动生成唯一值，无需手动配置，彻底避免资源冲突；若需自定义相关配置，需由使用者自行关注并处理潜在的资源冲突问题。
+
+# FAQ
+
+## 如果查看服务实例的五位随机标识
+
+五位随机标识是每个服务实例的唯一身份标识，用于区分不同的服务实例配置文件、容器资源等核心关联信息，在多实例部署场景中尤为关键—— 所有针对指定实例的配置修改、运维操作，均需通过该随机标识精准定位目标实例，避免操作串号、资源冲突等问题。
+
+**查看步骤**
+
+1. 确认当前服务的访问地址：启动服务后，通过 `https://<服务运行IP>:<服务运行端口>/login` 访问 openJiuwen 智能体平台，请务必记录该访问端口；
+
+2. 登录服务运行的服务器，执行`docker ps -a | grep <服务运行端口>`命令，查询对应的前端服务容器。从查询结果的容器名称中，提取末尾的五位随机标识（容器名格式为jiuwen-frontend-<五位随机标识>）。
+
+**实操示例**
+
+若当前服务的访问地址为：`https://localhost:3000/login`，则需记录核心端口为3000；
+在服务运行服务器执行查询命令：
+
+```
+docker ps -a | grep 3000
 ```
 
-# ----------------------- MYSQL 配置 ------------------------
+命令返回结果如下，重点查看最后一列的容器名称：
 
-# 启动 MYSQL 容器使用的 image（默认无需设置，确保对应的镜像已存在或可正常拉取）
-
-MYSQL_IMAGE=<MySQL 镜像地址，如 mysql:8.4.5>
-
-# MYSQL 服务名称（Docker Compose 中唯一服务标识，避免与其他服务冲突）
-
-MYSQL_SERVICE=<自定义服务名称，如需设置请保证唯一，如 mysql>
-
-# MYSQL 容器名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-MYSQL_DOCKER=<自定义容器名称，如需设置请保证唯一，如 jiuwen-mysql>
-
-# MYSQL 服务对外暴露的端口（默认无需设置，部署脚本会自动分配未占用端口；如需设置，请更改此变量）
-
-MYSQL_HOST_PORT=<自定义端口号，如需设置请保证不冲突，如 3307>
-
-# MYSQL 使用的卷名（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-MYSQL_VOLUME=<数据卷名称，如需设置请保证唯一，如 mysql-data>
-
-# 数据库配置（如果使用本脚本部署的 MYSQL 容器，默认无需设置，部署脚本会自动产生匹配值，如果使用外部 MYSQL，请更改这几个变量）
-
-DB_HOST=<MySQL 服务地址，如 mysql>
-DB_PORT=<MySQL 服务端口，如 3306>
-DB_USER=<MySQL 数据库用户名，如 root>
-DB_PASSWORD=<MySQL 数据库用户名${DB_USER}使用的密码>
-OPS_DB_NAME=<MySQL 运维数据库名，如 jiuwen_ops>
-AGENT_DB_NAME=<MySQL Agent 核心数据库名，如 jiuwen_agent>
-DB_ROOT_PASSWORD=<MySQL 数据库 root 用户的密码，如果是本部署脚本拉起的 MYSQL 容器，值为 root>
-
-# ----------------------- ETCD 配置 ------------------------
-
-# 启动 ETCD 容器使用的 image（默认无需设置，确保对应的镜像已存在或可正常拉取）
-
-ETCD_IMAGE=<ETCD 镜像地址，如 bitnami/etcd:3.5.18>
-
-# ETCD 服务名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-ETCD_SERVICE=<服务名称，如需设置请保证唯一，如 etcd>
-
-# ETCD 容器名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-ETCD_DOCKER=<容器名称，如需设置请保证唯一，如 jiuwen-milvus-etcd>
-
-# ETCD 服务对外暴露的端口（默认无需设置，部署脚本会自动分配未占用端口；如需设置，请更改此变量）
-
-ETCD_HOST_PORT=<自定义端口号，如需设置请保证不冲突，如 2379>
-
-# ETCD 使用的卷名（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-ETCD_VOLUME=<数据卷名称，如需设置请保证唯一，如 etcd-data>
-
-# ----------------------- MINIO 配置 ------------------------
-
-# 启动 MINIO 容器使用的 image（默认无需设置，确保对应的镜像已存在或可正常拉取）
-
-MINIO_IMAGE=<MINIO 镜像地址，如 minio/minio:RELEASE.2024-12-18T13-15-44Z>
-
-# MINIO 服务名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-MINIO_SERVICE=<服务名称，如需设置请保证唯一，如 minio>
-
-# MINIO 容器名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-MINIO_DOCKER=<容器唯一名称，如需设置请保证唯一，如 jiuwen-milvus-minio>
-
-# MINIO 服务对外暴露的端口（默认无需设置，部署脚本会自动分配未占用端口；如需设置，请更改此变量）
-
-MINIO_SERVICE_HOST_PORT=<自定义端口号，如需设置请保证不冲突，如 8129>
-
-# MINIO 控制台对外暴露的端口（默认无需设置，部署脚本会自动分配未占用端口；如需设置，请更改此变量）
-
-MINIO_CONSOLE_HOST_PORT=<自定义端口号，如需设置请保证不冲突，如 8130>
-
-# MINIO 使用的卷名（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-MINIO_VOLUME=<数据卷名称，如需设置请保证唯一，如 minio-data>
-
-# ----------------------- MILVUS 配置 ------------------------
-
-# 启动 MILVUS 容器使用的 image（默认无需设置，但请确保你的机器上有这个镜像）
-
-MILVUS_IMAGE=<Milvus 镜像地址，如 milvusdb/milvus:v2.6.2>
-
-# MILVUS 服务名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-MILVUS_SERVICE=<服务名称，如需设置请保证唯一，如 milvus>
-
-# MILVUS 容器名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-MILVUS_DOCKER=<容器唯一名称，如需设置请保证唯一，如 jiuwen-milvus-standalone>
-
-# MILVUS 服务对外暴露的端口（默认无需设置，部署脚本会自动分配未占用端口；如需设置，请更改此变量）
-
-MILVUS_HOST_PORT=<自定义端口号，如需设置请保证不冲突，如 8131>
-
-# MILVUS 使用的数据卷名（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-MILVUS_VOLUME=<数据卷名称，如需设置请保证唯一，如 milvus-data>
-
-# MILVUS 配置（如果使用本脚本部署的 MILVUS 容器，默认无需设置，部署脚本会自动产生匹配值，如果使用外部 MILVUS，请更改这几个变量）
-
-MILVUS_HOST=<Milvus 服务地址，如 milvus>
-MILVUS_PORT=<Milvus 服务端口，默认 19530>
-MILVUS_COLLECTION_NAME=<向量集合名称，如 memory_vector>
-MILVUS_TOKEN=<Milvus 认证 Token，Milvus 认证 Token，无认证需求则留空（或不配置该变量）>
-
-# ----------------------- 前端配置 ------------------------
-
-# 启动前端容器使用的 image（默认无需设置，如要设置，请确保对应的镜像已存在或可正常拉取）
-
-FRONTEND_IMAGE=<前端镜像地址，如 studio-frontend:latest>
-
-# FRONTEND 服务名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-FRONTEND_SERVICE=<服务名称，如需设置请保证唯一，如 frontend>
-
-# FRONTEND 容器名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-FRONTEND_DOCKER=<容器唯一名称，如需设置请保证唯一，如 jiuwen-frontend>
-
-# FRONTEND 服务对外暴露的端口（默认无需设置，部署脚本会自动分配未占用端口；如需设置，请更改此变量）
-
-FRONTEND_HOST_PORT=<自定义端口号，如需设置请保证不冲突，如 3000>
-
-# ----------------------- 后端配置 ------------------------
-
-# 启动后端容器使用的 image（默认无需设置，如要设置，请确保对应的镜像已存在或可正常拉取）
-
-BACKEND_IMAGE=<后端镜像地址，如 studio-backend:latest>
-
-# BACKEND 服务名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-BACKEND_SERVICE=<服务名称，如需设置请保证唯一，如 backend>
-
-# BACKEND 容器名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-BACKEND_DOCKER=<容器唯一名称，如需设置请保证唯一，如 jiuwen-backend>
-
-# BACKEND 服务对外暴露的端口（默认无需设置，部署脚本会自动分配未占用端口；如需设置，请更改此变量）
-
-BACKEND_HOST_PORT=<自定义端口号，如需设置请保证不冲突，如 8000>
-
-# 提供 BACKEND 服务地址（如果使用本脚本部署的 BACKEND 服务，默认无需设置，部署脚本会自动产生匹配值，如果使用 BACKEND 服务，请更改这个变量）
-
-VITE_API_PROXY_TARGET=<后端API地址，如http://backend:8000/>
-
-# ----------------------- 插件服务配置 ------------------------
-
-# 启动插件服务容器使用的 image（默认无需设置，如要设置，请确保对应的镜像已存在或可正常拉取）
-
-PLUGIN_SERVER_IMAGE=<插件服务镜像地址，如 studio-plugin-server:latest>
-
-# 插件服务名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-PLUGIN_SERVER_SERVICE=plugin-server
-
-# 插件容器名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-PLUGIN_SERVER_DOCKER=jiuwen-plugin-server
-
-# 插件服务对外暴露的端口（默认无需设置，部署脚本会自动分配未占用端口；如需设置，请更改此变量）
-
-PLUGIN_SERVER_HOST_PORT=2030
-
-# 提供插件服务的地址（如果使用本脚本部署的插件服务，默认无需设置，部署脚本会自动产生匹配值，如果使用外部插件服务，请更改这个变量）
-
-VITE_PLUGIN_SERVICE_URL=<插件服务地址>
-
-# ----------------------- SANDBOX 服务配置 ------------------------
-
-# 启动 SANDBOX GATWAY 容器使用的 image（默认无需设置，如要设置，请确保对应的镜像已存在或可正常拉取）
-
-SANDBOX_GATEWAY_IMAGE=studio-sandbox-gateway:latest
-
-# SANDBOX GATWAY 服务名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-SANDBOX_GATEWAY_SERVICE=sandbox-gateway
-
-# SANDBOX GATWAY 容器名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-SANDBOX_GATEWAY_DOCKER=jiuwen-sandbox-gateway
-
-# SANDBOX GATWAY 服务对外暴露的端口（默认无需设置，部署脚本会自动分配未占用端口；如需设置，请更改此变量）
-
-SANDBOX_GATEWAY_HOST_PORT=2031
-
-# 提供 SANDBOX GATWAY 服务的地址（如果使用本脚本部署的 SANDBOX GATWAY 服务，默认无需设置，部署脚本会自动产生匹配值，如果使用外部 SANDBOX GATWAY 服务，请更改这个变量）
-
-CODE_SANDBOX_URL=<SANDBOX GATWAY 服务地址>
-
-# 启动 SANDBOX PYTHON SERVER 容器使用的 image（默认无需设置，如要设置，请确保对应的镜像已存在或可正常拉取）
-
-PYTHON_SERVER_IMAGE=studio-python-server:latest
-
-# SANDBOX PYTHON SERVER 服务名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-PYTHON_SERVER_SERVICE=python-server
-
-# SANDBOX PYTHON SERVER 容器名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-PYTHON_SERVER_DOCKER=jiuwen-python-server
-
-# SANDBOX PYTHON SERVER 服务对外暴露的端口（默认无需设置，部署脚本会自动分配未占用端口；如需设置，请更改此变量）
-
-PYTHON_SERVER_HOST_PORT=2032
-
-# 启动 SANDBOX JS SERVER 容器使用的 image（默认无需设置，如要设置，请确保对应的镜像已存在或可正常拉取）
-
-JS_SERVER_IMAGE=studio-js-server:latest
-
-# SANDBOX JS SERVER 服务名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-JS_SERVER_SERVICE=js-server
-
-# SANDBOX JS SERVER 容器名称（默认无需设置，部署脚本会自动生成唯一名称，如需设置，请更改此变量）
-
-JS_SERVER_DOCKER=jiuwen-js-server
-
-# SANDBOX JS SERVER 服务对外暴露的端口（默认无需设置，部署脚本会自动分配未占用端口；如需设置，请更改此变量）
-
-JS_SERVER_HOST_PORT=2033
+```
+6e9db4f73a03   swr.cn-north-4.myhuaweicloud.com/openjiuwen/studio-web-amd64:0.1.2b6   "/usr/local/bin/star…"   22 hours ago   Up 5 minutes (healthy)   0.0.0.0:3000->3001/tcp, [::]:3000->3001/tcp   jiuwen-frontend-wd63t
 ```
 
+该容器名称为jiuwen-frontend-wd63t，末尾的wd63t即为该服务实例的五位随机标识。
+
+> 注意：五位随机标识十分重要，后续对该实例执行配置修改、服务重启、实例维护等所有操作，均需基于此标识定位对应配置文件（如.envs/env.deploy.<五位随机标识>、.envs/env.runtime.<五位随机标识>）。
+
+## 如何修改配置中变量
+
+本工具的配置变量分为**部署类变量**和**运行时类变量**两类，不同服务状态（全新部署 / 已有服务调整）对应不同的变量修改流程，以下为标准化操作步骤：
+
+### 全新服务启动（首次部署）
+
+若为全新服务部署，部署类变量与运行时类变量均在统一配置文件中修改 `deploy/service/.env.custom`，修改完毕请如下执行启动命令完成部署：
+
+```
+$ ./service.sh up -n
+```
+
+### 已有服务配置变量修改
+
+针对已部署的服务调整配置变量，需先停止服务，再根据变量类型修改对应文件，最后重新启动，分以下两种场景操作：
+
+**场景 1：单套服务部署 / 确认修改最近启动的服务**
+
+```
+# 第一步：停止当前服务
+$ ./service.sh down
+# 第二步：根据变量类型修改对应文件
+# 部署类变量：编辑根目录 .env 文件
+# 运行时类变量：编辑 .envs/env.runtime.<五位随机标识> 文件
+# 第三步：重新启动服务
+$ ./service.sh up -f .env
+```
+
+**场景 2：通用万能流程（推荐，适配所有已部署场景）**
+
+适用于部署过多套服务、无法确认目标服务实例，或需确保操作无误差的所有场景，为最稳妥的标准化操作：
+
+```
+# 第一步：停止当前服务
+$ ./service.sh down
+# 第二步：根据变量类型修改对应文件
+# 部署类变量：编辑 .envs/env.deploy.<五位随机标识> 文件
+# 运行时类变量：编辑 .envs/env.runtime.<五位随机标识> 文件
+# 第三步：指定配置文件重新启动服务
+$ ./service.sh up -f .envs/env.deploy.<五位随机标识>
+```
+
+## 如何对接外部服务
+
+除了**全量服务部署**， 本部署工具还支持**部分服务组合部署**。若需跳过工具内置的配套服务、对接外部已有服务，可参考以下配置流程。
+
+### 如何对接外部 MySQL 数据库服务
+
+**操作步骤**
+
+1. 配置外部 MySQL 连接信息
+
+在部署目录的配置文件`deploy/service/.env.custom`中，新增并完善以下环境变量，填入外部 MySQL 服务的真实参数：
+
+```
+DB_TYPE=mysql
+DB_HOST=<MySQL服务地址>
+DB_PORT=<MySQL服务端口>
+DB_USER=<MySQL服务用户名>
+DB_PASSWORD=<MySQL服务密码>
+OPS_DB_NAME=<运维数据库名称，示例：openjiuwen_ops>
+AGENT_DB_NAME=<业务数据库名称，示例：openjiuwen_agent>
+```
+
+2. 前置数据库准备
+
+需提前在外部 MySQL 服务中，手动创建上述配置中指定的 OPS_DB_NAME 和 AGENT_DB_NAME 两个数据库实例；同时确保配置的 MySQL 账号，具备这两个数据库的 读写权限，避免服务启动后无法正常连接
+
+3. 启动不含内置 MySQL 组件的服务群
+
+执行以下命令，启动剔除内置 MySQL 模块的服务组：
+
+```
+$ ./service.sh milvus plugin sandbox jiuwen up -n
+```
+
+### 如何对接外部 Milvus 数据库服务
+
+**操作步骤**
+
+1. 配置外部 Milvus 连接信息
+
+在部署目录的配置文件`deploy/service/.env.custom`中，新增并完善以下环境变量，填入外部 Milvus 服务的真实参数：
+
+```
+MILVUS_HOST=<Milvus服务地址>
+MILVUS_PORT=<Milvus服务端口>
+# 向量集合名称，默认无需修改
+MILVUS_COLLECTION_NAME="memory_vector"
+# 若外部 Milvus 开启认证，填入对应 Token；无认证则留空
+MILVUS_TOKEN=""
+```
+
+2. 启动不含内置 Milvus 组件的服务群
+
+执行以下命令，启动剔除内置 Milvus 模块的服务组：
+
+```
+$ ./service.sh mysql plugin sandbox jiuwen up -n
+```
+
+## 如何启动 Agent Studio 的依赖服务
+
+若用户采用**本地部署模式**搭建 Agent Studio，通常需要自行部署 MySQL、Milvus、Plugin Server、SandBox 这四个依赖服务，存在部署难度高、环境配置复杂、耗时较长等问题。
+
+为降低用户使用门槛、帮助用户快速上手，本部署工具支持**单个或多个组合服务独立部署**功能，可按需拉起指定的**容器化服务**，供本地部署的 Agent Studio 直接调用，用户可选择自行部署，或者利用本工具拉起依赖服务。
+
+**操作步骤**
+
+1.  一键拉起所需依赖服务，执行命令后请重点关注终端输出的配置信息：
+    > 说明：示例中为启动全部 4 个依赖服务的命令，实际操作时可按需传入对应服务参数，仅启动需要的服务组件。
+
+```
+$ ./service.sh mysql milvus plugin sandbox up -n
+✅ MYSQL Server started
+=== To use it, please set the following value in .env: ===
+DB_HOST=localhost
+DB_PORT=3041
+DB_USER=root
+DB_PASSWORD=root
+===  ===
+✅ Milvus Server started
+=== To use it, please set the following value in .env: ===
+MILVUS_HOST=localhost
+MILVUS_PORT=3044
+===  ===
+✅ Plugin Server started
+=== To use it, please set the following value in .env: ===
+VITE_PLUGIN_CONFIG_PATH=/config.json
+VITE_PLUGIN_SERVICE_URL=http://localhost:3045
+===  ===
+✅ Sandbox Server started
+=== To use it, please set the following value in .env: ===
+CODE_SANDBOX_URL=http://localhost:3046/run
+===  ===
+```
+
+2. 将终端输出的上述所有环境变量，完整配置到本地部署目录下的 .env 环境变量文件中。
+   > 注意：命令输出中默认的 localhost 仅适用于依赖服务与本地部署的 Agent Studio 同机部署的场景；若依赖服务部署在远端服务器，请将所有 localhost 替换为该远端服务器的实际 IP 地址。
+
+## 部署工具获取 IP 失败，怎么办？
+
+**问题现象**
+部署脚本默认会自动探测并获取当前运行机器的 IP 地址。但在部分客户环境中，可能出现 IP 获取失败或获取不准确的情况：例如服务器存在多张网卡，部分网卡未接入网络、部分网卡仅用于内网隔离，仅特定网卡的 IP 可被外部网络访问。此时脚本无法自动判断应选用哪一个 IP，需由客户手动指定。
+
+**解决方案**
+在部署目录的对应配置文件`deploy/service/.env.custom`中，新增并设置 IP 环境变量，填入当前物理机可被外部访问的实际 IP 地址：
+
+```
+IP=<客户物理机的可访问IP地址>
+```
+
+## 镜像拉取到一半失败（连接超时）
+
+**问题现象**
+执行 `./service.sh up` 启动服务时，出现类似以下报错，提示服务启动失败：
+
+```
+✅ up PLUGIN container
+[+] Running 7/9
+ - js-server-a5jd4 Pulling                                                             21.5s
+ ✔ sandbox-gateway-a5jd4 Pulled                                                        18.2s
+   ...（省略镜像拉取成功日志）...
+ - python-server-a5jd4 Pulling                                                         21.5s
+failed to copy: httpReadSeeker: failed open: failed to do request: Get "https://op-svc-swr-b051-10-38-19-62-3az.obs.cn-north-4.myhuaweicloud.com:443/...":
+dial tcp 121.36.121.197:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond.
+❌ up SANDBOX service failed
+```
+
+**问题原因**
+该报错的核心原因是 临时网络波动 / 华为云 OBS 镜像仓库连接超时, 服务启动时需要从华为云 OBS（对象存储服务）拉取 容器镜像；网络链路临时不稳定、镜像仓库服务器响应延迟，或短时间内并发请求过高，导致连接超时，镜像拉取失败；该问题属于偶发性网络问题，非服务配置或环境异常导致。
+
+**解决方案**
+无需做任何额外操作，重新执行一次即可，临时网络问题大概率会自动恢复。

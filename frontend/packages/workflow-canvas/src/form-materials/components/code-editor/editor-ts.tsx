@@ -43,7 +43,8 @@ export const TypeScriptCodeEditor: React.FC<EditorTsProps> = ({
   const stableExtensions = useMemo(() => extensions || {}, [extensions])
 
   // 提取props中的maxHeight，如果未提供则使用默认值
-  const maxHeight = props.maxHeight ?? (mini ? 200 : undefined)
+  const { maxHeight: propsMaxHeight, ...restProps } = props
+  const maxHeight = propsMaxHeight ?? (mini ? 200 : undefined)
 
   return (
     <BaseEditor
@@ -60,8 +61,7 @@ export const TypeScriptCodeEditor: React.FC<EditorTsProps> = ({
       maxHeight={maxHeight}
       lineNumbers={!mini}
       foldGutter={!mini}
-      {...props}
-      maxHeight={maxHeight} // 确保maxHeight不被props覆盖
+      {...restProps}
     >
       {children}
     </BaseEditor>

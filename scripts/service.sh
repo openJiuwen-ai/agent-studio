@@ -90,10 +90,8 @@ exec_service() {
 
 # ==================== Main function ====================
 main() {
-    detect_os
-    info "Operating System: ${CONFIG["OS_TYPE"]}"
-    info "Executing command: $*"
     parse_args "$@"
+    detect_os
     check_docker
     process_env_file
     generate_config_files

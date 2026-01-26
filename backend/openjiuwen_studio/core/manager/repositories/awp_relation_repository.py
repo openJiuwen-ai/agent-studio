@@ -5,7 +5,8 @@ from typing import Callable
 from fastapi import status
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import jiuwen_db_logger, milliseconds
+from openjiuwen.core.common.logging import logger
+from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.agent_repository import agent_repository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
@@ -30,8 +31,8 @@ class AwpRelationRepository():
             try:
                 return func(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error("Data preprocessing error for relation of agent/workflow/plugin")
-                jiuwen_db_logger.debug(f"Relationship processing exception: {type(e).__name__}", exc_info=True)
+                logger.error("Data preprocessing error for relation of agent/workflow/plugin")
+                logger.debug(f"Relationship processing exception: {type(e).__name__}", exc_info=True)
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST, 
                                      message=f"Error: Data preprocessing error for relation of agent/workflow/plugin. \
                                                 Exception details: {type(e).__name__}")

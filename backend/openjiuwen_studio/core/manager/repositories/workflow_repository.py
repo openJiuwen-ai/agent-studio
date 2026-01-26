@@ -5,7 +5,8 @@ from fastapi import status
 from sqlalchemy import bindparam, select
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import jiuwen_db_logger, milliseconds
+from openjiuwen.core.common.logging import logger
+from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import (
     get_db_jw, get_val_from_dict)
@@ -28,8 +29,8 @@ class WorkflowRepository():
             try:
                 return func(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error("Error: workflow db data preprocessing error")
-                jiuwen_db_logger.debug(f"Exception details: {type(e).__name__}", exc_info=True)
+                logger.error("Error: workflow db data preprocessing error")
+                logger.debug(f"Exception details: {type(e).__name__}", exc_info=True)
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST, 
                                      message=f"Error: workflow db data preprocessing error: {type(e).__name__}")
         return wrapper
@@ -106,7 +107,7 @@ class WorkflowRepository():
         with get_db_jw(db_session) as db:
             workflow_db = JiuwenBaseRepository(db, WorkflowBaseDB)
             if not workflow_data:
-                jiuwen_db_logger.debug(f"No workflow data to register: \ndata: {workflow_data}")
+                logger.debug(f"No workflow data to register: \ndata: {workflow_data}")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST, message="No workflow data to register")
             find_id = {
                 "space_id": workflow_data.space_id,
@@ -219,7 +220,7 @@ class WorkflowRepository():
         with get_db_jw(db_session) as db:
             workflow_db = JiuwenBaseRepository(db, WorkflowBaseDB)
             if not workflow_data:
-                jiuwen_db_logger.debug(f"No workflow data to update: \ndata: {workflow_data}")
+                logger.debug(f"No workflow data to update: \ndata: {workflow_data}")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST, 
                                      message="No workflow data to update")
             find_id = {
@@ -256,7 +257,7 @@ class WorkflowRepository():
         with get_db_jw(db_session) as db:
             workflow_publish_db = JiuwenBaseRepository(db, WorkflowPublishDB)
             if not publish_data:
-                jiuwen_db_logger.debug(f"No workflow data to publish: \ndata: {publish_data}")
+                logger.debug(f"No workflow data to publish: \ndata: {publish_data}")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST,
                                      message="No workflow data to publish")
             find_id = {
@@ -389,13 +390,13 @@ class WorkflowRepository():
         space_id = search_params.get("space_id")
         search_term = search_params.get("search_term", "").strip()
 
-        jiuwen_db_logger.info(
+        logger.info(
             f"[DFX:WORKFLOW_SEARCH_START] space_id={space_id}, search_term='{search_term}', params={search_params}")
 
         # 1. 参数验证
         validation_result = WorkflowRepository._validate_search_params(search_params)
         if validation_result.code != status.HTTP_200_OK:
-            jiuwen_db_logger.warning(f"[DFX:WORKFLOW_SEARCH_INVALID_PARAMS] {validation_result.message}")
+            logger.warning(f"[DFX:WORKFLOW_SEARCH_INVALID_PARAMS] {validation_result.message}")
             return validation_result
 
         with get_db_jw(db_session) as db:
@@ -408,7 +409,7 @@ class WorkflowRepository():
             status_filter = search_params.get("status_filter")
             if status_filter and status_filter != 'all':
                 find_id["status"] = status_filter
-                jiuwen_db_logger.debug(f"[DFX:WORKFLOW_SEARCH_STATUS_FILTER] status={status_filter}")
+                logger.debug(f"[DFX:WORKFLOW_SEARCH_STATUS_FILTER] status={status_filter}")
 
             # 4. 构建搜索条件和标签搜索
             search_conditions, tag_workflow_ids = WorkflowRepository._build_search_conditions(db, search_term, space_id)
@@ -422,7 +423,7 @@ class WorkflowRepository():
             # 7. 获取总数（用于分页）
             count_result = workflow_db.count_dl_in_sql_with_search(find_id=find_id, searchs=search_conditions)
             if count_result.code != status.HTTP_200_OK:
-                jiuwen_db_logger.error(f"[DFX:WORKFLOW_SEARCH_COUNT_ERROR] {count_result.message}")
+                logger.error(f"[DFX:WORKFLOW_SEARCH_COUNT_ERROR] {count_result.message}")
                 return count_result
 
             total = count_result.data
@@ -468,7 +469,7 @@ class WorkflowRepository():
 
             # DFX: 搜索完成 - 记录性能指标和结果统计
             execution_time = milliseconds() - start_time
-            jiuwen_db_logger.info(f"[DFX:WORKFLOW_SEARCH_SUCCESS] space_id={space_id}, search_term='{search_term}', "
+            logger.info(f"[DFX:WORKFLOW_SEARCH_SUCCESS] space_id={space_id}, search_term='{search_term}', "
                                 f"results={len(workflow_list)}, execution_time={execution_time}ms, total={total}")
 
         return ResponseModel(
@@ -558,12 +559,12 @@ class WorkflowRepository():
             ).fetchall()
 
             if not tag_results:
-                jiuwen_db_logger.debug(f"[DFX:WORKFLOW_TAG_BATCH_SEARCH] No tags found for terms: {search_terms}")
+                logger.debug(f"[DFX:WORKFLOW_TAG_BATCH_SEARCH] No tags found for terms: {search_terms}")
                 return set()
 
             # 提取所有标签ID
             tag_ids = [tag_row[0].primary_id for tag_row in tag_results]
-            jiuwen_db_logger.debug(
+            logger.debug(
                 f"[DFX:WORKFLOW_TAG_BATCH_SEARCH] Found {len(tag_ids)} tags for {len(search_terms)} terms: {tag_ids}")
 
             if not tag_ids:
@@ -577,15 +578,15 @@ class WorkflowRepository():
 
             if tag_result.get("code") == status.HTTP_200_OK and tag_result.get("data"):
                 workflow_ids = set(tag_result.get("data"))
-                jiuwen_db_logger.info(
+                logger.info(
                     f"[DFX:WORKFLOW_TAG_BATCH_SEARCH] Found {len(workflow_ids)} workflows via batch search")
                 return workflow_ids
             else:
-                jiuwen_db_logger.warning(f"[DFX:WORKFLOW_TAG_BATCH_SEARCH] Batch tag search failed: {tag_result}")
+                logger.warning(f"[DFX:WORKFLOW_TAG_BATCH_SEARCH] Batch tag search failed: {tag_result}")
                 return set()
 
         except Exception as e:
-            jiuwen_db_logger.error(f"[DFX:WORKFLOW_TAG_BATCH_SEARCH_ERROR]: {type(e).__name__}")
+            logger.error(f"[DFX:WORKFLOW_TAG_BATCH_SEARCH_ERROR]: {type(e).__name__}")
             return set()
 
     @staticmethod
@@ -621,7 +622,7 @@ class WorkflowRepository():
             order_cols_asc = [sort_by]
             order_cols_desc = []
 
-        jiuwen_db_logger.debug(f"[DFX:WORKFLOW_SORT] sort_by={sort_by}, sort_order={sort_order}")
+        logger.debug(f"[DFX:WORKFLOW_SORT] sort_by={sort_by}, sort_order={sort_order}")
 
         return sort_by, sort_order, order_cols_asc, order_cols_desc
 
@@ -633,7 +634,7 @@ class WorkflowRepository():
         offset = (page - 1) * page_size
         return_range = [offset, page_size]
 
-        jiuwen_db_logger.debug(f"[DFX:WORKFLOW_PAGINATION] page={page}, page_size={page_size}")
+        logger.debug(f"[DFX:WORKFLOW_PAGINATION] page={page}, page_size={page_size}")
 
         return page, page_size, offset, return_range
 
@@ -651,14 +652,14 @@ class WorkflowRepository():
                 return_range=return_range
             )
 
-            jiuwen_db_logger.debug(
+            logger.debug(
                 f"[DFX:WORKFLOW_MAIN_SEARCH] status={result.code}, results_count={len(result.data) if result.data else 0}")
             if result.data and len(result.data) == 1:
                 result.data = result.data[0]
             return result
 
         except Exception as e:
-            jiuwen_db_logger.error(f"[DFX:WORKFLOW_MAIN_SEARCH_ERROR] {str(e)}")
+            logger.error(f"[DFX:WORKFLOW_MAIN_SEARCH_ERROR] {str(e)}")
             return ResponseModel(
                 code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=f"Main search execution error: {str(e)}"
@@ -675,7 +676,7 @@ class WorkflowRepository():
         if search_result.code == status.HTTP_200_OK and search_result.data:
             workflow_list = search_result.data if isinstance(search_result.data, list) else [
                                                              search_result.data] if search_result.data else []
-            jiuwen_db_logger.debug(f"[DFX:WORKFLOW_MERGE] Main search returned {len(workflow_list)} results")
+            logger.debug(f"[DFX:WORKFLOW_MERGE] Main search returned {len(workflow_list)} results")
 
         # 如果没有标签搜索结果，直接返回主搜索结果
         if not tag_workflow_ids:
@@ -689,7 +690,7 @@ class WorkflowRepository():
 
         # 更新总数
         total = len(merged_list)
-        jiuwen_db_logger.info(
+        logger.info(
             f"[DFX:WORKFLOW_MERGE] Merged {len(workflow_list)} main + {len(tag_workflow_ids)} tag = {total} unique results")
 
         return merged_list, total
@@ -705,14 +706,14 @@ class WorkflowRepository():
         existing_ids = {workflow.get("workflow_id") for workflow in workflow_list}
         # 如果主搜索结果已经包含所有标签结果，直接返回
         if tag_workflow_ids.issubset(existing_ids):
-            jiuwen_db_logger.debug(f"[DFX:WORKFLOW_MERGE_OPTIMIZED] All tag results already in main search")
+            logger.debug(f"[DFX:WORKFLOW_MERGE_OPTIMIZED] All tag results already in main search")
             return workflow_list
 
         # 获取缺失的工作流
         missing_ids = tag_workflow_ids - existing_ids
 
         if missing_ids:
-            jiuwen_db_logger.debug(
+            logger.debug(
                 f"[DFX:WORKFLOW_MERGE_OPTIMIZED] Fetching {len(missing_ids)} missing workflows from tag search")
 
             missing_workflows_result = workflow_db.get_dl_in_sql_with_cols(
@@ -769,7 +770,7 @@ class WorkflowRepository():
         if not tags_filter:
             return workflow_list, total
 
-        jiuwen_db_logger.debug(f"[DFX:WORKFLOW_TAG_FILTER] Applying filter for tags: {len(tags_filter)} items")
+        logger.debug(f"[DFX:WORKFLOW_TAG_FILTER] Applying filter for tags: {len(tags_filter)} items")
 
         # 获取包含指定标签的工作流ID列表
         tag_result = workflow_tag_repository.find_workflows_by_tags({
@@ -786,12 +787,12 @@ class WorkflowRepository():
             ]
             filtered_total = len(filtered_list)
 
-            jiuwen_db_logger.info(f"[DFX:WORKFLOW_TAG_FILTER] Filtered {total} -> {filtered_total} workflows")
+            logger.info(f"[DFX:WORKFLOW_TAG_FILTER] Filtered {total} -> {filtered_total} workflows")
 
             return filtered_list, filtered_total
         else:
             # 如果没有找到包含指定标签的工作流，返回空列表
-            jiuwen_db_logger.debug(f"[DFX:WORKFLOW_TAG_FILTER] No workflows found for tags: {len(tags_filter)} items")
+            logger.debug(f"[DFX:WORKFLOW_TAG_FILTER] No workflows found for tags: {len(tags_filter)} items")
             return [], 0
 
     @staticmethod
@@ -829,7 +830,7 @@ class WorkflowRepository():
                     break
 
             if is_sorted:
-                jiuwen_db_logger.debug(f"[DFX:WORKFLOW_SORT_OPTIMIZED] Already sorted, skipping sort")
+                logger.debug(f"[DFX:WORKFLOW_SORT_OPTIMIZED] Already sorted, skipping sort")
                 return workflow_list
 
         def sort_key(workflow):
@@ -848,7 +849,7 @@ class WorkflowRepository():
         else:
             workflow_list.sort(key=sort_key, reverse=reverse_order)
 
-        jiuwen_db_logger.debug(
+        logger.debug(
             f"[DFX:WORKFLOW_SORT_OPTIMIZED] Sorted {len(workflow_list)} results by {sort_by} {sort_order}")
         return workflow_list
 

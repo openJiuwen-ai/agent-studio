@@ -24,6 +24,7 @@ detect_os() {
             error "Unsupported OS: ${os_type}"
             ;;
     esac
+    info "Operating System: ${CONFIG["OS_TYPE"]}"
 }
 
 # ============= Generate 5-character random string =================

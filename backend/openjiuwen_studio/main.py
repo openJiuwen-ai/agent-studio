@@ -104,11 +104,8 @@ async def lifespan_func(app: FastAPI):
     workflow_tag_association.create(bind=engine, checkfirst=True)
 
     # 运行数据库字段同步（添加新字段）
-    if ops_settings.AUTO_SYNC_DB:
-        logger.info("🔵 [Config] AUTO_SYNC_DB is enabled. Running database field sync...")
-        run_database_sync()
-    else:
-        logger.info("⚪️ [Config] AUTO_SYNC_DB is disabled. Skipping automatic database field sync.")
+    run_database_sync()
+    logger.info("✅ Database field sync completed")
 
     # ops数据库相关表自动创建
     create_database_tables()

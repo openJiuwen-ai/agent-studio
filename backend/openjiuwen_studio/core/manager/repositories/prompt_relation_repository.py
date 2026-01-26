@@ -5,7 +5,8 @@ from typing import Callable
 from fastapi import status
 from sqlalchemy.orm import Session
 
-from openjiuwen_studio.core.database import jiuwen_db_logger, milliseconds
+from openjiuwen.core.common.logging import logger
+from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
 from openjiuwen_studio.models.prompt_relation import PromptRelationDB
@@ -26,8 +27,8 @@ class PromptRelationRepository():
             try:
                 return func(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error("Error: prompt&workflow&agent db data preprocessing error")
-                jiuwen_db_logger.debug(f"Exception details: {type(e).__name__}", exc_info=True)
+                logger.error("Error: prompt&workflow&agent db data preprocessing error")
+                logger.debug(f"Exception details: {type(e).__name__}", exc_info=True)
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST, 
                                      message=f"Error: prompt&workflow&agent db data preprocessing error, {type(e).__name__}")
         return wrapper

@@ -448,7 +448,7 @@ const WorkflowSelector: React.FC<WorkflowSelectorProps> = ({ open, onClose, onCo
                 <div className="flex justify-center px-6 pb-6">
                   <Box display="flex" justifyContent="center" alignItems="center" gap={2}>
                     <Typography variant="body2" color="textSecondary">
-                      {t('workflowCanvas.workflowSelector.pagination', { total: totalWorkflows, current: currentPage, total: totalPages })}
+                      {t('workflowCanvas.workflowSelector.pagination', { total: totalWorkflows, current: currentPage, totalPages })}
                     </Typography>
                     <Pagination
                       count={totalPages}

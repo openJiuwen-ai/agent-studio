@@ -3,11 +3,6 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { lazySuspense } from '../../shared/lazy-suspense'
-
-export const PromptEditor = lazySuspense(() => import('./editor').then(module => ({ default: module.PromptEditor })))
-
+// Static import since types and hooks are already statically loaded
+export { PromptEditor, useEditor, useEditorEvent } from './editor'
 export type { PromptEditorPropsType } from './editor'
-
-// Export useEditor hook for other components
-export { useEditor, useEditorEvent } from './editor'

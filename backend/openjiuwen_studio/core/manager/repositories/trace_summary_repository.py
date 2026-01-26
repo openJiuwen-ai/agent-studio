@@ -15,8 +15,6 @@ from fastapi import status
 from pydantic import ValidationError
 
 from openjiuwen.core.common.logging import logger
-
-from openjiuwen_studio.core.database import jiuwen_db_logger
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
 from openjiuwen_studio.models.trace_detail import TraceDetailDB
@@ -118,7 +116,7 @@ def with_exception_handling(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            jiuwen_db_logger.error(f"Trace summary repository error: {str(e)}")
+            logger.error(f"Trace summary repository error: {str(e)}")
             return ResponseModel(
                 code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 message=f"Operation failed: {str(e)}",
@@ -519,7 +517,7 @@ def _extract_agent_execution_info_from_trace_detail(
                 _component_process_over(detail, c)
             else:
                 # Component not found in running_components, create it
-                jiuwen_db_logger.warning(
+                logger.warning(
                     f"Missing start record for agent component: {span_id}"
                 )
                 c = InvokeExecuteInfo(
@@ -867,7 +865,7 @@ class TraceSummaryRepository:
                     exec_infos.append(InvokeExecuteInfo(**item))
                 except Exception as exc:
                     # 兜底其他构造失败
-                    jiuwen_db_logger.warning(
+                    logger.warning(
                         "Skip execute_info with wrong types | error=%s item=%r",
                         exc, item
                     )

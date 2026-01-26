@@ -6,7 +6,7 @@ from openjiuwen_studio.core.manager.repositories import BaseRepository
 from openjiuwen_studio.models.embedding_model_config import EmbeddingModelConfig
 from openjiuwen_studio.models.knowledge_base import KnowledgeBaseDB
 from openjiuwen_studio.schemas.embedding_model_config import EmbeddingProtocol
-from openjiuwen_studio.core.database import jiuwen_db_logger
+from openjiuwen.core.common.logging import logger
 
 
 class EmbeddingModelConfigRepository(BaseRepository[EmbeddingModelConfig]):
@@ -104,7 +104,7 @@ class EmbeddingModelConfigRepository(BaseRepository[EmbeddingModelConfig]):
                 self.db.commit()
                 self.db.refresh(model)
             except Exception as e:
-                jiuwen_db_logger.error(f"Failed to toggle status for embedding model {config_id}: {e}")
+                logger.error(f"Failed to toggle status for embedding model {config_id}: {e}")
                 self.db.rollback()
                 raise
         return model

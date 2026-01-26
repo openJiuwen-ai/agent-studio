@@ -40,6 +40,17 @@ export default defineConfig(({ command, mode }) => {
           drop_debugger: mode === 'production',
         },
       },
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            // Group all workflow-canvas form-materials modules into the same chunk
+            // to avoid circular dependency warnings from re-exports
+            if (id.includes('/packages/workflow-canvas/src/form-materials/')) {
+              return 'workflow-canvas-form-materials'
+            }
+          },
+        },
+      },
     },
     define: {
       __APP_VERSION__: JSON.stringify(env.npm_package_version || '1.0.0'),

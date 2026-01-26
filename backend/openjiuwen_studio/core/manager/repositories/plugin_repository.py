@@ -11,7 +11,7 @@ from openjiuwen_studio.models.plugin import PluginBaseDB, PluginPublishDB
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_val_from_dict, get_db_jw
-from openjiuwen_studio.core.database import jiuwen_db_logger, milliseconds
+from openjiuwen_studio.core.database import milliseconds
 
 
 class PluginRepository():
@@ -24,7 +24,7 @@ class PluginRepository():
             try:
                 return func(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error(f"Error: Plugin data processing failed: {str(e)}")
+                logger.error(f"Error: Plugin data processing failed: {str(e)}")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST,
                                      message=f"Error: Plugin processing exception:, {str(e)}").model_dump(
                     exclude_none=True)
@@ -36,7 +36,7 @@ class PluginRepository():
         with get_db_jw() as db:
             plugin_db = JiuwenBaseRepository(db, PluginBaseDB)
             if not plugin_data:
-                jiuwen_db_logger.debug(f"No plugin data to register: \ndata: {plugin_data}")
+                logger.debug(f"No plugin data to register: \ndata: {plugin_data}")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST,
                                      message="No plugin data to register").model_dump(exclude_none=True)
             find_id = {
@@ -73,7 +73,7 @@ class PluginRepository():
         with get_db_jw() as db:
             plugin_db = JiuwenBaseRepository(db, PluginBaseDB)
             if not plugin_data:
-                jiuwen_db_logger.debug("No plugin data to update")
+                logger.debug("No plugin data to update")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST,
                                      message="No plugin data to update").model_dump(exclude_none=True)
             find_id = {
@@ -164,7 +164,7 @@ class PluginRepository():
         with get_db_jw() as db:
             plugin_publish_db = JiuwenBaseRepository(db, PluginPublishDB)
             if not publish_data:
-                jiuwen_db_logger.debug(f"No plugin data to publish: \ndata: {publish_data}")
+                logger.debug(f"No plugin data to publish: \ndata: {publish_data}")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST,
                                      message="No plugin data to publish").model_dump(exclude_none=True)
 
@@ -204,7 +204,7 @@ class PluginRepository():
                 sorted_data = sorted(db_res.data, key=lambda x: Version(x.get('plugin_version', '0.0.0')), reverse=True)
                 db_res.data = sorted_data[0] if sorted_data else None
             except Exception as e:
-                jiuwen_db_logger.warning(f"Error sorting plugin versions: {e}")
+                logger.warning(f"Error sorting plugin versions: {e}")
                 db_res.data = db_res.data[0] if db_res.data else None
 
             return db_res.model_dump(exclude_none=True)
@@ -228,7 +228,7 @@ class PluginRepository():
                 sorted_data = sorted(db_res.data, key=lambda x: Version(x.get('plugin_version', '0.0.0')), reverse=True)
                 db_res.data = sorted_data
             except Exception as e:
-                jiuwen_db_logger.warning(f"Error sorting plugin versions: {e}")
+                logger.warning(f"Error sorting plugin versions: {e}")
 
             return db_res.model_dump(exclude_none=True)
 

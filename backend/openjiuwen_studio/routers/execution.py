@@ -101,7 +101,7 @@ async def handler(
         session_id = " ".join(
             [
                 id_val.strip()
-                for id_val in [request_body.space_id, request_body.conversation_id]
+                for id_val in [request_body.space_id, request_body.conversation_id, get_thread_session()]
                 if id_val and id_val.strip()
             ]
         )

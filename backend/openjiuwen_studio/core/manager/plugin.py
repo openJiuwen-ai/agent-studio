@@ -14,7 +14,6 @@ from pydantic import ValidationError
 from openjiuwen_studio.core.database import milliseconds
 import openjiuwen_studio.core.manager.convertor.plugin as convert
 from openjiuwen_studio.core.manager.convertor.components.plugin import param_type_mapping
-from openjiuwen_studio.core.manager.internal.workflow import InputElem
 from openjiuwen_studio.core.manager.login_manager.space import check_user_space
 from openjiuwen_studio.core.manager.repositories.plugin_repository import plugin_repository
 from openjiuwen_studio.core.manager.repositories.tool_repository import tool_repository
@@ -266,14 +265,14 @@ def plugin_list(
                 }
             )
         )
-    
+
     # 转换插件信息
     infos: List[PluginInfo] = []
     plugin_data = list_result.data.get("plugin_infos", [])
     for info_dict in plugin_data:
         info = PluginInfo(**info_dict)
         infos.append(info)
-    
+
     # 获取分页信息
     pagination_data = list_result.data.get("pagination", {})
     pagination = PluginListPagination(**pagination_data) if pagination_data else PluginListPagination(
@@ -282,7 +281,7 @@ def plugin_list(
         page=req.page or 1,
         page_size=req.size or 10
     )
-    
+
     return ResponseModel(
         code=status.HTTP_200_OK,
         message="get plugin success",
@@ -361,17 +360,7 @@ def plugin_create_api(
 def _plugin_input_output_parameters(params: List[PluginToolParam]) -> List[Dict[str, Any]]:
     input_output_params: List[Dict[str, Any]] = []
     for param in params:
-        input = InputElem(
-            name=param.name,
-            type=param_type_mapping.get(param.type),
-            description=param.desc,
-            required=param.is_required,
-            method=param.method
-        )
-        param_dict = input.model_dump()
-        param_dict['runtime'] = param.is_runtime if hasattr(param, 'is_runtime') else True
-        param_dict['value'] = param.value if hasattr(param, 'value') else ""
-        param_dict['priority'] = param.priority if hasattr(param, 'priority') else 0
+        param_dict = param.model_dump()
         input_output_params.append(param_dict)
 
     return input_output_params
@@ -384,22 +373,12 @@ def _input_parameters_to_request_params(input_parameters: List[Dict[str, Any]]) 
 
     request_params = []
     for param in input_parameters:
-        param_type = ParamType.PARAM_TYPE_STRING
-        for key, value in param_type_mapping.items():
-            if value == param.get('type'):
-                param_type = key
-                break
-
-        request_param = PluginToolParam(
-            name=param.get('name', ''),
-            desc=param.get('description', ''),
-            type=param_type,
-            is_required=param.get('required', False),
-            is_runtime=param.get('runtime', True),
-            value=param.get('value', ''),
-            method=param.get('method', 0),
-            priority=param.get('priority', 0),
-        )
+        if isinstance(param.get("type"), str):
+            for key, value in param_type_mapping.items():
+                if value == param.get('type'):
+                    param["type"] = key
+                    break
+        request_param = PluginToolParam(**param)
         request_params.append(request_param)
 
     return request_params
@@ -939,8 +918,8 @@ def plugin_publish_delete(
 
 @with_exception_handling
 def plugin_read_market_json(
-    req: PluginList,
-    current_user: dict
+        req: PluginList,
+        current_user: dict
 ) -> ResponseModel:
     """
     读取backend目录下的config.json文件内容并以JSON字符串形式返回
@@ -994,10 +973,10 @@ def plugin_read_market_json(
 
 @with_exception_handling
 def plugin_tool_update_available(
-    tool_id: str,
-    space_id: str,
-    available: bool,
-    plugin_version: str = None
+        tool_id: str,
+        space_id: str,
+        available: bool,
+        plugin_version: str = None
 ) -> ResponseModel:
     """
     更新工具的可用状态（供运行面调用）

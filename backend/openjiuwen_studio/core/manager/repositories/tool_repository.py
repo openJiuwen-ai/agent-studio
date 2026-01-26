@@ -10,7 +10,8 @@ from openjiuwen_studio.models.plugin import ToolBaseDB
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_val_from_dict, get_db_jw
-from openjiuwen_studio.core.database import jiuwen_db_logger, milliseconds
+from openjiuwen.core.common.logging import logger
+from openjiuwen_studio.core.database import milliseconds
 
 
 class ToolRepository():
@@ -23,7 +24,7 @@ class ToolRepository():
             try:
                 return func(self, *args, **kwargs)
             except Exception as e:
-                jiuwen_db_logger.error(f"Error: tool db data preprocessing failed: {type(e).__name__}")
+                logger.error(f"Error: tool db data preprocessing failed: {type(e).__name__}")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST,
                                      message=f"Error: tool db data preprocessing failed: {type(e).__name__}").model_dump(
                     exclude_none=True)
@@ -35,7 +36,7 @@ class ToolRepository():
         with get_db_jw() as db:
             tool_db = JiuwenBaseRepository(db, ToolBaseDB)
             if not tool_data:
-                jiuwen_db_logger.debug("No tool data to register")
+                logger.debug("No tool data to register")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST,
                                      message="No tool data to register").model_dump(exclude_none=True)
             find_id = {
@@ -68,7 +69,7 @@ class ToolRepository():
         with get_db_jw() as db:
             tool_db = JiuwenBaseRepository(db, ToolBaseDB)
             if not tool_data:
-                jiuwen_db_logger.debug("No tool data to update")
+                logger.debug("No tool data to update")
                 return ResponseModel(code=status.HTTP_400_BAD_REQUEST,
                                      message="No tool data to update").model_dump(exclude_none=True)
             find_id = {

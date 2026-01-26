@@ -11,6 +11,7 @@ export class EventConverter {
   private nodeOutputs = new Map<string, any>()
   private finalOutputs: any = null
   private streamMessageOutput = ''
+  private waitingForInputNodes = new Set<string>()
 
   reset(): void {
     this.nodeStartTimes.clear()
@@ -18,6 +19,7 @@ export class EventConverter {
     this.nodeOutputs.clear()
     this.finalOutputs = null
     this.streamMessageOutput = ''
+    this.waitingForInputNodes.clear()
   }
 
   getHasError(): boolean {
@@ -54,6 +56,22 @@ export class EventConverter {
 
   deleteNodeStartTime(nodeId: string): void {
     this.nodeStartTimes.delete(nodeId)
+  }
+
+  addWaitingForInputNode(nodeId: string): void {
+    this.waitingForInputNodes.add(nodeId)
+  }
+
+  removeWaitingForInputNode(nodeId: string): void {
+    this.waitingForInputNodes.delete(nodeId)
+  }
+
+  isWaitingForInput(nodeId: string): boolean {
+    return this.waitingForInputNodes.has(nodeId)
+  }
+
+  clearWaitingForInputNodes(): void {
+    this.waitingForInputNodes.clear()
   }
 
   getFinalData(inputs: any): any {
@@ -200,6 +218,10 @@ export class EventConverter {
     const interactionMsg = this.getEventProperty(event, 'interaction_msg')
     const inputs = this.getEventProperty(event, 'inputs')
 
+    if (interactionNode) {
+      this.waitingForInputNodes.add(interactionNode)
+    }
+
     return {
       type: 'input_required',
       data: {
@@ -238,7 +260,19 @@ export class EventConverter {
       this.nodeOutputs.set(finishNodeId, outputs)
     }
 
+    const isWaitingForInput = finishNodeId && this.waitingForInputNodes.has(finishNodeId)
+
     this.nodeStartTimes.delete(finishNodeId)
+
+    let finalStatus = 'completed'
+    if (isWaitingForInput) {
+      const hasUserOutputs = outputs && Object.keys(outputs).length > 0
+      if (!hasUserOutputs) {
+        finalStatus = 'waiting_for_input'
+      } else {
+        this.waitingForInputNodes.delete(finishNodeId)
+      }
+    }
 
     if (finishNodeId && finishNodeId.toString().startsWith('end_')) {
       if (this.streamMessageOutput) {
@@ -254,7 +288,7 @@ export class EventConverter {
       type: 'node_status',
       data: {
         nodeId: finishNodeId,
-        status: 'completed',
+        status: finalStatus,
         outputs: outputs,
         timestamp: timestamp || Date.now(),
       },

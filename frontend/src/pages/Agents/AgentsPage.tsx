@@ -58,7 +58,7 @@ const AgentsPage: React.FC = () => {
 
   // 导入导出相关状态
   const [isImporting, setIsImporting] = useState(false)
-  const [importConflict, setImportConflict] = useState<{ isOpen: boolean; agentName: string; data: any } | null>(null)
+  const [importConflict, setImportConflict] = useState<{ isOpen: boolean; agentName: string; data: any; isZip?: boolean } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // 编辑状态相关
@@ -365,16 +365,11 @@ const AgentsPage: React.FC = () => {
     const file = event.target.files?.[0]
     if (!file) return
 
-    // 检查是否为zip文件
-    if (file.name.endsWith('.zip') || file.type.includes('zip') || file.type.includes('compressed')) {
-      // ZIP文件直接上传导入，默认不覆盖
-      event.target.value = ''
-      executeImport(file, false)
-      return
-    }
+    // 检查文件类型
+    const isZip = file.name.endsWith('.zip') || file.type.includes('zip') || file.type.includes('compressed')
+    const isJson = file.name.endsWith('.json') || file.type.includes('json')
 
-    // 检查是否为JSON文件
-    if (!file.name.endsWith('.json') && !file.type.includes('json')) {
+    if (!isZip && !isJson) {
       event.target.value = ''
       showError(t('agents.agentList.messages.invalidFile'))
       return
@@ -385,8 +380,44 @@ const AgentsPage: React.FC = () => {
     const reader = new FileReader()
     reader.onload = async (e) => {
       try {
-        const content = e.target?.result as string
-        const importData = JSON.parse(content)
+        let importData: any
+        
+        if (isZip) {
+          // 读取ZIP文件中的JSON配置
+          const arrayBuffer = e.target?.result as ArrayBuffer
+          const zip = new (await import('jszip')).default()
+          const zipContent = await zip.loadAsync(arrayBuffer)
+          
+          // 查找配置文件
+          let configFile: any = null
+          for (const filename of Object.keys(zipContent.files)) {
+            if (filename.endsWith('.json') && filename.includes('-export-')) {
+              configFile = zipContent.files[filename]
+              break
+            }
+          }
+          
+          // 如果没找到带-export-的，找第一个JSON文件
+          if (!configFile) {
+            for (const filename of Object.keys(zipContent.files)) {
+              if (filename.endsWith('.json')) {
+                configFile = zipContent.files[filename]
+                break
+              }
+            }
+          }
+          
+          if (!configFile) {
+            throw new Error('ZIP文件中未找到配置文件')
+          }
+          
+          const jsonContent = await configFile.async('text')
+          importData = JSON.parse(jsonContent)
+        } else {
+          // JSON文件直接解析
+          const content = e.target?.result as string
+          importData = JSON.parse(content)
+        }
 
         if (!importData.agent || !importData.dependencies) {
           throw new Error('无效的导入文件格式')
@@ -406,13 +437,13 @@ const AgentsPage: React.FC = () => {
              setImportConflict({
                isOpen: true,
                agentName: importData.agent.agent_name,
-               data: importData,
+               data: isZip ? file : importData,
              })
           } else {
-             executeImport(importData, false)
+             executeImport(isZip ? file : importData, false)
           }
         } catch (err) {
-          executeImport(importData, false)
+          executeImport(isZip ? file : importData, false)
         }
 
       } catch (error) {
@@ -420,7 +451,12 @@ const AgentsPage: React.FC = () => {
         showError(`文件解析异常: ${error instanceof Error ? error.message : '未知错误'}`)
       }
     }
-    reader.readAsText(file)
+    
+    if (isZip) {
+      reader.readAsArrayBuffer(file)
+    } else {
+      reader.readAsText(file)
+    }
   }
 
   // 处理点击进入编辑状态

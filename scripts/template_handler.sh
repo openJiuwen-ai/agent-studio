@@ -69,7 +69,7 @@ generate_config_file() {
 generate_config_files() {
     local nginx_template_file=${CONFIG["NGINX_TEMPLE_FILE"]}
     local nginx_dir="${CONFIG["CONFIG_DIR"]}/.nginx-files"
-    local nginx_file="${nginx_dir}/${DEPLOY_VARS["NGINX_FILE_NAME"]}"
+    local nginx_file="${nginx_dir}/nginx.conf.${DEPLOY_VARS["NAME_SUFFIX"]}"
     declare -A ALL_VARS
 
     for key in "${!DEPLOY_VARS[@]}"; do

@@ -18,6 +18,7 @@ from openjiuwen_studio.core.manager.utils.utils import Version, check_version
 from openjiuwen_studio.core.utils.exception import log_exception
 from openjiuwen_studio.core.config import settings
 from openjiuwen_studio.models.workflow import WorkflowBaseDBPd, WorkflowPublishDBPd
+from openjiuwen_studio.models.agent import AgentBaseDB, AgentPublishDB
 from openjiuwen_studio.schemas.workflow import WorkflowBase, WorkflowSave, WorkflowResponseSave, \
     WorkflowList, WorkflowResponse, WorkflowResponseList, WorkflowPublish, \
     WorkflowBaseResponse, WorkflowUpdate, WorkflowId, WorkflowSearchRequest, WorkflowCreate, \
@@ -25,6 +26,7 @@ from openjiuwen_studio.schemas.workflow import WorkflowBase, WorkflowSave, Workf
 import openjiuwen_studio.core.manager.convertor.workflow as convert
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.core.manager.repositories.workflow_repository import workflow_repository
+from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw, JiuwenBaseRepository
 from openjiuwen_studio.core.common.dsl import ComponentType
 from openjiuwen_studio.core.manager.workflow_tag import create_workflow_tags, get_workflow_tags, update_workflow_tags
 from openjiuwen_studio.core.database import milliseconds
@@ -604,6 +606,164 @@ def workflow_canvas_save(
 
 
 @with_exception_handling
+def _update_workflow_name_in_agents(
+        space_id: str,
+        workflow_id: str,
+        new_workflow_name: str,
+        new_workflow_desc: str = None
+) -> ResponseModel[dict]:
+    """同步更新所有引用该工作流的agent配置中的工作流名称和描述"""
+    with get_db_jw() as db:
+        updated_count = 0
+        failed_count = 0
+        errors = []
+
+        # 1. 查询并更新draft版本的agent
+        agent_db = JiuwenBaseRepository(db, AgentBaseDB)
+        
+        # 获取所有draft版本的agent
+        draft_agents = agent_db.get_dl_in_sql(
+            find_id={"space_id": space_id},
+            return_first_item=False
+        )
+
+        if draft_agents.code == status.HTTP_200_OK and draft_agents.data:
+            for agent_data in draft_agents.data:
+                try:
+                    agent_id = agent_data.get("agent_id")
+                    workflows = agent_data.get("workflows", [])
+
+                    if not isinstance(workflows, list):
+                        workflows = []
+
+                    # 检查是否引用了该工作流
+                    updated = False
+                    for workflow in workflows:
+                        if workflow.get("workflow_id") == workflow_id:
+                            # 更新工作流名称和描述
+                            if new_workflow_name:
+                                workflow["workflow_name"] = new_workflow_name
+                            if new_workflow_desc:
+                                workflow["description"] = new_workflow_desc
+                            updated = True
+
+                    if updated:
+                        # 更新draft版本
+                        agent_data["workflows"] = workflows
+                        agent_data["update_time"] = milliseconds()
+                        
+                        # 移除primary_id字段，避免更新时出错
+                        if "primary_id" in agent_data:
+                            del agent_data["primary_id"]
+
+                        # 更新agent
+                        update_result = agent_db.update_dl_in_sql(
+                            find_id={
+                                "agent_id": agent_id,
+                                "agent_version": AgentBaseDB.__version_none__
+                            },
+                            update_dl=agent_data
+                        )
+                        
+                        if update_result.code == status.HTTP_200_OK:
+                            updated_count += 1
+                            logger.info(
+                                f"[WORKFLOW_UPDATE] Updated workflow name in agent {agent_id} (draft version)")
+                        else:
+                            failed_count += 1
+                            errors.append(f"Failed to update agent {agent_id} (draft): {update_result.message}")
+
+                except Exception as e:
+                    failed_count += 1
+                    agent_id_str = agent_data.get('agent_id', 'unknown')
+                    error_msg = f"Error processing agent {agent_id_str} "
+                    error_msg += f"(draft): {str(e)}"
+                    errors.append(error_msg)
+                    logger.error(
+                        f"[WORKFLOW_UPDATE] Failed to update workflow name "
+                        f"in agent {agent_id_str}: {e}")
+
+        # 2. 查询并更新publish版本的agent
+        agent_publish_db = JiuwenBaseRepository(db, AgentPublishDB)
+        
+        # 获取所有publish版本的agent
+        publish_agents = agent_publish_db.get_dl_in_sql(
+            find_id={"space_id": space_id},
+            return_first_item=False
+        )
+
+        if publish_agents.code == status.HTTP_200_OK and publish_agents.data:
+            for agent_data in publish_agents.data:
+                try:
+                    agent_id = agent_data.get("agent_id")
+                    agent_version = agent_data.get("agent_version")
+                    workflows = agent_data.get("workflows", [])
+
+                    if not isinstance(workflows, list):
+                        workflows = []
+
+                    # 检查是否引用了该工作流
+                    updated = False
+                    for workflow in workflows:
+                        if workflow.get("workflow_id") == workflow_id:
+                            # 更新工作流名称和描述
+                            if new_workflow_name:
+                                workflow["workflow_name"] = new_workflow_name
+                            if new_workflow_desc:
+                                workflow["description"] = new_workflow_desc
+                            updated = True
+
+                    if updated:
+                        # 更新publish版本
+                        agent_data["workflows"] = workflows
+                        agent_data["update_time"] = milliseconds()
+                        
+                        # 移除primary_id字段，避免更新时出错
+                        if "primary_id" in agent_data:
+                            del agent_data["primary_id"]
+
+                        # 更新publish版本
+                        update_result = agent_publish_db.update_dl_in_sql(
+                            find_id={
+                                "agent_id": agent_id,
+                                "agent_version": agent_version
+                            },
+                            update_dl=agent_data
+                        )
+                        
+                        if update_result.code == status.HTTP_200_OK:
+                            updated_count += 1
+                            logger.info(
+                                f"[WORKFLOW_UPDATE] Updated workflow name in agent {agent_id} "
+                                f"(publish v{agent_version})")
+                        else:
+                            failed_count += 1
+                            error_msg = f"Failed to update agent {agent_id} v{agent_version} "
+                            error_msg += f"(publish): {update_result.message}"
+                            errors.append(error_msg)
+
+                except Exception as e:
+                    failed_count += 1
+                    agent_id_str = agent_data.get('agent_id', 'unknown')
+                    error_msg = f"Error processing agent {agent_id_str} "
+                    error_msg += f"(publish): {str(e)}"
+                    errors.append(error_msg)
+                    logger.error(
+                        f"[WORKFLOW_UPDATE] Failed to update workflow name "
+                        f"in agent {agent_id_str} (publish): {e}")
+
+        return ResponseModel(
+            code=status.HTTP_200_OK,
+            message=f"Updated workflow name in agents: {updated_count} updated, {failed_count} failed",
+            data={
+                "updated_count": updated_count,
+                "failed_count": failed_count,
+                "errors": errors if errors else None
+            }
+        )
+
+
+@with_exception_handling
 def workflow_meta_update(
         req: WorkflowUpdate,
         current_user: dict
@@ -654,6 +814,19 @@ def workflow_meta_update(
                 code=status.HTTP_400_BAD_REQUEST,
                 message=str(e)
             )
+
+    # 5. 同步更新所有引用该工作流的agent配置中的工作流名称和描述
+    if req.name is not None or req.desc is not None:
+        sync_result = _update_workflow_name_in_agents(
+            space_id=req.space_id,
+            workflow_id=req.workflow_id,
+            new_workflow_name=req.name,
+            new_workflow_desc=req.desc
+        )
+        logger.info(
+            f"Synced workflow name in agents: {sync_result.data['updated_count']} updated, "
+            f"{sync_result.data['failed_count']} failed"
+        )
 
     res_data = WorkflowResponseUpdate(
         workflow_id=req.workflow_id,
