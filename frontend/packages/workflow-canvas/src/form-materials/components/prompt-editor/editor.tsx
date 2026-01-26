@@ -11,6 +11,7 @@ import { ExtensionManager } from '../base-editor'
 import { PropsType } from './types'
 import { createCustomLanguageExtension } from './custom-language-support'
 import { mentionExtension, type MentionOptions } from './extensions/mention'
+import { useTranslation } from '../../../i18n'
 
 import './styles.css'
 
@@ -96,6 +97,10 @@ export { useEditor, useEditorEvent }
 
 export function PromptEditor(props: PromptEditorPropsType) {
   const { value, onChange, readonly, placeholder, style, hasError, children, disableMarkdownHighlight, options, onVariableSelect } = props || {}
+  const { t } = useTranslation()
+
+  const defaultPlaceholder = t('workflowCanvas.formMaterials.promptEditor.placeholder')
+  const finalPlaceholder = placeholder ?? defaultPlaceholder
 
   const editorRef = useRef<BaseEditorRef | null>(null)
   const extensionManagerRef = useRef<ExtensionManager | null>(null)
@@ -397,7 +402,7 @@ export function PromptEditor(props: PromptEditorPropsType) {
             onChange={handleEditorChange}
             language="markdown" // Use markdown for prompt editing
             theme="light"
-            placeholder={placeholder}
+            placeholder={finalPlaceholder}
             readonly={readonly}
             options={stableOptions}
             extensions={stableExtensions}

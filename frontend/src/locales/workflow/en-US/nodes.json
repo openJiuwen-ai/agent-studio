@@ -168,6 +168,9 @@
       "description": "Description",
       "helpLLMUnderstandProperty": "Help LLM to understand the property",
       "defaultValue": "Default Value"
+    },
+    "promptEditor": {
+      "placeholder": "Use {{variable}} to reference input parameters"
     }
   },
   "historyPanel": {

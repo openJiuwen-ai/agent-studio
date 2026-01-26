@@ -167,6 +167,9 @@
       "description": "描述",
       "helpLLMUnderstandProperty": "帮助 LLM 理解该属性",
       "defaultValue": "默认值"
+    },
+    "promptEditor": {
+      "placeholder": "使用 {{变量名}} 引用输入参数"
     }
   },
   "historyPanel": {
