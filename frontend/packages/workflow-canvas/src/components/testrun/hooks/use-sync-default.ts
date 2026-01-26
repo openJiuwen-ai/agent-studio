@@ -8,15 +8,22 @@ import { useEffect } from 'react'
 import { TestRunFormMeta, TestRunFormMetaItem } from '../testrun-form/type'
 
 const getDefaultValue = (meta: TestRunFormMetaItem) => {
-  if (['object', 'array', 'map'].includes(meta.type) && typeof meta.defaultValue === 'string') {
-    try {
-      return JSON.parse(meta.defaultValue)
-    } catch {
-      // 解析失败时返回原字符串，避免运行时错误
-      return meta.defaultValue
+  const defaultValue = meta.defaultValue
+
+  if (['object', 'array', 'map'].includes(meta.type)) {
+    if (typeof defaultValue === 'string') {
+      if (defaultValue === '') {
+        return meta.type === 'array' ? [] : null
+      }
+      try {
+        return JSON.parse(defaultValue)
+      } catch {
+        return defaultValue
+      }
     }
   }
-  return meta.defaultValue
+
+  return defaultValue
 }
 
 export const useSyncDefault = (params: {
@@ -45,16 +52,21 @@ export const useSyncDefault = (params: {
       }
     })
 
-    // 始终将默认值合并到现有值中
-    // 用户编辑的值（在 values 中）会覆盖默认值
-    // 但只保留在新 formMeta 中定义的字段的值
     setValues(prevValues => {
       const mergedValues = { ...defaultValues }
 
-      // 只保留用户已编辑的、且在新 formMeta 中定义的字段的值
       Object.keys(prevValues).forEach(key => {
-        if (fieldNames.has(key) && prevValues[key] !== undefined && prevValues[key] !== null && prevValues[key] !== '') {
-          mergedValues[key] = prevValues[key]
+        if (fieldNames.has(key) && prevValues[key] !== undefined && prevValues[key] !== null) {
+          const meta = formMeta.find(m => m.name === key)
+          if (meta?.type === 'array') {
+            mergedValues[key] = prevValues[key]
+          } else if (meta?.type === 'object') {
+            if (typeof prevValues[key] === 'object' && Object.keys(prevValues[key] || {}).length > 0) {
+              mergedValues[key] = prevValues[key]
+            }
+          } else if (prevValues[key] !== '') {
+            mergedValues[key] = prevValues[key]
+          }
         }
       })
 
