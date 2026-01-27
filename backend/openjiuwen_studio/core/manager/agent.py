@@ -1298,6 +1298,26 @@ def _update_plugin_ids_in_json(data: Any, plugin_id_map: Dict[str, str]) -> Any:
         return data
 
 
+def _update_tool_ids_in_json(data: Any, tool_id_map: Dict[str, str]) -> Any:
+    """递归更新JSON中的tool_id"""
+    if isinstance(data, dict):
+        new_data = {}
+        for k, v in data.items():
+            # 检查值是否为旧工具ID
+            if k == "toolID" or k == "tool_id":
+                if isinstance(v, str) and v in tool_id_map:
+                    new_data[k] = tool_id_map[v]
+                else:
+                    new_data[k] = v
+            else:
+                new_data[k] = _update_tool_ids_in_json(v, tool_id_map)
+        return new_data
+    elif isinstance(data, list):
+        return [_update_tool_ids_in_json(item, tool_id_map) for item in data]
+    else:
+        return data
+
+
 def _create_plugin_and_tools(
     space_id: str, plugin_tpl: dict, tool_id_map: Dict[str, str]
 ) -> tuple[str, list[str]]:
@@ -2417,7 +2437,7 @@ def agent_export(
     has_documents = any(kb.get("documents") for kb in knowledge_bases)
 
     # 统一文件名格式
-    timestamp = datetime.datetime.now(tz=timezone.utc).strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
     base_filename = f"{agent_data.get('agent_name', 'agent')}-export-{timestamp}"
 
     if has_documents:
@@ -3090,6 +3110,10 @@ async def _agent_import_core(
                     # 更新插件ID引用
                     if plugin_id_map:
                         updated_schema = _update_plugin_ids_in_json(updated_schema, plugin_id_map)
+
+                    # 更新工具ID引用
+                    if tool_id_map:
+                        updated_schema = _update_tool_ids_in_json(updated_schema, tool_id_map)
 
                     # 如果 schema 发生变化，更新 wf_data
                     if updated_schema != schema_obj:
