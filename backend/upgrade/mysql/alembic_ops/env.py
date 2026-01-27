@@ -24,17 +24,22 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     # Build URL from env vars for offline mode as well
-    db_user = os.getenv("DB_USER")
-    db_password = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_port = os.getenv("DB_PORT")
-    db_name = os.getenv("OPS_DB_NAME")
-    
-    if all([db_user, db_password, db_host, db_port, db_name]):
-        url = f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    db_type = os.getenv("DB_TYPE", "mysql")
+    if db_type == "sqlite":
+        sqlite_db = os.getenv("OPS_SQLITE_DB")
+        url = f"sqlite:///{sqlite_db}"
     else:
-        # Fallback to .ini value if env vars missing
-        url = config.get_main_option("sqlalchemy.url")
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        db_host = os.getenv("DB_HOST")
+        db_port = os.getenv("DB_PORT")
+        db_name = os.getenv("OPS_DB_NAME")
+        
+        if all([db_user, db_password, db_host, db_port, db_name]):
+            url = f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        else:
+            # Fallback to .ini value if env vars missing
+            url = config.get_main_option("sqlalchemy.url")
     
     context.configure(
         url=url,
@@ -51,15 +56,23 @@ def run_migrations_online() -> None:
     section = config.get_section(config.config_ini_section, {})
     
     # Override sqlalchemy.url with environment variables
-    db_user = os.getenv("DB_USER")
-    db_password = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_port = os.getenv("DB_PORT")
-    db_name = os.getenv("OPS_DB_NAME")
-    
-    if all([db_user, db_password, db_host, db_port, db_name]):
-        url = f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    db_type = os.getenv("DB_TYPE", "mysql")
+    if db_type == "sqlite":
+        sqlite_db = os.getenv("OPS_SQLITE_DB")
+        url = f"sqlite:///{sqlite_db}"
         section["sqlalchemy.url"] = url
+        render_as_batch = True
+    else:
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        db_host = os.getenv("DB_HOST")
+        db_port = os.getenv("DB_PORT")
+        db_name = os.getenv("OPS_DB_NAME")
+        
+        if all([db_user, db_password, db_host, db_port, db_name]):
+            url = f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+            section["sqlalchemy.url"] = url
+        render_as_batch = False
 
     connectable = engine_from_config(
         section,
@@ -69,7 +82,9 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata,
+            render_as_batch=render_as_batch
         )
 
         with context.begin_transaction():
