@@ -18,6 +18,7 @@ from openjiuwen_studio.core.manager.convertor.components.plugin import param_typ
 from openjiuwen_studio.core.manager.login_manager.space import check_user_space
 from openjiuwen_studio.core.manager.repositories.plugin_repository import plugin_repository
 from openjiuwen_studio.core.manager.repositories.tool_repository import tool_repository
+from openjiuwen_studio.core.manager.repositories.agent_repository import agent_repository
 from openjiuwen_studio.core.utils.exception import log_exception
 from openjiuwen_studio.models.plugin import PluginBaseDBPd, ToolBaseDB, PluginPublishDBPd
 from openjiuwen_studio.schemas.plugin import (
@@ -181,6 +182,17 @@ def plugin_update(
             code=result.code,
             message=result.message,
         )
+
+    # 同步更新引用了该插件的Agent中的插件名称
+    try:
+        if hasattr(req, 'name') and req.name:
+            agent_repository.update_plugin_name_in_agents(
+                space_id=req.space_id,
+                plugin_id=req.plugin_id,
+                new_plugin_name=req.name
+            )
+    except Exception as e:
+        logger.error(f"Failed to sync plugin name to agents: {e}", exc_info=True)
 
     return ResponseModel(
         code=status.HTTP_200_OK,
@@ -465,6 +477,22 @@ def _plugin_update_tool(
             code=result.code,
             message=result.message,
         )
+
+    # 同步更新引用了该工具的Agent中的工具名称
+    try:
+        if 'name' in req:
+            tool_id = req.get('tool_id')
+            space_id = req.get('space_id')
+            new_name = req.get('name')
+            
+            if tool_id and space_id and new_name:
+                agent_repository.update_tool_name_in_agents(
+                    space_id=space_id,
+                    tool_id=tool_id,
+                    new_tool_name=new_name
+                )
+    except Exception as e:
+        logger.error(f"Failed to sync tool name to agents: {e}", exc_info=True)
 
     return ResponseModel(
         code=status.HTTP_200_OK,
