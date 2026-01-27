@@ -10,6 +10,7 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Union, Tuple
+from dataclasses import asdict
 from fastapi import status, UploadFile
 from openjiuwen.core.common.logging import logger
 
@@ -73,66 +74,72 @@ from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import g
 from openjiuwen_studio.core.manager.model_manager.managers import ModelConfigManager
 from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
 from openjiuwen_studio.ops.modules.llm.llm_manager import get_llm_client_by_protocol
+from openjiuwen_studio.core.manager.repositories.knowledge_base_repository import (
+    KBDetails,
+    KBDocument,
+)
 
+_CURR_INDEX_TYPE = os.getenv("INDEX_MANAGER_TYPE", "chroma")
 
 # ==================== GraphRAG 配置和模型管理 ====================
 
+
 def _extract_full_error_message(error: Exception) -> str:
     """提取完整的错误信息，包括异常链中的所有错误
-    
+
     用于提取 openjiuwen 包抛出的异常信息，因为 openjiuwen 包内部可能捕获异常后
     使用 cause 参数重新抛出，形成异常链。
-    
+
     Args:
         error: 异常对象
-        
+
     Returns:
         完整的错误信息字符串，包含所有异常链中的错误
     """
     error_parts = []
     current_error = error
-    
+
     # 遍历异常链，收集所有错误信息
     while current_error is not None:
         error_str = str(current_error)
         if error_str:
             error_parts.append(error_str)
-        
+
         # 检查是否有 __cause__ (异常链)
-        if hasattr(current_error, '__cause__') and current_error.__cause__:
+        if hasattr(current_error, "__cause__") and current_error.__cause__:
             current_error = current_error.__cause__
         # 检查是否有 __context__ (异常上下文)
-        elif hasattr(current_error, '__context__') and current_error.__context__:
+        elif hasattr(current_error, "__context__") and current_error.__context__:
             current_error = current_error.__context__
         else:
             break
-    
+
     # 如果只有一个错误，直接返回
     if len(error_parts) == 1:
         return error_parts[0]
-    
+
     # 如果有多个错误，用 " -> " 连接
     return " -> ".join(error_parts)
 
 
 def _format_error_message_for_frontend(error_msg: str) -> str:
     """格式化错误信息供前端显示
-    
+
     改写规则：
     1. 固定错误消息保持不变
     2. 带前缀的错误：去掉前缀、状态码、箭头（替换为分号）
     3. 在 "reason" 之前截断（如果存在）
     4. 确保首字母大写
-    
+
     Args:
         error_msg: 原始错误信息
-        
+
     Returns:
         格式化后的错误信息
     """
     if not error_msg:
         return error_msg
-    
+
     # 固定错误消息列表（保持不变）
     fixed_messages = {
         "Document not found",
@@ -143,14 +150,14 @@ def _format_error_message_for_frontend(error_msg: str) -> str:
         "Processing failed with unknown error",
         "Failed to update status to INDEXED",
     }
-    
+
     # 如果是固定错误消息，直接返回（首字母已大写）
     if error_msg in fixed_messages:
         return error_msg
-    
+
     # 需要改写的错误信息
     result = error_msg
-    
+
     # 1. 去掉前缀
     prefixes = [
         "File parsing failed: ",
@@ -161,27 +168,27 @@ def _format_error_message_for_frontend(error_msg: str) -> str:
         if result.startswith(prefix):
             result = result[len(prefix):]
             break
-    
+
     # 2. 去掉状态码 [155xxx]
-    result = re.sub(r'\[\d+\]\s*', '', result)
-    
+    result = re.sub(r"\[\d+\]\s*", "", result)
+
     # 3. 去掉箭头 -> 和前后空格，用分号替换
-    result = re.sub(r'\s*->\s*', '; ', result)
-    
+    result = re.sub(r"\s*->\s*", "; ", result)
+
     # 4. 在 "reason" 之前截断（如果存在）
     # 匹配 ", reason:" 或 ",reason:" 或 " reason:" 等变体
-    reason_pattern = r',\s*reason\s*:'
+    reason_pattern = r",\s*reason\s*:"
     match = re.search(reason_pattern, result, re.IGNORECASE)
     if match:
-        result = result[:match.start()].strip()
-    
+        result = result[: match.start()].strip()
+
     # 5. 清理多余的空格
-    result = ' '.join(result.split())
-    
+    result = " ".join(result.split())
+
     # 6. 确保首字母大写
     if result:
         result = result[0].upper() + result[1:] if len(result) > 1 else result.upper()
-    
+
     return result
 
 
@@ -271,7 +278,8 @@ def _create_embed_model(kb_id: str, space_id: str) -> APIEmbedding:
     db = SessionLocal()
     try:
         # 1. 查询知识库，获取 embedding_model_config_id
-        kb_get = KnowledgeBaseGet(space_id=space_id, kb_id=kb_id)
+        kb_details = KBDetails(space_id=space_id, kb_id=kb_id, index_manager_type=_CURR_INDEX_TYPE)
+        kb_get = KnowledgeBaseGet(**asdict(kb_details))
         kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
 
         if kb_result.code != status.HTTP_200_OK or not kb_result.data:
@@ -451,6 +459,7 @@ def knowledge_base_create(req: KnowledgeBaseCreate, current_user: dict) -> Respo
         "kb_id": kb_id,
         "name": req.name,
         "description": req.description,
+        "index_manager_type": _CURR_INDEX_TYPE,
         "embedding_model_config_id": req.embedding_model_config_id,
         "config": req.config,
         "create_time": milliseconds(),
@@ -975,7 +984,7 @@ def _check_milvus_connection() -> Tuple[bool, str]:
     except ImportError:
         # 如果没有 pymilvus，尝试使用 MilvusIndexer 来测试
         try:
-            index_manager = _create_milvus_index_manager()
+            index_manager = _create_index_manager()
             # 如果 MilvusIndexer 创建成功，假设连接可用
             # 注意：这是一个简化的检查，实际连接可能在后续操作时才验证
             return True, ""
@@ -1079,7 +1088,14 @@ async def _delete_kb_indices(kb_id: str, space_id: str) -> dict:
 
         while True:
             doc_list_result = knowledge_base_repository.document_list(
-                space_id=space_id, kb_id=kb_id, page=page, size=page_size
+                KBDocument(
+                    KBDetails(space_id=space_id, kb_id=kb_id, index_manager_type=_CURR_INDEX_TYPE),
+                    doc_id=None,
+                    doc_status=None,
+                    process_info=None,
+                    index_name=None,
+                    chunk_count=None,
+                )
             )
 
             if doc_list_result.code != status.HTTP_200_OK or not doc_list_result.data:
@@ -1214,7 +1230,7 @@ async def create_knowledge_base_for_retrieval(
         ValueError: 如果知识库不存在或配置无效
     """
     # 1. 从数据库获取知识库信息
-    kb_get = KnowledgeBaseGet(space_id=space_id, kb_id=kb_id)
+    kb_get = KnowledgeBaseGet(space_id=space_id, kb_id=kb_id, index_manager_type=_CURR_INDEX_TYPE)
     kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
 
     if kb_result.code != status.HTTP_200_OK or not kb_result.data:
@@ -1353,11 +1369,16 @@ async def _index_documents(
 
     # 1. 更新状态为INDEXING
     update_indexing_result = knowledge_base_repository.document_update_status(
-        space_id=space_id,
-        kb_id=kb_id,
-        doc_id=doc_id,
-        doc_status=DocumentStatus.INDEXING.value,
-        process_info={**process_info, "parsing_completed": True, "document_count": len(documents)},
+        KBDocument(
+            kb=KBDetails(space_id=space_id, kb_id=kb_id, index_manager_type=_CURR_INDEX_TYPE),
+            doc_id=doc_id,
+            doc_status=DocumentStatus.INDEXING.value,
+            process_info={
+                **process_info,
+                "parsing_completed": True,
+                "document_count": len(documents),
+            },
+        )
     )
 
     if update_indexing_result.code != status.HTTP_200_OK:
@@ -1513,10 +1534,46 @@ async def process_single_document(
     file_name: str = None,
 ):
     """在后台异步处理单个文档"""
+    kb_details = KBDetails(space_id=space_id, kb_id=kb_id, index_manager_type=_CURR_INDEX_TYPE)
     try:
         logger.info(
             f"[DOC_PROCESS_BG] Starting background processing - Doc ID: {doc_id}, KB ID: {kb_id}"
         )
+
+        # Skip if stored index_manager_type != current running INDEX_MANAGER_TYPE
+        try:
+            stored = knowledge_base_repository.document_get(
+                KBDocument(kb=kb_details, doc_id=doc_id)
+            )
+            if stored and stored.code == status.HTTP_200_OK and stored.data:
+                stored_type = stored.data.get("index_manager_type")
+                if stored_type and stored_type != _CURR_INDEX_TYPE:
+                    reason = f"index_manager_type_mismatch: stored={stored_type}, current={_CURR_INDEX_TYPE}"
+                    logger.info(f"[DOC_PROCESS_BG] Skipping doc {doc_id}: {reason}")
+                    # mark as FAILED (or choose another status) with reason so frontend/admins see why
+                    try:
+                        knowledge_base_repository.document_update_status(
+                            KBDocument(
+                                kb=kb_details,
+                                doc_id=doc_id,
+                                doc_status=DocumentStatus.FAILED.value,
+                                process_info={
+                                    **process_info,
+                                    "error": reason,
+                                    "failed_time": milliseconds(),
+                                },
+                            )
+                        )
+                    except Exception:
+                        logger.warning(
+                            f"[DOC_PROCESS_BG] Failed to update status for skipped doc {doc_id}"
+                        )
+                    return
+        except Exception:
+            # Ignore repository read errors here and proceed; later steps will fail and set status
+            logger.debug(
+                f"[DOC_PROCESS_BG] Could not verify index_manager_type for doc {doc_id}, proceeding"
+            )
 
         # 1. 解析文件
         try:
@@ -1563,13 +1620,14 @@ async def process_single_document(
         }
 
         update_indexed_result = knowledge_base_repository.document_update_status(
-            space_id=space_id,
-            kb_id=kb_id,
-            doc_id=doc_id,
-            doc_status=DocumentStatus.INDEXED.value,
-            process_info=final_process_info,
-            es_index_name=index_result.get("chunk_index"),
-            chunk_count=index_result.get("chunk_count"),
+            KBDocument(
+                kb=kb_details,
+                doc_id=doc_id,
+                doc_status=DocumentStatus.INDEXED.value,
+                process_info=final_process_info,
+                index_name=index_result.get("chunk_index"),
+                chunk_count=index_result.get("chunk_count"),
+            )
         )
 
         if update_indexed_result.code != status.HTTP_200_OK:
@@ -1595,15 +1653,16 @@ async def process_single_document(
         # 更新状态为FAILED，记录完整的错误信息
         try:
             knowledge_base_repository.document_update_status(
-                space_id=space_id,
-                kb_id=kb_id,
-                doc_id=doc_id,
-                doc_status=DocumentStatus.FAILED.value,
-                process_info={
-                    **process_info,
-                    "error": error_message,
-                    "failed_time": milliseconds(),
-                },
+                kbdoc=KBDocument(
+                    kb=kb_details,
+                    doc_id=doc_id,
+                    doc_status=DocumentStatus.FAILED.value,
+                    process_info={
+                        **process_info,
+                        "error": error_message,
+                        "failed_time": milliseconds(),
+                    },
+                )
             )
         except Exception as update_error:
             logger.error(
@@ -1700,7 +1759,7 @@ async def document_upload(
     _ = check_user_space(space_id, current_user)
 
     # 2. 验证知识库是否存在
-    kb_get = KnowledgeBaseGet(space_id=space_id, kb_id=kb_id)
+    kb_get = KnowledgeBaseGet(space_id=space_id, kb_id=kb_id, index_manager_type=_CURR_INDEX_TYPE)
     kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
     if kb_result.code != status.HTTP_200_OK or not kb_result.data:
         logger.warning(f"[DOC_UPLOAD] Knowledge base not found - KB ID: {kb_id}, User: {user_id}")
@@ -1777,6 +1836,7 @@ async def document_upload(
                 "file_size": file_size,
                 "file_type": file_type,
                 "mime_type": mime_type,
+                "index_manager_type": _CURR_INDEX_TYPE,
                 "status": DocumentStatus.UPLOADED.value,
                 "doc_metadata": metadata or {},
                 "create_time": current_time,
@@ -1930,7 +1990,7 @@ def knowledge_base_list(req: KnowledgeBaseListRequest, current_user: dict) -> Re
     user_id = current_user.get("user_id", "unknown")
 
     logger.info(
-        f"[KB_LIST] Getting knowledge base list - User: {user_id}, Space ID: {req.space_id}, "
+        f"[KB_LIST] Getting knowledge base list - User: {user_id}, Space ID: {req.space_id} ({_CURR_INDEX_TYPE=})"
         f"Page: {req.page}, Size: {req.size}"
     )
 
@@ -1961,7 +2021,9 @@ def knowledge_base_list(req: KnowledgeBaseListRequest, current_user: dict) -> Re
 
     # 2. 从数据库获取知识库列表
     list_result = knowledge_base_repository.knowledge_base_list(
-        space_id=req.space_id, page=req.page, size=req.size
+        kb=KBDetails(space_id=req.space_id, index_manager_type=_CURR_INDEX_TYPE),
+        page=req.page,
+        size=req.size,
     )
 
     if list_result.code != status.HTTP_200_OK:
@@ -2036,7 +2098,9 @@ def document_list(req: DocumentListRequest, current_user: dict) -> ResponseModel
     _ = check_user_space(req.space_id, current_user)
 
     # 2. 验证知识库是否存在
-    kb_get = KnowledgeBaseGet(space_id=req.space_id, kb_id=req.kb_id)
+    kb_get = KnowledgeBaseGet(
+        space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+    )
     kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
     if kb_result.code != status.HTTP_200_OK or not kb_result.data:
         logger.warning(f"[DOC_LIST] Knowledge base not found - KB ID: {req.kb_id}, User: {user_id}")
@@ -2044,7 +2108,11 @@ def document_list(req: DocumentListRequest, current_user: dict) -> ResponseModel
 
     # 3. 从数据库获取文档列表
     list_result = knowledge_base_repository.document_list(
-        space_id=req.space_id, kb_id=req.kb_id, page=req.page, size=req.size
+        KBDocument(
+            KBDetails(space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE),
+        ),
+        page=req.page,
+        size=req.size,
     )
 
     if list_result.code != status.HTTP_200_OK:
@@ -2093,7 +2161,6 @@ def document_update(req: DocumentUpdateRequest, current_user: dict) -> ResponseM
     """更新文档信息（当前只支持更新文档名称）"""
     start_time = time.time()
     user_id = current_user.get("user_id", "unknown")
-
     logger.info(
         f"[DOC_UPDATE] Updating document - User: {user_id}, "
         f"Space ID: {req.space_id}, KB ID: {req.kb_id}, Doc ID: {req.document_id}, Name: {req.document_name}"
@@ -2103,7 +2170,9 @@ def document_update(req: DocumentUpdateRequest, current_user: dict) -> ResponseM
     _ = check_user_space(req.space_id, current_user)
 
     # 2. 验证知识库是否存在
-    kb_get = KnowledgeBaseGet(space_id=req.space_id, kb_id=req.kb_id)
+    kb_get = KnowledgeBaseGet(
+        space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+    )
     kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
     if kb_result.code != status.HTTP_200_OK or not kb_result.data:
         logger.warning(
@@ -2111,10 +2180,16 @@ def document_update(req: DocumentUpdateRequest, current_user: dict) -> ResponseM
         )
         return ResponseModel(code=status.HTTP_404_NOT_FOUND, message="Knowledge base not found")
 
-    # 3. 验证文档是否存在
-    doc_get_result = knowledge_base_repository.document_get(
-        space_id=req.space_id, kb_id=req.kb_id, doc_id=req.document_id
+    kb_details = KBDetails(
+        space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
     )
+
+    # 3. 验证文档是否存在
+    kb_doc = KBDocument(
+        kb=kb_details,
+        doc_id=req.document_id,
+    )
+    doc_get_result = knowledge_base_repository.document_get(kbdoc=kb_doc)
     if doc_get_result.code != status.HTTP_200_OK or not doc_get_result.data:
         logger.warning(
             f"[DOC_UPDATE] Document not found - Doc ID: {req.document_id}, KB ID: {req.kb_id}, User: {user_id}"
@@ -2122,9 +2197,7 @@ def document_update(req: DocumentUpdateRequest, current_user: dict) -> ResponseM
         return ResponseModel(code=status.HTTP_404_NOT_FOUND, message="Document not found")
 
     # 4. 更新文档名称
-    update_result = knowledge_base_repository.document_update(
-        space_id=req.space_id, kb_id=req.kb_id, doc_id=req.document_id, name=req.document_name
-    )
+    update_result = knowledge_base_repository.document_update(kbdoc=kb_doc, name=req.document_name)
 
     if update_result.code != status.HTTP_200_OK:
         logger.error(
@@ -2162,7 +2235,9 @@ async def document_delete(req: DocumentDeleteRequest, current_user: dict) -> Res
     _ = check_user_space(req.space_id, current_user)
 
     # 2. 验证知识库是否存在
-    kb_get = KnowledgeBaseGet(space_id=req.space_id, kb_id=req.kb_id)
+    kb_get = KnowledgeBaseGet(
+        space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+    )
     kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
     if kb_result.code != status.HTTP_200_OK or not kb_result.data:
         logger.warning(
@@ -2178,7 +2253,12 @@ async def document_delete(req: DocumentDeleteRequest, current_user: dict) -> Res
     for doc_id in req.document_ids:
         # 验证文档是否存在
         doc_get_result = knowledge_base_repository.document_get(
-            space_id=req.space_id, kb_id=req.kb_id, doc_id=doc_id
+            KBDocument(
+                KBDetails(
+                    space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+                ),
+                doc_id=doc_id,
+            )
         )
         if doc_get_result.code != status.HTTP_200_OK or not doc_get_result.data:
             logger.warning(
@@ -2193,7 +2273,12 @@ async def document_delete(req: DocumentDeleteRequest, current_user: dict) -> Res
 
         # 删除文档
         delete_result = knowledge_base_repository.document_delete(
-            space_id=req.space_id, kb_id=req.kb_id, doc_id=doc_id
+            KBDocument(
+                KBDetails(
+                    space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+                ),
+                doc_id=doc_id,
+            )
         )
 
         if delete_result.code != status.HTTP_200_OK:
@@ -2287,7 +2372,6 @@ def document_get_status_batch(req: DocumentStatusRequest, current_user: dict) ->
     """批量查询文档状态"""
     start_time = time.time()
     user_id = current_user.get("user_id", "unknown")
-
     logger.info(
         f"[DOC_STATUS] Getting document status batch - User: {user_id}, "
         f"Space ID: {req.space_id}, KB ID: {req.kb_id}, Doc IDs: {len(req.doc_id_list)}"
@@ -2300,7 +2384,12 @@ def document_get_status_batch(req: DocumentStatusRequest, current_user: dict) ->
     status_items = []
     for doc_id in req.doc_id_list:
         doc_result = knowledge_base_repository.document_get(
-            space_id=req.space_id, kb_id=req.kb_id, doc_id=doc_id
+            KBDocument(
+                KBDetails(
+                    space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+                ),
+                doc_id=doc_id,
+            )
         )
 
         if doc_result.code == status.HTTP_200_OK and doc_result.data:
@@ -2324,7 +2413,7 @@ def document_get_status_batch(req: DocumentStatusRequest, current_user: dict) ->
             # 如果状态是 FAILED 但没有错误信息，提供默认错误信息
             if status_value == DocumentStatus.FAILED.value and not error_msg:
                 error_msg = "Processing failed with unknown error"
-            
+
             # 格式化错误信息供前端显示
             if error_msg:
                 error_msg = _format_error_message_for_frontend(error_msg)
@@ -2378,7 +2467,9 @@ async def document_process(req: DocumentProcessRequest, current_user: dict) -> R
 
     _ = check_user_space(req.space_id, current_user)
 
-    kb_get = KnowledgeBaseGet(space_id=req.space_id, kb_id=req.kb_id)
+    kb_get = KnowledgeBaseGet(
+        space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+    )
     kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
     if kb_result.code != status.HTTP_200_OK or not kb_result.data:
         logger.warning(
@@ -2404,11 +2495,18 @@ async def document_process(req: DocumentProcessRequest, current_user: dict) -> R
     # 收集有效文档信息（用于串行处理）
     valid_documents: list[dict] = []
 
+    kb_details = KBDetails(
+        space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+    )
+
     # 第一阶段：验证所有文档并更新状态
     for doc_id in req.doc_id_list:
         try:
             doc_result = knowledge_base_repository.document_get(
-                space_id=req.space_id, kb_id=req.kb_id, doc_id=doc_id
+                KBDocument(
+                    kb=kb_details,
+                    doc_id=doc_id,
+                )
             )
 
             if doc_result.code != status.HTTP_200_OK or not doc_result.data:
@@ -2418,15 +2516,16 @@ async def document_process(req: DocumentProcessRequest, current_user: dict) -> R
                 # 尝试更新状态为FAILED（如果文档存在但查询失败）
                 try:
                     knowledge_base_repository.document_update_status(
-                        space_id=req.space_id,
-                        kb_id=req.kb_id,
-                        doc_id=doc_id,
-                        doc_status=DocumentStatus.FAILED.value,
-                        process_info={
-                            **process_info_base,
-                            "error": "Document not found",
-                            "failed_time": milliseconds(),
-                        },
+                        KBDocument(
+                            kb=kb_details,
+                            doc_id=doc_id,
+                            doc_status=DocumentStatus.FAILED.value,
+                            process_info={
+                                **process_info_base,
+                                "error": "Document not found",
+                                "failed_time": milliseconds(),
+                            },
+                        )
                     )
                 except Exception:
                     # 如果文档不存在，无法更新状态，这是正常的
@@ -2442,15 +2541,16 @@ async def document_process(req: DocumentProcessRequest, current_user: dict) -> R
                 )
                 try:
                     knowledge_base_repository.document_update_status(
-                        space_id=req.space_id,
-                        kb_id=req.kb_id,
-                        doc_id=doc_id,
-                        doc_status=DocumentStatus.FAILED.value,
-                        process_info={
-                            **process_info_base,
-                            "error": "Document status invalid",
-                            "failed_time": milliseconds(),
-                        },
+                        KBDocument(
+                            kb=kb_details,
+                            doc_id=doc_id,
+                            doc_status=DocumentStatus.FAILED.value,
+                            process_info={
+                                **process_info_base,
+                                "error": "Document status invalid",
+                                "failed_time": milliseconds(),
+                            },
+                        )
                     )
                 except Exception as update_error:
                     logger.error(
@@ -2464,25 +2564,32 @@ async def document_process(req: DocumentProcessRequest, current_user: dict) -> R
                 failed_docs.append(doc_id)
                 logger.error(f"[DOC_PROCESS] File path not found for document {doc_id}")
                 knowledge_base_repository.document_update_status(
-                    space_id=req.space_id,
-                    kb_id=req.kb_id,
-                    doc_id=doc_id,
-                    doc_status=DocumentStatus.FAILED.value,
-                    process_info={
-                        **process_info_base,
-                        "error": "File path not found",
-                        "failed_time": milliseconds(),
-                    },
+                    KBDocument(
+                        kb=kb_details,
+                        doc_id=doc_id,
+                        doc_status=DocumentStatus.FAILED.value,
+                        process_info={
+                            **process_info_base,
+                            "error": "File path not found",
+                            "failed_time": milliseconds(),
+                        },
+                    )
                 )
                 continue
 
             # 更新文档状态为 PROCESSING
-            update_result = knowledge_base_repository.document_update_status(
+            kb_details = KBDetails(
                 space_id=req.space_id,
                 kb_id=req.kb_id,
-                doc_id=doc_id,
-                doc_status=DocumentStatus.PROCESSING.value,
-                process_info=process_info_base,
+                index_manager_type=_CURR_INDEX_TYPE,
+            )
+            update_result = knowledge_base_repository.document_update_status(
+                kbdoc=KBDocument(
+                    kb=kb_details,
+                    doc_id=doc_id,
+                    doc_status=DocumentStatus.PROCESSING.value,
+                    process_info=process_info_base,
+                )
             )
 
             if update_result.code != status.HTTP_200_OK:
@@ -2494,15 +2601,16 @@ async def document_process(req: DocumentProcessRequest, current_user: dict) -> R
                 )
                 try:
                     knowledge_base_repository.document_update_status(
-                        space_id=req.space_id,
-                        kb_id=req.kb_id,
-                        doc_id=doc_id,
-                        doc_status=DocumentStatus.FAILED.value,
-                        process_info={
-                            **process_info_base,
-                            "error": "Failed to update document status",
-                            "failed_time": milliseconds(),
-                        },
+                        KBDocument(
+                            kb=kb_details,
+                            doc_id=doc_id,
+                            doc_status=DocumentStatus.FAILED.value,
+                            process_info={
+                                **process_info_base,
+                                "error": "Failed to update document status",
+                                "failed_time": milliseconds(),
+                            },
+                        )
                     )
                 except Exception as update_error:
                     logger.error(
@@ -2528,15 +2636,16 @@ async def document_process(req: DocumentProcessRequest, current_user: dict) -> R
 
             try:
                 knowledge_base_repository.document_update_status(
-                    space_id=req.space_id,
-                    kb_id=req.kb_id,
-                    doc_id=doc_id,
-                    doc_status=DocumentStatus.FAILED.value,
-                    process_info={
-                        **process_info_base,
-                        "error": "Document validation failed",
-                        "failed_time": milliseconds(),
-                    },
+                    KBDocument(
+                        kb=kb_details,
+                        doc_id=doc_id,
+                        doc_status=DocumentStatus.FAILED.value,
+                        process_info={
+                            **process_info_base,
+                            "error": "Document validation failed",
+                            "failed_time": milliseconds(),
+                        },
+                    )
                 )
             except Exception as update_error:
                 logger.error(
@@ -2606,7 +2715,9 @@ def task_progress(req: TaskProgressRequest, current_user: dict) -> ResponseModel
     _ = check_user_space(req.space_id, current_user)
 
     # 2. 验证知识库是否存在
-    kb_get = KnowledgeBaseGet(space_id=req.space_id, kb_id=req.kb_id)
+    kb_get = KnowledgeBaseGet(
+        space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+    )
     kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
     if kb_result.code != status.HTTP_200_OK or not kb_result.data:
         logger.warning(
@@ -2614,10 +2725,15 @@ def task_progress(req: TaskProgressRequest, current_user: dict) -> ResponseModel
         )
         return ResponseModel(code=status.HTTP_404_NOT_FOUND, message="Knowledge base not found")
 
+    kb_details = KBDetails(
+        space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+    )
     # 3. 查询该任务ID下的所有文档
     list_result = knowledge_base_repository.document_list(
-        space_id=req.space_id, kb_id=req.kb_id, page=1, size=1000  # 假设一个任务不会超过1000个文档
-    )
+        kbdoc=KBDocument(kb=kb_details),
+        page=1,
+        size=1000,
+    )  # 假设一个任务不会超过1000个文档
 
     if list_result.code != status.HTTP_200_OK:
         logger.error(
