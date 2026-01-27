@@ -72,6 +72,7 @@ import {
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from 'react-query'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useIsNewDashboard } from '@/hooks/useIsNewDashboard'
 import { ENV_CONFIG } from '@/config/environment'
 import {
   useOptimizationJobDetail,
@@ -97,7 +98,6 @@ import ToolSettingsPanel from '@/components/Prompts/ToolSettingsPanel'
 import ToolEditDialog, { type EditingTool } from '@/components/Prompts/ToolEditDialog'
 import { SliderField } from '@/components/Prompts/SliderField'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '@/Common/UnifiedSnackbar'
-import Pagination from '@/components/Prompts/Pagination'
 import EvaluationDetailDialog from '@/components/Prompts/EvaluationDetailDialog'
 import { copyToClipboard } from '@/utils/prompts/utils'
 import { convertApiToolsToFrontendTools, convertFrontendToolsToApiTools } from '@/utils/prompts/toolFormatConverter'
@@ -123,6 +123,7 @@ const PromptOptimizeEditPage: React.FC = () => {
   const { id } = useParams()
   const [searchParams] = useSearchParams()
   const isEditMode = searchParams.get('mode') === 'edit'
+  const isNewDashboard = useIsNewDashboard()
 
   // 基本信息状态
   const { user } = useAuthStore()
@@ -1113,22 +1114,26 @@ const PromptOptimizeEditPage: React.FC = () => {
   // 响应式计算主体内容区域高度
   React.useEffect(() => {
     const updateContentHeight = () => {
-      if (window.innerWidth < 640) {
-        // 小屏幕：手机等移动设备
-        setContentHeight('70vh')
-      } else if (window.innerWidth < 2000) {
-        // 中等屏幕：平板、14寸笔记本等
-        setContentHeight('72vh')
-      } else {
-        // 大屏幕：15寸以上笔记本、台式显示器
+      if (isNewDashboard) {
         setContentHeight('85vh')
+      } else {
+        if (window.innerWidth < 640) {
+          // 小屏幕：手机等移动设备
+          setContentHeight('70vh')
+        } else if (window.innerWidth < 2000) {
+          // 中等屏幕：平板、14寸笔记本等
+          setContentHeight('72vh')
+        } else {
+          // 大屏幕：15寸以上笔记本、台式显示器
+          setContentHeight('85vh')
+        }
       }
     }
 
     updateContentHeight()
     window.addEventListener('resize', updateContentHeight)
     return () => window.removeEventListener('resize', updateContentHeight)
-  }, [])
+  }, [isNewDashboard])
 
   // 页面进入时，如果是草稿类型，强制刷新一次（确保获取最新数据）
   // 使用 ref 来跟踪是否已经执行过，确保只在组件挂载时执行一次
@@ -2686,9 +2691,12 @@ const PromptOptimizeEditPage: React.FC = () => {
   }, [currentOptimizedVersion, optimizedPrompt, optimizedVersions])
 
   return (
-    <div className="w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40" style={{ minHeight: '93vh', overflowX: 'auto' }}>
+    <div
+      className={`w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 ${isNewDashboard ? 'py-6' : ''}`}
+      style={{ height: '100%', overflowX: 'auto' }}
+    >
       {/* 页面容器 */}
-      <div style={{ margin: '0 auto', minWidth: '1100px' }}>
+      <div style={{ margin: '0 auto', minWidth: '1100px', height: '100%' }}>
         {/* 页面头部 */}
         <div
           className="flex items-center bg-white/60 backdrop-blur-sm border border-gray-200/60 shadow-sm"

@@ -22,8 +22,16 @@ interface RefreshJobDetailParams {
 export const useOptimizationJobList = (idList?: string[], workspaceId?: string, userId?: string) => {
   return useQuery(['selfOpt', 'jobList', idList, workspaceId, userId], () => SelfOptService.getJobList(idList || ['*'], workspaceId!, userId!), {
     enabled: !!(workspaceId && userId), // 只有当workspaceId和userId都存在时才执行查询
-    staleTime: 1 * 60 * 1000, // 1分钟内不重新获取
-    cacheTime: 5 * 60 * 1000, // 缓存5分钟
+
+    // 🎯 禁用缓存，确保每次参数改变时都重新请求
+    staleTime: 0, // 数据立即过期，每次参数改变时都重新请求
+    cacheTime: 5 * 60 * 1000, // 保留缓存时间用于内存管理（组件卸载后保留5分钟）
+
+    // 🎯 添加自动刷新机制
+    refetchOnMount: true, // 组件挂载时重新获取数据
+    refetchOnWindowFocus: false, // 窗口重新聚焦时不重新获取数据
+    refetchOnReconnect: true, // 网络重连时重新获取数据
+
     retry: 2,
     retryDelay: 1000,
     onError: (error: any) => {

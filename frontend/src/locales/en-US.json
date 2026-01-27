@@ -46,8 +46,18 @@
       "editAgent": "Edit agent",
       "copyAgent": "Copy agent",
       "deleteAgent": "Delete agent",
+      "copyWorkflow": "Copy workflow",
+      "deleteWorkflow": "Delete workflow",
       "save": "Save",
       "cancel": "Cancel"
+    },
+    "view": {
+      "gridView": "Grid view",
+      "tableView": "Table view",
+      "searchPlaceholder": "Search..."
+    },
+    "card": {
+      "editedAgo": "Edited"
     },
     "status": {
       "active": "Active",
@@ -58,6 +68,7 @@
       "deleted": "Deleted",
       "loading": "Loading...",
       "saving": "Saving...",
+      "creating": "Creating...",
       "success": "Success",
       "error": "Error",
       "warning": "Warning",
@@ -67,6 +78,10 @@
     "messages": {
       "noData": "No data available",
       "loading": "Loading...",
+      "noDescription": "No description",
+      "clickToAddDescription": "Click to add description",
+      "disabled": "Disabled",
+      "moreActions": "More actions",
       "error": "An error occurred",
       "success": "Operation successful",
       "confirmDelete": "Are you sure you want to delete this item?",
@@ -78,7 +93,25 @@
       "agentDeleteSuccess": "Agent deleted successfully",
       "agentDeleteFailed": "Failed to delete agent",
       "agentCopySuccess": "Agent copied successfully",
+      "relativeTime": {
+        "justNow": "Just now",
+        "minutesAgo": "{{count}}m ago",
+        "hoursAgo": "{{count}}h ago",
+        "daysAgo": "{{count}}d ago",
+        "weeksAgo": "{{count}}w ago"
+      },
       "agentCopyFailed": "Failed to copy agent",
+      "agentExportSuccess": "Agent exported successfully",
+      "agentExportFailed": "Export failed",
+      "agentExportException": "Export exception",
+      "agentImportSuccess": "Agent imported successfully",
+      "agentImportOverwriteSuccess": "Agent overwritten successfully",
+      "agentImportFailed": "Import failed",
+      "agentImportException": "Import exception",
+      "agentImportFileParseError": "File parse error",
+      "agentImportInvalidFormat": "Invalid import file format",
+      "agentImportWarning": "Warning",
+      "agentFileParseException": "File parse exception",
       "agentUpdateSuccess": "Agent information updated successfully",
       "agentConfigSaveSuccess": "Agent configuration saved successfully",
       "agentConfigSaveFailed": "Save failed, please check agent configuration and try again",
@@ -112,6 +145,8 @@
       "first": "First",
       "last": "Last",
       "page": "Page {{current}} of {{total}}",
+      "pagePrefix": "Page ",
+      "pageSuffix": "of {{total}}",
       "total": "Total {{total}} records",
       "pageSize": "Show per page",
       "items": "items"
@@ -139,6 +174,7 @@
         "workflow": "Delete Workflow",
         "model": "Delete Model",
         "plugin": "Delete Plugin",
+        "knowledgeBase": "Delete Knowledge Base",
         "default": "Delete Confirmation"
       },
       "messages": {
@@ -146,6 +182,7 @@
         "workflow": "Are you sure you want to delete workflow \"{{name}}\"? This action cannot be undone.",
         "model": "Are you sure you want to delete model \"{{name}}\"? This action cannot be undone.",
         "plugin": "Are you sure you want to delete plugin \"{{name}}\"? This action cannot be undone.",
+        "knowledgeBase": "Are you sure you want to delete knowledge base \"{{name}}\"? This action cannot be undone.",
         "default": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone."
       },
       "buttons": {
@@ -153,6 +190,7 @@
         "deleteWorkflow": "Delete Workflow",
         "deleteModel": "Delete Model",
         "deletePlugin": "Delete Plugin",
+        "deleteKnowledgeBase": "Delete Knowledge Base",
         "delete": "Delete",
         "cancel": "Cancel",
         "deleting": "Deleting..."
@@ -405,8 +443,12 @@
       "logout": "Logout",
       "switchUser": "Switch Userspace",
       "language": "Language",
+      "currentLanguage": "EN",
       "switchToEnglish": "Switch to English",
-      "switchToChinese": "Switch to Chinese"
+      "switchToChinese": "Switch to Chinese",
+      "switchToNewVersion": "Try New Version",
+      "switchToOldVersion": "Back to Old Version",
+      "beta": "Beta"
     },
     "sidebar": {
       "toggleCollapse": "Toggle sidebar",
@@ -432,7 +474,15 @@
       "automationTasks": "Automation Tasks",
       "models": "Models",
       "knowledgeBases": "Knowledge Bases",
-      "plugins": "Plugins"
+      "plugins": "Plugins",
+      "pluginManagement": "Plugin Management",
+      "pluginMarket": "Plugin Market",
+      "section": {
+        "appDevelopment": "App Development",
+        "promptEngineering": "Prompt Engineering",
+        "modelsAndData": "Models & Data",
+        "plugins": "Plugins"
+      }
     }
   },
   "dashboard": {
@@ -592,7 +642,7 @@
       "searchPlaceholder": "Search workflow name or description...",
       "filter": "Filter",
       "sortBy": "Sort by",
-      "name": "Name",
+      "name": "Workflow Name",
       "status": "Status",
       "createdAt": "Created",
       "updatedAt": "Updated",
@@ -686,11 +736,13 @@
       "searchPlaceholder": "Search prompts...",
       "filter": "Filter",
       "sortBy": "Sort by",
-      "name": "Name",
+      "name": "Prompt",
       "promptKey": "Prompt Key",
       "description": "Description",
       "latestVersion": "Latest Version",
       "associatedObjects": "Associated Objects",
+      "associatedCount": "{{count}} associated objects",
+      "noAssociations": "No associated objects",
       "creator": "Creator",
       "createdAt": "Created At",
       "lastModifier": "Last Modifier",
@@ -699,7 +751,12 @@
       "category": "Category",
       "status": "Status",
       "updatedAt": "Updated At",
-      "actions": "Actions"
+      "actions": "Actions",
+      "createFirstPrompt": "Create your first prompt template",
+      "tryAdjustSearch": "Please try adjusting your search criteria",
+      "sortByName": "Sort by name",
+      "sortByCreated": "Sort by created",
+      "sortByUpdated": "Sort by updated"
     },
     "promptEdit": {
       "title": "Prompt Editor",
@@ -851,15 +908,20 @@
         "stopping": "Stopping",
         "draft": "Draft"
       },
+      "clearFilters": "Clear Filters",
+      "filters": {
+        "allStatuses": "All"
+      },
       "table": {
         "taskName": "Task Name",
         "status": "Status",
         "rounds": "Optimization Rounds",
+        "round": "round",
+        "progress": "Progress",
         "createdAt": "Created At",
         "duration": "Duration",
         "description": "Description",
-        "actions": "Actions",
-        "round": "round"
+        "actions": "Actions"
       },
       "actions": {
         "view": "View Details",
@@ -1470,7 +1532,7 @@
       "name": "Model Name",
       "provider": "Provider",
       "type": "Model Type",
-      "status": "Status",
+      "status": "Enabled Status",
       "actions": "Actions",
       "allProviders": "All Providers",
       "allStatuses": "All Status",
@@ -1664,7 +1726,13 @@
     "title": "Plugins",
     "subtitle": "Manage and extend system functionality with plugin ecosystem",
     "installPlugin": "Install Plugin",
-    "searchPlaceholder": "Search plugin names, descriptions, or tags...",
+    "searchPlaceholder": "Search plugin names or descriptions...",
+    "tabs": {
+      "installed": "Installed",
+      "market": "Plugin Market",
+      "updates": "Updates",
+      "settings": "Settings"
+    },
     "filters": {
       "allCategories": "All Categories",
       "allStatuses": "All Status",
@@ -1703,6 +1771,14 @@
       "cancel": "Cancel",
       "retry": "Retry"
     },
+    "tableView": {
+      "columns": {
+        "plugin": "Plugin",
+        "type": "Type",
+        "status": "Status",
+        "actions": "Actions"
+      }
+    },
     "uploadFile": "Upload Plugin File",
     "uploadFileDesc": "Upload plugin package from local file",
     "description": "Description",
@@ -1728,18 +1804,45 @@
         "subtitle": "Create plugin based on existing service",
         "name": "Plugin Name",
         "namePlaceholder": "For example: Amap API, Weather Service, Payment Gateway",
+        "nameHelperText": "Enter the plugin name for identification and invocation",
         "description": "Plugin Description",
         "descriptionPlaceholder": "Describe the plugin's functionality, purpose and usage scenarios",
+        "descriptionHelperText": "Provide a detailed description including main features, use cases, and invocation methods",
+        "detailsLabel": "Plugin Details",
+        "optional": "(Optional)",
+        "detailsPlaceholder": "Detailed description supporting Markdown format...",
+        "detailsHelperText": "Write rich text description using Markdown syntax ({{count}} characters)",
         "url": "Service URL",
         "urlPlaceholder": "Enter the plugin service URL",
         "textPlaceholder": "For example: http://localhost:8185",
         "authMethod": "Authentication Method",
         "create": "Create Plugin",
-        "saveChanges": "Save Changes"
+        "saving": "Saving...",
+        "saveChanges": "Save Changes",
+        "urlInvalid": "Please enter a valid HTTP address",
+        "urlHelper": "Provide the complete API service address including protocol (http) ({{current}}/{{max}} bytes)",
+        "urlLengthError": "URL cannot exceed {{max}} bytes (current: {{current}} bytes)"
       },
       "editPlugin": {
         "title": "Edit Plugin",
         "subtitle": "Modify plugin configuration information"
+      },
+      "idePlugin": {
+        "editTitle": "Edit IDE Plugin",
+        "createTitle": "Create IDE Plugin",
+        "nameTooltip": "Give the plugin a concise and clear name for easy identification and management",
+        "namePlaceholder": "For example: Data Processor, API Caller, File Converter",
+        "nameHelperText": "Use a concise and clear name, avoid special characters",
+        "descriptionTooltip": "Describe the plugin's functionality, purpose, and usage scenarios in detail",
+        "descriptionPlaceholder": "Describe the plugin's functionality, purpose, usage scenarios...",
+        "descriptionHelperText": "Include: main features, use cases, invocation methods, notes",
+        "runtime": "IDE Runtime",
+        "runtimeTooltip": "Select the programming language environment for the plugin",
+        "runtimeEnvironment": "Runtime Environment",
+        "runtimeInfoTitle": "Runtime Environment Info",
+        "python3Desc": "Suitable for data processing, machine learning, scientific computing, automation scripts",
+        "nodejsDesc": "Suitable for Web API development, real-time communication, frontend build tools, microservices",
+        "runtimeHint": "Choose the appropriate runtime environment based on the plugin's functional requirements"
       },
       "pluginDetails": {
         "title": "Plugin Details",
@@ -1922,6 +2025,8 @@
     "comingSoon": "Coming Soon",
     "uploadFileDescription": "Upload plugin package from local file",
     "cloudPlugin": {
+      "createFromService": "Create from existing service",
+      "createFromServiceDescription": "Quickly create plugins based on cloud services",
       "createFromIDE": "Create in IDE",
       "createFromIDEDescription": "Create plugins in integrated development environment"
     },
@@ -2670,6 +2775,12 @@
     },
     "createButton": "Create Knowledge Base",
     "searchPlaceholder": "Search knowledge base name or description...",
+    "list": {
+      "name": "Knowledge Base",
+      "updatedAt": "Updated At",
+      "createdAt": "Created At",
+      "actions": "Actions"
+    },
     "status": {
       "active": "Active",
       "processing": "Processing",

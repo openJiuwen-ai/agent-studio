@@ -45,12 +45,6 @@ const resources = {
     },
   },
 }
-// TODO：初始化时如果没有存储语言，默认设置为中文，国际化整改后删除
-if (typeof window !== 'undefined') {
-  const storage = window.localStorage
-  storage.setItem('i18nextLng', 'zh-CN')
-}
-
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -72,8 +66,6 @@ i18n
 if (typeof window !== 'undefined') {
   // @ts-ignore - i18next global access
   window.i18next = i18n
-  // TODO：初始化时如果没有存储语言，默认设置为中文，国际化整改后删除
-  i18n.changeLanguage('zh-CN')
 }
 
 export const useScopedTranslation = (keyPrefix: string, ns = 'translation') => {

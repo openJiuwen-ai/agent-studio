@@ -46,8 +46,18 @@
       "editAgent": "编辑智能体",
       "copyAgent": "复制智能体",
       "deleteAgent": "删除智能体",
+      "copyWorkflow": "复制工作流",
+      "deleteWorkflow": "删除工作流",
       "save": "保存",
       "cancel": "取消"
+    },
+    "view": {
+      "gridView": "网格视图",
+      "tableView": "表格视图",
+      "searchPlaceholder": "搜索..."
+    },
+    "card": {
+      "editedAgo": "编辑于"
     },
     "status": {
       "active": "活跃",
@@ -58,6 +68,7 @@
       "deleted": "已删除",
       "loading": "加载中...",
       "saving": "保存中...",
+      "creating": "创建中...",
       "success": "成功",
       "error": "错误",
       "warning": "警告",
@@ -67,6 +78,10 @@
     "messages": {
       "noData": "暂无数据",
       "loading": "加载中...",
+      "noDescription": "暂无描述",
+      "clickToAddDescription": "点击添加描述",
+      "disabled": "已禁用",
+      "moreActions": "更多操作",
       "error": "发生错误",
       "success": "操作成功",
       "confirmDelete": "确认删除此项目？",
@@ -78,7 +93,25 @@
       "agentDeleteSuccess": "智能体删除成功",
       "agentDeleteFailed": "删除智能体失败",
       "agentCopySuccess": "智能体复制成功",
+      "relativeTime": {
+        "justNow": "刚刚",
+        "minutesAgo": "{{count}}分钟前",
+        "hoursAgo": "{{count}}小时前",
+        "daysAgo": "{{count}}天前",
+        "weeksAgo": "{{count}}周前"
+      },
       "agentCopyFailed": "复制智能体失败",
+      "agentExportSuccess": "智能体导出成功",
+      "agentExportFailed": "导出失败",
+      "agentExportException": "导出异常",
+      "agentImportSuccess": "智能体导入成功",
+      "agentImportOverwriteSuccess": "智能体覆盖导入成功",
+      "agentImportFailed": "导入失败",
+      "agentImportException": "导入异常",
+      "agentImportFileParseError": "文件解析失败",
+      "agentImportInvalidFormat": "无效的导入文件格式",
+      "agentImportWarning": "警告",
+      "agentFileParseException": "文件解析异常",
       "agentUpdateSuccess": "智能体信息更新成功",
       "agentConfigSaveSuccess": "智能体配置保存成功",
       "agentConfigSaveFailed": "保存失败，请检查智能体配置后重试",
@@ -112,6 +145,8 @@
       "first": "首页",
       "last": "尾页",
       "page": "第 {{current}} 页，共 {{total}} 页",
+      "pagePrefix": "第",
+      "pageSuffix": "/ {{total}} 页",
       "total": "共 {{total}} 条记录",
       "pageSize": "每页显示",
       "items": "条"
@@ -139,6 +174,7 @@
         "workflow": "删除工作流",
         "model": "删除模型",
         "plugin": "删除插件",
+        "knowledgeBase": "删除知识库",
         "default": "删除确认"
       },
       "messages": {
@@ -146,6 +182,7 @@
         "workflow": "确定要删除工作流\"{{name}}\"吗？此操作无法撤销。",
         "model": "确定要删除模型\"{{name}}\"吗？此操作无法撤销。",
         "plugin": "确定要删除插件\"{{name}}\"吗？此操作无法撤销。",
+        "knowledgeBase": "确定要删除知识库\"{{name}}\"吗？此操作无法撤销。",
         "default": "确定要删除\"{{name}}\"吗？此操作无法撤销。"
       },
       "buttons": {
@@ -153,6 +190,7 @@
         "deleteWorkflow": "删除工作流",
         "deleteModel": "删除模型",
         "deletePlugin": "删除插件",
+        "deleteKnowledgeBase": "删除知识库",
         "delete": "删除",
         "cancel": "取消",
         "deleting": "删除中..."
@@ -415,8 +453,12 @@
       "logout": "退出登录",
       "switchUser": "切换用户空间",
       "language": "语言",
+      "currentLanguage": "中文",
       "switchToEnglish": "切换到英文",
-      "switchToChinese": "切换到中文"
+      "switchToChinese": "切换到中文",
+      "switchToNewVersion": "体验新版",
+      "switchToOldVersion": "返回旧版",
+      "beta": "Beta"
     },
     "sidebar": {
       "toggleCollapse": "切换侧边栏",
@@ -442,7 +484,15 @@
       "automationTasks": "自动化任务",
       "models": "模型管理",
       "knowledgeBases": "知识库管理",
-      "plugins": "插件管理"
+      "plugins": "插件管理",
+      "pluginManagement": "插件管理",
+      "pluginMarket": "插件市场",
+      "section": {
+        "appDevelopment": "应用开发",
+        "promptEngineering": "提示词工程",
+        "modelsAndData": "模型与数据",
+        "plugins": "插件"
+      }
     }
   },
   "dashboard": {
@@ -571,7 +621,7 @@
       "searchPlaceholder": "搜索工作流名称或描述...",
       "filter": "筛选",
       "sortBy": "排序方式",
-      "name": "名称",
+      "name": "工作流名称",
       "status": "状态",
       "createdAt": "创建时间",
       "updatedAt": "更新时间",
@@ -665,11 +715,13 @@
       "searchPlaceholder": "搜索提示词...",
       "filter": "筛选",
       "sortBy": "排序方式",
-      "name": "名称",
+      "name": "提示词",
       "promptKey": "提示词Key",
       "description": "描述",
       "latestVersion": "最新版本",
       "associatedObjects": "关联对象",
+      "associatedCount": "共 {{count}} 个关联对象",
+      "noAssociations": "暂无关联对象",
       "creator": "创建人",
       "createdAt": "创建时间",
       "lastModifier": "最后修改人",
@@ -678,7 +730,12 @@
       "category": "分类",
       "status": "状态",
       "updatedAt": "更新时间",
-      "actions": "操作"
+      "actions": "操作",
+      "createFirstPrompt": "创建您的第一个提示词模板",
+      "tryAdjustSearch": "请尝试调整搜索条件",
+      "sortByName": "按名称排序",
+      "sortByCreated": "按创建时间排序",
+      "sortByUpdated": "按更新时间排序"
     },
     "promptEdit": {
       "title": "提示词编辑器",
@@ -830,15 +887,20 @@
         "stopping": "暂停中",
         "draft": "草稿"
       },
+      "clearFilters": "清除筛选",
+      "filters": {
+        "allStatuses": "全部"
+      },
       "table": {
         "taskName": "自优化任务名称",
         "status": "状态",
         "rounds": "优化轮次",
+        "round": "轮",
+        "progress": "进度",
         "createdAt": "创建时间",
         "duration": "任务耗时",
         "description": "描述",
-        "actions": "操作",
-        "round": "轮"
+        "actions": "操作"
       },
       "actions": {
         "view": "查看详情",
@@ -1450,7 +1512,7 @@
       "name": "模型名称",
       "provider": "API协议",
       "type": "模型ID",
-      "status": "状态",
+      "status": "启用状态",
       "actions": "操作",
       "allProviders": "所有API协议",
       "allStatuses": "所有状态",
@@ -1647,9 +1709,17 @@
     "searchPlaceholder": "搜索插件名称、描述",
     "tabs": {
       "installed": "已安装",
-      "market": "市场",
+      "market": "插件市场",
       "updates": "更新",
       "settings": "设置"
+    },
+    "tableView": {
+      "columns": {
+        "plugin": "插件",
+        "type": "类型",
+        "status": "状态",
+        "actions": "操作"
+      }
     },
     "filters": {
       "allCategories": "全部分类",
@@ -1729,6 +1799,10 @@
         "description": "插件描述",
         "descriptionPlaceholder": "详细描述插件的功能、用途、适用场景等...",
         "descriptionHelperText": "请提供插件的详细功能描述，包括主要功能、适用场景、调用方式等信息",
+        "detailsLabel": "插件详情",
+        "optional": "(可选)",
+        "detailsPlaceholder": "支持Markdown格式的详细描述...",
+        "detailsHelperText": "使用Markdown语法编写富文本描述 ({{count}}字符)",
         "url": "服务URL",
         "urlPlaceholder": "请输入插件服务的URL地址",
         "authMethod": "认证方式",
@@ -1736,7 +1810,8 @@
         "saving": "保存中...",
         "saveChanges": "保存更改",
         "urlInvalid": "请输入有效的HTTP地址",
-        "urlHelper": "请提供完整的API服务地址，包含协议(http)"
+        "urlHelper": "请提供完整的API服务地址，包含协议(http) ({{current}}/{{max}}字节)",
+        "urlLengthError": "URL长度不能超过{{max}}字节（当前：{{current}}字节）"
       },
       "idePlugin": {
         "editTitle": "编辑本地代码插件",
@@ -3274,6 +3349,12 @@
     },
     "createButton": "创建知识库",
     "searchPlaceholder": "搜索知识库名称或描述...",
+    "list": {
+      "name": "知识库",
+      "updatedAt": "更新时间",
+      "createdAt": "创建时间",
+      "actions": "操作"
+    },
     "status": {
       "active": "已激活",
       "processing": "处理中",
@@ -3312,7 +3393,7 @@
       "selectModel": "请选择 Embedding 模型",
       "noModelsError": "请先创建 Embedding 模型",
       "selectModelError": "请选择 Embedding 模型",
-      "modelUnavailable": "所选模型不可用",
+      "modelUnavailable": "该模型不可用",
       "testText": "你好，世界！",
       "testFailed": "测试失败",
       "testFailedDisableFailed": "选中的 Embedding 模型测试失败，且禁用操作失败。请手动在模型管理中禁用该模型。",

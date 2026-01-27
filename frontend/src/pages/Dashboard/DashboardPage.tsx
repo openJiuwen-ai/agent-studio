@@ -398,7 +398,7 @@ const DashboardPage: React.FC = () => {
       {/* Recent activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent agents */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 min-w-0">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center">
               <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center mr-3">
@@ -423,8 +423,8 @@ const DashboardPage: React.FC = () => {
                 >
                   <div className="text-4xl group-hover:scale-110 transition-transform duration-300">{agent.icon}</div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 group-hover:text-blue-900 transition-colors duration-300">{agent.name}</p>
-                    <p className="text-xs text-gray-600 group-hover:text-gray-700 transition-colors duration-300">{agent.description}</p>
+                    <p className="text-sm font-semibold text-gray-900 group-hover:text-blue-900 transition-colors duration-300 truncate w-full">{agent.name}</p>
+                    <p className="text-xs text-gray-600 group-hover:text-gray-700 transition-colors duration-300 truncate w-full">{agent.description}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-500 font-medium">{agent.lastUpdated}</p>
@@ -451,7 +451,7 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* Recent workflows */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 min-w-0">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center">
               <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mr-3">
@@ -478,8 +478,8 @@ const DashboardPage: React.FC = () => {
                     <WorkflowIcon className="w-6 h-6 text-green-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 group-hover:text-green-900 transition-colors duration-300">{workflow.name}</p>
-                    <p className="text-xs text-gray-600 group-hover:text-gray-700 transition-colors duration-300">{workflow.description}</p>
+                    <p className="text-sm font-semibold text-gray-900 group-hover:text-green-900 transition-colors duration-300 truncate">{workflow.name}</p>
+                    <p className="text-xs text-gray-600 group-hover:text-gray-700 transition-colors duration-300 truncate">{workflow.description}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-500 font-medium">{workflow.lastUpdated}</p>

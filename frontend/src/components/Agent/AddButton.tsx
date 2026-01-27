@@ -3,7 +3,6 @@ import { useScopedTranslation } from '@/i18n'
 import { Menu, MenuItem } from '@mui/material'
 import { Plus } from 'lucide-react'
 
-// 通用的添加按钮组件
 const AddButton = ({
   onSelect,
   options,
@@ -24,7 +23,7 @@ const AddButton = ({
   const open = Boolean(anchorEl)
 
   const handleClick = (event: MouseEvent<HTMLElement>) => {
-    event.stopPropagation() // 阻止事件冒泡到Accordion
+    event.stopPropagation()
     if (!disabled) {
       setAnchorEl(event.currentTarget)
     }

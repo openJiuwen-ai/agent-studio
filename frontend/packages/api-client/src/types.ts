@@ -1434,9 +1434,17 @@ export interface AgentListResponse {
       usage_count: number
       tags: string[]
       create_time: number
+      update_time?: number
       api_endpoint: string
       agent_version: string
-      agent_type: string
+      agent_type?: string
+      latest_publish_version?: string
+      latest_publish_time?: number
+      relation_count?: {
+        workflows: number
+        knowledge: number
+        plugins: number
+      }
     }>
     pagination: {
       page: number
@@ -1474,6 +1482,7 @@ export interface AgentSearchResponse {
       usage_count: number
       tags: string[]
       create_time: number
+      update_time?: number
       api_endpoint: string
       agent_version: string
       agent_type: string

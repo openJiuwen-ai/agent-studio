@@ -1,7 +1,11 @@
 {
   "title": "智能体开发",
   "subtitle": "创建和管理您的AI智能体",
+  "initializing": "正在初始化...",
+  "projectDevelopment": "智能体开发",
   "createAgent": "创建智能体",
+  "import": "导入",
+  "importing": "导入中...",
   "agentList": {
     "noAgents": "暂无智能体",
     "searchPlaceholder": "搜索智能体名称或描述...",
@@ -20,9 +24,9 @@
     "editDescriptionPlaceholder": "请输入智能体描述（最多500个字符）",
     "createFirst": "创建智能体",
     "clearSearch": "清空搜索",
-    "modelLoading": "加载中...",
-    "modelDisabledTooltip": "该模型已被禁用",
-    "modelDisabledTag": "(已禁用)",
+      "modelLoading": "加载中...",
+      "modelDisabledTooltip": "该模型不可用",
+      "modelDisabledTag": "(已禁用)",
     "searchNoAgentsFoundTitle": "未找到匹配的智能体",
     "searchNoAgentsFoundDesc": "没有找到包含 \"{{keyword}}\" 的智能体，请尝试其他搜索词或创建新的智能体",
     "createNewAgentButton": "创建新智能体",
@@ -38,6 +42,50 @@
   "addBtn": {
     "addExisting": "添加已有",
     "createNew": "创建新的"
+  },
+  "tableView": {
+    "columns": {
+      "agent": "智能体",
+      "model": "模型",
+      "resources": "引用资源",
+      "publishStatus": "发布状态",
+      "updateAt": "更新时间",
+      "createdAt": "创建时间",
+      "actions": "操作"
+    },
+    "types": {
+      "multiWorkflow": "多工作流",
+      "autonomousPlanning": "自主规划"
+    },
+    "published": "已发布",
+    "draft": "草稿",
+    "exportAgent": "导出智能体",
+    "loading": "加载中...",
+    "noMatchingAgents": "未找到匹配的智能体",
+    "noMatchingAgentsDesc": "没有找到匹配的智能体，请尝试调整搜索关键词"
+  },
+  "importConflictDialog": {
+    "title": "智能体已存在",
+    "message": "当前空间下已存在智能体 \"{{name}}\"",
+    "question": "您希望如何处理？",
+    "overwriteButton": "覆盖现有智能体",
+    "createCopyButton": "创建副本",
+    "cancelButton": "取消"
+  },
+  "agentCard": {
+    "actions": {
+      "edit": "编辑",
+      "copy": "复制",
+      "export": "导出",
+      "delete": "删除"
+    },
+    "types": {
+      "workflow": "单Agent（多工作流模式）",
+      "react": "单Agent（自主规划模式）",
+      "default": "单Agent（自主规划模式）"
+    },
+    "editedAgo": "编辑于",
+    "loadingModel": "加载中..."
   },
   "agentPublishDialog": {
     "title": "提交新版本",

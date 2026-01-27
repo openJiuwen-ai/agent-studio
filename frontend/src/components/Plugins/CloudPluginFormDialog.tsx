@@ -107,7 +107,7 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
           {/* Plugin Description */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700 flex items-center">
-              {t('plugins.dialog.cloudPluginForm.description') || '插件描述'} <span className="text-red-500 ml-1">*</span>
+              {t('plugins.dialog.cloudPluginForm.description')} <span className="text-red-500 ml-1">*</span>
             </label>
             <TextField
               value={form.description}
@@ -125,7 +125,7 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
           {/* Plugin Markdown Description */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700 flex items-center">
-              插件详情 <span className="text-gray-400 ml-1">(可选)</span>
+              {t('plugins.dialog.cloudPluginForm.detailsLabel')} <span className="text-gray-400 ml-1">{t('plugins.dialog.cloudPluginForm.optional')}</span>
             </label>
             <TextField
               value={form.desc_mk || ''}
@@ -133,15 +133,15 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
               fullWidth
               multiline
               rows={6}
-              placeholder="支持Markdown格式的详细描述..."
-              helperText={`使用Markdown语法编写富文本描述 (${(form.desc_mk || '').length}字符)`}
+              placeholder={t('plugins.dialog.cloudPluginForm.detailsPlaceholder')}
+              helperText={t('plugins.dialog.cloudPluginForm.detailsHelperText', { count: (form.desc_mk || '').length })}
             />
           </div>
 
           {/* Plugin URL */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700 flex items-center">
-              {t('plugins.dialog.cloudPluginForm.url') || '服务URL'} <span className="text-red-500 ml-1">*</span>
+              {t('plugins.dialog.cloudPluginForm.url')} <span className="text-red-500 ml-1">*</span>
             </label>
             <TextField
               value={form.url}
@@ -153,8 +153,8 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
                 form.url && !isUrlValid
                   ? t('plugins.dialog.cloudPluginForm.urlInvalid')
                   : form.url && !isUrlLengthValid
-                    ? `URL长度不能超过${MAX_URL_BYTES}字节（当前：${getUrlByteLength(form.url)}字节）`
-                    : `请提供完整的API服务地址，包含协议(http)（${form.url ? getUrlByteLength(form.url) : 0}/${MAX_URL_BYTES}字节）`
+                    ? t('plugins.dialog.cloudPluginForm.urlLengthError', { max: MAX_URL_BYTES, current: getUrlByteLength(form.url) })
+                    : t('plugins.dialog.cloudPluginForm.urlHelper', { current: form.url ? getUrlByteLength(form.url) : 0, max: MAX_URL_BYTES })
               }
               error={Boolean(form.url && (!isUrlValid || !isUrlLengthValid))}
             />

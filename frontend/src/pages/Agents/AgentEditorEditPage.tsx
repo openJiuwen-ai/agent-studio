@@ -1,4 +1,5 @@
 import { getDefaultSpaceId } from '@/utils/spaceUtils'
+import { useIsNewDashboard } from '@/hooks/useIsNewDashboard'
 import { Button, IconButton, Paper, CircularProgress, Divider, Select, MenuItem, SelectChangeEvent } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AgentDetailResponse, AgentService, ExecutionService, SaveAgentRequest, useModels } from '@test-agentstudio/api-client'
@@ -24,6 +25,7 @@ const MIN_RIGHT = 15
 
 const AgentEditorEditPage = () => {
   const { t } = useScopedTranslation('agents.agentEditor.editPage')
+  const isNew = useIsNewDashboard()
   const [leftPanelWidth, setLeftPanelWidth] = useState(30)
   const [rightPanelWidth, setRightPanelWidth] = useState(30)
   const [isDragging, setIsDragging] = useState(false)
@@ -504,7 +506,7 @@ const AgentEditorEditPage = () => {
   }, [modelsList, displayedSaveAgentRequest?.model?.model_info?.model_name])
 
   return (
-    <div className="agent-editor-enhanced-page flex flex-col h-full w-full overflow-x-hidden" key={selectedHistoryVersion || 'draft'}>
+    <div className={`agent-editor-enhanced-page flex flex-col h-full w-full overflow-x-hidden ${isNew ? 'py-6' : ''}`} key={selectedHistoryVersion || 'draft'}>
       {loading ? (
         <div className="flex items-center justify-center h-full w-full">
           <CircularProgress />

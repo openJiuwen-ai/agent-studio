@@ -880,14 +880,18 @@ const PromptsPage: React.FC = () => {
 
       {/* 分页组件 */}
       <Pagination
-        currentPage={currentPage}
-        totalCount={totalCount}
-        pageSize={pageSize}
+        pager={{
+          total: totalCount,
+          currentPage: currentPage,
+          pageSize: pageSize,
+          pageSizeOptions: [9, 18, 30, 60],
+        }}
         loading={loading}
         error={error}
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
-        pageSizeOptions={[9, 18, 30, 60]}
+        onPagerChange={(page, pageSize) => {
+          handlePageChange(page)
+          handlePageSizeChange(pageSize)
+        }}
       />
 
       {/* 基本信息对话框 */}

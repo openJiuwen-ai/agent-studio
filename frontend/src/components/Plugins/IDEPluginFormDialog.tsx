@@ -75,7 +75,7 @@ const IDEPluginFormDialog: React.FC<IDEPluginFormDialogProps> = ({
     <Dialog open={open} onClose={onCancel} maxWidth="md" fullWidth>
       <DialogTitle className="flex items-center space-x-2">
         <Code className="w-5 h-5 text-blue-600" />
-        <span>{isEditing ? t('plugins.dialog.idePlugin.editTitle', '编辑本地代码插件') : t('plugins.dialog.idePlugin.createTitle', '创建本地代码插件')}</span>
+        <span>{isEditing ? t('plugins.dialog.idePlugin.editTitle') : t('plugins.dialog.idePlugin.createTitle')}</span>
       </DialogTitle>
 
       <DialogContent>
@@ -93,7 +93,7 @@ const IDEPluginFormDialog: React.FC<IDEPluginFormDialogProps> = ({
               onChange={e => onFormChange('name', e.target.value)}
               fullWidth
               required
-              placeholder={t('plugins.dialog.idePlugin.namePlaceholder', '例如：数据处理器、API调用器、文件转换器')}
+              placeholder={t('plugins.dialog.idePlugin.namePlaceholder')}
               helperText={`${t('plugins.dialog.idePlugin.nameHelperText')} (${form.name.length}/128)`}
               inputProps={{ maxLength: 128 }}
             />
@@ -123,7 +123,7 @@ const IDEPluginFormDialog: React.FC<IDEPluginFormDialogProps> = ({
           {/* Plugin Markdown Description */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700 flex items-center">
-              插件详情 <span className="text-gray-400 ml-1">(可选)</span>
+              {t('plugins.dialog.cloudPluginForm.detailsLabel')} <span className="text-gray-400 ml-1">{t('plugins.dialog.cloudPluginForm.optional')}</span>
             </label>
             <TextField
               value={form.desc_mk || ''}
@@ -131,8 +131,8 @@ const IDEPluginFormDialog: React.FC<IDEPluginFormDialogProps> = ({
               fullWidth
               multiline
               rows={6}
-              placeholder="支持Markdown格式的详细描述..."
-              helperText={`使用Markdown语法编写富文本描述 (${(form.desc_mk || '').length}字符)`}
+              placeholder={t('plugins.dialog.cloudPluginForm.detailsPlaceholder')}
+              helperText={t('plugins.dialog.cloudPluginForm.detailsHelperText', { count: (form.desc_mk || '').length })}
             />
           </div>
 

@@ -14,6 +14,7 @@ import { useCreateAgent } from '@test-agentstudio/api-client'
 import { CreateAgentRequest } from '@test-agentstudio/api-client'
 import { useAuthStore } from '../../stores/useAuthStore'
 import { ENV_CONFIG } from '../../config/environment'
+import { useIsNewDashboard } from '@/hooks/useIsNewDashboard'
 
 type AgentMode = 'single-react-agent' | 'multi-workflow'
 
@@ -36,6 +37,7 @@ const AgentCreatePage: React.FC = () => {
   const { t, i18n } = useScopedTranslation('agents.agentCreate')
   const navigate = useNavigate()
   const { user } = useAuthStore()
+  const isNew = useIsNewDashboard()
 
   const MODE_INFO: Record<AgentMode, AgentModeInfo> = {
     'single-react-agent': {
@@ -189,7 +191,7 @@ const AgentCreatePage: React.FC = () => {
 
   return (
     <div
-      className="bg-gray-50 flex flex-col"
+      className={`bg-gray-50 flex flex-col ${isNew ? 'py-12' : ''}`}
       style={{
         width: '100%',
         maxWidth: '100vw',

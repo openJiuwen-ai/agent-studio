@@ -2,6 +2,8 @@
  * 重定向工具函数 - 智能处理页面跳转，避免不必要的重定向
  */
 
+import { useUIStore } from '@/stores/useUIStore'
+
 // 检查当前是否已经在登录页面
 export const isCurrentLoginPage = (): boolean => {
   if (typeof window === 'undefined') return false
@@ -33,19 +35,27 @@ export const smartRedirectToLogin = (): void => {
   }
 }
 
-// 重定向到Dashboard（带智能检查）
+
+// 获取 Dashboard 目标路径
+const getDashboardTargetPath = (): string => {
+  const isNew = useUIStore.getState().isNewDashboard
+  return isNew ? '/dashboard/agents' : '/dashboard'
+}
+
+// 重定向到 Dashboard（带智能检查）
 export const smartRedirectToDashboard = (): void => {
   if (typeof window !== 'undefined') {
     const currentPath = window.location.pathname
+    const targetPath = getDashboardTargetPath()
 
-    // 如果已经在dashboard，不需要重定向
-    if (currentPath === '/dashboard') {
-      console.log('🏠 [RedirectUtils] Already on dashboard, skipping redirect')
+    // 如果已经在目标页面，不需要重定向
+    if (currentPath === targetPath || currentPath.startsWith(targetPath + '/')) {
+      console.log(`🏠 [RedirectUtils] Already on ${targetPath}, skipping redirect`)
       return
     }
 
-    console.log('🚀 [RedirectUtils] Redirecting to dashboard...')
-    window.location.href = '/dashboard'
+    console.log(`🚀 [RedirectUtils] Redirecting to ${targetPath}...`)
+    window.location.href = targetPath
   }
 }
 
@@ -63,14 +73,15 @@ export const createSmartRedirect = (navigate: (path: string, options?: any) => v
   toDashboard: () => {
     if (typeof window !== 'undefined') {
       const currentPath = window.location.pathname
+      const targetPath = getDashboardTargetPath()
 
-      if (currentPath === '/dashboard') {
-        console.log('🏠 [RedirectUtils] React Router: Already on dashboard, skipping redirect')
+      if (currentPath === targetPath || currentPath.startsWith(targetPath + '/')) {
+        console.log(`🏠 [RedirectUtils] React Router: Already on ${targetPath}, skipping redirect`)
         return
       }
 
-      console.log('🚀 [RedirectUtils] React Router: Redirecting to dashboard...')
-      navigate('/dashboard', { replace: true })
+      console.log(`🚀 [RedirectUtils] React Router: Redirecting to ${targetPath}...`)
+      navigate(targetPath, { replace: true })
     }
   },
 })

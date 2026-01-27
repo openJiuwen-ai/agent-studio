@@ -19,13 +19,13 @@ export const useWorkflows = (request: WorkflowListRequest) => {
   return useQuery(['workflows', 'api', 'list', request], () => WorkflowService.getWorkflows(request), {
     enabled: !!request.space_id, // 只有当space_id存在时才执行查询
 
-    // 🎯 优化缓存策略，与画布缓存保持一致
-    staleTime: 30 * 1000, // 30秒内数据视为新鲜（原为2分钟）
-    cacheTime: 5 * 60 * 1000, // 缓存5分钟（保持不变）
+    // 🎯 禁用缓存，确保搜索、排序、过滤时都重新请求
+    staleTime: 0, // 数据立即过期，每次参数改变时都重新请求
+    cacheTime: 5 * 60 * 1000, // 保留缓存时间用于内存管理（组件卸载后保留5分钟）
 
     // 🎯 添加自动刷新机制
     refetchOnMount: true, // 组件挂载时重新获取数据
-    refetchOnWindowFocus: true, // 窗口重新聚焦时重新获取数据
+    refetchOnWindowFocus: false, // 窗口重新聚焦时不重新获取数据
     refetchOnReconnect: true, // 网络重连时重新获取数据
 
     retry: 2,
@@ -270,14 +270,14 @@ export const useSearchWorkflows = (request: WorkflowSearchRequest, options?: { e
   return useQuery(['workflows', 'search', request], () => WorkflowService.searchWorkflows(request), {
     enabled: options?.enabled !== false && !!request.space_id && request.search_term.trim() !== '', // 只有当enabled为true且space_id存在且有搜索词时才执行查询
 
-    // 🎯 优化的缓存策略 - 搜索结果缓存时间稍短，确保数据新鲜度
-    staleTime: 15 * 1000, // 15秒内数据视为新鲜
-    cacheTime: 3 * 60 * 1000, // 缓存3分钟
+    // 🎯 禁用缓存，确保搜索、排序、过滤时都重新请求
+    staleTime: 0, // 数据立即过期，每次参数改变时都重新请求
+    cacheTime: 3 * 60 * 1000, // 保留缓存时间用于内存管理（组件卸载后保留3分钟）
 
     // 🎯 搜索优化的自动刷新机制
-    refetchOnMount: false, // 搜索结果不自动刷新，减少不必要的请求
-    refetchOnWindowFocus: false, // 窗口聚焦时不刷新搜索结果
-    refetchOnReconnect: true, // 仅在网络重连时刷新
+    refetchOnMount: true, // 组件挂载时重新获取数据
+    refetchOnWindowFocus: false, // 窗口聚焦时不刷新搜索结果（避免干扰用户操作）
+    refetchOnReconnect: true, // 网络重连时刷新
 
     // 🎯 搜索特定的重试策略
     retry: 1, // 搜索只重试1次，避免用户等待过久

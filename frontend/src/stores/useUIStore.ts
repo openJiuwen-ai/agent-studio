@@ -4,9 +4,20 @@ import { persist } from 'zustand/middleware'
 // UI相关状态类型定义
 interface UIState {
   // 插件管理页面显示模式
-  pluginViewMode: 'grid' | 'list'
+  pluginViewMode: 'grid' | 'list' // 保留用于旧版页面
+  pluginManagementViewMode: 'grid' | 'list' // 插件管理页面（新版）
+  pluginMarketViewMode: 'grid' | 'list' // 插件市场页面（新版）
+  // 智能体页面显示模式
+  agentViewMode: 'grid' | 'table'
+  // 工作流页面显示模式
+  workflowViewMode: 'grid' | 'table'
+  // 提示词页面显示模式
+  promptsViewMode: 'grid' | 'list'
   // 知识库管理页面显示模式
   knowledgeBaseViewMode: 'grid' | 'list'
+
+  // 是否使用新版 Dashboard UI
+  isNewDashboard: boolean
 
   // 其他可以扩展的UI状态
   // 例如：主题模式、侧边栏状态、面板大小等
@@ -17,9 +28,21 @@ interface UIState {
 
 interface UIActions {
   // 插件显示模式操作
-  setPluginViewMode: (mode: 'grid' | 'list') => void
+  setPluginViewMode: (mode: 'grid' | 'list') => void // 保留用于旧版页面
+  setPluginManagementViewMode: (mode: 'grid' | 'list') => void // 插件管理页面（新版）
+  setPluginMarketViewMode: (mode: 'grid' | 'list') => void // 插件市场页面（新版）
+  // 智能体显示模式操作
+  setAgentViewMode: (mode: 'grid' | 'table') => void
+  // 工作流显示模式操作
+  setWorkflowViewMode: (mode: 'grid' | 'table') => void
+  // 提示词显示模式操作
+  setPromptsViewMode: (mode: 'grid' | 'list') => void
   // 知识库显示模式操作
   setKnowledgeBaseViewMode: (mode: 'grid' | 'list') => void
+
+  // Dashboard 版本切换
+  setIsNewDashboard: (isNew: boolean) => void
+  toggleDashboardVersion: () => void
 
   // 主题相关操作
   setTheme: (theme: 'light' | 'dark' | 'auto') => void
@@ -35,8 +58,14 @@ interface UIActions {
 }
 
 const initialState: UIState = {
-  pluginViewMode: 'grid', // 默认为网格模式
+  pluginViewMode: 'grid', // 默认为网格模式（旧版页面）
+  pluginManagementViewMode: 'grid', // 默认为网格模式（插件管理页面）
+  pluginMarketViewMode: 'grid', // 默认为网格模式（插件市场页面）
+  agentViewMode: 'grid', // 默认为网格模式
+  workflowViewMode: 'grid', // 默认为网格模式
+  promptsViewMode: 'grid', // 默认为网格模式
   knowledgeBaseViewMode: 'grid', // 默认为网格模式
+  isNewDashboard: false, // 默认使用旧版 Dashboard
   theme: 'light',
   sidebarCollapsed: false,
   mainLayoutSize: 100,
@@ -47,16 +76,60 @@ export const useUIStore = create<UIState & UIActions>()(
     (set, get) => ({
       ...initialState,
 
-      // 设置插件显示模式
+      // 设置插件显示模式（旧版页面）
       setPluginViewMode: (mode: 'grid' | 'list') => {
         console.log(`🎨 [UIStore] Plugin view mode changed to: ${mode}`)
         set({ pluginViewMode: mode })
+      },
+
+      // 设置插件管理页面显示模式（新版）
+      setPluginManagementViewMode: (mode: 'grid' | 'list') => {
+        console.log(`🎨 [UIStore] Plugin management view mode changed to: ${mode}`)
+        set({ pluginManagementViewMode: mode })
+      },
+
+      // 设置插件市场页面显示模式（新版）
+      setPluginMarketViewMode: (mode: 'grid' | 'list') => {
+        console.log(`🎨 [UIStore] Plugin market view mode changed to: ${mode}`)
+        set({ pluginMarketViewMode: mode })
+      },
+
+      // 设置智能体显示模式
+      setAgentViewMode: (mode: 'grid' | 'table') => {
+        console.log(`🎨 [UIStore] Agent view mode changed to: ${mode}`)
+        set({ agentViewMode: mode })
+      },
+
+      // 设置工作流显示模式
+      setWorkflowViewMode: (mode: 'grid' | 'table') => {
+        console.log(`🎨 [UIStore] Workflow view mode changed to: ${mode}`)
+        set({ workflowViewMode: mode })
+      },
+
+      // 设置提示词显示模式
+      setPromptsViewMode: (mode: 'grid' | 'list') => {
+        console.log(`🎨 [UIStore] Prompts view mode changed to: ${mode}`)
+        set({ promptsViewMode: mode })
       },
 
       // 设置知识库显示模式
       setKnowledgeBaseViewMode: (mode: 'grid' | 'list') => {
         console.log(`🎨 [UIStore] Knowledge base view mode changed to: ${mode}`)
         set({ knowledgeBaseViewMode: mode })
+      },
+
+      // 设置 Dashboard 版本
+      setIsNewDashboard: (isNew: boolean) => {
+        console.log(`🎨 [UIStore] Dashboard version changed to: ${isNew ? 'new' : 'old'}`)
+        set({ isNewDashboard: isNew })
+      },
+
+      // 切换 Dashboard 版本
+      toggleDashboardVersion: () => {
+        const current = get().isNewDashboard
+        const next = !current
+        console.log(`🎨 [UIStore] Toggling dashboard version from ${current ? 'new' : 'old'} to ${next ? 'new' : 'old'}`)
+        set({ isNewDashboard: next })
       },
 
       // 设置主题
@@ -88,7 +161,13 @@ export const useUIStore = create<UIState & UIActions>()(
       partialize: state => ({
         // 只持久化需要保存的状态
         pluginViewMode: state.pluginViewMode,
+        pluginManagementViewMode: state.pluginManagementViewMode,
+        pluginMarketViewMode: state.pluginMarketViewMode,
+        agentViewMode: state.agentViewMode,
+        workflowViewMode: state.workflowViewMode,
+        promptsViewMode: state.promptsViewMode,
         knowledgeBaseViewMode: state.knowledgeBaseViewMode,
+        isNewDashboard: state.isNewDashboard,
         theme: state.theme,
         sidebarCollapsed: state.sidebarCollapsed,
         mainLayoutSize: state.mainLayoutSize,
@@ -105,6 +184,41 @@ export const useUIStore = create<UIState & UIActions>()(
 export const usePluginViewMode = () => {
   const viewMode = useUIStore(state => state.pluginViewMode)
   const setViewMode = useUIStore(state => state.setPluginViewMode)
+
+  return [viewMode, setViewMode] as const
+}
+
+export const usePluginManagementViewMode = () => {
+  const viewMode = useUIStore(state => state.pluginManagementViewMode)
+  const setViewMode = useUIStore(state => state.setPluginManagementViewMode)
+
+  return [viewMode, setViewMode] as const
+}
+
+export const usePluginMarketViewMode = () => {
+  const viewMode = useUIStore(state => state.pluginMarketViewMode)
+  const setViewMode = useUIStore(state => state.setPluginMarketViewMode)
+
+  return [viewMode, setViewMode] as const
+}
+
+export const useAgentViewMode = () => {
+  const viewMode = useUIStore(state => state.agentViewMode)
+  const setViewMode = useUIStore(state => state.setAgentViewMode)
+
+  return [viewMode, setViewMode] as const
+}
+
+export const useWorkflowViewMode = () => {
+  const viewMode = useUIStore(state => state.workflowViewMode)
+  const setViewMode = useUIStore(state => state.setWorkflowViewMode)
+
+  return [viewMode, setViewMode] as const
+}
+
+export const usePromptsViewMode = () => {
+  const viewMode = useUIStore(state => state.promptsViewMode)
+  const setViewMode = useUIStore(state => state.setPromptsViewMode)
 
   return [viewMode, setViewMode] as const
 }

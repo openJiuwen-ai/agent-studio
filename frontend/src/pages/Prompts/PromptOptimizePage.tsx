@@ -25,7 +25,7 @@ import {
 import { useOptimizationJobList, useDeleteOptimizationJob, useRefreshOptimizationJobList, type JobDetail } from '@test-agentstudio/api-client'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '@/Common/UnifiedSnackbar'
 import ConditionalTooltip from '@/components/Prompts/ConditionalTooltip'
-import Pagination from '@/components/Prompts/Pagination'
+import { Pagination } from '@/components/Common/common-table'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { ENV_CONFIG } from '@/config/environment'
 
@@ -687,13 +687,17 @@ const PromptOptimizePage: React.FC = () => {
 
       {/* 分页组件 - 右下角 */}
       <Pagination
-        currentPage={currentPage}
-        totalCount={filteredPrompts.length}
-        pageSize={pageSize}
+        pager={{
+          total: filteredPrompts.length,
+          currentPage: currentPage,
+          pageSize: pageSize,
+          pageSizeOptions: [10, 20, 30, 40, 50],
+        }}
         loading={loading}
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
-        pageSizeOptions={[10, 20, 30, 40, 50]}
+        onPagerChange={(page, pageSize) => {
+          handlePageChange(page)
+          handlePageSizeChange(pageSize)
+        }}
       />
 
       {/* Snackbar提示 */}

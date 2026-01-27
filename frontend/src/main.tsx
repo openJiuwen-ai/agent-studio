@@ -1,4 +1,3 @@
-import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from 'react-query'
@@ -7,6 +6,7 @@ import CssBaseline from '@mui/material/CssBaseline'
 import AppWrapper from './components/AppWrapper'
 import './i18n' // Initialize i18n and attach to window
 import './index.css'
+import './styles/theme.css'
 import './utils/font-loader'
 
 const queryClient = new QueryClient({

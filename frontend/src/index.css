@@ -1,3 +1,6 @@
+/* 导入主题样式 */
+@import './styles/theme.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -238,6 +241,15 @@
       font-size: 0.875rem !important;
     }
   }
+}
+
+#root {
+  min-width: 1440px;
+  height: 100%;
+}
+
+html, body {
+  height: 100%;
 }
 
 /* 主对话区域隐藏滚动条样式 */
@@ -626,3 +638,4 @@
   color: rgba(255, 255, 255, 0.8) !important;
   font-style: italic;
 }
+

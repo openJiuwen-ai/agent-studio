@@ -35,7 +35,7 @@ const LanguageDropdown: React.FC<LanguageDropdownProps> = ({ className }) => {
         title={t('layout.header.language')}
       >
         <Globe className="w-4 h-4 text-gray-600" />
-        <span className="hidden sm:block text-sm font-medium text-gray-700">{i18n.language === 'zh-CN' ? '中文' : 'EN'}</span>
+        <span className="hidden sm:block text-sm font-medium text-gray-700">{t('layout.header.currentLanguage')}</span>
         <ChevronDown className="w-3 h-3 text-gray-400" />
       </button>
       {isOpen && (

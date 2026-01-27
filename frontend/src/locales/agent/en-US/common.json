@@ -1,7 +1,11 @@
 {
   "title": "Agent Development",
   "subtitle": "Create and manage your AI agents",
+  "initializing": "Initializing...",
+  "projectDevelopment": "Agent Development",
   "createAgent": "Create Agent",
+  "import": "Import",
+  "importing": "Importing...",
   "agentList": {
     "noAgents": "No agents available",
     "searchPlaceholder": "Search agent names or descriptions...",
@@ -38,6 +42,58 @@
   "addBtn": {
     "addExisting": "Add existing",
     "createNew": "Create new"
+  },
+  "tableView": {
+    "columns": {
+      "agent": "Agent",
+      "model": "Model",
+      "resources": "Resources",
+      "publishStatus": "Publish Status",
+      "updateAt": "Updated Time",
+      "createdAt": "Created Time",
+      "actions": "Actions"
+    },
+    "types": {
+      "multiWorkflow": "Multi-workflow",
+      "autonomousPlanning": "Autonomous Planning"
+    },
+    "published": "Published",
+    "draft": "Draft",
+    "exportAgent": "Export agent",
+    "loading": "Loading...",
+    "noMatchingAgents": "No matching agents found",
+    "noMatchingAgentsDesc": "No matching agents found, please try adjusting your search keywords"
+  },
+  "importConflictDialog": {
+    "title": "Agent Already Exists",
+    "message": "An agent with the name \"{{name}}\" already exists in the current space",
+    "question": "How would you like to proceed?",
+    "overwriteButton": "Overwrite Existing Agent",
+    "createCopyButton": "Create Copy",
+    "cancelButton": "Cancel"
+  },
+  "toolbar": {
+    "title": "Project Development",
+    "gridView": "Grid view",
+    "tableView": "Table view",
+    "importButton": "Import",
+    "importing": "Importing...",
+    "createButton": "Create Agent"
+  },
+  "agentCard": {
+    "actions": {
+      "edit": "Edit",
+      "copy": "Copy",
+      "export": "Export",
+      "delete": "Delete"
+    },
+    "types": {
+      "workflow": "Multi-workflow",
+      "react": "Autonomous Planning",
+      "default": "Autonomous Planning"
+    },
+    "editedAgo": "Edited",
+    "loadingModel": "Loading..."
   },
   "agentPublishDialog": {
     "title": "Submit New Version",

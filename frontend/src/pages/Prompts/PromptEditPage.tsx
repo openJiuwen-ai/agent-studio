@@ -73,6 +73,7 @@ import {
 } from '@/utils/prompts/promptEditPageUtils'
 import { convertApiToolsToFrontendTools } from '@/utils/prompts/toolFormatConverter'
 import { copyToClipboard } from '@/utils/prompts/utils'
+import { useIsNewDashboard } from '@/hooks/useIsNewDashboard'
 import { PromptService, PromptModelService, type RelationObj, type MockContext } from '@test-agentstudio/api-client'
 
 const PromptEditPage: React.FC = () => {
@@ -80,6 +81,7 @@ const PromptEditPage: React.FC = () => {
   const { id } = useParams()
   const [searchParams] = useSearchParams()
   const isNew = id === 'new'
+  const isNewDashboard = useIsNewDashboard()
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const readOnlyToggleRef = useRef<HTMLDivElement>(null)
   // 用于在 useEffect 中访问 hook 返回的 setter
@@ -3221,7 +3223,7 @@ const PromptEditPage: React.FC = () => {
   )
 
   return (
-    <div className="bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40" style={{ minHeight: '93vh', minWidth: 'fit-content', width: '100%' }}>
+    <div className={`bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 ${isNewDashboard ? 'py-6 h-full' : ''}`} style={{ minHeight: '93vh', minWidth: 'fit-content', width: '100%' }}>
       {/* Page header */}
       <PromptEditHeader
         isNew={isNew}
@@ -3795,7 +3797,7 @@ const PromptEditPage: React.FC = () => {
         </div>
       ) : (
         /* 正常编辑模式 */
-        <div className={`resizable-columns-container flex min-h-[calc(100vh-200px)] gap-0`} style={{ minWidth: 'fit-content', width: '100%' }}>
+        <div className={`resizable-columns-container flex min-h-[calc(100vh-200px)] gap-0 ${isNewDashboard ? 'h-[calc(100%-72px)]' : ''}`} style={{ minWidth: 'fit-content', width: '100%' }}>
           {/* Column 1: 编写提示词 */}
           <div style={{ width: `${visibleModules.actualWidths[0]}%` }}>
             <Card className="h-full shadow-lg border-0 bg-white/60 backdrop-blur-sm flex flex-col overflow-hidden" sx={{ borderRadius: 0 }}>

@@ -14,6 +14,7 @@ import {
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useKnowledgeBaseStore } from '@/stores/useKnowledgeBaseStore'
 import { ENV_CONFIG } from '@/config/environment'
+import { useIsNewDashboard } from '@/hooks/useIsNewDashboard'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '@/Common/UnifiedSnackbar'
 import DeleteConfirmationDialog from '@/components/Common/DeleteConfirmationDialog'
 import AddDocumentDialog from './components/AddDocumentDialog'
@@ -25,6 +26,7 @@ const KnowledgeBaseEditorPage: React.FC = () => {
   const location = useLocation()
   const { user } = useAuthStore()
   const { snackbar, showSuccess, showError, closeSnackbar } = useUnifiedSnackbar()
+  const isNew = useIsNewDashboard()
 
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [documents, setDocuments] = useState<DocumentItem[]>([])
@@ -912,7 +914,7 @@ const KnowledgeBaseEditorPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={`min-h-screen bg-gray-50 ${isNew ? 'py-6' : ''}`}>
       {/* 头部导航 */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
