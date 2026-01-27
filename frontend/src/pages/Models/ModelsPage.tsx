@@ -1868,78 +1868,80 @@ const ModelsPage: React.FC = () => {
                 variant="outlined"
               />
             </Grid> */}
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                    <Typography gutterBottom sx={{ mb: 0 }}>
-                      {t('models.modelConfig.parameters.temperature')}
-                    </Typography>
-                    <Tooltip title={t('models.modelConfig.parameters.temperatureDesc')} placement="top" arrow>
-                      <IconButton size="small" sx={{ p: 0, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                  <Slider
-                    value={newModel.temperature}
-                    onChange={(_, value) =>
-                      setNewModel({
-                        ...newModel,
-                        temperature: value as number,
-                      })
-                    }
-                    min={0}
-                    max={2}
-                    step={0.1}
-                    marks={[
-                      { value: 0, label: '0' },
-                      { value: 1, label: '1' },
-                      { value: 2, label: '2' },
-                    ]}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                    <Typography gutterBottom sx={{ mb: 0 }}>
-                      {t('models.modelConfig.parameters.topp')}
-                    </Typography>
-                    <Tooltip title={t('models.modelConfig.parameters.toppDesc')} placement="top" arrow>
-                      <IconButton size="small" sx={{ p: 0, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                  <Slider
-                    value={newModel.topp}
-                    onChange={(_, value) =>
-                      setNewModel({
-                        ...newModel,
-                        topp: value as number,
-                      })
-                    }
-                    min={0}
-                    max={1}
-                    step={0.1}
-                    marks={[
-                      { value: 0, label: '0' },
-                      { value: 0.5, label: '0.5' },
-                      { value: 1, label: '1' },
-                    ]}
-                  />
-                </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                <Typography gutterBottom sx={{ mb: 0 }}>
+                  {t('models.modelConfig.parameters.temperature')}
+                </Typography>
+                <Tooltip title={t('models.modelConfig.parameters.temperatureDesc')} placement="top" arrow>
+                  <IconButton size="small" sx={{ p: 0, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </IconButton>
+                </Tooltip>
+              </Box>
+              <Slider
+                value={newModel.temperature}
+                onChange={(_, value) =>
+                  setNewModel({
+                    ...newModel,
+                    temperature: value as number,
+                  })
+                }
+                min={0}
+                max={2}
+                step={0.1}
+                valueLabelDisplay="on"
+                marks={[
+                  { value: 0, label: '0' },
+                  { value: 1, label: '1' },
+                  { value: 2, label: '2' },
+                ]}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                <Typography gutterBottom sx={{ mb: 0 }}>
+                  {t('models.modelConfig.parameters.topp')}
+                </Typography>
+                <Tooltip title={t('models.modelConfig.parameters.toppDesc')} placement="top" arrow>
+                  <IconButton size="small" sx={{ p: 0, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                  </IconButton>
+                </Tooltip>
+              </Box>
+              <Slider
+                value={newModel.topp}
+                onChange={(_, value) =>
+                  setNewModel({
+                    ...newModel,
+                    topp: value as number,
+                  })
+                }
+                min={0}
+                max={1}
+                step={0.1}
+                valueLabelDisplay="on"
+                marks={[
+                  { value: 0, label: '0' },
+                  { value: 0.5, label: '0.5' },
+                  { value: 1, label: '1' },
+                ]}
+              />
+            </Grid>
               </>
             )}
 
