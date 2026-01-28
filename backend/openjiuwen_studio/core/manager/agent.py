@@ -1009,6 +1009,8 @@ def agent_react_copy(req: AgentCopy, current_user: dict) -> ResponseModel:
     # 准备复制数据
     agent_data = get_result.data.copy()
     agent_data.pop("agent_version", None)  # 复制的智能体只能生成draft版本
+    agent_data.pop("latest_publish_version", None)
+    agent_data.pop("latest_publish_time", None)
 
     # 创建复制的智能体
     agent_copy = AgentBaseDBPd(**agent_data)
@@ -3364,6 +3366,8 @@ async def _agent_import_core(
                 agent_data["update_time"] = milliseconds()
                 # 确保没有 agent_version (Draft)
                 agent_data.pop("agent_version", None)
+                agent_data.pop("latest_publish_version", None)
+                agent_data.pop("latest_publish_time", None)
 
                 logger.info(
                     f"[AGENT_IMPORT] Creating agent copy with new ID {new_agent_id} (original: {old_agent_id})"
@@ -3394,6 +3398,8 @@ async def _agent_import_core(
             agent_data["update_time"] = milliseconds()
             # 确保没有 agent_version (Draft)
             agent_data.pop("agent_version", None)
+            agent_data.pop("latest_publish_version", None)
+            agent_data.pop("latest_publish_time", None)
 
             logger.info(f"[AGENT_IMPORT] Creating agent with new ID {new_agent_id}")
             agent_obj = AgentBaseDBPd(**agent_data)
