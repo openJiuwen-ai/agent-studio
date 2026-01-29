@@ -441,7 +441,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                   disabled={loadingVersions.has(plugin.plugin_id)}
                                   className="notranslate"
                                   MenuProps={{
-                                    disablePortal: true,
+                                    disablePortal: false,
                                     anchorOrigin: {
                                       vertical: 'bottom',
                                       horizontal: 'left',
@@ -455,6 +455,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                         translate: 'no',
                                         position: 'relative',
                                         zIndex: 9999,
+                                        maxWidth: 250,
                                       },
                                       className: 'notranslate',
                                     },
