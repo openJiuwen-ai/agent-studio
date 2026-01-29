@@ -43,6 +43,10 @@ class ModelConfig(Base):
     monthly_requests = Column(Integer, default=0)
     monthly_tokens = Column(Integer, default=0)
     monthly_cost = Column(Float, default=0.0)
+
+    # 是否预置模型相关字段
+    is_system_model = Column(Boolean, server_default="0")  # 是否预置
+    system_model_id = Column(Integer, index=True)  # 系统模型的id
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -7,19 +7,13 @@
 自动检测模型定义与数据库表结构的差异，并同步新增字段
 """
 
-import importlib
-import pkgutil
-import sys
 from typing import Any, Dict, List
 
-from sqlalchemy import MetaData, create_engine, inspect, text
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.sql import schema
-
 from openjiuwen.core.common.logging import logger
+from sqlalchemy import inspect, text
+
 from openjiuwen_studio.core.database import engine
-from openjiuwen_studio.models import (AgentBaseDB, PluginBaseDB, SpaceDB, UserDB,
-                        WorkflowBaseDB)
+from openjiuwen_studio.models import (SystemLLMModelDB, SystemEmbeddingModelDB)
 
 
 class DatabaseSync:
@@ -342,6 +336,9 @@ def get_all_model_classes():
 
         # 知识库模型
         KnowledgeBaseDB, KnowledgeBaseDocumentDB,
+
+        # 系统模型
+        SystemLLMModelDB, SystemEmbeddingModelDB
     ])
 
     return model_classes

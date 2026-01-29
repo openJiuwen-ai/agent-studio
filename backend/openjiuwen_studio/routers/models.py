@@ -100,7 +100,9 @@ def model_to_response(model: ModelConfig) -> ModelConfigResponse:
         created_at=model.created_at,
         updated_at=model.updated_at or model.created_at,  # Fallback to created_at if updated_at is None
         usage_stats=create_usage_stats_from_model(model),
-        api_key_masked=masked_api_key
+        api_key_masked=masked_api_key,
+        is_system_model=model.is_system_model,
+        system_model_id=model.system_model_id
     )
 
 

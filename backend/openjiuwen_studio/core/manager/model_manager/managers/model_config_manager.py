@@ -470,7 +470,9 @@ class ModelConfigManager:
             total_cost=model.total_cost,
             success_rate=model.success_rate,
             avg_response_time=model.avg_response_time,
-            api_key_masked=masked_api_key
+            api_key_masked=masked_api_key,
+            is_system_model=model.is_system_model,
+            system_model_id=model.system_model_id
         )
     
     def _validate_parameters(self, parameters: Dict[str, Any], model_type: str) -> None:

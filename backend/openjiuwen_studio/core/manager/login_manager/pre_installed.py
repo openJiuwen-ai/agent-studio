@@ -1,21 +1,26 @@
 import json
 import os
 import uuid
+from typing import Any
 
-from openjiuwen_studio.core.database import SessionLocal, milliseconds
 from openjiuwen.core.common.logging import logger
+from sqlalchemy.orm import Session
 
-from openjiuwen_studio.models.workflow import WorkflowBaseDBPd
-from openjiuwen_studio.models.agent import AgentBaseDBPd
-from openjiuwen_studio.core.manager.repositories.workflow_repository import workflow_repository
-from openjiuwen_studio.core.manager.repositories.agent_repository import agent_repository
 import openjiuwen_studio.core.manager.convertor.workflow as convert
+from openjiuwen_studio.core.database import SessionLocal, milliseconds
+from openjiuwen_studio.core.manager.repositories import EmbeddingModelConfigRepository, ModelConfigRepository
+from openjiuwen_studio.core.manager.repositories.agent_repository import agent_repository
+from openjiuwen_studio.core.manager.repositories.system_embedding_model_repository import SystemEmbeddingModelRepository
+from openjiuwen_studio.core.manager.repositories.system_llm_model_repository import SystemLLMModelRepository
+from openjiuwen_studio.core.manager.repositories.workflow_repository import workflow_repository
+from openjiuwen_studio.models.agent import AgentBaseDBPd
+from openjiuwen_studio.models.workflow import WorkflowBaseDBPd
 
 
 def pre_install(space_id: str):
     db = SessionLocal()
     try:
-        create_examples(space_id)
+        create_examples(space_id, db)
         db.commit()
     except Exception as e:
         db.rollback()
@@ -33,7 +38,7 @@ def _read_json(path: str) -> dict:
         return {}
 
 
-def create_examples(space_id: str):
+def create_examples(space_id: str, db: Session):
     base_dir = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "../../../examples")
     )
@@ -218,3 +223,41 @@ def create_examples(space_id: str):
         update_time=current_time,
     )
     agent_repository.create_agent_db(finance_agent)
+
+    # pre install system models for user
+    pre_install_models_for_user(db, space_id)
+
+
+def pre_install_models_for_user(db: Session, space_id: str):
+    """Pre install system llm and embedding models for user"""
+    llm_model_repo = ModelConfigRepository(db)
+    embedding_model_repo = EmbeddingModelConfigRepository(db)
+    system_llm_model_repo = SystemLLMModelRepository(db)
+    system_embedding_model_repo = SystemEmbeddingModelRepository(db)
+
+    # add system llm models to model config
+    system_llm_models = system_llm_model_repo.query().all()
+    for model in system_llm_models:
+        model_dict = _model_to_dict(model, space_id)
+        created_llm_model_config = llm_model_repo.create(model_dict)
+        logger.info(f"Added llm model config: {created_llm_model_config.id} from system llm model: {model.id}")
+
+    # add system embedding models to embedding model config
+    system_embedding_models = system_embedding_model_repo.query().all()
+    for model in system_embedding_models:
+        model_dict = _model_to_dict(model, space_id)
+        created_embedding_model_config = embedding_model_repo.create(model_dict)
+        logger.info(
+            f"Added embedding model config: {created_embedding_model_config.id} from system embedding model: {model.id}"
+        )
+
+
+def _model_to_dict(model, space_id: str) -> dict[str, Any]:
+    model_dict = model.to_dict(exclude_invalid=True)
+    model_dict.update({'space_id': space_id})
+    model_dict.update({'is_system_model': True})
+    model_dict.update({'system_model_id': model.id})
+    model_dict.pop("id")
+    model_dict.pop("created_at")
+    model_dict.pop("updated_at")
+    return model_dict

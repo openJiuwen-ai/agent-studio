@@ -118,6 +118,8 @@ class ModelConfigResponse(ModelConfigBase):
     usage_stats: ModelUsageStats = Field(default_factory=ModelUsageStats)
     # API key is masked in response for security
     api_key_masked: Optional[str] = Field(None, description="Masked API key for display")
+    is_system_model: Optional[bool] = Field(None, description="是否系统预置模型")
+    system_model_id: Optional[int] = Field(None, description="系统模型id")
 
     class Config:
         from_attributes = True

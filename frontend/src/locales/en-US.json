@@ -1572,6 +1572,8 @@
       "descriptionMaxLength": "Description cannot exceed 500 characters",
       "timeoutRange": "Timeout must be between 1-300 seconds",
       "fillRequiredFields": "Please fill in all required fields",
+      "systemModelNoEdit": "Pre-built models are not editable",
+      "systemModelNoDelete": "Pre-built models cannot be deleted",
       "fieldNames": {
         "name": "Model Name",
         "modelId": "Model ID",

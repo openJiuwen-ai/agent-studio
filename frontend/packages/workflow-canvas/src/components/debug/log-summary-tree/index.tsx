@@ -25,11 +25,9 @@ const LogSummaryTree: FC<LogSummaryTreeProps> = ({ logSummary, onNodeClick }) =>
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
 
   const mergeInvokeInfo = (invokes: InvokeExecuteInfo[]): InvokeExecuteInfo[] => {
-    const mergedMap = new Map<string, InvokeExecuteInfo>()
-
     const filteredInvokes = invokes.filter(invoke => !shouldFilterNode(invoke))
 
-    filteredInvokes.forEach(invoke => {
+    return filteredInvokes.map(invoke => {
       const normalizedInvoke = {
         ...invoke,
         invokeId: invoke.invokeId,
@@ -52,63 +50,13 @@ const LogSummaryTree: FC<LogSummaryTreeProps> = ({ logSummary, onNodeClick }) =>
         workflowVersion: invoke.workflow_version,
       }
 
-      const isLoopIteration = normalizedInvoke.loopNodeId !== null && normalizedInvoke.loopIndex !== null
-      const key = isLoopIteration
-        ? `${normalizedInvoke.invokeId || `${normalizedInvoke.invokeType}_${normalizedInvoke.invokeName}`}_loop_${normalizedInvoke.loopIndex}`
-        : normalizedInvoke.invokeId || `${normalizedInvoke.invokeType}_${normalizedInvoke.invokeName}_${normalizedInvoke.startTimestamp}`
-
-      if (mergedMap.has(key)) {
-        const existing = mergedMap.get(key)!
-
-        const existingStart = existing.startTimestamp || 0
-        const existingEnd = existingStart + (existing.duration || 0)
-        const currentStart = normalizedInvoke.startTimestamp || 0
-        const currentEnd = currentStart + (normalizedInvoke.duration || 0)
-
-        const newStart = Math.min(existingStart, currentStart)
-        const newEnd = Math.max(existingEnd, currentEnd)
-        const newDuration = newEnd - newStart
-
-        const getStatusPriority = (status?: string) => {
-          const s = status?.toLowerCase()
-          if (s === 'failed' || s === 'error') return 1
-          if (s === 'running' || s === 'processing') return 2
-          if (s === 'success' || s === 'completed' || s === 'finish') return 3
-          return 4
-        }
-
-        const existingPriority = getStatusPriority(existing.status)
-        const currentPriority = getStatusPriority(normalizedInvoke.status)
-        const finalStatus = existingPriority < currentPriority ? existing.status : normalizedInvoke.status
-
-        const inputTokens = (existing.inputTokens || 0) + (normalizedInvoke.inputTokens || 0)
-        const outputTokens = (existing.outputTokens || 0) + (normalizedInvoke.outputTokens || 0)
-
-        const inputs = { ...existing.inputs, ...normalizedInvoke.inputs }
-        const outputs = { ...existing.outputs, ...normalizedInvoke.outputs }
-
-        const existingChildren = existing.childInvokesExecuteInfo || []
-        const currentChildren = normalizedInvoke.childInvokesExecuteInfo || []
-        const allChildren = [...existingChildren, ...currentChildren]
-        const uniqueChildren = mergeInvokeInfo(allChildren)
-
-        mergedMap.set(key, {
-          ...existing,
-          startTimestamp: newStart,
-          duration: newDuration,
-          status: finalStatus,
-          inputTokens,
-          outputTokens,
-          inputs,
-          outputs,
-          childInvokesExecuteInfo: uniqueChildren,
-        })
-      } else {
-        mergedMap.set(key, normalizedInvoke)
+      // 递归处理子节点
+      if (normalizedInvoke.childInvokesExecuteInfo) {
+        normalizedInvoke.childInvokesExecuteInfo = mergeInvokeInfo(normalizedInvoke.childInvokesExecuteInfo)
       }
-    })
 
-    return Array.from(mergedMap.values())
+      return normalizedInvoke
+    })
   }
 
   const shouldFilterNode = (invoke: InvokeExecuteInfo): boolean => {
@@ -160,22 +108,22 @@ const LogSummaryTree: FC<LogSummaryTreeProps> = ({ logSummary, onNodeClick }) =>
       return []
     }
 
-    const deduplicatedRoots = mergeInvokeInfo(executeInfoList)
+    const processedRoots = mergeInvokeInfo(executeInfoList)
 
     const trees: TreeNode[] = []
     let nodeCounter = 0
 
-    deduplicatedRoots.forEach(rootInvoke => {
+    processedRoots.forEach(rootInvoke => {
       const buildNodeTree = (invoke: InvokeExecuteInfo, level: number = 0): TreeNode => {
         const rawChildren = extractChildInvokes(invoke)
-        const deduplicatedChildren = mergeInvokeInfo(rawChildren)
+        const processedChildren = mergeInvokeInfo(rawChildren)
         const nodeId = `node-${nodeCounter++}`
 
         return {
           invoke,
           level,
           id: nodeId,
-          children: deduplicatedChildren.map(child => buildNodeTree(child, level + 1)),
+          children: processedChildren.map(child => buildNodeTree(child, level + 1)),
         }
       }
 

@@ -1552,6 +1552,8 @@
       "descriptionMaxLength": "描述不能超过500个字符",
       "timeoutRange": "超时时间必须在1-300秒之间",
       "fillRequiredFields": "请填写所有必填字段",
+      "systemModelNoEdit": "预置模型不支持编辑",
+      "systemModelNoDelete": "预置模型不支持删除",
       "fieldNames": {
         "name": "模型名称",
         "modelId": "模型ID",

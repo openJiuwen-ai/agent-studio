@@ -59,6 +59,7 @@ interface UnifiedModelListItem {
   description: string
   createdAt: string
   updatedAt: string
+  isSystemModel: boolean
   modelType: ModelType // 添加模型类型字段
   // LLM 特有属性
   usage?: {
@@ -1026,9 +1027,7 @@ const ModelsPage: React.FC = () => {
         >
           <Bot className="w-5 h-5" />
           <span>{t('models.tabs.llm')}</span>
-          <span className={`ml-1 px-2 py-0.5 text-xs rounded-full ${
-            activeTab === 0 ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600'
-          }`}>
+          <span className={`ml-1 px-2 py-0.5 text-xs rounded-full ${activeTab === 0 ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600'}`}>
             {modelsResponse?.total || 0}
           </span>
         </button>
@@ -1046,9 +1045,7 @@ const ModelsPage: React.FC = () => {
         >
           <FileCode2 className="w-5 h-5" />
           <span>{t('models.tabs.embedding')}</span>
-          <span className={`ml-1 px-2 py-0.5 text-xs rounded-full ${
-            activeTab === 1 ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-600'
-          }`}>
+          <span className={`ml-1 px-2 py-0.5 text-xs rounded-full ${activeTab === 1 ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-600'}`}>
             {embeddingModelsResponse?.total || 0}
           </span>
         </button>
@@ -1062,9 +1059,14 @@ const ModelsPage: React.FC = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-200" />
             <input
               type="text"
-              placeholder={currentModelType === 'LLM' 
-                ? t('models.modelList.searchPlaceholder')
-                : t('models.modelList.searchPlaceholder').replace(/或标签|标签/g, '').replace(/\s+/g, ' ').trim()}
+              placeholder={
+                currentModelType === 'LLM'
+                  ? t('models.modelList.searchPlaceholder')
+                  : t('models.modelList.searchPlaceholder')
+                      .replace(/或标签|标签/g, '')
+                      .replace(/\s+/g, ' ')
+                      .trim()
+              }
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-300 transition-all duration-200 bg-gray-50 focus:bg-white"
@@ -1343,14 +1345,17 @@ const ModelsPage: React.FC = () => {
                           </Tooltip>
                         )}
                         {/* 编辑按钮 */}
-                        <Tooltip title={t('models.editModel')}>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleOpenModelDialog(model)}
-                            className="text-gray-500 hover:text-blue-600 hover:bg-blue-50"
-                          >
-                            <Settings className="w-4 h-4" />
-                          </IconButton>
+                        <Tooltip title={model.isSystemModel ? t('models.messages.systemModelNoEdit') : t('models.editModel')}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleOpenModelDialog(model)}
+                              disabled={model.isSystemModel}
+                              className="text-gray-500 hover:text-blue-600 hover:bg-blue-50"
+                            >
+                              <Settings className="w-4 h-4" />
+                            </IconButton>
+                          </span>
                         </Tooltip>
                         {/* 禁用/启用按钮 - 两种模式都有 */}
                         <Tooltip title={model.isActive ? t('models.modelList.deactivateModel') : t('models.modelList.activateModel')}>
@@ -1365,10 +1370,17 @@ const ModelsPage: React.FC = () => {
                           </IconButton>
                         </Tooltip>
                         {/* 删除按钮 - 两种模式都有 */}
-                        <Tooltip title={t('models.modelList.deleteModel')}>
-                          <IconButton size="small" onClick={() => handleDeleteModel(model.id, model.name)} className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                            <Trash2 className="w-4 h-4" />
-                          </IconButton>
+                        <Tooltip title={model.isSystemModel ? t('models.messages.systemModelNoDelete') : t('models.modelList.deleteModel')}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteModel(model.id, model.name)}
+                              disabled={model.isSystemModel}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </IconButton>
+                          </span>
                         </Tooltip>
                       </div>
                     </TableCell>
@@ -1381,124 +1393,124 @@ const ModelsPage: React.FC = () => {
 
         {/* 分页组件 - 始终显示 */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">{t('models.modelList.perPage')}:</span>
-              <select
-                value={pageSize}
-                onChange={e => {
-                  setPageSize(Number(e.target.value))
-                  if (hasFilters) {
-                    setFilteredPage(1) // 重置筛选分页到第一页
-                  } else {
-                    setCurrentPage(1) // 重置到第一页
-                  }
-                }}
-                className="px-3 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-300 shadow-sm"
-              >
-                <option value={10}>10 {t('models.modelList.pageItem')}</option>
-                <option value={20}>20 {t('models.modelList.pageItem')}</option>
-                <option value={50}>50 {t('models.modelList.pageItem')}</option>
-              </select>
-              <span className="text-sm text-gray-600">
-                {t('models.modelList.totalItems', { totalItems: finalTotalItems })}
-                {hasFilters && <span className="text-blue-600 ml-1">({t('models.modelList.filterResult')})</span>}
-              </span>
-            </div>
-
-            <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => {
-                    if (hasFilters) {
-                      setFilteredPage(Math.max(1, filteredPage - 1))
-                    } else {
-                      setCurrentPage(Math.max(1, currentPage - 1))
-                    }
-                  }}
-                  disabled={finalCurrentPage === 1}
-                  className={`p-2 rounded-lg ${finalCurrentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`}
-                  title={t('models.modelList.prevPage')}
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-
-                <div className="flex items-center space-x-1">
-                  {/* 安全的页码计算 */}
-                  {(() => {
-                    const displayPages = finalTotalPages
-                    const displayCurrent = finalCurrentPage
-
-                    // 临时修复：即使只有1页也显示页码按钮
-                    if (displayPages < 1) return [1]
-
-                    const pages = []
-                    const maxVisible = 5
-
-                    if (displayPages <= maxVisible) {
-                      // 总页数少，显示所有页码
-                      for (let i = 1; i <= displayPages; i++) {
-                        pages.push(i)
-                      }
-                    } else {
-                      // 总页数多，智能显示页码
-                      if (displayCurrent <= 3) {
-                        // 当前页在前部，显示前5页
-                        for (let i = 1; i <= maxVisible; i++) {
-                          pages.push(i)
-                        }
-                      } else if (displayCurrent >= displayPages - 2) {
-                        // 当前页在后部，显示最后5页
-                        for (let i = displayPages - maxVisible + 1; i <= displayPages; i++) {
-                          pages.push(i)
-                        }
-                      } else {
-                        // 当前页在中间，前后各显示2页
-                        for (let i = displayCurrent - 2; i <= displayCurrent + 2; i++) {
-                          pages.push(i)
-                        }
-                      }
-                    }
-
-                    return pages
-                  })().map(pageNum => (
-                    <button
-                      key={pageNum}
-                      onClick={() => {
-                        if (hasFilters) {
-                          setFilteredPage(pageNum)
-                        } else {
-                          setCurrentPage(pageNum)
-                        }
-                      }}
-                      className={`w-10 h-10 rounded-lg font-bold transition-colors ${
-                        finalCurrentPage === pageNum
-                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
-                          : 'bg-gray-50 text-black font-bold hover:bg-gray-200'
-                      }`}
-                      title={t('models.modelList.pageNum', { pageNum })}
-                    >
-                      {pageNum}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => {
-                    if (hasFilters) {
-                      setFilteredPage(Math.min(finalTotalPages, filteredPage + 1))
-                    } else {
-                      setCurrentPage(Math.min(finalTotalPages, currentPage + 1))
-                    }
-                  }}
-                  disabled={finalCurrentPage === finalTotalPages}
-                  className={`p-2 rounded-lg ${finalCurrentPage === finalTotalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`}
-                  title={t('models.modelList.nextPage')}
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-
-                <span className="text-sm text-gray-600 ml-4">{t('models.modelList.pageNumDesc', { finalCurrentPage, finalTotalPages })}</span>
-            </div>
+          <div className="flex items-center space-x-4">
+            <span className="text-sm text-gray-600">{t('models.modelList.perPage')}:</span>
+            <select
+              value={pageSize}
+              onChange={e => {
+                setPageSize(Number(e.target.value))
+                if (hasFilters) {
+                  setFilteredPage(1) // 重置筛选分页到第一页
+                } else {
+                  setCurrentPage(1) // 重置到第一页
+                }
+              }}
+              className="px-3 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-300 shadow-sm"
+            >
+              <option value={10}>10 {t('models.modelList.pageItem')}</option>
+              <option value={20}>20 {t('models.modelList.pageItem')}</option>
+              <option value={50}>50 {t('models.modelList.pageItem')}</option>
+            </select>
+            <span className="text-sm text-gray-600">
+              {t('models.modelList.totalItems', { totalItems: finalTotalItems })}
+              {hasFilters && <span className="text-blue-600 ml-1">({t('models.modelList.filterResult')})</span>}
+            </span>
           </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => {
+                if (hasFilters) {
+                  setFilteredPage(Math.max(1, filteredPage - 1))
+                } else {
+                  setCurrentPage(Math.max(1, currentPage - 1))
+                }
+              }}
+              disabled={finalCurrentPage === 1}
+              className={`p-2 rounded-lg ${finalCurrentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`}
+              title={t('models.modelList.prevPage')}
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-1">
+              {/* 安全的页码计算 */}
+              {(() => {
+                const displayPages = finalTotalPages
+                const displayCurrent = finalCurrentPage
+
+                // 临时修复：即使只有1页也显示页码按钮
+                if (displayPages < 1) return [1]
+
+                const pages = []
+                const maxVisible = 5
+
+                if (displayPages <= maxVisible) {
+                  // 总页数少，显示所有页码
+                  for (let i = 1; i <= displayPages; i++) {
+                    pages.push(i)
+                  }
+                } else {
+                  // 总页数多，智能显示页码
+                  if (displayCurrent <= 3) {
+                    // 当前页在前部，显示前5页
+                    for (let i = 1; i <= maxVisible; i++) {
+                      pages.push(i)
+                    }
+                  } else if (displayCurrent >= displayPages - 2) {
+                    // 当前页在后部，显示最后5页
+                    for (let i = displayPages - maxVisible + 1; i <= displayPages; i++) {
+                      pages.push(i)
+                    }
+                  } else {
+                    // 当前页在中间，前后各显示2页
+                    for (let i = displayCurrent - 2; i <= displayCurrent + 2; i++) {
+                      pages.push(i)
+                    }
+                  }
+                }
+
+                return pages
+              })().map(pageNum => (
+                <button
+                  key={pageNum}
+                  onClick={() => {
+                    if (hasFilters) {
+                      setFilteredPage(pageNum)
+                    } else {
+                      setCurrentPage(pageNum)
+                    }
+                  }}
+                  className={`w-10 h-10 rounded-lg font-bold transition-colors ${
+                    finalCurrentPage === pageNum
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white'
+                      : 'bg-gray-50 text-black font-bold hover:bg-gray-200'
+                  }`}
+                  title={t('models.modelList.pageNum', { pageNum })}
+                >
+                  {pageNum}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => {
+                if (hasFilters) {
+                  setFilteredPage(Math.min(finalTotalPages, filteredPage + 1))
+                } else {
+                  setCurrentPage(Math.min(finalTotalPages, currentPage + 1))
+                }
+              }}
+              disabled={finalCurrentPage === finalTotalPages}
+              className={`p-2 rounded-lg ${finalCurrentPage === finalTotalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:bg-gray-100'}`}
+              title={t('models.modelList.nextPage')}
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+
+            <span className="text-sm text-gray-600 ml-4">{t('models.modelList.pageNumDesc', { finalCurrentPage, finalTotalPages })}</span>
+          </div>
+        </div>
       </div>
 
       {/* Unified Model Dialog for Add/Edit */}
@@ -1554,9 +1566,8 @@ const ModelsPage: React.FC = () => {
                     <span style={{ color: 'orange' }}>模型友好名称过长，请控制在100字符以内</span>
                   ) : (
                     <span style={{ color: '#666' }}>
-                      {modelType === 'Embedding' 
-                        ? t('models.modelConfig.basicInfo.embeddingNameHint') 
-                        : t('models.modelConfig.basicInfo.nameHint')} | {t('models.modelConfig.basicInfo.charNum')}
+                      {modelType === 'Embedding' ? t('models.modelConfig.basicInfo.embeddingNameHint') : t('models.modelConfig.basicInfo.nameHint')} |{' '}
+                      {t('models.modelConfig.basicInfo.charNum')}
                       {newModel.name?.length || 0}/100
                     </span>
                   )
@@ -1612,9 +1623,8 @@ const ModelsPage: React.FC = () => {
                     <span style={{ color: 'orange' }}>模型标识符过长，请控制在100字符以内</span>
                   ) : (
                     <span style={{ color: '#666' }}>
-                      {modelType === 'Embedding' 
-                        ? t('models.modelConfig.basicInfo.embeddingTypeHint') 
-                        : t('models.modelConfig.basicInfo.typeHint')} | {t('models.modelConfig.basicInfo.charNum')}
+                      {modelType === 'Embedding' ? t('models.modelConfig.basicInfo.embeddingTypeHint') : t('models.modelConfig.basicInfo.typeHint')} |{' '}
+                      {t('models.modelConfig.basicInfo.charNum')}
                       {newModel.modelId?.length || 0}/100
                     </span>
                   )
@@ -1682,9 +1692,8 @@ const ModelsPage: React.FC = () => {
                     <span style={{ color: 'orange' }}>Base URL 长度超限，请控制在100字符以内</span>
                   ) : (
                     <span style={{ color: '#666' }}>
-                      {modelType === 'Embedding'
-                        ? t('models.messages.embeddingBaseUrlHint')
-                        : t('models.modelConfig.parameters.baseUrlHint')}: {newModel.baseUrl?.length || 0}/100
+                      {modelType === 'Embedding' ? t('models.messages.embeddingBaseUrlHint') : t('models.modelConfig.parameters.baseUrlHint')}:{' '}
+                      {newModel.baseUrl?.length || 0}/100
                     </span>
                   )
                 }
@@ -1847,7 +1856,7 @@ const ModelsPage: React.FC = () => {
                     helperText={t('models.modelConfig.parameters.timeoutDesc')}
                   />
                 </Grid>
-            {/* <Grid item xs={12} md={6}>
+                {/* <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
                 label="最大输出Token数"
@@ -1859,78 +1868,78 @@ const ModelsPage: React.FC = () => {
                 variant="outlined"
               />
             </Grid> */}
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                <Typography gutterBottom sx={{ mb: 0 }}>
-                  {t('models.modelConfig.parameters.temperature')}
-                </Typography>
-                <Tooltip title={t('models.modelConfig.parameters.temperatureDesc')} placement="top" arrow>
-                  <IconButton size="small" sx={{ p: 0, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                  </IconButton>
-                </Tooltip>
-              </Box>
-              <Slider
-                value={newModel.temperature}
-                onChange={(_, value) =>
-                  setNewModel({
-                    ...newModel,
-                    temperature: value as number,
-                  })
-                }
-                min={0}
-                max={2}
-                step={0.1}
-                marks={[
-                  { value: 0, label: '0' },
-                  { value: 1, label: '1' },
-                  { value: 2, label: '2' },
-                ]}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                <Typography gutterBottom sx={{ mb: 0 }}>
-                  {t('models.modelConfig.parameters.topp')}
-                </Typography>
-                <Tooltip title={t('models.modelConfig.parameters.toppDesc')} placement="top" arrow>
-                  <IconButton size="small" sx={{ p: 0, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                  </IconButton>
-                </Tooltip>
-              </Box>
-              <Slider
-                value={newModel.topp}
-                onChange={(_, value) =>
-                  setNewModel({
-                    ...newModel,
-                    topp: value as number,
-                  })
-                }
-                min={0}
-                max={1}
-                step={0.1}
-                marks={[
-                  { value: 0, label: '0' },
-                  { value: 0.5, label: '0.5' },
-                  { value: 1, label: '1' },
-                ]}
-              />
-            </Grid>
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                    <Typography gutterBottom sx={{ mb: 0 }}>
+                      {t('models.modelConfig.parameters.temperature')}
+                    </Typography>
+                    <Tooltip title={t('models.modelConfig.parameters.temperatureDesc')} placement="top" arrow>
+                      <IconButton size="small" sx={{ p: 0, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                  <Slider
+                    value={newModel.temperature}
+                    onChange={(_, value) =>
+                      setNewModel({
+                        ...newModel,
+                        temperature: value as number,
+                      })
+                    }
+                    min={0}
+                    max={2}
+                    step={0.1}
+                    marks={[
+                      { value: 0, label: '0' },
+                      { value: 1, label: '1' },
+                      { value: 2, label: '2' },
+                    ]}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                    <Typography gutterBottom sx={{ mb: 0 }}>
+                      {t('models.modelConfig.parameters.topp')}
+                    </Typography>
+                    <Tooltip title={t('models.modelConfig.parameters.toppDesc')} placement="top" arrow>
+                      <IconButton size="small" sx={{ p: 0, color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                  <Slider
+                    value={newModel.topp}
+                    onChange={(_, value) =>
+                      setNewModel({
+                        ...newModel,
+                        topp: value as number,
+                      })
+                    }
+                    min={0}
+                    max={1}
+                    step={0.1}
+                    marks={[
+                      { value: 0, label: '0' },
+                      { value: 0.5, label: '0.5' },
+                      { value: 1, label: '1' },
+                    ]}
+                  />
+                </Grid>
               </>
             )}
 

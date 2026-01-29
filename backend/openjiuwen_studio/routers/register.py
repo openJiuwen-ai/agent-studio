@@ -1,10 +1,11 @@
 from fastapi import FastAPI, APIRouter, Request
+from openjiuwen.core.common.logging import set_thread_session, logger
+
+from openjiuwen_studio.core.common.language_thread_context import (set_language, clear_language,
+                                                                   get_highest_priority_language)
 from openjiuwen_studio.routers import (auth, models, users, agents, workflows, execution, space,
                                        related_member, plugin, tags, knowledge_base, embedding_models, prompt_router,
-                                       prompt_debug_router, prompt_tuning_router, prompt_llm_router)
-from openjiuwen_studio.core.common.language_thread_context import (set_language, clear_language, 
-                                                                   get_highest_priority_language)
-from openjiuwen.core.common.logging import set_thread_session, logger
+                                       prompt_debug_router, prompt_tuning_router, prompt_llm_router, system_model)
 
 api_router = APIRouter()
 
@@ -24,6 +25,7 @@ def router_register(app: FastAPI):
     v1_router.include_router(plugin.plugin_router, prefix="/plugin", tags=["Plugin"])
     v1_router.include_router(tags.tags_router, prefix="/tags", tags=["Tags"])
     v1_router.include_router(knowledge_base.knowledge_base_router, prefix="/knowledge-base", tags=["Knowledge Base"])
+    v1_router.include_router(system_model.system_router, prefix="/system", tags=["System"])
 
     # Add health check endpoint directly to api_router (not v1_router)
     @api_router.get("/health")
@@ -49,7 +51,7 @@ def router_register(app: FastAPI):
             "docs": "/api/docs",
             "health": "/api/health"
         }
-    
+
     @app.middleware("http")
     async def process_header_language(request: Request, call_next):
         accept_language = request.headers.get("accept-language", "cn")

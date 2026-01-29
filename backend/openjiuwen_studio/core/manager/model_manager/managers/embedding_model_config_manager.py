@@ -219,6 +219,8 @@ class EmbeddingModelConfigManager:
             is_active=model.is_active,
             created_at=model.created_at,
             updated_at=model.updated_at,
-            api_key_masked=masked_api_key
+            api_key_masked=masked_api_key,
+            is_system_model=model.is_system_model,
+            system_model_id=model.system_model_id
         )
 

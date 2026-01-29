@@ -1,6 +1,6 @@
+import io
 import os
 import sys
-import io
 from contextlib import asynccontextmanager
 
 # 添加项目根目录到 Python 路径，以便直接运行时能找到所有模块
@@ -28,7 +28,8 @@ from openjiuwen_studio.models import ModelConfig, ModelUsageLog, EmbeddingModelC
     PromptRelationDB, TagDB, UserDB, SpaceDB, SpaceUserDB, WorkflowBaseDB, WorkflowPublishDB, PluginBaseDB, \
     PluginPublishDB, ToolBaseDB, \
     WorkflowExecutionDB, WorkflowExecutionDetailsDB, AgentExecutionDB, AgentExecutionDetailsDB, \
-    AgentWorkflowRelationDB, KnowledgeBaseDB, KnowledgeBaseDocumentDB, ReferenceDB
+    AgentWorkflowRelationDB, KnowledgeBaseDB, KnowledgeBaseDocumentDB, ReferenceDB, SystemEmbeddingModelDB, \
+    SystemLLMModelDB
 # Import database sync tool
 from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.db_sync import run_database_sync
@@ -46,7 +47,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 async def lifespan_func(app: FastAPI):
     # Startup
     logger.info("🚀 Starting Jiuwen Agent Studio Backend...")
-    
+
     target_tables = [
         ModelConfig.__table__,
         ModelUsageLog.__table__,
@@ -75,6 +76,9 @@ async def lifespan_func(app: FastAPI):
         # Knowledge Base tables
         KnowledgeBaseDB.__table__,
         KnowledgeBaseDocumentDB.__table__,
+        # System model tables
+        SystemLLMModelDB.__table__,
+        SystemEmbeddingModelDB.__table__,
     ]
 
     if engine.url.drivername == "sqlite":

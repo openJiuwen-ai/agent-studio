@@ -26,6 +26,7 @@ export interface FrontendEmbeddingModelConfig {
   description: string // 描述（前端默认为空）
   createdAt: string
   updatedAt: string
+  isSystemModel: boolean // 是否系统预置模型
 }
 
 // 数据转换函数：后端到前端
@@ -44,6 +45,7 @@ function backendToFrontend(backend: EmbeddingModelConfigResponse): FrontendEmbed
     description: '', // 后端不支持 description，前端默认为空
     createdAt: backend.created_at,
     updatedAt: backend.updated_at,
+    isSystemModel: backend.is_system_model ?? false,
   }
 }
 
