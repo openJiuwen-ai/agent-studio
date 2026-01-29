@@ -6,9 +6,16 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
-# Set path for local imports
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-load_dotenv()
+# 定义项目根目录
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+
+# 将项目根目录添加到 sys.path
+sys.path.append(PROJECT_ROOT)
+
+# 加载 .env 文件
+dotenv_path = os.path.join(PROJECT_ROOT, ".env")
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path=dotenv_path)
 
 from openjiuwen_studio.ops.modules.prompt.infra.database import Base
 # Import the module that defines the models to register them with Base
