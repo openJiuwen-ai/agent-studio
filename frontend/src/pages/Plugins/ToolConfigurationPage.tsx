@@ -4,7 +4,7 @@ import { useQueryClient } from 'react-query'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/useAuthStore'
 import { ENV_CONFIG } from '../../config/environment'
-import { ArrowLeft, Save, Plus, Trash2, Settings, Code, FileText, RotateCcw, CheckCircle, XCircle } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Settings, Code, FileText, RotateCcw, CheckCircle, XCircle, Check } from 'lucide-react'
 import { validateToolPath, getPathHelpText } from '../../utils/validationUtils'
 import { copyToClipboard } from '../../utils/prompts/utils'
 import {
@@ -93,7 +93,7 @@ const codeTemplates: CodeTemplate[] = [
     name: '基础函数',
     description: '简单的数据处理函数',
     template: `def add_test(a: int, b: int):
-    return a + b
+  return a + b
 
 def main(args: Args):
   a = args.params['add1']
@@ -632,10 +632,12 @@ const ToolConfigurationPage: React.FC = () => {
         plugin_version: '',
         request_params: convertParams(tool.input_parameters),
         response_params: convertParams(tool.output_parameters),
-        headers: tool.headers.map(header => ({
-          name: header.key,
-          value: header.value,
-        })),
+        headers: tool.headers
+          .filter(header => header.key.trim() !== '' || header.value.trim() !== '')
+          .map(header => ({
+            name: header.key,
+            value: header.value,
+          })),
       }
     } else {
       return {
@@ -649,10 +651,12 @@ const ToolConfigurationPage: React.FC = () => {
         plugin_version: '',
         request_params: convertParams(tool.input_parameters),
         response_params: convertParams(tool.output_parameters),
-        headers: tool.headers.map(header => ({
-          name: header.key,
-          value: header.value,
-        })),
+        headers: tool.headers
+          .filter(header => header.key.trim() !== '' || header.value.trim() !== '')
+          .map(header => ({
+            name: header.key,
+            value: header.value,
+          })),
       }
     }
   }
@@ -876,12 +880,42 @@ const ToolConfigurationPage: React.FC = () => {
   const handleRemoveHeader = (index: number) => {
     if (tool) {
       const updatedTool = { ...tool }
-      if (updatedTool.headers.length > 1) {
-        updatedTool.headers = updatedTool.headers.filter((_, i) => i !== index)
-      } else {
-        updatedTool.headers = [{ key: '', value: '' }]
-      }
+      updatedTool.headers = updatedTool.headers.filter((_, i) => i !== index)
       setTool(updatedTool)
+      // Save after deletion
+      handleSaveSingleHeader(index)
+    }
+  }
+
+  const handleSaveSingleHeader = async (index: number) => {
+    if (!tool) return
+
+    try {
+      const apiRequest = convertToolToApiRequest(tool)
+      console.log(`Saving header row ${index}:`, apiRequest)
+
+      const response = await updatePluginApiMutation.mutateAsync(apiRequest)
+
+      if (response.code === 200) {
+        setSnackbar({
+          open: true,
+          message: t('plugins.toolConfig.headerSaveSuccess', '请求头保存成功'),
+          severity: 'success',
+        })
+        setPathError('')
+      } else {
+        setSnackbar({
+          open: true,
+          message: t('plugins.toolConfig.headerSaveFailed', '保存失败: {{message}}', {
+            message: response.message || t('plugins.errors.unknownError', '未知错误'),
+          }),
+          severity: 'error',
+        })
+      }
+    } catch (error: unknown) {
+      console.error('保存请求头失败:', error)
+      const errorMessage = error?.response?.data?.message || error?.message || t('plugins.toolConfig.headerSaveFailedRetry', '保存请求头失败，请稍后重试')
+      setSnackbar({ open: true, message: errorMessage, severity: 'error' })
     }
   }
 
@@ -1676,13 +1710,25 @@ const ToolConfigurationPage: React.FC = () => {
 
               <div className="space-y-4">
                 {/* Header Row */}
-                <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-gray-50 rounded-lg border-b">
-                  <div className="col-span-5 text-sm font-medium text-gray-700">Key</div>
-                  <div className="col-span-5 text-sm font-medium text-gray-700">Value</div>
-                  <div className="col-span-2 text-sm font-medium text-gray-700">操作</div>
-                </div>
+                {tool.headers.length > 0 && (
+                  <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-gray-50 rounded-lg border-b">
+                    <div className="col-span-5 text-sm font-medium text-gray-700">Key</div>
+                    <div className="col-span-5 text-sm font-medium text-gray-700">Value</div>
+                    <div className="col-span-2 text-sm font-medium text-gray-700">操作</div>
+                  </div>
+                )}
 
-                {tool.headers.map((header, index) => (
+                {tool.headers.length === 0 ? (
+                  <div className="bg-gray-50 rounded-lg p-6 text-center">
+                    <Typography variant="body2" color="text.secondary" className="mb-2">
+                      暂无请求头配置
+                    </Typography>
+                    <Button variant="outlined" startIcon={<Plus className="w-4 h-4" />} onClick={handleAddHeader}>
+                      添加请求头
+                    </Button>
+                  </div>
+                ) : (
+                  tool.headers.map((header, index) => (
                   <div key={index} className="grid grid-cols-12 gap-2 items-center p-4 border border-gray-200 rounded-lg">
                     <div className="col-span-5">
                       <TextField
@@ -1704,19 +1750,29 @@ const ToolConfigurationPage: React.FC = () => {
                         disabled={isReadOnly}
                       />
                     </div>
-                    <div className="col-span-2 flex justify-center">
+                    <div className="col-span-2 flex justify-center gap-1">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleSaveSingleHeader(index)}
+                        title="保存此行"
+                        disabled={isReadOnly || updatePluginApiMutation.isLoading}
+                        color="success"
+                      >
+                        <Check className="w-4 h-4" />
+                      </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => handleRemoveHeader(index)}
                         color="error"
-                        title={tool.headers.length > 1 ? '删除此行' : '清空内容'}
+                        title="删除此行"
                         disabled={isReadOnly}
                       >
                         <Trash2 className="w-4 h-4" />
                       </IconButton>
                     </div>
                   </div>
-                ))}
+                ))
+                )}
               </div>
             </div>
           )}
@@ -2585,7 +2641,12 @@ const ToolConfigurationPage: React.FC = () => {
       </Dialog>
 
       {/* Snackbar */}
-      <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={2000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
         <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
           {snackbar.message}
         </Alert>

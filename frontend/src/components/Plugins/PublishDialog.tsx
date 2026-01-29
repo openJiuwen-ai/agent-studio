@@ -159,7 +159,8 @@ const PublishDialog: React.FC<PublishDialogProps> = ({
               disabled={loading}
               multiline
               rows={3}
-              helperText={t('plugins.dialog.publishPlugin.versionDescHelperText', '请详细描述此版本的更新内容、新功能或修复的问题')}
+              helperText={`${t('plugins.dialog.publishPlugin.versionDescHelperText', '请详细描述此版本的更新内容、新功能或修复的问题')} (${versionDesc.length}/256)`}
+              inputProps={{ maxLength: 256 }}
             />
           </div>
         </Box>

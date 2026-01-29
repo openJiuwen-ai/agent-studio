@@ -180,6 +180,8 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
     codeLanguage: 'python' as 'javascript' | 'python',
   })
   const [deletingToolId, setDeletingToolId] = useState<string | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [toolToDelete, setToolToDelete] = useState<PluginCodeInfo | null>(null)
 
   // Tool creation API
   const createCodeToolApi = usePluginCreateCode()
@@ -275,20 +277,26 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
 
   const handleDeleteTool = async (tool: PluginCodeInfo) => {
     if (!plugin_id || !tool?.tool_id) return
+    setToolToDelete(tool)
+    setDeleteDialogOpen(true)
+  }
+
+  const confirmDeleteTool = async () => {
+    if (!toolToDelete || !plugin_id || !toolToDelete?.tool_id) return
 
     try {
-      setDeletingToolId(tool.tool_id)
+      setDeletingToolId(toolToDelete.tool_id)
 
       const deleteRequest = {
         space_id: getDefaultSpaceId(),
         plugin_id,
-        tool_id: tool.tool_id,
+        tool_id: toolToDelete.tool_id,
       }
 
       const response = await deleteToolApi.mutateAsync(deleteRequest)
 
       if (response.code === 200) {
-        showSuccess(t('plugins.pluginConfig.toolDeletedSuccess', { name: tool.name || t('plugins.pluginConfig.unnamedTool', '未命名工具') }))
+        showSuccess(t('plugins.pluginConfig.toolDeletedSuccess', { name: toolToDelete.name || t('plugins.pluginConfig.unnamedTool', '未命名工具') }))
         // Refresh the tool list after successful deletion (only in edit mode)
         if (configTabValue === 'advanced' && !isReadOnly) {
           setTimeout(async () => {
@@ -304,6 +312,8 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
       showError(errorMessage)
     } finally {
       setDeletingToolId(null)
+      setDeleteDialogOpen(false)
+      setToolToDelete(null)
     }
   }
 
@@ -715,6 +725,33 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setIsMarkdownPreviewOpen(false)}>关闭</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{t('plugins.tools.deleteDialog.title', '确认删除工具')}</DialogTitle>
+        <DialogContent>
+          <div className="space-y-4 mt-2">
+            <Typography variant="body1">{t('plugins.tools.deleteDialog.content', { name: toolToDelete?.name || '未命名工具' })}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {t('plugins.tools.deleteDialog.warning', '此操作不可撤销，删除后所有相关配置将被永久移除。')}
+            </Typography>
+          </div>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleteToolApi.isLoading}>
+            {t('common.buttons.cancel', '取消')}
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={confirmDeleteTool}
+            disabled={deleteToolApi.isLoading}
+            startIcon={deleteToolApi.isLoading ? <CircularProgress size={16} /> : <Trash2 className="w-4 h-4" />}
+          >
+            {deleteToolApi.isLoading ? t('common.buttons.deleting', '删除中...') : t('common.buttons.confirmDelete', '确认删除')}
+          </Button>
         </DialogActions>
       </Dialog>
 
