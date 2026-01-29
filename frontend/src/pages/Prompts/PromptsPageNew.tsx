@@ -13,7 +13,7 @@ import UnifiedSnackbar, { useUnifiedSnackbar } from '@/Common/UnifiedSnackbar'
 import { copyToClipboard, handleRelationObjNavigate } from '@/utils/prompts/utils'
 import { CommonPageLayout, SearchInput } from '@/components/Common/common-page'
 import type { ViewType } from '@/components/Common/common-page'
-import { ConfigCard, CardFooterRow, type EditingState } from '@/components/Common/common-grid'
+import { ConfigCard, CardFooterRow, type ConfigCardTag, type EditingState } from '@/components/Common/common-grid'
 import { ConfigTable, type TableColumn, type SortState } from '@/components/Common/common-table'
 import { Empty } from '@/components/Common/Empty'
 import { useOptimizedSearch } from '@/hooks/useSearchOptimization'
@@ -540,9 +540,12 @@ const PromptsPageNew: React.FC = () => {
         title: t('prompts.promptList.latestVersion'),
         dataIndex: 'version',
         width: 100,
-        sortable: true,
-        sortField: 'version',
-        render: ({ row }) => <span className="text-sm text-gray-700">{row.version || '-'}</span>,
+        render: ({ row }) => {
+          const hasVersion = row.version && row.version !== '-'
+          return (
+            <span className="text-sm text-gray-700">{hasVersion ? row.version : t('common.status.draft')}</span>
+          )
+        },
       },
       {
         key: 'associations',
@@ -612,16 +615,10 @@ const PromptsPageNew: React.FC = () => {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {prompts.map(prompt => {
-          // 准备标签
-          const tags = prompt.tags.slice(0, 3).map(tag => ({ label: tag, color: '#3B82F6' }))
-          if (prompt.tags.length > 3) {
-            tags.push({ label: `+${prompt.tags.length - 3}`, color: '#6B7280' })
-          }
-
-          // 草稿状态标签
-          if (prompt.isDraftEdited) {
-            tags.unshift({ label: t('common.status.draft'), color: '#EA580C' })
-          }
+          const hasVersion = prompt.version && prompt.version !== '-'
+          const tags: ConfigCardTag[] = hasVersion
+            ? [{ label: String(prompt.version) }]
+            : [{ label: t('common.status.draft'), variant: 'warning' }]
 
           // 准备操作
           const actions = [

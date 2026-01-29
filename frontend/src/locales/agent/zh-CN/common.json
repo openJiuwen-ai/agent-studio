@@ -54,8 +54,8 @@
       "actions": "操作"
     },
     "types": {
-      "multiWorkflow": "多工作流",
-      "autonomousPlanning": "自主规划"
+      "multiWorkflow": "单Agent（多工作流模式）",
+      "autonomousPlanning": "单Agent（自主规划模式）"
     },
     "published": "已发布",
     "draft": "草稿",

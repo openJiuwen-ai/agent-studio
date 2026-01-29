@@ -191,7 +191,7 @@ const AgentCreatePage: React.FC = () => {
 
   return (
     <div
-      className={`bg-gray-50 flex flex-col ${isNew ? 'py-12' : ''}`}
+      className={`bg-gray-50 flex flex-col px-6 ${isNew ? 'py-6' : ''}`}
       style={{
         width: '100%',
         maxWidth: '100vw',

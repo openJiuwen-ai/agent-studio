@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { AgentSortBy } from '@test-agentstudio/api-client'
 import { Plus, Upload } from 'lucide-react'
 import DeleteConfirmationDialog from '../../components/Common/DeleteConfirmationDialog'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '../../Common/UnifiedSnackbar'
@@ -157,13 +158,13 @@ const AgentsPage: React.FC = () => {
         {viewType === 'grid' && (
           <>
             <select
-              value={sortBy || 'name'}
+              value={sortBy || AgentSortBy.update_time}
               onChange={e => setSortBy(e.target.value as any)}
               className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
             >
-              <option value="name">{t('agents.agentList.sortByName')}</option>
-              <option value="create_time">{t('agents.agentList.sortByCreated')}</option>
-              <option value="update_time">{t('agents.agentList.sortByUpdated')}</option>
+              <option value={AgentSortBy.name}>{t('agents.agentList.sortByName')}</option>
+              <option value={AgentSortBy.create_time}>{t('agents.agentList.sortByCreated')}</option>
+              <option value={AgentSortBy.update_time}>{t('agents.agentList.sortByUpdated')}</option>
             </select>
             <button
               onClick={() => setSortOrder((sortOrder === 'asc' ? 'desc' : 'asc') as any)}

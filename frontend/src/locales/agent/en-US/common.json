@@ -54,8 +54,8 @@
       "actions": "Actions"
     },
     "types": {
-      "multiWorkflow": "Multi-workflow",
-      "autonomousPlanning": "Autonomous Planning"
+      "multiWorkflow": "Single Agent (Multi-Workflow Mode)",
+      "autonomousPlanning": "Single Agent (Autonomous Planning Mode)"
     },
     "published": "Published",
     "draft": "Draft",

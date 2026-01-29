@@ -7,7 +7,8 @@ import { Card, CardHeader, CardHeaderIcon, CardHeaderContent, CardBody, CardFoot
 export interface ConfigCardTag {
   label: string
   color?: string
-  variant?: 'default' | 'error' | 'loading'
+  bgColor?: string
+  variant?: 'default' | 'error' | 'loading' | 'warning'
   tooltip?: React.ReactNode
 }
 
@@ -171,12 +172,13 @@ export const ConfigCard: React.FC<ConfigCardProps> = ({
     const variantStyles = {
       error: 'bg-[#FEE2E2] text-[#DC2626]',
       loading: 'bg-[#F3F4F6] text-[#6B7280]',
+      warning: 'bg-[#FEF3C7] text-[#92400E]',
       default: 'bg-[#F3F4F6] text-[#6B7280]',
-    }
+    } as const
 
     return {
       className: `${baseClass} ${variantStyles[variant || 'default']}`,
-      style: { maxWidth, minWidth: `${MIN_TAG_WIDTH}px` } as React.CSSProperties,
+      style: { maxWidth } as React.CSSProperties,
     }
   }
 
@@ -204,7 +206,13 @@ export const ConfigCard: React.FC<ConfigCardProps> = ({
 
   const renderTag = (tag: ConfigCardTag, index: number) => {
     const { className, style } = getTagStyles(tag.variant)
-    const customStyle = { ...style, color: tag.color }
+    const baseStyle = { ...(style as React.CSSProperties) }
+
+    const customStyle: React.CSSProperties = {
+      ...baseStyle,
+      color: tag.color ?? baseStyle.color,
+      backgroundColor: tag.bgColor ?? baseStyle.backgroundColor,
+    }
 
     if (tag.variant === 'error') {
       return (

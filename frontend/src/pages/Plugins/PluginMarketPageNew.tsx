@@ -81,7 +81,7 @@ const PluginMarketPageNew: React.FC = () => {
   const currentSpaceId = getDefaultSpaceId()
 
   // 获取已安装插件列表（用于检查安装状态）
-  const { data: pluginListData, refetch: refetchPluginList } = usePluginList({
+  const { data: pluginListData, isLoading: pluginListLoading, refetch: refetchPluginList } = usePluginList({
     space_id: currentSpaceId,
     page: 1,
     size: 100,
@@ -333,6 +333,7 @@ const PluginMarketPageNew: React.FC = () => {
           .map(plugin => {
             const installed = isPluginInstalled(plugin)
             const isInstalling = installingPluginId === plugin.plugin_id
+            const checkingInstall = pluginListLoading
 
             return (
               <ConfigCard
@@ -365,20 +366,27 @@ const PluginMarketPageNew: React.FC = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (!installed && !isInstalling) {
+                        if (!installed && !isInstalling && !checkingInstall) {
                           handleInstallPlugin(plugin)
                         }
                       }}
-                      disabled={installed || isInstalling}
+                      disabled={installed || isInstalling || checkingInstall}
                       className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1 ${
                         installed
                           ? 'bg-green-100 text-green-700 cursor-default'
                           : isInstalling
                             ? 'bg-gray-100 text-gray-500 cursor-wait'
-                            : 'bg-blue-500 text-white hover:bg-blue-600'
+                            : checkingInstall
+                              ? 'bg-gray-100 text-gray-500 cursor-wait'
+                              : 'bg-blue-500 text-white hover:bg-blue-600'
                       }`}
                     >
-                      {isInstalling ? (
+                      {checkingInstall ? (
+                        <>
+                          <CircularProgress size={12} sx={{ color: 'inherit' }} />
+                          {t('plugins.loading')}
+                        </>
+                      ) : isInstalling ? (
                         <>
                           <CircularProgress size={12} sx={{ color: 'inherit' }} />
                           {t('plugins.messages.installing')}
@@ -402,7 +410,7 @@ const PluginMarketPageNew: React.FC = () => {
           })}
       </div>
     )
-  }, [displayPlugins, editingState, t, searchTerm, installedPlugins, installingPluginId])
+  }, [displayPlugins, editingState, t, searchTerm, installedPlugins, installingPluginId, pluginListLoading])
 
   // 表格列定义
   const tableColumns: TableColumn<Plugin>[] = useMemo(
@@ -451,6 +459,7 @@ const PluginMarketPageNew: React.FC = () => {
         render: ({ row }) => {
           const installed = isPluginInstalled(row)
           const isInstalling = installingPluginId === row.plugin_id
+          const checkingInstall = pluginListLoading
           return (
             <div className="flex items-center justify-start gap-2">
               <Tooltip title={t('plugins.actions.view')}>
@@ -463,17 +472,24 @@ const PluginMarketPageNew: React.FC = () => {
                 </IconButton>
               </Tooltip>
               <button
-                onClick={() => !installed && !isInstalling && handleInstallPlugin(row)}
-                disabled={installed || isInstalling}
+                onClick={() => !installed && !isInstalling && !checkingInstall && handleInstallPlugin(row)}
+                disabled={installed || isInstalling || checkingInstall}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1 ${
                   installed
                     ? 'bg-green-100 text-green-700 cursor-default'
                     : isInstalling
                       ? 'bg-gray-100 text-gray-500 cursor-wait'
-                      : 'bg-blue-500 text-white hover:bg-blue-600'
+                      : checkingInstall
+                        ? 'bg-gray-100 text-gray-500 cursor-wait'
+                        : 'bg-blue-500 text-white hover:bg-blue-600'
                 }`}
               >
-                {isInstalling ? (
+                {checkingInstall ? (
+                  <>
+                    <CircularProgress size={12} sx={{ color: 'inherit' }} />
+                    {t('plugins.loading')}
+                  </>
+                ) : isInstalling ? (
                   <>
                     <CircularProgress size={12} sx={{ color: 'inherit' }} />
                     {t('plugins.messages.installing')}
@@ -495,7 +511,7 @@ const PluginMarketPageNew: React.FC = () => {
         },
       },
     ],
-    [t, installedPlugins, installingPluginId],
+    [t, installedPlugins, installingPluginId, pluginListLoading],
   )
 
   // 列表视图
@@ -605,7 +621,11 @@ const PluginMarketPageNew: React.FC = () => {
             </DialogContent>
             <DialogActions>
               <Button onClick={() => setDetailDialogOpen(false)}>{t('common.buttons.close')}</Button>
-              {!isPluginInstalled(selectedPlugin) && (
+              {pluginListLoading ? (
+                <Button disabled variant="contained" startIcon={<CircularProgress size={16} sx={{ color: 'inherit' }} />}>
+                  {t('plugins.loading')}
+                </Button>
+              ) : !isPluginInstalled(selectedPlugin) ? (
                 <Button
                   onClick={() => {
                     handleInstallPlugin(selectedPlugin)
@@ -616,7 +636,7 @@ const PluginMarketPageNew: React.FC = () => {
                 >
                   {t('plugins.actions.install')}
                 </Button>
-              )}
+              ) : null}
             </DialogActions>
           </>
         )}
