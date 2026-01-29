@@ -1,0 +1,32 @@
+/**
+ * CSS 变量 - 和 tokens.js 保持同步
+ * 供非 Tailwind 场景使用（如内联 style、第三方组件等）
+ */
+
+:root {
+  /* 全局背景 */
+  --global-bg-page: #F8F9FC;
+  --global-bg-white: #FFFFFF;
+
+  /* 文字颜色 */
+  --text-black: #000000;
+  --text-gray: #777777;
+  --text-blue: #0A59F7;
+
+  /* 菜单 */
+  --menu-hover-bg: #F3F3F3;
+  --menu-hover-text: #767676;
+  --menu-section-text: #AEAEAE;
+
+  /* 表格 */
+  --table-bg-container: #F8F9FC;
+  --table-bg-cell: #F8F9FC;
+  --table-bg-cell-hover: #EFF6F9;
+  --table-text-head: #6B7280;
+  --table-row-height: 56px;
+  --table-font-size: 14px;
+
+  /* 卡片阴影 */
+  --shadow-card: 0 1px 4px 0 rgb(0 0 0 / 4%);
+  --shadow-card-hover: 0 4px 12px -2px rgb(0 0 0 / 8%), 0 2px 4px -1px rgb(0 0 0 / 4%);
+}

@@ -3223,7 +3223,7 @@ const PromptEditPage: React.FC = () => {
   )
 
   return (
-    <div className={`bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 ${isNewDashboard ? 'py-6 h-full' : ''}`} style={{ minHeight: '93vh', minWidth: 'fit-content', width: '100%' }}>
+    <div className={`bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 px-6 ${isNewDashboard ? 'py-6 h-full' : ''}`} style={{ minHeight: '93vh', minWidth: 'fit-content', width: '100%' }}>
       {/* Page header */}
       <PromptEditHeader
         isNew={isNew}

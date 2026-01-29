@@ -1114,9 +1114,6 @@ const PromptOptimizeEditPage: React.FC = () => {
   // 响应式计算主体内容区域高度
   React.useEffect(() => {
     const updateContentHeight = () => {
-      if (isNewDashboard) {
-        setContentHeight('85vh')
-      } else {
         if (window.innerWidth < 640) {
           // 小屏幕：手机等移动设备
           setContentHeight('70vh')
@@ -1127,7 +1124,6 @@ const PromptOptimizeEditPage: React.FC = () => {
           // 大屏幕：15寸以上笔记本、台式显示器
           setContentHeight('85vh')
         }
-      }
     }
 
     updateContentHeight()
@@ -2692,7 +2688,7 @@ const PromptOptimizeEditPage: React.FC = () => {
 
   return (
     <div
-      className={`w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 ${isNewDashboard ? 'py-6' : ''}`}
+      className={`w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 px-6 ${isNewDashboard ? 'py-6' : ''}`}
       style={{ height: '100%', overflowX: 'auto' }}
     >
       {/* 页面容器 */}

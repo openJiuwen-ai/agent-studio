@@ -202,7 +202,7 @@ function CommonPageLayoutInner(props: CommonPageLayoutProps) {
   )
 
   return (
-    <div className={`h-full flex flex-col bg-[#F8F9FC] ${className || ''}`}>
+    <div className={`h-full flex flex-col bg-[#F8F9FC] px-6 ${className || ''}`}>
       <PageHeader
         title={title}
         tabs={tabs}
@@ -230,7 +230,7 @@ function CommonPageLayoutInner(props: CommonPageLayoutProps) {
         {effectiveLoading ? (
           <LoadingState />
         ) : viewType === 'grid' && gridView ? (
-          <div className="flex-1 min-h-0 overflow-auto">{gridView}</div>
+          <div className="flex-1 min-h-0 overflow-auto pt-2">{gridView}</div>
         ) : viewType === 'table' && tableView ? (
           <div className="h-full">{tableView}</div>
         ) : null}

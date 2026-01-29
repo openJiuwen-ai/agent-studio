@@ -541,7 +541,7 @@ const AgentsPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8 min-h-full">
+    <div className="space-y-8 min-h-full px-6">
       {/* 隐藏的文件输入框 */}
       <input
         type="file"

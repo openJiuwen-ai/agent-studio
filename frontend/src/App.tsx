@@ -46,7 +46,7 @@ const WorkflowCanvas = React.lazy(() => import('@test-agentstudio/workflow-canva
 // 工作流编辑器外层容器
 const WorkflowCanvasOuter: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isNew = useUIStore(state => state.isNewDashboard)
-  return <div className={isNew ? 'py-6 h-full' : 'h-full'}>{children}</div>
+  return <div className={isNew ? 'py-6 h-full px-6' : 'h-full px-6'}>{children}</div>
 }
 
 // 加载组件

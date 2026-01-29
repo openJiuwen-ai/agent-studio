@@ -16,7 +16,7 @@ export const Card: React.FC<CardProps> = ({ children, className, onClick }) => {
   return (
     <CardContext.Provider value={{ onClick }}>
       <div
-        className={`group bg-white rounded-[8px] border border-[#E2E8F0] hover:border-[#CBD5E1] hover:shadow-sm transition-all duration-200 cursor-pointer flex flex-col ${className || ''}`}
+        className={`group bg-white rounded-[8px] shadow-card-hover cursor-pointer flex flex-col ${className || ''}`}
         onClick={onClick}
       >
         {children}

@@ -506,7 +506,7 @@ const AgentEditorEditPage = () => {
   }, [modelsList, displayedSaveAgentRequest?.model?.model_info?.model_name])
 
   return (
-    <div className={`agent-editor-enhanced-page flex flex-col h-full w-full overflow-x-hidden ${isNew ? 'py-6' : ''}`} key={selectedHistoryVersion || 'draft'}>
+    <div className={`agent-editor-enhanced-page flex flex-col h-full w-full overflow-x-hidden px-6 ${isNew ? 'py-6' : ''}`} key={selectedHistoryVersion || 'draft'}>
       {loading ? (
         <div className="flex items-center justify-center h-full w-full">
           <CircularProgress />

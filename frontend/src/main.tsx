@@ -6,7 +6,6 @@ import CssBaseline from '@mui/material/CssBaseline'
 import AppWrapper from './components/AppWrapper'
 import './i18n' // Initialize i18n and attach to window
 import './index.css'
-import './styles/theme.css'
 import './utils/font-loader'
 
 const queryClient = new QueryClient({

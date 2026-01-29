@@ -1,5 +1,5 @@
 /* 导入主题样式 */
-@import './styles/theme.css';
+@import './styles/index.css';
 
 @tailwind base;
 @tailwind components;
