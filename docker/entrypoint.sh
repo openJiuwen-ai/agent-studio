@@ -8,7 +8,7 @@ do
   absPath="/app/site-packages/${pathName}"
   if [ -d "${absPath}" ]; then
     chown -R app:app ${absPath}
-    chmod -R 644 ${absPath}
+    chmod -R 755 ${absPath}
     echo "Updated ownership of ${absPath} to app:app"
   fi
 done
