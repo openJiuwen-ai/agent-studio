@@ -295,7 +295,7 @@
     "notSelected": "未选择",
     "modelDisabled": "模型已禁用，请重新选择",
     "enableHistory": "启用对话历史",
-    "modelNotExists": "模型不存在，请重新选择"
+    "modelNotExists": "模型不存在或已禁用，请重新选择"
   },
   "formInput": {
     "input": "输入"
