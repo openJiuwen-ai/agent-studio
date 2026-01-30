@@ -9,6 +9,7 @@ import { Download } from 'lucide-react'
 import { formMeta } from './form-meta'
 import { WorkflowNodeType } from '../constants'
 import { t } from '../../i18n'
+import { generateNodeTitle } from '../../utils/workflow-node-utils'
 
 export const OutputNodeRegistry: FlowNodeRegistry = {
   type: WorkflowNodeType.Output,
@@ -26,12 +27,15 @@ export const OutputNodeRegistry: FlowNodeRegistry = {
     description: t('workflowCanvas.nodes.output.description'),
   },
   formMeta,
-  onAdd() {
+  onAdd(context?) {
+    const titlePrefix = t('workflowCanvas.nodes.output.titlePrefix')
+    const title = generateNodeTitle(WorkflowNodeType.Output, context, titlePrefix)
+
     return {
       id: `output_${customNanoid(5)}`,
       type: WorkflowNodeType.Output,
       data: {
-        title: '输出',
+        title: title,
         inputs: {
           inputParameters: {
             output: {

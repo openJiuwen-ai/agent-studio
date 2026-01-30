@@ -180,8 +180,6 @@ export const useSaveWorkflow = () => {
     // 🎯 保存成功后，确保数据同步
     onSuccess: (response, variables) => {
       if (response.code === 200) {
-        console.log('工作流保存成功')
-
         // 立即更新缓存，确保下次进入编辑器显示最新数据
         queryClient.setQueryData(['workflows', 'canvas', variables.workflow_id, variables.space_id], {
           ...response,
@@ -200,8 +198,6 @@ export const useSaveWorkflow = () => {
 
         // 🎯 更新工作流列表缓存，确保列表显示最新信息
         queryClient.invalidateQueries(['workflows', 'api', 'list'], { predicate: query => query.queryKey[3]?.space_id === variables.space_id })
-
-        console.log('工作流保存成功，画布和列表缓存已刷新')
       }
     },
   })

@@ -10,6 +10,7 @@ import { customNanoid } from '../../utils/nanoid-custom'
 import { WorkflowNodeType } from '../constants'
 import { formMeta } from './form-meta'
 import { t } from '../../i18n'
+import { generateNodeTitle } from '../../utils/workflow-node-utils'
 
 export const ConditionNodeRegistry: FlowNodeRegistry = {
   type: WorkflowNodeType.Condition,
@@ -26,12 +27,16 @@ export const ConditionNodeRegistry: FlowNodeRegistry = {
     },
   },
   formMeta,
-  onAdd() {
+  onAdd(context?) {
+    const nodeId = `condition_${customNanoid(5)}`
+    const titlePrefix = t('workflowCanvas.nodes.condition.titlePrefix')
+    const title = generateNodeTitle(WorkflowNodeType.Condition, context, titlePrefix)
+
     return {
-      id: `condition_${customNanoid(5)}`,
+      id: nodeId,
       type: WorkflowNodeType.Condition,
       data: {
-        title: '选择器',
+        title: title,
         branches: [
           {
             conditions: [

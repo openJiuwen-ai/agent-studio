@@ -16,18 +16,21 @@ const NODE_TYPE_I18N_KEYS: Record<string, string> = {
   '3': 'workflowCanvas.node.LLM',
   '4': 'workflowCanvas.node.Selector',
   '5': 'workflowCanvas.node.Loop',
-  '6': 'workflowCanvas.node.Code',
-  '7': 'workflowCanvas.node.Input',
-  '8': 'workflowCanvas.node.Output',
-  '9': 'workflowCanvas.node.Intent',
-  '10': 'workflowCanvas.node.Questioner',
+  '6': 'workflowCanvas.node.Intent',
+  '7': 'workflowCanvas.node.Questioner',
+  '8': 'workflowCanvas.node.Input',
+  '9': 'workflowCanvas.node.Output',
+  '10': 'workflowCanvas.node.Code',
   '11': 'workflowCanvas.node.TextEditor',
   '12': 'workflowCanvas.node.Continue',
   '13': 'workflowCanvas.node.Break',
-  '14': 'workflowCanvas.node.Variable',
+  '14': 'workflowCanvas.node.Workflow',
   '15': 'workflowCanvas.node.Start',
   '16': 'workflowCanvas.node.End',
-  comment: 'workflowCanvas.node.Comment',
+  '17': 'workflowCanvas.node.Variable',
+  '18': 'workflowCanvas.node.Variable',
+  '19': 'workflowCanvas.node.Plugin',
+  '99': 'workflowCanvas.node.Comment',
 }
 
 /**
@@ -35,19 +38,22 @@ const NODE_TYPE_I18N_KEYS: Record<string, string> = {
  * @param node - Node entity
  * @returns Node display name
  */
-export const getNodeDisplayName = (node: any): string => {
-  if (node?.data?.title) {
-    return node.data.title
+export const getNodeDisplayName = (node: FlowNodeEntity): string => {
+  if (node?.form?.values?.title) {
+    const formData = node.form.values
+    if (formData?.title) {
+      return formData.title
+    }
   }
 
-  const nodeType = node?.type || node?.data?.type
+  const nodeType = node?.type
   const i18nKey = NODE_TYPE_I18N_KEYS[nodeType]
 
   if (i18nKey) {
     return t(i18nKey)
   }
 
-  return `${t('workflowCanvas.node.Node')} (${node?.id || t('workflowCanvas.node.Unknown')})`
+  return t('workflowCanvas.node.Node')
 }
 
 /**

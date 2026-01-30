@@ -12,7 +12,7 @@
       }
     },
     "code": {
-      "title": "Code",
+      "titlePrefix": "Code",
       "description": "Code node for running custom JavaScript or Python code.",
       "outputDescription": "Code execution result"
     },
@@ -20,16 +20,20 @@
       "description": "Tool node for calling specific plugin tools to perform tasks."
     },
     "condition": {
+      "titlePrefix": "Selector",
       "description": "Connect multiple downstream branches. Only the branch that meets the set condition will be executed."
     },
     "loop": {
+      "titlePrefix": "Loop",
       "description": "Repeat a series of tasks by setting iteration count and logic."
     },
     "input": {
+      "titlePrefix": "Input",
       "description": "Input node for pausing during workflow execution and waiting for user input.",
       "output": "Output"
     },
     "output": {
+      "titlePrefix": "Output",
       "description": "Output node for outputting intermediate or final results during workflow execution."
     },
     "start": {
@@ -39,6 +43,7 @@
       "description": "Final node of the workflow, used to return the result information after the workflow runs."
     },
     "questioner": {
+      "titlePrefix": "Questioner",
       "description": "Questioner node for asking questions to users and collecting answers.",
       "maxQuestions": "Max Questions",
       "maxQuestionsDescription": "Set maximum number of questions, range 1-10",
@@ -48,12 +53,15 @@
       "mustBePositiveInteger": "Must be an integer greater than 0 and not greater than 10"
     },
     "intent": {
+      "titlePrefix": "Intent",
       "description": "Intent recognition node for matching different intents based on different user inputs."
     },
     "textEditor": {
+      "titlePrefix": "Text_Editor",
       "description": "Text editor node for processing and transforming text content in workflows."
     },
     "variableMerge": {
+      "titlePrefix": "Variable_Merge",
       "description": "Workflow variable aggregation node for aggregating variables from multiple groups.",
       "configCannotBeEmpty": "Variable merge configuration cannot be empty",
       "atLeastOneGroup": "At least one variable group must be added",

@@ -11,6 +11,7 @@ import { WorkflowNodeType } from '../constants'
 import { formMeta } from './form-meta'
 import { generateIntentId } from './components/utils'
 import { t } from '../../i18n'
+import { generateNodeTitle } from '../../utils/workflow-node-utils'
 
 export const IntentNodeRegistry: FlowNodeRegistry = {
   type: WorkflowNodeType.Intent,
@@ -39,7 +40,7 @@ export const IntentNodeRegistry: FlowNodeRegistry = {
   /**
    * 添加意图识别节点时的默认配置
    */
-  onAdd() {
+  onAdd(context?) {
     const defaultIntents = [
       {
         name: '',
@@ -47,11 +48,15 @@ export const IntentNodeRegistry: FlowNodeRegistry = {
       },
     ]
 
+    const nodeId = `intent_${nanoid(5)}`
+    const titlePrefix = t('workflowCanvas.nodes.intent.titlePrefix')
+    const title = generateNodeTitle(WorkflowNodeType.Intent, context, titlePrefix)
+
     return {
-      id: `intent_${nanoid(5)}`,
+      id: nodeId,
       type: WorkflowNodeType.Intent,
       data: {
-        title: '意图识别',
+        title: title,
         inputs: {
           llmParam: {
             systemPrompt: {

@@ -114,19 +114,6 @@ export const Editor = () => {
   const { canvasData, initialCanvasData, isLoading, error, handleAutoSave } = useWorkflowData(workflowId, spaceId, version)
   const editorRef = React.useRef<FreeLayoutPluginContext>(null)
 
-  // 调试日志
-  React.useEffect(() => {
-    console.log('Editor debug info:')
-    console.log('- workflowId:', workflowId)
-    console.log('- spaceId:', spaceId)
-    console.log('- version:', version)
-    console.log('- selectedVersion:', selectedVersion)
-    console.log('- isLoading:', isLoading)
-    console.log('- error:', error)
-    console.log('- canvasData:', canvasData)
-    console.log('- initialCanvasData:', initialCanvasData)
-  }, [workflowId, spaceId, version, selectedVersion, isLoading, error, canvasData, initialCanvasData])
-
   const editorProps = useEditorProps(initialCanvasData, nodeRegistries, handleAutoSave)
 
   React.useEffect(() => {

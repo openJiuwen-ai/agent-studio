@@ -12,7 +12,7 @@
       }
     },
     "code": {
-      "title": "代码",
+      "titlePrefix": "代码",
       "description": "代码节点，用于运行自定义的 JavaScript 或 Python 代码。",
       "outputDescription": "代码执行结果"
     },
@@ -20,16 +20,20 @@
       "description": "工具节点，用于调用具体的插件工具执行特定任务。"
     },
     "condition": {
+      "titlePrefix": "选择器",
       "description": "连接多个下游分支。只有满足设定条件的对应分支才会被执行。"
     },
     "loop": {
+      "titlePrefix": "循环",
       "description": "用于通过设置迭代次数和逻辑来重复执行一系列任务。"
     },
     "input": {
+      "titlePrefix": "输入",
       "description": "输入节点，用于在工作流执行过程中暂停并等待用户输入。",
       "output": "输出"
     },
     "output": {
+      "titlePrefix": "输出",
       "description": "输出节点，用于输出工作流执行过程中的中间结果或最终结果。"
     },
     "start": {
@@ -39,6 +43,7 @@
       "description": "工作流的最终节点，用于返回工作流运行后的结果信息。"
     },
     "questioner": {
+      "titlePrefix": "提问器",
       "description": "提问节点，用于向用户提出问题并收集回答。",
       "maxQuestions": "最大提问次数",
       "maxQuestionsDescription": "设置最大提问次数，范围 1-10",
@@ -48,12 +53,15 @@
       "mustBePositiveInteger": "必须是大于0且不大于10的整数"
     },
     "intent": {
+      "titlePrefix": "意图识别",
       "description": "意图识别节点，用于根据用户不同的输入匹配不同的意图。"
     },
     "textEditor": {
+      "titlePrefix": "文本编辑",
       "description": "文本编辑节点，用于在工作流中处理和转换文本内容。"
     },
     "variableMerge": {
+      "titlePrefix": "变量聚合",
       "description": "工作流的变量聚合节点，用于将多个分组的变量进行聚合。",
       "configCannotBeEmpty": "变量聚合配置不能为空",
       "atLeastOneGroup": "至少需要添加一个变量分组",
