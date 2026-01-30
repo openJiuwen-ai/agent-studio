@@ -38,6 +38,9 @@ def _llm_output_config_object_convert(is_first: bool, outputs: Outputs) -> Dict[
     if outputs.type != "object":
         return result
 
+    if outputs.properties is None:
+        return result
+
     if is_first:
         for key, value in outputs.properties.items():
             base_value = BaseValue(**value)
