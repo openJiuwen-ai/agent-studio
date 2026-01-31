@@ -224,63 +224,108 @@ class AuthService:
         SecurityManager.clear_auth_status(req.email)
 
     @staticmethod
-    async def verify_access_token(token: str):
-        """
-        校验 AccessToken 有效性（核心逻辑）
-        :param token: 待校验的 AccessToken
-        :return: 解析后的用户数据（包含 sub 等字段）
-        :raise: 校验失败时抛出对应异常
-        """
+    async def login_user(form_data: OAuth2PasswordRequestForm):
+        """统一登录逻辑"""
+        username = form_data.username
+        password = form_data.password
+        # 1. 校验用户名是否存在
+        ret = user_repository.get_user_tbl(username)
+        if ret.get("code") != status.HTTP_200_OK:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User does not exist",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        user_data = ret.get("data")
+        user = UserDBPd(**user_data)
+
+        # 2. 检查用户是否被锁定
+        lock_info = SecurityManager.get_lock_info(username)
+        if lock_info["is_locked"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User is locked due to too many failed login attempts. Please try again later.",
+            )
+
+        # 3. 校验密码
+        if not session_auth.verify_password(password, user):
+            # 记录失败次数
+            SecurityManager.record_login_failure(username)
+            remain = max(0, 5 - (lock_info["current_fail_count"] + 1))
+            raise HTTPException(status_code=401, detail=f"密码错误，还剩 {remain} 次尝试机会")
+
+        # 密码正确，清除错误计数和锁定
+        SecurityManager.clear_auth_status(username)
+
         try:
-            # 基础校验：解析 Token（自动校验 格式、签名、过期时间 exp）
-            payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+            # 生成token并返回
+            access_token = session_auth.create_access_token(
+                data={"sub": user.email},
+                expires_delta=timedelta(minutes=settings.new_access_token_expire_minutes)
+            )
+            refresh_token = session_auth.create_refresh_token(
+                data={"sub": user.email},
+                expires_delta=timedelta(days=settings.new_refresh_token_expire_days)
+            )
+            encrypted_access_token = security_utils.encrypt_api_key(access_token)
+            encrypted_refresh_token = security_utils.encrypt_api_key(refresh_token)
+            # 存储 access_token 和 refresh_token
+            user_repository.update_session_key(user.email, encrypted_access_token)
+            user_repository.update_refresh_token(user.email, encrypted_refresh_token)
 
-            # 提取核心用户标识
-            user_id: str = payload.get("sub")
-            if user_id is None:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid token: Missing user identifier."
-                )
-
-            # 校验用户是否是否在锁定中
-            lock_info = SecurityManager.get_lock_info(user_id)
-            if lock_info["is_locked"]:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Invalid token: User locked.",
-                )
-
-            # 校验token是否还生效
-            ret = user_repository.get_user_tbl(email=user_id)
-            if ret.get("code") != status.HTTP_200_OK:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid user."
-                )
-            user = ret.get("data")
-            access_token = user.get("session_key")
-
-            if not access_token or security_utils.decrypt_api_key(access_token) != token:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid token"
-                )
-
-            # 校验通过，返回解析后的用户数据
             return {
-                "valid": True,
-                "expiresAt": payload.get("exp")
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": "bearer",
+                "user": create_user_response(user, False).dict()
             }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Login process failed: {str(e)}")
+            raise HTTPException(status_code=500, detail="Login process failed") from e
 
-        except JWTError as e:
-            if "expired" in str(e).lower():
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token has expired: Please log in again."
-                ) from e
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail=f"Invalid Token: Format error or signature verification failure（{str(e)}）"
-                ) from e
+
+    @staticmethod
+    async def refresh_access_token_service(refresh_token: str):
+        try:
+            # Update session key in database with new access token and refresh token
+            payload = verify_refresh_token_strict(refresh_token)
+
+            if not (payload and payload.get("sub")):
+                raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+            # 生成新的 access token 和 refresh token
+            new_access_token = create_access_token(
+                data={"sub": payload["sub"]},
+                expires_delta=timedelta(minutes=settings.new_access_token_expire_minutes)
+            )
+
+            if not new_access_token:
+                raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+
+            encrypted_new_access_token = security_utils.encrypt_api_key(new_access_token)
+            user_repository.update_session_key(payload["sub"], encrypted_new_access_token)
+
+            return {
+                    "access_token": new_access_token,
+                    "token_type": "bearer"
+                }
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Failed to refresh token") from e
+
+
+    @staticmethod
+    async def logout_service(access_token: str):
+        """登出服务：删除access token和refresh token（置空session_key和refresh_token）"""
+        try:
+            payload = jwt.decode(access_token, settings.secret_key, algorithms=[settings.algorithm])
+            email = payload.get("sub")
+        except Exception:
+            email = None
+        if email:
+            user_repository.update_session_key(email, None)
+            user_repository.update_refresh_token(email, None)
+        return True

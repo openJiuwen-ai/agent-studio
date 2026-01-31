@@ -12,6 +12,7 @@ from openjiuwen_studio.core.config import settings
 from openjiuwen_studio.core.manager.repositories.user_repository import user_repository
 from openjiuwen_studio.schemas.user import (RoleType, UserDBPd, UserInfo, UserLogin,
                               UserResponse)
+from backend.openjiuwen_studio.core.manager.model_manager.utils import security_utils
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="v1/auth/login")
 
@@ -102,6 +103,39 @@ def verify_refresh_token(token: str):
         if datetime.now(timezone.utc).replace(tzinfo=None) > datetime.fromtimestamp(payload.get("exp")):
             return None
 
+        return payload
+    except jwt.PyJWTError:
+        return None
+
+
+def verify_refresh_token_strict(token: str):
+    """Verify refresh token, check DB consistency (签名+类型+数据库一致性)"""
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+
+        # Check if it's a refresh token
+        if payload.get("type") != "refresh":
+            return None
+
+        # Check if token is expired
+        if datetime.now(timezone.utc).replace(tzinfo=None) > datetime.fromtimestamp(payload.get("exp")):
+            return None
+
+        # 校验数据库中 refresh_token 是否一致
+        email = payload.get("sub")
+        if not email:
+            return None
+        ret = user_repository.get_user_tbl(email)
+        if ret.get("code") != status.HTTP_200_OK:
+            return None
+        user = ret.get("data")
+        user_db = UserDBPd(**user)
+        db_refresh_token = user_db.refresh_token
+        if not db_refresh_token:
+            return None
+        decrpyted_db_refresh_token = security_utils.decrypt_api_key(db_refresh_token)
+        if not decrpyted_db_refresh_token or decrpyted_db_refresh_token != token:
+            return None
         return payload
     except jwt.PyJWTError:
         return None

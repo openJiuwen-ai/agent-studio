@@ -48,34 +48,6 @@ async def register(req: RegisterRequest):
     )
 
 
-@auth_router.post("/login", response_model=ResponseModel[dict])
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    """需要密码的登录"""
-    result = await AuthService.login_user(form_data)
-    return ResponseModel(code=200, message="登录成功", data=result)
-
-
-@auth_router.post("/logout", response_model=ResponseModel[dict])
-async def logout(request: Request):
-    """用户登出接口，删除access token和refresh token（置空session_key和refresh_token）"""
-    access_token = None
-    # 获取access token
-    auth_header = request.headers.get("authorization")
-    if auth_header and auth_header.lower().startswith("bearer "):
-        access_token = auth_header.split(" ", 1)[1]
-    if not access_token:
-        return ResponseModel(code=400, message="缺少token", data={})
-    await AuthService.logout_service(access_token)
-    return ResponseModel(code=200, message="退出成功", data={})
-
-
-@auth_router.post("/refresh", response_model=ResponseModel[dict])
-async def refresh_token(request: RefreshTokenRequest):
-    """Refresh access token endpoint"""
-    result = await AuthService.refresh_access_token_service(request.refreshToken)
-    return ResponseModel(code=200, message="刷新成功", data=result)
-
-
 @auth_router.post("/send-reset-code", response_model=ResponseModel[dict])
 async def send_reset_code(req: SendCodeRequest, background_tasks: BackgroundTasks):
     """发送重置密码验证码"""
@@ -105,3 +77,31 @@ async def verify_access_token(token: str = Depends(oauth2_scheme)):
         message="token 校验成功",
         data=result
     )
+
+
+@auth_router.post("/login", response_model=ResponseModel[dict])
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """需要密码的登录"""
+    result = await AuthService.login_user(form_data)
+    return ResponseModel(code=200, message="登录成功", data=result)
+
+
+@auth_router.post("/logout", response_model=ResponseModel[dict])
+async def logout(request: Request):
+    """用户登出接口，删除access token和refresh token（置空session_key和refresh_token）"""
+    access_token = None
+    # 获取access token
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        access_token = auth_header.split(" ", 1)[1]
+    if not access_token:
+        return ResponseModel(code=400, message="缺少token", data={})
+    await AuthService.logout_service(access_token)
+    return ResponseModel(code=200, message="退出成功", data={})
+
+
+@auth_router.post("/refresh", response_model=ResponseModel[dict])
+async def refresh_token(request: RefreshTokenRequest):
+    """Refresh access token endpoint"""
+    result = await AuthService.refresh_access_token_service(request.refreshToken)
+    return ResponseModel(code=200, message="刷新成功", data=result)
