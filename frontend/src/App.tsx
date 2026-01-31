@@ -20,6 +20,8 @@ import WorkflowsPageNew from './pages/Workflows/WorkflowsPageNew'
 import PromptsPage from './pages/Prompts/PromptsPage'
 import PromptsPageNew from './pages/Prompts/PromptsPageNew'
 import KnowledgeBasePageNew from './pages/KnowledgeBase/KnowledgeBasePageNew'
+import UserLoginPage from '@/pages/Auth/UserLoginPage.tsx'
+import { ENV_CONFIG } from '@/config/environment.ts'
 
 // 懒加载非核心页面
 const AgentCreatePage = React.lazy(() => import('./pages/Agents/AgentCreatePage'))
@@ -138,14 +140,20 @@ const App: React.FC = () => {
   const { isAuthenticated } = useAuthStore()
   const isNew = useUIStore(state => state.isNewDashboard)
 
+  const enable_pwd = ENV_CONFIG.VITE_ENABLE_NEW_AUTH
+
+  const loginRouteConfig = enable_pwd ? { path: '/user_login', element: <UserLoginPage /> } : { path: '/login', element: <LoginPage /> }
+
+  const loginPath = enable_pwd ? '/user_login' : '/login'
+
   return (
     <div className="h-screen w-full overflow-hidden">
       <LanguageProvider>
         <Routes>
           {/* Public routes */}
-          <Route path="/" element={<Navigate to={isAuthenticated ? (isNew ? '/dashboard/agents' : '/dashboard') : '/login'} replace />} />
-          <Route path="/login" element={<LoginPage />} />
-
+          <Route path="/" element={<Navigate to={isAuthenticated ? (isNew ? '/dashboard/agents' : '/dashboard') : loginPath} replace />} />
+          {/* Dynamic login route*/}
+          <Route path={loginRouteConfig.path} element={loginRouteConfig.element} />
           {/* Protected routes */}
           <Route
             path="/dashboard"

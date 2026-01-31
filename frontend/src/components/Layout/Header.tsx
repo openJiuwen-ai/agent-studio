@@ -7,6 +7,8 @@ import { Menu, ChevronDown, Users, ArrowRight } from 'lucide-react'
 import { useLogout } from '@test-agentstudio/api-client'
 import { resolveAvatar } from '../../utils/avatar'
 import LanguageDropdown from '../Common/LanguageDropdown'
+import { ENV_CONFIG } from '@/config/environment.ts'
+import { getLoginPagePath } from '@/Common/LoginPage.ts'
 
 interface HeaderProps {
   user: any
@@ -21,6 +23,8 @@ const Header: React.FC<HeaderProps> = ({ user, onMenuClick }) => {
   const { logout } = useAuthStore()
   const navigate = useNavigate()
   const toggleDashboardVersion = useUIStore(state => state.toggleDashboardVersion)
+
+  const enable_pwd = ENV_CONFIG.VITE_ENABLE_NEW_AUTH
 
   // 使用logout hook，传递认证状态管理器
   const logoutMutation = useLogout({ logout })
@@ -40,6 +44,7 @@ const Header: React.FC<HeaderProps> = ({ user, onMenuClick }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+
   const handleSwitchUser = async () => {
     try {
       // 使用hook进行注销
@@ -47,12 +52,12 @@ const Header: React.FC<HeaderProps> = ({ user, onMenuClick }) => {
       // 清除本地状态
       logout()
       // 跳转到登录页面，允许切换用户空间
-      navigate('/login')
+      navigate(getLoginPagePath())
     } catch (error) {
       console.error('切换用户空间失败:', error)
       // 即使API调用失败，也清除本地状态
       logout()
-      navigate('/login')
+      navigate(getLoginPagePath())
     }
   }
 

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { getLoginPagePath } from '@/Common/LoginPage.ts'
 
 interface RedirectContextType {
   currentPath: string
@@ -43,8 +44,8 @@ export const RedirectProvider: React.FC<RedirectProviderProps> = ({ children }) 
     // 2. Currently in a login redirect process
     // 3. Just came from the login page (to prevent loops)
 
-    const isCurrentlyOnLoginPage = currentPath === '/login'
-    const recentlyOnLoginPage = previousPath === '/login'
+    const isCurrentlyOnLoginPage = currentPath === getLoginPagePath()
+    const recentlyOnLoginPage = previousPath === getLoginPagePath()
 
     if (isCurrentlyOnLoginPage) {
       console.log('🚫 [RedirectContext] Already on login page - skipping redirect')

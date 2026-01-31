@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../stores/useAuthStore'
 import { AuthService } from '@test-agentstudio/api-client'
 import { useRedirectContext } from '../contexts/RedirectContext'
+import { getLoginPagePath } from '@/Common/LoginPage.ts'
 
 interface UseAuthGuardOptions {
   redirectTo?: string
@@ -133,7 +134,7 @@ export const useAuthGuard = (options: UseAuthGuardOptions = {}): UseAuthGuardRet
             // 只有在非登录页面且允许重定向时才重定向
             if (!isLoginPage && shouldRedirectToLogin()) {
               setLoginRedirectInProgress(true)
-              navigate('/login', { replace: true })
+              navigate(getLoginPagePath(), { replace: true })
             } else {
               // 显示内容
               setShouldShowContent(true)
@@ -149,7 +150,7 @@ export const useAuthGuard = (options: UseAuthGuardOptions = {}): UseAuthGuardRet
           // 只有在非登录页面且允许重定向时才重定向
           if (!isLoginPage && shouldRedirectToLogin()) {
             setLoginRedirectInProgress(true)
-            navigate('/login', { replace: true })
+            navigate(getLoginPagePath(), { replace: true })
           } else {
             // 显示内容
             setShouldShowContent(true)

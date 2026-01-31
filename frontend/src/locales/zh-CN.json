@@ -316,6 +316,13 @@
     "Asia/Shanghai": "中国标准时间 (UTC+8)"
   },
   "auth": {
+    "common": {
+      "invalidEmailFormat": "请输入有效的邮箱格式",
+      "minPasswordLength": "密码长度最少6位",
+      "maxPasswordLength": "密码长度最大20位",
+      "maxEmailLength": "邮箱最大长度50位",
+      "invalidCode": "请输入6位数字验证码"
+    },
     "login": {
       "title": "登录",
       "subtitle": "欢迎回来！请登录您的账户",
@@ -343,7 +350,42 @@
       "invalidCredentials": "用户名或密码错误",
       "invalidEmailFormat": "请输入正确的邮箱",
       "passwordTooShort": "密码长度至少需要6位",
-      "networkError": "网络错误，请稍后重试"
+      "networkError": "网络错误，请稍后重试",
+      "registerLink": "还没有账号?",
+      "remainingAttempts": "剩余登录次数{{count}}",
+      "lockedMessage": "登录失败次数过多,账号已锁定{{time}}后可重试"
+    },
+    "register": {
+      "title": "注册",
+      "username": "用户名",
+      "usernamePlaceholder": "请输入用户空间名称（邮箱格式）",
+      "password": "密码",
+      "passwordPlaceholder": "请设置密码",
+      "verificationCode": "验证码",
+      "verificationCodePlaceholder": "请输入验证码",
+      "getVerificationCode": "获取验证码",
+      "submit": "注册账号",
+      "registering": "注册中...",
+      "loginLink": "已有账号,返回登录",
+      "registerFailed": "注册失败",
+      "sendCodeFailed": "发送验证码失败",
+      "registerNow": "立即注册"
+    },
+    "forgotPassword": {
+      "title": "忘记密码",
+      "username": "用户名",
+      "usernamePlaceholder": "请输入用户空间名称（邮箱格式）",
+      "newPassword": "新密码",
+      "newPasswordPlaceholder": "请输入新密码",
+      "verificationCode": "验证码",
+      "verificationCodePlaceholder": "请输入验证码",
+      "getVerificationCode": "获取验证码",
+      "submit": "重置密码",
+      "resetting": "重置密码中...",
+      "loginLink": "返回登录",
+      "sendCodeFailed": "发送验证码失败",
+      "resetFailed": "重置密码失败",
+      "resetSuccess": "重置密码成功"
     },
     "changePassword": {
       "title": "修改密码",

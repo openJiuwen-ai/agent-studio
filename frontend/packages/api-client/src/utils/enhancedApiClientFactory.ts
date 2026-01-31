@@ -1,5 +1,6 @@
 import { createApiClient } from './apiClientFactory'
 import type { TokenProvider, AuthStateUpdater } from '../client'
+import { getLoginPagePath } from '../../../../src/Common/LoginPage'
 
 // 认证状态更新函数类型，增强版
 export type EnhancedAuthStateUpdater = AuthStateUpdater & {
@@ -21,8 +22,7 @@ const smartRedirectToLogin = (authStateUpdater?: EnhancedAuthStateUpdater): bool
 
     // 标记重定向开始
     authStateUpdater?.setLoginRedirectInProgress?.(true)
-
-    window.location.href = '/login'
+    window.location.href = getLoginPagePath()
     return true
   }
 

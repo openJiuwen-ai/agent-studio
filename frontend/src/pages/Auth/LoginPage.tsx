@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
-import { useAuthStore } from '../../stores/useAuthStore'
+import { useAuthStore } from '@/stores/useAuthStore.ts'
 import { Loader2 } from 'lucide-react'
 import { useLogin, useUserSpaces, AuthService } from '@test-agentstudio/api-client'
-import { generateLetterAvatar } from '../../utils/avatar'
+import { generateLetterAvatar } from '@/utils/avatar.ts'
 import LanguageDropdown from '../../components/Common/LanguageDropdown'
 
 interface LoginForm {

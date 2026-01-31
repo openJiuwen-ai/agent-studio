@@ -316,6 +316,13 @@
     "Asia/Shanghai": "China Standard Time (UTC+8)"
   },
   "auth": {
+    "common": {
+      "invalidEmailFormat": "Please enter a valid email address",
+      "minPasswordLength": "Minimum password length of 6 characters",
+      "maxPasswordLength": "Maximum password length is 20 characters",
+      "maxEmailLength": "Maximum length of an email is 50 characters",
+      "invalidCode": "Please enter a 6-digit verification code"
+    },
     "login": {
       "title": "Login",
       "subtitle": "Welcome back! Please login to your account",
@@ -333,7 +340,42 @@
       "loginSuccess": "Login successful",
       "loginFailed": "Login failed, please check username and password",
       "invalidCredentials": "Invalid username or password",
-      "networkError": "Network error, please try again later"
+      "networkError": "Network error, please try again later",
+      "registerLink": "Don't have an account yet?",
+      "remainingAttempts": "Remaining login attempts {{count}}",
+      "lockedMessage": "Too many login failures, the account has been locked {{time}}. After the lock time, you can try again"
+    },
+    "register": {
+      "title": "Register",
+      "username": "Username",
+      "usernamePlaceholder": "Enter userspace name (email format)",
+      "password": "Password",
+      "passwordPlaceholder": "Enter password",
+      "verificationCode": "Verification Code",
+      "verificationCodePlaceholder": "Enter Verification Code",
+      "getVerificationCode": "Get Verification Code",
+      "submit": "Sign up now",
+      "registering": "Registering...",
+      "loginLink": "Existing account, return to log in",
+      "registerFailed": "Register failed",
+      "sendCodeFailed": "Send verification code failed",
+      "registerNow": "Register Now"
+    },
+    "forgotPassword": {
+      "title": "Forget password",
+      "username": "Username",
+      "usernamePlaceholder": "Enter userspace name (email format)",
+      "newPassword": "New Password",
+      "newPasswordPlaceholder": "Enter new password",
+      "verificationCode": "Verification Code",
+      "verificationCodePlaceholder": "Enter Verification Code",
+      "getVerificationCode": "Get Verification Code",
+      "submit": "Reset password",
+      "resetting": "Resetting password...",
+      "loginLink": "Return to login",
+      "sendCodeFailed": "Send verification code failed",
+      "resetFailed": "Reset password failed",
+      "resetSuccess": "Reset password successful"
     },
     "changePassword": {
       "title": "Change Password",

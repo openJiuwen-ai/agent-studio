@@ -93,6 +93,7 @@ export const useAuthStore = create<AuthState & AuthActions>()(
               const oldToken = get().token
               console.log('✅ [AuthStore] Token refreshed successfully')
               console.log('🔄 [AuthStore] Token updated successfully')
+              localStorage.setItem('access_token', newToken)
               set({ token: newToken })
             },
             getRefreshToken: () => refreshToken,

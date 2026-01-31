@@ -76,6 +76,10 @@ export const API_ENDPOINTS = {
     REFRESH: '/auth/refresh',
     REGISTER: '/auth/register',
     CHANGE_PASSWORD: '/auth/change-password',
+    RESET_PASSWORD: '/auth/reset-password',
+    FORGOT_PASSWORD: '/auth/send-reset-code',
+    SEND_CODE: '/auth/send-code',
+    VERIFY_ACCESS_TOKEN: '/auth/verify_access_token',
   },
 
   // 用户管理

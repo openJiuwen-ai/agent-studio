@@ -9,6 +9,7 @@ import { CircularProgress } from '@mui/material'
 import Sidebar from './Sidebar'
 import SidebarNew from './SidebarNew'
 import Header from './Header'
+import { getLoginPagePath } from '@/Common/LoginPage.ts'
 
 const Layout: React.FC = () => {
   const { t } = useTranslation()
@@ -133,7 +134,7 @@ const Layout: React.FC = () => {
 
   // 如果用户未登录，重定向到登录页
   if (!user) {
-    navigate('/login')
+    navigate(getLoginPagePath())
     return null
   }
 

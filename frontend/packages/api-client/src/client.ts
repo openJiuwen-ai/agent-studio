@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
 import { API_CONFIG, HTTP_STATUS, ERROR_TYPES, API_ENDPOINTS } from './config'
 import { ErrorResponse, GenericApiResponse } from './types'
+import { getLoginPagePath } from '../../../src/Common/LoginPage'
 
 // API错误类
 export class ApiError extends Error {
@@ -39,7 +40,7 @@ const renewToken = async (authStateUpdater: AuthStateUpdater): Promise<string | 
       // 强制跳转到登录页
       if (typeof window !== 'undefined') {
         console.log('🔄 [Token Renewal] Redirecting to login page...')
-        window.location.href = '/login'
+        window.location.href = getLoginPagePath()
       }
 
       return null
@@ -223,14 +224,14 @@ const createApiClient = (
             authStateUpdater.logout()
             // 强制跳转到登录页
             if (typeof window !== 'undefined') {
-              window.location.href = '/login'
+              window.location.href = getLoginPagePath()
             }
             return Promise.reject(createApiError(error, ERROR_TYPES.AUTH))
           }
         } else {
           // 没有authStateUpdater时，直接跳转到登录页
           if (typeof window !== 'undefined') {
-            window.location.href = '/login'
+            window.location.href = getLoginPagePath()
           }
         }
       }
@@ -421,7 +422,7 @@ const performTokenRenewal = async (authStateUpdater: AuthStateUpdater) => {
       // 强制跳转到登录页
       if (typeof window !== 'undefined') {
         console.log('🔄 [Token Renewal] Redirecting to login page...')
-        window.location.href = '/login'
+        window.location.href = getLoginPagePath()
       }
     }
   } catch (error) {
@@ -434,7 +435,7 @@ const performTokenRenewal = async (authStateUpdater: AuthStateUpdater) => {
     // 强制跳转到登录页
     if (typeof window !== 'undefined') {
       console.log('🔄 [Token Renewal] Redirecting to login page...')
-      window.location.href = '/login'
+      window.location.href = getLoginPagePath()
     }
   }
 }

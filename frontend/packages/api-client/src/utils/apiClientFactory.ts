@@ -1,5 +1,6 @@
 import { createApiClientInstance, TokenProvider, AuthStateUpdater, LanguageProvider } from '../client'
 import { AxiosInstance } from 'axios'
+import { getLoginPagePath } from '../../../../src/Common/LoginPage'
 
 // 全局token提供者
 let globalTokenProvider: TokenProvider | null = null
@@ -50,7 +51,7 @@ export const getApiClient = (): AxiosInstance => {
         globalAuthStateUpdater = {
           logout: () => {
             localStorage.removeItem('access_token')
-            window.location.href = '/login'
+            window.location.href = getLoginPagePath()
           },
           updateToken: (newToken: string) => {
             localStorage.setItem('access_token', newToken)

@@ -219,6 +219,7 @@ export interface UserInfoWithTag extends UserInfo {
 // 登录响应数据接口
 interface LoginData {
   access_token: string
+  refresh_token: string
   token_type: string
   user: UserInfo
 }
@@ -243,6 +244,12 @@ export interface ChangePasswordRequest {
   currentPassword: string
   newPassword: string
   confirmPassword: string
+}
+
+export interface ResetPasswordRequest {
+  email: string
+  new_pwd: string
+  code: string
 }
 
 // 用户相关类型

@@ -29,4 +29,7 @@ export const ENV_CONFIG = {
   // Plugin Service Configuration
   PLUGIN_SERVICE_URL: import.meta.env.VITE_PLUGIN_SERVICE_URL || '',
   PLUGIN_CONFIG_PATH: import.meta.env.VITE_PLUGIN_CONFIG_PATH || '/config.json',
+
+  // Login Page Configuration
+  VITE_ENABLE_NEW_AUTH: import.meta.env.VITE_ENABLE_NEW_AUTH === 'True',
 }
