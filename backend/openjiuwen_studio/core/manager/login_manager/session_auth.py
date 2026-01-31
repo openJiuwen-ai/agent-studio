@@ -47,7 +47,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = (datetime.now(timezone.utc) + expires_delta).replace(tzinfo=None)
     else:
-        expire = (datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)).replace(tzinfo=None)
+        if settings.enable_new_auth:
+            # 新密码体系：短期 access token
+            expire = (
+                datetime.now(timezone.utc)
+                + timedelta(minutes=settings.new_access_token_expire_minutes)
+            ).replace(tzinfo=None)
+        else:
+            # 单机部署：超长 access token
+            expire = (
+                datetime.now(timezone.utc)
+                + timedelta(minutes=settings.access_token_expire_minutes)
+            ).replace(tzinfo=None)
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
@@ -60,7 +71,18 @@ def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = (datetime.now(timezone.utc) + expires_delta).replace(tzinfo=None)
     else:
-        expire = (datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)).replace(tzinfo=None)
+        # 新密码体系：短期 refresh token
+        if settings.enable_new_auth:
+            expire = (
+                datetime.now(timezone.utc) 
+                + timedelta(days=settings.new_refresh_token_expire_days)
+            ).replace(tzinfo=None)
+        else:
+            # 单机部署：超长 refresh token
+            expire = (
+                datetime.now(timezone.utc) 
+                + timedelta(days=settings.refresh_token_expire_days)
+            ).replace(tzinfo=None)
 
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)

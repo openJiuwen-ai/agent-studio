@@ -112,6 +112,24 @@ class UserRepository():
             return user_db.update_dl_in_sql(find_id=find_id, update_dl=update_data).model_dump(exclude_none=True)
     
     '''
+    description: 更新数据库中user的refresh_token
+    param {str} email   email作为健值定位user
+    param {str} refresh_token
+    return {*}
+    '''
+    @with_exception_handling
+    def update_refresh_token(self, email: str, refresh_token: str):
+        with get_db_jw() as db:
+            user_db = JiuwenBaseRepository(db, UserDB)
+            find_id = {
+                "email": email,
+            }
+            update_data = {
+                "refresh_token": refresh_token,
+            }
+            return user_db.update_dl_in_sql(find_id=find_id, update_dl=update_data).model_dump(exclude_none=True)
+
+    '''
     description: 删除数据库中的user
     param {Optional} email  email和下面的session_key至少要有一个
     param {Optional} session_key
@@ -211,6 +229,24 @@ class UserRepository():
             if del_space.code != status.HTTP_200_OK:
                 return del_space.model_dump(exclude_none=True)
             return space_user_repos.unregister_dl_in_sql(find_id=find_id).model_dump(exclude_none=True)
-        
 
+    '''
+    description: 更新用户密码
+    param {str} email 
+    param {str} hashed_password 传入加密后的哈希值
+    return {*}
+    '''
+    @with_exception_handling
+    def update_user_password(self, email: str, hashed_password: str):
+        with get_db_jw() as db:
+            user_db = JiuwenBaseRepository(db, UserDB)
+            find_id = {"email": email}
+            update_data = {
+                "password": hashed_password
+            }
+            return user_db.update_dl_in_sql(
+                find_id=find_id,
+                update_dl=update_data
+            ).model_dump(exclude_none=True)
+    
 user_repository = UserRepository()

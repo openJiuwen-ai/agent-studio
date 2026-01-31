@@ -3,7 +3,8 @@ from openjiuwen.core.common.logging import set_thread_session, logger
 
 from openjiuwen_studio.core.common.language_thread_context import (set_language, clear_language,
                                                                    get_highest_priority_language)
-from openjiuwen_studio.routers import (auth, models, users, agents, workflows, execution, space,
+from openjiuwen_studio.core.config import settings
+from openjiuwen_studio.routers import (auth, auth_new, models, users, agents, workflows, execution, space,
                                        related_member, plugin, tags, knowledge_base, embedding_models, prompt_router,
                                        prompt_debug_router, prompt_tuning_router, prompt_llm_router, system_model)
 
@@ -13,7 +14,12 @@ api_router = APIRouter()
 def router_register(app: FastAPI):
     """Register API routers to FastAPI app."""
     v1_router = APIRouter(prefix="/v1")
-    v1_router.include_router(auth.auth_router, prefix="/auth", tags=["Authentication"])
+    if settings.enable_new_auth:
+        # 新流程：挂载包含注册、密码管理的路由
+        v1_router.include_router(auth_new.auth_router, prefix="/auth", tags=["New Auth"])
+    else:
+        # 挂载旧的直接登录逻辑
+        v1_router.include_router(auth.auth_router, prefix="/auth", tags=["Legacy Auth"])
     v1_router.include_router(users.users_router, prefix="/users", tags=["Users"])
     v1_router.include_router(space.space_router, prefix="/spaces", tags=["Space"])
     v1_router.include_router(models.models_router, prefix="/models", tags=["Models"])

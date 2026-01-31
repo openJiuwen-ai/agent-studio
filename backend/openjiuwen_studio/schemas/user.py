@@ -67,3 +67,19 @@ class UserUpdate(UserTag):
 
 class RefreshTokenRequest(BaseModel):
     refreshToken: str
+
+
+class SendCodeRequest(BaseModel):
+    email: EmailStr
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    code: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str

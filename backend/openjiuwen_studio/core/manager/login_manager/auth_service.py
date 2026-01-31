@@ -16,9 +16,11 @@ from openjiuwen_studio.core.manager.login_manager.pre_installed import pre_insta
 from openjiuwen_studio.routers.auth import create_space_db
 from openjiuwen_studio.routers.users import create_user_response
 from openjiuwen_studio.schemas.user import RoleType, UserDBPd
-from openjiuwen_studio.core.manager.login_manager.session_auth import (create_access_token,
-                                                                       verify_refresh_token_strict,
-                                                                       create_refresh_token)
+from openjiuwen_studio.core.manager.login_manager.session_auth import (
+    create_access_token,
+    create_refresh_token,
+    verify_refresh_token_strict,
+    )
 from openjiuwen_studio.schemas.common import ResponseModel
 
 security_utils = SecurityUtils()
@@ -54,7 +56,10 @@ class AuthService:
                 data={"sub": user_db.email},
                 expires_delta=timedelta(minutes=settings.new_access_token_expire_minutes)
             )
-            refresh_token = session_auth.create_refresh_token(data={"sub": user_db.email})
+            refresh_token = session_auth.create_refresh_token(
+                data={"sub": user_db.email},
+                expires_delta=timedelta(days=settings.new_refresh_token_expire_days)
+            )
             encrypted_access_token = security_utils.encrypt_api_key(access_token)
             encrypted_refresh_token = security_utils.encrypt_api_key(refresh_token)
             ret = user_repository.create_user_tbl(
