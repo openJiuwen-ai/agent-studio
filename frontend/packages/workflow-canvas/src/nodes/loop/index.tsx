@@ -12,6 +12,7 @@ import { formMeta } from './form-meta'
 import { WorkflowNodeType } from '../constants'
 import { LoopType } from './form-meta'
 import { t } from '../../i18n'
+import { generateNodeTitle } from '../../utils/workflow-node-utils'
 
 export const LoopNodeRegistry: FlowNodeRegistry = {
   type: WorkflowNodeType.Loop,
@@ -85,12 +86,16 @@ export const LoopNodeRegistry: FlowNodeRegistry = {
       return { allowed: true }
     },
   },
-  onAdd() {
+  onAdd(context?) {
+    const nodeId = `loop_${customNanoid(5)}`
+    const titlePrefix = t('workflowCanvas.nodes.loop.titlePrefix')
+    const title = generateNodeTitle(WorkflowNodeType.Loop, context, titlePrefix)
+
     return {
-      id: `loop_${customNanoid(5)}`,
+      id: nodeId,
       type: WorkflowNodeType.Loop,
       data: {
-        title: t('workflowCanvas.loop.title'),
+        title: title,
         inputs: {
           loopParam: {
             type: LoopType.NUM_LOOP,

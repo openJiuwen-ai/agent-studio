@@ -555,12 +555,15 @@ const PluginConfigurationPage: React.FC = () => {
         open={isPublishDialogOpen}
         pluginName={plugin?.name || ''}
         pluginId={plugin_id || ''}
+        spaceId={getDefaultSpaceId()}
         onClose={() => {
           setIsPublishDialogOpen(false)
         }}
         onPublish={handlePublishPlugin}
         loading={publishPluginApi.isLoading}
         latestVersion={getLatestVersion()}
+        configData={configForm}
+        updatePluginApi={updatePluginApi}
       />
     </>
   )

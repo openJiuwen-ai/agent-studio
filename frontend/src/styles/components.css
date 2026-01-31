@@ -1,0 +1,58 @@
+/**
+ * 业务组件类 - 项目自定义的组件级样式
+ * 使用 @layer components 保证优先级正确
+ */
+
+@layer components {
+  /* ========== 卡片阴影 hover ========== */
+  .shadow-card-hover {
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 180ms ease, transform 180ms ease;
+  }
+  .shadow-card-hover:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-2px);
+  }
+
+  /* ========== 全局 ========== */
+  .global-bg {
+    background-color: var(--global-bg-page);
+  }
+
+  /* ========== 菜单 ========== */
+  .menu-item-active {
+    background-color: color-mix(in srgb, var(--text-blue) 10%, transparent);
+    color: var(--text-blue);
+  }
+
+  .menu-item-hover:hover {
+    background-color: var(--menu-hover-bg);
+    color: var(--menu-hover-text);
+  }
+
+  .menu-text {
+    color: var(--text-gray);
+    @apply font-medium;
+  }
+
+  .menu-section-title {
+    color: var(--menu-section-text);
+    @apply font-normal;
+  }
+
+  /* ========== 登录页 ========== */
+  .login-card-bg {
+    background-color: var(--global-bg-white);
+  }
+
+  .openjiuwen-login-logo {
+    color: var(--text-black);
+    @apply font-extrabold text-2xl;
+  }
+
+  .openjiuwen-login-title {
+    color: var(--text-black);
+    @apply font-bold;
+    font-size: 22px;
+  }
+}

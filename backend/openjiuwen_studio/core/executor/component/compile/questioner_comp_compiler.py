@@ -4,7 +4,8 @@
 
 from typing import Any, Dict, List
 
-from openjiuwen.core.component.questioner_comp import QuestionerConfig, FieldInfo, QuestionerComponent
+from openjiuwen.core.component.questioner_comp import QuestionerConfig, FieldInfo
+from openjiuwen_studio.core.executor.component.component_impl.questioner_comp import QuestionerComponent
 from openjiuwen_studio.core.executor.component.compile.llm_comp_compiler import parse_model_config
 from openjiuwen_studio.core.executor.component.compile.base_comp_compiler import BaseCompCompiler
 

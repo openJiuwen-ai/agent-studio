@@ -315,7 +315,7 @@ const KnowledgeBasePage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 p-6">
+    <div className="min-h-screen via-white p-6">
       {/* 页面头部介绍 */}
       <div className="mb-8 text-center">
         <div className="mx-auto w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg">

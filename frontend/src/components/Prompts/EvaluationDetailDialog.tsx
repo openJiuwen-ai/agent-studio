@@ -19,7 +19,7 @@ import {
   Chip,
   Tooltip,
 } from '@mui/material'
-import Pagination from './Pagination'
+import { Pagination } from '@/components/Common/common-table'
 
 // 截断文本函数
 const truncateText = (text: string, maxLength: number = 400): string => {
@@ -340,16 +340,17 @@ const EvaluationDetailDialog: React.FC<EvaluationDetailDialogProps> = ({
             {!loading && evaluateCases.length > 0 && (
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
                 <Pagination
-                  currentPage={pageNum}
-                  totalCount={evaluateCases.length}
-                  pageSize={pageSize}
-                  loading={loading}
-                  onPageChange={onPageChange}
-                  onPageSizeChange={(size) => {
-                    onPageSizeChange(size)
-                    onPageChange(1) // 重置为第一页
+                  pager={{
+                    total: evaluateCases.length,
+                    currentPage: pageNum,
+                    pageSize: pageSize,
+                    pageSizeOptions: [10, 20, 30, 50],
                   }}
-                  pageSizeOptions={[10, 20, 30, 50]}
+                  loading={loading}
+                  onPagerChange={(page, pageSize) => {
+                    onPageSizeChange(pageSize)
+                    onPageChange(page)
+                  }}
                 />
               </Box>
             )}

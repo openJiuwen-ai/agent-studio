@@ -354,7 +354,7 @@ const PluginVersionHistory: React.FC<PluginVersionHistoryProps> = ({ open, onClo
                               <Typography variant="body2" className="text-gray-600 mb-1">
                                 {t('plugins.versionHistory.description') || '版本说明'}:
                               </Typography>
-                              <Typography variant="body2" className="text-gray-800 bg-gray-50 p-2 rounded">
+                              <Typography variant="body2" className="text-gray-800 bg-gray-50 p-2 rounded whitespace-normal break-words">
                                 {version.version_desc}
                               </Typography>
                             </div>

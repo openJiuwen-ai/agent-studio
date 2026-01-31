@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/useAuthStore'
-import { Menu, ChevronDown, Users } from 'lucide-react'
+import { useUIStore } from '../../stores/useUIStore'
+import { Menu, ChevronDown, Users, ArrowRight } from 'lucide-react'
 import { useLogout } from '@test-agentstudio/api-client'
 import { resolveAvatar } from '../../utils/avatar'
 import LanguageDropdown from '../Common/LanguageDropdown'
@@ -19,6 +20,7 @@ const Header: React.FC<HeaderProps> = ({ user, onMenuClick }) => {
   // const notificationsRef = useRef<HTMLDivElement>(null)
   const { logout } = useAuthStore()
   const navigate = useNavigate()
+  const toggleDashboardVersion = useUIStore(state => state.toggleDashboardVersion)
 
   // 使用logout hook，传递认证状态管理器
   const logoutMutation = useLogout({ logout })
@@ -54,6 +56,10 @@ const Header: React.FC<HeaderProps> = ({ user, onMenuClick }) => {
     }
   }
 
+  const handleVersionSwitch = () => {
+    toggleDashboardVersion()
+  }
+
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 h-16 flex items-center justify-between px-4 sm:px-6 lg:px-8">
       {/* Left section */}
@@ -65,7 +71,18 @@ const Header: React.FC<HeaderProps> = ({ user, onMenuClick }) => {
 
       {/* Right section */}
       <div className="flex items-center space-x-4">
-        {/* <LanguageDropdown /> */}
+        <button
+          onClick={handleVersionSwitch}
+          className="group relative inline-flex items-center gap-2 px-4 py-1.5 pr-5 text-sm font-medium rounded-full border border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all duration-200 shadow-sm hover:shadow"
+        >
+          {t('layout.header.switchToNewVersion')}
+          <ArrowRight className="w-4 h-4" />
+          <span className="absolute -top-2 -right-2 inline-flex rounded-full h-6 w-6 items-center justify-center text-[10px] font-bold bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-sm">
+            {t('layout.header.beta')}
+          </span>
+        </button>
+
+        <LanguageDropdown />
 
         {/* User menu */}
         <div className="relative" ref={userMenuRef}>

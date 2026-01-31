@@ -64,7 +64,7 @@ export type { RestoreVersionConfirmationDialogProps } from './RestoreVersionConf
 export { default as LimitedTextInput } from './LimitedTextInput'
 export type { LimitedTextInputProps } from './LimitedTextInput'
 
-export { default as Pagination } from './Pagination'
+export { Pagination } from '@/components/Common/common-table'
 
 export { default as PromptEditHeader } from './PromptEditHeader'
 export type { PromptEditHeaderProps } from './PromptEditHeader'

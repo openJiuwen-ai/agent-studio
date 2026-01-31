@@ -44,7 +44,7 @@ const codeTemplates: CodeTemplate[] = [
     name: '基础函数',
     description: '简单的数据处理函数',
     template: `def add_test(a: int, b: int):
-    return a + b
+  return a + b
 
 def main(args: Args):
   a = args.params['add1']

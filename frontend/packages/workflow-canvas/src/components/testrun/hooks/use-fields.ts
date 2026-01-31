@@ -118,14 +118,17 @@ export const useFields = (params: {
 
   // Convert each meta item to a form field with value and onChange handler
   const fields: TestRunFormField[] = formMeta.map(meta => {
-    // Handle object type specially - serialize object to JSON string for display
+    // Handle object type specially - ensure value is parsed for JsonCodeEditor
     const getCurrentValue = (): unknown => {
       const rawValue = values[meta.name] ?? meta.defaultValue
-      if ((meta.type === 'object' || meta.type === 'array') && rawValue !== null && typeof rawValue !== 'string') {
+      if (rawValue === null || rawValue === undefined) {
+        return rawValue
+      }
+
+      if ((meta.type === 'object' || meta.type === 'array') && typeof rawValue === 'string') {
         try {
-          return JSON.stringify(rawValue, null, 2)
-        } catch (error) {
-          console.warn('[use-fields] Failed to stringify value:', error)
+          return JSON.parse(rawValue)
+        } catch {
           return rawValue
         }
       }

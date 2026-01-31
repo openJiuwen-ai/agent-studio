@@ -61,11 +61,7 @@ const AppWrapper: React.FC = () => {
   }
 
   return (
-    <ApiClientProvider
-      tokenProvider={tokenProvider}
-      authStateUpdater={authStateUpdater()}
-      languageProvider={languageProvider}
-    >
+    <ApiClientProvider tokenProvider={tokenProvider} authStateUpdater={authStateUpdater()} languageProvider={languageProvider}>
       <App />
     </ApiClientProvider>
   )

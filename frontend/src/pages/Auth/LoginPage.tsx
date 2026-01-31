@@ -18,13 +18,12 @@ const LoginPage: React.FC = () => {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const navigate = useNavigate()
   const { login, isAuthenticated, token } = useAuthStore()
-  
+
   // 根据当前语言环境选择图片
   const loginImage = i18n.language.startsWith('zh') ? '/login-page.png' : '/login-page-en.png'
 
   // 使用hooks，传递认证状态管理器
   const loginMutation = useLogin({ login })
-  const userSpacesQuery = useUserSpaces({ enabled: false }) // 初始禁用，避免401错误
 
   const {
     register,
@@ -66,27 +65,9 @@ const LoginPage: React.FC = () => {
           // 使用安全验证方法，避免在登录页面触发重定向
           const response = await AuthService.validateTokenSafely()
 
-          if (response.data.valid) {
-            console.log('✅ [LoginPage] Token is valid, redirecting to dashboard')
-            // 从localStorage恢复用户状态
-            const storedUser = localStorage.getItem('auth-storage')
-            if (storedUser) {
-              try {
-                const authData = JSON.parse(storedUser)
-                if (authData.state?.user && authData.state?.token) {
-                  login(authData.state.user, authData.state.token, authData.state.refreshToken)
-
-                  // 重启token自动刷新
-                  const { startTokenRenewal } = useAuthStore.getState()
-                  startTokenRenewal()
-                }
-              } catch (parseError) {
-                console.warn('⚠️ [LoginPage] Failed to parse stored auth data:', parseError)
-              }
-            }
+          if (response.data?.valid) {
             navigate('/dashboard', { replace: true })
           } else {
-            console.log('❌ [LoginPage] Token is invalid, showing login page')
             // 清除无效的token
             localStorage.removeItem('access_token')
             localStorage.removeItem('refresh_token')
@@ -152,7 +133,7 @@ const LoginPage: React.FC = () => {
       // 从response中获取用户信息和token
       const userInfo = response.data.user
       const accessToken = response.data.access_token
-      const refreshToken = response.data.refresh_token
+      const refreshToken = (response.data as any).refresh_token
       const tokenType = response.data.token_type
 
       // 验证必要的数据是否存在
@@ -184,37 +165,6 @@ const LoginPage: React.FC = () => {
       localStorage.setItem('access_token', accessToken)
       localStorage.setItem('refresh_token', refreshToken)
       localStorage.setItem('token_type', tokenType)
-
-      // 调用space接口获取空间列表
-      let spaceId = ''
-      try {
-        // 确保token已经设置，延迟一小段时间
-        await new Promise(resolve => setTimeout(resolve, 500))
-        const spaceResponse = await userSpacesQuery.refetch()
-        if (spaceResponse.data?.data && spaceResponse.data.data.space_list && spaceResponse.data.data.space_list.length > 0) {
-          spaceId = spaceResponse.data.data.space_list[0].space_id
-          localStorage.setItem('selectedSpaceId', spaceId)
-          console.log('获取到的第一个空间ID:', spaceId)
-
-          // 更新用户的spaceId
-          const { updateUser } = useAuthStore.getState()
-          updateUser({ spaceId })
-        }
-      } catch (spaceError) {
-        console.error('获取空间列表错误:', spaceError)
-        // 即使获取空间失败，也继续登录流程
-      }
-
-      // 保存凭据（如果勾选了记住我）
-      // if (rememberMe) {
-      //   localStorage.setItem('rememberedEmail', data.username)
-      //   localStorage.setItem('rememberedPassword', data.password)
-      //   localStorage.setItem('rememberMe', 'true')
-      // } else {
-      //   localStorage.removeItem('rememberedEmail')
-      //   localStorage.removeItem('rememberedPassword')
-      //   localStorage.removeItem('rememberMe')
-      // }
 
       // 启动 token 自动刷新
       const { startTokenRenewal } = useAuthStore.getState()
@@ -249,7 +199,7 @@ const LoginPage: React.FC = () => {
   // 显示加载状态 while checking authentication
   if (isCheckingAuth) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen global-bg flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8">
           <div className="text-center">
             <div className="flex justify-center">
@@ -268,17 +218,17 @@ const LoginPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex flex-col py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen global-bg flex flex-col py-12 px-4 sm:px-6 lg:px-8">
       <div className="flex items-center justify-between">
         <div className="flex w-48">
           <div className="w-8 h-8 mr-2">
-            <img src="/jiuwen-logo.svg" width={64} height={64} alt="Jiuwen Logo" />
+            <img src="/jiuwen-logo.svg" width={32} height={32} alt="Jiuwen Logo" />
           </div>
-          <div className="text-xl font-[800] item-end mt-2">openJiuwen</div>
+          <div className="openjiuwen-login-logo">openJiuwen</div>
         </div>
-        {/* <LanguageDropdown /> */}
+        <LanguageDropdown />
       </div>
-      <div className="w-full flex justify-center flex-1 items-center">
+      <div className="w-full flex justify-center flex-1 items-center mb-[36px]">
         <div className="flex items-center justify-center h-full">
           {/* Jiuwen image */}
           <div className="w-[60%] max-w-[600px] h-[500px] mr-8">
@@ -287,8 +237,8 @@ const LoginPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="w-[400px] space-y-8 flex flex-col h-[466px] rounded-xl shadow-xl px-8 py-8">
-            <div className="font-[600] text-xl">{t('auth.login.formTitle')}</div>
+          <div className="login-card-bg w-[400px] space-y-8 flex flex-col h-[282px] rounded-xl shadow-xl px-8 py-8">
+            <div className="openjiuwen-login-title">{t('auth.login.formTitle')}</div>
             {/* Login Form */}
             <form className="space-y-6 flex-1" onSubmit={handleSubmit(onFormSubmit)}>
               <div className="space-y-4">
@@ -311,15 +261,10 @@ const LoginPage: React.FC = () => {
                     className="input-field w-full"
                     placeholder={t('auth.login.usernamePlaceholder')}
                   />
-                  <p className="mt-1 text-sm text-red-600">{errors.username ? errors.username.message : ''}</p>
+                  {/* 显示校验错误或接口错误 */}
+                  <p className="mt-1 text-sm text-red-600">{errors.root ? errors.root.message : errors.username ? errors.username.message : ''}</p>
                 </div>
               </div>
-
-              {errors.root && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-sm text-red-600">{errors.root.message}</p>
-                </div>
-              )}
 
               <div>
                 <button

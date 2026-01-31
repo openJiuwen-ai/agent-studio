@@ -9,16 +9,21 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
+# 定义项目根目录
+PROJECT_ROOT = dirname(dirname(dirname(dirname(dirname(abspath(__file__))))))
+
 # 将项目根目录添加到 sys.path
-sys.path.append(dirname(dirname(dirname(abspath(__file__)))))
+sys.path.append(PROJECT_ROOT)
 
 # 加载 .env 文件
-load_dotenv(dotenv_path=dirname(dirname(dirname(abspath(__file__)))) + "/.env")
+dotenv_path = os.path.join(PROJECT_ROOT, ".env")
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path=dotenv_path)
 
 from openjiuwen_studio.models.db_fun_base import Base
 
 # Dynamically import all models to ensure they are registered with Base.metadata
-models_dir = os.path.join(dirname(dirname(abspath(__file__))), 'openjiuwen_studio', 'models')
+models_dir = os.path.join(PROJECT_ROOT, 'backend', 'openjiuwen_studio', 'models')
 for filename in os.listdir(models_dir):
     if filename.endswith('.py') and filename != '__init__.py':
         module_name = f"openjiuwen_studio.models.{filename[:-3]}"
@@ -61,17 +66,22 @@ def run_migrations_offline() -> None:
 
     """
     # Build URL from env vars for offline mode as well
-    db_user = os.getenv("DB_USER")
-    db_password = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_port = os.getenv("DB_PORT")
-    db_name = os.getenv("AGENT_DB_NAME")
-    
-    if all([db_user, db_password, db_host, db_port, db_name]):
-        url = f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    db_type = os.getenv("DB_TYPE", "mysql")
+    if db_type == "sqlite":
+        sqlite_db = os.getenv("AGENT_SQLITE_DB")
+        url = f"sqlite:///{sqlite_db}"
     else:
-        # Fallback to .ini value if env vars missing
-        url = config.get_main_option("sqlalchemy.url")
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        db_host = os.getenv("DB_HOST")
+        db_port = os.getenv("DB_PORT")
+        db_name = os.getenv("AGENT_DB_NAME")
+        
+        if all([db_user, db_password, db_host, db_port, db_name]):
+            url = f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        else:
+            # Fallback to .ini value if env vars missing
+            url = config.get_main_option("sqlalchemy.url")
     
     context.configure(
         url=url,
@@ -94,15 +104,23 @@ def run_migrations_online() -> None:
     section = config.get_section(config.config_ini_section, {})
     
     # Override sqlalchemy.url with environment variables
-    db_user = os.getenv("DB_USER")
-    db_password = os.getenv("DB_PASSWORD")
-    db_host = os.getenv("DB_HOST")
-    db_port = os.getenv("DB_PORT")
-    db_name = os.getenv("AGENT_DB_NAME")
-    
-    if all([db_user, db_password, db_host, db_port, db_name]):
-        url = f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+    db_type = os.getenv("DB_TYPE", "mysql")
+    if db_type == "sqlite":
+        sqlite_db = os.getenv("AGENT_SQLITE_DB")
+        url = f"sqlite:///{sqlite_db}"
         section["sqlalchemy.url"] = url
+        render_as_batch = True
+    else:
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        db_host = os.getenv("DB_HOST")
+        db_port = os.getenv("DB_PORT")
+        db_name = os.getenv("AGENT_DB_NAME")
+        
+        if all([db_user, db_password, db_host, db_port, db_name]):
+            url = f"mysql+pymysql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+            section["sqlalchemy.url"] = url
+        render_as_batch = False
 
     connectable = engine_from_config(
         section,
@@ -112,7 +130,9 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata,
+            render_as_batch=render_as_batch
         )
 
         with context.begin_transaction():

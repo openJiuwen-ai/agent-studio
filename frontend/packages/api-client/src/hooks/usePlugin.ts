@@ -126,13 +126,13 @@ export const usePluginList = (request: PluginListRequest, options?: { enabled?: 
         return errorMessage.includes('Network Error') || errorMessage.includes('timeout')
       },
 
-      // 优化缓存策略
-      staleTime: 30 * 1000, // 30秒内数据视为新鲜
-      cacheTime: 5 * 60 * 1000, // 缓存5分钟
+      // 🎯 禁用缓存，确保搜索、排序、过滤时都重新请求
+      staleTime: 0, // 数据立即过期，每次参数改变时都重新请求
+      cacheTime: 5 * 60 * 1000, // 保留缓存时间用于内存管理（组件卸载后保留5分钟）
 
-      // 添加自动刷新机制
+      // 🎯 添加自动刷新机制
       refetchOnMount: true, // 组件挂载时重新获取数据
-      refetchOnWindowFocus: true, // 窗口重新聚焦时重新获取数据
+      refetchOnWindowFocus: false, // 窗口重新聚焦时不重新获取数据
       refetchOnReconnect: true, // 网络重连时重新获取数据
 
       retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000), // 指数退避

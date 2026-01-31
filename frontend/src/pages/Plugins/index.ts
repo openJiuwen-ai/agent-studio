@@ -1,3 +1,5 @@
 export { default as PluginManagementPage } from './PluginManagementPage'
+export { default as PluginManagementPageNew } from './PluginManagementPageNew'
+export { default as PluginMarketPageNew } from './PluginMarketPageNew'
 export { default as PluginConfigurationPage } from './PluginConfigurationPage'
 export { default as PluginVersionPage } from './PluginVersionPage'

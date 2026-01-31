@@ -150,20 +150,6 @@ const WorkflowCreationPage: React.FC = () => {
                         error={!formData.description.trim()}
                       />
                     </div>
-
-                    {/* Trigger Type */}
-                    <div>
-                      <Typography variant="subtitle2" className="text-gray-700 mb-2 font-medium">
-                        触发类型
-                      </Typography>
-                      <select
-                        value={formData.trigger}
-                        onChange={e => handleInputChange('trigger', e.target.value)}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-300 transition-all duration-200 bg-gray-50 focus:bg-white"
-                      >
-                        <option value="manual">手动触发</option>
-                      </select>
-                    </div>
                   </div>
                 </div>
               </div>

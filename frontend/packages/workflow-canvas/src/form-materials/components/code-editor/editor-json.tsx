@@ -10,28 +10,18 @@ import { BaseEditor } from '../base-editor'
 import type { BaseEditorProps } from '../base-editor'
 
 export interface EditorJsonProps extends Omit<BaseEditorProps, 'language'> {
-  /** JSON object value - automatically stringified internally */
   value?: Record<string, unknown> | unknown
-  /** Callback receives parsed JSON object, not string */
   onChange?: (value: Record<string, unknown> | unknown) => void
-  /** Debounce delay for parsing (ms), default 800 */
   parseDelay?: number
-  /** Show validation errors, default true */
   showErrors?: boolean
-  /** Custom error message renderer */
   renderError?: (error: string) => React.ReactNode
-  /** Validate on blur instead of debounce */
   validateOnBlur?: boolean
-  /** Callback for validation status changes */
   onValidationChange?: (isValid: boolean, error?: string) => void
-  /** Mini mode for compact display */
   mini?: boolean
-  /** Default display format when value is empty */
   defaultFormat?: string
-  /** Array element type validation */
   arrayElementType?: string
-  /** Enable array element type validation */
   validateArrayElements?: boolean
+  compact?: boolean
 }
 
 // Enhanced type for ref
@@ -72,20 +62,23 @@ const JsonCodeEditorWithEnhancedLogic: React.ForwardRefRenderFunction<JsonCodeEd
     defaultFormat,
     arrayElementType,
     validateArrayElements = false,
+    compact = false,
     ...props
   },
   ref,
 ) => {
-  // Internal string state for the editor
+  const stringifyValue = useCallback((val: unknown) => {
+    return compact ? JSON.stringify(val) : JSON.stringify(val, null, 2)
+  }, [compact])
+
   const [editorValue, setEditorValue] = useState<string>(() => {
-    // Initialize with the provided value, properly formatted
     try {
       if (value !== undefined && value !== null) {
-        return JSON.stringify(value, null, 2)
+        return stringifyValue(value)
       } else if (defaultFormat) {
         return defaultFormat
       } else {
-        return JSON.stringify({}, null, 2)
+        return stringifyValue({})
       }
     } catch (error) {
       console.warn('Failed to format initial JSON value:', error)
@@ -112,16 +105,15 @@ const JsonCodeEditorWithEnhancedLogic: React.ForwardRefRenderFunction<JsonCodeEd
   const isInternalUpdateRef = useRef(false)
 
   useEffect(() => {
-    // Only update if the value actually changed and it's not an internal update
     if (value !== lastValueRef.current && !isInternalUpdateRef.current) {
       try {
         let newEditorValue: string
         if (value !== undefined && value !== null) {
-          newEditorValue = JSON.stringify(value, null, 2)
+          newEditorValue = stringifyValue(value)
         } else if (defaultFormat) {
           newEditorValue = defaultFormat
         } else {
-          newEditorValue = JSON.stringify({}, null, 2)
+          newEditorValue = stringifyValue({})
         }
 
         setEditorValue(newEditorValue)
@@ -136,7 +128,7 @@ const JsonCodeEditorWithEnhancedLogic: React.ForwardRefRenderFunction<JsonCodeEd
         console.warn('Failed to stringify value for JSON editor:', error)
       }
     }
-  }, [value, defaultFormat])
+  }, [value, defaultFormat, stringifyValue])
 
   // Validate array element types
   const validateArrayElementTypes = useCallback(

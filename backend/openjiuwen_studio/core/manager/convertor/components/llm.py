@@ -33,10 +33,13 @@ def get_model_config(model_id: int, space_id: str) -> ModelConfig:
     return model
 
 
-def _llm_output_config_object_convert(is_first: bool, outputs: Outputs) -> Dict[str, Any]:
+def _llm_output_config_object_convert(is_first: bool, outputs: Outputs):
     result: Dict[str, Any] = {}
     if outputs.type != "object":
-        return result
+        return result, []
+
+    if outputs.properties is None:
+        return result, []
 
     if is_first:
         for key, value in outputs.properties.items():
@@ -45,10 +48,12 @@ def _llm_output_config_object_convert(is_first: bool, outputs: Outputs) -> Dict[
             if key in outputs.required:
                 required = True
             if base_value.type == "object":
+                properties, convert_required = _llm_output_config_object_convert(False, Outputs(**value))
                 result[key] = {
                     "type": base_value.type,
                     "description": base_value.description,
-                    "properties": _llm_output_config_object_convert(False, Outputs(**value))
+                    "properties": properties,
+                    "required": convert_required,
                 }
             else:
                 result[key] = {"type": base_value.type, "description": base_value.description, "required": required}
@@ -56,12 +61,17 @@ def _llm_output_config_object_convert(is_first: bool, outputs: Outputs) -> Dict[
         for key, value in outputs.properties.items():
             base_value = BaseValue(**value)
             if base_value.type == "object":
-                result[key] = {"type": base_value.type, "description": base_value.description,
-                               "properties": _llm_output_config_object_convert(False, Outputs(**value))}
+                properties, required = _llm_output_config_object_convert(False, Outputs(**value))
+                result[key] = {"type": base_value.type,
+                               "description": base_value.description,
+                               "properties": properties,
+                               "required": required,
+                               }
             else:
                 result[key] = {"type": base_value.type, "description": base_value.description}
-        result["required"] = outputs.required
-    return result
+                result["required"] = outputs.required
+
+    return result, outputs.required
 
 
 def _llm_output_config_convert(outputs: Outputs) -> Dict[str, Any]:
@@ -73,10 +83,11 @@ def _llm_output_config_convert(outputs: Outputs) -> Dict[str, Any]:
             if key in outputs.required:
                 required = True
             if base_value.type == "object":
+                properties, _ = _llm_output_config_object_convert(True, Outputs(**value))
                 result[key] = {
                     "type": base_value.type,
                     "description": base_value.description,
-                    "properties": _llm_output_config_object_convert(True, Outputs(**value)),
+                    "properties": properties,
                     "required": required
                 }
             elif base_value.type == "array":

@@ -16,6 +16,7 @@ export const arrayRegistry: Partial<JsonSchemaTypeRegistry> = {
   ConstantRenderer: props => (
     <JsonCodeEditor
       mini
+      compact
       value={props.value}
       onChange={v => props.onChange?.(v)}
       placeholder={t('workflowCanvas.formMaterials.input.pleaseInputArray')}

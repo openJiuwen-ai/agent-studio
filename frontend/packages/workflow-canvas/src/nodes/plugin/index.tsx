@@ -219,7 +219,6 @@ const showPluginSelector = (allowMultiple: boolean = true) => {
         </div>,
       )
     } catch (error) {
-      console.error('Error showing plugin selector:', error)
       resolve(null)
     }
   })
@@ -254,11 +253,6 @@ export const PluginNodeRegistry: FlowNodeRegistry = {
 
       // 如果选择了多个工具，我们需要手动创建多个节点
       if (result.length > 1) {
-        console.log(
-          '用户选择了多个工具，将创建多个节点：',
-          result.map(r => r.title),
-        )
-
         // 为每个选中的工具创建节点，位置稍微错开避免重叠
         result.forEach((toolInfo, index) => {
           const nodeId = `plugin_${customNanoid(5)}`
@@ -332,15 +326,11 @@ export const PluginNodeRegistry: FlowNodeRegistry = {
       // 单个工具的情况，按原有逻辑处理
       const nodeId = `plugin_${customNanoid(5)}`
       const plugin = result[0].plugin
-      console.log('plugin', plugin)
-      const selectedTool = result[0].selectedTool // 直接使用选中的工具
-      console.log('selectedTool', selectedTool)
+      const selectedTool = result[0].selectedTool
 
       // 格式化工具的输入输出参数
       const formattedInputs = formatPluginInputs(selectedTool, plugin, result[0].selectedVersion)
       const outputDataProperties = formatPluginOutputData(selectedTool)
-
-      console.log('formattedInputs', formattedInputs)
 
       return {
         id: nodeId,
@@ -376,7 +366,6 @@ export const PluginNodeRegistry: FlowNodeRegistry = {
         },
       } as FlowNodeJSON
     } catch (error) {
-      console.error('选择插件时出错:', error)
       dragStateManager.reset()
       return null
     }

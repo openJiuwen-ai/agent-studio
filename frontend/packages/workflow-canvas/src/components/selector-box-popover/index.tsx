@@ -28,30 +28,6 @@ export const SelectorBoxPopover: FunctionComponent<SelectorBoxPopoverProps> = ({
         }}
       >
         <ButtonGroup size="small" style={{ display: 'flex', flexWrap: 'nowrap', height: BUTTON_HEIGHT }}>
-          <Tooltip content={'折叠'}>
-            <Button
-              icon={<Minimize2 size={18} className="text-white" />}
-              style={{ height: BUTTON_HEIGHT }}
-              type="primary"
-              theme="solid"
-              onMouseDown={() => {
-                commandRegistry.executeCommand(FlowCommandId.COLLAPSE)
-              }}
-            />
-          </Tooltip>
-
-          <Tooltip content={'展开'}>
-            <Button
-              icon={<Maximize2 size={18} className="text-white" />}
-              style={{ height: BUTTON_HEIGHT }}
-              type="primary"
-              theme="solid"
-              onMouseDown={() => {
-                commandRegistry.executeCommand(FlowCommandId.EXPAND)
-              }}
-            />
-          </Tooltip>
-
           <Tooltip content={'复制'}>
             <Button
               icon={<Copy size={18} className="text-white" />}

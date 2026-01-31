@@ -343,12 +343,13 @@ const WorkflowSelector: React.FC<WorkflowSelectorProps> = ({ open, onClose, onCo
   return (
     <div
       className="workflow-selector-modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 z-[9999]"
+      translate="no"
       onMouseDown={e => e.preventDefault()} // 防止鼠标事件冒泡到画布
       onMouseUp={e => e.preventDefault()} // 防止鼠标事件冒泡到画布
       onClick={e => e.preventDefault()} // 防止点击事件冒泡到画布
     >
       <div
-        className="bg-white rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col"
+        className="bg-white rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col notranslate"
         onMouseDown={e => e.stopPropagation()} // 阻止事件冒泡到遮罩层
         onMouseUp={e => e.stopPropagation()} // 阻止事件冒泡到遮罩层
         onClick={e => e.stopPropagation()} // 阻止事件冒泡到遮罩层

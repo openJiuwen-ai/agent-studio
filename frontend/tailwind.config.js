@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+const tailwindExtend = require('./src/styles/tailwind.extend')
+
 module.exports = {
   content: [
     './index.html',
@@ -34,6 +36,8 @@ module.exports = {
           800: '#1e293b',
           900: '#0f172a',
         },
+        // 业务自定义颜色从 tailwind.extend.js 引入
+        ...tailwindExtend.colors,
       },
       fontFamily: {
         sans: ['HarmonyOS Sans SC', 'HarmonyOS Sans', 'Inter', 'system-ui', 'sans-serif'],
@@ -58,6 +62,8 @@ module.exports = {
           '100%': { transform: 'translateY(0)', opacity: '1' },
         },
       },
+      // 从 tailwind.extend.js 引入其他业务自定义配置（boxShadow 等）
+      boxShadow: tailwindExtend.boxShadow,
     },
   },
   plugins: [require('@tailwindcss/typography')],

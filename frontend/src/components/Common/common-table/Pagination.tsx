@@ -2,60 +2,57 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 
-interface PaginationProps {
+export interface PagerState {
+  total: number
   currentPage: number
-  totalCount: number
   pageSize: number
-  loading?: boolean
-  error?: string | null
-  onPageChange: (page: number) => void
-  onPageSizeChange: (pageSize: number) => void
   pageSizeOptions?: number[]
 }
 
+export type PagerChangeHandler = (page: number, pageSize: number) => void
+
+interface PaginationProps {
+  pager: PagerState
+  loading?: boolean
+  error?: string | null
+  onPagerChange: PagerChangeHandler
+}
+
 const Pagination: React.FC<PaginationProps> = ({
-  currentPage,
-  totalCount,
-  pageSize,
+  pager,
   loading = false,
   error = null,
-  onPageChange,
-  onPageSizeChange,
-  pageSizeOptions,
+  onPagerChange,
 }) => {
   const { t } = useTranslation()
 
-  // 计算总页数
-  const totalPages = Math.ceil(totalCount / pageSize)
+  const { currentPage, total, pageSize, pageSizeOptions } = pager
+  const totalPages = Math.ceil(total / pageSize)
 
-  // 处理页码输入变化
   const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const page = parseInt(e.target.value)
     if (page >= 1 && page <= totalPages) {
-      onPageChange(page)
+      onPagerChange(page, pageSize)
     }
   }
 
-  // 处理页码输入键盘事件
   const handlePageInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.currentTarget.blur()
     }
   }
 
-  // 如果正在加载或有错误，不显示分页
   if (loading || error) {
     return null
   }
 
   return (
-    <div className="flex items-center justify-end mt-8 space-x-6">
-      {/* 每页条数选择器 */}
+    <div className="flex items-center justify-end space-x-6">
       <div className="flex items-center space-x-2">
         <span className="text-sm text-gray-700">{t('common.pagination.pageSize')}</span>
         <select
           value={pageSize}
-          onChange={e => onPageSizeChange(Number(e.target.value))}
+          onChange={e => onPagerChange(1, Number(e.target.value))}
           className="px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           {(pageSizeOptions && pageSizeOptions.length > 0 ? pageSizeOptions : [10, 20, 30, 40, 50]).map(opt => (
@@ -67,14 +64,12 @@ const Pagination: React.FC<PaginationProps> = ({
         <span className="text-sm text-gray-700">{t('common.pagination.items')}</span>
       </div>
 
-      {/* 分页信息和控制 */}
-      {totalCount > 0 && (
+      {total > 0 && (
         <div className="flex items-center space-x-4">
-          <span className="text-sm text-gray-700">{t('common.pagination.total', { total: totalCount })}</span>
+          <span className="text-sm text-gray-700">{t('common.pagination.total', { total })}</span>
           <div className="flex items-center space-x-1">
-            {/* 首页 */}
             <button
-              onClick={() => onPageChange(1)}
+              onClick={() => onPagerChange(1, pageSize)}
               disabled={currentPage === 1}
               className="p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('common.pagination.first')}
@@ -82,9 +77,8 @@ const Pagination: React.FC<PaginationProps> = ({
               <ChevronsLeft className="w-4 h-4" />
             </button>
 
-            {/* 上一页 */}
             <button
-              onClick={() => onPageChange(currentPage - 1)}
+              onClick={() => onPagerChange(currentPage - 1, pageSize)}
               disabled={currentPage === 1}
               className="p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('common.pagination.previous')}
@@ -92,9 +86,8 @@ const Pagination: React.FC<PaginationProps> = ({
               <ChevronLeft className="w-4 h-4" />
             </button>
 
-            {/* 页码显示 */}
             <div className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700">
-              <span>第</span>
+              <span>{t('common.pagination.pagePrefix')}</span>
               <input
                 type="number"
                 value={currentPage}
@@ -104,12 +97,11 @@ const Pagination: React.FC<PaginationProps> = ({
                 max={totalPages}
                 className="w-12 px-2 py-1 text-center text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              <span>/ {totalPages} 页</span>
+              <span>{t('common.pagination.pageSuffix', { total: totalPages })}</span>
             </div>
 
-            {/* 下一页 */}
             <button
-              onClick={() => onPageChange(currentPage + 1)}
+              onClick={() => onPagerChange(currentPage + 1, pageSize)}
               disabled={currentPage >= totalPages}
               className="p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('common.pagination.next')}
@@ -117,9 +109,8 @@ const Pagination: React.FC<PaginationProps> = ({
               <ChevronRight className="w-4 h-4" />
             </button>
 
-            {/* 末页 */}
             <button
-              onClick={() => onPageChange(totalPages)}
+              onClick={() => onPagerChange(totalPages, pageSize)}
               disabled={currentPage >= totalPages}
               className="p-2 text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('common.pagination.last')}

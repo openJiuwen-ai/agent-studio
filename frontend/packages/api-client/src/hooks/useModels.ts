@@ -18,14 +18,22 @@ export const useModels = (params?: {
   sort_order?: 'asc' | 'desc'
 }) => {
   return useQuery(['models', 'list', params?.spaceId, params], () => modelService.getModelConfigs(params), {
-    staleTime: 2 * 60 * 1000, // 2分钟内不重新获取
-    cacheTime: 5 * 60 * 1000, // 缓存5分钟
-    refetchOnMount: true, // 组件挂载时重新获取（如果数据过期）
-    refetchOnWindowFocus: true, // 窗口获得焦点时重新获取（如果数据过期）
+    enabled: !!params?.spaceId, // 只有当spaceId存在时才执行查询
+    // 🎯 禁用缓存，确保搜索、排序、过滤时都重新请求
+    staleTime: 0, // 数据立即过期，每次参数改变时都重新请求
+    cacheTime: 5 * 60 * 1000, // 保留缓存时间用于内存管理（组件卸载后保留5分钟）
+    // 🎯 添加自动刷新机制
+    refetchOnMount: true, // 组件挂载时重新获取数据
+    refetchOnWindowFocus: false, // 窗口重新聚焦时不重新获取数据
+    refetchOnReconnect: true, // 网络重连时重新获取数据
     retry: 2,
     retryDelay: 1000,
     onError: error => {
-      console.log('获取模型列表失败:', error)
+      console.error('从API获取模型列表失败:', error)
+    },
+    // 🎯 成功回调，用于调试
+    onSuccess: data => {
+      console.log(`成功获取 space_id ${params?.spaceId} 的模型列表，共 ${data?.items?.length || 0} 个模型`)
     },
   })
 }

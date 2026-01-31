@@ -36,6 +36,7 @@ from openjiuwen_studio.core.manager.reference_extractor import extract_workflow_
 from openjiuwen_studio.core.manager.repositories.reference_repository import reference_repository
 from openjiuwen.core.common.exception.exception import JiuWenBaseException
 from openjiuwen_studio.core.common.exceptions import JiuWenComponentException
+from openjiuwen_studio.core.manager.model_manager.managers.model_config_manager import ModelConfigManager
 
 # 生成随机字符串用于节点ID
 random_id = ''.join(random.choice('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_') for _ in range(5))
@@ -314,6 +315,69 @@ def workflow_create(
     )
 
 
+def _sync_model_config_in_schema(schema: dict, space_id: str) -> bool:
+    """
+    Sync model configuration (name, type) in workflow schema with latest data from DB.
+    Recursively traverses nodes and blocks.
+    
+    Returns:
+        bool: True if any changes were made, False otherwise
+    """
+    has_changes = False
+    
+    def _traverse_and_update(nodes, model_mgr):
+        nonlocal has_changes
+        if not nodes:
+            return
+            
+        for node in nodes:
+            # Update model config in inputs.llmParam
+            try:
+                if "data" in node and "inputs" in node["data"]:
+                    inputs = node["data"]["inputs"]
+                    if "llmParam" in inputs:
+                        llm_param = inputs["llmParam"]
+                        if "model" in llm_param:
+                            model_info = llm_param["model"]
+                            model_id = model_info.get("id")
+                            if model_id:
+                                try:
+                                    # Fetch latest config
+                                    model_config = model_mgr.get_config_by_id(int(model_id), space_id)
+                                    if model_config:
+                                        # Update name and type
+                                        # name in schema corresponds to model_config.name (user defined name)
+                                        # type in schema corresponds to model_config.model_type (actual model type)
+                                        if model_info.get("name") != model_config.name or \
+                                           model_info.get("type") != model_config.model_type:
+                                            model_info["name"] = model_config.name
+                                            model_info["type"] = model_config.model_type
+                                            has_changes = True
+                                            logger.debug(f"Synced model {model_id} for node {node.get('id')}")
+                                except Exception as e:
+                                    # Log but don't fail the whole request if one model is missing or error
+                                    logger.warning(
+                                        "Failed to sync model config for node "
+                                        f"{node.get('id')}, model_id {model_id}: {e}"
+                                    )
+            except Exception as e:
+                logger.warning(f"Error processing node {node.get('id')}: {e}")
+
+            # Recursive check for nested blocks (e.g. Loop)
+            if "blocks" in node and isinstance(node["blocks"], list):
+                _traverse_and_update(node["blocks"], model_mgr)
+
+    try:
+        with get_db_jw() as db:
+            model_mgr = ModelConfigManager(db)
+            if "nodes" in schema and isinstance(schema["nodes"], list):
+                _traverse_and_update(schema["nodes"], model_mgr)
+    except Exception as e:
+        logger.error(f"Error in _sync_model_config_in_schema: {e}")
+        
+    return has_changes
+
+
 @with_exception_handling
 def workflow_canvas(
         req: WorkflowId,
@@ -331,6 +395,34 @@ def workflow_canvas(
             code=canvas_result.code,
             message=canvas_result.message,
         )
+
+    # 同步更新模型配置信息
+    try:
+        if canvas_result.data and "schema" in canvas_result.data:
+            schema_str = canvas_result.data["schema"]
+            if schema_str:
+                schema = json.loads(schema_str)
+                is_changed = _sync_model_config_in_schema(schema, req.space_id)
+                
+                if is_changed:
+                    new_schema_str = json.dumps(schema)
+                    canvas_result.data["schema"] = new_schema_str
+                    
+                    # 仅在草稿模式下自动保存变更
+                    is_draft = not req.workflow_version or req.workflow_version == 'draft'
+                    if is_draft:
+                        logger.info(f"Auto-saving updated model config for workflow {req.workflow_id}")
+                        update_data = {
+                            "workflow_id": req.workflow_id,
+                            "space_id": req.space_id,
+                            "schema": new_schema_str
+                        }
+                        # 保存到数据库
+                        workflow_repository.workflow_save(update_data)
+                        
+    except Exception as e:
+        logger.error(f"Failed to sync model config in workflow canvas: {e}")
+
     return ResponseModel(
         code=status.HTTP_200_OK,
         message="canvas workflow success",
