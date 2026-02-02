@@ -38,7 +38,7 @@ class UserDBPd(UserInfo, UserTag):
     session_key: Optional[str] = None
     password: str
     is_active: bool
-    refesh_token: Optional[str] = None
+    refresh_token: Optional[str] = None
 
 
 class UserResponse(UserInfo, UserTag):

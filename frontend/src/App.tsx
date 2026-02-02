@@ -22,6 +22,7 @@ import PromptsPageNew from './pages/Prompts/PromptsPageNew'
 import KnowledgeBasePageNew from './pages/KnowledgeBase/KnowledgeBasePageNew'
 import UserLoginPage from '@/pages/Auth/UserLoginPage.tsx'
 import { ENV_CONFIG } from '@/config/environment.ts'
+import { getLoginPagePath } from '@/Common/LoginPage.ts'
 
 // 懒加载非核心页面
 const AgentCreatePage = React.lazy(() => import('./pages/Agents/AgentCreatePage'))
@@ -62,7 +63,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const { isAuthenticated } = useAuthStore()
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
+    return <Navigate to= {getLoginPagePath()} replace />
   }
 
   return <>{children}</>

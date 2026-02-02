@@ -12,7 +12,7 @@ from openjiuwen_studio.core.config import settings
 from openjiuwen_studio.core.manager.repositories.user_repository import user_repository
 from openjiuwen_studio.schemas.user import (RoleType, UserDBPd, UserInfo, UserLogin,
                               UserResponse)
-from backend.openjiuwen_studio.core.manager.model_manager.utils import security_utils
+from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="v1/auth/login")
 
@@ -133,7 +133,8 @@ def verify_refresh_token_strict(token: str):
         db_refresh_token = user_db.refresh_token
         if not db_refresh_token:
             return None
-        decrpyted_db_refresh_token = security_utils.decrypt_api_key(db_refresh_token)
+        security_util = SecurityUtils()
+        decrpyted_db_refresh_token = security_util.decrypt_api_key(db_refresh_token)
         if not decrpyted_db_refresh_token or decrpyted_db_refresh_token != token:
             return None
         return payload
