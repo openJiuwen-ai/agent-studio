@@ -2,10 +2,11 @@
 
 Provides comprehensive API key security management functionality,
 including key storage, validation, and format checking.
+Supports Huawei Cloud KMS for root key encryption.
 """
+import os
 import base64
 from typing import Dict, Any
-import os
 
 from dotenv import load_dotenv
 
@@ -26,16 +27,27 @@ class SecurityUtils:
     """Security Utils
     
     Provides API key security management functionality including:
-    - API key storage and retrieval (current version without encryption)
+    - API key storage and retrieval with AES-GCM encryption
+    - Huawei Cloud KMS integration for root key protection (optional)
     - Key format validation
     - Key masking for display
     - Provider-specific validation rules
     
     Attributes:
         logger: Logger instance for audit and error tracking
+        use_kms: Whether to use Huawei Cloud KMS for root key management
+        kms_client: Huawei Cloud KMS client instance (if KMS enabled)
     """
 
-    def __init__(self, master_key: bytes = None) -> None:
+    def __init__(self, master_key: bytes = None, use_kms: bool = None) -> None:
+        """
+        初始化安全工具类
+        
+        Args:
+            master_key: 如果传入则直接使用，否则根据环境变量读取
+            use_kms: 是否使用华为云KMS管理根密钥
+        """
+        # 非KMS模式
         service_mode = os.getenv('SERVICE_MODE', 'develop')
         self.master_key = None
         if master_key is None:
@@ -53,6 +65,131 @@ class SecurityUtils:
         if self.master_key:
             if len(self.master_key) != 32:
                 raise ValueError('master_key length must be 32 bytes')
+        
+        # KMS模式支持
+        if use_kms is None:
+            use_kms = os.getenv('HUAWEICLOUD_KMS_ENABLED', 'false').lower() == 'true'
+        
+        self.use_kms = use_kms
+        if self.use_kms:
+            self._init_kms()
+        else:
+            # 非KMS模式：保持原有逻辑，无需额外操作
+            self.kms_client = None
+            self.kms_key_id = None
+            self.encrypted_root_key = None
+    
+    def _init_kms(self):
+        """初始化华为云KMS客户端"""
+        try:
+            from .huaweicloud_iam import HuaweiCloudIAM
+            from .huaweicloud_kms import HuaweiCloudKMS
+            
+            # 从环境变量读取KMS配置
+            username = os.getenv('HUAWEICLOUD_USERNAME')
+            password = os.getenv('HUAWEICLOUD_PASSWORD')
+            domain_name = os.getenv('HUAWEICLOUD_DOMAIN_NAME')
+            project_name = os.getenv('HUAWEICLOUD_PROJECT_NAME')
+            project_id = os.getenv('HUAWEICLOUD_PROJECT_ID')
+            region = os.getenv('HUAWEICLOUD_REGION', 'cn-north-4')
+            
+            if not all([username, password]):
+                raise ValueError(
+                    "Missing KMS configuration. Required environment variables: "
+                    "HUAWEICLOUD_USERNAME, HUAWEICLOUD_PASSWORD"
+                )
+            
+            if not project_name and not project_id:
+                raise ValueError(
+                    "Missing project configuration. Required one of: "
+                    "HUAWEICLOUD_PROJECT_NAME or HUAWEICLOUD_PROJECT_ID"
+                )
+            
+            iam_endpoint = os.getenv('HUAWEICLOUD_IAM_ENDPOINT')
+            
+            # 初始化IAM客户端
+            iam_client = HuaweiCloudIAM(
+                username, 
+                password, 
+                domain_name=domain_name,
+                iam_endpoint=iam_endpoint
+            )
+            
+            # 先获取token以访问KMS服务
+            if project_name and not project_id:
+                iam_client.get_token(project_name=project_name)
+                project_id = iam_client.project_id
+                if not project_id:
+                    raise ValueError(f"Failed to get project_id for project_name: {project_name}")
+            
+            kms_endpoint = os.getenv('HUAWEICLOUD_KMS_ENDPOINT')
+            
+            # 初始化KMS客户端
+            self.kms_client = HuaweiCloudKMS(
+                iam_client, 
+                project_id, 
+                region,
+                kms_endpoint=kms_endpoint
+            )
+            self.kms_key_id = os.getenv('HUAWEICLOUD_KMS_KEY_ID')
+            self.encrypted_root_key = os.getenv('ENCRYPTED_ROOT_KEY')
+            
+            if not self.kms_key_id:
+                raise ValueError("Missing HUAWEICLOUD_KMS_KEY_ID environment variable")
+            
+            if not self.encrypted_root_key:
+                raise ValueError("Missing ENCRYPTED_ROOT_KEY environment variable")
+            
+            logger.info("KMS client initialized successfully")
+            
+        except ImportError as e:
+            logger.error(f"Failed to import KMS modules: {str(e)}")
+            raise RuntimeError("KMS modules not available") from e
+        except Exception as e:
+            logger.error(f"Failed to initialize KMS: {str(e)}")
+            raise
+    
+    def _get_master_key(self) -> bytes:
+        """
+        获取主密钥（根密钥）
+        
+        根据use_kms标志决定从KMS解密获取还是使用本地密钥
+        
+        Returns:
+            主密钥字节（32字节）
+            
+        Raises:
+            ValueError: 如果无法获取主密钥
+        """
+        if self.use_kms:
+            # KMS模式：从KMS解密获取根密钥
+            if not self.kms_client:
+                raise ValueError("KMS client not initialized")
+            
+            if not self.encrypted_root_key:
+                raise ValueError("ENCRYPTED_ROOT_KEY not found in environment")
+            
+            try:
+                logger.debug("Decrypting root key from KMS...")
+                root_key = self.kms_client.decrypt(
+                    self.kms_key_id,
+                    self.encrypted_root_key
+                )
+                
+                if len(root_key) != 32:
+                    raise ValueError(f"Decrypted root key length is {len(root_key)}, expected 32 bytes")
+                
+                logger.debug("Root key decrypted successfully from KMS")
+                return root_key
+                
+            except Exception as e:
+                logger.error(f"Failed to decrypt root key from KMS: {str(e)}")
+                raise ValueError(f"Failed to decrypt root key from KMS: {str(e)}") from e
+        else:
+            # 非KMS模式：使用本地密钥
+            if not self.master_key:
+                raise ValueError("Master key not available")
+            return self.master_key
 
     @classmethod
     def generate_random_key(cls, length: int = 16) -> bytes:
@@ -81,12 +218,17 @@ class SecurityUtils:
         if not isinstance(api_key, str):
             raise ValueError("API key must be a string")
 
-        if not self.master_key:
+        # 非KMS模式下，如果没有master_key则直接返回（保持原有行为）
+        if not self.use_kms and not self.master_key:
             return api_key
 
         try:
+            # 统一获取根密钥（KMS模式从KMS解密，非KMS模式使用本地密钥）
+            master_key = self._get_master_key()
+            
+            # 统一的加密逻辑
             salt = self.generate_random_key()
-            encryption_key = self.hkdf_drive(self.master_key, salt)
+            encryption_key = self.hkdf_drive(master_key, salt)
             nonce = get_random_bytes(12)
             cipher = AES.new(encryption_key, AES.MODE_GCM, nonce=nonce)
             ciphertext, auth_tag = cipher.encrypt_and_digest(api_key.encode('utf-8'))
@@ -123,7 +265,12 @@ class SecurityUtils:
         if len(data) < min_encrypted_len:
             # Too short to be encrypted → treat as plaintext
             return stored_key
+        
         try:
+            # 统一获取根密钥（KMS模式从KMS解密，非KMS模式使用本地密钥）
+            master_key = self._get_master_key()
+            
+            # 统一的解密逻辑
             salt_len = 16  # Depends on the length returned by generate_random_key.
             nonce_len = 12
             tag_len = 16  # GCM default length.
@@ -133,7 +280,7 @@ class SecurityUtils:
             ciphertext = data[salt_len + nonce_len: -tag_len]
             auth_tag = data[-tag_len:]
 
-            encryption_key = self.hkdf_drive(self.master_key, salt)
+            encryption_key = self.hkdf_drive(master_key, salt)
             cipher = AES.new(encryption_key, AES.MODE_GCM, nonce=nonce)
             plaintext = cipher.decrypt_and_verify(ciphertext, auth_tag)
 
