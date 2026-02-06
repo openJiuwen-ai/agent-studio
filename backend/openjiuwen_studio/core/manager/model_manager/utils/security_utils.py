@@ -62,10 +62,7 @@ class SecurityUtils:
                 self.master_key = base64.b64decode(key_base64)
         else:
             self.master_key = master_key
-        if self.master_key:
-            if len(self.master_key) != 32:
-                raise ValueError('master_key length must be 32 bytes')
-        
+
         # KMS模式支持
         if use_kms is None:
             use_kms = os.getenv('HUAWEICLOUD_KMS_ENABLED', 'false').lower() == 'true'
@@ -73,11 +70,21 @@ class SecurityUtils:
         self.use_kms = use_kms
         if self.use_kms:
             self._init_kms()
-        else:
-            # 非KMS模式：保持原有逻辑，无需额外操作
-            self.kms_client = None
-            self.kms_key_id = None
-            self.encrypted_root_key = None
+            self.master_key = self._get_master_key()
+
+        if self.master_key:
+            if len(self.master_key) != 32:
+                raise ValueError('master_key length must be 32 bytes')
+    
+    def get_initialized_master_key(self) -> bytes | None:
+        """
+        返回初始化完成后当前生效的 master_key。
+        
+        - 非 KMS 模式：为从环境变量或入参传入的 32 字节本地密钥
+        - KMS 模式：为通过 KMS 解密得到的 32 字节根密钥
+        - 若未成功初始化，则返回 None
+        """
+        return self.master_key
     
     def _init_kms(self):
         """初始化华为云KMS客户端"""
@@ -132,13 +139,11 @@ class SecurityUtils:
                 kms_endpoint=kms_endpoint
             )
             self.kms_key_id = os.getenv('HUAWEICLOUD_KMS_KEY_ID')
-            self.encrypted_root_key = os.getenv('ENCRYPTED_ROOT_KEY')
+            # KMS模式下，SERVER_AES_MASTER_KEY存储的是KMS加密后的根密钥
+            self.encrypted_root_key = self.master_key.decode('utf-8') if self.master_key else None
             
             if not self.kms_key_id:
                 raise ValueError("Missing HUAWEICLOUD_KMS_KEY_ID environment variable")
-            
-            if not self.encrypted_root_key:
-                raise ValueError("Missing ENCRYPTED_ROOT_KEY environment variable")
             
             logger.info("KMS client initialized successfully")
             
@@ -161,35 +166,27 @@ class SecurityUtils:
         Raises:
             ValueError: 如果无法获取主密钥
         """
-        if self.use_kms:
-            # KMS模式：从KMS解密获取根密钥
-            if not self.kms_client:
-                raise ValueError("KMS client not initialized")
+        if not self.kms_client:
+            raise ValueError("KMS client not initialized")
+        
+        if not self.encrypted_root_key:
+            raise ValueError("SERVER_AES_MASTER_KEY not found in environment (KMS mode requires encrypted root key)")
+        
+        try:
+            logger.debug("Decrypting root key from KMS...")
+            root_key = self.kms_client.decrypt(
+                self.kms_key_id,
+                self.encrypted_root_key
+            )
+
+            logger.debug("Root key decrypted successfully from KMS")
+
+            root_key = base64.b64decode(root_key)
+            return root_key
             
-            if not self.encrypted_root_key:
-                raise ValueError("ENCRYPTED_ROOT_KEY not found in environment")
-            
-            try:
-                logger.debug("Decrypting root key from KMS...")
-                root_key = self.kms_client.decrypt(
-                    self.kms_key_id,
-                    self.encrypted_root_key
-                )
-                
-                if len(root_key) != 32:
-                    raise ValueError(f"Decrypted root key length is {len(root_key)}, expected 32 bytes")
-                
-                logger.debug("Root key decrypted successfully from KMS")
-                return root_key
-                
-            except Exception as e:
-                logger.error(f"Failed to decrypt root key from KMS: {str(e)}")
-                raise ValueError(f"Failed to decrypt root key from KMS: {str(e)}") from e
-        else:
-            # 非KMS模式：使用本地密钥
-            if not self.master_key:
-                raise ValueError("Master key not available")
-            return self.master_key
+        except Exception as e:
+            logger.error(f"Failed to decrypt root key from KMS: {str(e)}")
+            raise ValueError(f"Failed to decrypt root key from KMS: {str(e)}") from e
 
     @classmethod
     def generate_random_key(cls, length: int = 16) -> bytes:
@@ -218,17 +215,12 @@ class SecurityUtils:
         if not isinstance(api_key, str):
             raise ValueError("API key must be a string")
 
-        # 非KMS模式下，如果没有master_key则直接返回（保持原有行为）
-        if not self.use_kms and not self.master_key:
+        if not self.master_key:
             return api_key
 
         try:
-            # 统一获取根密钥（KMS模式从KMS解密，非KMS模式使用本地密钥）
-            master_key = self._get_master_key()
-            
-            # 统一的加密逻辑
             salt = self.generate_random_key()
-            encryption_key = self.hkdf_drive(master_key, salt)
+            encryption_key = self.hkdf_drive(self.master_key, salt)
             nonce = get_random_bytes(12)
             cipher = AES.new(encryption_key, AES.MODE_GCM, nonce=nonce)
             ciphertext, auth_tag = cipher.encrypt_and_digest(api_key.encode('utf-8'))
@@ -267,10 +259,6 @@ class SecurityUtils:
             return stored_key
         
         try:
-            # 统一获取根密钥（KMS模式从KMS解密，非KMS模式使用本地密钥）
-            master_key = self._get_master_key()
-            
-            # 统一的解密逻辑
             salt_len = 16  # Depends on the length returned by generate_random_key.
             nonce_len = 12
             tag_len = 16  # GCM default length.
@@ -280,7 +268,7 @@ class SecurityUtils:
             ciphertext = data[salt_len + nonce_len: -tag_len]
             auth_tag = data[-tag_len:]
 
-            encryption_key = self.hkdf_drive(master_key, salt)
+            encryption_key = self.hkdf_drive(self.master_key, salt)
             cipher = AES.new(encryption_key, AES.MODE_GCM, nonce=nonce)
             plaintext = cipher.decrypt_and_verify(ciphertext, auth_tag)
 
@@ -309,6 +297,60 @@ class SecurityUtils:
             return "*" * len(api_key)
         
         return "*" * (len(api_key) - visible_chars) + api_key[-visible_chars:]
+    
+    @staticmethod
+    def get_decrypted_secret(env_key: str, default: str = None) -> str:
+        """
+        Retrieve decrypted sensitive configuration items (Supports automatic decryption in KMS mode)
+        
+        This is a general-purpose method for obtaining sensitive configuration values 
+        from environment variables across all scenarios requiring sensitive data access.
+        
+        - KMS mode: Always treats the value as AES-GCM encrypted ciphertext and decrypts it
+        - Non-KMS mode: Returns raw environment variable value (maintains legacy behavior)
+        
+        Args:
+            env_key (str): Environment variable key name
+            default (str, optional): Default value to return if environment variable is not found
+        
+        Returns:
+            str: Decrypted plaintext key (in KMS mode) or original raw value (in non-KMS mode)
+        """
+        encrypted_value = os.getenv(env_key, default)
+        if not encrypted_value:
+            return default
+        
+        use_kms = os.getenv('HUAWEICLOUD_KMS_ENABLED', 'false').lower() == 'true'
+        
+        if not use_kms:
+            # Non-KMS mode: return raw value
+            return encrypted_value
+        
+        # KMS mode: always treat the value as ciphertext and attempt decryption
+        # In KMS mode, environment variables should contain AES-GCM encrypted values
+        # that were encrypted using the root key (which is itself encrypted by KMS)
+        try:
+            security_utils = SecurityUtils()
+            decrypted = security_utils.decrypt_api_key(encrypted_value)
+            
+            # In KMS mode, if decrypt_api_key returns the original value unchanged,
+            # it means the value was not in the expected encrypted format
+            # This should be treated as an error in KMS mode
+            if decrypted == encrypted_value:
+                raise ValueError(
+                    f"Secret '{env_key}' appears to be plaintext, but KMS mode requires encrypted values. "
+                    f"Please encrypt the value using the encryption tool before setting it in environment variables."
+                )
+            
+            return decrypted
+        except ValueError as e:
+            # Re-raise ValueError as-is (it's already a meaningful error message)
+            raise
+        except Exception as e:
+            logger.error(f"Failed to decrypt secret '{env_key}' in KMS mode: {str(e)}")
+            raise ValueError(
+                f"Failed to decrypt secret '{env_key}' in KMS mode"
+            ) from e
     
     @staticmethod
     def validate_api_key_format(api_key: str, provider: str) -> Dict[str, Any]:
