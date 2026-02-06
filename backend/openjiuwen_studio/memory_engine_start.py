@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from openjiuwen_studio.ops.modules.prompt.infra.database import get_database_url
 from openjiuwen_studio.ops.modules.prompt.infra.database import get_async_database_url
+from openjiuwen_studio.core.manager.model_manager.utils.security_utils import SecurityUtils
 
 
 class MemoryEngineManager:
@@ -36,6 +37,8 @@ class MemoryEngineManager:
 
         try:
             master_aes_key = base64.b64decode(os.getenv("SERVER_AES_MASTER_KEY_ENV", ""))
+            if os.getenv('HUAWEICLOUD_KMS_ENABLED', 'false').lower() == 'true':
+                master_aes_key = SecurityUtils(use_kms=True).get_initialized_master_key()
         except binascii.Error:
             master_aes_key = b''
         except Exception:
