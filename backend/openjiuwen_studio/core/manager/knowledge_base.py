@@ -962,7 +962,10 @@ def _check_milvus_connection() -> Tuple[bool, str]:
 
         milvus_host = os.getenv("MILVUS_HOST", "localhost")
         milvus_port = os.getenv("MILVUS_PORT", "19530")
-        milvus_token = os.getenv("MILVUS_TOKEN", None)
+        milvus_token = SecurityUtils.get_decrypted_secret(
+            "MILVUS_TOKEN",
+            os.getenv("MILVUS_TOKEN", None),
+        )
 
         # 尝试连接 Milvus
         alias = "kb_connection_test"
@@ -1073,7 +1076,10 @@ def _create_milvus_index_manager() -> MilvusIndexer:
     """Create Milvus index manager (used by _check_milvus_connection and _create_index_manager)."""
     milvus_host = os.getenv("MILVUS_HOST", "localhost")
     milvus_port = os.getenv("MILVUS_PORT", "19530")
-    milvus_token = os.getenv("MILVUS_TOKEN", None)
+    milvus_token = SecurityUtils.get_decrypted_secret(
+        "MILVUS_TOKEN",
+        os.getenv("MILVUS_TOKEN", None),
+    )
     milvus_uri = f"http://{milvus_host}:{milvus_port}"
     return MilvusIndexer(
         config=_default_index_config(),
@@ -1221,7 +1227,10 @@ def _create_vector_store(collection_name: str) -> Union[MilvusVectorStore, Chrom
     elif index_manager_type == "milvus":
         milvus_host = os.getenv("MILVUS_HOST", "localhost")
         milvus_port = os.getenv("MILVUS_PORT", "19530")
-        milvus_token = os.getenv("MILVUS_TOKEN", None)
+        milvus_token = SecurityUtils.get_decrypted_secret(
+            "MILVUS_TOKEN",
+            os.getenv("MILVUS_TOKEN", None),
+        )
 
         # 组合 Milvus URI (格式: http://host:port 或 tcp://host:port)
         # 默认使用 http:// 协议

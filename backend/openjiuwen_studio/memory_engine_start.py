@@ -45,11 +45,15 @@ class MemoryEngineManager:
             master_aes_key = b''
         vector_db_type = os.getenv("INDEX_MANAGER_TYPE", "milvus")
         if vector_db_type == "milvus":
+            milvus_token = SecurityUtils.get_decrypted_secret(
+                "MILVUS_TOKEN",
+                os.getenv("MILVUS_TOKEN", None),
+            )
             vector_store = MemoryMilvusVectorStore(
                 milvus_host=os.getenv("MILVUS_HOST"),
                 milvus_port=os.getenv("MILVUS_PORT"),
                 embedding_dims=int(os.getenv("EMBEDDING_MODEL_DIMENTION", 1024)),
-                token=os.getenv("MILVUS_TOKEN", None)
+                token=milvus_token,
             )
             logger.info("✅ milvus vector store created")
         elif vector_db_type == "chroma":
