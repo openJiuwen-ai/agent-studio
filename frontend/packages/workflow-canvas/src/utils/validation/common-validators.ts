@@ -45,9 +45,10 @@ export interface InputParametersValidatorOptions extends ValidatorOptions {
  * @returns Title validator function
  */
 export const createTitleValidator = (options: ValidatorOptions = {}) => {
-  const { message = t('workflowCanvas.validation.titleRequired') } = options
-
-  return ({ value }: { value: string }) => (value ? undefined : message)
+  return ({ value }: { value: string }) => {
+    if (value) return undefined
+    return options.message || t('workflowCanvas.validation.titleRequired')
+  }
 }
 
 /**
@@ -64,8 +65,6 @@ export const createInputParametersValidator = (options: InputParametersValidator
     includePrivateScope = false,
     errorMessages = {},
   } = options
-
-  const { required: requiredMessage = t('workflowCanvas.validation.paramRequired'), unknownVariable: unknownVariableMessage = t('workflowCanvas.validation.variableUnknown') } = errorMessages
 
   return ({ value, context, name, formValues }: any) => {
     // Extract property name
@@ -87,8 +86,8 @@ export const createInputParametersValidator = (options: InputParametersValidator
       required: isRequired,
       includePrivateScope,
       errorMessages: {
-        required: t('workflowCanvas.validation.paramRequired', { param: valuePropertyKey }),
-        unknownVariable: t('workflowCanvas.validation.paramEmpty', { param: valuePropertyKey }),
+        required: errorMessages.required || t('workflowCanvas.validation.paramRequired', { param: valuePropertyKey }),
+        unknownVariable: errorMessages.unknownVariable || t('workflowCanvas.validation.variableUnknown'),
       },
     })
   }
@@ -100,11 +99,12 @@ export const createInputParametersValidator = (options: InputParametersValidator
  * @returns Prompt validator function
  */
 export const createPromptValidator = (options: ValidatorOptions = {}) => {
-  const { message = t('workflowCanvas.validation.promptRequired') } = options
-
   return ({ value }: any) => {
     const content = value?.content ?? ''
-    return !content || content.trim().length === 0 ? message : undefined
+    if (!content || content.trim().length === 0) {
+      return options.message || t('workflowCanvas.validation.promptRequired')
+    }
+    return undefined
   }
 }
 
@@ -115,12 +115,13 @@ export const createPromptValidator = (options: ValidatorOptions = {}) => {
  * @returns Output count validator function
  */
 export const createOutputCountValidator = (minCount: number, options: ValidatorOptions = {}) => {
-  const { message = t('workflowCanvas.validation.outputCountMin', { count: minCount }) } = options
-
   return ({ value }: any) => {
-    if (!value?.properties) return message
+    if (!value?.properties) {
+      return options.message || t('workflowCanvas.validation.outputCountMin', { count: minCount })
+    }
     const outputCount = Object.keys(value.properties).length
-    return outputCount >= minCount ? undefined : message
+    if (outputCount >= minCount) return undefined
+    return options.message || t('workflowCanvas.validation.outputCountMin', { count: minCount })
   }
 }
 
@@ -130,16 +131,20 @@ export const createOutputCountValidator = (minCount: number, options: ValidatorO
  * @returns Condition validator function
  */
 export const createConditionValidator = (options: ValidatorOptions = {}) => {
-  const { message = t('workflowCanvas.validation.conditionIncomplete') } = options
-
   return ({ value }: any) => {
     // Handle is_empty and is_not_empty operators
     if (value?.operator === 'is_empty' || value?.operator === 'is_not_empty') {
-      return !value?.left ? message : undefined
+      if (!value?.left) {
+        return options.message || t('workflowCanvas.validation.conditionIncomplete')
+      }
+      return undefined
     }
 
     // Handle other operators that require left and right values
-    return !value?.left || !value?.right ? message : undefined
+    if (!value?.left || !value?.right) {
+      return options.message || t('workflowCanvas.validation.conditionIncomplete')
+    }
+    return undefined
   }
 }
 
@@ -149,15 +154,13 @@ export const createConditionValidator = (options: ValidatorOptions = {}) => {
  * @returns Return content validator function
  */
 export const createReturnContentValidator = (options: ValidatorOptions = {}) => {
-  const { emptyMessage = t('workflowCanvas.validation.returnContentEmpty'), resultMessage = t('workflowCanvas.validation.resultRequired') } = options
-
   return ({ value, formValues }: any) => {
     if (formValues?.exceptionConfig?.processType === 'return_content') {
       if (!value || Object.keys(value).length === 0) {
-        return emptyMessage
+        return options.emptyMessage || t('workflowCanvas.validation.returnContentEmpty')
       }
       if (!value.result) {
-        return resultMessage
+        return options.resultMessage || t('workflowCanvas.validation.resultRequired')
       }
     }
     return undefined
@@ -170,12 +173,10 @@ export const createReturnContentValidator = (options: ValidatorOptions = {}) => 
  * @returns Model validator function
  */
 export const createModelValidator = (options: ValidatorOptions = {}) => {
-  const { message = t('workflowCanvas.validation.modelRequired') } = options
-
   return ({ value }: any) => {
     // Check if model is configured
     if (!value || !value.id || value.id === '') {
-      return message
+      return options.message || t('workflowCanvas.validation.modelRequired')
     }
     return undefined
   }
@@ -187,14 +188,12 @@ export const createModelValidator = (options: ValidatorOptions = {}) => {
  * @returns Streaming template validator function
  */
 export const createStreamingTemplateValidator = (options: ValidatorOptions = {}) => {
-  const { message = t('workflowCanvas.validation.streamingTemplateEmpty') } = options
-
   return ({ value, formValues }: any) => {
     // If streaming is enabled, check if output template is empty
     if (formValues?.inputs?.streaming === true) {
       const content = formValues?.inputs?.content?.content ?? ''
       if (!content || content.trim().length === 0) {
-        return message
+        return options.message || t('workflowCanvas.validation.streamingTemplateEmpty')
       }
     }
     return undefined
@@ -215,7 +214,7 @@ export const commonValidators = {
   optionalInputParameters: createInputParametersValidator({ required: false }),
 
   /** Dual output validator */
-  dualOutput: createOutputCountValidator(2, { message: t('workflowCanvas.validation.outputCountDual') }),
+  dualOutput: createOutputCountValidator(2),
 
   /** Condition validator */
   condition: createConditionValidator(),

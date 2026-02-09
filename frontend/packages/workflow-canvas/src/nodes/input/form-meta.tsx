@@ -14,7 +14,7 @@ export const renderForm = () => {
     <>
       <FormHeader />
       <FormContent>
-        <FormOutput name={t('workflowCanvas.nodes.input.output')} minProperties={1} expandable={true} />
+        <FormOutput name={'workflowCanvas.formInput.input'} minProperties={1} expandable={true} />
       </FormContent>
     </>
   )

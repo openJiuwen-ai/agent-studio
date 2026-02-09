@@ -28,28 +28,30 @@ from openjiuwen_studio.ops.modules.prompt.domain.entities import (
 
 from openjiuwen_studio.ops.modules.prompt.infra.database import get_db_ops
 from openjiuwen_studio.ops.modules.prompt.infra.repositories.job_repo import SQLJobRepository
-
 from openjiuwen_studio.ops.modules.llm.llm_config_service import LLMConfigService
-from openjiuwen_studio.routers.prompt_llm_router import get_llm_config_service
 from openjiuwen_studio.ops.common.handle_exceptions_util import handle_exceptions
+from openjiuwen_studio.routers.prompt_llm_router import get_llm_config_service
+from openjiuwen_studio.core.utils.compatible_field import compatible_provider
+from openjiuwen_studio.core.common.language_thread_context import get_language
 
-from openjiuwen.agent.chat_agent import create_chat_agent_config, create_chat_agent
-from openjiuwen.agent.config.base import LLMCallConfig
-from openjiuwen.core.utils.llm.base import BaseModelInfo
-from openjiuwen.agent_builder.tune.optimizer.joint_optimizer import JointOptimizer
-from openjiuwen.agent_builder.tune.evaluator.evaluator import DefaultEvaluator
-from openjiuwen.agent_builder.tune.base import Case, EvaluatedCase
-from openjiuwen.core.utils.tool.schema import ToolInfo, ToolCall
-from openjiuwen.agent_builder.tune.trainer.trainer import Trainer
-from openjiuwen.agent_builder.tune.dataset.case_loader import CaseLoader
-from openjiuwen.core.component.common.configs.model_config import ModelConfig
-
-from openjiuwen.agent_builder.tune.trainer.base import Callbacks, Progress
-from openjiuwen.agent_builder.prompt_builder.builder.meta_template_builder import MetaTemplateBuilder
-from openjiuwen.agent_builder.prompt_builder.builder.feedback_prompt_builder import FeedbackPromptBuilder
-from openjiuwen.agent_builder.prompt_builder.builder.badcase_prompt_builder import BadCasePromptBuilder
+from openjiuwen.dev_tools.tune.chat_agent.chat_agent import create_chat_agent_config, create_chat_agent
+from openjiuwen.dev_tools.tune.optimizer.joint_optimizer import JointOptimizer
+from openjiuwen.dev_tools.tune.evaluator.evaluator import DefaultEvaluator
+from openjiuwen.dev_tools.tune.base import Case, EvaluatedCase
+from openjiuwen.dev_tools.tune.trainer.base import Progress, Callbacks
+from openjiuwen.core.single_agent.legacy import LLMCallConfig
+from openjiuwen.core.common.schema import Param
 from openjiuwen.core.common.logging import logger
-from openjiuwen.core.utils.tool.function.function import LocalFunction, Param
+from openjiuwen.core.foundation.llm import ToolCall
+from openjiuwen.core.foundation.tool import ToolInfo
+from openjiuwen.core.foundation.llm.schema.mode_info import BaseModelInfo
+from openjiuwen.core.foundation.tool.function.function import LocalFunction
+from openjiuwen.core.foundation.llm import Model, ModelRequestConfig, ModelClientConfig  # from ModelConfig
+from openjiuwen.dev_tools.tune.trainer.trainer import Trainer
+from openjiuwen.dev_tools.tune.dataset.case_loader import CaseLoader
+from openjiuwen.dev_tools.prompt_builder.builder.meta_template_builder import MetaTemplateBuilder
+from openjiuwen.dev_tools.prompt_builder.builder.feedback_prompt_builder import FeedbackPromptBuilder
+from openjiuwen.dev_tools.prompt_builder.builder.badcase_prompt_builder import BadCasePromptBuilder
 
 router = APIRouter(prefix="/api/v1/prompts/tuning", tags=["prompt tuning"])
 
@@ -445,23 +447,27 @@ class OptimizationTaskExecutor:
     @staticmethod
     def _create_agent(prompt: str, llm_config: Dict[str, Any], tools: List = None):
         """创建聊天Agent"""
-        model = ModelConfig(
-            model_provider=llm_config.get("provider"),
-            model_info=BaseModelInfo(
-                api_base=llm_config.get("base_url"),
-                api_key=llm_config.get("api_key"),
-                model=llm_config.get("model_name"),
-                top_p=llm_config.get("params").get("top_p"),
-                temperature=llm_config.get("params").get("temperature"),
-                timeout=llm_config.get("params").get("timeout"),
-            )
+        model_client_config = ModelClientConfig(
+            client_provider=compatible_provider(llm_config.get("provider")),
+            api_base=llm_config.get("base_url"),
+            api_key=llm_config.get("api_key"),
+            timeout=llm_config.get("params").get("timeout"),
+            verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
+        )
+        model_config = ModelRequestConfig(
+            model=llm_config.get("model_name"),
+            top_p=llm_config.get("params").get("top_p"),
+            temperature=llm_config.get("params").get("temperature"),
+            max_tokens=llm_config.get("max_tokens"),
         )
 
         logger.info(
-            f"_create_agent model_config base_url: {model.model_info.api_base}   model_name: {model.model_info.model_name}")
+            f"_create_agent model_config base_url: {model_client_config.api_base} "
+            f"model_name: {model_config.model_name}")
 
         llm_call_config = LLMCallConfig(
-            model=model,
+            model=model_config,
+            model_client=model_client_config,
             system_prompt=[{"role": "system", "content": prompt}],
             user_prompt=[{"role": "user", "content": "{{query}}"}]
         )
@@ -479,21 +485,23 @@ class OptimizationTaskExecutor:
     @staticmethod
     def _create_trainer(llm_config: Dict[str, Any], optimize_config: Dict[str, Any]):
         """创建训练器"""
-        # 构建模型配置
-        config = ModelConfig(
-            model_provider=llm_config.get("provider"),
-            model_info=BaseModelInfo(
-                api_base=llm_config.get("base_url"),
-                api_key=llm_config.get("api_key"),
-                model=llm_config.get("model_name"),
-                top_p=llm_config.get("params").get("top_p"),
-                temperature=llm_config.get("params").get("temperature"),
-                timeout=llm_config.get("params").get("timeout"),
-            )
+        model_client_config = ModelClientConfig(
+            client_provider=compatible_provider(llm_config.get("provider")),
+            api_base=llm_config.get("base_url"),
+            api_key=llm_config.get("api_key"),
+            timeout=llm_config.get("params").get("timeout"),
+            verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
+        )
+        model_config = ModelRequestConfig(
+            model=llm_config.get("model_name"),
+            top_p=llm_config.get("params").get("top_p"),
+            temperature=llm_config.get("params").get("temperature"),
+            max_tokens=llm_config.get("max_tokens"),
         )
 
         logger.info(
-            f"_create_trainer model_config base_url: {config.model_info.api_base}   model_name: {config.model_info.model_name}")
+            f"_create_trainer model_config base_url: {model_client_config.api_base} "
+            f"model_name: {model_config.model_name}")
 
         # 构建评估指标
         metric_parts = []
@@ -508,13 +516,15 @@ class OptimizationTaskExecutor:
 
         # 创建优化器
         optimizer = JointOptimizer(
-            model_config=config,
+            model_config=model_config,
+            model_client_config=model_client_config,
             num_examples=optimize_config.get("example_num", 0)
         )
 
         # 创建评估器
         evaluator = DefaultEvaluator(
-            model_config=config,
+            model_config=model_config,
+            model_client_config=model_client_config,
             metric=metric
         )
         llm_parallel_num = optimize_config.get("llm_parallel", 1)
@@ -914,12 +924,12 @@ def get_history(
     return entities.GetOptimizeResponse(code=200, msg=f"未找到iteration_round为{iteration_round}的历史记录", history=[])
 
 
-def wrap_sse_generator(original_generator):
+async def wrap_sse_generator(original_generator):
     """
     将原始生成器的输出包装成SSE规范格式
     SSE要求每个数据块以"data: "开头，两个换行(\n\n)结尾
     """
-    for content in original_generator:
+    async for content in original_generator:
         if content:
             res = json.dumps({"content": content})
             yield f"data: {res}\n"
@@ -968,19 +978,20 @@ async def prompt_generate(
             )
 
             # 初始化ModelConfig
-            model_config = ModelConfig(
-                model_provider=llm_config.get("provider"),
-                model_info=BaseModelInfo(
-                    api_base=llm_config.get("base_url"),
-                    api_key=llm_config.get("api_key"),
-                    model=llm_config.get("model_name"),
-                    top_p=llm_config.get("params").get("top_p"),
-                    temperature=llm_config.get("params").get("temperature"),
-                    timeout=llm_config.get("params").get("timeout"),
-                )
+            model_client_config = ModelClientConfig(
+                client_provider=compatible_provider(llm_config.get("provider")),
+                api_base=llm_config.get("base_url"),
+                api_key=llm_config.get("api_key"),
+                timeout=llm_config.get("params").get("timeout"),
+                verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
             )
-
-            logger.info(f"prompt_generate model_config: {model_config}")
+            model_config = ModelRequestConfig(
+                model=llm_config.get("model_name"),
+                top_p=llm_config.get("params").get("top_p"),
+                temperature=llm_config.get("params").get("temperature"),
+                max_tokens=llm_config.get("max_tokens"),
+            )
+            logger.info(f"prompt_generate model_config: {model_config}, model_client_config: {model_client_config}")
 
         elif model_from == "user":
             # 从用户请求体中提取模型配置
@@ -994,18 +1005,18 @@ async def prompt_generate(
                 )
 
             # 初始化BaseModelInfo
-            model_config = ModelConfig(
-                model_provider=model_provider,
-                model_info=BaseModelInfo(
-                    api_base=model_info.get("api_base", ""),
-                    api_key=model_info.get("api_key", ""),
-                    model=model_info.get("model_type", ""),
-                    temperature=model_info.get("temperature", 0.95),
-                    top_p=model_info.get("top_p", 0.1),
-                    streaming=model_info.get("streaming", False),
-                    timeout=model_info.get("timeout", 60),
-                    model_type=model_info.get("model_type", ""),
-                )
+            model_client_config = ModelClientConfig(
+                client_provider=compatible_provider(model_info.get("provider", "")),
+                api_base=model_info.get("base_url", ""),
+                api_key=model_info.get("api_key", ""),
+                timeout=model_info.get("params").get("timeout", 60),
+                verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
+            )
+            model_config = ModelRequestConfig(
+                model=model_info.get("model_name", ""),
+                top_p=model_info.get("params").get("top_p", 0.1),
+                temperature=model_info.get("params").get("temperature", 0.95),
+                max_tokens=model_info.get("max_tokens", 2000),
             )
 
         else:
@@ -1016,7 +1027,10 @@ async def prompt_generate(
             )
 
         # 4. 初始化MetaTemplateBuilder
-        builder = MetaTemplateBuilder(model_config)
+        builder = MetaTemplateBuilder(
+            model_config=model_config,
+            model_client_config=model_client_config,
+        )
 
         # 5. 确定模板类型
         template_type = "general"
@@ -1032,11 +1046,12 @@ async def prompt_generate(
                 prompt=instruct,
                 tools=tools,
                 template_type=template_type,
+                language="zh-CN" if get_language() in ("zh-cn", "zh") else "en-US",
                 custom_template_name=meta_template_type if template_type == "other" else None
             )
             sse_stream = wrap_sse_generator(stream_generator)
             return StreamingResponse(
-                iterate_in_threadpool(sse_stream),
+                sse_stream,
                 media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
@@ -1050,6 +1065,7 @@ async def prompt_generate(
                 prompt=instruct,
                 tools=tools,
                 template_type=template_type,
+                language="zh-CN" if get_language() in ("zh-cn", "zh") else "en-US",
                 custom_template_name=meta_template_type if template_type == "other" else None
             )
             return JSONResponse(content={
@@ -1102,20 +1118,25 @@ async def optimize_feedback(
         llm_config = ModelConfigConverter.convert_to_sdk_format(
             llm_service, model_info_dict
         )
-        # 4. 初始化MetaTemplateBuilder
-        model_config = ModelConfig(
-                model_provider=llm_config.get("provider"),
-                model_info=BaseModelInfo(
-                    api_base=llm_config.get("base_url"),
-                    api_key=llm_config.get("api_key"),
-                    model=llm_config.get("model_name"),
-                    top_p=llm_config.get("params").get("top_p"),
-                    temperature=llm_config.get("params").get("temperature"),
-                    timeout=llm_config.get("params").get("timeout"),
-                )
-            )
+        # 4. 初始化FeedbackPromptBuilder
+        model_client_config = ModelClientConfig(
+            client_provider=compatible_provider(llm_config.get("provider")),
+            api_base=llm_config.get("base_url"),
+            api_key=llm_config.get("api_key"),
+            timeout=llm_config.get("params").get("timeout"),
+            verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
+        )
+        model_config = ModelRequestConfig(
+            model=llm_config.get("model_name"),
+            top_p=llm_config.get("params").get("top_p"),
+            temperature=llm_config.get("params").get("temperature"),
+            max_tokens=llm_config.get("max_tokens"),
+        )
         logger.info(f"optimize_feedback model_config： {model_config}")
-        builder = FeedbackPromptBuilder(model_config)
+        builder = FeedbackPromptBuilder(
+            model_config=model_config,
+            model_client_config=model_client_config,
+        )
 
         # 6. 根据stream参数调用不同方法
         if stream:
@@ -1125,11 +1146,12 @@ async def optimize_feedback(
                 feedback=feedback,
                 mode=mode,
                 start_pos=start_pos,
-                end_pos=end_pos
+                end_pos=end_pos,
+                language="zh-CN" if get_language() in ("zh-cn", "zh") else "en-US",
             )
             sse_stream = wrap_sse_generator(stream_generator)
             return StreamingResponse(
-                iterate_in_threadpool(sse_stream),
+                sse_stream,
                 media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
@@ -1144,7 +1166,8 @@ async def optimize_feedback(
                 feedback=feedback,
                 mode=mode,
                 start_pos=start_pos,
-                end_pos=end_pos
+                end_pos=end_pos,
+                language="zh-CN" if get_language() in ("zh-cn", "zh") else "en-US",
             )
             return JSONResponse(content={
                 "content": result,
@@ -1207,31 +1230,37 @@ async def prompt_bad_cases(
             llm_service, model_info_dict
         )
 
-        # 4. 初始化MetaTemplateBuilder
-        model_config = ModelConfig(
-            model_provider=llm_config.get("provider"),
-            model_info=BaseModelInfo(
-                api_base=llm_config.get("base_url"),
-                api_key=llm_config.get("api_key"),
-                model=llm_config.get("model_name"),
-                top_p=llm_config.get("params").get("top_p"),
-                temperature=llm_config.get("params").get("temperature"),
-                timeout=llm_config.get("params").get("timeout"),
-            )
+        # 4. 初始化BadCasePromptBuilder
+        model_client_config = ModelClientConfig(
+            client_provider=compatible_provider(llm_config.get("provider")),
+            api_base=llm_config.get("base_url"),
+            api_key=llm_config.get("api_key"),
+            timeout=llm_config.get("params").get("timeout"),
+            verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
         )
-        logger.info(f"prompt_bad_cases model_config : {model_config}")
-        builder = BadCasePromptBuilder(model_config)
+        model_config = ModelRequestConfig(
+            model=llm_config.get("model_name"),
+            top_p=llm_config.get("params").get("top_p"),
+            temperature=llm_config.get("params").get("temperature"),
+            max_tokens=llm_config.get("max_tokens"),
+        )
+        logger.info(f"optimize_feedback model_config： {model_config}")
+        builder = BadCasePromptBuilder(
+            model_config=model_config,
+            model_client_config=model_client_config,
+        )
 
         # 6. 根据stream参数调用不同方法
         if stream:
             # 流式输出
             stream_generator = builder.stream_build(
                 prompt=prompt,
-                cases=cases
+                cases=cases,
+                language="zh-CN" if get_language() in ("zh-cn", "zh") else "en-US",
             )
             sse_stream = wrap_sse_generator(stream_generator)
             return StreamingResponse(
-                iterate_in_threadpool(sse_stream),
+                sse_stream,
                 media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
@@ -1243,7 +1272,8 @@ async def prompt_bad_cases(
             # 非流式输出
             result = builder.build(
                 prompt=prompt,
-                cases=cases
+                cases=cases,
+                language="zh-CN" if get_language() in ("zh-cn", "zh") else "en-US",
             )
             return JSONResponse(content={
                 "content": result,

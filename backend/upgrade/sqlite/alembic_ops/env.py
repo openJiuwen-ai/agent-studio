@@ -76,9 +76,20 @@ def run_migrations_offline() -> None:
     url = None
     if db_type == "sqlite":
         sqlite_db = os.getenv("OPS_SQLITE_DB", "ops.db")
+        sqlite_db_path = os.getenv("SQLITE_DB_PATH", "data/databases")
+
         # 确保数据库文件路径是绝对路径
         if not os.path.isabs(sqlite_db):
-            sqlite_db = os.path.join(BACKEND_ROOT, "data", "databases", sqlite_db)
+            # 如果路径是相对路径，相对于 BACKEND_ROOT
+            if not os.path.isabs(sqlite_db_path):
+                sqlite_db_path = os.path.join(BACKEND_ROOT, sqlite_db_path)
+
+            # 确保目录存在
+            os.makedirs(sqlite_db_path, exist_ok=True)
+
+            # 组合完整路径
+            sqlite_db = os.path.join(sqlite_db_path, sqlite_db)
+
         url = f"sqlite:///{sqlite_db}"
     else:
         db_user = os.getenv("DB_USER")
@@ -110,9 +121,20 @@ def run_migrations_online() -> None:
     url = None
     if db_type == "sqlite":
         sqlite_db = os.getenv("OPS_SQLITE_DB", "ops.db")
+        sqlite_db_path = os.getenv("SQLITE_DB_PATH", "data/databases")
+
         # 确保数据库文件路径是绝对路径
         if not os.path.isabs(sqlite_db):
-            sqlite_db = os.path.join(BACKEND_ROOT, "data", "databases", sqlite_db)
+            # 如果路径是相对路径，相对于 BACKEND_ROOT
+            if not os.path.isabs(sqlite_db_path):
+                sqlite_db_path = os.path.join(BACKEND_ROOT, sqlite_db_path)
+
+            # 确保目录存在
+            os.makedirs(sqlite_db_path, exist_ok=True)
+
+            # 组合完整路径
+            sqlite_db = os.path.join(sqlite_db_path, sqlite_db)
+
         url = f"sqlite:///{sqlite_db}"
         render_as_batch = True
     else:

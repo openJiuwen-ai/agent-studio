@@ -58,7 +58,7 @@ export function ActionMenu<T extends object>({
         const disabled = typeof op.disabled === 'function' ? op.disabled(row, rowIndex) : (op.disabled ?? false)
         const icon = typeof op.icon === 'function' ? op.icon(row, rowIndex) : op.icon
         const tooltip = typeof op.tooltip === 'function' ? op.tooltip(row, rowIndex) : op.tooltip
-        const item = (
+        const menuItem = (
           <MenuItem
             key={op.key}
             disabled={disabled}
@@ -75,10 +75,10 @@ export function ActionMenu<T extends object>({
         )
         return tooltip ? (
           <Tooltip key={op.key} title={tooltip}>
-            {item}
+            <span>{menuItem}</span>
           </Tooltip>
         ) : (
-          item
+          menuItem
         )
       })}
     </Menu>
@@ -123,7 +123,7 @@ export function ActionButtons<T extends object>({
         const disabled = typeof op.disabled === 'function' ? op.disabled(row, rowIndex) : (op.disabled ?? false)
         const icon = typeof op.icon === 'function' ? op.icon(row, rowIndex) : op.icon
         const tooltip = typeof op.tooltip === 'function' ? op.tooltip(row, rowIndex) : op.tooltip
-        const content = (
+        const button = (
           <IconButton
             size="small"
             disabled={disabled}
@@ -136,7 +136,7 @@ export function ActionButtons<T extends object>({
             {icon ?? <Box sx={{ fontSize: '0.75rem', fontWeight: 500 }}>{op.label}</Box>}
           </IconButton>
         )
-        return tooltip ? <Tooltip key={op.key} title={tooltip}>{content}</Tooltip> : content
+        return tooltip ? <Tooltip key={op.key} title={tooltip}><span>{button}</span></Tooltip> : button
       })}
       {overflow.length > 0 && (
         <IconButton size="small" onClick={event => onOpenMenu(event, rowId, columnKey)}>

@@ -30,7 +30,7 @@ export const BlockStartNodeRegistry: FlowNodeRegistry = {
       cursor: 'move',
     },
   },
-  info: {
+  info: () => ({
     icon: (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '4px 0', flexDirection: 'column' }}>
         <PlayCircle size={20} className="text-green-600" />
@@ -38,7 +38,7 @@ export const BlockStartNodeRegistry: FlowNodeRegistry = {
       </div>
     ),
     description: t('workflowCanvas.nodes.blockStart.description'),
-  },
+  }),
   /**
    * Render node via formMeta
    */

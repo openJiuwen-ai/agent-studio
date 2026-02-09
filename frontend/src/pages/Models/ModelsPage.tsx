@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useAuthStore } from '../../stores/useAuthStore'
 import { useTranslation } from 'react-i18next'
 import { Plus, Settings, Trash2, Play, CheckCircle, Search, XCircle, Loader2, ChevronLeft, ChevronRight, RefreshCw, Package, Bot, FileCode2 } from 'lucide-react'
@@ -211,7 +211,8 @@ const ModelsPage: React.FC = () => {
   const [testPrompt, setTestPrompt] = useState('')
   const [testResult, setTestResult] = useState('')
   const [isTesting, setIsTesting] = useState(false)
-  const [testingModelId, setTestingModelId] = useState<string | null>(null) // 记录正在测试的模型 ID
+  const testingModelIdRef = useRef<string | null>(null) // 使用 ref 持久化跟踪正在测试的模型 ID
+  const testGenerationRef = useRef(0) // 测试代数，用于防止旧测试覆盖新测试状态
 
   // Tag input state
   const [newTag, setNewTag] = useState('')
@@ -238,7 +239,7 @@ const ModelsPage: React.FC = () => {
       const descriptionLengthValid = (newModel.description?.length || 0) <= 500
       const baseValid = nameValid && modelIdValid && apiKeyValid && baseUrlValid && descriptionLengthValid && tagsValid
       const timeout = newModel.timeout
-      return baseValid && timeout !== undefined && timeout >= 1 && timeout <= 300 // 超时时间范围验证
+      return baseValid && timeout !== undefined && timeout >= 1 && timeout <= 3600 // 超时时间范围验证
     }
   }
 
@@ -351,6 +352,19 @@ const ModelsPage: React.FC = () => {
     setCurrentPage(1)
   }, [searchTerm, filterProvider, filterStatus, activeTab])
 
+  // 监听测试对话框关闭，确保重置测试状态
+  useEffect(() => {
+    if (!showTestDialog) {
+      // 对话框关闭时，增加代数使正在进行的测试失效
+      testGenerationRef.current += 1
+      // 重置所有测试相关状态
+      setIsTesting(false)
+      testingModelIdRef.current = null
+      setTestPrompt('')
+      setTestResult('')
+    }
+  }, [showTestDialog])
+
   // 确定最终显示的模型数据
   const finalModels = hasFilters ? paginatedFilteredModels : paginatedDisplayModels
   const finalTotalItems = hasFilters ? filteredTotalItems : totalItems
@@ -379,7 +393,7 @@ const ModelsPage: React.FC = () => {
     // LLM 模型需要验证超时时间范围
     if (modelType === 'LLM') {
       const timeout = newModel.timeout
-      if (timeout === undefined || timeout < 1 || timeout > 300) {
+      if (timeout === undefined || timeout < 1 || timeout > 3600) {
         setSnackbar({ open: true, message: t('models.messages.timeoutRange'), severity: 'error' })
         return
       }
@@ -460,7 +474,7 @@ const ModelsPage: React.FC = () => {
                     friendlyMessage = t('models.messages.validationErrors.minLength')
                   } else if (errorDetail.msg?.includes('at most') && errorDetail.msg?.includes('characters')) {
                     const match = errorDetail.msg.match(/at most (\d+) characters/)
-                    const maxLength = match ? match[1] : '限制'
+                    const maxLength = match ? match[1] : t('models.messages.validationErrors.maxLengthFallback')
                     friendlyMessage = t('models.messages.validationErrors.maxLength', { max: maxLength })
                   } else if (errorDetail.msg?.includes('required') || errorDetail.msg?.includes('field required')) {
                     friendlyMessage = t('models.messages.validationErrors.required')
@@ -579,7 +593,7 @@ const ModelsPage: React.FC = () => {
                   friendlyMessage = t('models.messages.validationErrors.minLength')
                 } else if (errorDetail.msg?.includes('at most') && errorDetail.msg?.includes('characters')) {
                   const match = errorDetail.msg.match(/at most (\d+) characters/)
-                  const maxLength = match ? match[1] : '限制'
+                  const maxLength = match ? match[1] : t('models.messages.validationErrors.maxLengthFallback')
                   friendlyMessage = t('models.messages.validationErrors.maxLength', { max: maxLength })
                 } else if (errorDetail.msg?.includes('required') || errorDetail.msg?.includes('field required')) {
                   friendlyMessage = t('models.messages.validationErrors.required')
@@ -739,91 +753,60 @@ const ModelsPage: React.FC = () => {
 
   // 测试 Embedding 模型
   const handleTestEmbeddingModel = async (modelId: string) => {
-    setTestingModelId(modelId)
+    testingModelIdRef.current = modelId
     try {
       const result = await testEmbeddingModelMutation.mutateAsync({
         id: modelId,
         testRequest: { text: t('models.messages.testText') },
       })
 
-      // 格式化测试结果（result 是 EmbeddingModelTestResponse，包含 data, model, usage 等字段）
+      // 格式化测试结果（result 含 data, model, response_time；后端不再返回 usage/tokens）
       const embeddingData = result.data?.[0]
       const dimension = embeddingData?.embedding?.length || 0
-      const usage = result.usage || {}
       const model = result.model || 'unknown'
 
       setSnackbar({
         open: true,
-        message: `测试成功！模型: ${model}，向量维度: ${dimension}，Token 使用: ${usage.total_tokens || 0}`,
+        message: t('models.messages.embeddingModel.testSuccess', {
+          model,
+          dimension,
+        }),
         severity: 'success',
       })
     } catch (error: any) {
-      // 提取错误信息
       const errorDetail = error?.detail || error?.response?.data?.detail || error?.message || ''
-      
-      // 解析后端错误信息并映射到国际化key
-      const parseError = (errorText: string): string => {
-        if (!errorText || typeof errorText !== 'string') {
-          return t('models.messages.embeddingModel.testFailed')
-        }
-        
-        // 提取模型名
-        const modelNameMatch = errorText.match(/Embedding model '([^']+)'/i)
+      const raw = String(errorDetail || '')
+      // 后端统一返回英文，按英文匹配后 replace 为当前语言的 i18n
+      if (!raw) {
+        setSnackbar({ open: true, message: t('models.messages.modelTestError.testFailed'), severity: 'error' })
+      } else {
+        const modelNameMatch = raw.match(/Embedding model '([^']+)'/i)
         const modelName = modelNameMatch ? modelNameMatch[1] : ''
-        
-        // 检查是否是模型未启用
-        if (errorText.toLowerCase().includes('is not active') || errorText.toLowerCase().includes('not active')) {
-          return t('models.messages.embeddingModel.testError.modelNotActive', { modelName })
+        if (raw.toLowerCase().includes('is not active') || raw.toLowerCase().includes('not active')) {
+          setSnackbar({ open: true, message: t('models.messages.modelTestError.modelNotActive', { modelName }), severity: 'error' })
+        } else {
+          let detail = ''
+          const colonIndex = raw.indexOf(':')
+          if (colonIndex > 0) detail = raw.substring(colonIndex + 1).trim()
+          if (!detail) detail = raw
+          let errorType = 'unknownError'
+          if (raw.includes('model name') && raw.includes('is invalid')) errorType = 'modelNameInvalid'
+          else if (raw.includes('API key') && raw.includes('is invalid')) errorType = 'apiKeyInvalid'
+          else if (raw.includes('API URL') && raw.includes('is invalid')) errorType = 'apiUrlInvalid'
+          else if (raw.includes('request parameters') && raw.includes('is invalid')) errorType = 'requestParamsInvalid'
+          else if (raw.includes('API server') && raw.includes('error')) errorType = 'apiServerError'
+          else if (raw.includes('configuration') && raw.includes('is invalid')) errorType = 'configInvalid'
+          else if (raw.includes('insufficient quota') && raw.includes('is invalid')) errorType = 'insufficientQuota'
+          else if (raw.includes('API call failed')) errorType = 'apiCallFailed'
+          setSnackbar({
+            open: true,
+            message: t(`models.messages.modelTestError.${errorType}`, { modelName, detail }),
+            severity: 'error',
+          })
         }
-        
-        // 提取错误类型和详情
-        let errorType = 'unknownError'
-        let detail = ''
-        
-        // 提取冒号后的详情部分
-        const colonIndex = errorText.indexOf(':')
-        if (colonIndex > 0) {
-          detail = errorText.substring(colonIndex + 1).trim()
-        }
-        
-        if (errorText.includes('model name') && errorText.includes('is invalid')) {
-          errorType = 'modelNameInvalid'
-        } else if (errorText.includes('API key') && errorText.includes('is invalid')) {
-          errorType = 'apiKeyInvalid'
-        } else if (errorText.includes('API URL') && errorText.includes('is invalid')) {
-          errorType = 'apiUrlInvalid'
-        } else if (errorText.includes('request parameters') && errorText.includes('is invalid')) {
-          errorType = 'requestParamsInvalid'
-        } else if (errorText.includes('API server') && errorText.includes('error')) {
-          errorType = 'apiServerError'
-        } else if (errorText.includes('configuration') && errorText.includes('is invalid')) {
-          errorType = 'configInvalid'
-        } else if (errorText.includes('insufficient quota') && errorText.includes('is invalid')) {
-          errorType = 'insufficientQuota'
-        } else if (errorText.includes('API call failed')) {
-          errorType = 'apiCallFailed'
-        }
-        
-        // 如果没有提取到详情，使用整个错误文本
-        if (!detail) {
-          detail = errorText
-        }
-        
-        // 使用国际化模板
-        const i18nKey = `models.messages.embeddingModel.testError.${errorType}` as const
-        return t(i18nKey, { modelName, detail })
       }
-      
-      const errorMessage = parseError(errorDetail)
-      
-      // 测试失败后只显示错误信息，不自动禁用模型
-      setSnackbar({
-        open: true,
-        message: errorMessage,
-        severity: 'error',
-      })
     } finally {
-      setTestingModelId(null)
+      testingModelIdRef.current = null
     }
   }
 
@@ -833,11 +816,17 @@ const ModelsPage: React.FC = () => {
       return
     }
 
+    const currentModelId = selectedModel.id
+    // 增加测试代数，使旧测试的失效
+    testGenerationRef.current += 1
+    const currentGeneration = testGenerationRef.current
+
     setIsTesting(true)
+    testingModelIdRef.current = currentModelId
 
     try {
       const result = await testModelMutation.mutateAsync({
-        id: selectedModel.id,
+        id: currentModelId,
         prompt: testPrompt,
         spaceId: user?.spaceId || '',
         parameters: {
@@ -846,9 +835,13 @@ const ModelsPage: React.FC = () => {
           max_tokens: selectedModel.maxTokens ?? 4096,
         },
       })
-      setTestResult(
-        `${t('models.testSuccess')}\n${t('models.modelList.name')}: ${selectedModel.name}\n${t('models.testPrompt')}: ${testPrompt}\n\n${t('models.testResponse')}: ${result.response || t('models.testCompletion')}\n\n${t('models.averageResponseTime')}: ${result.latency.toFixed(3)}s\n\n${t('models.configInfo')}: \n- ${t('models.modelConfig.parameters.temperature')}: ${selectedModel.temperature}\n- top_p: ${selectedModel.topp}\n- max_tokens: ${selectedModel.maxTokens}\n- ${t('models.modelList.provider')}: ${selectedModel.provider}`,
-      )
+
+      // 只有当代数匹配、对话框仍然打开且模型ID匹配时才设置结果
+      if (currentGeneration === testGenerationRef.current && showTestDialog && testingModelIdRef.current === currentModelId) {
+        setTestResult(
+          `${t('models.testSuccess')}\n${t('models.modelList.name')}: ${selectedModel.name}\n${t('models.testPrompt')}: ${testPrompt}\n\n${t('models.testResponse')}: ${result.response || t('models.testCompletion')}\n\n${t('models.averageResponseTime')}: ${result.latency.toFixed(3)}s\n\n${t('models.configInfo')}: \n- ${t('models.modelConfig.parameters.temperature')}: ${selectedModel.temperature}\n- top_p: ${selectedModel.topp}\n- max_tokens: ${selectedModel.maxTokens}\n- ${t('models.modelList.provider')}: ${selectedModel.provider}`,
+        )
+      }
     } catch (error: any) {
       let errorMessage = t('models.testFailed')
 
@@ -885,11 +878,26 @@ const ModelsPage: React.FC = () => {
         errorMessage = error.message
       }
 
-      setTestResult(
-        `${t('models.testFailed')}: ${errorMessage}\n${t('models.modelList.name')}: ${selectedModel.name}\n${t('models.testPrompt')}: ${testPrompt}`,
-      )
+      if (currentGeneration === testGenerationRef.current && showTestDialog && testingModelIdRef.current === currentModelId) {
+        // 后端统一返回英文，按英文匹配后 replace 为当前语言的 i18n
+        const localizedError = errorMessage
+          .replace(/Model call failed, please check model configuration/gi, t('models.messages.modelTestError.modelCallFailedCheckConfig'))
+          .replace(/API Key or model ID invalid, please check model configuration/gi, t('models.messages.modelTestError.apiKeyOrModelInvalid'))
+          .replace(/Model service address unreachable, please check base URL or network configuration/gi, t('models.messages.modelTestError.serviceUnreachable'))
+        setTestResult(
+          `${t('models.testFailed')}: ${localizedError}\n${t('models.modelList.name')}: ${selectedModel.name}\n${t('models.testPrompt')}: ${testPrompt}`,
+        )
+      }
     } finally {
-      setIsTesting(false)
+      // 只有当正在测试的模型ID仍等于当前模型ID时才重置 isTesting
+      // 这确保不会取消新测试的状态
+      if (testingModelIdRef.current === currentModelId) {
+        setIsTesting(false)
+      }
+      // 只有当代数和模型ID都匹配时才清除 testingModelIdRef
+      if (currentGeneration === testGenerationRef.current && testingModelIdRef.current === currentModelId) {
+        testingModelIdRef.current = null
+      }
       // 无论测试成功还是失败，都刷新模型列表以更新统计信息
       await Promise.all([refetchLLM(), refetchEmbedding()])
     }
@@ -907,16 +915,26 @@ const ModelsPage: React.FC = () => {
   // Tag management functions
   const handleAddTag = () => {
     const currentTags = newModel.tags || []
-    if (newTag.trim() && !currentTags.includes(newTag.trim())) {
+    const trimmedTag = newTag.trim()
+    if (!trimmedTag) return
+    if (trimmedTag.length > 100) {
+      setSnackbar({
+        open: true,
+        message: t('models.messages.tagLengthLimit'),
+        severity: 'warning',
+      })
+      return
+    }
+    if (!currentTags.includes(trimmedTag)) {
       if (currentTags.length >= 10) {
         setSnackbar({
           open: true,
-          message: '标签数量不能超过10个',
+          message: t('models.messages.tagsLimit'),
           severity: 'warning',
         })
         return
       }
-      setNewModel({ ...newModel, tags: [...currentTags, newTag.trim()] })
+      setNewModel({ ...newModel, tags: [...currentTags, trimmedTag] })
       setNewTag('')
     }
   }
@@ -1334,10 +1352,10 @@ const ModelsPage: React.FC = () => {
                               <IconButton
                                 size="small"
                                 onClick={() => handleTestEmbeddingModel(model.id)}
-                                disabled={testingModelId !== null || !model.isActive}
+                                disabled={testingModelIdRef.current !== null || !model.isActive}
                                 className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                               >
-                                {testingModelId === model.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                                {testingModelIdRef.current === model.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                               </IconButton>
                             </span>
                           </Tooltip>
@@ -1551,7 +1569,7 @@ const ModelsPage: React.FC = () => {
                 error={(newModel.name || '').length > 100}
                 helperText={
                   (newModel.name || '').length > 80 ? (
-                    <span style={{ color: 'orange' }}>模型友好名称过长，请控制在100字符以内</span>
+                    <span style={{ color: 'orange' }}>{t('models.modelConfig.basicInfo.nameError')}</span>
                   ) : (
                     <span style={{ color: '#666' }}>
                       {modelType === 'Embedding' 
@@ -1609,7 +1627,7 @@ const ModelsPage: React.FC = () => {
                 error={(newModel.modelId || '').length > 100}
                 helperText={
                   (newModel.modelId || '').length > 80 ? (
-                    <span style={{ color: 'orange' }}>模型标识符过长，请控制在100字符以内</span>
+                    <span style={{ color: 'orange' }}>{t('models.messages.modelIdMaxLength')}</span>
                   ) : (
                     <span style={{ color: '#666' }}>
                       {modelType === 'Embedding' 
@@ -1644,7 +1662,7 @@ const ModelsPage: React.FC = () => {
                 error={(newModel.apiKey || '').length > 500}
                 helperText={
                   (newModel.apiKey || '').length > 500 ? (
-                    <span style={{ color: 'orange' }}>API Key 长度超限，请控制在500字符以内</span>
+                    <span style={{ color: 'orange' }}>{t('models.messages.apiKeyMaxLength')}</span>
                   ) : (
                     <span style={{ color: '#666' }}>
                       {editMode ? t('models.messages.apiKeyEditHint') : t('models.modelConfig.parameters.apiKeyHint')}: {newModel.apiKey?.length || 0}/500
@@ -1679,7 +1697,7 @@ const ModelsPage: React.FC = () => {
                   baseUrlError ? (
                     <span style={{ color: 'red' }}>{baseUrlError}</span>
                   ) : (newModel.baseUrl || '').length > 100 ? (
-                    <span style={{ color: 'orange' }}>Base URL 长度超限，请控制在100字符以内</span>
+                    <span style={{ color: 'orange' }}>{t('models.messages.baseUrlMaxLength')}</span>
                   ) : (
                     <span style={{ color: '#666' }}>
                       {modelType === 'Embedding'
@@ -1699,12 +1717,27 @@ const ModelsPage: React.FC = () => {
                       label={t('models.modelConfig.basicInfo.tags')}
                       placeholder=""
                       value={newTag}
-                      onChange={e => setNewTag(e.target.value)}
+                      onChange={e => {
+                        const value = e.target.value
+                        if (value.length <= 100) {
+                          setNewTag(value)
+                        }
+                      }}
                       onKeyDown={e => {
                         if (e.key === 'Enter') {
                           e.preventDefault()
                           const currentTags = newModel.tags || []
-                          if (newTag.trim() && !currentTags.includes(newTag.trim())) {
+                          const trimmedTag = newTag.trim()
+                          if (!trimmedTag) return
+                          if (trimmedTag.length > 100) {
+                            setSnackbar({
+                              open: true,
+                              message: t('models.messages.tagLengthLimit'),
+                              severity: 'warning',
+                            })
+                            return
+                          }
+                          if (!currentTags.includes(trimmedTag)) {
                             if (currentTags.length >= 10) {
                               setSnackbar({
                                 open: true,
@@ -1715,7 +1748,7 @@ const ModelsPage: React.FC = () => {
                             }
                             setNewModel({
                               ...newModel,
-                              tags: [...currentTags, newTag.trim()],
+                              tags: [...currentTags, trimmedTag],
                             })
                             setNewTag('')
                           }
@@ -1724,6 +1757,10 @@ const ModelsPage: React.FC = () => {
                       variant="outlined"
                       className="flex-1 !mr-4"
                       disabled={(newModel.tags || []).length >= 10}
+                      helperText={t('models.messages.tagLength', { length: newTag.length })}
+                      FormHelperTextProps={{
+                        className: newTag.length >= 100 ? 'text-red-600' : 'text-gray-600',
+                      }}
                     />
                     <Button
                       size="small"
@@ -1775,7 +1812,7 @@ const ModelsPage: React.FC = () => {
                   error={(newModel.description || '').length > 500} // 只在长度超限时显示红色边框
                   helperText={
                     (newModel.description || '').length > 500 ? (
-                      <span style={{ color: 'orange' }}>描述过长，请控制在500字符以内</span>
+                      <span style={{ color: 'orange' }}>{t('models.messages.descriptionMaxLength')}</span>
                     ) : (
                       <span style={{ color: '#666' }}>
                         {t('models.modelConfig.basicInfo.descriptionLimit')} {newModel.description?.length || 0}/500
@@ -1803,7 +1840,7 @@ const ModelsPage: React.FC = () => {
                     type="number"
                     placeholder=""
                     value={newModel.timeout || ''}
-                    error={!(newModel.timeout && newModel.timeout >= 1 && newModel.timeout <= 300)} // 只在URL格式错误时显示红色边框
+                    error={!(newModel.timeout && newModel.timeout >= 1 && newModel.timeout <= 3600)} // 只在URL格式错误时显示红色边框
                     onChange={e => {
                       const value = e.target.value
                       if (value === '') {
@@ -1816,8 +1853,8 @@ const ModelsPage: React.FC = () => {
                         // 自动将值限制在有效范围内
                         if (numValue < 1) {
                           numValue = 1
-                        } else if (numValue > 300) {
-                          numValue = 300
+                        } else if (numValue > 3600) {
+                          numValue = 3600
                         }
                         setNewModel({ ...newModel, timeout: numValue })
                       }
@@ -2014,8 +2051,7 @@ const ModelsPage: React.FC = () => {
         open={showTestDialog}
         onClose={() => {
           setShowTestDialog(false)
-          setTestPrompt('')
-          setTestResult('')
+          // useEffect 会处理状态重置
         }}
         maxWidth="md"
         fullWidth
@@ -2047,21 +2083,24 @@ const ModelsPage: React.FC = () => {
                   variant="outlined"
                   size="small"
                   onClick={() => setTestPrompt(t('models.introducePrompt'))}
-                  className="cursor-pointer hover:bg-blue-50 hover:border-blue-300"
+                  disabled={isTesting}
+                  className={`${isTesting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-blue-50 hover:border-blue-300'}`}
                 />
                 <Chip
                   label={t('models.aiConceptsPrompt')}
                   variant="outlined"
                   size="small"
                   onClick={() => setTestPrompt(t('models.aiConceptsPrompt'))}
-                  className="cursor-pointer hover:bg-blue-50 hover:border-blue-300"
+                  disabled={isTesting}
+                  className={`${isTesting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-blue-50 hover:border-blue-300'}`}
                 />
                 <Chip
                   label={t('models.helloWorldPrompt')}
                   variant="outlined"
                   size="small"
                   onClick={() => setTestPrompt(t('models.helloWorldPrompt'))}
-                  className="cursor-pointer hover:bg-blue-50 hover:border-blue-300"
+                  disabled={isTesting}
+                  className={`${isTesting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-blue-50 hover:border-blue-300'}`}
                 />
               </div>
             </div>
@@ -2074,6 +2113,7 @@ const ModelsPage: React.FC = () => {
               value={testPrompt}
               onChange={e => setTestPrompt(e.target.value)}
               placeholder=""
+              disabled={isTesting}
               helperText={
                 testPrompt.length > 1000 ? t('models.promptLimit', { length: testPrompt.length }) : t('models.promptLength', { length: testPrompt.length })
               }
@@ -2085,7 +2125,7 @@ const ModelsPage: React.FC = () => {
                 variant="contained"
                 startIcon={isTesting ? <Loader2 className="animate-spin" /> : <Play />}
                 onClick={handleTestModel}
-                disabled={!isTesting && !testPrompt.trim()}
+                disabled={isTesting || !testPrompt.trim()}
                 className={`px-6 py-2 rounded-lg font-semibold transform transition-all duration-300 shadow-lg ${
                   isTesting
                     ? 'bg-gray-600 text-white cursor-not-allowed'
@@ -2102,7 +2142,8 @@ const ModelsPage: React.FC = () => {
                   setTestPrompt('')
                   setTestResult('')
                 }}
-                className="text-gray-600 hover:text-gray-700 hover:bg-gray-100 border-gray-300 hover:border-gray-400 px-4 py-2 rounded-lg transition-all duration-200"
+                disabled={isTesting}
+                className={`${isTesting ? 'opacity-50 cursor-not-allowed text-gray-400 border-gray-300' : 'text-gray-600 hover:text-gray-700 hover:bg-gray-100 border-gray-300 hover:border-gray-400'} px-4 py-2 rounded-lg transition-all duration-200`}
               >
                 {t('models.reset')}
               </Button>
@@ -2147,11 +2188,11 @@ const ModelsPage: React.FC = () => {
         itemName={deleteDialog.modelName}
         isLoading={deleteModelMutation.isLoading || deleteEmbeddingModelMutation.isLoading}
         iconType={deleteDialog.knowledgeBases && deleteDialog.knowledgeBases.length > 0 ? 'warning' : 'danger'}
-        title={deleteDialog.knowledgeBases && deleteDialog.knowledgeBases.length > 0 ? '无法删除模型' : undefined}
+        title={deleteDialog.knowledgeBases && deleteDialog.knowledgeBases.length > 0 ? t('models.messages.cannotDeleteModel') : undefined}
         message={
           deleteDialog.knowledgeBases && deleteDialog.knowledgeBases.length > 0 ? (
             <div className="space-y-3 text-base text-left">
-              <p className="text-gray-600">该模型正在被以下知识库使用：</p>
+              <p className="text-gray-600">{t('models.messages.modelInUseByKnowledgeBases')}</p>
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 max-h-60 overflow-y-auto">
                 <ul className="list-disc list-inside space-y-1">
                   {deleteDialog.knowledgeBases.map((kbName: string, index: number) => (
@@ -2161,11 +2202,11 @@ const ModelsPage: React.FC = () => {
                   ))}
                 </ul>
               </div>
-              <p className="text-gray-600">请先删除或修改这些知识库的模型配置，然后才能删除该模型。</p>
+              <p className="text-gray-600">{t('models.messages.modelInUseHint')}</p>
             </div>
           ) : undefined
         }
-        confirmButtonText={deleteDialog.knowledgeBases && deleteDialog.knowledgeBases.length > 0 ? '我知道了' : undefined}
+        confirmButtonText={deleteDialog.knowledgeBases && deleteDialog.knowledgeBases.length > 0 ? t('models.messages.iKnow') : undefined}
         cancelButtonText={deleteDialog.knowledgeBases && deleteDialog.knowledgeBases.length > 0 ? undefined : t('common.cancel')}
       />
 

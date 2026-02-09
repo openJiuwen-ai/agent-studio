@@ -54,8 +54,9 @@ export function MessageContent({ message }: { message: ChatMessage }) {
         {groups.map(([key, groupChunks]) => (
           <div key={key} className="p-3 rounded-xl shadow-sm overflow-x-hidden bg-white border border-gray-200 text-gray-800">
             <div className="space-y-3">
-              {groupChunks.map(chunk => (
+              {groupChunks.map((chunk, idx) => (
                 <div key={chunk.id} className="relative">
+                  {idx > 0 && <div className="h-px bg-black my-3" />}
                   {renderChunkHeader(chunk.type, chunk.nodeId, chunk.nodeName)}
                   {renderContent(chunk.content)}
                 </div>

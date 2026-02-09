@@ -60,17 +60,21 @@ def questioner_convert(node: Node, space_id: str) -> dsl.Component:
         if llm_params is None:
             raise ValueError("llm_param is none")
 
-        model_info = dsl.BaseModelInfo(
+        model_client_config = dsl.ModelClientConfig(
+            client_provider="",
+            api_key="",
+            api_base="",
+            timeout=30
+        )
+        request_config = dsl.ModelRequestConfig(
             model_name="",
             temperature=0.7,
-            top_p=0.9,
-            streaming=True,
-            timeout=30.0
+            top_p=0.9
         )
 
         model = dsl.ModelConfig(
-            model_provider="",
-            model_info=model_info
+            model_client_config=model_client_config,
+            request_config=request_config
         )
 
         questioner_configs = dsl.QuestionerConfig(
@@ -82,11 +86,11 @@ def questioner_convert(node: Node, space_id: str) -> dsl.Component:
 
         model_id = int(llm_params.model.id)
         model_config = get_model_config(model_id, space_id)
-        model_info.model_name = llm_params.model.type
-        model_info.api_key = model_config.api_key
-        model_info.api_base = model_config.base_url
-        model_info.timeout = model_config.timeout
-        model.model_provider = model_config.provider
+        request_config.model_name = llm_params.model.type
+        model_client_config.api_key = model_config.api_key
+        model_client_config.api_base = model_config.base_url
+        model_client_config.timeout = model_config.timeout
+        model_client_config.client_provider = model_config.provider
 
         # 从模型配置中读取temperature和top_p参数
         logger.info(
@@ -106,11 +110,11 @@ def questioner_convert(node: Node, space_id: str) -> dsl.Component:
                 # 如果已经是ModelParameters对象
                 model_params = model_config.parameters
             
-            model_info.temperature = model_params.temperature
-            model_info.top_p = model_params.top_p
+            request_config.temperature = model_params.temperature
+            request_config.top_p = model_params.top_p
             logger.info(
-                f"[QUESTIONER_CONVERT] Set temperature={model_info.temperature}, "
-                f"top_p={model_info.top_p} from model config"
+                f"[QUESTIONER_CONVERT] Set temperature={request_config.temperature}, "
+                f"top_p={request_config.top_p} from model config"
             )
         else:
             logger.warning(

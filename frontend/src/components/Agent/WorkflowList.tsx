@@ -92,11 +92,11 @@ const WorkflowList = ({
                 {validationResults?.[workflow.workflow_id]?.status === 'loading' && (
                   <span className="inline-flex items-center gap-2 text-xs text-gray-500 flex-shrink-0">
                     <LoaderCircle className="w-4 h-4 animate-spin" />
-                    <span>校验中...</span>
+                    <span>{t('validating')}</span>
                   </span>
                 )}
                 {validationResults?.[workflow.workflow_id]?.status === 'error' && (
-                  <Tooltip title={'工作流校验失败，请跳转对应的工作流进行修改'} arrow>
+                  <Tooltip title={t('validationFailedTooltip')} arrow>
                     <span className="inline-flex items-center flex-shrink-0 ml-1">
                       <button
                         type="button"
@@ -108,7 +108,7 @@ const WorkflowList = ({
                         }}
                         disabled={disabled}
                         className={`inline-flex items-center text-red-600 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        aria-label="工作流校验失败"
+                        aria-label={t('validationFailedAria')}
                       >
                         <AlertCircle className="w-4 h-4" />
                       </button>

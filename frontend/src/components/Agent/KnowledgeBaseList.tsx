@@ -2,6 +2,7 @@ import Typography from '@mui/material/Typography'
 import { Settings, Trash2, BookOpen } from 'lucide-react'
 import { useState } from 'react'
 import DeleteConfirmationDialog from '@/components/Common/DeleteConfirmationDialog'
+import { useScopedTranslation } from '@/i18n'
 
 interface KnowledgeBaseItem {
   id: string
@@ -9,7 +10,6 @@ interface KnowledgeBaseItem {
   description?: string
 }
 
-// 知识库列表组件
 const KnowledgeBaseList = ({
   knowledgeBaseObjects,
   onClick,
@@ -19,6 +19,7 @@ const KnowledgeBaseList = ({
   onClick: (operate: 'delete' | 'setting', knowledgeBaseId: string) => void
   disabled?: boolean
 }) => {
+  const { t } = useScopedTranslation('agents.agentEditor.orchestration')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
 
@@ -57,7 +58,7 @@ const KnowledgeBaseList = ({
           </div>
           <div className="flex space-x-4 pt-1">
             <button
-              title="设置"
+              title={t('orchestrationPage.knowledgeBaseList.settingsTitle')}
               onClick={e => {
                 e.stopPropagation()
                 onClick('setting', kb.id)
@@ -66,7 +67,7 @@ const KnowledgeBaseList = ({
               <Settings className="w-4 h-4 text-gray-600" />
             </button>
             <button
-              title="删除"
+              title={t('orchestrationPage.knowledgeBaseList.deleteTitle')}
               onClick={e => {
                 e.stopPropagation()
                 if (!disabled) {
@@ -82,7 +83,9 @@ const KnowledgeBaseList = ({
           </div>
         </div>
       ))}
-      {knowledgeBaseObjects.length === 0 && <div className="text-center py-6 text-gray-500">未添加知识库，可点击右上角进行添加</div>}
+      {knowledgeBaseObjects.length === 0 && (
+        <div className="text-center py-6 text-gray-500">{t('orchestrationPage.knowledgeBaseList.list.empty')}</div>
+      )}
       <DeleteConfirmationDialog
         isOpen={confirmOpen}
         onClose={() => {
@@ -96,9 +99,9 @@ const KnowledgeBaseList = ({
         }}
         itemType="knowledgeBase"
         itemName={pendingDelete?.name || ''}
-        title="移除知识库"
-        confirmButtonText="确认"
-        message={`确定移除此知识库？此操作无法撤销。`}
+        title={t('orchestrationPage.knowledgeBaseList.removeDialog.title')}
+        confirmButtonText={t('orchestrationPage.knowledgeBaseList.removeDialog.confirmButtonText')}
+        message={t('orchestrationPage.knowledgeBaseList.removeDialog.message')}
       />
     </div>
   )

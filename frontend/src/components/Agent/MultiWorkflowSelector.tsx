@@ -94,6 +94,7 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
 
   const spaceId = getDefaultSpaceId() || ''
   const maxGreetingLength = 2000
+  const maxDefaultResponseLength = 2000
 
   const { validationResults, setValidationResults, validateWorkflows, isValidating, workflowValidationErrorCount } = useWorkflowValidation({
     workflows: workflowObjects,
@@ -375,7 +376,7 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
                 {workflowObjects.length}
               </span>
               {workflowValidationErrorCount > 0 && (
-                <Tooltip title={`所选工作流存在校验不通过（${workflowValidationErrorCount} 个），请跳转对应工作流进行修改`} arrow>
+                <Tooltip title={t('workflowValidation.tooltip', { count: workflowValidationErrorCount })} arrow>
                   <span className="inline-flex items-center ml-2">
                     <AlertCircle className="w-[20px] h-[20px] text-red-500" />
                   </span>
@@ -397,9 +398,9 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
                   <SettingsIcon fontSize="small" />
                 </IconButton>
               </Tooltip> */}
-              <Tooltip title="刷新工作流信息" arrow>
+              <Tooltip title={t('refreshWorkflows.tooltip')} arrow>
                 <span>
-                  <IconButton size="small" onClick={handleRefreshWorkflows} disabled={workflowObjects.length === 0} aria-label="刷新">
+                  <IconButton size="small" onClick={handleRefreshWorkflows} disabled={workflowObjects.length === 0} aria-label={t('refreshWorkflows.ariaLabel')}>
                     <RefreshCcw className={`w-4 h-4 ${isValidating ? 'animate-spin' : ''}`} />
                   </IconButton>
                 </span>
@@ -450,12 +451,35 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
                   value={selectedModelName || ''}
                   onChange={event => handleModelChange(event.target.value as string)}
                   displayEmpty
+                  MenuProps={{
+                    PaperProps: {
+                      sx: {
+                        maxHeight: 320,
+                        width: 360,
+                        borderRadius: 2,
+                      },
+                    }
+                  }}
                   renderValue={value => {
                     // 如果选择的模型不在可用列表中，显示提示
                     if (value && !modelsList.find(model => model.model_name === value && model.is_active)) {
                       return <span style={{ color: '#d32f2f' }}>{t('select.disabledModel', { name: value })}</span>
                     }
-                    return value ? value : <span style={{ color: 'rgba(0, 0, 0, 0.38)' }}>{t('select.placeholder')}</span>
+                    return value ? (
+                      <span
+                        title={String(value)}
+                        style={{
+                          display: 'block',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {String(value)}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'rgba(0, 0, 0, 0.38)' }}>{t('select.placeholder')}</span>
+                    )
                   }}
                   sx={{
                     width: 200,
@@ -470,7 +494,9 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
                     .filter(model => model.is_active)
                     .map(model => (
                       <MenuItem key={model.model_name} value={model.model_name}>
-                        {model.model_name}
+                        <span style={{ display: 'block', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {model.model_name}
+                        </span>
                       </MenuItem>
                     ))}
                 </Select>
@@ -557,6 +583,8 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
               rows={4}
               placeholder={t('defaultResponse.placeholder')}
               disabled={readonly}
+              inputProps={{ maxLength: maxDefaultResponseLength }}
+              helperText={`${defaultResponse.length}/${maxDefaultResponseLength}`}
               sx={{
                 '& .MuiInputBase-root.Mui-disabled': { cursor: 'not-allowed' },
                 '& .MuiInputBase-input.Mui-disabled': { cursor: 'not-allowed' },

@@ -105,8 +105,8 @@ def _switch_conditions_convert(logic: int, conditions: List[BranchCondition]) ->
                 raise ValueError("invalid operator type, not int or string")
 
             expressions = []
-            if is_right_array:
-                # Process each array element, create multiple expressions joined by 'and'
+            if is_right_array and operator in (OperatorType.CONTAIN, OperatorType.NOT_CONTAIN):
+                # 只有 in / not_in 才按数组展开
                 for element in right_array_elements:
                     # Handle element type, add quotes if string
                     element_expr = str(element)

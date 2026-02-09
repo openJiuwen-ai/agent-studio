@@ -1,4 +1,4 @@
-# builder image
+# Stage 1: Builder environment
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE} AS builder
 
@@ -13,7 +13,7 @@ RUN uv sync --group dev
 RUN uv build --out-dir /app/dist
 
 
-# runtime image
+# Stage 2: Final image - Only copy necessary files from builder stage
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE} AS runtime
 

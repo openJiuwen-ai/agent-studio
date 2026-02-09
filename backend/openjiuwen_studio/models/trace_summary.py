@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 from sqlalchemy import (JSON, BigInteger, DateTime, Integer, String,
                         Text)
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 from openjiuwen_studio.models.db_fun_base import Base, DBFunBase
 from openjiuwen_studio.ops.config import settings
@@ -49,7 +50,11 @@ class TraceSummaryDB(Base, DBFunBase):
 
     # 错误信息
     error_code: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, comment="错误代码")
-    fail_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="失败原因")
+    fail_reason: Mapped[Optional[str]] = mapped_column(
+        Text().with_variant(LONGTEXT, "mysql"),
+        nullable=True,
+        comment="失败原因"
+    )
 
     # 时间字段
     create_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, comment="创建时间")

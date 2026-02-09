@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from openjiuwen.core.common.logging import logger
 
+from openjiuwen_studio.core.common.language_thread_context import get_language
 from openjiuwen_studio.core.manager.login_manager.user import get_current_user
 from openjiuwen_studio.core.manager.model_manager.managers import ModelConfigManager
 from openjiuwen_studio.routers.common import handle_response, validate_request
@@ -23,35 +24,129 @@ from openjiuwen_studio.schemas.execution_log import ExecutionLogsCreateList, Api
 import openjiuwen_studio.core.manager.execution_log as exe_mgr
 
 
-def _get_friendly_error_message(err, operation: str) -> str:
+def _normalize_language(language: Optional[str]) -> str:
+    if not language:
+        return "zh"
+    language = language.strip().lower()
+    if language in {"cn", "zh", "zh-cn", "zh-hans", "zh-hans-cn"} or language.startswith("zh"):
+        return "zh"
+    return "en"
+
+
+def _resolve_language(current_user: Optional[dict]) -> str:
     """
-    根据错误类型和操作类型返回友好的错误消息
+    解析当前语言。
+    策略：倾向于英文 (Sticky English)。
+    1. 如果 HTTP Header 指定了英文，返回英文。
+    2. 如果用户配置 (Profile) 指定了英文，返回英文。
+    3. 否则返回中文。
+    
+    这样可以解决：
+    - 用户切换到英文，立即生效 (Header 优先)。
+    - 用户配置了英文，但在默认中文的浏览器中访问，依然显示英文 (Profile 覆盖浏览器默认中文)。
     """
-    # 检查是否为模型配置为空的错误
+    # 1. 检查 Header
+    language = get_language()
+    header_lang = None
+    if language and language.strip().lower() not in {"cn"}:
+        header_lang = _normalize_language(language)
+        if header_lang == "en":
+            return "en"
+
+    # 2. 检查用户配置
+    if current_user:
+        locale = (current_user.get("data") or {}).get("locale")
+        if locale:
+            user_lang = _normalize_language(locale)
+            if user_lang == "en":
+                return "en"
+
+    # 3. 如果 Header 是中文 (或默认)，且用户配置不是英文 (或无配置)，则返回中文
+    # (如果 Header 明确是中文，也会走到这里返回中文，除非用户配置是英文)
+    return "zh"
+
+
+# 常见字段名翻译映射
+FIELD_TRANSLATIONS = {
+    "model": {"zh": "模型配置", "en": "Model Configuration"},
+    "name": {"zh": "名称", "en": "Name"},
+    "description": {"zh": "描述", "en": "Description"},
+    "agent_id": {"zh": "智能体ID", "en": "Agent ID"},
+    "space_id": {"zh": "工作空间ID", "en": "Space ID"},
+    "type": {"zh": "类型", "en": "Type"},
+    "version": {"zh": "版本", "en": "Version"},
+    "input_variables": {"zh": "输入变量", "en": "Input Variables"},
+    "knowledge": {"zh": "知识库", "en": "Knowledge Base"},
+    "prompt": {"zh": "提示词", "en": "Prompt"},
+    "tools": {"zh": "工具", "en": "Tools"},
+}
+
+
+def _translate_field_name(field: str, language: str) -> str:
+    """翻译字段名"""
+    # 如果字段名在映射表中，返回对应语言的翻译
+    if field in FIELD_TRANSLATIONS:
+        translations = FIELD_TRANSLATIONS[field]
+        return translations.get(language, field)
+    
+    # 尝试处理嵌套字段，例如 "model.name" -> "模型配置.名称"
+    if '.' in field:
+        parts = field.split('.')
+        translated_parts = []
+        for part in parts:
+            if part in FIELD_TRANSLATIONS:
+                translated_parts.append(FIELD_TRANSLATIONS[part].get(language, part))
+            else:
+                translated_parts.append(part)
+        return '.'.join(translated_parts)
+        
+    return field
+
+
+def _translate_validation_message(err: dict, operation: str, language: str) -> str:
+    ctx = err.get("ctx") or {}
     if (operation == "AGENT_SAVE"
-            and err.get("ctx") == {"class_name": "AgentModel"}
-            and err.get("msg") == 'Input should be a valid dictionary or instance of AgentModel'):
-        return "智能体自动保存失败，模型配置为空，请为智能体配置模型"
-    # 默认返回原始错误消息
-    return err.get('msg', 'Validation error')
+            and ctx.get("class_name") == "AgentModel"
+            and err.get("msg") == "Input should be a valid dictionary or instance of AgentModel"):
+        if language == "zh":
+            return "智能体模型配置为空，请先配置模型"
+        return "Agent model configuration is empty, please configure the model for the agent"
+
+    err_type = err.get("type")
+    err_msg = err.get("msg") or "Validation error"
+
+    if err_type == "missing" or err_msg == "Field required":
+        return "必填字段" if language == "zh" else "Field required"
+
+    return err_msg
 
 
-def handle_validation_error(e: ValidationError, operation: str, user_id: str = 'unknown') -> HTTPException:
+def handle_validation_error(
+        e: ValidationError,
+        operation: str,
+        current_user: Optional[dict] = None,
+        user_id: str = "unknown"
+) -> HTTPException:
     """处理ValidationError，生成友好的错误信息"""
+    language = _resolve_language(current_user)
     logger.error(f"[{operation}] Validation failed - User: {user_id}, Errors: {e.errors()}")
     # 构造友好的错误信息
     error_details = []
     for err in e.errors():
         # 提取字段路径和错误信息
-        field = '.'.join(map(str, err['loc'])) if isinstance(err['loc'], tuple) else str(err['loc'])
-        msg = _get_friendly_error_message(err, operation)
+        raw_field = '.'.join(map(str, err['loc'])) if isinstance(err['loc'], tuple) else str(err['loc'])
+        # 翻译字段名
+        field = _translate_field_name(raw_field, language)
+        
+        msg = _translate_validation_message(err, operation, language)
         error_details.append(f"{field}: {msg}")
 
     # 拼接最终的错误信息
     error_msg = ", ".join(error_details)
+    prefix = "参数校验失败" if language == "zh" else "Validation failed"
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Validation failed: {error_msg}"
+        detail=f"{prefix}: {error_msg}"
     )
 
 
@@ -82,7 +177,8 @@ async def agent_create(
                 f"[AGENT_CREATE] Agent created - ID: {res.data.get('id')}, User: {current_user.get('user_id', 'unknown')}")
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_CREATE", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_CREATE", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/delete", response_model=ResponseModel[dict])
@@ -109,7 +205,8 @@ async def agent_delete(
                 f"[AGENT_DELETE] Agent deleted - ID: {req.agent_id}, User: {current_user.get('user_id', 'unknown')}")
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_DELETE", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_DELETE", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/delete_publish", response_model=ResponseModel[dict])
@@ -135,7 +232,8 @@ async def agent_publish_delete(
         res = mgr.agent_publish_delete(req, current_user)
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_PUBLISH_DELETE") from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_PUBLISH_DELETE", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/get_agent_info", response_model=ResponseModel[dict])
@@ -161,7 +259,8 @@ async def agent_get_info(
         res = mgr.get_single_agent_info(req, current_user, manager)
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_GET_INFO", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_GET_INFO", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/save", response_model=ResponseModel[dict])
@@ -242,7 +341,7 @@ async def agent_save(
             logger.info(f"[AGENT_SAVE] Agent saved - ID: {req.agent_id}, User: {user_id}")
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_SAVE", user_id) from e
+        raise handle_validation_error(e, "AGENT_SAVE", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/update", response_model=ResponseModel[dict])
@@ -270,7 +369,7 @@ async def agent_update(
             logger.info(f"[AGENT_UPDATE] Agent updated - ID: {req.agent_id}, User: {user_id}")
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_UPDATE", user_id) from e
+        raise handle_validation_error(e, "AGENT_UPDATE", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/list", response_model=ResponseModel[dict])
@@ -294,7 +393,8 @@ async def agent_list(
         res = mgr.agent_get_list(req, current_user)
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_LIST", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_LIST", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/publish", response_model=ResponseModel[dict])
@@ -321,7 +421,8 @@ async def agent_publish(
                 f"[AGENT_PUBLISH] Agent published - ID: {req.agent_id}, Version: {req.agent_version}, User: {current_user.get('user_id', 'unknown')}")
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_PUBLISH", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_PUBLISH", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/version_list", response_model=ResponseModel[AgentVersionListResponse])
@@ -345,7 +446,8 @@ async def agent_version_list(
         res = mgr.agent_version_list(req, current_user)
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_VERSION_LIST", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_VERSION_LIST", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.get("/{agent_id}", response_model=ResponseModel[dict])
@@ -373,7 +475,8 @@ async def agent_get(
         res = mgr.agent_convert(AgentGetVersion(**req), current_user)
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_GET") from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_GET", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/copy", response_model=ResponseModel[dict])
@@ -400,7 +503,8 @@ async def agent_copy(
                 f"[AGENT_COPY] Agent copied - SourceID: {req.agent_id}, NewID: {res.data.get('id')}, User: {current_user.get('user_id', 'unknown')}")
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_COPY", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_COPY", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/search", response_model=ResponseModel[dict])
@@ -424,7 +528,8 @@ async def agent_search(
         res = mgr.agent_search(req, current_user)
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_SEARCH", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_SEARCH", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/get_execution_logs_create_list", response_model=ResponseModel[ExecutionLogsCreateList])
@@ -445,7 +550,8 @@ async def get_agent_execution_logs_create_list(
         res = exe_mgr.get_agent_execution_logs_create_list(req, current_user)
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_EXECUTION_LOGS_LIST", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_EXECUTION_LOGS_LIST", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/get_execution_log", response_model=ResponseModel[ApiExecutionLogGet])
@@ -466,7 +572,8 @@ async def get_agent_execution_log(
         res = exe_mgr.get_agent_execution_log(req, current_user)
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_EXECUTION_LOG_GET", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_EXECUTION_LOG_GET", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/enter_execution_logs_debug", response_model=ResponseModel[ApiExecutionLogsDebugEnter])
@@ -487,7 +594,8 @@ async def enter_agent_execution_logs_debug(
         res = exe_mgr.enter_agent_execution_logs_debug(req, current_user)
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_EXECUTION_DEBUG", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_EXECUTION_DEBUG", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/export")
@@ -515,7 +623,8 @@ async def agent_export(
 
         return handle_response(res)
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_EXPORT", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_EXPORT", current_user=current_user, user_id=user_id) from e
 
 
 @agents_router.post("/import", response_model=ResponseModel[dict])
@@ -576,7 +685,8 @@ async def agent_import(
             )
             
     except ValidationError as e:
-        raise handle_validation_error(e, "AGENT_IMPORT", current_user.get('user_id', 'unknown')) from e
+        user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
+        raise handle_validation_error(e, "AGENT_IMPORT", current_user=current_user, user_id=user_id) from e
     except Exception as e:
         logger.error(f"[AGENT_IMPORT] Unexpected error: {e}", exc_info=True)
         raise HTTPException(

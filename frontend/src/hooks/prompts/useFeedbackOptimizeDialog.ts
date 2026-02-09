@@ -215,7 +215,7 @@ export const useFeedbackOptimizeDialog = (props: UseFeedbackOptimizeDialogProps)
       // 检查是否配置了有效的模型
       const currentSelectedModel = selectedModelRef.current
       if (!checkValidModel(currentSelectedModel, currentModelConfig, availableModels)) {
-        setSnackbar({ open: true, message: '请先配置有效的模型', severity: 'error' })
+        setSnackbar({ open: true, message: t('components.prompts.promptEditPage.noModelConfigured'), severity: 'error' })
         return
       }
 
@@ -626,7 +626,7 @@ export const useFeedbackOptimizeDialog = (props: UseFeedbackOptimizeDialogProps)
       }
 
       const handleError = (error: string) => {
-        setSnackbar({ open: true, message: error || '优化失败，请重试', severity: 'error' })
+        setSnackbar({ open: true, message: error || t('components.prompts.promptEditPage.optimizationFailed'), severity: 'error' })
       }
 
       const handleComplete = () => {
@@ -1120,7 +1120,7 @@ export const useFeedbackOptimizeDialog = (props: UseFeedbackOptimizeDialogProps)
     }
 
     if (currentOptimizationType === 'select' && (!selectedText || !selectionIndices)) {
-      const errorMsg = !selectedText ? '选中优化需要选中文本' : '无法确定选中位置'
+      const errorMsg = !selectedText ? t('components.prompts.promptEditPage.selectOptimizationNeedsSelectedText') : t('components.prompts.promptEditPage.selectedPositionNotDetermined')
       setSnackbar({ open: true, message: errorMsg, severity: 'error' })
       return
     }

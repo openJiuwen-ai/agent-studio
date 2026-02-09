@@ -6,22 +6,12 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, List, Union
 
 from openjiuwen.core.common.logging import logger
-from openjiuwen.core.component.base import WorkflowComponent
-from openjiuwen.core.component.branch_comp import BranchComponent
-from openjiuwen.core.component.break_comp import BreakComponent
-from openjiuwen.core.component.condition.condition import AlwaysTrue
-from openjiuwen.core.component.end_comp import End
-from openjiuwen.core.component.loop_comp import LoopComponent, LoopGroup
-from openjiuwen.core.component.set_variable_comp import SetVariableComponent
-from openjiuwen.core.component.start_comp import Start
-from openjiuwen.core.component.tool_comp import ToolComponentConfig, ToolComponent
-from openjiuwen.core.component.workflow_comp import SubWorkflowComponent
-from openjiuwen.core.graph.executable import Input, Output
-from openjiuwen.core.runtime.base import ComponentExecutable
-from openjiuwen.core.runtime.runtime import BaseRuntime
-from openjiuwen.core.workflow.base import Workflow as InvokableWorkflow
-from openjiuwen.core.workflow.base import WorkflowConfig
-from openjiuwen.core.workflow.workflow_config import WorkflowMetadata, WorkflowInputsSchema
+from openjiuwen.core.workflow import Start, End, WorkflowComponent, SubWorkflowComponent
+from openjiuwen.core.workflow import LoopComponent, LoopGroup, LoopBreakComponent, LoopSetVariableComponent
+# from openjiuwen.core.workflow import ToolComponentConfig, ToolComponent # 下一个版本再用
+from openjiuwen.core.workflow.workflow import Workflow as InvokableWorkflow
+from openjiuwen.core.workflow import WorkflowCard
+from openjiuwen.core.workflow import ComponentAbility
 
 from openjiuwen_studio.core.common.dsl import PluginCodeConfig as DlPluginCodeConfig
 from openjiuwen_studio.core.common.dsl import PluginType
@@ -43,9 +33,9 @@ from openjiuwen_studio.core.executor.component.compile.variable_merge_comp_compi
 from openjiuwen_studio.core.executor.plugin.plugin_tools import ServiceTool, CodeTool
 from openjiuwen_studio.core.executor.workflow.context import Context
 from openjiuwen_studio.core.executor.workflow.pregel_graph_adapter import PregelGraphAdapter
-from openjiuwen.core.workflow.workflow_config import ComponentAbility
 from openjiuwen.core.graph.executable import Executable
 from openjiuwen_studio.core.executor.component.component_impl.user_output_comp import UserOutputComponent
+from openjiuwen_studio.core.executor.component.component_impl.tool_comp import ToolComponentConfig, ToolComponent
 
 
 class IWorkflowLoader(ABC):
@@ -170,7 +160,7 @@ class Workflow:
         dl_wf_components = workflow_dl.components
         for comp in dl_wf_components:
             if comp.id in self.dl_workflow.start_id:
-                compiled_comp = Start({})
+                compiled_comp = Start()
                 flow.set_start_comp(comp.id, compiled_comp, comp.inputs)
             elif comp.id in self.dl_workflow.end_id:
                 stream_inputs_schema = None
@@ -178,10 +168,10 @@ class Workflow:
                 response_mode = None
                 if comp.configs:
                     end_config = EndConfig.model_validate(comp.configs)
-                    template: str = ""
                     if end_config.response_template:
-                        template = end_config.response_template
-                    compiled_comp = End({"responseTemplate": template})
+                        compiled_comp = End({"response_template": end_config.response_template})
+                    else:
+                        compiled_comp = End()
                     # 打开流式输出开关
                     if end_config.stream_output:
                         find_llm_to_stream_out(comp.id, comp.inputs, self.need_stream_output_comp)
@@ -228,11 +218,13 @@ class Workflow:
             context: Context,
             loader: Optional[IWorkflowLoader] = None
     ) -> InvokableWorkflow:
-        flow = InvokableWorkflow(WorkflowConfig(metadata=WorkflowMetadata(
+        card = WorkflowCard(
             id=self.id,
             version=self.version,
             name=self.name,
-        ), workflow_inputs_schema=WorkflowInputsSchema.model_validate(self.inputs)))
+            input_params=self.inputs
+        )
+        flow = InvokableWorkflow(card=card)
 
         flow = await self.process_components(context, flow, self.dl_workflow, loader)
         flow = await self.process_stream_connections(flow)
@@ -254,7 +246,7 @@ class Workflow:
 
         # 2. 处理BREAK组件
         if comp.type == ComponentType.COMPONENT_TYPE_BREAK:
-            return BreakComponent()
+            return LoopBreakComponent()
 
         # 3. 处理特殊组件（保持原有逻辑）
         if comp.type in self.SPECIAL_COMPONENT_TYPES:
@@ -335,7 +327,8 @@ class Workflow:
             plugin_tool = ServiceTool(DlRestfulApiSchema.model_validate(tool_config.tool)).compile()
         else:
             plugin_tool = CodeTool(DlPluginCodeConfig.model_validate(tool_config.tool)).compile()
-        tool_config = ToolComponentConfig()
+        tool_config = ToolComponentConfig(tool_id=comp.id)
+        # 不使用 Runner.resource_mgr.add_tool 因为不能重复添加
         return ToolComponent(tool_config).bind_tool(plugin_tool)
 
     async def process_stream_connections(self,
@@ -399,9 +392,9 @@ class Workflow:
             configs: Any,
             loader: Optional[IWorkflowLoader]
     ) -> Any:
-        ref_ir = ExecSubWfConfig.model_validate(configs).reference_ir
-        sub_id = ref_ir.id
-        sub_version = ref_ir.version
+        sub_wf_info = ExecSubWfConfig.model_validate(configs).sub_workflow_info
+        sub_id = sub_wf_info.id
+        sub_version = sub_wf_info.version
         sub_workflow = await loader.get_compiled_workflow(Context(context),
                                                           sub_id, sub_version, self.space_id, self.current_user)
         return SubWorkflowComponent(sub_workflow)
@@ -427,7 +420,7 @@ class Workflow:
         for comp in loop_body.components:
             if comp.type == ComponentType.COMPONENT_TYPE_SET_VARIABLE:
                 set_variable_config = SetVariableConfig.model_validate(comp.configs)
-                set_variable_comp = SetVariableComponent(set_variable_config.inter_variable)
+                set_variable_comp = LoopSetVariableComponent(set_variable_config.inter_variable)
                 loop_group.add_workflow_comp(comp.id, set_variable_comp)
 
         return LoopComponent(loop_group, comp_outputs)

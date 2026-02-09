@@ -79,7 +79,7 @@ export function useCondition({ leftSchema, operator, onClearOp, onClearRight, ru
         .map(_op => ({
           ...(allOps?.[_op] || {}),
           value: _op,
-          label: t(allOps?.[_op]?.label || _op),
+          label: allOps?.[_op]?.label || _op,
         })),
     [rule, allOps],
   )

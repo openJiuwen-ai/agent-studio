@@ -30,14 +30,14 @@ generate_ssl_certs() {
                 -newkey rsa:2048 \
                 -keyout "$temp_key" \
                 -out "$ssl_dir/certificate.crt" \
-                -subj "//CN=localhost" 2>/dev/null
+                -subj "//CN=localhost"
                 ;;
             *)
                 openssl req -x509 -nodes -days 365 \
                 -newkey rsa:2048 \
                 -keyout "$temp_key" \
                 -out "$ssl_dir/certificate.crt" \
-                -subj "/CN=localhost" 2>/dev/null
+                -subj "/CN=localhost"
                 ;;
         esac
     else
@@ -49,7 +49,7 @@ generate_ssl_certs() {
     openssl rsa -aes256 \
         -in "$temp_key" \
         -out "$ssl_dir/private.key" \
-        -passout "pass:$ssl_password" 2>/dev/null
+        -passout "pass:$ssl_password"
 
     rm -f "$temp_key"
 

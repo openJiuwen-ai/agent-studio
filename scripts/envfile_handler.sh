@@ -12,8 +12,8 @@ generate_env_file() {
     read_env_from_file "${default_deploy_env_file}" "DEPLOY_VARS"
     read_env_from_file "${default_runtime_env_file}" "RUNTIME_VARS"
     read_custom_env_file
-    get_public_ip
-    setup_env_vars
+    process_env_vars
+    prepare_upgrade_env
 
     local suffix=${DEPLOY_VARS["NAME_SUFFIX"]}
     local deploy_env_file="${env_dirs}/env.deploy.${suffix}"
@@ -35,8 +35,8 @@ write_env_to_file() {
     info "Writing variable array DEPLOY_VARS to file: ${env_file}"
     > "${env_file}"
     printf "%s\n" "${!source_array[@]}" | sort | while read -r key; do
-        if [[ -n "${key}" ]]; then
-            echo "${key}=${source_array[$key]}" >> "${env_file}"
+        if [ -n "${key}" ]; then
+            echo "${key}=${source_array[${key}]}" >> "${env_file}"
         fi
     done
 }
@@ -47,12 +47,15 @@ read_custom_env_file() {
     if [ ! -f ${custom_env_file} ]; then
         return
     fi
-    local os_type=${CONFIG["OS_TYPE"]}
-    local -a default_deploy_keys=("${!DEPLOY_VARS[@]}")
-    local -a default_runtime_keys=("${!RUNTIME_VARS[@]}")
-    local -a other_deploy_keys=("${!NAMES[@]}")
-    other_deploy_keys+=("${PORTS[@]}")
-    default_deploy_keys+=("IP")
+    local os_type=${DEPLOY_VARS["OS_TYPE"]}
+    local -a deploy_keys=(
+        "${!DEPLOY_VARS[@]}"
+        "${!NAMES[@]}"
+        "${PORTS[@]}"
+        "VERSION"
+        "IP"
+    )
+    local -a runtime_keys=("${!RUNTIME_VARS[@]}")
 
     # Read .env line by line, exclude comments and empty lines, store in associative array
     while IFS= read -r line || [[ -n "${line}" ]]; do
@@ -61,7 +64,7 @@ read_custom_env_file() {
             -n "${line//[[:space:]]/}"        # Not empty (has content after removing all whitespace)
         ]]; then
             # Remove leading/trailing whitespace
-            if [[ "$os_type" == "macos" ]]; then
+            if [ "${os_type}" == "macos" ]; then
                 line_trimmed=$(echo "${line}" | sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//')
             else
                 line_trimmed=$(echo "${line}" | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')
@@ -85,17 +88,11 @@ read_custom_env_file() {
                 value="${BASH_REMATCH[1]}"
             fi
 
-            if [[ " ${default_deploy_keys[*]} " =~ " ${key} " ]]; then
+            if [[ " ${deploy_keys[*]} " =~ " ${key} " ]]; then
                 info "Override deploy variable: ${key}=${value}"
                 DEPLOY_VARS["${key}"]="${value}"
-            elif [[ " ${default_runtime_keys[*]} " =~ " ${key} " ]]; then
-                info "Override runtime variable: ${key}=${value}"
-                RUNTIME_VARS["${key}"]="${value}"
-            elif [[ " ${other_deploy_keys[*]} " =~ " ${key} " ]]; then
-                info "Override deploy variable (no-default): ${key}=${value}"
-                DEPLOY_VARS["${key}"]="${value}"
             else
-                info "Override runtime variable (no-default): ${key}=${value}"
+                info "Override runtime variable: ${key}=${value}"
                 RUNTIME_VARS["${key}"]="${value}"
             fi
         fi
@@ -107,7 +104,7 @@ read_custom_env_file() {
 read_env_from_file() {
     local env_file=$1
     local -n target_array=$2
-    local os_type=${CONFIG["OS_TYPE"]}
+    local os_type=${DEPLOY_VARS["OS_TYPE"]}
 
     if [ ! -f "${env_file}" ]; then
         error ".env file does not exist: ${env_file}"
@@ -121,7 +118,7 @@ read_env_from_file() {
             -n "${line//[[:space:]]/}"        # Not empty (has content after removing all whitespace)
         ]]; then
             # Remove leading/trailing whitespace
-            if [[ "$os_type" == "macos" ]]; then
+            if [ "${os_type}" == "macos" ]; then
                 line_trimmed=$(echo "${line}" | sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//')
             else
                 line_trimmed=$(echo "${line}" | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//')
@@ -189,5 +186,4 @@ process_env_file() {
             fi
             ;;
     esac
-    fill_containers_name
 }

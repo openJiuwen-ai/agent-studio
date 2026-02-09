@@ -12,7 +12,7 @@
       }
     },
     "code": {
-      "title": "Code",
+      "titlePrefix": "Code",
       "description": "Code node for running custom JavaScript or Python code.",
       "outputDescription": "Code execution result"
     },
@@ -20,25 +20,90 @@
       "description": "Tool node for calling specific plugin tools to perform tasks."
     },
     "condition": {
-      "description": "Connect multiple downstream branches. Only the branch that meets the set condition will be executed."
+      "titlePrefix": "Selector",
+      "description": "Connect multiple downstream branches. Only the branch that meets the set condition will be executed.",
+      "typeMismatch": "Expected {{expectedType}} type, but got {{actualType}} type",
+      "type": {
+        "array": "array",
+        "object": "object",
+        "string": "string",
+        "number": "number",
+        "integer": "integer",
+        "boolean": "boolean"
+      },
+      "invalidDateTimeFormat": "Expected date-time format (ISO 8601), e.g.: 2026-01-09T15:44:53.043Z",
+      "conditionValueCannotBeEmpty": "Condition value cannot be empty",
+      "conditionValueRequired": "Condition value is required",
+      "pleaseSelectVariableToCheck": "Please select a variable to check",
+      "pleaseSelectLeftValue": "Please select left value",
+      "pleaseSelectRightValue": "Please select right value",
+      "ifBranchMustBeConnected": "\"If\" branch must be connected to a node",
+      "elseBranchMustBeConnected": "\"Else\" branch must be connected to a node",
+      "elseIfBranchMustBeConnected": "\"Else If\" branch must be connected to a node",
+      "branchType": {
+        "if": "If",
+        "else": "Else",
+        "elseIf": "Else If"
+      },
+      "branchesMustBeConnected": "The following branches must be connected to nodes: {{types}}",
+      "branchLabel": "Condition Branch",
+      "operators": {
+        "eq": "Equal",
+        "neq": "Not Equal",
+        "gt": "Greater Than",
+        "gte": "Greater Than or Equal",
+        "lt": "Less Than",
+        "lte": "Less Than or Equal",
+        "contains": "Contains",
+        "notContains": "Does Not Contain",
+        "isEmpty": "Is Empty",
+        "isNotEmpty": "Is Not Empty"
+      },
+      "unconditional": "Unconditional",
+      "logic": {
+        "and": "And",
+        "or": "Or"
+      }
     },
     "loop": {
-      "description": "Repeat a series of tasks by setting iteration count and logic."
+      "titlePrefix": "Loop",
+      "description": "Repeat a series of tasks by setting iteration count and logic.",
+      "loopCountCannotBeEmpty": "Loop count cannot be empty",
+      "loopCountVariableNotFound": "Loop count referenced variable not found",
+      "loopCountMustBePositive": "Loop count must be greater than 0",
+      "loopCountExceedsLimit": "Loop count cannot exceed 1000",
+      "loopCountMustBeNumber": "Loop count must be a number",
+      "loopArrayConfigCannotBeEmpty": "Loop array configuration cannot be empty",
+      "atLeastOneArrayVariable": "At least one array variable is required",
+      "arrayVariableNameCannotBeEmpty": "Array variable name cannot be empty",
+      "intermediateVarCannotBeEmpty": "Intermediate variable \"{{field}}\" cannot be empty",
+      "intermediateVarNotFound": "Intermediate variable \"{{field}}\" referenced variable not found",
+      "arrayVariableValueCannotBeEmpty": "Array variable \"{{field}}\" value cannot be empty",
+      "arrayVariableCannotBeEmpty": "Array variable \"{{field}}\" cannot be empty",
+      "arrayVariableNotFound": "Array variable \"{{field}}\" referenced variable not found",
+      "arrayVariableMustBeArray": "Array variable \"{{field}}\" must be an array type",
+      "arrayVariableCannotBeEmptyArray": "Array variable \"{{field}}\" cannot be an empty array",
+      "loopBodyMustContainStartAndEnd": "Loop body must contain start and end nodes",
+      "loopBodyMustHaveCompletePath": "Loop body must have a complete path from start to end"
     },
     "input": {
+      "titlePrefix": "Input",
       "description": "Input node for pausing during workflow execution and waiting for user input.",
       "output": "Output"
     },
     "output": {
+      "titlePrefix": "Output",
       "description": "Output node for outputting intermediate or final results during workflow execution."
     },
     "start": {
       "description": "Starting node of the workflow, used to set the information needed to start the workflow."
     },
     "end": {
-      "description": "Final node of the workflow, used to return the result information after the workflow runs."
+      "description": "Final node of the workflow, used to return the result information after the workflow runs.",
+      "outputConfiguredNote": "Output Content is configured. The workflow will only return the responseContent field. To return output variables, please clear the Output Content configuration."
     },
     "questioner": {
+      "titlePrefix": "Questioner",
       "description": "Questioner node for asking questions to users and collecting answers.",
       "maxQuestions": "Max Questions",
       "maxQuestionsDescription": "Set maximum number of questions, range 1-10",
@@ -48,12 +113,21 @@
       "mustBePositiveInteger": "Must be an integer greater than 0 and not greater than 10"
     },
     "intent": {
-      "description": "Intent recognition node for matching different intents based on different user inputs."
+      "titlePrefix": "Intent",
+      "description": "Intent recognition node for matching different intents based on different user inputs.",
+      "atLeastOneIntent": "At least one intent is required",
+      "intentNameCannotBeEmpty": "Intent {{index}} name cannot be empty",
+      "intentNameTooLong": "Intent {{index}} name cannot exceed 50 characters",
+      "intentMustBeConnected": "Intent \"{{name}}\" must be connected to a node",
+      "intentsMustBeConnected": "The following intents must be connected to nodes: {{names}}",
+      "otherIntentMustBeConnected": "Other intent port must be connected to a node"
     },
     "textEditor": {
+      "titlePrefix": "Text_Editor",
       "description": "Text editor node for processing and transforming text content in workflows."
     },
     "variableMerge": {
+      "titlePrefix": "Variable_Merge",
       "description": "Workflow variable aggregation node for aggregating variables from multiple groups.",
       "configCannotBeEmpty": "Variable merge configuration cannot be empty",
       "atLeastOneGroup": "At least one variable group must be added",
@@ -68,21 +142,30 @@
       "addGroup": "Add Group"
     },
     "subWorkflow": {
-      "description": "Execute nested sub-workflows"
+      "title": "Workflow",
+      "description": "Execute nested sub-workflows",
+      "workflowFallback": "Workflow"
     },
     "continue": {
+      "titlePrefix": "Continue",
+      "title": "Continue",
       "description": "Continue node for skipping the current iteration and continuing to the next iteration in a loop."
     },
     "break": {
+      "titlePrefix": "Break",
+      "title": "Break",
       "description": "Break node for immediately exiting a loop."
     },
     "blockStart": {
+      "title": "Start",
       "description": "Start node of a block."
     },
     "blockEnd": {
+      "title": "End",
       "description": "End node of a block."
     },
     "variable": {
+      "titlePrefix": "Variable",
       "description": "Used to reset the value of a loop variable for the next iteration",
       "title": "Variable",
       "settings": "Settings",
@@ -167,7 +250,10 @@
       "inputVariableName": "Input Variable Name",
       "description": "Description",
       "helpLLMUnderstandProperty": "Help LLM to understand the property",
-      "defaultValue": "Default Value"
+      "defaultValue": "Default Value",
+      "duplicateParameterName": "Duplicate parameter name",
+      "completeCurrentParameterFirst": "Please complete the current parameter settings before adding a new one",
+      "parameterNameAlreadyExists": "Parameter name \"{{name}}\" already exists, please use a different name"
     },
     "promptEditor": {
       "placeholder": "Use {{variable}} to reference input parameters"
@@ -304,9 +390,15 @@
   "formOutput": {
     "output": "Output"
   },
+  "formVersion": {
+    "version": "Version"
+  },
   "formPrompt": {
     "userPrompt": "User Prompt",
-    "systemPrompt": "System Prompt"
+    "systemPrompt": "System Prompt",
+    "unlink": "Unlink",
+    "unlinkConfirm": "Confirm to unlink prompt \"{{promptName}}-{{version}}\" from workflow node? This action cannot be undone.",
+    "confirm": "Confirm"
   },
   "formContentEditor": {
     "outputContent": "Output Content",
@@ -315,6 +407,8 @@
   "pluginSelector": {
     "selectPluginTools": "Select Plugin Tools",
     "supportMultipleSelection": "Support selecting multiple tools from multiple plugins",
+    "searchPlaceholder": "Search plugin name",
+    "noSearchResults": "No matching plugins found",
     "noAvailablePlugins": "No available plugins",
     "plugin": "Plugin",
     "noDescription": "No description",

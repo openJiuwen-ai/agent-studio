@@ -5,7 +5,7 @@ import { ExecutionService, SaveAgentRequest } from '@test-agentstudio/api-client
 import { ActionSlotMount } from '@/components/Common/ActionSlot'
 import AgentOperationsBar from './AgentOperationsBar'
 import AgentDebugPanel from './AgentDebugPanel'
-import MemoryButton from '@/pages/Memory/MemoryButton'
+import MemoryButton from '@/pages/MemoryBase/MemoryButton'
 import { MessageRenderer } from './messages/MessageRenderer'
 import { useScopedTranslation } from '@/i18n'
 
@@ -27,6 +27,8 @@ const extractTextFromOutput = (outputRaw: any) => {
 interface AgentDebugChatProps {
   /** 智能体ID */
   agentId: string
+  /** 此智能体的记忆库ID */
+  mdbId?: string
   /** 调试信息面板开关变化回调 */
   onDebugInfoChange?: (open: boolean) => void
   /** 是否显示长期记忆，透传给MemoryButton */
@@ -43,10 +45,10 @@ interface AgentDebugChatProps {
  * 智能体调试聊天组件
  * 提供与智能体交互的聊天界面，支持调试信息显示
  */
-const AgentDebugChat = ({ agentId, onDebugInfoChange, enableLongTerm, hideMemoryButton, saveAgentRequest, isModelActive = true }: AgentDebugChatProps) => {
+const AgentDebugChat = ({ agentId, mdbId, onDebugInfoChange, enableLongTerm, hideMemoryButton, saveAgentRequest, isModelActive = true }: AgentDebugChatProps) => {
   // 提供给MemoryEngine
   const userIdForMem = getDefaultSpaceId()
-  const groupIdForMem = agentId
+  const groupIdForMem = mdbId || agentId
   // 状态管理
   const [showDebugInfo, setShowDebugInfo] = useState(false)
   const [inputMessage, setInputMessage] = useState('')
@@ -142,6 +144,7 @@ const AgentDebugChat = ({ agentId, onDebugInfoChange, enableLongTerm, hideMemory
     type: string
     nodeId?: string
     nodeName?: string
+    index?: number
   } | null => {
     if (!raw || typeof raw !== 'object') return null
 
@@ -154,9 +157,10 @@ const AgentDebugChat = ({ agentId, onDebugInfoChange, enableLongTerm, hideMemory
       const nodeId = nodeIdRaw != null && String(nodeIdRaw).trim() ? String(nodeIdRaw) : undefined
       const nodeNameRaw = streamPayload?.node_name ?? streamPayload?.nodeName ?? streamPayload?.name
       const nodeName = nodeNameRaw != null && String(nodeNameRaw).trim() ? String(nodeNameRaw) : undefined
+      const index = typeof streamPayload?.index === 'number' ? streamPayload.index : undefined
       const text = extractTextFromOutput(streamPayload?.output ?? streamPayload?.answer ?? streamPayload?.output_text)
       if (!text) return null
-      return { text, type: eventType || 'workflow', nodeId, nodeName }
+      return { text, type: eventType || 'workflow', nodeId, nodeName, index }
     }
 
     const outputText = event.output_text
@@ -180,7 +184,11 @@ const AgentDebugChat = ({ agentId, onDebugInfoChange, enableLongTerm, hideMemory
     return null
   }
 
-  const updateAssistantStreamingContent = (ts: number | null, incoming: string, meta?: { type: string; nodeId?: string; nodeName?: string }) => {
+  const updateAssistantStreamingContent = (
+    ts: number | null,
+    incoming: string,
+    meta?: { type: string; nodeId?: string; nodeName?: string; index?: number },
+  ) => {
     if (!ts) return
     setChatHistory(prev => {
       const idx = prev.findIndex(m => m.timestamp === ts && m.role === 'assistant')
@@ -191,10 +199,23 @@ const AgentDebugChat = ({ agentId, onDebugInfoChange, enableLongTerm, hideMemory
       const safeType = meta?.type || 'agent'
       const safeNodeId = meta?.nodeId
       const safeNodeName = meta?.nodeName
+      const safeIndex = meta?.index
 
       let nextChunks = msg.chunks ? [...msg.chunks] : []
 
-      const existingIdx = nextChunks.findIndex(c => c.type === safeType && c.nodeId === safeNodeId)
+      let existingIdx = -1
+      // If index is 0, we force creating a new chunk, so skip searching for existing one.
+      if (safeIndex !== 0) {
+        // Search from end to find the latest matching chunk
+        for (let i = nextChunks.length - 1; i >= 0; i--) {
+          const c = nextChunks[i]
+          if (c.type === safeType && c.nodeId === safeNodeId) {
+            existingIdx = i
+            break
+          }
+        }
+      }
+
       if (existingIdx >= 0) {
         const existing = nextChunks[existingIdx]
         // 直接拼接，不再使用 mergeStreamText
@@ -205,6 +226,7 @@ const AgentDebugChat = ({ agentId, onDebugInfoChange, enableLongTerm, hideMemory
           nodeName: existing.nodeName || safeNodeName,
           content: newContent,
           status: 'streaming',
+          index: safeIndex ?? existing.index,
         }
       } else {
         nextChunks.push({
@@ -214,6 +236,7 @@ const AgentDebugChat = ({ agentId, onDebugInfoChange, enableLongTerm, hideMemory
           nodeName: safeNodeName,
           content: incoming,
           status: 'streaming',
+          index: safeIndex,
         })
       }
 
@@ -322,6 +345,7 @@ const AgentDebugChat = ({ agentId, onDebugInfoChange, enableLongTerm, hideMemory
         type: normalized.type,
         nodeId: normalized.nodeId,
         nodeName: normalized.nodeName,
+        index: normalized.index,
       })
     }
     return {}

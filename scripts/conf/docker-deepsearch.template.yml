@@ -1,0 +1,25 @@
+services:
+  <<DEEPSEARCH_SERVICE>>:
+    image: <<DEEPSEARCH_IMAGE>>
+    pull_policy: if_not_present
+    container_name: <<DEEPSEARCH_DOCKER>>
+    ports:
+      - "<<DEEPSEARCH_HOST_PORT>>:8000"
+    environment:
+      - LLM_SSL_VERIFY=False
+      - TOOL_SSL_VERIFY=False
+    env_file:
+      - ../.envs/env.deepsearch.<<NAME_SUFFIX>>
+    restart: unless-stopped
+    networks:
+      - <<JIUWEN_NETWORK_NAME>>
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+networks:
+  <<JIUWEN_NETWORK_NAME>>:
+    driver: bridge

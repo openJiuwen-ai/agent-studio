@@ -34,61 +34,88 @@ from openjiuwen_studio.schemas.space import SpaceAWPQuery
 from openjiuwen_studio.core.manager.reference_extractor import extract_workflow_references, \
     check_referenced_dependencies
 from openjiuwen_studio.core.manager.repositories.reference_repository import reference_repository
-from openjiuwen.core.common.exception.exception import JiuWenBaseException
+from openjiuwen_studio.core.common.exceptions import BaseError
 from openjiuwen_studio.core.common.exceptions import JiuWenComponentException
 from openjiuwen_studio.core.manager.model_manager.managers.model_config_manager import ModelConfigManager
 
 # 生成随机字符串用于节点ID
 random_id = ''.join(random.choice('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_') for _ in range(5))
 
-DEFAULT_WORKFLOW_SCHEMA = {
-    "nodes": [
-        {
-            "id": f"start_{random_id}",
-            "type": "1",
-            "meta": {
-                "position": {
-                    "x": 180,
-                    "y": 36
-                }
-            },
-            "data": {
-                "title": "开始",
-                "outputs": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "default": "你好，请帮我分析一下这个问题。"
-                        }
-                    }
-                }
-            }
-        },
-        {
-            "id": f"end_{random_id}",
-            "type": "2",
-            "meta": {
-                "position": {
-                    "x": 1100,
-                    "y": 36
-                }
-            },
-            "data": {
-                "title": "结束",
-                "inputs": {
-                    "inputParameters": {
-                        "result": {
-                            "type": "ref",
-                        }
+# 国际化文本
+DEFAULT_WORKFLOW_TEXTS_ZH = {
+    "start_title": "开始",
+    "end_title": "结束",
+    "query_default": "你好，请帮我分析一下这个问题。"
+}
+
+DEFAULT_WORKFLOW_TEXTS_EN = {
+    "start_title": "Start",
+    "end_title": "End",
+    "query_default": "Hello, please help me analyze this question."
+}
+
+
+def get_default_workflow_schema():
+    """获取默认工作流schema，根据当前语言返回对应文本"""
+    from openjiuwen_studio.core.common.language_thread_context import get_language
+
+    language = get_language()
+    if language in ("zh-cn", "zh"):
+        texts = DEFAULT_WORKFLOW_TEXTS_ZH
+    else:
+        texts = DEFAULT_WORKFLOW_TEXTS_EN
+
+    return {
+        "nodes": [
+            {
+                "id": f"start_{random_id}",
+                "type": "1",
+                "meta": {
+                    "position": {
+                        "x": 180,
+                        "y": 36
                     }
                 },
-                "streaming": False
+                "data": {
+                    "title": texts["start_title"],
+                    "outputs": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "default": texts["query_default"]
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                "id": f"end_{random_id}",
+                "type": "2",
+                "meta": {
+                    "position": {
+                        "x": 1100,
+                        "y": 36
+                    }
+                },
+                "data": {
+                    "title": texts["end_title"],
+                    "inputs": {
+                        "inputParameters": {
+                            "result": {
+                                "type": "ref",
+                            }
+                        }
+                    },
+                    "streaming": False
+                }
             }
-        }
-    ],
-    "edges": []
-}
+        ],
+        "edges": []
+    }
+
+
+DEFAULT_WORKFLOW_SCHEMA = get_default_workflow_schema()
 
 
 def with_exception_handling(func: Callable) -> Callable:
@@ -101,37 +128,37 @@ def with_exception_handling(func: Callable) -> Callable:
                 code=status.HTTP_400_BAD_REQUEST,
                 message=str(e)
             )
-        except JiuWenBaseException as e:
+        except BaseError as e:
             log_exception(e)
             if isinstance(e, JiuWenComponentException):
                 type_name_map = {
-                    ComponentType.COMPONENT_TYPE_START: "开始",
-                    ComponentType.COMPONENT_TYPE_LLM: "大模型",
-                    ComponentType.COMPONENT_TYPE_END: "结束",
-                    ComponentType.COMPONENT_TYPE_IF: "选择器",
-                    ComponentType.COMPONENT_TYPE_LOOP: "循环",
-                    ComponentType.COMPONENT_TYPE_INPUT: "输入",
-                    ComponentType.COMPONENT_TYPE_OUTPUT: "输出",
-                    ComponentType.COMPONENT_TYPE_QUESTION: "提问器",
-                    ComponentType.COMPONENT_TYPE_CONTINUE: "继续",
-                    ComponentType.COMPONENT_TYPE_BREAK: "中断",
-                    ComponentType.COMPONENT_TYPE_TEXT_EDITOR: "文本编辑",
-                    ComponentType.COMPONENT_TYPE_INTENT: "意图识别",
-                    ComponentType.COMPONENT_TYPE_SUB_WORKFLOW: "子工作流",
-                    ComponentType.COMPONENT_TYPE_EMPTY_START: "空开始",
-                    ComponentType.COMPONENT_TYPE_EMPTY_END: "空结束",
-                    ComponentType.COMPONENT_TYPE_CODE: "代码",
-                    ComponentType.COMPONENT_TYPE_VARIABLE_MERGE: "变量聚合",
-                    ComponentType.COMPONENT_TYPE_SET_VARIABLE: "设置变量",
-                    ComponentType.COMPONENT_TYPE_PLUGIN: "插件",
+                    ComponentType.COMPONENT_TYPE_START: "START",
+                    ComponentType.COMPONENT_TYPE_LLM: "LLM",
+                    ComponentType.COMPONENT_TYPE_END: "END",
+                    ComponentType.COMPONENT_TYPE_IF: "IF",
+                    ComponentType.COMPONENT_TYPE_LOOP: "LOOP",
+                    ComponentType.COMPONENT_TYPE_INPUT: "INPUT",
+                    ComponentType.COMPONENT_TYPE_OUTPUT: "OUTPUT",
+                    ComponentType.COMPONENT_TYPE_QUESTION: "QUESTION",
+                    ComponentType.COMPONENT_TYPE_CONTINUE: "CONTINUE",
+                    ComponentType.COMPONENT_TYPE_BREAK: "BREAK",
+                    ComponentType.COMPONENT_TYPE_TEXT_EDITOR: "TEXT_EDITOR",
+                    ComponentType.COMPONENT_TYPE_INTENT: "INTENT",
+                    ComponentType.COMPONENT_TYPE_SUB_WORKFLOW: "SUB_WORKFLOW",
+                    ComponentType.COMPONENT_TYPE_EMPTY_START: "EMPTY_START",
+                    ComponentType.COMPONENT_TYPE_EMPTY_END: "EMPTY_END",
+                    ComponentType.COMPONENT_TYPE_CODE: "CODE",
+                    ComponentType.COMPONENT_TYPE_VARIABLE_MERGE: "VARIABLE_MERGE",
+                    ComponentType.COMPONENT_TYPE_SET_VARIABLE: "SET_VARIABLE",
+                    ComponentType.COMPONENT_TYPE_PLUGIN: "PLUGIN",
                 }
                 type_name = type_name_map.get(getattr(e, "component_type", 0), str(getattr(e, "component_type", "")))
-                formatted_message = f"{type_name}组件[{getattr(e, 'component_id', '')}]: {e.message}"
+                formatted_message = f"{type_name} component [{getattr(e, 'component_id', '')}]: {e.message}"
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message=formatted_message,
                     data={
-                        "error_code": getattr(e, "error_code", -1),
+                        "error_code": getattr(e, "code", -1),
                         "component_id": e.component_id,
                         "component_type": e.component_type,
                         "error_stage": e.error_stage,
@@ -141,7 +168,7 @@ def with_exception_handling(func: Callable) -> Callable:
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message=e.message,
-                    data={"error_code": getattr(e, "error_code", -1)}
+                    data={"error_code": getattr(e, "code", -1)}
                 )
         except Exception as e:
             log_exception(e)

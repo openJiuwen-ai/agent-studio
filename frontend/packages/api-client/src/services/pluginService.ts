@@ -268,7 +268,7 @@ export class PluginService {
                   // 检查 code 是否为 200，只有 200 才继续解析 data 字段
                   if (sseMessage.code !== 200) {
                     // code 不为 200，表示执行错误
-                    const errorMessage = `错误 ${sseMessage.code}: ${sseMessage.message || 'Unknown error'}`
+                    const errorMessage = `error ${sseMessage.code}: ${sseMessage.message || 'Unknown error'}`
 
                     // 创建错误事件
                     const errorEvent: PluginExecutionEvent = {

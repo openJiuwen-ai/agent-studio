@@ -203,7 +203,7 @@ class AgentRepository():
             # 定义需要返回的字段，包含必要的JSON字段（如model）
             # 基础元数据字段 + 重要的JSON字段
             meta_data_keys = agent.AgentBaseDB.get_meta_data_keys()
-            cols_find = meta_data_keys + ["model"]
+            cols_find = meta_data_keys
 
             res = agent_db.get_dl_in_sql_with_cols(find_id=find_id, cols_find=cols_find,
                                                    order_cols_desc=order_cols_desc, order_cols_asc=order_cols_asc,

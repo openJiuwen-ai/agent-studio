@@ -37,7 +37,7 @@ wait_for_container_healthy() {
             "healthy")
                 echo ""
                 success "Container [${container_name}] reached Healthy status! (total wait ${elapsed_time} seconds)"
-                return 0
+                return
                 ;;
             "starting")
                 echo -n "."
@@ -80,8 +80,6 @@ check_containers() {
     done
 }
 
-
-
 # ==== Wait for MySQL container to fully start (can connect + execute SQL)======
 wait_for_mysql() {
     # Parameters: 
@@ -101,7 +99,7 @@ wait_for_mysql() {
         # Use docker exec to run "SELECT 1" - success means MySQL is fully ready
         if docker exec -i "${mysql_container}" mysql -u root -p"${db_password}" -h 127.0.0.1 -e "SELECT 1" 2>/dev/null; then
             success "MySQL container [${mysql_container}] is fully ready!"
-            return 0  # Exit function - MySQL is ready
+            return
         fi
 
         # MySQL not ready yet: print progress dot and retry after 1 second
@@ -112,19 +110,23 @@ wait_for_mysql() {
 
 # ============= Check and create database ====================
 create_db_if_not_exist() {
-    local agent_db=${RUNTIME_VARS["AGENT_DB_NAME"]}
-    local ops_db=${RUNTIME_VARS["OPS_DB_NAME"]}
     local mysql_container=${DEPLOY_VARS["MYSQL_DOCKER"]}
     local db_password=${DEPLOY_VARS["DB_ROOT_PASSWORD"]}
+    local db_names=(
+        "${RUNTIME_VARS["AGENT_DB_NAME"]}"
+        "${RUNTIME_VARS["OPS_DB_NAME"]}"
+        "${DEPLOY_VARS["DEEPSEARCH_DB_NAME"]}"
+    )
 
-    info "Checking if database [${agent_db} ${ops_db}] is ready"
-    docker exec -i "${mysql_container}" mysql -u root -p"${db_password}" -h 127.0.0.1 << EOF
-CREATE DATABASE IF NOT EXISTS ${agent_db} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE DATABASE IF NOT EXISTS ${ops_db} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    for db_name in "${db_names[@]}"; do
+        info "Checking if database ${db_name} is ready"
+        docker exec -i "${mysql_container}" mysql -u root -p"${db_password}" -h 127.0.0.1 << EOF
+CREATE DATABASE IF NOT EXISTS ${db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 EOF
-    if [ $? -eq 0 ]; then
-        success "Database [${agent_db} ${ops_db}] is ready"
-    else
-        error "Database [${agent_db} ${ops_db}] creation failed! Check container logs or network connection"
-    fi
+        if [ $? -eq 0 ]; then
+            success "Database ${db_name} are ready"
+        else
+            error "Database ${db_name} creation failed! Check container logs or network connection"
+        fi
+    done
 }

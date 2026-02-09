@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from openjiuwen.core.tracer.span import TraceAgentSpan, TraceWorkflowSpan
+from openjiuwen.core.session.tracer.span import TraceWorkflowSpan, TraceAgentSpan
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from openjiuwen_studio.core.common.message import ExecuteResponse

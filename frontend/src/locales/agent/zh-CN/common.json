@@ -36,6 +36,16 @@
     },
     "messages": {
       "exportSuccess": "智能体导出成功",
+      "exportFailed": "导出失败",
+      "exportError": "导出异常",
+      "importSuccess": "智能体导入成功",
+      "importOverwriteSuccess": "智能体覆盖导入成功",
+      "importFailed": "导入失败",
+      "importError": "导入异常",
+      "importWarning": "警告",
+      "configNotFoundInZip": "ZIP文件中未找到配置文件",
+      "invalidImportFormat": "无效的导入文件格式",
+      "fileParseError": "文件解析异常",
       "invalidFile": "请选择有效的JSON或ZIP文件"
     }
   },

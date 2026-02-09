@@ -1,10 +1,13 @@
 from fastapi import FastAPI, APIRouter, Request
-from openjiuwen_studio.routers import (auth, models, users, agents, workflows, execution, space,
-                                       related_member, plugin, tags, knowledge_base, embedding_models, prompt_router,
-                                       prompt_debug_router, prompt_tuning_router, prompt_llm_router)
-from openjiuwen_studio.core.common.language_thread_context import (set_language, clear_language, 
+from openjiuwen.core.common.logging import set_session_id, logger
+
+from openjiuwen_studio.core.common.language_thread_context import (set_language, clear_language,
                                                                    get_highest_priority_language)
-from openjiuwen.core.common.logging import set_thread_session, logger
+from openjiuwen_studio.core.config import settings
+from openjiuwen_studio.routers import (auth, auth_new, models, users, agents, workflows, execution, space, deepsearch,
+                                       related_member, plugin, tags, knowledge_base, embedding_models, prompt_router,
+                                       prompt_debug_router, prompt_tuning_router, prompt_llm_router, system_model,
+                                       memory_base)
 
 api_router = APIRouter()
 
@@ -12,7 +15,12 @@ api_router = APIRouter()
 def router_register(app: FastAPI):
     """Register API routers to FastAPI app."""
     v1_router = APIRouter(prefix="/v1")
-    v1_router.include_router(auth.auth_router, prefix="/auth", tags=["Authentication"])
+    if settings.enable_new_auth:
+        # 新流程：挂载包含注册、密码管理的路由
+        v1_router.include_router(auth_new.auth_router, prefix="/auth", tags=["New Auth"])
+    else:
+        # 挂载旧的直接登录逻辑
+        v1_router.include_router(auth.auth_router, prefix="/auth", tags=["Legacy Auth"])
     v1_router.include_router(users.users_router, prefix="/users", tags=["Users"])
     v1_router.include_router(space.space_router, prefix="/spaces", tags=["Space"])
     v1_router.include_router(models.models_router, prefix="/models", tags=["Models"])
@@ -20,10 +28,13 @@ def router_register(app: FastAPI):
     v1_router.include_router(agents.agents_router, prefix="/agents", tags=["Agents"])
     v1_router.include_router(execution.execution_router, prefix="/execution", tags=["Execution"])
     v1_router.include_router(workflows.workflows_router, prefix="/workflows", tags=["Workflows"])
+    v1_router.include_router(deepsearch.deepsearch_router, prefix="/agent/deepsearch", tags=["deepsearch"])
     v1_router.include_router(related_member.related_router, prefix="/related", tags=["Relation"])
     v1_router.include_router(plugin.plugin_router, prefix="/plugin", tags=["Plugin"])
     v1_router.include_router(tags.tags_router, prefix="/tags", tags=["Tags"])
     v1_router.include_router(knowledge_base.knowledge_base_router, prefix="/knowledge-base", tags=["Knowledge Base"])
+    v1_router.include_router(system_model.system_router, prefix="/system", tags=["System"])
+    v1_router.include_router(memory_base.memory_base_router, prefix="/memory", tags=["Memory Base"])
 
     # Add health check endpoint directly to api_router (not v1_router)
     @api_router.get("/health")
@@ -49,7 +60,7 @@ def router_register(app: FastAPI):
             "docs": "/api/docs",
             "health": "/api/health"
         }
-    
+
     @app.middleware("http")
     async def process_header_language(request: Request, call_next):
         accept_language = request.headers.get("accept-language", "cn")
@@ -71,7 +82,7 @@ def router_register(app: FastAPI):
     async def process_header_request_id(request: Request, call_next):
         request_id = request.headers.get("x-request-id")
         if request_id:
-            set_thread_session(request_id)
+            set_session_id(request_id)
         try:
             response = await call_next(request)
             return response

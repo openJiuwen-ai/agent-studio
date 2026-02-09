@@ -38,6 +38,7 @@ export interface EmbeddingModelConfigResponse extends EmbeddingModelConfigBase {
   created_at: string
   updated_at: string
   api_key_masked?: string // 脱敏的API密钥
+  is_system_model?: boolean
 }
 
 // Embedding 模型配置列表响应

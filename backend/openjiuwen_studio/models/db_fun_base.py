@@ -8,7 +8,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped
 
 from openjiuwen_studio.schemas.common import ResponseModel
 
-orm_config = ConfigDict(from_attributes=True)
+orm_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class Base(DeclarativeBase):

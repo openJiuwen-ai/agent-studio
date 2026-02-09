@@ -1,20 +1,59 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
-from typing import Any, Dict, List
+from typing import List, Dict, Any
 
-from openjiuwen.core.common.exception.exception import JiuWenBaseException
-from openjiuwen.core.graph.executable import Input, Output
-from openjiuwen.core.utils.tool.base import Tool
-from openjiuwen.core.utils.tool.param import Param
-from openjiuwen.core.utils.tool.service_api.restful_api import RestfulApi
+from openjiuwen.core.foundation.tool import Tool, ToolCard, Input, Output
+from openjiuwen.core.foundation.tool import RestfulApiCard, RestfulApi
 
 from openjiuwen_studio.core.common.dsl import PluginCodeConfig as DlPluginCodeConfig
-from openjiuwen_studio.core.common.dsl import RestfulApiSchema as DlRestfulApiSchema
+from openjiuwen_studio.core.common.dsl import RestfulApiSchema as DlRestfulApiSchema, Param
+
 from openjiuwen_studio.core.executor.component.component_impl.code_comp import CodeComponent
 from openjiuwen_studio.core.common.exceptions import JiuWenExecuteException
 from openjiuwen_studio.core.common.status_code import StatusCode
-from openjiuwen.core.utils.tool.schema import ToolInfo
+
+TYPE = "type"
+OBJECT = "object"
+REQUIRED = "required"
+PROPERTIES = "properties"
+
+
+def convert_params_to_json_schema(params: List[Param]) -> Dict[str, Any]:
+    """
+    将 RestfulApiSchema 中的 params 转换为 JSON Schema 格式的 input_params RestfulApiCard中的
+
+    """
+    properties = {}
+    required_params = []
+
+    for param in params:
+        # 构建每个参数的属性
+        param_schema = {
+            "type": param.type,
+            "description": param.description,
+            "location": param.method,
+        }
+
+        # 添加默认值（如果存在）
+        if param.default_value is not None:
+            param_schema["default"] = param.default_value
+
+        # 将参数添加到properties中
+        properties[param.name] = param_schema
+
+        # 如果参数是必需的，添加到required列表中
+        if param.required:
+            required_params.append(param.name)
+
+    # 构建完整的JSON Schema
+    input_params = {
+        TYPE: OBJECT,
+        PROPERTIES: properties,
+        REQUIRED: required_params
+    }
+
+    return input_params
 
 
 class ServiceTool:
@@ -22,27 +61,23 @@ class ServiceTool:
         self.restfulapischema: DlRestfulApiSchema = restfulapischema
 
     def compile(self) -> RestfulApi:
-        params: List[Param] = []
-        builtin_params: List[Param] = []
+        queries = {}
+        headers = self.restfulapischema.headers
         for i in self.restfulapischema.params:
-            if i.runtime:
-                param = Param(name=i.name, description=i.description, type=i.type, required=i.required, method=i.method)
-                params.append(param)
-            else:
-                builtin_param = Param(name=i.name, description=i.description, type=i.type, required=i.required,
-                                      method=i.method, default_value=i.default_value)
-                builtin_params.append(builtin_param)
-        responses: List[Param] = []
-        for j in self.restfulapischema.response:
-            response_param = Param(name=j.name, description=j.description, type=j.type, required=j.required)
-            responses.append(response_param)
-        # Use the existing name field if available, otherwise fall back to tool_id
+            if not i.runtime:
+                if i.method == "query" and i.default_value is not None:
+                    queries[i.name] = i.default_value
+                elif i.method == "header" and i.default_value is not None:
+                    headers[i.name] = i.default_value
+
         tool_name = self.restfulapischema.name or self.restfulapischema.tool_id
-        tool = RestfulApi(name=tool_name, description=self.restfulapischema.description,
-                          params=params, path=self.restfulapischema.path,
-                          headers=self.restfulapischema.headers, method=self.restfulapischema.method,
-                          response=responses, builtin_params=builtin_params)
-        return tool
+        input_params = convert_params_to_json_schema(self.restfulapischema.params)
+        restfulapi_card = RestfulApiCard(name=tool_name,
+                                         description=self.restfulapischema.description, input_params=input_params,
+                                         url=self.restfulapischema.path, method=self.restfulapischema.method,
+                                         headers=headers, queries=queries)  # 不能配置id,否则会跑到Runner.get_tool
+        restfulapi_tool = RestfulApi(restfulapi_card)
+        return restfulapi_tool
 
 
 class CodeTool:
@@ -50,27 +85,43 @@ class CodeTool:
         self.codeschema: DlPluginCodeConfig = codeschema
 
     def compile(self) -> Tool:
-        tool = PluginCodeTool(tool_id=self.codeschema.tool_id, conf=self.codeschema)
-        return tool
+        # 使用工厂方法创建，内部会自动处理 Card 的构造
+        code_tool = PluginCodeTool.create(self.codeschema)
+        return code_tool
+
+
+class PluginCodeCard(ToolCard):
+    """插件代码工具卡片，用于适配 Tool 框架的元数据管理"""
+    pass
 
 
 class PluginCodeTool(CodeComponent, Tool):
-    def __init__(self, tool_id: str, conf: DlPluginCodeConfig) -> None:
-        super().__init__(node_id=tool_id, conf=conf)
+    def __init__(self, card: PluginCodeCard, conf: DlPluginCodeConfig) -> None:
+        CodeComponent.__init__(self, node_id=card.id, conf=conf)
+        Tool.__init__(self, card=card)
         self.conf: DlPluginCodeConfig = conf
-        self.tool_id: str = tool_id
-        self.node_id: str = tool_id
+        self.tool_id: str = card.id
+        self.node_id: str = card.id
         # Use the existing name field if available, otherwise fall back to tool_id
-        self.name: str = conf.name or tool_id
-        self.params: List[Param] = self.conf.input_params
+        self.name: str = conf.name or card.id
+        self.params = card.input_params
         self.description = self.conf.description
 
-    def get_tool_info(self) -> ToolInfo:
-        tool_info_dict = Param.format_functions(self)
-        tool_info = ToolInfo(**tool_info_dict)
-        return tool_info
+    @classmethod
+    def create(cls, conf: DlPluginCodeConfig):
+        """工厂方法：从 DSL 配置创建符合 Tool 规范的实例"""
+        # 转换参数 schema
+        input_schema = convert_params_to_json_schema(conf.input_params)
 
-    async def ainvoke(self, inputs: Input, **kwargs) -> Output:
+        # 构建 ToolCard
+        card = PluginCodeCard(
+            name=conf.name,
+            description=conf.description,
+            input_params=input_schema
+        )  # 不能配置id,否则会跑到Runner.get_tool
+        return cls(card=card, conf=conf)
+
+    async def invoke(self, inputs: Input, **kwargs) -> Output:
         code = self.conf.code
         language = self.conf.language
         execute_type = self.conf.execute_type
@@ -102,5 +153,5 @@ class PluginCodeTool(CodeComponent, Tool):
             err_code = error_body.error_code
             err_msg = error_body.message
             result_data = {key: value for key, value in result.items() if key != "error_body"}
-        final_result: Dict[str, Any] = {'errCode': err_code, 'errMessage': err_msg, 'data': result_data}
+        final_result: Dict[str, Any] = {'code': err_code, 'message': err_msg, 'data': result_data}
         return final_result

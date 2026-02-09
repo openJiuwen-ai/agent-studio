@@ -22,11 +22,6 @@ plugin_type_mapping = {
     PluginType.PLUGIN_TYPE_CLOUD_CODE: dsl.PluginType.CODE,
 }
 
-plugin_type_mapping = {
-    PluginType.PLUGIN_TYPE_CLOUD_API: dsl.PluginType.SERVICE,
-    PluginType.PLUGIN_TYPE_CLOUD_CODE: dsl.PluginType.CODE,
-}
-
 api_method_mapping = {
     PluginApiMethod.PLUGIN_API_METHOD_GET: "GET",
     PluginApiMethod.PLUGIN_API_METHOD_POST: "POST",
@@ -48,9 +43,9 @@ param_type_mapping = {
 
 param_send_method_type_mapping = {
     ParamSendMethod.PARAM_SEND_METHOD_NONE: "",
-    ParamSendMethod.PARAM_SEND_METHOD_HEADER: "Headers",
-    ParamSendMethod.PARAM_SEND_METHOD_QUERY: "Query",
-    ParamSendMethod.PARAM_SEND_METHOD_BODY: "Body",
+    ParamSendMethod.PARAM_SEND_METHOD_HEADER: "header",
+    ParamSendMethod.PARAM_SEND_METHOD_QUERY: "query",
+    ParamSendMethod.PARAM_SEND_METHOD_BODY: "body",
 }
 
 

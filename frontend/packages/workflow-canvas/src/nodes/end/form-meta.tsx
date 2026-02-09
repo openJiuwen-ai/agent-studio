@@ -13,15 +13,18 @@ import { Field } from '@flowgram.ai/free-layout-editor'
 import { Typography } from '@douyinfe/semi-ui'
 import { IFlowTemplateValue } from '../../form-materials'
 import { useIsSidebar } from '../../hooks'
+import { useTranslation } from '../../i18n'
 
 export const renderForm = () => {
+  const { t } = useTranslation()
+
   const SidebarNote: React.FC<{ show: boolean }> = ({ show }) => {
     const isSidebar = useIsSidebar()
     if (!isSidebar || !show) return null
     return (
       <div>
         <Typography.Text type="tertiary" size="small">
-          已配置“输出内容”，工作流将仅返回字段 responseContent；若需返回输出变量，请清空“输出内容”配置。
+          {t('workflowCanvas.nodes.end.outputConfiguredNote')}
         </Typography.Text>
       </div>
     )
@@ -31,7 +34,7 @@ export const renderForm = () => {
     <>
       <FormHeader titleEditable={false} menuVisible={false} />
       <FormContent>
-        <FormInput name="输出" />
+        <FormInput name={'workflowCanvas.formOutput.output'} />
         <Field<boolean> name="inputs.streaming">
           {({ field: streamingField }) => (
             <Field<IFlowTemplateValue> name="inputs.content">

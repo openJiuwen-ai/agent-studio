@@ -15,16 +15,15 @@ import {
 // 工作流相关的React Query hooks
 
 // 从API获取工作流列表
-export const useWorkflows = (request: WorkflowListRequest) => {
+export const useWorkflows = (request: WorkflowListRequest, options?: { staleTime?: number; refetchOnMount?: boolean | 'always' }) => {
   return useQuery(['workflows', 'api', 'list', request], () => WorkflowService.getWorkflows(request), {
     enabled: !!request.space_id, // 只有当space_id存在时才执行查询
 
-    // 🎯 禁用缓存，确保搜索、排序、过滤时都重新请求
-    staleTime: 0, // 数据立即过期，每次参数改变时都重新请求
+    staleTime: options?.staleTime ?? 0, // 默认数据立即过期，每次参数改变时都重新请求
     cacheTime: 5 * 60 * 1000, // 保留缓存时间用于内存管理（组件卸载后保留5分钟）
 
     // 🎯 添加自动刷新机制
-    refetchOnMount: true, // 组件挂载时重新获取数据
+    refetchOnMount: options?.refetchOnMount ?? true, // 默认组件挂载时重新获取数据，可由调用方覆盖
     refetchOnWindowFocus: false, // 窗口重新聚焦时不重新获取数据
     refetchOnReconnect: true, // 网络重连时重新获取数据
 
@@ -180,8 +179,6 @@ export const useSaveWorkflow = () => {
     // 🎯 保存成功后，确保数据同步
     onSuccess: (response, variables) => {
       if (response.code === 200) {
-        console.log('工作流保存成功')
-
         // 立即更新缓存，确保下次进入编辑器显示最新数据
         queryClient.setQueryData(['workflows', 'canvas', variables.workflow_id, variables.space_id], {
           ...response,
@@ -200,8 +197,6 @@ export const useSaveWorkflow = () => {
 
         // 🎯 更新工作流列表缓存，确保列表显示最新信息
         queryClient.invalidateQueries(['workflows', 'api', 'list'], { predicate: query => query.queryKey[3]?.space_id === variables.space_id })
-
-        console.log('工作流保存成功，画布和列表缓存已刷新')
       }
     },
   })
@@ -225,24 +220,39 @@ export const useDeleteWorkflow = () => {
   })
 }
 
-// 更新工作流
 export const useUpdateWorkflow = () => {
   const queryClient = useQueryClient()
 
   return useMutation((request: UpdateWorkflowRequest) => WorkflowService.updateWorkflow(request), {
-    onSuccess: (response: WorkflowUpdateResponse, variables) => {
+    onSuccess: (response, request) => {
       if (response.code === 200) {
-        // 更新成功后，使工作流列表缓存失效，触发重新获取
-        queryClient.invalidateQueries(['workflows', 'api', 'list'], { predicate: query => query.queryKey[3]?.space_id === variables.space_id })
-        console.log('工作流更新成功')
-        // 可以在这里添加成功提示
-        return { success: true, message: response.message }
+        const updater = (oldData: unknown) => {
+          type CachedData = { data?: { workflow_list?: any[] }, code?: number, message?: string }
+          const cached = oldData as CachedData | undefined
+          
+          if (!cached?.data?.workflow_list) return oldData
+          
+          const updates: any = {}
+          if (request.name !== undefined) updates.name = request.name
+          if (request.desc !== undefined) updates.desc = request.desc
+          
+          return {
+            ...cached,
+            data: {
+              ...cached.data,
+              workflow_list: cached.data.workflow_list.map(workflow =>
+                workflow.workflow_id === request.workflow_id ? { ...workflow, ...updates } : workflow
+              ),
+            },
+          }
+        }
+        
+        queryClient.setQueriesData({ queryKey: ['workflows', 'api', 'list'], exact: false }, updater)
+        queryClient.setQueriesData({ queryKey: ['workflows', 'search'], exact: false }, updater)
       }
     },
     onError: error => {
       console.error('更新工作流失败:', error)
-      // 可以在这里添加失败提示
-      return { success: false, message: '更新工作流失败，请稍后重试' }
     },
   })
 }
@@ -266,12 +276,11 @@ export const useCopyWorkflow = () => {
 }
 
 // 搜索工作流
-export const useSearchWorkflows = (request: WorkflowSearchRequest, options?: { enabled?: boolean }) => {
+export const useSearchWorkflows = (request: WorkflowSearchRequest, options?: { enabled?: boolean; staleTime?: number }) => {
   return useQuery(['workflows', 'search', request], () => WorkflowService.searchWorkflows(request), {
     enabled: options?.enabled !== false && !!request.space_id && request.search_term.trim() !== '', // 只有当enabled为true且space_id存在且有搜索词时才执行查询
 
-    // 🎯 禁用缓存，确保搜索、排序、过滤时都重新请求
-    staleTime: 0, // 数据立即过期，每次参数改变时都重新请求
+    staleTime: options?.staleTime ?? 0, // 默认数据立即过期，每次参数改变时都重新请求
     cacheTime: 3 * 60 * 1000, // 保留缓存时间用于内存管理（组件卸载后保留3分钟）
 
     // 🎯 搜索优化的自动刷新机制

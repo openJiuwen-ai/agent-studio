@@ -20,6 +20,9 @@
   display: inline-block;
   margin-left: 4px;
   margin-top: -1px;
+  max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
 }

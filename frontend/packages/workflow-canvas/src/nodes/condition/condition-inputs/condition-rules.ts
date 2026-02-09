@@ -4,48 +4,49 @@
  */
 
 import { IConditionRule, ConditionOpConfigs, ConditionPresetOp } from '../../../form-materials'
+import { t } from '../../../i18n'
 
-// 自定义操作符配置，支持中文标签
+// 自定义操作符配置，支持国际化标签（使用 getter 延迟翻译）
 export const conditionOps: ConditionOpConfigs = {
   [ConditionPresetOp.EQ]: {
-    label: '等于',
+    get label() { return t('workflowCanvas.nodes.condition.operators.eq') },
     abbreviation: '=',
   },
   [ConditionPresetOp.NEQ]: {
-    label: '不等于',
+    get label() { return t('workflowCanvas.nodes.condition.operators.neq') },
     abbreviation: '≠',
   },
   [ConditionPresetOp.GT]: {
-    label: '大于',
+    get label() { return t('workflowCanvas.nodes.condition.operators.gt') },
     abbreviation: '>',
   },
   [ConditionPresetOp.GTE]: {
-    label: '大于等于',
+    get label() { return t('workflowCanvas.nodes.condition.operators.gte') },
     abbreviation: '>=',
   },
   [ConditionPresetOp.LT]: {
-    label: '小于',
+    get label() { return t('workflowCanvas.nodes.condition.operators.lt') },
     abbreviation: '<',
   },
   [ConditionPresetOp.LTE]: {
-    label: '小于等于',
+    get label() { return t('workflowCanvas.nodes.condition.operators.lte') },
     abbreviation: '<=',
   },
   [ConditionPresetOp.CONTAINS]: {
-    label: '包含',
+    get label() { return t('workflowCanvas.nodes.condition.operators.contains') },
     abbreviation: '⊇',
   },
   [ConditionPresetOp.NOT_CONTAINS]: {
-    label: '不包含',
+    get label() { return t('workflowCanvas.nodes.condition.operators.notContains') },
     abbreviation: '⊉',
   },
   [ConditionPresetOp.IS_EMPTY]: {
-    label: '为空',
+    get label() { return t('workflowCanvas.nodes.condition.operators.isEmpty') },
     abbreviation: '=',
     rightDisplay: 'Empty',
   },
   [ConditionPresetOp.IS_NOT_EMPTY]: {
-    label: '不为空',
+    get label() { return t('workflowCanvas.nodes.condition.operators.isNotEmpty') },
     abbreviation: '≠',
     rightDisplay: 'Empty',
   },

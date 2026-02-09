@@ -55,10 +55,9 @@ const initialState: KnowledgeBaseState = {
   searchQuery: '',
   selectedKnowledgeBaseIds: [],
   isSearching: false,
-  // 分页相关
   total: 0,
   currentPage: 1,
-  pageSize: 10,
+  pageSize: 20,
 }
 
 export const useKnowledgeBaseStore = create<KnowledgeBaseStore>()(
@@ -96,7 +95,7 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseStore>()(
             knowledgeBases,
             total: response.data.total,
             currentPage: response.data.page,
-            pageSize: response.data.size,
+            pageSize: size, // 使用请求参数，与分页器一致，避免被后端返回值覆盖
             isLoading: false,
           })
         } catch (error) {
@@ -136,7 +135,7 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseStore>()(
             knowledgeBases,
             total: response.data.total,
             currentPage: response.data.page,
-            pageSize: response.data.page_size,
+            pageSize: size, 
             isSearching: false,
           })
         } catch (error) {

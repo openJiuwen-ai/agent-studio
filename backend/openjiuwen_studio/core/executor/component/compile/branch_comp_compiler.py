@@ -5,8 +5,8 @@
 from typing import Any, List
 
 from openjiuwen.core.common.logging import logger
-from openjiuwen.core.component.branch_comp import BranchComponent
-from openjiuwen.core.component.condition.condition import AlwaysTrue
+from openjiuwen.core.workflow import BranchComponent
+from openjiuwen.core.workflow.components.condition.condition import AlwaysTrue
 
 from openjiuwen_studio.core.common.dsl import Connection, Branch
 from openjiuwen_studio.core.executor.component.compile import util

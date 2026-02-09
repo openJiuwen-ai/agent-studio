@@ -8,6 +8,7 @@ import { Field } from '@flowgram.ai/free-layout-editor'
 import { Select as SemiSelect, Modal } from '@douyinfe/semi-ui'
 
 import { useIsSidebar } from '../../../hooks'
+import { useTranslation } from '../../../i18n'
 import { PythonCodeEditor, TypeScriptCodeEditor } from '../../../form-materials'
 import { FormItem } from '../../../form-components'
 import { CompactSelect, LanguageSelectContainer } from './styles'
@@ -15,6 +16,7 @@ import { getCodeTemplate, shouldUpdateTemplate, isTemplateForLanguage } from './
 
 export function Code() {
   const isSidebar = useIsSidebar()
+  const { t } = useTranslation()
 
   if (!isSidebar) {
     return null
@@ -78,10 +80,12 @@ export function Code() {
 
                 if (isEdited) {
                   Modal.confirm({
-                    title: '切换编程语言',
-                    content: `切换到 ${newLanguage === 'python' ? 'Python' : 'JavaScript'} 后，当前编辑的内容将会丢失，是否确认切换？`,
-                    okText: '确认切换',
-                    cancelText: '取消',
+                    title: t('workflowCanvas.formCode.switchLanguageTitle'),
+                    content: t('workflowCanvas.formCode.switchLanguageMessage', {
+                      language: newLanguage === 'python' ? 'Python' : 'JavaScript',
+                    }),
+                    okText: t('workflowCanvas.formCode.confirmSwitch'),
+                    cancelText: t('workflowCanvas.formCode.cancel'),
                     onOk: () => {
                       languageField.onChange(newLanguage)
                       const newTemplate = getCodeTemplate(newLanguage)
@@ -96,7 +100,7 @@ export function Code() {
               }
 
               return (
-                <FormItem name="代码">
+                <FormItem name={t('workflowCanvas.formCode.code')}>
                   <LanguageSelectContainer>
                     <CompactSelect
                       value={languageField.value}

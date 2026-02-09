@@ -22,6 +22,8 @@ export function parseInteractionMsgToFormMeta(
     if (s.includes('number')) return 'number'
     if (s.includes('array')) return 'array'
     if (s.includes('object')) return 'object'
+    if (s.includes('date-time')) return 'date-time'
+    if (s.includes('file')) return 'file'
     return 'string'
   }
 

@@ -38,7 +38,7 @@ class ModelConfigBase(BaseModel):
     parameters: ModelParameters = Field(default_factory=ModelParameters)
 
     # Connection settings
-    timeout: int = Field(default=60, ge=1, le=300, description="Request timeout in seconds")
+    timeout: int = Field(default=60, ge=1, le=3600, description="Request timeout in seconds")
     retry_count: int = Field(default=3, ge=0, le=10, description="Number of retry attempts")
     enable_streaming: bool = Field(default=True, description="Enable streaming responses")
     enable_function_calling: bool = Field(default=False, description="Enable function calling")
@@ -93,7 +93,7 @@ class ModelConfigUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     tags: Optional[List[str]] = Field(None)
     parameters: Optional[ModelParameters] = Field(None)
-    timeout: Optional[int] = Field(None, ge=1, le=300)
+    timeout: Optional[int] = Field(None, ge=1, le=3600)
     retry_count: Optional[int] = Field(None, ge=0, le=10)
     enable_streaming: Optional[bool] = Field(None)
     enable_function_calling: Optional[bool] = Field(None)
@@ -118,6 +118,8 @@ class ModelConfigResponse(ModelConfigBase):
     usage_stats: ModelUsageStats = Field(default_factory=ModelUsageStats)
     # API key is masked in response for security
     api_key_masked: Optional[str] = Field(None, description="Masked API key for display")
+    is_system_model: Optional[bool] = Field(None, description="是否系统预置模型")
+    system_model_id: Optional[int] = Field(None, description="系统模型id")
 
     class Config:
         from_attributes = True

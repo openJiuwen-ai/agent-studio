@@ -146,6 +146,7 @@ class ModelConfig(BaseModel):
     temperature: Optional[float] = None
     top_k: Optional[int] = None
     top_p: Optional[float] = None
+    timeout: Optional[int] = None
     presence_penalty: Optional[float] = None
     frequency_penalty: Optional[float] = None
     json_mode: Optional[bool] = None

@@ -14,7 +14,10 @@ export const syncVariableTitle: EffectOptions[] = [
           _var.updateMeta({
             ...(_var.meta || {}),
             title: value || context.node.id,
-            icon: context.node.getNodeRegistry<FlowNodeRegistry>().info?.icon,
+            icon: (() => {
+              const info = context.node.getNodeRegistry<FlowNodeRegistry>().info
+              return typeof info === 'function' ? info().icon : info?.icon
+            })(),
           })
         })
       })

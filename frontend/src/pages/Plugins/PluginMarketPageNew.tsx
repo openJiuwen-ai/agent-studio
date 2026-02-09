@@ -601,7 +601,7 @@ const PluginMarketPageNew: React.FC = () => {
                 </div>
                 {selectedPlugin.desc_mk && (
                   <div>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>插件详情</Typography>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>{t('plugins.dialog.pluginDetails.basicInfo')}</Typography>
                     <div className="prose prose-sm max-w-none p-4 bg-gray-50 rounded-lg border border-gray-200">
                       <ReactMarkdown>{selectedPlugin.desc_mk}</ReactMarkdown>
                     </div>
@@ -609,7 +609,7 @@ const PluginMarketPageNew: React.FC = () => {
                 )}
                 {selectedPlugin.tags && selectedPlugin.tags.length > 0 && (
                   <div>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>标签</Typography>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>{t('plugins.dialog.pluginDetails.tags')}</Typography>
                     <div className="flex flex-wrap gap-2">
                       {selectedPlugin.tags.map(tag => (
                         <span key={tag} className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-full">{tag}</span>

@@ -235,7 +235,7 @@ const AgentPublishDialog: React.FC<AgentPublishDialogProps> = ({ open, agentId, 
             onClick={handlePublish}
             disabled={isPublishing || !versionNumber.trim() || !versionDescription.trim()}
             variant="contained"
-            className="w-full sm:w-auto px-6 sm:px-8 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium shadow-sm hover:shadow-xl transition-all"
+            className="btn-primary w-full sm:w-auto px-6 sm:px-8 py-2 font-medium"
           >
             {isPublishing ? (
               <div className="flex items-center justify-center">

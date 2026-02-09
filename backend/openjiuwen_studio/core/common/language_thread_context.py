@@ -4,14 +4,15 @@
 """
 Thread-Local Context Module
 
-Provides thread-local storage for request-scoped context variables.
+Provides context-local storage for request-scoped context variables.
 This module manages context that needs to be accessed across the call chain
 without explicit parameter passing.
 """
-import threading
+import contextvars
 from typing import Optional
 
-_thread_local = threading.local()
+# 使用 contextvars 替代 threading.local 以支持异步环境
+_language_context = contextvars.ContextVar("language", default="cn")
 
 
 def get_highest_priority_language(accept_language: str) -> list:
@@ -23,44 +24,37 @@ def get_highest_priority_language(accept_language: str) -> list:
 
     Returns:
         List of language codes sorted by priority (highest q-value first)
-
-    Note:
-        Languages before a q-value specifier share that q-value.
-        Example: "zh-CN,zh;q=0.9,en;q=0.6" means both zh-CN and zh have q=0.9
     """
     if not accept_language:
         return []
 
     language_prefs = []
-    accumulated_languages = []
-    default_q = 1.0
-
-    segments = accept_language.split(';')
-
-    for segment in segments:
-        segment = segment.strip()
-        if not segment:
+    
+    # Split by comma to get individual language ranges
+    parts = [p.strip() for p in accept_language.split(',') if p.strip()]
+    
+    for part in parts:
+        # Each part might contain parameters separated by semicolons
+        subparts = [sp.strip() for sp in part.split(';')]
+        if not subparts:
             continue
-
-        if segment.lower().startswith('q='):
-            q_str = segment[2:].strip()
-            if q_str:
+            
+        lang = subparts[0]
+        q_value = 1.0
+        
+        # Parse parameters to find q-value
+        for param in subparts[1:]:
+            if param.lower().startswith('q='):
                 try:
-                    parsed_q = float(q_str)
-                    if 0.0 <= parsed_q <= 1.0:
-                        for lang in accumulated_languages:
-                            language_prefs.append((lang.lower(), parsed_q))
-                        accumulated_languages = []
-                        default_q = parsed_q
+                    q_str = param[2:].strip()
+                    if q_str:
+                        q_value = float(q_str)
                 except ValueError:
                     pass
-        else:
-            languages = [lang.strip() for lang in segment.split(',') if lang.strip()]
-            accumulated_languages.extend(languages)
+        
+        language_prefs.append((lang.lower(), q_value))
 
-    for lang in accumulated_languages:
-        language_prefs.append((lang.lower(), default_q))
-
+    # Sort by q-value descending
     language_prefs.sort(key=lambda x: x[1], reverse=True)
 
     return [lang_code for lang_code, q_value in language_prefs]
@@ -68,30 +62,29 @@ def get_highest_priority_language(accept_language: str) -> list:
 
 def set_language(language: str) -> None:
     """
-    Set the current request's language in thread-local storage.
+    Set the current request's language in context storage.
 
     Args:
         language: Language code (e.g., 'cn', 'en')
     """
-    _thread_local.language = language
+    _language_context.set(language)
 
 
 def get_language() -> str:
     """
-    Get the current request's language from thread-local storage.
+    Get the current request's language from context storage.
 
     Returns:
         str: Language code, defaults to 'cn' if not set
     """
-    return getattr(_thread_local, 'language', 'cn')
+    return _language_context.get()
 
 
 def clear_language() -> None:
     """
-    Clear the language from thread-local storage.
+    Reset the language context to default.
     Typically called at the end of a request lifecycle.
+    Note: In contextvars, we usually just let the context exit scope, 
+    but for compatibility we reset it to default.
     """
-    try:
-        delattr(_thread_local, 'language')
-    except AttributeError:
-        pass
+    _language_context.set("cn")

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Upload, ArrowLeft, ArrowRight, Check, FileText, HelpCircle, AlertTriangle, Play, Loader2, CheckCircle } from 'lucide-react'
+import { X, Upload, ArrowLeft, ArrowRight, Check, FileText, HelpCircle, AlertTriangle, Play, Loader2, CheckCircle, Info } from 'lucide-react'
 import { Tooltip } from '@mui/material'
 import { KnowledgeBase } from '@/types/knowledgeBase'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -226,7 +226,8 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
 
   const ALLOWED_FILE_TYPES = ['.pdf', '.docx', '.txt', '.md']
   const MAX_DOCUMENT_NAME_LENGTH = 100
-  const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB in bytes
+  const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB in bytes
+  const MAX_FILE_SIZE_LABEL = '50MB' // 与 MAX_FILE_SIZE 一致，用于界面展示与国际化
 
   const validateFileType = (file: File): boolean => {
     const fileName = file.name.toLowerCase()
@@ -718,7 +719,7 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
                   <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                   <div className="text-sm text-gray-600 mb-2">{t('knowledgeBases.addDocument.dragAndDrop')}</div>
                   <div className="text-xs text-gray-500 mb-2">{t('knowledgeBases.addDocument.supportedFormats')}</div>
-                  <div className="text-xs text-orange-600 mb-4 font-medium">文件大小限制：单个文件不超过 20MB</div>
+                  <div className="text-xs text-orange-600 mb-4 font-medium">{t('knowledgeBases.addDocument.fileSizeLimit', { size: MAX_FILE_SIZE_LABEL })}</div>
                   <input type="file" multiple onChange={handleFileChange} accept=".pdf,.docx,.txt,.md" className="hidden" id="file-upload" />
                   <label
                     htmlFor="file-upload"
@@ -925,6 +926,21 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
                         </label>
                       </div>
                     </div>
+
+                    {/* 勾选文档图构建后自动展示的提示：紧贴该行下方，与小问号悬停提示互不干扰 */}
+                    {formData.enableGraphEnhancement && (
+                      <div
+                        className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                        <span>
+                          {t('knowledgeBases.addDocument.enableGraphEnhancementTooltip') ||
+                            '构建文档图可以获取更好的检索效果，但是会增加耗时以及消耗额外的大模型token。'}
+                        </span>
+                      </div>
+                    )}
 
                     {/* 模型选择器 - 仅在启用图增强时显示 */}
                     {formData.enableGraphEnhancement && (
@@ -1197,9 +1213,9 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
 
             {/* Content */}
             <div className="text-center mb-8">
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">文件大小超出限制</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">{t('knowledgeBases.addDocument.oversizedTitle')}</h3>
               <div className="text-left text-gray-600 text-base leading-relaxed space-y-3">
-                <p>以下文件大小超过 <span className="font-semibold text-blue-600">20MB</span> 限制：</p>
+                <p>{t('knowledgeBases.addDocument.filesExceedLimit', { size: MAX_FILE_SIZE_LABEL })}</p>
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <ul className="list-disc list-inside space-y-1">
                     {oversizedFiles.map((fileInfo, index) => {

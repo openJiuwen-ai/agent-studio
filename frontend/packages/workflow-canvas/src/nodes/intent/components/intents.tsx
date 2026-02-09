@@ -159,7 +159,7 @@ export const Intents: React.FC<IntentsProps> = ({ readOnly = false }) => {
                       onChange={(value: any) => {
                         handleUpdateIntent(index, { name: value })
                       }}
-                      placeholder="请输入用户意图的描述"
+                      placeholder={t('workflowCanvas.intent.enterIntentDescription')}
                       style={{ flex: 1, height: '28px' }}
                       disabled={readOnly}
                     />
@@ -213,12 +213,12 @@ export const Intents: React.FC<IntentsProps> = ({ readOnly = false }) => {
                 {safeIntents.map((intent: IntentOption, index: number) => (
                   <IntentDisplay
                     key={intent.id || index}
-                    label={'选项'}
-                    content={intent.name || '未配置'}
+                    label={t('workflowCanvas.intent.option')}
+                    content={intent.name || t('workflowCanvas.intent.notConfigured')}
                     isWarning={!intent.name || intent.name.trim() === ''}
                   />
                 ))}
-                <IntentDisplay label="其他意图" content="" />
+                <IntentDisplay label={t('workflowCanvas.intent.otherIntent')} content="" />
               </>
             )
           }}

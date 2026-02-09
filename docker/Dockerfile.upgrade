@@ -1,0 +1,13 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+WORKDIR /root
+COPY backend /root/backend
+
+RUN source /usr/local/miniconda3/etc/profile.d/conda.sh \
+    && conda activate py3114 \
+    && pip install uv \
+    && cd backend \
+    && uv sync --group dev
+
+CMD ["bash", "-c", "source /usr/local/miniconda3/etc/profile.d/conda.sh && conda activate py3114 && /bin/bash"]

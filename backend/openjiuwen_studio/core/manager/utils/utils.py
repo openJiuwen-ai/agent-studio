@@ -88,10 +88,11 @@ def check_version(latest: str, current: str) -> tuple[bool, str | None]:
     return True, None
 
 
-def convert_to_properties_format(input_list) -> dict:
+def convert_to_properties_format(input_list):
     """Convert parameter list to properties format"""
 
     properties = {}
+    requires = []
 
     if not input_list:
         return {}
@@ -102,10 +103,10 @@ def convert_to_properties_format(input_list) -> dict:
             properties[property_name] = {
                 'type': item.get('type'),
                 'description': item.get('description'),
-                'required': item.get('required')
             }
-
-        return properties
+            if item.get('required') and item.get('required') == True:
+                requires.append(property_name)
+        return properties, requires
     except (KeyError, TypeError) as e:
         logger.error(f"[AGENT_CONVERT] failed to convert parameters to properties format - Error: {e}")
         raise ValueError(f"Failed to convert properties format: {e}") from e
@@ -121,11 +122,11 @@ def get_current_project_version() -> str:
         # pyproject.toml is in backend/
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file)))))
         pyproject_path = os.path.join(backend_dir, "pyproject.toml")
-        
+
         # Read and parse pyproject.toml
         with open(pyproject_path, "rb") as f:
             pyproject_data = tomllib.load(f)
-        
+
         # Get version from project section
         version = pyproject_data.get("project", {}).get("version", "")
         return version

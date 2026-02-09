@@ -311,13 +311,13 @@ const AgentsPage: React.FC = () => {
         a.click()
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
-        showSuccess('智能体导出成功')
+        showSuccess(t('agents.agentList.messages.exportSuccess'))
       } else {
-        showError(`导出失败: ${response.message || '未知错误'}`)
+        showError(`${t('agents.agentList.messages.exportFailed')}: ${response.message || t('common.messages.unknownError')}`)
       }
     } catch (error) {
       console.error('导出异常:', error)
-      showError(`导出异常: ${error instanceof Error ? error.message : '未知错误'}`)
+      showError(`${t('agents.agentList.messages.exportError')}: ${error instanceof Error ? error.message : t('common.messages.unknownError')}`)
     }
   }
 
@@ -336,19 +336,19 @@ const AgentsPage: React.FC = () => {
         const warnings = response.data?.warnings
         if (warnings && Array.isArray(warnings) && warnings.length > 0) {
           const warningMsg = warnings.join('; ')
-          showWarning(`警告: ${warningMsg}`, 10000)
+          showWarning(`${t('agents.agentList.messages.importWarning')}: ${warningMsg}`, 10000)
         } else {
-          showSuccess(overwrite ? '智能体覆盖导入成功' : '智能体导入成功')
+          showSuccess(overwrite ? t('agents.agentList.messages.importOverwriteSuccess') : t('agents.agentList.messages.importSuccess'))
         }
         
         queryClient.invalidateQueries(['agents', 'api', 'list'], { exact: false })
         refetchAgents()
       } else {
-        showError(`导入失败: ${response.message || '未知错误'}`)
+        showError(`${t('agents.agentList.messages.importFailed')}: ${response.message || t('common.messages.unknownError')}`)
       }
     } catch (error) {
       console.error('导入异常:', error)
-      showError(`导入异常: ${error instanceof Error ? error.message : '文件解析失败'}`)
+      showError(`${t('agents.agentList.messages.importError')}: ${error instanceof Error ? error.message : t('agents.agentList.messages.fileParseError')}`)
     } finally {
       setIsImporting(false)
       setImportConflict(null)
@@ -408,7 +408,7 @@ const AgentsPage: React.FC = () => {
           }
           
           if (!configFile) {
-            throw new Error('ZIP文件中未找到配置文件')
+            throw new Error(t('agents.agentList.messages.configNotFoundInZip'))
           }
           
           const jsonContent = await configFile.async('text')
@@ -420,7 +420,7 @@ const AgentsPage: React.FC = () => {
         }
 
         if (!importData.agent || !importData.dependencies) {
-          throw new Error('无效的导入文件格式')
+          throw new Error(t('agents.agentList.messages.invalidImportFormat'))
         }
 
         const agentId = importData.agent.agent_id
@@ -613,7 +613,7 @@ const AgentsPage: React.FC = () => {
           disabled={isImporting}
         >
           {isImporting ? <CircularProgress size={20} /> : <Upload className="w-5 h-5" />}
-          <span>导入</span>
+          <span>{isImporting ? t('agents.importing') : t('agents.import')}</span>
         </button>
 
         {/* Create Agent Button */}
@@ -785,7 +785,7 @@ const AgentsPage: React.FC = () => {
                   <div className="flex items-center space-x-2">
                     <button
                       className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200"
-                      title="导出智能体"
+                      title={t('agents.tableView.exportAgent')}
                       onClick={() => handleExportAgent(agent.agent_id, agent.agent_name)}
                     >
                       <Download className="w-4 h-4" />
@@ -833,7 +833,7 @@ const AgentsPage: React.FC = () => {
               disabled={isImporting}
             >
               {isImporting ? <CircularProgress size={20} /> : <Upload className="w-5 h-5" />}
-              <span>导入</span>
+              <span>{isImporting ? t('agents.importing') : t('agents.import')}</span>
             </button>
             <button
               className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-700 transform hover:scale-105 transition-all duration-300 shadow-sm hover:shadow-xl"
@@ -843,7 +843,7 @@ const AgentsPage: React.FC = () => {
               }}
             >
               <Plus className="w-5 h-5" />
-              <span>{debouncedSearchTerm.trim() ? '创建新智能体' : t('agents.agentList.createFirst')}</span>
+              <span>{debouncedSearchTerm.trim() ? t('agents.agentList.createNewAgentButton') : t('agents.agentList.createFirst')}</span>
             </button>
           </div>
         </div>
@@ -945,11 +945,11 @@ const AgentsPage: React.FC = () => {
              </div>
              {/* Content */}
              <div className="text-center mb-8">
-               <h3 className="text-2xl font-bold text-gray-900 mb-4">智能体已存在</h3>
+               <h3 className="text-2xl font-bold text-gray-900 mb-4">{t('agents.importConflictDialog.title')}</h3>
                <p className="text-gray-600 text-lg leading-relaxed">
-                 当前空间下已存在智能体 "{importConflict.agentName}",
+                 {t('agents.importConflictDialog.message', { name: importConflict.agentName })}
                  <br/>
-                 您希望如何处理？
+                 {t('agents.importConflictDialog.question')}
                </p>
              </div>
              {/* Actions */}
@@ -958,19 +958,19 @@ const AgentsPage: React.FC = () => {
                  onClick={() => executeImport(importConflict.data, true)}
                  className="w-full px-6 py-3 bg-orange-600 text-white rounded-xl hover:bg-orange-700 font-medium transition-all"
                >
-                 覆盖现有智能体 (Overwrite)
+                 {t('agents.importConflictDialog.overwriteButton')}
                </button>
                <button
                  onClick={() => executeImport(importConflict.data, false)}
                  className="w-full px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium transition-all"
                >
-                 创建副本 (Create Copy)
+                 {t('agents.importConflictDialog.createCopyButton')}
                </button>
                <button
                  onClick={() => setImportConflict(null)}
                  className="w-full px-6 py-3 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-all"
                >
-                 取消
+                 {t('agents.importConflictDialog.cancelButton')}
                </button>
              </div>
           </div>

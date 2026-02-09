@@ -57,12 +57,14 @@ export interface FlowNodeMeta extends WorkflowNodeMeta {
  * You can customize your own node registry
  * 你可以自定义节点的注册器
  */
+export type FlowNodeRegistryInfo = {
+  icon: string | ReactElement
+  description: string
+}
+
 export interface FlowNodeRegistry extends FlowNodeRegistryDefault {
   meta: FlowNodeMeta
-  info?: {
-    icon: string | ReactElement
-    description: string
-  }
+  info?: FlowNodeRegistryInfo | (() => FlowNodeRegistryInfo)
   canAdd?: (ctx: FreeLayoutPluginContext) => boolean
   canDelete?: (ctx: FreeLayoutPluginContext, from: FlowNodeEntity) => boolean
   onAdd?: (ctx: FreeLayoutPluginContext) => FlowNodeJSON

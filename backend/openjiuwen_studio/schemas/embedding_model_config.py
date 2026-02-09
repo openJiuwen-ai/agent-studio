@@ -55,7 +55,9 @@ class EmbeddingModelConfigResponse(EmbeddingModelConfigBase):
     created_at: datetime
     updated_at: datetime
     api_key_masked: Optional[str] = Field(None, description="脱敏的API密钥")
-    
+    is_system_model: Optional[bool] = Field(None, description="是否系统预置模型")
+    system_model_id: Optional[int] = Field(None, description="系统模型id")
+
     class Config:
         from_attributes = True
 

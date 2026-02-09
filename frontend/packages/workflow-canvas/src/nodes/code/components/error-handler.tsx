@@ -201,7 +201,7 @@ export function ErrorHandler() {
           {({ field }) => {
             const processType = field.value
             return processType === 'execute_exception_step' ? (
-              <FormDisplay label="异常处理" content={errorHandlingOptions.find(option => option.value === processType)?.label || '执行异常流程'} />
+              <FormDisplay label={t('workflowCanvas.errorHandler.exceptionHandling')} content={errorHandlingOptions.find(option => option.value === processType)?.label || t('workflowCanvas.errorHandler.executeExceptionStep')} />
             ) : (
               <></>
             )

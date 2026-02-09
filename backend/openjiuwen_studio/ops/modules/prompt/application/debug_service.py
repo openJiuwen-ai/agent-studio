@@ -299,7 +299,7 @@ class PromptDebugService:
                 "step": "llm_call"
             })
             llm_span.set_start_time_first_rest()
-            openai_coroutine = get_llm_client_by_protocol(llm_protocol_config).astream(**call_kwargs)
+            openai_coroutine = get_llm_client_by_protocol(llm_protocol_config).stream(**call_kwargs)
             logger.info(f"llm config:\n {json.dumps(llm_protocol_config, indent=4, ensure_ascii=False)}")
             logger.info(f"llm call_params:\n {json.dumps(call_kwargs, indent=4, ensure_ascii=False)}")
 
@@ -720,7 +720,7 @@ class PromptDebugService:
         _first_response_time = None
         _start_time = time.time_ns()
 
-        async for chk in get_llm_client_by_protocol(llm_protocol_config).astream(**call_kwargs):
+        async for chk in get_llm_client_by_protocol(llm_protocol_config).stream(**call_kwargs):
             if not _first_response_time:
                 _first_response_time = time.time_ns()
                 latency = (_first_response_time - _start_time) // 1000000

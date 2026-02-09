@@ -1,4 +1,5 @@
 import { ModelDetail, WorkflowDetail } from '@/types/agentTypes'
+import { Memory } from '@mui/icons-material'
 import { SaveAgentRequest, AgentService, AgentPlugin } from '@test-agentstudio/api-client'
 import { create } from 'zustand'
 
@@ -9,10 +10,17 @@ interface MemoryVariable {
   defaultValue?: string
   enabled?: boolean
 }
-
+interface MemoryBase {
+	mdb_id: string
+  name: string
+  desc?: string
+  embedding_model_config_id?: number
+  llm_model_config_id?: number
+}
 interface Memory {
   max_tokens: number
   longterm_memory_config: boolean
+  memory_base?: MemoryBase
   variable_config: MemoryVariable[]
 }
 
@@ -130,6 +138,7 @@ export const useAgentStore = create<AgentState & AgentActions>((set, get) => ({
     if (get().readonly) {
       return
     }
+    console.log(memoryConfig)
     get().updateSaveAgentRequest({ memory: memoryConfig })
   },
 

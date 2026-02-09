@@ -6,7 +6,7 @@ export interface DeleteConfirmationDialogProps {
   isOpen: boolean
   onClose: () => void
   onConfirm: () => void
-  itemType?: 'agent' | 'workflow' | 'model' | 'plugin' | 'knowledgeBase'
+  itemType?: 'agent' | 'workflow' | 'model' | 'plugin' | 'knowledgeBase' | 'memoryBase'
   itemName?: string
   isLoading?: boolean
   title?: string
@@ -44,6 +44,8 @@ const DeleteConfirmationDialog: React.FC<DeleteConfirmationDialogProps> = ({
         return t('common.confirmDialog.titles.plugin')
       case 'knowledgeBase':
         return t('common.confirmDialog.titles.knowledgeBase')
+      case 'memoryBase':
+        return t('common.confirmDialog.titles.memoryBase')
       default:
         return t('common.confirmDialog.titles.default')
     }
@@ -61,6 +63,8 @@ const DeleteConfirmationDialog: React.FC<DeleteConfirmationDialogProps> = ({
         return t('common.confirmDialog.messages.plugin', { name: itemName })
       case 'knowledgeBase':
         return t('common.confirmDialog.messages.knowledgeBase', { name: itemName })
+      case 'memoryBase':
+        return t('common.confirmDialog.messages.memoryBase', { name: itemName })
       default:
         return t('common.confirmDialog.messages.default', { name: itemName })
     }
@@ -78,6 +82,8 @@ const DeleteConfirmationDialog: React.FC<DeleteConfirmationDialogProps> = ({
         return t('common.confirmDialog.buttons.deletePlugin')
       case 'knowledgeBase':
         return t('common.confirmDialog.buttons.deleteKnowledgeBase')
+      case 'memoryBase':
+        return t('common.confirmDialog.buttons.deleteMemoryBase')
       default:
         return t('common.confirmDialog.buttons.delete')
     }

@@ -194,7 +194,7 @@ const AgentsPage: React.FC = () => {
         </button>
         {/* 新建按钮 */}
         <button
-          className="h-8 px-4 bg-[#3b82f6] text-white rounded-[4px] text-sm font-medium hover:bg-[#2563eb] transition-colors flex items-center space-x-2"
+          className="btn-primary h-8 flex items-center gap-2 text-sm px-4"
           onClick={() => navigate('/dashboard/agents/new')}
         >
           <Plus className="w-4 h-4" />

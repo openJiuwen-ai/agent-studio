@@ -1,21 +1,29 @@
 import json
 import os
 import uuid
+from typing import Any
 
-from openjiuwen_studio.core.database import SessionLocal, milliseconds
 from openjiuwen.core.common.logging import logger
+from sqlalchemy.orm import Session
 
-from openjiuwen_studio.models.workflow import WorkflowBaseDBPd
-from openjiuwen_studio.models.agent import AgentBaseDBPd
-from openjiuwen_studio.core.manager.repositories.workflow_repository import workflow_repository
-from openjiuwen_studio.core.manager.repositories.agent_repository import agent_repository
 import openjiuwen_studio.core.manager.convertor.workflow as convert
+from openjiuwen_studio.core.database import SessionLocal, milliseconds
+from openjiuwen_studio.core.manager.repositories import EmbeddingModelConfigRepository, ModelConfigRepository
+from openjiuwen_studio.core.manager.repositories.agent_repository import agent_repository
+from openjiuwen_studio.core.manager.repositories.system_embedding_model_repository import SystemEmbeddingModelRepository
+from openjiuwen_studio.core.manager.repositories.system_llm_model_repository import SystemLLMModelRepository
+from openjiuwen_studio.core.manager.repositories.workflow_repository import workflow_repository
+from openjiuwen_studio.models.agent import AgentBaseDBPd
+from openjiuwen_studio.models.workflow import WorkflowBaseDBPd
 
 
-def pre_install(space_id: str):
+def pre_install(space_id: str, language: str = None):
+    if language is None:
+        language = os.getenv("LANGUAGE", "zh")
+    logger.info(f"[Template] Pre-installing templates for space: {space_id}, language: {language}")
     db = SessionLocal()
     try:
-        create_examples(space_id)
+        create_examples(space_id, db, language)
         db.commit()
     except Exception as e:
         db.rollback()
@@ -26,21 +34,41 @@ def pre_install(space_id: str):
 
 def _read_json(path: str) -> dict:
     try:
+        logger.info(f"[Template] Reading template file: {path}")
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            content = json.load(f)
+            logger.info(f"[Template] Successfully read template file: {path}, name: {content.get('name', 'N/A')}")
+            return content
     except Exception as e:
         logger.error(f"[Template] Error reading template file: {str(e)}, path: {path}")
         return {}
 
 
-def create_examples(space_id: str):
+def get_template_path(base_dir: str, filename: str, language: str) -> str:
+    subdir = "zh"
+    if language and language.lower().startswith("en"):
+        subdir = "en"
+
+    path = os.path.join(base_dir, subdir, filename)
+    logger.info(f"[Template] Looking for template: {path}, language: {language}")
+    if os.path.exists(path):
+        logger.info(f"[Template] Found template: {path}")
+        return path
+
+    fallback_path = os.path.join(base_dir, filename)
+    logger.info(f"[Template] Fallback to: {fallback_path}")
+    return fallback_path
+
+
+def create_examples(space_id: str, db: Session, language: str = "zh"):
     base_dir = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "../../../examples")
     )
     current_time = milliseconds()
 
     def _create_workflow_from_template(filename: str) -> dict | None:
-        tpl = _read_json(os.path.join(base_dir, filename))
+        tpl_path = get_template_path(base_dir, filename, language)
+        tpl = _read_json(tpl_path)
         if not tpl:
             return None
 
@@ -141,7 +169,8 @@ def create_examples(space_id: str):
     travel_wfs = [w for w in [wf_check_weather, wf_plan_route] if w]
 
     # Create Travel Agent
-    ag_tpl = _read_json(os.path.join(base_dir, "agent.travel.template.json"))
+    ag_tpl_path = get_template_path(base_dir, "agent.travel.template.json", language)
+    ag_tpl = _read_json(ag_tpl_path)
     agent_id = str(uuid.uuid4())
     _ag_configs = ag_tpl.get("configs") or {}
     _ag_pt = ag_tpl.get("prompt_template") or []
@@ -170,7 +199,7 @@ def create_examples(space_id: str):
         triggers=ag_tpl.get("triggers") or [],
         knowledge=ag_tpl.get("knowledge") or [],
         constraint={"reserved_max_chat_rounds": 10, "max_iteration": 5},
-        opening_remarks="您好！我是您的智能旅游助手，很高兴为您服务。请问有什么可以帮助您的吗？",
+        opening_remarks=ag_tpl.get("opening_remarks") or "您好！我是您的智能旅游助手，很高兴为您服务。请问有什么可以帮助您的吗？",
         memory=ag_tpl.get("memory") or None,
         create_time=current_time,
         update_time=current_time,
@@ -178,7 +207,8 @@ def create_examples(space_id: str):
     agent_repository.create_agent_db(travel_agent)
 
     # Create Finance Agent
-    finance_tpl = _read_json(os.path.join(base_dir, "agent.finance.template.json"))
+    finance_tpl_path = get_template_path(base_dir, "agent.finance.template.json", language)
+    finance_tpl = _read_json(finance_tpl_path)
     finance_agent_id = str(uuid.uuid4())
     _fi_configs = finance_tpl.get("configs") or {}
     _fi_pt = finance_tpl.get("prompt_template") or []
@@ -207,7 +237,7 @@ def create_examples(space_id: str):
         triggers=finance_tpl.get("triggers") or [],
         knowledge=finance_tpl.get("knowledge") or [],
         constraint={"reserved_max_chat_rounds": 10, "max_iteration": 5},
-        opening_remarks="您好！我是您的智能金融客服助手，很高兴为您服务。请问有什么可以帮助您的吗？",
+        opening_remarks=finance_tpl.get("opening_remarks") or "您好！我是您的智能金融客服助手，很高兴为您服务。请问有什么可以帮助您的吗？",
         memory=finance_tpl.get("memory")
         or {
             "max_tokens": 1000,
@@ -218,3 +248,41 @@ def create_examples(space_id: str):
         update_time=current_time,
     )
     agent_repository.create_agent_db(finance_agent)
+
+    # pre install system models for user
+    pre_install_models_for_user(db, space_id)
+
+
+def pre_install_models_for_user(db: Session, space_id: str):
+    """Pre install system llm and embedding models for user"""
+    llm_model_repo = ModelConfigRepository(db)
+    embedding_model_repo = EmbeddingModelConfigRepository(db)
+    system_llm_model_repo = SystemLLMModelRepository(db)
+    system_embedding_model_repo = SystemEmbeddingModelRepository(db)
+
+    # add system llm models to model config
+    system_llm_models = system_llm_model_repo.query().all()
+    for model in system_llm_models:
+        model_dict = _model_to_dict(model, space_id)
+        created_llm_model_config = llm_model_repo.create(model_dict)
+        logger.info(f"Added llm model config: {created_llm_model_config.id} from system llm model: {model.id}")
+
+    # add system embedding models to embedding model config
+    system_embedding_models = system_embedding_model_repo.query().all()
+    for model in system_embedding_models:
+        model_dict = _model_to_dict(model, space_id)
+        created_embedding_model_config = embedding_model_repo.create(model_dict)
+        logger.info(
+            f"Added embedding model config: {created_embedding_model_config.id} from system embedding model: {model.id}"
+        )
+
+
+def _model_to_dict(model, space_id: str) -> dict[str, Any]:
+    model_dict = model.to_dict(exclude_invalid=True)
+    model_dict.update({'space_id': space_id})
+    model_dict.update({'is_system_model': True})
+    model_dict.update({'system_model_id': model.id})
+    model_dict.pop("id")
+    model_dict.pop("created_at")
+    model_dict.pop("updated_at")
+    return model_dict

@@ -14,7 +14,7 @@ import { nodeRegistries } from '../../nodes'
 import { WorkflowNodeType } from '../../nodes/constants'
 import { canContainNode } from '../../utils'
 import { NodesContainer, SearchContainer, CategoriesContainer, CategoryTitle, NodesGrid, NodeWrap, NodeLabel } from './styled'
-import { t } from '../../i18n'
+import { useTranslation } from '../../i18n'
 
 // 节点类型枚举键到可搜索名称的映射
 const nodeTypeKeyNames: Record<WorkflowNodeType, string> = {
@@ -51,7 +51,7 @@ const nodeTypeI18nKeys: Record<WorkflowNodeType, string> = {
   [WorkflowNodeType.BlockStart]: 'workflowCanvas.node.Start',
   [WorkflowNodeType.BlockEnd]: 'workflowCanvas.node.End',
   [WorkflowNodeType.Comment]: 'workflowCanvas.node.Comment',
-  [WorkflowNodeType.VariableMerge]: 'workflowCanvas.node.Variable',
+  [WorkflowNodeType.VariableMerge]: 'workflowCanvas.node.VariableMerge',
   [WorkflowNodeType.Continue]: 'workflowCanvas.node.Continue',
   [WorkflowNodeType.Break]: 'workflowCanvas.node.Break',
   [WorkflowNodeType.Input]: 'workflowCanvas.node.Input',
@@ -64,11 +64,7 @@ const nodeTypeI18nKeys: Record<WorkflowNodeType, string> = {
   [WorkflowNodeType.Plugin]: 'workflowCanvas.node.Plugin',
 }
 
-// Get translated node name
-const getNodeTypeName = (type: WorkflowNodeType): string => {
-  const i18nKey = nodeTypeI18nKeys[type]
-  return i18nKey ? t(i18nKey) : String(type)
-}
+// Get translated node name (moved to component to use useTranslation hook)
 
 // 节点分类
 const nodeCategories = {
@@ -135,7 +131,14 @@ interface NodeListProps {
 export const NodeList: FC<NodeListProps> = props => {
   const { onSelect, containerNode, fromPort, onClose } = props
   const context = useClientContext()
+  const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Get translated node name
+  const getNodeTypeName = (type: WorkflowNodeType): string => {
+    const i18nKey = nodeTypeI18nKeys[type]
+    return i18nKey ? t(i18nKey) : String(type)
+  }
 
   const handleClick = async (e: React.MouseEvent, registry: FlowNodeRegistry) => {
     // 插件节点和工作流节点需要异步处理
@@ -261,7 +264,8 @@ export const NodeList: FC<NodeListProps> = props => {
           const translatedName = getNodeTypeName(registry.type as WorkflowNodeType)
           const nodeType = String(registry.type)
           const nodeTypeKey = nodeTypeKeyNames[registry.type as WorkflowNodeType] || ''
-          const description = registry.info?.description || ''
+          const info = typeof registry.info === 'function' ? registry.info() : registry.info
+          const description = info?.description || ''
 
           // 计算各字段的匹配分数
           const nameScore = fuzzyMatchWithScore(translatedName, searchQuery)
@@ -295,14 +299,19 @@ export const NodeList: FC<NodeListProps> = props => {
     })
 
     return categorized
-  }, [searchQuery, containerNode])
+  }, [searchQuery, containerNode, t, getNodeTypeName])
 
   console.log('>>> fromNode', fromPort?.node)
   return (
     <NodesContainer>
       {/* 搜索框 */}
       <SearchContainer>
-        <Input placeholder={t('workflowCanvas.nodePanel.searchPlaceholder')} value={searchQuery} onChange={setSearchQuery} style={{ width: '100%', height: '32px' }} />
+        <Input
+          placeholder={t('workflowCanvas.nodePanel.searchPlaceholder')}
+          value={searchQuery}
+          onChange={setSearchQuery}
+          style={{ width: '100%', height: '32px' }}
+        />
       </SearchContainer>
 
       <CategoriesContainer>
@@ -317,23 +326,26 @@ export const NodeList: FC<NodeListProps> = props => {
               {category.nameKey && <CategoryTitle>{t(category.nameKey)}</CategoryTitle>}
 
               <NodesGrid>
-                {categoryRegistries.map((registry, index) => (
-                  <Node
-                    key={`${registry.type}-${index}`}
-                    index={index}
-                    disabled={!(registry.canAdd?.(context) ?? true)}
-                    icon={
-                      typeof registry.info?.icon === 'string' ? (
-                        <img style={{ width: 20, height: 20, borderRadius: 4 }} src={registry.info.icon} />
-                      ) : (
-                        <div style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{registry.info?.icon}</div>
-                      )
-                    }
-                    label={getNodeTypeName(registry.type as WorkflowNodeType)}
-                    description={registry.info?.description}
-                    onClick={e => handleClick(e, registry)}
-                  />
-                ))}
+                {categoryRegistries.map((registry, index) => {
+                  const info = typeof registry.info === 'function' ? registry.info() : registry.info
+                  return (
+                    <Node
+                      key={`${registry.type}-${index}`}
+                      index={index}
+                      disabled={!(registry.canAdd?.(context) ?? true)}
+                      icon={
+                        typeof info?.icon === 'string' ? (
+                          <img style={{ width: 20, height: 20, borderRadius: 4 }} src={info.icon} />
+                        ) : (
+                          <div style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{info?.icon}</div>
+                        )
+                      }
+                      label={getNodeTypeName(registry.type as WorkflowNodeType)}
+                      description={info?.description}
+                      onClick={e => handleClick(e, registry)}
+                    />
+                  )
+                })}
               </NodesGrid>
             </div>
           )

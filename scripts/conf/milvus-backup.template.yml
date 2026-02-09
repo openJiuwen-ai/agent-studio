@@ -1,0 +1,42 @@
+log:
+  level: info
+  console: true
+  file:
+    filename: "logs/<<UPGRADE_PHASE>>.log"
+milvus:
+  address: <<MILVUS_HOST>>
+  port: <<MILVUS_PORT>>
+  token: <<MILVUS_TOKEN>>
+  tlsMode: 0
+
+minio:
+  storageType: "minio"
+  address: <<MINIO_HOST>>
+  port: <<MINIO_PORT>>
+  accessKeyID: <<MINIO_ACCESS_KEY>>
+  secretAccessKey: <<MINIO_SECRET_KEY>>
+  useSSL: false
+  bucketName: "a-bucket"
+  rootPath: "files"
+
+  backupStorageType: "local"
+  backupRootPath: "/root/milvus-backup-data"
+  backupAddress: ""
+  backupPort: 0
+  backupAccessKeyID: ""
+  backupSecretAccessKey: ""
+  backupUseSSL: false
+
+  crossStorage: "true"
+
+backup:
+  parallelism:
+    copydata: 128
+    backupCollection: 4
+    backupSegment: 1024
+    restoreCollection: 2
+    importJob: 768
+  keepTempFiles: false
+  gcPause:
+    enable: true
+    address: http://<<MILVUS_HOST>>:<<MILVUS_HTTP_HOST_PORT>>

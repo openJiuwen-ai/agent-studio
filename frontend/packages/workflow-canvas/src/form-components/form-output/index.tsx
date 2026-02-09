@@ -42,11 +42,18 @@ export function FormOutput({
   maxDescBytes,
 }: FormOutputProps) {
   const { t } = useTranslation()
-  const displayName = name || t('workflowCanvas.formOutput.output')
+  var displayName = t('workflowCanvas.formOutput.output')
+  if (name) {
+    displayName = t(name)
+  }
   const isSidebar = useIsSidebar()
 
   if (!isSidebar) {
-    return <Field<IJsonSchema> name={outputName}>{({ field }) => <FormDisplay label={displayName} labelExtra={labelExtra} content={<DisplayOutputs value={field.value} />} />}</Field>
+    return (
+      <Field<IJsonSchema> name={outputName}>
+        {({ field }) => <FormDisplay label={displayName} labelExtra={labelExtra} content={<DisplayOutputs value={field.value} />} />}
+      </Field>
+    )
   }
 
   return (

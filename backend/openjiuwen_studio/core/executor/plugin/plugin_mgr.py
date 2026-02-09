@@ -50,7 +50,7 @@ async def _fetch_plugin_dl(
         plugin_publish_dsl = res.data
         if plugin_publish_dsl is None:
             raise JiuWenExecuteException(
-                error_code=StatusCode.PLUGIN_DL_FETCH_FAILED.code,
+                code=StatusCode.PLUGIN_DL_FETCH_FAILED.code,
                 message=StatusCode.PLUGIN_DL_FETCH_FAILED.errmsg.format(
                     msg=str(f"fetch plugin failed with version: {version}")),
                 node_id=tool_id
@@ -69,7 +69,7 @@ async def _fetch_plugin_dl(
                 )
     if plugin_dl is None:
         raise JiuWenExecuteException(
-            error_code=StatusCode.PLUGIN_DL_FETCH_FAILED.code,
+            code=StatusCode.PLUGIN_DL_FETCH_FAILED.code,
             message=StatusCode.PLUGIN_DL_FETCH_FAILED.errmsg.format(msg=str("fetch plugin dl failed")),
             node_id=tool_id
         )
@@ -114,7 +114,7 @@ class PluginManager:
         tool = await self.get_tool(tool_id, space_id, plugin_id, version, current_user)
         if not tool:
             raise JiuWenExecuteException(
-                error_code=StatusCode.PLUGIN_COMPILE_FAILED.code,
+                code=StatusCode.PLUGIN_COMPILE_FAILED.code,
                 message=StatusCode.PLUGIN_COMPILE_FAILED.errmsg.format(
                     msg=str(f"can not find tool with plugin_id={plugin_id} tool_id={tool_id}")),
                 node_id=tool_id
@@ -132,14 +132,14 @@ class PluginManager:
             current_user: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
         tool = await self.get_compiled_tool(plugin_id, tool_id, space_id, version, current_user)
-        data = await tool.ainvoke(inputs)
+        data = await tool.invoke(inputs)
         available = True
-        if data.get("errCode"):
+        if data.get("code") != status.HTTP_200_OK and data.get("code") != 0:
             available = False
         available_res = plugin_tool_update_available(tool_id, space_id, available, version)
         if available_res.code != status.HTTP_200_OK:
-            data["errCode"] = available_res.code
-            data["errMessage"] = available_res.message
+            data["code"] = available_res.code
+            data["message"] = available_res.message
         return PluginManager.result_convert(data)
 
     @staticmethod
@@ -148,8 +148,8 @@ class PluginManager:
         return ExecuteResponse(
             type=ExecuteResponseType.Plugin,
             payload={
-                "error_code": data.get("errCode"),
-                "error_message": data.get("errMessage"),
+                "error_code": data.get("code"),
+                "error_message": data.get("message"),
                 "output": data.get("data"),
             }
         ).model_dump()

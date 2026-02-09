@@ -267,11 +267,6 @@ const WorkflowsPage: React.FC = () => {
         onSuccess: result => {
           if (result?.code === 200) {
             showSuccess(t('workflows.workflowList.updateSuccess'))
-            if (shouldUseSearch) {
-              refetchSearch()
-            } else {
-              refetch()
-            }
           } else {
             showError(result?.message || t('workflows.workflowList.updateFailed'))
           }
@@ -408,7 +403,7 @@ const WorkflowsPage: React.FC = () => {
     () => (
       <Link
         to="/dashboard/workflows/new"
-        className="h-8 px-4 bg-[#3b82f6] text-white rounded-[4px] text-sm font-medium hover:bg-[#2563eb] transition-colors flex items-center space-x-2"
+        className="btn-primary h-8 flex items-center gap-2 text-sm px-4"
       >
         <Plus className="w-4 h-4" />
         <span>{t('workflows.createWorkflow')}</span>

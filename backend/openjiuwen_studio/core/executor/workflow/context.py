@@ -9,7 +9,7 @@ DEPTH_LIMIT = 5
 class Context:
 
     def __init__(self, parent = None):
-        if parent == None:
+        if parent is None:
             self.depth = 0
         else:
             self.depth = parent.get_depth() + 1

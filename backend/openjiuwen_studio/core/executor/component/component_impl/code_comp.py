@@ -5,14 +5,15 @@ import textwrap
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-from openjiuwen.core.common.exception.exception import JiuWenBaseException
-from openjiuwen.core.component.base import WorkflowComponent
-from openjiuwen.core.component.branch_router import BranchRouter
-from openjiuwen.core.component.condition.condition import Condition
+from openjiuwen_studio.core.common.exceptions import BaseError
+from openjiuwen.core.workflow import BranchRouter
+from openjiuwen.core.workflow.components.condition.condition import Condition
 from openjiuwen.core.graph.base import Graph
-from openjiuwen.core.graph.executable import Input, Output
-from openjiuwen.core.runtime.base import ComponentExecutable
-from openjiuwen.core.runtime.runtime import BaseRuntime, Runtime
+from openjiuwen.core.session import BaseSession
+
+from openjiuwen.core.workflow import WorkflowComponent, Input, Output
+from openjiuwen.core.context_engine import ModelContext
+from openjiuwen.core.session.node import Session
 
 from openjiuwen_studio.core.common.dsl import CodeLanguage, ExceptHandlingMethod, ExceptConfig, CodeConfig, ErrorBody
 from openjiuwen_studio.core.executor.component.code_runner.base import CodeRunner
@@ -29,7 +30,7 @@ class ExceptedCondition(Condition):
     def set_excepted(self, excepted: bool) -> None:
         self.excepted = excepted
 
-    def invoke(self, inputs: Input, runtime: BaseRuntime) -> bool:
+    def invoke(self, inputs: Input, session: BaseSession) -> bool:
         return self.excepted
 
 
@@ -38,8 +39,8 @@ class DefaultCondition(Condition):
         super().__init__()
         self.excepted_condition = excepted_condition
 
-    def invoke(self, inputs: Input, runtime: BaseRuntime) -> bool:
-        return not self.excepted_condition.invoke(inputs, runtime)
+    def invoke(self, inputs: Input, session: BaseSession) -> bool:
+        return not self.excepted_condition.invoke(inputs, session)
 
 
 DEFAULT_PY_CODE = """
@@ -60,9 +61,8 @@ class Args {
 """
 
 
-class CodeComponent(ComponentExecutable, WorkflowComponent):
+class CodeComponent(WorkflowComponent):
     def __init__(self, node_id: str, conf: CodeConfig) -> None:
-        super().__init__()
         self.conf = conf
         self.node_id = node_id
         self._router = BranchRouter()
@@ -81,8 +81,8 @@ class CodeComponent(ComponentExecutable, WorkflowComponent):
         graph.add_node(node_id, self.to_executable(), wait_for_all=wait_for_all)
         graph.add_conditional_edges(node_id, self._router)
 
-    async def invoke(self, inputs: Input, runtime: Runtime, context: Any) -> Output:
-        self._router.set_runtime(runtime)
+    async def invoke(self, inputs: Input, session: Session, context: ModelContext) -> Output:
+        self._router.set_session(session)
         code = self.conf.code
         language = self.conf.language
         execute_type = self.conf.execute_type
@@ -219,7 +219,7 @@ class CodeComponent(ComponentExecutable, WorkflowComponent):
                 f"value={value!r}"
             )
             raise JiuWenExecuteException(
-                error_code=StatusCode.CODE_COMPONENT_INVOKE_ERROR.code,
+                code=StatusCode.CODE_COMPONENT_INVOKE_ERROR.code,
                 message=message,
                 node_id=self.node_id,
             ) from e
@@ -229,8 +229,8 @@ class CodeComponent(ComponentExecutable, WorkflowComponent):
                             response_result: Dict[str, Any]) -> Dict[str, Any]:
         # 处理异常策略
         if except_config.except_handling_method == ExceptHandlingMethod.BREAK:
-            raise JiuWenBaseException(
-                error_code=error_body.error_code,
+            raise BaseError(
+                code=error_body.error_code,
                 message=error_body.error_message,
             )
         elif except_config.except_handling_method == ExceptHandlingMethod.EXECUTE_EXCEPT_STEP:

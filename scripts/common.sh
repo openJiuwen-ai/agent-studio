@@ -12,19 +12,19 @@ detect_os() {
     local os_type=$(uname -s)
     case "${os_type}" in
         Darwin)
-            CONFIG["OS_TYPE"]="macos"
+            DEPLOY_VARS["OS_TYPE"]="macos"
             ;;
         Linux)
-            CONFIG["OS_TYPE"]="linux"
+            DEPLOY_VARS["OS_TYPE"]="linux"
             ;;
         MINGW*|MSYS*|CYGWIN*)
-            CONFIG["OS_TYPE"]="windows"
+            DEPLOY_VARS["OS_TYPE"]="windows"
             ;;
         *)
             error "Unsupported OS: ${os_type}"
             ;;
     esac
-    info "Operating System: ${CONFIG["OS_TYPE"]}"
+    info "Operating System: ${DEPLOY_VARS["OS_TYPE"]}"
 }
 
 # ============= Generate 5-character random string =================
@@ -34,7 +34,7 @@ generate_random_chars() {
     local char_count=${#chars}  # Character set length (36)
     local random_str=""
     local i=0
-    local os_type=${CONFIG["OS_TYPE"]}
+    local os_type=${DEPLOY_VARS["OS_TYPE"]}
 
     # Loop 5 times, each time take 1 random character
     while [ $i -lt 5 ]; do
@@ -67,13 +67,11 @@ check_docker() {
     info "Checking Docker..."
     
     command -v docker >/dev/null 2>&1 || {
-        log_error "Docker is not installed. Please install it first."
-        return 1
+        error "Docker is not installed. Please install it first."
     }
     
     docker info >/dev/null 2>&1 || {
         error "Docker daemon is not running. Please start it first."
-        return 1
     }
     
     # Detect Docker Compose command
@@ -83,7 +81,6 @@ check_docker() {
         CONFIG["DOCKER_COMPOSE_CMD"]="docker-compose"
     else
         error "Docker Compose is not installed. Please install it first."
-        return 1
     fi
     
     success "Docker is ready"
@@ -92,10 +89,10 @@ check_docker() {
 # ===================== Fetch public IP =====================
 get_public_ip() {
     local local_ip=""
-    local os_type=${CONFIG["OS_TYPE"]}
+    local os_type=${DEPLOY_VARS["OS_TYPE"]}
     local cmd=${ARGS["CMD"]}
 
-    if [[ -n "${DEPLOY_VARS["IP"]:-}" ]]; then
+    if [ -n "${DEPLOY_VARS["IP"]:-}" ]; then
         info "Predefined IP address detected: ${DEPLOY_VARS["IP"]}"
         return
     fi
@@ -111,13 +108,13 @@ get_public_ip() {
             ;;
         linux)
             local default_interface=$(ip route show default | awk '/default/ {print $5; exit}')
-            if [[ -n "$default_interface" ]]; then
+            if [ -n "${default_interface}" ]; then
                 # Extract IPv4 address of the default gateway interface (strip subnet mask)
-                local_ip=$(ip addr show "$default_interface" | awk '/inet / {gsub(/\/.*/, "", $2); print $2; exit}')
+                local_ip=$(ip addr show "${default_interface}" | awk '/inet / {gsub(/\/.*/, "", $2); print $2; exit}')
             fi
 
             # fallback: Retain original logic (hostname -I) if all above fail
-            if [[ -z "$local_ip" ]]; then
+            if [ -z "${local_ip}" ]; then
                 local_ip=$(hostname -I | awk '{print $1}')
             fi
             ;;
@@ -139,4 +136,41 @@ get_public_ip() {
     esac
 
     DEPLOY_VARS["IP"]=${local_ip}
+}
+
+# Print all key-value pairs of bash array
+print_array() {
+    local array_name="$1"
+    local -n arr_ref="$1"
+    
+    echo -e "\033[33m$ ${array_name}\033[0m"
+    
+    if [[ ! "$(declare -p ${array_name})" =~ "declare -a" && ! "$(declare -p ${array_name})" =~ "declare -A" ]]; then
+        echo -e "\033[31m[ERROR] ${array_name} is not a bash array variable!\033[0m"
+        return
+    fi
+
+    for key in "${!arr_ref[@]}"; do
+        echo -e "\033[36m  ├─ ${array_name}[${key}] = ${arr_ref[${key}]}\033[0m"
+    done
+    
+    echo -e "\033[33m  └─ Total elements count: ${#arr_ref[@]}\033[0m\n"
+}
+
+# Convert string: uppercase → lowercase + hyphen(-) → underscore(_)
+format_dir_str() {
+    local original_str="$1"
+    local lower_str="${original_str,,}"
+    local final_str="${lower_str//_/-}"
+    echo "${final_str}"
+}
+
+# Set value for associative array if the key is empty/unset
+set_if_empty() {
+    local -n vars=$1
+    local key=$2
+    local value=$3
+    if [ -z "${vars["${key}"]:-}" ]; then
+        vars["${key}"]="${value}"
+    fi 
 }

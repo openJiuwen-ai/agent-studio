@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { difference, omit } from 'lodash-es'
 import { produce } from 'immer'
 import { IJsonSchema, type JsonSchemaTypeManager, useTypeManager } from '@flowgram.ai/json-schema'
+import { t } from '../../../i18n'
 
 import { PropertyValueType } from './types'
 
@@ -123,10 +124,10 @@ export function usePropertiesEdit(value?: PropertyValueType, onChange?: (value: 
 
     if (duplicateName) {
       // 如果发现重复参数名，阻止更新并触发警告
-      console.warn(`参数名 "${nextValue.name}" 已存在，请使用不同的参数名`)
+      console.warn(t('workflowCanvas.formMaterials.editor.parameterNameAlreadyExists', { name: nextValue.name }))
       // 返回错误状态而不是抛出异常，让UI组件处理显示
       return {
-        error: `参数名 "${nextValue.name}" 已存在，请使用不同的参数名`,
+        error: t('workflowCanvas.formMaterials.editor.parameterNameAlreadyExists', { name: nextValue.name }),
         shouldUpdate: false,
       }
     }

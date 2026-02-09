@@ -118,13 +118,13 @@ const EvaluationDetailDialog: React.FC<EvaluationDetailDialogProps> = ({
           <Box className="flex items-center justify-center py-8">
             <CircularProgress size={40} />
             <Typography variant="body1" className="ml-4" sx={{ color: '#6b7280' }}>
-              加载中...
+              {t('prompts.optimizeEditPage.optimizationResult.loading')}
             </Typography>
           </Box>
         ) : evaluationData.length === 0 ? (
           <Box className="flex items-center justify-center py-8">
             <Typography variant="body1" sx={{ color: '#6b7280' }}>
-              暂无评测数据
+              {t('prompts.optimizeEditPage.optimizationResult.noEvaluationData')}
             </Typography>
           </Box>
         ) : (
@@ -143,7 +143,7 @@ const EvaluationDetailDialog: React.FC<EvaluationDetailDialogProps> = ({
                 <TableHead>
                   <TableRow sx={{ backgroundColor: '#f9fafb', '& th': { py: 2 } }}>
                     <TableCell
-                      width="100"
+                      width="4%"
                       className="font-semibold"
                       sx={{
                         fontWeight: 600,
@@ -164,7 +164,7 @@ const EvaluationDetailDialog: React.FC<EvaluationDetailDialogProps> = ({
                         borderBottom: '2px solid #e5e7eb',
                       }}
                     >
-                      用户输入
+                      {t('prompts.optimizeEditPage.optimizationResult.userInput')}
                     </TableCell>
                     <TableCell
                       width="25%"
@@ -176,7 +176,7 @@ const EvaluationDetailDialog: React.FC<EvaluationDetailDialogProps> = ({
                         borderBottom: '2px solid #e5e7eb',
                       }}
                     >
-                      模型回答
+                      {t('prompts.optimizeEditPage.optimizationResult.modelAnswer')}
                     </TableCell>
                     <TableCell
                       width="25%"
@@ -188,10 +188,10 @@ const EvaluationDetailDialog: React.FC<EvaluationDetailDialogProps> = ({
                         borderBottom: '2px solid #e5e7eb',
                       }}
                     >
-                      参照回答
+                      {t('prompts.optimizeEditPage.optimizationResult.referenceAnswer')}
                     </TableCell>
                     <TableCell
-                      width="120"
+                      width="7%"
                       className="font-semibold text-center"
                       sx={{
                         fontWeight: 600,
@@ -200,10 +200,10 @@ const EvaluationDetailDialog: React.FC<EvaluationDetailDialogProps> = ({
                         borderBottom: '2px solid #e5e7eb',
                       }}
                     >
-                      模型评分
+                      {t('prompts.optimizeEditPage.optimizationResult.modelScore')}
                     </TableCell>
                     <TableCell
-                      width="20%"
+                      width="24%"
                       className="font-semibold"
                       sx={{
                         fontWeight: 600,
@@ -212,7 +212,7 @@ const EvaluationDetailDialog: React.FC<EvaluationDetailDialogProps> = ({
                         borderBottom: '2px solid #e5e7eb',
                       }}
                     >
-                      评分原因
+                      {t('prompts.optimizeEditPage.optimizationResult.scoreReason')}
                     </TableCell>
                   </TableRow>
                 </TableHead>
@@ -322,7 +322,7 @@ const EvaluationDetailDialog: React.FC<EvaluationDetailDialogProps> = ({
                   fontWeight: 500,
                 }}
               >
-                <strong style={{ color: '#1f2937', fontWeight: 600 }}>平均得分：</strong>{' '}
+                <strong style={{ color: '#1f2937', fontWeight: 600 }}>{t('prompts.optimizeEditPage.optimizationResult.averageScore')}</strong>{' '}
                 <span
                   style={{
                     color: '#3b82f6',
@@ -332,7 +332,7 @@ const EvaluationDetailDialog: React.FC<EvaluationDetailDialogProps> = ({
                 >
                   {Math.round(evaluationData.reduce((sum, item) => sum + item.score, 0) / evaluationData.length)}
                 </span>
-                <span style={{ color: '#6b7280', marginLeft: '4px' }}>分</span>
+                <span style={{ color: '#6b7280', marginLeft: '4px' }}>{t('prompts.optimizeEditPage.optimizationResult.scoreUnit')}</span>
               </Typography>
             </Box>
 

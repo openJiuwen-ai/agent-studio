@@ -7,6 +7,7 @@ import { useCallback } from 'react'
 
 import { validateRequiredFields, validateBasicTypes } from '../utils/validation'
 import { TestRunFormMetaItem } from '../testrun-form/type'
+import { t } from '../../../i18n'
 
 export function useFormValidation() {
   const validate = useCallback((
@@ -15,7 +16,7 @@ export function useFormValidation() {
   ): string[] | null => {
     const missingRequired = validateRequiredFields(values, formMeta)
     if (missingRequired.length > 0) {
-      return [`请填写必填字段: ${missingRequired.join(', ')}`]
+      return [t('workflowCanvas.testrunForm.missingRequiredFields', { fields: missingRequired.join(', ') })]
     }
 
     const typeValidationErrors = validateBasicTypes(values, formMeta)

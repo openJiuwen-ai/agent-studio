@@ -22,6 +22,7 @@ import { useIsSidebar } from '../../hooks'
 import { FormHeader, FormContent, FormItem, FormDisplay, FormInput, FormOutput } from '../../form-components'
 import { VersionField } from '@/components/Agent/VersionField'
 import React, { useMemo } from 'react'
+import { useTranslation } from '../../i18n'
 import { getDefaultSpaceId } from '@/utils/spaceUtils'
 import WorkflowService from '../../../../api-client/src/services/workflowService'
 import { DataEvent, type Effect } from '@flowgram.ai/editor'
@@ -30,6 +31,7 @@ import { canvasDetailCache, buildOutputsSchemaFromNodes } from './index'
 
 const renderForm = () => {
   const isSidebar = useIsSidebar()
+  const { t } = useTranslation()
   const spaceId = useMemo(() => getDefaultSpaceId() || '', [])
 
   if (isSidebar) {
@@ -37,7 +39,7 @@ const renderForm = () => {
       <>
         <FormHeader />
         <FormContent>
-          <FormItem name="版本" vertical>
+          <FormItem name={t('workflowCanvas.formVersion.version')} vertical>
             <Field<string> name="configs.subWorkflow.workflowId">
               {({ field: { value: workflowId } }) => (
                 <Field<string | undefined> name="configs.subWorkflow.workflowVersion">
@@ -47,7 +49,7 @@ const renderForm = () => {
             </Field>
           </FormItem>
 
-          <FormItem name="输入" vertical>
+          <FormItem name={t('workflowCanvas.formInput.input')} vertical>
             <Field<Record<string, IFlowValue | undefined> | undefined> name="inputs.inputParameters">
               {({ field: { value, onChange } }) => (
                 <Field<JsonSchema | undefined> name="configs.subWorkflow.startSchema">
@@ -68,7 +70,7 @@ const renderForm = () => {
               )}
             </Field>
           </FormItem>
-          <FormItem name="输出" vertical>
+          <FormItem name={t('workflowCanvas.formOutput.output')} vertical>
             <Field
               name="outputs"
               render={({ field: { value, onChange } }: FieldRenderProps<JsonSchema>) => (
@@ -93,7 +95,7 @@ const renderForm = () => {
       <FormHeader />
       <FormContent>
         <FormDisplay
-          label="版本"
+          label={t('workflowCanvas.formVersion.version')}
           content={
             <Field<string> name="configs.subWorkflow.workflowId">
               {({ field: { value: wfId } }) => (
@@ -106,7 +108,7 @@ const renderForm = () => {
         />
 
         <FormDisplay
-          label="输入"
+          label={t('workflowCanvas.formInput.input')}
           content={
             <Field<Record<string, IFlowValue | undefined> | undefined> name="inputs.inputParameters">
               {({ field: { value } }) => (

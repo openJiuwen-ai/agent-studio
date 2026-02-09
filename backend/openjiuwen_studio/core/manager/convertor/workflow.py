@@ -106,7 +106,7 @@ def _friendly_validation_message(err: dict, schema: dict) -> tuple[str, str, int
             "Failed to extract node info, use empty defaults | loc=%r node_idx=%r error=%s",
             loc, node_idx, exc
         )
-        component_id = ''          # 与上面默认值保持一致
+        component_id = ''  # 与上面默认值保持一致
         component_type = 0
 
     def tuple_to_loc_str(tuple_path):
@@ -117,9 +117,9 @@ def _friendly_validation_message(err: dict, schema: dict) -> tuple[str, str, int
     # 字段友好信息展示
     hint = msg + ", error location: " + err_loc
     is_missing_llm_model = (
-        'llmParam' in field_path
-        and field_path.endswith('model')
-        and 'missing' in err.get('type', '')
+            'llmParam' in field_path
+            and field_path.endswith('model')
+            and 'missing' in err.get('type', '')
     )
     if is_missing_llm_model:
         hint = '未配置模型，请在LLM组件中选择模型'
@@ -144,7 +144,7 @@ def workflow_convert(workflow_info: WorkflowBase, skip_validation: bool = False)
             if component_type == dsl.ComponentType.COMPONENT_TYPE_LLM:
                 code = StatusCode.LLM_COMPONENT_CONFIG_INVALID.code
             raise JiuWenComponentException(
-                error_code=code,
+                code=code,
                 message=StatusCode.COMPONENT_CONFIG_INVALID.errmsg.format(msg=hint),
                 component_id=component_id,
                 component_type=component_type,
@@ -159,12 +159,13 @@ def workflow_convert(workflow_info: WorkflowBase, skip_validation: bool = False)
         nodes = canvas.nodes
         components = component_convert(canvas.edges, nodes, workflow_info.space_id, False)
 
-        input_properties = convert_to_properties_format(workflow_info.input_parameters)
+        input_properties, input_requires = convert_to_properties_format(workflow_info.input_parameters)
         inputs = {
             "type": "object",
-            "properties": input_properties
+            "properties": input_properties,
+            "required": input_requires
         }
-        output_properties = convert_to_properties_format(workflow_info.output_parameters)
+        output_properties, output_requires = convert_to_properties_format(workflow_info.output_parameters)
 
         start_id: List[str] = []
         end_id: List[str] = []

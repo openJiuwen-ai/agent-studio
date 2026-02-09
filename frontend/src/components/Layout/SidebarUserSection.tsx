@@ -1,12 +1,10 @@
 import React, { useState, useRef, useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ChevronLeft, ChevronRight, Globe, LogOut, ArrowLeft, ArrowRight } from 'lucide-react'
-import { Popover, Tooltip } from '@mui/material'
+import { ChevronLeft, ChevronRight, Globe, LogOut } from 'lucide-react'
+import { Popover } from '@mui/material'
 import { useLogout } from '@test-agentstudio/api-client'
 import { resolveAvatar } from '../../utils/avatar'
-import { useUIStore } from '../../stores/useUIStore'
-
 interface SidebarUserSectionProps {
   user: any
   isCollapsed: boolean
@@ -21,13 +19,6 @@ const SidebarUserSection: React.FC<SidebarUserSectionProps> = ({ user, isCollaps
   const userButtonRef = useRef<HTMLButtonElement>(null)
 
   const logoutMutation = useLogout({ logout: onLogout || (() => {}) })
-
-  const isUCDNew = useUIStore(state => state.isNewDashboard)
-  const toggleDashboardVersion = useUIStore(state => state.toggleDashboardVersion)
-
-  const handleVersionSwitch = useCallback(() => {
-    toggleDashboardVersion()
-  }, [toggleDashboardVersion])
 
   const handleLanguageChange = useCallback(
     (language: string) => {
@@ -77,36 +68,7 @@ const SidebarUserSection: React.FC<SidebarUserSectionProps> = ({ user, isCollaps
 
   return (
     <div className={`shrink-0 pb-3 ${isCollapsed ? 'flex flex-col items-center space-y-0' : 'px-3'}`}>
-      {/* Version switch button - above user section */}
-      <Tooltip title={isUCDNew ? t('layout.header.switchToOldVersion') : t('layout.header.switchToNewVersion')} placement="right">
-        <button
-          onClick={handleVersionSwitch}
-          className={`${isCollapsed ? 'justify-center px-2 py-2 mx-1 mb-1' : 'w-full py-2 mb-2'} group flex items-center justify-center gap-2 rounded-lg transition-all duration-200 ${
-            isUCDNew
-              ? 'bg-gray-100/50 hover:bg-gray-200/50 text-gray-600'
-              : 'bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-gray-700 border border-blue-200/50'
-          }`}
-        >
-          {isUCDNew ? (
-            <>
-              <ArrowLeft className="w-4 h-4" />
-              {!isCollapsed && <span className="text-[13px] font-semibold">{t('layout.header.switchToOldVersion')}</span>}
-            </>
-          ) : (
-            <>
-              {!isCollapsed && <span className="text-[13px] font-semibold">{t('layout.header.switchToNewVersion')}</span>}
-              <ArrowRight className="w-4 h-4" />
-              {!isCollapsed && (
-                <span className="ml-auto px-2 py-0.5 text-[10px] font-bold bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-md shadow-sm">
-                  {t('layout.header.beta')}
-                </span>
-              )}
-            </>
-          )}
-        </button>
-      </Tooltip>
-
-      {/* User section - original layout */}
+      {/* User section */}
       <div className={`flex items-center ${isCollapsed ? 'flex-col space-y-0' : 'gap-2'}`}>
         {/* User avatar button */}
         <button

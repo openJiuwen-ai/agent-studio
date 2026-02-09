@@ -23,7 +23,7 @@ services:
       - ../log-dirs/logs-<<NAME_SUFFIX>>/performance:/app/logs/performance
       - ../log-dirs/logs-<<NAME_SUFFIX>>/interface:/app/logs/interface
       - <<SQLITE_VOLUME>>:/app/data
-      - <<MEMORY_VOLUME>>:<<MEMORY_DATA_ABS_PATH>>
+      - <<MEMORY_VOLUME>>:<<MEMORY_DATA_PATH>>
       - <<KNOWLEDGE_VOLUME>>:/app/site-packages/data
     networks:
       - <<JIUWEN_NETWORK_NAME>>

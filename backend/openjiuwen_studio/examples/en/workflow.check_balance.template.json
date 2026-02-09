@@ -1,0 +1,86 @@
+{
+  "name": "check_balance",
+  "desc": "Check balance workflow, queries current account balance based on user name.",
+  "icon_uri": "",
+  "url": "test",
+  "schema": {
+    "nodes": [
+      {
+        "id": "start_0",
+        "type": "1",
+        "meta": { "position": { "x": 180, "y": 38 } },
+        "data": {
+          "title": "Start",
+          "outputs": {
+            "type": "object",
+            "properties": {
+              "query": { "type": "string", "default": "Hello, please analyze this issue for me." }
+            }
+          }
+        }
+      },
+      {
+        "id": "questioner_0",
+        "type": "7",
+        "meta": { "position": { "x": 640, "y": 38 } },
+        "data": {
+          "title": "Questioner",
+          "inputs": {
+            "inputParameters": {
+              "query": {
+                "type": "ref",
+                "content": ["start_0", "query"],
+                "extra": { "index": 0 }
+              }
+            },
+            "llmParam": {
+              "systemPrompt": {
+                "type": "template",
+                "content": ""
+              },
+              "prompt": {
+                "type": "template",
+                "content": ""
+              }
+            },
+            "max_response": 10
+          },
+          "outputs": {
+            "type": "object",
+            "properties": {
+              "user_response": { "type": "string", "description": "User response output variable" },
+              "account_name": { "type": "string", "description": "User Name" }
+            },
+            "required": ["user_response", "account_name"]
+          }
+        }
+      },
+      {
+        "id": "end_0",
+        "type": "2",
+        "meta": { "position": { "x": 1100, "y": 38 } },
+        "data": {
+          "title": "End",
+          "inputs": {
+            "inputParameters": {
+              "result": {
+                "type": "ref",
+                "content": ["questioner_0", "account_name"],
+                "extra": { "index": 0 }
+              }
+            },
+            "streaming": true,
+            "content": {
+              "type": "template",
+              "content": "Balance check for {{result}} completed!"
+            }
+          }
+        }
+      }
+    ],
+    "edges": [
+      { "sourceNodeID": "questioner_0", "targetNodeID": "end_0" },
+      { "sourceNodeID": "start_0", "targetNodeID": "questioner_0" }
+    ]
+  }
+}

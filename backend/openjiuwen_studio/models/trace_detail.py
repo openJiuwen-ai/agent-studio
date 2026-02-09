@@ -1,6 +1,7 @@
 
 from typing import Optional, Dict, Any
 from sqlalchemy import String, BigInteger, Text, JSON, Integer
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 from openjiuwen_studio.models.db_fun_base import Base, DBFunBase
 from openjiuwen_studio.ops.config import settings
@@ -40,8 +41,16 @@ class TraceDetailDB(Base, DBFunBase):
     status_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, comment="状态码 (如: '0'表示成功)")
 
     # 数据字段
-    input: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="输入数据")
-    output: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="输出数据")
+    input: Mapped[Optional[str]] = mapped_column(
+        Text().with_variant(LONGTEXT, "mysql"),
+        nullable=True,
+        comment="输入数据"
+    )
+    output: Mapped[Optional[str]] = mapped_column(
+        Text().with_variant(LONGTEXT, "mysql"),
+        nullable=True,
+        comment="输出数据"
+    )
     attributes: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True, comment="扩展属性对象")
 
     # 索引

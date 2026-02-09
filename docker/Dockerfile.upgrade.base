@@ -1,0 +1,31 @@
+
+ARG ARCH_IMAGE
+FROM ${ARCH_IMAGE}
+
+SHELL ["/bin/bash", "-c"]
+
+RUN apt-get update -y && apt-get install -y --no-install-recommends \
+    wget \
+    iputils-ping \
+    curl \
+    netcat-openbsd \
+    ca-certificates \
+    mydumper
+
+ARG MILVUS_ARCH
+RUN wget -q https://github.com/zilliztech/milvus-backup/releases/download/v0.5.9/milvus-backup_0.5.9_Linux_${MILVUS_ARCH}.tar.gz -O milvus-backup.tar.gz \
+    && tar -zxf milvus-backup.tar.gz \
+    && mv milvus-backup /usr/local/bin/ \
+    && chmod +x /usr/local/bin/milvus-backup \
+    && rm -rf milvus-backup.tar.gz LICENSE README.md
+
+ARG CONDA_ARCH
+RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-${CONDA_ARCH}.sh -O miniconda3.sh \
+    && bash miniconda3.sh -b -p /usr/local/miniconda3 \
+    && source /usr/local/miniconda3/etc/profile.d/conda.sh \
+    && conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main \
+    && conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r \
+    && conda create -n py3114 python=3.11.4 -y \
+    && conda activate py3114 \
+    && ln -sf $(which python3.11) /usr/bin/python3.11 \
+    && rm -rf miniconda3.sh /usr/local/miniconda3/pkgs/*

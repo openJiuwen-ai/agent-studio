@@ -97,7 +97,7 @@ const ToolFormDialog: React.FC<ToolFormDialogProps> = ({ open, loading = false, 
                 required
                 multiline
                 rows={3}
-                placeholder={t('plugins.pluginConfig.toolDescriptionPlaceholder', '详细描述工具的功能、用途、参数说明等...')}
+                placeholder={t('plugins.pluginConfig.toolDescriptionTooltip', '详细描述工具的功能、用途、参数说明等...')}
                 helperText={`${t('plugins.pluginConfig.toolDescriptionHelper', `建议包含：主要功能、输入参数、输出结果、使用示例等信息`)} (${form.description.length}/256)`}
                 inputProps={{ maxLength: 256 }}
               />

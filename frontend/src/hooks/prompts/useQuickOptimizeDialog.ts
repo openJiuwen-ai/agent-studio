@@ -107,7 +107,7 @@ export const useQuickOptimizeDialog = (props: UseQuickOptimizeDialogProps): UseQ
 
       // 检查是否配置了有效的模型
       if (!checkValidModel(currentSelectedModel, latestModelConfig, availableModels)) {
-        setSnackbar({ open: true, message: '请先配置有效的模型', severity: 'error' })
+        setSnackbar({ open: true, message: t('components.prompts.promptEditPage.noModelConfigured'), severity: 'error' })
         return
       }
 
@@ -138,8 +138,8 @@ export const useQuickOptimizeDialog = (props: UseQuickOptimizeDialogProps): UseQ
 
         // 如果找到了消息，优先使用 messageInputValues 中的值（用户编辑后的内容）
         originalContent = systemMessage
-          ? messageInputValues[systemMessage.id] || systemMessage.content || '未找到System类型的Prompt模板'
-          : '未找到System类型的Prompt模板'
+          ? messageInputValues[systemMessage.id] || systemMessage.content || t('components.prompts.quickOptimizeDialog.templateNotFound')
+          : t('components.prompts.quickOptimizeDialog.templateNotFound')
       } else if (currentTarget?.type === 'base') {
         // 基准组 - 使用 ref 获取最新的组数据
         const baseGroup = latestGroupsData.find(g => g.id === 0)
@@ -149,8 +149,8 @@ export const useQuickOptimizeDialog = (props: UseQuickOptimizeDialogProps): UseQ
           : baseGroup?.messages.find(msg => msg.role === 'system')
         // 如果找到了消息，优先使用 messageInputValues 中的值（用户编辑后的内容）
         originalContent = systemMessage
-          ? (baseGroup?.messageInputValues || {})[systemMessage.id] || systemMessage.content || '基准组中未找到System类型的Prompt模板'
-          : '基准组中未找到System类型的Prompt模板'
+          ? (baseGroup?.messageInputValues || {})[systemMessage.id] || systemMessage.content || t('components.prompts.quickOptimizeDialog.templateNotFoundBase')
+          : t('components.prompts.quickOptimizeDialog.templateNotFoundBase')
       } else if (currentTarget?.type === 'control' && currentTarget.groupId) {
         // 对照组 - 使用 ref 获取最新的组数据
         const group = latestGroupsData.find(g => g.id === currentTarget.groupId)
@@ -160,8 +160,8 @@ export const useQuickOptimizeDialog = (props: UseQuickOptimizeDialogProps): UseQ
           : group?.messages.find(msg => msg.role === 'system')
         // 如果找到了消息，优先使用 messageInputValues 中的值（用户编辑后的内容）
         originalContent = systemMessage
-          ? group?.messageInputValues[systemMessage.id] || systemMessage.content || `对照组${currentTarget.groupId}中未找到System类型的Prompt模板`
-          : `对照组${currentTarget.groupId}中未找到System类型的Prompt模板`
+          ? group?.messageInputValues[systemMessage.id] || systemMessage.content || t('components.prompts.quickOptimizeDialog.templateNotFoundControl', { groupId: currentTarget.groupId })
+          : t('components.prompts.quickOptimizeDialog.templateNotFoundControl', { groupId: currentTarget.groupId })
       } else if (currentTarget?.type === 'message' && currentTarget.messageId) {
         // 特定消息 - 使用 ref 获取最新的组数据
         let message = promptMessages.find(msg => msg.id === currentTarget.messageId)
@@ -175,13 +175,13 @@ export const useQuickOptimizeDialog = (props: UseQuickOptimizeDialogProps): UseQ
             if (message) break
           }
         }
-        originalContent = message?.content || '未找到对应的消息内容'
+        originalContent = message?.content || t('components.prompts.quickOptimizeDialog.messageNotFound')
       } else {
-        originalContent = '未找到System类型的Prompt模板'
+        originalContent = t('components.prompts.quickOptimizeDialog.templateNotFound')
       }
 
       // 验证内容
-      if (originalContent.includes('未找到')) {
+      if (originalContent.includes(t('components.prompts.quickOptimizeDialog.notFoundKeyword'))) {
         setSnackbar({
           open: true,
           message: t('components.prompts.promptEditPage.targetPromptEmpty'),
@@ -256,7 +256,7 @@ export const useQuickOptimizeDialog = (props: UseQuickOptimizeDialogProps): UseQ
           console.error('快捷优化超时：API长时间无响应')
           setSnackbar({
             open: true,
-            message: '快捷优化超时，请稍后重试',
+            message: t('components.prompts.promptEditPage.quickOptimizeTimeout'),
             severity: 'error',
           })
           setIsOptimizing(false)
@@ -284,7 +284,7 @@ export const useQuickOptimizeDialog = (props: UseQuickOptimizeDialogProps): UseQ
             console.error('快捷优化失败:', error)
             setSnackbar({
               open: true,
-              message: t('components.prompts.promptEditPage.quickOptimizeFailedWithError', { error }) || `快捷优化失败: ${error}`,
+              message: t('components.prompts.promptEditPage.quickOptimizeFailedWithError', { error: error || '' }),
               severity: 'error',
             })
             setIsOptimizing(false)
@@ -315,7 +315,7 @@ export const useQuickOptimizeDialog = (props: UseQuickOptimizeDialogProps): UseQ
               console.error('快捷优化完成但无内容返回')
               setSnackbar({
                 open: true,
-                message: '快捷优化未返回任何内容，请检查模型设置或稍后重试',
+                message: t('components.prompts.promptEditPage.quickOptimizeNoContent'),
                 severity: 'error',
               })
               setOptimizationResult('')
@@ -352,7 +352,7 @@ export const useQuickOptimizeDialog = (props: UseQuickOptimizeDialogProps): UseQ
         if (error instanceof Error) {
           // 尝试从错误信息中提取更详细的错误描述
           if (error.message) {
-            errorMessage = `快捷优化失败: ${error.message}`
+            errorMessage = t('components.prompts.promptEditPage.quickOptimizeFailedWithError', { error: error.message })
           }
         }
 

@@ -1,0 +1,146 @@
+{
+  "name": "check_weather",
+  "desc": "Weather check workflow, returns weather info based on city and date.",
+  "icon_uri": "",
+  "url": "template",
+  "schema": {
+    "nodes": [
+      {
+        "id": "start_1",
+        "type": "1",
+        "meta": {
+          "position": {
+            "x": 180,
+            "y": 38
+          }
+        },
+        "data": {
+          "title": "Start",
+          "outputs": {
+            "type": "object",
+            "properties": {
+              "city": {
+                "type": "string",
+                "default": "",
+                "description": "City Name"
+              },
+              "date": {
+                "type": "string",
+                "extra": {
+                  "index": 2
+                },
+                "description": "Date"
+              }
+            },
+            "required": [
+              "city",
+              "date"
+            ]
+          }
+        }
+      },
+      {
+        "id": "llm_1",
+        "type": "3",
+        "meta": {
+          "position": {
+            "x": 640,
+            "y": 38
+          }
+        },
+        "data": {
+          "title": "LLM",
+          "inputs": {
+            "llmParam": {
+              "systemPrompt": {
+                "type": "template",
+                "content": "## Role\nYou are a weather check assistant, a professional, data-driven provider of weather information.\nYou are proficient in basic meteorology and can interpret and convey weather data accurately and clearly.\n\n## Task Description\nYour core task is to respond to user weather queries by simulating a structured, detailed, and easy-to-understand weather report. Your response should make the user feel like they are querying a real weather service system, providing them with the meteorological information they need.\n\n## Constraints\n1. Your response must be generated based on the location (city or region) and time (e.g., today, tomorrow, specific date) provided by the user.\n2. All weather data (e.g., temperature, humidity, wind power, weather phenomena) are simulated to provide a reasonable, typical weather report example.\n3. **Strictly prohibited** to mention \"simulated\", \"fictional\", \"hypothetical\" or any words implying that the information is not from a real source in the response. Your role is a relay of weather data.\n4. The response content should be professional, friendly, and include warm tips for users (e.g., dressing suggestions, travel reminders).\n5. If the location queried by the user is unclear or the time range cannot be parsed, politely ask the user to provide more specific information.\n6. Organize your response according to the <Output Format>.\n\n## Execution Steps\n1. **Parse Query**: Carefully read the user's input and extract key information, including the query location and query time.\n2. **Data Simulation**: Based on the extracted location (e.g., Beijing, Shanghai) and time (e.g., today, October 27, 2023), simulate a set of reasonable weather data, including but not limited to: temperature range, weather conditions (sunny, cloudy, rainy, etc.), wind direction and force, air humidity, Air Quality Index (AQI), sunrise and sunset times.\n3. **Organize Information**: Organize the simulated weather data according to the requirements of <Output Format> to ensure clear information hierarchy.\n4. **Add Tips**: Based on the simulated weather conditions, generate 1-2 thoughtful life or travel suggestions.\n5. **Generate Response**: Integrate the organized information and tips into a coherent, natural response and provide it directly to the user.\n\n## Output Format\nPlease use the following format to organize your response:\n\n**【Location】 Weather Report (Date)**\n\n*   **Weather Condition**: <Weather Phenomenon, e.g., Sunny to Cloudy>\n*   **Temperature**: <Min Temp>℃ ~ <Max Temp>℃\n*   **Wind**: <Wind Direction> <Wind Force> Level\n*   **Humidity**: <Relative Humidity>%\n*   **Air Quality**: <AQI> (<Quality Level, e.g., Good>)\n*   **Sunrise/Sunset**: <Sunrise Time> / <Sunset Time>\n\n**Warm Tips**: <1-2 specific suggestions based on weather, e.g., Large temperature difference between day and night, please add or remove clothes appropriately.>\n\n(End of response, no signature or extra explanation needed)"
+              },
+              "prompt": {
+                "type": "template",
+                "content": "City: {{city}}; Date: {{date}}"
+              },
+              "model": {}
+            },
+            "inputParameters": {
+              "city": {
+                "type": "ref",
+                "content": [
+                  "start_1",
+                  "city"
+                ],
+                "extra": {
+                  "index": 0
+                }
+              },
+              "date": {
+                "type": "ref",
+                "content": [
+                  "start_1",
+                  "date"
+                ]
+              }
+            }
+          },
+          "outputs": {
+            "type": "object",
+            "properties": {
+              "output": {
+                "type": "string",
+                "extra": {
+                  "index": 1
+                }
+              }
+            },
+            "required": [
+              "output"
+            ]
+          }
+        }
+      },
+      {
+        "id": "end_1",
+        "type": "2",
+        "meta": {
+          "position": {
+            "x": 1100,
+            "y": 38
+          }
+        },
+        "data": {
+          "title": "End",
+          "inputs": {
+            "inputParameters": {
+              "result": {
+                "type": "ref",
+                "content": [
+                  "llm_1",
+                  "output"
+                ],
+                "extra": {
+                  "index": 0
+                }
+              }
+            },
+            "streaming": true,
+            "content": {
+              "type": "template",
+              "content": "{{result}}"
+            }
+          },
+          "streaming": false
+        }
+      }
+    ],
+    "edges": [
+      {
+        "sourceNodeID": "start_1",
+        "targetNodeID": "llm_1"
+      },
+      {
+        "sourceNodeID": "llm_1",
+        "targetNodeID": "end_1"
+      }
+    ]
+  }
+}

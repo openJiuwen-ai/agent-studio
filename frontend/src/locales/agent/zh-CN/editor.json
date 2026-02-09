@@ -85,6 +85,7 @@
       },
       "overwritePromptTemplateDialog": {
         "description": "本操作会覆盖提示词模板的草稿，请选择您希望的处理方式。",
+        "instructionsTitle": "操作说明：",
         "overwriteAndJump": "覆盖跳转：将当前智能体的系统提示词内容覆盖到提示词编辑页面",
         "notOverwriteAndJump": "不覆盖跳转：保持提示词编辑页面的原有内容不变",
         "overwriteAndJumpLabel": "覆盖跳转",
@@ -178,6 +179,7 @@
           "constraintTitle": "规格",
           "skillsTitle": "技能",
           "conversationTitle": "对话设置",
+          "memoryTitle": "记忆",
           "greetingTitle": "开场白",
           "workflowTitle": "工作流",
           "pluginTitle": "插件"
@@ -194,6 +196,7 @@
           "disabledModel": "模型已禁用（{{name}}）"
         },
         "alerts": {
+          "noWorkflow": "暂无工作流，点击上方按钮添加工作流",
           "noModelsInline": "未配置模型",
           "modelDisabledAction": "前往启用",
           "modelDisabledMessage": "当前关联的模型“{{name}}”已被禁用，请选择其他可用模型或前往模型管理页面启用该模型",
@@ -202,8 +205,50 @@
           "noModelsConfiguredAction": "前往配置",
           "noModelsConfiguredMessage": "当前未配置任何模型，请前往模型配置页面添加模型"
         },
+        "workflow": {
+          "refreshTooltip": "刷新工作流信息",
+          "validationWarning": "所选工作流存在校验不通过（{{count}} 个），请跳转对应工作流进行修改",
+          "refreshAriaLabel": "刷新"
+        },
+        "knowledge": {
+          "sectionTitle": "知识",
+          "accordionTitle": "知识库",
+          "sectionTitleShort": "文本"
+        },
+        "knowledgeBaseList": {
+          "list": {
+            "empty": "未添加知识库，可点击右上角进行添加"
+          },
+          "settingsTitle": "设置",
+          "deleteTitle": "删除",
+          "removeDialog": {
+            "title": "移除知识库",
+            "confirmButtonText": "确认",
+            "message": "确定移除此知识库？此操作无法撤销。"
+          }
+        },
+        "knowledgeSettings": {
+          "title": "知识库设置",
+          "graphStrategyLabel": "文档图检索策略",
+          "graphStrategyTooltip": "选择文档图增强检索的方式，仅在知识库中有图增强构建的文档时可用。",
+          "enabled": "已启用",
+          "disabled": "未启用",
+          "base": "基础",
+          "agentic": "Agentic",
+          "baseTooltip": "利用知识图谱的实体与关系网络做推理，擅长跨段、跨文档的复杂问题，能给出更有逻辑的回答。",
+          "agenticTooltip": "由检索智能体自动决策和多步查询，适合开放性或多步推理的问题，兼顾准确度与灵活性，效果更好。",
+          "noGraphDocsMessage": "当前知识库中没有图增强构建的文档，文档图检索策略不可用",
+          "maxRecallLabel": "最大召回数量",
+          "maxRecallTooltip": "从知识中返回给大模型的最大段落数，数值越大返回的内容越多。",
+          "minScoreLabel": "最小匹配分数",
+          "minScoreTooltip": "向量检索时，只有相似度分数大于此值的段落才会被返回。",
+          "minScoreWarning": "设置为1可能过滤所有结果"
+        },
+        "errors": {
+          "deleteFailed": "删除失败"
+        },
         "memory": {
-          "title": "记忆配置",
+          "memoryTitle": "记忆",
           "variablesTitle": "变量配置",
           "fields": {
             "nameLabel": "变量名称",
@@ -219,6 +264,7 @@
             "enabledLabel": "启用",
             "disabledLabel": "禁用"
           },
+          "longTermTitle": "长期记忆",
           "longTermToggleLabel": "启用长期记忆",
           "longTermDescription": "启用后，智能体将能够记住与用户的对话过程中的用户个人信息和偏好数据"
         }
@@ -230,6 +276,10 @@
       "addPlugin": {
         "addExisting": "添加已有插件",
         "createNew": "创建新插件"
+      },
+      "addKnowledgeBase": {
+        "addExisting": "添加已有知识库",
+        "createNew": "创建新知识库"
       },
       "modelSetting": {
         "fields": {
@@ -275,7 +325,28 @@
           "versionLabel": "关联版本：",
           "emptyText": "未添加工作流，可点击右上角进行添加",
           "settingsTitle": "设置",
-          "deleteTitle": "删除"
+          "deleteTitle": "删除",
+          "validating": "校验中...",
+          "validationFailedTooltip": "工作流校验失败，请跳转对应的工作流进行修改",
+          "validationFailedAria": "工作流校验失败"
+        }
+      },
+      "knowledgeBaseSelector": {
+        "title": "选择知识库",
+        "loading": "加载中...",
+        "empty": "暂无知识库",
+        "cancel": "取消",
+        "confirm": "确认 ({{count}})",
+        "selected": "已选择",
+        "embeddingModelLabel": "Embedding 模型: {{name}} ({{modelId}})",
+        "embeddingModelMismatch": "Embedding 模型不一致",
+        "errors": {
+          "fetchFailed": "获取知识库列表失败",
+          "loadFailed": "加载知识库列表时出错",
+          "noEmbeddingModel": "部分知识库未配置 Embedding 模型",
+          "validateFailed": "无法验证部分知识库的 Embedding 模型",
+          "modelMismatch": "所选知识库使用了不同的 Embedding 模型：{{modelInfo}}。请选择使用相同 Embedding 模型的知识库。",
+          "validateError": "验证 Embedding 模型时出错"
         }
       },
       "workflowSelector": {
@@ -321,6 +392,14 @@
         },
         "errors": {
           "executeFailed": "执行失败"
+        },
+        "interactionMessage": {
+          "submitted": "已提交",
+          "expired": "已失效",
+          "fillAndSubmit": "请在此卡片中填写并提交",
+          "inputPlaceholder": "请输入...",
+          "clearInputAria": "清空输入",
+          "submit": "提交"
         }
       },
       "agentDebugPanel": {
@@ -484,6 +563,13 @@
       "title": "对话设置",
       "description": "设置工作流执行时携带的最大消息轮数",
       "maxRoundsLabel": "最大消息轮数"
+    },
+    "workflowValidation": {
+      "tooltip": "所选工作流存在校验不通过（{{count}} 个），请跳转对应工作流进行修改"
+    },
+    "refreshWorkflows": {
+      "tooltip": "刷新工作流信息",
+      "ariaLabel": "刷新"
     }
   }
 }

@@ -9,9 +9,9 @@ import { FlowNodeRegistry } from '../../typings'
 import { XCircle } from 'lucide-react'
 import { formMeta } from './form-meta'
 import { WorkflowNodeType } from '../constants'
+import { generateNodeTitle } from '../../utils/workflow-node-utils'
 import { t } from '../../i18n'
 
-const index = 0
 export const BreakNodeRegistry: FlowNodeRegistry = {
   type: WorkflowNodeType.Break,
   meta: {
@@ -23,20 +23,23 @@ export const BreakNodeRegistry: FlowNodeRegistry = {
     },
     onlyInContainer: WorkflowNodeType.Loop,
   },
-  info: {
+  info: () => ({
     icon: <XCircle size={16} className="text-red-600" />,
     description: t('workflowCanvas.nodes.break.description'),
-  },
+  }),
   /**
    * Render node via formMeta
    */
   formMeta,
-  onAdd() {
+  onAdd(context?) {
+    const titlePrefix = t('workflowCanvas.nodes.break.titlePrefix')
+    const title = generateNodeTitle(WorkflowNodeType.Break, context, titlePrefix)
+
     return {
       id: `break_${customNanoid(5)}`,
       type: WorkflowNodeType.Break,
       data: {
-        title: `跳出循环`,
+        title: title,
       },
     }
   },

@@ -1,12 +1,10 @@
 services:
-  # MySQL Database
   <<MYSQL_SERVICE>>:
     image: <<MYSQL_IMAGE>>
     pull_policy: if_not_present
     container_name: <<MYSQL_DOCKER>>
     restart: unless-stopped
     environment:
-      # Extract credentials from DATABASE_URL for MySQL container
       MYSQL_ROOT_PASSWORD: <<DB_ROOT_PASSWORD>>
       MYSQL_DATABASE: <<AGENT_DB_NAME>>
     env_file:

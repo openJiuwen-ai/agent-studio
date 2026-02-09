@@ -7,9 +7,13 @@ from typing import List, Any, Optional
 
 from fastapi import status
 from openjiuwen.core.common.logging import logger
+from openjiuwen.core.foundation.llm import BaseModelInfo
+from openjiuwen_studio.core.common.language_thread_context import get_language
+from openjiuwen_studio.core.common.agent_defaults import AgentDefaults
 
 from openjiuwen_studio.core.common import dsl
-from openjiuwen_studio.core.common.dsl import AgentType, ConstrainConfig, ModelConfig, BaseModelInfo, KBRetrievalConfig
+from openjiuwen_studio.core.common.dsl import AgentType, ConstrainConfig, ModelConfig, ModelClientConfig, \
+    ModelRequestConfig, KBRetrievalConfig
 from openjiuwen_studio.core.manager.internal.agent import AgentWorkflowListNodeBase
 from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
 from openjiuwen_studio.core.manager.repositories.tool_repository import tool_repository
@@ -18,10 +22,10 @@ from openjiuwen_studio.core.manager.repositories.knowledge_base_repository impor
 from openjiuwen_studio.core.manager.utils.utils import convert_to_properties_format
 from openjiuwen_studio.models.agent import AgentBaseDBPd
 from openjiuwen_studio.schemas import ResponseModel, WorkflowBase
-from openjiuwen_studio.schemas.agent import AgentModel, AgentPlugin
+from openjiuwen_studio.schemas.agent import AgentPlugin
 from openjiuwen_studio.schemas.plugin import PluginToolId
 from openjiuwen_studio.schemas.workflow import WorkflowId
-from openjiuwen_studio.schemas.knowledge_base import KnowledgeBaseGet, RetrievalGraphMode
+from openjiuwen_studio.schemas.knowledge_base import KnowledgeBaseGet
 
 
 def workflow_convert(space_id: str, workflow: AgentWorkflowListNodeBase):
@@ -44,13 +48,14 @@ def workflow_convert(space_id: str, workflow: AgentWorkflowListNodeBase):
         input_parameters = workflow_info.input_parameters
         output_parameters = workflow_info.output_parameters
 
-        input_properties = convert_to_properties_format(input_parameters)
+        input_properties, input_requires = convert_to_properties_format(input_parameters)
         inputs = {
             "type": "object",
-            "properties": input_properties
+            "properties": input_properties,
+            "required": input_requires
         }
 
-        output_properties = convert_to_properties_format(output_parameters)
+        output_properties, output_requires = convert_to_properties_format(output_parameters)
 
         return inputs, output_properties
 
@@ -132,16 +137,17 @@ def agent_plugin_convert(space_id: str, plugin: AgentPlugin) -> dsl.PluginSchema
                 f"get plugin tool info with id {plugin.tool_id} from db failed, error: {get_result.message}")
 
         tool_info = get_result.data
-        input_parameters = tool_info.input_parameters	 
+        input_parameters = tool_info.input_parameters
         output_parameters = tool_info.output_parameters
 
-        input_properties = convert_to_properties_format(input_parameters)
+        input_properties, input_requires = convert_to_properties_format(input_parameters)
         inputs = {
             "type": "object",
-            "properties": input_properties
+            "properties": input_properties,
+            "required": input_requires
         }
 
-        output_properties = convert_to_properties_format(output_parameters)
+        output_properties, output_requires = convert_to_properties_format(output_parameters)
 
         plugin_schema = dsl.PluginSchema(
             id=plugin.tool_id,
@@ -270,7 +276,7 @@ def knowledges_retrieval_config_convert(configs: dict[str, Any]):
     # 从配置中获取 use_agent 和 use_sync（前端直接传递）
     use_agent = retrieval_config.get("use_agent", False)
     use_sync = retrieval_config.get("use_sync", False)
-    
+
     # 如果 use_agent 或 use_sync 中有一个为 True，则设置 use_graph 和 graph_expansion 为 True
     if use_agent or use_sync:
         use_graph = True
@@ -281,18 +287,22 @@ def knowledges_retrieval_config_convert(configs: dict[str, Any]):
 
     kb_retrieval_config = KBRetrievalConfig(
         retrieval_type=retrieval_config["retrieval_type"],
-                                            use_graph=use_graph,
+        use_graph=use_graph,
         source=retrieval_config.get("source", 1),
-                                            topk=retrieval_config["topk"],
-                                            score_threshold=retrieval_config["score_threshold"],
-                                            graph_expansion=graph_expansion,
-                                            use_agent=use_agent,
+        topk=retrieval_config["topk"],
+        score_threshold=retrieval_config["score_threshold"],
+        graph_expansion=graph_expansion,
+        use_agent=use_agent,
         use_sync=use_sync
     )
     return kb_retrieval_config
 
 
-def react_agent_convert(space_id: str, agent_info: AgentBaseDBPd) -> tuple[Optional[dict], Optional[str]]:
+def react_agent_convert(
+        space_id: str,
+        agent_info: AgentBaseDBPd,
+        model_details: Optional[dict] = None
+) -> tuple[Optional[dict], Optional[str]]:
     """Convert ReAct type agent to DSL format"""
     start_time = time.time()
 
@@ -302,19 +312,92 @@ def react_agent_convert(space_id: str, agent_info: AgentBaseDBPd) -> tuple[Optio
         workflows_dsl = workflows_convert(space_id, agent_info.workflows)
         constrain_dsl = ConstrainConfig(**agent_info.constraint)
 
-        model_data = AgentModel(**agent_info.model)
-        model_dsl = ModelConfig(
-            model_provider=model_data.model_provider,
-            model_info=BaseModelInfo(
-                api_key=SecurityUtils().decrypt_api_key(model_data.model_info.api_key),
-                api_base=model_data.model_info.api_base,
-                model_name=model_data.model_info.model_type,
-                temperature=model_data.model_info.temperature,
-                top_p=model_data.model_info.top_p,
-                streaming=model_data.model_info.streaming,
-                timeout=model_data.model_info.timeout
+        model_dsl = None
+        if model_details:
+            # Prepare model info (model_details already contains overrides from agent_config)
+            info = model_details
+
+            model_info_dict = {
+                "api_key": info.get("api_key"),
+                "api_base": info.get("base_url"),
+                "model_name": info.get("name"),
+                "model_type": info.get("model_type"),
+                "model_id": info.get("id"),
+                "streaming": info.get("enable_streaming"),
+                "timeout": info.get("timeout"),
+            }
+            # Add parameters if present in model_details
+            if info.get("parameters"):
+                model_info_dict.update(info.get("parameters"))
+
+            # Create ModelConfig DSL
+            # Need to decrypt api_key if needed, but here we assume raw or handled
+            api_key = model_info_dict.get("api_key")
+            if api_key:
+                try:
+                    api_key = SecurityUtils().decrypt_api_key(api_key)
+                except ValueError as e:
+                    logger.warning(
+                        f"[AGENT_CONVERT] Failed to decrypt API key: {str(e)}, using original key"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"[AGENT_CONVERT] Unexpected error decrypting API key: {str(e)}"
+                    )
+
+            provider = info.get("provider")
+            model_dsl = ModelConfig(
+                model_client_config=ModelClientConfig(
+                    client_provider=provider,
+                    api_key=api_key,
+                    api_base=model_info_dict.get("api_base"),
+                    timeout=model_info_dict.get("timeout", 60)
+                ),
+                request_config=ModelRequestConfig(
+                    model_name=model_info_dict.get("model_type"),
+                    temperature=model_info_dict.get("temperature", 0.7),
+                    top_p=model_info_dict.get("top_p", 0.9),
+                    stream=model_info_dict.get("streaming", False),
+                )
             )
-        )
+        elif hasattr(agent_info, 'model_id') and agent_info.model_id:
+            # Get model config by model_id
+            from openjiuwen_studio.core.manager.repositories.model_config_repository import ModelConfigRepository
+            from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
+
+            with get_db_jw() as db:
+                model_repo = ModelConfigRepository(db)
+                model_config = model_repo.get_by_id(agent_info.model_id)
+
+            if model_config:
+                # Create model_dsl from model_config
+                # Get parameters from JSON field
+                parameters = model_config.parameters or {}
+
+                model_dsl = ModelConfig(
+                    model_client_config=ModelClientConfig(
+                        client_provider=model_config.provider,
+                        api_key=SecurityUtils().decrypt_api_key(model_config.api_key) if model_config.api_key else '',
+                        api_base=model_config.base_url,
+                        timeout=model_config.timeout
+                    ),
+                    request_config=ModelRequestConfig(
+                        model_name=model_config.model_type,
+                        temperature=parameters.get('temperature', 0.7),
+                        top_p=parameters.get('top_p', 0.9),
+                        stream=model_config.enable_streaming,
+                    )
+                )
+
+                # Apply agent_model_config overrides if available
+                if hasattr(agent_info, 'agent_model_config') and agent_info.agent_model_config:
+                    agent_model_config = agent_info.agent_model_config
+                    if 'temperature' in agent_model_config:
+                        model_dsl.model_info.temperature = agent_model_config['temperature']
+                    if 'top_p' in agent_model_config:
+                        model_dsl.model_info.top_p = agent_model_config['top_p']
+                    if 'timeout' in agent_model_config:
+                        model_dsl.model_info.timeout = agent_model_config['timeout']
 
         plugins: list[AgentPlugin] = [AgentPlugin(**p) for p in agent_info.plugins]
 
@@ -368,7 +451,11 @@ def react_agent_convert(space_id: str, agent_info: AgentBaseDBPd) -> tuple[Optio
         raise ValueError(f"Failed to convert ReAct agent {agent_info.agent_id}: {e}")
 
 
-def workflow_agent_convert(space_id: str, agent_info: AgentBaseDBPd) -> tuple[Optional[dict], Optional[str]]:
+def workflow_agent_convert(
+        space_id: str,
+        agent_info: AgentBaseDBPd,
+        model_details: Optional[dict] = None
+) -> tuple[Optional[dict], Optional[str]]:
     """Convert Workflow type agent to DSL format"""
     start_time = time.time()
 
@@ -377,19 +464,89 @@ def workflow_agent_convert(space_id: str, agent_info: AgentBaseDBPd) -> tuple[Op
     try:
         workflows_dsl = workflows_convert(space_id, agent_info.workflows)
 
-        model_data = AgentModel(**agent_info.model)
-        model_dsl = ModelConfig(
-            model_provider=model_data.model_provider,
-            model_info=BaseModelInfo(
-                api_key=SecurityUtils().decrypt_api_key(model_data.model_info.api_key),
-                api_base=model_data.model_info.api_base,
-                model_name=model_data.model_info.model_type,
-                temperature=model_data.model_info.temperature,
-                top_p=model_data.model_info.top_p,
-                streaming=model_data.model_info.streaming,
-                timeout=model_data.model_info.timeout
+        model_dsl = None
+        if model_details:
+            # Prepare model info (model_details already contains overrides from agent_config)
+            info = model_details
+
+            model_info_dict = {
+                "api_key": info.get("api_key"),
+                "api_base": info.get("base_url"),
+                "model_name": info.get("name"),
+                "model_type": info.get("model_type"),
+                "model_id": info.get("id"),
+                "streaming": info.get("enable_streaming"),
+                "timeout": info.get("timeout"),
+            }
+            if info.get("parameters"):
+                model_info_dict.update(info.get("parameters"))
+
+            api_key = model_info_dict.get("api_key")
+            if api_key:
+                try:
+                    api_key = SecurityUtils().decrypt_api_key(api_key)
+                except ValueError as e:
+                    logger.warning(
+                        f"[AGENT_CONVERT] Failed to decrypt API key: {str(e)}, using original key"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"[AGENT_CONVERT] Unexpected error decrypting API key: {str(e)}"
+                    )
+
+            model_dsl = ModelConfig(
+                model_provider=info.get("provider"),
+                model_info=BaseModelInfo(
+                    api_key=api_key,
+                    api_base=model_info_dict.get("api_base"),
+                    model_name=model_info_dict.get("model_type"),
+                    temperature=model_info_dict.get("temperature", 0.7),
+                    top_p=model_info_dict.get("top_p", 0.9),
+                    streaming=model_info_dict.get("streaming", False),
+                    timeout=model_info_dict.get("timeout", 60),
+                ),
             )
-        )
+        elif hasattr(agent_info, 'model_id') and agent_info.model_id:
+            # Get model config by model_id
+            from openjiuwen_studio.core.manager.repositories.model_config_repository import ModelConfigRepository
+            from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
+
+            with get_db_jw() as db:
+                model_repo = ModelConfigRepository(db)
+                model_config = model_repo.get_by_id(agent_info.model_id)
+
+            if model_config:
+                # Create model_dsl from model_config
+                # Get parameters from JSON field
+                parameters = model_config.parameters or {}
+
+                model_dsl = ModelConfig(
+                    model_provider=model_config.provider,
+                    model_info=BaseModelInfo(
+                        api_key=SecurityUtils().decrypt_api_key(model_config.api_key) if model_config.api_key else '',
+                        api_base=model_config.base_url,
+                        model_name=model_config.model_type,
+                        temperature=parameters.get('temperature', 0.7),
+                        top_p=parameters.get('top_p', 0.9),
+                        streaming=model_config.enable_streaming,
+                        timeout=model_config.timeout
+                    )
+                )
+
+                # Apply agent_model_config overrides if available
+                if hasattr(agent_info, 'agent_model_config') and agent_info.agent_model_config:
+                    agent_model_config = agent_info.agent_model_config
+                    if 'temperature' in agent_model_config:
+                        model_dsl.model_info.temperature = agent_model_config['temperature']
+                    if 'top_p' in agent_model_config:
+                        model_dsl.model_info.top_p = agent_model_config['top_p']
+                    if 'timeout' in agent_model_config:
+                        model_dsl.model_info.timeout = agent_model_config['timeout']
+
+        if agent_info.default_response and agent_info.default_response.strip():
+            default_response = agent_info.default_response
+        else:
+            default_response = AgentDefaults.DEFAULT_RESPONSE.msg
 
         agent_dsl = dsl.WorkflowAgent(
             id=agent_info.agent_id,
@@ -400,7 +557,7 @@ def workflow_agent_convert(space_id: str, agent_info: AgentBaseDBPd) -> tuple[Op
             configs={},
             workflows=workflows_dsl,
             model=model_dsl,
-            default_response=agent_info.default_response if agent_info.default_response and agent_info.default_response.strip() else "抱歉，我无法理解您的问题，请换一种方式表达"
+            default_response=default_response
         )
 
         conversion_duration = time.time() - start_time
@@ -426,7 +583,11 @@ def workflow_agent_convert(space_id: str, agent_info: AgentBaseDBPd) -> tuple[Op
         raise ValueError(f"Failed to convert Workflow agent {agent_info.agent_id}: {e}")
 
 
-def agent_convert(space_id: str, agent_info: AgentBaseDBPd) -> tuple[Optional[dict], Optional[str]]:
+def agent_convert(
+        space_id: str,
+        agent_info: AgentBaseDBPd,
+        model_details: Optional[dict] = None
+) -> tuple[Optional[dict], Optional[str]]:
     """Select appropriate conversion method based on agent type"""
     start_time = time.time()
 
@@ -435,9 +596,9 @@ def agent_convert(space_id: str, agent_info: AgentBaseDBPd) -> tuple[Optional[di
         logger.info(f"[AGENT_CONVERT] Converting agent - ID: {agent_info.agent_id}, Type: {agent_type}")
 
         if agent_type == AgentType.ReAct:
-            result = react_agent_convert(space_id, agent_info)
+            result = react_agent_convert(space_id, agent_info, model_details)
         elif agent_type == AgentType.Workflow:
-            result = workflow_agent_convert(space_id, agent_info)
+            result = workflow_agent_convert(space_id, agent_info, model_details)
         else:
             logger.error(f"[AGENT_CONVERT] Invalid agent type - ID: {agent_info.agent_id}, Type: {agent_type}")
             return None, f"agent with id {agent_info.agent_id} invalid agent type: {agent_type}"

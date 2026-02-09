@@ -35,6 +35,7 @@
     "Continue": "继续",
     "Break": "中断",
     "Variable": "变量",
+    "VariableMerge": "变量聚合",
     "Comment": "注释",
     "Node": "节点",
     "Unknown": "未知",
@@ -63,7 +64,17 @@
     "warning": "警告",
     "fixAll": "修复所有",
     "noValidationIssues": "没有发现校验问题",
-    "configurationError": "配置有误"
+    "configurationError": "配置有误",
+    "fieldRequired": "字段是必需的",
+    "variableReferencedNotFound": "引用的变量不存在"
+  },
+  "editor": {
+    "nodeNotFound": "节点 {{nodeId}} 不存在",
+    "openNodePanelFailed": "打开节点详情面板失败",
+    "historyVersionSchemaEmpty": "历史版本 schema 为空，无法加载到画布",
+    "historySchemaParseFailed": "历史版本 schema 解析失败或导入失败",
+    "fetchHistoryVersionFailed": "获取历史版本失败",
+    "versionHistory": "版本历史"
   },
   "ui": {
     "draft": "草稿",
@@ -140,7 +151,11 @@
   },
   "intent": {
     "matching": "意图匹配",
-    "otherIntent": "其他意图"
+    "otherIntent": "其他意图",
+    "defaultIntentName": "意图{{index}}",
+    "enterIntentDescription": "请输入用户意图的描述",
+    "option": "选项",
+    "notConfigured": "未配置"
   },
   "errorHandler": {
     "exceptionHandling": "异常处理",
@@ -156,12 +171,31 @@
     "executeExceptionStep": "执行异常流程",
     "returnContentConfig": "返回内容配置"
   },
+  "formCode": {
+    "code": "代码",
+    "switchLanguageTitle": "切换编程语言",
+    "switchLanguageMessage": "切换到 {{language}} 后，当前编辑的内容将会丢失，是否确认切换？",
+    "confirmSwitch": "确认切换",
+    "cancel": "取消"
+  },
   "splittingSelector": {
     "comma": "逗号",
     "semicolon": "分号",
     "period": "句号",
     "cancel": "取消",
     "added": "已添加"
+  },
+  "textEditor": {
+    "input": "输入",
+    "concatenateTemplate": "字符串拼接模板",
+    "textProcessingMethod": "文本处理方式",
+    "stringConcatenation": "字符串拼接",
+    "stringSplitting": "字符串分隔",
+    "delimiter": "分隔符",
+    "enterDelimiterToAdd": "输入分隔符后按回车添加",
+    "add": "添加",
+    "addCustomDelimiter": "+ 添加自定义分隔符",
+    "selectDelimiter": "请选择分隔符（可多选）"
   },
   "draggableList": {
     "add": "添加",
@@ -204,7 +238,47 @@
     "otherData": "其他数据"
   },
   "testrunForm": {
-    "noInputNeeded": "本次试运行无需输入"
+    "noInputNeeded": "本次试运行无需输入",
+    "missingRequiredFields": "请填写必填字段：{{fields}}",
+    "validation": {
+      "integer": "请输入整数",
+      "number": "请输入数字",
+      "boolean": "请选择布尔值",
+      "object": "请输入有效的JSON对象",
+      "jsonFormat": "请输入有效的JSON格式",
+      "array": "请输入有效的JSON数组",
+      "arrayFormat": "请输入有效的JSON数组格式"
+    }
+  },
+  "jsonEditor": {
+    "formatError": "JSON格式错误",
+    "type": {
+      "boolean": "布尔值",
+      "integer": "整数",
+      "number": "数字",
+      "string": "字符串",
+      "object": "对象",
+      "array": "数组"
+    },
+    "arrayElementTypeMismatch": "数组第{{index}}个元素类型不匹配，期望{{expectedType}}类型，实际为{{actualType}}类型"
+  },
+  "nodePrompt": {
+    "systemPromptEmpty": "系统提示词为空，无法生成。",
+    "generateFailed": "提示词生成失败: {{error}}",
+    "generateCompleted": "系统提示词自动生成完成，可选择采纳。",
+    "requestFailed": "提示词生成请求失败",
+    "noContentToAdopt": "无可采纳内容。",
+    "adoptedGenerated": "已采纳自动生成的提示词。",
+    "canceled": "已取消自动生成结果，恢复原提示词。",
+    "unnamedPrompt": "未命名提示词",
+    "loadFailed": "预填提示词信息失败，请稍后重试。",
+    "requiredFields": "请填写提示词Key、名称与版本。",
+    "createFailed": "创建提示词失败",
+    "versionFormatError": "提交版本需为 x.x.x，并且大于已存在版本{{current}}",
+    "currentVersion": "(当前：{{version}})",
+    "commitDescription": "工作流节点 {{nodeName}} 保存的版本",
+    "saved": "提示词已保存并提交版本。",
+    "saveFailed": "保存提示词失败，请稍后重试。"
   },
   "loop": {
     "title": "循环",

@@ -237,7 +237,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
                       <div className="w-full">
                         {index > 0 && <div className="border-t border-gray-300" style={{ marginBottom: 'clamp(0.25rem, 0.5vw, 0.5rem)' }}></div>}
                         <div>
-                          {firstModel.series.vendor} 协议
+                          {firstModel.series.vendor} {t('components.prompts.modelSelector.protocol')}
                           {shouldShowModelFrom && firstModel.model_from === 'config' && `（${t('components.prompts.modelSelector.systemBuiltIn')}）`}
                         </div>
                       </div>

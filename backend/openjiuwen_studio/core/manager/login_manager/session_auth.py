@@ -12,6 +12,7 @@ from openjiuwen_studio.core.config import settings
 from openjiuwen_studio.core.manager.repositories.user_repository import user_repository
 from openjiuwen_studio.schemas.user import (RoleType, UserDBPd, UserInfo, UserLogin,
                               UserResponse)
+from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="v1/auth/login")
 
@@ -47,7 +48,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = (datetime.now(timezone.utc) + expires_delta).replace(tzinfo=None)
     else:
-        expire = (datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)).replace(tzinfo=None)
+        if settings.enable_new_auth:
+            # 新密码体系：短期 access token
+            expire = (
+                datetime.now(timezone.utc)
+                + timedelta(minutes=settings.new_access_token_expire_minutes)
+            ).replace(tzinfo=None)
+        else:
+            # 单机部署：超长 access token
+            expire = (
+                datetime.now(timezone.utc)
+                + timedelta(minutes=settings.access_token_expire_minutes)
+            ).replace(tzinfo=None)
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
@@ -60,7 +72,18 @@ def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = (datetime.now(timezone.utc) + expires_delta).replace(tzinfo=None)
     else:
-        expire = (datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)).replace(tzinfo=None)
+        # 新密码体系：短期 refresh token
+        if settings.enable_new_auth:
+            expire = (
+                datetime.now(timezone.utc) 
+                + timedelta(days=settings.new_refresh_token_expire_days)
+            ).replace(tzinfo=None)
+        else:
+            # 单机部署：超长 refresh token
+            expire = (
+                datetime.now(timezone.utc) 
+                + timedelta(days=settings.refresh_token_expire_days)
+            ).replace(tzinfo=None)
 
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
@@ -80,6 +103,40 @@ def verify_refresh_token(token: str):
         if datetime.now(timezone.utc).replace(tzinfo=None) > datetime.fromtimestamp(payload.get("exp")):
             return None
 
+        return payload
+    except jwt.PyJWTError:
+        return None
+
+
+def verify_refresh_token_strict(token: str):
+    """Verify refresh token, check DB consistency (签名+类型+数据库一致性)"""
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+
+        # Check if it's a refresh token
+        if payload.get("type") != "refresh":
+            return None
+
+        # Check if token is expired
+        if datetime.now(timezone.utc).replace(tzinfo=None) > datetime.fromtimestamp(payload.get("exp")):
+            return None
+
+        # 校验数据库中 refresh_token 是否一致
+        email = payload.get("sub")
+        if not email:
+            return None
+        ret = user_repository.get_user_tbl(email)
+        if ret.get("code") != status.HTTP_200_OK:
+            return None
+        user = ret.get("data")
+        user_db = UserDBPd(**user)
+        db_refresh_token = user_db.refresh_token
+        if not db_refresh_token:
+            return None
+        security_util = SecurityUtils()
+        decrpyted_db_refresh_token = security_util.decrypt_api_key(db_refresh_token)
+        if not decrpyted_db_refresh_token or decrpyted_db_refresh_token != token:
+            return None
         return payload
     except jwt.PyJWTError:
         return None

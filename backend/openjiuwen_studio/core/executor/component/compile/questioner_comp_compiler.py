@@ -4,8 +4,7 @@
 
 from typing import Any, Dict, List
 
-from openjiuwen.core.component.questioner_comp import QuestionerConfig, FieldInfo
-from openjiuwen_studio.core.executor.component.component_impl.questioner_comp import QuestionerComponent
+from openjiuwen.core.workflow import QuestionerConfig, FieldInfo, QuestionerComponent
 from openjiuwen_studio.core.executor.component.compile.llm_comp_compiler import parse_model_config
 from openjiuwen_studio.core.executor.component.compile.base_comp_compiler import BaseCompCompiler
 
@@ -17,7 +16,7 @@ class QuestionerCompCompiler(BaseCompCompiler):
         self.questioner_comp_config_dict: Dict[str, Any] = questioner_comp_config_dict
 
     def compile(self) -> QuestionerComponent:
-        model_config = parse_model_config(self.questioner_comp_config_dict)
+        model_config, model_client_config, model_id = parse_model_config(self.questioner_comp_config_dict)
 
         field_infos: List[FieldInfo] = []
         for field_info_dict in self.questioner_comp_config_dict.get('field_names', []):
@@ -36,7 +35,9 @@ class QuestionerCompCompiler(BaseCompCompiler):
         with_chat_history = self.questioner_comp_config_dict.get('with_chat_history', False)
 
         questioner_comp_config = QuestionerConfig(
-            model=model_config,
+            model_id=None,  # 不能给，给了会走到Runner.get_model
+            model_client_config=model_client_config,
+            model_config=model_config,
             field_names=field_infos,
             with_chat_history=with_chat_history,
             max_response=max_response

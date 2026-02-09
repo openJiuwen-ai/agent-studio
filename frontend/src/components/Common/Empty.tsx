@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Database } from 'lucide-react'
+import { Plus, Database, Brain } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import AgentIcon from '@/assets/icons/agent.svg?react'
 import WorkflowIcon from '@/assets/icons/workflow.svg?react'
@@ -86,13 +86,24 @@ const resourceConfig = {
       createButton: 'knowledgeBases.createButton',
     },
   },
+  memoryBases: {
+    icon: <Brain className="w-12 h-12 text-[#6b7280]" />,
+    createPath: null, // 记忆库通过对话框创建
+    i18nKeys: {
+      noDataTitle: 'memoryBases.empty.title',
+      noResultsTitle: 'memoryBases.search.noResults',
+      noDataDescription: 'memoryBases.empty.description',
+      noResultsDescription: 'memoryBases.search.tryOtherKeywords',
+      createButton: 'memoryBases.createButton',
+    },
+  },
 } as const
 
 interface EmptyProps {
   searchTerm?: string
-  type: 'agents' | 'workflows' | 'models' | 'plugins' | 'prompts' | 'promptOptimize' | 'knowledgeBases'
+  type: 'agents' | 'workflows' | 'models' | 'plugins' | 'prompts' | 'promptOptimize' | 'knowledgeBases' | 'memoryBases'
   hasFilters?: boolean // 是否有筛选条件（用于 models、promptOptimize）
-  onCreateClick?: () => void // 创建按钮点击回调（用于 models、prompts、promptOptimize、knowledgeBases）
+  onCreateClick?: () => void // 创建按钮点击回调（用于 models、prompts、promptOptimize、knowledgeBases、memoryBases）
   customTitle?: string // 自定义标题（覆盖默认 i18n 文案）
   customDescription?: string // 自定义描述（覆盖默认 i18n 文案）
 }
@@ -106,11 +117,12 @@ export const Empty: React.FC<EmptyProps> = ({ searchTerm = '', type, hasFilters 
     (type === 'models' && hasFilters) ||
     (type === 'promptOptimize' && hasFilters) ||
     (type === 'prompts' && hasSearch) ||
-    (type === 'knowledgeBases' && hasSearch)
+    (type === 'knowledgeBases' && hasSearch) ||
+    (type === 'memoryBases' && hasSearch)
 
   const createButton = useMemo(() => {
-    if ((type === 'models' || type === 'plugins' || type === 'prompts' || type === 'promptOptimize' || type === 'knowledgeBases') && onCreateClick) {
-      // 模型、插件、提示词、自优化任务和知识库类型使用回调函数
+    if ((type === 'models' || type === 'plugins' || type === 'prompts' || type === 'promptOptimize' || type === 'knowledgeBases' || type === 'memoryBases') && onCreateClick) {
+      // 模型、插件、提示词、自优化任务、知识库和记忆库类型使用回调函数
       return (
         <button
           onClick={onCreateClick}

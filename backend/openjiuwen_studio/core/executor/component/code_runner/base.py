@@ -37,13 +37,13 @@ class CodeRunner(ABC):
             except (asyncio.TimeoutError, TimeoutError):
                 error_body = ErrorBody(
                     error_message=f"Execution timed out after {attempt + 1}/{max_attempts} attempts",
-                    error_code="4001"
+                    error_code=4001
                 )
                 logger.error(f"{error_body}")
             except Exception as e:
                 error_body = ErrorBody(
                     error_message=f"Execution failed after {attempt + 1}/{max_attempts} attempts: {e}",
-                    error_code="4002"
+                    error_code=4002
                 )
                 logger.error(f"{error_body}")
 

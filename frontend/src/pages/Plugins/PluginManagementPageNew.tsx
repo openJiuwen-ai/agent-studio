@@ -292,7 +292,7 @@ const PluginManagementPageNew: React.FC = () => {
             showSuccess(t('plugins.messages.pluginDeleted', { name: deleteDialog.plugin.name }))
             return
           } else {
-            showError(t('plugins.errors.deleteFailed') + ': ' + (response.message || t('plugins.errors.unknownError')))
+            showError(t('plugins.messages.deleteFailed') + ': ' + (response.message || t('plugins.errors.unknownError')))
           }
         } else {
           setDeleteDialog({ isOpen: false, plugin: null })
@@ -562,7 +562,7 @@ const PluginManagementPageNew: React.FC = () => {
       </button>
       <button
         onClick={() => setInstallDialogOpen(true)}
-        className="h-8 px-4 bg-[#3b82f6] text-white rounded-[4px] text-sm font-medium hover:bg-[#2563eb] transition-colors flex items-center space-x-2"
+        className="btn-primary h-8 flex items-center gap-2 text-sm px-4"
       >
         <Plus className="w-4 h-4" />
         <span>{t('plugins.installPlugin')}</span>
@@ -614,7 +614,7 @@ const PluginManagementPageNew: React.FC = () => {
                 </div>
                 {selectedPlugin.desc_mk && (
                   <div>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>插件详情</Typography>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>{t('plugins.dialog.pluginDetails.basicInfo')}</Typography>
                     <div className="prose prose-sm max-w-none p-4 bg-gray-50 rounded-lg border border-gray-200">
                       <ReactMarkdown>{selectedPlugin.desc_mk}</ReactMarkdown>
                     </div>
@@ -733,7 +733,7 @@ const PluginManagementPageNew: React.FC = () => {
             disabled={deletePluginMutation.isLoading}
             startIcon={deletePluginMutation.isLoading ? <CircularProgress size={16} /> : null}
           >
-            {deletePluginMutation.isLoading ? t('common.buttons.deleting', '删除中...') : t('common.buttons.delete')}
+            {deletePluginMutation.isLoading ? t('common.buttons.deleting') : t('common.buttons.delete')}
           </Button>
         </DialogActions>
       </Dialog>

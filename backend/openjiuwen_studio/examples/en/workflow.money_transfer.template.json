@@ -1,0 +1,86 @@
+{
+  "name": "money_transfer",
+  "desc": "Money transfer workflow",
+  "icon_uri": "",
+  "url": "test",
+  "schema": {
+    "nodes": [
+      {
+        "id": "start_2",
+        "type": "1",
+        "meta": { "position": { "x": 180, "y": 38 } },
+        "data": {
+          "title": "Start",
+          "outputs": {
+            "type": "object",
+            "properties": {
+              "query": { "type": "string", "default": "Hello, please analyze this issue for me." }
+            }
+          }
+        }
+      },
+      {
+        "id": "questioner_2",
+        "type": "7",
+        "meta": { "position": { "x": 640, "y": 38 } },
+        "data": {
+          "title": "Questioner",
+          "inputs": {
+            "inputParameters": {
+              "query": {
+                "type": "ref",
+                "content": ["start_2", "query"],
+                "extra": { "index": 0 }
+              }
+            },
+            "llmParam": {
+              "systemPrompt": {
+                "type": "template",
+                "content": ""
+              },
+              "prompt": {
+                "type": "template",
+                "content": ""
+              }
+            },
+            "max_response": 10
+          },
+          "outputs": {
+            "type": "object",
+            "properties": {
+              "user_response": { "type": "string", "description": "User response output variable" },
+              "amount": { "type": "string", "description": "Transfer amount" }
+            },
+            "required": ["user_response", "amount"]
+          }
+        }
+      },
+      {
+        "id": "end_0",
+        "type": "2",
+        "meta": { "position": { "x": 1100, "y": 38 } },
+        "data": {
+          "title": "End",
+          "inputs": {
+            "inputParameters": {
+              "result": {
+                "type": "ref",
+                "content": ["questioner_2", "amount"],
+                "extra": { "index": 0 }
+              }
+            },
+            "streaming": true,
+            "content": {
+              "type": "template",
+              "content": "Transfer completed, amount is {{result}}."
+            }
+          }
+        }
+      }
+    ],
+    "edges": [
+      { "sourceNodeID": "start_2", "targetNodeID": "questioner_2" },
+      { "sourceNodeID": "questioner_2", "targetNodeID": "end_0" }
+    ]
+  }
+}

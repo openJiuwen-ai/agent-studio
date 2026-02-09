@@ -51,22 +51,29 @@ const WorkflowSelector: React.FC<WorkflowSelectorProps> = ({ open, onClose, onCo
   }, [searchTerm])
 
   // 根据是否有搜索词决定使用哪个hook
+  // 使用缓存策略优化选择器场景，避免频繁请求
   const {
     data: workflowData,
     isLoading: workflowLoading,
     error,
   } = debouncedSearchTerm.trim() !== ''
-    ? useSearchWorkflows({
-        space_id: spaceId,
-        search_term: debouncedSearchTerm.trim(),
-        page: currentPage,
-        page_size: pageSize,
-      })
-    : useWorkflows({
-        space_id: spaceId,
-        page: currentPage,
-        page_size: pageSize,
-      })
+    ? useSearchWorkflows(
+        {
+          space_id: spaceId,
+          search_term: debouncedSearchTerm.trim(),
+          page: currentPage,
+          page_size: pageSize,
+        },
+        { staleTime: 10 * 1000 }
+      )
+    : useWorkflows(
+        {
+          space_id: spaceId,
+          page: currentPage,
+          page_size: pageSize,
+        },
+        { staleTime: 10 * 1000, refetchOnMount: false }
+      )
 
   // 从响应数据中提取工作流列表和分页信息
   const workflowList = useMemo(() => {
@@ -116,38 +123,7 @@ const WorkflowSelector: React.FC<WorkflowSelectorProps> = ({ open, onClose, onCo
 
   useEffect(() => {
     setSelectedWorkflows(initialSelected)
-    // 确保初始选择的工作流数据被加载到缓存中
-    if (initialSelected.length > 0) {
-      const loadMissingWorkflows = async () => {
-        const missingIds = initialSelected.filter(workflowId => !selectedWorkflowsCache.has(workflowId))
-
-        if (missingIds.length > 0) {
-          try {
-            const response = await WorkflowService.getWorkflows({
-              space_id: spaceId,
-              page: 1,
-              page_size: 10,
-            })
-            const workflows = response.data?.workflow_list || []
-
-            setSelectedWorkflowsCache(prev => {
-              const newCache = new Map(prev)
-              workflows.forEach(workflow => {
-                if (missingIds.includes(workflow.workflow_id)) {
-                  newCache.set(workflow.workflow_id, mapWorkflow(workflow))
-                }
-              })
-              return newCache
-            })
-          } catch (error) {
-            console.error('Failed to load initial workflows:', error)
-          }
-        }
-      }
-
-      loadMissingWorkflows()
-    }
-  }, [initialSelected, spaceId])
+  }, [initialSelected])
 
   // 当页面变化时重置当前页码到第1页，完全保留缓存
   useEffect(() => {

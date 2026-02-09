@@ -13,20 +13,22 @@ from openjiuwen_studio.core.executor.workflow.workflow_runner import _fetch_work
 from openjiuwen_studio.core.common.dsl import ComponentType
 from openjiuwen_studio.core.common.status_code import StatusCode
 from openjiuwen_studio.core.common.dsl import LoopConfig
-from openjiuwen.core.runtime.workflow import WorkflowRuntime, NodeRuntime
-from openjiuwen.core.stream.emitter import StreamEmitter
-from openjiuwen.core.stream.manager import StreamWriterManager
-from openjiuwen.core.runtime.wrapper import WrappedNodeRuntime
-from openjiuwen.core.context_engine.engine import ContextEngine
+
+# 修改：从新路径导入
+from openjiuwen.core.session.internal.workflow import WorkflowSession, NodeSession
+from openjiuwen.core.session.stream.emitter import StreamEmitter
+from openjiuwen.core.session.stream.manager import StreamWriterManager
+from openjiuwen.core.session.node import Session
+from openjiuwen.core.workflow import WorkflowCard
+
 from openjiuwen.core.graph.base import INPUTS_KEY
-from openjiuwen.core.common.exception.exception import JiuWenBaseException
+from openjiuwen_studio.core.common.exceptions import BaseError
 from openjiuwen.core.workflow.workflow_config import WorkflowConfig
 from openjiuwen_studio.core.executor.workflow.pregel_graph_adapter import JiuWenGraphException
 from openjiuwen_studio.core.executor.util.utils import result_convert, handle_stream_error
-from openjiuwen.core.tracer.span import TraceWorkflowSpan
+from openjiuwen.core.session.tracer.span import TraceWorkflowSpan
 from openjiuwen_studio.schemas import WorkflowId
 from openjiuwen.core.common.logging import logger
-from openjiuwen.core.context_engine.config import ContextEngineConfig
 from openjiuwen_studio.core.common.exceptions import JiuWenComponentException
 from openjiuwen_studio.core.common.message import ExecuteResponseType, ExecuteResponse
 
@@ -59,17 +61,15 @@ class ComponentExecutor(WorkflowRunner):
             await _fetch_workflow_dl(workflow_id, workflow_version, space_id, current_user, skip_validation=True),
             space_id,
             current_user)
-        workflow_context = WorkflowRuntime(workflow_id=workflow_id, session_id=execution_id)
-        workflow_context.config().add_workflow_config(workflow_id, WorkflowConfig())
+        workflow_session = WorkflowSession(workflow_id=workflow_id, session_id=execution_id)
+        workflow_session.config().add_workflow_config(workflow_id, WorkflowConfig(
+            card=WorkflowCard(id=workflow_id, version=workflow_version, input_params=inputs)))
 
-        workflow_context.set_stream_writer_manager(StreamWriterManager(stream_emitter=StreamEmitter()))
-        # 节点context
-        node_context = NodeRuntime(workflow_context, component_id)
-        runtime = WrappedNodeRuntime(node_context)
-        context_config = ContextEngineConfig()
-        context_engine = ContextEngine(agent_id="run_single_component_agent_id", config=context_config)
-        context = context_engine.get_workflow_context(workflow_id=workflow_id,
-                                                      session_id=execution_id)
+        workflow_session.set_stream_writer_manager(StreamWriterManager(stream_emitter=StreamEmitter()))
+        node_session = NodeSession(workflow_session, component_id)
+        session = Session(node_session, stream_mode=False)
+        context = None
+
         if loop_id:
             try:
                 target_loop = next(wf_comp for wf_comp in workflow.dl_workflow.components if wf_comp.id == loop_id)
@@ -86,8 +86,8 @@ class ComponentExecutor(WorkflowRunner):
             raise ValueError(f"Component with id '{component_id}' not found in workflow {workflow_id}") from exc
 
         if target_comp.type not in CAN_SINGLE_COMP_RUN:
-            raise JiuWenBaseException(
-                error_code=StatusCode.COMPONENT_UNSUPPORT_RUN_ERROR.code,
+            raise BaseError(
+                code=StatusCode.COMPONENT_UNSUPPORT_RUN_ERROR.code,
                 message=StatusCode.COMPONENT_UNSUPPORT_RUN_ERROR.errmsg
             )
 
@@ -138,18 +138,18 @@ class ComponentExecutor(WorkflowRunner):
                 inputs = {INPUTS_KEY: inputs}
             else:
                 compiled_comp = await workflow.compile_component(Context(), workflow.dl_workflow, target_comp)
-        except JiuWenBaseException as ce:
+        except BaseError as be:
             code = _compile_err_code(int(target_comp.type))
-            msg = f"{_type_cn(int(target_comp.type))}组件[{component_id}]: {ce.message}"
+            msg = f"{_type_cn(int(target_comp.type))}组件[{component_id}]: {be.message}"
             raise JiuWenComponentException(
                 code, msg, component_id, int(target_comp.type), error_stage="compile"
-            ) from ce
-        except Exception as ce:
+            ) from be
+        except Exception as e:
             code = _compile_err_code(int(target_comp.type))
-            msg = f"{_type_cn(int(target_comp.type))}组件[{component_id}]: {str(ce)}"
+            msg = f"{_type_cn(int(target_comp.type))}组件[{component_id}]: {str(e)}"
             raise JiuWenComponentException(
                 code, msg, component_id, int(target_comp.type), error_stage="compile"
-            ) from ce
+            ) from e
         executor = compiled_comp.to_executable()
         trace_logs: list[TraceWorkflowSpan] = []
         data = None
@@ -162,7 +162,7 @@ class ComponentExecutor(WorkflowRunner):
         task = asyncio.current_task()
         registration = ComponentExecutionRegistration(
             execution_id=execution_id,
-            runtime=workflow_context,
+            session=session,
             task=task
         )
         component_execution_manager.register_execution(registration)
@@ -171,7 +171,7 @@ class ComponentExecutor(WorkflowRunner):
             # 执行前检查取消
             if component_execution_manager.is_cancelled(execution_id):
                 raise asyncio.CancelledError()
-            data = await executor.invoke(inputs, runtime, context)
+            data = await executor.invoke(inputs, session, context)
             rsp, trace_log, trace_detail = result_convert(data, business_type="WORKFLOW")
             if trace_log:
                 trace_logs.append(trace_log)
@@ -179,7 +179,7 @@ class ComponentExecutor(WorkflowRunner):
         except asyncio.CancelledError:
             logger.warning(f"component run cancelled by user: {execution_id}")
             pass
-        except (JiuWenBaseException, JiuWenGraphException) as e:
+        except (BaseError, JiuWenGraphException) as e:
             logger.error(f"component run got JiuWen error: {e}")
             code = _run_err_code(int(target_comp.type))
             msg = f"{_type_cn(int(target_comp.type))}组件[{component_id}]: {getattr(e, 'message', str(e))}"

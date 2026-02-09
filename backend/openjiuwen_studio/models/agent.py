@@ -16,6 +16,15 @@ if TYPE_CHECKING:
     pass
 
 
+class AgentModelConfig(BaseModel):
+    """Agent模型配置参数封装"""
+    timeout: int = Field(default=300)
+    temperature: float = Field(default=0.7)
+    top_p: float = Field(default=0.9)
+    # 配置类必加，禁止传入未定义的字段，防传参错误
+    model_config = {"extra": "forbid"}
+
+
 @declarative_mixin
 class AgentDBMixin:
     if settings.DB_TYPE.lower() == "sqlite":
@@ -36,7 +45,8 @@ class AgentDBMixin:
     configs: Mapped[Dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     plugins: Mapped[List[Dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     workflows: Mapped[List[Dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
-    model: Mapped[Dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    model_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    agent_model_config: Mapped[Dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     prompt_template: Mapped[List[Dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     constraint: Mapped[Dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     prompt_tuning: Mapped[Dict[str, Any] | None] = mapped_column(JSON, nullable=True)

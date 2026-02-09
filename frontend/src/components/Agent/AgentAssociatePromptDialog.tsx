@@ -354,7 +354,7 @@ const AgentAssociatePromptDialog: React.FC<AgentAssociatePromptDialogProps> = ({
             variant="contained"
             onClick={handleReplace}
             disabled={!extractPreviewContent() || replacing}
-            className="bg-gradient-to-r from-blue-600 to-purple-600"
+            className="btn-primary"
             startIcon={replacing ? <CircularProgress size={16} /> : undefined}
           >
             {replacing ? t('replacing') : t('replaceSystemPrompt')}

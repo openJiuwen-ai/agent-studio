@@ -131,12 +131,12 @@ export const ParameterTypeSelector: React.FC<ParameterTypeSelectorProps> = ({
 
 function getTypeLabel(type: string): string {
   const labels: Record<string, string> = {
-    string: '字符串',
-    int: '整数',
-    float: '浮点数',
-    boolean: '布尔值',
-    object: '对象',
-    array: '数组'
+    string: 'String',
+    int: 'Int',
+    float: 'Float',
+    boolean: 'Boolean',
+    object: 'Object',
+    array: 'Array'
   };
   return labels[type] || type;
 }

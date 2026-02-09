@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
 import { API_CONFIG, HTTP_STATUS, ERROR_TYPES, API_ENDPOINTS } from './config'
 import { ErrorResponse, GenericApiResponse } from './types'
+import { getLoginPagePath } from '../../../src/Common/LoginPage'
 
 // API错误类
 export class ApiError extends Error {
@@ -24,6 +25,14 @@ export type AuthStateUpdater = {
   getRefreshToken?: () => string | null
 }
 
+// 检查是否已经在登录页面，避免重定向循环
+const isOnLoginPage = (): boolean => {
+  if (typeof window === 'undefined') return false
+  const currentPath = window.location.pathname
+  const loginPath = getLoginPagePath()
+  return currentPath === loginPath || currentPath.includes(loginPath)
+}
+
 // 刷新token的函数
 const renewToken = async (authStateUpdater: AuthStateUpdater): Promise<string | null> => {
   try {
@@ -36,10 +45,10 @@ const renewToken = async (authStateUpdater: AuthStateUpdater): Promise<string | 
       console.log('🚪 [Token Renewal] Logging out due to missing refresh token')
       authStateUpdater.logout()
 
-      // 强制跳转到登录页
-      if (typeof window !== 'undefined') {
+      // 只有在非登录页面时才强制跳转，避免刷新循环
+      if (typeof window !== 'undefined' && !isOnLoginPage()) {
         console.log('🔄 [Token Renewal] Redirecting to login page...')
-        window.location.href = '/login'
+        window.location.href = getLoginPagePath()
       }
 
       return null
@@ -111,7 +120,14 @@ const createApiClient = (
       if (languageProvider) {
         const language = languageProvider()
         if (language) {
-          config.headers['Accept-Language'] = language
+          // 设置语言优先级，选中的语言权重为1.0，其他语言为0.5
+          if (language === 'en-US') {
+            config.headers['Accept-Language'] = 'en-US;q=1.0, zh-CN;q=0.5'
+          } else if (language === 'zh-CN') {
+            config.headers['Accept-Language'] = 'zh-CN;q=1.0, en-US;q=0.5'
+          } else {
+            config.headers['Accept-Language'] = language
+          }
         }
       }
 
@@ -221,16 +237,16 @@ const createApiClient = (
             console.error('❌ Token refresh failed:', refreshError)
             // 刷新失败，清除认证状态并跳转到登录页
             authStateUpdater.logout()
-            // 强制跳转到登录页
-            if (typeof window !== 'undefined') {
-              window.location.href = '/login'
+            // 只有在非登录页面时才强制跳转，避免刷新循环
+            if (typeof window !== 'undefined' && !isOnLoginPage()) {
+              window.location.href = getLoginPagePath()
             }
             return Promise.reject(createApiError(error, ERROR_TYPES.AUTH))
           }
         } else {
-          // 没有authStateUpdater时，直接跳转到登录页
-          if (typeof window !== 'undefined') {
-            window.location.href = '/login'
+          // 没有authStateUpdater时，只有在非登录页面才跳转到登录页
+          if (typeof window !== 'undefined' && !isOnLoginPage()) {
+            window.location.href = getLoginPagePath()
           }
         }
       }
@@ -354,17 +370,17 @@ const createApiError = (error: AxiosError<ErrorResponse>, type: string): Error =
 // 获取HTTP状态码文本
 const getHttpStatusText = (status: number): string => {
   const statusTexts: Record<number, string> = {
-    [HTTP_STATUS.BAD_REQUEST]: '请求参数错误',
-    [HTTP_STATUS.UNAUTHORIZED]: '未授权访问',
-    [HTTP_STATUS.FORBIDDEN]: '禁止访问',
-    [HTTP_STATUS.NOT_FOUND]: '资源不存在',
-    [HTTP_STATUS.CONFLICT]: '资源冲突',
-    [HTTP_STATUS.UNPROCESSABLE_ENTITY]: '请求数据验证失败',
-    [HTTP_STATUS.INTERNAL_SERVER_ERROR]: '服务器内部错误',
-    [HTTP_STATUS.BAD_GATEWAY]: '网关错误',
-    [HTTP_STATUS.SERVICE_UNAVAILABLE]: '服务不可用',
+    [HTTP_STATUS.BAD_REQUEST]: 'request parameter error',
+    [HTTP_STATUS.UNAUTHORIZED]: 'unauthorized access',
+    [HTTP_STATUS.FORBIDDEN]: 'forbidden access',
+    [HTTP_STATUS.NOT_FOUND]: 'resource not found',
+    [HTTP_STATUS.CONFLICT]: 'resource conflict',
+    [HTTP_STATUS.UNPROCESSABLE_ENTITY]: 'request data validation failed',
+    [HTTP_STATUS.INTERNAL_SERVER_ERROR]: 'internal server error',
+    [HTTP_STATUS.BAD_GATEWAY]: 'bad gateway',
+    [HTTP_STATUS.SERVICE_UNAVAILABLE]: 'service unavailable',
   }
-  return statusTexts[status] || '未知错误'
+  return statusTexts[status] || 'unknown error'
 }
 
 // 生成请求ID
@@ -418,10 +434,10 @@ const performTokenRenewal = async (authStateUpdater: AuthStateUpdater) => {
       console.log('🚪 [Token Renewal] Logging out due to token refresh failure')
       authStateUpdater.logout()
 
-      // 强制跳转到登录页
-      if (typeof window !== 'undefined') {
+      // 只有在非登录页面时才强制跳转，避免刷新循环
+      if (typeof window !== 'undefined' && !isOnLoginPage()) {
         console.log('🔄 [Token Renewal] Redirecting to login page...')
-        window.location.href = '/login'
+        window.location.href = getLoginPagePath()
       }
     }
   } catch (error) {
@@ -431,10 +447,10 @@ const performTokenRenewal = async (authStateUpdater: AuthStateUpdater) => {
     console.log('🚪 [Token Renewal] Logging out due to token refresh failure')
     authStateUpdater.logout()
 
-    // 强制跳转到登录页
-    if (typeof window !== 'undefined') {
+    // 只有在非登录页面时才强制跳转，避免刷新循环
+    if (typeof window !== 'undefined' && !isOnLoginPage()) {
       console.log('🔄 [Token Renewal] Redirecting to login page...')
-      window.location.href = '/login'
+      window.location.href = getLoginPagePath()
     }
   }
 }
@@ -544,7 +560,7 @@ export const apiRequest = {
               if (detailedError) {
                 errorMessage = detailedError
               } else if (errorData.code) {
-                errorMessage = `错误 ${errorData.code}: ${errorData.message || errorData.msg || errorMessage}`
+                errorMessage = `error ${errorData.code}: ${errorData.message || errorData.msg || errorMessage}`
               }
             } catch (e) {
               // 如果不是JSON，使用原始文本（如果不太长）

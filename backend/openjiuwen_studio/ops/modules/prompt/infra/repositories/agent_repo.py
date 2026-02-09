@@ -28,7 +28,7 @@ class SQLAgentRepository(AgentRepository):
 
     def find_model_config_by_modelid(self, model_id: int, agentmodel: BaseAgent) \
             -> Optional[BaseAgent]:
-        query = self.db.query(agentmodel).filter(agentmodel.id == model_id, agentmodel.is_active == True)
+        query = self.db.query(agentmodel).filter(agentmodel.id == model_id, agentmodel.is_active)
         result = query.first()
         return result
 

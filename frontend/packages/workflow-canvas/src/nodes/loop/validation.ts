@@ -5,6 +5,7 @@
 
 import { validateFlowValue } from '../../form-materials'
 import { FlowNodeEntity } from '@flowgram.ai/free-layout-editor'
+import { t } from '../../i18n'
 
 interface LoopValidationContext {
   value?: any
@@ -15,9 +16,6 @@ interface LoopValidationContext {
   formValues?: any
 }
 
-/**
- * Loop 节点的循环次数校验 - 只在NUM_LOOP类型下校验
- */
 export const validateLoopNum = ({ value, context, formValues }: LoopValidationContext) => {
   const loopType = formValues?.inputs?.loopParam?.type
 
@@ -30,8 +28,8 @@ export const validateLoopNum = ({ value, context, formValues }: LoopValidationCo
     required: true,
     includePrivateScope: true,
     errorMessages: {
-      required: '循环次数不能为空',
-      unknownVariable: '循环次数引用的变量不存在',
+      required: t('workflowCanvas.nodes.loop.loopCountCannotBeEmpty'),
+      unknownVariable: t('workflowCanvas.nodes.loop.loopCountVariableNotFound'),
     },
   })
 
@@ -43,22 +41,19 @@ export const validateLoopNum = ({ value, context, formValues }: LoopValidationCo
     const loopNum = value.content
     if (typeof loopNum === 'number') {
       if (loopNum < 1) {
-        return '循环次数必须大于0'
+        return t('workflowCanvas.nodes.loop.loopCountMustBePositive')
       }
       if (loopNum > 1000) {
-        return '循环次数不能超过1000'
+        return t('workflowCanvas.nodes.loop.loopCountExceedsLimit')
       }
     } else {
-      return '循环次数必须为数字'
+      return t('workflowCanvas.nodes.loop.loopCountMustBeNumber')
     }
   }
 
   return undefined
 }
 
-/**
- * Loop 节点的循环数组校验 - 只在ARRAY_LOOP类型下校验
- */
 export const validateLoopArray = ({ value, context, name, formValues }: LoopValidationContext) => {
   const loopType = formValues?.inputs?.loopParam?.type
 
@@ -68,17 +63,17 @@ export const validateLoopArray = ({ value, context, name, formValues }: LoopVali
 
   if (name === 'inputs.loopParam.loopArray') {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      return '循环数组配置不能为空'
+      return t('workflowCanvas.nodes.loop.loopArrayConfigCannotBeEmpty')
     }
 
     const arrayKeys = Object.keys(value)
     if (arrayKeys.length === 0) {
-      return '至少需要一个数组变量'
+      return t('workflowCanvas.nodes.loop.atLeastOneArrayVariable')
     }
 
     for (const [key] of Object.entries(value)) {
       if (!key || key.trim() === '') {
-        return '数组变量名不能为空'
+        return t('workflowCanvas.nodes.loop.arrayVariableNameCannotBeEmpty')
       }
     }
   }
@@ -86,9 +81,6 @@ export const validateLoopArray = ({ value, context, name, formValues }: LoopVali
   return undefined
 }
 
-/**
- * Loop 节点的中间变量字段校验
- */
 export const validateIntermediateVarField = ({ value, context, name, formValues }: LoopValidationContext) => {
   const fieldName = name?.replace(/^inputs\.loopParam\.intermediateVar\./, '') || ''
 
@@ -97,17 +89,14 @@ export const validateIntermediateVarField = ({ value, context, name, formValues 
     required: true,
     includePrivateScope: true,
     errorMessages: {
-      required: `中间变量 "${fieldName}" 不能为空`,
-      unknownVariable: `中间变量 "${fieldName}" 引用的变量不存在`,
+      required: t('workflowCanvas.nodes.loop.intermediateVarCannotBeEmpty', { field: fieldName }),
+      unknownVariable: t('workflowCanvas.nodes.loop.intermediateVarNotFound', { field: fieldName }),
     },
   })
 
   return validationResult?.message
 }
 
-/**
- * Loop 节点的循环数组字段校验
- */
 export const validateLoopArrayField = ({ value, context, name, formValues }: LoopValidationContext) => {
   const fieldName = name?.replace(/^inputs\.loopParam\.loopArray\./, '') || ''
   const loopType = formValues?.inputs?.loopParam?.type
@@ -117,7 +106,7 @@ export const validateLoopArrayField = ({ value, context, name, formValues }: Loo
   }
 
   if (!value) {
-    return `数组变量 "${fieldName}" 的值不能为空`
+    return t('workflowCanvas.nodes.loop.arrayVariableValueCannotBeEmpty', { field: fieldName })
   }
 
   const validationResult = validateFlowValue(value, {
@@ -125,8 +114,8 @@ export const validateLoopArrayField = ({ value, context, name, formValues }: Loo
     required: true,
     includePrivateScope: true,
     errorMessages: {
-      required: `数组变量 "${fieldName}" 不能为空`,
-      unknownVariable: `数组变量 "${fieldName}" 引用的变量不存在`,
+      required: t('workflowCanvas.nodes.loop.arrayVariableCannotBeEmpty', { field: fieldName }),
+      unknownVariable: t('workflowCanvas.nodes.loop.arrayVariableNotFound', { field: fieldName }),
     },
   })
 
@@ -136,19 +125,16 @@ export const validateLoopArrayField = ({ value, context, name, formValues }: Loo
 
   if (value?.type === 'constant') {
     if (!Array.isArray(value.content)) {
-      return `数组变量 "${fieldName}" 必须是数组类型`
+      return t('workflowCanvas.nodes.loop.arrayVariableMustBeArray', { field: fieldName })
     }
     if (Array.isArray(value.content) && value.content.length === 0) {
-      return `数组变量 "${fieldName}" 不能为空数组`
+      return t('workflowCanvas.nodes.loop.arrayVariableCannotBeEmptyArray', { field: fieldName })
     }
   }
 
   return undefined
 }
 
-/**
- * 校验循环节点内部的连接和节点
- */
 export const validateLoopBlocks = ({ value, context }: LoopValidationContext) => {
   const blocks = context.node?.blocks || []
 
@@ -184,8 +170,13 @@ export const validateLoopBlocks = ({ value, context }: LoopValidationContext) =>
   const blockEnd = blocks.find(block => block.flowNodeType === '16')
 
   if (!blockStart || !blockEnd) {
-    return '循环体必须包含开始和结束节点'
+    return t('workflowCanvas.nodes.loop.loopBodyMustContainStartAndEnd')
   }
+
+  // continue 和 break 也可以作为有效的结束节点
+  const continueNode = blocks.find(block => block.flowNodeType === '12')
+  const breakNode = blocks.find(block => block.flowNodeType === '13')
+  const validEndNodes = [blockEnd, continueNode, breakNode].filter(Boolean) as FlowNodeEntity[]
 
   const buildGraph = (nodes: FlowNodeEntity[], edgeList: any[]) => {
     const graph = new Map<string, string[]>()
@@ -226,18 +217,16 @@ export const validateLoopBlocks = ({ value, context }: LoopValidationContext) =>
   }
 
   const graph = buildGraph(blocks, edges)
-  const hasCompletePath = hasPath(graph, blockStart.id, blockEnd.id)
+  // 检查从 blockStart 是否有路径能到达任一有效结束节点
+  const hasCompletePath = validEndNodes.some(endNode => hasPath(graph, blockStart.id, endNode.id))
 
   if (!hasCompletePath) {
-    return '循环体必须有从开始到结束的完整路径'
+    return t('workflowCanvas.nodes.loop.loopBodyMustHaveCompletePath')
   }
 
   return undefined
 }
 
-/**
- * Loop 节点的完整校验配置
- */
 export const validation = {
   'inputs.loopParam.loopNum': validateLoopNum,
   'inputs.loopParam.loopArray': validateLoopArray,

@@ -12,6 +12,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
 
 import { useIsSidebar, useNodeRenderContext } from '../../../hooks'
+import { useTranslation } from '../../../i18n'
 import { ConditionProvider, ConditionPresetOp } from '../../../form-materials'
 import { Feedback, FormItem } from '../../../form-components'
 import { conditionRules, conditionOps } from './condition-rules'
@@ -22,6 +23,7 @@ import { normalizeBranches, generateBranchId, determineBranchType, BranchValue }
 
 export function MultiConditionInputs() {
   const { node } = useNodeRenderContext()
+  const { t } = useTranslation()
   const isSidebar = useIsSidebar()
 
   const updatePorts = useCallback(() => {
@@ -177,7 +179,7 @@ export function MultiConditionInputs() {
             return (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                 <SortableContext items={sortableItems.map(item => item.id)} strategy={verticalListSortingStrategy}>
-                  <FormItem name="条件分支" customComponent={addButton}>
+                  <FormItem name={t('workflowCanvas.nodes.condition.branchLabel')} customComponent={addButton}>
                     <div className="space-y-0">
                       {branches.map((branch: BranchValue, branchIndex: number) => (
                         <Field<BranchValue> key={`branch-${branchIndex}`} name={`branches.${branchIndex}`}>

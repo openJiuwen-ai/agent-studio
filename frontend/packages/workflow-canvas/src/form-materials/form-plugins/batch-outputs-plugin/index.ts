@@ -26,7 +26,10 @@ export const provideBatchOutputsEffect: EffectOptions[] = createEffectFromVariab
       key: `${ctx.node.id}`,
       meta: {
         title: ctx.node.form?.getValueIn('title'),
-        icon: ctx.node.getNodeRegistry<FlowNodeRegistry>().info?.icon,
+        icon: (() => {
+          const info = ctx.node.getNodeRegistry<FlowNodeRegistry>().info
+          return typeof info === 'function' ? info().icon : info?.icon
+        })(),
       },
       type: ASTFactory.createObject({
         properties: Object.entries(value).map(([_key, value]) =>

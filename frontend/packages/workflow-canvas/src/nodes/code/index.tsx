@@ -10,13 +10,14 @@ import { FlowNodeRegistry } from '../../typings'
 import { Code } from 'lucide-react'
 import { formMeta } from './form-meta'
 import { t } from '../../i18n'
+import { generateNodeTitle } from '../../utils/workflow-node-utils'
 
 export const CodeNodeRegistry: FlowNodeRegistry = {
   type: WorkflowNodeType.Code,
-  info: {
+  info: () => ({
     icon: <Code size={16} className="text-emerald-600" />,
     description: t('workflowCanvas.nodes.code.description'),
-  },
+  }),
   meta: {
     defaultPorts: [{ type: 'input' }],
     useDynamicPort: true,
@@ -28,12 +29,16 @@ export const CodeNodeRegistry: FlowNodeRegistry = {
     singleComponentDebug: true,
   },
   formMeta,
-  onAdd() {
+  onAdd(context?) {
+    const nodeId = `code_${customNanoid(5)}`
+    const titlePrefix = t('workflowCanvas.nodes.code.titlePrefix')
+    const title = generateNodeTitle(WorkflowNodeType.Code, context, titlePrefix)
+
     return {
-      id: `code_${customNanoid(5)}`,
+      id: nodeId,
       type: WorkflowNodeType.Code,
       data: {
-        title: t('workflowCanvas.nodes.code.title'),
+        title: title,
         inputs: {
           inputParameters: {
             input: {

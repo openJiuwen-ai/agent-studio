@@ -25,10 +25,9 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 from datetime import datetime, timezone
 
 from fastapi import status
-from openjiuwen.agent.config.react_config import ReActAgentConfig
-from openjiuwen.agent.config.workflow_config import WorkflowAgentConfig
-from openjiuwen.core.agent.agent import Agent as InvokableAgent
-from openjiuwen.core.common.exception.exception import JiuWenBaseException
+from openjiuwen.core.single_agent.legacy.config import ReActAgentConfig, WorkflowAgentConfig
+from openjiuwen.core.single_agent.base import BaseAgent as InvokableAgent
+from openjiuwen_studio.core.common.exceptions import BaseError
 from openjiuwen.core.common.logging import logger
 from openjiuwen.core.retrieval.common.config import RetrievalConfig
 from openjiuwen.core.retrieval.graph_knowledge_base import GraphKnowledgeBase
@@ -36,8 +35,9 @@ from openjiuwen.core.retrieval.simple_knowledge_base import (
     retrieve_multi_kb,
     SimpleKnowledgeBase
 )
-from openjiuwen.core.runtime.interaction.interactive_input import InteractiveInput
-from openjiuwen.core.utils.llm.model_utils.model_factory import ModelFactory
+from openjiuwen.core.runner import Runner
+from openjiuwen.core.session import InteractiveInput
+from openjiuwen.core.foundation.llm import Model
 
 import openjiuwen_studio.core.manager.agent as mgr
 from openjiuwen_studio.core.common.status_code import StatusCode
@@ -132,7 +132,7 @@ async def _fetch_agent_dl(
         str: Agent DL配置的JSON字符串
 
     Raises:
-        JiuWenBaseException: 当获取配置失败时抛出异常
+        BaseError: 当获取配置失败时抛出异常
     """
     # 构建请求参数
     req = {"agent_id": id, "space_id": space_id, "agent_version": version}
@@ -143,15 +143,15 @@ async def _fetch_agent_dl(
 
     # 检查响应状态
     if res.code != status.HTTP_200_OK:
-        raise JiuWenBaseException(
-            error_code=StatusCode.AGENT_DL_FETCH_FAILED.code,
+        raise BaseError(
+            code=StatusCode.AGENT_DL_FETCH_FAILED.code,
             message=StatusCode.AGENT_DL_FETCH_FAILED.errmsg.format(msg=str(res.message)),
         )
 
     agent_dl = res.data
     if agent_dl is None:
-        raise JiuWenBaseException(
-            error_code=StatusCode.AGENT_DL_FETCH_FAILED.code,
+        raise BaseError(
+            code=StatusCode.AGENT_DL_FETCH_FAILED.code,
             message=StatusCode.AGENT_DL_FETCH_FAILED.errmsg.format(msg=str("fetch agent failed"))
         )
 
@@ -273,7 +273,7 @@ class AgentRunner:
         # 配置已变更或首次创建，重新编译Agent
         invokable_agent = await self.create_new_agent(agent_config, space_id, current_user)
         if catch_instance:
-            invokable_agent._context_engine._context_accessor = catch_instance._context_engine._context_accessor
+            invokable_agent._context_engine._context_pool = catch_instance._context_engine._context_pool
 
         # 更新缓存
         self._agent_instances[user_id][agent_key] = (agent_config, invokable_agent)
@@ -491,7 +491,7 @@ class AgentRunner:
             Any: Agent执行的流式结果
 
         Raises:
-            JiuWenBaseException: 业务异常，如配置获取失败等
+            BaseError: 业务异常，如配置获取失败等
             JiuWenGraphException: 图执行异常
             Exception: 其他未预期的异常
         """
@@ -499,14 +499,12 @@ class AgentRunner:
         if isinstance(inputs, InteractiveInput):
             inputs = {"conversation_id": conversation_id, "query": inputs}
         elif "conversation_id" not in inputs:
-            raise JiuWenBaseException(StatusCode.AGENT_MISSING_CONVERSATION_ID.code,
+            raise BaseError(StatusCode.AGENT_MISSING_CONVERSATION_ID.code,
                                       StatusCode.AGENT_MISSING_CONVERSATION_ID.errmsg)
 
         # 2. 获取Agent配置
         agent_dl_json = await _fetch_agent_dl(id, version, space_id, current_user)
         agent_config = AgentDlAdapter.convert_to_agent_config(agent_dl_json)
-        memory_engine = get_memory_engine()
-        memory_engine.set_group_llm_config(agent_config.id, agent_config.model)
 
         # 2.1 使用知识库检索（如果配置了知识库）
         kb_ids, retrieval_config = AgentDlAdapter.get_knowledge_config(agent_dl_json)
@@ -534,13 +532,9 @@ class AgentRunner:
                     # 从 agent_config 中获取 LLM 配置
                     if hasattr(agent_config, 'model') and hasattr(agent_config.model, 'model_info'):
                         model_info = agent_config.model.model_info
-                        llm_client = ModelFactory().get_model(
+                        llm_client = Model(
                             model_provider=agent_config.model.model_provider,
-                            api_base=model_info.api_base,
-                            api_key=model_info.api_key,
-                            timeout=model_info.timeout or 120,
-                            temperature=model_info.temperature,
-                            top_p=model_info.top_p,
+                            model_info=model_info
                         )
                         model_name = model_info.model_name
                         logger.debug(f"[KB_RETRIEVAL] Created LLM client for graph/agentic retrieval")
@@ -646,7 +640,11 @@ class AgentRunner:
             kb_spans_processed = False
             agent_invoke_id = id  # agent的顶层invoke_id就是agent_id
             
-            async for chunk in invokable_agent.stream(inputs):
+            async for chunk in Runner.run_agent_streaming(
+                agent=invokable_agent,
+                inputs=inputs,
+                session=conversation_id
+            ):
                 # 处理单个chunk的追踪信息
                 rsp = await process_chunk_trace(chunk, trace_context)
                 
@@ -667,9 +665,9 @@ class AgentRunner:
             # 7. 执行完成后的清理和保存
             await finalize_trace(trace_context)
 
-        except (JiuWenBaseException, JiuWenGraphException) as e:
+        except (BaseError, JiuWenGraphException) as e:
             # 7a. 处理已知的业务异常和图执行异常
-            await handle_trace_error(trace_context, e.error_code, e.message)
+            await handle_trace_error(trace_context, e.code, e.message)
             raise
 
         except Exception as e:

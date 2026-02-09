@@ -95,7 +95,8 @@ export const TestDebugPanel: FC<TestDebugPanelProps> = ({ nodeData, workflowId, 
     if (!node) return null
 
     const registry = node.getNodeRegistry()
-    const icon = registry?.info?.icon
+    const info = typeof registry?.info === 'function' ? registry.info() : registry?.info
+    const icon = info?.icon
     if (!icon) return <MessageSquare size={16} className={styles['interruption-icon']} />
 
     if (typeof icon === 'string') {

@@ -5,14 +5,13 @@ from typing import List, Union
 
 from openjiuwen_studio.core.common.dsl import Agent as AgentDL, AgentType, ReactAgent as ReactAgentDL, \
     WorkflowAgent as WorkflowAgentDL, PluginSchema as PluginSchemaDL, WorkflowSchema as WorkflowSchemaDL
-from openjiuwen.agent.common.enum import ControllerType
-from openjiuwen.agent.config.base import AgentConfig
-from openjiuwen.agent.config.react_config import ReActAgentConfig, ConstrainConfig
-from openjiuwen.agent.config.workflow_config import WorkflowAgentConfig, DefaultResponse
-from openjiuwen.core.component.common.configs.model_config import ModelConfig
-from openjiuwen.core.utils.llm.base import BaseModelInfo
-from openjiuwen.agent.common.schema import WorkflowSchema, PluginSchema
-from openjiuwen.core.memory.config.config import MemoryConfig
+from openjiuwen.core.common.constants.enums import ControllerType
+from openjiuwen.core.application.llm_agent import ReActAgentConfig, ConstrainConfig
+from openjiuwen.core.single_agent.legacy import WorkflowAgentConfig, DefaultResponse, WorkflowSchema, PluginSchema
+from openjiuwen.core.foundation.llm import BaseModelInfo, ModelConfig
+from openjiuwen.core.memory.config.config import AgentMemoryConfig
+from openjiuwen.core.common import Param
+from openjiuwen.core.workflow import WorkflowCard
 
 
 VARIABLE_PROMPT_SYS = """
@@ -45,18 +44,18 @@ def _plugin_schema_adapter(plugin_dls: List[PluginSchemaDL]) -> List[PluginSchem
     return plugin_schemas
 
 
-def _workflow_schema_adapter(workflow_dls: List[WorkflowSchemaDL]) -> List[WorkflowSchema]:
-    workflow_schemas = []
+def _workflow_schema_adapter(workflow_dls: List[WorkflowSchemaDL]) -> List[WorkflowCard]:
+    workflow_cards = []
     for workflow_dl in workflow_dls:
-        workflow_schema = WorkflowSchema(
+        workflow_card = WorkflowCard(
             id=workflow_dl.id,
             version=workflow_dl.version,
             name=workflow_dl.name,
             description=workflow_dl.description,
-            inputs=workflow_dl.inputs,
+            input_params=workflow_dl.inputs,
         )
-        workflow_schemas.append(workflow_schema)
-    return workflow_schemas
+        workflow_cards.append(workflow_card)
+    return workflow_cards
 
 
 class AgentDlAdapter:
@@ -91,23 +90,32 @@ class AgentDlAdapter:
         agent_config.workflows = _workflow_schema_adapter(agent_dl.workflows)
 
         # 模型配置
-        model_info = BaseModelInfo(
-            api_key=agent_dl.model.model_info.api_key,
-            api_base=agent_dl.model.model_info.api_base,
-            model=agent_dl.model.model_info.model_name,
-            temperature=agent_dl.model.model_info.temperature,
-            top_p=agent_dl.model.model_info.top_p,
-            stream=agent_dl.model.model_info.streaming,
-            timeout=agent_dl.model.model_info.timeout
-        )
+        if agent_dl.model and agent_dl.model.model_client_config:
+            request_config = agent_dl.model.request_config
+            model_info = BaseModelInfo(
+                api_key=agent_dl.model.model_client_config.api_key,
+                api_base=agent_dl.model.model_client_config.api_base,
+                model=request_config.model_name if request_config else "",
+                temperature=request_config.temperature if request_config else 0.7,
+                top_p=request_config.top_p if request_config else 0.9,
+                stream=request_config.stream if request_config else False,
+                timeout=agent_dl.model.model_client_config.timeout
+            )
 
-        agent_config.model = ModelConfig(
-            model_provider=agent_dl.model.model_provider,
-            model_info=model_info
-        )
+            model_provider = agent_dl.model.model_client_config.client_provider
+            # Normalize provider casing
+            if model_provider.lower() == 'openai':
+                model_provider = 'OpenAI'
+            elif model_provider.lower() == 'siliconflow':
+                model_provider = 'SiliconFlow'
+
+            agent_config.model = ModelConfig(
+                model_provider=model_provider,
+                model_info=model_info
+            )
 
         return agent_config
-    
+
     @staticmethod
     def _parse_memory_config_to_react_agent_config(react_agent_config: ReActAgentConfig, react_agent_dl: ReactAgentDL):
         # 1.获取记忆的配置
@@ -116,19 +124,29 @@ class AgentDlAdapter:
             variable_list = variable_config
         else:
             variable_list = []
-        react_agent_config.memory_config = MemoryConfig(
-            mem_variables={
-                var["name"]: var["description"] for var in variable_list if var.get("enabled", False)
-            },
+        react_agent_config.agent_memory_config = AgentMemoryConfig(
+            mem_variables=[
+                Param.string(var["name"], description=var["description"], required=False)
+                for var in variable_list if var.get("enabled", False)
+            ],
             enable_long_term_mem=react_agent_dl.configs.get("longterm_memory_config", False)
         )
 
-        # 2.拼接prompt
+        # 2.获取记忆库的id和对应的配置
+        memory_base_dict = react_agent_dl.configs.get("memory_base")
+        if not isinstance(memory_base_dict, dict):
+            memory_base_dict = {}
+        mdb_id = memory_base_dict.get("mdb_id", "")
+        # 如果绑定了记忆库
+        if mdb_id:
+            react_agent_config.memory_scope_id = mdb_id
+
+        # 3.拼接prompt
         if not react_agent_config.prompt_template:
             system_content = ""
-            if react_agent_config.memory_config.mem_variables:
+            if react_agent_config.agent_memory_config.mem_variables:
                 system_content += VARIABLE_PROMPT_SYS
-            if react_agent_config.memory_config.enable_long_term_mem:
+            if react_agent_config.agent_memory_config.enable_long_term_mem:
                 system_content += LONG_TERM_PROMPT
             if system_content != "":
                 react_agent_config.prompt_template.append({
@@ -136,9 +154,9 @@ class AgentDlAdapter:
                     "content": system_content
                 })
         else:
-            if react_agent_config.memory_config.mem_variables:
+            if react_agent_config.agent_memory_config.mem_variables:
                 react_agent_config.prompt_template[0]["content"] += VARIABLE_PROMPT_SYS
-            if react_agent_config.memory_config.enable_long_term_mem:
+            if react_agent_config.agent_memory_config.enable_long_term_mem:
                 react_agent_config.prompt_template[0]["content"] += LONG_TERM_PROMPT
 
     @staticmethod
@@ -241,3 +259,12 @@ class AgentDlAdapter:
             for kb in agent_dl.knowledges:
                 kb_ids.append(kb.id)
         return kb_ids, agent_dl.kb_retrieval
+
+    @staticmethod
+    def get_memory_base_id(agent_dl_json: str):
+        agent_dl = AgentDL.model_validate_json(agent_dl_json)
+        memory_base_dict = agent_dl.configs.get("memory_base")
+        if not isinstance(memory_base_dict, dict):
+            memory_base_dict = {}
+        mdb_id = memory_base_dict.get("mdb_id", "")
+        return mdb_id

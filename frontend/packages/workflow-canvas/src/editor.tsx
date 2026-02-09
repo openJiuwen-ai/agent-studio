@@ -25,7 +25,7 @@ import { Tools } from './components/tools'
 import { ExecutionProvider } from './context'
 import { WorkflowOperation } from './components/workflow-operation'
 import { LoadingState, ErrorState } from './components/editor-states'
-import { t } from './i18n'
+import { useTranslation } from './i18n'
 
 import { WorkflowCanvasWrapper, DocFreeFeatureOverview, EditorContainer } from './styles/styles'
 import { WorkflowService } from '@test-agentstudio/api-client'
@@ -62,7 +62,7 @@ const AutoOpenNodePanel: React.FC<{ nodeId: string | undefined }> = ({ nodeId })
         const node = document.getNode(nodeId)
 
         if (!node) {
-          console.warn(`节点 ${nodeId} 不存在`)
+          console.warn(t('workflowCanvas.editor.nodeNotFound', { nodeId }))
           return
         }
 
@@ -85,7 +85,7 @@ const AutoOpenNodePanel: React.FC<{ nodeId: string | undefined }> = ({ nodeId })
         // 标记已打开
         nodeIdOpenedRef.current = nodeId
       } catch (error) {
-        console.error('打开节点详情面板失败:', error)
+        console.error(t('workflowCanvas.editor.openNodePanelFailed'), error)
       }
     }, 500) // 延迟 500ms 确保编辑器完全初始化
 
@@ -113,19 +113,7 @@ export const Editor = () => {
 
   const { canvasData, initialCanvasData, isLoading, error, handleAutoSave } = useWorkflowData(workflowId, spaceId, version)
   const editorRef = React.useRef<FreeLayoutPluginContext>(null)
-
-  // 调试日志
-  React.useEffect(() => {
-    console.log('Editor debug info:')
-    console.log('- workflowId:', workflowId)
-    console.log('- spaceId:', spaceId)
-    console.log('- version:', version)
-    console.log('- selectedVersion:', selectedVersion)
-    console.log('- isLoading:', isLoading)
-    console.log('- error:', error)
-    console.log('- canvasData:', canvasData)
-    console.log('- initialCanvasData:', initialCanvasData)
-  }, [workflowId, spaceId, version, selectedVersion, isLoading, error, canvasData, initialCanvasData])
+  const { t } = useTranslation()
 
   const editorProps = useEditorProps(initialCanvasData, nodeRegistries, handleAutoSave)
 
@@ -163,7 +151,7 @@ export const Editor = () => {
       if (response.code === 200) {
         const schemaString = response?.data?.workflow?.schema
         if (!schemaString) {
-          console.warn('历史版本 schema 为空，无法加载到画布')
+          console.warn(t('workflowCanvas.editor.historyVersionSchemaEmpty'))
           return
         }
         try {
@@ -188,14 +176,14 @@ export const Editor = () => {
           const versionDisplay = versionId === 'draft' ? t('workflowCanvas.ui.draft') : versionId
           Toast.success({ content: t('workflowCanvas.ui.switchedToVersion', { version: versionDisplay }) })
         } catch (e) {
-          console.error('历史版本 schema 解析失败或导入失败', e)
+          console.error(t('workflowCanvas.editor.historySchemaParseFailed'), e)
           historyService.start()
         }
       } else {
-        console.error('获取历史版本失败', response)
+        console.error(t('workflowCanvas.editor.fetchHistoryVersionFailed'), response)
       }
     } catch (err) {
-      console.error('获取历史版本失败', err)
+      console.error(t('workflowCanvas.editor.fetchHistoryVersionFailed'), err)
     }
   }
 
@@ -229,7 +217,7 @@ export const Editor = () => {
                 {/* 右侧固定宽度版本历史面板 */}
                 {showHistoryPanel && (
                   <HistoryPanel
-                    title="版本历史"
+                    title={t('workflowCanvas.editor.versionHistory')}
                     width={360}
                     onClose={() => closeHistoryPanel()}
                     workflowId={context?.workflowId || workflowId || undefined}

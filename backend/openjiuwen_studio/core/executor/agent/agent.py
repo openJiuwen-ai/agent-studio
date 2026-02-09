@@ -22,13 +22,15 @@ Agent - Agent实例管理器
 """
 
 from typing import List, Dict, Any, Union
+import asyncio
 
-from openjiuwen.agent.config.react_config import ReActAgentConfig
-from openjiuwen.agent.config.workflow_config import WorkflowAgentConfig
-from openjiuwen.agent.llm_agent.llm_agent import LLMAgent
-from openjiuwen.agent.workflow_agent.workflow_agent import WorkflowAgent
-from openjiuwen.core.agent.agent import Agent as InvokableAgent
-from openjiuwen.core.utils.tool.base import Tool
+from openjiuwen.core.application.llm_agent import ReActAgentConfig
+from openjiuwen.core.single_agent.legacy import WorkflowAgentConfig, WorkflowFactory
+from openjiuwen.core.application.llm_agent import LLMAgent
+from openjiuwen.core.application.workflow_agent import WorkflowAgent
+from openjiuwen.core.single_agent.base import BaseAgent as InvokableAgent
+from openjiuwen.core.single_agent.legacy.agent import workflow_provider
+from openjiuwen.core.foundation.tool import Tool
 from openjiuwen.core.common.logging import logger
 
 from openjiuwen_studio.core.executor.plugin.plugin_mgr import PluginManager
@@ -178,21 +180,25 @@ class Agent:
             invokable_agent = WorkflowAgent(self.agent_config)
 
         # 3. 编译并绑定所有Workflow组件
-        from openjiuwen.core.agent.agent import workflow_provider
+        async def create_provider(wf: Workflow, mgr: WorkflowRunner):
+            # async def provider():
+            workflow = await wf.compile(Context(), mgr)
 
-        def create_provider(wf: Workflow, mgr: WorkflowRunner):
-            @workflow_provider(workflow_id=wf.id, workflow_version=wf.version,
-                               workflow_name=wf.name, inputs=wf.inputs)
-            async def provider():
-                return await wf.compile(Context(), mgr)
-
+            provider = WorkflowFactory(
+                    workflow_id=wf.id,
+                    workflow_version=wf.version,
+                    factory=lambda: workflow,
+                    workflow_name=wf.name,
+                    workflow_description=wf.description if hasattr(wf, 'description') else "",
+                    input_schema=wf.inputs
+                )
             return provider
 
         # 预检查所有 workflow 配置
         for wf in self.workflows:
             self._precheck_workflow_before_compile(wf)
 
-        providers = [create_provider(wf, self.workflow_mgr) for wf in self.workflows]
+        providers = await asyncio.gather(*[create_provider(wf, self.workflow_mgr) for wf in self.workflows])
         invokable_agent.add_workflows(providers)
 
         # 4. 编译并绑定所有Plugin工具
@@ -229,7 +235,7 @@ class Agent:
                         not end_config.response_template or not end_config.response_template.strip()
                 ):
                     raise JiuWenExecuteException(
-                        error_code=StatusCode.WORKFLOW_RUNNER_ERROR.code,
+                        code=StatusCode.WORKFLOW_RUNNER_ERROR.code,
                         message=StatusCode.WORKFLOW_RUNNER_ERROR.errmsg.format(
                                 msg=str(f"workflow '{workflow.name}' end node stream_output is enabled "
                                         f"but response_template is empty")

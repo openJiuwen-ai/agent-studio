@@ -12,7 +12,7 @@
       }
     },
     "code": {
-      "title": "代码",
+      "titlePrefix": "代码",
       "description": "代码节点，用于运行自定义的 JavaScript 或 Python 代码。",
       "outputDescription": "代码执行结果"
     },
@@ -20,25 +20,90 @@
       "description": "工具节点，用于调用具体的插件工具执行特定任务。"
     },
     "condition": {
-      "description": "连接多个下游分支。只有满足设定条件的对应分支才会被执行。"
+      "titlePrefix": "选择器",
+      "description": "连接多个下游分支。只有满足设定条件的对应分支才会被执行。",
+      "typeMismatch": "期望{{expectedType}}类型，但输入的是{{actualType}}类型",
+      "type": {
+        "array": "数组",
+        "object": "对象",
+        "string": "字符串",
+        "number": "数字",
+        "integer": "整数",
+        "boolean": "布尔值"
+      },
+      "invalidDateTimeFormat": "期望日期时间格式（ISO 8601），例如：2026-01-09T15:44:53.043Z",
+      "conditionValueCannotBeEmpty": "条件值不能为空",
+      "conditionValueRequired": "条件值是必需的",
+      "pleaseSelectVariableToCheck": "请选择要判断的变量",
+      "pleaseSelectLeftValue": "请选择左值",
+      "pleaseSelectRightValue": "请选择右值",
+      "ifBranchMustBeConnected": "\"如果\"分支必须连线到节点",
+      "elseBranchMustBeConnected": "\"否则\"分支必须连线到节点",
+      "elseIfBranchMustBeConnected": "\"否则如果\"分支必须连线到节点",
+      "branchType": {
+        "if": "如果",
+        "else": "否则",
+        "elseIf": "否则如果"
+      },
+      "branchesMustBeConnected": "以下分支必须连线到节点: {{types}}",
+      "branchLabel": "条件分支",
+      "operators": {
+        "eq": "等于",
+        "neq": "不等于",
+        "gt": "大于",
+        "gte": "大于等于",
+        "lt": "小于",
+        "lte": "小于等于",
+        "contains": "包含",
+        "notContains": "不包含",
+        "isEmpty": "为空",
+        "isNotEmpty": "不为空"
+      },
+      "unconditional": "无条件",
+      "logic": {
+        "and": "且",
+        "or": "或"
+      }
     },
     "loop": {
-      "description": "用于通过设置迭代次数和逻辑来重复执行一系列任务。"
+      "titlePrefix": "循环",
+      "description": "用于通过设置迭代次数和逻辑来重复执行一系列任务。",
+      "loopCountCannotBeEmpty": "循环次数不能为空",
+      "loopCountVariableNotFound": "循环次数引用的变量不存在",
+      "loopCountMustBePositive": "循环次数必须大于0",
+      "loopCountExceedsLimit": "循环次数不能超过1000",
+      "loopCountMustBeNumber": "循环次数必须为数字",
+      "loopArrayConfigCannotBeEmpty": "循环数组配置不能为空",
+      "atLeastOneArrayVariable": "至少需要一个数组变量",
+      "arrayVariableNameCannotBeEmpty": "数组变量名不能为空",
+      "intermediateVarCannotBeEmpty": "中间变量 \"{{field}}\" 不能为空",
+      "intermediateVarNotFound": "中间变量 \"{{field}}\" 引用的变量不存在",
+      "arrayVariableValueCannotBeEmpty": "数组变量 \"{{field}}\" 的值不能为空",
+      "arrayVariableCannotBeEmpty": "数组变量 \"{{field}}\" 不能为空",
+      "arrayVariableNotFound": "数组变量 \"{{field}}\" 引用的变量不存在",
+      "arrayVariableMustBeArray": "数组变量 \"{{field}}\" 必须是数组类型",
+      "arrayVariableCannotBeEmptyArray": "数组变量 \"{{field}}\" 不能为空数组",
+      "loopBodyMustContainStartAndEnd": "循环体必须包含开始和结束节点",
+      "loopBodyMustHaveCompletePath": "循环体必须有从开始到结束的完整路径"
     },
     "input": {
+      "titlePrefix": "输入",
       "description": "输入节点，用于在工作流执行过程中暂停并等待用户输入。",
       "output": "输出"
     },
     "output": {
+      "titlePrefix": "输出",
       "description": "输出节点，用于输出工作流执行过程中的中间结果或最终结果。"
     },
     "start": {
       "description": "工作流的起始节点，用于设置启动工作流所需的信息。"
     },
     "end": {
-      "description": "工作流的最终节点，用于返回工作流运行后的结果信息。"
+      "description": "工作流的最终节点，用于返回工作流运行后的结果信息。",
+      "outputConfiguredNote": "已配置\"输出内容\"，工作流将仅返回字段 responseContent；若需返回输出变量，请清空\"输出内容\"配置。"
     },
     "questioner": {
+      "titlePrefix": "提问器",
       "description": "提问节点，用于向用户提出问题并收集回答。",
       "maxQuestions": "最大提问次数",
       "maxQuestionsDescription": "设置最大提问次数，范围 1-10",
@@ -48,12 +113,21 @@
       "mustBePositiveInteger": "必须是大于0且不大于10的整数"
     },
     "intent": {
-      "description": "意图识别节点，用于根据用户不同的输入匹配不同的意图。"
+      "titlePrefix": "意图识别",
+      "description": "意图识别节点，用于根据用户不同的输入匹配不同的意图。",
+      "atLeastOneIntent": "至少需要添加一个意图",
+      "intentNameCannotBeEmpty": "意图 {{index}} 的名称不能为空",
+      "intentNameTooLong": "意图 {{index}} 的名称长度不能超过50个字符",
+      "intentMustBeConnected": "意图\"{{name}}\"必须连线到节点",
+      "intentsMustBeConnected": "以下意图必须连线到节点: {{names}}",
+      "otherIntentMustBeConnected": "其他意图端口必须连线到节点"
     },
     "textEditor": {
+      "titlePrefix": "文本编辑",
       "description": "文本编辑节点，用于在工作流中处理和转换文本内容。"
     },
     "variableMerge": {
+      "titlePrefix": "变量聚合",
       "description": "工作流的变量聚合节点，用于将多个分组的变量进行聚合。",
       "configCannotBeEmpty": "变量聚合配置不能为空",
       "atLeastOneGroup": "至少需要添加一个变量分组",
@@ -68,21 +142,30 @@
       "addGroup": "添加分组"
     },
     "subWorkflow": {
-      "description": "可执行嵌套子工作流"
+      "title": "工作流",
+      "description": "可执行嵌套子工作流",
+      "workflowFallback": "工作流"
     },
     "continue": {
+      "titlePrefix": "继续循环",
+      "title": "继续循环",
       "description": "继续节点，用于在循环中跳过当前迭代并继续下一次迭代。"
     },
     "break": {
+      "titlePrefix": "跳出循环",
+      "title": "跳出循环",
       "description": "中断节点，用于在循环中立即退出循环。"
     },
     "blockStart": {
+      "title": "开始",
       "description": "块的起始节点。"
     },
     "blockEnd": {
+      "title": "结束",
       "description": "块的结束节点。"
     },
     "variable": {
+      "titlePrefix": "变量",
       "description": "用于重置循环变量的值以进行下一次迭代",
       "title": "变量",
       "settings": "设置",
@@ -166,7 +249,10 @@
       "inputVariableName": "输入变量名",
       "description": "描述",
       "helpLLMUnderstandProperty": "帮助 LLM 理解该属性",
-      "defaultValue": "默认值"
+      "defaultValue": "默认值",
+      "duplicateParameterName": "参数名重复",
+      "completeCurrentParameterFirst": "请先完成当前参数的设置再添加新参数",
+      "parameterNameAlreadyExists": "参数名 \"{{name}}\" 已存在，请使用不同的参数名"
     },
     "promptEditor": {
       "placeholder": "使用 {{变量名}} 引用输入参数"
@@ -303,9 +389,15 @@
   "formOutput": {
     "output": "输出"
   },
+  "formVersion": {
+    "version": "版本"
+  },
   "formPrompt": {
     "userPrompt": "用户提示词",
-    "systemPrompt": "系统提示词"
+    "systemPrompt": "系统提示词",
+    "unlink": "解除关联",
+    "unlinkConfirm": "确认解除提示词\"{{promptName}}-{{version}}\"与工作流节点的关联？此操作无法撤销。",
+    "confirm": "确认"
   },
   "formContentEditor": {
     "outputContent": "输出内容",
@@ -314,6 +406,8 @@
   "pluginSelector": {
     "selectPluginTools": "选择插件工具",
     "supportMultipleSelection": "支持同时选择多个插件中的多个工具",
+    "searchPlaceholder": "搜索插件名称",
+    "noSearchResults": "未找到匹配的插件",
     "noAvailablePlugins": "暂无可用插件",
     "plugin": "插件",
     "noDescription": "暂无描述",

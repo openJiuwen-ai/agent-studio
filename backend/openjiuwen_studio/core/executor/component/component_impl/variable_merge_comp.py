@@ -3,16 +3,14 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 from typing import Any, Dict
-
-from openjiuwen.core.component.base import WorkflowComponent
-from openjiuwen.core.graph.executable import Input, Output
-from openjiuwen.core.runtime.base import ComponentExecutable
-from openjiuwen.core.runtime.runtime import Runtime
+from openjiuwen.core.workflow import WorkflowComponent, Input, Output
+from openjiuwen.core.context_engine import ModelContext
+from openjiuwen.core.session.node import Session
 
 from openjiuwen_studio.core.common.dsl import VariMergeConfig
 
 
-class VariableMergeComponent(ComponentExecutable, WorkflowComponent):
+class VariableMergeComponent(WorkflowComponent):
     def __init__(self, conf: VariMergeConfig) -> None:
         super().__init__()
         self.conf = conf
@@ -22,7 +20,7 @@ class VariableMergeComponent(ComponentExecutable, WorkflowComponent):
         """检查组件输出值是否为空"""
         return value in [None, "", [], {}, ()] or (hasattr(value, '__len__') and len(value) == 0)
 
-    async def invoke(self, inputs: Input, runtime: Runtime, context: Any) -> Output:
+    async def invoke(self, inputs: Input, session: Session, context: ModelContext) -> Output:
         result: Dict[str, Any] = {}
         for group in self.groups:
             for item in group.items:
@@ -30,5 +28,3 @@ class VariableMergeComponent(ComponentExecutable, WorkflowComponent):
                     result[group.name] = inputs[item]
                     break
         return result
-
-

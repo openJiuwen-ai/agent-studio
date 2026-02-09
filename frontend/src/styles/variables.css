@@ -8,6 +8,10 @@
   --global-bg-page: #F8F9FC;
   --global-bg-white: #FFFFFF;
 
+  /* 主题主色 - 主按钮、强调元素等复用 */
+  --primary-color: #1A56F8;
+  --primary-gradient: linear-gradient(93.91deg, #1A56F8 0%, #691CFF 100%);
+
   /* 文字颜色 */
   --text-black: #000000;
   --text-gray: #777777;

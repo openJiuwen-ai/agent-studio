@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
-import { useAuthStore } from '../../stores/useAuthStore'
+import { useAuthStore } from '@/stores/useAuthStore.ts'
 import { Loader2 } from 'lucide-react'
 import { useLogin, useUserSpaces, AuthService } from '@test-agentstudio/api-client'
-import { generateLetterAvatar } from '../../utils/avatar'
+import { generateLetterAvatar } from '@/utils/avatar.ts'
 import LanguageDropdown from '../../components/Common/LanguageDropdown'
 
 interface LoginForm {
@@ -270,7 +270,7 @@ const LoginPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={loginMutation.isLoading}
-                  className="w-full btn-primary py-3 text-base font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full btn-login text-base font-medium disabled:cursor-not-allowed"
                 >
                   {loginMutation.isLoading ? (
                     <div className="flex items-center justify-center space-x-2">

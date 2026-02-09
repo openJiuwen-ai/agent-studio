@@ -15,6 +15,7 @@ interface UIState {
   promptsViewMode: 'grid' | 'list'
   // 知识库管理页面显示模式
   knowledgeBaseViewMode: 'grid' | 'list'
+  memoryBaseViewMode: 'grid' | 'list'
 
   // 是否使用新版 Dashboard UI
   isNewDashboard: boolean
@@ -39,7 +40,8 @@ interface UIActions {
   setPromptsViewMode: (mode: 'grid' | 'list') => void
   // 知识库显示模式操作
   setKnowledgeBaseViewMode: (mode: 'grid' | 'list') => void
-
+  // 知识库显示模式操作
+  setMemoryBaseViewMode: (mode: 'grid' | 'list') => void
   // Dashboard 版本切换
   setIsNewDashboard: (isNew: boolean) => void
   toggleDashboardVersion: () => void
@@ -65,6 +67,7 @@ const initialState: UIState = {
   workflowViewMode: 'grid', // 默认为网格模式
   promptsViewMode: 'grid', // 默认为网格模式
   knowledgeBaseViewMode: 'grid', // 默认为网格模式
+  memoryBaseViewMode: 'grid',
   isNewDashboard: false, // 默认使用旧版 Dashboard
   theme: 'light',
   sidebarCollapsed: false,
@@ -116,6 +119,12 @@ export const useUIStore = create<UIState & UIActions>()(
       setKnowledgeBaseViewMode: (mode: 'grid' | 'list') => {
         console.log(`🎨 [UIStore] Knowledge base view mode changed to: ${mode}`)
         set({ knowledgeBaseViewMode: mode })
+      },
+
+      // 设置记忆库显示模式
+      setMemoryBaseViewMode: (mode: 'grid' | 'list') => {
+        console.log(`🎨 [UIStore] Memory base view mode changed to: ${mode}`)
+        set({ memoryBaseViewMode: mode })
       },
 
       // 设置 Dashboard 版本

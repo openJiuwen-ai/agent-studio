@@ -31,21 +31,20 @@ interface WorkflowCardProps {
   isUpdating?: boolean
 }
 
-// 格式化时间辅助函数
-const formatTime = (time?: string | Date | number): string => {
-  if (!time) return ''
-  const date = typeof time === 'number' ? new Date(time) : (typeof time === 'string' ? new Date(time) : time)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
+const formatRelativeTime = (
+  time: string | Date | number | undefined,
+  t: (key: string, opts?: { count?: number }) => string
+): string => {
+  if (!time) return t('common.messages.relativeTime.justNow')
+  const date = typeof time === 'number' ? new Date(time) : typeof time === 'string' ? new Date(time) : time
+  const diffMs = Date.now() - date.getTime()
   const diffMins = Math.floor(diffMs / 60000)
   const diffHours = Math.floor(diffMs / 3600000)
   const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 1) return '刚刚'
-  if (diffMins < 60) return `${diffMins}分钟前`
-  if (diffHours < 24) return `${diffHours}小时前`
-  if (diffDays < 7) return `${diffDays}天前`
-
+  if (diffMins < 1) return t('common.messages.relativeTime.justNow')
+  if (diffMins < 60) return t('common.messages.relativeTime.minutesAgo', { count: diffMins })
+  if (diffHours < 24) return t('common.messages.relativeTime.hoursAgo', { count: diffHours })
+  if (diffDays < 7) return t('common.messages.relativeTime.daysAgo', { count: diffDays })
   return date.toLocaleDateString()
 }
 
@@ -70,7 +69,7 @@ export const WorkflowCard: React.FC<WorkflowCardProps> = ({
   const actions: ConfigCardAction[] = [
     {
       key: 'edit',
-      label: '编辑',
+      label: t('common.buttons.edit'),
       icon: <Edit className="w-4 h-4" />,
       onClick: () => {
         window.location.href = `/dashboard/workflows/editor/${workflow.workflow_id}?spaceId=${workflow.space_id || ENV_CONFIG.DEFAULT_SPACE_ID}`
@@ -78,13 +77,13 @@ export const WorkflowCard: React.FC<WorkflowCardProps> = ({
     },
     {
       key: 'copy',
-      label: '复制',
+      label: t('common.buttons.copy'),
       icon: <Copy className="w-4 h-4" />,
       onClick: onCopy,
     },
     {
       key: 'delete',
-      label: '删除',
+      label: t('common.buttons.delete'),
       icon: <Trash2 className="w-4 h-4" />,
       onClick: onDelete,
     },
@@ -93,8 +92,7 @@ export const WorkflowCard: React.FC<WorkflowCardProps> = ({
   // 工作流图标
   const workflowIcon = <WorkflowIcon className="w-6 h-6" />
 
-  // 格式化时间
-  const timeDisplay = formatTime(workflow.update_time || workflow.create_time)
+  const timeDisplay = formatRelativeTime(workflow.update_time || workflow.create_time, t)
 
   return (
     <ConfigCard

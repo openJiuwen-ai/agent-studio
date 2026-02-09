@@ -157,7 +157,7 @@ export const WorkflowOperationsHandler = ({ workflowId, canvasData, spaceId, onS
       const link = document.createElement('a')
       link.href = URL.createObjectURL(dataBlob)
       const workflowName = canvasData?.name || 'workflow'
-      link.download = `${workflowName}_${new Date().toISOString().split('T')[0]}.json`
+      link.download = `${workflowName}-export-${Date.now()}.json`
       link.click()
       URL.revokeObjectURL(link.href)
 

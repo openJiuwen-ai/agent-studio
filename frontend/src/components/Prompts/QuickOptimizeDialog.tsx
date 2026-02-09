@@ -342,7 +342,7 @@ export const QuickOptimizeDialog: React.FC<QuickOptimizeDialogProps> = ({
                             <div className="flex items-center text-blue-600">
                               <CircularProgress size={16} className="mr-2" sx={{ color: '#3b82f6' }} />
                               <Typography variant="caption" className="font-medium">
-                                准备差异对比中...
+                                {t('components.prompts.quickOptimizeDialog.preparingDiff')}
                               </Typography>
                             </div>
                           </div>
@@ -359,7 +359,7 @@ export const QuickOptimizeDialog: React.FC<QuickOptimizeDialogProps> = ({
                                 // 优化失败时显示错误提示
                                 <>
                                   <Typography variant="body2" className="text-gray-600 mb-2 font-medium">
-                                    优化失败，点击&ldquo;重新生成&rdquo;可重新生成优化建议
+                                    {t('components.prompts.quickOptimizeDialog.optimizationFailed')}
                                   </Typography>
                                   <Typography variant="caption" className="text-gray-500">
                                     {t('components.prompts.quickOptimizeDialog.optimizedContentHere')}

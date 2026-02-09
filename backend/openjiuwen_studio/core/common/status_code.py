@@ -33,6 +33,8 @@ class StatusCode(Enum):
                                    "agent校验服务器内部错误: {msg}",
                                    "agent verification internal server error: {msg}")
 
+    AGENT_MODEL_NOT_FOUND = (BASE_CODE + 1014, "未找到指定的模型: {msg}", "model not found: {msg}")
+
     # Agent Import/Export 1020~1049
     AGENT_EXPORT_FAILED = (BASE_CODE + 1020, "智能体导出失败: {msg}", "agent export failed: {msg}")
     AGENT_EXPORT_AGENT_NOT_FOUND = (BASE_CODE + 1021, "导出失败，智能体不存在", "agent not found for export")
@@ -58,7 +60,6 @@ class StatusCode(Enum):
                                    "There are circles in workflow graph: {msg}")
     WORKFLOW_GRAPH_BRANCH_REDUCE_ERROR = (BASE_CODE + 2003,
                                           "不同源的分支在同一节点汇合",
-
                                           "These edges have different branch ancestors and cannot be reduced")
     WORKFLOW_GRAPH_LOOP_CONTROL_NODE_REDUCE_ERROR = (BASE_CODE + 2004,
                                                      "循环控制节点:{msg}存在未汇合的非switch类型的分支祖先",
@@ -188,6 +189,11 @@ class StatusCode(Enum):
                                 "Component config invalid: {msg}")
     LLM_COMPONENT_CONFIG_INVALID = (BASE_CODE + 4502, "LLM组件配置错误: {msg}",
                                     "LLM component config invalid: {msg}")
+
+
+    # 任务空间模块 5001~5999
+    TASK_SPACE_THIRDPARTY_CLIENT_ERROR = (BASE_CODE + 5001, "与DeepSearch服务端连接失败: {msg}",
+                                    "Failed to initialize DeepSearch HTTP client: {msg}")
 
     @property
     def code(self):

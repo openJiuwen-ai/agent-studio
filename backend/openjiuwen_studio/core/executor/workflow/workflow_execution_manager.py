@@ -6,8 +6,9 @@ import asyncio
 import threading
 from typing import Dict, Optional, Any
 from dataclasses import dataclass
+from builtins import id as builtinid
 from openjiuwen.core.common.logging import logger
-from openjiuwen.core.runtime.workflow import WorkflowRuntime
+from openjiuwen.core.workflow import Session
 
 
 @dataclass
@@ -17,7 +18,7 @@ class WorkflowExecutionRegistration:
     workflow_id: str
     workflow_version: str
     space_id: str
-    runtime: Optional[WorkflowRuntime] = None
+    session: Optional[Session] = None
     task: Optional[asyncio.Task] = None
 
 
@@ -45,14 +46,15 @@ class WorkflowExecutionManager:
                 workflow_id=registration.workflow_id,
                 workflow_version=registration.workflow_version,
                 space_id=registration.space_id,
-                runtime=registration.runtime,
+                session=registration.session,
                 task=registration.task,
                 thread_id=thread_id
             )
             # 初始化取消标志
             self._cancelled_flags[registration.conversation_id] = False
             logger.info(
-                f"Registered workflow execution: conversation_id={registration.conversation_id}, thread_id={thread_id}")
+                f"Registered workflow execution: conversation_id={registration.conversation_id}, "
+                f"thread_id={thread_id}")
 
     def unregister_execution(self, conversation_id: str) -> None:
         """取消注册执行任务"""
@@ -121,25 +123,12 @@ class WorkflowExecutionManager:
                 self._cancelled_flags[conversation_id] = True
             logger.info(f"Set cancelled flag for conversation_id: {conversation_id}")
 
-            # 2. 清理会话 - 调用 runtime 的 close 方法
-            if execution_info.runtime:
-                try:
-                    stream_writer_manager = execution_info.runtime.stream_writer_manager()
-                    if stream_writer_manager:
-                        # 关闭 stream emitter，这会停止所有的流式输出
-                        stream_emitter = stream_writer_manager.stream_emitter()
-                        if stream_emitter and not stream_emitter.is_closed():
-                            await stream_emitter.close()
-                            logger.info(f"Closed stream emitter for conversation_id: {execution_info.conversation_id}")
-
-                    await execution_info.runtime.close()
-                    logger.info(f"Closed runtime for conversation_id: {execution_info.conversation_id}")
-                except Exception as e:
-                    logger.error(f"Failed to close runtime: {e}", exc_info=True)
-
-            # 3. 取消异步任务
-            if execution_info.task and not execution_info.task.done():
+            # 2. 取消异步任务
+            if execution_info.session and execution_info.task and not execution_info.task.done():
                 execution_info.task.cancel()
+                logger.info(
+                    f"Workflow task cancelled by user for conversation_id: {conversation_id} "
+                    f"task_id: {builtinid(execution_info.task)}")
                 try:
                     await execution_info.task
                 except asyncio.CancelledError:
@@ -147,18 +136,7 @@ class WorkflowExecutionManager:
                 except Exception as e:
                     logger.error(f"Error cancelling task: {e}", exc_info=True)
 
-            # 4. 清理状态 - 重置 runtime 的状态
-            if execution_info.runtime and hasattr(execution_info.runtime, 'state'):
-                try:
-                    state = execution_info.runtime.state()
-                    if state and hasattr(state, 'set_state'):
-                        # 清空状态
-                        state.set_state({})
-                        logger.info(f"Cleared state for conversation_id: {execution_info.conversation_id}")
-                except Exception as e:
-                    logger.error(f"Failed to clear state: {e}", exc_info=True)
-
-            # 5. 从注册表中移除
+            # 3. 从注册表中移除
             self.unregister_execution(conversation_id)
 
             logger.info(

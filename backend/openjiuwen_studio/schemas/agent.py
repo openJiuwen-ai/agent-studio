@@ -92,10 +92,19 @@ class MemoryVariableConfig(BaseModel):
     enabled: Optional[bool] = True
 
 
+class MemoryBaseConfig(BaseModel):
+    mdb_id: str
+    name: str
+    embedding_model_config_id: int
+    llm_model_config_id: int
+    description: Optional[str] = None
+
+
 class AgentMemoryConfig(BaseModel):
     max_tokens: int = Field(default=1000, ge=1, le=5000)
     variable_config: Optional[List[MemoryVariableConfig]] | None = None
     longterm_memory_config: bool | None = False
+    memory_base: Optional[MemoryBaseConfig] | None = None
 
 
 class AgentDisplayInfo(AgentCreate):

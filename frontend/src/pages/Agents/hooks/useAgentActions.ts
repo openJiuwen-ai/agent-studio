@@ -352,9 +352,8 @@ export function useAgentActions(refetchAgents?: () => void, snackbarHelpers?: Sn
         agent_type: agentType,
       },
       {
-        onSuccess: async (response) => {
+        onSuccess: (response) => {
           if (response.code === 200) {
-            await refreshCache()
             showSuccess(t('common.messages.agentUpdateSuccess'))
             cancelEditing()
           } else {

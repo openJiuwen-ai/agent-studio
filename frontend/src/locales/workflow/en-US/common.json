@@ -35,6 +35,7 @@
     "Continue": "Continue",
     "Break": "Break",
     "Variable": "Variable",
+    "VariableMerge": "Variable Merge",
     "Comment": "Comment",
     "Node": "Node",
     "Unknown": "Unknown",
@@ -63,7 +64,17 @@
     "warning": "Warning",
     "fixAll": "Fix All",
     "noValidationIssues": "No validation issues found",
-    "configurationError": "Configuration error"
+    "configurationError": "Configuration error",
+    "fieldRequired": "Field is required",
+    "variableReferencedNotFound": "Referenced variable not found"
+  },
+  "editor": {
+    "nodeNotFound": "Node {{nodeId}} does not exist",
+    "openNodePanelFailed": "Failed to open node details panel",
+    "historyVersionSchemaEmpty": "History version schema is empty, cannot load to canvas",
+    "historySchemaParseFailed": "Failed to parse or import history version schema",
+    "fetchHistoryVersionFailed": "Failed to fetch history version",
+    "versionHistory": "Version History"
   },
   "ui": {
     "draft": "Draft",
@@ -140,7 +151,11 @@
   },
   "intent": {
     "matching": "Intent Matching",
-    "otherIntent": "Other Intent"
+    "otherIntent": "Other Intent",
+    "defaultIntentName": "Intent {{index}}",
+    "enterIntentDescription": "Enter user intent description",
+    "option": "Option",
+    "notConfigured": "Not configured"
   },
   "errorHandler": {
     "exceptionHandling": "Exception Handling",
@@ -156,12 +171,31 @@
     "executeExceptionStep": "Execute Exception Step",
     "returnContentConfig": "Return Content Config"
   },
+  "formCode": {
+    "code": "Code",
+    "switchLanguageTitle": "Switch Programming Language",
+    "switchLanguageMessage": "After switching to {{language}}, the current edited content will be lost. Are you sure you want to switch?",
+    "confirmSwitch": "Confirm Switch",
+    "cancel": "Cancel"
+  },
   "splittingSelector": {
     "comma": "Comma",
     "semicolon": "Semicolon",
     "period": "Period",
     "cancel": "Cancel",
     "added": "Added"
+  },
+  "textEditor": {
+    "input": "Input",
+    "concatenateTemplate": "String Concatenation Template",
+    "textProcessingMethod": "Text Processing Method",
+    "stringConcatenation": "String Concatenation",
+    "stringSplitting": "String Splitting",
+    "delimiter": "Delimiter",
+    "enterDelimiterToAdd": "Enter delimiter and press Enter to add",
+    "add": "Add",
+    "addCustomDelimiter": "+ Add Custom Delimiter",
+    "selectDelimiter": "Please select delimiters (multiple allowed)"
   },
   "draggableList": {
     "add": "Add",
@@ -204,7 +238,47 @@
     "otherData": "Other Data"
   },
   "testrunForm": {
-    "noInputNeeded": "No input required for this test run"
+    "noInputNeeded": "No input required for this test run",
+    "missingRequiredFields": "Please fill in required fields: {{fields}}",
+    "validation": {
+      "integer": "Please enter an integer",
+      "number": "Please enter a number",
+      "boolean": "Please select a boolean value",
+      "object": "Please enter a valid JSON object",
+      "jsonFormat": "Please enter a valid JSON format",
+      "array": "Please enter a valid JSON array",
+      "arrayFormat": "Please enter a valid JSON array format"
+    }
+  },
+  "nodePrompt": {
+    "systemPromptEmpty": "System prompt is empty, cannot generate.",
+    "generateFailed": "Prompt generation failed: {{error}}",
+    "generateCompleted": "System prompt auto-generation completed, you can choose to adopt it.",
+    "requestFailed": "Prompt generation request failed",
+    "noContentToAdopt": "No content to adopt.",
+    "adoptedGenerated": "Adopted the auto-generated prompt.",
+    "canceled": "Cancelled auto-generation result, restored original prompt.",
+    "unnamedPrompt": "Unnamed Prompt",
+    "loadFailed": "Failed to load prompt information, please try again later.",
+    "requiredFields": "Please fill in the Prompt Key, name and version.",
+    "createFailed": "Failed to create prompt",
+    "versionFormatError": "Commit version must be in x.x.x format and greater than existing version{{current}}",
+    "currentVersion": "(current: {{version}})",
+    "commitDescription": "Workflow node {{nodeName}} saved version",
+    "saved": "Prompt saved and version committed.",
+    "saveFailed": "Failed to save prompt, please try again later."
+  },
+  "jsonEditor": {
+    "formatError": "JSON format error",
+    "type": {
+      "boolean": "boolean",
+      "integer": "integer",
+      "number": "number",
+      "string": "string",
+      "object": "object",
+      "array": "array"
+    },
+    "arrayElementTypeMismatch": "Array element at index {{index}} type mismatch, expected {{expectedType}}, got {{actualType}}"
   },
   "loop": {
     "title": "Loop",

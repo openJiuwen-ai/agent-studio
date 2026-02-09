@@ -8,6 +8,7 @@ parse_args() {
     local cmd=""
     local env_file=""
     local is_new_svc="false"
+    local is_upgrade="false"
     local modules=()
 
     while [ $i -lt ${#args[@]} ]; do
@@ -15,10 +16,10 @@ parse_args() {
             -f|--file)
                 # Parse -f option: must be followed by file path
                 if [ $((i+1)) -ge ${#args[@]} ]; then
-                    error "-f/--file option must be followed by .env file path!"
+                    error "-f/--file option must be followed by <ENV_FILE> file path!"
                 fi
                 env_file="${args[$((i+1))]}"
-                # Check if file exists (optional, can also check in read_env_from_file)
+                # Check if file exists
                 if [ ! -f "${env_file}" ]; then
                     error "-f specified file does not exist: ${env_file}"
                 fi
@@ -36,12 +37,17 @@ parse_args() {
                 cmd="${args[$i]}"
                 i=$((i+1))
                 ;;
-            milvus|jiuwen|mysql|plugin|sandbox)
+            upgrade|mysql|milvus|plugin|sandbox|deepsearch|jiuwen)
                 # treat as modules
-                local module=$(echo "${args[$i]}" | tr 'a-z' 'A-Z')
+                local module="${args[$i]^^}"
+                DEPLOY_VARS["HAS_${module}"]="true"
                 modules+=("${module}")
-                key="HAS_${module}_CONTAINER"
-                DEPLOY_VARS["${key}"]="true"
+                i=$((i+1))
+                ;;
+            --upgrade)
+                is_upgrade="true"
+                DEPLOY_VARS["HAS_UPGRADE"]="true"
+                DEPLOY_VARS["IS_UP_UPGRADE_TOOL"]="true"
                 i=$((i+1))
                 ;;
             -h|--help)
@@ -52,36 +58,59 @@ parse_args() {
                 ;;
         esac
     done
-
     info "Executing command: $*"
-    if [ -z "${cmd}" ]; then
-        error "No command specified"
-    fi
-    
-    # deduplicate
-    if [ ${#modules[@]} -gt 0 ]; then
-        local deduped_modules=($(printf "%s\n" "${modules[@]}" | sort -u))
-        modules=("${deduped_modules[@]}")
-    fi
-
-    # should not specify .env when bring up new services
-    if [[ "${is_new_svc}" == "true" && -n "${env_file}" ]]; then
-        error "Please do not specify -f and -n in the sametime"
-    fi
 
     # Assign parsed commands to global variables for main function
     ARGS["CMD"]=${cmd}
     ARGS["ENV_FILE"]=${env_file}
     ARGS["IS_NEW_SVC"]=${is_new_svc}
-    ARGS_MODULES=("${modules[@]}")
+    ARGS["IS_UPGRADE"]=${is_upgrade}
 
-    if [ ${#ARGS_MODULES[@]} -eq 0 ]; then
-        info "ARGS_MODULES: <full>"
-    else
-        info "ARGS_MODULES: ${ARGS_MODULES[*]}"
+    process_module_args "${modules[@]}"
+    valid_args
+}
+
+valid_args() {
+    if [ -z "${ARGS["CMD"]}" ]; then
+        error "No command specified"
+    fi
+
+    # Do not specify env file with new service creation
+    if [[ "${ARGS["IS_NEW_SVC"]}" == "true" && -n "${ARGS["ENV_FILE"]}" ]]; then
+        error "Option -f/--file and -n/--new cannot be specified simultaneously"
+    fi
+
+    # -n/--new only works with 'up' command
+    if [[ "${ARGS["CMD"]}" != "up" && "${ARGS["IS_NEW_SVC"]}" == "true" ]]; then
+        error "Option -n/--new is only supported with the 'up' command"
+    fi
+
+    # Upgrade requires both 'up' and -n/--new
+    if [ "${ARGS["IS_UPGRADE"]}" == "true" ]; then
+        if [[ "${ARGS["CMD"]}" != "up" || "${ARGS["IS_NEW_SVC"]}" != "true" ]]; then
+            error "To upgrade from an old version existing instance to a new one, start the new instance with 'up -n/--new'"
+        fi
     fi
 }
 
+process_module_args(){
+    local modules=("$@")
+
+    # deduplicate
+    if [ ${#modules[@]} -gt 0 ]; then
+        local deduped_modules=($(printf "%s\n" "${modules[@]}" | sort -u))
+        ARGS_MODULES=("${deduped_modules[@]}")
+    fi
+
+    info "ARGS_MODULES: ${ARGS_MODULES[*]}"
+
+    if [ ${#ARGS_MODULES[@]} -eq 0 ]; then
+        for module in "MYSQL" "MILVUS" "PLUGIN" "SANDBOX" "DEEPSEARCH" "JIUWEN"
+        do
+            DEPLOY_VARS["HAS_${module}"]="true"
+        done
+    fi
+}
 
 # Print help info and exit
 print_help() {
@@ -97,13 +126,15 @@ Options:
   -h,--help Show this help message and exit immediately.
   -f,--file Specify the path to the .env configuration file (for existing service).
   -n,--new  Force to start a BRAND NEW service (ignore existing .env file).
+  --upgrade Start a new set of services upgraded from a lower version deployment.
 
-Modules (for service.sh/cluster.sh, optional):
-  milvus    Deploy milvus module
-  jiuwen    Deploy jiuwen module
-  mysql     Deploy mysql module
-  plugin    Deploy plugin module
-  sandbox   Deploy sandbox module
+Modules (optional):
+  milvus        Deploy milvus module
+  jiuwen        Deploy jiuwen module
+  mysql         Deploy mysql module
+  plugin        Deploy plugin module
+  sandbox       Deploy sandbox module
+  deepsearch    Deploy deepsearch module
 Note: No module specified means deploy ALL modules.
 
 Examples:

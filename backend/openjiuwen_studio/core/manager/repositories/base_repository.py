@@ -116,10 +116,6 @@ class BaseRepository(Generic[T]):
                 if hasattr(db_obj, field):
                     setattr(db_obj, field, value)
             
-            # Update timestamp (if model has updated_at field)
-            if hasattr(db_obj, 'updated_at'):
-                setattr(db_obj, 'updated_at', datetime.now(timezone.utc).replace(tzinfo=None))
-            
             self.db.commit()
             self.db.refresh(db_obj)
             return db_obj

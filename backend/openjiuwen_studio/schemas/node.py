@@ -35,7 +35,7 @@ class BaseValue(BaseType):
 
 
 class Outputs(BaseType):
-    properties: Dict[str, Dict] = Field(..., alias="properties")
+    properties: Optional[Dict[str, Dict]] = Field(None, alias="properties")
     required: Optional[List[Any]] = Field([], alias="required")
 
 

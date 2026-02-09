@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (JSON, BigInteger, DateTime, ForeignKey, Index, Integer,
                         String, Text, func)
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import (Mapped, mapped_column, relationship)
 
 from openjiuwen_studio.models.agent import AgentBaseDB, AgentPublishDB
@@ -42,7 +43,12 @@ class AgentExecutionDB(Base, DBFunBase):
     inputs: Mapped[dict | None] = mapped_column(JSON, default=None, nullable=True, comment='inputs of this execution')
     outputs: Mapped[dict | None] = mapped_column(JSON, default=None, nullable=True, comment='outputs of this execution')
     error_code: Mapped[int | None] = mapped_column(Integer, default=None, nullable=True, comment='error code')
-    fail_reason: Mapped[str | None] = mapped_column(Text, default=None, nullable=True, comment='the reason for failure')
+    fail_reason: Mapped[str | None] = mapped_column(
+        Text().with_variant(LONGTEXT, "mysql"),
+        default=None,
+        nullable=True,
+        comment='the reason for failure'
+    )
     input_tokens: Mapped[int | None] = mapped_column(
         Integer, default=None, nullable=True, comment='number of input tokens')
     output_tokens: Mapped[int | None] = mapped_column(
@@ -63,16 +69,22 @@ class AgentExecutionDB(Base, DBFunBase):
     # 与agent表关联
     agent_draft: Mapped[AgentBaseDB] = relationship(
         "AgentBaseDB",
-        primaryjoin=f"and_(AgentExecutionDB.agent_version=='{DBFunBase.__version_none__}', AgentExecutionDB.agent_id==AgentBaseDB.agent_id, \
-            AgentExecutionDB.agent_version==AgentBaseDB.agent_version)",
+        primaryjoin=f"and_(" \
+                   f"AgentExecutionDB.agent_version=='{DBFunBase.__version_none__}', " \
+                   f"AgentExecutionDB.agent_id==AgentBaseDB.agent_id, " \
+                   f"AgentExecutionDB.agent_version==AgentBaseDB.agent_version" \
+                   f")",
         foreign_keys=[agent_id, agent_version],
         back_populates="agent_executions",
     )
     # 与agent_publish表关联
     agent_publish: Mapped[AgentPublishDB] = relationship(
         "AgentPublishDB",
-        primaryjoin=f"and_(AgentExecutionDB.agent_version!='{DBFunBase.__version_none__}', AgentExecutionDB.agent_id==AgentPublishDB.agent_id, \
-            AgentExecutionDB.agent_version==AgentPublishDB.agent_version)",
+        primaryjoin=f"and_(" \
+                   f"AgentExecutionDB.agent_version!='{DBFunBase.__version_none__}', " \
+                   f"AgentExecutionDB.agent_id==AgentPublishDB.agent_id, " \
+                   f"AgentExecutionDB.agent_version==AgentPublishDB.agent_version" \
+                   f")",
         foreign_keys=[agent_id, agent_version],
         back_populates="agent_executions",
     )

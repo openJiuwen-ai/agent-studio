@@ -1,4 +1,4 @@
-import { getApiClient, getToken } from '../utils/apiClientFactory'
+import { getApiClient, getToken, getAcceptLanguage } from '../utils/apiClientFactory'
 import { API_ENDPOINTS } from '../config'
 import {
   WorkflowExecutionRequest,
@@ -157,6 +157,7 @@ export class ExecutionService {
           Accept: 'text/event-stream',
           'Cache-Control': 'no-cache',
           Authorization: `Bearer ${getToken() || ''}`,
+          'Accept-Language': getAcceptLanguage(),
         },
         body: JSON.stringify(request),
         credentials: 'include',
@@ -211,7 +212,7 @@ export class ExecutionService {
                   if (sseMessage.code !== 200) {
                     // code 不为 200，表示执行错误，将 code 和 message 拼接成错误消息
                     const originalErrorMessage = sseMessage.message || 'Unknown error'
-                    const errorMessage = `错误 ${sseMessage.code}: ${originalErrorMessage}`
+                    const errorMessage = `error ${sseMessage.code}: ${originalErrorMessage}`
 
                     const messageData = sseMessage.data
                     const errorNodesInfo = messageData?.error_nodes_info

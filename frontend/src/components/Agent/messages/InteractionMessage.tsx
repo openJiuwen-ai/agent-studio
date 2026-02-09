@@ -1,7 +1,8 @@
 import { TextField, InputAdornment, IconButton, Tooltip, Button, Divider } from '@mui/material'
 import type { ChatMessage } from './chatTypes'
 import { useMemo, useState, useEffect } from 'react'
-import { Type, Hash, List, Braces, ToggleLeft, Calendar, Info, X } from 'lucide-react'
+import { Type, Hash, List, Braces, ToggleLeft, Calendar, X } from 'lucide-react'
+import { useScopedTranslation } from '@/i18n'
 import { MessageContent } from './NormalMessage'
 
 type InteractionField = { input_name: string; description?: string; type?: string; required?: boolean; defaultValue?: string }
@@ -76,6 +77,7 @@ export function InteractionMessage({
   disabled?: boolean
   inputFocused?: boolean
 }) {
+  const { t } = useScopedTranslation('agents.agentEditor.previewDebug.agentDebugChat.interactionMessage')
   const info = message.detailInfo
   const submitted = info?.submittedValue
   const fields: InteractionField[] = useMemo(() => parseInteractionMsg(info?.interaction_msg), [info])
@@ -147,11 +149,11 @@ export function InteractionMessage({
       <div className="w-full rounded-xl border border-gray-200 bg-white p-4 shadow-sm min-h-40">
         <div className="flex items-center justify-between mb-3">
           {isSubmitted ? (
-            <span className={`px-2 py-0.5 rounded-full text-xs bg-green-50 text-green-700 border border-green-200`}>已提交</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs bg-green-50 text-green-700 border border-green-200`}>{t('submitted')}</span>
           ) : isExpired ? (
-            <span className={`px-2 py-0.5 rounded-full text-xs bg-gray-50 text-gray-500 border border-gray-200`}>已失效</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs bg-gray-50 text-gray-500 border border-gray-200`}>{t('expired')}</span>
           ) : (
-            <span className={`px-2 py-0.5 rounded-full text-xs bg-amber-50 text-amber-700 border border-amber-200`}>请在此卡片中填写并提交</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs bg-amber-50 text-amber-700 border border-amber-200`}>{t('fillAndSubmit')}</span>
           )}
         </div>
         <div className="space-y-4">
@@ -164,7 +166,7 @@ export function InteractionMessage({
                     <TextField
                       value={v}
                       onChange={e => handleChange('input', e.target.value)}
-                      placeholder="请输入..."
+                      placeholder={t('inputPlaceholder')}
                       size="small"
                       disabled={isSubmitted || isExpired}
                       fullWidth
@@ -175,7 +177,7 @@ export function InteractionMessage({
                         endAdornment:
                           !isSubmitted && !isExpired && String(v).length > 0 ? (
                             <InputAdornment position="end">
-                              <IconButton aria-label="clear input" size="small" onClick={() => handleChange('input', '')} className="clear-btn">
+                              <IconButton aria-label={t('clearInputAria')} size="small" onClick={() => handleChange('input', '')} className="clear-btn">
                                 <X className="w-4 h-4" />
                               </IconButton>
                             </InputAdornment>
@@ -218,7 +220,7 @@ export function InteractionMessage({
                                   <div className="flex items-center gap-2">
                                     {!isSubmitted && !isExpired && String(v).length > 0 ? (
                                       <IconButton
-                                        aria-label="clear input"
+                                        aria-label={t('clearInputAria')}
                                         size="small"
                                         onClick={() => handleChange(field.input_name, '')}
                                         className="clear-btn"
@@ -247,8 +249,8 @@ export function InteractionMessage({
           )}
           {!isSubmitted ? (
             <div className="flex items-center justify-end">
-              <Button variant="contained" color="primary" onClick={handleSubmit} disabled={isExpired || !canSubmitValues(formValues, fields)}>
-                提交
+                <Button variant="contained" color="primary" onClick={handleSubmit} disabled={isExpired || !canSubmitValues(formValues, fields)}>
+                {t('submit')}
               </Button>
             </div>
           ) : null}

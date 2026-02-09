@@ -9,17 +9,9 @@ generate_final_names() {
     info "Generating name...."
     for key in "${!NAMES[@]}"; do
         # info "Generating name for ${key}"
-        local value="${NAMES[$key]}" # Predefined default value
-
-        if [[ -n "${DEPLOY_VARS["${key:-}"]:-}" ]]; then
-            DEPLOY_VARS["${key}"]="${DEPLOY_VARS[$key]}"
-            # success "[$key] using .env defined value: ${DEPLOY_VARS[$key]}"
-        else
-            local final_value="${value}-${name_suffix}"
-            DEPLOY_VARS["${key}"]="${final_value}"
-            # info "[$key] undefined in .env, generating random name: ${final_value}"
-        fi
+        set_if_empty "DEPLOY_VARS" "${key}" "${NAMES[${key}]}-${name_suffix}"
     done
+    info "Generating name Done!"
 }
 
 # === Configures no_proxy/NO_PROXY env vars to bypass proxy for internal container/host connections =====
@@ -27,14 +19,14 @@ setup_no_proxy_vars() {
     local no_proxy_addrs="localhost,127.0.0.1"
 
     # Public IP Address of host machine
-    if [[ -n "${DEPLOY_VARS["IP"]:-}" ]]; then
+    if [ -n "${DEPLOY_VARS["IP"]:-}" ]; then
         no_proxy_addrs="${no_proxy_addrs},${DEPLOY_VARS["IP"]}"
     fi
 
     # all containers
     for addr in "${CONTAINERS_ADDRS[@]}"; do
-        if [[ -n "${DEPLOY_VARS[$addr]:-}" ]]; then
-            no_proxy_addrs="${no_proxy_addrs},${DEPLOY_VARS[$addr]}"
+        if [ -n "${DEPLOY_VARS[${addr}]:-}" ]; then
+            no_proxy_addrs="${no_proxy_addrs},${DEPLOY_VARS[${addr}]}"
         fi
     done
 
@@ -54,101 +46,131 @@ setup_no_proxy_vars() {
     DEPLOY_VARS["NO_PROXY_STR"]="${NO_PROXY_STR}"
 }
 
-# === Populates CONTAINERS array with generated docker container names per module ===
-fill_containers_name() {
-    local module
-    local docker_keys
-    local docker_key
-    local docker_names=()
+valid_env_vars() {
+    if [[ "${RUNTIME_VARS["MEMORY_DATA_PATH"]}" =~ ^/ ]]; then
+        error "MEMORY_DATA_PATH only supports relative paths for container deployment!"
+    else
+        RUNTIME_VARS["MEMORY_DATA_PATH"]="/app/${RUNTIME_VARS["MEMORY_DATA_PATH"]}"
+    fi
 
-    for module in "${!CONTAINER_KEYS[@]}"; do
-        docker_names=()
-        docker_keys="${CONTAINER_KEYS[$module]}"
-        IFS=' ' read -r -a docker_key_arr <<< "$docker_keys"
-
-        for docker_key in "${docker_key_arr[@]}"; do
-            if [ -n "${DEPLOY_VARS[$docker_key]-}" ]; then
-                docker_names+=("${DEPLOY_VARS[$docker_key]}")
-            else
-                warning "Key ${docker_key} not found in DEPLOY_VARS (module: ${module})"
-            fi
-        done
-
-        CONTAINERS[$module]="${docker_names[*]}"
-    done
+    if [[ "${DEPLOY_VARS["HAS_JIUWEN"]}" == "true" ||
+          "${DEPLOY_VARS["HAS_DEEPSEARCH"]}" == "true" ]]; then
+        if [ -z "${RUNTIME_VARS["DB_HOST"]:-}" ]; then
+            error "Validation failed: DB_HOST is a mandatory configuration item that must be defined in .env.custom!"
+        fi
+    fi
 }
 
 # === env variable setup (ports, names, proxy, module config, nginx timeout) ===
-setup_env_vars() {
-    count_undefined_ports
-    alloc_available_ports
-    assign_ports
+process_env_vars() {
+    process_ports
     generate_final_names
     setup_no_proxy_vars
     configure_module_env
+    valid_env_vars
 
-    local nginx_read_timeout_ms=${RUNTIME_VARS["VITE_API_PROXY_TIMEOUT"]}
-    if ! [[ "${nginx_read_timeout_ms}" =~ ^[0-9]+$ ]]; then
-        error "Error: The value of VITE_API_PROXY_TIMEOUT [${nginx_read_timeout_ms}] is not a valid number (only non-negative integers are supported)!"
+    local tms=${RUNTIME_VARS["VITE_API_PROXY_TIMEOUT"]}
+    if ! [[ "${tms}" =~ ^[0-9]+$ ]]; then
+        error "Error: The value of VITE_API_PROXY_TIMEOUT [${tms}] is not a valid number (only non-negative integers are supported)!"
     fi
 
-    local nginx_read_timeout=$(( nginx_read_timeout_ms / 1000 ))
+    local nginx_read_timeout=$(( tms / 1000 ))
     DEPLOY_VARS["NGINX_READ_TIMEOUT"]=${nginx_read_timeout}
 }
 
 # =========  Detect if it start the container, set env vars if yes =========
 configure_module_env() {
-    local modules=("${ARGS_MODULES[@]}")
-    if [ ${#modules[@]} -eq 0 ]; then
-        modules=("${ALL_MODULES[@]}")
-    fi
-
-    local i=0
-    while [ $i -lt ${#modules[@]} ]; do
-        case "${modules[$i]}" in
-            MYSQL)
-                if [[ "${RUNTIME_VARS["DB_TYPE"]:-}" == "mysql" ]]; then
-                    if [ -z "${RUNTIME_VARS["DB_HOST"]:-}" ]; then
-                        RUNTIME_VARS["DB_HOST"]=${DEPLOY_VARS["MYSQL_SERVICE"]}
-                        DEPLOY_VARS["HAS_MYSQL_CONTAINER"]="true"
-                    fi
+    for module in "${ALL_MODULES[@]}"; do
+        if [ "${DEPLOY_VARS["HAS_${module}"]}" == "false" ]; then
+            continue
+        fi
+        case "${module}" in
+            UPGRADE)
+                if [ ${DEPLOY_VARS["HAS_UPGRADE"]}=="true" ]; then
+                    DEPLOY_VARS["IS_UP_UPGRADE_TOOL"]="true"
                 fi
+                ;;
+            MYSQL)
+                if [ "${RUNTIME_VARS["DB_TYPE"]:-}" != "mysql" ]; then
+                    DEPLOY_VARS["HAS_MYSQL"]="false"
+                    continue
+                fi
+                if [ -n "${RUNTIME_VARS["DB_HOST"]:-}" ]; then
+                    DEPLOY_VARS["HAS_MYSQL"]="false"
+                    continue
+                fi
+                DEPLOY_VARS["HAS_MYSQL"]="true"
+                DEPLOY_VARS["IS_UP_MYSQL"]="true"
+                RUNTIME_VARS["DB_HOST"]=${DEPLOY_VARS["MYSQL_SERVICE"]}
+                RUNTIME_VARS["DB_PORT"]="3306"
                 ;;
             MILVUS)
-                if [[ -z "${RUNTIME_VARS["MILVUS_HOST"]:-}" ]]; then
+                if [[ -n "${RUNTIME_VARS["MILVUS_HOST"]:-}" ||
+                     -n "${RUNTIME_VARS["MINIO_HOST"]:-}" ]]; then
+                    DEPLOY_VARS["HAS_MILVUS"]="false"
+                    continue
+                fi
+                DEPLOY_VARS["HAS_MILVUS"]="true"
+                local imt="${RUNTIME_VARS["INDEX_MANAGER_TYPE"]}"
+                if [ "${imt}" == "milvus" ]; then
+                    DEPLOY_VARS["IS_UP_ETCD"]="true"
+                    DEPLOY_VARS["IS_UP_MILVUS"]="true"
                     RUNTIME_VARS["MILVUS_HOST"]=${DEPLOY_VARS["MILVUS_SERVICE"]}
-                    DEPLOY_VARS["HAS_MILVUS_CONTAINER"]="true"
+                    RUNTIME_VARS["MILVUS_PORT"]="19530"
                 fi
-
-                if [[ -z "${RUNTIME_VARS["MINIO_HOST"]:-}" ]]; then
-                    RUNTIME_VARS["MINIO_HOST"]=${DEPLOY_VARS["MINIO_SERVICE"]}
-                fi
+                DEPLOY_VARS["IS_UP_MINIO"]="true"
+                RUNTIME_VARS["MINIO_HOST"]=${DEPLOY_VARS["MINIO_SERVICE"]}
                 ;;
             PLUGIN)
-                if [[ -z "${RUNTIME_VARS["VITE_PLUGIN_SERVICE_URL"]:-}" ]]; then
-                    local plugin_service=${DEPLOY_VARS["PLUGIN_SERVER_SERVICE"]}
-                    local plugin_port=${DEPLOY_VARS["PLUGIN_SERVER_PORT"]}
-                    RUNTIME_VARS["VITE_PLUGIN_SERVICE_URL"]="http://${plugin_service}:${plugin_port}"
-                    DEPLOY_VARS["HAS_PLUGIN_CONTAINER"]="true"
+                if [ -n "${RUNTIME_VARS["VITE_PLUGIN_SERVICE_URL"]:-}" ]; then
+                    DEPLOY_VARS["HAS_PLUGIN"]="false"
+                    continue
                 fi
+                local plugin_service=${DEPLOY_VARS["PLUGIN_SERVER_SERVICE"]}
+                local plugin_port=${DEPLOY_VARS["PLUGIN_SERVER_PORT"]}
+                DEPLOY_VARS["HAS_PLUGIN"]="true"
+                DEPLOY_VARS["IS_UP_PLUGIN_SERVER"]="true"
+                RUNTIME_VARS["VITE_PLUGIN_SERVICE_URL"]="http://${plugin_service}:${plugin_port}"
                 ;;
             SANDBOX)
-                if [[ -z "${RUNTIME_VARS["CODE_SANDBOX_URL"]:-}" ]]; then
-                    local gateway_service=${DEPLOY_VARS["SANDBOX_GATEWAY_SERVICE"]}
-                    local gateway_port=${DEPLOY_VARS["SANDBOX_GATEWAY_PORT"]}
-                    RUNTIME_VARS["CODE_SANDBOX_URL"]="http://${gateway_service}:${gateway_port}/run"
-                    DEPLOY_VARS["HAS_SANDBOX_CONTAINER"]="true"
+                if [ -n "${RUNTIME_VARS["CODE_SANDBOX_URL"]:-}" ]; then
+                    DEPLOY_VARS["HAS_SANDBOX"]="false"
+                    continue
+                fi
+
+                local gateway_service=${DEPLOY_VARS["SANDBOX_GATEWAY_SERVICE"]}
+                local gateway_port=${DEPLOY_VARS["SANDBOX_GATEWAY_PORT"]}
+                DEPLOY_VARS["HAS_SANDBOX"]="true"
+                DEPLOY_VARS["IS_UP_SANDBOX_GATEWAY"]="true"
+                RUNTIME_VARS["CODE_SANDBOX_URL"]="http://${gateway_service}:${gateway_port}/run"
+
+                local els="${DEPLOY_VARS["ENABLE_LINUX_SANDBOX"],,}"
+                if [ "${els}" == "false" ]; then
+                    DEPLOY_VARS["IS_UP_PYTHON_SERVER"]="true"
+                    DEPLOY_VARS["IS_UP_JS_SERVER"]="true"
                 fi
                 ;;
             JIUWEN)
-                if [[ -z "${RUNTIME_VARS["VITE_API_PROXY_TARGET"]:-}" ]]; then
-                    local backend_service=${DEPLOY_VARS["BACKEND_SERVICE"]}
-                    local backend_port=${RUNTIME_VARS["BACKEND_PORT"]}
-                    RUNTIME_VARS["VITE_API_PROXY_TARGET"]="http://${backend_service}:${backend_port}/"
+                if [ -n "${RUNTIME_VARS["VITE_API_PROXY_TARGET"]:-}" ]; then
+                    DEPLOY_VARS["HAS_JIUWEN"]="false"
+                    continue
                 fi
-                DEPLOY_VARS["HAS_JIUWEN_CONTAINER"]="true"
+                local backend_service=${DEPLOY_VARS["BACKEND_SERVICE"]}
+                local backend_port=${RUNTIME_VARS["BACKEND_PORT"]}
+                DEPLOY_VARS["HAS_JIUWEN"]="true"
+                DEPLOY_VARS["IS_UP_BACKEND"]="true"
+                DEPLOY_VARS["IS_UP_FRONTEND"]="true"
+                RUNTIME_VARS["VITE_API_PROXY_TARGET"]="http://${backend_service}:${backend_port}/"
                 ;;
+            DEEPSEARCH)
+                if [ -n "${RUNTIME_VARS["DEEPSEARCH_AGENT_HOST"]:-}" ]; then
+                    DEPLOY_VARS["HAS_DEEPSEARCH"]="false"
+                    continue
+                fi
+                DEPLOY_VARS["HAS_DEEPSEARCH"]="true"
+                DEPLOY_VARS["IS_UP_DEEPSEARCH"]="true"
+                RUNTIME_VARS["DEEPSEARCH_AGENT_HOST"]=${DEPLOY_VARS["DEEPSEARCH_SERVICE"]}
+                RUNTIME_VARS["DEEPSEARCH_AGENT_PORT"]="8000"
         esac
-        i=$((i + 1))
     done
 }

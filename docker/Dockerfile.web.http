@@ -1,0 +1,39 @@
+# Multi-stage build for production
+FROM node:20-alpine AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files first
+COPY frontend/package*.json ./
+COPY frontend/packages/ ./packages/
+
+# Copy source code
+COPY frontend .
+
+# replace VITE_ENABLE_NEW_AUTH with true (enable login page with password)
+RUN sed -i "s/VITE_ENABLE_NEW_AUTH: import.meta.env.VITE_ENABLE_NEW_AUTH === 'True'/VITE_ENABLE_NEW_AUTH: true/" src/config/environment.ts
+
+# Build the application
+RUN npm install && npm run build
+
+# Production stage
+FROM nginx:alpine
+
+# Copy built application
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Fix permissions for nginx user
+RUN chown -R nginx:nginx /usr/share/nginx/html
+
+# Copy main nginx.conf
+COPY frontend/nginx_http/nginx.conf /etc/nginx/nginx.conf
+
+# Copy server/upstream config
+COPY frontend/nginx_http/default.conf.template /etc/nginx/templates/default.conf.template
+
+# Expose port
+EXPOSE 3000
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

@@ -3,50 +3,82 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { useMemo, useEffect, useState, useCallback, forwardRef } from 'react'
+import { useMemo, useEffect, useState, useCallback, forwardRef, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { isPlainObject, last } from 'lodash-es'
 import { type ArrayType, ASTMatch, type BaseType, type BaseVariableField, useCurrentScope } from '@flowgram.ai/editor'
-import { type TreeNodeData } from '@douyinfe/semi-ui/lib/es/tree'
-import { Tree, Popover } from '@douyinfe/semi-ui'
+import { Popover } from '@douyinfe/semi-ui'
 
 import { IInputsValues } from '../../../'
 import { FlowValueUtils } from '../../../'
 import { useEditor, useEditorEvent } from '../../prompt-editor'
 
+// 扁平化的可选项
+interface FlatOption {
+  key: string
+  label: string
+  depth: number
+}
+
+// 树节点数据
+interface TreeNodeData {
+  key: string | number
+  label: ReactNode
+  value: string | number
+  children?: TreeNodeData[]
+}
+
 // EditorAPI interface from prompt-editor
 interface EditorAPI {
-  replaceText: (_options: { from: number; to: number; text: string }) => void
+  replaceText?: (_options: { from: number; to: number; text: string }) => void
   $view: {
-    state: {
-      doc: {
+    state?: {
+      doc?: {
         sliceString: (_from: number, _to: number) => string
+        toString?: () => string
       }
-      selection: {
-        main: {
+      selection?: {
+        main?: {
           head: number
         }
+        head?: number
       }
     }
+    dispatch?: (transaction: { changes: { from: number; to: number; insert: string }; selection: { anchor: number; head: number } }) => void
+    dom?: {
+      parentElement?: HTMLElement
+    }
+  }
+  getView?: () => {
+    coordsAtPos?: (pos: number) => { left: number; top: number; right: number; bottom: number } | null
+    dom?: { parentElement?: HTMLElement }
+    state?: {
+      doc?: {
+        sliceString: (_from: number, _to: number) => string
+      }
+    }
+    focus?: () => void
+    dispatch?: (transaction: { changes: { from: number; to: number; insert: string }; selection?: { anchor: number; head: number } }) => void
   }
 }
 
 // Simple Mention component
 interface MentionProps {
   triggerCharacters: string[]
-  onOpenChange: (e: { value: boolean; state: unknown }) => void
+  onOpenChange: (e: { value: boolean; state: EditorState }) => void
 }
 
 function Mention({ triggerCharacters, onOpenChange }: MentionProps) {
-  const editor = useEditor<EditorAPI>()
+  const editor = useEditor() as EditorAPI | undefined
 
   // 使用 React Context 的事件系统
   const handleEditorChange = useCallback(
-    (update: { docChanged: boolean; selectionSet?: boolean; state: unknown }) => {
+    (update: { docChanged: boolean; selectionSet?: boolean; state: EditorState }) => {
       // 检查文档变化或选择变化，都应该触发变量选择检查
       if (!update.docChanged && !update.selectionSet) return
 
       const view = editor?.$view
-      const state = update.state || view?.state
+      const state: EditorState = update.state || (view?.state as EditorState | undefined)
 
       if (!state || !state.selection) {
         return
@@ -91,22 +123,23 @@ function Mention({ triggerCharacters, onOpenChange }: MentionProps) {
 // Simple PositionMirror component
 interface PositionMirrorProps {
   position: number
+  onChange?: () => void
 }
 
-const PositionMirror = forwardRef<HTMLDivElement, PositionMirrorProps>(function PositionMirror({ position }, ref) {
-  const editor = useEditor<EditorAPI>()
+const PositionMirror = forwardRef<HTMLDivElement, PositionMirrorProps>(function PositionMirror({ position, onChange: _onChange }, ref) {
+  const editor = useEditor() as EditorAPI | undefined
   const [coords, setCoords] = useState({ left: 0, top: 0 })
 
   useEffect(() => {
     if (editor && position >= 0) {
-      const view = editor.getView()
+      const view = editor.getView?.()
       if (view) {
         try {
           // CodeMirror 6 standard API: get coordinates for cursor position
-          const rect = view.coordsAtPos(position)
+          const rect = view.coordsAtPos?.(position)
 
           if (rect) {
-            const editorElement = view.dom.parentElement
+            const editorElement = view.dom?.parentElement
             if (editorElement) {
               const editorRect = editorElement.getBoundingClientRect()
               const newCoords = {
@@ -130,6 +163,7 @@ const PositionMirror = forwardRef<HTMLDivElement, PositionMirrorProps>(function 
 interface EditorState {
   doc: {
     toString(): string
+    sliceString: (_from: number, _to: number) => string
   }
   selection: {
     main?: {
@@ -194,13 +228,11 @@ function getCurrentMentionReplaceRange(state: EditorState) {
     from = pos - 1
     to = pos + 1
     triggerLength = 1
-    console.log('检测到光标在{}中间，设置替换范围', { from, to, triggerLength })
   } else if (pos >= 2 && sliceMinus2 === '{}' && sliceCurrent !== '}') {
     // 新增支持：输入法输入{}后光标在}后面的情况
     from = pos - 2
     to = pos
     triggerLength = 2
-    console.log('检测到光标在{}后面，设置替换范围', { from, to, triggerLength })
   } else {
     return null
   }
@@ -210,20 +242,44 @@ function getCurrentMentionReplaceRange(state: EditorState) {
 
 type VariableField = BaseVariableField<{ icon?: string | JSX.Element; title?: string }>
 
-export function InputsPicker({ inputsValues, onSelect }: { inputsValues: IInputsValues; onSelect: (v: string) => void }) {
+interface InputsPickerProps {
+  inputsValues: IInputsValues
+  onSelect: (v: string) => void
+}
+
+// 将树结构扁平化为可选项列表
+function flattenTreeData(node: TreeNodeData, depth = 0): FlatOption[] {
+  const result: FlatOption[] = []
+  const key = node.key as string
+  const label = node.label as string
+
+  // 添加当前节点
+  result.push({ key, label, depth })
+
+  // 递归处理子节点
+  if (node.children && node.children.length > 0) {
+    for (const child of node.children) {
+      result.push(...flattenTreeData(child, depth + 1))
+    }
+  }
+
+  return result
+}
+
+export function InputsPicker({ inputsValues, onSelect }: InputsPickerProps) {
   const scope = useCurrentScope()
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   const getArrayDrilldown = (type: ArrayType, depth = 1): { type: BaseType; depth: number } => {
     if (ASTMatch.isArray(type.items)) {
       return getArrayDrilldown(type.items, depth + 1)
     }
-
     return { type: type.items, depth: depth }
   }
 
   const renderVariable = (variable: VariableField, keyPath: string[]): TreeNodeData => {
     const type = variable?.type
-
     let children: TreeNodeData[] | undefined
 
     if (ASTMatch.isObject(type)) {
@@ -234,7 +290,6 @@ export function InputsPicker({ inputsValues, onSelect }: { inputsValues: IInputs
 
     if (ASTMatch.isArray(type)) {
       const drilldown = getArrayDrilldown(type)
-
       if (ASTMatch.isObject(drilldown.type)) {
         children = (drilldown.type.properties || [])
           .map(_property => renderVariable(_property as VariableField, [...keyPath, ...new Array(drilldown.depth).fill('[0]'), _property.key]))
@@ -273,12 +328,13 @@ export function InputsPicker({ inputsValues, onSelect }: { inputsValues: IInputs
       return {
         key: currKey,
         value: currKey,
-        label: last(keyPath),
-        children: Object.entries(value)
+        label: (last(keyPath) ?? currKey) as ReactNode,
+        children: Object.entries(value as Record<string, unknown>)
           .map(([key, value]) => getTreeData(value, [...keyPath, key])!)
-          .filter(Boolean),
+          .filter(Boolean) as TreeNodeData[],
       }
     }
+    return undefined
   }
 
   const treeData: TreeNodeData[] = useMemo(
@@ -289,16 +345,70 @@ export function InputsPicker({ inputsValues, onSelect }: { inputsValues: IInputs
     [],
   )
 
-  return (
-    <Tree
-      treeData={treeData}
-      onSelect={(selectedKeys, _info) => {
-        const selectedKey = Array.isArray(selectedKeys) ? selectedKeys[0] : selectedKeys
-        if (selectedKey) {
-          onSelect(selectedKey.toString())
+  // 扁平化选项
+  const flatOptions: FlatOption[] = useMemo(() => treeData.flatMap(node => flattenTreeData(node)), [treeData])
+
+  // 重置选中索引当选项变化时
+  useEffect(() => {
+    setSelectedIndex(0)
+  }, [flatOptions])
+
+  // 滚动到选中项
+  useEffect(() => {
+    if (containerRef.current) {
+      const selectedElement = containerRef.current.children[selectedIndex] as HTMLElement
+      if (selectedElement) {
+        selectedElement.scrollIntoView({ block: 'nearest' })
+      }
+    }
+  }, [selectedIndex])
+
+  // 键盘事件处理
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setSelectedIndex(prev => (prev + 1) % flatOptions.length)
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setSelectedIndex(prev => (prev - 1 + flatOptions.length) % flatOptions.length)
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        if (flatOptions[selectedIndex]) {
+          onSelect(flatOptions[selectedIndex].key)
         }
-      }}
-    />
+      }
+    },
+    [flatOptions, selectedIndex, onSelect],
+  )
+
+  // 暴露键盘处理方法给父组件
+  useEffect(() => {
+    if (containerRef.current) {
+      const element = containerRef.current
+      element.focus()
+    }
+  }, [])
+
+  return (
+    <div ref={containerRef} tabIndex={0} style={{ width: '100%', outline: 'none' }} onKeyDown={handleKeyDown}>
+      {flatOptions.map((option, index) => (
+        <div
+          key={option.key}
+          onClick={() => onSelect(option.key)}
+          onMouseEnter={() => setSelectedIndex(index)}
+          style={{
+            padding: `8px ${8 + option.depth * 16}px`,
+            cursor: 'pointer',
+            backgroundColor: index === selectedIndex ? 'var(--semi-color-fill-0)' : 'transparent',
+            borderRadius: 4,
+            margin: '2px 0',
+          }}
+        >
+          {option.label}
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -309,27 +419,36 @@ export function InputsTree({ inputsValues, triggerCharacters = DEFAULT_TRIGGER_C
   const [visible, setVisible] = useState(false)
   const [position, setPosition] = useState(-1)
   const [savedRange, setSavedRange] = useState<{ from: number; to: number } | null>(null)
-  const editor = useEditor<EditorAPI>()
+  const editor = useEditor() as EditorAPI | undefined
+  const pickerRef = useRef<HTMLDivElement>(null)
 
   function insert(variablePath: string) {
-    if (!editor) {
-      return
-    }
-    // 使用保存的范围，因为变量选择时光标位置可能已经改变
-    if (!savedRange) {
+    if (!editor || !savedRange) {
       return
     }
 
     const { from, to } = savedRange
     const insertText = '{{' + variablePath + '}}'
 
-    editor.$view.dispatch({
+    // 先将焦点返回到编辑器
+    const view = editor.getView?.()
+    if (!view) {
+      return
+    }
+
+    view.focus?.()
+
+    // 直接使用 view.dispatch 执行插入操作
+    view.dispatch?.({
       changes: {
         from,
         to,
         insert: insertText,
       },
-      selection: { anchor: from + insertText.length, head: from + insertText.length },
+      selection: {
+        anchor: from + insertText.length,
+        head: from + insertText.length,
+      },
     })
 
     setVisible(false)
@@ -341,7 +460,6 @@ export function InputsTree({ inputsValues, triggerCharacters = DEFAULT_TRIGGER_C
       const selection = e.state.selection.main || e.state.selection
       if (selection && selection.head !== undefined) {
         setPosition(selection.head)
-        // Force position update by changing posKey
         setPosKey(String(Math.random()))
 
         if (e.value && editor) {
@@ -355,11 +473,31 @@ export function InputsTree({ inputsValues, triggerCharacters = DEFAULT_TRIGGER_C
     setVisible(e.value)
   }
 
+  // 弹窗打开时聚焦到选择器
   useEffect(() => {
-    if (!editor) {
-      return
+    if (visible && pickerRef.current) {
+      const timer = setTimeout(() => {
+        pickerRef.current?.focus()
+      }, 50)
+      return () => clearTimeout(timer)
     }
-  }, [editor, visible])
+  }, [visible])
+
+  // 全局键盘事件处理 - Escape 关闭弹窗
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setVisible(false)
+        setSavedRange(null)
+        const view = editor?.getView?.()
+        if (view?.focus) {
+          view.focus()
+        }
+      }
+    },
+    [editor],
+  )
 
   return (
     <>
@@ -373,17 +511,14 @@ export function InputsTree({ inputsValues, triggerCharacters = DEFAULT_TRIGGER_C
         clickToHide={false}
         content={
           <div
+            ref={pickerRef}
             style={{ width: 300, maxHeight: 300, overflowY: 'auto' }}
-            onClick={e => {
-              e.stopPropagation()
-            }}
+            onClick={e => e.stopPropagation()}
+            onMouseDown={e => e.stopPropagation()}
+            onKeyDown={handleKeyDown}
+            tabIndex={-1}
           >
-            <InputsPicker
-              inputsValues={inputsValues}
-              onSelect={v => {
-                insert(v)
-              }}
-            />
+            <InputsPicker inputsValues={inputsValues} onSelect={insert} />
           </div>
         }
       >

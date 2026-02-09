@@ -5,13 +5,18 @@
 import asyncio
 import json
 from typing import Any, Dict, AsyncGenerator, Optional
+from builtins import id as builtinid
 
 from fastapi import status
-from openjiuwen.core.common.exception.exception import JiuWenBaseException
+from openjiuwen_studio.core.common.exceptions import BaseError
 from openjiuwen.core.common.logging import logger
-from openjiuwen.core.workflow.base import Workflow as InvokableWorkflow
-from openjiuwen.core.tracer.span import TraceWorkflowSpan
-from openjiuwen.core.stream.writer import TraceSchema
+from openjiuwen.core.workflow.workflow import Workflow as InvokableWorkflow
+from openjiuwen.core.session.tracer.span import TraceWorkflowSpan
+from openjiuwen.core.session.stream import TraceSchema
+from openjiuwen.core.session.workflow import Session, create_workflow_session
+from openjiuwen.core.session.internal.workflow import WorkflowSession
+from openjiuwen.core.runner import Runner
+from openjiuwen.core.context_engine import ModelContext, ContextEngine, ContextEngineConfig
 
 import openjiuwen_studio.core.manager.workflow as mgr
 from openjiuwen_studio.core.executor.workflow.context import Context
@@ -147,24 +152,24 @@ async def _fetch_workflow_dl(
         if isinstance(res.data, dict) and "error_code" in res.data:
             if "component_id" in res.data and "component_type" in res.data:
                 raise JiuWenComponentException(
-                    error_code=res.data.get("error_code"),
+                    code=res.data.get("error_code"),
                     message=str(res.message),
                     component_id=res.data.get("component_id"),
                     component_type=res.data.get("component_type"),
                     error_stage=res.data.get("error_stage") or "convert",
                 )
-            raise JiuWenBaseException(
-                error_code=res.data.get("error_code"),
+            raise BaseError(
+                code=res.data.get("error_code"),
                 message=str(res.message),
             )
-        raise JiuWenBaseException(
-            error_code=StatusCode.WORKFLOW_DL_FETCH_FAILED.code,
+        raise BaseError(
+            code=StatusCode.WORKFLOW_DL_FETCH_FAILED.code,
             message=StatusCode.WORKFLOW_DL_FETCH_FAILED.errmsg.format(msg=str(res.message)),
         )
     workflow_dl = res.data
     if workflow_dl is None:
-        raise JiuWenBaseException(
-            error_code=StatusCode.WORKFLOW_DL_FETCH_FAILED.code,
+        raise BaseError(
+            code=StatusCode.WORKFLOW_DL_FETCH_FAILED.code,
             message=StatusCode.WORKFLOW_DL_FETCH_FAILED.errmsg.format(msg=str("fetch workflow failed"))
         )
     logger.info(f"fetch workflow dl: {workflow_dl.model_dump_json()}")
@@ -228,7 +233,7 @@ class WorkflowRunner(IWorkflowLoader):
             cancel_success = await workflow_execution_manager.cancel_execution(conversation_id)
             if not cancel_success:
                 raise JiuWenExecuteException(
-                    error_code=StatusCode.WORKFLOW_EXECUTION_CONFLICT_ERROR.code,
+                    code=StatusCode.WORKFLOW_EXECUTION_CONFLICT_ERROR.code,
                     message=StatusCode.WORKFLOW_EXECUTION_CONFLICT_ERROR.errmsg.format(msg=conversation_id),
                     workflow_id=id,
                 )
@@ -256,24 +261,29 @@ class WorkflowRunner(IWorkflowLoader):
             logger.error(f"Failed to generate component_name_map: {e}", exc_info=True)
 
         try:
+            # 编译工作流
             flow = await self.get_compiled_workflow(Context(), id, version, space_id, current_user)
+            # 创建 Session 用于 workflow 执行, session_id确保唯一性
+            session = create_workflow_session(session_id=conversation_id)
 
-            from openjiuwen.core.runtime.workflow import WorkflowRuntime
-
-            # session_id，确保唯一性
-            runtime = WorkflowRuntime(session_id=conversation_id)
             task = asyncio.current_task()
+            logger.info(f"Workflow task_id: {builtinid(task)}")
             # 注册执行任务
             registration = WorkflowExecutionRegistration(
                 conversation_id=conversation_id,
                 workflow_id=id,
                 workflow_version=version,
                 space_id=space_id,
-                runtime=runtime,
+                session=session,
                 task=task
             )
             workflow_execution_manager.register_execution(registration)
-            async for chunk in flow.stream(inputs=inputs, runtime=runtime):
+            # 使用 Runner.run_workflow_streaming() 执行工作流
+            async for chunk in Runner.run_workflow_streaming(
+                    workflow=flow,  # 传入已编译的 Workflow 实例
+                    inputs=inputs,
+                    session=session,
+            ):
                 # 检查任务是否被取消
                 if task and task.cancelled():
                     logger.warning(f"Workflow execution has been cancelled: conversation_id={conversation_id}")
@@ -310,18 +320,21 @@ class WorkflowRunner(IWorkflowLoader):
             #     trace_summary_repository.create_trace_summary_by_trace_id(trace_id)
         except asyncio.CancelledError:
             logger.warning(f"Workflow execution cancelled: conversation_id={conversation_id}")
+            # task.cancel()
+            # logger.warning(f"Workflow execution cancelled 1 : task.cancelled() {task.cancelled()} "
+            #                f"taskid {builtinid(task)}")
             pass
         except JiuWenExecuteException as e:
-            await handle_stream_error(trace_logs, [], last_chunk, e.error_code, e.message, flow_index)
+            await handle_stream_error(trace_logs, [], last_chunk, e.code, e.message, flow_index)
             # if trace_id is not None:
             #     trace_summary_repository.create_trace_summary_by_trace_id(trace_id)
             e.set_workflow_id(id)
             raise e
-        except (JiuWenBaseException, JiuWenGraphException) as e:
-            await handle_stream_error(trace_logs, [], last_chunk, e.error_code, e.message, flow_index)
+        except (BaseError, JiuWenGraphException) as e:
+            await handle_stream_error(trace_logs, [], last_chunk, e.code, e.message, flow_index)
             # if trace_id is not None:
             #     trace_summary_repository.create_trace_summary_by_trace_id(trace_id)
-            raise JiuWenExecuteException(e.error_code, e.message, workflow_id=id) from e
+            raise JiuWenExecuteException(e.code, e.message, workflow_id=id) from e
         except Exception as e:
             await handle_stream_error(trace_logs, [], last_chunk, -1, str(e), flow_index)
             # if trace_id is not None:

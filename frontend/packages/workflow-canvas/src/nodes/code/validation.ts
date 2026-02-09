@@ -4,6 +4,7 @@
  */
 
 import { commonValidators, createInputParametersValidator } from '../../utils/validation'
+import { t } from '../../i18n'
 
 /**
  * Code 节点的完整校验配置
@@ -17,8 +18,8 @@ export const validation = {
     const validator = createInputParametersValidator({
       requiredParams: required,
       errorMessages: {
-        required: '是必需的',
-        unknownVariable: '引用的变量不存在',
+        required: t('workflowCanvas.validation.fieldRequired'),
+        unknownVariable: t('workflowCanvas.validation.variableReferencedNotFound'),
       },
     })
 

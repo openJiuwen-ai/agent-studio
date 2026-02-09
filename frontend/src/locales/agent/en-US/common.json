@@ -36,6 +36,16 @@
     },
     "messages": {
       "exportSuccess": "Agent exported successfully",
+      "exportFailed": "Export failed",
+      "exportError": "Export error",
+      "importSuccess": "Agent imported successfully",
+      "importOverwriteSuccess": "Agent overwritten successfully",
+      "importFailed": "Import failed",
+      "importError": "Import error",
+      "importWarning": "Warning",
+      "configNotFoundInZip": "Configuration file not found in ZIP",
+      "invalidImportFormat": "Invalid import file format",
+      "fileParseError": "File parse error",
       "invalidFile": "Please select a valid JSON or ZIP file"
     }
   },

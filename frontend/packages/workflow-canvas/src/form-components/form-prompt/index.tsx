@@ -270,9 +270,12 @@ export function FormPrompt({
                                 }}
                                 itemType="workflow"
                                 itemName={nodeTitle}
-                                title="解除关联"
-                                message={`确认解除提示词"${promptHook.currentRelation?.promptName || ''}-${promptHook.selectedVersion || promptHook.currentRelation?.promptVersion || ''}"与工作流节点的关联？此操作无法撤销。`}
-                                confirmButtonText="确认"
+                                title={t('workflowCanvas.formPrompt.unlink')}
+                                message={t('workflowCanvas.formPrompt.unlinkConfirm', {
+                                  promptName: promptHook.currentRelation?.promptName || '',
+                                  version: promptHook.selectedVersion || promptHook.currentRelation?.promptVersion || ''
+                                })}
+                                confirmButtonText={t('workflowCanvas.formPrompt.confirm')}
                               />
 
                               {/* 消息提示 */}

@@ -19,6 +19,7 @@ import {
 } from '@/components/Agent/helper/promptHelpers'
 import UnifiedSnackbar, { SnackbarMessage } from '@/Common/UnifiedSnackbar'
 import { useWorkflowCanvasData } from './use-workflow-data'
+import { t } from '../i18n'
 
 export interface UseWorkflowNodePromptOptions {
   nodeId: string
@@ -35,35 +36,26 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
   const [searchParams] = useSearchParams()
   const spaceId = searchParams.get('spaceId') || user?.spaceId || getDefaultSpaceId() || ENV_CONFIG.DEFAULT_SPACE_ID
 
-  // 获取工作流数据以获取工作流名称
   const { canvasData, isLoading: canvasDataLoading } = useWorkflowCanvasData(workflowId, spaceId)
   const workflowName = useMemo(() => {
-    // 如果数据还在加载中，返回空字符串（不立即回退到 workflowId）
     if (canvasDataLoading) {
       return ''
     }
-    // 如果 canvasData 不存在，可能是 spaceId 为空或数据加载失败
     if (!canvasData) {
-      // 如果 spaceId 为空，useWorkflowCanvasData 会返回 null，此时无法获取名称
       return ''
     }
-    // 优先使用 name 字段（根据 WorkflowCanvasResponse 类型定义，name 字段应该存在）
     const name = canvasData.name
     if (name && typeof name === 'string' && name.trim()) {
       return name.trim()
     }
-    // 如果没有 name，尝试其他可能的字段
     return canvasData.workflow_name || canvasData.display_name || ''
   }, [canvasData, canvasDataLoading])
 
-  // 关联提示词弹窗开关
   const [associateDialogOpen, setAssociateDialogOpen] = useState(false)
   const handleOpenAssociateDialog = () => setAssociateDialogOpen(true)
   const handleCloseAssociateDialog = () => setAssociateDialogOpen(false)
 
-  // 当前关联的提示词与版本信息
   const [currentRelation, setCurrentRelation] = useState<{ promptId: string; promptVersion: string; promptName: string } | null>(null)
-  // 版本下拉相关状态
   const [versionLoading, setVersionLoading] = useState(false)
   const [versionOptions, setVersionOptions] = useState<{ id: string; version: string }[]>([])
   const [selectedVersion, setSelectedVersion] = useState<string>('')
@@ -74,7 +66,6 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
     return versionOptions.map(v => v.version).reduce((acc, cur) => (compareVersions(acc, cur) >= 0 ? acc : cur))
   }, [versionOptions])
 
-  // 保存提示词相关状态
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [overrideDraftDialogOpen, setOverrideDraftDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -97,23 +88,15 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
 
   const userId = useMemo(() => user?.id || ENV_CONFIG.DEFAULT_USER_ID, [user])
 
-  // 工作流节点信息 - id 格式为: 工作流id&节点id
-  // 注意：优先使用 workflowName，只有在数据已加载完成且确实没有名称时才回退
   const nodeInfoMemo = useMemo(() => {
     let finalName = workflowName
 
-    // 如果 workflowName 为空
     if (!finalName) {
-      // 如果数据还在加载中，暂时使用 workflowId（会在数据加载完成后更新）
       if (canvasDataLoading) {
         finalName = workflowId || nodeId
-      }
-      // 如果数据已加载完成但 canvasData 为 null（可能是 spaceId 问题）
-      else if (!canvasData) {
+      } else if (!canvasData) {
         finalName = workflowId || nodeId
-      }
-      // 如果数据已加载完成且有 canvasData，但 name 字段为空（数据问题）
-      else {
+      } else {
         finalName = workflowId || nodeId
       }
     }
@@ -126,7 +109,6 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
     }
   }, [workflowId, nodeId, workflowName, canvasDataLoading, canvasData])
 
-  // 调试：打印 canvasData 信息（开发环境）- 必须在 nodeInfoMemo 定义之后
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
       console.log('[useWorkflowNodePrompt] Debug info:', {
@@ -195,9 +177,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
       if (text) {
         onSystemPromptChange(text)
       }
-    } catch (e) {
-      // 获取失败不阻断
-    }
+    } catch (e) {}
   }
 
   useEffect(() => {
@@ -219,9 +199,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
     try {
       await RelatedMemberService.deletePromptRelation(spaceId, nodeInfoMemo)
       setCurrentRelation(null)
-    } catch (e) {
-      // 解关联失败不阻断
-    }
+    } catch (e) {}
   }
 
   const handleVersionSelectChange = async (nextVersion: string) => {
@@ -232,9 +210,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
       await RelatedMemberService.registerPromptRelation(spaceId, promptInfo, nodeInfoMemo)
       setCurrentRelation(prev => (prev ? { ...prev, promptVersion: nextVersion } : prev))
       await loadPromptContentByVersion(currentRelation.promptId, nextVersion)
-    } catch (e) {
-      // 更新失败不阻断主流程
-    }
+    } catch (e) {}
   }
 
   const handleRelationUpdated = (info: { promptId: string; promptName: string; promptVersion: string; promptContent: string }) => {
@@ -260,7 +236,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
     if (readonly) return
     const content = (systemPrompt || '').trim()
     if (!content) {
-      setSnackbar({ open: true, severity: 'error', message: '系统提示词为空，无法生成。' })
+      setSnackbar({ open: true, severity: 'error', message: t('workflowCanvas.nodePrompt.systemPromptEmpty') })
       return
     }
 
@@ -295,7 +271,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
           setDisplayOverride(quickOptimizeStreamingRef.current)
         },
         (error: string) => {
-          setSnackbar({ open: true, severity: 'error', message: `提示词生成失败: ${error}` })
+          setSnackbar({ open: true, severity: 'error', message: t('workflowCanvas.nodePrompt.generateFailed', { error }) })
           setIsGenerating(false)
           setDisplayOverride(null)
           quickOptimizeAbortRef.current = null
@@ -303,14 +279,14 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
         () => {
           setIsGenerating(false)
           setCandidatePrompt(quickOptimizeStreamingRef.current)
-          setSnackbar({ open: true, severity: 'success', message: '系统提示词自动生成完成，可选择采纳。' })
+          setSnackbar({ open: true, severity: 'success', message: t('workflowCanvas.nodePrompt.generateCompleted') })
           setDisplayOverride(quickOptimizeStreamingRef.current)
           quickOptimizeAbortRef.current = null
         },
         quickOptimizeAbortRef.current,
       )
     } catch (e: any) {
-      const msg = typeof e?.message === 'string' ? e.message : '提示词生成请求失败'
+      const msg = typeof e?.message === 'string' ? e.message : t('workflowCanvas.nodePrompt.requestFailed')
       setSnackbar({ open: true, severity: 'error', message: msg })
       setIsGenerating(false)
       setDisplayOverride(null)
@@ -322,14 +298,14 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
     if (readonly) return
     const text = candidatePrompt || quickOptimizeStreamingRef.current || ''
     if (!text.trim()) {
-      setSnackbar({ open: true, severity: 'error', message: '无可采纳内容。' })
+      setSnackbar({ open: true, severity: 'error', message: t('workflowCanvas.nodePrompt.noContentToAdopt') })
       return
     }
     onSystemPromptChange(text)
     setCandidatePrompt('')
     quickOptimizeStreamingRef.current = ''
     setDisplayOverride(null)
-    setSnackbar({ open: true, severity: 'success', message: '已采纳自动生成的提示词。' })
+    setSnackbar({ open: true, severity: 'success', message: t('workflowCanvas.nodePrompt.adoptedGenerated') })
   }
 
   const handleCancelCandidate = () => {
@@ -339,13 +315,13 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
     setCandidatePrompt('')
     quickOptimizeStreamingRef.current = ''
     setDisplayOverride(null)
-    setSnackbar({ open: true, severity: 'success', message: '已取消自动生成结果，恢复原提示词。' })
+    setSnackbar({ open: true, severity: 'success', message: t('workflowCanvas.nodePrompt.canceled') })
   }
 
   const handleOpenSaveDialog = async () => {
     const content = (systemPrompt || '').trim()
     if (!content) {
-      setSnackbar({ open: true, severity: 'error', message: '系统提示词为空，无法保存。' })
+      setSnackbar({ open: true, severity: 'error', message: t('workflowCanvas.nodePrompt.systemPromptEmpty') })
       return
     }
 
@@ -374,7 +350,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
         })
       } else {
         const defaultKey = nodeId ? `workflow_${nodeId}_${Date.now()}` : `workflow_${Date.now()}`
-        const defaultName = nodeName || '未命名提示词'
+        const defaultName = nodeName || t('workflowCanvas.nodePrompt.unnamedPrompt')
         setExistingPromptInfo(null)
         setSaveForm({
           promptKey: defaultKey,
@@ -396,7 +372,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
         })
         setSaveDialogOpen(true)
       } else {
-        setSnackbar({ open: true, severity: 'error', message: '预填提示词信息失败，请稍后重试。' })
+        setSnackbar({ open: true, severity: 'error', message: t('workflowCanvas.nodePrompt.loadFailed') })
       }
     }
   }
@@ -404,7 +380,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
   const handleConfirmSave = async () => {
     const { promptKey, promptName, promptVersion, promptDesc } = saveForm
     if (!promptKey.trim() || !promptName.trim() || !promptVersion.trim()) {
-      setSnackbar({ open: true, severity: 'error', message: '请填写提示词Key、名称与版本。' })
+      setSnackbar({ open: true, severity: 'error', message: t('workflowCanvas.nodePrompt.requiredFields') })
       return
     }
     setSaving(true)
@@ -420,7 +396,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
           workspace_id: spaceId,
         })
         if (createResp.code !== 0 || !createResp.prompt_id) {
-          throw new Error('创建提示词失败')
+          throw new Error(t('workflowCanvas.nodePrompt.createFailed'))
         }
         targetPromptId = String(createResp.prompt_id)
       }
@@ -439,7 +415,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
           model: '1',
           temperature: 0.7,
           maxTokens: 2048,
-          top_p: 0.7,
+          topP: 0.7,
         },
         selectedModel: null,
         templateEngine: 'normal',
@@ -455,14 +431,16 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
         setSnackbar({
           open: true,
           severity: 'error',
-          message: `提交版本需为 x.x.x，并且大于已存在版本${existingPromptInfo?.latestVersion ? `（当前：${existingPromptInfo.latestVersion}）` : ''}`,
+          message: t('workflowCanvas.nodePrompt.versionFormatError', {
+            current: existingPromptInfo?.latestVersion ? t('workflowCanvas.nodePrompt.currentVersion', { version: existingPromptInfo.latestVersion }) : '',
+          }),
         })
         setSaving(false)
         return
       }
       await PromptService.commitVersion(targetPromptId, userId, {
         commit_version: promptVersion,
-        commit_description: promptDesc || `工作流节点 ${nodeName || nodeId} 保存的版本`,
+        commit_description: promptDesc || t('workflowCanvas.nodePrompt.commitDescription', { nodeName: nodeName || nodeId }),
       })
 
       const promptInfo: RelatedMemberInfo = {
@@ -478,10 +456,10 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
       await loadVersionListForCurrentRelation()
       await loadPromptContentByVersion(targetPromptId, promptVersion)
 
-      setSnackbar({ open: true, severity: 'success', message: '提示词已保存并提交版本。' })
+      setSnackbar({ open: true, severity: 'success', message: t('workflowCanvas.nodePrompt.saved') })
       setSaveDialogOpen(false)
     } catch (e: any) {
-      const msg = typeof e?.message === 'string' ? e.message : '保存提示词失败，请稍后重试。'
+      const msg = typeof e?.message === 'string' ? e.message : t('workflowCanvas.nodePrompt.saveFailed')
       setSnackbar({ open: true, severity: 'error', message: msg })
     } finally {
       setSaving(false)
@@ -492,7 +470,6 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
   const isLockedForCandidate = useMemo(() => isGenerating || !!candidatePrompt, [isGenerating, candidatePrompt])
 
   return {
-    // 状态
     isGenerating,
     candidatePrompt,
     saving,
@@ -511,7 +488,6 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
     saveForm,
     existingPromptInfo,
     snackbar,
-    // 方法
     handleOpenAssociateDialog,
     handleCloseAssociateDialog,
     handleReplacePromptText,

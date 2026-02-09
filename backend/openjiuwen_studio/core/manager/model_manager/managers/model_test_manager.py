@@ -1,10 +1,11 @@
+import os
 import time
 from datetime import datetime, timezone
 from typing import Optional
 
-from openjiuwen.core.common.exception.exception import JiuWenBaseException
+from openjiuwen_studio.core.common.exceptions import BaseError
 from openjiuwen.core.common.logging import logger
-from openjiuwen.core.utils.llm.model_utils.model_factory import ModelFactory
+from openjiuwen.core.foundation.llm import Model, ModelClientConfig, ModelRequestConfig
 from sqlalchemy.orm import Session
 
 from openjiuwen_studio.core.manager.repositories import ModelConfigRepository, ModelUsageRepository
@@ -16,6 +17,7 @@ from openjiuwen_studio.core.exceptions import (
     ValidationError, ModelApiKeyDecryptError
 )
 from openjiuwen_studio.core.common.status_code import StatusCode
+from openjiuwen_studio.core.utils.compatible_field import compatible_provider
 
 
 class ModelTester:
@@ -34,7 +36,6 @@ class ModelTester:
         self.model_repo = ModelConfigRepository(db)
         self.usage_repo = ModelUsageRepository(db)
         self.security_utils = SecurityUtils()
-        self.model_factory = ModelFactory()
 
     async def test_model_config(
             self,
@@ -82,12 +83,13 @@ class ModelTester:
 
             # Execute model inference using ModelFactory
             try:
-                factory_model = self.model_factory.get_model(
-                    model_provider=model.provider,
+                model_client_config = ModelClientConfig(
+                    client_provider=compatible_provider(model.provider),
                     api_key=api_key,
                     api_base=model.base_url,
                     max_retries=3,
-                    timeout=model.timeout or 60
+                    timeout=model.timeout or 60,
+                    verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
                 )
 
                 # 从模型配置中获取默认参数
@@ -117,13 +119,19 @@ class ModelTester:
 
                 logger.info(f"Model test params: temperature={temperature}, top_p={top_p}, max_tokens={max_tokens}")
 
-                ai_message = await factory_model.ainvoke(
-                    model_name=model.model_type,
-                    messages=messages,
-                    temperature=temperature,
+                model_config = ModelRequestConfig(
+                    model=model.model_type,
                     top_p=top_p,
-                    max_tokens=max_tokens
+                    temperature=temperature,
+                    max_tokens=max_tokens,
                 )
+
+                model_inference = Model(
+                    model_client_config=model_client_config,
+                    model_config=model_config
+                )
+
+                ai_message = await model_inference.invoke(messages)
 
                 inference_result = {
                     'response': str(ai_message.content),
@@ -199,8 +207,8 @@ class ModelTester:
 
                 logger.error(f"Model inference failed: {model.name} (ID: {model_id}), error: {error_message}")
 
-                raise JiuWenBaseException(
-                    error_code=StatusCode.AGENT_TEST_FAILED.code,
+                raise BaseError(
+                    code=StatusCode.AGENT_TEST_FAILED.code,
                     message=StatusCode.AGENT_TEST_FAILED.errmsg.format(msg=user_error_msg)
                 ) from inference_error
 
@@ -211,15 +219,17 @@ class ModelTester:
             raise ModelTestError(f"Model test exception: {str(e)}") from e
 
     def _map_inference_error_to_user_msg(self, error_message: str) -> str:
+        """Return English messages so frontend can localize via i18n."""
         msg = error_message.lower()
 
         if "401" in msg or "unauthorized" in msg or "'bad request" in msg:
-            return "API Key 或模型 ID 无效，请检查模型配置"
+            return "API Key or model ID is invalid, please check model configuration"
 
         if "resolving ip address failed" in msg or "dns" in msg:
-            return "模型服务地址不可达，请检查模型基础服务地址或网络配置"
+            return "Model service address is unreachable, please check " \
+                   "model base service address or network configuration"
 
-        return "模型调用失败，请检查模型相关配置"
+        return "Model invocation failed, please check model related configuration"
 
     def _log_test_result(
             self,

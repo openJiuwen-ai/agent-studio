@@ -4,6 +4,7 @@
  */
 
 import { customNanoid } from '../../../utils/nanoid-custom'
+import { t } from '../../../i18n'
 
 export interface ConditionValue {
   left?: { type: 'ref'; content: string[] }
@@ -68,12 +69,12 @@ export const determineBranchType = (branch: BranchValue, index: number, branches
 export const getBranchTitle = (type: BranchType): string => {
   switch (type) {
     case 'if':
-      return '如果'
+      return t('workflowCanvas.nodes.condition.branchType.if')
     case 'elseIf':
-      return '否则如果'
+      return t('workflowCanvas.nodes.condition.branchType.elseIf')
     case 'else':
-      return '否则'
+      return t('workflowCanvas.nodes.condition.branchType.else')
     default:
-      return '如果'
+      return t('workflowCanvas.nodes.condition.branchType.if')
   }
 }

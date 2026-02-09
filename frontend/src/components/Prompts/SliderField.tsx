@@ -60,19 +60,21 @@ export const SliderField: React.FC<SliderFieldProps> = ({
       <div 
         className="flex items-center flex-shrink-0"
         style={{ 
-          width: 'clamp(2rem, 20vw, 6.9rem)',
+          width: 'clamp(1rem, 22vw, 10.5rem)',
           gap: 0,
         }}
       >
-        <Typography 
-          variant="subtitle2" 
-          className="text-gray-700 truncate"
-          sx={{
-            fontSize: 'clamp(0.7rem, 1.5vw, 0.8rem)',
-          }}
-        >
-          {label}
-        </Typography>
+        <Tooltip title={label} arrow>
+          <Typography 
+            variant="subtitle2" 
+            className="text-gray-700 truncate"
+            sx={{
+              fontSize: 'clamp(0.4rem, 1vw, 0.7rem)',
+            }}
+          >
+            {label}
+          </Typography>
+        </Tooltip>
         <Tooltip title={tooltip}>
           <IconButton 
             size="small" 

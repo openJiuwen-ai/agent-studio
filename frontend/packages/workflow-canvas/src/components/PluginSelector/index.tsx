@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Typography, Button, IconButton, CircularProgress, MenuItem, Select, SelectChangeEvent, Chip } from '@mui/material'
-import { X } from 'lucide-react'
+import { X, Search } from 'lucide-react'
 import { PluginService, PluginInfo, PluginApiInfo, PluginApiMethod } from '@test-agentstudio/api-client'
 import { getDefaultSpaceId } from '../../../../../src/utils/spaceUtils'
 import { dragStateManager } from '../../utils/drag-state-manager'
@@ -29,6 +29,11 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
   const [pluginList, setPluginList] = useState<PluginInfo[]>([])
   const [pluginLoading, setPluginLoading] = useState(false)
 
+  // 搜索相关状态
+  const [searchTerm, setSearchTerm] = useState<string>('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>('')
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+
   // 版本相关状态
   const [pluginVersions, setPluginVersions] = useState<Map<string, PluginVersion[]>>(new Map())
   const [selectedVersions, setSelectedVersions] = useState<Map<string, string>>(new Map())
@@ -38,6 +43,37 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
   const [pluginTools, setPluginTools] = useState<Map<string, PluginApiInfo[]>>(new Map())
   const [loadingTools, setLoadingTools] = useState<Set<string>>(new Set())
   const [selectedTools, setSelectedTools] = useState<Map<string, Set<string>>>(new Map()) // pluginId -> toolIds
+
+  // 防抖处理搜索词
+  useEffect(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 300) // 300ms防抖延迟
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+    }
+  }, [searchTerm])
+
+  // 根据搜索词过滤插件列表
+  const filteredPluginList = useMemo(() => {
+    if (!debouncedSearchTerm.trim()) {
+      return pluginList
+    }
+    const searchLower = debouncedSearchTerm.toLowerCase().trim()
+    return pluginList.filter(plugin => {
+      const name = (plugin.name || '').toLowerCase()
+      const desc = (plugin.desc || '').toLowerCase()
+      const pluginId = plugin.plugin_id.toLowerCase()
+      return name.includes(searchLower) || desc.includes(searchLower) || pluginId.includes(searchLower)
+    })
+  }, [pluginList, debouncedSearchTerm])
 
   // 通知拖拽状态管理器模态框状态变化
   useEffect(() => {
@@ -57,12 +93,17 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
   useEffect(() => {
     if (open) {
       loadPlugins()
+      setSearchTerm('') // 打开时清空搜索词
+      setDebouncedSearchTerm('')
     }
 
     return () => {
       // Cleanup: Clear any pending timeouts or intervals
       setLoadingVersions(new Set())
       setLoadingTools(new Set())
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
     }
   }, [open])
 
@@ -390,6 +431,28 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
           </IconButton>
         </div>
 
+        {/* 搜索框 */}
+        <div className="mb-4">
+          <div className="relative group">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-200" />
+            <input
+              type="text"
+              placeholder={t('workflowCanvas.pluginSelector.searchPlaceholder')}
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-300 transition-all duration-200 bg-gray-50 focus:bg-white"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
         {pluginLoading ? (
           <div className="flex items-center justify-center flex-1">
             <CircularProgress />
@@ -397,11 +460,15 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
         ) : (
           <>
             <div className="flex-1 overflow-y-auto mb-4">
-              {pluginList.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">{t('workflowCanvas.pluginSelector.noAvailablePlugins')}</div>
+              {filteredPluginList.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">
+                  {debouncedSearchTerm.trim()
+                    ? t('workflowCanvas.pluginSelector.noSearchResults')
+                    : t('workflowCanvas.pluginSelector.noAvailablePlugins')}
+                </div>
               ) : (
                 <div className="space-y-2">
-                  {pluginList.map(plugin => {
+                  {filteredPluginList.map(plugin => {
                     return (
                       <div key={plugin.plugin_id} className="border rounded-lg border-gray-200">
                         <div className="p-3">
@@ -532,8 +599,8 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                                       <Chip
                                                         label={
                                                           tool.available === true
-                                                            ? t('plugins.pluginConfig.enabled', '启用')
-                                                            : t('plugins.pluginConfig.disabled', '禁用')
+                                                            ? t('plugins.actions.enable', '启用')
+                                                            : t('plugins.actions.disable', '禁用')
                                                         }
                                                         size="small"
                                                         color={tool.available === true ? 'success' : 'default'}

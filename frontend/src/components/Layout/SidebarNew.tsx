@@ -1,7 +1,7 @@
 import React, { useRef, useMemo, useCallback } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { X, Database, ShoppingBag } from 'lucide-react'
+import { X, Database, ShoppingBag, Brain, Layers } from 'lucide-react'
 import { Tooltip } from '@mui/material'
 import AgentIcon from '@/assets/icons/agent.svg?react'
 import WorkflowIcon from '@/assets/icons/workflow.svg?react'
@@ -49,6 +49,7 @@ const SidebarNew: React.FC<SidebarProps> = ({
       {
         title: 'layout.navigation.section.appDevelopment',
         items: [
+          { name: t('layout.navigation.apps'), href: `${basePath}/apps`, icon: Layers },
           { name: t('layout.navigation.agents'), href: `${basePath}/agents`, icon: AgentIcon },
           { name: t('layout.navigation.workflows'), href: `${basePath}/workflows`, icon: WorkflowIcon },
         ],
@@ -72,6 +73,7 @@ const SidebarNew: React.FC<SidebarProps> = ({
         items: [
           { name: t('layout.navigation.models'), href: `${basePath}/models`, icon: ModelIcon },
           { name: t('layout.navigation.knowledgeBases'), href: `${basePath}/knowledge-bases`, icon: Database },
+          { name: t('layout.navigation.memoryBase'), href: `${basePath}/memory-bases`, icon: Brain },
         ],
       },
     ],
@@ -157,7 +159,7 @@ const SidebarNew: React.FC<SidebarProps> = ({
               )}
 
               {/* Section items */}
-              <div className="space-y-0.5">
+              <div className="space-y-2">
                 {section.items.map(item => (
                   <Tooltip
                     key={item.name}
@@ -169,8 +171,8 @@ const SidebarNew: React.FC<SidebarProps> = ({
                     <NavLink
                       to={item.href}
                       className={`
-                        group flex items-center font-medium rounded-lg transition-colors duration-200 relative min-h-9 menu-item-hover
-                        ${isCollapsed ? 'justify-center px-2 py-1.5 mx-1' : 'px-2 py-2 mx-1'}
+                        group flex items-center font-medium rounded-lg transition-colors duration-200 relative h-7 menu-item-hover
+                        ${isCollapsed ? 'justify-center px-2 mx-1' : 'px-2 mx-1'}
                         ${isActive(item.href) ? 'menu-item-active' : 'menu-text'}
                       `}
                       onClick={handleNavItemClick}

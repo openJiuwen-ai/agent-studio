@@ -2,15 +2,16 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 from __future__ import annotations
-
+import os
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import List, Dict, Any, Literal, Optional
 
 from openai import OpenAI, AsyncOpenAI
-from openjiuwen.core.utils.llm.model_utils.model_factory import ModelFactory
+from openjiuwen.core.foundation.llm import Model, ModelClientConfig, ModelRequestConfig
 
 from openjiuwen_studio.ops.modules.llm.llm_config_service import LLMConfigService
+from openjiuwen_studio.core.utils.compatible_field import compatible_provider
 
 # 全局单例，方便后面拿配置
 _config_service: LLMConfigService | None = None
@@ -52,12 +53,18 @@ def get_llm_client(model_id: str, source: Literal["db", "config"] = "config"):
 
     cfg = _config_service.get_llm_model_info(model_id, source=source)
     protocol = cfg.get("protocol_config", "")
-    factory_model = ModelFactory().get_model(
-        model_provider=protocol.get("provider"),
+    model_client_config = ModelClientConfig(
+        client_provider=compatible_provider(protocol.get("provider")),
         api_key=protocol.get("api_key", ""),
-        api_base=protocol.get("base_url", "")
+        api_base=protocol.get("base_url", ""),
+        timeout=protocol.get("timeout", 60),
+        verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
     )
-    return factory_model
+    model = Model(
+        model_client_config=model_client_config,
+        model_config=ModelRequestConfig()
+    )
+    return model
 
 
 def get_llm_client_by_protocol(protocol: Dict[str, Any]):
@@ -65,12 +72,18 @@ def get_llm_client_by_protocol(protocol: Dict[str, Any]):
     if protocol is None:
         raise RuntimeError("LLM protocol config empty")
 
-    factory_model = ModelFactory().get_model(
-        model_provider=protocol.get("provider"),
+    model_client_config = ModelClientConfig(
+        client_provider=compatible_provider(protocol.get("provider")),
         api_key=protocol.get("api_key", ""),
-        api_base=protocol.get("base_url", "")
+        api_base=protocol.get("base_url", ""),
+        timeout=protocol.get("timeout", 60),
+        verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
     )
-    return factory_model
+    model = Model(
+        model_client_config=model_client_config,
+        model_config=ModelRequestConfig()
+    )
+    return model
 
 
 def get_async_openai_client(model_id: str, source: Literal["db", "config"] = "config") -> AsyncOpenAI:

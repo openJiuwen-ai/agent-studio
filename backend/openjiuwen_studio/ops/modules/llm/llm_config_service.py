@@ -12,6 +12,7 @@ from openjiuwen_studio.ops.modules.llm.schema import ListModelRequest
 from openjiuwen_studio.ops.modules.prompt.domain.repositories import AgentRepository
 from openjiuwen_studio.ops.modules.prompt.infra.repositories import orm_repo
 from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
+from openjiuwen_studio.core.common.language_thread_context import get_language
 
 
 class LLMConfigService:
@@ -195,11 +196,12 @@ def convert_orm_to_model_config(orm_obj, api_key_flag: bool = True) -> ModelConf
     parameters = orm_obj.parameters or {}
 
     # 构建 param_schemas
-    param_schemas = [
+    param_schemas_cn = [
         {
             "name": "temperature",
             "label": "温度",
-            "desc": "temperature:控制模型生成结果的随机性与创造性。值越高，输出越随机、多样；值越低，结果越确定、保守。范围通常为0~2，推荐设置0.1~1.0。示例：0.7（平衡随机性与一致性）、1.2（更具创造性的输出）。",
+            "desc": "temperature:控制模型生成结果的随机性与创造性。值越高，输出越随机、多样；值越低，结果越确定、保守。范围通常为0~2，"
+                    "推荐设置0.1~1.0。示例：0.7（平衡随机性与一致性）、1.2（更具创造性的输出）。",
             "type": "float",
             "min": "0",
             "max": "2",
@@ -208,7 +210,8 @@ def convert_orm_to_model_config(orm_obj, api_key_flag: bool = True) -> ModelConf
         {
             "name": "top_p",
             "label": "核采样",
-            "desc": "Top-p:选择累计概率达到p的最小词集合进行采样。动态调整候选词的数量，平衡输出的多样性和质量。建议：通常设置为0.9-0.95，与温度配合使用时建议只调整其中一个。",
+            "desc": "Top-p:选择累计概率达到p的最小词集合进行采样。动态调整候选词的数量，平衡输出的多样性和质量。"
+                    "建议：通常设置为0.9-0.95，与温度配合使用时建议只调整其中一个。",
             "type": "float",
             "min": "0",
             "max": "1",
@@ -217,13 +220,55 @@ def convert_orm_to_model_config(orm_obj, api_key_flag: bool = True) -> ModelConf
         {
             "name": "timeout",
             "label": "超时时间",
-            "desc": "timeout:大模型返回等待时间，超过这个时间即终止等待并报错：API call timeout。取值范围为[1-300]，默认值60秒。",
+            "desc": "timeout:大模型返回等待时间，超过这个时间即终止等待并报错：API call timeout。取值范围为[1-3600]，默认值60秒。",
+            "type": "int",
+            "min": "1",
+            "max": "3600",
+            "default_val": str(orm_obj.timeout or 60)
+        }
+    ]
+
+    param_schemas_us = [
+        {
+            "name": "temperature",
+            "label": "Temperature",
+            "desc": "Temperature: Controls the randomness and creativity of the model's output. Higher values "
+                    "produce more random and diverse outputs; lower values yield more deterministic and "
+                    "conservative results. Typical range is 0–2, with recommended settings between 0.1 and 1.0. "
+                    "Examples: 0.7 (balanced randomness and consistency), 1.2 (more creative output).",
+            "type": "float",
+            "min": "0",
+            "max": "2",
+            "default_val": str(parameters.get("temperature", 0.7))
+        },
+        {
+            "name": "top_p",
+            "label": "Top-p",
+            "desc": "Top-p (nucleus sampling): Selects the smallest set of tokens whose cumulative "
+                    "probability exceeds p, then samples from this set. Dynamically adjusts the number of "
+                    "candidate tokens to balance diversity and quality. Recommended range: typically 0.9–0.95. "
+                    "When used together with temperature, it's advised to adjust only one of them at a time.",
+            "type": "float",
+            "min": "0",
+            "max": "1",
+            "default_val": str(parameters.get("top_p", 0.7))
+        },
+        {
+            "name": "timeout",
+            "label": "Timeout",
+            "desc": "Timeout: Maximum waiting time (in seconds) for the large language model to return a response. "
+                    "If exceeded, the request is terminated with an 'API call timeout' error. "
+                    "Valid range: [1–300]. Default value: 60 seconds.",
             "type": "int",
             "min": "1",
             "max": "300",
             "default_val": str(orm_obj.timeout or 60)
         }
     ]
+
+    param_schemas = param_schemas_us
+    if get_language() in ("zh-cn", "zh"):
+        param_schemas = param_schemas_cn
 
     # 构建 openModel
     open_model = {

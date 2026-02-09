@@ -38,6 +38,7 @@ export interface FrontendModelConfig {
   description: string
   createdAt: string
   updatedAt: string
+  isSystemModel: boolean // 是否系统预置模型
 }
 
 // 数据转换函数：后端到前端
@@ -68,6 +69,7 @@ function backendToFrontend(backend: ModelConfigResponse): FrontendModelConfig {
     description: backend.description || '',
     createdAt: backend.created_at,
     updatedAt: backend.updated_at,
+    isSystemModel: backend.is_system_model ?? false,
   }
 }
 

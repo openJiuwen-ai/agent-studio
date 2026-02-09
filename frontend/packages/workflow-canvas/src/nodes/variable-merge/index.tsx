@@ -10,25 +10,30 @@ import { FlowNodeRegistry } from '../../typings'
 import { formMeta } from './form-meta'
 import { customNanoid } from '../../utils/nanoid-custom'
 import { t } from '../../i18n'
+import { generateNodeTitle } from '../../utils/workflow-node-utils'
 
 export const VariableMergeNodeRegistry: FlowNodeRegistry = {
   type: WorkflowNodeType.VariableMerge,
-  info: {
+  info: () => ({
     icon: <Merge size={16} className="text-purple-600" />,
     description: t('workflowCanvas.nodes.variableMerge.description'),
-  },
+  }),
   meta: {
     size: {
       width: 360,
       height: 211,
     },
   },
-  onAdd() {
+  onAdd(context?) {
+    const nodeId = `variable_merge_${customNanoid(5)}`
+    const titlePrefix = t('workflowCanvas.nodes.variableMerge.titlePrefix')
+    const title = generateNodeTitle(WorkflowNodeType.VariableMerge, context, titlePrefix)
+
     return {
-      id: `variable_merge_${customNanoid(5)}`,
+      id: nodeId,
       type: 'variable_merge',
       data: {
-        title: '变量聚合',
+        title: title,
         inputs: {
           variableMerge: [
             {

@@ -1,5 +1,6 @@
 import { createApiClientInstance, TokenProvider, AuthStateUpdater, LanguageProvider } from '../client'
 import { AxiosInstance } from 'axios'
+import { getLoginPagePath } from '../../../../src/Common/LoginPage'
 
 // 全局token提供者
 let globalTokenProvider: TokenProvider | null = null
@@ -50,7 +51,7 @@ export const getApiClient = (): AxiosInstance => {
         globalAuthStateUpdater = {
           logout: () => {
             localStorage.removeItem('access_token')
-            window.location.href = '/login'
+            window.location.href = getLoginPagePath()
           },
           updateToken: (newToken: string) => {
             localStorage.setItem('access_token', newToken)
@@ -100,4 +101,18 @@ export const getToken = () => {
     return null
   }
   return globalTokenProvider()
+}
+
+// 获取当前语言（带权重）
+export const getAcceptLanguage = (): string => {
+  if (!globalLanguageProvider) {
+    return 'zh-CN;q=1.0, en-US;q=0.5'
+  }
+  const language = globalLanguageProvider()
+  if (language === 'en-US') {
+    return 'en-US;q=1.0, zh-CN;q=0.5'
+  } else if (language === 'zh-CN') {
+    return 'zh-CN;q=1.0, en-US;q=0.5'
+  }
+  return language
 }

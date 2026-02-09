@@ -33,10 +33,13 @@ def get_model_config(model_id: int, space_id: str) -> ModelConfig:
     return model
 
 
-def _llm_output_config_object_convert(is_first: bool, outputs: Outputs) -> Dict[str, Any]:
+def _llm_output_config_object_convert(is_first: bool, outputs: Outputs):
     result: Dict[str, Any] = {}
     if outputs.type != "object":
-        return result
+        return result, []
+
+    if outputs.properties is None:
+        return result, []
 
     if is_first:
         for key, value in outputs.properties.items():
@@ -45,10 +48,12 @@ def _llm_output_config_object_convert(is_first: bool, outputs: Outputs) -> Dict[
             if key in outputs.required:
                 required = True
             if base_value.type == "object":
+                properties, convert_required = _llm_output_config_object_convert(False, Outputs(**value))
                 result[key] = {
                     "type": base_value.type,
                     "description": base_value.description,
-                    "properties": _llm_output_config_object_convert(False, Outputs(**value))
+                    "properties": properties,
+                    "required": convert_required,
                 }
             else:
                 result[key] = {"type": base_value.type, "description": base_value.description, "required": required}
@@ -56,12 +61,17 @@ def _llm_output_config_object_convert(is_first: bool, outputs: Outputs) -> Dict[
         for key, value in outputs.properties.items():
             base_value = BaseValue(**value)
             if base_value.type == "object":
-                result[key] = {"type": base_value.type, "description": base_value.description,
-                               "properties": _llm_output_config_object_convert(False, Outputs(**value))}
+                properties, required = _llm_output_config_object_convert(False, Outputs(**value))
+                result[key] = {"type": base_value.type,
+                               "description": base_value.description,
+                               "properties": properties,
+                               "required": required,
+                               }
             else:
                 result[key] = {"type": base_value.type, "description": base_value.description}
-        result["required"] = outputs.required
-    return result
+                result["required"] = outputs.required
+
+    return result, outputs.required
 
 
 def _llm_output_config_convert(outputs: Outputs) -> Dict[str, Any]:
@@ -73,10 +83,11 @@ def _llm_output_config_convert(outputs: Outputs) -> Dict[str, Any]:
             if key in outputs.required:
                 required = True
             if base_value.type == "object":
+                properties, _ = _llm_output_config_object_convert(True, Outputs(**value))
                 result[key] = {
                     "type": base_value.type,
                     "description": base_value.description,
-                    "properties": _llm_output_config_object_convert(True, Outputs(**value)),
+                    "properties": properties,
                     "required": required
                 }
             elif base_value.type == "array":
@@ -113,17 +124,21 @@ def llm_convert(node: Node, space_id: str) -> dsl.Component:
         if llm_params is None:
             raise ValueError("llm_param is none")
 
-        model_info = dsl.BaseModelInfo(
+        model_client_config = dsl.ModelClientConfig(
+            client_provider="",
+            api_key="",
+            api_base="",
+            timeout=30
+        )
+        request_config = dsl.ModelRequestConfig(
             model_name="",
             temperature=0.7,
-            top_p=0.9,
-            streaming=True,
-            timeout=30.0
+            top_p=0.9
         )
 
         model = dsl.ModelConfig(
-            model_provider="",
-            model_info=model_info
+            model_client_config=model_client_config,
+            request_config=request_config
         )
 
         llm_configs = dsl.LLMConfig(
@@ -140,11 +155,11 @@ def llm_convert(node: Node, space_id: str) -> dsl.Component:
         model_id = int(llm_params.model.id)
 
         model_config = get_model_config(model_id, space_id)
-        model_info.model_name = llm_params.model.type
-        model_info.api_key = model_config.api_key
-        model_info.api_base = model_config.base_url
-        model_info.timeout = model_config.timeout
-        model.model_provider = model_config.provider
+        request_config.model_name = llm_params.model.type
+        model_client_config.api_key = model_config.api_key
+        model_client_config.api_base = model_config.base_url
+        model_client_config.timeout = model_config.timeout
+        model_client_config.client_provider = model_config.provider
         
         # 从模型配置中读取temperature和top_p参数
         if model_config.parameters:
@@ -155,8 +170,8 @@ def llm_convert(node: Node, space_id: str) -> dsl.Component:
                 # 如果已经是ModelParameters对象
                 model_params = model_config.parameters
             
-            model_info.temperature = model_params.temperature
-            model_info.top_p = model_params.top_p
+            request_config.temperature = model_params.temperature
+            request_config.top_p = model_params.top_p
 
         # 构建转换后的LLM组件配置
         llm_component = dsl.Component(

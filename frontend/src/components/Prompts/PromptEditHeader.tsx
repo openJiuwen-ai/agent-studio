@@ -56,10 +56,11 @@ const PromptEditHeader: React.FC<PromptEditHeaderProps> = ({
     <div 
       className="flex items-center bg-white/60 backdrop-blur-sm border border-gray-200/60 shadow-sm"
       style={{
-        padding: 'clamp(0.5rem, 0.6vw, 0.875rem)',
+        padding: 'clamp(0.375rem, 0.5vw, 0.625rem)', // 减小内边距
         minHeight: 'clamp(3.5rem, 4.5vh, 4rem)',
-        minWidth: 'fit-content',
         width: '100%',
+        maxWidth: '100%',
+        overflow: 'hidden',
       }}
     >
       <IconButton
@@ -84,19 +85,33 @@ const PromptEditHeader: React.FC<PromptEditHeaderProps> = ({
         />
       </IconButton>
       <div 
-        className="flex items-center flex-1 min-w-0"
+        className="flex items-center min-w-0"
         style={{
-          gap: 'clamp(0.375rem, 0.5vw, 0.5rem)',
-          marginLeft: 'clamp(0.5rem, 0.8vw, 0.875rem)',
+          gap: 'clamp(0.25rem, 0.4vw, 0.375rem)', // 减小间距
+          marginLeft: 'clamp(0.375rem, 0.6vw, 0.625rem)', // 减小左边距
+          overflow: 'hidden',
+          flex: '0 0 auto', // 完全不扩展，严格按内容大小
         }}
       >
-        <div className="min-w-0" style={{ maxWidth: '50%', flex: '0 1 auto' }}>
+        <div 
+          className="min-w-0" 
+          style={{ 
+            maxWidth: 'clamp(200px, 30vw, 400px)', // 使用固定的最大宽度范围
+            overflow: 'hidden',
+            flex: '0 0 auto', // 完全不扩展，严格按内容大小
+            minWidth: 0, // 确保可以收缩到 0
+          }}
+        >
           <ConditionalTooltip title={isNew ? t('prompts.promptEdit.header.createPrompt') : prompt.name || t('prompts.promptEdit.header.promptName')}>
             <h1 
-              className="font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent truncate cursor-pointer"
+              className="font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent cursor-pointer"
               style={{
                 fontSize: 'clamp(0.875rem, 0.85vw, 1.125rem)',
                 lineHeight: 1.5,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                width: '100%',
               }}
             >
               {isNew ? t('prompts.promptEdit.header.createPrompt') : prompt.name || t('prompts.promptEdit.header.promptName')}
@@ -106,11 +121,15 @@ const PromptEditHeader: React.FC<PromptEditHeaderProps> = ({
             title={isNew ? t('prompts.promptEdit.header.createDescription') : prompt.description || t('prompts.promptEdit.header.promptDescription')}
           >
             <p 
-              className="text-gray-600 truncate cursor-pointer"
+              className="text-gray-600 cursor-pointer"
               style={{
                 fontSize: 'clamp(0.6875rem, 0.65vw, 0.8125rem)',
                 marginTop: 'clamp(0.125rem, 0.1vh, 0.1875rem)',
                 lineHeight: 1.6,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                width: '100%',
               }}
             >
               {isNew ? t('prompts.promptEdit.header.createDescription') : prompt.description || t('prompts.promptEdit.header.promptDescription')}
@@ -137,9 +156,10 @@ const PromptEditHeader: React.FC<PromptEditHeaderProps> = ({
       </div>
 
       <div 
-        className="flex items-center"
+        className="flex items-center flex-shrink-0"
         style={{
-          gap: 'clamp(0.5rem, 1vw, 1rem)',
+          gap: 'clamp(0.375rem, 0.7vw, 0.75rem)', // 减小右侧按钮区域的间距
+          marginLeft: 'auto', // 自动推到右边，消除中间空白
         }}
       >
         <div

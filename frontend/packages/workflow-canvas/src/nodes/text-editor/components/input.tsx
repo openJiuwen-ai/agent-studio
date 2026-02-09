@@ -3,6 +3,7 @@ import { Field, FieldRenderProps } from '@flowgram.ai/free-layout-editor'
 import { useIsSidebar } from '../../../hooks'
 import { FormItem, FormDisplay } from '../../../form-components'
 import { InputsValues, IFlowValue, DisplayInputsValues } from '../../../form-materials'
+import { useTranslation } from '../../../i18n'
 
 interface InputProps {
   name?: string
@@ -11,13 +12,15 @@ interface InputProps {
   defaultFields?: string[]
 }
 
-export function Input({ name = '输入', inputParametersName = 'inputs.inputParameters' }: InputProps) {
+export function Input({ name, inputParametersName = 'inputs.inputParameters' }: InputProps) {
   const isSidebar = useIsSidebar()
+  const { t } = useTranslation()
+  const displayName = name || t('workflowCanvas.textEditor.input')
 
   if (!isSidebar) {
     return (
       <Field<Record<string, IFlowValue | undefined> | undefined> name={inputParametersName}>
-        {({ field }) => <FormDisplay label={name} content={<DisplayInputsValues value={field.value} />} />}
+        {({ field }) => <FormDisplay label={displayName} content={<DisplayInputsValues value={field.value} />} />}
       </Field>
     )
   }
@@ -51,7 +54,7 @@ export function Input({ name = '输入', inputParametersName = 'inputs.inputPara
           if (field.value === 'StringSplitting') {
             return (
               <>
-                <FormItem name={name} vertical>
+                <FormItem name={displayName} vertical>
                   <Field<Record<string, IFlowValue | undefined> | undefined> name={inputParametersName}>
                     {({ field }) => {
                       const handleChange = (value: Record<string, IFlowValue | undefined> | undefined) => {
@@ -77,7 +80,7 @@ export function Input({ name = '输入', inputParametersName = 'inputs.inputPara
           }
 
           return (
-            <FormItem name={name} vertical>
+            <FormItem name={displayName} vertical>
               <Field<Record<string, IFlowValue | undefined> | undefined> name={inputParametersName}>
                 {({ field }) => <InputsValues value={field.value} onChange={value => field.onChange(value)} />}
               </Field>

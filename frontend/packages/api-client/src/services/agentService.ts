@@ -37,7 +37,7 @@ export class AgentService {
     } catch (error) {
       // API调用失败时抛出错误，不再返回mock响应
       console.error('获取智能体列表API调用失败:', error)
-      throw new Error(`获取智能体列表失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      throw error
     }
   }
 
@@ -57,7 +57,7 @@ export class AgentService {
     } catch (error) {
       // API调用失败时抛出错误，不再返回mock响应
       console.error('获取智能体详情API调用失败:', error)
-      throw new Error(`获取智能体详情失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      throw error
     }
   }
 
@@ -78,7 +78,7 @@ export class AgentService {
     } catch (error) {
       // API调用失败时抛出错误
       console.error('删除智能体API调用失败:', error)
-      throw new Error(`删除智能体失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      throw error
     }
   }
 
@@ -118,7 +118,7 @@ export class AgentService {
     } catch (error) {
       // API调用失败时抛出错误，不再返回mock响应
       console.error('保存智能体API调用失败:', error)
-      throw new Error(`保存智能体失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      throw error
     }
   }
 
@@ -130,7 +130,7 @@ export class AgentService {
       return response.data
     } catch (error) {
       console.error('复制智能体API调用失败:', error)
-      throw new Error(`${error instanceof Error ? error.message : '未知错误'}`)
+      throw error
     }
   }
 
@@ -142,7 +142,7 @@ export class AgentService {
       return response.data
     } catch (error) {
       console.error('搜索智能体API调用失败:', error)
-      throw new Error(`搜索智能体失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      throw error
     }
   }
 
@@ -154,7 +154,7 @@ export class AgentService {
       return response.data
     } catch (error) {
       console.error('发布智能体API调用失败:', error)
-      throw new Error(`发布智能体失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      throw error
     }
   }
 
@@ -203,7 +203,7 @@ export class AgentService {
       }
     } catch (error) {
       console.error('导出智能体API调用失败:', error)
-      throw new Error(`导出智能体失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      throw error
     }
   }
 
@@ -235,7 +235,7 @@ export class AgentService {
       return response.data
     } catch (error) {
       console.error('导入智能体API调用失败:', error)
-      throw new Error(`导入智能体失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      throw error
     }
   }
 
@@ -247,7 +247,7 @@ export class AgentService {
       return response.data
     } catch (error) {
       console.error('获取智能体版本列表API调用失败:', error)
-      throw new Error(`获取智能体版本列表失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      throw error
     }
   }
 
@@ -263,7 +263,7 @@ export class AgentService {
       return response.data
     } catch (error) {
       console.error('删除智能体版本API调用失败:', error)
-      throw new Error(`删除智能体版本失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      throw error
     }
   }
 }

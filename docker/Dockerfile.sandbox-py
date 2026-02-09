@@ -1,4 +1,4 @@
-# builder image
+# Stage 1: Builder environment
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE} AS builder
 
@@ -13,7 +13,7 @@ RUN uv sync --group dev
 RUN uv build --out-dir /sandbox/dist
 
 
-# runtime image
+# Stage 2: Final image - Only copy necessary files from builder stage
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE} AS runtime
 
@@ -33,7 +33,7 @@ RUN pip3 install /sandbox/dist/openjiuwen_sandbox_pyserver-0.1.0-py3-none-any.wh
 ENV PYTHONPATH=/sandbox/site-packages/openjiuwen_sandbox_pyserver:/sandbox/site-packages
 
 EXPOSE 5001
-# Health check with configurable port
+
 HEALTHCHECK --interval=30s --timeout=30s --start-period=30s --retries=5 \
     CMD curl -f http://localhost:5001/health || exit 1
 

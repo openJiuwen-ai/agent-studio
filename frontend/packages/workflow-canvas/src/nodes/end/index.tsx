@@ -20,10 +20,10 @@ export const EndNodeRegistry: FlowNodeRegistry = {
       height: 211,
     },
   },
-  info: {
+  info: () => ({
     icon: <Power size={16} className="text-red-600" />,
     description: t('workflowCanvas.nodes.end.description'),
-  },
+  }),
   onAdd() {
     return {
       id: `end`,

@@ -107,7 +107,8 @@ export const TestRunSidePanel: FC<TestRunSidePanelProps> = ({ workflowId, spaceI
     if (!node) return null
 
     const registry = node.getNodeRegistry()
-    const icon = registry?.info?.icon
+    const info = typeof registry?.info === 'function' ? registry.info() : registry?.info
+    const icon = info?.icon
     if (!icon) return <MessageSquare size={16} className={styles['interruption-icon']} />
 
     if (typeof icon === 'string') {
@@ -171,7 +172,8 @@ export const TestRunSidePanel: FC<TestRunSidePanelProps> = ({ workflowId, spaceI
       if (!node) return nodeId
 
       const registry = node.getNodeRegistry()
-      return registry?.info?.title || registry?.info?.name || nodeId
+      const info = typeof registry?.info === 'function' ? registry.info() : registry?.info
+      return info?.title || info?.name || nodeId
     },
     [document.root.blocks, messages],
   )

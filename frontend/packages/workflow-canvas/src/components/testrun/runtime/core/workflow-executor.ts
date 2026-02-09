@@ -7,12 +7,7 @@ import { ExecutionService } from '@test-agentstudio/api-client'
 import { Emitter } from '@flowgram.ai/free-layout-editor'
 import { v4 as uuidv4 } from 'uuid'
 
-import {
-  StreamExecuteParams,
-  StreamResponse,
-  ExecutionOptions,
-  NodeExecutionStatus,
-} from '../types'
+import { StreamExecuteParams, StreamResponse, ExecutionOptions, NodeExecutionStatus } from '../types'
 import { EventConverter } from './event-converter'
 import { ExecutionStatusManager } from './execution-status-manager'
 
@@ -37,10 +32,7 @@ export class WorkflowExecutor {
 
   public onResultChanged = this.resultEmitter.event
 
-  constructor(
-    private eventConverter: EventConverter,
-    private statusManager: ExecutionStatusManager,
-  ) {}
+  constructor(private eventConverter: EventConverter, private statusManager: ExecutionStatusManager) {}
 
   getIsExecuting(): boolean {
     return this.isExecuting
@@ -50,20 +42,14 @@ export class WorkflowExecutor {
     return this.currentExecutionParams
   }
 
-  async execute(
-    params: StreamExecuteParams,
-    options: ExecutionOptions,
-    onEvent?: (event: StreamResponse) => void,
-  ): Promise<void> {
+  async execute(params: StreamExecuteParams, options: ExecutionOptions, onEvent?: (event: StreamResponse) => void): Promise<void> {
     this.statusManager.manageExecutionStart(options)
 
     const executionId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     this.activeExecutions.add(executionId)
     this.executionCount++
 
-    if (this.executionCount === 1) {
-      this.isExecuting = true
-    }
+    this.isExecuting = true
 
     this.eventHandlers = onEvent ? [onEvent] : []
     this.executionController = new AbortController()
@@ -98,6 +84,14 @@ export class WorkflowExecutor {
         },
         error => {
           this.handleExecutionError(error, executionId)
+        },
+        () => {
+          if (this.isExecuting) {
+            this.executionCount--
+            if (this.executionCount <= 0) {
+              this.isExecuting = false
+            }
+          }
         },
       )
 
@@ -153,6 +147,9 @@ export class WorkflowExecutor {
         error => {
           this.handleExecutionError(error, '')
         },
+        () => {
+          this.isExecuting = false
+        },
       )
 
       this.isExecuting = false
@@ -182,8 +179,11 @@ export class WorkflowExecutor {
       ExecutionService.cancelWorkflowExecution({
         space_id: this.currentSpaceId,
         conversation_id: this.currentConversationId,
-      }).catch((error) => {
-        console.error('Failed to cancel workflow execution on server:', error)
+      }).catch(error => {
+        if (error?.response?.status === 404 || error?.message?.includes('Execution not found')) {
+        } else {
+          console.error('Failed to cancel workflow execution on server:', error)
+        }
       })
     }
 

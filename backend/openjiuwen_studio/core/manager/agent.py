@@ -20,10 +20,12 @@ from openjiuwen.core.common.logging import logger
 from pydantic import BaseModel, ValidationError
 from pymilvus import connections
 import psutil
+from openjiuwen_studio.core.common.agent_defaults import AgentDefaults
 
 import openjiuwen_studio.core.manager.knowledge_base as kb_mgr
 import openjiuwen_studio.core.manager.convertor.agent as convert
 from openjiuwen_studio.core.common.dsl import AgentEditMode
+from openjiuwen_studio.core.common.language_thread_context import get_language
 from openjiuwen_studio.core.common.status_code import StatusCode
 from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.internal.agent import (
@@ -55,13 +57,13 @@ from openjiuwen_studio.core.manager.repositories.knowledge_base_repository impor
 )
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
 from openjiuwen_studio.core.manager.repositories.tool_repository import tool_repository
-from openjiuwen_studio.ops.dependencies import get_db_ops
+from openjiuwen_studio.ops.dependencies import get_db_ops, get_db_agent
 from openjiuwen_studio.core.manager.utils.utils import (
     Version,
     check_version,
     get_current_project_version,
 )
-from openjiuwen_studio.models.agent import AgentBaseDBPd
+from openjiuwen_studio.models.agent import AgentBaseDBPd, AgentModelConfig
 from openjiuwen_studio.models.agent import AgentPublishDBPd
 from openjiuwen_studio.models.embedding_model_config import EmbeddingModelConfig
 from openjiuwen_studio.models.knowledge_base_document import KnowledgeBaseDocumentDB
@@ -125,8 +127,9 @@ if TYPE_CHECKING:
     # 只为类型检查器服务，运行时不执行
     AgentBaseDBPd: Type[BaseModel]
 
-DEFAULT_OPENING_REMARKS = "您好！我是您的智能助手，很高兴为您服务。请问有什么可以帮助您的吗？"
 DEFAULT_PAGE = 1
+
+
 DEFAULT_PAGE_SIZE = 10
 
 
@@ -134,6 +137,17 @@ DEFAULT_PAGE_SIZE = 10
 def get_db_ops_session():
     """Helper to get ops database session as context manager"""
     gen = get_db_ops()
+    try:
+        db = next(gen)
+        yield db
+    finally:
+        gen.close()
+
+
+@contextmanager
+def get_db_agent_session():
+    """Helper to get agent database session as context manager"""
+    gen = get_db_agent()
     try:
         db = next(gen)
         yield db
@@ -240,7 +254,9 @@ def with_exception_handling(func: Callable) -> Callable:
 
             return ResponseModel(
                 code=StatusCode.AGENT_DB_CONNECTION_ERROR.code,
-                message=StatusCode.AGENT_DB_CONNECTION_ERROR.errmsg.format(msg=error_msg),
+                message=StatusCode.AGENT_DB_CONNECTION_ERROR.errmsg.format(
+                    msg=error_msg
+                ),
             )
 
         except Exception as e:
@@ -262,12 +278,16 @@ def with_exception_handling(func: Callable) -> Callable:
             elif "network" in error_msg.lower() or "connection" in error_msg.lower():
                 status_code = StatusCode.AGENT_NETWORK_CONNECTION_ERROR.code
                 message = StatusCode.AGENT_NETWORK_CONNECTION_ERROR.errmsg
-            elif "permission" in error_msg.lower() or "unauthorized" in error_msg.lower():
+            elif (
+                "permission" in error_msg.lower() or "unauthorized" in error_msg.lower()
+            ):
                 status_code = StatusCode.AGENT_PERMISSION_ERROR.code
                 message = StatusCode.AGENT_PERMISSION_ERROR.errmsg
             else:
                 status_code = StatusCode.AGENT_INTERNAL_SERVER_ERROR.code
-                message = StatusCode.AGENT_INTERNAL_SERVER_ERROR.errmsg.format(msg=error_type)
+                message = StatusCode.AGENT_INTERNAL_SERVER_ERROR.errmsg.format(
+                    msg=error_type
+                )
 
             return ResponseModel(code=status_code, message=message)
 
@@ -294,7 +314,7 @@ def create_agent_react_info(req: AgentCreate) -> AgentBaseDBPd:
         # plugins=plugins,  # 待plugins功能完善后再获取
         # model=req.model,
         constraint=constraint.model_dump(),
-        opening_remarks=DEFAULT_OPENING_REMARKS,
+        opening_remarks=AgentDefaults.OPENING_REMARKS.msg,
         create_time=current_time,
         update_time=current_time,
     )
@@ -308,9 +328,13 @@ def agent_react_create(req: AgentCreate, current_user: dict) -> ResponseModel:
     start_time = time.time()
     # 从current_user中正确获取user_id_str
     data = current_user.get("data", {})
-    user_id = data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    user_id = (
+        data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    )
 
-    logger.info(f"[AGENT_CREATE] Creating agent - User: {user_id}, Name: {req.agent_name}")
+    logger.info(
+        f"[AGENT_CREATE] Creating agent - User: {user_id}, Name: {req.agent_name}"
+    )
 
     # 1. 验证用户空间权限
     _ = check_user_space(req.space_id, current_user)
@@ -353,7 +377,9 @@ def agent_delete(req: AgentGet, current_user: dict) -> ResponseModel:
     start_time = time.time()
     # 从current_user中正确获取user_id_str
     data = current_user.get("data", {})
-    user_id = data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    user_id = (
+        data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    )
 
     logger.info(f"[AGENT_DELETE] Deleting agent - User: {user_id}, ID: {req.agent_id}")
 
@@ -361,7 +387,11 @@ def agent_delete(req: AgentGet, current_user: dict) -> ResponseModel:
     _ = check_user_space(req.space_id, current_user)
 
     # 2. 构建删除查询参数
-    agent_query = AgentId(space_id=req.space_id, agent_id=req.agent_id, agent_version=None)
+    agent_query = AgentId(
+        space_id=req.space_id,
+        agent_id=req.agent_id,
+        agent_version=None
+    )
 
     # 3. 从DB中删除agent及其所有版本
     delete_result = agent_repository.delete_agent_db(agent_query)
@@ -386,7 +416,9 @@ def agent_delete(req: AgentGet, current_user: dict) -> ResponseModel:
                 f"{cleanup_result['message']}"
             )
     except Exception as e:
-        logger.error(f"[AGENT_DELETE] Error cleaning up references for agent {req.agent_id}: {e}")
+        logger.error(
+            f"[AGENT_DELETE] Error cleaning up references for agent {req.agent_id}: {e}"
+        )
 
     logger.info(
         f"[AGENT_DELETE] Agent deleted - ID: {req.agent_id}, User: {user_id}, Duration: {time.time() - start_time:.3f}s"
@@ -400,12 +432,17 @@ def agent_delete(req: AgentGet, current_user: dict) -> ResponseModel:
 
 
 @with_exception_handling
-def agent_publish_delete(req: AgentId, current_user: dict) -> ResponseModel:
+def agent_publish_delete(
+        req: AgentId,
+        current_user: dict
+) -> ResponseModel:
     """删除指定id及publish版本的智能体"""
     start_time = time.time()
     # 从current_user中正确获取user_id_str
     data = current_user.get("data", {})
-    user_id = data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    user_id = (
+        data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    )
 
     logger.info(
         f"[AGENT_PUBLISH_DELETE] Deleting agent publish - User: {user_id}, ID: {req.agent_id}, "
@@ -458,7 +495,9 @@ def agent_publish_delete(req: AgentId, current_user: dict) -> ResponseModel:
 
 @with_exception_handling
 def get_single_agent_info(
-    req: AgentGetVersion, current_user: dict, manager: ModelConfigManager
+        req: AgentGetVersion,
+        current_user: dict,
+        manager: ModelConfigManager
 ) -> ResponseModel:
     """获取单个智能体信息"""
     _ = check_user_space(req.space_id, current_user)
@@ -480,7 +519,9 @@ def get_single_agent_info(
     # 2. 获取workflow list列表
     workflow_request = req.model_dump()
     workflow_request.update({"page": 1, "page_size": 10000})  # 获取所有工作流
-    list_result = workflow_repository.workflow_list(SpaceAWPQuery.model_validate(workflow_request))
+    list_result = workflow_repository.workflow_list(
+        SpaceAWPQuery.model_validate(workflow_request)
+    )
     if list_result.code != status.HTTP_200_OK:
         wf_list: list[AgentWorkflowListNode] = []
     else:
@@ -509,8 +550,9 @@ def get_single_agent_info(
             id=model.id,
             name=model.name,
             type=model.model_type,
-            api_key=model.api_key or "",
-            api_base=model.base_url or "",
+            # 隐藏掉api_key和api_base数据
+            api_key="",
+            api_base="",
             model_provider=model.provider,
             streaming=model.enable_streaming,
             timeout=model.timeout,
@@ -518,21 +560,57 @@ def get_single_agent_info(
 
         m_list.append(m_info)
 
-    options = AgentOptionInfo(workflow_list=wf_list, model_list=m_list)
+    options = AgentOptionInfo(
+        workflow_list=wf_list,
+        model_list=m_list
+    )
 
-    data_response = SingleAgentData(agent_info=agent_info, agent_option_info=options)
+    data_response = SingleAgentData(
+        agent_info=agent_info,
+        agent_option_info=options
+    )
+
+    resp_data = data_response.model_dump(by_alias=False)
+
+    # 补充model信息
+    if agent_info.model_id:
+        models, _ = manager.get_paginated_configs(
+            page=1, size=1, filters={"id": agent_info.model_id, "space_id": req.space_id}
+        )
+        if models:
+            model_config = models[0]
+            saved_config = agent_info.agent_model_config or {}
+
+            model_info = {
+                "model_id": model_config.id,
+                "model_name": model_config.name,
+                "model_type": model_config.model_type,
+                "api_base": "",
+                "api_key": "",
+                "streaming": model_config.enable_streaming,
+                "temperature": saved_config.get("temperature", 0.7),
+                "top_p": saved_config.get("top_p", 0.9),
+                "timeout": saved_config.get("timeout", 300),
+            }
+
+            resp_data["agent_info"]["model"] = {
+                "model_provider": model_config.provider,
+                "model_info": model_info
+            }
 
     # 5. 返回创建结果
     return ResponseModel(
         code=status.HTTP_200_OK,
         message="create agent success",
-        data=data_response.model_dump(by_alias=False),
+        data=resp_data,
     )
 
 
 @with_exception_handling
 def agent_save(
-    req: AgentDisplayInfo, current_user: dict, manager: ModelConfigManager
+        req: AgentDisplayInfo,
+        current_user: dict,
+        manager: ModelConfigManager
 ) -> ResponseModel:
     """更新并保存智能体"""
     start_time = time.time()
@@ -581,50 +659,34 @@ def agent_save(
         )
         model_using = models[0] if models else None
 
+    req_dict.pop("model", None)
     if model_using:
         # 提取模型基础参数
-        model_params = model_using.parameters
-        model_base_config = {
-            "model_name": model_using.name,
-            "model_type": model_using.model_type,
-            "api_key": model_using.api_key,
-            "api_base": model_using.base_url,
-            "streaming": model_using.enable_streaming,
-            "timeout": model_using.timeout,
-            "temperature": model_params.get("temperature", 0.7),
-            "top_p": model_params.get("top_p", 0.9),
-            "max_tokens": model_params.get("max_tokens", 4096),
-            "provider": model_using.provider,
-        }
-        logger.info(
-            f"[AGENT_SAVE] model url: {model_using.base_url}, model id: {model_using.model_type}"
-        )
-
-        # 合并模型信息
         req_model_info = req_model.model_info.model_dump()
-        # 更新必要字段
-        req_model_info.update(
-            {
-                "api_key": model_base_config["api_key"],
-                "api_base": model_base_config["api_base"],
-                "model_id": model_using.id,  # 确保设置model_id
-            }
+
+        req_dict["model_id"] = model_using.id
+
+        # 使用定义的 Schema 来构建model_config配置
+        model_config_data = AgentModelConfig(
+            timeout=req_model_info.get("timeout") or 300,
+            temperature=req_model_info.get("temperature") or 0.7,
+            top_p=req_model_info.get("top_p") or 0.9,
         )
-
-        # 填充空值
-        for key, value in req_model_info.items():
-            if value is None and key in model_base_config:
-                req_model_info[key] = model_base_config[key]
-
-        # 构建完整模型字典
-        req_dict["model"] = {
-            "model_provider": model_using.provider,
-            "model_info": req_model_info,
-        }
-        logger.info(f"[AGENT_SAVE] model_provider: {model_using.provider}")
+        req_dict["agent_model_config"] = model_config_data.model_dump(exclude_none=True)
+    else:
+        # 如果指定了model_info但找不到对应模型，则报错
+        if req_model and req_model.model_info and req_model.model_info.model_name:
+            logger.error(f"[AGENT_SAVE] {req_model.model_info.model_name} Model not found")
+            return ResponseModel(
+                code=StatusCode.AGENT_MODEL_NOT_FOUND.code,
+                message=StatusCode.AGENT_MODEL_NOT_FOUND.errmsg.format(msg=req_model.model_info.model_name)
+            )
 
     # 创建AgentBaseDBPd实例
-    agent_info = AgentBaseDBPd(**req_dict, update_time=milliseconds())
+    try:
+        agent_info = AgentBaseDBPd(**req_dict, update_time=milliseconds())
+    except ValidationError as e:
+        raise e
 
     # 4. 更新agent_info信息至DB中
     save_result = agent_repository.save_agent_db(agent_info)
@@ -672,7 +734,9 @@ def agent_save(
             f"{len(references)} references processed"
         )
     except Exception as e:
-        logger.error(f"[AGENT_SAVE] Error managing references for agent {req.agent_id}: {e}")
+        logger.error(
+            f"[AGENT_SAVE] Error managing references for agent {req.agent_id}: {e}"
+        )
         # 引用关系管理失败不影响主要保存功能
 
     logger.info(
@@ -687,12 +751,17 @@ def agent_save(
 
 
 @with_exception_handling
-def agent_meta_update(req: AgentUpdate, current_user: dict) -> ResponseModel:
+def agent_meta_update(
+        req: AgentUpdate,
+        current_user: dict
+) -> ResponseModel:
     """更新并保存智能体"""
     start_time = time.time()
     # 从current_user中正确获取user_id_str
     data = current_user.get("data", {})
-    user_id = data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    user_id = (
+        data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    )
 
     logger.info(f"[AGENT_UPDATE] Updating agent metadata - User: {user_id}")
 
@@ -700,13 +769,20 @@ def agent_meta_update(req: AgentUpdate, current_user: dict) -> ResponseModel:
     _ = check_user_space(req.space_id, current_user)
 
     # 2. 构建agent_info对象
-    agent_info = AgentBaseDBPd(**req.model_dump(), update_time=milliseconds())
+    req_dict = req.model_dump()
+
+    agent_info = AgentBaseDBPd(
+        **req_dict,
+        update_time=milliseconds()
+    )
 
     # 3. 更新agent_info信息至DB中
     save_result = agent_repository.save_agent_db(agent_info)
 
     if save_result.code != status.HTTP_200_OK:
-        logger.error(f"[AGENT_UPDATE] Database update failed, Error: {save_result.message}")
+        logger.error(
+            f"[AGENT_UPDATE] Database update failed, Error: {save_result.message}"
+        )
         return ResponseModel(
             code=save_result.code,
             message=save_result.message,
@@ -723,22 +799,17 @@ def agent_meta_update(req: AgentUpdate, current_user: dict) -> ResponseModel:
     )
 
 
-def check_agent_validity(agent_meta: dict) -> bool:
-    """检查agent信息是否合法"""
-    try:
-        agent_info = AgentBaseDBPd(**agent_meta)
-        # 检查必要字段是否存在且有效
-        return bool(agent_info.agent_id and agent_info.agent_name)
-    except Exception:
-        return False
-
-
 @with_exception_handling
-def agent_get_list(req: AgentList, current_user: dict) -> ResponseModel:
+def agent_get_list(
+        req: AgentList,
+        current_user: dict
+) -> ResponseModel:
     """获取智能体列表"""
     # 从current_user中正确获取user_id_str
     data = current_user.get("data", {})
-    user_id = data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    user_id = (
+        data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    )
 
     logger.info(
         f"[AGENT_LIST] Getting agent list - User: {user_id}, Space: {req.space_id}, Page: {req.page}"
@@ -755,12 +826,32 @@ def agent_get_list(req: AgentList, current_user: dict) -> ResponseModel:
 
     if list_result.code != status.HTTP_200_OK:
         # 查询有异常错误，直接报出来
-        return ResponseModel(code=list_result.code, message=list_result.message)
+        return ResponseModel(
+            code=list_result.code,
+            message=list_result.message
+        )
+
+    # 批量获取模型信息
+    model_ids = {item.get("model_id") for item in list_result.data["items"] if item.get("model_id")}
+    model_name_map = {}
+    if model_ids:
+        try:
+            with get_db_agent_session() as db:
+                model_mgr = ModelConfigManager(db)
+                models = model_mgr.get_configs_by_ids(list(model_ids))
+                if models:
+                    for m in models:
+                        model_name_map[m.id] = m.name
+        except Exception as e:
+            logger.error(f"[AGENT_GET_LIST] Failed to fetch model names: {e}")
 
     items: list[AgentItem] = []
     for item_data in list_result.data["items"]:
         model_name = "no model"
-        if item_data.get("model"):
+        m_id = item_data.get("model_id")
+        if m_id and m_id in model_name_map:
+            model_name = model_name_map[m_id]
+        elif item_data.get("model"): # 兼容旧数据
             try:
                 # 简化模型数据处理
                 model = AgentModel(**item_data.get("model"))
@@ -798,7 +889,10 @@ def agent_get_list(req: AgentList, current_user: dict) -> ResponseModel:
         total_pages=total_pages,
     )
 
-    response_data = AgentListInfo(agent_items=items, pagination=page_info)
+    response_data = AgentListInfo(
+        agent_items=items,
+        pagination=page_info
+    )
 
     # 4. 返回创建结果
     return ResponseModel(
@@ -809,12 +903,17 @@ def agent_get_list(req: AgentList, current_user: dict) -> ResponseModel:
 
 
 @with_exception_handling
-def agent_publish(req: AgentPublish, current_user: dict) -> ResponseModel:
+def agent_publish(
+        req: AgentPublish,
+        current_user: dict
+) -> ResponseModel:
     """发布智能体"""
     start_time = time.time()
     # 从current_user中正确获取user_id_str
     data = current_user.get("data", {})
-    user_id = data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    user_id = (
+        data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    )
     logger.info(
         f"[AGENT_PUBLISH] Publishing agent - User: {user_id}, ID: {req.agent_id}, Version: {req.agent_version}"
     )
@@ -888,9 +987,56 @@ def agent_publish(req: AgentPublish, current_user: dict) -> ResponseModel:
 
     # 5. 使用agent_convert进行智能体校验
     logger.debug(f"[AGENT_PUBLISH] Starting validation - ID: {req.agent_id}")
-    agent_dsl, err = convert.agent_convert(req.space_id, agent_data)
+    # 临时获取模型信息用于校验
+    model_details = None
+    if agent_data.model_id:
+        try:
+            with get_db_agent_session() as db:
+                model_mgr = ModelConfigManager(db)
+                models, _ = model_mgr.get_paginated_configs(
+                    page=1, size=1, filters={"id": agent_data.model_id}
+                )
+                if models:
+                    m = models[0]
+                    model_details = {
+                        "id": m.id,
+                        "name": m.name,
+                        "model_type": m.model_type,
+                        "provider": m.provider,
+                        "api_key": m.api_key,
+                        "base_url": m.base_url,
+                        "enable_streaming": m.enable_streaming,
+                        "timeout": m.timeout,
+                        "parameters": m.parameters,
+                    }
+
+                    # Apply model_config overrides
+                    if agent_data.agent_model_config:
+                        if model_details.get("parameters") is None:
+                            model_details["parameters"] = {}
+                        if agent_data.agent_model_config.get("temperature") is not None:
+                            model_details["parameters"]["temperature"] = (
+                                agent_data.agent_model_config.get("temperature")
+                            )
+                        if agent_data.agent_model_config.get("top_p") is not None:
+                            model_details["parameters"]["top_p"] = (
+                                agent_data.agent_model_config.get("top_p")
+                            )
+                        if agent_data.agent_model_config.get("timeout") is not None:
+                            model_details["timeout"] = (
+                                agent_data.agent_model_config.get("timeout")
+                            )
+
+        except Exception as e:
+            logger.warning(
+                f"[AGENT_PUBLISH] Failed to fetch model info for validation: {e}"
+            )
+
+    _, err = convert.agent_convert(req.space_id, agent_data, model_details)
     if err is not None:
-        logger.error(f"[AGENT_PUBLISH] Validation failed - ID: {req.agent_id}, Error: {err}")
+        logger.error(
+            f"[AGENT_PUBLISH] Validation failed - ID: {req.agent_id}, Error: {err}"
+        )
         return ResponseModel(
             code=status.HTTP_400_BAD_REQUEST,
             message=f"Agent validation failed: {err}",
@@ -900,7 +1046,9 @@ def agent_publish(req: AgentPublish, current_user: dict) -> ResponseModel:
 
     # 6. 构建publish需要的AgentPublishDB结构，并将其存入数据库中
     # 获取智能体基础数据，明确排除 agent_version 字段以避免冲突
-    agent_publish_data = agent_data.model_dump(exclude_none=True, exclude={"agent_version"})
+    agent_publish_data = agent_data.model_dump(
+        exclude_none=True, exclude={"agent_version"}
+    )
 
     # 更新时间戳为当前发布时间
     current_time = milliseconds()
@@ -931,7 +1079,9 @@ def agent_publish(req: AgentPublish, current_user: dict) -> ResponseModel:
     # 8. 管理发布版本的引用关系
     try:
         # 8.1 提取并创建发布版本的引用关系
-        references = extract_agent_references(agent_publish_data, req.space_id, req.agent_version)
+        references = extract_agent_references(
+            agent_publish_data, req.space_id, req.agent_version
+        )
         for ref in references:
             create_result = reference_repository.reference_create(ref)
             if create_result["code"] != status.HTTP_200_OK:
@@ -950,7 +1100,10 @@ def agent_publish(req: AgentPublish, current_user: dict) -> ResponseModel:
         # 引用关系管理失败不影响主要发布功能
 
     # 9. 构建响应数据
-    res_data = AgentResponsePublish(agent_id=req.agent_id, success=True)
+    res_data = AgentResponsePublish(
+        agent_id=req.agent_id,
+        success=True
+    )
 
     # 记录完成指标
     execution_time = time.time() - start_time
@@ -967,13 +1120,18 @@ def agent_publish(req: AgentPublish, current_user: dict) -> ResponseModel:
 
 
 @with_exception_handling
-def agent_convert(req: AgentGetVersion, current_user: dict) -> ResponseModel:
+def agent_convert(
+        req: AgentGetVersion,
+        current_user: dict
+) -> ResponseModel:
     """转换agent数据格式"""
     _ = check_user_space(req.space_id, current_user)
 
     # 1. 从db中获取agent_info信息
     agent_query = AgentId(
-        space_id=req.space_id, agent_id=req.agent_id, agent_version=req.agent_version
+        space_id=req.space_id,
+        agent_id=req.agent_id,
+        agent_version=req.agent_version
     )
     get_result = agent_repository.get_agent_db(agent_query)
     if get_result.code != status.HTTP_200_OK:
@@ -982,18 +1140,67 @@ def agent_convert(req: AgentGetVersion, current_user: dict) -> ResponseModel:
             message=get_result.message,
         )
 
-    # 2. 将展示面信息转换成执行面可用信息
-    agent_dsl, err = convert.agent_convert(req.space_id, AgentBaseDBPd(**get_result.data))
+    # 2. 获取模型详情 (if model_id exists)
+    model_details = None
+    model_id = get_result.data.get("model_id")
+    model_config = get_result.data.get("agent_model_config")
+    if model_id:
+        try:
+            with get_db_agent_session() as db:
+                model_mgr = ModelConfigManager(db)
+                models, _ = model_mgr.get_paginated_configs(
+                    page=1, size=1, filters={"id": model_id, "space_id": req.space_id}
+                )
+                if models:
+                    m = models[0]
+                    model_details = {
+                        "id": m.id,
+                        "name": m.name,
+                        "model_type": m.model_type,
+                        "provider": m.provider,
+                        "api_key": m.api_key,
+                        "base_url": m.base_url,
+                        "enable_streaming": m.enable_streaming,
+                        "timeout": m.timeout,
+                        "parameters": m.parameters
+                    }
+        except Exception as e:
+            logger.error(f"[AGENT_CONVERT] Failed to fetch model config: {e}")
+
+    if model_details and model_config:
+        # 优先使用 agent 自身的配置覆盖模型的默认配置
+        if model_config.get("timeout") is not None:
+            model_details["timeout"] = model_config.get("timeout")
+        # 确保 parameters 字典存在
+        if "parameters" in model_details and model_details["parameters"] is not None:
+            if model_config.get("max_tokens") is not None:
+                model_details["parameters"]["max_tokens"] = model_config.get("max_tokens")
+            if model_config.get("temperature") is not None:
+                model_details["parameters"]["temperature"] = model_config.get("temperature")
+            if model_config.get("top_p") is not None:
+                model_details["parameters"]["top_p"] = model_config.get("top_p")
+
+    # 3. 将展示面信息转换成执行面可用信息
+    agent_dsl, err = convert.agent_convert(
+        req.space_id, AgentBaseDBPd(**get_result.data), model_details
+    )
     if err is not None:
         return ResponseModel(
             code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message="convert agent dsl failed",
         )
-    return ResponseModel(code=status.HTTP_200_OK, message="convert agent success", data=agent_dsl)
+    return ResponseModel(
+        code=status.HTTP_200_OK,
+        message="convert agent success",
+        data=agent_dsl
+    )
 
 
 @with_exception_handling
-def agent_react_copy(req: AgentCopy, current_user: dict) -> ResponseModel:
+def agent_react_copy(
+        req: AgentCopy,
+        current_user: dict
+) -> ResponseModel:
     """创建新的智能体"""
     _ = check_user_space(req.space_id, current_user)
 
@@ -1021,7 +1228,7 @@ def agent_react_copy(req: AgentCopy, current_user: dict) -> ResponseModel:
     if len(agent_copy.agent_name) > AGENT_NAME_MAX_SIZE:
         return ResponseModel(
             code=status.HTTP_400_BAD_REQUEST,
-            message=f"Agent name add '_copy' suffix exceeds the {AGENT_NAME_MAX_SIZE}-character length limit.",
+            message=f"Agent name add '_copy' suffix exceeds the {AGENT_NAME_MAX_SIZE}-character length limit."
         )
 
     # 保存到数据库
@@ -1040,7 +1247,10 @@ def agent_react_copy(req: AgentCopy, current_user: dict) -> ResponseModel:
 
 
 @with_exception_handling
-def agent_search(req: AgentSearchRequest, current_user: dict) -> ResponseModel:
+def agent_search(
+        req: AgentSearchRequest,
+        current_user: dict
+) -> ResponseModel:
     """搜索智能体"""
     # 1. 校验Space_id是否有权限
     _ = check_user_space(req.space_id, current_user)
@@ -1092,11 +1302,18 @@ def agent_search(req: AgentSearchRequest, current_user: dict) -> ResponseModel:
         },
     }
 
-    return ResponseModel(code=status.HTTP_200_OK, message="Search agent success", data=res_data)
+    return ResponseModel(
+        code=status.HTTP_200_OK,
+        message="Search agent success",
+        data=res_data
+    )
 
 
 @with_exception_handling
-def agent_version_list(req: AgentVersionListRequest, current_user: dict) -> ResponseModel:
+def agent_version_list(
+        req: AgentVersionListRequest,
+        current_user: dict
+) -> ResponseModel:
     """获取智能体的发布版本列表"""
     _ = check_user_space(req.space_id, current_user)
 
@@ -1105,13 +1322,22 @@ def agent_version_list(req: AgentVersionListRequest, current_user: dict) -> Resp
 
     if version_result.code == status.HTTP_404_NOT_FOUND:
         logger.info(f"No published versions found for agent {req.agent_id}, returning empty list")
-        response_data = AgentVersionListResponse(agent_id=req.agent_id, versions=[])
+        response_data = AgentVersionListResponse(
+            agent_id=req.agent_id,
+            versions=[]
+        )
         return ResponseModel(
-            code=status.HTTP_200_OK, message="No agent version was found", data=response_data
+            code=status.HTTP_200_OK,
+            message="No agent version was found",
+            data=response_data
         )
 
     if version_result.code != status.HTTP_200_OK:
-        return ResponseModel(code=version_result.code, message=version_result.message, data=None)
+        return ResponseModel(
+            code=version_result.code,
+            message=version_result.message,
+            data=None
+        )
 
     # 构建响应数据
     versions_data = version_result.data or []
@@ -1126,7 +1352,10 @@ def agent_version_list(req: AgentVersionListRequest, current_user: dict) -> Resp
             )
         )
 
-    response_data = {"agent_id": req.agent_id, "versions": versions}
+    response_data = {
+        "agent_id": req.agent_id,
+        "versions": versions
+    }
 
     return ResponseModel(
         code=status.HTTP_200_OK,
@@ -1183,7 +1412,9 @@ def _collect_workflow_dependencies(
 
     from openjiuwen_studio.schemas.workflow import WorkflowId
 
-    wf_query = WorkflowId(space_id=space_id, workflow_id=workflow_id, workflow_version=None)
+    wf_query = WorkflowId(
+        space_id=space_id, workflow_id=workflow_id, workflow_version=None
+    )
 
     wf_result = workflow_repository.workflow_get(wf_query)
 
@@ -1247,7 +1478,9 @@ def _collect_plugin_dependencies(
     elif hasattr(plugin_data, "model_dump"):
         plugin_dict = plugin_data.model_dump()
     elif hasattr(plugin_data, "__dict__"):
-        plugin_dict = {k: v for k, v in plugin_data.__dict__.items() if not k.startswith("_")}
+        plugin_dict = {
+            k: v for k, v in plugin_data.__dict__.items() if not k.startswith("_")
+        }
     else:
         # 如果是字典，直接使用
         plugin_dict = plugin_data
@@ -1356,7 +1589,9 @@ def _create_plugin_and_tools(
     tools = plugin_tpl.get("tools") or plugin_tpl.get("tool_list") or []
 
     # 获取插件版本，兼容不同字段名，默认值为"draft"（与__version_none__保持一致）
-    plugin_version = plugin_tpl.get("plugin_version") or plugin_tpl.get("version") or "draft"
+    plugin_version = (
+        plugin_tpl.get("plugin_version") or plugin_tpl.get("version") or "draft"
+    )
     plugin_type = plugin_tpl.get("plugin_type", PluginType.PLUGIN_TYPE_CLOUD_API)
 
     for t in tools:
@@ -1450,7 +1685,9 @@ def _create_plugin_and_tools(
             }
 
         # 记录工具创建日志
-        logger.info(f"[AGENT_IMPORT] Creating tool {t.get('name')} for plugin {plugin_id}")
+        logger.info(
+            f"[AGENT_IMPORT] Creating tool {t.get('name')} for plugin {plugin_id}"
+        )
         logger.debug(f"[AGENT_IMPORT] Tool data: {tool_dict}")
 
         # 创建工具并处理冲突
@@ -1464,7 +1701,9 @@ def _create_plugin_and_tools(
                 "message", ""
             ) or "Duplicate entry" in create_res.get("message", ""):
                 # 生成新的工具ID并重试
-                logger.warning(f"[AGENT_IMPORT] Tool {tool_id} exists, generating new ID.")
+                logger.warning(
+                    f"[AGENT_IMPORT] Tool {tool_id} exists, generating new ID."
+                )
                 final_tool_id = str(uuid.uuid4())
                 tool_dict["tool_id"] = final_tool_id
                 create_res = tool_repository.tool_create(tool_dict)
@@ -1486,7 +1725,9 @@ def _create_plugin_and_tools(
                 )
                 continue
         else:
-            logger.info(f"[AGENT_IMPORT] Created tool {t.get('name')} with ID {final_tool_id}")
+            logger.info(
+                f"[AGENT_IMPORT] Created tool {t.get('name')} with ID {final_tool_id}"
+            )
             created_tool_ids.append(final_tool_id)
 
         # 更新tool_id_map，记录旧的工具ID和新的工具ID的映射关系
@@ -1506,7 +1747,9 @@ def _import_plugin_tools(
     created_tool_ids = []
 
     if not tool_list:
-        logger.info(f"[AGENT_IMPORT] No tools found for plugin {plugin_data.get('plugin_id')}")
+        logger.info(
+            f"[AGENT_IMPORT] No tools found for plugin {plugin_data.get('plugin_id')}"
+        )
         return created_tool_ids
     logger.info(
         f"[AGENT_IMPORT] Found {len(tool_list)} tools for plugin {plugin_data.get('plugin_id')}"
@@ -1516,7 +1759,9 @@ def _import_plugin_tools(
     # 确保工具的 plugin_type 与插件一致
     plugin_type = plugin_data.get("plugin_type", PluginType.PLUGIN_TYPE_CLOUD_API)
     # 获取插件版本，默认值为"draft"（与__version_none__保持一致）
-    plugin_version = plugin_data.get("plugin_version") or plugin_data.get("version") or "draft"
+    plugin_version = (
+        plugin_data.get("plugin_version") or plugin_data.get("version") or "draft"
+    )
 
     for tool in tool_list:
         # 1. 基础字段补全
@@ -1665,7 +1910,9 @@ def _import_plugin_tools(
 
             if create_res.get("code") != status.HTTP_200_OK:
                 message = create_res.get("message", "")
-                if "Duplicate entry" in str(message) or "IntegrityError" in str(message):
+                if "Duplicate entry" in str(message) or "IntegrityError" in str(
+                    message
+                ):
                     # 工具ID冲突，生成新ID
                     logger.warning(
                         f"[AGENT_IMPORT] Tool {tool_dict.get('tool_id')} exists, generating new ID."
@@ -1767,7 +2014,9 @@ def _collect_knowledge_dependencies(
         processed_kb_ids.add(kb_id)
 
 
-def _resolve_embedding_model_id(space_id: str, model_info: Dict[str, Any]) -> Optional[int]:
+def _resolve_embedding_model_id(
+    space_id: str, model_info: Dict[str, Any]
+) -> Optional[int]:
     """Resolve embedding model ID based on exported info"""
     if not model_info:
         return None
@@ -2163,7 +2412,9 @@ def agent_export(
 ) -> Union[ResponseModel, Tuple[io.BytesIO, str]]:
     """导出智能体及其依赖项"""
     data = current_user.get("data", {})
-    user_id = data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    user_id = (
+        data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    )
     username = data.get("username", "unknown") if isinstance(data, dict) else "unknown"
 
     logger.info(f"[AGENT_EXPORT] Exporting agent - User: {user_id}, ID: {req.agent_id}")
@@ -2225,8 +2476,10 @@ def agent_export(
         for pl in agent_plugins:
             pl_id = pl.get("plugin_id")
             if pl_id and pl_id not in processed_plugin_ids:
-                _collect_plugin_dependencies(pl_id, req.space_id, plugins, processed_plugin_ids)
-
+                _collect_plugin_dependencies(
+                    pl_id, req.space_id, plugins, processed_plugin_ids
+                )
+    
         # 3. 处理知识库依赖
         if "knowledge" in agent_data and agent_data["knowledge"]:
             _collect_knowledge_dependencies(
@@ -2246,7 +2499,9 @@ def agent_export(
         )
 
         prompt_relations_res = prompt_relation_repository.get_prompt_relate_tbl(
-            space_id=req.space_id, find_member_info=agent_related_info, only_active=True
+            space_id=req.space_id,
+            find_member_info=agent_related_info,
+            only_active=True
         )
 
         if prompt_relations_res.code == status.HTTP_200_OK and prompt_relations_res.data:
@@ -2265,17 +2520,13 @@ def agent_export(
 
                         try:
                             # 查询prompt基本信息
-                            prompt_basic = (
-                                db.query(PromptBasicModel)
-                                .filter(
-                                    and_(
-                                        PromptBasicModel.id == int(prompt_id),
-                                        PromptBasicModel.deleted_at.is_(None),
-                                    )
+                            prompt_basic = db.query(PromptBasicModel).filter(
+                                and_(
+                                    PromptBasicModel.id == int(prompt_id),
+                                    PromptBasicModel.deleted_at.is_(None)
                                 )
-                                .first()
-                            )
-
+                            ).first()
+                            
                             # 查询prompt提交信息
                             prompt_commit = None
 
@@ -2289,9 +2540,8 @@ def agent_export(
                                             PromptCommitModel.version == prompt_version,
                                         )
                                     )
-                                    .first()
-                                )
-
+                                ).first()
+                            
                             # 2. 如果没找到，或者版本是draft，或者关联版本查找失败，尝试查找最新提交
                             if not prompt_commit and prompt_basic and prompt_basic.latest_version:
                                 prompt_commit = (
@@ -2303,9 +2553,8 @@ def agent_export(
                                             == prompt_basic.latest_version,
                                         )
                                     )
-                                    .first()
-                                )
-
+                                ).first()
+                                
                             # 3. 如果还是没找到，尝试查找用户草稿
                             prompt_draft = None
                             if not prompt_commit:
@@ -2408,14 +2657,8 @@ def agent_export(
         )
 
     # 4. 清理敏感信息 (如 API Key)
-    if "model" in agent_data and agent_data["model"]:
-        if "model_info" in agent_data["model"]:
-            # 注意：如果是 dict 访问，如果是对象则 getattr
-            # agent_data 来自 repository get_agent_db，通常是 dict
-            if isinstance(agent_data["model"], dict) and "model_info" in agent_data["model"]:
-                if isinstance(agent_data["model"]["model_info"], dict):
-                    agent_data["model"]["model_info"]["api_key"] = ""
-                    agent_data["model"]["model_info"]["api_base"] = ""
+    # model字段已弃用，不再处理
+    # agent_model_config 中不包含敏感信息，model_id 直接导出供参考
 
     # 5. 构建导出数据
     version = get_current_project_version()
@@ -2436,7 +2679,9 @@ def agent_export(
     )
 
     # 检查是否有知识库文档需要导出
-    has_documents = any(kb.get("documents") for kb in knowledge_bases)
+    has_documents = any(
+        kb.get("documents") for kb in knowledge_bases
+    )
 
     # 统一文件名格式
     timestamp = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d%H%M%S")
@@ -2607,7 +2852,9 @@ async def agent_import_from_file(
 
             # 构造请求对象
             req = AgentImportRequest(
-                space_id=space_id, import_data=import_data, overwrite=overwrite
+                space_id=space_id,
+                import_data=import_data,
+                overwrite=overwrite
             )
 
             # 3. 调用核心导入逻辑（复用现有逻辑）
@@ -2640,11 +2887,15 @@ async def agent_import(req: AgentImportRequest, current_user: dict) -> ResponseM
 
 
 async def _agent_import_core(
-    req: AgentImportRequest, current_user: dict, documents_source_dir: Path = None
+    req: AgentImportRequest, 
+    current_user: dict, 
+    documents_source_dir: Path = None
 ) -> ResponseModel:
     """导入智能体及其依赖项（核心逻辑）"""
     data = current_user.get("data", {})
-    user_id = data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    user_id = (
+        data.get("user_id_str", "unknown") if isinstance(data, dict) else "unknown"
+    )
     space_id = req.space_id
 
     logger.info(f"[AGENT_IMPORT] Importing agent - User: {user_id}, Space: {space_id}")
@@ -2661,7 +2912,9 @@ async def _agent_import_core(
     created_resources = []
 
     def rollback_resources(resources):
-        logger.info(f"[AGENT_IMPORT] Rolling back {len(resources)} resources due to error")
+        logger.info(
+            f"[AGENT_IMPORT] Rolling back {len(resources)} resources due to error"
+        )
         for item in reversed(resources):
             try:
                 if item["type"] == "workflow":
@@ -2672,9 +2925,13 @@ async def _agent_import_core(
                     )
                     workflow_repository.workflow_draft_delete(wf_id)
                 elif item["type"] == "tool":
-                    tool_repository.tool_delete({"tool_id": item["id"], "space_id": space_id})
+                    tool_repository.tool_delete(
+                        {"tool_id": item["id"], "space_id": space_id}
+                    )
                 elif item["type"] == "plugin":
-                    plugin_repository.plugin_delete({"plugin_id": item["id"], "space_id": space_id})
+                    plugin_repository.plugin_delete(
+                        {"plugin_id": item["id"], "space_id": space_id}
+                    )
                 elif item["type"] == "knowledge_base":
                     kb_del_req = KnowledgeBaseGet(space_id=space_id, kb_id=item["id"])
                     knowledge_base_repository.knowledge_base_delete(kb_del_req)
@@ -2704,7 +2961,9 @@ async def _agent_import_core(
                     plugin_data["space_id"] = space_id
                     plugin_repository.plugin_save(plugin_data)
                     # 同时也更新工具
-                    created_tools = _import_plugin_tools(plugin_data, space_id, tool_id_map)
+                    created_tools = _import_plugin_tools(
+                        plugin_data, space_id, tool_id_map
+                    )
                     # Note: We don't rollback overwritten plugins/tools usually as it's destructive,
                     # but newly created tools inside existing plugin should probably be tracked.
                     # For simplicity, we only track completely new resources.
@@ -2780,14 +3039,18 @@ async def _agent_import_core(
                     if create_res.get("code") != status.HTTP_200_OK:
                         message = create_res.get("message", "")
                         # 捕获 IntegrityError (全局ID冲突)
-                        if "Duplicate entry" in str(message) or "IntegrityError" in str(message):
+                        if "Duplicate entry" in str(message) or "IntegrityError" in str(
+                            message
+                        ):
                             logger.warning(
                                 f"[AGENT_IMPORT] Plugin {old_plugin_id} exists in another space, generating new ID."
                             )
                             new_plugin_id = str(uuid.uuid4())
                             plugin_id_map[old_plugin_id] = new_plugin_id
                             plugin_data["plugin_id"] = new_plugin_id
-                            plugin_data["plugin_name"] = f"{plugin_data.get('plugin_name')}_copy"
+                            plugin_data["plugin_name"] = (
+                                f"{plugin_data.get('plugin_name')}_copy"
+                            )
                             plugin_data["create_time"] = None
                             plugin_data["update_time"] = None
 
@@ -2808,13 +3071,17 @@ async def _agent_import_core(
                                     f"[AGENT_IMPORT] Failed to create plugin with new ID: {retry_res.get('message')}"
                                 )
                             else:
-                                created_resources.append({"type": "plugin", "id": new_plugin_id})
+                                created_resources.append(
+                                    {"type": "plugin", "id": new_plugin_id}
+                                )
                                 # 插件创建成功，创建工具
                                 created_tools = _import_plugin_tools(
                                     plugin_data, space_id, tool_id_map
                                 )
                                 for tid in created_tools:
-                                    created_resources.append({"type": "tool", "id": tid})
+                                    created_resources.append(
+                                        {"type": "tool", "id": tid}
+                                    )
                         else:
                             logger.error(
                                 f"[AGENT_IMPORT] Failed to create plugin {old_plugin_id}: {message}"
@@ -2824,7 +3091,9 @@ async def _agent_import_core(
                             {"type": "plugin", "id": plugin_data.get("plugin_id")}
                         )
                         # 插件创建成功，创建工具
-                        created_tools = _import_plugin_tools(plugin_data, space_id, tool_id_map)
+                        created_tools = _import_plugin_tools(
+                            plugin_data, space_id, tool_id_map
+                        )
                         for tid in created_tools:
                             created_resources.append({"type": "tool", "id": tid})
 
@@ -2888,10 +3157,13 @@ async def _agent_import_core(
                         system_prompt = agent_data.get("configs", {}).get("system_prompt")
                         if system_prompt:
                             # 构造 messages 结构
-                            recovered_messages = json.dumps(
-                                [{"role": "system", "content": system_prompt}], ensure_ascii=False
-                            )
-
+                            recovered_messages = json.dumps([
+                                {
+                                    "role": "system",
+                                    "content": system_prompt
+                                }
+                            ], ensure_ascii=False)
+                            
                             if not prompt_commit_data:
                                 prompt_commit_data = {}
 
@@ -3131,7 +3403,9 @@ async def _agent_import_core(
             # 检查是否存在
             from openjiuwen_studio.schemas.workflow import WorkflowId
 
-            wf_query = WorkflowId(space_id=space_id, workflow_id=old_wf_id, workflow_version=None)
+            wf_query = WorkflowId(
+                space_id=space_id, workflow_id=old_wf_id, workflow_version=None
+            )
             existing_wf = workflow_repository.workflow_get(wf_query)
 
             # 根据用户需求：如果当前用户空间下不存在同样workflow_id的工作流，就直接生成新ID
@@ -3236,7 +3510,9 @@ async def _agent_import_core(
                         {"tool_id": current_tool_id, "space_id": space_id}
                     )
 
-                    if plugin_res.get("code") == status.HTTP_200_OK and plugin_res.get("data"):
+                    if plugin_res.get("code") == status.HTTP_200_OK and plugin_res.get(
+                        "data"
+                    ):
                         plugin_info = plugin_res["data"]
                         # 处理PluginBaseDB对象或字典
                         if hasattr(plugin_info, "name"):
@@ -3250,7 +3526,9 @@ async def _agent_import_core(
                             except Exception:
                                 p["plugin_name"] = None
 
-                    if tool_res.get("code") == status.HTTP_200_OK and tool_res.get("data"):
+                    if tool_res.get("code") == status.HTTP_200_OK and tool_res.get(
+                        "data"
+                    ):
                         tool_info = tool_res["data"]
                         # 处理ToolBaseDB对象或字典
                         if hasattr(tool_info, "name"):
@@ -3269,7 +3547,9 @@ async def _agent_import_core(
 
         # 更新引用了workflow_id的字段
         if workflow_id_map:
-            logger.info(f"[AGENT_IMPORT] Updating workflow IDs in agent config: {workflow_id_map}")
+            logger.info(
+                f"[AGENT_IMPORT] Updating workflow IDs in agent config: {workflow_id_map}"
+            )
             # Update workflows list
             if "workflows" in agent_data and agent_data["workflows"]:
                 for wf in agent_data["workflows"]:
@@ -3330,7 +3610,9 @@ async def _agent_import_core(
         old_agent_id = agent_data.get("agent_id")
 
         # 检查 Agent 是否存在于当前空间
-        agent_query = AgentId(space_id=space_id, agent_id=old_agent_id, agent_version=None)
+        agent_query = AgentId(
+            space_id=space_id, agent_id=old_agent_id, agent_version=None
+        )
         existing_agent = agent_repository.get_agent_db(agent_query)
 
         final_agent_id = old_agent_id
@@ -3342,6 +3624,10 @@ async def _agent_import_core(
                 agent_data["space_id"] = space_id
                 agent_data["update_time"] = milliseconds()
 
+                # model_id 在不同环境可能不同，导入时作为参考，保留原值
+                # agent_model_config 不包含敏感信息，直接导入
+
+                # 创建AgentBaseDBPd实例 (不再处理model字段)
                 agent_obj = AgentBaseDBPd(**agent_data)
                 save_res = agent_repository.save_agent_db(agent_obj)
                 if save_res.code != status.HTTP_200_OK:
@@ -3369,6 +3655,7 @@ async def _agent_import_core(
                 agent_data.pop("latest_publish_version", None)
                 agent_data.pop("latest_publish_time", None)
 
+                # 创建AgentBaseDBPd实例 (不再处理model字段)
                 logger.info(
                     f"[AGENT_IMPORT] Creating agent copy with new ID {new_agent_id} (original: {old_agent_id})"
                 )
@@ -3407,7 +3694,9 @@ async def _agent_import_core(
 
             if create_res.code != status.HTTP_200_OK:
                 # 捕获 IntegrityError: ID已存在但不在当前space下
-                logger.error(f"[AGENT_IMPORT] Failed to create agent: {create_res.message}")
+                logger.error(
+                    f"[AGENT_IMPORT] Failed to create agent: {create_res.message}"
+                )
                 rollback_resources(created_resources)
                 return ResponseModel(
                     code=StatusCode.AGENT_IMPORT_AGENT_CREATE_ERROR.code,
@@ -3447,7 +3736,9 @@ async def _agent_import_core(
 
                     # 创建或更新关联关系
                     prompt_relation_repository.create_prompt_relate_tbl(
-                        space_id=space_id, prompt_info=prompt_info, relate_member_info=agent_info
+                        space_id=space_id,
+                        prompt_info=prompt_info,
+                        relate_member_info=agent_info
                     )
                 except Exception as e:
                     logger.error(

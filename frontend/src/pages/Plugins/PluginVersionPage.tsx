@@ -198,12 +198,12 @@ const PluginVersionPage: React.FC = () => {
         name: versionData.plugin_info.name || '',
         description: versionData.plugin_info.desc || '',
         icon: versionData.plugin_info.icon_uri || '⚙️',
-        category: versionData.plugin_info.plugin_type === 1 ? t('plugins.types.cloud', '云侧插件') : t('plugins.types.ide', '本地代码插件'),
+        category: versionData.plugin_info.plugin_type === 1 ? t('plugins.types.cloud') : t('plugins.types.ide'),
         status: 'active',
         version: versionData.plugin_info.plugin_version || version,
         installDate: new Date().toISOString().split('T')[0],
         lastUpdate: new Date().toISOString().split('T')[0],
-        tags: [t('plugins.tags.cloud', '云侧'), t('plugins.tags.custom', '自定义'), t('plugins.tags.api', 'API')],
+        tags: [t('plugins.tags.cloud'), t('plugins.tags.custom'), t('plugins.tags.api')],
         dependencies: [],
         config: {
           url: versionData.plugin_info.url || '',
@@ -214,21 +214,21 @@ const PluginVersionPage: React.FC = () => {
 
       setPlugin(pluginData)
     } else if (versionError) {
-      console.error(t('plugins.message.getVersionInfoFailed', '获取插件版本信息失败'), versionError)
-      showError(t('plugins.message.getVersionInfoFailed', '获取插件版本信息失败，请稍后重试'))
+      console.error(t('plugins.messages.loadFailed'), versionError)
+      showError(t('plugins.messages.loadFailed'))
     } else if (versionDataResponse && versionDataResponse.code !== 200) {
-      showError(`${t('plugins.message.getVersionInfoFailed', '获取插件版本信息失败')}: ${versionDataResponse.message}`)
+      showError(`${t('plugins.messages.loadFailed')}: ${versionDataResponse.message}`)
     }
   }, [versionDataResponse, versionLoading, versionError, plugin_id, version])
 
   const handleSaveConfig = useCallback(async () => {
     if (isReadOnly) {
-      showError(t('plugins.message.readOnlyMode', '当前为只读模式，不允许编辑插件配置'))
+      showError(t('plugins.pluginVersion.readOnlyModePublish'))
       return
     }
 
     if (!plugin_id || !pluginConfigData) {
-      showError(t('plugins.errors.pluginDataNotLoaded', '插件数据未加载，请刷新页面'))
+      showError(t('plugins.errors.pluginDataNotLoaded'))
       return
     }
 
@@ -252,7 +252,7 @@ const PluginVersionPage: React.FC = () => {
       const response = await updatePluginApi.mutateAsync(updateRequest)
 
       if (response.code === 200) {
-        showSuccess(t('plugins.message.pluginVersionConfigSaveSuccess', '插件版本配置保存成功'))
+        showSuccess(t('plugins.pluginVersion.saveSuccess'))
 
         // Update local state
         setPluginConfigData(prev => ({
@@ -280,12 +280,12 @@ const PluginVersionPage: React.FC = () => {
             : null,
         )
       } else {
-        showError(t('plugins.errors.saveFailed', '保存失败') + `: ${response.message || t('common.message.unknownError', '未知错误')}`)
+        showError(t('plugins.errors.saveFailed') + `: ${response.message || t('plugins.messages.unknownError')}`)
       }
     } catch (error: unknown) {
-      console.error(t('plugins.errors.savePluginVersionConfigFailed', '保存插件版本配置失败'), error)
+      console.error(t('plugins.errors.saveFailed'), error)
       const errorMessage =
-        error?.response?.data?.message || error?.message || t('plugins.errors.savePluginVersionConfigFailed', '保存插件版本配置失败，请稍后重试')
+        error?.response?.data?.message || error?.message || t('common.messages.networkError')
       showError(errorMessage)
     }
   }, [
@@ -331,7 +331,7 @@ const PluginVersionPage: React.FC = () => {
 
         // Here you would typically send the data to your backend API
         console.log('Updating plugin version:', updatedPlugin)
-        showSuccess(t('plugins.version.updateSuccess', { name: updatedPlugin.name }))
+        showSuccess(t('plugins.pluginVersion.updateSuccess', { name: updatedPlugin.name }))
         setIsEditDialogOpen(false)
         setEditingPlugin(null)
       }
@@ -355,12 +355,12 @@ const PluginVersionPage: React.FC = () => {
   const handlePublishPlugin = useCallback(
     async (version: string, versionDesc: string) => {
       if (isReadOnly) {
-        showError(t('plugins.pluginVersion.readOnlyModePublish', '当前为只读模式，不允许发布插件'))
+        showError(t('plugins.pluginVersion.readOnlyModePublish'))
         return
       }
 
       if (!plugin_id) {
-        showError(t('plugins.pluginVersion.pluginIdNotFound', '插件ID不存在，无法发布'))
+        showError(t('plugins.pluginVersion.pluginIdNotFound'))
         return
       }
 
@@ -384,11 +384,11 @@ const PluginVersionPage: React.FC = () => {
           // Optionally refresh plugin data to get latest publish status
           // The usePluginPublishGet hook will automatically refetch when needed
         } else {
-          showError(t('plugins.pluginVersion.publishFailed', '发布插件版本失败') + `: ${response.message || t('common.message.unknownError', '未知错误')}`)
+          showError(t('plugins.pluginVersion.publishFailed') + `: ${response.message || t('plugins.messages.unknownError')}`)
         }
       } catch (error: unknown) {
-        console.error(t('plugins.pluginVersion.publishFailed', '发布插件版本失败'), error)
-        const errorMessage = error?.response?.data?.message || error?.message || t('plugins.pluginVersion.publishFailed', '发布插件版本失')
+        console.error(t('plugins.pluginVersion.publishFailed'), error)
+        const errorMessage = error?.response?.data?.message || error?.message || t('common.messages.networkError')
         showError(errorMessage)
       }
     },
@@ -401,7 +401,7 @@ const PluginVersionPage: React.FC = () => {
         <div className="text-center">
           <CircularProgress size={48} className="mb-4" />
           <Typography variant="body1" color="text.secondary">
-            {t('plugins.pluginVersion.loadingPluginVersion', '正在加载插件版本信息...')}
+            {t('plugins.pluginVersion.loadingPluginVersion')}
           </Typography>
         </div>
       </div>
@@ -414,13 +414,13 @@ const PluginVersionPage: React.FC = () => {
         <div className="text-center">
           <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-yellow-500" />
           <Typography variant="h6" className="mb-2">
-            {t('plugins.pluginVersion.pluginVersionNotFound', '插件版本未找到')}
+            {t('plugins.pluginVersion.pluginVersionNotFound')}
           </Typography>
           <Typography variant="body2" color="text.secondary" className="mb-4">
-            {t('plugins.pluginVersion.checkPluginIdAndVersion', '请检查插件ID和版本号是否正确')}
+            {t('plugins.pluginVersion.checkPluginIdAndVersion')}
           </Typography>
           <Button variant="contained" onClick={() => navigate('/dashboard/plugins')}>
-            {t('plugins.action.returnToPluginManagement', '返回插件管理')}
+            {t('plugins.actions.backToManagement')}
           </Button>
         </div>
       </div>
@@ -535,13 +535,13 @@ const PluginVersionPage: React.FC = () => {
       <Box className="px-6 py-4 bg-white border-b border-gray-200">
         <Breadcrumbs aria-label="breadcrumb">
           <Link component="button" variant="body1" onClick={() => navigate('/dashboard/plugins')} className="text-gray-600 hover:text-gray-900">
-            {t('plugins.title', '插件管理')}
+            {t('plugins.title')}
           </Link>
           <Link component="button" variant="body1" onClick={() => navigate(`/dashboard/plugins/${plugin_id}`)} className="text-gray-600 hover:text-gray-900">
             {plugin?.name}
           </Link>
           <Typography variant="body1" color="text.primary" className="font-medium">
-            {t('plugins.categories.version', '版本')} {version}
+            {t('common.version')} {version}
           </Typography>
         </Breadcrumbs>
       </Box>

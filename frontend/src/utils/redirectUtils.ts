@@ -1,15 +1,14 @@
 /**
  * 重定向工具函数 - 智能处理页面跳转，避免不必要的重定向
  */
-
-import { useUIStore } from '@/stores/useUIStore'
+import { getLoginPagePath } from '@/Common/LoginPage.ts'
 
 // 检查当前是否已经在登录页面
 export const isCurrentLoginPage = (): boolean => {
   if (typeof window === 'undefined') return false
 
   const currentPath = window.location.pathname
-  return currentPath === '/login' || currentPath.includes('/login')
+  return currentPath === getLoginPagePath() || currentPath.includes(getLoginPagePath())
 }
 
 // 检查是否应该跳转到登录页面
@@ -28,7 +27,7 @@ export const smartRedirectToLogin = (): void => {
   if (shouldRedirectToLogin()) {
     console.log('🔄 [RedirectUtils] Redirecting to login page...')
     if (typeof window !== 'undefined') {
-      window.location.href = '/login'
+      window.location.href = getLoginPagePath()
     }
   } else {
     console.log('⏭️ [RedirectUtils] Skipping login redirect - already on login page')
@@ -36,10 +35,9 @@ export const smartRedirectToLogin = (): void => {
 }
 
 
-// 获取 Dashboard 目标路径
+// 获取 Dashboard 目标路径（统一使用新版首页）
 const getDashboardTargetPath = (): string => {
-  const isNew = useUIStore.getState().isNewDashboard
-  return isNew ? '/dashboard/agents' : '/dashboard'
+  return '/dashboard/agents'
 }
 
 // 重定向到 Dashboard（带智能检查）
@@ -64,7 +62,7 @@ export const createSmartRedirect = (navigate: (path: string, options?: any) => v
   toLogin: () => {
     if (shouldRedirectToLogin()) {
       console.log('🔄 [RedirectUtils] React Router: Redirecting to login...')
-      navigate('/login', { replace: true })
+      navigate(getLoginPagePath(), { replace: true })
     } else {
       console.log('⏭️ [RedirectUtils] React Router: Skipping login redirect - already on login page')
     }
@@ -91,7 +89,7 @@ export const isAuthRelatedPage = (): boolean => {
   if (typeof window === 'undefined') return false
 
   const currentPath = window.location.pathname
-  const authPaths = ['/login', '/register', '/forgot-password']
+  const authPaths = ['/login', '/register', '/forgot-password', '/user_login']
 
   return authPaths.some(path => currentPath === path || currentPath.includes(path))
 }

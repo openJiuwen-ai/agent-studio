@@ -24,7 +24,11 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
-    <<PRIVILEGED_SECURITY_OPTS>>
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
 
   <<PYTHON_SERVER_SERVICE>>:
     image: <<PYTHON_SERVER_IMAGE>>

@@ -32,7 +32,7 @@ def sub_workflow_convert(node: Node, space_id: str) -> dsl.Component:
         converted_outputs = outputs_convert(data.outputs)
     
     # Create sub-workflow reference configuration as BaseInfo instance
-    reference_ir = dsl.BaseInfo(
+    sub_workflow_info = dsl.BaseInfo(
         id=sub_workflow_config.workflow_id,
         version=sub_workflow_config.workflow_version,
         name=sub_workflow_config.workflow_name or "",
@@ -46,7 +46,7 @@ def sub_workflow_convert(node: Node, space_id: str) -> dsl.Component:
         type_version="1.0.0",
         inputs=converted_inputs,
         outputs=converted_outputs,
-        configs={"reference_ir": reference_ir},
+        configs={"sub_workflow_info": sub_workflow_info},
         name=data.title if hasattr(data, 'title') else ""
     )
     

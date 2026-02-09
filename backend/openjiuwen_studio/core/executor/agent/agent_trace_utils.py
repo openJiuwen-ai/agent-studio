@@ -22,8 +22,8 @@ from typing import Any, Optional, List, Dict
 from datetime import datetime
 import uuid
 
-from openjiuwen.core.tracer.span import TraceWorkflowSpan, TraceAgentSpan
-from openjiuwen.core.stream.writer import TraceSchema, OutputSchema
+from openjiuwen.core.session.tracer.span import TraceWorkflowSpan, TraceAgentSpan
+from openjiuwen.core.session.stream.base import TraceSchema, OutputSchema
 from openjiuwen.core.common.logging import logger
 
 

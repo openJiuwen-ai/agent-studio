@@ -26,7 +26,7 @@ def create_user_response(user_db: UserDBPd, include_session_key: bool) -> UserRe
     return user_response
 
 
-def create_user_db(email: str, password: str, role_type: RoleType) -> UserDBPd:
+def create_user_db(email: str, password: str, role_type: RoleType, locale: str = "zh-CN") -> UserDBPd:
     user_id = ''.join(secrets.choice(string.digits) for _ in range(8))
     name = email.split('@')[0]
     user_unique_name = email
@@ -39,7 +39,7 @@ def create_user_db(email: str, password: str, role_type: RoleType) -> UserDBPd:
         "description": "",
         "avata_url": "",
         "role_type": role_type,
-        "locale": "zh-CN",
+        "locale": locale,
         "password": hash_password(password),
         "user_create_time": user_create_time,
         "user_update_time": user_create_time,
@@ -102,6 +102,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     user = ret.get("data")
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    # 如果启用新认证系统，进行 session_key 验证
+    if settings.enable_new_auth:
+        db_session_key = user.get("session_key")
+        # 检查是否为空 (处理登出、重置密码后的情况)
+        if not db_session_key:
+            raise HTTPException(status_code=401, detail="Session expired")
     user_db = UserDBPd(**user)
 
     return {"code": status.HTTP_200_OK,

@@ -25,7 +25,7 @@ const OverridePromptTemplateDialog: React.FC<OverridePromptTemplateDialogProps> 
           <Typography variant="body2">{t('overwritePromptTemplateDialog.description')}</Typography>
           <Alert severity="warning">
             <div className="text-sm">
-              <div className="font-medium">操作说明：</div>
+              <div className="font-medium">{t('overwritePromptTemplateDialog.instructionsTitle')}</div>
               <ul className="list-disc list-inside mt-1">
                 <li>{t('overwritePromptTemplateDialog.overwriteAndJump')}</li>
                 <li>{t('overwritePromptTemplateDialog.notOverwriteAndJump')}</li>

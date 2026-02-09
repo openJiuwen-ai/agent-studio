@@ -141,7 +141,10 @@ const parseLoopEffect = (value: any, ctx: EffectFuncProps['context']) => {
       key: `${ctx.node.id}_locals`,
       meta: {
         title: ctx.node.form?.getValueIn('title'),
-        icon: ctx.node.getNodeRegistry<FlowNodeRegistry>().info?.icon,
+        icon: (() => {
+          const info = ctx.node.getNodeRegistry<FlowNodeRegistry>().info
+          return typeof info === 'function' ? info().icon : info?.icon
+        })(),
       },
       type: ASTFactory.createObject({
         properties,
@@ -212,7 +215,10 @@ export const exportIntermediateVarsEffect: EffectOptions[] = [
           key: `${context.node.id}`,
           meta: {
             title: context.node.form?.getValueIn('title'),
-            icon: context.node.getNodeRegistry<FlowNodeRegistry>().info?.icon,
+            icon: (() => {
+              const info = context.node.getNodeRegistry<FlowNodeRegistry>().info
+              return typeof info === 'function' ? info().icon : info?.icon
+            })(),
           },
           type: ASTFactory.createObject({
             properties: allProperties,

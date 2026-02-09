@@ -18,10 +18,11 @@ export function FormContent(props: { children?: React.ReactNode }) {
   const { node, expanded } = useNodeRenderContext()
   const isSidebar = useIsSidebar()
   const registry = node.getNodeRegistry<FlowNodeRegistry>()
+  const info = typeof registry.info === 'function' ? registry.info() : registry.info
   return (
     <FormWrapper>
       <>
-        {isSidebar && <FormTitleDescription>{registry.info?.description}</FormTitleDescription>}
+        {isSidebar && <FormTitleDescription>{info?.description}</FormTitleDescription>}
         {(expanded || isSidebar) && props.children}
       </>
     </FormWrapper>

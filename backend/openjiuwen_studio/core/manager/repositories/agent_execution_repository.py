@@ -9,8 +9,8 @@ from functools import wraps
 from typing import Callable
 
 from fastapi import status
-from openjiuwen.core.stream.base import OutputSchema
-from openjiuwen.core.tracer.span import TraceAgentSpan, TraceWorkflowSpan
+from openjiuwen.core.session.tracer.span import TraceWorkflowSpan, TraceAgentSpan
+from openjiuwen.core.session.stream.base import OutputSchema
 from sqlalchemy.orm import Session
 
 from openjiuwen.core.common.logging import logger

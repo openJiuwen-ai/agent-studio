@@ -7,13 +7,13 @@ import threading
 from dataclasses import dataclass
 from typing import Dict, Optional
 from openjiuwen.core.common.logging import logger
-from openjiuwen.core.runtime.workflow import WorkflowRuntime
+from openjiuwen.core.session.node import Session
 
 
 @dataclass
 class ComponentExecutionRegistration:
     execution_id: str
-    runtime: Optional[WorkflowRuntime] = None
+    session: Optional[Session] = None
     task: Optional[asyncio.Task] = None
 
 
@@ -32,7 +32,7 @@ class ComponentExecutionManager:
         with self._lock:
             key = reg.execution_id
             self._executions[key] = ComponentExecutionInfo(
-                execution_id=key, runtime=reg.runtime, task=reg.task, thread_id=threading.get_ident()
+                execution_id=key, session=reg.session, task=reg.task, thread_id=threading.get_ident()
             )
             self._cancelled_flags[key] = False
             logger.info(f"Registered component execution: {key}")
@@ -62,33 +62,15 @@ class ComponentExecutionManager:
                 self._cancelled_flags[execution_id] = True
             logger.info(f"Set cancelled flag for {execution_id}")
 
-            if info.runtime:
-                try:
-                    swm = info.runtime.stream_writer_manager()
-                    if swm:
-                        emitter = swm.stream_emitter()
-                        if emitter and not emitter.is_closed():
-                            await emitter.close()
-                    await info.runtime.close()
-                except Exception as e:
-                    logger.error(f"Close runtime failed: {e}", exc_info=True)
-
             if info.task and not info.task.done():
                 info.task.cancel()
+                logger.info(f"Component run task cancelled by user: {execution_id}")
                 try:
                     await info.task
                 except asyncio.CancelledError:
                     logger.info(f"Task cancelled: {execution_id}")
                 except Exception as e:
                     logger.error(f"Cancel task error: {e}", exc_info=True)
-
-            if info.runtime and hasattr(info.runtime, "state"):
-                try:
-                    state = info.runtime.state()
-                    if state and hasattr(state, "set_state"):
-                        state.set_state({})
-                except Exception as e:
-                    logger.error(f"Clear state failed: {e}", exc_info=True)
 
             self.unregister_execution(execution_id)
             return True

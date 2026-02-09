@@ -22,10 +22,10 @@ export const StartNodeRegistry: FlowNodeRegistry = {
       height: 211,
     },
   },
-  info: {
+  info: () => ({
     icon: <Play size={16} className="text-green-600" />,
     description: t('workflowCanvas.nodes.start.description'),
-  },
+  }),
   /**
    * Render node via formMeta
    */

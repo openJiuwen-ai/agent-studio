@@ -17,37 +17,8 @@ export interface ModelParameterEditorProps {
   readonly?: boolean
 }
 
-// 参数名称映射表（中文 -> 英文）
-const PARAM_NAME_MAP: Record<string, string> = {
-  温度: 'Temperature',
-  核采样: 'Top-p',
-}
-
-// 参数描述映射表（中文 -> 英文）
-const PARAM_DESC_MAP: Record<string, string> = {
-  'temperature:控制模型生成结果的随机性与创造性。值越高，输出越随机、多样；值越低，结果越确定、保守。范围通常为0~2，推荐设置0.1~1.0。示例：0.7（平衡随机性与一致性）、1.2（更具创造性的输出）。':
-    'temperature: Controls the randomness and creativity of model generation results. Higher values produce more random and diverse outputs; lower values produce more deterministic and conservative results. Range is typically 0~2, recommended setting is 0.1~1.0. Examples: 0.7 (balanced randomness and consistency), 1.2 (more creative output).',
-  'Top-p:选择累计概率达到p的最小词集合进行采样。动态调整候选词的数量，平衡输出的多样性和质量。建议：通常设置为0.9-0.95，与温度配合使用时建议只调整其中一个。':
-    'Top-p: Selects the minimum set of words with cumulative probability reaching p for sampling. Dynamically adjusts the number of candidate words, balancing output diversity and quality. Recommendation: Usually set to 0.9-0.95, when used with temperature, it is recommended to adjust only one of them.',
-}
-
 const ModelParameterEditor: React.FC<ModelParameterEditorProps> = ({ selectedModel, modelConfig, onModelConfigChange, className = '', readonly = false }) => {
-  const { t, i18n } = useTranslation()
-
-  // 根据当前语言环境映射参数名称和描述
-  const getMappedLabel = (label: string): string => {
-    if (i18n.language === 'en-US' && PARAM_NAME_MAP[label]) {
-      return PARAM_NAME_MAP[label]
-    }
-    return label
-  }
-
-  const getMappedDesc = (desc: string): string => {
-    if (i18n.language === 'en-US' && PARAM_DESC_MAP[desc]) {
-      return PARAM_DESC_MAP[desc]
-    }
-    return desc
-  }
+  const { t } = useTranslation()
   return (
     <div className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(0.5rem, 1.5vh, 0.75rem)' }}>
       {selectedModel?.openModel?.param_config?.param_schemas ? (
@@ -57,16 +28,18 @@ const ModelParameterEditor: React.FC<ModelParameterEditorProps> = ({ selectedMod
               paramSchema.min !== undefined && paramSchema.max !== undefined ? (
                 // 使用滑块控件（当有min和max时）
                 <div className="flex items-center" style={{ gap: 0 }}>
-                  <div className="flex items-center flex-shrink-0" style={{ width: 'clamp(2rem, 20vw, 5.5rem)', gap: 0 }}>
-                    <Typography
-                      variant="subtitle2"
-                      className="text-gray-700 truncate"
-                      sx={{
-                        fontSize: 'clamp(0.7rem, 1.5vw, 0.8rem)',
-                      }}
-                    >
-                      {paramSchema.label}
-                    </Typography>
+                  <div className="flex items-center flex-shrink-0" style={{ width: 'clamp(1rem, 8vw, 6.9rem)', gap: 0 }}>
+                    <Tooltip title={paramSchema.label}>
+                      <Typography
+                        variant="subtitle2"
+                        className="text-gray-700 truncate"
+                        sx={{
+                          fontSize: 'clamp(0.7rem, 1.5vw, 0.8rem)',
+                        }}
+                      >
+                        {paramSchema.label}
+                      </Typography>
+                    </Tooltip>
                     <Tooltip title={paramSchema.desc}>
                       <IconButton
                         size="small"
@@ -223,15 +196,17 @@ const ModelParameterEditor: React.FC<ModelParameterEditorProps> = ({ selectedMod
                 // 使用文本输入框（当没有min和max时）
                 <div className="flex items-center" style={{ gap: 0 }}>
                   <div className="flex items-center flex-shrink-0" style={{ minWidth: 'clamp(2rem, 8vw, 3rem)', gap: 0 }}>
-                    <Typography
-                      variant="subtitle2"
-                      className="text-gray-700 truncate"
-                      sx={{
-                        fontSize: 'clamp(0.7rem, 1.5vw, 0.8rem)',
-                      }}
-                    >
-                      {paramSchema.label}
-                    </Typography>
+                    <Tooltip title={paramSchema.label}>
+                      <Typography
+                        variant="subtitle2"
+                        className="text-gray-700 truncate"
+                        sx={{
+                          fontSize: 'clamp(0.7rem, 1.5vw, 0.8rem)',
+                        }}
+                      >
+                        {paramSchema.label}
+                      </Typography>
+                    </Tooltip>
                     <Tooltip title={paramSchema.desc}>
                       <IconButton
                         size="small"
@@ -300,15 +275,17 @@ const ModelParameterEditor: React.FC<ModelParameterEditorProps> = ({ selectedMod
             ) : paramSchema.type === 'bool' ? (
               <div className="flex items-center justify-between">
                 <div className="flex items-center flex-shrink-0" style={{ minWidth: 'clamp(2rem, 10vw, 3.5rem)', gap: 0 }}>
-                  <Typography
-                    variant="subtitle2"
-                    className="text-gray-700 truncate"
-                    sx={{
-                      fontSize: 'clamp(0.75rem, 1.5vw, 0.875rem)',
-                    }}
-                  >
-                    {paramSchema.label}
-                  </Typography>
+                  <Tooltip title={paramSchema.label}>
+                    <Typography
+                      variant="subtitle2"
+                      className="text-gray-700 truncate"
+                      sx={{
+                        fontSize: 'clamp(0.75rem, 1.5vw, 0.875rem)',
+                      }}
+                    >
+                      {paramSchema.label}
+                    </Typography>
+                  </Tooltip>
                   <Tooltip title={paramSchema.desc}>
                     <IconButton
                       size="small"
@@ -356,15 +333,17 @@ const ModelParameterEditor: React.FC<ModelParameterEditorProps> = ({ selectedMod
               // 其他类型使用文本输入框
               <div className="flex items-center" style={{ gap: 0 }}>
                 <div className="flex items-center flex-shrink-0" style={{ minWidth: 'clamp(2rem, 10vw, 3.5rem)', gap: 0 }}>
-                  <Typography
-                    variant="subtitle2"
-                    className="text-gray-700 truncate"
-                    sx={{
-                      fontSize: 'clamp(0.75rem, 1.5vw, 0.875rem)',
-                    }}
-                  >
-                    {paramSchema.label}
-                  </Typography>
+                  <Tooltip title={paramSchema.label}>
+                    <Typography
+                      variant="subtitle2"
+                      className="text-gray-700 truncate"
+                      sx={{
+                        fontSize: 'clamp(0.75rem, 1.5vw, 0.875rem)',
+                      }}
+                    >
+                      {paramSchema.label}
+                    </Typography>
+                  </Tooltip>
                   <Tooltip title={paramSchema.desc}>
                     <IconButton
                       size="small"

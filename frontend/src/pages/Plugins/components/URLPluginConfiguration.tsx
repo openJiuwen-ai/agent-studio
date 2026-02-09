@@ -256,7 +256,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
   const handleToolSubmit = async () => {
     // Validate form
     if (!toolForm.name.trim() || !toolForm.description.trim() || !toolForm.path.trim() || !toolForm.method) {
-      showError(t('plugins.tools.fillRequiredFields', '请填写所有必填字段'))
+      showError(t('plugins.tools.fillRequiredFields'))
       return
     }
 
@@ -278,7 +278,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
 
     const methodNumber = methodMap[toolForm.method.toUpperCase()]
     if (!methodNumber) {
-      showError(t('plugins.pluginConfig.unsupportedMethod', '不支持的请求方法，仅支持 GET、POST'))
+      showError(t('plugins.pluginConfig.unsupportedMethod'))
       return
     }
 
@@ -323,11 +323,11 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
           })
         }
       } else {
-        showError(t('plugins.pluginConfig.createFailed', '创建失败') + `: ${response.message || t('common.messages.unknownError', '未知错误')}`)
+        showError(t('plugins.pluginConfig.createFailed') + `: ${response.message || t('common.messages.unknownError')}`)
       }
     } catch (error: unknown) {
-      console.error(t('plugins.pluginConfig.createFailed', '创建工具失败'), error)
-      const errorMessage = error.response?.data?.message || error.message || t('plugins.pluginConfig.createFailedRetry', '创建工具失败，请稍后重试')
+      console.error(t('plugins.pluginConfig.createFailed'), error)
+      const errorMessage = error.response?.data?.message || error.message || t('plugins.pluginConfig.createFailedRetry')
       showError(errorMessage)
     }
   }
@@ -353,17 +353,17 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
       const response = await deleteToolApi.mutateAsync(deleteRequest)
 
       if (response.code === 200) {
-        showSuccess(t('plugins.pluginConfig.toolDeletedSuccess', { name: toolToDelete.name || t('plugins.pluginConfig.unnamedTool', '未命名工具') }))
+        showSuccess(t('plugins.pluginConfig.toolDeletedSuccess', { name: tool.name || t('plugins.pluginConfig.unnamedTool') }))
         // Refresh the tool list after successful deletion
         setTimeout(() => {
           urlToolsQuery.refetch()
         }, 500) // Small delay to ensure backend processes deletion
       } else {
-        showError(t('plugins.pluginConfig.deleteFailed', '删除工具失败') + `: ${response.message || t('common.messages.unknownError', '未知错误')}`)
+        showError(t('plugins.pluginConfig.deleteFailed') + `: ${response.message || t('common.messages.unknownError')}`)
       }
     } catch (error: unknown) {
-      console.error(t('plugins.pluginConfig.deleteFailed', '删除工具失败'), error)
-      const errorMessage = error?.response?.data?.message || error?.message || t('plugins.pluginConfig.deleteFailedRetry', '删除工具失败，请稍后重试')
+      console.error(t('plugins.pluginConfig.deleteFailed'), error)
+      const errorMessage = error?.response?.data?.message || error?.message || t('plugins.pluginConfig.deleteFailedRetry')
       showError(errorMessage)
     } finally {
       setDeletingToolId(null)
@@ -385,27 +385,27 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
 
   const getParamTypeName = (type: number): string => {
     const typeMap: Record<number, string> = {
-      1: '字符串',
-      2: '整数',
-      3: '浮点数',
-      4: '布尔值',
-      5: '对象',
-      6: '字符串数组',
-      7: '整数数组',
-      8: '浮点数数组',
-      9: '布尔数组',
+      1: 'String',
+      2: 'Int',
+      3: 'Float',
+      4: 'Boolean',
+      5: 'Object',
+      6: 'String[]',
+      7: 'Int[]',
+      8: 'Float[]',
+      9: 'Boolean[]',
     }
-    return typeMap[type] || '未知'
+    return typeMap[type] || t('plugins.pluginConfig.unknown')
   }
 
   const getInputMethodName = (method: number): string => {
     const methodMap: Record<number, string> = {
-      0: '无',
+      0: 'None',
       1: 'Header',
       2: 'Query',
       3: 'Body',
     }
-    return methodMap[method] || '未知'
+    return methodMap[method] || t('plugins.pluginConfig.unknown')
   }
 
   const openParameterDialog = (param: any | null) => {
@@ -453,12 +453,12 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
 
   const handleSaveParameter = async () => {
     if (!parameterForm.name.trim()) {
-      showError('请输入参数名称')
+      showError(t('plugins.paramConfig.nameRequired'))
       return
     }
 
     if (!parameterForm.is_runtime && !parameterForm.value.trim()) {
-      showError('非运行时参数必须设置默认值')
+      showError(t('plugins.paramConfig.nonRuntimeValueRequired'))
       return
     }
 
@@ -502,15 +502,15 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
           ...prev,
           request_params: updatedRequestParams,
         }))
-        showSuccess(editingParameter ? '参数更新成功' : '参数添加成功')
+        showSuccess(editingParameter ? t('plugins.paramConfig.updateSuccess') : t('plugins.paramConfig.addSuccess'))
         setIsParameterDialogOpen(false)
         setEditingParameter(null)
       } else {
-        showError(`${editingParameter ? '参数更新' : '参数添加'}失败: ${response.message || '未知错误'}`)
+        showError(`${editingParameter ? t('plugins.paramConfig.update') : t('plugins.paramConfig.add')}${t('common.failed')}: ${response.message || t('common.messages.unknownError')}`)
       }
     } catch (error: unknown) {
-      console.error(`${editingParameter ? '更新参数' : '添加参数'}失败:`, error)
-      const errorMessage = error?.response?.data?.message || error?.message || '网络错误，请稍后重试'
+      console.error(`${editingParameter ? t('plugins.paramConfig.update') : t('plugins.paramConfig.add')}${t('common.failed')}:`, error)
+      const errorMessage = error?.response?.data?.message || error?.message || t('common.messages.networkError')
       showError(errorMessage)
     }
   }
@@ -542,9 +542,9 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
           ...prev,
           request_params: updatedRequestParams,
         }))
-        showSuccess('参数删除成功')
+        showSuccess(t('plugins.paramConfig.deleteSuccess'))
       } else {
-        showError(`参数删除失败: ${response.message || '未知错误'}`)
+        showError(`${t('plugins.paramConfig.delete')}${t('common.failed')}: ${response.message || t('common.messages.unknownError')}`)
       }
     } catch (error: unknown) {
       console.error('删除参数失败:', error)
@@ -572,13 +572,13 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
         <div className="text-center">
           <Code className="w-16 h-16 mx-auto mb-4 text-yellow-500" />
           <Typography variant="h6" className="mb-2">
-            {t('plugins.pluginConfig.pluginNotFound', '插件未找到')}
+            {t('plugins.pluginConfig.pluginNotFound')}
           </Typography>
           <Typography variant="body2" color="text.secondary" className="mb-4">
-            {t('plugins.pluginConfig.checkPluginId', '请检查插件ID是否正确')}
+            {t('plugins.pluginConfig.checkPluginId')}
           </Typography>
           <Button variant="contained" onClick={() => navigate('/dashboard/plugins')}>
-            {t('plugins.actions.returnToPluginManagement', '返回插件管理')}
+            {t('plugins.actions.returnToPluginManagement')}
           </Button>
         </div>
       </div>
@@ -592,7 +592,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
         <div className="mb-8">
           <div className="mb-6 flex items-center justify-between">
             <Button variant="outlined" startIcon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/dashboard/plugins')}>
-              {t('plugins.actions.returnToPluginManagement', '返回插件管理')}
+              {t('plugins.actions.returnToPluginManagement')}
             </Button>
             <Button
               variant="outlined"
@@ -600,7 +600,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
               onClick={() => setIsHistoryDialogOpen(true)}
               className="text-blue-600 border-blue-600 hover:bg-blue-50"
             >
-              {t('plugins.actions.versionHistory', '版本历史')}
+              {t('plugins.actions.versionHistory')}
             </Button>
           </div>
 
@@ -616,7 +616,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                     onBlur={handleNameSubmit}
                     size="small"
                     variant="outlined"
-                    placeholder={t('plugins.basicInfo.name', '插件名称')}
+                    placeholder={t('plugins.basicInfo.name')}
                     inputProps={{ maxLength: 20, style: { fontSize: '2rem', fontWeight: 'bold' } }}
                     className="font-bold text-gray-900"
                     autoFocus
@@ -629,7 +629,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                 <div
                   className="cursor-pointer hover:text-blue-600 transition-colors"
                   onClick={handleEditName}
-                  title={t('plugins.actions.clickToEditName', '点击编辑插件名称')}
+                  title={t('plugins.actions.clickToEditName')}
                 >
                   {' '}
                   <Typography variant="h4" className="font-bold text-gray-900 hover:text-blue-600">
@@ -650,7 +650,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
           <Card className="p-6">
             <Typography variant="h6" className="mb-4 flex items-center">
               <Info className="w-5 h-5 mr-2 text-blue-600" />
-              {t('plugins.basicInfoLabel', '基本信息')}
+              {t('plugins.basicInfoLabel')}
             </Typography>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
@@ -661,7 +661,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
               </div>
               <div>
                 <Typography variant="subtitle2" color="text.secondary">
-                  {t('plugins.versionHistory.pluginType', '插件类型')}
+                  {t('plugins.versionHistory.pluginType')}
                 </Typography>
                 <Typography variant="div" component="div">
                   <Chip label={plugin.category} size="small" />
@@ -674,13 +674,13 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
           <Card className="p-6">
             <Typography variant="h6" className="mb-4 flex items-center">
               <Settings className="w-5 h-5 mr-2 text-purple-600" />
-              {t('plugins.pluginConfig.configOptions', '配置选项')}
+              {t('plugins.pluginConfig.configOptions')}
             </Typography>
 
             <Tabs value={configTabValue} onChange={(e, newValue) => setConfigTabValue(newValue)} className="mb-6">
-              <Tab label={t('plugins.pluginConfig.basicTab', '基本配置')} value="basic" />
-              <Tab label={t('plugins.pluginConfig.toolsTab', '工具设置')} value="advanced" />
-              <Tab label="插件参数" value="params" />
+              <Tab label={t('plugins.pluginConfig.basicTab')} value="basic" />
+              <Tab label={t('plugins.pluginConfig.toolsTab')} value="advanced" />
+              <Tab label={t('plugins.pluginConfig.paramsTab')} value="params" />
             </Tabs>
 
             {/* Tab Content */}
@@ -688,28 +688,28 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
               <div className="space-y-6">
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-bold text-gray-800 mb-3">{t('plugins.pluginConfig.pluginDescription', '插件描述')}</label>
+                    <label className="block text-sm font-bold text-gray-800 mb-3">{t('plugins.pluginConfig.pluginDescription')}</label>
                     <TextField
                       fullWidth
                       multiline
                       rows={4}
                       value={configForm.desc}
                       onChange={e => setConfigForm(prev => ({ ...prev, desc: e.target.value }))}
-                      placeholder={t('plugins.pluginConfig.descriptionPlaceholder', '详细描述插件的功能、用途和特性...')}
-                      helperText={`${t('plugins.pluginConfig.descriptionHelper', '详细描述插件的功能和行为，帮助用户了解插件的作用')} (${configForm.desc.length}/258)`}
+                      placeholder={t('plugins.pluginConfig.descriptionPlaceholder')}
+                      helperText={`${t('plugins.pluginConfig.descriptionHelper')} (${configForm.desc.length}/258)`}
                       inputProps={{ maxLength: 258 }}
                       disabled={isReadOnly}
                     />
                   </div>
                   <div>
                     <div className="flex items-center gap-2 mb-3">
-                      <label className="block text-sm font-bold text-gray-800">插件详情 (markdown格式)</label>
+                      <label className="block text-sm font-bold text-gray-800">{t('plugins.pluginConfig.pluginDetailsMarkdown')}</label>
                       {configForm.desc_mk && (
                         <IconButton
                           size="small"
                           onClick={() => setIsMarkdownPreviewOpen(true)}
                           className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 -ml-1 -mt-1"
-                          title="预览Markdown"
+                          title={t('plugins.pluginConfig.previewMarkdown')}
                         >
                           <Eye className="w-4 h-4" />
                         </IconButton>
@@ -721,13 +721,13 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                       rows={6}
                       value={configForm.desc_mk || ''}
                       onChange={e => setConfigForm(prev => ({ ...prev, desc_mk: e.target.value }))}
-                      placeholder="支持Markdown格式的详细描述..."
-                      helperText={`使用Markdown语法编写富文本描述 (${(configForm.desc_mk || '').length}字符)`}
+                      placeholder={t('plugins.pluginConfig.markdownDetailedDesc')}
+                      helperText={t('plugins.pluginConfig.useMarkdownSyntax', { count: (configForm.desc_mk || '').length })}
                       disabled={isReadOnly}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-gray-800 mb-3">{t('plugins.versionHistory.pluginIcon', '插件图标')}</label>
+                    <label className="block text-sm font-bold text-gray-800 mb-3">{t('plugins.versionHistory.pluginIcon')}</label>
 
                     {/* Icon selection grid - Hidden in read-only mode */}
                     {!isReadOnly && (
@@ -749,7 +749,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                         {/* Current selection display */}
                         <div className="mt-4 text-center">
                           <Typography variant="body2" className="text-gray-500">
-                            {t('plugins.pluginConfig.currentSelection', '当前选择')}: <span className="text-2xl ml-2">{configForm.icon_uri || '☁️'}</span>
+                            {t('plugins.pluginConfig.currentSelection')}: <span className="text-2xl ml-2">{configForm.icon_uri || '☁️'}</span>
                           </Typography>
                         </div>
                       </>
@@ -761,20 +761,20 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                 <div className="mt-6 pt-6 border-t border-gray-200">
                   <Typography variant="h6" className="mb-4 flex items-center">
                     <Code className="w-5 h-5 mr-2 text-green-600" />
-                    {t('plugins.pluginConfig.apiConfig', 'API 配置')}
+                    {t('plugins.pluginConfig.apiConfig')}
                   </Typography>
 
                   <div className="space-y-4">
                     <div>
                       <Typography variant="subtitle2" className="mb-2">
-                        {t('plugins.pluginConfig.serviceUrl', '服务地址')}
+                        {t('plugins.pluginConfig.serviceUrl')}
                       </Typography>
                       <TextField
                         fullWidth
                         value={configForm.url}
                         onChange={e => handleUrlChange(e.target.value)}
-                        placeholder={t('plugins.pluginConfig.serviceUrlPlaceholder', '请输入API服务地址')}
-                        helperText={t('plugins.pluginConfig.serviceUrlHelper', '输入插件提供的服务地址，例如：http://api.example.com')}
+                        placeholder={t('plugins.pluginConfig.serviceUrlPlaceholder')}
+                        helperText={t('plugins.pluginConfig.serviceUrlHelper')}
                         error={!!urlError}
                         disabled={isReadOnly}
                         InputProps={{
@@ -801,7 +801,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
               <div className="space-y-6">
                 <div className="flex items-center justify-between mb-4">
                   <Typography variant="subtitle2" className="font-medium">
-                    {t('plugins.pluginConfig.apiToolsList', 'API工具列表')}
+                    {t('plugins.pluginConfig.apiToolsList')}
                   </Typography>
                   {toolsLoading && <CircularProgress size={20} />}
                 </div>
@@ -810,28 +810,28 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                   <div className="flex items-center justify-center py-8">
                     <CircularProgress size={24} className="mr-2" />
                     <Typography variant="body2" color="text.secondary">
-                      {t('plugins.pluginConfig.loadingTools', '加载工具列表...')}
+                      {t('plugins.pluginConfig.loadingTools')}
                     </Typography>
                   </div>
                 ) : currentToolsQuery?.isError ? (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
                     <Typography variant="body2" color="error">
-                      {t('plugins.pluginConfig.loadFailed', '加载工具列表失败')}
+                      {t('plugins.pluginConfig.loadFailed')}
                     </Typography>
                     {!isReadOnly && (
                       <Button size="small" variant="outlined" onClick={() => urlToolsQuery.refetch()} className="mt-2">
-                        {t('common.actions.retry', '重试')}
+                        {t('common.actions.retry')}
                       </Button>
                     )}
                   </div>
                 ) : !currentToolsQuery?.data?.data?.api_info || currentToolsQuery.data?.data?.api_info.length === 0 ? (
                   <div className="bg-gray-50 rounded-lg p-8 text-center">
                     <Typography variant="body1" color="text.secondary" className="mb-4">
-                      暂无工具配置
+                      {t('plugins.pluginConfig.noToolsConfig')}
                     </Typography>
                     {!isReadOnly && (
                       <Button variant="contained" startIcon={<Plus className="w-4 h-4" />} onClick={() => setIsToolDialogOpen(true)}>
-                        添加工具
+                        {t('plugins.pluginConfig.addTool')}
                       </Button>
                     )}
                   </div>
@@ -856,14 +856,14 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
                             <Typography variant="subtitle1" className="font-medium mb-1">
-                              {tool.name || t('plugins.pluginConfig.unnamedTool', '未命名工具')}
+                              {tool.name || t('plugins.pluginConfig.unnamedTool')}
                             </Typography>
                             <Typography variant="body2" color="text.secondary" className="mb-2">
-                              {tool.desc || t('plugins.pluginConfig.noDescription', '暂无描述')}
+                              {tool.desc || t('plugins.pluginConfig.noDescription')}
                             </Typography>
                             <div className="flex items-center space-x-4 text-sm text-gray-500">
                               <span>
-                                {t('plugins.pluginConfig.method', '方法')}: {getMethodString(tool.method)}
+                                {t('plugins.pluginConfig.method')}: {getMethodString(tool.method)}
                               </span>
                               <Typography
                                 component="span"
@@ -876,10 +876,10 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                                   verticalAlign: 'middle',
                                 }}
                               >
-                                {t('plugins.pluginConfig.path', '路径')}: {tool.path || '/'}
+                                {t('plugins.pluginConfig.path')}: {tool.path || '/'}
                               </Typography>
                               <Chip
-                                label={tool.available ? t('plugins.pluginConfig.enabled', '启用') : t('plugins.pluginConfig.disabled', '禁用')}
+                                label={tool.available ? t('plugins.actions.enable', '启用') : t('plugins.actions.disable', '禁用')}
                                 size="small"
                                 color={tool.available ? 'success' : 'default'}
                               />
@@ -901,7 +901,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                                     },
                                   })
                                 }}
-                                title={t('plugins.pluginConfig.editTool', '编辑工具')}
+                                title={t('plugins.pluginConfig.editTool')}
                               >
                                 <Edit className="w-4 h-4" />
                               </IconButton>
@@ -914,7 +914,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                                   startIcon={<CircularProgress size={14} />}
                                   sx={{ minWidth: 'auto', fontSize: '0.75rem', padding: '4px 8px' }}
                                 >
-                                  删除中
+                                  {t('common.deleting')}
                                 </Button>
                               ) : (
                                 <IconButton
@@ -923,7 +923,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                                     e.stopPropagation()
                                     handleDeleteTool(tool)
                                   }}
-                                  title={t('plugins.pluginConfig.deleteTool', '删除工具')}
+                                  title={t('plugins.pluginConfig.deleteTool')}
                                 >
                                   <Trash2 className="w-4 h-4 text-red-500 hover:text-red-700" />
                                 </IconButton>
@@ -935,7 +935,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                     {!isReadOnly && (
                       <div className="flex justify-center mt-4">
                         <Button variant="outlined" startIcon={<Plus className="w-4 h-4" />} onClick={() => setIsToolDialogOpen(true)}>
-                          {t('plugins.pluginConfig.addNewTool', '添加新工具')}
+                          {t('plugins.pluginConfig.addNewTool')}
                         </Button>
                       </div>
                     )}
@@ -948,10 +948,10 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
             {configTabValue === 'params' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <Typography variant="h6">输入参数配置</Typography>
+                  <Typography variant="h6">{t('plugins.paramConfig.title')}</Typography>
                   {!isReadOnly && (
                     <Button variant="outlined" startIcon={<Plus className="w-4 h-4" />} onClick={() => openParameterDialog(null)}>
-                      添加输入参数
+                      {t('plugins.paramConfig.addInputParam')}
                     </Button>
                   )}
                 </div>
@@ -959,11 +959,11 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                 {configForm.request_params?.length === 0 ? (
                   <div className="bg-gray-50 rounded-lg p-8 text-center">
                     <Typography variant="body1" color="text.secondary">
-                      暂无输入参数
+                      {t('plugins.paramConfig.noInputParams')}
                     </Typography>
                     {!isReadOnly && (
                       <Typography variant="body2" color="text.secondary" className="mt-1">
-                        点击"添加输入参数"开始配置
+                        {t('plugins.paramConfig.clickToAddInputParams')}
                       </Typography>
                     )}
                   </div>
@@ -979,23 +979,23 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                               </Typography>
                               <Chip label={getParamTypeName(param.type)} size="small" />
                               <Chip label={getInputMethodName(param.method)} size="small" variant="outlined" />
-                              {param.is_required && <Chip label="必选" size="small" color="error" variant="outlined" />}
+                              {param.is_required && <Chip label={t('plugins.paramConfig.required')} size="small" color="error" variant="outlined" />}
                             </div>
                             <Typography variant="body2" color="text.secondary" className="mt-1">
                               {param.desc}
                             </Typography>
                             {param.value && (
                               <Typography variant="caption" color="text.secondary" className="mt-1">
-                                默认值: {param.value}
+                                {t('plugins.paramConfig.defaultValue')}: {param.value}
                               </Typography>
                             )}
                           </div>
                           {!isReadOnly && (
                             <div className="flex items-center space-x-2">
-                              <IconButton size="small" onClick={() => openParameterDialog(param)} title="编辑参数">
+                              <IconButton size="small" onClick={() => openParameterDialog(param)} title={t('plugins.paramConfig.editParam')}>
                                 <Edit className="w-4 h-4" />
                               </IconButton>
-                              <IconButton size="small" onClick={() => handleDeleteParameter(index)} title="删除参数">
+                              <IconButton size="small" onClick={() => handleDeleteParameter(index)} title={t('plugins.paramConfig.deleteParam')}>
                                 <Trash2 className="w-4 h-4" />
                               </IconButton>
                             </div>
@@ -1014,7 +1014,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
         {!isReadOnly && (
           <div className="mt-8 flex justify-end space-x-3">
             <Button variant="outlined" onClick={() => navigate('/dashboard/plugins')}>
-              {t('common.actions.cancel', '取消')}
+              {t('common.actions.cancel')}
             </Button>
             <Button
               variant="contained"
@@ -1023,7 +1023,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
               startIcon={<Rocket className="w-4 h-4" />}
               className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 mr-3"
             >
-              {t('plugins.pluginConfig.publishPlugin', '发布插件')}
+              {t('plugins.pluginConfig.publishPlugin')}
             </Button>
             <Button
               variant="contained"
@@ -1034,10 +1034,10 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
               {updatePluginApi.isLoading ? (
                 <div className="flex items-center">
                   <CircularProgress size={16} className="mr-2" />
-                  {t('common.actions.saving', '保存中...')}
+                  {t('common.actions.saving')}
                 </div>
               ) : (
-                t('plugins.pluginConfig.saveConfig', '保存配置')
+                t('plugins.pluginConfig.saveConfig')
               )}
             </Button>
           </div>
@@ -1094,14 +1094,14 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
           sx: { maxHeight: '80vh' },
         }}
       >
-        <DialogTitle>Markdown预览</DialogTitle>
+        <DialogTitle>{t('plugins.pluginConfig.markdownPreview')}</DialogTitle>
         <DialogContent dividers>
           <div className="prose prose-sm max-w-none overflow-y-auto" style={{ maxHeight: '60vh' }}>
             <ReactMarkdown>{configForm.desc_mk || ''}</ReactMarkdown>
           </div>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setIsMarkdownPreviewOpen(false)}>关闭</Button>
+          <Button onClick={() => setIsMarkdownPreviewOpen(false)}>{t('common.actions.close')}</Button>
         </DialogActions>
       </Dialog>
 
@@ -1115,13 +1115,13 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>{editingParameter ? '编辑参数' : '添加参数'}</DialogTitle>
+        <DialogTitle>{editingParameter ? t('plugins.paramConfig.editParam') : t('plugins.paramConfig.addParam')}</DialogTitle>
         <DialogContent>
           <div className="space-y-4 mt-2">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <Typography variant="subtitle2">
-                  参数名称 <span className="text-red-500 ml-1">*</span>
+                  {t('plugins.paramConfig.paramName')} <span className="text-red-500 ml-1">*</span>
                 </Typography>
                 <div className="flex items-center space-x-2">
                   <input
@@ -1132,7 +1132,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                     className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                   />
                   <label htmlFor="is_required" className="text-sm font-medium text-gray-700 cursor-pointer whitespace-nowrap">
-                    必选参数
+                    {t('plugins.paramConfig.requiredParam')}
                   </label>
                 </div>
               </div>
@@ -1140,14 +1140,14 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                 fullWidth
                 value={parameterForm.name}
                 onChange={e => handleParameterFormChange('name', e.target.value)}
-                placeholder="请输入参数名称..."
-                helperText={`参数名称 (${parameterForm.name.length}/128)`}
+                placeholder={t('plugins.paramConfig.paramNamePlaceholder')}
+                helperText={`${t('plugins.paramConfig.paramName')} (${parameterForm.name.length}/128)`}
                 inputProps={{ maxLength: 128 }}
               />
             </div>
             <div>
               <Typography variant="subtitle2" className="mb-2">
-                参数描述
+                {t('plugins.paramConfig.paramDesc')}
               </Typography>
               <TextField
                 fullWidth
@@ -1155,15 +1155,15 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                 rows={2}
                 value={parameterForm.desc}
                 onChange={e => handleParameterFormChange('desc', e.target.value)}
-                placeholder="请输入参数描述..."
-                helperText={`参数描述 (${parameterForm.desc.length}/256)`}
+                placeholder={t('plugins.paramConfig.paramDescPlaceholder')}
+                helperText={`${t('plugins.paramConfig.paramDesc')} (${parameterForm.desc.length}/256)`}
                 inputProps={{ maxLength: 256 }}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Typography variant="subtitle2" className="mb-2">
-                  参数类型
+                  {t('plugins.paramConfig.paramType')}
                 </Typography>
                 <ParameterTypeSelector
                   value={parameterForm.type}
@@ -1173,13 +1173,13 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
               </div>
               <div>
                 <Typography variant="subtitle2" className="mb-2">
-                  传入方法
+                  {t('plugins.paramConfig.inputMethod')}
                 </Typography>
                 <FormControl fullWidth>
                   <Select value={parameterForm.method} onChange={e => handleParameterFormChange('method', e.target.value)}>
-                    <MenuItem value={1}>Header参数</MenuItem>
-                    <MenuItem value={2}>Query参数</MenuItem>
-                    <MenuItem value={3}>Body参数</MenuItem>
+                    <MenuItem value={1}>{t('plugins.paramConfig.headerParam')}</MenuItem>
+                    <MenuItem value={2}>{t('plugins.paramConfig.queryParam')}</MenuItem>
+                    <MenuItem value={3}>{t('plugins.paramConfig.bodyParam')}</MenuItem>
                   </Select>
                 </FormControl>
               </div>
@@ -1194,17 +1194,17 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <label htmlFor="is_runtime" className="text-sm font-medium text-gray-700 cursor-pointer">
-                  非运行时参数
+                  {t('plugins.paramConfig.nonRuntimeParam')}
                 </label>
               </div>
               <Typography variant="caption" className="text-gray-500 mt-1 block">
-                勾选后需要设置参数默认值
+                {t('plugins.paramConfig.nonRuntimeParamDesc')}
               </Typography>
             </div>
             {!parameterForm.is_runtime && (
               <div>
                 <Typography variant="subtitle2" className="mb-2">
-                  默认值 <span className="text-red-500 ml-1">*</span>
+                  {t('plugins.paramConfig.defaultValue')} <span className="text-red-500 ml-1">*</span>
                 </Typography>
                 {(() => {
                   const isBooleanType = parameterForm.type === 4
@@ -1224,8 +1224,8 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                       fullWidth
                       value={parameterForm.value}
                       onChange={e => handleParameterFormChange('value', e.target.value)}
-                      placeholder="请输入默认值..."
-                      helperText="非运行时参数的默认值"
+                      placeholder={t('plugins.paramConfig.defaultValuePlaceholder')}
+                      helperText={t('plugins.paramConfig.nonRuntimeParamDefaultValue')}
                       required
                     />
                   )
@@ -1241,7 +1241,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
               setEditingParameter(null)
             }}
           >
-            取消
+            {t('common.actions.cancel')}
           </Button>
           <Button variant="contained" onClick={handleSaveParameter}>
             {editingParameter ? '更新' : '添加'}

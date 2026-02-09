@@ -9,6 +9,7 @@ import styled from 'styled-components'
 import { ConditionValue, BranchValue } from './utils'
 import { ConditionPresetOp, defaultConditionOpConfigs } from '../../../form-materials'
 import { useScopeAvailable } from '@flowgram.ai/editor'
+import { useTranslation } from '../../../i18n'
 import { last } from 'lodash-es'
 
 // 条件容器 - 参考 HTML 结构
@@ -129,7 +130,7 @@ const formatConditionValue = (value: unknown, available?: { getByKeyPath?: (path
         if (variable) {
           const rootField = last(variable.parentFields) || variable
           const isRoot = variable === rootField
-          const rootTitle = rootField.meta?.title || rootField.key || '未知'
+          const rootTitle = rootField.meta?.title || rootField.key || 'Unknown'
           const varName = variable.keyPath.slice(1).join('.')
 
           if (varName && !isRoot) {
@@ -143,7 +144,7 @@ const formatConditionValue = (value: unknown, available?: { getByKeyPath?: (path
       }
     }
 
-    const componentId = value[0] || '未知'
+    const componentId = value[0] || 'Unknown'
     const varName = value.slice(1).join('.')
 
     if (varName) {
@@ -233,18 +234,19 @@ interface ConditionContentDisplayProps {
 }
 
 export const ConditionContentDisplay: React.FC<ConditionContentDisplayProps> = React.memo(({ branch }) => {
+  const { t } = useTranslation()
   const conditions = branch?.conditions || []
 
   if (conditions.length === 0) {
     return (
       <ConditionContainer>
-        <div style={{ textAlign: 'center', color: '#999', fontSize: '12px' }}>无条件</div>
+        <div style={{ textAlign: 'center', color: '#999', fontSize: '12px' }}>{t('workflowCanvas.nodes.condition.unconditional')}</div>
       </ConditionContainer>
     )
   }
 
   const logic = typeof branch?.logic === 'number' ? branch.logic : parseInt(branch?.logic as string, 10) || 2
-  const logicText = logic === 1 ? '或' : '且'
+  const logicText = logic === 1 ? t('workflowCanvas.nodes.condition.logic.or') : t('workflowCanvas.nodes.condition.logic.and')
 
   return (
     <ConditionContainer>

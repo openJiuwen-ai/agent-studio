@@ -14,7 +14,6 @@ import { useCreateAgent } from '@test-agentstudio/api-client'
 import { CreateAgentRequest } from '@test-agentstudio/api-client'
 import { useAuthStore } from '../../stores/useAuthStore'
 import { ENV_CONFIG } from '../../config/environment'
-import { useIsNewDashboard } from '@/hooks/useIsNewDashboard'
 
 type AgentMode = 'single-react-agent' | 'multi-workflow'
 
@@ -37,8 +36,6 @@ const AgentCreatePage: React.FC = () => {
   const { t, i18n } = useScopedTranslation('agents.agentCreate')
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const isNew = useIsNewDashboard()
-
   const MODE_INFO: Record<AgentMode, AgentModeInfo> = {
     'single-react-agent': {
       id: 'single-react-agent',
@@ -191,7 +188,7 @@ const AgentCreatePage: React.FC = () => {
 
   return (
     <div
-      className={`bg-gray-50 flex flex-col px-6 ${isNew ? 'py-6' : ''}`}
+      className="bg-gray-50 flex flex-col px-6 py-6"
       style={{
         width: '100%',
         maxWidth: '100vw',
@@ -631,7 +628,7 @@ const AgentCreatePage: React.FC = () => {
                   placeholder={t('form.description.placeholder')}
                   error={!!errors.description}
                   helperText={errors.description}
-                  inputProps={{ maxLength: 1000 }}
+                  inputProps={{ maxLength: 500 }}
                   sx={{
                     marginBottom: 0,
                     '& .MuiOutlinedInput-root': {
@@ -663,7 +660,7 @@ const AgentCreatePage: React.FC = () => {
                   }}
                 >
                   <Typography variant="body2" className="text-gray-500" sx={{ fontSize: 'clamp(0.5625rem, 0.9vw, 0.6875rem)' }}>
-                    {agentData.description.length}/1000
+                    {agentData.description.length}/500
                   </Typography>
                 </div>
               </div>
@@ -703,7 +700,7 @@ const AgentCreatePage: React.FC = () => {
                 {t('actions.cancel')}
               </Button>
               <Button
-                variant="contained"
+                className="btn-primary"
                 startIcon={
                   isLoading ? (
                     <Loader2
@@ -722,16 +719,6 @@ const AgentCreatePage: React.FC = () => {
                   height: 'clamp(1.75rem, 3.5vh, 2.25rem)',
                   fontSize: 'clamp(0.6875rem, 1.1vw, 0.8125rem)',
                   padding: 'clamp(0.1875rem, 0.375vh, 0.3125rem) clamp(0.5rem, 1vw, 0.75rem)',
-                  backgroundColor: '#0a59F7',
-                  color: 'white',
-                  '&:hover': {
-                    backgroundColor: '#0849d1',
-                  },
-                  '&:disabled': {
-                    backgroundColor: '#0a59F7',
-                    opacity: 0.4,
-                    color: 'white',
-                  },
                 }}
               >
                 {isLoading ? t('actions.creating') : t('actions.create')}

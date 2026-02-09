@@ -1,6 +1,6 @@
 import os
 from typing import Optional
-
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     minio_secure: bool = False
     minio_bucket: str = ""
 
+    # deepsearch配置
+    deepsearch_agent_host: str = ""
+    deepsearch_agent_port: int = 6000
+
     # Security
     secret_key: str = "your-secret-key-change-in-production"
     algorithm: str = "HS256"
@@ -52,6 +56,9 @@ class Settings(BaseSettings):
     # access_token: 10年，refresh_token: 10年
     access_token_expire_minutes: int = 5256000  # 10年 = 365 * 10 * 24 * 60
     refresh_token_expire_days: int = 3650  # 10年
+    # 非单机部署使用较短的过期时间
+    new_access_token_expire_minutes: int = 15 # 15分钟
+    new_refresh_token_expire_days: int = 7 # 7天
 
     # CORS
     allowed_origins: list = [
@@ -59,8 +66,28 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000"
     ]
 
-    # Redis (for caching and sessions)
-    redis_url: str = "redis://localhost:6379"
+    # Redis配置
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: str = ""
+    
+    @property
+    def redis_url(self) -> str:
+        """构建 Redis 连接 URL"""
+        if self.redis_password:
+            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
+        return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+    
+    # 云邮件推送
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_alias: str = "openJiuwen"
+    
+    # 用户认证类型开关,只用在后端
+    enable_new_auth: bool = Field(False, alias="VITE_ENABLE_NEW_AUTH")
 
     # External APIs
     openai_api_key: Optional[str] = None

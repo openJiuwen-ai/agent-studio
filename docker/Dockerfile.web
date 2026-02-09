@@ -1,38 +1,25 @@
-# Multi-stage build for production
+# Stage 1: Builder environment
 FROM node:18-alpine AS builder
 
-# Set working directory
 WORKDIR /app
-
-# Copy source code
 COPY frontend .
-
-# Build the application
 RUN npm install && npm run build
 
-# Production stage
+
+# Stage 2: Final image - Only copy necessary files from builder stage
 FROM nginx:alpine
 
-# Copy built application
 COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy nginx configuration
 COPY frontend/nginx.conf /etc/nginx/nginx.conf
-
-# Copy privateKeyTool for get ssl password
 COPY docker/privateKeyTool.sh /usr/local/bin/privateKeyTool
 RUN chmod +x /usr/local/bin/privateKeyTool
 RUN chown root:root /usr/local/bin/privateKeyTool
-
-# Copy nginx start shell
 COPY docker/start_nginx.sh /usr/local/bin/start-nginx.sh
 RUN chmod +x /usr/local/bin/start-nginx.sh
 
-# Expose HTTPS (3001) ports
 EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f -k https://localhost:3001/ || exit 1
 
-# Start nginx
 ENTRYPOINT ["/usr/local/bin/start-nginx.sh"]

@@ -33,7 +33,7 @@ export function SplittingSelector() {
       {({ field }: FieldRenderProps<string>) => {
         if (field.value === 'StringSplitting') {
           return (
-            <FormItem name="分隔符" vertical>
+            <FormItem name={t('workflowCanvas.textEditor.delimiter')} vertical>
               <Field name="inputs.textEditorParam.delimiters" defaultValue={[]}>
                 {({ field: delimiterField }: FieldRenderProps<any>) => {
                   // 获取自定义分隔符（除了 'custom' 标识和预设分隔符之外的实际值）
@@ -148,11 +148,11 @@ export function SplittingSelector() {
                           value={customInputValue}
                           onChange={setCustomInputValue}
                           onKeyPress={handleKeyPress}
-                          placeholder="输入分隔符后按回车添加"
+                          placeholder={t('workflowCanvas.textEditor.enterDelimiterToAdd')}
                           style={{ flex: 1, fontSize: '12px' }}
                         />
                         <Button size="small" type="primary" onClick={handleAddCustom} style={{ fontSize: '12px', padding: '0 12px' }}>
-                          添加
+                          {t('workflowCanvas.textEditor.add')}
                         </Button>
                         <Button
                           size="small"
@@ -212,7 +212,7 @@ export function SplittingSelector() {
                     </div>
                   ) : (
                     <div className="gedit-m-form-select-custom-option" onClick={() => setShowCustomInput(true)}>
-                      + 添加自定义分隔符
+                      {t('workflowCanvas.textEditor.addCustomDelimiter')}
                     </div>
                   )
 
@@ -222,7 +222,7 @@ export function SplittingSelector() {
                       value={getSelectValues()}
                       onChange={(value: string | string[]) => handleSelectChange(Array.isArray(value) ? value : [value])}
                       options={optionList}
-                      placeholder="请选择分隔符（可多选）"
+                      placeholder={t('workflowCanvas.textEditor.selectDelimiter')}
                       innerBottomSlot={innerSlotNode}
                     />
                   )

@@ -1,6 +1,7 @@
 import { convertApiToolsToFrontendTools } from './toolFormatConverter'
 import type { PromptMessage, ComparisonGroupData, OptimizationSource } from '@/types/promptType'
 import type { DebugMockTool } from '@test-agentstudio/api-client'
+import i18n from '@/i18n'
 
 export const extractDebugErrorMessage = (error: unknown): string => {
   let errorMessage = ''
@@ -48,15 +49,16 @@ export const extractDebugErrorMessage = (error: unknown): string => {
 
   // 如果没有提取到错误消息，使用默认消息
   if (!errorMessage) {
-    errorMessage = '未知错误'
+    errorMessage = i18n.t('utils.prompts.utils.promptEditPageUtils.unknownError')
   }
 
   // 检查是否需要添加"请求失败"前缀
-  if (errorMessage.includes('失败') || errorMessage.toLowerCase().includes('fail')) {
+  const failKeyword = i18n.t('utils.prompts.utils.promptEditPageUtils.failKeyword')
+  if (errorMessage.includes(failKeyword) || errorMessage.toLowerCase().includes('fail')) {
     return errorMessage
   }
 
-  return `请求失败: ${errorMessage}`
+  return `${i18n.t('utils.prompts.utils.promptEditPageUtils.requestFailed')}: ${errorMessage}`
 }
 
 export const generateMessageKey = (): string => {
@@ -163,19 +165,19 @@ export const extractVariables = (content: string, templateEngine: 'normal' | 'ji
       // 如果变量名已存在，说明是重复的，静默跳过（不打印错误）
     } else {
       // 变量名无效，提供详细的错误信息
-      let errorMessage = '不符合格式要求'
+      let errorMessage = i18n.t('utils.prompts.utils.promptEditPageUtils.variableNameFormatError')
       if (trimmedName.length > 50) {
-        errorMessage = `变量名长度超过50个字符（当前长度：${trimmedName.length}）`
+        errorMessage = i18n.t('utils.prompts.utils.promptEditPageUtils.variableNameTooLong', { length: trimmedName.length })
       } else if (/^[0-9]/.test(trimmedName)) {
-        errorMessage = '变量名不能以数字开头'
+        errorMessage = i18n.t('utils.prompts.utils.promptEditPageUtils.variableNameCannotStartWithNumber')
       } else if (!/^[a-zA-Z0-9_-]*$/.test(trimmedName)) {
-        errorMessage = '变量名只能包含字母、数字、下划线和连字符'
+        errorMessage = i18n.t('utils.prompts.utils.promptEditPageUtils.variableNameInvalidCharacters')
       } else if (!allowSpaces && /^\s|\s$/.test(rawVariableName)) {
-        errorMessage = 'Normal模式下变量名前后不能有空格'
+        errorMessage = i18n.t('utils.prompts.utils.promptEditPageUtils.variableNameNoSpacesInNormalMode')
       }
       // 只在开发环境输出警告，避免生产环境噪音
       if (process.env.NODE_ENV === 'development') {
-        console.warn(`🚫 [VAR-VALIDATION] 跳过提取的无效变量名: "${trimmedName}"，${errorMessage}`)
+        console.warn(`🚫 [VAR-VALIDATION] ${i18n.t('utils.prompts.utils.promptEditPageUtils.skipInvalidVariableName', { name: trimmedName, error: errorMessage })}`)
       }
     }
   }
@@ -355,7 +357,6 @@ export const validateComparisonGroupPlaceholders = (
 
   // 如果有无效的组，显示错误信息
   if (invalidGroups.length > 0) {
-    const errorMessage = invalidGroups.map(g => `${g.groupName}: ${g.errors.join(', ')}`).join('\n')
     showSnackbar(t('components.prompts.promptContentEditor.invalidPlaceholderVariables'), 'error')
   }
 
@@ -376,19 +377,21 @@ export const getFirstSystemMessage = (
 ): string => {
   if (optimizationSource.type === 'main') {
     const systemMessage = promptMessages.find(msg => msg.role === 'system')
-    return systemMessage?.content || '未找到目标消息'
+    return systemMessage?.content || i18n.t('utils.prompts.utils.promptEditPageUtils.targetMessageNotFound')
   } else if (optimizationSource.type === 'base' || optimizationSource.type === 'control') {
     // 基准组和对照组统一处理：基准组编号为0，对照组使用指定的groupId
     const groupId = optimizationSource.type === 'base' ? 0 : optimizationSource.groupId
     if (groupId === undefined) {
-      return '未找到目标消息'
+      return i18n.t('utils.prompts.utils.promptEditPageUtils.targetMessageNotFound')
     }
     const group = comparisonGroupsData.find(g => g.id === groupId)
     const systemMessage = group?.messages.find(msg => msg.role === 'system')
-    const groupName = optimizationSource.type === 'base' ? '基准组' : `对照组${groupId}`
-    return systemMessage?.content || `${groupName}中未找到目标消息`
+    const groupName = optimizationSource.type === 'base' 
+      ? i18n.t('utils.prompts.utils.promptEditPageUtils.baseGroup') 
+      : i18n.t('utils.prompts.utils.promptEditPageUtils.controlGroup', { id: groupId })
+    return systemMessage?.content || i18n.t('utils.prompts.utils.promptEditPageUtils.targetMessageNotFoundInGroup', { groupName })
   }
-  return '未找到目标消息'
+  return i18n.t('utils.prompts.utils.promptEditPageUtils.targetMessageNotFound')
 }
 
 /**
@@ -445,7 +448,7 @@ export const processToolCallsIncremental = (
 
     // 确保 existingCall 存在
     if (!existingCall) {
-      console.warn(`⚠️ [PROCESS] 索引 ${targetIndex} 的现有调用不存在，跳过处理`)
+      console.warn(`⚠️ [PROCESS] ${i18n.t('utils.prompts.utils.promptEditPageUtils.existingCallNotFound', { index: targetIndex })}`)
       return
     }
 
@@ -501,7 +504,7 @@ export const processToolCallsIncremental = (
  */
 export const calculateSelectionIndices = (selectedText: string, promptContent: string): { start: number; end: number } | null => {
   if (!selectedText || !promptContent) {
-    console.warn('🔍 [INDICES] 计算选中位置失败 - 缺少必要参数:', {
+    console.warn(`🔍 [INDICES] ${i18n.t('utils.prompts.utils.promptEditPageUtils.calculateSelectionIndicesFailed')}:`, {
       hasSelectedText: !!selectedText,
       hasPromptContent: !!promptContent,
       selectedTextLength: selectedText?.length,

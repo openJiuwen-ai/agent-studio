@@ -553,7 +553,7 @@ class WorkflowRepository():
             tag_results = db.execute(
                 select(TagDB).where(
                     TagDB.space_id == space_id,
-                    TagDB.is_active == True,
+                    TagDB.is_active,
                     or_(*search_conditions)
                 )
             ).fetchall()

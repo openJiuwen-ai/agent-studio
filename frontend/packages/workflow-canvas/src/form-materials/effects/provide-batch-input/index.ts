@@ -14,7 +14,10 @@ export const provideBatchInputEffect: EffectOptions[] = createEffectFromVariable
       key: `${ctx.node.id}_locals`,
       meta: {
         title: ctx.node.form?.getValueIn('title'),
-        icon: ctx.node.getNodeRegistry<FlowNodeRegistry>().info?.icon,
+        icon: (() => {
+          const info = ctx.node.getNodeRegistry<FlowNodeRegistry>().info
+          return typeof info === 'function' ? info().icon : info?.icon
+        })(),
       },
       type: ASTFactory.createObject({
         properties: [

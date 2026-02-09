@@ -8,6 +8,7 @@ export function generateLetterAvatar(name?: string, size: number = 150): string 
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 }
 
+
 export function resolveAvatar(avatar: string | undefined, name?: string, size: number = 150): string {
   const isDefaultUnsplash = !!avatar && /unsplash\.com\/photo-1472099645785-5658abf4ff4e/.test(avatar)
   if (!avatar || isDefaultUnsplash) {

@@ -9,6 +9,7 @@ import { formMeta } from './form-meta'
 import { WorkflowNodeType } from '../constants'
 import { customNanoid } from '../../utils/nanoid-custom'
 import { t } from '../../i18n'
+import { generateNodeTitle } from '../../utils/workflow-node-utils'
 
 export const TextEditorNodeRegistry: FlowNodeRegistry = {
   type: WorkflowNodeType.TextEditor,
@@ -20,10 +21,10 @@ export const TextEditorNodeRegistry: FlowNodeRegistry = {
     },
     singleComponentDebug: true,
   },
-  info: {
+  info: () => ({
     icon: <FileText size={16} className="text-green-600" />,
     description: t('workflowCanvas.nodes.textEditor.description'),
-  },
+  }),
   /**
    * Render node via formMeta
    */
@@ -37,12 +38,16 @@ export const TextEditorNodeRegistry: FlowNodeRegistry = {
   /**
    * 添加文本编辑节点时的默认配置
    */
-  onAdd() {
+  onAdd(context?) {
+    const nodeId = `text_editor_${customNanoid(5)}`
+    const titlePrefix = t('workflowCanvas.nodes.textEditor.titlePrefix')
+    const title = generateNodeTitle(WorkflowNodeType.TextEditor, context, titlePrefix)
+
     return {
-      id: `text_editor_${customNanoid(5)}`,
+      id: nodeId,
       type: WorkflowNodeType.TextEditor,
       data: {
-        title: '文本编辑',
+        title: title,
         inputs: {
           textEditorParam: {
             editType: 'StringConcatenation',

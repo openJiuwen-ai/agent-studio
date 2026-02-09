@@ -7,16 +7,16 @@ count_undefined_ports() {
 
     # Traverse port list, count undefined (empty/no key) ports
     for port_name in "${PORTS[@]}"; do
-        if [[ -z "${DEPLOY_VARS[$port_name]:-}" ]]; then
+        if [ -z "${DEPLOY_VARS[${port_name}]:-}" ]; then
             undefined_count=$((undefined_count + 1))
-            # info "[$port_name] undefined, requires available port allocation"
+            # info "[${port_name}] undefined, requires available port allocation"
         else
-            local port=${DEPLOY_VARS[$port_name]}
+            local port=${DEPLOY_VARS[${port_name}]}
             ALLOCATED_PORTS+=("${port}")
-            # info "[$port_name] defined, value: ${port}"
+            # info "[${port_name}] defined, value: ${port}"
 
-            if is_port_occupied "$port"; then
-                error "[$port_name]:${port} is occupied. Please specify an unoccupied port instead."
+            if is_port_occupied "${port}"; then
+                error "[${port_name}]:${port} is occupied. Please specify an unoccupied port instead."
             fi
         fi
     done
@@ -32,7 +32,7 @@ count_undefined_ports() {
 is_port_occupied() {
     local port="$1"
     local port_occupied=0
-    local os_type=${CONFIG["OS_TYPE"]}
+    local os_type=${DEPLOY_VARS["OS_TYPE"]}
 
     case "${os_type}" in
         macos)
@@ -65,14 +65,14 @@ is_port_occupied() {
 }
 
 # =========== Allocate multiple available ports at once ==============
-alloc_available_ports() {
+find_available_ports() {
     local start_port=${CONFIG["START_PORT"]}
     local end_port=${CONFIG["END_PORT"]}
     local need_port_num=${CONFIG["ALLOC_PORT_NUM"]}
     local allocated_ports=("${ALLOCATED_PORTS[@]:-}")
 
     if [ "$need_port_num" -eq 0 ]; then
-        return 0
+        return
     fi
     
     info "Current allocated port list: ${allocated_ports[*]:-empty}"
@@ -132,21 +132,28 @@ assign_ports() {
 
     # Traverse all port names, assign dynamically
     for port_name in "${PORTS[@]}"; do
-        if [[ -n "${DEPLOY_VARS[$port_name]:-}" ]]; then
+        if [ -n "${DEPLOY_VARS[${port_name}]:-}" ]; then
             # Already defined: keep original value
-            success "[$port_name] already defined, keeping original value: ${DEPLOY_VARS[$port_name]}"
+            success "[${port_name}] already defined, keeping original value: ${DEPLOY_VARS[${port_name}]}"
         else
             # Undefined: take value from available port list by index
-            if [[ $port_index -lt ${#AVAILABLE_PORTS[@]} ]]; then
-                DEPLOY_VARS["$port_name"]=${AVAILABLE_PORTS[$port_index]}
-                success "[$port_name] undefined, assigning available port: ${DEPLOY_VARS[$port_name]}"
+            if [ ${port_index} -lt ${#AVAILABLE_PORTS[@]} ]; then
+                DEPLOY_VARS["${port_name}"]=${AVAILABLE_PORTS[${port_index}]}
+                success "[${port_name}] undefined, assigning available port: ${DEPLOY_VARS[${port_name}]}"
                 port_index=$((port_index + 1))  # Increment index for next undefined port
             else
-                # Extreme case: insufficient available ports (shouldn't happen as alloc_available_ports already validates)
-                error "[$port_name] no available ports to assign (available ports: ${#AVAILABLE_PORTS[@]})"
+                # Extreme case: insufficient available ports (shouldn't happen as find_available_ports already validates)
+                error "[${port_name}] no available ports to assign (available ports: ${#AVAILABLE_PORTS[@]})"
             fi
         fi
     done
 
     info "============== All port assignments complete! =============="
+}
+
+
+process_ports() {
+    count_undefined_ports
+    find_available_ports
+    assign_ports
 }

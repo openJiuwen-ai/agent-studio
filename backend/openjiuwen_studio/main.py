@@ -1,6 +1,6 @@
+import io
 import os
 import sys
-import io
 from contextlib import asynccontextmanager
 
 # 添加项目根目录到 Python 路径，以便直接运行时能找到所有模块
@@ -28,10 +28,11 @@ from openjiuwen_studio.models import ModelConfig, ModelUsageLog, EmbeddingModelC
     PromptRelationDB, TagDB, UserDB, SpaceDB, SpaceUserDB, WorkflowBaseDB, WorkflowPublishDB, PluginBaseDB, \
     PluginPublishDB, ToolBaseDB, \
     WorkflowExecutionDB, WorkflowExecutionDetailsDB, AgentExecutionDB, AgentExecutionDetailsDB, \
-    AgentWorkflowRelationDB, KnowledgeBaseDB, KnowledgeBaseDocumentDB, ReferenceDB
-# Import database sync tool
+    AgentWorkflowRelationDB, KnowledgeBaseDB, KnowledgeBaseDocumentDB, ReferenceDB, SystemEmbeddingModelDB, \
+    SystemLLMModelDB, MemoryBaseDB
+# Import alembic version check
 from openjiuwen.core.common.logging import logger
-from openjiuwen_studio.core.db_sync import run_database_sync
+from openjiuwen_studio.core.alembic_version_check import check_alembic_versions
 from openjiuwen_studio.ops.config import settings as ops_settings
 # Import Trace models
 from openjiuwen_studio.models.trace_detail import TraceDetailDB
@@ -46,7 +47,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 async def lifespan_func(app: FastAPI):
     # Startup
     logger.info("🚀 Starting Jiuwen Agent Studio Backend...")
-    
+
     target_tables = [
         ModelConfig.__table__,
         ModelUsageLog.__table__,
@@ -75,6 +76,11 @@ async def lifespan_func(app: FastAPI):
         # Knowledge Base tables
         KnowledgeBaseDB.__table__,
         KnowledgeBaseDocumentDB.__table__,
+        # System model tables
+        SystemLLMModelDB.__table__,
+        SystemEmbeddingModelDB.__table__,
+        # Memory Base tables
+        MemoryBaseDB.__table__,
     ]
 
     if engine.url.drivername == "sqlite":
@@ -103,9 +109,8 @@ async def lifespan_func(app: FastAPI):
     # Create workflow_tag_association table if it doesn't exist
     workflow_tag_association.create(bind=engine, checkfirst=True)
 
-    # 运行数据库字段同步（添加新字段）
-    run_database_sync()
-    logger.info("✅ Database field sync completed")
+    # 检查 Alembic 版本
+    check_alembic_versions()
 
     # ops数据库相关表自动创建
     create_database_tables()

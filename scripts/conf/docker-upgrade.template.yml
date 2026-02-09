@@ -1,0 +1,27 @@
+services:
+  <<UPGRADE_TOOL_SERVICE>>:
+    container_name: <<UPGRADE_TOOL_DOCKER>>
+    image: <<UPGRADE_TOOL_IMAGE>>
+    #privileged: true
+    command: sleep infinity
+    volumes:
+      - ../log-dirs/logs-<<NAME_SUFFIX>>:/root/logs
+    restart: unless-stopped
+    networks:
+      - <<JIUWEN_NETWORK_NAME>>
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "command -v mydumper >/dev/null && command -v milvus-backup >/dev/null && source /root/backend/.venv/bin/activate && command -v alembic >/dev/null",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  <<JIUWEN_NETWORK_NAME>>:
+    driver: bridge

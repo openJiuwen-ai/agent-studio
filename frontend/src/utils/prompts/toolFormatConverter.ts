@@ -1,4 +1,5 @@
 import type { Tool, ToolParameter } from '@/types/promptType'
+import i18n from '@/i18n'
 
 /**
  * API工具格式（agentTools 或 tools）
@@ -143,7 +144,7 @@ const generateBasicJsonSchema = (parameters: ToolParameter[]): string => {
     }
     return JSON.stringify(basicSchema, null, 2)
   } catch (error) {
-    console.error('从parameters生成JSON Schema失败:', error)
+    console.error(i18n.t('utils.prompts.utils.toolFormatConverter.generateJsonSchemaFailed'), error)
     return ''
   }
 }
@@ -186,7 +187,7 @@ export const convertApiToolsToFrontendTools = (apiTools: ApiTool[], startIndex: 
               parametersJsonSchema = JSON.stringify(parsed, null, 2)
             }
           } catch (parseError) {
-            console.error(`🛠️ [convertApiToolsToFrontendTools] 工具 ${func.name} - 解析字符串失败:`, parseError)
+            console.error(`🛠️ [convertApiToolsToFrontendTools] ${i18n.t('utils.prompts.utils.toolFormatConverter.tool')} ${func.name} - ${i18n.t('utils.prompts.utils.toolFormatConverter.parseStringFailed')}:`, parseError)
             // 解析失败，忽略
           }
         } else {
@@ -194,7 +195,7 @@ export const convertApiToolsToFrontendTools = (apiTools: ApiTool[], startIndex: 
           parametersJsonSchema = JSON.stringify(func.parameters, null, 2)
         }
       } catch (error) {
-        console.error(`🛠️ [convertApiToolsToFrontendTools] 工具 ${func.name} - 保存JSON Schema失败:`, error)
+        console.error(`🛠️ [convertApiToolsToFrontendTools] ${i18n.t('utils.prompts.utils.toolFormatConverter.tool')} ${func.name} - ${i18n.t('utils.prompts.utils.toolFormatConverter.saveJsonSchemaFailed')}:`, error)
         // 如果保存失败，会在后面从parameters生成
       }
     }
@@ -208,7 +209,7 @@ export const convertApiToolsToFrontendTools = (apiTools: ApiTool[], startIndex: 
         try {
           parsedParams = JSON.parse(func.parameters)
         } catch (parseError) {
-          console.error(`🛠️ [convertApiToolsToFrontendTools] 工具 ${func.name} - 解析失败:`, parseError)
+          console.error(`🛠️ [convertApiToolsToFrontendTools] ${i18n.t('utils.prompts.utils.toolFormatConverter.tool')} ${func.name} - ${i18n.t('utils.prompts.utils.toolFormatConverter.parseFailed')}:`, parseError)
           parsedParams = null
         }
       } else {
@@ -301,7 +302,7 @@ export const convertFrontendToolsToApiTools = (tools: Tool[]): ApiTool[] => {
         }
         return apiTool
       } catch (error) {
-        console.error('解析工具JSON Schema失败，使用默认转换:', error)
+        console.error(i18n.t('utils.prompts.utils.toolFormatConverter.parseToolJsonSchemaFailed'), error)
         // 如果解析失败，回退到使用parameters转换
       }
     }

@@ -9,7 +9,8 @@ import { FlowNodeRegistry } from '../../typings'
 import { Icon } from './styles'
 
 export const getIcon = (node: FlowNodeEntity) => {
-  const icon = node.getNodeRegistry<FlowNodeRegistry>().info?.icon
+  const info = node.getNodeRegistry<FlowNodeRegistry>().info
+  const icon = typeof info === 'function' ? info().icon : info?.icon
   if (!icon) return null
 
   if (typeof icon === 'string') {

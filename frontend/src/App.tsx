@@ -1,7 +1,6 @@
 import React, { Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/useAuthStore'
-import { useUIStore } from './stores/useUIStore'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import Layout from './components/Layout/Layout'
@@ -10,9 +9,10 @@ import Layout from './components/Layout/Layout'
 import './i18n'
 import { LanguageProvider } from './contexts/LanguageContext'
 
-// 立即加载的核心页面（用户可能立即访问）
+// 立即加载的核心页面（用户可能立即访问）- 统一使用新版
 import LoginPage from './pages/Auth/LoginPage'
 import DashboardPage from './pages/Dashboard/DashboardPage'
+import AppsPage from './pages/Apps/AppsPage'
 import AgentsPage from './pages/Agents/AgentsPage'
 import AgentsPageNew from './pages/Agents/AgentsPageNew'
 import WorkflowsPage from './pages/Workflows/WorkflowsPage'
@@ -20,20 +20,21 @@ import WorkflowsPageNew from './pages/Workflows/WorkflowsPageNew'
 import PromptsPage from './pages/Prompts/PromptsPage'
 import PromptsPageNew from './pages/Prompts/PromptsPageNew'
 import KnowledgeBasePageNew from './pages/KnowledgeBase/KnowledgeBasePageNew'
+import MemoryBasePageNew from './pages/MemoryBase/MemoryBasePageNew'
+import UserLoginPage from '@/pages/Auth/UserLoginPage.tsx'
+import { ENV_CONFIG } from '@/config/environment.ts'
+import { getLoginPagePath } from '@/Common/LoginPage.ts'
 
 // 懒加载非核心页面
 const AgentCreatePage = React.lazy(() => import('./pages/Agents/AgentCreatePage'))
 const AgentEditorEditPage = React.lazy(() => import('./pages/Agents/AgentEditorEditPage'))
 const WorkflowCreationPage = React.lazy(() => import('./pages/Workflows/WorkflowCreationPage'))
 const PromptEditPage = React.lazy(() => import('./pages/Prompts/PromptEditPage'))
-const PromptOptimizePage = React.lazy(() => import('./pages/Prompts/PromptOptimizePage'))
 const PromptOptimizePageNew = React.lazy(() => import('./pages/Prompts/PromptOptimizePageNew'))
 const PromptOptimizeEditPage = React.lazy(() => import('./pages/Prompts/PromptOptimizeEditPage'))
-const ModelsPage = React.lazy(() => import('./pages/Models/ModelsPage'))
 const ModelsPageNew = React.lazy(() => import('./pages/Models/ModelsPageNew'))
-const KnowledgeBasePage = React.lazy(() => import('./pages/KnowledgeBase/KnowledgeBasePage'))
 const KnowledgeBaseSettingsPage = React.lazy(() => import('./pages/KnowledgeBase/KnowledgeBaseEditorPage'))
-const PluginManagementPage = React.lazy(() => import('./pages/Plugins').then(module => ({ default: module.PluginManagementPage })))
+const MemoryBaseSettingsPage = React.lazy(() => import('./pages/MemoryBase/MemoryBaseEditorPage'))
 const PluginManagementPageNew = React.lazy(() => import('./pages/Plugins/PluginManagementPageNew'))
 const PluginMarketPageNew = React.lazy(() => import('./pages/Plugins/PluginMarketPageNew'))
 const PluginConfigurationPage = React.lazy(() => import('./pages/Plugins/PluginConfigurationPage'))
@@ -43,10 +44,9 @@ const ToolConfigurationPage = React.lazy(() => import('./pages/Plugins/ToolConfi
 // 懒加载workflow-canvas组件
 const WorkflowCanvas = React.lazy(() => import('@test-agentstudio/workflow-canvas').then(module => ({ default: module.WorkflowCanvas })))
 
-// 工作流编辑器外层容器
+// 工作流编辑器外层容器（新版样式）
 const WorkflowCanvasOuter: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const isNew = useUIStore(state => state.isNewDashboard)
-  return <div className={isNew ? 'py-6 h-full px-6' : 'h-full px-6'}>{children}</div>
+  return <div className="py-6 h-full px-6">{children}</div>
 }
 
 // 加载组件
@@ -60,92 +60,43 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const { isAuthenticated } = useAuthStore()
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
+    return <Navigate to= {getLoginPagePath()} replace />
   }
 
   return <>{children}</>
 }
 
-// 条件渲染 Agents 页面
-const AgentsPageWrapper: React.FC = () => {
-  const isNew = useUIStore(state => state.isNewDashboard)
-  return isNew ? <AgentsPageNew /> : <AgentsPage />
-}
-
-// 条件渲染 Workflows 页面
-const WorkflowsPageWrapper: React.FC = () => {
-  const isNew = useUIStore(state => state.isNewDashboard)
-  return isNew ? <WorkflowsPageNew /> : <WorkflowsPage />
-  // return <WorkflowsPage />
-}
-
-// 条件渲染 Models 页面
-const ModelsPageWrapper: React.FC = () => {
-  const isNew = useUIStore(state => state.isNewDashboard)
-  return isNew ? <ModelsPageNew /> : <ModelsPage />
-  // return <ModelsPage />
-}
-
-// 条件渲染 Plugins 页面
-const PluginsPageWrapper: React.FC = () => {
-  const isNew = useUIStore(state => state.isNewDashboard)
-  return isNew ? <PluginManagementPageNew /> : <PluginManagementPage />
-}
-
-// 条件渲染 Prompts 页面
-const PromptsPageWrapper: React.FC = () => {
-  const isNew = useUIStore(state => state.isNewDashboard)
-  return isNew ? <PromptsPageNew /> : <PromptsPage />
-}
-
-// 条件渲染 KnowledgeBase 页面（新版 CommonPageLayout + 网格/表格；旧版自建布局 + KnowledgeBaseCard）
-const KnowledgeBasePageWrapper: React.FC = () => {
-  const isNew = useUIStore(state => state.isNewDashboard)
-  return isNew ? <KnowledgeBasePageNew /> : <KnowledgeBasePage />
-}
-
-// 条件渲染 提示词自优化 页面（新版 CommonPageLayout + 仅表格 + 状态筛选；旧版自建布局 + 统计卡片）
-const PromptOptimizePageWrapper: React.FC = () => {
-  const isNew = useUIStore(state => state.isNewDashboard)
-  return isNew ? <PromptOptimizePageNew /> : <PromptOptimizePage />
-}
-
-// Layout 包装器：当切换到新版且在 /dashboard 时，自动跳转到 /dashboard/agents
-// 当切换到旧版且在 /dashboard/plugins/market 时，重定向到 /dashboard/plugins
+// Layout 包装器：/dashboard 根路径统一重定向到 /dashboard/agents（新版首页）
 const LayoutWrapper: React.FC = () => {
-  const isNew = useUIStore(state => state.isNewDashboard)
   const navigate = useNavigate()
   const location = useLocation()
 
-  // 当切换到新版且在 /dashboard 时，自动跳转到 /dashboard/agents
   useEffect(() => {
-    if (isNew && location.pathname === '/dashboard') {
+    if (location.pathname === '/dashboard') {
       navigate('/dashboard/agents', { replace: true })
     }
-  }, [isNew, location.pathname, navigate])
-
-  // 当切换到旧版且在 /dashboard/plugins/market 时，重定向到 /dashboard/plugins
-  useEffect(() => {
-    if (!isNew && location.pathname === '/dashboard/plugins/market') {
-      navigate('/dashboard/plugins', { replace: true })
-    }
-  }, [isNew, location.pathname, navigate])
+  }, [location.pathname, navigate])
 
   return <Layout />
 }
 
 const App: React.FC = () => {
   const { isAuthenticated } = useAuthStore()
-  const isNew = useUIStore(state => state.isNewDashboard)
+
+  const enable_pwd = ENV_CONFIG.VITE_ENABLE_NEW_AUTH
+
+  const loginRouteConfig = enable_pwd ? { path: '/user_login', element: <UserLoginPage /> } : { path: '/login', element: <LoginPage /> }
+
+  const loginPath = enable_pwd ? '/user_login' : '/login'
 
   return (
     <div className="h-screen w-full overflow-hidden">
       <LanguageProvider>
         <Routes>
-          {/* Public routes */}
-          <Route path="/" element={<Navigate to={isAuthenticated ? (isNew ? '/dashboard/agents' : '/dashboard') : '/login'} replace />} />
-          <Route path="/login" element={<LoginPage />} />
-
+          {/* Public routes - 已登录默认进入新版首页 /dashboard/agents */}
+          <Route path="/" element={<Navigate to={isAuthenticated ? '/dashboard/agents' : loginPath} replace />} />
+          {/* Dynamic login route*/}
+          <Route path={loginRouteConfig.path} element={loginRouteConfig.element} />
           {/* Protected routes */}
           <Route
             path="/dashboard"
@@ -155,9 +106,8 @@ const App: React.FC = () => {
               </ProtectedRoute>
             }
           >
-            <Route index element={<DashboardPage />} />
-
-            <Route path="agents" element={<AgentsPageWrapper />} />
+            <Route path="apps" element={<AppsPage />} />
+            <Route path="agents" element={<AgentsPageNew />} />
             <Route
               path="agents/new"
               element={
@@ -174,7 +124,7 @@ const App: React.FC = () => {
                 </Suspense>
               }
             />
-            <Route path="workflows" element={<WorkflowsPageWrapper />} />
+            <Route path="workflows" element={<WorkflowsPageNew />} />
             <Route
               path="workflows/new"
               element={
@@ -193,7 +143,7 @@ const App: React.FC = () => {
                 </Suspense>
               }
             />
-            <Route path="prompts" element={<PromptsPageWrapper />} />
+            <Route path="prompts" element={<PromptsPageNew />} />
             <Route
               path="prompts/:id"
               element={
@@ -214,7 +164,7 @@ const App: React.FC = () => {
               path="prompts/optimize"
               element={
                 <Suspense fallback={<LoadingFallback />}>
-                  <PromptOptimizePageWrapper />
+                  <PromptOptimizePageNew />
                 </Suspense>
               }
             />
@@ -238,7 +188,7 @@ const App: React.FC = () => {
               path="models"
               element={
                 <Suspense fallback={<LoadingFallback />}>
-                  <ModelsPageWrapper />
+                  <ModelsPageNew />
                 </Suspense>
               }
             />
@@ -254,7 +204,23 @@ const App: React.FC = () => {
               path="knowledge-bases"
               element={
                 <Suspense fallback={<LoadingFallback />}>
-                  <KnowledgeBasePageWrapper />
+                  <KnowledgeBasePageNew />
+                </Suspense>
+              }
+            />
+            <Route
+              path="memory-bases/:id/edit"
+              element={
+                <Suspense fallback={<LoadingFallback />}>
+                  <MemoryBaseSettingsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="memory-bases"
+              element={
+                <Suspense fallback={<LoadingFallback />}>
+                  <MemoryBasePageNew />
                 </Suspense>
               }
             />
@@ -262,7 +228,7 @@ const App: React.FC = () => {
               path="plugins"
               element={
                 <Suspense fallback={<LoadingFallback />}>
-                  <PluginsPageWrapper />
+                  <PluginManagementPageNew />
                 </Suspense>
               }
             />
@@ -301,7 +267,7 @@ const App: React.FC = () => {
           </Route>
 
           {/* Redirect to dashboard if authenticated, otherwise to login */}
-          <Route path="*" element={isAuthenticated ? <Navigate to={isNew ? '/dashboard/agents' : '/dashboard'} replace /> : <Navigate to="/login" replace />} />
+          <Route path="*" element={isAuthenticated ? <Navigate to="/dashboard/agents" replace /> : <Navigate to={loginPath} replace />} />
         </Routes>
       </LanguageProvider>
     </div>

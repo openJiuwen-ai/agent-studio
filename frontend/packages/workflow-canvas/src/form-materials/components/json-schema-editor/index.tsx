@@ -10,7 +10,7 @@ import { Button, Checkbox, IconButton } from '@douyinfe/semi-ui'
 import { IconExpand, IconShrink, IconPlus, IconChevronDown, IconChevronRight, IconMinus } from '@douyinfe/semi-icons'
 
 import { InjectTypeSelector, BlurInput } from '../../'
-import { t } from '../../../i18n'
+import { useTranslation } from '../../../i18n'
 
 import { ConfigType, PropertyValueType } from './types'
 import { IconAddChildren } from './icon'
@@ -37,6 +37,7 @@ export function JsonSchemaEditor(props: {
   maxNameBytes?: number
 }) {
   const { value = DEFAULT, config = {}, onChange: onChangeProps, readonly, showAddButton = true, defaultFields, minProperties = 0, expandable = false, maxNameBytes } = props
+  const { t } = useTranslation()
   const [error, setError] = useState<string>()
   const { propertyList, onAddProperty, onRemoveProperty, onEditProperty } = usePropertiesEdit(value, onChangeProps)
 
@@ -46,7 +47,7 @@ export function JsonSchemaEditor(props: {
     const result = onEditProperty(key, nextValue)
 
     if (result && !result.shouldUpdate) {
-      setError(result.error || '参数名重复')
+      setError(result.error || t('workflowCanvas.formMaterials.editor.duplicateParameterName'))
     }
   }
 
@@ -54,7 +55,7 @@ export function JsonSchemaEditor(props: {
   const handleAddProperty = () => {
     const hasEmptyName = propertyList.some(item => !item.name || item.name.trim() === '')
     if (hasEmptyName) {
-      setError('请先完成当前参数的设置再添加新参数')
+      setError(t('workflowCanvas.formMaterials.editor.completeCurrentParameterFirst'))
       return
     }
     setError(undefined)
@@ -153,6 +154,7 @@ function PropertyEdit(props: {
     maxNameBytes,
   } = props
 
+  const { t } = useTranslation()
   const [expand, setExpand] = useState(false)
   const [collapse, setCollapse] = useState(false)
 
@@ -322,7 +324,7 @@ function PropertyEdit(props: {
                   onChange={_v => {
                     const result = onEditProperty(_property.key!, _v)
                     if (result && !result.shouldUpdate) {
-                      handleError(result.error || '参数名重复')
+                      handleError(result.error || t('workflowCanvas.formMaterials.editor.duplicateParameterName'))
                     }
                   }}
                   onRemove={() => {

@@ -49,7 +49,11 @@ const KnowledgeBasePageNew: React.FC = () => {
   } = useKnowledgeBaseStore()
 
   const spaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID
-  const { data: embeddingModelsResponse, isLoading: embeddingModelsLoading } = useEmbeddingModels({ spaceId })
+  const { data: embeddingModelsResponse, isLoading: embeddingModelsLoading } = useEmbeddingModels({
+    spaceId,
+    page: 1,
+    size: 100,
+  })
   const embeddingModelMap = useMemo(() => {
     const items = embeddingModelsResponse?.items || []
     return items.reduce((acc, m) => {
@@ -79,13 +83,6 @@ const KnowledgeBasePageNew: React.FC = () => {
   const isResettingRef = useRef<boolean>(false)
   const hasCheckedRef = useRef<boolean>(false)
   const prevSearchTermRef = useRef<string>('')
-
-  // 首次进入或从其他模块切回时，将 store 的 pageSize 同步到 20（与 pageSizeOptions 一致）
-  useEffect(() => {
-    if (pageSize === 10 && location.pathname === '/dashboard/knowledge-bases') {
-      setPageSize(20)
-    }
-  }, [location.pathname, pageSize, setPageSize])
 
   // 返场/重置：从其他模块切回时重置分页并重新拉数；从详情返回不重置
   useEffect(() => {
@@ -254,7 +251,7 @@ const KnowledgeBasePageNew: React.FC = () => {
     () => (
       <>
         <button
-          className="h-8 px-4 bg-[#3b82f6] text-white rounded-[4px] text-sm font-medium hover:bg-[#2563eb] transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-primary h-8 flex items-center gap-2 text-sm px-4 disabled:cursor-not-allowed"
           onClick={handleCreateKnowledgeBase}
           disabled={isAtLimit}
         >

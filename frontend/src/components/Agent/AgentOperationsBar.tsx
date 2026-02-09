@@ -110,7 +110,7 @@ const AgentOperationsBar = ({
               }
             }}
             disabled={disabled}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-sm px-4 rounded-xl"
+            className="btn-primary shadow-sm px-4 rounded-xl"
             size="small"
             sx={{
               borderRadius: '12px',

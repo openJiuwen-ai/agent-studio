@@ -34,66 +34,6 @@ class ModelConfigManager:
         self.usage_repo = ModelUsageRepository(db)
         self.security_utils = SecurityUtils()
     
-    def get_model_configs(
-        self,
-        page: int = 1,
-        size: int = 10,
-        provider: Optional[ModelProvider] = None,
-        is_active: Optional[bool] = None,
-        search: Optional[str] = None,
-        tags: Optional[List[str]] = None
-    ) -> Tuple[List[ModelConfigResponse], int]:
-        """Get paginated model configurations.
-        
-        Args:
-            page: Page number
-            size: Page size
-            provider: Provider filter
-            is_active: Active status filter
-            search: Search keyword
-            tags: Tag filter
-            
-        Returns:
-            Tuple of (model config responses, total count)
-        """
-        try:
-            models, total = self.model_repo.get_paginated(
-                page=page,
-                size=size,
-                provider=provider,
-                is_active=is_active,
-                search=search,
-                tags=tags
-            )
-            
-            # Convert to response format
-            model_responses = [ModelConfigManager._model_to_response(model) for model in models]
-            
-            logger.info(f"Retrieved model configs: page={page}, size={size}, total={total}")
-            return model_responses, total
-            
-        except Exception as e:
-            logger.error(f"Failed to get model configs: {str(e)}")
-            raise
-    
-    def get_model_config(self, model_id: int) -> ModelConfigResponse:
-        """Get model configuration by ID.
-        
-        Args:
-            model_id: Model ID
-            
-        Returns:
-            Model configuration response
-            
-        Raises:
-            ModelConfigNotFoundError: Model config not found
-        """
-        model = self.model_repo.get_by_id(model_id)
-        if not model:
-            raise ModelConfigNotFoundError(f"Model config not found: {model_id}")
-        
-        return ModelConfigManager._model_to_response(model)
-    
     def get_config_by_id(self, model_id: int, space_id: str) -> ModelConfig:
         """Get model configuration by ID (returns raw model object).
         
@@ -371,6 +311,24 @@ class ModelConfigManager:
             }
         ]
     
+    def get_configs_by_ids(self, model_ids: List[int]) -> List[ModelConfig]:
+        """Batch get model configurations by IDs.
+        
+        Args:
+            model_ids: List of Model IDs
+            
+        Returns:
+            List of Model configuration objects
+        """
+        if not model_ids:
+            return []
+            
+        try:
+            return self.model_repo.get_by_ids(model_ids)
+        except Exception as e:
+            logger.error(f"Failed to batch get model configs: {str(e)}")
+            raise ValidationError(f"Failed to batch get model configs: {str(e)}") from e
+
     def get_paginated_configs(
         self,
         page: int = 1,
@@ -470,7 +428,9 @@ class ModelConfigManager:
             total_cost=model.total_cost,
             success_rate=model.success_rate,
             avg_response_time=model.avg_response_time,
-            api_key_masked=masked_api_key
+            api_key_masked=masked_api_key,
+            is_system_model=model.is_system_model,
+            system_model_id=model.system_model_id
         )
     
     def _validate_parameters(self, parameters: Dict[str, Any], model_type: str) -> None:

@@ -1,4 +1,4 @@
-# builder image
+# Stage 1: Builder environment
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE} AS builder
 
@@ -8,7 +8,6 @@ ARG INDEX_URL
 RUN echo "VERSION: ${VERSION}"
 RUN echo "INDEX_URL: ${INDEX_URL}"
 
-# Set working directory
 WORKDIR /app
 COPY backend .
 RUN pip install uv -i ${INDEX_URL}
@@ -18,7 +17,7 @@ RUN uv sync --group dev
 RUN uv build --out-dir /app/dist
 
 
-# builder image
+# Stage 2: Final image - Only copy necessary files from builder stage
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE} AS runtime
 

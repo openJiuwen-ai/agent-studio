@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { X, ChevronDown, Lock, Unlock, MessageSquare, Layers, Database } from 'lucide-react'
+import { X, ChevronDown, Lock, Unlock, MessageSquare, Layers, Database, Brain } from 'lucide-react'
 import DashboardIcon from '@/assets/icons/dashboard.svg?react'
 import AgentIcon from '@/assets/icons/agent.svg?react'
 import WorkflowIcon from '@/assets/icons/workflow.svg?react'
@@ -35,7 +35,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
 
   const navigation: NavigationItem[] = [
     { name: t('layout.navigation.dashboard'), href: '/dashboard', icon: DashboardIcon },
-    // { name: t('layout.navigation.apps'), href: '/dashboard/apps', icon: Layers },
+    { name: t('layout.navigation.apps'), href: '/dashboard/apps', icon: Layers },
     { name: t('layout.navigation.agents'), href: '/dashboard/agents', icon: AgentIcon },
     { name: t('layout.navigation.workflows'), href: '/dashboard/workflows', icon: WorkflowIcon },
     {
@@ -48,6 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, isCollapsed, onToggl
     },
     { name: t('layout.navigation.models'), href: '/dashboard/models', icon: ModelIcon },
     { name: t('layout.navigation.knowledgeBases'), href: '/dashboard/knowledge-bases', icon: Database },
+    { name: t('layout.navigation.memoryBase'), href: '/dashboard/memory-bases', icon: Brain },
     { name: t('layout.navigation.plugins'), href: '/dashboard/plugins', icon: PluginIcon },
   ]
 

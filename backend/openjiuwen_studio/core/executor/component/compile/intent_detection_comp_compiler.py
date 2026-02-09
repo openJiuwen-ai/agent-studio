@@ -3,7 +3,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 from typing import Any, List
 
-from openjiuwen.core.component.intent_detection_comp import IntentDetectionComponent, IntentDetectionCompConfig
+from openjiuwen.core.workflow import IntentDetectionComponent, IntentDetectionCompConfig
 from openjiuwen.core.common.logging import logger
 
 from openjiuwen_studio.core.executor.component.compile import util
@@ -27,11 +27,13 @@ class IntentDetectionCompCompiler(BaseCompCompiler):
         self.component_id = intent_detection_comp.id
 
     def compile(self) -> Any:
-        model_config = parse_model_config(self.config_dict)
+        model_config, model_client_config, model_id = parse_model_config(self.config_dict)
 
         config = IntentDetectionCompConfig(
+            model_id=None,  # 不能给，给了会走到Runner.get_model
+            model_client_config=model_client_config,
+            model_config=model_config,
             category_name_list=self.config_dict.get('category_name_list'),
-            model=model_config,
             user_prompt=self.config_dict.get('user_prompt'),
             enable_history=self.config_dict.get('enable_history'),
         )
@@ -43,14 +45,16 @@ class IntentDetectionCompCompiler(BaseCompCompiler):
             )
             raise JiuWenExecuteException(
                 StatusCode.INTENT_DETECTION_COMP_COMPILER_ERROR.code,
-                StatusCode.INTENT_DETECTION_COMP_COMPILER_ERROR.errmsg.format(msg=f"组件 [{self.component_id}] 的分支配置为空"),
+                StatusCode.INTENT_DETECTION_COMP_COMPILER_ERROR.errmsg.format(
+                    msg=f"组件 [{self.component_id}] 的分支配置为空"),
                 node_id=self.component_id
             )
 
         for index, branch_info in enumerate(self.branch_list):
             bool_expression = f'${{{self.component_id}.classification_id}} == {index}'
             targets = util.get_targets(self.component_id, branch_info.branch_id, self.connections)
-            logger.info(f"[DEBUG] 调用 intent_comp.add_branch: component_id={self.component_id}, condition={bool_expression}, target={targets}, branch_id={branch_info.branch_id}")
+            logger.info(f"[DEBUG] 调用 intent_comp.add_branch: component_id={self.component_id}, "
+                        f"condition={bool_expression}, target={targets}, branch_id={branch_info.branch_id}")
             intent_comp.add_branch(
                 condition=bool_expression,
                 target=targets, branch_id=branch_info.branch_id)

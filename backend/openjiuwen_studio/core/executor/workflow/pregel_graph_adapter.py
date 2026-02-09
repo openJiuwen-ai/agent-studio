@@ -2,7 +2,7 @@ import json
 from typing import Any, Dict, List, Tuple
 
 import networkx as nx
-from openjiuwen.core.common.exception.exception import JiuWenBaseException
+from openjiuwen_studio.core.common.exceptions import BaseError
 from openjiuwen.core.common.logging import logger
 
 from openjiuwen_studio.core.common.dsl import BaseFlow, Connection, Component, ComponentType
@@ -12,7 +12,7 @@ from openjiuwen_studio.core.common.status_code import StatusCode
 EMPTY_NODE_ID_PREFIX = 'empty_node_'
 
 
-class JiuWenGraphException(JiuWenBaseException):
+class JiuWenGraphException(BaseError):
     """workflow图异常"""
 
 
@@ -158,7 +158,7 @@ class PregelGraphAdapter():
             in_edges.append(f'{u}-{v}')
         self._reduce_cba_map(cba_map)
         if len(cba_map) > 1:
-            raise JiuWenExecuteException(error_code=StatusCode.WORKFLOW_GRAPH_BRANCH_REDUCE_ERROR.code,
+            raise JiuWenExecuteException(code=StatusCode.WORKFLOW_GRAPH_BRANCH_REDUCE_ERROR.code,
                                          message=StatusCode.WORKFLOW_GRAPH_BRANCH_REDUCE_ERROR.errmsg, node_id=node, )
         elif len(cba_map) == 1:
             (k, v) = cba_map.popitem()
@@ -174,7 +174,7 @@ class PregelGraphAdapter():
         cba = self._graph.nodes[node].get('cba', False)
         while cba:
             if not self._is_switch_like_component(cba):
-                raise JiuWenGraphException(error_code=StatusCode.WORKFLOW_GRAPH_LOOP_CONTROL_NODE_REDUCE_ERROR.code,
+                raise JiuWenGraphException(code=StatusCode.WORKFLOW_GRAPH_LOOP_CONTROL_NODE_REDUCE_ERROR.code,
                                            message=StatusCode.WORKFLOW_GRAPH_LOOP_CONTROL_NODE_REDUCE_ERROR.errmsg.format(
                                                msg=node))
             cba = self._graph.nodes[cba].get('cba', False)
@@ -246,7 +246,7 @@ class PregelGraphAdapter():
         # 再校验是否存在环
         cycles: List[List[str]] = list(nx.simple_cycles(self._graph))
         if cycles:
-            raise JiuWenGraphException(error_code=StatusCode.WORKFLOW_GRAPH_CIRCLE_ERROR.code,
+            raise JiuWenGraphException(code=StatusCode.WORKFLOW_GRAPH_CIRCLE_ERROR.code,
                                        message=StatusCode.WORKFLOW_GRAPH_CIRCLE_ERROR.errmsg.format(
                                            msg=json.dumps(cycles)))
 
@@ -275,7 +275,7 @@ class PregelGraphAdapter():
                 node_type = self._graph.nodes[node]['type']
                 if node_type != ComponentType.COMPONENT_TYPE_START:
                     raise JiuWenComponentException(
-                        error_code=StatusCode.WORKFLOW_GRAPH_START_NODE_ERROR.code,
+                        code=StatusCode.WORKFLOW_GRAPH_START_NODE_ERROR.code,
                         message=StatusCode.WORKFLOW_GRAPH_START_NODE_ERROR.errmsg,
                         component_id=node,
                         component_type=node_type
@@ -332,7 +332,7 @@ class PregelGraphAdapter():
         if not nx.has_path(self._graph, start_id, end_id):
             error_msg = f"开始节点: {start_id}, 结束节点: {end_id}"
             raise JiuWenGraphException(
-                error_code=StatusCode.WORKFLOW_GRAPH_CONNECTIVITY_ERROR.code,
+                code=StatusCode.WORKFLOW_GRAPH_CONNECTIVITY_ERROR.code,
                 message=StatusCode.WORKFLOW_GRAPH_CONNECTIVITY_ERROR.errmsg.format(msg=error_msg)
             )
         logger.debug(

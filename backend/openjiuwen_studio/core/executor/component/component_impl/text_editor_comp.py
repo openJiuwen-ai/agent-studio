@@ -3,11 +3,10 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved
 import re
 from typing import Any, Dict, List
+from openjiuwen.core.workflow import WorkflowComponent, Input, Output
+from openjiuwen.core.context_engine import ModelContext
+from openjiuwen.core.session.node import Session
 
-from openjiuwen.core.component.base import WorkflowComponent
-from openjiuwen.core.runtime.runtime import Runtime
-from openjiuwen.core.graph.executable import Input, Output
-from openjiuwen.core.runtime.base import ComponentExecutable
 from openjiuwen_studio.core.executor.component.component_impl.user_output_comp import has_double_braces
 from openjiuwen_studio.core.common.dsl import TextEditorConfig, TextEditorType
 from openjiuwen_studio.core.common.exceptions import JiuWenExecuteException
@@ -33,7 +32,7 @@ from openjiuwen_studio.core.common.status_code import StatusCode
 # }
 
 
-class TextEditorComponent(ComponentExecutable, WorkflowComponent):
+class TextEditorComponent(WorkflowComponent):
     def __init__(self, node_id: str, conf: TextEditorConfig, output_name: str) -> None:
         super().__init__()
         self.conf: TextEditorConfig = conf
@@ -82,7 +81,7 @@ class TextEditorComponent(ComponentExecutable, WorkflowComponent):
             split_result = new_result
         return split_result
 
-    async def invoke(self, inputs: Input, runtime: Runtime, context) -> Output:
+    async def invoke(self, inputs: Input, session: Session, context: ModelContext) -> Output:
         output_result = None
         if self.edit_type == TextEditorType.CONCATENATION.value:
             concatenate_format = self.conf.concatenate_format

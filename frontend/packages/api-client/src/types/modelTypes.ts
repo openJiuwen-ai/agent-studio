@@ -71,6 +71,7 @@ export interface ModelConfigResponse extends ModelConfigBase {
   updated_at: string
   usage_stats: ModelUsageStats
   api_key_masked?: string
+  is_system_model?: boolean
 }
 
 // 模型配置列表响应

@@ -5,29 +5,30 @@
 
 import { commonValidators, createInputParametersValidator, createTitleValidator } from '../../utils/validation'
 import { checkPortConnection } from '../../form-materials'
+import { t } from '../../i18n'
 
-export const validateTitle = createTitleValidator({ message: '标题不能为空' })
+export const validateTitle = createTitleValidator({ message: t('workflowCanvas.validation.titleRequired') })
 
 export const validateInputParameters = createInputParametersValidator({
   requiredParams: ['query'],
   errorMessages: {
-    required: '参数是必需的',
-    unknownVariable: '引用的变量不存在',
+    required: t('workflowCanvas.validation.paramRequired', { param: '{{param}}' }),
+    unknownVariable: t('workflowCanvas.validation.variableUnknown'),
   },
 })
 
 export const validateIntents = ({ value, context }: any) => {
   if (!value || !Array.isArray(value) || value.length === 0) {
-    return '至少需要添加一个意图'
+    return t('workflowCanvas.nodes.intent.atLeastOneIntent')
   }
 
   for (let i = 0; i < value.length; i++) {
     const intent = value[i]
     if (!intent.name || intent.name.trim() === '') {
-      return `意图 ${i + 1} 的名称不能为空`
+      return t('workflowCanvas.nodes.intent.intentNameCannotBeEmpty', { index: i + 1 })
     }
     if (intent.name.length > 50) {
-      return `意图 ${i + 1} 的名称长度不能超过50个字符`
+      return t('workflowCanvas.nodes.intent.intentNameTooLong', { index: i + 1 })
     }
   }
 
@@ -51,16 +52,16 @@ export const validateIntents = ({ value, context }: any) => {
       .map((intent: any) => intent.name)
 
     if (unconnectedIntentNames.length === 1) {
-      return `意图"${unconnectedIntentNames[0]}"必须连线到节点`
+      return t('workflowCanvas.nodes.intent.intentMustBeConnected', { name: unconnectedIntentNames[0] })
     } else {
-      return `以下意图必须连线到节点: ${unconnectedIntentNames.join(', ')}`
+      return t('workflowCanvas.nodes.intent.intentsMustBeConnected', { names: unconnectedIntentNames.join(', ') })
     }
   }
 
   const hasOtherIntentConnection = checkPortConnection(node, '0', 'output')
 
   if (!hasOtherIntentConnection) {
-    return '其他意图端口必须连线到节点'
+    return t('workflowCanvas.nodes.intent.otherIntentMustBeConnected')
   }
 
   return undefined

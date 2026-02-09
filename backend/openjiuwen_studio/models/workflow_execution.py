@@ -2,6 +2,7 @@ from __future__ import annotations
 from datetime import datetime
 from sqlalchemy import (JSON, BigInteger, DateTime, ForeignKey, Index, Integer,
                         String, Text, func)
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import (Mapped, mapped_column, relationship)
 from openjiuwen_studio.models.db_fun_base import Base, DBFunBase
 from openjiuwen_studio.models.workflow import WorkflowBaseDB, WorkflowPublishDB
@@ -42,7 +43,12 @@ class WorkflowExecutionDB(Base, DBFunBase):
     inputs: Mapped[dict | None] = mapped_column(JSON, default=None, nullable=True, comment='inputs of this execution')
     outputs: Mapped[dict | None] = mapped_column(JSON, default=None, nullable=True, comment='outputs of this execution')
     error_code: Mapped[int | None] = mapped_column(Integer, default=None, nullable=True, comment='error code')
-    fail_reason: Mapped[str | None] = mapped_column(Text, default=None, nullable=True, comment='the reason for failure')
+    fail_reason: Mapped[str | None] = mapped_column(
+        Text().with_variant(LONGTEXT, "mysql"),
+        default=None,
+        nullable=True,
+        comment='the reason for failure'
+    )
     input_tokens: Mapped[int | None] = mapped_column(
         Integer, default=None, nullable=True, comment='number of input tokens')
     output_tokens: Mapped[int | None] = mapped_column(
@@ -157,7 +163,7 @@ class WorkflowExecutionDetailsDB(Base, DBFunBase):
     agent_parent_invoke_id: Mapped[str] = mapped_column(String(100), default="", 
         comment='Reserved field: nested workflows for future adaptation of workflow nodes')
 
-    meta_data: Mapped[str | None] = mapped_column(Text, default=None)
+    meta_data: Mapped[str | None] = mapped_column(Text().with_variant(LONGTEXT, "mysql"), default=None)
 
     # loop 信息
     loop_node_id: Mapped[str | None] = mapped_column(String(100), default=None)

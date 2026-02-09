@@ -23,9 +23,9 @@ from openjiuwen_studio.schemas.execution_log import WfExecutionLogsFilter, WfExe
     ExecutionLogDebug, AgExecutionLogsFilter, AgExecutionLogIndex
 from openjiuwen_studio.core.manager.repositories.workflow_execution_repository import workflow_execution_repository
 from openjiuwen_studio.core.manager.repositories.agent_execution_repository import agent_execution_repository
-from openjiuwen.core.stream.writer import TraceSchema
+from openjiuwen.core.session.stream import TraceSchema
 from openjiuwen_studio.core.executor.util.utils import result_convert as executor_result_convert
-from openjiuwen.core.tracer.span import TraceWorkflowSpan, TraceAgentSpan
+from openjiuwen.core.session.tracer.span import TraceWorkflowSpan, TraceAgentSpan
 
 
 def with_exception_handling(func: Callable) -> Callable:

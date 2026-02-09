@@ -53,19 +53,19 @@ def _intent_configs_model_convert(model_id: int, space_id: str) -> dsl.ModelConf
             raise ModelApiKeyDecryptError(f"API key decryption failed: {str(e)}") from e
 
     param = ModelParameters(**model.parameters)
-    model_info = dsl.BaseModelInfo(
-        api_key=model.api_key,
-        api_base=model.base_url,
-        model_name=model.model_type,
-        temperature=param.temperature,
-        top_p=param.top_p,
-        streaming=model.enable_streaming,
-        timeout=model.timeout
-    )
 
     return dsl.ModelConfig(
-        model_provider=model.provider,
-        model_info=model_info
+        model_client_config=dsl.ModelClientConfig(
+            client_provider=model.provider,
+            api_key=model.api_key,
+            api_base=model.base_url,
+            timeout=model.timeout
+        ),
+        request_config=dsl.ModelRequestConfig(
+            model_name=model.model_type,
+            temperature=param.temperature,
+            top_p=param.top_p,
+        )
     )
 
 

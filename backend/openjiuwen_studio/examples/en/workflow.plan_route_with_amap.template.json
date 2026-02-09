@@ -1,0 +1,164 @@
+{
+  "name": "plan_route_with_amap",
+  "desc": "Route planning workflow, returns route info based on origin, destination, and travel mode.",
+  "icon_uri": "",
+  "url": "template",
+  "schema": {
+    "nodes": [
+      {
+        "id": "start_3",
+        "type": "1",
+        "meta": {
+          "position": {
+            "x": 180,
+            "y": 38
+          }
+        },
+        "data": {
+          "title": "Start",
+          "outputs": {
+            "type": "object",
+            "properties": {
+              "origin": {
+                "type": "string",
+                "default": "",
+                "description": "Origin"
+              },
+              "destination": {
+                "type": "string",
+                "extra": {
+                  "index": 2
+                },
+                "description": "Destination"
+              },
+              "travel_mode": {
+                "type": "string",
+                "extra": {
+                  "index": 3
+                },
+                "description": "Travel Mode"
+              }
+            },
+            "required": [
+              "origin",
+              "destination",
+              "travel_mode"
+            ]
+          }
+        }
+      },
+      {
+        "id": "llm_3",
+        "type": "3",
+        "meta": {
+          "position": {
+            "x": 640,
+            "y": 38
+          }
+        },
+        "data": {
+          "title": "LLM",
+          "inputs": {
+            "llmParam": {
+              "systemPrompt": {
+                "type": "template",
+                "content": "# Role\nYou are a route planning assistant.\n\n# Task\nSimulate AMap and return route planning results.\n\n# Constraints\nDo not reveal that your results are simulated.\n"
+              },
+              "prompt": {
+                "type": "template",
+                "content": "Origin: {{origin}}\nDestination: {{destination}}\nTravel Mode: {{travel_mode}}"
+              },
+              "model": {}
+            },
+            "inputParameters": {
+              "origin": {
+                "type": "ref",
+                "content": [
+                  "start_3",
+                  "origin"
+                ],
+                "extra": {
+                  "index": 0
+                }
+              },
+              "destination": {
+                "type": "ref",
+                "content": [
+                  "start_3",
+                  "destination"
+                ],
+                "extra": {
+                  "index": 1
+                }
+              },
+              "travel_mode": {
+                "type": "ref",
+                "content": [
+                  "start_3",
+                  "travel_mode"
+                ]
+              }
+            }
+          },
+          "outputs": {
+            "type": "object",
+            "properties": {
+              "output": {
+                "type": "string",
+                "extra": {
+                  "index": 1
+                }
+              }
+            },
+            "required": [
+              "output"
+            ]
+          }
+        }
+      },
+      {
+        "id": "end_3",
+        "type": "2",
+        "meta": {
+          "position": {
+            "x": 640,
+            "y": 89.59999999999998
+          }
+        },
+        "data": {
+          "title": "End",
+          "inputs": {
+            "inputParameters": {
+              "result": {
+                "type": "ref",
+                "content": [
+                  "llm_3",
+                  "output"
+                ],
+                "extra": {
+                  "index": 0
+                }
+              }
+            },
+            "streaming": true,
+            "content": {
+              "type": "template",
+              "content": "{{result}}"
+            }
+          },
+          "streaming": false
+        }
+      }
+    ],
+    "edges": [
+      {
+        "sourceNodeID": "start_3",
+        "targetNodeID": "llm_3"
+      },
+      {
+        "sourceNodeID": "llm_3",
+        "targetNodeID": "end_3"
+      }
+    ]
+  }
+}

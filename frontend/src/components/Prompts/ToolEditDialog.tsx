@@ -188,16 +188,16 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
   const getParameterNameError = (paramName: string, currentIndex: number): string => {
     if (!paramName.trim()) return ''
 
-    // 检查格式
-    const namePattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+    // 检查格式（只能包含英文字母、数字、下划线、连字符，必须以英文字母开头）
+    const namePattern = /^[a-zA-Z][a-zA-Z0-9_-]*$/
     if (!namePattern.test(paramName.trim())) {
-      return '只能包含字母、数字、下划线，且不能以数字开头'
+      return t('components.prompts.toolEditDialog.parameterNameFormatError')
     }
 
     // 检查重复
     const otherParams = editingTool?.parameters.filter((_, i) => i !== currentIndex) || []
     if (otherParams.some(p => p.name.trim() === paramName.trim())) {
-      return '参数名称重复'
+      return t('components.prompts.toolEditDialog.parameterNameDuplicateError')
     }
 
     return ''
@@ -211,7 +211,7 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
     const toolName = editingTool.name || ''
     if (!toolName.trim()) return true
 
-    const toolNamePattern = /^[a-zA-Z_][a-zA-Z0-9_-]*$/
+    const toolNamePattern = /^[a-zA-Z][a-zA-Z0-9_-]*$/
     if (!toolNamePattern.test(toolName.trim())) return true
 
     // 工具描述允许为空，不需要检查
@@ -234,14 +234,14 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
   const validateToolParameters = (parameters: ToolParameter[]): string | null => {
     // 1. 验证参数数量
     if (parameters.length > 50) {
-      return `工具参数数量过多，最多支持50个参数（当前${parameters.length}个）`
+      return t('components.prompts.toolEditDialog.validation.tooManyParameters', { count: parameters.length })
     }
 
     // 2. 验证参数名称重复
     const paramNames = parameters.map(p => p.name.trim()).filter(name => name)
     const duplicateNames = paramNames.filter((name, index) => paramNames.indexOf(name) !== index)
     if (duplicateNames.length > 0) {
-      return `参数名称重复：${duplicateNames.join(', ')}`
+      return t('components.prompts.toolEditDialog.validation.duplicateParameterNames', { names: duplicateNames.join(', ') })
     }
 
     // 3. 逐个验证参数
@@ -251,34 +251,34 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
 
       // 验证参数名称
       if (!param.name || !param.name.trim()) {
-        return `第${paramIndex}个参数的名称不能为空`
+        return t('components.prompts.toolEditDialog.validation.parameterNameEmpty', { index: paramIndex })
       }
 
-      // 验证参数名称格式（只允许字母、数字、下划线，且不能以数字开头）
-      const namePattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+      // 验证参数名称格式（只能包含英文字母、数字、下划线、连字符，必须以英文字母开头）
+      const namePattern = /^[a-zA-Z][a-zA-Z0-9_-]*$/
       if (!namePattern.test(param.name.trim())) {
-        return `参数名称 "${param.name}" 格式不正确，只能包含字母、数字、下划线，且不能以数字开头`
+        return t('components.prompts.toolEditDialog.validation.parameterNameFormatInvalid', { name: param.name })
       }
 
       // 验证参数名称长度
       if (param.name.length > 100) {
-        return `参数名称 "${param.name}" 超过100个字符限制（当前${param.name.length}个字符）`
+        return t('components.prompts.toolEditDialog.validation.parameterNameTooLong', { name: param.name, length: param.name.length })
       }
 
       // 验证参数类型
       const validTypes = Object.values(DATA_TYPES) as string[]
       if (!validTypes.includes(param.type)) {
-        return `参数 "${param.name}" 的类型 "${param.type}" 不是有效的数据类型`
+        return t('components.prompts.toolEditDialog.validation.parameterTypeInvalid', { name: param.name, type: param.type })
       }
 
       // 验证参数描述长度（允许为空）
       if (param.description && param.description.length > 500) {
-        return `参数 "${param.name}" 的描述超过500个字符限制（当前${param.description.length}个字符）`
+        return t('components.prompts.toolEditDialog.validation.parameterDescriptionTooLong', { name: param.name, length: param.description.length })
       }
 
       // 验证必填字段的逻辑性
       if (param.required === undefined || param.required === null) {
-        return `参数 "${param.name}" 必须指定是否为必填项`
+        return t('components.prompts.toolEditDialog.validation.parameterRequiredNotSpecified', { name: param.name })
       }
     }
 
@@ -292,58 +292,58 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
 
       // 验证根级别结构
       if (typeof schema !== 'object' || schema === null) {
-        return 'JSON Schema必须是一个对象'
+        return t('components.prompts.toolEditDialog.validation.jsonSchemaMustBeObject')
       }
 
       if (schema.type !== 'object') {
-        return 'JSON Schema的根类型必须是 "object"'
+        return t('components.prompts.toolEditDialog.validation.jsonSchemaRootTypeMustBeObject')
       }
 
       // 允许空的 properties 对象（删除所有参数的情况）
       if (schema.properties === undefined || schema.properties === null) {
-        return 'JSON Schema必须包含 "properties" 字段'
+        return t('components.prompts.toolEditDialog.validation.jsonSchemaMustHaveProperties')
       }
       if (typeof schema.properties !== 'object') {
-        return 'JSON Schema的 "properties" 字段必须是对象类型'
+        return t('components.prompts.toolEditDialog.validation.jsonSchemaPropertiesMustBeObject')
       }
 
       // 验证properties中的每个属性
       const properties = schema.properties
       for (const [propName, propDef] of Object.entries(properties)) {
         if (typeof propDef !== 'object' || propDef === null) {
-          return `属性 "${propName}" 的定义必须是对象类型`
+          return t('components.prompts.toolEditDialog.validation.propertyDefinitionMustBeObject', { name: propName })
         }
 
         const prop = propDef as Record<string, unknown>
 
         // 验证type字段
         if (!prop.type) {
-          return `属性 "${propName}" 缺少 "type" 字段`
+          return t('components.prompts.toolEditDialog.validation.propertyMissingType', { name: propName })
         }
 
         const validJsonTypes = ['string', 'number', 'integer', 'boolean', 'array', 'object']
 
         // type必须是单个字符串
         if (typeof prop.type !== 'string' || !validJsonTypes.includes(prop.type)) {
-          return `属性 "${propName}" 的类型 "${prop.type}" 不是有效的JSON Schema类型，支持的类型：${validJsonTypes.join(', ')}`
+          return t('components.prompts.toolEditDialog.validation.propertyTypeInvalid', { name: propName, type: prop.type, validTypes: validJsonTypes.join(', ') })
         }
 
         // 验证数组类型的items
         if (prop.type === 'array') {
           if (!prop.items || typeof prop.items !== 'object') {
-            return `数组类型属性 "${propName}" 必须包含 "items" 字段且为对象类型`
+            return t('components.prompts.toolEditDialog.validation.arrayPropertyMustHaveItems', { name: propName })
           }
 
           const items = prop.items as Record<string, unknown>
           const validItemTypes = ['string', 'number', 'integer', 'boolean', 'object']
           if (!items.type || !validItemTypes.includes(items.type as string)) {
-            return `数组类型属性 "${propName}" 的items类型无效，支持的类型：${validItemTypes.join(', ')}`
+            return t('components.prompts.toolEditDialog.validation.arrayPropertyItemsTypeInvalid', { name: propName, validTypes: validItemTypes.join(', ') })
           }
         }
 
         // 验证description字段
         if (prop.description && typeof prop.description !== 'string') {
-          return `属性 "${propName}" 的描述必须是字符串类型`
+          return t('components.prompts.toolEditDialog.validation.propertyDescriptionMustBeString', { name: propName })
         }
 
         // 验证通用约束关键字
@@ -351,10 +351,10 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
         // 验证enum约束（适用于所有类型）
         if (prop.enum !== undefined) {
           if (!Array.isArray(prop.enum)) {
-            return `属性 "${propName}" 的enum必须是数组类型`
+            return t('components.prompts.toolEditDialog.validation.propertyEnumMustBeArray', { name: propName })
           }
           if (prop.enum.length === 0) {
-            return `属性 "${propName}" 的enum数组不能为空`
+            return t('components.prompts.toolEditDialog.validation.propertyEnumCannotBeEmpty', { name: propName })
           }
 
           // 验证enum值与类型的一致性
@@ -362,14 +362,14 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
           for (let i = 0; i < prop.enum.length; i++) {
             const enumValue = prop.enum[i] as unknown
             if (!validateEnumValueType(enumValue, propType)) {
-              return `属性 "${propName}" 的enum值 "${enumValue}" 与类型 "${propType}" 不匹配`
+              return t('components.prompts.toolEditDialog.validation.propertyEnumValueTypeMismatch', { name: propName, value: String(enumValue), type: propType })
             }
           }
 
           // 检查enum值是否有重复
           const uniqueValues = new Set(prop.enum)
           if (uniqueValues.size !== prop.enum.length) {
-            return `属性 "${propName}" 的enum值不能重复`
+            return t('components.prompts.toolEditDialog.validation.propertyEnumValuesDuplicate', { name: propName })
           }
         }
 
@@ -387,22 +387,22 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
         // 验证string类型的约束
         if (hasStringType) {
           if (prop.minLength !== undefined && (typeof prop.minLength !== 'number' || prop.minLength < 0)) {
-            return `属性 "${propName}" 的minLength必须是非负数`
+            return t('components.prompts.toolEditDialog.validation.propertyMinLengthMustBeNonNegative', { name: propName })
           }
           if (prop.maxLength !== undefined && (typeof prop.maxLength !== 'number' || prop.maxLength < 0)) {
-            return `属性 "${propName}" 的maxLength必须是非负数`
+            return t('components.prompts.toolEditDialog.validation.propertyMaxLengthMustBeNonNegative', { name: propName })
           }
           if (prop.minLength !== undefined && prop.maxLength !== undefined && prop.minLength > prop.maxLength) {
-            return `属性 "${propName}" 的minLength不能大于maxLength`
+            return t('components.prompts.toolEditDialog.validation.propertyMinLengthCannotExceedMaxLength', { name: propName })
           }
           if (prop.pattern !== undefined && typeof prop.pattern !== 'string') {
-            return `属性 "${propName}" 的pattern必须是字符串类型的正则表达式`
+            return t('components.prompts.toolEditDialog.validation.propertyPatternMustBeString', { name: propName })
           }
 
           // 增强的format验证
           if (prop.format !== undefined) {
             if (typeof prop.format !== 'string') {
-              return `属性 "${propName}" 的format必须是字符串类型`
+              return t('components.prompts.toolEditDialog.validation.propertyFormatMustBeString', { name: propName })
             }
             const validFormats = [
               'date',
@@ -426,7 +426,7 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
               'relative-json-pointer',
             ]
             if (!validFormats.includes(prop.format)) {
-              return `属性 "${propName}" 的format "${prop.format}" 不是有效的格式，支持的格式：${validFormats.join(', ')}`
+              return t('components.prompts.toolEditDialog.validation.propertyFormatInvalid', { name: propName, format: prop.format, validFormats: validFormats.join(', ') })
             }
           }
         }
@@ -434,51 +434,51 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
         // 验证number和integer类型的约束
         if (hasNumberType) {
           if (prop.minimum !== undefined && typeof prop.minimum !== 'number') {
-            return `属性 "${propName}" 的minimum必须是数值类型`
+            return t('components.prompts.toolEditDialog.validation.propertyMinimumMustBeNumber', { name: propName })
           }
           if (prop.maximum !== undefined && typeof prop.maximum !== 'number') {
-            return `属性 "${propName}" 的maximum必须是数值类型`
+            return t('components.prompts.toolEditDialog.validation.propertyMaximumMustBeNumber', { name: propName })
           }
           if (prop.exclusiveMinimum !== undefined && typeof prop.exclusiveMinimum !== 'number') {
-            return `属性 "${propName}" 的exclusiveMinimum必须是数值类型`
+            return t('components.prompts.toolEditDialog.validation.propertyExclusiveMinimumMustBeNumber', { name: propName })
           }
           if (prop.exclusiveMaximum !== undefined && typeof prop.exclusiveMaximum !== 'number') {
-            return `属性 "${propName}" 的exclusiveMaximum必须是数值类型`
+            return t('components.prompts.toolEditDialog.validation.propertyExclusiveMaximumMustBeNumber', { name: propName })
           }
 
           // 验证边界值的逻辑关系
           if (prop.minimum !== undefined && prop.maximum !== undefined && prop.minimum > prop.maximum) {
-            return `属性 "${propName}" 的minimum不能大于maximum`
+            return t('components.prompts.toolEditDialog.validation.propertyMinimumCannotExceedMaximum', { name: propName })
           }
           if (prop.exclusiveMinimum !== undefined && prop.exclusiveMaximum !== undefined && prop.exclusiveMinimum >= prop.exclusiveMaximum) {
-            return `属性 "${propName}" 的exclusiveMinimum必须小于exclusiveMaximum`
+            return t('components.prompts.toolEditDialog.validation.propertyExclusiveMinimumMustBeLessThanExclusiveMaximum', { name: propName })
           }
           if (prop.minimum !== undefined && prop.exclusiveMaximum !== undefined && prop.minimum >= prop.exclusiveMaximum) {
-            return `属性 "${propName}" 的minimum不能大于等于exclusiveMaximum`
+            return t('components.prompts.toolEditDialog.validation.propertyMinimumCannotExceedExclusiveMaximum', { name: propName })
           }
           if (prop.exclusiveMinimum !== undefined && prop.maximum !== undefined && prop.exclusiveMinimum >= prop.maximum) {
-            return `属性 "${propName}" 的exclusiveMinimum必须小于maximum`
+            return t('components.prompts.toolEditDialog.validation.propertyExclusiveMinimumMustBeLessThanMaximum', { name: propName })
           }
 
           if (prop.multipleOf !== undefined && (typeof prop.multipleOf !== 'number' || prop.multipleOf <= 0)) {
-            return `属性 "${propName}" 的multipleOf必须是正数`
+            return t('components.prompts.toolEditDialog.validation.propertyMultipleOfMustBePositive', { name: propName })
           }
 
           if (hasIntegerType) {
             if (prop.minimum !== undefined && !Number.isInteger(prop.minimum)) {
-              return `整数类型属性 "${propName}" 的minimum必须是整数`
+              return t('components.prompts.toolEditDialog.validation.integerPropertyMinimumMustBeInteger', { name: propName })
             }
             if (prop.maximum !== undefined && !Number.isInteger(prop.maximum)) {
-              return `整数类型属性 "${propName}" 的maximum必须是整数`
+              return t('components.prompts.toolEditDialog.validation.integerPropertyMaximumMustBeInteger', { name: propName })
             }
             if (prop.exclusiveMinimum !== undefined && !Number.isInteger(prop.exclusiveMinimum)) {
-              return `整数类型属性 "${propName}" 的exclusiveMinimum必须是整数`
+              return t('components.prompts.toolEditDialog.validation.integerPropertyExclusiveMinimumMustBeInteger', { name: propName })
             }
             if (prop.exclusiveMaximum !== undefined && !Number.isInteger(prop.exclusiveMaximum)) {
-              return `整数类型属性 "${propName}" 的exclusiveMaximum必须是整数`
+              return t('components.prompts.toolEditDialog.validation.integerPropertyExclusiveMaximumMustBeInteger', { name: propName })
             }
             if (prop.multipleOf !== undefined && !Number.isInteger(prop.multipleOf)) {
-              return `整数类型属性 "${propName}" 的multipleOf必须是整数`
+              return t('components.prompts.toolEditDialog.validation.integerPropertyMultipleOfMustBeInteger', { name: propName })
             }
           }
         }
@@ -487,53 +487,53 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
         if (hasBooleanType) {
           // 只有当类型仅为boolean时，enum才只能包含boolean值
           if (prop.enum && prop.enum.some((val: unknown) => typeof val !== 'boolean')) {
-            return `布尔类型属性 "${propName}" 的enum值只能包含true或false`
+            return t('components.prompts.toolEditDialog.validation.booleanPropertyEnumMustBeBoolean', { name: propName })
           }
         }
 
         // 验证array类型的约束
         if (hasArrayType) {
           if (prop.minItems !== undefined && (typeof prop.minItems !== 'number' || prop.minItems < 0 || !Number.isInteger(prop.minItems))) {
-            return `属性 "${propName}" 的minItems必须是非负整数`
+            return t('components.prompts.toolEditDialog.validation.propertyMinItemsMustBeNonNegativeInteger', { name: propName })
           }
           if (prop.maxItems !== undefined && (typeof prop.maxItems !== 'number' || prop.maxItems < 0 || !Number.isInteger(prop.maxItems))) {
-            return `属性 "${propName}" 的maxItems必须是非负整数`
+            return t('components.prompts.toolEditDialog.validation.propertyMaxItemsMustBeNonNegativeInteger', { name: propName })
           }
           if (prop.minItems !== undefined && prop.maxItems !== undefined && prop.minItems > prop.maxItems) {
-            return `属性 "${propName}" 的minItems不能大于maxItems`
+            return t('components.prompts.toolEditDialog.validation.propertyMinItemsCannotExceedMaxItems', { name: propName })
           }
           if (prop.uniqueItems !== undefined && typeof prop.uniqueItems !== 'boolean') {
-            return `属性 "${propName}" 的uniqueItems必须是布尔类型`
+            return t('components.prompts.toolEditDialog.validation.propertyUniqueItemsMustBeBoolean', { name: propName })
           }
 
           // 验证additionalItems（如果存在items数组的话）
           if (prop.additionalItems !== undefined && typeof prop.additionalItems !== 'boolean' && typeof prop.additionalItems !== 'object') {
-            return `属性 "${propName}" 的additionalItems必须是布尔类型或对象类型`
+            return t('components.prompts.toolEditDialog.validation.propertyAdditionalItemsMustBeBooleanOrObject', { name: propName })
           }
         }
 
         // 验证object类型的约束
         if (hasObjectType) {
           if (prop.properties && typeof prop.properties !== 'object') {
-            return `对象类型属性 "${propName}" 的properties必须是对象类型`
+            return t('components.prompts.toolEditDialog.validation.objectPropertyPropertiesMustBeObject', { name: propName })
           }
           if (prop.required && !Array.isArray(prop.required)) {
-            return `对象类型属性 "${propName}" 的required必须是数组类型`
+            return t('components.prompts.toolEditDialog.validation.objectPropertyRequiredMustBeArray', { name: propName })
           }
           if (prop.additionalProperties !== undefined && typeof prop.additionalProperties !== 'boolean' && typeof prop.additionalProperties !== 'object') {
-            return `对象类型属性 "${propName}" 的additionalProperties必须是布尔类型或对象类型`
+            return t('components.prompts.toolEditDialog.validation.objectPropertyAdditionalPropertiesMustBeBooleanOrObject', { name: propName })
           }
           if (prop.minProperties !== undefined && (typeof prop.minProperties !== 'number' || prop.minProperties < 0 || !Number.isInteger(prop.minProperties))) {
-            return `属性 "${propName}" 的minProperties必须是非负整数`
+            return t('components.prompts.toolEditDialog.validation.propertyMinPropertiesMustBeNonNegativeInteger', { name: propName })
           }
           if (prop.maxProperties !== undefined && (typeof prop.maxProperties !== 'number' || prop.maxProperties < 0 || !Number.isInteger(prop.maxProperties))) {
-            return `属性 "${propName}" 的maxProperties必须是非负整数`
+            return t('components.prompts.toolEditDialog.validation.propertyMaxPropertiesMustBeNonNegativeInteger', { name: propName })
           }
           if (prop.minProperties !== undefined && prop.maxProperties !== undefined && prop.minProperties > prop.maxProperties) {
-            return `属性 "${propName}" 的minProperties不能大于maxProperties`
+            return t('components.prompts.toolEditDialog.validation.propertyMinPropertiesCannotExceedMaxProperties', { name: propName })
           }
           if (prop.patternProperties && typeof prop.patternProperties !== 'object') {
-            return `对象类型属性 "${propName}" 的patternProperties必须是对象类型`
+            return t('components.prompts.toolEditDialog.validation.objectPropertyPatternPropertiesMustBeObject', { name: propName })
           }
 
           // 验证patternProperties中的正则表达式
@@ -542,37 +542,37 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
               try {
                 new RegExp(pattern)
               } catch (error) {
-                return `属性 "${propName}" 的patternProperties中的模式 "${pattern}" 不是有效的正则表达式`
+                return t('components.prompts.toolEditDialog.validation.objectPropertyPatternPropertiesInvalidRegex', { name: propName, pattern })
               }
             }
           }
 
           // 验证dependencies（如果存在）
           if (prop.dependencies && typeof prop.dependencies !== 'object') {
-            return `对象类型属性 "${propName}" 的dependencies必须是对象类型`
+            return t('components.prompts.toolEditDialog.validation.objectPropertyDependenciesMustBeObject', { name: propName })
           }
         }
       }
 
       // 验证required字段
       if (schema.required && !Array.isArray(schema.required)) {
-        return '"required" 字段必须是数组类型'
+        return t('components.prompts.toolEditDialog.validation.jsonSchemaRequiredMustBeArray')
       }
 
       if (schema.required) {
         for (const requiredProp of schema.required) {
           if (typeof requiredProp !== 'string') {
-            return '"required" 数组中的元素必须是字符串类型'
+            return t('components.prompts.toolEditDialog.validation.jsonSchemaRequiredElementsMustBeString')
           }
           if (!properties[requiredProp]) {
-            return `"required" 中指定的属性 "${requiredProp}" 在properties中不存在`
+            return t('components.prompts.toolEditDialog.validation.jsonSchemaRequiredPropertyNotFound', { name: requiredProp })
           }
         }
       }
 
       return null
     } catch (error) {
-      return `JSON格式错误: ${error instanceof Error ? error.message : '未知错误'}`
+      return t('components.prompts.toolEditDialog.validation.jsonFormatError', { error: error instanceof Error ? error.message : t('common.messages.unknownError') })
     }
   }
 
@@ -776,27 +776,27 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
 
     // 验证工具基本信息
     if (!editingTool.name || !editingTool.name.trim()) {
-      setSnackbarMessage('工具名称不能为空')
+      setSnackbarMessage(t('components.prompts.toolEditDialog.toolNameEmpty'))
       setSnackbarOpen(true)
       return
     }
 
     if (editingTool.name.length > 100) {
-      setSnackbarMessage(`工具名称超过100个字符限制（当前${editingTool.name.length}个字符）`)
+      setSnackbarMessage(t('components.prompts.toolEditDialog.toolNameTooLong', { length: editingTool.name.length }))
       setSnackbarOpen(true)
       return
     }
 
     if (editingTool.description && editingTool.description.length > 1000) {
-      setSnackbarMessage(`工具描述超过1000个字符限制（当前${editingTool.description.length}个字符）`)
+      setSnackbarMessage(t('components.prompts.toolEditDialog.toolDescriptionTooLong', { length: editingTool.description.length }))
       setSnackbarOpen(true)
       return
     }
 
-    // 验证工具名称格式（只允许字母、数字、下划线、连字符，且不能以数字开头）
-    const toolNamePattern = /^[a-zA-Z_][a-zA-Z0-9_-]*$/
+    // 验证工具名称格式（只能包含英文字母、数字、下划线、连字符，必须以英文字母开头）
+    const toolNamePattern = /^[a-zA-Z][a-zA-Z0-9_-]*$/
     if (!toolNamePattern.test(editingTool.name.trim())) {
-      setSnackbarMessage('工具名称格式不正确，只能包含字母、数字、下划线、连字符，且不能以数字开头')
+      setSnackbarMessage(t('components.prompts.toolEditDialog.toolNameFormatError'))
       setSnackbarOpen(true)
       return
     }
@@ -821,7 +821,7 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
         const jsonValidationError = validateJsonSchema(parametersJsonSchema)
         if (jsonValidationError) {
           console.error('❌ [ToolEditDialog] JSON Schema验证失败:', jsonValidationError)
-          setSnackbarMessage(`JSON Schema格式错误：${jsonValidationError}`)
+          setSnackbarMessage(t('components.prompts.toolEditDialog.jsonSchemaValidationError', { error: jsonValidationError }))
           setSnackbarOpen(true)
           return // 不保存
         }
@@ -832,7 +832,7 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
 
           if (validationError) {
             console.error('❌ [ToolEditDialog] 参数验证失败:', validationError)
-            setSnackbarMessage(`参数验证失败：${validationError}`)
+            setSnackbarMessage(t('components.prompts.toolEditDialog.parameterValidationFailed', { error: validationError }))
             setSnackbarOpen(true)
             return // 不保存
           }
@@ -849,7 +849,7 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
           onToolChange(updatedTool)
         } catch (error) {
           console.error('JSON Schema解析失败:', error)
-          setSnackbarMessage(`JSON Schema解析失败：${error instanceof Error ? error.message : '未知错误'}`)
+          setSnackbarMessage(t('components.prompts.toolEditDialog.jsonSchemaParseError', { error: error instanceof Error ? error.message : t('common.messages.unknownError') }))
           setSnackbarOpen(true)
           return // 不保存
         }
@@ -859,7 +859,7 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
       const validationError = validateToolParameters(editingTool.parameters)
       if (validationError) {
         console.error('❌ [ToolEditDialog] 参数验证失败:', validationError)
-        setSnackbarMessage(`参数验证失败：${validationError}`)
+        setSnackbarMessage(t('components.prompts.toolEditDialog.parameterValidationFailed', { error: validationError }))
         setSnackbarOpen(true)
         return // 不保存
       }
@@ -928,7 +928,7 @@ const ToolEditDialog: React.FC<ToolEditDialogProps> = ({ open, editingTool, onCl
                 const toolName = editingTool?.name || ''
                 const toolNamePattern = /^[a-zA-Z][a-zA-Z0-9_-]*$/
                 const hasNameError = Boolean(toolName.trim() && !toolNamePattern.test(toolName.trim()))
-                const nameErrorMessage = hasNameError ? '只能包含英文字母、数字、下划线（_）、连字符（-），必须以英文字母开头' : ''
+                const nameErrorMessage = hasNameError ? t('components.prompts.toolEditDialog.toolNameFormatError') : ''
 
                 return (
                   <TextField

@@ -6,9 +6,7 @@
 import { TestRunFormField, TestRunFormMeta } from '../testrun-form/type'
 import { t } from '../../../i18n'
 
-// Validation functions for different types
 const validateValue = (type: string, value: unknown): { isValid: boolean; error?: string } => {
-  // If value is undefined or null, it's valid (user hasn't entered anything yet)
   if (value === undefined || value === null || value === '') {
     return { isValid: true }
   }
@@ -19,7 +17,7 @@ const validateValue = (type: string, value: unknown): { isValid: boolean; error?
       if (isNaN(num) || !Number.isInteger(num)) {
         return {
           isValid: false,
-          error: '请输入整数',
+          error: t('workflowCanvas.testrunForm.validation.integer'),
         }
       }
       return { isValid: true }
@@ -29,7 +27,7 @@ const validateValue = (type: string, value: unknown): { isValid: boolean; error?
       if (isNaN(num)) {
         return {
           isValid: false,
-          error: '请输入数字',
+          error: t('workflowCanvas.testrunForm.validation.number'),
         }
       }
       return { isValid: true }
@@ -38,7 +36,7 @@ const validateValue = (type: string, value: unknown): { isValid: boolean; error?
       if (typeof value !== 'boolean') {
         return {
           isValid: false,
-          error: '请选择布尔值',
+          error: t('workflowCanvas.testrunForm.validation.boolean'),
         }
       }
       return { isValid: true }
@@ -50,13 +48,13 @@ const validateValue = (type: string, value: unknown): { isValid: boolean; error?
           if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
             return {
               isValid: false,
-              error: '请输入有效的JSON对象',
+              error: t('workflowCanvas.testrunForm.validation.object'),
             }
           }
         } catch {
           return {
             isValid: false,
-            error: '请输入有效的JSON格式',
+            error: t('workflowCanvas.testrunForm.validation.jsonFormat'),
           }
         }
       }
@@ -69,25 +67,24 @@ const validateValue = (type: string, value: unknown): { isValid: boolean; error?
           if (!Array.isArray(parsed)) {
             return {
               isValid: false,
-              error: '请输入有效的JSON数组',
+              error: t('workflowCanvas.testrunForm.validation.array'),
             }
           }
         } catch {
           return {
             isValid: false,
-            error: '请输入有效的JSON数组格式',
+            error: t('workflowCanvas.testrunForm.validation.arrayFormat'),
           }
         }
       } else if (!Array.isArray(value) && value !== undefined && value !== null) {
         return {
           isValid: false,
-          error: '请输入有效的JSON数组',
+          error: t('workflowCanvas.testrunForm.validation.array'),
         }
       }
       return { isValid: true }
     }
     case 'file': {
-      // File value is { url: string; object_key: string; metadata?: {...} }
       if (typeof value === 'object' && value !== null) {
         const fileValue = value as Record<string, unknown>
         const url = fileValue.url
@@ -116,9 +113,7 @@ export const useFields = (params: {
 }): TestRunFormField[] => {
   const { formMeta, values, setValues } = params
 
-  // Convert each meta item to a form field with value and onChange handler
   const fields: TestRunFormField[] = formMeta.map(meta => {
-    // Handle object type specially - ensure value is parsed for JsonCodeEditor
     const getCurrentValue = (): unknown => {
       const rawValue = values[meta.name] ?? meta.defaultValue
       if (rawValue === null || rawValue === undefined) {
@@ -141,19 +136,16 @@ export const useFields = (params: {
     const handleChange = (newValue: unknown): void => {
       if (meta.type === 'object' || meta.type === 'array') {
         try {
-          // For empty input, set to null/undefined
           if (newValue === '' || newValue === null || newValue === undefined) {
             setValues(prevValues => ({
               ...prevValues,
               [meta.name]: meta.type === 'array' ? [] : null,
             }))
           } else {
-            // Handle both string and parsed object inputs
             let parsedValue: unknown
             if (typeof newValue === 'string') {
               parsedValue = JSON.parse(newValue)
             } else {
-              // If it's already an object/array, use it directly
               parsedValue = newValue
             }
 
@@ -164,9 +156,6 @@ export const useFields = (params: {
           }
         } catch (error) {
           console.warn('[use-fields] Failed to parse JSON value:', error instanceof Error ? error.message : String(error))
-          // For JSON parsing errors, do NOT update the form state to preserve other field values
-          // The JsonCodeEditor will handle displaying the error internally
-          // This prevents other field values from being cleared when JSON validation fails
         }
       } else {
         setValues(prevValues => ({

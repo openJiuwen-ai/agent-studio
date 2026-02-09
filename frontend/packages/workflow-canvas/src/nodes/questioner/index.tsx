@@ -10,13 +10,14 @@ import { FlowNodeRegistry } from '../../typings'
 import { WorkflowNodeType } from '../constants'
 import { formMeta } from './form-meta'
 import { t } from '../../i18n'
+import { generateNodeTitle } from '../../utils/workflow-node-utils'
 
 export const QuestionerNodeRegistry: FlowNodeRegistry = {
   type: WorkflowNodeType.Questioner,
-  info: {
+  info: () => ({
     icon: <HelpCircle size={16} className="text-blue-600" />,
     description: t('workflowCanvas.nodes.questioner.description'),
-  },
+  }),
   meta: {
     defaultPorts: [{ type: 'input' }, { type: 'output' }],
     size: {
@@ -26,12 +27,16 @@ export const QuestionerNodeRegistry: FlowNodeRegistry = {
     nodePanelVisible: true,
   },
   formMeta,
-  onAdd() {
+  onAdd(context?) {
+    const nodeId = `questioner_${customNanoid(5)}`
+    const titlePrefix = t('workflowCanvas.nodes.questioner.titlePrefix')
+    const title = generateNodeTitle(WorkflowNodeType.Questioner, context, titlePrefix)
+
     return {
-      id: `questioner_${customNanoid(5)}`,
+      id: nodeId,
       type: WorkflowNodeType.Questioner,
       data: {
-        title: '提问器',
+        title: title,
         inputs: {
           max_response: 3,
           inputParameters: {

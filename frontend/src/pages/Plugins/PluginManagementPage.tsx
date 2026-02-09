@@ -268,7 +268,7 @@ const PluginManagementPage: React.FC = () => {
             showSuccess(t('plugins.messages.pluginDeleted', { name: deleteDialog.plugin.name }))
             return
           } else {
-            showError(t('plugins.errors.deleteFailed') + ': ' + (response.message || t('plugins.errors.unknownError')))
+            showError(t('plugins.messages.deleteFailed') + ': ' + (response.message || t('plugins.errors.unknownError')))
           }
         } else {
           // For non-cloud plugins, refresh the list

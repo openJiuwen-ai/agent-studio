@@ -2,11 +2,12 @@ import random
 import string
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 from openjiuwen.core.common.logging import logger
 
 from openjiuwen_studio.core.config import settings
+from openjiuwen_studio.core.common.language_thread_context import get_highest_priority_language
 from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.login_manager.pre_installed import pre_install
 from openjiuwen_studio.core.manager.login_manager.session_auth import *
@@ -50,7 +51,7 @@ def create_space_db(user_db: UserDBPd) -> SpaceDBPd:
 
 
 @auth_router.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     """
     登录接口：如果用户名存在则直接登录，不存在则自动注册
     不需要密码验证
@@ -63,16 +64,29 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         ret = user_repository.get_user_tbl(email=username)
         logger.info(f"ret: {ret}")
 
+        accept_language = request.headers.get("accept-language", "")
+        language = "zh"
+        
+        langs = get_highest_priority_language(accept_language)
+        if langs:
+            primary = langs[0]
+            if primary.startswith("en"):
+                language = "en"
+            elif primary.startswith("zh"):
+                language = "zh"
+            else:
+                language = "zh"
+
         # 如果用户不存在，则调用register流程
         if ret["code"] != status.HTTP_200_OK:
             # 用户不存在，自动注册
-            return await register_internal(username)
+            return await register_internal(username, language)
 
         # 用户存在，直接登录（不需要密码验证）
         user_data = ret.get("data")
         if not user_data:
             # 如果data为空，也当作用户不存在处理
-            return await register_internal(username)
+            return await register_internal(username, language)
 
         logger.info(f"user_data: {user_data}")
 
@@ -106,7 +120,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         raise HTTPException(status_code=500, detail="Login process failed")
 
 
-async def register_internal(username: str):
+async def register_internal(username: str, language: str = "zh"):
     """
     内部注册函数：创建新用户和空间
     不需要密码，使用空密码或默认密码
@@ -115,7 +129,7 @@ async def register_internal(username: str):
         # 检查用户是否已存在（双重检查）
         ret = user_repository.find_user_tbl(email=username)
         if ret["code"] == status.HTTP_500_INTERNAL_SERVER_ERROR:
-            raise HTTPException(status_code=ret["code"], detail="DB ERROR When find user")
+            raise HTTPException(status_code=ret["code"], detail="DB ERROR：failed to find user")
         if ret["code"] == status.HTTP_200_OK:
             # 用户已存在，直接登录
             user_data = ret["data"]
@@ -145,7 +159,7 @@ async def register_internal(username: str):
 
         # 创建新用户（不需要密码，使用空字符串作为默认密码）
         default_password = ""
-        user_db = create_user_db(username, default_password, RoleType.COMMON_USER)
+        user_db = create_user_db(username, default_password, RoleType.COMMON_USER, locale=language)
 
         access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
         access_token = create_access_token(
@@ -173,7 +187,7 @@ async def register_internal(username: str):
         if ret["code"] != status.HTTP_200_OK:
             raise HTTPException(status_code=500, detail="Failed to sign up")
 
-        pre_install(space_db.space_id)
+        pre_install(space_db.space_id, language)
 
         user_response = create_user_response(user_db, False)
         return {
@@ -190,14 +204,26 @@ async def register_internal(username: str):
 
 
 @auth_router.post("/register", response_model=ResponseModel[dict])
-async def register(form_data: OAuth2PasswordRequestForm = Depends()):
+async def register(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     """
     注册接口：创建新用户和空间（不需要密码）
     为了兼容性保留此接口，但实际逻辑已合并到login接口
     """
     try:
         username = form_data.username
-        result = await register_internal(username)
+        accept_language = request.headers.get("accept-language", "")
+        language = "zh"
+        
+        langs = get_highest_priority_language(accept_language)
+        if langs:
+            primary = langs[0]
+            if primary.startswith("en"):
+                language = "en"
+            elif primary.startswith("zh"):
+                language = "zh"
+            else:
+                language = "zh"
+        result = await register_internal(username, language)
 
         # 转换为ResponseModel格式以保持兼容性
         return ResponseModel(

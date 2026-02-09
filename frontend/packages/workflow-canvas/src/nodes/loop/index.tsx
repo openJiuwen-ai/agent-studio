@@ -12,13 +12,14 @@ import { formMeta } from './form-meta'
 import { WorkflowNodeType } from '../constants'
 import { LoopType } from './form-meta'
 import { t } from '../../i18n'
+import { generateNodeTitle } from '../../utils/workflow-node-utils'
 
 export const LoopNodeRegistry: FlowNodeRegistry = {
   type: WorkflowNodeType.Loop,
-  info: {
+  info: () => ({
     icon: <RotateCcw size={16} className="text-cyan-600" />,
     description: t('workflowCanvas.nodes.loop.description'),
-  },
+  }),
   meta: {
     /**
      * Mark as subcanvas
@@ -85,12 +86,16 @@ export const LoopNodeRegistry: FlowNodeRegistry = {
       return { allowed: true }
     },
   },
-  onAdd() {
+  onAdd(context?) {
+    const nodeId = `loop_${customNanoid(5)}`
+    const titlePrefix = t('workflowCanvas.nodes.loop.titlePrefix')
+    const title = generateNodeTitle(WorkflowNodeType.Loop, context, titlePrefix)
+
     return {
-      id: `loop_${customNanoid(5)}`,
+      id: nodeId,
       type: WorkflowNodeType.Loop,
       data: {
-        title: t('workflowCanvas.loop.title'),
+        title: title,
         inputs: {
           loopParam: {
             type: LoopType.NUM_LOOP,
@@ -119,7 +124,7 @@ export const LoopNodeRegistry: FlowNodeRegistry = {
             },
             moveDisable: false,
           },
-          data: { title: t('workflowCanvas.block.start') },
+          data: { title: t('workflowCanvas.nodes.blockStart.title') },
         },
         {
           id: `block_end_${customNanoid(5)}`,
@@ -132,7 +137,7 @@ export const LoopNodeRegistry: FlowNodeRegistry = {
 
             moveDisable: false,
           },
-          data: { title: t('workflowCanvas.block.end') },
+          data: { title: t('workflowCanvas.nodes.blockEnd.title') },
         },
       ],
     }

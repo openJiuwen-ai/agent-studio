@@ -210,7 +210,7 @@ export const useDebugOptimizeDialog = (props: UseDebugOptimizeDialogProps): UseD
           },
           error => {
             // 错误处理
-            const errorMessage = isRetry ? error || '重新优化失败，请重试' : error || 'badcase优化失败，请重试'
+            const errorMessage = isRetry ? error || t('components.prompts.promptEditPage.reoptimizeFailed') : error || t('components.prompts.promptEditPage.badcaseOptimizationFailed')
             setSnackbar({ open: true, message: errorMessage, severity: 'error' })
             setAiReplyOptimizeStep('input')
           },

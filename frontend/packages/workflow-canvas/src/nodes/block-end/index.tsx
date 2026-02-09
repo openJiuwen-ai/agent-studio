@@ -30,7 +30,7 @@ export const BlockEndNodeRegistry: FlowNodeRegistry = {
       cursor: 'move',
     },
   },
-  info: {
+  info: () => ({
     icon: (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '4px 0', flexDirection: 'column' }}>
         <Square size={20} className="text-red-600" />
@@ -38,7 +38,7 @@ export const BlockEndNodeRegistry: FlowNodeRegistry = {
       </div>
     ),
     description: t('workflowCanvas.nodes.blockEnd.description'),
-  },
+  }),
   /**
    * Render node via formMeta
    */

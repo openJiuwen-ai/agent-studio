@@ -110,16 +110,33 @@ export const useRefreshAgentDetail = () => {
   })
 }
 
-// 更新智能体
 export const useUpdateAgent = () => {
   const queryClient = useQueryClient()
 
   return useMutation((request: UpdateAgentRequest) => AgentService.updateAgent(request), {
-    onSuccess: (response: UpdateAgentResponse, variables) => {
-      if (response.code === 200 || response.code === 0) {
-        // 更新成功后，使智能体列表缓存失效，触发重新获取
-        queryClient.invalidateQueries(['agents', 'api', 'list'], { predicate: query => query.queryKey[3]?.space_id === variables.space_id })
-        console.log('智能体更新成功')
+    onSuccess: (response, request) => {
+      if (response.code === 200) {
+        const updater = (oldData: unknown) => {
+          type CachedData = { data?: { agent_items?: any[] }, code?: number, message?: string }
+          const cached = oldData as CachedData | undefined
+          
+          if (!cached?.data?.agent_items) return oldData
+          
+          return {
+            ...cached,
+            data: {
+              ...cached.data,
+              agent_items: cached.data.agent_items.map(agent =>
+                agent.agent_id === request.agent_id 
+                  ? { ...agent, agent_name: request.agent_name, description: request.description }
+                  : agent
+              ),
+            },
+          }
+        }
+        
+        queryClient.setQueriesData({ queryKey: ['agents', 'api', 'list'], exact: false }, updater)
+        queryClient.setQueriesData({ queryKey: ['agents', 'search'], exact: false }, updater)
       }
     },
     onError: error => {

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MoreVertical, Info, Check, X } from 'lucide-react'
 import { Tooltip, CircularProgress, Popover } from '@mui/material'
@@ -49,6 +49,7 @@ export interface ConfigCardProps {
   className?: string
   nameMaxLength?: number
   descriptionMaxLength?: number
+  inlineError?: string
 }
 
 const GAP = 8
@@ -101,14 +102,41 @@ export const ConfigCard: React.FC<ConfigCardProps> = ({
   className = '',
   nameMaxLength,
   descriptionMaxLength,
+  inlineError,
 }) => {
   const { t } = useTranslation()
   const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null)
   const tagContainerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(0)
   const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [showErrorTooltip, setShowErrorTooltip] = useState(true)
+  const [errorTooltipKey, setErrorTooltipKey] = useState(0)
+  const errorTooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isEditingThis = editingState.id === id && editingState.isEditing
+
+  useEffect(() => {
+    if (inlineError) {
+      setShowErrorTooltip(true)
+      if (errorTooltipTimerRef.current) clearTimeout(errorTooltipTimerRef.current)
+      errorTooltipTimerRef.current = setTimeout(() => setShowErrorTooltip(false), 3000)
+    } else {
+      setShowErrorTooltip(true)
+    }
+    return () => {
+      if (errorTooltipTimerRef.current) {
+        clearTimeout(errorTooltipTimerRef.current)
+        errorTooltipTimerRef.current = null
+      }
+    }
+  }, [inlineError])
+
+  const showErrorTooltipAgain = useCallback(() => {
+    setErrorTooltipKey(prev => prev + 1)
+    setShowErrorTooltip(true)
+    if (errorTooltipTimerRef.current) clearTimeout(errorTooltipTimerRef.current)
+    errorTooltipTimerRef.current = setTimeout(() => setShowErrorTooltip(false), 3000)
+  }, [])
 
   const tagDisplayInfo = useMemo(() => {
     return calculateTagDisplay(tags, containerWidth)
@@ -296,141 +324,83 @@ export const ConfigCard: React.FC<ConfigCardProps> = ({
       <Card
         className={className}
         onClick={() => {
-        if (!isEditingThis && !isMenuOpen) {
-          if (clickTimeoutRef.current) {
-            clearTimeout(clickTimeoutRef.current)
+          if (!isMenuOpen) {
+            if (clickTimeoutRef.current) {
+              clearTimeout(clickTimeoutRef.current)
+            }
+            clickTimeoutRef.current = setTimeout(() => {
+              if (window.getSelection()?.toString().trim()) return
+              onClick?.()
+            }, 200)
           }
-          clickTimeoutRef.current = setTimeout(() => {
-            onClick?.()
-          }, 200)
-        }
-      }}
-    >
-      <CardHeader>
-        <CardHeaderIcon bgColor={iconBgColor} textColor={`${iconTextColor} text-2xl`}>
-          {icon}
-        </CardHeaderIcon>
-        <CardHeaderContent className={tags.length > 0 ? 'justify-between' : 'justify-center'}>
-          {isEditingThis && editingState.field === 'name' ? (
-            <div className="flex items-center gap-1">
-              <div className="flex-1 relative">
-                <input
-                  id={`edit-input-${id}-name`}
-                  type="text"
-                  value={editingState.value}
-                  onChange={e => onUpdateValue?.(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Escape') {
-                      e.preventDefault()
-                      onCancelEdit?.()
-                    }
+        }}
+      >
+        <CardHeader>
+          <CardHeaderIcon bgColor={iconBgColor} textColor={`${iconTextColor} text-2xl`}>
+            {icon}
+          </CardHeaderIcon>
+          <CardHeaderContent className={tags.length > 0 ? 'justify-between' : 'justify-center'}>
+            {isEditingThis && editingState.field === 'name' ? (
+              <div className="flex items-center gap-1 min-w-0 flex-1">
+                <Tooltip
+                  key={errorTooltipKey}
+                  title={inlineError ?? ''}
+                  placement="top-end"
+                  open={!!inlineError && showErrorTooltip}
+                  slotProps={{
+                    popper: {
+                      modifiers: [{ name: 'offset', options: { offset: [0, -10] } }],
+                      sx: {
+                        '& .MuiTooltip-tooltip': {
+                          bgcolor: '#FEE2E2',
+                          color: '#DC2626',
+                          fontWeight: 500,
+                        },
+                      },
+                    },
                   }}
-                  onBlur={onSaveEdit}
-                  maxLength={nameMaxLength}
-                  className="w-full px-2 py-1 pr-16 text-[14px] font-bold text-[#1F2937] leading-[24px] h-[24px] border border-[#3B82F6] rounded-[4px] focus:outline-none focus:ring-1 focus:ring-[#3B82F6]"
-                  disabled={isUpdating}
-                  onClick={e => e.stopPropagation()}
-                  autoFocus
-                />
-                {nameMaxLength && (
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-[#9CA3AF] pointer-events-none" style={{ lineHeight: '24px' }}>
-                    {editingState.value.length}
-                    {t('agents.agentList.characterCount.name')}
+                >
+                  <div className="flex-1 relative">
+                    <input
+                      id={`edit-input-${id}-name`}
+                      type="text"
+                      value={editingState.value}
+                      onChange={e => onUpdateValue?.(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Escape') {
+                          e.preventDefault()
+                          onCancelEdit?.()
+                        }
+                      }}
+                      maxLength={nameMaxLength}
+                      className={`w-full px-2 py-1 pr-16 text-[14px] font-bold text-[#1F2937] leading-[24px] h-[24px] border rounded-[4px] focus:outline-none focus:ring-1 ${
+                        inlineError ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-[#3B82F6] focus:ring-[#3B82F6] focus:border-[#3B82F6]'
+                      }`}
+                      disabled={isUpdating}
+                      onClick={e => e.stopPropagation()}
+                      autoFocus
+                    />
+                    {nameMaxLength != null && (
+                      <div
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-[#9CA3AF] pointer-events-none"
+                        style={{ lineHeight: '24px' }}
+                      >
+                        {editingState.value.length}/{nameMaxLength}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-              <button
-                onClick={e => {
-                  e.stopPropagation()
-                  onSaveEdit?.()
-                }}
-                disabled={isUpdating}
-                className="flex items-center justify-center p-0.5 text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title={t('common.buttons.save')}
-              >
-                {isUpdating ? <CircularProgress size={14} sx={{ color: '#16A34A' }} /> : <Check className="w-3.5 h-3.5" />}
-              </button>
-              <button
-                onMouseDown={e => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  onCancelEdit?.()
-                }}
-                disabled={isUpdating}
-                className="flex items-center justify-center p-0.5 text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title={t('common.buttons.cancel')}
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1 h-[24px]">
-              <h3
-                className="text-[#1F2937] font-bold text-[14px] leading-[24px] truncate cursor-text"
-                onMouseDown={handleFieldMouseDown('name')}
-                onDoubleClick={handleFieldDoubleClick('name')}
-                title={title}
-              >
-                {title}
-              </h3>
-              {titleExtra}
-            </div>
-          )}
-          {tags.length > 0 && (
-            <div ref={tagContainerRef} className="flex items-center gap-2 w-full overflow-hidden">
-              {tagDisplayInfo.visibleTags.map((tag, index) => renderTag(tag, index))}
-              {tagDisplayInfo.showOverflow && renderOverflowTag(tagDisplayInfo.overflowCount)}
-            </div>
-          )}
-        </CardHeaderContent>
-      </CardHeader>
-
-      {description !== undefined && (
-        <CardBody>
-          {isEditingThis && editingState.field === 'description' ? (
-            <div className="flex items-start gap-1">
-              <div className="flex-1 relative" style={{ height: '39px' }}>
-                <textarea
-                  id={`edit-input-${id}-description`}
-                  value={editingState.value}
-                  onChange={e => onUpdateValue?.(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Escape') {
-                      e.preventDefault()
-                      onCancelEdit?.()
-                    }
-                  }}
-                  onBlur={onSaveEdit}
-                  maxLength={descriptionMaxLength}
-                  className="config-card-scrollbar w-full px-2 py-1 pr-16 text-xs text-[#6B7280] border border-[#3B82F6] rounded-[4px] focus:outline-none focus:ring-1 focus:ring-[#3B82F6] resize-none overflow-y-auto"
-                  style={{
-                    lineHeight: '1.625',
-                    height: '39px',
-                    minHeight: '39px',
-                    maxHeight: '39px',
-                  }}
-                  disabled={isUpdating}
-                  onClick={e => e.stopPropagation()}
-                  autoFocus
-                />
-                {descriptionMaxLength && (
-                  <div className="absolute right-2 bottom-0.5 text-xs text-[#9CA3AF] pointer-events-none" style={{ lineHeight: '1' }}>
-                    {editingState.value.length}
-                    {t('agents.agentList.characterCount.description')}
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-col gap-1">
+                </Tooltip>
                 <button
                   onClick={e => {
                     e.stopPropagation()
+                    showErrorTooltipAgain()
                     onSaveEdit?.()
                   }}
                   disabled={isUpdating}
                   className="flex items-center justify-center p-0.5 text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   title={t('common.buttons.save')}
                 >
-                  {isUpdating ? <CircularProgress size={12} sx={{ color: '#16A34A' }} /> : <Check className="w-3 h-3" />}
+                  {isUpdating ? <CircularProgress size={14} sx={{ color: '#16A34A' }} /> : <Check className="w-3.5 h-3.5" />}
                 </button>
                 <button
                   onMouseDown={e => {
@@ -442,64 +412,164 @@ export const ConfigCard: React.FC<ConfigCardProps> = ({
                   className="flex items-center justify-center p-0.5 text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   title={t('common.buttons.cancel')}
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-            </div>
-          ) : (
-            <p
-              className="text-[#6B7280] text-xs leading-relaxed line-clamp-2 overflow-hidden h-[39px] cursor-text whitespace-pre-line break-words"
-              onMouseDown={handleFieldMouseDown('description')}
-              onDoubleClick={handleFieldDoubleClick('description')}
-              title={description || t('common.messages.clickToAddDescription')}
-            >
-              {description || t('common.messages.noDescription')}
-            </p>
-          )}
-        </CardBody>
-      )}
-
-      {footer && actions.length > 0 ? (
-        <CardFooter>
-          <CardFooterRow>
-            {footer}
-            <>
-              <button
-                onClick={handleMenuToggle}
-                className="p-1 text-[#9CA3AF] hover:text-[#4B5563] hover:bg-[#F3F4F6] rounded-[4px] transition-colors"
-                title={t('common.messages.moreActions')}
+            ) : (
+              <div
+                className={`flex items-center gap-1 h-[24px] min-w-0 flex-1 ${onEdit ? 'cursor-text' : ''}`}
+                onMouseDown={onEdit ? handleFieldMouseDown('name') : undefined}
+                onDoubleClick={onEdit ? handleFieldDoubleClick('name') : undefined}
+                title={onEdit ? `${t('common.messages.doubleClickToEdit')}` : undefined}
               >
-                <MoreVertical className="w-4 h-4" />
-              </button>
+                <h3 className="text-[#1F2937] font-bold text-[14px] leading-[24px] truncate min-w-0">{title}</h3>
+                {titleExtra}
+              </div>
+            )}
+            {tags.length > 0 && (
+              <div ref={tagContainerRef} className="flex items-center gap-2 w-full overflow-hidden">
+                {tagDisplayInfo.visibleTags.map((tag, index) => renderTag(tag, index))}
+                {tagDisplayInfo.showOverflow && renderOverflowTag(tagDisplayInfo.overflowCount)}
+              </div>
+            )}
+          </CardHeaderContent>
+        </CardHeader>
 
-              <Popover
-                open={isMenuOpen}
-                anchorEl={menuAnchorEl}
-                onClose={handleMenuClose}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-              >
-                {actions.map(action => (
+        {description !== undefined && (
+          <CardBody>
+            {isEditingThis && editingState.field === 'description' ? (
+              <div className="flex items-start gap-1">
+                <Tooltip
+                  key={errorTooltipKey}
+                  title={inlineError ?? ''}
+                  placement="top-end"
+                  open={!!inlineError && showErrorTooltip}
+                  slotProps={{
+                    popper: {
+                      modifiers: [{ name: 'offset', options: { offset: [0, -10] } }],
+                      sx: {
+                        '& .MuiTooltip-tooltip': {
+                          bgcolor: '#FEE2E2',
+                          color: '#DC2626',
+                          fontWeight: 500,
+                        },
+                      },
+                    },
+                  }}
+                >
+                  <div className="flex-1 relative" style={{ height: '39px' }}>
+                    <textarea
+                      id={`edit-input-${id}-description`}
+                      value={editingState.value}
+                      onChange={e => onUpdateValue?.(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Escape') {
+                          e.preventDefault()
+                          onCancelEdit?.()
+                        }
+                      }}
+                      maxLength={descriptionMaxLength}
+                      className={`config-card-scrollbar w-full px-2 py-1 pr-16 text-xs text-[#6B7280] border rounded-[4px] focus:outline-none focus:ring-1 resize-none overflow-y-auto ${
+                        inlineError ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-[#3B82F6] focus:ring-[#3B82F6] focus:border-[#3B82F6]'
+                      }`}
+                      style={{
+                        lineHeight: '1.625',
+                        height: '39px',
+                        minHeight: '39px',
+                        maxHeight: '39px',
+                      }}
+                      disabled={isUpdating}
+                      onClick={e => e.stopPropagation()}
+                      autoFocus
+                    />
+                    {descriptionMaxLength != null && (
+                      <div className="absolute right-2 bottom-0.5 text-xs text-[#9CA3AF] pointer-events-none" style={{ lineHeight: '1' }}>
+                        {editingState.value.length}/{descriptionMaxLength}
+                      </div>
+                    )}
+                  </div>
+                </Tooltip>
+                <div className="flex flex-col gap-1">
                   <button
-                    key={action.key}
-                    onClick={() => handleMenuAction(action.onClick)}
-                    disabled={action.disabled}
-                    className={`w-full px-3 py-2 text-left text-sm transition-colors flex items-center space-x-2 ${
-                      action.danger ? 'text-red-600 hover:bg-[#FEF2F2]' : 'text-[#374151] hover:bg-[#F3F4F6]'
-                    } ${action.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    onClick={e => {
+                      e.stopPropagation()
+                      showErrorTooltipAgain()
+                      onSaveEdit?.()
+                    }}
+                    disabled={isUpdating}
+                    className="flex items-center justify-center p-0.5 text-green-600 hover:bg-green-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={t('common.buttons.save')}
                   >
-                    {action.icon && <span>{action.icon}</span>}
-                    <span>{action.label}</span>
+                    {isUpdating ? <CircularProgress size={12} sx={{ color: '#16A34A' }} /> : <Check className="w-3 h-3" />}
                   </button>
-                ))}
-              </Popover>
-            </>
-          </CardFooterRow>
-        </CardFooter>
-      ) : footer ? (
-        <CardFooter>{footer}</CardFooter>
-      ) : null}
-    </Card>
+                  <button
+                    onMouseDown={e => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onCancelEdit?.()
+                    }}
+                    disabled={isUpdating}
+                    className="flex items-center justify-center p-0.5 text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={t('common.buttons.cancel')}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p
+                className={`text-[#6B7280] text-xs leading-relaxed line-clamp-2 overflow-hidden h-[39px] whitespace-pre-line break-words ${onEdit ? 'cursor-text' : ''}`}
+                onMouseDown={onEdit ? handleFieldMouseDown('description') : undefined}
+                onDoubleClick={onEdit ? handleFieldDoubleClick('description') : undefined}
+                title={onEdit ? `${t('common.messages.doubleClickToEdit')}` : undefined}
+              >
+                {description || t('common.messages.noDescription')}
+              </p>
+            )}
+          </CardBody>
+        )}
+
+        {footer && actions.length > 0 ? (
+          <CardFooter>
+            <CardFooterRow>
+              {footer}
+              <>
+                <button
+                  onClick={handleMenuToggle}
+                  className="p-1 text-[#9CA3AF] hover:text-[#4B5563] hover:bg-[#F3F4F6] rounded-[4px] transition-colors"
+                  title={t('common.messages.moreActions')}
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+
+                <Popover
+                  open={isMenuOpen}
+                  anchorEl={menuAnchorEl}
+                  onClose={handleMenuClose}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                >
+                  {actions.map(action => (
+                    <button
+                      key={action.key}
+                      onClick={() => handleMenuAction(action.onClick)}
+                      disabled={action.disabled}
+                      className={`w-full px-3 py-2 text-left text-sm transition-colors flex items-center space-x-2 ${
+                        action.danger ? 'text-red-600 hover:bg-[#FEF2F2]' : 'text-[#374151] hover:bg-[#F3F4F6]'
+                      } ${action.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {action.icon && <span>{action.icon}</span>}
+                      <span>{action.label}</span>
+                    </button>
+                  ))}
+                </Popover>
+              </>
+            </CardFooterRow>
+          </CardFooter>
+        ) : footer ? (
+          <CardFooter>{footer}</CardFooter>
+        ) : null}
+      </Card>
     </>
   )
 }

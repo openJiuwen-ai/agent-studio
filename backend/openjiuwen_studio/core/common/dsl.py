@@ -3,8 +3,9 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 from enum import Enum, IntEnum, StrEnum
 from typing import Optional, Any, Dict, List, TypeVar, Union
-
 from pydantic import BaseModel as PydanticBaseModel, Field
+
+from openjiuwen.core.workflow.components.flow.loop.loop_comp import LoopType as BaseLoopType
 
 
 class AgentType(str, Enum):
@@ -63,19 +64,24 @@ class BaseModel(PydanticBaseModel):
     }
 
 
-class BaseModelInfo(BaseModel):
-    api_key: Optional[str] = Field("")
-    api_base: Optional[str] = Field("")
-    model_name: str = Field("")
-    temperature: float = Field(0.1)
-    top_p: float = Field(0.1)
-    streaming: bool = Field(False)
+class ModelClientConfig(BaseModel):
+    client_provider: str = Field("")
+    api_key: str = Field("")
+    api_base: str = Field("")
     timeout: float = Field(0.1)
 
 
+class ModelRequestConfig(BaseModel):
+    model_name: str = Field("")
+    temperature: float = Field(0.1)
+    top_p: float = Field(0.1)
+    stream: bool = Field(False)
+
+
 class ModelConfig(BaseModel):
-    model_provider: str = Field("")
-    model_info: BaseModelInfo = Field(default_factory=BaseModelInfo)
+    model_id: str = Field("")
+    model_client_config: Optional[ModelClientConfig] = Field(default=None)
+    request_config: Optional[ModelRequestConfig] = Field(default=None)
 
 
 class BaseInfo(BaseModel):
@@ -237,10 +243,7 @@ class Workflow(BaseFlow, BaseInfo):
 
 
 class ExecSubWfConfig(BaseModel):
-    reference_ir: Optional[BaseInfo] = Field(default_factory=BaseInfo)
-
-
-from openjiuwen.core.component.loop_comp import LoopType as BaseLoopType
+    sub_workflow_info: Optional[BaseInfo] = Field(default_factory=BaseInfo)
 
 
 class LoopType(str, Enum):
@@ -293,7 +296,7 @@ class ExceptHandlingMethod(StrEnum):
 
 
 class PluginType(StrEnum):
-    CODE = "CODE"
+    CODE = "code"
     SERVICE = "service"
 
 
@@ -329,7 +332,6 @@ class Param(BaseModel):
     type: Optional[str] = Field("")
     required: Optional[bool] = Field(default=False)
     default_value: Optional[str] = Field(default=None)
-    visible: Optional[bool] = Field(default=True)
     method: Optional[str] = Field(default="")
     runtime: Optional[bool] = Field(default=True)
 
@@ -343,7 +345,7 @@ class PluginCodeConfig(CodeConfig):
 
 class ErrorBody(BaseModel):
     error_message: str = Field(default="")
-    error_code: str = Field(default="")
+    error_code: int = Field(default=0)
 
 
 class RestfulApiSchema(BaseModel):

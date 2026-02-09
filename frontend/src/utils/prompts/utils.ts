@@ -1,17 +1,18 @@
 import type { SnackbarMessage } from '@/Common/UnifiedSnackbar'
 import type { NavigateFunction } from 'react-router-dom'
 import type { RelationObj } from '@test-agentstudio/api-client'
+import i18n from '@/i18n'
 
 // 版本号格式验证函数
 export const validateVersionNumber = (version: string): string => {
   if (!version) {
-    return '版本号不能为空'
+    return i18n.t('utils.prompts.utils.validateVersionNumber.empty')
   }
 
   // 检查版本号格式：主版本.次版本.修订版本
   const versionRegex = /^(\d+)\.(\d+)\.(\d+)$/
   if (!versionRegex.test(version)) {
-    return '版本号格式错误，请使用 主版本.次版本.修订版本 格式（如：1.2.3）'
+    return i18n.t('utils.prompts.utils.validateVersionNumber.invalidFormat')
   }
 
   return '' // 无错误
@@ -39,7 +40,7 @@ export const formatDateTime = (timestamp: number | string | Date): string => {
 
     // 检查日期是否有效
     if (isNaN(date.getTime())) {
-      return '无效时间'
+      return i18n.t('utils.prompts.utils.formatDateTime.invalidTime')
     }
 
     // 直接格式化，不进行时区转换（API返回的时间已经是UTC+8）
@@ -55,7 +56,7 @@ export const formatDateTime = (timestamp: number | string | Date): string => {
       .replace(/\//g, '-')
   } catch (error) {
     console.error('时间格式化失败:', error, '原始时间戳:', timestamp)
-    return '时间格式错误'
+    return i18n.t('utils.prompts.utils.formatDateTime.formatError')
   }
 }
 
@@ -81,7 +82,7 @@ export const formatDraftDateTime = (timestamp: number | string | Date): string =
 
     // 检查日期是否有效
     if (isNaN(date.getTime())) {
-      return '无效时间'
+      return i18n.t('utils.prompts.utils.formatDateTime.invalidTime')
     }
 
     // 判断是否为今天
@@ -110,7 +111,7 @@ export const formatDraftDateTime = (timestamp: number | string | Date): string =
     }
   } catch (error) {
     console.error('草稿时间格式化失败:', error, '原始时间戳:', timestamp)
-    return '时间格式错误'
+    return i18n.t('utils.prompts.utils.formatDateTime.formatError')
   }
 }
 
@@ -134,17 +135,11 @@ export const messageId = (): string => {
 export const copyToClipboard = async (
   text: string,
   setSnackbar: (snackbar: SnackbarMessage) => void,
-  successMessage: string = '已复制到剪贴板',
+  successMessage: string = i18n.t('utils.prompts.utils.copyToClipboard.defaultSuccess'),
 ): Promise<void> => {
-  console.log('开始复制，内容:', text)
-  console.log('内容长度:', text?.length)
-  console.log('包含换行符数量:', (text?.match(/\n/g) || []).length)
-  console.log('包含回车符数量:', (text?.match(/\r/g) || []).length)
-  console.log('内容JSON表示:', JSON.stringify(text))
-
   if (!text) {
     console.error('复制内容为空')
-    setSnackbar({ open: true, message: '复制内容为空', severity: 'error' })
+    setSnackbar({ open: true, message: i18n.t('utils.prompts.utils.copyToClipboard.emptyContent'), severity: 'error' })
     return
   }
 
@@ -152,9 +147,6 @@ export const copyToClipboard = async (
   const isInDialog = document.querySelector('[role="dialog"]') || document.querySelector('.MuiDialog-root') || document.querySelector('[data-testid="dialog"]')
   const isInDrawer = document.querySelector('.MuiDrawer-root') || document.querySelector('[role="presentation"]')
   const isInModal = isInDialog || isInDrawer
-  console.log('是否在对话框中:', !!isInDialog)
-  console.log('是否在抽屉中:', !!isInDrawer)
-  console.log('是否在模态环境中:', !!isInModal)
 
   // 验证复制是否成功的函数
   const verifyClipboard = async (expectedText: string, execCommandSuccess: boolean = false): Promise<boolean> => {
@@ -164,38 +156,36 @@ export const copyToClipboard = async (
     try {
       if (navigator.clipboard && navigator.clipboard.readText && window.isSecureContext) {
         const clipboardText = await navigator.clipboard.readText()
-        console.log('验证剪贴板内容:', clipboardText)
-        console.log('剪贴板内容长度:', clipboardText?.length)
-        console.log('剪贴板换行符数量:', (clipboardText?.match(/\n/g) || []).length)
-        console.log('剪贴板回车符数量:', (clipboardText?.match(/\r/g) || []).length)
 
         // 比较内容是否完全一致
         const isEqual = clipboardText === expectedText
         if (!isEqual) {
-          console.log('内容不匹配:')
-          console.log('期望:', JSON.stringify(expectedText))
-          console.log('实际:', JSON.stringify(clipboardText))
+          // 如果 execCommand 返回成功，即使验证不匹配也信任 execCommand 的结果
+          // 因为可能是换行符、编码等细微差异导致的验证失败，但实际复制已成功
+          if (execCommandSuccess) {
+            return true
+          }
         }
         return isEqual
       }
     } catch (error) {
-      console.log('无法读取剪贴板进行验证:', error)
+      // 在 HTTPS 环境下，readText() 可能因权限问题失败
+      // 如果 execCommand 返回成功，应该信任 execCommand 的结果
+      if (execCommandSuccess) {
+        return true
+      }
     }
 
     // 如果无法使用 Clipboard API 验证，但 execCommand 返回成功，则假设复制成功
     if (execCommandSuccess) {
-      console.log('无法验证剪贴板内容，但 execCommand 返回成功，假设复制成功')
       return true
     }
 
-    console.log('无法验证剪贴板内容，复制可能失败')
     return false
   }
 
   // 专门用于模态环境（对话框/抽屉）的复制方法
   const copyInDialog = async (text: string): Promise<void> => {
-    console.log('使用模态环境专用复制方法')
-
     // 创建一个临时的可编辑区域
     const tempDiv = document.createElement('div')
     tempDiv.contentEditable = 'true'
@@ -224,13 +214,10 @@ export const copyToClipboard = async (
 
       // 执行复制
       const success = document.execCommand('copy')
-      console.log('对话框复制方法结果:', success)
 
       if (success) {
-        console.log('✓ 对话框复制方法成功')
         setSnackbar({ open: true, message: successMessage, severity: 'success' })
       } else {
-        console.log('✗ 对话框复制方法失败，尝试备用方案')
         fallbackCopy()
       }
     } finally {
@@ -247,37 +234,25 @@ export const copyToClipboard = async (
     if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
       try {
         await navigator.clipboard.writeText(text)
-        console.log('✓ 使用 navigator.clipboard.writeText 复制成功')
 
         // 验证复制是否真的成功
         const isVerified = await verifyClipboard(text)
         if (isVerified) {
           setSnackbar({ open: true, message: successMessage, severity: 'success' })
           return
-        } else {
-          console.log('✗ 复制验证失败，尝试传统方法')
         }
       } catch (clipboardError) {
-        console.log('navigator.clipboard.writeText 失败:', clipboardError)
         // 继续使用传统方法
       }
-    } else {
-      console.log('Clipboard API 不可用，原因:', {
-        hasClipboard: !!navigator.clipboard,
-        hasWriteText: !!(navigator.clipboard && navigator.clipboard.writeText),
-        isSecureContext: window.isSecureContext,
-      })
     }
 
     // 如果在模态环境中，使用特殊的复制方法
     if (isInModal) {
-      console.log('检测到模态环境，使用特殊复制方法')
       await copyInDialog(text)
       return
     }
 
     // 方法2: 使用传统的 document.execCommand 方法（确保保持换行符）
-    console.log('使用传统方法复制')
     const textarea = document.createElement('textarea')
     textarea.value = text // 使用 value 属性确保保持换行符
 
@@ -302,23 +277,17 @@ export const copyToClipboard = async (
 
       // 执行复制命令
       const successful = document.execCommand('copy')
-      console.log('document.execCommand 执行结果:', successful)
-      console.log('复制的文本内容 (JSON):', JSON.stringify(textarea.value))
 
       if (successful) {
-        console.log('✓ 传统方法复制成功')
-
         // 验证复制是否真的成功
         const isVerified = await verifyClipboard(text, successful)
         if (isVerified) {
           setSnackbar({ open: true, message: successMessage, severity: 'success' })
           return
         } else {
-          console.log('✗ 传统方法复制验证失败，尝试备用方法')
           await fallbackCopy()
         }
       } else {
-        console.log('✗ document.execCommand 失败，尝试备用方法')
         await fallbackCopy()
       }
     } finally {
@@ -334,7 +303,6 @@ export const copyToClipboard = async (
 
   // 方法3: 最后的备用方案
   async function fallbackCopy() {
-    console.log('使用备用复制方案')
     try {
       // 使用textarea而不是div来保持换行符
       const textarea = document.createElement('textarea')
@@ -358,29 +326,23 @@ export const copyToClipboard = async (
 
         // 尝试复制
         const success = document.execCommand('copy')
-        console.log('备用方法复制结果:', success)
-        console.log('备用方法复制的文本内容 (JSON):', JSON.stringify(textarea.value))
 
         if (success) {
-          console.log('✓ 备用方法复制成功')
-
           // 验证复制是否真的成功
           const isVerified = await verifyClipboard(text, success)
           if (isVerified) {
             setSnackbar({ open: true, message: successMessage, severity: 'success' })
           } else {
-            console.log('✗ 备用方法复制验证失败')
             setSnackbar({
               open: true,
-              message: '自动复制失败，请手动复制内容',
+              message: i18n.t('utils.prompts.utils.copyToClipboard.autoCopyFailed'),
               severity: 'error',
             })
           }
         } else {
-          console.log('✗ 所有复制方法都失败了')
           setSnackbar({
             open: true,
-            message: '自动复制失败，请手动复制内容',
+            message: i18n.t('prompts.utils.copyToClipboard.autoCopyFailed'),
             severity: 'error',
           })
         }
@@ -394,7 +356,7 @@ export const copyToClipboard = async (
       console.error('备用复制方法也失败:', fallbackErr)
       setSnackbar({
         open: true,
-        message: '复制功能不可用，请手动复制内容',
+        message: i18n.t('utils.prompts.utils.copyToClipboard.copyUnavailable'),
         severity: 'error',
       })
     }

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import dayjs from 'dayjs'
 import { Chip, Typography, Tooltip, Switch } from '@mui/material'
 import { Play, Pencil, Trash2, Loader2 } from 'lucide-react'
 import { ConfigTable } from '@/components/Common/common-table'
@@ -122,7 +123,7 @@ export const EmbeddingModelsTable: React.FC<EmbeddingModelsTableProps> = ({
         width: 170,
         dateFormatter: (value: unknown) => {
           if (!value) return ''
-          return new Date(value as string | number | Date).toLocaleString('zh-CN')
+          return dayjs(value as string | number | Date).format('YYYY-MM-DD HH:mm:ss')
         },
       },
       {
@@ -137,8 +138,9 @@ export const EmbeddingModelsTable: React.FC<EmbeddingModelsTableProps> = ({
             key: 'edit',
             icon: <Pencil className="w-4 h-4" />,
             label: t('models.editModel'),
-            tooltip: t('models.editModel'),
+            tooltip: (row) => row.isSystemModel ? t('models.messages.systemModelNoEdit') : t('models.editModel'),
             onClick: (row) => onEdit?.(row),
+            disabled: (row) => row.isSystemModel,
           },
           {
             key: 'test',
@@ -155,8 +157,9 @@ export const EmbeddingModelsTable: React.FC<EmbeddingModelsTableProps> = ({
             key: 'delete',
             icon: <Trash2 className="w-4 h-4" />,
             label: t('models.modelList.deleteModel'),
-            tooltip: t('models.modelList.deleteModel'),
+            tooltip: (row) => row.isSystemModel ? t('models.messages.systemModelNoDelete') : t('models.modelList.deleteModel'),
             onClick: (row) => onDelete?.(row),
+            disabled: (row) => row.isSystemModel,
           },
         ],
       },

@@ -24,6 +24,17 @@ class ModelConfigRepository(BaseRepository[ModelConfig]):
         """
         super().__init__(db, ModelConfig)
     
+    def get_by_ids(self, model_ids: List[int]) -> List[ModelConfig]:
+        """Batch get model configs by IDs.
+        
+        Args:
+            model_ids: List of Model IDs
+            
+        Returns:
+            List of model configs
+        """
+        return self.query().filter(ModelConfig.id.in_(model_ids)).all()
+
     def get_by_name(self, name: str) -> Optional[ModelConfig]:
         """Get model config by name.
         
@@ -201,6 +212,19 @@ class ModelConfigRepository(BaseRepository[ModelConfig]):
             List of model configs
         """
         return self.query().filter(ModelConfig.id.in_(model_ids)).all()
+
+    def get_by_space_id_and_system_model_id(self, space_id: str, system_model_id: int) -> Optional[ModelConfig]:
+        """Get model config by space_id and system_model_id.
+
+        Args:
+            space_id: user space id
+            system_model_id: related system model id
+
+        Returns:
+            Model config instance or None
+        """
+        return self.query().filter(ModelConfig.space_id == space_id,
+                                   ModelConfig.system_model_id == system_model_id).first()
     
     def get_recently_used_models(self, days: int = 7, limit: int = 10) -> List[ModelConfig]:
         """Get recently used model configs.

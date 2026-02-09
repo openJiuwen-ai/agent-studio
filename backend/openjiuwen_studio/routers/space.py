@@ -42,7 +42,7 @@ async def get_user(
 
 
 @space_router.get("/", response_model=ResponseModel[dict])
-def get_user(
+def get_spaces(
         current_user: dict = Depends(get_current_user)
 ):
     """Get all spaces by user ID get from session token"""

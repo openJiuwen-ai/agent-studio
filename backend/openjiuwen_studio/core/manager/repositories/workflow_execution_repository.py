@@ -4,7 +4,7 @@ from functools import wraps
 from typing import Callable
 
 from fastapi import status
-from openjiuwen.core.tracer.span import TraceWorkflowSpan
+from openjiuwen.core.session.tracer.span import TraceWorkflowSpan
 from sqlalchemy.orm import Session
 
 from openjiuwen.core.common.logging import logger

@@ -4,14 +4,10 @@ import os
 
 from dotenv import load_dotenv
 from openjiuwen.core.common.logging import logger
-from openjiuwen.core.memory.config.config import SysMemConfig
-from openjiuwen.core.memory.embed_models.api import APIEmbedModel
-from openjiuwen.core.memory.engine.memory_engine import MemoryEngine
-from openjiuwen.core.memory.store.impl.chroma_semantic_store import ChromaSemanticStore
-from openjiuwen.core.memory.store.impl.dbm_kv_store import DbmKVStore
-from openjiuwen.core.memory.store.impl.default_db_store import DefaultDbStore
-from openjiuwen.core.memory.store.impl.milvus_semantic_store import \
-    MilvusSemanticStore
+from openjiuwen.core.foundation.llm import ModelRequestConfig, ModelClientConfig
+from openjiuwen.core.foundation.store import DbBasedKVStore, DefaultDbStore
+from openjiuwen.core.memory import LongTermMemory, MemoryEngineConfig
+from openjiuwen.core.memory import MemoryMilvusVectorStore
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from openjiuwen_studio.ops.modules.prompt.infra.database import get_database_url
@@ -20,7 +16,7 @@ from openjiuwen_studio.core.manager.model_manager.utils.security_utils import Se
 
 
 class MemoryEngineManager:
-    _instance: MemoryEngine | None = None
+    _instance: LongTermMemory | None = None
 
     @classmethod
     async def init(cls):
@@ -47,37 +43,21 @@ class MemoryEngineManager:
             master_aes_key = b''
         except Exception:
             master_aes_key = b''
-        config = SysMemConfig(
-            crypto_key=master_aes_key
-        )
-        embed_model = APIEmbedModel(
-            base_url=os.getenv("EMBED_API_BASE"),
-            model_name=os.getenv("EMBED_MODEL_NAME"),
-            api_key=os.getenv("EMBED_API_KEY"),
-            timeout=int(os.getenv("EMBED_TIMEOUT", 60)),
-            max_retries=int(os.getenv("EMBED_MAX_RETRIES", 3)),
-        )
-        vector_db_type = os.getenv("INDEX_MANAGER_TYPE", "chroma")
-        semantic_store = None
+        vector_db_type = os.getenv("INDEX_MANAGER_TYPE", "milvus")
         if vector_db_type == "milvus":
-            semantic_store = MilvusSemanticStore(
+            vector_store = MemoryMilvusVectorStore(
                 milvus_host=os.getenv("MILVUS_HOST"),
                 milvus_port=os.getenv("MILVUS_PORT"),
-                collection_name=os.getenv("MILVUS_COLLECTION_NAME"),
-                embedding_dims=os.getenv("EMBEDDING_MODEL_DIMENTION", 1024),
-                embed_model=embed_model,
+                embedding_dims=int(os.getenv("EMBEDDING_MODEL_DIMENTION", 1024)),
                 token=os.getenv("MILVUS_TOKEN", None)
             )
-            logger.info("✅ milvus semantic store created")
+            logger.info("✅ milvus vector store created")
         elif vector_db_type == "chroma":
-            semantic_store = ChromaSemanticStore(
-                persist_directory=data_dir,
-                embed_model=embed_model,
-            )
-            logger.info("✅ chroma semantic store created")
+            from openjiuwen.core.memory import MemoryChromaVectorStore
+            vector_store = MemoryChromaVectorStore(persist_directory=data_dir)
+            logger.info("✅ chroma vector store created")
         else:
-            logger.error(f"Unknown vector db type: {vector_db_type}, please set INDEX_MANAGER_TYPE to milvus or chroma")
-
+            raise ValueError(f"Unknown vector db type: {vector_db_type}, please set VECTOR_DB_TYPE to milvus or chroma")
         agent_database_url = get_database_url("agent")
         async_agent_database_url = get_async_database_url(agent_database_url)
         db_store = DefaultDbStore(create_async_engine(
@@ -85,17 +65,33 @@ class MemoryEngineManager:
             pool_size=20,
             max_overflow=20
         ))
-        MemoryEngine.register_store(
-            kv_store=DbmKVStore(kv_db_path),
+        kv_store = DbBasedKVStore(create_async_engine(
+            async_agent_database_url,
+            pool_pre_ping=True,
+            echo=False,
+        ))
+        memory_engine = LongTermMemory()
+        await memory_engine.register_store(
+            kv_store=kv_store,
             db_store=db_store,
-            semantic_store=semantic_store
+            vector_store=vector_store
         )
-        cls._instance = await MemoryEngine.create_mem_engine_instance(config)
+        memory_engine.set_config(MemoryEngineConfig(
+            default_model_cfg=ModelRequestConfig(),
+            default_model_client_cfg=ModelClientConfig(
+                client_provider="SiliconFlow",
+                api_key="default_api_key",
+                api_base="default_api_base",
+                verify_ssl=False
+            ),
+            crypto_key=master_aes_key
+        ))
+        cls._instance = memory_engine
         logger.info("✅ Memory engine created")
         return cls._instance
 
     @classmethod
-    def get_instance(cls) -> MemoryEngine:
+    def get_instance(cls) -> LongTermMemory:
         if cls._instance is None:
             raise RuntimeError("MemoryEngine has not been initialized. Call 'init' first.")
         return cls._instance

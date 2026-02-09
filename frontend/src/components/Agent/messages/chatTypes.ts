@@ -15,4 +15,5 @@ export interface MessageChunk {
   nodeName?: string
   content: string
   status: 'streaming' | 'done'
+  index?: number
 }

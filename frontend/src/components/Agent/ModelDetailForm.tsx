@@ -64,7 +64,7 @@ export const ModelDetailForm = (props: ModelDetailFormProps) => {
     temperature: { labelKey: 'fields.temperature.label', tooltipKey: 'fields.temperature.tooltip', min: 0, max: 2, step: 0.1, decimals: 1 },
     top_p: { labelKey: 'fields.topP.label', tooltipKey: 'fields.topP.tooltip', min: 0, max: 1, step: 0.1, decimals: 1 },
     // max_tokens: { labelKey: 'fields.maxTokens.label', min: 100, step: 1, integerOnly: true },
-    timeout: { labelKey: 'fields.timeout.label', min: 1, max: 300, step: 1, integerOnly: true },
+    timeout: { labelKey: 'fields.timeout.label', min: 1, max: 3600, step: 1, integerOnly: true },
   }
 
   const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)

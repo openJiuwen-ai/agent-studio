@@ -9,6 +9,7 @@ import { formMeta } from './form-meta'
 import { WorkflowNodeType } from '../constants'
 import { customNanoid } from '../../utils/nanoid-custom'
 import { t } from '../../i18n'
+import { generateNodeTitle } from '../../utils/workflow-node-utils'
 
 export const InputNodeRegistry: FlowNodeRegistry = {
   type: WorkflowNodeType.Input,
@@ -19,10 +20,10 @@ export const InputNodeRegistry: FlowNodeRegistry = {
       height: 211,
     },
   },
-  info: {
+  info: () => ({
     icon: <MousePointerClick size={16} className="text-blue-600" />,
     description: t('workflowCanvas.nodes.input.description'),
-  },
+  }),
   /**
    * Render node via formMeta
    */
@@ -36,12 +37,15 @@ export const InputNodeRegistry: FlowNodeRegistry = {
   /**
    * 添加输入节点时的默认配置
    */
-  onAdd() {
+  onAdd: (context?) => {
+    const titlePrefix = t('workflowCanvas.nodes.input.titlePrefix')
+    const title = generateNodeTitle(WorkflowNodeType.Input, context, titlePrefix)
+
     return {
       id: `input_${customNanoid(5)}`,
       type: WorkflowNodeType.Input,
       data: {
-        title: '输入',
+        title: title,
         outputs: {
           type: 'object',
           properties: {

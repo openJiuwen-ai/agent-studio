@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Plus } from 'lucide-react'
 import { Button, TextField, Typography, Card } from '@mui/material'
 import { useCreateWorkflow } from '@test-agentstudio/api-client'
@@ -14,6 +15,7 @@ interface WorkflowFormData {
 }
 
 const WorkflowCreationPage: React.FC = () => {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const [formData, setFormData] = useState<WorkflowFormData>({
@@ -22,7 +24,6 @@ const WorkflowCreationPage: React.FC = () => {
     trigger: 'schedule',
   })
 
-  // 工作流名称校验状态
   const [nameValidationError, setNameValidationError] = useState<string>('')
 
   const createWorkflowMutation = useCreateWorkflow()
@@ -36,7 +37,6 @@ const WorkflowCreationPage: React.FC = () => {
   const handleInputChange = (field: keyof WorkflowFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
 
-    // 如果是名称字段，进行实时校验
     if (field === 'name') {
       const validationResult = validateVariableName(value as string)
       if (!validationResult.isValid) {
@@ -66,10 +66,10 @@ const WorkflowCreationPage: React.FC = () => {
         // Navigate to the workflow editor with the new workflow ID and space_id
         navigate(`/dashboard/workflows/editor/${workflowId}?spaceId=${spaceId}`)
       } else {
-        console.error('创建工作流失败:', response.message)
+        console.error('Create workflow failed:', response.message)
       }
     } catch (error) {
-      console.error('创建工作流失败:', error)
+      console.error('Create workflow failed:', error)
     }
   }
 
@@ -88,7 +88,7 @@ const WorkflowCreationPage: React.FC = () => {
             onClick={handleCancel}
             className="border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50"
           >
-            返回
+            {t('workflows.workflowCreation.back')}
           </Button>
         </div>
 
@@ -97,7 +97,7 @@ const WorkflowCreationPage: React.FC = () => {
           <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-8 py-4">
             <div className="flex items-center justify-center">
               <Typography variant="h5" className="text-white font-semibold">
-                工作流配置向导
+                {t('workflows.workflowCreation.title')}
               </Typography>
             </div>
           </div>
@@ -108,7 +108,7 @@ const WorkflowCreationPage: React.FC = () => {
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
                   <Typography variant="h6" className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-blue-800">
-                    基本信息
+                    {t('workflows.workflowCreation.basicInfo')}
                   </Typography>
                 </div>
                 <div className="p-6">
@@ -116,16 +116,16 @@ const WorkflowCreationPage: React.FC = () => {
                     {/* Workflow Name */}
                     <div>
                       <Typography variant="subtitle2" className="text-gray-700 mb-2 font-medium">
-                        工作流名称 *
+                        {t('workflows.workflowCreation.workflowNameLabel')}
                       </Typography>
                       <TextField
                         fullWidth
                         size="small"
-                        placeholder="输入工作流名称（仅支持字母、数字、下划线，且只能以字母开头）"
+                        placeholder={t('workflows.workflowCreation.workflowNamePlaceholder')}
                         value={formData.name}
                         onChange={e => handleInputChange('name', e.target.value)}
                         inputProps={{ maxLength: 100 }}
-                        helperText={nameValidationError ? nameValidationError : !formData.name.trim() ? '名称不能为空' : `${formData.name.length}/100`}
+                        helperText={nameValidationError ? nameValidationError : !formData.name.trim() ? t('workflows.workflowCreation.nameRequired') : t('workflows.workflowCreation.nameCharCount', { count: formData.name.length })}
                         error={!formData.name.trim() || !!nameValidationError}
                         className="[& .MuiOutlinedInput-root]:rounded-xl [& .MuiOutlinedInput-root]:border-gray-200 [& .MuiOutlinedInput-root]:focus:border-blue-300 [& .MuiOutlinedInput-root]:focus:ring-blue-500"
                       />
@@ -134,18 +134,18 @@ const WorkflowCreationPage: React.FC = () => {
                     {/* Description */}
                     <div>
                       <Typography variant="subtitle2" className="text-gray-700 mb-2 font-medium">
-                        工作流描述 *
+                        {t('workflows.workflowCreation.workflowDescriptionLabel')}
                       </Typography>
                       <TextField
                         fullWidth
                         size="small"
                         multiline
                         rows={6}
-                        placeholder="描述工作流的功能和用途..."
+                        placeholder={t('workflows.workflowCreation.workflowDescriptionPlaceholder')}
                         value={formData.description}
                         onChange={e => handleInputChange('description', e.target.value)}
                         inputProps={{ maxLength: 500 }}
-                        helperText={!formData.description.trim() ? '描述不能为空' : `${formData.description.length}/500`}
+                        helperText={!formData.description.trim() ? t('workflows.workflowCreation.descriptionRequired') : t('workflows.workflowCreation.descriptionCharCount', { count: formData.description.length })}
                         className="[& .MuiOutlinedInput-root]:rounded-xl [& .MuiOutlinedInput-root]:border-gray-200 [& .MuiOutlinedInput-root]:focus:border-blue-300 [& .MuiOutlinedInput-root]:focus:ring-blue-500"
                         error={!formData.description.trim()}
                       />
@@ -165,7 +165,7 @@ const WorkflowCreationPage: React.FC = () => {
                 className="px-8 py-3 text-gray-600 border-gray-300 hover:border-gray-400 hover:bg-gray-50"
                 disabled={createWorkflowMutation.isLoading}
               >
-                取消
+                {t('workflows.workflowCreation.cancel')}
               </Button>
 
               <Button
@@ -174,9 +174,9 @@ const WorkflowCreationPage: React.FC = () => {
                 startIcon={createWorkflowMutation.isLoading ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div> : <Plus />}
                 onClick={handleCreate}
                 disabled={!formData.name.trim() || !formData.description.trim() || !!nameValidationError || createWorkflowMutation.isLoading}
-                className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-sm hover:shadow-xl transition-all duration-200"
+                className="btn-primary px-8 py-3 shadow-sm hover:shadow-md transition-all duration-200"
               >
-                {createWorkflowMutation.isLoading ? '创建中...' : '创建工作流'}
+                {createWorkflowMutation.isLoading ? t('workflows.workflowCreation.creating') : t('workflows.workflowCreation.create')}
               </Button>
             </div>
           </div>
