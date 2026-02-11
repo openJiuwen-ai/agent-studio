@@ -32,6 +32,7 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
 
   const [currentStep, setCurrentStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
+  const [isTransitioning, setIsTransitioning] = useState(false)
   const [uploadedFileIds, setUploadedFileIds] = useState<string[]>([])
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [dragActive, setDragActive] = useState(false)
@@ -157,6 +158,7 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
     setSelectedFiles([])
     setUploadedFileIds([])
     setDocumentsProcessed(false)
+    setIsTransitioning(false)
     uploadedFileIdsRef.current = []
     documentsProcessedRef.current = false
     uploadedFilesHashRef.current = ''
@@ -473,33 +475,50 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
         metadata: JSON.stringify({ uploadTime: new Date().toISOString() }),
       })
 
-      if (response.code === 200) {
-        const documents = Array.isArray(response.data) ? response.data : (response.data as any)?.documents || []
-
-        documents.forEach((doc: any, index: number) => {
-          if (index < filesToUpload.length) {
-            const file = filesToUpload[index]
-            const docId = doc.doc_id || doc.id
-            if (docId) {
-              fileToDocIdMapRef.current.set(getFileKey(file), docId)
+      if (response && response.code === 200) {
+        try {
+          // Safely parse response data
+          let documents: any[] = []
+          if (response.data) {
+            if (Array.isArray(response.data)) {
+              documents = response.data
+            } else if (typeof response.data === 'object' && response.data !== null) {
+              const dataObj = response.data as any
+              documents = Array.isArray(dataObj.documents) ? dataObj.documents : []
             }
           }
-        })
 
-        updateUploadedIds()
-        setDocumentsProcessed(false)
-        documentsProcessedRef.current = false
-        uploadedFilesHashRef.current = generateFilesHash(selectedFiles)
+          // Extract doc IDs safely
+          documents.forEach((doc: any, index: number) => {
+            if (index < filesToUpload.length && doc) {
+              const file = filesToUpload[index]
+              const docId = doc.id || doc.doc_id
+              if (docId && typeof docId === 'string') {
+                fileToDocIdMapRef.current.set(getFileKey(file), docId)
+              }
+            }
+          })
 
-        showSuccess(t('knowledgeBases.addDocument.uploadSuccess'))
-        return true
+          updateUploadedIds()
+          setDocumentsProcessed(false)
+          documentsProcessedRef.current = false
+          uploadedFilesHashRef.current = generateFilesHash(selectedFiles)
+
+          showSuccess(t('knowledgeBases.addDocument.uploadSuccess'))
+          return true
+        } catch (parseError) {
+          console.error('Error parsing upload response:', parseError)
+          showError(t('knowledgeBases.addDocument.uploadFailed') || '上传成功但解析响应失败')
+          return false
+        }
       } else {
-        showError(response.message || t('knowledgeBases.addDocument.uploadFailed'))
+        const errorMsg = response?.message || t('knowledgeBases.addDocument.uploadFailed') || '上传失败'
+        showError(errorMsg)
         return false
       }
     } catch (error) {
       console.error('Upload failed:', error)
-      showError(t('knowledgeBases.addDocument.uploadFailed'))
+      showError(t('knowledgeBases.addDocument.uploadFailed') || '上传失败')
       return false
     } finally {
       setIsLoading(false)
@@ -569,26 +588,60 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
   }
 
   const handleNext = async () => {
-    if (currentStep === 1) {
-      if (selectedFiles.length === 0) {
-        showError(t('knowledgeBases.addDocument.noFilesSelected'))
-        return
-      }
+    // Prevent multiple simultaneous calls
+    if (isLoading) {
+      return
+    }
 
-      const allFilesUploaded = selectedFiles.every(file => fileToDocIdMapRef.current.has(getFileKey(file)))
-
-      if (allFilesUploaded) {
-        updateUploadedIds()
-        uploadedFilesHashRef.current = generateFilesHash(selectedFiles)
-        setCurrentStep(2)
-      } else {
-        const success = await handleUploadFiles()
-        if (success) {
-          setCurrentStep(2)
+    try {
+      if (currentStep === 1) {
+        if (selectedFiles.length === 0) {
+          showError(t('knowledgeBases.addDocument.noFilesSelected'))
+          return
         }
+
+        const allFilesUploaded = selectedFiles.every(file => fileToDocIdMapRef.current.has(getFileKey(file)))
+
+        if (allFilesUploaded) {
+          updateUploadedIds()
+          uploadedFilesHashRef.current = generateFilesHash(selectedFiles)
+          // Set transitioning state to prevent button changes during transition
+          setIsTransitioning(true)
+          // Use double requestAnimationFrame to ensure all DOM updates are complete
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setCurrentStep(2)
+              // Clear transitioning state after a short delay
+              setTimeout(() => setIsTransitioning(false), 100)
+            })
+          })
+        } else {
+          const success = await handleUploadFiles()
+          if (success) {
+            // Verify we have doc IDs before advancing
+            const currentUploadedIds = Array.from(fileToDocIdMapRef.current.values())
+            if (currentUploadedIds.length > 0) {
+              // Set transitioning state to prevent button changes during transition
+              setIsTransitioning(true)
+              // Use double requestAnimationFrame to ensure all DOM updates are complete
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  setCurrentStep(2)
+                  // Clear transitioning state after a short delay
+                  setTimeout(() => setIsTransitioning(false), 100)
+                })
+              })
+            } else {
+              showError(t('knowledgeBases.addDocument.uploadFailed') || '上传成功但无法获取文档ID，请重试')
+            }
+          }
+        }
+      } else if (currentStep === 2) {
+        await handleFileSettings()
       }
-    } else if (currentStep === 2) {
-      await handleFileSettings()
+    } catch (error) {
+      console.error('handleNext error:', error)
+      showError(t('knowledgeBases.addDocument.uploadFailed') || `操作失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -703,7 +756,7 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
 
           <div className="p-6 max-h-[60vh] overflow-y-auto">
             {currentStep === 1 && (
-              <div>
+              <div key="step-1">
                 <p className="text-gray-600 mb-6">{t('knowledgeBases.addDocument.uploadDescription')}</p>
 
                 {/* 文件上传区域 */}
@@ -745,9 +798,7 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
                                   {file.name}
                                 </div>
                                 <div className="text-xs text-gray-500">
-                                  {file.size >= 1024 * 1024 
-                                    ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` 
-                                    : `${(file.size / 1024).toFixed(2)} KB`}
+                                  {file.size >= 1024 * 1024 ? `${(file.size / (1024 * 1024)).toFixed(2)} MB` : `${(file.size / 1024).toFixed(2)} KB`}
                                   {isUploaded && <span className="ml-2 text-green-600">✓ {t('document.uploaded') || '已上传'}</span>}
                                 </div>
                               </div>
@@ -768,7 +819,7 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
             )}
 
             {currentStep === 2 && (
-              <div>
+              <div key="step-2">
                 <p className="text-gray-600 mb-6">{t('knowledgeBases.addDocument.settingsDescription')}</p>
 
                 <div className="space-y-6">
@@ -880,13 +931,13 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
                                 e.preventDefault()
                                 setFormData(prev => ({
                                   ...prev,
-                                  chunkOverlapPercent: Math.min(50, prev.chunkOverlapPercent + 1)
+                                  chunkOverlapPercent: Math.min(50, prev.chunkOverlapPercent + 1),
                                 }))
                               } else if (e.key === 'ArrowDown') {
                                 e.preventDefault()
                                 setFormData(prev => ({
                                   ...prev,
-                                  chunkOverlapPercent: Math.max(0, prev.chunkOverlapPercent - 1)
+                                  chunkOverlapPercent: Math.max(0, prev.chunkOverlapPercent - 1),
                                 }))
                               }
                             }}
@@ -954,14 +1005,14 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
                             value={formData.llmModelId || ''}
                             onChange={e => setFormData(prev => ({ ...prev, llmModelId: e.target.value ? Number(e.target.value) : null }))}
                             className={`flex-1 min-w-0 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                              modelTestPassed && formData.llmModelId === testedModelId 
-                                ? 'border-green-500 bg-green-50' 
-                                : 'border-gray-300'
+                              modelTestPassed && formData.llmModelId === testedModelId ? 'border-green-500 bg-green-50' : 'border-gray-300'
                             }`}
                             style={!formData.llmModelId ? { color: '#9ca3af' } : {}}
                             disabled={modelsLoading || isTestingModel}
                           >
-                            <option value="" disabled hidden style={{ color: '#9ca3af' }}>{t('knowledgeBases.addDocument.selectModelPlaceholder') || '请选择模型'}</option>
+                            <option value="" disabled hidden style={{ color: '#9ca3af' }}>
+                              {t('knowledgeBases.addDocument.selectModelPlaceholder') || '请选择模型'}
+                            </option>
                             {modelsList.map(model => (
                               <option key={model.id} value={model.id} style={{ color: '#111827' }}>
                                 {model.name}
@@ -999,9 +1050,7 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
                         {formData.enableGraphEnhancement && !formData.llmModelId && (
                           <p className="mt-1 text-xs text-amber-600">{t('knowledgeBases.addDocument.modelRequired') || '启用图增强需要选择LLM模型'}</p>
                         )}
-                        {formData.llmModelId && !modelTestPassed && (
-                          <p className="mt-1 text-xs text-amber-600">请点击测试按钮验证模型可用性</p>
-                        )}
+                        {formData.llmModelId && !modelTestPassed && <p className="mt-1 text-xs text-amber-600">请点击测试按钮验证模型可用性</p>}
                         {modelTestPassed && formData.llmModelId === testedModelId && (
                           <p className="mt-1 text-xs text-green-600 flex items-center">
                             <CheckCircle className="w-3 h-3 mr-1" />
@@ -1038,7 +1087,8 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
                 type="button"
                 onClick={handleNext}
                 disabled={
-                  isLoading || 
+                  isLoading ||
+                  isTransitioning ||
                   (currentStep === 1 && selectedFiles.length === 0) ||
                   (currentStep === 2 && formData.enableGraphEnhancement && (!formData.llmModelId || !modelTestPassed))
                 }
@@ -1053,12 +1103,12 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
                 } disabled:opacity-50`}
               >
                 {isLoading ? (
-                  t('common.saving')
+                  <span key="loading-text">{t('common.saving')}</span>
                 ) : (
-                  <>
+                  <span key="next-text" className="flex items-center">
                     {t('common.buttons.next')}
                     <ArrowRight className="w-4 h-4 ml-1" />
-                  </>
+                  </span>
                 )}
               </button>
             </div>
@@ -1197,10 +1247,7 @@ const AddDocumentDialog: React.FC<AddDocumentDialogProps> = ({ open, knowledgeBa
           {/* Modal */}
           <div className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 transform transition-all">
             {/* Close button */}
-            <button
-              onClick={() => setShowOversizedFileDialog(false)}
-              className="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors"
-            >
+            <button onClick={() => setShowOversizedFileDialog(false)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors">
               <X className="w-6 h-6" />
             </button>
 

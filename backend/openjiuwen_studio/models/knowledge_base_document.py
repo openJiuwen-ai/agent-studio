@@ -50,6 +50,9 @@ class KnowledgeBaseDocumentDBMixin:
     file_path: Mapped[str] = mapped_column(
         String(1000), nullable=False, comment="文档在服务器上的存储路径"
     )
+    obs_name: Mapped[str] = mapped_column(
+        String(1000), nullable=False, comment="OBS 存储路径在存储桶中"
+    )
     file_size: Mapped[int | None] = mapped_column(
         BigInteger, nullable=True, comment="文件大小（字节）"
     )

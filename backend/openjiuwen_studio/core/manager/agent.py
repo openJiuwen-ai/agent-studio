@@ -2013,6 +2013,7 @@ def _collect_knowledge_dependencies(
                     "doc_id": doc.doc_id,
                     "name": doc.name,
                     "file_path": doc.file_path,  # 需要导出文件
+                    "obs_name": doc.obs_name,
                     "file_size": doc.file_size,
                     "file_type": doc.file_type,
                     "mime_type": doc.mime_type,
