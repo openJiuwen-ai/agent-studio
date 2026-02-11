@@ -1,3 +1,5 @@
+import os
+import sys
 from functools import wraps
 
 from dataclasses import dataclass
@@ -43,8 +45,11 @@ class KnowledgeBaseRepository:
             try:
                 return func_(self, *args, **kwargs)
             except Exception as e:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                fname = os.path.split(exc_traceback.tb_frame.f_code.co_filename)[1]
                 logger.error("Error: knowledge base db data preprocessing error")
                 logger.debug(f"Exception details: {type(e).__name__}", exc_info=True)
+                logger.error(f"{e}: {func_.__name__}({args=}, {kwargs=}) {exc_type} {fname}:{exc_traceback.tb_lineno}")
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message=f"Error: knowledge base db data preprocessing error: {type(e).__name__}",
