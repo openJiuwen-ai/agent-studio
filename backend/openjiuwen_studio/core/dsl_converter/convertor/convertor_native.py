@@ -22,74 +22,18 @@ from openjiuwen_studio.core.database import milliseconds
 
 
 class NativeWorkflowConvertor(WorkflowConvertor):
-    """
-    Converts OpenJiuwen native format workflows.
-
-    Expected workflow schema (complete example that passes all 3 validation layers):
-    {
-        "workflow_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        "workflow_version": "draft",
-        "latest_publish_time": 1770718317014,
-        "latest_publish_version": "v0.0.1",
-        "name": "Customer Support Workflow",
-        "desc": "Automated customer support with AI",
-        "space_id": "18630429",
-        "url": "test",
-        "icon_uri": "",
-        "schema": "{\"nodes\":[{\"id\":\"start_1\",\"type\":\"1\",\"data\":{\"title\":\"START\"}},{\"id\":\"llm_2\",\"type\":\"3\",\"data\":{\"title\":\"LLM\"}},{\"id\":\"end_3\",\"type\":\"2\",\"data\":{\"title\":\"END\"}}],\"edges\":[{\"source\":\"start_1\",\"target\":\"llm_2\"},{\"source\":\"llm_2\",\"target\":\"end_3\"}]}",
-        "input_parameters": [{"name": "query", "type": "string"}],
-        "output_parameters": [{"name": "response", "type": "string"}],
-        "create_time": 1770709211479,
-        "update_time": 1770718317014
-    }
-
-    Field transformations during conversion:
-    - workflow_id: REGENERATED (new UUID) → avoid collisions
-    - workflow_version: CLEARED (None) → import creates draft
-    - latest_publish_*: CLEARED (None) → no version history
-    - name: KEPT → importer adds "(imported)" suffix
-    - desc, url, icon_uri: KEPT as-is
-    - space_id: REPLACED with target space_id
-    - schema: NODE IDS REGENERATED → start_1 becomes start_abc123
-    - input/output_parameters: KEPT as-is
-    - create_time, update_time: REGENERATED (current timestamp)
-
-    Validation will PASS if:
-    ✓ Required fields present: workflow_id, name, space_id, schema, create_time, update_time
-    ✓ Field constraints: name (1-255 chars), desc (max 500), url (max 500)
-    ✓ Schema has START node (type="1") and END node (type="2")
-    ✓ Schema is valid JSON with nodes array and edges array
-
-    Note: Convertor automatically handles:
-    - Schema as object → converts to JSON string
-    - Edges with sourceNodeID/targetNodeID → normalizes to source/target
-    """
+    """Converts OpenJiuwen native format workflows"""
 
     def convert(self, json_data: Dict[str, Any]) -> WorkflowImportResult:
         """
         Convert OpenJiuwen native workflow for import.
 
         Steps:
-        0. Pre-process schema field:
-           - Convert schema from object to JSON string if needed (some exports have it as object)
-           - Normalize edge format from sourceNodeID/targetNodeID to source/target if needed
         1. Validate structure matches WorkflowBase schema
-        2. Generate new workflow_id (GUID) to avoid collisions with existing workflows
-        3. Regenerate all node IDs in canvas schema to avoid conflicts
-        4. Update timestamps (create_time, update_time) to current time
-        5. Clear version fields (workflow_version, latest_publish_version, latest_publish_time)
-        6. Check for missing resources (models, plugins, sub-workflows) - non-blocking
-
-        Note: The actual workflow database record will be created by workflow_manager.workflow_create()
-        which assigns a fresh workflow_id and auto-incrementing id field.
-
-        Handles both schema formats:
-        - String format: "schema": "{\"nodes\":[...],\"edges\":[...]}" (standard)
-        - Object format: "schema": {"nodes":[...], "edges":[...]} (some exports)
-
-        Handles both edge formats:
-        - Standard: {"source": "node1", "target": "node2"}
-        - Alternative: {"sourceNodeID": "node1", "targetNodeID": "node2"}
+        2. Generate new workflow_id to avoid collisions
+        3. Regenerate node IDs in canvas to avoid conflicts
+        4. Update timestamps
+        5. Check for missing resources (optional)
 
         Args:
             json_data: OpenJiuwen workflow JSON
@@ -104,34 +48,6 @@ class NativeWorkflowConvertor(WorkflowConvertor):
 
         # Store original workflow_id for metadata
         original_workflow_id = json_data.get("workflow_id", "unknown")
-
-        # Pre-process: Normalize schema to string if it's an object
-        # Some exports have schema as object, but WorkflowBase expects string
-        schema_field = json_data.get("schema")
-        if schema_field and not isinstance(schema_field, str):
-            try:
-                json_data["schema"] = json.dumps(schema_field)
-                logger.info("Converted schema from object to JSON string")
-            except (TypeError, ValueError) as e:
-                raise ValueError(f"Failed to convert schema to JSON string: {e}") from e
-
-        # Pre-process: Normalize edge format if needed
-        # Some exports use sourceNodeID/targetNodeID, but we need source/target
-        if isinstance(json_data.get("schema"), str):
-            try:
-                schema_obj = json.loads(json_data["schema"])
-                edges = schema_obj.get("edges", [])
-                normalized = False
-                for edge in edges:
-                    if "sourceNodeID" in edge or "targetNodeID" in edge:
-                        edge["source"] = edge.pop("sourceNodeID", edge.get("source"))
-                        edge["target"] = edge.pop("targetNodeID", edge.get("target"))
-                        normalized = True
-                if normalized:
-                    json_data["schema"] = json.dumps(schema_obj)
-                    logger.info("Normalized edge format from sourceNodeID/targetNodeID to source/target")
-            except (json.JSONDecodeError, TypeError, KeyError) as e:
-                logger.warning(f"Failed to normalize edge format: {e}")
 
         # Step 1: Validate schema structure
         try:

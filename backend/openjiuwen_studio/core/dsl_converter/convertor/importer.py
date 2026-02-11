@@ -64,36 +64,21 @@ class WorkflowImporter:
         """
         Import workflow from JSON data.
 
-        Complete workflow import process:
-        1. Detect format (OpenJiuwen native, n8n, etc.)
-        2. Convert to OpenJiuwen format:
-           - Generate new workflow_id (GUID) to avoid collisions
-           - Regenerate all canvas node IDs
-           - Update timestamps to current time
-           - Clear version fields (creates as draft)
-        3. Validate workflow structure and optionally compile/execute test
-        4. Create workflow in database via manager:
-           - Assigns fresh workflow_id and auto-incrementing id
-           - Appends " (imported)" to workflow name to distinguish from original
-           - Sets proper permissions and space_id
-        5. Save canvas schema with regenerated node IDs
-        6. Optionally publish as v1.0.0 (if mode is "draft_and_publish")
-
-        Important: The imported workflow will have:
-        - A NEW workflow_id (different from the exported workflow)
-        - A NEW auto-incrementing id field
-        - Name with " (imported)" suffix (e.g., "My Workflow (imported)")
-        - Current timestamps
-        - No version history (starts as draft)
+        Steps:
+        1. Detect format
+        2. Convert to OpenJiuwen format
+        3. Validate
+        4. Save to database (if not dry_run)
+        5. Optionally publish
 
         Args:
             json_data: Workflow JSON data
             space_id: Target space ID
             current_user: Current user info
-            options: Import options (mode, validate_strict, dry_run)
+            options: Import options
 
         Returns:
-            ImportResult with import status, new workflow_id, name, warnings, and metadata
+            ImportResult with import status and details
         """
         if options is None:
             options = ImportOptions()
@@ -186,13 +171,9 @@ class WorkflowImporter:
             )
 
         # Step 5: Create workflow via manager (gets permissions, tags, etc.)
-        # Add " (imported)" suffix to distinguish from original
         try:
-            original_name = workflow_data["name"]
-            imported_name = f"{original_name} (imported)"
-
             create_req = WorkflowCreate(
-                name=imported_name,
+                name=workflow_data["name"],
                 desc=workflow_data.get("desc", ""),
                 space_id=space_id,
                 icon_uri=workflow_data.get("icon_uri")
@@ -280,11 +261,10 @@ class WorkflowImporter:
         return ImportResult(
             success=True,
             workflow_id=workflow_id,
-            workflow_name=imported_name,
+            workflow_name=workflow_data["name"],
             warnings=all_warnings,
             metadata={
                 **conversion_result.metadata,
-                "original_name": original_name,
                 "saved_to_db": True,
                 "published": options.mode == "draft_and_publish" and "publish failed" not in str(all_warnings)
             }
