@@ -16,7 +16,7 @@ dependencies = [
     "sqlalchemy==2.0.41",
     "pyjwt==2.10.1",
     "networkx==3.4.2",
-    "openjiuwen[chromadb] @ git+https://gitcode.com/openJiuwen/agent-core.git@ff4c741a",
+    "openjiuwen[chromadb,obs] @ git+https://gitcode.com/openJiuwen/agent-core.git@develop",
     "pydantic-settings==2.5.2",
     "aiomysql==0.2.0",
     "jinja2==3.1.6",
