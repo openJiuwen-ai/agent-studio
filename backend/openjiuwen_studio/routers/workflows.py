@@ -554,6 +554,14 @@ async def workflow_import(
     - OpenJiuwen native export
     - n8n workflow JSON
 
+    The imported workflow will receive:
+    - A NEW workflow_id (GUID) - different from the exported workflow
+    - A NEW auto-incrementing id field
+    - Name with " (imported)" suffix (e.g., "My Workflow (imported)")
+    - Regenerated canvas node IDs to avoid conflicts
+    - Current timestamps (create_time, update_time)
+    - No version history (starts as draft)
+
     Args:
         file: JSON file containing workflow
         space_id: Target workspace ID
@@ -563,8 +571,82 @@ async def workflow_import(
 
     Returns:
         ResponseModel[Dict]: Import result with workflow_id, name, warnings, and metadata
+        Example response:
+        {
+            "code": 200,
+            "message": "Workflow imported successfully",
+            "data": {
+                "workflow_id": "new-guid-12345",
+                "workflow_name": "My Workflow (imported)",
+                "warnings": ["Referenced resource may not exist: plugin_123"],
+                "metadata": {
+                    "original_workflow_id": "old-guid-67890",
+                    "original_name": "My Workflow",
+                    "source_format": "openjiuwen_native",
+                    "regenerated_nodes": 5,
+                    "saved_to_db": true,
+                    "published": false
+                }
+            }
+        }
 
-    Example:
+    Example OpenJiuwen workflow JSON (complete, validated, ready for import):
+        {
+            "workflow_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "workflow_version": "draft",
+            "latest_publish_time": null,
+            "latest_publish_version": null,
+            "name": "Customer Support Workflow",
+            "desc": "Automated customer support with AI-powered responses",
+            "space_id": "18630429",
+            "url": "test",
+            "icon_uri": "",
+            "schema": "{\"nodes\":[{\"id\":\"start_abc\",\"type\":\"1\",\"position\":{\"x\":100,\"y\":100},\"data\":{\"title\":\"START\",\"inputs\":{\"inputParameters\":{\"message\":{\"type\":\"value\",\"content\":\"Hello\"}}}}},{\"id\":\"llm_def\",\"type\":\"3\",\"position\":{\"x\":300,\"y\":100},\"data\":{\"title\":\"LLM\",\"inputs\":{\"inputParameters\":{\"prompt\":{\"type\":\"ref\",\"content\":[\"start_abc\",\"message\"]}},\"llmParam\":{\"model\":{\"id\":\"gpt-4\"}}}}},{\"id\":\"end_ghi\",\"type\":\"2\",\"position\":{\"x\":500,\"y\":100},\"data\":{\"title\":\"END\"}}],\"edges\":[{\"id\":\"e1\",\"source\":\"start_abc\",\"target\":\"llm_def\"},{\"id\":\"e2\",\"source\":\"llm_def\",\"target\":\"end_ghi\"}]}",
+            "input_parameters": [
+                {
+                    "name": "customer_query",
+                    "description": "The customer's question or issue",
+                    "type": "string",
+                    "required": true
+                }
+            ],
+            "output_parameters": [
+                {
+                    "name": "ai_response",
+                    "description": "AI-generated response",
+                    "type": "string"
+                }
+            ],
+            "create_time": 1770709211479,
+            "update_time": 1770718317014
+        }
+
+        Validation (3 layers - all will PASS with above example):
+
+        Layer 1 - WorkflowBase Schema:
+        ✓ Required fields present: workflow_id, name, space_id, schema, create_time, update_time
+        ✓ Field types correct: strings are strings, ints are ints
+        ✓ Field constraints met: name (1-255 chars), desc (max 500 chars), url (max 500 chars)
+
+        Layer 2 - Canvas Structure:
+        ✓ Schema is valid JSON string with nodes and edges
+        ✓ Has START node (type="1") - required
+        ✓ Has END node (type="2") - required
+        ✓ All nodes are connected via edges
+
+        Layer 3 - Strict Validation (optional, if validate_strict=true):
+        ✓ Canvas converts to DSL successfully
+        ✓ Components are valid
+        ✓ Workflow can be compiled and executed
+
+        Flexible Format Support:
+        The importer automatically handles different export formats:
+        - Schema as JSON string (standard) OR as object (auto-converted)
+        - Edges with "source"/"target" OR "sourceNodeID"/"targetNodeID" (auto-normalized)
+
+        So you can import workflows exported from different systems without manual editing!
+
+    Example cURL:
         curl -X POST "http://localhost:8000/workflows/import" \\
              -H "Authorization: Bearer {token}" \\
              -F "file=@workflow.json" \\
