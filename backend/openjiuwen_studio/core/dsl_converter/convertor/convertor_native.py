@@ -124,8 +124,8 @@ class NativeWorkflowConvertor(WorkflowConvertor):
                 normalized = False
                 for edge in edges:
                     if "sourceNodeID" in edge or "targetNodeID" in edge:
-                        edge["source"] = edge.pop("sourceNodeID", edge.get("source"))
-                        edge["target"] = edge.pop("targetNodeID", edge.get("target"))
+                        edge["sourceNodeID"] = edge.pop("sourceNodeID", edge.get("sourceNodeID"))
+                        edge["targetNodeID"] = edge.pop("targetNodeID", edge.get("targetNodeID"))
                         normalized = True
                 if normalized:
                     json_data["schema"] = json.dumps(schema_obj)
@@ -208,14 +208,14 @@ class NativeWorkflowConvertor(WorkflowConvertor):
 
         # Update edges to use new IDs
         for edge in schema.get("edges", []):
-            source = edge.get("source")
-            target = edge.get("target")
+            source = edge.get("sourceNodeID")
+            target = edge.get("targetNodeID")
 
             if source in id_mapping:
-                edge["source"] = id_mapping[source]
+                edge["sourceNodeID"] = id_mapping[source]
 
             if target in id_mapping:
-                edge["target"] = id_mapping[target]
+                edge["targetNodeID"] = id_mapping[target]
 
         # Update references in node data (inputParameters, etc.)
         self._update_node_references(schema.get("nodes", []), id_mapping)
@@ -287,12 +287,12 @@ class NativeWorkflowConvertor(WorkflowConvertor):
         if edges:
             for edge in edges:
                 if isinstance(edge, dict):
-                    source = edge.get("source")
-                    target = edge.get("target")
+                    source = edge.get("sourceNodeID")
+                    target = edge.get("targetNodeID")
                     if source in id_mapping:
-                        edge["source"] = id_mapping[source]
+                        edge["sourceNodeID"] = id_mapping[source]
                     if target in id_mapping:
-                        edge["target"] = id_mapping[target]
+                        edge["targetNodeID"] = id_mapping[target]
 
     def _check_missing_resources(self, workflow_data: Dict[str, Any]) -> List[str]:
         """

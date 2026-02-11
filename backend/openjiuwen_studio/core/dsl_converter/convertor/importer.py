@@ -208,7 +208,7 @@ class WorkflowImporter:
                     warnings=all_warnings
                 )
 
-            workflow_id = create_result.data["workflow_id"]
+            workflow_id = create_result.data['workflow']["workflow_id"]
             logger.info(f"Workflow created via manager: {workflow_id}")
 
         except Exception as e:

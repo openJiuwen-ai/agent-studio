@@ -105,8 +105,8 @@ class WorkflowValidator:
             # Check for disconnected nodes
             connected_ids = set()
             for edge in edges:
-                connected_ids.add(edge.get("source"))
-                connected_ids.add(edge.get("target"))
+                connected_ids.add(edge.get("sourceNodeID"))
+                connected_ids.add(edge.get("targetNodeID"))
 
             disconnected = []
             for node in nodes:
