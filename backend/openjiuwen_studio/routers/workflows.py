@@ -538,3 +538,198 @@ async def get_download_url(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to generate download URL"
         ) from e
+
+@workflows_router.post("/import", response_model=ResponseModel[Dict])
+async def workflow_import(
+    file: UploadFile = File(...),
+    space_id: str = Form(...),
+    import_mode: str = Form("draft"),
+    validate_strict: bool = Form(False),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Import workflow from JSON file.
+
+    Supported formats:
+    - OpenJiuwen native export
+    - n8n workflow JSON
+
+    The imported workflow will receive:
+    - A NEW workflow_id (GUID) - different from the exported workflow
+    - A NEW auto-incrementing id field
+    - Name with " (imported)" suffix (e.g., "My Workflow (imported)")
+    - Regenerated canvas node IDs to avoid conflicts
+    - Current timestamps (create_time, update_time)
+    - No version history (starts as draft)
+
+    Args:
+        file: JSON file containing workflow
+        space_id: Target workspace ID
+        import_mode: "draft" (save only) or "draft_and_publish" (save + publish as v1.0.0)
+        validate_strict: If True, compile workflow to validate (slower but more thorough)
+        current_user: Current user information
+
+    Returns:
+        ResponseModel[Dict]: Import result with workflow_id, name, warnings, and metadata
+        Example response:
+        {
+            "code": 200,
+            "message": "Workflow imported successfully",
+            "data": {
+                "workflow_id": "new-guid-12345",
+                "workflow_name": "My Workflow (imported)",
+                "warnings": ["Referenced resource may not exist: plugin_123"],
+                "metadata": {
+                    "original_workflow_id": "old-guid-67890",
+                    "original_name": "My Workflow",
+                    "source_format": "openjiuwen_native",
+                    "regenerated_nodes": 5,
+                    "saved_to_db": true,
+                    "published": false
+                }
+            }
+        }
+
+    Example OpenJiuwen workflow JSON (complete, validated, ready for import):
+        {
+            "workflow_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            "workflow_version": "draft",
+            "latest_publish_time": null,
+            "latest_publish_version": null,
+            "name": "Customer Support Workflow",
+            "desc": "Automated customer support with AI-powered responses",
+            "space_id": "18630429",
+            "url": "test",
+            "icon_uri": "",
+            "schema": "{\"nodes\":[{\"id\":\"start_abc\",\"type\":\"1\",\"position\":{\"x\":100,\"y\":100},\"data\":{\"title\":\"START\",\"inputs\":{\"inputParameters\":{\"message\":{\"type\":\"value\",\"content\":\"Hello\"}}}}},{\"id\":\"llm_def\",\"type\":\"3\",\"position\":{\"x\":300,\"y\":100},\"data\":{\"title\":\"LLM\",\"inputs\":{\"inputParameters\":{\"prompt\":{\"type\":\"ref\",\"content\":[\"start_abc\",\"message\"]}},\"llmParam\":{\"model\":{\"id\":\"gpt-4\"}}}}},{\"id\":\"end_ghi\",\"type\":\"2\",\"position\":{\"x\":500,\"y\":100},\"data\":{\"title\":\"END\"}}],\"edges\":[{\"id\":\"e1\",\"source\":\"start_abc\",\"target\":\"llm_def\"},{\"id\":\"e2\",\"source\":\"llm_def\",\"target\":\"end_ghi\"}]}",
+            "input_parameters": [
+                {
+                    "name": "customer_query",
+                    "description": "The customer's question or issue",
+                    "type": "string",
+                    "required": true
+                }
+            ],
+            "output_parameters": [
+                {
+                    "name": "ai_response",
+                    "description": "AI-generated response",
+                    "type": "string"
+                }
+            ],
+            "create_time": 1770709211479,
+            "update_time": 1770718317014
+        }
+
+        Validation (3 layers - all will PASS with above example):
+
+        Layer 1 - WorkflowBase Schema:
+        ✓ Required fields present: workflow_id, name, space_id, schema, create_time, update_time
+        ✓ Field types correct: strings are strings, ints are ints
+        ✓ Field constraints met: name (1-255 chars), desc (max 500 chars), url (max 500 chars)
+
+        Layer 2 - Canvas Structure:
+        ✓ Schema is valid JSON string with nodes and edges
+        ✓ Has START node (type="1") - required
+        ✓ Has END node (type="2") - required
+        ✓ All nodes are connected via edges
+
+        Layer 3 - Strict Validation (optional, if validate_strict=true):
+        ✓ Canvas converts to DSL successfully
+        ✓ Components are valid
+        ✓ Workflow can be compiled and executed
+
+        Flexible Format Support:
+        The importer automatically handles different export formats:
+        - Schema as JSON string (standard) OR as object (auto-converted)
+        - Edges with "source"/"target" OR "sourceNodeID"/"targetNodeID" (auto-normalized)
+
+        So you can import workflows exported from different systems without manual editing!
+
+    Example cURL:
+        curl -X POST "http://localhost:8000/workflows/import" \\
+             -H "Authorization: Bearer {token}" \\
+             -F "file=@workflow.json" \\
+             -F "space_id=abc123" \\
+             -F "import_mode=draft" \\
+             -F "validate_strict=false"
+    """
+    try:
+        import json
+        from openjiuwen_studio.core.dsl_converter.convertor.importer import WorkflowImporter, ImportOptions
+
+        logger.info(f"Workflow import request - User: {current_user.get('user_id', 'unknown')}, "
+                   f"Space: {space_id}, Mode: {import_mode}")
+
+        # Read and parse JSON file
+        try:
+            content = await file.read()
+            json_data = json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON file: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid JSON file: {e}"
+            ) from e
+        except Exception as e:
+            logger.error(f"Failed to read file: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to read file: {e}"
+            ) from e
+
+        # Validate import_mode
+        if import_mode not in ["draft", "draft_and_publish"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid import_mode: {import_mode}. Must be 'draft' or 'draft_and_publish'"
+            )
+
+        # Build import options
+        options = ImportOptions(
+            mode=import_mode,
+            validate_strict=validate_strict,
+            dry_run=False
+        )
+
+        # Perform import
+        importer = WorkflowImporter()
+        result = await importer.import_workflow(
+            json_data=json_data,
+            space_id=space_id,
+            current_user=current_user,
+            options=options
+        )
+
+        # Return result
+        if result.success:
+            logger.info(f"Workflow import successful: {result.workflow_id}")
+            return ResponseModel(
+                code=status.HTTP_200_OK,
+                message="Workflow imported successfully",
+                data={
+                    "workflow_id": result.workflow_id,
+                    "workflow_name": result.workflow_name,
+                    "warnings": result.warnings,
+                    "metadata": result.metadata
+                }
+            )
+        else:
+            logger.error(f"Workflow import failed: {result.errors}")
+            return ResponseModel(
+                code=status.HTTP_400_BAD_REQUEST,
+                message="Workflow import failed",
+                data={
+                    "errors": result.errors,
+                    "warnings": result.warnings
+                }
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during workflow import: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error during import: {str(e)}"
+        ) from e
