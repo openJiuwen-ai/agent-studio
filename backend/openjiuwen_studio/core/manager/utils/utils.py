@@ -104,7 +104,7 @@ def convert_to_properties_format(input_list):
                 'type': item.get('type'),
                 'description': item.get('description'),
             }
-            if item.get('required') and item.get('required') == True:
+            if item.get('required') is True:
                 requires.append(property_name)
         return properties, requires
     except (KeyError, TypeError) as e:
