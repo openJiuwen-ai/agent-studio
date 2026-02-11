@@ -1,0 +1,26 @@
+{
+  "workflow_id": "test-workflow-123",
+  "name": "Example OpenJiuwen Workflow",
+  "desc": "A simple workflow for testing import functionality",
+  "space_id": "test-space-123",
+  "url": "",
+  "icon_uri": "",
+  "schema": "{\"nodes\":[{\"id\":\"start_abc123\",\"type\":\"1\",\"data\":{\"title\":\"Start\",\"outputs\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"default\":\"Hello\"}}}},\"meta\":{\"position\":{\"x\":180,\"y\":36}}},{\"id\":\"llm_def456\",\"type\":\"3\",\"data\":{\"title\":\"AI Generator\",\"inputs\":{\"inputParameters\":{\"query\":{\"type\":\"ref\",\"content\":[\"start_abc123\",\"query\"]}},\"llmParam\":{\"model\":{\"id\":\"1\",\"name\":\"GPT-4\",\"type\":\"openai\"}}},\"outputs\":{\"type\":\"object\",\"properties\":{\"result\":{\"type\":\"string\"}}}},\"meta\":{\"position\":{\"x\":500,\"y\":36}}},{\"id\":\"end_ghi789\",\"type\":\"2\",\"data\":{\"title\":\"End\",\"inputs\":{\"inputParameters\":{\"result\":{\"type\":\"ref\",\"content\":[\"llm_def456\",\"result\"]}}}},\"meta\":{\"position\":{\"x\":1100,\"y\":36}}}],\"edges\":[{\"id\":\"edge_1\",\"source\":\"start_abc123\",\"target\":\"llm_def456\",\"sourceHandle\":\"output\",\"targetHandle\":\"input\"},{\"id\":\"edge_2\",\"source\":\"llm_def456\",\"target\":\"end_ghi789\",\"sourceHandle\":\"output\",\"targetHandle\":\"input\"}]}",
+  "input_parameters": [
+    {
+      "name": "query",
+      "type": "string",
+      "description": "Input query",
+      "required": true
+    }
+  ],
+  "output_parameters": [
+    {
+      "name": "result",
+      "type": "string",
+      "description": "AI generated result"
+    }
+  ],
+  "create_time": 1704067200000,
+  "update_time": 1704067200000
+}

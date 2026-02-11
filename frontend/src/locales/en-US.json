@@ -1134,6 +1134,32 @@
     "title": "Workflows",
     "subtitle": "Design, manage and monitor your automated workflows, build efficient business processes",
     "createWorkflow": "Create Workflow",
+    "importWorkflow": "Import Workflow",
+    "import": {
+      "title": "Import Workflow",
+      "subtitle": "Import a workflow from JSON file (OpenJiuwen or n8n format)",
+      "file": "Workflow File",
+      "dragDrop": "Drag and drop your JSON file here, or click to select",
+      "selectFile": "Select File",
+      "fileFormat": "Supported formats: .json (OpenJiuwen native or n8n)",
+      "importMode": "Import Mode",
+      "modes": {
+        "draft": "Draft Only",
+        "draftDesc": "Import as draft workflow",
+        "publish": "Draft & Publish",
+        "publishDesc": "Import and publish immediately"
+      },
+      "validateStrict": "Strict Validation",
+      "validateStrictDesc": "Validate workflow can be compiled and executed",
+      "importButton": "Import Workflow",
+      "importing": "Importing...",
+      "success": "Workflow imported successfully",
+      "errors": {
+        "noFile": "Please select a file to import",
+        "invalidFileType": "Please select a valid JSON file",
+        "importFailed": "Failed to import workflow"
+      }
+    },
     "workflowList": {
       "title": "Workflow List",
       "noWorkflows": "No workflows available",

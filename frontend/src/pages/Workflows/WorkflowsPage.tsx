@@ -1,4 +1,4 @@
-import { AlertCircle, Check, Copy, Edit, Plus, Search, Trash2, X } from 'lucide-react'
+import { AlertCircle, Check, Copy, Edit, Plus, Search, Trash2, Upload, X } from 'lucide-react'
 import WorkflowIcon from '@/assets/icons/workflow.svg?react'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -16,6 +16,7 @@ import {
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '../../Common/UnifiedSnackbar'
 import DeleteConfirmationDialog from '../../components/Common/DeleteConfirmationDialog'
+import ImportWorkflowDialog from '../../components/Workflows/ImportWorkflowDialog'
 import { ENV_CONFIG } from '../../config/environment'
 import { useOptimizedSearch } from '../../hooks/useSearchOptimization'
 import { useAuthStore } from '../../stores/useAuthStore'
@@ -66,6 +67,9 @@ const WorkflowsPage: React.FC = () => {
   const [editingField, setEditingField] = useState<'name' | 'desc' | null>(null)
   const [editingValue, setEditingValue] = useState<string>('')
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+
+  // 导入工作流状态
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
 
   // 判断是否需要使用搜索API - 有搜索词时使用搜索API
   const shouldUseSearch = searchOptimization.debouncedSearchTerm.trim() !== ''
@@ -149,6 +153,13 @@ const WorkflowsPage: React.FC = () => {
   // Refresh workflows list
   const refreshWorkflows = () => {
     refetch()
+  }
+
+  // Handle successful import
+  const handleImportSuccess = () => {
+    showSuccess(t('workflows.import.success'))
+    refetch() // Refresh workflow list
+    setImportDialogOpen(false)
   }
 
   // Handle workflow deletion
@@ -411,7 +422,7 @@ const WorkflowsPage: React.FC = () => {
     // 字符长度限制信息
     const lengthMatch = errorMsg.match(/(\d+) characters?/)
     if (lengthMatch) {
-      return `长度不能超过${lengthMatch[1]}个字符`
+      return t('workflows.workflowList.errorLengthExceeded', { count: lengthMatch[1] })
     }
 
     return errorMsg
@@ -538,6 +549,15 @@ const WorkflowsPage: React.FC = () => {
             <Plus className="w-5 h-5" />
             <span>{t('workflows.createWorkflow')}</span>
           </Link>
+
+          {/* Import Workflow Button */}
+          <button
+            onClick={() => setImportDialogOpen(true)}
+            className="inline-flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transform hover:scale-105 transition-all duration-300 shadow-sm hover:shadow-xl"
+          >
+            <Upload className="w-5 h-5" />
+            <span>{t('workflows.importWorkflow')}</span>
+          </button>
         </div>
       </div>
 
@@ -625,8 +645,8 @@ const WorkflowsPage: React.FC = () => {
                             <div className="flex justify-between items-center">
                               <div className={`text-xs ${editingValue && !isInputValid() ? 'text-red-500' : 'text-gray-500'}`}>
                                 {editingValue && !isInputValid()
-                                  ? '格式错误：只能包含字母、数字、下划线，且必须以字母开头'
-                                  : '只能包含字母、数字、下划线，且必须以字母开头'}
+                                  ? t('workflows.workflowList.formatError')
+                                  : t('workflows.workflowList.formatHint')}
                               </div>
                               <div className="text-xs text-gray-500 text-right">{editingValue.length}/100</div>
                             </div>
@@ -828,6 +848,14 @@ const WorkflowsPage: React.FC = () => {
         itemType="workflow"
         itemName={deleteDialog.workflowName}
         isLoading={deleteWorkflow.isLoading}
+      />
+
+      {/* Import Workflow Dialog */}
+      <ImportWorkflowDialog
+        isOpen={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        onSuccess={handleImportSuccess}
+        spaceId={user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID}
       />
 
       {/* Unified Snackbar */}

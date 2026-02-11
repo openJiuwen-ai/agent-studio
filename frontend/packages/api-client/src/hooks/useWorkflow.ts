@@ -227,26 +227,24 @@ export const useUpdateWorkflow = () => {
     onSuccess: (response, request) => {
       if (response.code === 200) {
         const updater = (oldData: unknown) => {
-          type CachedData = { data?: { workflow_list?: any[] }, code?: number, message?: string }
+          type CachedData = { data?: { workflow_list?: any[] }; code?: number; message?: string }
           const cached = oldData as CachedData | undefined
-          
+
           if (!cached?.data?.workflow_list) return oldData
-          
+
           const updates: any = {}
           if (request.name !== undefined) updates.name = request.name
           if (request.desc !== undefined) updates.desc = request.desc
-          
+
           return {
             ...cached,
             data: {
               ...cached.data,
-              workflow_list: cached.data.workflow_list.map(workflow =>
-                workflow.workflow_id === request.workflow_id ? { ...workflow, ...updates } : workflow
-              ),
+              workflow_list: cached.data.workflow_list.map(workflow => (workflow.workflow_id === request.workflow_id ? { ...workflow, ...updates } : workflow)),
             },
           }
         }
-        
+
         queryClient.setQueriesData({ queryKey: ['workflows', 'api', 'list'], exact: false }, updater)
         queryClient.setQueriesData({ queryKey: ['workflows', 'search'], exact: false }, updater)
       }
@@ -303,6 +301,27 @@ export const useSearchWorkflows = (request: WorkflowSearchRequest, options?: { e
   })
 }
 
+// 导入工作流
+export const useImportWorkflow = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation((formData: FormData) => WorkflowService.importWorkflow(formData), {
+    onSuccess: (response, variables) => {
+      if (response.code === 200) {
+        // 导入成功后，使工作流列表缓存失效，触发重新获取
+        const spaceId = variables.get('space_id') as string
+        queryClient.invalidateQueries(['workflows', 'api', 'list'], {
+          predicate: query => (query.queryKey[3] as any)?.space_id === spaceId,
+        })
+        console.log('工作流导入成功')
+      }
+    },
+    onError: error => {
+      console.error('导入工作流失败:', error)
+    },
+  })
+}
+
 export default {
   useWorkflows,
   useRefreshWorkflows,
@@ -314,4 +333,5 @@ export default {
   useDeleteWorkflow,
   useCopyWorkflow,
   useSearchWorkflows,
+  useImportWorkflow,
 }

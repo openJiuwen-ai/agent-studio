@@ -3,9 +3,8 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved
 from typing import Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from pydantic import ValidationError
-from minio import Minio
 from openjiuwen.core.common.logging import logger
 
 from openjiuwen_studio.core.common.exceptions import JiuWenComponentException
@@ -534,4 +533,117 @@ async def get_download_url(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to generate download URL"
+        ) from e
+
+@workflows_router.post("/import", response_model=ResponseModel[Dict])
+async def workflow_import(
+    file: UploadFile = File(...),
+    space_id: str = Form(...),
+    import_mode: str = Form("draft"),
+    validate_strict: bool = Form(False),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Import workflow from JSON file.
+
+    Supported formats:
+    - OpenJiuwen native export
+    - n8n workflow JSON
+
+    Args:
+        file: JSON file containing workflow
+        space_id: Target workspace ID
+        import_mode: "draft" (save only) or "draft_and_publish" (save + publish as v1.0.0)
+        validate_strict: If True, compile workflow to validate (slower but more thorough)
+        current_user: Current user information
+
+    Returns:
+        ResponseModel[Dict]: Import result with workflow_id, name, warnings, and metadata
+
+    Example:
+        curl -X POST "http://localhost:8000/workflows/import" \\
+             -H "Authorization: Bearer {token}" \\
+             -F "file=@workflow.json" \\
+             -F "space_id=abc123" \\
+             -F "import_mode=draft" \\
+             -F "validate_strict=false"
+    """
+    try:
+        import json
+        from openjiuwen_studio.core.dsl_converter.convertor.importer import WorkflowImporter, ImportOptions
+
+        logger.info(f"Workflow import request - User: {current_user.get('user_id', 'unknown')}, "
+                   f"Space: {space_id}, Mode: {import_mode}")
+
+        # Read and parse JSON file
+        try:
+            content = await file.read()
+            json_data = json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON file: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid JSON file: {e}"
+            ) from e
+        except Exception as e:
+            logger.error(f"Failed to read file: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to read file: {e}"
+            ) from e
+
+        # Validate import_mode
+        if import_mode not in ["draft", "draft_and_publish"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid import_mode: {import_mode}. Must be 'draft' or 'draft_and_publish'"
+            )
+
+        # Build import options
+        options = ImportOptions(
+            mode=import_mode,
+            validate_strict=validate_strict,
+            dry_run=False
+        )
+
+        # Perform import
+        importer = WorkflowImporter()
+        result = await importer.import_workflow(
+            json_data=json_data,
+            space_id=space_id,
+            current_user=current_user,
+            options=options
+        )
+
+        # Return result
+        if result.success:
+            logger.info(f"Workflow import successful: {result.workflow_id}")
+            return ResponseModel(
+                code=status.HTTP_200_OK,
+                message="Workflow imported successfully",
+                data={
+                    "workflow_id": result.workflow_id,
+                    "workflow_name": result.workflow_name,
+                    "warnings": result.warnings,
+                    "metadata": result.metadata
+                }
+            )
+        else:
+            logger.error(f"Workflow import failed: {result.errors}")
+            return ResponseModel(
+                code=status.HTTP_400_BAD_REQUEST,
+                message="Workflow import failed",
+                data={
+                    "errors": result.errors,
+                    "warnings": result.warnings
+                }
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during workflow import: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error during import: {str(e)}"
         ) from e
