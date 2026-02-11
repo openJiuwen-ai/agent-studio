@@ -12,12 +12,6 @@ Examples:
     # Import as draft
     python -m cli.workflow_import workflow.json --space-id space1 --user-id user1
 
-    # Import and publish
-    python -m cli.workflow_import workflow.json --space-id space1 --user-id user1 --publish
-
-    # Dry run (validate only)
-    python -m cli.workflow_import workflow.json --space-id space1 --user-id user1 --dry-run
-
     # With strict validation
     python -m cli.workflow_import workflow.json --space-id space1 --user-id user1 --validate
 """
@@ -40,12 +34,10 @@ from openjiuwen_studio.core.dsl_converter.convertor.importer import WorkflowImpo
 @click.argument('json_file', type=click.Path(exists=True))
 @click.option('--space-id', required=True, help='Target workspace ID')
 @click.option('--user-id', required=True, help='User ID for import')
-@click.option('--publish', is_flag=True, help='Publish workflow after import (creates v1.0.0)')
 @click.option('--validate/--no-validate', default=False,
               help='Strict validation (compile workflow)')
-@click.option('--dry-run', is_flag=True, help='Preview import without saving')
 @click.option('--verbose', '-v', is_flag=True, help='Verbose output')
-def import_workflow(json_file, space_id, user_id, publish, validate, dry_run, verbose):
+def import_workflow(json_file, space_id, user_id, validate, verbose):
     """
     Import workflow from JSON file.
 
@@ -53,8 +45,7 @@ def import_workflow(json_file, space_id, user_id, publish, validate, dry_run, ve
     - OpenJiuwen native export
     - n8n workflow JSON
 
-    The workflow will be imported as a draft by default.
-    Use --publish to also create a published version (v1.0.0).
+    The workflow will be imported as a draft only.
     """
     # Set logging level
     if verbose:
@@ -97,20 +88,15 @@ def import_workflow(json_file, space_id, user_id, publish, validate, dry_run, ve
     current_user = {"user_id": user_id}
 
     # Build import options
-    mode = "draft_and_publish" if publish else "draft"
     options = ImportOptions(
-        mode=mode,
-        validate_strict=validate,
-        dry_run=dry_run
+        validate_strict=validate
     )
 
     # Show import settings
     click.echo("Import settings:")
     click.echo(f"  Space ID: {space_id}")
     click.echo(f"  User ID: {user_id}")
-    click.echo(f"  Mode: {mode}")
     click.echo(f"  Strict validation: {validate}")
-    click.echo(f"  Dry run: {dry_run}")
     click.echo()
 
     # Perform import
@@ -146,9 +132,6 @@ def import_workflow(json_file, space_id, user_id, publish, validate, dry_run, ve
                 click.echo(f"\n⚠ Warnings ({len(result.warnings)}):")
                 for warning in result.warnings:
                     click.echo(f"  • {warning}")
-
-            if dry_run:
-                click.echo("\n(Dry run - no changes were made)")
 
             sys.exit(0)
 

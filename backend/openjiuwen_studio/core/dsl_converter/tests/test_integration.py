@@ -67,13 +67,13 @@ class TestWorkflowImportIntegration:
         )
         assert validation_result.is_valid is True
 
-        # 4. Import (dry-run)
+        # 4. Import
         importer = WorkflowImporter()
         import_result = await importer.import_workflow(
             json_data=openjiuwen_fixture,
             space_id="test-space",
             current_user={"user_id": "test-user"},
-            options=ImportOptions(mode="draft", dry_run=True)
+            options=ImportOptions()
         )
         assert import_result.success is True
 
@@ -106,13 +106,13 @@ class TestWorkflowImportIntegration:
         )
         assert validation_result.is_valid is True
 
-        # 4. Import (dry-run)
+        # 4. Import
         importer = WorkflowImporter()
         import_result = await importer.import_workflow(
             json_data=n8n_fixture,
             space_id="test-space",
             current_user={"user_id": "test-user"},
-            options=ImportOptions(mode="draft", dry_run=True)
+            options=ImportOptions()
         )
         assert import_result.success is True
         assert len(import_result.warnings) >= 0  # May have warnings
@@ -130,38 +130,14 @@ class TestWorkflowImportIntegration:
                 json_data=openjiuwen_fixture,
                 space_id="test-space",
                 current_user={"user_id": "test-user"},
-                options=ImportOptions(mode="draft", dry_run=False)
+                options=ImportOptions()
             )
 
             assert result.success is True
             assert result.metadata["saved_to_db"] is True
             mock_repo.workflow_create.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_import_and_publish_workflow(self, openjiuwen_fixture):
-        """Test import with automatic publishing"""
-        with patch('openjiuwen_studio.repositories.workflow_repository') as mock_repo, \
-             patch('openjiuwen_studio.core.manager.workflow.mgr') as mock_mgr:
-
-            mock_repo.workflow_create = MagicMock(
-                return_value={"workflow_id": "new-workflow-123"}
-            )
-            mock_mgr.workflow_publish = AsyncMock(
-                return_value={"version": "1.0.0"}
-            )
-
-            importer = WorkflowImporter()
-            result = await importer.import_workflow(
-                json_data=openjiuwen_fixture,
-                space_id="test-space",
-                current_user={"user_id": "test-user"},
-                options=ImportOptions(mode="draft_and_publish", dry_run=False)
-            )
-
-            assert result.success is True
-            assert result.metadata["saved_to_db"] is True
-            assert result.metadata["published"] is True
-            mock_mgr.workflow_publish.assert_called_once()
+    # Test removed - publishing is no longer supported in import
 
     @pytest.mark.asyncio
     async def test_import_with_strict_validation(self, openjiuwen_fixture):
@@ -179,7 +155,7 @@ class TestWorkflowImportIntegration:
                 json_data=openjiuwen_fixture,
                 space_id="test-space",
                 current_user={"user_id": "test-user"},
-                options=ImportOptions(mode="draft", validate_strict=True, dry_run=False)
+                options=ImportOptions(validate_strict=True)
             )
 
             assert result.success is True
@@ -275,7 +251,7 @@ class TestWorkflowImportIntegration:
             json_data=invalid_data,
             space_id="test-space",
             current_user={"user_id": "test-user"},
-            options=ImportOptions(mode="draft", dry_run=True)
+            options=ImportOptions()
         )
 
         assert result.success is False
@@ -298,7 +274,7 @@ class TestWorkflowImportIntegration:
             json_data=n8n_with_warning,
             space_id="test-space",
             current_user={"user_id": "test-user"},
-            options=ImportOptions(mode="draft", dry_run=True)
+            options=ImportOptions()
         )
 
         # Should succeed but have warnings
@@ -312,7 +288,7 @@ class TestWorkflowImportIntegration:
             json_data=openjiuwen_fixture,
             space_id="test-space",
             current_user={"user_id": "test-user"},
-            options=ImportOptions(mode="draft", dry_run=True)
+            options=ImportOptions()
         )
 
         # Check metadata contains expected fields
@@ -333,7 +309,7 @@ class TestWorkflowImportIntegration:
                 json_data=data,
                 space_id=f"test-space-{name}",
                 current_user={"user_id": f"test-user-{name}"},
-                options=ImportOptions(mode="draft", dry_run=True)
+                options=ImportOptions()
             )
 
         # Import both workflows concurrently
@@ -371,22 +347,7 @@ class TestWorkflowImportIntegration:
         )
         assert result.is_valid is False
 
-    @pytest.mark.asyncio
-    async def test_dry_run_does_not_persist(self, openjiuwen_fixture):
-        """Test that dry-run mode does not persist to database"""
-        with patch('openjiuwen_studio.repositories.workflow_repository') as mock_repo:
-            importer = WorkflowImporter()
-            result = await importer.import_workflow(
-                json_data=openjiuwen_fixture,
-                space_id="test-space",
-                current_user={"user_id": "test-user"},
-                options=ImportOptions(mode="draft", dry_run=True)
-            )
-
-            assert result.success is True
-            assert result.metadata["saved_to_db"] is False
-            # Repository should NOT have been called
-            mock_repo.workflow_create.assert_not_called()
+    # Test removed - dry_run is no longer supported
 
     @pytest.mark.asyncio
     async def test_complete_n8n_conversion_preserves_logic(self, n8n_fixture):
@@ -414,7 +375,7 @@ class TestWorkflowImportIntegration:
             json_data=openjiuwen_fixture,
             space_id="test-space",
             current_user={"user_id": "test-user"},
-            options=ImportOptions(mode="draft", dry_run=True)
+            options=ImportOptions()
         )
 
         # Verify all required fields

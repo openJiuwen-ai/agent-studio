@@ -14,7 +14,6 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
   const { t } = useTranslation()
 
   const [file, setFile] = useState<File | null>(null)
-  const [importMode, setImportMode] = useState<'draft' | 'draft_and_publish'>('draft')
   const [validateStrict, setValidateStrict] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -72,7 +71,6 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
       const formData = new FormData()
       formData.append('file', file)
       formData.append('space_id', spaceId)
-      formData.append('import_mode', importMode)
       formData.append('validate_strict', String(validateStrict))
 
       const token = getToken()
@@ -92,7 +90,6 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
         onClose()
         // Reset form
         setFile(null)
-        setImportMode('draft')
         setValidateStrict(false)
       } else {
         setError(result.message || t('workflows.import.errors.importFailed'))
@@ -108,7 +105,6 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
     if (!isLoading) {
       setFile(null)
       setError(null)
-      setImportMode('draft')
       setValidateStrict(false)
       onClose()
     }
@@ -175,33 +171,6 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
                 <p className="text-xs text-gray-500 mt-2">{t('workflows.import.fileFormat')}</p>
               </>
             )}
-          </div>
-        </div>
-
-        {/* Import Mode */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">{t('workflows.import.importMode')}</label>
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              onClick={() => setImportMode('draft')}
-              disabled={isLoading}
-              className={`p-4 border-2 rounded-xl transition-all ${
-                importMode === 'draft' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:border-purple-300'
-              }`}
-            >
-              <div className="font-medium">{t('workflows.import.modes.draft')}</div>
-              <div className="text-sm text-gray-500 mt-1">{t('workflows.import.modes.draftDesc')}</div>
-            </button>
-            <button
-              onClick={() => setImportMode('draft_and_publish')}
-              disabled={isLoading}
-              className={`p-4 border-2 rounded-xl transition-all ${
-                importMode === 'draft_and_publish' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:border-purple-300'
-              }`}
-            >
-              <div className="font-medium">{t('workflows.import.modes.publish')}</div>
-              <div className="text-sm text-gray-500 mt-1">{t('workflows.import.modes.publishDesc')}</div>
-            </button>
           </div>
         </div>
 

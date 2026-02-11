@@ -30,10 +30,8 @@ import openjiuwen_studio.core.manager.workflow as workflow_mgr
 @dataclass
 class ImportOptions:
     """Options for workflow import"""
-    mode: str = "draft"              # "draft" | "draft_and_publish"
     validate_strict: bool = False     # Compile + validate
     auto_fix: bool = True            # Try to fix issues (not implemented yet)
-    dry_run: bool = False            # Preview only, don't save
 
 
 @dataclass
@@ -77,7 +75,7 @@ class WorkflowImporter:
            - Appends " (imported)" to workflow name to distinguish from original
            - Sets proper permissions and space_id
         5. Save canvas schema with regenerated node IDs
-        6. Optionally publish as v1.0.0 (if mode is "draft_and_publish")
+        6. (Publishing removed - always imports as draft only)
 
         Important: The imported workflow will have:
         - A NEW workflow_id (different from the exported workflow)
@@ -90,7 +88,7 @@ class WorkflowImporter:
             json_data: Workflow JSON data
             space_id: Target space ID
             current_user: Current user info
-            options: Import options (mode, validate_strict, dry_run)
+            options: Import options (validate_strict)
 
         Returns:
             ImportResult with import status, new workflow_id, name, warnings, and metadata
@@ -171,21 +169,7 @@ class WorkflowImporter:
                 warnings=all_warnings
             )
 
-        # Step 4: Dry run check
-        if options.dry_run:
-            logger.info("Dry run mode - workflow validated but not saved")
-            return ImportResult(
-                success=True,
-                workflow_id=workflow_data.get("workflow_id"),
-                workflow_name=workflow_data.get("name"),
-                warnings=all_warnings,
-                metadata={
-                    "dry_run": True,
-                    **conversion_result.metadata
-                }
-            )
-
-        # Step 5: Create workflow via manager (gets permissions, tags, etc.)
+        # Step 4: Create workflow via manager (gets permissions, tags, etc.)
         # Add " (imported)" suffix to distinguish from original
         try:
             original_name = workflow_data["name"]
@@ -219,7 +203,7 @@ class WorkflowImporter:
                 warnings=all_warnings
             )
 
-        # Step 6: Save the imported canvas schema (replacing default)
+        # Step 5: Save the imported canvas schema (replacing default)
         try:
             save_req = WorkflowSave(
                 workflow_id=workflow_id,
@@ -249,33 +233,6 @@ class WorkflowImporter:
                 workflow_id=workflow_id
             )
 
-        # Step 7: Optionally publish
-        if options.mode == "draft_and_publish":
-            try:
-                publish_req = WorkflowPublish(
-                    workflow_id=workflow_id,
-                    space_id=space_id,
-                    version="1.0.0",
-                    version_description="Imported workflow",
-                    force=False
-                )
-
-                publish_result = workflow_mgr.workflow_publish(publish_req, current_user)
-
-                # Handle async if needed
-                if asyncio.iscoroutine(publish_result):
-                    publish_result = await publish_result
-
-                if publish_result.code != status.HTTP_200_OK:
-                    all_warnings.append(f"Publish failed: {publish_result.message}")
-                    logger.warning(f"Publish failed: {publish_result.message}")
-                else:
-                    logger.info(f"Workflow published: {workflow_id} v1.0.0")
-
-            except Exception as e:
-                all_warnings.append(f"Publish failed: {e}")
-                logger.warning(f"Publish failed: {e}")
-
         # Success!
         return ImportResult(
             success=True,
@@ -286,6 +243,6 @@ class WorkflowImporter:
                 **conversion_result.metadata,
                 "original_name": original_name,
                 "saved_to_db": True,
-                "published": options.mode == "draft_and_publish" and "publish failed" not in str(all_warnings)
+                "published": False
             }
         )

@@ -41,18 +41,15 @@ Comprehensive test suite for the workflow import system.
 
 5. **test_importer.py** (20 tests)
    - Complete import orchestration
-   - Draft mode import
-   - Draft and publish mode
-   - Dry-run mode
+   - Draft mode import (always draft only)
    - Strict validation
-   - Error handling (database, publish, validation)
+   - Error handling (database, validation)
    - Metadata tracking
 
 6. **test_integration.py** (19 tests)
    - End-to-end import workflows
    - Pipeline integration (detect → convert → validate → import)
    - Database persistence
-   - Publish workflow
    - Concurrent imports
    - Error propagation
    - Warning propagation
@@ -201,9 +198,7 @@ with patch('openjiuwen_studio.core.manager.workflow.flow_mgr') as mock_flow_mgr:
 
 ### Import
 
-✅ Draft mode saves to database
-✅ Draft and publish mode publishes workflow
-✅ Dry-run mode previews without saving
+✅ Draft mode saves to database (always draft only)
 ✅ Strict validation compiles workflow
 ✅ Handles errors gracefully
 ✅ Tracks metadata
@@ -270,7 +265,7 @@ Critical paths to cover:
 - ✅ All format detection paths
 - ✅ All conversion paths (per format)
 - ✅ All validation layers
-- ✅ All import modes
+- ✅ Draft import mode
 - ✅ All error paths
 - ✅ All warning paths
 

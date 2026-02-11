@@ -1126,13 +1126,6 @@
       "dragDrop": "拖拽JSON文件到此处，或点击选择文件",
       "selectFile": "选择文件",
       "fileFormat": "支持格式：.json（OpenJiuwen原生格式或n8n格式）",
-      "importMode": "导入模式",
-      "modes": {
-        "draft": "仅草稿",
-        "draftDesc": "导入为草稿工作流",
-        "publish": "草稿并发布",
-        "publishDesc": "导入后立即发布"
-      },
       "validateStrict": "严格验证",
       "validateStrictDesc": "验证工作流是否可以编译和执行",
       "importButton": "导入工作流",

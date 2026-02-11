@@ -20,7 +20,6 @@ This module provides functionality to import workflows from various sources into
 
 ✅ **Safe Import**
 - Regenerates IDs to avoid collisions
-- Dry-run mode for preview
 - Detailed warnings and error messages
 
 ✅ **Flexible Integration**
@@ -47,8 +46,7 @@ This module provides functionality to import workflows from various sources into
        │
 ┌──────▼───────┐
 │   Importer   │  Orchestrates import process
-│              │  - Save to database
-│              │  - Optional publish
+│              │  - Save to database as draft
 └──────────────┘
 ```
 
@@ -61,22 +59,13 @@ This module provides functionality to import workflows from various sources into
 curl -X POST "http://localhost:8000/workflows/import" \
   -H "Authorization: Bearer {token}" \
   -F "file=@workflow.json" \
-  -F "space_id=abc123" \
-  -F "import_mode=draft"
-
-# Import and publish as v1.0.0
-curl -X POST "http://localhost:8000/workflows/import" \
-  -H "Authorization: Bearer {token}" \
-  -F "file=@workflow.json" \
-  -F "space_id=abc123" \
-  -F "import_mode=draft_and_publish"
+  -F "space_id=abc123"
 
 # With strict validation (compile workflow)
 curl -X POST "http://localhost:8000/workflows/import" \
   -H "Authorization: Bearer {token}" \
   -F "file=@workflow.json" \
   -F "space_id=abc123" \
-  -F "import_mode=draft" \
   -F "validate_strict=true"
 ```
 
@@ -87,18 +76,6 @@ curl -X POST "http://localhost:8000/workflows/import" \
 python -m cli.workflow_import workflow.json \
   --space-id abc123 \
   --user-id user456
-
-# Import and publish
-python -m cli.workflow_import workflow.json \
-  --space-id abc123 \
-  --user-id user456 \
-  --publish
-
-# Dry run (preview without saving)
-python -m cli.workflow_import workflow.json \
-  --space-id abc123 \
-  --user-id user456 \
-  --dry-run
 
 # With strict validation
 python -m cli.workflow_import workflow.json \
@@ -133,9 +110,7 @@ async def import_workflow():
 
    # Configure options
    options = ImportOptions(
-      mode="draft",  # or "draft_and_publish"
-      validate_strict=False,  # Set True for compilation validation
-      dry_run=False  # Set True for preview
+      validate_strict=False  # Set True for compilation validation
    )
 
    # Import
@@ -254,24 +229,11 @@ Import performs multi-layer validation:
 ```python
 @dataclass
 class ImportOptions:
-    mode: str = "draft"              # "draft" | "draft_and_publish"
     validate_strict: bool = False     # Compile + validate
     auto_fix: bool = True            # Try to fix issues (future)
-    dry_run: bool = False            # Preview only
 ```
 
-### Mode Options
-
-**draft** (default)
-- Imports workflow as draft
-- Saved to `workflow` table
-- Can be edited in UI
-
-**draft_and_publish**
-- Imports as draft
-- Automatically publishes as v1.0.0
-- Saved to both `workflow` and `workflow_publish` tables
-- Immutable published version
+All workflows are imported as drafts only and saved to the database. If you want to publish an imported workflow, you can do so manually after import through the UI or API.
 
 ## Import Result
 
@@ -410,17 +372,12 @@ The import system handles errors at multiple levels:
 
 ### For OpenJiuwen Native Imports
 
-1. **Always use dry-run first**
-   ```bash
-   python -m cli.workflow_import workflow.json ... --dry-run
-   ```
-
-2. **Check warnings carefully**
+1. **Check warnings carefully**
    - Missing resource references
    - Model configurations
    - Sub-workflow dependencies
 
-3. **Import dependencies first**
+2. **Import dependencies first**
    - Import sub-workflows before parent workflows
    - Ensure referenced models exist
 
