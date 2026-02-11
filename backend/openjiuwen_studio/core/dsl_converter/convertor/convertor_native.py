@@ -167,10 +167,10 @@ class NativeWorkflowConvertor(WorkflowConvertor):
         json_data.pop("latest_publish_time", None)
 
         # Step 6: Check for missing resources (non-blocking)
-        missing_resources = self._check_missing_resources(json_data)
-        if missing_resources:
-            for resource in missing_resources:
-                warnings.append(f"Referenced resource may not exist: {resource}")
+        # missing_resources = self._check_missing_resources(json_data)
+        # if missing_resources:
+        #     for resource in missing_resources:
+        #         warnings.append(f"Referenced resource may not exist: {resource}")
 
         return WorkflowImportResult(
             workflow_data=json_data,
