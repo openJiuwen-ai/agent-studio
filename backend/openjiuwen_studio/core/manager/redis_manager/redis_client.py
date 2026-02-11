@@ -1,15 +1,17 @@
 import redis
 from openjiuwen_studio.core.config import settings
+from openjiuwen_studio.core.manager.model_manager.utils.security_utils import SecurityUtils
 
 
 class RedisManager:
     """通用 Redis 管理器"""
     def __init__(self):
+        rds_password = SecurityUtils.get_decrypted_secret("REDIS_PASSWORD", settings.redis_password)
         self.client = redis.Redis(
             host=settings.redis_host,
             port=settings.redis_port,
             db=settings.redis_db,
-            password=settings.redis_password,
+            password=rds_password,
             decode_responses=True
         )
 
