@@ -13,6 +13,14 @@ COPY backend .
 RUN pip install uv -i ${INDEX_URL}
 RUN sed -i "s#url = \"[^\"]*\"#url = \"${INDEX_URL}\"#g" pyproject.toml
 
+# 替换为阿里云 Ubuntu 源（含 security）
+RUN sed -i 's|http://\(archive\|security\).ubuntu.com|http://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list
+
+# 安装 git（uv 可能需要）
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN uv sync --group dev
 RUN uv build --out-dir /app/dist
 
@@ -38,6 +46,15 @@ RUN mkdir -p /app/dist /app/logs/run /app/logs/performance /app/logs/interface
 RUN chown -R app:app /app
 
 USER app
+
+# 替换为阿里云 Ubuntu 源（含 security）
+RUN sed -i 's|http://\(archive\|security\).ubuntu.com|http://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list
+
+# 安装 git（uv 可能需要）
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy Python packages from builder stage
 COPY --from=builder /app/dist/${WHL_NAME} /app/dist
 RUN pip3 install /app/dist/${WHL_NAME} --trusted-host ${TRUSTED_HOST} --index-url ${INDEX_URL} --target=/app/site-packages --retries=5 --timeout=120
