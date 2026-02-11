@@ -95,7 +95,20 @@ class OBSDocumentManager:
         if not self.bucket:
             logger.warning("[OBS] OBS_BUCKET not set, skipping upload_document")
 
-        self.obs_client = AioBotoClient()
+        server = os.getenv("OBS_SERVER")
+        access_key_id = SecurityUtils.get_decrypted_secret(
+            "OBS_ACCESS_KEY_ID",
+            os.getenv("OBS_SECRET_KEY", None)
+        )
+        secret_access_key = SecurityUtils.get_decrypted_secret(
+            "OBS_SECRET_ACCESS_KEY",
+            os.getenv("OBS_SECRET_ACCESS_KEY", None)
+        )
+        self.obs_client = AioBotoClient(
+            server=server,
+            access_key_id=access_key_id,
+            secret_access_key=secret_access_key,
+        )
 
     @staticmethod
     def obs_name(space_id: str, kb_id: str, file_name: str) -> str:
