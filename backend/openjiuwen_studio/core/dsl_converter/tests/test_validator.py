@@ -8,57 +8,54 @@ Tests for WorkflowValidator
 Tests validation logic for imported workflows.
 """
 
+import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
-import pytest
 
-from openjiuwen_studio.core.dsl_converter.converter.validator import WorkflowValidator, ValidationResult
-
-
-@pytest.fixture
-def validator():
-    """Create validator instance"""
-    return WorkflowValidator()
-
-
-@pytest.fixture
-def valid_workflow_data():
-    """Create valid workflow data"""
-    return {
-        "workflow_id": "test-123",
-        "name": "Test Workflow",
-        "desc": "Test Description",
-        "space_id": "space-123",
-        "schema": json.dumps({
-            "nodes": [
-                {
-                    "id": "start_1",
-                    "type": "1",
-                    "data": {"title": "Start"},
-                    "meta": {"position": {"x": 100, "y": 100}}
-                },
-                {
-                    "id": "end_1",
-                    "type": "2",
-                    "data": {"title": "End"},
-                    "meta": {"position": {"x": 300, "y": 100}}
-                }
-            ],
-            "edges": [
-                {"id": "edge1", "sourceNodeID": "start_1", "targetNodeID": "end_1"}
-            ]
-        }),
-        "input_parameters": [],
-        "output_parameters": []
-    }
+from openjiuwen_studio.core.dsl_converter.convertor.validator import WorkflowValidator, ValidationResult
 
 
 class TestWorkflowValidator:
     """Test suite for WorkflowValidator"""
 
+    @pytest.fixture
+    def validator(self):
+        """Create validator instance"""
+        return WorkflowValidator()
+
+    @pytest.fixture
+    def valid_workflow_data(self):
+        """Create valid workflow data"""
+        return {
+            "workflow_id": "test-123",
+            "name": "Test Workflow",
+            "desc": "Test Description",
+            "space_id": "space-123",
+            "schema": json.dumps({
+                "nodes": [
+                    {
+                        "id": "start_1",
+                        "type": "1",
+                        "data": {"title": "Start"},
+                        "meta": {"position": {"x": 100, "y": 100}}
+                    },
+                    {
+                        "id": "end_1",
+                        "type": "2",
+                        "data": {"title": "End"},
+                        "meta": {"position": {"x": 300, "y": 100}}
+                    }
+                ],
+                "edges": [
+                    {"id": "edge1", "source": "start_1", "target": "end_1"}
+                ]
+            }),
+            "input_parameters": [],
+            "output_parameters": []
+        }
+
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_valid_workflow(validator, valid_workflow_data):
+    async def test_validate_valid_workflow(self, validator, valid_workflow_data):
         """Test validation of valid workflow"""
         result = await validator.validate(
             workflow_data=valid_workflow_data,
@@ -71,8 +68,7 @@ class TestWorkflowValidator:
         assert len(result.errors) == 0
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_missing_workflow_id(validator, valid_workflow_data):
+    async def test_validate_missing_workflow_id(self, validator, valid_workflow_data):
         """Test validation fails when workflow_id missing"""
         del valid_workflow_data["workflow_id"]
 
@@ -87,8 +83,7 @@ class TestWorkflowValidator:
         assert any("workflow_id" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_missing_schema(validator, valid_workflow_data):
+    async def test_validate_missing_schema(self, validator, valid_workflow_data):
         """Test validation fails when schema missing"""
         del valid_workflow_data["schema"]
 
@@ -103,8 +98,7 @@ class TestWorkflowValidator:
         assert any("schema" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_invalid_schema_json(validator, valid_workflow_data):
+    async def test_validate_invalid_schema_json(self, validator, valid_workflow_data):
         """Test validation fails with invalid schema JSON"""
         valid_workflow_data["schema"] = "invalid json {["
 
@@ -119,8 +113,7 @@ class TestWorkflowValidator:
         assert len(result.errors) > 0
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_missing_start_node(validator, valid_workflow_data):
+    async def test_validate_missing_start_node(self, validator, valid_workflow_data):
         """Test validation fails when START node missing"""
         schema = json.loads(valid_workflow_data["schema"])
         # Remove START node (type 1)
@@ -138,8 +131,7 @@ class TestWorkflowValidator:
         assert any("start" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_missing_end_node(validator, valid_workflow_data):
+    async def test_validate_missing_end_node(self, validator, valid_workflow_data):
         """Test validation fails when END node missing"""
         schema = json.loads(valid_workflow_data["schema"])
         # Remove END node (type 2)
@@ -157,8 +149,7 @@ class TestWorkflowValidator:
         assert any("end" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_disconnected_node(validator, valid_workflow_data):
+    async def test_validate_disconnected_node(self, validator, valid_workflow_data):
         """Test validation detects disconnected nodes"""
         schema = json.loads(valid_workflow_data["schema"])
         # Add disconnected CODE node
@@ -183,12 +174,11 @@ class TestWorkflowValidator:
                   for w in result.warnings)
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_edge_missing_source(validator, valid_workflow_data):
+    async def test_validate_edge_missing_source(self, validator, valid_workflow_data):
         """Test validation fails when edge references missing source"""
         schema = json.loads(valid_workflow_data["schema"])
         schema["edges"] = [
-            {"id": "edge1", "sourceNodeID": "nonexistent", "targetNodeID": "end_1"}
+            {"id": "edge1", "source": "nonexistent", "target": "end_1"}
         ]
         valid_workflow_data["schema"] = json.dumps(schema)
 
@@ -203,12 +193,11 @@ class TestWorkflowValidator:
         assert any("edge" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_edge_missing_target(validator, valid_workflow_data):
+    async def test_validate_edge_missing_target(self, validator, valid_workflow_data):
         """Test validation fails when edge references missing target"""
         schema = json.loads(valid_workflow_data["schema"])
         schema["edges"] = [
-            {"id": "edge1", "sourceNodeID": "start_1", "targetNodeID": "nonexistent"}
+            {"id": "edge1", "source": "start_1", "target": "nonexistent"}
         ]
         valid_workflow_data["schema"] = json.dumps(schema)
 
@@ -223,8 +212,7 @@ class TestWorkflowValidator:
         assert any("edge" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_with_warnings(validator, valid_workflow_data):
+    async def test_validate_with_warnings(self, validator, valid_workflow_data):
         """Test validation succeeds but returns warnings"""
         schema = json.loads(valid_workflow_data["schema"])
         # Add LLM node without model config (warning but not error)
@@ -239,8 +227,8 @@ class TestWorkflowValidator:
             "meta": {"position": {"x": 200, "y": 100}}
         })
         schema["edges"] = [
-            {"id": "edge1", "sourceNodeID": "start_1", "targetNodeID": "llm_1"},
-            {"id": "edge2", "sourceNodeID": "llm_1", "targetNodeID": "end_1"}
+            {"id": "edge1", "source": "start_1", "target": "llm_1"},
+            {"id": "edge2", "source": "llm_1", "target": "end_1"}
         ]
         valid_workflow_data["schema"] = json.dumps(schema)
 
@@ -256,8 +244,7 @@ class TestWorkflowValidator:
         # Warnings might exist about missing model config
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_schema_as_dict(validator, valid_workflow_data):
+    async def test_validate_schema_as_dict(self, validator, valid_workflow_data):
         """Test validation when schema is dict (not string)"""
         valid_workflow_data["schema"] = json.loads(valid_workflow_data["schema"])
 
@@ -272,12 +259,10 @@ class TestWorkflowValidator:
         assert len(result.errors) == 0
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_complex_workflow(validator):
+    async def test_validate_complex_workflow(self, validator):
         """Test validation of complex workflow with multiple nodes"""
         workflow_data = {
             "workflow_id": "test-123",
-            "space_id": "space-123",
             "name": "Complex Workflow",
             "schema": json.dumps({
                 "nodes": [
@@ -293,10 +278,10 @@ class TestWorkflowValidator:
                      "meta": {"position": {"x": 800, "y": 0}}}
                 ],
                 "edges": [
-                    {"id": "e1", "sourceNodeID": "start", "targetNodeID": "llm1"},
-                    {"id": "e2", "sourceNodeID": "llm1", "targetNodeID": "if1"},
-                    {"id": "e3", "sourceNodeID": "if1", "targetNodeID": "code1"},
-                    {"id": "e4", "sourceNodeID": "code1", "targetNodeID": "end"}
+                    {"id": "e1", "source": "start", "target": "llm1"},
+                    {"id": "e2", "source": "llm1", "target": "if1"},
+                    {"id": "e3", "source": "if1", "target": "code1"},
+                    {"id": "e4", "source": "code1", "target": "end"}
                 ]
             }),
             "input_parameters": [],
@@ -313,45 +298,42 @@ class TestWorkflowValidator:
         assert result.is_valid is True
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_strict_mode(validator, valid_workflow_data):
+    @patch('openjiuwen_studio.core.manager.workflow.flow_mgr')
+    async def test_validate_strict_mode(self, mock_flow_mgr, validator, valid_workflow_data):
         """Test strict validation mode (compilation)"""
-        # Mock workflow_convert to succeed
-        with patch('openjiuwen_studio.core.manager.convertor.workflow.workflow_convert') as mock_convert:
-            mock_convert.return_value = MagicMock()  # Return any object
+        # Mock flow_mgr.validate to succeed
+        mock_flow_mgr.validate = AsyncMock(return_value=None)
 
-            result = await validator.validate(
-                workflow_data=valid_workflow_data,
-                space_id="space-123",
-                current_user={"user_id": "user123"},
-                strict=True
-            )
+        result = await validator.validate(
+            workflow_data=valid_workflow_data,
+            space_id="space-123",
+            current_user={"user_id": "user123"},
+            strict=True
+        )
 
-            # Should call workflow_convert
-            mock_convert.assert_called_once()
-            assert result.is_valid is True
+        # Should call flow_mgr.validate
+        mock_flow_mgr.validate.assert_called_once()
+        assert result.is_valid is True
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_strict_mode_compilation_fails(validator, valid_workflow_data):
+    @patch('openjiuwen_studio.core.manager.workflow.flow_mgr')
+    async def test_validate_strict_mode_compilation_fails(self, mock_flow_mgr, validator, valid_workflow_data):
         """Test strict validation fails when compilation fails"""
-        # Mock workflow_convert to raise error
-        with patch('openjiuwen_studio.core.manager.convertor.workflow.workflow_convert') as mock_convert:
-            mock_convert.side_effect = Exception("Compilation failed")
+        # Mock flow_mgr.validate to raise error
+        mock_flow_mgr.validate = AsyncMock(side_effect=Exception("Compilation failed"))
 
-            result = await validator.validate(
-                workflow_data=valid_workflow_data,
-                space_id="space-123",
-                current_user={"user_id": "user123"},
-                strict=True
-            )
+        result = await validator.validate(
+            workflow_data=valid_workflow_data,
+            space_id="space-123",
+            current_user={"user_id": "user123"},
+            strict=True
+        )
 
-            assert result.is_valid is False
-            assert any("compilation" in err.lower() for err in result.errors)
+        assert result.is_valid is False
+        assert any("compilation" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_empty_nodes(validator, valid_workflow_data):
+    async def test_validate_empty_nodes(self, validator, valid_workflow_data):
         """Test validation fails with empty nodes array"""
         schema = json.loads(valid_workflow_data["schema"])
         schema["nodes"] = []
@@ -368,8 +350,7 @@ class TestWorkflowValidator:
         assert len(result.errors) > 0
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validate_missing_name(validator, valid_workflow_data):
+    async def test_validate_missing_name(self, validator, valid_workflow_data):
         """Test validation fails when name missing"""
         del valid_workflow_data["name"]
 
@@ -384,8 +365,7 @@ class TestWorkflowValidator:
         assert any("name" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    @staticmethod
-    async def test_validation_result_structure(validator, valid_workflow_data):
+    async def test_validation_result_structure(self, validator, valid_workflow_data):
         """Test ValidationResult structure"""
         result = await validator.validate(
             workflow_data=valid_workflow_data,

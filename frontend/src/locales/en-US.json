@@ -1147,6 +1147,13 @@
       "dragDrop": "Drag and drop your JSON file here, or click to select",
       "selectFile": "Select File",
       "fileFormat": "Supported formats: .json (OpenJiuwen native or n8n)",
+      "importMode": "Import Mode",
+      "modes": {
+        "draft": "Draft Only",
+        "draftDesc": "Import as draft workflow",
+        "publish": "Draft & Publish",
+        "publishDesc": "Import and publish immediately"
+      },
       "validateStrict": "Strict Validation",
       "validateStrictDesc": "Validate workflow can be compiled and executed",
       "importButton": "Import Workflow",
