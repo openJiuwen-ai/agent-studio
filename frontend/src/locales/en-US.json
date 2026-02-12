@@ -4703,5 +4703,19 @@
         }	 
       }
     }
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "close": "Close",
+    "link": "Privacy Policy",
+    "notice": {
+      "title": "Important Notice",
+      "content": "This platform is for trial use only. Please do not upload real personal data. The platform periodically clears data. Please use the export function to back up important data in time. Users bear the responsibility for any loss caused by uploading private data or failing to export in time.",
+      "acknowledge": "I Understand"
+    },
+    "policy": {
+      "paragraph1": "This platform is <bold>for trial and demonstration purposes only</bold>. Please do not upload, enter, or submit real personal information (including but not limited to name, ID number, phone number, bank card information, address, social media accounts, sensitive business data, etc.).",
+      "paragraph2": "The platform will <bold>periodically clean up</bold> usage data. Please <bold>make good use of the export function to back up and properly save important data</bold> during use, to avoid data loss or inability to recover due to feature testing, data cleanup, or service adjustments."
+    }
   }
 }
