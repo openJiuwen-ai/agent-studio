@@ -174,8 +174,8 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
           </div>
         </div>
 
-        {/* Validate Strict Toggle */}
-        <div className="mb-6">
+        {/* Validate Strict Toggle - HIDDEN */}
+        <div className="mb-6 hidden">
           <label className="flex items-center justify-between p-4 border-2 border-gray-200 rounded-xl hover:border-purple-300 transition-colors cursor-pointer">
             <div>
               <div className="font-medium text-gray-900">{t('workflows.import.validateStrict')}</div>
