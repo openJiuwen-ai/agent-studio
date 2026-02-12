@@ -126,8 +126,15 @@ class OBSDocumentManager:
     async def download_document(
         self,
         object_name: str,
-        file_path: str,
+        file_path: str | Path,
     ):
+        file_path = Path(file_path)
+
+        # Create file path directory if it does not exist
+        file_dir = file_path.parent
+        if not os.path.isdir(file_dir):
+            file_dir.mkdir(parents=True, exist_ok=True)
+
         await self.obs_client.download_file(self.bucket, object_name, file_path)
 
     async def upload_document(
@@ -1720,10 +1727,11 @@ async def process_single_document(
                 obs_manager = OBSDocumentManager()
                 await obs_manager.download_document(object_name=obs_name, file_path=file_path)
 
+
         except Exception as parse_error:
             # 提取 openjiuwen 包的完整错误信息（可能包含异常链）
             full_error_msg = _extract_full_error_message(parse_error)
-            error_message = f"OBS donwload failed: {full_error_msg}"
+            error_message = f"OBS download failed: {full_error_msg}"
             logger.error(
                 f"[DOC_PROCESS_BG] OBS file download failed - {file_name=}, {obs_name=}, Error: {error_message}",
                 exc_info=True,
