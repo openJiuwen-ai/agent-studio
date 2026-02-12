@@ -16,6 +16,7 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
   const [file, setFile] = useState<File | null>(null)
   const [validateStrict, setValidateStrict] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
 
@@ -86,11 +87,18 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
       const result = await response.json()
 
       if (result.code === 200) {
-        onSuccess()
-        onClose()
-        // Reset form
-        setFile(null)
-        setValidateStrict(false)
+        // Show success state
+        setIsSuccess(true)
+
+        // Wait 1.5 seconds to show success message, then close
+        setTimeout(() => {
+          onSuccess()
+          onClose()
+          // Reset form
+          setFile(null)
+          setValidateStrict(false)
+          setIsSuccess(false)
+        }, 1500)
       } else {
         setError(result.message || t('workflows.import.errors.importFailed'))
       }
@@ -102,7 +110,7 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
   }
 
   const handleClose = () => {
-    if (!isLoading) {
+    if (!isLoading && !isSuccess) {
       setFile(null)
       setError(null)
       setValidateStrict(false)
@@ -191,6 +199,14 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
           </label>
         </div>
 
+        {/* Success Message */}
+        {isSuccess && (
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-start gap-3">
+            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-green-700">{t('workflows.import.success')}</div>
+          </div>
+        )}
+
         {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
@@ -203,17 +219,26 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
         <div className="flex gap-4">
           <button
             onClick={handleClose}
-            disabled={isLoading}
+            disabled={isLoading || isSuccess}
             className="flex-1 px-6 py-3 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {t('common.cancel')}
           </button>
           <button
             onClick={handleImport}
-            disabled={isLoading || !file}
-            className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            disabled={isLoading || !file || isSuccess}
+            className={`flex-1 px-6 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+              isSuccess
+                ? 'bg-green-600 text-white'
+                : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700'
+            }`}
           >
-            {isLoading ? (
+            {isSuccess ? (
+              <>
+                <CheckCircle className="w-5 h-5" />
+                {t('workflows.import.success')}
+              </>
+            ) : isLoading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
                 {t('workflows.import.importing')}
