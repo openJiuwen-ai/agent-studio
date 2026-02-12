@@ -1,7 +1,7 @@
 import random
 import string
 
-from openjiuwen_studio.core.manager.redis_manager.redis_client import redis_manager
+from openjiuwen_studio.core.manager.redis_manager.redis_client import redis_manager_str as redis_manager
 
 
 class SecurityManager:

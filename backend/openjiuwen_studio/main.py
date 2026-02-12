@@ -41,6 +41,11 @@ from openjiuwen_studio.models.trace_detail import TraceDetailDB
 from openjiuwen_studio.models.trace_summary import TraceSummaryDB
 from openjiuwen_studio.models.tag import workflow_tag_association
 
+from openjiuwen_studio.core.manager.redis_manager.redis_client import redis_manager_bytes
+from openjiuwen.core.runner import Runner
+from openjiuwen.core.runner.runner_config import get_runner_config
+from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerConfig
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
@@ -117,6 +122,19 @@ async def lifespan_func(app: FastAPI):
     # ops数据库相关表自动创建
     create_database_tables()
     logger.info("✅ Database tables created")
+
+    runner_config = get_runner_config()
+    runner_config.checkpointer_config = CheckpointerConfig(
+        type="redis",
+        conf={
+            "connection": {
+                "redis_client": redis_manager_bytes.client
+            }
+        }
+    )
+    Runner.set_config(runner_config)
+
+    await Runner.start()
 
     yield
 
