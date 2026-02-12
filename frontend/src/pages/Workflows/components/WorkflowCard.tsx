@@ -126,7 +126,7 @@ export const WorkflowCard: React.FC<WorkflowCardProps> = ({
       editingState={editingState}
       actions={actions}
       isUpdating={isUpdating}
-      className={isNewlyImported ? 'bg-green-50/50' : ''}
+      className={isNewlyImported ? 'bg-green-100' : ''}
       onClick={() => {
         // Clear the newly imported flag when user clicks the card
         if (isNewlyImported) {
