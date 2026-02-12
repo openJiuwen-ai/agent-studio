@@ -1145,6 +1145,18 @@ const UserLoginPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* 隐私政策链接 */}
+      <div className="w-full max-w-4xl mx-auto mt-6 px-4 text-center">
+        <a
+          href="/privacy-policy"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-blue-500 hover:text-blue-700 hover:underline transition-colors"
+        >
+          {t('privacy.link', '隐私声明')}
+        </a>
+      </div>
     </div>
   )
 }
