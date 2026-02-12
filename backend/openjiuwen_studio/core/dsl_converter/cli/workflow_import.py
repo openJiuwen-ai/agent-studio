@@ -85,7 +85,7 @@ def import_workflow(json_file, space_id, user_id, validate, verbose):
     click.echo()
 
     # Build current_user context
-    current_user = {"user_id": user_id}
+    current_user = {"code": 200, "data": {"user_id_str": user_id}}
 
     # Build import options
     options = ImportOptions(
