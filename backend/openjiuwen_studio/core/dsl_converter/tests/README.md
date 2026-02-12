@@ -58,47 +58,73 @@ Comprehensive test suite for the workflow import system.
 
 ## Running Tests
 
-### Run All Tests
+### Quick Start (Recommended)
+
+**Using the test runner script (cross-platform):**
+
+```bash
+# From tests directory
+cd backend/openjiuwen_studio/core/dsl_converter/tests
+python run_tests.py all          # Run all 136 tests
+python run_tests.py importer     # Run just importer tests
+python run_tests.py integration  # Run integration tests
+python run_tests.py coverage     # Run with coverage report
+python run_tests.py quick        # Run quick smoke tests
+```
+
+**Or on Linux/Mac using the shell script:**
+
+```bash
+# From tests directory
+cd backend/openjiuwen_studio/core/dsl_converter/tests
+./run_import_tests.sh all
+./run_import_tests.sh importer
+./run_import_tests.sh integration
+```
+
+See `TEST_RUNNER_GUIDE.md` in this directory for more options and examples.
+
+### Run All Tests (Direct pytest)
 
 ```bash
 # From backend directory
-pytest tests/importer/ -v
+pytest openjiuwen_studio/core/dsl_converter/tests/ -v
 ```
 
 ### Run Specific Test File
 
 ```bash
-pytest tests/importer/test_detector.py -v
-pytest tests/importer/test_convertor_native.py -v
-pytest tests/importer/test_convertor_n8n.py -v
-pytest tests/importer/test_validator.py -v
-pytest tests/importer/test_importer.py -v
-pytest tests/importer/test_integration.py -v
+pytest openjiuwen_studio/core/dsl_converter/tests/test_detector.py -v
+pytest openjiuwen_studio/core/dsl_converter/tests/test_convertor_native.py -v
+pytest openjiuwen_studio/core/dsl_converter/tests/test_convertor_n8n.py -v
+pytest openjiuwen_studio/core/dsl_converter/tests/test_validator.py -v
+pytest openjiuwen_studio/core/dsl_converter/tests/test_importer.py -v
+pytest openjiuwen_studio/core/dsl_converter/tests/test_integration.py -v
 ```
 
 ### Run with Coverage
 
 ```bash
-pytest tests/importer/ --cov=openjiuwen_studio.core.dsl_converter.convertor --cov-report=html
+pytest openjiuwen_studio/core/dsl_converter/tests/ --cov=openjiuwen_studio.core.dsl_converter.convertor --cov-report=html
 ```
 
 ### Run Specific Test
 
 ```bash
-pytest tests/importer/test_detector.py::TestWorkflowDetector::test_detect_openjiuwen_format_from_fixture -v
+pytest openjiuwen_studio/core/dsl_converter/tests/test_detector.py::TestWorkflowDetector::test_detect_openjiuwen_format_from_fixture -v
 ```
 
 ### Run Tests Matching Pattern
 
 ```bash
 # Run all n8n-related tests
-pytest tests/importer/ -k "n8n" -v
+pytest openjiuwen_studio/core/dsl_converter/tests/ -k "n8n" -v
 
 # Run all validation tests
-pytest tests/importer/ -k "validate" -v
+pytest openjiuwen_studio/core/dsl_converter/tests/ -k "validate" -v
 
 # Run all integration tests
-pytest tests/importer/test_integration.py -v
+pytest openjiuwen_studio/core/dsl_converter/tests/test_integration.py -v
 ```
 
 ## Test Fixtures
@@ -281,7 +307,8 @@ Example GitHub Actions:
 ```yaml
 - name: Run Import Tests
   run: |
-    pytest tests/importer/ --cov=openjiuwen_studio.core.dsl_converter.convertor
+    cd backend
+    pytest openjiuwen_studio/core/dsl_converter/tests/ --cov=openjiuwen_studio.core.dsl_converter.convertor
 ```
 
 ## Debugging Tests
@@ -289,25 +316,25 @@ Example GitHub Actions:
 ### Verbose Output
 
 ```bash
-pytest tests/importer/ -v -s
+pytest openjiuwen_studio/core/dsl_converter/tests/ -v -s
 ```
 
 ### Failed Tests Only
 
 ```bash
-pytest tests/importer/ --lf
+pytest openjiuwen_studio/core/dsl_converter/tests/ --lf
 ```
 
 ### Stop on First Failure
 
 ```bash
-pytest tests/importer/ -x
+pytest openjiuwen_studio/core/dsl_converter/tests/ -x
 ```
 
 ### Show Print Statements
 
 ```bash
-pytest tests/importer/ -s
+pytest openjiuwen_studio/core/dsl_converter/tests/ -s
 ```
 
 ## Test Maintenance
