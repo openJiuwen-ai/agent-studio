@@ -4,6 +4,14 @@ FROM ${BASE_IMAGE}
 WORKDIR /root
 COPY backend /root/backend
 
+# 替换为阿里云 Ubuntu 源（含 security）
+RUN sed -i 's|http://\(archive\|security\).ubuntu.com|http://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list
+
+# 安装 git（uv 可能需要）
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN source /usr/local/miniconda3/etc/profile.d/conda.sh \
     && conda activate py3114 \
     && pip install uv \

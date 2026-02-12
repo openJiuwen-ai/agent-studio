@@ -1,28 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+import asyncio
+import inspect
+import json
 import os
 import re
-import uuid
 import time
-import inspect
-import asyncio
-from datetime import datetime
-from pathlib import Path
-from typing import List, Dict, Any, Union, Tuple
+import uuid
 from dataclasses import asdict
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, Any, Union, Tuple
+from typing import List
+
 from fastapi import status, UploadFile
 from openjiuwen.core.common.logging import logger
-
-from openjiuwen.core.retrieval.indexing.processor.parser.auto_file_parser import AutoFileParser
-from openjiuwen.core.retrieval.indexing.processor.chunker.chunking import TextChunker
-from openjiuwen.core.retrieval.indexing.processor.extractor.triple_extractor import TripleExtractor
-from openjiuwen.core.retrieval.indexing.indexer.milvus_indexer import MilvusIndexer
-from openjiuwen.core.retrieval.vector_store.milvus_store import MilvusVectorStore
-from openjiuwen.core.retrieval.indexing.indexer.chroma_indexer import ChromaIndexer
-from openjiuwen.core.retrieval.vector_store.chroma_store import ChromaVectorStore
-from openjiuwen.core.retrieval.simple_knowledge_base import SimpleKnowledgeBase
-from openjiuwen.core.retrieval.graph_knowledge_base import GraphKnowledgeBase
 from openjiuwen.core.retrieval.common.config import (
     KnowledgeBaseConfig,
     EmbeddingConfig,
@@ -30,15 +23,35 @@ from openjiuwen.core.retrieval.common.config import (
 )
 from openjiuwen.core.retrieval.common.document import Document
 from openjiuwen.core.retrieval.embedding.openai_embedding import OpenAIEmbedding
+from openjiuwen.core.retrieval.graph_knowledge_base import GraphKnowledgeBase
+from openjiuwen.core.retrieval.indexing.indexer.chroma_indexer import ChromaIndexer
+from openjiuwen.core.retrieval.indexing.indexer.milvus_indexer import MilvusIndexer
+from openjiuwen.core.retrieval.indexing.processor.chunker.chunking import TextChunker
+from openjiuwen.core.retrieval.indexing.processor.extractor.triple_extractor import TripleExtractor
+from openjiuwen.core.retrieval.indexing.processor.parser.auto_file_parser import AutoFileParser
+from openjiuwen.core.retrieval.simple_knowledge_base import SimpleKnowledgeBase
+from openjiuwen.core.retrieval.vector_store.chroma_store import ChromaVectorStore
+from openjiuwen.core.retrieval.vector_store.milvus_store import MilvusVectorStore
+from openjiuwen.core.foundation.store.object.aioboto_storage_client import AioBotoClient
 
+from openjiuwen_studio.core.database import SessionLocal
+from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.login_manager.space import check_user_space
+from openjiuwen_studio.core.manager.model_manager.managers import ModelConfigManager
+from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
+from openjiuwen_studio.core.manager.repositories import EmbeddingModelConfigRepository
+from openjiuwen_studio.core.manager.repositories.agent_repository import agent_repository
+from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
+from openjiuwen_studio.core.manager.repositories.knowledge_base_repository import (
+    KBDetails,
+    KBDocument,
+)
 from openjiuwen_studio.core.manager.repositories.knowledge_base_repository import (
     knowledge_base_repository,
 )
-from openjiuwen_studio.core.manager.repositories.agent_repository import agent_repository
-from openjiuwen_studio.core.manager.repositories import EmbeddingModelConfigRepository
-from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
-from openjiuwen_studio.core.database import SessionLocal
+from openjiuwen_studio.models.knowledge_base_document import DocumentStatus
+from openjiuwen_studio.ops.modules.llm.llm_manager import get_llm_client_by_protocol
+from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.schemas.knowledge_base import (
     KnowledgeBaseCreate,
     KnowledgeBaseResponseCreate,
@@ -52,7 +65,6 @@ from openjiuwen_studio.schemas.knowledge_base import (
     KnowledgeBaseListRequest,
     KnowledgeBaseListResponse,
     KnowledgeBaseListItem,
-    DocumentGetRequest,
     DocumentStatusRequest,
     DocumentStatusResponse,
     DocumentStatusListResponse,
@@ -67,22 +79,100 @@ from openjiuwen_studio.schemas.knowledge_base import (
     TaskProgressResponse,
     TaskProgressItem,
 )
-from openjiuwen_studio.schemas.common import ResponseModel
-from openjiuwen_studio.core.database import milliseconds
-from openjiuwen_studio.models.knowledge_base_document import DocumentStatus
-from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
-from openjiuwen_studio.core.manager.model_manager.managers import ModelConfigManager
-from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
-from openjiuwen_studio.ops.modules.llm.llm_manager import get_llm_client_by_protocol
-from openjiuwen_studio.core.manager.repositories.knowledge_base_repository import (
-    KBDetails,
-    KBDocument,
-)
 
 _CURR_INDEX_TYPE = os.getenv("INDEX_MANAGER_TYPE", "milvus")
 
-# ==================== GraphRAG 配置和模型管理 ====================
 
+class OBSDocumentManager:
+    """
+    Manages OBS documents and uploads/downloads them to/from OBS
+    """
+
+    backend_dir = Path(__file__).resolve().parent.parent.parent.parent
+
+    def __init__(self, bucket: str = None):
+        self.bucket = bucket or os.getenv("OBS_BUCKET")
+        if not self.bucket:
+            logger.warning("[OBS] OBS_BUCKET not set, skipping upload_document")
+
+        server = os.getenv("OBS_SERVER")
+        access_key_id = SecurityUtils.get_decrypted_secret(
+            "OBS_ACCESS_KEY_ID",
+            os.getenv("OBS_SECRET_KEY", None)
+        )
+        secret_access_key = SecurityUtils.get_decrypted_secret(
+            "OBS_SECRET_ACCESS_KEY",
+            os.getenv("OBS_SECRET_ACCESS_KEY", None)
+        )
+        self.obs_client = AioBotoClient(
+            server=server,
+            access_key_id=access_key_id,
+            secret_access_key=secret_access_key,
+        )
+
+    @staticmethod
+    def obs_name(space_id: str, kb_id: str, file_name: str) -> str:
+        return f"{space_id}/{kb_id}/{file_name}"
+
+    @classmethod
+    def local_path(cls, space_id: str, kb_id: str, file_name: str) -> Path:
+        storage_path = cls.backend_dir / "data" / "knowledge_base" / space_id / kb_id
+        storage_path.mkdir(parents=True, exist_ok=True)
+        return storage_path / file_name
+
+    async def delete_document(self, object_name: str):
+        await self.obs_client.delete_object(self.bucket, object_name)
+
+    async def download_document(
+        self,
+        object_name: str,
+        file_path: str,
+    ):
+        await self.obs_client.download_file(self.bucket, object_name, file_path)
+
+    async def upload_document(
+        self,
+        object_name: str,
+        file_path: str | Path,
+    ):
+        await self.obs_client.upload_file(self.bucket, object_name, file_path)
+
+    async def download_if_updated(
+        self,
+        object_name: str,
+        file_path: str,
+    ):
+        listed_objects = await self.obs_client.list_objects(
+            self.bucket, object_prefix=object_name, max_objects=1
+        )
+        if not listed_objects:
+            logger.info("No matching objects found on OBS, skipping download.")
+            return
+
+        obs_last_modified = listed_objects[0].get("LastModified")
+        if not obs_last_modified:
+            logger.info("OBS object missing LastModified, skipping download.")
+            return
+
+        # If local file does not exist, download directly
+        if not os.path.exists(file_path):
+            await self.download_document(object_name, file_path)
+            logger.info("Local file missing, downloaded from OBS.")
+            return
+
+        # Check local file mtime
+        local_mtime = os.path.getmtime(file_path)
+        local_modified = datetime.fromtimestamp(local_mtime, tz=timezone.utc)
+
+        if obs_last_modified <= local_modified:
+            logger.info("Local file is up to date, skipping download.")
+            return
+
+        await self.download_document(object_name, file_path)
+        logger.info("Downloaded updated file.")
+
+
+# ==================== GraphRAG 配置和模型管理 ====================
 
 def _extract_full_error_message(error: Exception) -> str:
     """提取完整的错误信息，包括异常链中的所有错误
@@ -962,7 +1052,10 @@ def _check_milvus_connection() -> Tuple[bool, str]:
 
         milvus_host = os.getenv("MILVUS_HOST", "localhost")
         milvus_port = os.getenv("MILVUS_PORT", "19530")
-        milvus_token = os.getenv("MILVUS_TOKEN", None)
+        milvus_token = SecurityUtils.get_decrypted_secret(
+            "MILVUS_TOKEN",
+            os.getenv("MILVUS_TOKEN", None),
+        )
 
         # 尝试连接 Milvus
         alias = "kb_connection_test"
@@ -1073,7 +1166,10 @@ def _create_milvus_index_manager() -> MilvusIndexer:
     """Create Milvus index manager (used by _check_milvus_connection and _create_index_manager)."""
     milvus_host = os.getenv("MILVUS_HOST", "localhost")
     milvus_port = os.getenv("MILVUS_PORT", "19530")
-    milvus_token = os.getenv("MILVUS_TOKEN", None)
+    milvus_token = SecurityUtils.get_decrypted_secret(
+        "MILVUS_TOKEN",
+        os.getenv("MILVUS_TOKEN", None),
+    )
     milvus_uri = f"http://{milvus_host}:{milvus_port}"
     return MilvusIndexer(
         config=_default_index_config(),
@@ -1221,7 +1317,10 @@ def _create_vector_store(collection_name: str) -> Union[MilvusVectorStore, Chrom
     elif index_manager_type == "milvus":
         milvus_host = os.getenv("MILVUS_HOST", "localhost")
         milvus_port = os.getenv("MILVUS_PORT", "19530")
-        milvus_token = os.getenv("MILVUS_TOKEN", None)
+        milvus_token = SecurityUtils.get_decrypted_secret(
+            "MILVUS_TOKEN",
+            os.getenv("MILVUS_TOKEN", None),
+        )
 
         # 组合 Milvus URI (格式: http://host:port 或 tcp://host:port)
         # 默认使用 http:// 协议
@@ -1572,6 +1671,7 @@ async def process_single_document(
     indexing_strategy,
     process_info: dict,
     file_name: str = None,
+    obs_name: str = None,
 ):
     """在后台异步处理单个文档"""
     kb_details = KBDetails(space_id=space_id, kb_id=kb_id, index_manager_type=_CURR_INDEX_TYPE)
@@ -1619,6 +1719,26 @@ async def process_single_document(
         try:
             if not file_name:
                 file_name = Path(file_path).name
+
+            # If local file is missing (e.g. multi-worker deployments), try to fetch from OBS.
+            if not os.path.exists(file_path) and obs_name:
+                logger.info(
+                    f'[DOC_PROCESS_BG] Local file missing, downloading from OBS - "{obs_name}" -> "{file_path}"'
+                )
+                obs_manager = OBSDocumentManager()
+                await obs_manager.download_document(object_name=obs_name, file_path=file_path)
+
+        except Exception as parse_error:
+            # 提取 openjiuwen 包的完整错误信息（可能包含异常链）
+            full_error_msg = _extract_full_error_message(parse_error)
+            error_message = f"OBS donwload failed: {full_error_msg}"
+            logger.error(
+                f"[DOC_PROCESS_BG] OBS file download failed - {file_name=}, {obs_name=}, Error: {error_message}",
+                exc_info=True,
+            )
+            raise Exception(error_message) from parse_error
+
+        try:
             documents = await _parse_file(file_path, parsing_strategy, doc_id, file_name=file_name)
         except Exception as parse_error:
             # 提取 openjiuwen 包的完整错误信息（可能包含异常链）
@@ -1730,6 +1850,7 @@ async def _process_documents_sequentially(
     for idx, doc_info in enumerate(documents, 1):
         doc_id = doc_info.get("doc_id")
         file_path = doc_info.get("file_path")
+        obs_name = doc_info.get("obs_name")
         doc_name = doc_info.get("name")
         try:
             logger.info(
@@ -1756,6 +1877,7 @@ async def _process_documents_sequentially(
                 indexing_strategy=indexing_strategy,
                 process_info=process_info,
                 file_name=doc_name,
+                obs_name=obs_name
             )
 
             logger.info(
@@ -1863,6 +1985,23 @@ async def document_upload(
             with open(file_path, "wb") as f:
                 f.write(file_content)
 
+            # Compute OBS object name (stored in DB even if OBS upload is disabled/unavailable)
+            obs_manager = OBSDocumentManager()
+            object_name = obs_manager.obs_name(
+                space_id=space_id, kb_id=kb_id, file_name=file_path.name
+            )
+
+            # uploading document to OBS (best-effort; local file is source-of-truth for indexing)
+            try:
+                await obs_manager.upload_document(object_name=object_name, file_path=file_path)
+            except Exception as obs_error:
+                # Do not fail the upload request; indexing can still proceed from local storage.
+                logger.warning(
+                    f"[DOC_UPLOAD] OBS upload failed (continuing with local file) - "
+                    f"File: {filename}, Doc ID: {doc_id}, KB ID: {kb_id}, Error: {str(obs_error)}",
+                    exc_info=True,
+                )
+
             logger.debug(f"[DOC_UPLOAD] File saved - Path: {file_path}, Size: {file_size} bytes")
 
             # 4.4 创建文档记录
@@ -1873,6 +2012,7 @@ async def document_upload(
                 "doc_id": doc_id,
                 "name": filename,
                 "file_path": str(file_path),
+                "obs_name": object_name,
                 "file_size": file_size,
                 "file_type": file_type,
                 "mime_type": mime_type,
@@ -2314,6 +2454,7 @@ async def document_delete(req: DocumentDeleteRequest, current_user: dict) -> Res
 
         # 获取文件路径，用于删除本地文件
         file_path = doc_get_result.data.get("file_path")
+        obs_name = doc_get_result.data.get("obs_name")
 
         # 删除文档
         delete_result = knowledge_base_repository.document_delete(
@@ -2348,6 +2489,10 @@ async def document_delete(req: DocumentDeleteRequest, current_user: dict) -> Res
                     logger.warning(
                         f"[DOC_DELETE] Failed to delete local file - Path: {file_path}, Error: {str(e)}"
                     )
+
+            # deleting document from OBS
+            obs_manager = OBSDocumentManager()
+            await obs_manager.delete_document(obs_name)
 
             # 同步删除索引中的数据（使用新的知识库系统）
             try:
@@ -2663,8 +2808,16 @@ async def document_process(req: DocumentProcessRequest, current_user: dict) -> R
                     )
                 continue
             doc_name = doc_result.data.get("name")
+            doc_obs_name = doc_result.data.get("obs_name")
             # 收集有效文档信息
-            valid_documents.append({"doc_id": doc_id, "file_path": file_path, "name": doc_name})
+            valid_documents.append(
+                {
+                    "doc_id": doc_id,
+                    "file_path": file_path,
+                    "name": doc_name,
+                    "obs_name": doc_obs_name,
+                }
+            )
             processed_count += 1
             logger.info(
                 f"[DOC_PROCESS] Document validated and status updated to PROCESSING - Doc ID: {doc_id}"

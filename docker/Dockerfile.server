@@ -38,6 +38,7 @@ RUN mkdir -p /app/dist /app/logs/run /app/logs/performance /app/logs/interface
 RUN chown -R app:app /app
 
 USER app
+
 # Copy Python packages from builder stage
 COPY --from=builder /app/dist/${WHL_NAME} /app/dist
 RUN pip3 install /app/dist/${WHL_NAME} --trusted-host ${TRUSTED_HOST} --index-url ${INDEX_URL} --target=/app/site-packages --retries=5 --timeout=120
