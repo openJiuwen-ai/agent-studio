@@ -118,15 +118,15 @@ export const WorkflowCard: React.FC<WorkflowCardProps> = ({
     <ConfigCard
       id={workflow.workflow_id}
       icon={workflowIcon}
-      iconBgColor="bg-gradient-to-br from-blue-50 to-indigo-50"
-      iconTextColor="text-blue-600"
+      iconBgColor={isNewlyImported ? 'bg-green-100' : 'bg-gradient-to-br from-blue-50 to-indigo-50'}
+      iconTextColor={isNewlyImported ? 'text-green-600' : 'text-blue-600'}
       title={workflow.name}
       description={workflow.desc}
       tags={tags}
       editingState={editingState}
       actions={actions}
       isUpdating={isUpdating}
-      className={isNewlyImported ? 'ring-2 ring-green-400 ring-offset-2' : ''}
+      className={isNewlyImported ? 'bg-green-50/50' : ''}
       onClick={() => {
         // Clear the newly imported flag when user clicks the card
         if (isNewlyImported) {
