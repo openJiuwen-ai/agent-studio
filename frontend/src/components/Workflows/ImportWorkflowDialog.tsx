@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { X, Upload, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getToken } from '@test-agentstudio/api-client'
+import { markWorkflowAsNewlyImported } from '../../utils/newlyImportedWorkflows'
 
 export interface ImportWorkflowDialogProps {
   isOpen: boolean
@@ -87,6 +88,11 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
       const result = await response.json()
 
       if (result.code === 200) {
+        // Mark workflow as newly imported
+        if (result.data?.workflow_id) {
+          markWorkflowAsNewlyImported(result.data.workflow_id)
+        }
+
         // Show success state
         setIsSuccess(true)
 
