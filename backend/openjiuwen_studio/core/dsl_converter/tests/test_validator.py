@@ -263,6 +263,7 @@ class TestWorkflowValidator:
         """Test validation of complex workflow with multiple nodes"""
         workflow_data = {
             "workflow_id": "test-123",
+            "space_id": "space-123",
             "name": "Complex Workflow",
             "schema": json.dumps({
                 "nodes": [
