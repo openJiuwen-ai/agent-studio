@@ -47,7 +47,7 @@ class TestWorkflowValidator:
                     }
                 ],
                 "edges": [
-                    {"id": "edge1", "source": "start_1", "target": "end_1"}
+                    {"id": "edge1", "sourceNodeID": "start_1", "targetNodeID": "end_1"}
                 ]
             }),
             "input_parameters": [],
@@ -178,7 +178,7 @@ class TestWorkflowValidator:
         """Test validation fails when edge references missing source"""
         schema = json.loads(valid_workflow_data["schema"])
         schema["edges"] = [
-            {"id": "edge1", "source": "nonexistent", "target": "end_1"}
+            {"id": "edge1", "sourceNodeID": "nonexistent", "targetNodeID": "end_1"}
         ]
         valid_workflow_data["schema"] = json.dumps(schema)
 
@@ -197,7 +197,7 @@ class TestWorkflowValidator:
         """Test validation fails when edge references missing target"""
         schema = json.loads(valid_workflow_data["schema"])
         schema["edges"] = [
-            {"id": "edge1", "source": "start_1", "target": "nonexistent"}
+            {"id": "edge1", "sourceNodeID": "start_1", "targetNodeID": "nonexistent"}
         ]
         valid_workflow_data["schema"] = json.dumps(schema)
 
@@ -227,8 +227,8 @@ class TestWorkflowValidator:
             "meta": {"position": {"x": 200, "y": 100}}
         })
         schema["edges"] = [
-            {"id": "edge1", "source": "start_1", "target": "llm_1"},
-            {"id": "edge2", "source": "llm_1", "target": "end_1"}
+            {"id": "edge1", "sourceNodeID": "start_1", "targetNodeID": "llm_1"},
+            {"id": "edge2", "sourceNodeID": "llm_1", "targetNodeID": "end_1"}
         ]
         valid_workflow_data["schema"] = json.dumps(schema)
 
@@ -278,10 +278,10 @@ class TestWorkflowValidator:
                      "meta": {"position": {"x": 800, "y": 0}}}
                 ],
                 "edges": [
-                    {"id": "e1", "source": "start", "target": "llm1"},
-                    {"id": "e2", "source": "llm1", "target": "if1"},
-                    {"id": "e3", "source": "if1", "target": "code1"},
-                    {"id": "e4", "source": "code1", "target": "end"}
+                    {"id": "e1", "sourceNodeID": "start", "targetNodeID": "llm1"},
+                    {"id": "e2", "sourceNodeID": "llm1", "targetNodeID": "if1"},
+                    {"id": "e3", "sourceNodeID": "if1", "targetNodeID": "code1"},
+                    {"id": "e4", "sourceNodeID": "code1", "targetNodeID": "end"}
                 ]
             }),
             "input_parameters": [],

@@ -62,7 +62,6 @@ class NativeWorkflowConvertor(WorkflowConvertor):
 
     Note: Convertor automatically handles:
     - Schema as object → converts to JSON string
-    - Edges with sourceNodeID/targetNodeID → normalizes to source/target
     """
 
     def convert(self, json_data: Dict[str, Any]) -> WorkflowImportResult:
@@ -72,7 +71,6 @@ class NativeWorkflowConvertor(WorkflowConvertor):
         Steps:
         0. Pre-process schema field:
            - Convert schema from object to JSON string if needed (some exports have it as object)
-           - Normalize edge format from sourceNodeID/targetNodeID to source/target if needed
         1. Validate structure matches WorkflowBase schema
         2. Generate new workflow_id (GUID) to avoid collisions with existing workflows
         3. Regenerate all node IDs in canvas schema to avoid conflicts
@@ -86,10 +84,6 @@ class NativeWorkflowConvertor(WorkflowConvertor):
         Handles both schema formats:
         - String format: "schema": "{\"nodes\":[...],\"edges\":[...]}" (standard)
         - Object format: "schema": {"nodes":[...], "edges":[...]} (some exports)
-
-        Handles both edge formats:
-        - Standard: {"source": "node1", "target": "node2"}
-        - Alternative: {"sourceNodeID": "node1", "targetNodeID": "node2"}
 
         Args:
             json_data: OpenJiuwen workflow JSON
@@ -114,24 +108,6 @@ class NativeWorkflowConvertor(WorkflowConvertor):
                 logger.info("Converted schema from object to JSON string")
             except (TypeError, ValueError) as e:
                 raise ValueError(f"Failed to convert schema to JSON string: {e}") from e
-
-        # Pre-process: Normalize edge format if needed
-        # Some exports use sourceNodeID/targetNodeID, but we need source/target
-        if isinstance(json_data.get("schema"), str):
-            try:
-                schema_obj = json.loads(json_data["schema"])
-                edges = schema_obj.get("edges", [])
-                normalized = False
-                for edge in edges:
-                    if "sourceNodeID" in edge or "targetNodeID" in edge:
-                        edge["sourceNodeID"] = edge.pop("sourceNodeID", edge.get("sourceNodeID"))
-                        edge["targetNodeID"] = edge.pop("targetNodeID", edge.get("targetNodeID"))
-                        normalized = True
-                if normalized:
-                    json_data["schema"] = json.dumps(schema_obj)
-                    logger.info("Normalized edge format from sourceNodeID/targetNodeID to source/target")
-            except (json.JSONDecodeError, TypeError, KeyError) as e:
-                logger.warning(f"Failed to normalize edge format: {e}")
 
         # Step 1: Validate schema structure
         try:

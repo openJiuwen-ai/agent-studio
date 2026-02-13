@@ -364,8 +364,8 @@ class N8nWorkflowConvertor(WorkflowConvertor):
                         if target_id:
                             edges.append({
                                 "id": f"edge_{uuid.uuid4().hex[:8]}",
-                                "source": source_id,
-                                "target": target_id,
+                                "sourceNodeID": source_id,
+                                "targetNodeID": target_id,
                                 "sourceHandle": "output",
                                 "targetHandle": "input"
                             })
@@ -376,7 +376,7 @@ class N8nWorkflowConvertor(WorkflowConvertor):
                             edges: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
         """Add START and END nodes to workflow"""
         # Find entry points (nodes with no incoming connections)
-        all_targets = {edge["target"] for edge in edges}
+        all_targets = {edge["targetNodeID"] for edge in edges}
         entry_nodes = [n for n in nodes if n["id"] not in all_targets]
 
         # Create START node
@@ -405,14 +405,14 @@ class N8nWorkflowConvertor(WorkflowConvertor):
         for entry in entry_nodes:
             edges.append({
                 "id": f"edge_{uuid.uuid4().hex[:8]}",
-                "source": start_id,
-                "target": entry["id"],
+                "sourceNodeID": start_id,
+                "targetNodeID": entry["id"],
                 "sourceHandle": "output",
                 "targetHandle": "input"
             })
 
         # Find exit points (nodes with no outgoing connections)
-        all_sources = {edge["source"] for edge in edges}
+        all_sources = {edge["sourceNodeID"] for edge in edges}
         exit_nodes = [n for n in nodes if n["id"] not in all_sources]
 
         # Create END node
@@ -440,8 +440,8 @@ class N8nWorkflowConvertor(WorkflowConvertor):
         for exit_node in exit_nodes:
             edges.append({
                 "id": f"edge_{uuid.uuid4().hex[:8]}",
-                "source": exit_node["id"],
-                "target": end_id,
+                "sourceNodeID": exit_node["id"],
+                "targetNodeID": end_id,
                 "sourceHandle": "output",
                 "targetHandle": "input"
             })

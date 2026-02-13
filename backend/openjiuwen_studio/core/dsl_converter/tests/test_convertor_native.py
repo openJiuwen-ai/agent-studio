@@ -65,8 +65,8 @@ class TestNativeWorkflowConvertor:
                     }
                 ],
                 "edges": [
-                    {"id": "edge1", "source": "start_abc", "target": "llm_def"},
-                    {"id": "edge2", "source": "llm_def", "target": "end_ghi"}
+                    {"id": "edge1", "sourceNodeID": "start_abc", "targetNodeID": "llm_def"},
+                    {"id": "edge2", "sourceNodeID": "llm_def", "targetNodeID": "end_ghi"}
                 ]
             }),
             "input_parameters": [{"name": "query", "type": "string"}],
@@ -132,8 +132,8 @@ class TestNativeWorkflowConvertor:
 
         # All edge sources and targets should reference new node IDs
         for edge in new_schema["edges"]:
-            assert edge["source"] in node_ids
-            assert edge["target"] in node_ids
+            assert edge["sourceNodeID"] in node_ids
+            assert edge["targetNodeID"] in node_ids
 
     def test_convert_updates_input_parameter_references(self, convertor, sample_workflow):
         """Test that ref-type inputParameters are updated"""
@@ -314,7 +314,7 @@ class TestNativeWorkflowConvertor:
                 {"id": "old_2", "type": "3"}
             ],
             "edges": [
-                {"source": "old_1", "target": "old_2"}
+                {"sourceNodeID": "old_1", "targetNodeID": "old_2"}
             ]
         }
 

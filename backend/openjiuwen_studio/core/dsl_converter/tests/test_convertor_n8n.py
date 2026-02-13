@@ -337,7 +337,7 @@ class TestN8nWorkflowConvertor:
             {"id": "node2", "type": "3"}
         ]
         edges = [
-            {"source": "node2", "target": "node3"}
+            {"sourceNodeID": "node2", "targetNodeID": "node3"}
         ]
 
         result_nodes, result_edges = convertor._add_start_end_nodes(nodes, edges)
@@ -349,9 +349,9 @@ class TestN8nWorkflowConvertor:
 
         # START should connect to node1 (has no incoming edges)
         start_id = start_nodes[0]["id"]
-        start_edges = [e for e in result_edges if e["source"] == start_id]
+        start_edges = [e for e in result_edges if e["sourceNodeID"] == start_id]
         assert len(start_edges) >= 1
-        assert any(e["target"] == "node1" for e in start_edges)
+        assert any(e["targetNodeID"] == "node1" for e in start_edges)
 
     def test_add_start_end_nodes_connects_exit_points(self, convertor):
         """Test that END node connects to exit points"""
@@ -360,7 +360,7 @@ class TestN8nWorkflowConvertor:
             {"id": "node2", "type": "3"}
         ]
         edges = [
-            {"source": "node1", "target": "node2"}
+            {"sourceNodeID": "node1", "targetNodeID": "node2"}
         ]
 
         result_nodes, result_edges = convertor._add_start_end_nodes(nodes, edges)
@@ -372,9 +372,9 @@ class TestN8nWorkflowConvertor:
 
         # node2 (has no outgoing edges) should connect to END
         end_id = end_nodes[0]["id"]
-        end_edges = [e for e in result_edges if e["target"] == end_id]
+        end_edges = [e for e in result_edges if e["targetNodeID"] == end_id]
         assert len(end_edges) >= 1
-        assert any(e["source"] == "node2" for e in end_edges)
+        assert any(e["sourceNodeID"] == "node2" for e in end_edges)
 
     def test_convert_headers_from_dict(self, convertor):
         """Test _convert_headers with dict input"""
