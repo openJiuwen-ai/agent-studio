@@ -302,7 +302,7 @@ class TestWorkflowValidator:
     async def test_validate_strict_mode(self, validator, valid_workflow_data):
         """Test strict validation mode (compilation)"""
         # Mock workflow_convert to succeed
-        with patch('openjiuwen_studio.core.manager.converter.workflow.workflow_convert') as mock_convert:
+        with patch('openjiuwen_studio.core.manager.convertor.workflow.workflow_convert') as mock_convert:
             mock_convert.return_value = MagicMock()  # Return any object
 
             result = await validator.validate(
@@ -320,7 +320,7 @@ class TestWorkflowValidator:
     async def test_validate_strict_mode_compilation_fails(self, validator, valid_workflow_data):
         """Test strict validation fails when compilation fails"""
         # Mock workflow_convert to raise error
-        with patch('openjiuwen_studio.core.manager.converter.workflow.workflow_convert') as mock_convert:
+        with patch('openjiuwen_studio.core.manager.convertor.workflow.workflow_convert') as mock_convert:
             mock_convert.side_effect = Exception("Compilation failed")
 
             result = await validator.validate(

@@ -3,7 +3,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 """
-Tests for NativeWorkflowConvertor
+Tests for NativeWorkflowConverter
 
 Tests conversion of OpenJiuwen native format workflows using actual fixture files.
 """
@@ -12,16 +12,16 @@ import pytest
 import json
 from pathlib import Path
 
-from openjiuwen_studio.core.dsl_converter.converter.converter_native import NativeWorkflowConvertor
+from openjiuwen_studio.core.dsl_converter.converter.converter_native import NativeWorkflowConverter
 
 
-class TestNativeWorkflowConvertor:
-    """Test suite for NativeWorkflowConvertor"""
+class TestNativeWorkflowConverter:
+    """Test suite for NativeWorkflowConverter"""
 
     @pytest.fixture
     def converter(self):
         """Create converter instance"""
-        return NativeWorkflowConvertor()
+        return NativeWorkflowConverter()
 
     @pytest.fixture
     def fixtures_dir(self):

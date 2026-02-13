@@ -274,7 +274,7 @@ Tests use pytest fixtures for reusability:
 @pytest.fixture
 def converter(self):
     """Create converter instance"""
-    return N8nWorkflowConvertor()
+    return N8nWorkflowConverter()
 
 @pytest.fixture
 def simple_n8n_workflow(self):

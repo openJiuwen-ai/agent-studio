@@ -181,7 +181,7 @@ class TestWorkflowImporter:
             ))
 
             # Mock workflow_convert for strict validation
-            with patch('openjiuwen_studio.core.manager.converter.workflow.workflow_convert') as mock_convert:
+            with patch('openjiuwen_studio.core.manager.convertor.workflow.workflow_convert') as mock_convert:
                 mock_convert.return_value = MagicMock()  # Return any object, we just need it not to raise
 
                 result = await importer.import_workflow(

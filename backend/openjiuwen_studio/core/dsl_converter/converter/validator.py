@@ -132,7 +132,7 @@ class WorkflowValidator:
         # Layer 3: Strict validation (Compilation)
         if strict and not errors:
             try:
-                import openjiuwen_studio.core.manager.converter.workflow as convert
+                import openjiuwen_studio.core.manager.convertor.workflow as convert
                 workflow_obj = WorkflowBase(**workflow_data)
                 # Conversion triggers full business logic and component validation
                 convert.workflow_convert(workflow_obj, skip_validation=False)

@@ -240,7 +240,7 @@ class TestWorkflowImportIntegration:
                 message="Success"
             ))
 
-            with patch('openjiuwen_studio.core.manager.converter.workflow.workflow_convert') as mock_convert:
+            with patch('openjiuwen_studio.core.manager.convertor.workflow.workflow_convert') as mock_convert:
                 mock_convert.return_value = MagicMock()  # Return any object
 
                 importer = WorkflowImporter()
