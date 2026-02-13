@@ -61,20 +61,48 @@ class N8nWorkflowConvertor(WorkflowConvertor):
         logger.info(f"Converting n8n workflow '{n8n_name}' with {len(n8n_nodes)} nodes")
 
         # Convert nodes
+        # Convert nodes
         openjiuwen_nodes = []
+        node_name_to_id = {}
+
         for n8n_node in n8n_nodes:
+            node_name = n8n_node.get("name", n8n_node.get("id", "unknown"))
+            node_type = n8n_node.get("type", "unknown")
+
             try:
+                # --- CHANGE START ---
+                # Check if the node type is known in our mapping
+                if node_type not in self.N8N_TO_OPENJIUWEN:
+                    # Log a warning to satisfy the 'conversion_warnings' test
+                    msg = f"Node type '{node_type}' is not supported. Converted to fallback node."
+                    warnings.append(msg)
+                    logger.warning(msg)
+
+                    # Force the fallback logic
+                    fallback = self._create_fallback_node(n8n_node)
+                    openjiuwen_nodes.append(fallback)
+                    node_name_to_id[node_name] = fallback["id"]
+                    continue
+
+                    # Original logic for supported nodes
                 converted = self._convert_node(n8n_node)
                 openjiuwen_nodes.append(converted)
+                node_name_to_id[node_name] = converted["id"]
+                # --- CHANGE END ---
+
             except Exception as e:
-                node_name = n8n_node.get("name", n8n_node.get("id", "unknown"))
-                warnings.append(f"Failed to convert node '{node_name}': {e}")
-                logger.warning(f"Failed to convert n8n node '{node_name}': {e}")
-                # Add fallback CODE node
-                openjiuwen_nodes.append(self._create_fallback_node(n8n_node))
+                # Existing catch-all for unexpected crashes
+                error_msg = f"Failed to convert node '{node_name}': {e}"
+                if error_msg not in warnings:
+                    warnings.append(error_msg)
+                logger.warning(error_msg)
+
+                fallback = self._create_fallback_node(n8n_node)
+                openjiuwen_nodes.append(fallback)
+                node_name_to_id[node_name] = fallback["id"]
 
         # Convert connections to edges
-        edges = self._convert_connections(n8n_connections, n8n_nodes)
+        edges = self._convert_connections(n8n_connections, n8n_nodes, node_name_to_id)
 
         # Add START and END nodes
         openjiuwen_nodes, edges = self._add_start_end_nodes(openjiuwen_nodes, edges)
@@ -108,6 +136,7 @@ class N8nWorkflowConvertor(WorkflowConvertor):
             warnings=warnings,
             metadata={
                 "source": "n8n",
+                "source_format": "n8n",
                 "original_name": n8n_name,
                 "converted_nodes": len(openjiuwen_nodes),
                 "original_nodes": len(n8n_nodes),
@@ -342,13 +371,13 @@ class N8nWorkflowConvertor(WorkflowConvertor):
             }
         }
 
-    def _convert_connections(self, n8n_connections: Dict, n8n_nodes: List[Dict]) -> List[Dict]:
+    # 1. Add node_name_to_id to the arguments
+    def _convert_connections(self, n8n_connections: Dict, n8n_nodes: List[Dict], node_name_to_id: Dict[str, str]) -> List[Dict]:
         """Convert n8n connections to OpenJiuwen edges"""
         edges = []
 
-        # Build node name to ID mapping
-        node_name_to_id = {node.get("name"): self._get_converted_node_id(node)
-                          for node in n8n_nodes}
+        # --- DELETE the old node_name_to_id mapping logic here ---
+        # We now use the one passed from the caller to ensure IDs match.
 
         for source_name, conn_types in n8n_connections.items():
             source_id = node_name_to_id.get(source_name)
@@ -356,6 +385,7 @@ class N8nWorkflowConvertor(WorkflowConvertor):
                 continue
 
             for conn_type, target_lists in conn_types.items():
+                # n8n connections are nested lists: main -> [ [targets], [targets] ]
                 for target_list in target_lists:
                     for target in target_list:
                         target_name = target.get("node")

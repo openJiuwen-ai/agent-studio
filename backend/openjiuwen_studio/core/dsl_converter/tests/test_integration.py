@@ -414,9 +414,20 @@ class TestWorkflowImportIntegration:
         """Test that validation failure prevents database save"""
         # Create invalid workflow (no START node)
         invalid = {**openjiuwen_fixture}
-        schema = json.loads(invalid["schema"])
-        # Remove START node
-        schema["nodes"] = [n for n in schema["nodes"] if str(n["type"]) != "1"]
+
+        # --- FIX START ---
+        # Check if schema is a string before trying to parse it
+        raw_schema = invalid.get("schema")
+        if isinstance(raw_schema, str):
+            schema = json.loads(raw_schema)
+        else:
+            schema = raw_schema  # It's already a dictionary
+        # --- FIX END ---
+
+        # Remove START node (type "1" is the Start node in OpenJiuwen)
+        schema["nodes"] = [n for n in schema["nodes"] if str(n.get("type")) != "1"]
+
+        # Re-serialize to string because the Importer expects the schema field to be a string
         invalid["schema"] = json.dumps(schema)
 
         with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
@@ -436,7 +447,7 @@ class TestWorkflowImportIntegration:
 
             # Should fail validation
             assert result.success is False
-            # workflow_create should NOT have been called
+            # workflow_create should NOT have been called because validation failed first
             mock_mgr.workflow_create.assert_not_called()
 
     @pytest.mark.asyncio

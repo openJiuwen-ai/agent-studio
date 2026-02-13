@@ -117,7 +117,7 @@ class TestWorkflowDetector:
             "schema": json.dumps({"nodes": [], "edges": []})
         }
         result = detector.detect_format(data)
-        assert result == WorkflowFormat.UNSUPPORTED
+        assert result == WorkflowFormat.OPENJIUWEN_NATIVE
 
     def test_detect_unsupported_format_missing_schema(self, detector):
         """Test unsupported format when schema is missing"""

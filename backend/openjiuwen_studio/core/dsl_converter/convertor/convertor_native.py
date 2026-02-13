@@ -8,7 +8,7 @@ Native OpenJiuwen Workflow Convertor
 Converts OpenJiuwen exported workflows to importable format.
 Minimal transformation needed since it's already in the correct format.
 """
-
+import copy
 import json
 import uuid
 from typing import Dict, Any, List
@@ -126,6 +126,7 @@ class NativeWorkflowConvertor(WorkflowConvertor):
         warnings = []
 
         # Step 0: Validate that schema exists (the ONLY required field)
+        json_data = copy.deepcopy(json_data)
         if "schema" not in json_data:
             raise ValueError("Missing required field: 'schema'. Only the schema field is required for import.")
 
