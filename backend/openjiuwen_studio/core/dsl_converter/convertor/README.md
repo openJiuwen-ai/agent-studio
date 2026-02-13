@@ -235,10 +235,15 @@ asyncio.run(import_workflow())
 **What happens:**
 1. Detects n8n format
 2. Converts nodes to OpenJiuwen components
-3. Converts connections to edges
+3. **Converts connections to edges** - n8n "connections" → OpenJiuwen "edges" with `sourceNodeID`/`targetNodeID`
 4. Adds START and END nodes (n8n doesn't have explicit start/end)
 5. Extracts input/output parameters
 6. Creates workflow with metadata
+
+**Important:** All edges use standardized field names:
+- ✅ **`sourceNodeID`** - The ID of the source node
+- ✅ **`targetNodeID`** - The ID of the target node
+- ❌ NOT "source" or "target" (n8n uses different format internally)
 
 ## Validation Layers
 

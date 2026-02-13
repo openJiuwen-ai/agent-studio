@@ -12,22 +12,22 @@ Comprehensive test suite for the workflow import system.
    - Unsupported format detection
    - Edge cases (empty data, invalid JSON, etc.)
 
-2. **test_convertor_native.py** (25 tests)
-   - OpenJiuwen native format conversion
+2. **test_convertor_native.py** (16 tests)
+   - OpenJiuwen native format conversion using actual fixtures
+   - Partial workflow support (only schema required)
    - ID regeneration (workflow_id, node IDs)
    - Timestamp updates
    - Reference updates (edges, input parameters)
    - Version field clearing
-   - Missing resource detection
-   - Nested structure handling (loop nodes)
+   - Space ID always ignored from source JSON
+   - Default value injection for missing fields
 
-3. **test_convertor_n8n.py** (27 tests)
-   - n8n format conversion to OpenJiuwen
-   - Node type mappings (httpRequest, code, if, merge, etc.)
+3. **test_convertor_n8n.py** (18 tests)
+   - n8n format conversion to OpenJiuwen using actual fixture
+   - Node type mappings from fixture (httpRequest, code, if, webhook, respondToWebhook)
    - START/END node generation
-   - Connection to edge conversion
+   - Connections to edges conversion (n8n connections → OpenJiuwen edges with sourceNodeID/targetNodeID)
    - Position preservation
-   - Fallback creation for unsupported types
    - Header conversion
    - Input/output parameter extraction
 
@@ -54,7 +54,7 @@ Comprehensive test suite for the workflow import system.
    - Error propagation
    - Warning propagation
 
-**Total: 136 test cases**
+**Total: 118 test cases** (reduced from 136 - removed tests for non-existent features, now only test actual fixture data)
 
 ## Running Tests
 
@@ -65,7 +65,7 @@ Comprehensive test suite for the workflow import system.
 ```bash
 # From tests directory
 cd backend/openjiuwen_studio/core/dsl_converter/tests
-python run_tests.py all          # Run all 136 tests
+python run_tests.py all          # Run all 118 tests
 python run_tests.py importer     # Run just importer tests
 python run_tests.py integration  # Run integration tests
 python run_tests.py coverage     # Run with coverage report
@@ -129,27 +129,42 @@ pytest openjiuwen_studio/core/dsl_converter/tests/test_integration.py -v
 
 ## Test Fixtures
 
-### OpenJiuwen Export Format
+All tests use **actual fixture files only** - no synthetic test data.
+
+### 1. OpenJiuwen Full Export
 
 **File:** `fixtures/openjiuwen_export.json`
 
-Simple OpenJiuwen workflow with:
-- START node
-- LLM node (with input reference)
-- END node
-- Input parameter: `query`
-- Output parameter: `result`
+Complete OpenJiuwen workflow export with all fields:
+- Name: "check_weather"
+- 3 nodes: START (type "1"), LLM (type "3"), END (type "2")
+- 2 edges: start_1 → llm_1 → end_1 (using sourceNodeID/targetNodeID)
+- Input parameters: `city`, `date`
+- Output parameters: `result`
+- Full metadata: workflow_id, space_id, timestamps, etc.
 
-### n8n Workflow Format
+### 2. Minimal Workflow (Partial Import)
+
+**File:** `fixtures/minimal_workflow.json`
+
+**✨ NEW:** Demonstrates partial workflow import - only has `schema` field:
+- 3 nodes: START, LLM, END
+- 2 edges using sourceNodeID/targetNodeID
+- LLM has `input` parameter
+- No other fields (tests default value injection)
+
+### 3. n8n Workflow Format
 
 **File:** `fixtures/n8n_workflow.json`
 
-n8n workflow with:
-- Webhook trigger
-- HTTP Request node
-- Code node
-- IF condition node
-- Response nodes (success/error)
+n8n workflow with 5 nodes:
+- webhook_1: Webhook trigger at [250, 300]
+- http_request_1: HTTP Request at [450, 300]
+- code_1: Code node at [650, 300]
+- if_1: IF condition at [850, 300]
+- respond_1: Respond to Webhook at [1050, 300]
+- 4 connections: Webhook → HTTP Request → Process Data → Check Condition → Respond
+- Uses n8n "connections" format (converted to OpenJiuwen "edges")
 
 ## Test Categories
 
@@ -207,12 +222,15 @@ with patch('openjiuwen_studio.core.manager.workflow.flow_mgr') as mock_flow_mgr:
 
 ### Conversion
 
+✅ **Partial workflow import** - only schema required, all other fields get defaults
+✅ **Space ID always ignored** - source space_id cleared, set by importer
 ✅ Converts OpenJiuwen → OpenJiuwen (ID regeneration)
-✅ Converts n8n → OpenJiuwen (node mapping)
+✅ Converts n8n → OpenJiuwen (node mapping, connections → edges)
+✅ **Edge format standardized** - all edges use sourceNodeID/targetNodeID
 ✅ Preserves workflow structure
-✅ Updates references correctly
+✅ Updates references correctly (edges, input parameters)
 ✅ Generates START/END nodes for n8n
-✅ Creates fallback nodes for unsupported types
+✅ Default value injection for missing fields
 
 ### Validation
 
@@ -277,11 +295,15 @@ Tests verify:
 
 ## Test Data
 
-Tests use:
-- Real fixture files (JSON)
-- Inline test data (Python dicts)
-- Invalid data for error cases
-- Edge cases (empty, missing fields)
+**All tests use ONLY actual fixture files** - no synthetic test data:
+- **fixtures/openjiuwen_export.json** - Full OpenJiuwen workflow export
+- **fixtures/minimal_workflow.json** - Partial workflow (only schema field)
+- **fixtures/n8n_workflow.json** - n8n format workflow
+
+For edge cases and error scenarios:
+- Minimal valid data (e.g., workflow with empty nodes array)
+- Invalid data structures (e.g., missing required fields)
+- Small test objects for testing helper methods (_convert_headers, _generate_node_id)
 
 ## Coverage Goals
 
