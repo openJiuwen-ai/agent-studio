@@ -248,8 +248,8 @@ class TestN8nWorkflowConvertor:
         # Check edge structure
         for edge in schema["edges"]:
             assert "id" in edge
-            assert "source" in edge
-            assert "target" in edge
+            assert "sourceNodeID" in edge
+            assert "targetNodeID" in edge
 
     def test_convert_extracts_input_output_parameters(self, convertor, simple_n8n_workflow):
         """Test that input/output parameters are extracted"""
