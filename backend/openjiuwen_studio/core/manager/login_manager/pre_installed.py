@@ -61,9 +61,13 @@ def get_template_path(base_dir: str, filename: str, language: str) -> str:
 
 
 def create_examples(space_id: str, db: Session, language: str = "zh"):
-    base_dir = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../../../examples")
-    )
+    examples_dir = os.getenv("EXAMPLES_DIR")
+    if examples_dir and os.path.exists(examples_dir):
+        base_dir = examples_dir
+    else:
+        base_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../../../examples")
+        )
     current_time = milliseconds()
 
     def _create_workflow_from_template(filename: str) -> dict | None:
