@@ -298,39 +298,39 @@ class TestWorkflowValidator:
         assert result.is_valid is True
 
     @pytest.mark.asyncio
-    @patch('openjiuwen_studio.core.manager.workflow.flow_mgr')
-    async def test_validate_strict_mode(self, mock_flow_mgr, validator, valid_workflow_data):
+    async def test_validate_strict_mode(self, validator, valid_workflow_data):
         """Test strict validation mode (compilation)"""
-        # Mock flow_mgr.validate to succeed
-        mock_flow_mgr.validate = AsyncMock(return_value=None)
+        # Mock workflow_convert to succeed
+        with patch('openjiuwen_studio.core.manager.convertor.workflow.workflow_convert') as mock_convert:
+            mock_convert.return_value = MagicMock()  # Return any object
 
-        result = await validator.validate(
-            workflow_data=valid_workflow_data,
-            space_id="space-123",
-            current_user={"user_id": "user123"},
-            strict=True
-        )
+            result = await validator.validate(
+                workflow_data=valid_workflow_data,
+                space_id="space-123",
+                current_user={"user_id": "user123"},
+                strict=True
+            )
 
-        # Should call flow_mgr.validate
-        mock_flow_mgr.validate.assert_called_once()
-        assert result.is_valid is True
+            # Should call workflow_convert
+            mock_convert.assert_called_once()
+            assert result.is_valid is True
 
     @pytest.mark.asyncio
-    @patch('openjiuwen_studio.core.manager.workflow.flow_mgr')
-    async def test_validate_strict_mode_compilation_fails(self, mock_flow_mgr, validator, valid_workflow_data):
+    async def test_validate_strict_mode_compilation_fails(self, validator, valid_workflow_data):
         """Test strict validation fails when compilation fails"""
-        # Mock flow_mgr.validate to raise error
-        mock_flow_mgr.validate = AsyncMock(side_effect=Exception("Compilation failed"))
+        # Mock workflow_convert to raise error
+        with patch('openjiuwen_studio.core.manager.convertor.workflow.workflow_convert') as mock_convert:
+            mock_convert.side_effect = Exception("Compilation failed")
 
-        result = await validator.validate(
-            workflow_data=valid_workflow_data,
-            space_id="space-123",
-            current_user={"user_id": "user123"},
-            strict=True
-        )
+            result = await validator.validate(
+                workflow_data=valid_workflow_data,
+                space_id="space-123",
+                current_user={"user_id": "user123"},
+                strict=True
+            )
 
-        assert result.is_valid is False
-        assert any("compilation" in err.lower() for err in result.errors)
+            assert result.is_valid is False
+            assert any("compilation" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
     async def test_validate_empty_nodes(self, validator, valid_workflow_data):

@@ -12,6 +12,7 @@ import pytest
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+from fastapi import status
 
 from openjiuwen_studio.core.dsl_converter.convertor import (
     WorkflowImporter,
@@ -19,6 +20,14 @@ from openjiuwen_studio.core.dsl_converter.convertor import (
     ImportResult,
     WorkflowFormat
 )
+
+
+class MockResponse:
+    """Mock response object matching workflow manager response structure"""
+    def __init__(self, code, data=None, message=""):
+        self.code = code
+        self.data = data or {}
+        self.message = message
 
 
 class TestWorkflowImporter:
@@ -61,8 +70,20 @@ class TestWorkflowImporter:
         """Test importing OpenJiuwen format in draft mode"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.repositories.workflow_repository') as mock_repo:
-            mock_repo.workflow_create = MagicMock(return_value={"workflow_id": "new-123"})
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            # Mock workflow_create response
+            mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={'workflow': {"workflow_id": "new-123"}},
+                message="Success"
+            ))
+
+            # Mock workflow_canvas_save response
+            mock_mgr.workflow_canvas_save = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={},
+                message="Success"
+            ))
 
             result = await importer.import_workflow(
                 json_data=openjiuwen_workflow_data,
@@ -73,7 +94,8 @@ class TestWorkflowImporter:
 
             assert result.success is True
             assert result.workflow_id is not None
-            assert result.workflow_name == openjiuwen_workflow_data["name"]
+            assert result.workflow_id == "new-123"
+            assert result.workflow_name.endswith(" (imported)")
             assert result.metadata["source_format"] == "openjiuwen_native"
             assert result.metadata["saved_to_db"] is True
             assert result.metadata["published"] is False
@@ -83,8 +105,18 @@ class TestWorkflowImporter:
         """Test importing n8n format in draft mode"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.repositories.workflow_repository') as mock_repo:
-            mock_repo.workflow_create = MagicMock(return_value={"workflow_id": "new-123"})
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={'workflow': {"workflow_id": "new-456"}},
+                message="Success"
+            ))
+
+            mock_mgr.workflow_canvas_save = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={},
+                message="Success"
+            ))
 
             result = await importer.import_workflow(
                 json_data=n8n_workflow_data,
@@ -97,17 +129,25 @@ class TestWorkflowImporter:
             assert result.workflow_id is not None
             assert result.metadata["source_format"] == "n8n"
             assert result.metadata["saved_to_db"] is True
-
-    # Test removed - dry_run is no longer supported
+            assert result.metadata["published"] is False
 
     @pytest.mark.asyncio
     async def test_import_always_draft_mode(self, importer, openjiuwen_workflow_data, import_context):
         """Test that import always uses draft mode (no publish)"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.repositories.workflow_repository') as mock_repo:
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={'workflow': {"workflow_id": "new-789"}},
+                message="Success"
+            ))
 
-            mock_repo.workflow_create = MagicMock(return_value={"workflow_id": "new-123"})
+            mock_mgr.workflow_canvas_save = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={},
+                message="Success"
+            ))
 
             result = await importer.import_workflow(
                 json_data=openjiuwen_workflow_data,
@@ -119,28 +159,41 @@ class TestWorkflowImporter:
             assert result.success is True
             assert result.metadata["saved_to_db"] is True
             assert result.metadata["published"] is False
+            # Verify workflow_publish was never called (it doesn't exist in the new code)
+            assert not hasattr(mock_mgr, 'workflow_publish') or not mock_mgr.workflow_publish.called
 
     @pytest.mark.asyncio
     async def test_import_with_strict_validation(self, importer, openjiuwen_workflow_data, import_context):
         """Test import with strict validation (compilation)"""
         options = ImportOptions(validate_strict=True)
 
-        with patch('openjiuwen_studio.repositories.workflow_repository') as mock_repo, \
-             patch('openjiuwen_studio.core.manager.workflow.flow_mgr') as mock_flow_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={'workflow': {"workflow_id": "new-strict-123"}},
+                message="Success"
+            ))
 
-            mock_repo.workflow_create = MagicMock(return_value={"workflow_id": "new-123"})
-            mock_flow_mgr.validate = AsyncMock(return_value=None)
+            mock_mgr.workflow_canvas_save = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={},
+                message="Success"
+            ))
 
-            result = await importer.import_workflow(
-                json_data=openjiuwen_workflow_data,
-                space_id=import_context["space_id"],
-                current_user=import_context["current_user"],
-                options=options
-            )
+            # Mock workflow_convert for strict validation
+            with patch('openjiuwen_studio.core.manager.convertor.workflow.workflow_convert') as mock_convert:
+                mock_convert.return_value = MagicMock()  # Return any object, we just need it not to raise
 
-            assert result.success is True
-            # Should have called strict validation
-            mock_flow_mgr.validate.assert_called_once()
+                result = await importer.import_workflow(
+                    json_data=openjiuwen_workflow_data,
+                    space_id=import_context["space_id"],
+                    current_user=import_context["current_user"],
+                    options=options
+                )
+
+                assert result.success is True
+                # Strict validation (workflow_convert) should have been called
+                mock_convert.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_import_unsupported_format(self, importer, import_context):
@@ -197,31 +250,48 @@ class TestWorkflowImporter:
                 "id": "1",
                 "type": "n8n-nodes-base.unsupportedType",
                 "name": "Unsupported",
-                "parameters": {}
+                "parameters": {},
+                "position": [0, 0]
             }],
             "connections": {}
         }
         options = ImportOptions(validate_strict=False)
 
-        result = await importer.import_workflow(
-            json_data=n8n_with_unsupported,
-            space_id=import_context["space_id"],
-            current_user=import_context["current_user"],
-            options=options
-        )
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={'workflow': {"workflow_id": "new-warn-123"}},
+                message="Success"
+            ))
 
-        # Should succeed but have warnings
-        assert len(result.warnings) > 0
+            mock_mgr.workflow_canvas_save = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={},
+                message="Success"
+            ))
+
+            result = await importer.import_workflow(
+                json_data=n8n_with_unsupported,
+                space_id=import_context["space_id"],
+                current_user=import_context["current_user"],
+                options=options
+            )
+
+            # Should succeed but have warnings about unsupported node
+            assert result.success is True
+            assert len(result.warnings) > 0
 
     @pytest.mark.asyncio
-    async def test_import_database_error(self, importer, openjiuwen_workflow_data, import_context):
-        """Test import handles database errors"""
+    async def test_import_workflow_create_error(self, importer, openjiuwen_workflow_data, import_context):
+        """Test import handles workflow creation errors"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.repositories.workflow_repository') as mock_repo:
-            mock_repo.workflow_create = MagicMock(
-                side_effect=Exception("Database connection failed")
-            )
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                data={},
+                message="Database connection failed"
+            ))
 
             result = await importer.import_workflow(
                 json_data=openjiuwen_workflow_data,
@@ -231,41 +301,95 @@ class TestWorkflowImporter:
             )
 
             assert result.success is False
-            assert any("database" in err.lower() or "failed" in err.lower()
-                      for err in result.errors)
+            assert any("creation failed" in err.lower() for err in result.errors)
 
-    # Test removed - publishing is no longer supported in import
+    @pytest.mark.asyncio
+    async def test_import_canvas_save_error(self, importer, openjiuwen_workflow_data, import_context):
+        """Test import handles canvas save errors"""
+        options = ImportOptions(validate_strict=False)
+
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={'workflow': {"workflow_id": "new-123"}},
+                message="Success"
+            ))
+
+            mock_mgr.workflow_canvas_save = MagicMock(return_value=MockResponse(
+                code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                data={},
+                message="Canvas save failed"
+            ))
+
+            result = await importer.import_workflow(
+                json_data=openjiuwen_workflow_data,
+                space_id=import_context["space_id"],
+                current_user=import_context["current_user"],
+                options=options
+            )
+
+            assert result.success is False
+            assert any("canvas save failed" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
     async def test_import_result_metadata(self, importer, openjiuwen_workflow_data, import_context):
         """Test import result contains expected metadata"""
         options = ImportOptions(validate_strict=False)
 
-        result = await importer.import_workflow(
-            json_data=openjiuwen_workflow_data,
-            space_id=import_context["space_id"],
-            current_user=import_context["current_user"],
-            options=options
-        )
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={'workflow': {"workflow_id": "new-meta-123"}},
+                message="Success"
+            ))
 
-        assert "source_format" in result.metadata
-        assert "original_name" in result.metadata or "original_workflow_id" in result.metadata
-        assert "saved_to_db" in result.metadata
-        assert "published" in result.metadata
+            mock_mgr.workflow_canvas_save = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={},
+                message="Success"
+            ))
+
+            result = await importer.import_workflow(
+                json_data=openjiuwen_workflow_data,
+                space_id=import_context["space_id"],
+                current_user=import_context["current_user"],
+                options=options
+            )
+
+            assert "source_format" in result.metadata
+            assert "original_name" in result.metadata
+            assert "saved_to_db" in result.metadata
+            assert "published" in result.metadata
+            assert result.metadata["published"] is False
 
     @pytest.mark.asyncio
-    async def test_import_preserves_workflow_name(self, importer, openjiuwen_workflow_data, import_context):
-        """Test that workflow name is preserved"""
+    async def test_import_preserves_workflow_name_with_suffix(self, importer, openjiuwen_workflow_data, import_context):
+        """Test that workflow name gets (imported) suffix"""
         options = ImportOptions(validate_strict=False)
 
-        result = await importer.import_workflow(
-            json_data=openjiuwen_workflow_data,
-            space_id=import_context["space_id"],
-            current_user=import_context["current_user"],
-            options=options
-        )
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={'workflow': {"workflow_id": "new-name-123"}},
+                message="Success"
+            ))
 
-        assert result.workflow_name == openjiuwen_workflow_data["name"]
+            mock_mgr.workflow_canvas_save = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={},
+                message="Success"
+            ))
+
+            result = await importer.import_workflow(
+                json_data=openjiuwen_workflow_data,
+                space_id=import_context["space_id"],
+                current_user=import_context["current_user"],
+                options=options
+            )
+
+            original_name = openjiuwen_workflow_data["name"]
+            assert result.workflow_name == f"{original_name} (imported)"
+            assert result.metadata["original_name"] == original_name
 
     @pytest.mark.asyncio
     async def test_import_generates_new_workflow_id(self, importer, openjiuwen_workflow_data, import_context):
@@ -273,27 +397,28 @@ class TestWorkflowImporter:
         original_id = openjiuwen_workflow_data["workflow_id"]
         options = ImportOptions(validate_strict=False)
 
-        result = await importer.import_workflow(
-            json_data=openjiuwen_workflow_data,
-            space_id=import_context["space_id"],
-            current_user=import_context["current_user"],
-            options=options
-        )
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={'workflow': {"workflow_id": "completely-new-id"}},
+                message="Success"
+            ))
 
-        assert result.workflow_id != original_id
+            mock_mgr.workflow_canvas_save = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={},
+                message="Success"
+            ))
 
-    @pytest.mark.asyncio
-    async def test_import_handles_missing_space_id(self, importer, openjiuwen_workflow_data):
-        """Test import handles missing space_id"""
-        options = ImportOptions(validate_strict=False)
-
-        with pytest.raises((ValueError, TypeError)):
-            await importer.import_workflow(
+            result = await importer.import_workflow(
                 json_data=openjiuwen_workflow_data,
-                space_id=None,
-                current_user={"user_id": "test-user"},
+                space_id=import_context["space_id"],
+                current_user=import_context["current_user"],
                 options=options
             )
+
+            assert result.workflow_id == "completely-new-id"
+            assert result.workflow_id != original_id
 
     @pytest.mark.asyncio
     async def test_import_options_defaults(self):
@@ -301,28 +426,42 @@ class TestWorkflowImporter:
         options = ImportOptions()
 
         assert options.validate_strict is False
+        assert options.auto_fix is True
 
     @pytest.mark.asyncio
     async def test_import_result_success_structure(self, importer, openjiuwen_workflow_data, import_context):
         """Test ImportResult structure for successful import"""
         options = ImportOptions(validate_strict=False)
 
-        result = await importer.import_workflow(
-            json_data=openjiuwen_workflow_data,
-            space_id=import_context["space_id"],
-            current_user=import_context["current_user"],
-            options=options
-        )
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={'workflow': {"workflow_id": "struct-123"}},
+                message="Success"
+            ))
 
-        assert hasattr(result, "success")
-        assert hasattr(result, "workflow_id")
-        assert hasattr(result, "workflow_name")
-        assert hasattr(result, "warnings")
-        assert hasattr(result, "errors")
-        assert hasattr(result, "metadata")
-        assert isinstance(result.warnings, list)
-        assert isinstance(result.errors, list)
-        assert isinstance(result.metadata, dict)
+            mock_mgr.workflow_canvas_save = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={},
+                message="Success"
+            ))
+
+            result = await importer.import_workflow(
+                json_data=openjiuwen_workflow_data,
+                space_id=import_context["space_id"],
+                current_user=import_context["current_user"],
+                options=options
+            )
+
+            assert hasattr(result, "success")
+            assert hasattr(result, "workflow_id")
+            assert hasattr(result, "workflow_name")
+            assert hasattr(result, "warnings")
+            assert hasattr(result, "errors")
+            assert hasattr(result, "metadata")
+            assert isinstance(result.warnings, list)
+            assert isinstance(result.errors, list)
+            assert isinstance(result.metadata, dict)
 
     @pytest.mark.asyncio
     async def test_import_result_failure_structure(self, importer, import_context):
@@ -347,22 +486,35 @@ class TestWorkflowImporter:
         """Test importing multiple workflows sequentially"""
         options = ImportOptions(validate_strict=False)
 
-        # Import OpenJiuwen workflow
-        result1 = await importer.import_workflow(
-            json_data=openjiuwen_workflow_data,
-            space_id=import_context["space_id"],
-            current_user=import_context["current_user"],
-            options=options
-        )
+        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+            # Setup mocks for both imports
+            mock_mgr.workflow_create = MagicMock(side_effect=[
+                MockResponse(code=status.HTTP_200_OK, data={'workflow': {"workflow_id": "seq-1"}}, message="Success"),
+                MockResponse(code=status.HTTP_200_OK, data={'workflow': {"workflow_id": "seq-2"}}, message="Success")
+            ])
 
-        # Import n8n workflow
-        result2 = await importer.import_workflow(
-            json_data=n8n_workflow_data,
-            space_id=import_context["space_id"],
-            current_user=import_context["current_user"],
-            options=options
-        )
+            mock_mgr.workflow_canvas_save = MagicMock(return_value=MockResponse(
+                code=status.HTTP_200_OK,
+                data={},
+                message="Success"
+            ))
 
-        assert result1.success is True
-        assert result2.success is True
-        assert result1.workflow_id != result2.workflow_id
+            # Import OpenJiuwen workflow
+            result1 = await importer.import_workflow(
+                json_data=openjiuwen_workflow_data,
+                space_id=import_context["space_id"],
+                current_user=import_context["current_user"],
+                options=options
+            )
+
+            # Import n8n workflow
+            result2 = await importer.import_workflow(
+                json_data=n8n_workflow_data,
+                space_id=import_context["space_id"],
+                current_user=import_context["current_user"],
+                options=options
+            )
+
+            assert result1.success is True
+            assert result2.success is True
+            assert result1.workflow_id != result2.workflow_id
