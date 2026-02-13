@@ -349,3 +349,101 @@ class TestNativeWorkflowConvertor:
         # Reference should be updated
         ref = nodes[0]["data"]["inputs"]["inputParameters"]["field"]
         assert ref["content"][0] == "new_1"
+
+    def test_convert_partial_workflow_only_schema(self, convertor):
+        """Test that partial workflow with only schema field is accepted"""
+        # Minimal workflow with only schema
+        partial_workflow = {
+            "schema": json.dumps({
+                "nodes": [
+                    {"id": "start_1", "type": "1", "data": {"title": "Start"}},
+                    {"id": "end_1", "type": "2", "data": {"title": "End"}}
+                ],
+                "edges": [
+                    {"sourceNodeID": "start_1", "targetNodeID": "end_1"}
+                ]
+            })
+        }
+
+        result = convertor.convert(partial_workflow)
+
+        # Should successfully convert
+        assert result.workflow_data is not None
+
+        # Should have all required fields with defaults
+        assert result.workflow_data["workflow_id"]  # Should be generated
+        assert result.workflow_data["name"] == "Imported Workflow"  # Default name
+        assert result.workflow_data["desc"] == ""  # Default description
+        assert result.workflow_data["space_id"] == ""  # Default space_id (will be set by importer)
+        assert result.workflow_data["url"] == ""  # Default url
+        assert result.workflow_data["icon_uri"] == ""  # Default icon
+        assert result.workflow_data["input_parameters"] == []  # Default empty list
+        assert result.workflow_data["output_parameters"] == []  # Default empty list
+        assert result.workflow_data["create_time"] > 0  # Should be set to current time
+        assert result.workflow_data["update_time"] > 0  # Should be set to current time
+
+        # Schema should still be present and valid
+        schema = json.loads(result.workflow_data["schema"])
+        assert len(schema["nodes"]) == 2
+        assert len(schema["edges"]) == 1
+
+    def test_convert_partial_workflow_missing_schema_fails(self, convertor):
+        """Test that workflow without schema field fails"""
+        workflow_without_schema = {
+            "name": "Test Workflow",
+            "desc": "This has no schema"
+        }
+
+        with pytest.raises(ValueError, match="Missing required field: 'schema'"):
+            convertor.convert(workflow_without_schema)
+
+    def test_convert_partial_workflow_with_some_fields(self, convertor):
+        """Test that partial workflow with some fields keeps provided values"""
+        partial_workflow = {
+            "name": "My Custom Workflow",
+            "desc": "Custom description",
+            "schema": json.dumps({
+                "nodes": [
+                    {"id": "start_1", "type": "1", "data": {"title": "Start"}},
+                    {"id": "end_1", "type": "2", "data": {"title": "End"}}
+                ],
+                "edges": [
+                    {"sourceNodeID": "start_1", "targetNodeID": "end_1"}
+                ]
+            })
+        }
+
+        result = convertor.convert(partial_workflow)
+
+        # Should keep provided values
+        assert result.workflow_data["name"] == "My Custom Workflow"
+        assert result.workflow_data["desc"] == "Custom description"
+
+        # Should add defaults for missing fields
+        assert result.workflow_data["workflow_id"]  # Generated
+        assert result.workflow_data["space_id"] == ""  # Default
+        assert result.workflow_data["url"] == ""  # Default
+        assert result.workflow_data["icon_uri"] == ""  # Default
+
+    def test_convert_ignores_source_space_id(self, convertor):
+        """Test that space_id from source JSON is always ignored"""
+        workflow_with_space_id = {
+            "space_id": "source-space-12345",  # This should be ignored
+            "name": "Test Workflow",
+            "schema": json.dumps({
+                "nodes": [
+                    {"id": "start_1", "type": "1", "data": {"title": "Start"}},
+                    {"id": "end_1", "type": "2", "data": {"title": "End"}}
+                ],
+                "edges": [
+                    {"sourceNodeID": "start_1", "targetNodeID": "end_1"}
+                ]
+            })
+        }
+
+        result = convertor.convert(workflow_with_space_id)
+
+        # space_id should be cleared (empty string) - importer will set the target space_id
+        assert result.workflow_data["space_id"] == ""
+        # Metadata should track original workflow info
+        assert "original_workflow_id" in result.metadata

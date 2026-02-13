@@ -47,36 +47,53 @@ class NativeWorkflowConvertor(WorkflowConvertor):
     - workflow_id: REGENERATED (new UUID) → avoid collisions
     - workflow_version: CLEARED (None) → import creates draft
     - latest_publish_*: CLEARED (None) → no version history
-    - name: KEPT → importer adds "(imported)" suffix
-    - desc, url, icon_uri: KEPT as-is
-    - space_id: REPLACED with target space_id
+    - name: KEPT (or default "Imported Workflow") → importer may add suffix
+    - desc, url, icon_uri: KEPT as-is (or defaults)
+    - space_id: ALWAYS CLEARED → importer sets target space_id (source space_id ignored)
     - schema: NODE IDS REGENERATED → start_1 becomes start_abc123
-    - input/output_parameters: KEPT as-is
+    - input/output_parameters: KEPT as-is (or default empty arrays)
     - create_time, update_time: REGENERATED (current timestamp)
 
-    Validation will PASS if:
-    ✓ Required fields present: workflow_id, name, space_id, schema, create_time, update_time
-    ✓ Field constraints: name (1-255 chars), desc (max 500), url (max 500)
+    Import Requirements (PARTIAL WORKFLOWS SUPPORTED):
+    ✓ ONLY 'schema' is required - all other fields are optional and get defaults
     ✓ Schema has START node (type="1") and END node (type="2")
     ✓ Schema is valid JSON with nodes array and edges array
+    ✓ Field constraints if provided: name (1-255 chars), desc (max 500), url (max 500)
+
+    Missing fields get these defaults:
+    - workflow_id: Generated UUID
+    - space_id: ALWAYS cleared (set by importer from import context - source space_id is ignored)
+    - name: "Imported Workflow"
+    - desc: ""
+    - url: ""
+    - icon_uri: ""
+    - input_parameters: []
+    - output_parameters: []
+    - create_time: Current timestamp
+    - update_time: Current timestamp
 
     Note: Convertor automatically handles:
     - Schema as object → converts to JSON string
+    - Missing fields → adds sensible defaults
     """
 
     def convert(self, json_data: Dict[str, Any]) -> WorkflowImportResult:
         """
         Convert OpenJiuwen native workflow for import.
 
+        Supports PARTIAL workflows - only 'schema' is required, all other fields get defaults.
+
         Steps:
-        0. Pre-process schema field:
+        0. Validate that schema field exists (the only required field)
+        1. Pre-process schema field:
            - Convert schema from object to JSON string if needed (some exports have it as object)
-        1. Validate structure matches WorkflowBase schema
-        2. Generate new workflow_id (GUID) to avoid collisions with existing workflows
-        3. Regenerate all node IDs in canvas schema to avoid conflicts
-        4. Update timestamps (create_time, update_time) to current time
-        5. Clear version fields (workflow_version, latest_publish_version, latest_publish_time)
-        6. Check for missing resources (models, plugins, sub-workflows) - non-blocking
+        2. Add default values for missing fields
+        3. Validate structure matches WorkflowBase schema
+        4. Generate new workflow_id (GUID) to avoid collisions with existing workflows
+        5. Regenerate all node IDs in canvas schema to avoid conflicts
+        6. Update timestamps (create_time, update_time) to current time
+        7. Clear version fields (workflow_version, latest_publish_version, latest_publish_time)
+        8. Check for missing resources (models, plugins, sub-workflows) - non-blocking
 
         Note: The actual workflow database record will be created by workflow_manager.workflow_create()
         which assigns a fresh workflow_id and auto-incrementing id field.
@@ -85,21 +102,37 @@ class NativeWorkflowConvertor(WorkflowConvertor):
         - String format: "schema": "{\"nodes\":[...],\"edges\":[...]}" (standard)
         - Object format: "schema": {"nodes":[...], "edges":[...]} (some exports)
 
+        Default values for missing fields:
+        - workflow_id: Generated UUID
+        - space_id: ALWAYS cleared (source space_id ignored, set by importer from import context)
+        - name: "Imported Workflow"
+        - desc: ""
+        - url: ""
+        - icon_uri: ""
+        - input_parameters: []
+        - output_parameters: []
+        - create_time: Current timestamp
+        - update_time: Current timestamp
+
         Args:
-            json_data: OpenJiuwen workflow JSON
+            json_data: OpenJiuwen workflow JSON (only 'schema' required)
 
         Returns:
             WorkflowImportResult with processed workflow data
 
         Raises:
-            ValueError: If workflow structure is invalid
+            ValueError: If schema field is missing or invalid
         """
         warnings = []
+
+        # Step 0: Validate that schema exists (the ONLY required field)
+        if "schema" not in json_data:
+            raise ValueError("Missing required field: 'schema'. Only the schema field is required for import.")
 
         # Store original workflow_id for metadata
         original_workflow_id = json_data.get("workflow_id", "unknown")
 
-        # Pre-process: Normalize schema to string if it's an object
+        # Step 1: Pre-process: Normalize schema to string if it's an object
         # Some exports have schema as object, but WorkflowBase expects string
         schema_field = json_data.get("schema")
         if schema_field and not isinstance(schema_field, str):
@@ -109,18 +142,51 @@ class NativeWorkflowConvertor(WorkflowConvertor):
             except (TypeError, ValueError) as e:
                 raise ValueError(f"Failed to convert schema to JSON string: {e}") from e
 
-        # Step 1: Validate schema structure
+        # Step 2: Add default values for missing fields
+        current_time = milliseconds()
+
+        # Generate workflow_id if missing
+        if "workflow_id" not in json_data or not json_data["workflow_id"]:
+            json_data["workflow_id"] = str(uuid.uuid4())
+
+        # ALWAYS clear space_id - it must come from the import context (target space)
+        # The space_id in the JSON is from the source system and should be ignored
+        original_space_id = json_data.get("space_id")
+        json_data["space_id"] = ""  # Will be set by importer to target space_id
+        if original_space_id:
+            logger.info(f"Ignoring source space_id '{original_space_id}' - will use target space_id from import context")
+
+        # Set defaults for all optional fields
+        defaults = {
+            "name": "Imported Workflow",
+            "desc": "",
+            "url": "",
+            "icon_uri": "",
+            "input_parameters": [],
+            "output_parameters": [],
+            "create_time": current_time,
+            "update_time": current_time
+        }
+
+        for key, default_value in defaults.items():
+            if key not in json_data or json_data[key] is None:
+                json_data[key] = default_value
+                if key in ["name", "desc"]:
+                    logger.info(f"Added default value for missing field '{key}': {default_value}")
+
+        # Step 3: Validate schema structure
         try:
             WorkflowBase.model_validate(json_data)
         except ValidationError as e:
             raise ValueError(f"Invalid OpenJiuwen workflow format: {e}") from e
 
-        # Step 2: Generate new workflow_id (avoid collisions)
+        # Step 4: Regenerate workflow_id (avoid collisions with existing workflows)
+        # Always regenerate to ensure no conflicts, even if one was provided/generated earlier
         new_workflow_id = str(uuid.uuid4())
         json_data["workflow_id"] = new_workflow_id
         logger.info(f"Regenerated workflow_id: {original_workflow_id} → {new_workflow_id}")
 
-        # Step 3: Regenerate node IDs in canvas
+        # Step 5: Regenerate node IDs in canvas
         schema_str = json_data.get("schema")
         if schema_str:
             try:
@@ -132,17 +198,17 @@ class NativeWorkflowConvertor(WorkflowConvertor):
                 warnings.append(f"Failed to regenerate canvas IDs: {e}")
                 logger.warning(f"Failed to regenerate canvas IDs: {e}")
 
-        # Step 4: Update timestamps
+        # Step 6: Update timestamps (always regenerate to current time)
         current_time = milliseconds()
         json_data["create_time"] = current_time
         json_data["update_time"] = current_time
 
-        # Step 5: Clear version fields (import creates draft)
+        # Step 7: Clear version fields (import creates draft)
         json_data.pop("workflow_version", None)
         json_data.pop("latest_publish_version", None)
         json_data.pop("latest_publish_time", None)
 
-        # Step 6: Check for missing resources (non-blocking)
+        # Step 8: Check for missing resources (non-blocking)
         # missing_resources = self._check_missing_resources(json_data)
         # if missing_resources:
         #     for resource in missing_resources:

@@ -141,7 +141,9 @@ asyncio.run(import_workflow())
 
 ### OpenJiuwen Native Format
 
-**Structure:**
+**✨ NEW: Supports PARTIAL workflows - only `schema` is required!**
+
+**Full Structure (all fields optional except `schema`):**
 ```json
 {
   "workflow_id": "uuid",
@@ -156,12 +158,45 @@ asyncio.run(import_workflow())
 }
 ```
 
+**Minimal Structure (only schema required):**
+```json
+{
+  "schema": {
+    "nodes": [
+      {"id": "start_1", "type": "1", "data": {"title": "Start"}},
+      {"id": "llm_1", "type": "3", "data": {"title": "LLM", ...}},
+      {"id": "end_1", "type": "2", "data": {"title": "End"}}
+    ],
+    "edges": [
+      {"sourceNodeID": "start_1", "targetNodeID": "llm_1"},
+      {"sourceNodeID": "llm_1", "targetNodeID": "end_1"}
+    ]
+  }
+}
+```
+
+**Default values for missing fields:**
+- `workflow_id`: Generated UUID
+- `space_id`: **ALWAYS cleared** - source space_id is ignored, importer sets target space_id
+- `name`: "Imported Workflow"
+- `desc`: ""
+- `url`: ""
+- `icon_uri`: ""
+- `input_parameters`: []
+- `output_parameters`: []
+- `create_time`: Current timestamp
+- `update_time`: Current timestamp
+
+**Important:** The `space_id` from the imported JSON is always ignored. The workflow will be imported into the space specified in the import request/context.
+
 **What happens:**
-1. Validates structure
-2. Regenerates workflow_id (avoids collisions)
-3. Regenerates all node IDs in canvas
-4. Updates timestamps
-5. Clears version fields (imports as draft)
+1. Validates that `schema` field exists (only required field)
+2. Adds default values for any missing fields
+3. Validates complete structure
+4. Regenerates workflow_id (avoids collisions)
+5. Regenerates all node IDs in canvas
+6. Updates timestamps
+7. Clears version fields (imports as draft)
 
 ### n8n Format
 
