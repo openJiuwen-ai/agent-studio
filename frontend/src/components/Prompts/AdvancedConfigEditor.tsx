@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useRef, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Box,
@@ -104,6 +104,60 @@ const AdvancedConfigEditor: React.FC<AdvancedConfigEditorProps> = ({
 }) => {
   const { t } = useTranslation()
   const isReadOnly = !!readOnly
+
+  // 变量值/消息内容本地编辑，防抖同步到父组件，减少输入卡顿与 triggerAutoSave 频繁触发
+  const PARAM_DEBOUNCE_MS = 300
+  const [localEdits, setLocalEdits] = React.useState<Record<string, string>>({})
+  const localEditsRef = useRef<Record<string, string>>({})
+  const paramDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  localEditsRef.current = localEdits
+
+  const buildMergedParameters = useCallback(
+    (params: Parameter[], edits: Record<string, string>): Parameter[] => {
+      return params.map(param => {
+        const valueKey = `value_${param.name}`
+        const value = edits[valueKey] !== undefined ? edits[valueKey] : param.value
+        if (param.type === 'placeholder' && param.messages) {
+          const messages = param.messages.map((msg, msgIndex) => {
+            const msgKey = `msg_${param.name}_${msgIndex}`
+            const content = edits[msgKey] !== undefined ? edits[msgKey] : msg.content
+            return { ...msg, content }
+          })
+          return { ...param, value, messages }
+        }
+        return { ...param, value }
+      })
+    },
+    [],
+  )
+
+  const flushLocalEdits = useCallback(() => {
+    if (paramDebounceTimerRef.current) {
+      clearTimeout(paramDebounceTimerRef.current)
+      paramDebounceTimerRef.current = null
+    }
+    const edits = localEditsRef.current
+    if (Object.keys(edits).length === 0) return
+    const merged = buildMergedParameters(parameters, edits)
+    onParametersChange(merged)
+    setLocalEdits({})
+  }, [parameters, onParametersChange, buildMergedParameters])
+
+  const scheduleFlush = useCallback(() => {
+    if (paramDebounceTimerRef.current) clearTimeout(paramDebounceTimerRef.current)
+    paramDebounceTimerRef.current = setTimeout(flushLocalEdits, PARAM_DEBOUNCE_MS)
+  }, [flushLocalEdits])
+
+  useEffect(() => {
+    setLocalEdits({})
+  }, [parameters])
+
+  useEffect(() => {
+    return () => {
+      if (paramDebounceTimerRef.current) clearTimeout(paramDebounceTimerRef.current)
+    }
+  }, [])
 
   // 变量展开收起状态管理，默认展开
   const [variableExpanded, setVariableExpanded] = React.useState<{ [key: string]: boolean }>({})
@@ -610,20 +664,19 @@ const AdvancedConfigEditor: React.FC<AdvancedConfigEditorProps> = ({
                                         minRows={1}
                                         maxRows={8}
                                         fullWidth
-                                        value={msg.content}
+                                        value={localEdits[`msg_${param.name}_${msgIndex}`] ?? msg.content}
                                         onChange={e => {
-                                          if (isReadOnly) {
-                                            return
-                                          }
-                                          const newParams = [...parameters]
-                                          if (newParams[index].messages) {
-                                            newParams[index].messages![msgIndex].content = e.target.value
-                                            onParametersChange(newParams)
-                                          }
+                                          if (isReadOnly) return
+                                          const v = e.target.value
+                                          setLocalEdits(prev => ({ ...prev, [`msg_${param.name}_${msgIndex}`]: v }))
+                                          scheduleFlush()
                                         }}
                                         disabled={isReadOnly}
                                         onFocus={() => onEditingParamIdChange?.(param.name + '_' + msgIndex)}
-                                        onBlur={() => onEditingParamIdChange?.(null)}
+                                        onBlur={() => {
+                                          flushLocalEdits()
+                                          onEditingParamIdChange?.(null)
+                                        }}
                                         placeholder={t('components.prompts.advancedConfigEditor.variable.inputMessagePlaceholder', { role: msg.role })}
                                         className={`${roleStyles.lightBg}`}
                                         InputProps={{
@@ -730,12 +783,11 @@ const AdvancedConfigEditor: React.FC<AdvancedConfigEditorProps> = ({
                           ) : param.dataType === 'object' ? (
                             <div className="w-full">
                               <JsonEditor
-                                value={param.value}
+                                value={localEdits[`value_${param.name}`] !== undefined ? localEdits[`value_${param.name}`] : param.value}
                                 onChange={newValue => {
-                                  if (isReadOnly) {
-                                    return
-                                  }
-                                  onParameterChange(param.name, newValue)
+                                  if (isReadOnly) return
+                                  setLocalEdits(prev => ({ ...prev, [`value_${param.name}`]: newValue }))
+                                  scheduleFlush()
                                 }}
                                 placeholder={t('components.prompts.advancedConfigEditor.variable.jsonPlaceholder')}
                                 minHeight={40}
@@ -748,17 +800,16 @@ const AdvancedConfigEditor: React.FC<AdvancedConfigEditorProps> = ({
                             <TextField
                               fullWidth
                               size="small"
-                              value={param.value}
+                              value={localEdits[`value_${param.name}`] ?? param.value}
                               onChange={e => {
-                                if (isReadOnly) {
-                                  return
-                                }
-                                onParameterChange(param.name, e.target.value)
+                                if (isReadOnly) return
+                                const v = e.target.value
+                                setLocalEdits(prev => ({ ...prev, [`value_${param.name}`]: v }))
+                                scheduleFlush()
                               }}
                               onBlur={e => {
-                                if (isReadOnly) {
-                                  return
-                                }
+                                if (isReadOnly) return
+                                flushLocalEdits()
                                 onParameterBlur?.(param.name, e.target.value)
                               }}
                               placeholder={

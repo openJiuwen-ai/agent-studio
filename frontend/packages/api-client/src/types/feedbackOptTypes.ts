@@ -42,6 +42,7 @@ export interface QuickOptimizeRequest {
   modelInfo: QuickOptimizeModelInfo | AgentModelInfo
   instruct: string
   stream: boolean
+  workspace_id?: string
 }
 
 // 优化响应接口（流式响应）- 统一的返回格式
@@ -62,6 +63,7 @@ export interface OptimizeFeedbackRequest {
   end_pos?: number // 结束位置：仅选中模式时使用
   stream: boolean
   templateInfo: Record<string, any>
+  workspace_id?: string
 }
 
 // Badcase接口
@@ -77,6 +79,7 @@ export interface OptimizeBadcaseRequest {
   badcases: Badcase[]
   stream: boolean
   templateInfo: Record<string, any>
+  workspace_id?: string
 }
 
 // 流式响应回调函数类型

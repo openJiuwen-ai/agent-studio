@@ -14,7 +14,6 @@
 * 操作系统：
   * Ubuntu：最低 Ubuntu 20.04，推荐 Ubuntu 22.04 (Jammy) 及以上
     > **注意**：Ubuntu 官方与主流软件源已停止支持 Ubuntu 20.04 (Focal) 及以下版本系统。
-  * EulerOS：Huawei Cloud EulerOS 2.0及以上
 
 * 软件（安装方法详见下文）	 
   * Git 2.40及以上 
@@ -314,14 +313,6 @@
    MILVUS_PORT=19530
    MILVUS_COLLECTION_NAME=memory_vector
 
-   # 记忆相关配置（如果不使用记忆功能，可以不提供下面的参数）
-   EMBEDDING_MODEL_DIMENTION=1024
-   EMBED_API_BASE=""
-   EMBED_MODEL_NAME=""
-   EMBED_API_KEY=""
-   EMBED_TIMEOUT=5
-   EMBED_MAX_RETRIES=1
-
    # 配置代码沙箱服务（样例，启动代码执行沙箱服务详情请见[问题二：如何启用沙箱功能]）
    CODE_SANDBOX_URL=http://localhost:8188/run
 
@@ -342,13 +333,7 @@
    | **MEMORY_DATA_PATH**          | 记忆数据存储路径,默认值：memory-data    | `memory-data`                         |
    | **MILVUS_HOST**                 | Milvus服务的主机地址                     | `127.0.0.1`                                                                    |
    | **MILVUS_PORT**                 | Milvus服务的端口                       | `19530`                                                                    |
-   | **MILVUS_COLLECTION_NAME**                | Milvus服务的数据库名                     | `memory_vector`                                                                    
-   | **EMBEDDING_MODEL_DIMENTION**         | 向量模型的维度，根据EMBED_MODEL_NAME选择的模型确定 | `1024`                                                                    |                  
-   | **EMBED_API_BASE**                    | 向量模型的接口地址                         | `https://example.com/embedding_model`            |            
-   | **EMBED_MODEL_NAME**                  | 向量模型的名称                           | `text-embedding-model`                                                       |
-   | **EMBED_API_KEY**                     | 向量模型的API密钥                        | `sk-xxx`                                                                  |
-   | **EMBED_TIMEOUT**                     | 向量模型的最大等待时间（单位秒），默认值`60`             | `5`                                                                     |
-   | **EMBED_MAX_RETRIES**                 | 向量模型请求失败时的最大重试次数，默认值`3`              | `1`                                                                    |
+   | **MILVUS_COLLECTION_NAME**                | Milvus服务的数据库名                     | `memory_vector`
    | **CODE_SANDBOX_URL**                 | 代码沙箱服务地址                          | `http://localhost:8188/run`                                                                    |
    | **VITE_PLUGIN_SERVICE_URL**                 | 插件服务地址                            | `http://localhost:8185`                                                                    |
    | **VITE_PLUGIN_CONFIG_PATH**                 | 前端使用的插件服务配置文件                     | `/config.json`                                                                    |
@@ -473,10 +458,9 @@
 
   ![获取api_base和model_name](../images/embed_api_base_and_model_name.png)
 
-* 记录API地址（对应 EMBED_API_BASE）、model参数（对应 EMBED_MODEL_NAME）。
+* 记录API地址、model参数。
 
-* 点击 "API Key 管理"，按照官方界面引导获取 API Key（对应 EMBED_API_KEY）。
-> **注意**：在配置 *EMBEDDING_MODEL_DIMENTION* 之后启用了记忆，请不要再次修改，否则记忆功能会无法使用。embedding模型的其他配置也不建议修改，可能会影响效果。
+* 点击 "API Key 管理"，按照官方界面引导获取 API Key。
 
 <a id="linux-sandbox"></a>
 ### 问题二：如何启用沙箱功能
@@ -513,26 +497,42 @@
 
    其中 `ENABLE_LINUX_SANDBOX` 表示是否启动 bwrap 沙箱，`PYTHON_SANDBOX_URL` 和 `JS_SANDBOX_URL` 为前面两步启动的 Python 和 JS 服务 URL。
 
-   如果需要启动 bwrap 沙箱，请将 `ENABLE_LINUX_SANDBOX` 设置为1，并修改 `sandbox_server/gateway/openjiuwen_sandbox_gateway/conf/sandbox_config.yaml`，确保 Python 解释器和 Js 解释器以及相关依赖都包的路径都在 `mount` 配置中，以及 `PATH` 环境变量中包含了 Python 解释器和 Js 解释器所在路径。示例如下：
+   如果需要启动 bwrap 沙箱，请将 `ENABLE_LINUX_SANDBOX` 设置为1，并在 `sandbox_server/gateway/openjiuwen_sandbox_gateway/conf/sandbox_config.yaml` 中按需修改安全配置。目前支持 `seccomp` 、`namespace` 、`mount` 文件系统等配置参数。请确保 Python 解释器和 Js 解释器以及相关依赖都包的路径都在 `mount` 配置中，以及 `PATH` 环境变量中包含了 Python 解释器和 Js 解释器所在路径。示例如下：
 
    ```
+   seccomp: # whitelist mode
+     allow:
+       x86_64: ["epoll_wait", "getcwd", "wait4", "pread64", "set_tid_address", "prlimit64", "capget", "pipe2", "eventfd2", "pkey_alloc", "madvise", "sysinfo", "readlink", "geteuid", "getegid", "statx", "access", "clone", "arch_prctl", "clone3", "execve", "open", "lstat", "stat", "newfstatat", "lseek", "getdents64", "write", "close", "openat", "read", "futex", "mmap", "brk", "mprotect", "munmap", "rt_sigreturn", "mremap", "getgid", "getuid", "getpid", "getppid", "gettid", "exit", "exit_group", "rt_sigaction", "sched_yield", "set_robust_list", "get_robust_list", "rseq", "clock_gettime", "gettimeofday", "nanosleep", "epoll_create1", "epoll_ctl", "clock_nanosleep", "pselect6", "time", "rt_sigprocmask", "sigaltstack", "getrandom", "mkdirat", "mkdir", "socket", "connect", "bind", "listen", "accept", "sendto", "recvfrom", "getsockname", "recvmsg", "getpeername", "ppoll", "uname", "sendmsg", "sendmmsg", "fstat", "fcntl", "fstatfs", "poll", "epoll_pwait", 'ioctl']
+       aarch64: ["statx", "getcwd", "readlinkat", "madvise", "sysinfo", "clone", "eventfd2", "pipe2", "fcntl", "prlimit64", "set_tid_address", "faccessat", "execve", "write", "close", "openat", "read", "lseek", "getdents64", "futex", "mmap", "brk", "mprotect", "munmap", "rt_sigreturn", "rt_sigprocmask", "sigaltstack", "mremap", "getuid", "getgid", "geteuid", "getegid", "getpid", "getppid", "gettid", "exit", "exit_group", "rt_sigaction", "sched_yield", "get_robust_list", "set_robust_list", "rseq", "epoll_create1", "clock_gettime", "gettimeofday", "nanosleep", "epoll_ctl", "clock_nanosleep", "pselect6", "timerfd_create", "timerfd_settime", "timerfd_gettime", "getrandom", "mkdirat", "socket", "connect", "bind", "listen", "accept", "sendto", "recvfrom", "recvmsg", "getsockname", "getpeername", "ppoll", "uname", "sendmmsg", "newfstatat", "fstat", "fstatfs", "epoll_pwait", "ioctl"]
+
+   namespace:
+     user: False
+     net: True
+     pid: True
+     ipc: True
+     uts: True
+     cgroup: True
+
    mount:
-   [
-     {src: '/lib', dst: '/lib', mode: 'read'},
-     {src: '/lib64', dst: '/lib64', mode: 'read'},
-     {src: '/usr/bin', dst: '/usr/bin', mode: 'read'},
-     {src: '/usr/lib', dst: '/usr/lib', mode: 'read'},
-     {src: '/usr/lib64', dst: '/usr/lib64', mode: 'read'},
-     {src: '/usr/share/nodejs', dst: '/usr/share/nodejs', mode: 'read'},
-   ]
+     [
+       {src: '/lib', dst: '/lib', mode: 'read'},
+       {src: '/lib64', dst: '/lib64', mode: 'read'},
+       {src: '/usr/bin', dst: '/usr/bin', mode: 'read'},
+       {src: '/usr/lib', dst: '/usr/lib', mode: 'read'},
+       {src: '/usr/lib64', dst: '/usr/lib64', mode: 'read'},
+       {src: '/usr/share/nodejs', dst: '/usr/share/nodejs', mode: 'read'},
+     ]
 
    sandbox:
      type: bubblewrap
      path: bwrap
 
+   # Please ensure that both the Python and JavaScript interpreters
+   # are already in the mount directory, and either provide their full
+   # paths or add those paths to the PATH environment variable.
    interpreter:
      python_path: python3
-     node_path: node
+     javascript_path: node
 
    environment:
      PATH: /bin:/usr/bin

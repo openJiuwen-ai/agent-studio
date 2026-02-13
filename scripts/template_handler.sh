@@ -49,7 +49,7 @@ generate_config_file() {
     fi
 
     # Copy template as target file
-    cp -f "${templatefile}" "${destfile}" || error "Cannot create target file: ${destfile}"
+    exec_cmd "cp -f ${templatefile} ${destfile}"
 
     # Loop to replace each placeholder
     info "Starting placeholder replacement..."
@@ -67,7 +67,7 @@ generate_nginx_file() {
     local nginx_dir="${CONFIG["CONFIG_DIR"]}/.nginx-files"
     local nginx_file="${nginx_dir}/nginx.conf.${DEPLOY_VARS["NAME_SUFFIX"]}"
 
-    mkdir -p ${nginx_dir}
+    exec_cmd "mkdir -p ${nginx_dir}"
     generate_config_file ${nginx_template_file} ${nginx_file} "ALL_VARS"
 }
 

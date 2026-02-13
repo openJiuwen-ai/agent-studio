@@ -101,20 +101,7 @@ interface MemoryButtonProps {
   enableLongTerm?: boolean
 }
 
-/** 把后端 UTC 字符串 -> 本地格式 */
-function formatLocalDate(utcStr?: string) {
-  if (!utcStr) return ''
-  const utc = utcStr.includes('Z') ? utcStr : utcStr.replace(' ', 'T') + 'Z'
-  const date = new Date(utc)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
-}
+
 
 export default function MemoryButton({ userId, groupId, enableLongTerm = true }: MemoryButtonProps) {
   const { t } = useScopedTranslation('agents.agentEditor.previewDebug.memoryManager')
@@ -150,22 +137,8 @@ export default function MemoryButton({ userId, groupId, enableLongTerm = true }:
   useEffect(() => {
     if (open) {
       setDraftVars([...varList])
-      // 长期记忆数据按修改时间排序
-      const sortedLongList = sortLongTermByTime(longList);
-
-      // 然后检查每个对象是否有time属性，如果没有则添加
-      const processedList = sortedLongList.map(row => {
-        if (!row.time) {
-          return {
-            ...row,
-            time: new Date().toLocaleString('zh-CN')
-          };
-        }
-        return row;
-      });
-
       // 设置状态
-      setDraftLong(processedList);
+      setDraftLong([...longList]);
       setToDeleteVar(new Set())
       setToDelete(new Set())
     }
@@ -196,12 +169,10 @@ export default function MemoryButton({ userId, groupId, enableLongTerm = true }:
           field: r.type || t('menus.longterm'),
           value: r.content,
           _id: r.mem_id,
-          time: formatLocalDate(r.time || r.timestamp) || new Date().toLocaleString('zh-CN'),
+          time: '',
         }))
         setLongList(lList)
-        // 长期记忆数据按修改时间排序
-        const sortedLongList = sortLongTermByTime(lList)
-        setDraftLong(sortedLongList)
+        setDraftLong(lList)
 
         /* 清空待删集合 */
         setToDeleteVar(new Set())
@@ -242,13 +213,11 @@ export default function MemoryButton({ userId, groupId, enableLongTerm = true }:
           id: idx + 1,
           field: r.type || t('menus.longterm'),
           value: r.content,
-          time: formatLocalDate(r.time || r.timestamp) || new Date().toLocaleString('zh-CN'),
+          time: '',
           _id: r.mem_id || r.id, // 统一使用 mem_id
         }))
         setLongList(list)
-        // 长期记忆数据按修改时间排序
-        const sortedLongList = sortLongTermByTime(list)
-        setDraftLong(sortedLongList)
+        setDraftLong(list)
       }
     } catch (e: any) {
       setError(e.message || t('errors.loadFailed'))
@@ -271,7 +240,7 @@ export default function MemoryButton({ userId, groupId, enableLongTerm = true }:
       
       // 从草稿中移除
       const updatedDraft = draftLong.filter(r => r.id !== id)
-      setDraftLong(sortLongTermByTime(updatedDraft))
+      setDraftLong(updatedDraft)
     }
   }
 
@@ -316,12 +285,11 @@ export default function MemoryButton({ userId, groupId, enableLongTerm = true }:
           id: idx + 1,
           field: r.type || t('menus.longterm'),
           value: r.content,
-          time: formatLocalDate(r.time || r.timestamp) || new Date().toLocaleString('zh-CN'),
+          time: '',
           _id: r.mem_id || r.id,
         }))
         setLongList(freshList)
-        const sortedFreshList = sortLongTermByTime(freshList)
-        setDraftLong(sortedFreshList)
+        setDraftLong(freshList)
         setToDelete(new Set())
       }
 
@@ -357,9 +325,7 @@ export default function MemoryButton({ userId, groupId, enableLongTerm = true }:
       }
     };
     const getGridClasses = (isLong) => {
-      return isLong 
-        ? 'grid grid-cols-3 gap-4 flex-1' // 长文本模式：3列 + 合理间距
-        : 'grid grid-cols-2 gap-4 flex-1'; // 变量模式：2列 + 合理间距
+      return 'grid grid-cols-2 gap-4 flex-1'; // 统一2列 + 合理间距
     };
     return (
       <div className="space-y-3 w-full">
@@ -369,7 +335,6 @@ export default function MemoryButton({ userId, groupId, enableLongTerm = true }:
             {isLong ? (
               <>
                 <span className="font-medium">{t('table.headers.longTerm.memory')}</span>
-                <span className="font-medium">{t('table.headers.longTerm.updatedAt')}</span>
                 <span className="font-medium">{t('table.headers.longTerm.type')}</span>
               </>
             ) : (
@@ -396,7 +361,6 @@ export default function MemoryButton({ userId, groupId, enableLongTerm = true }:
                     <span className="text-gray-600 px-2 py-1 break-words max-w-full">
                       {row.value}
                     </span>
-                    <span className="text-gray-400 text-sm">{row.time}</span>
                     <span className="text-gray-400 text-sm">{getMemoryTypeName(row.field)}</span>
                   </>
                 ) : (

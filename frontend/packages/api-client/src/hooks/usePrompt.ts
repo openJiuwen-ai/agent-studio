@@ -108,19 +108,22 @@ export const useEditPromptBasicInfo = () => {
 export const useDeletePrompt = () => {
   const queryClient = useQueryClient()
 
-  return useMutation((promptId: string) => PromptService.deletePrompt(promptId), {
-    onSuccess: (response: any, promptId) => {
-      if (response.code === 0) {
-        // 删除成功后，使提示词列表缓存失效
-        queryClient.invalidateQueries(['prompts', 'list'])
-        queryClient.invalidateQueries(['prompts', 'detail', promptId])
-        console.log('提示词删除成功')
-      }
+  return useMutation(
+    ({ promptId, workspaceId }: { promptId: string; workspaceId: string }) => PromptService.deletePrompt(promptId, workspaceId),
+    {
+      onSuccess: (response: any, variables) => {
+        if (response.code === 0) {
+          // 删除成功后，使提示词列表缓存失效
+          queryClient.invalidateQueries(['prompts', 'list'])
+          queryClient.invalidateQueries(['prompts', 'detail', variables.promptId])
+          console.log('提示词删除成功')
+        }
+      },
+      onError: (error: any) => {
+        console.error('删除提示词失败:', error)
+      },
     },
-    onError: (error: any) => {
-      console.error('删除提示词失败:', error)
-    },
-  })
+  )
 }
 
 // 保存草稿
@@ -128,8 +131,8 @@ export const useSaveDraft = () => {
   const queryClient = useQueryClient()
 
   return useMutation(
-    ({ promptId, userId, spaceId, editorData }: { promptId: string; userId: string; spaceId: string; editorData: any }) =>
-      PromptService.saveDraft(promptId, userId, spaceId, editorData),
+    ({ promptId, spaceId, editorData }: { promptId: string; spaceId: string; editorData: any }) =>
+      PromptService.saveDraft(promptId, spaceId, editorData),
     {
       onSuccess: (response: any, variables) => {
         if (response.code === 0) {
@@ -150,13 +153,14 @@ export const useCommitVersion = () => {
   const queryClient = useQueryClient()
 
   return useMutation(
-    ({ promptId, userId, data }: { promptId: string; userId: string; data: CommitVersionRequest }) => PromptService.commitVersion(promptId, userId, data),
+    ({ promptId, workspaceId, data }: { promptId: string; workspaceId: string; data: CommitVersionRequest }) =>
+      PromptService.commitVersion(promptId, workspaceId, data),
     {
       onSuccess: (response: any, variables) => {
         if (response.code === 0) {
           // 提交成功后，使相关缓存失效
           queryClient.invalidateQueries(['prompts', 'detail', variables.promptId])
-          queryClient.invalidateQueries(['prompts', 'versions', variables.promptId])
+          queryClient.invalidateQueries(['prompts', 'versions', variables.promptId, variables.workspaceId])
           console.log('版本提交成功')
         }
       },
@@ -172,13 +176,14 @@ export const useRevertToVersion = () => {
   const queryClient = useQueryClient()
 
   return useMutation(
-    ({ promptId, userId, data }: { promptId: string; userId: string; data: RevertToVersionRequest }) => PromptService.revertToVersion(promptId, userId, data),
+    ({ promptId, workspaceId, data }: { promptId: string; workspaceId: string; data: RevertToVersionRequest }) =>
+      PromptService.revertToVersion(promptId, workspaceId, data),
     {
       onSuccess: (response: any, variables) => {
         if (response.code === 0) {
           // 还原成功后，使相关缓存失效
           queryClient.invalidateQueries(['prompts', 'detail', variables.promptId])
-          queryClient.invalidateQueries(['prompts', 'versions', variables.promptId])
+          queryClient.invalidateQueries(['prompts', 'versions', variables.promptId, variables.workspaceId])
           console.log('版本还原成功')
         }
       },
@@ -190,9 +195,9 @@ export const useRevertToVersion = () => {
 }
 
 // 获取版本列表
-export const usePromptVersionList = (promptId?: string, params?: GetVersionListRequest) => {
-  return useQuery(['prompts', 'versions', promptId, params?.page_size], () => PromptService.getVersionList(promptId!, params), {
-    enabled: !!promptId, // 只有当promptId存在时才执行查询
+export const usePromptVersionList = (promptId?: string, workspaceId?: string, params?: GetVersionListRequest) => {
+  return useQuery(['prompts', 'versions', promptId, workspaceId, params?.page_size], () => PromptService.getVersionList(promptId!, workspaceId!, params), {
+    enabled: !!promptId && !!workspaceId, // 只有当 promptId 和 workspaceId 存在时才执行查询
     staleTime: 1 * 60 * 1000, // 1分钟内不重新获取
     cacheTime: 5 * 60 * 1000, // 缓存5分钟
     retry: 2,

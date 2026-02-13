@@ -21,6 +21,7 @@ export interface MessageInputProps {
   onChange?: (value: string) => void
   placeholder?: string
   disabled?: boolean
+  isDisabled?: boolean
   agents?: MentionItem[]
   resources?: MentionItem[]
   onAgentSelect?: (agent: MentionItem) => void
@@ -38,6 +39,7 @@ const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       onChange,
       placeholder,
       disabled = false,
+      isDisabled = false,
       agents = [],
       resources = [],
       onAgentSelect,
@@ -183,6 +185,11 @@ const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       if (e.key === 'Enter' && !e.shiftKey) {
         // 如果选择器打开，不处理 Enter
         if (showPicker) {
+          e.preventDefault()
+          return
+        }
+        // 检查是否禁用发送
+        if (isDisabled) {
           e.preventDefault()
           return
         }

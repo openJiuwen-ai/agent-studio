@@ -119,7 +119,6 @@ const PromptOptimizeEditPage: React.FC = () => {
   // 基本信息状态
   const { user } = useAuthStore()
   const workspaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID
-  const userId = user?.id || ENV_CONFIG.DEFAULT_USER_ID
   const queryClient = useQueryClient()
 
   // 检查是否是草稿类型
@@ -131,14 +130,14 @@ const PromptOptimizeEditPage: React.FC = () => {
     data: formalJobDetailData,
     isLoading: formalJobDetailLoading,
     error: formalJobDetailError,
-  } = useOptimizationJobDetail(id && isEditMode && !isDraftType ? id : undefined, workspaceId, userId)
+  } = useOptimizationJobDetail(id && isEditMode && !isDraftType ? id : undefined, workspaceId)
 
   const {
     data: draftDetailData,
     isLoading: draftDetailLoading,
     refetch: refetchDraftDetail,
     error: draftDetailError,
-  } = useJobDraftDetail(id && isEditMode && isDraftType ? parseInt(id) : undefined, workspaceId, userId)
+  } = useJobDraftDetail(id && isEditMode && isDraftType ? parseInt(id) : undefined, workspaceId)
 
   // 统一的数据和加载状态
   const jobDetailData = isDraftType ? draftDetailData : formalJobDetailData
@@ -163,7 +162,6 @@ const PromptOptimizeEditPage: React.FC = () => {
   } = useJobHistory(
     detailDialogOpen && id ? id : undefined,
     detailDialogOpen ? workspaceId : undefined,
-    detailDialogOpen ? userId : undefined,
     detailDialogOpen ? detailDialogPageNum : undefined,
     detailDialogOpen ? detailDialogPageSize : undefined,
     detailDialogOpen ? detailDialogIterationRound : undefined,
@@ -1191,12 +1189,12 @@ const PromptOptimizeEditPage: React.FC = () => {
     if (id && isEditMode && isDraftType && refetchDraftDetail && !hasRefetchedRef.current) {
       // 使草稿详情查询缓存失效，强制重新获取
       const draftIdNum = parseInt(id)
-      queryClient.invalidateQueries(['selfOpt', 'draftDetail', draftIdNum, workspaceId, userId])
+      queryClient.invalidateQueries(['selfOpt', 'draftDetail', draftIdNum, workspaceId])
       // 立即刷新一次
       refetchDraftDetail()
       hasRefetchedRef.current = true
     }
-  }, [id, isEditMode, isDraftType, refetchDraftDetail, queryClient, workspaceId, userId])
+  }, [id, isEditMode, isDraftType, refetchDraftDetail, queryClient, workspaceId])
 
   // 从 sessionStorage 读取数据或加载已有数据
   React.useEffect(() => {
@@ -1343,14 +1341,10 @@ const PromptOptimizeEditPage: React.FC = () => {
       // 使用ref中的最新值构建草稿请求数据
       const draftData = buildOptimizationRequest(true, latestValuesRef.current)
 
-      // 获取用户ID
-      const userId = user?.id || ENV_CONFIG.DEFAULT_USER_ID
-
       // 调用保存草稿API
       const response = await saveJobDraftMutation.mutateAsync({
         data: draftData,
         workspaceId,
-        userId,
         draftId,
       })
 
@@ -1521,7 +1515,6 @@ const PromptOptimizeEditPage: React.FC = () => {
           await deleteJobMutation.mutateAsync({
             jobId: currentDraftId.toString(),
             workspaceId,
-            userId,
             jobType: 'draft',
           })
           setDraftId(undefined)
@@ -1540,7 +1533,6 @@ const PromptOptimizeEditPage: React.FC = () => {
       const response = await createOptimizationJobMutation.mutateAsync({
         request: requestData,
         workspaceId,
-        userId,
       })
 
       if (response.code === 200 || response.code === 0) {
@@ -1549,7 +1541,6 @@ const PromptOptimizeEditPage: React.FC = () => {
             await deleteJobMutation.mutateAsync({
               jobId: currentDraftId.toString(),
               workspaceId,
-              userId,
               jobType: 'draft',
             })
             setDraftId(undefined)

@@ -14,7 +14,6 @@ Please ensure the machine meets the following requirements:
 - Operating System:
   - Ubuntu: Minimum Ubuntu 20.04, Ubuntu 22.04 (Jammy) or newer recommended
     > **Note**: Ubuntu official and mainstream software sources have stopped supporting Ubuntu 20.04 (Focal) and older versions.
-  - EulerOS: Huawei Cloud EulerOS 2.0 or newer
 
 - Software (installation methods detailed below)
   - Git 2.40 or newer
@@ -290,14 +289,6 @@ Complete dependency installation first, then perform source retrieval and instal
    MILVUS_HOST=127.0.0.1
    MILVUS_PORT=19530
    MILVUS_COLLECTION_NAME=memory_vector
-
-   # Memory-related configuration (if you are not using the memory feature, you can omit the parameters below)
-   EMBEDDING_MODEL_DIMENTION=1024
-   EMBED_API_BASE=""
-   EMBED_MODEL_NAME=""
-   EMBED_API_KEY=""
-   EMBED_TIMEOUT=5
-   EMBED_MAX_RETRIES=1
   
    # Code sandbox configuration (example, please see [Question 2: How to Enable the Sandbox Feature] to learn more)
    CODE_SANDBOX_URL=http://localhost:8188/run
@@ -320,12 +311,6 @@ Complete dependency installation first, then perform source retrieval and instal
    | **MILVUS_HOST**                  | Milvus service host                                         | `127.0.0.1`                                                                  |
    | **MILVUS_PORT**                  | Milvus service port                                         | `19530`                                                                      |
    | **MILVUS_COLLECTION_NAME**       | Milvus collection name                                      | `memory_vector`                                                              |
-   | **EMBEDDING_MODEL_DIMENTION**    | Vector model dimension based on the chosen EMBED_MODEL_NAME | `1024`                                                                       |
-   | **EMBED_API_BASE**               | Endpoint URL for the embedding model                        | `https://example.com/embedding_model`                                        |
-   | **EMBED_MODEL_NAME**             | Embedding model name                                        | `text-embedding-model`                                                       |
-   | **EMBED_API_KEY**                | API key for the embedding model                             | `sk-xxx`                                                                     |
-   | **EMBED_TIMEOUT**                | Max timeout for embedding model requests(unit: second), default value `60` | `5`                                                                          |
-   | **EMBED_MAX_RETRIES**            | Max retry count for embedding model requests, default value `3`            | `1`                                                                          |
    | **CODE_SANDBOX_URL**             | Code Sandbox url                                            | `http://localhost:8188/run`                                                                    |
    | **VITE_PLUGIN_SERVICE_URL**      | Plugin Server url                                           | `http://localhost:8185`                                                                    |
    | **VITE_PLUGIN_CONFIG_PATH**      | Plugin configuration file path for web                      | `/config.json`                                                                    |
@@ -449,10 +434,9 @@ The memory and knowledge base features rely on an embedding model. The following
 
   ![Get api_base and model_name](../images/embed_api_base_and_model_name.png)
 
-- Record the API address (corresponds to EMBED_API_BASE) and the model parameter (corresponds to EMBED_MODEL_NAME).
+- Record the API address and the model parameter.
 
-- Click "API Key Management" and follow the official instructions to obtain an API Key (corresponds to EMBED_API_KEY).
-> **Note**: After setting EMBEDDING_MODEL_DIMENTION and enabling memory, do not change it again; otherwise, the memory feature will stop working. It is also not recommended to modify other embedding model settings, as they may affect performance.
+- Click "API Key Management" and follow the official instructions to obtain an API Key.
 
 ### <a id="linux-sandbox"></a> Question 2: How to Enable the Sandbox Feature
 
@@ -488,26 +472,42 @@ If you need to enable code node or code plugin tool, the sandbox service is requ
 
    `ENABLE_LINUX_SANDBOX` controls whether to enable the bwrap sandbox. `PYTHON_SANDBOX_URL` and `JS_SANDBOX_URL` are the URLs of the Python and JS services started in the previous steps.
 
-   To enable the bwrap sandbox, set `ENABLE_LINUX_SANDBOX` to 1 and edit `sandbox_server/gateway/openjiuwen_sandbox_gateway/conf/sandbox_config.yaml`: ensure the Python and Node interpreters and their dependencies are listed under `mount`, and that `PATH` includes the interpreter paths. Example:
+   To enable the bwrap sandbox, set `ENABLE_LINUX_SANDBOX` to 1 and edit `sandbox_server/gateway/openjiuwen_sandbox_gateway/conf/sandbox_config.yaml` as needed. Currently supported configuration parameters include `seccomp`, `namespace`, `mount` filesystem, etc. Please ensure the Python and Node interpreters and their dependencies are listed under `mount`, and that `PATH` includes the interpreter paths. Example:
 
    ```
+   seccomp: # whitelist mode
+     allow:
+       x86_64: ["epoll_wait", "getcwd", "wait4", "pread64", "set_tid_address", "prlimit64", "capget", "pipe2", "eventfd2", "pkey_alloc", "madvise", "sysinfo", "readlink", "geteuid", "getegid", "statx", "access", "clone", "arch_prctl", "clone3", "execve", "open", "lstat", "stat", "newfstatat", "lseek", "getdents64", "write", "close", "openat", "read", "futex", "mmap", "brk", "mprotect", "munmap", "rt_sigreturn", "mremap", "getgid", "getuid", "getpid", "getppid", "gettid", "exit", "exit_group", "rt_sigaction", "sched_yield", "set_robust_list", "get_robust_list", "rseq", "clock_gettime", "gettimeofday", "nanosleep", "epoll_create1", "epoll_ctl", "clock_nanosleep", "pselect6", "time", "rt_sigprocmask", "sigaltstack", "getrandom", "mkdirat", "mkdir", "socket", "connect", "bind", "listen", "accept", "sendto", "recvfrom", "getsockname", "recvmsg", "getpeername", "ppoll", "uname", "sendmsg", "sendmmsg", "fstat", "fcntl", "fstatfs", "poll", "epoll_pwait", 'ioctl']
+       aarch64: ["statx", "getcwd", "readlinkat", "madvise", "sysinfo", "clone", "eventfd2", "pipe2", "fcntl", "prlimit64", "set_tid_address", "faccessat", "execve", "write", "close", "openat", "read", "lseek", "getdents64", "futex", "mmap", "brk", "mprotect", "munmap", "rt_sigreturn", "rt_sigprocmask", "sigaltstack", "mremap", "getuid", "getgid", "geteuid", "getegid", "getpid", "getppid", "gettid", "exit", "exit_group", "rt_sigaction", "sched_yield", "get_robust_list", "set_robust_list", "rseq", "epoll_create1", "clock_gettime", "gettimeofday", "nanosleep", "epoll_ctl", "clock_nanosleep", "pselect6", "timerfd_create", "timerfd_settime", "timerfd_gettime", "getrandom", "mkdirat", "socket", "connect", "bind", "listen", "accept", "sendto", "recvfrom", "recvmsg", "getsockname", "getpeername", "ppoll", "uname", "sendmmsg", "newfstatat", "fstat", "fstatfs", "epoll_pwait", "ioctl"]
+
+   namespace:
+     user: False
+     net: True
+     pid: True
+     ipc: True
+     uts: True
+     cgroup: True
+
    mount:
-   [
-     {src: '/lib', dst: '/lib', mode: 'read'},
-     {src: '/lib64', dst: '/lib64', mode: 'read'},
-     {src: '/usr/bin', dst: '/usr/bin', mode: 'read'},
-     {src: '/usr/lib', dst: '/usr/lib', mode: 'read'},
-     {src: '/usr/lib64', dst: '/usr/lib64', mode: 'read'},
-     {src: '/usr/share/nodejs', dst: '/usr/share/nodejs', mode: 'read'},
-   ]
+     [
+       {src: '/lib', dst: '/lib', mode: 'read'},
+       {src: '/lib64', dst: '/lib64', mode: 'read'},
+       {src: '/usr/bin', dst: '/usr/bin', mode: 'read'},
+       {src: '/usr/lib', dst: '/usr/lib', mode: 'read'},
+       {src: '/usr/lib64', dst: '/usr/lib64', mode: 'read'},
+       {src: '/usr/share/nodejs', dst: '/usr/share/nodejs', mode: 'read'},
+     ]
 
    sandbox:
      type: bubblewrap
      path: bwrap
 
+   # Please ensure that both the Python and JavaScript interpreters
+   # are already in the mount directory, and either provide their full
+   # paths or add those paths to the PATH environment variable.
    interpreter:
      python_path: python3
-     node_path: node
+     javascript_path: node
 
    environment:
      PATH: /bin:/usr/bin

@@ -19,9 +19,7 @@ services:
       - ../examples:<<BACKEND_PATH>>/examples
       - ./config.yaml:<<BACKEND_PATH>>/conf/config.yaml
       - ./config.json:<<BACKEND_PATH>>/conf/config.json
-      - ../log-dirs/logs-<<NAME_SUFFIX>>/run:/app/logs/run
-      - ../log-dirs/logs-<<NAME_SUFFIX>>/performance:/app/logs/performance
-      - ../log-dirs/logs-<<NAME_SUFFIX>>/interface:/app/logs/interface
+      - ../log-dirs/logs-<<NAME_SUFFIX>>/server:/app/logs
       - <<SQLITE_VOLUME>>:/app/data
       - <<MEMORY_VOLUME>>:<<MEMORY_DATA_PATH>>
       - <<KNOWLEDGE_VOLUME>>:/app/site-packages/data

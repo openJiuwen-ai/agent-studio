@@ -234,7 +234,7 @@ const PromptOptimizePage: React.FC = () => {
   }
 
   // 使用 hooks 获取任务列表
-  const { data: jobListData, isLoading, refetch: refetchJobList } = useOptimizationJobList(['*'], workspaceId, userId)
+  const { data: jobListData, isLoading, refetch: refetchJobList } = useOptimizationJobList(['*'], workspaceId)
   const refreshJobListMutation = useRefreshOptimizationJobList()
   const deleteJobMutation = useDeleteOptimizationJob()
 
@@ -276,7 +276,7 @@ const PromptOptimizePage: React.FC = () => {
     if (isRefresh) {
       setRefreshing(true)
       try {
-        await refreshJobListMutation.mutateAsync({ idList: ['*'], workspaceId, userId })
+        await refreshJobListMutation.mutateAsync({ idList: ['*'], workspaceId })
       } catch (error) {
         console.error('刷新任务列表失败:', error)
         showSnackbar(t('prompts.optimizePage.messages.refreshFailed'), 'error')
@@ -381,7 +381,6 @@ const PromptOptimizePage: React.FC = () => {
       await deleteJobMutation.mutateAsync({
         jobId,
         workspaceId,
-        userId,
         jobType,
       })
       showSnackbar(t('prompts.optimizePage.messages.deleteSuccess'), 'success')

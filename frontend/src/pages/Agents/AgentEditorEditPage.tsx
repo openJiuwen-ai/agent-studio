@@ -1,7 +1,7 @@
 import { getDefaultSpaceId } from '@/utils/spaceUtils'
 import { Button, IconButton, Paper, CircularProgress, Divider, Select, MenuItem, SelectChangeEvent } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AgentDetailResponse, AgentService, ExecutionService, SaveAgentRequest, useModels } from '@test-agentstudio/api-client'
+import { AgentDetailResponse, AgentService, ExecutionService, SaveAgentRequest, useModels, RelatedMemberService, MemberType, type RelatedMemberInfo } from '@test-agentstudio/api-client'
 import i18n, { useScopedTranslation } from '@/i18n'
 import { ChevronLeft, Save, History, Brain, Settings, Eye, Clock, Tag } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
@@ -268,14 +268,54 @@ const AgentEditorEditPage = () => {
     if (!agentId) return
     try {
       const agentType = agentDetailResponse?.data?.agent_info?.agent_type || 'react'
+      const originalAgentName = agentDetailResponse?.data?.agent_info?.agent_name || ''
+      const newAgentName = nextName.trim()
+      const isNameChanged = newAgentName !== originalAgentName
+
       await AgentService.updateAgent({
         agent_id: agentId,
         space_id: getDefaultSpaceId(),
-        agent_name: nextName.trim(),
+        agent_name: newAgentName,
         description: nextDescription,
         icon: nextIcon,
         agent_type: agentType,
       })
+
+      // 如果名称发生变化，更新关联表中的智能体名称
+      if (isNameChanged) {
+        try {
+          const spaceId = getDefaultSpaceId()
+          const agentInfo: RelatedMemberInfo = {
+            id: agentId,
+            version: 'draft',
+            name: newAgentName,
+            type: MemberType.AGENT,
+          }
+
+          const relationsResponse = await RelatedMemberService.getPromptRelations(spaceId, agentInfo, false)
+
+          if (relationsResponse.code === 200 && relationsResponse.data && relationsResponse.data.length > 0) {
+            // 遍历所有关联的提示词，重新注册关联关系以更新智能体名称
+            const updatePromises = relationsResponse.data.map(async (relation) => {
+              const promptInfo: RelatedMemberInfo = {
+                id: relation.prompt_id,
+                version: relation.prompt_version,
+                name: relation.prompt_name,
+                type: MemberType.PROMPT,
+              }
+
+              return RelatedMemberService.registerPromptRelation(spaceId, promptInfo, agentInfo)
+            })
+
+            await Promise.all(updatePromises)
+            console.log(`已更新智能体 "${newAgentName}" 的 ${relationsResponse.data.length} 个关联关系`)
+          }
+        } catch (error) {
+          // 更新关联关系失败不影响主流程
+          console.warn('更新智能体关联关系失败:', error)
+        }
+      }
+
       showSuccess(t('messages.updateAgentSuccess'))
       await fetchAgentDetail(agentId)
       setSettingsOpen(false)

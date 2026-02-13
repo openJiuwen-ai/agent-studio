@@ -14,6 +14,8 @@ import { useTranslation } from '../../../../i18n'
 
 import { type JsonSchemaTypeRegistry } from '../types'
 
+export const ENABLE_FILE_TYPE = false
+
 const loadFileUploadService = async () => {
   try {
     const module = await import('../../../../components/testrun/runtime')

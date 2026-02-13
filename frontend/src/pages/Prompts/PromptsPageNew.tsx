@@ -902,6 +902,7 @@ const PromptsPageNew: React.FC = () => {
         onClose={handleCloseDeleteDialog}
         onDeleteSuccess={handleDeleteSuccess}
         prompt={promptToDelete}
+        workspaceId={workspaceId}
         showSnackbar={showSnackbar}
       />
 

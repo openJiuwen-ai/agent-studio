@@ -39,6 +39,11 @@ export interface ChatInputAreaProps {
   onModelClick: () => void
   modelButtonRef: React.RefObject<HTMLButtonElement | null>
 
+  // DeepSearch 服务状态
+  deepsearchUnavailable?: boolean
+  checkingDeepsearch?: boolean
+  disableEnterKey?: boolean
+
   // 新对话
   onNewConversation?: () => void
 
@@ -67,6 +72,8 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   onModelClick,
   modelButtonRef,
   onNewConversation,
+  deepsearchUnavailable = false,
+  checkingDeepsearch = false,
   className = '',
   inputStyle,
 }) => {
@@ -98,6 +105,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           onPressEnter={onPressEnter}
           className="w-full"
           style={inputStyle}
+          isDisabled={!selectedAgent || !selectedModel || !inputValue.trim() || isStreaming || deepsearchUnavailable || checkingDeepsearch}
         />
 
         {/* 左侧 @ 和 # 按钮 */}
@@ -134,32 +142,38 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
             </button>
           )}
 
-          {/* 发送按钮 - 在发送中时显示灰色禁用状态 */}
+          {/* 发送按钮 - 根据 DeepSearch 服务状态显示不同状态 */}
           <button
             onClick={onPressEnter}
-            disabled={!selectedAgent || !selectedModel || !inputValue.trim() || isStreaming}
+            disabled={!selectedAgent || !selectedModel || !inputValue.trim() || isStreaming || deepsearchUnavailable || checkingDeepsearch}
             className={`
               w-10 h-10 ${RADIUS_BUTTON} flex items-center justify-center
               transition-all duration-200 shrink-0
               ${
-                isStreaming
+                isStreaming || checkingDeepsearch
                   ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : selectedAgent && selectedModel && inputValue.trim()
-                    ? 'bg-blue-500 hover:bg-blue-600 active:scale-95 text-white shadow-sm hover:shadow'
-                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : deepsearchUnavailable
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : selectedAgent && selectedModel && inputValue.trim()
+                      ? 'bg-blue-500 hover:bg-blue-600 active:scale-95 text-white shadow-sm hover:shadow'
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               }
             `}
             title={
-              isStreaming
-                ? t('apps.chat.conversationInProgress')
-                : !selectedModel
-                  ? t('apps.chat.selectModel')
-                  : !selectedAgent
-                    ? t('apps.chat.selectAgent')
-                    : t('apps.chat.sendMessage')
+              checkingDeepsearch
+                ? t('apps.chat.checkingDeepsearch')
+                : isStreaming
+                  ? t('apps.chat.conversationInProgress')
+                  : deepsearchUnavailable
+                    ? t('apps.chat.deepsearchServiceDown')
+                    : !selectedModel
+                      ? t('apps.chat.selectModel')
+                      : !selectedAgent
+                        ? t('apps.chat.selectAgent')
+                        : t('apps.chat.sendMessage')
             }
           >
-            {isStreaming ? (
+            {isStreaming || checkingDeepsearch ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <Send className="w-5 h-5" />

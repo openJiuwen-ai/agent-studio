@@ -63,17 +63,7 @@ export function DynamicValueInput({ value, onChange, readonly, style, schema: sc
           setSelectSchema(_v || { type: 'string' })
 
           const schema = _v || { type: 'string' }
-          let content = typeManager.getDefaultValue(schema)
-          if (_v?.type === 'object') {
-            content = '{}'
-          }
-          if (_v?.type === 'array') {
-            content = '[]'
-          }
-          if (_v?.type === 'file') {
-            // File type defaults to undefined (will be set after upload)
-            content = undefined
-          }
+          const content: any = undefined
 
           onChange({
             type: 'constant',

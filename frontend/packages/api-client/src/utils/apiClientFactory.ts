@@ -1,6 +1,7 @@
 import { createApiClientInstance, TokenProvider, AuthStateUpdater, LanguageProvider } from '../client'
 import { AxiosInstance } from 'axios'
 import { getLoginPagePath } from '../../../../src/Common/LoginPage'
+import { API_CONFIG } from '../config'
 
 // 全局token提供者
 let globalTokenProvider: TokenProvider | null = null
@@ -115,4 +116,149 @@ export const getAcceptLanguage = (): string => {
     return 'zh-CN;q=1.0, en-US;q=0.5'
   }
   return language
+}
+
+/** 流式请求选项 */
+export interface StreamOptions<T = any> {
+  onData?: (data: T) => void
+  onError?: (error: string) => void
+  onComplete?: () => void
+  parseData?: (line: string) => T | null
+  abortController?: AbortController
+}
+
+/**
+ * 流式请求（Server-Sent Events 或自定义流式响应），内部自动带 Authorization，避免与 client 循环依赖
+ */
+export async function stream<T = any>(
+  url: string,
+  data?: any,
+  options?: StreamOptions<T>,
+): Promise<void> {
+  const { onData, onError, onComplete, parseData, abortController } = options || {}
+
+  try {
+    const fullUrl = url.startsWith('http') ? url : `${API_CONFIG.BASE_URL}${url}`
+    const token = getToken()
+
+    const response = await fetch(fullUrl, {
+      method: 'POST',
+      headers: {
+        ...API_CONFIG.HEADERS,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: data ? JSON.stringify(data) : undefined,
+      signal: abortController?.signal,
+    })
+
+    if (!response.ok) {
+      let errorMessage = `HTTP error! status: ${response.status}`
+      try {
+        const responseText = await response.text()
+        if (responseText) {
+          try {
+            const errorData = JSON.parse(responseText)
+            const detailedError = errorData.error || errorData.message || errorData.msg
+            if (detailedError) {
+              errorMessage = detailedError
+            } else if (errorData.code) {
+              errorMessage = `error ${errorData.code}: ${errorData.message || errorData.msg || errorMessage}`
+            }
+          } catch (e) {
+            if (responseText.length < 500) {
+              errorMessage = responseText
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('无法读取错误响应体:', e)
+      }
+      throw new Error(errorMessage)
+    }
+
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+
+    if (!reader) {
+      throw new Error('No response body')
+    }
+
+    let buffer = ''
+    let isReading = true
+
+    while (isReading) {
+      if (abortController?.signal.aborted) {
+        console.log('🛑 [stream] 流式请求被取消')
+        reader.cancel()
+        return
+      }
+
+      const { done, value } = await reader.read()
+
+      if (done) {
+        if (buffer.trim() || parseData) {
+          try {
+            let parsedData: T | null = null
+            if (parseData) {
+              parsedData = parseData(buffer)
+            } else {
+              const trimmedBuffer = buffer.trim()
+              if (trimmedBuffer.startsWith('data: ')) {
+                parsedData = JSON.parse(trimmedBuffer.substring(6)) as T
+              } else {
+                parsedData = JSON.parse(trimmedBuffer) as T
+              }
+            }
+            if (parsedData && onData) onData(parsedData)
+          } catch (e) {
+            console.error('Failed to parse final buffer data:', buffer, e)
+            const trimmedBuffer = buffer.trim()
+            if (onData && !trimmedBuffer.startsWith('data:') && !trimmedBuffer.startsWith('{')) {
+              onData(trimmedBuffer as unknown as T)
+            }
+          }
+        }
+        if (onComplete) onComplete()
+        isReading = false
+        break
+      }
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmedLine = line.trim()
+        if (trimmedLine || parseData) {
+          try {
+            let parsedData: T | null = null
+            if (parseData) {
+              parsedData = parseData(line)
+            } else {
+              if (trimmedLine.startsWith('data: ')) {
+                parsedData = JSON.parse(trimmedLine.substring(6)) as T
+              } else {
+                parsedData = JSON.parse(trimmedLine) as T
+              }
+            }
+            if (parsedData && onData) onData(parsedData)
+          } catch (e) {
+            console.error('Failed to parse stream data:', trimmedLine, e)
+            if (onData && !trimmedLine.startsWith('data:') && !trimmedLine.startsWith('{')) {
+              onData(trimmedLine as unknown as T)
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.log('🛑 [stream] 流式请求被取消')
+      return
+    }
+    console.error('Stream request error:', error)
+    if (onError) {
+      onError(error instanceof Error ? error.message : '流式请求失败')
+    }
+  }
 }

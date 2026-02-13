@@ -55,7 +55,8 @@ valid_env_vars() {
 
     if [[ "${DEPLOY_VARS["HAS_JIUWEN"]}" == "true" ||
           "${DEPLOY_VARS["HAS_DEEPSEARCH"]}" == "true" ]]; then
-        if [ -z "${RUNTIME_VARS["DB_HOST"]:-}" ]; then
+        if [[ "${RUNTIME_VARS["DB_TYPE"]}" == "mysql" &&
+               -z "${RUNTIME_VARS["DB_HOST"]:-}" ]]; then
             error "Validation failed: DB_HOST is a mandatory configuration item that must be defined in .env.custom!"
         fi
     fi
@@ -76,6 +77,7 @@ process_env_vars() {
 
     local nginx_read_timeout=$(( tms / 1000 ))
     DEPLOY_VARS["NGINX_READ_TIMEOUT"]=${nginx_read_timeout}
+    DEPLOY_VARS["VERSION"]=$(extract_version "${DEPLOY_VARS["VERSION"]}")
 }
 
 # =========  Detect if it start the container, set env vars if yes =========

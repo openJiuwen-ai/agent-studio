@@ -373,6 +373,10 @@
       "usernamePlaceholder": "请输入用户空间名称（邮箱格式）",
       "password": "密码",
       "passwordPlaceholder": "请设置密码",
+      "confirmPassword": "确认密码",
+      "confirmPasswordPlaceholder": "请再次输入密码",
+      "confirmPasswordRequired": "请确认密码",
+      "passwordsNotMatch": "两次输入的密码不一致",
       "verificationCode": "验证码",
       "verificationCodePlaceholder": "请输入验证码",
       "getVerificationCode": "获取验证码",
@@ -696,7 +700,9 @@
       "newConversation": "发起新对话",
       "conversationTimeout": "对话已超时，强制中断当前传输",
       "forceStop": "强制中断",
-      "generating": "正在生成中..."
+      "generating": "正在生成中...",
+      "deepSearchServiceUnavailable": "DeepSearch 服务暂不可用，请前往",
+      "deepSearchConfigRetry": "，参考文档进行配置后重试"
     },
     "picker": {
       "selectAgent": "选择智能体",

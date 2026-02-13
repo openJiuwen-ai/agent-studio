@@ -1,7 +1,34 @@
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+import re
+
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+
+_PASSWORD_MIN_LENGTH = 6
+_PASSWORD_MAX_LENGTH = 20
+_PASSWORD_SPECIAL_PATTERN = re.compile(r"[^\w]")
+_PASSWORD_DIGIT_PATTERN = re.compile(r"\d")
+_PASSWORD_LOWER_PATTERN = re.compile(r"[a-z]")
+_PASSWORD_UPPER_PATTERN = re.compile(r"[A-Z]")
+_PASSWORD_MIN_CLASSES = 2
+
+
+def _validate_password_strength(password: str) -> str:
+    if len(password) < _PASSWORD_MIN_LENGTH:
+        raise ValueError("密码长度至少 6 位")
+    if len(password) > _PASSWORD_MAX_LENGTH:
+        raise ValueError("密码长度不能超过 20 位")
+    classes = [
+        bool(_PASSWORD_DIGIT_PATTERN.search(password)),
+        bool(_PASSWORD_LOWER_PATTERN.search(password)),
+        bool(_PASSWORD_UPPER_PATTERN.search(password)),
+        bool(_PASSWORD_SPECIAL_PATTERN.search(password)),
+    ]
+    if sum(classes) < _PASSWORD_MIN_CLASSES:
+        raise ValueError("密码需包含数字/小写/大写/特殊字符中至少 2 种")
+    return password
 
 
 class RoleType(Enum):
@@ -51,7 +78,11 @@ class UserResponse(UserInfo, UserTag):
 
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=6, max_length=100)
+    password: str = Field(..., min_length=_PASSWORD_MIN_LENGTH, max_length=_PASSWORD_MAX_LENGTH)
+
+    @field_validator("password")
+    def validate_password_strength(cls, v: str) -> str:
+        return _validate_password_strength(v)
 
 
 class UserLogin(BaseModel):
@@ -63,7 +94,13 @@ class UserLogin(BaseModel):
 class UserUpdate(UserTag):
     username: Optional[str] = Field(None, min_length=3, max_length=50)
     user_unique_name: Optional[str] = Field(None, max_length=100)
-    password: Optional[str] = Field(None, min_length=6, max_length=50)
+    password: Optional[str] = Field(None, min_length=_PASSWORD_MIN_LENGTH, max_length=_PASSWORD_MAX_LENGTH)
+
+    @field_validator("password")
+    def validate_password_strength(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _validate_password_strength(v)
 
 
 class RefreshTokenRequest(BaseModel):
@@ -79,8 +116,16 @@ class RegisterRequest(BaseModel):
     password: str
     code: str
 
+    @field_validator("password")
+    def validate_password_strength(cls, v: str) -> str:
+        return _validate_password_strength(v)
+
 
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
     code: str
     new_password: str
+
+    @field_validator("new_password")
+    def validate_password_strength(cls, v: str) -> str:
+        return _validate_password_strength(v)

@@ -161,7 +161,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
     }
     setVersionLoading(true)
     try {
-      const options = await getVersionOptions(pid)
+      const options = await getVersionOptions(pid, spaceId)
       const merged = mergeCurrentVersionOption(options, pid, currentRelation?.promptVersion)
       setVersionOptions(merged)
     } catch (e) {
@@ -266,6 +266,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
       quickOptimizeAbortRef.current = new AbortController()
       await FeedbackOptService.quickOptimize(
         quickOptimizeRequest,
+        spaceId,
         (data: string) => {
           quickOptimizeStreamingRef.current += data
           setDisplayOverride(quickOptimizeStreamingRef.current)
@@ -401,7 +402,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
         targetPromptId = String(createResp.prompt_id)
       }
 
-      await PromptService.saveDraft(targetPromptId, userId, spaceId, {
+      await PromptService.saveDraft(targetPromptId, spaceId, {
         promptMessages: [
           {
             id: 'system-msg-1',
@@ -438,7 +439,7 @@ export function useWorkflowNodePrompt({ nodeId, nodeName, systemPrompt, onSystem
         setSaving(false)
         return
       }
-      await PromptService.commitVersion(targetPromptId, userId, {
+      await PromptService.commitVersion(targetPromptId, spaceId, {
         commit_version: promptVersion,
         commit_description: promptDesc || t('workflowCanvas.nodePrompt.commitDescription', { nodeName: nodeName || nodeId }),
       })

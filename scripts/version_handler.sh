@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 set -euo >/dev/null 2>&1
 
-# Extracts numeric version (x.y.z) from a version string, converts to integer for comparison
+# Extracts a clean version string by removing non-numeric/dot prefixes and suffixes
 extract_version() {
     local version="$1"
     
      # Remove all prefixes (non-digit/dot characters like v, V, leading letters)
-    version=$(echo "$version" | sed -E 's/^[^0-9.]+//')
+    version=$(echo "${version}" | sed -E 's/^[^0-9.]+//')
 
     # Remove all suffixes (content after first non-digit/dot character like -desktop.1, -rc1)
-    version=$(echo "$version" | sed -E 's/[^0-9.].*//')
+    version=$(echo "${version}" | sed -E 's/[^0-9.].*//')
+
+    echo ${version}
+}
+
+# Converts a semantic version string (x.y.z) to a numeric integer for easy comparison
+get_version_number() {
+    local version="$1"
 
     local major=$(echo "${version}" | cut -d. -f1)
     local middle=$(echo "${version}" | cut -d. -f2)
@@ -19,13 +26,13 @@ extract_version() {
 
 # Checks if the first version is less than the second version
 version_is_less_than() {
-    local version="$1"
-    local min_version="$2"
+    local version=$(extract_version "$1")
+    local min_version=$(extract_version "$2")
 
-    local version_num=$(extract_version "$1")
-    local min_version_num=$(extract_version "$2")
+    local version_num=$(get_version_number "${version}")
+    local min_version_num=$(get_version_number "${min_version}")
 
-    info "Version: $version → $version_num, $min_version → $min_version_num"
+    info "Version: ${version} → ${version_num}, ${min_version} → ${min_version_num}"
     if [[ "${version_num}" -lt "${min_version_num}" ]]; then
         return 0
     fi

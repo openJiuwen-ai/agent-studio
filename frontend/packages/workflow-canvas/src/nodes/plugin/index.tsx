@@ -214,7 +214,7 @@ const showPluginSelector = (allowMultiple: boolean = true) => {
       }
 
       root.render(
-        <div className="plugin-selector-modal" onMouseDown={e => e.preventDefault()} onMouseUp={e => e.preventDefault()} onClick={e => e.preventDefault()}>
+        <div className="plugin-selector-modal" onMouseDown={e => e.stopPropagation()} onMouseUp={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
           <PluginSelector open={true} onClose={handleClose} onConfirm={handleConfirm} allowDuplicate={allowMultiple} />
         </div>,
       )

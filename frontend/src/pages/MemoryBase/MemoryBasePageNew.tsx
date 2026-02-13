@@ -127,27 +127,22 @@ const MemoryBasePageNew: React.FC = () => {
     }
   }, [location.pathname, user?.spaceId, setPage, pageSize, fetchMemoryBases, searchMemoryBases, searchTerm]);
 
-  // 搜索词由空变为非空时，重置到第一页
-  useEffect(() => {
-    const cur = debouncedSearchTerm.trim();
-    const prev = prevSearchTermRef.current.trim();
-    if (cur !== '' && prev === '') {
-      setPage(1);
-    }
-    prevSearchTermRef.current = debouncedSearchTerm;
-  }, [debouncedSearchTerm, setPage]);
-
   // 根据 debouncedSearchTerm、currentPage、pageSize 拉数
   useEffect(() => {
     if (isResettingRef.current) return;
     const spaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID;
     const term = debouncedSearchTerm.trim();
     if (term) {
-      searchMemoryBases(spaceId, term, currentPage, pageSize);
+      // 搜索时始终从第1页开始
+      if (currentPage !== 1) {
+        setPage(1);
+      } else {
+        searchMemoryBases(spaceId, term, 1, pageSize);
+      }
     } else {
       fetchMemoryBases(spaceId, currentPage, pageSize);
     }
-  }, [debouncedSearchTerm, currentPage, pageSize, user?.spaceId, fetchMemoryBases, searchMemoryBases]);
+  }, [debouncedSearchTerm, currentPage, pageSize, user?.spaceId, fetchMemoryBases, searchMemoryBases, setPage]);
 
   const handlePagerChange = useCallback(
     (page: number, newPageSize: number) => {

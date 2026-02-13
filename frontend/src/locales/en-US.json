@@ -363,6 +363,10 @@
       "usernamePlaceholder": "Enter userspace name (email format)",
       "password": "Password",
       "passwordPlaceholder": "Enter password",
+      "confirmPassword": "Confirm Password",
+      "confirmPasswordPlaceholder": "Enter password again",
+      "confirmPasswordRequired": "Please confirm password",
+      "passwordsNotMatch": "Passwords do not match",
       "verificationCode": "Verification Code",
       "verificationCodePlaceholder": "Enter Verification Code",
       "getVerificationCode": "Get Verification Code",
@@ -686,7 +690,9 @@
       "newConversation": "Start new conversation",
       "conversationTimeout": "Conversation timed out, force stop current transmission",
       "forceStop": "Force stop",
-      "generating": "Generating..."
+      "generating": "Generating...",
+      "deepSearchServiceUnavailable": "DeepSearch service is temporarily unavailable, please visit ",
+      "deepSearchConfigRetry": ", refer to the documentation for configuration and try again"
     },
     "picker": {
       "selectAgent": "Select Agent",
@@ -4234,11 +4240,6 @@
       "description": "Create new knowledge base and upload documents",
       "success": "Knowledge base created successfully"
     },
-    "addDocument": {
-      "fileSizeLimit": "File size limit: each file must not exceed {{size}}",
-      "filesExceedLimit": "The following files exceed the {{size}} limit:",
-      "oversizedTitle": "File size exceeds limit"
-    },
     "edit": {
       "title": "Edit Knowledge Base",
       "description": "Modify knowledge base information and configuration"
@@ -4340,6 +4341,9 @@
       "noUploadedFiles": "No uploaded files",
       "settingsSuccess": "Document parameters set successfully",
       "settingsFailed": "Document parameter setup failed",
+      "fileSizeLimit": "File size limit: each file must not exceed {{size}}",
+ 	    "filesExceedLimit": "The following files exceed the {{size}} limit:",
+ 	    "oversizedTitle": "File size exceeds limit",
       "steps": {
         "upload": "Upload",
         "settings": "Parameters"

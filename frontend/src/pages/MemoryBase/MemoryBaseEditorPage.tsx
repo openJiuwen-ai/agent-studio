@@ -421,7 +421,8 @@ const MemoryBaseEditorPage: React.FC = () => {
       // 合并两个数组
       const allMemories = [...variableMemories, ...longTermMemories];
       const allMemoryIds = allMemories.map(mem => mem.id);
-
+      setAllMemories(allMemories);
+      setTotalMemories(allMemories.length);
       // 返回前pageSize个项目
       const firstPageItems = allMemories.slice(0, pageSize);
 

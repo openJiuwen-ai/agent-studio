@@ -1,5 +1,6 @@
 import random
 import string
+from typing import Any, Dict
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -239,7 +240,7 @@ async def register(request: Request, form_data: OAuth2PasswordRequestForm = Depe
 
 
 @auth_router.post("/logout", response_model=ResponseModel[dict])
-async def logout():
+async def logout(current_user: Dict[str, Any] = Depends(get_current_user)):
     """User logout endpoint"""
     # In a real application, you might want to blacklist the token
     return ResponseModel(

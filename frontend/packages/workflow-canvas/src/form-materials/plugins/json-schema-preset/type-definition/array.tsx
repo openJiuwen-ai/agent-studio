@@ -13,19 +13,23 @@ import { type JsonSchemaTypeRegistry } from '../types'
 
 export const arrayRegistry: Partial<JsonSchemaTypeRegistry> = {
   type: 'array',
-  ConstantRenderer: props => (
-    <JsonCodeEditor
-      mini
-      compact
-      value={props.value}
-      onChange={v => props.onChange?.(v)}
-      placeholder={t('workflowCanvas.formMaterials.input.pleaseInputArray')}
-      readonly={props.readonly}
-      defaultFormat="[]"
-      validateArrayElements={!!props.items?.type}
-      arrayElementType={props.items?.type}
-    />
-  ),
+  ConstantRenderer: props => {
+    const schemaKey = JSON.stringify(props.schema)
+    return (
+      <JsonCodeEditor
+        key={schemaKey}
+        mini
+        compact
+        value={props.value}
+        onChange={v => props.onChange?.(v)}
+        placeholder={t('workflowCanvas.formMaterials.input.pleaseInputArray')}
+        readonly={props.readonly}
+        defaultFormat="[]"
+        validateArrayElements={!!props.schema?.items?.type}
+        arrayElementType={props.schema?.items?.type}
+      />
+    )
+  },
   conditionRule: {
     [ConditionPresetOp.IS_EMPTY]: null,
     [ConditionPresetOp.IS_NOT_EMPTY]: null,

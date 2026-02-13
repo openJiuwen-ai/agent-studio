@@ -2119,7 +2119,7 @@ const PromptEditPage: React.FC = () => {
 
         if (version) {
           // 调用版本列表API
-          const response = await PromptService.getVersionList(id, { page_size: 20 })
+          const response = await PromptService.getVersionList(id, workspaceId, { page_size: 20 })
 
           if (response.code === 0) {
             const versionList = response.prompt_commit_infos
@@ -2831,6 +2831,7 @@ const PromptEditPage: React.FC = () => {
       selectedModel,
       modelConfig,
       availableModels,
+      workspaceId,
       getPromptContentBySource,
       calculateSelectionIndices,
       setSnackbar,
@@ -2864,6 +2865,7 @@ const PromptEditPage: React.FC = () => {
     selectedModel,
     modelConfig,
     availableModels,
+    workspaceId,
     setSnackbar,
     setPromptMessages,
     setMessageInputValues,
@@ -2896,6 +2898,7 @@ const PromptEditPage: React.FC = () => {
     setAiReplyOptimizeDialogOpen,
     abortControllerRef,
     badcaseOptimizeStreamingRef,
+    workspaceId,
     optimizationSource,
     promptMessages,
     setPromptMessages,

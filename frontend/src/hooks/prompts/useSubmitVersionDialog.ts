@@ -203,7 +203,7 @@ export const useSubmitVersionDialog = ({
 
     try {
       // 调用提交版本API
-      const response = await PromptService.commitVersion(id!, userId!, {
+      const response = await PromptService.commitVersion(id!, workspaceId!, {
         commit_version: versionNumber.replace('v', ''), // Remove 'v' prefix if present
         commit_description: versionDescription,
       })

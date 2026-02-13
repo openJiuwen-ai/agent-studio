@@ -240,7 +240,7 @@ export const useDraft = ({
           tools: customData?.tools || tools,
         }
 
-        const response = await PromptService.saveDraft(promptId, userId!, workspaceId!, editorData)
+        const response = await PromptService.saveDraft(promptId, workspaceId!, editorData)
 
         if (response.code === 0) {
           const now = new Date()

@@ -272,14 +272,6 @@ Complete dependency installation first, then perform source retrieval and instal
    MILVUS_PORT=19530
    MILVUS_COLLECTION_NAME=memory_vector
 
-   # Memory-related config (if you do not use the memory feature, you can omit the following)
-   EMBEDDING_MODEL_DIMENTION=1024
-   EMBED_API_BASE=""
-   EMBED_MODEL_NAME=""
-   EMBED_API_KEY=""
-   EMBED_TIMEOUT=5
-   EMBED_MAX_RETRIES=1
-
    # Code sandbox configuration (example, please see [Question 2: How to Enable the Sandbox Feature] to learn more)
    CODE_SANDBOX_URL=http://localhost:8188/run
 
@@ -301,12 +293,6 @@ Complete dependency installation first, then perform source retrieval and instal
    | **MILVUS_HOST**               | Milvus service host                                                 | `127.0.0.1`                                                                    |
    | **MILVUS_PORT**               | Milvus service port                                                 | `19530`                                                                        |
    | **MILVUS_COLLECTION_NAME**    | Milvus collection name                                              | `memory_vector`                                                                |
-   | **EMBEDDING_MODEL_DIMENTION** | Embedding model dimension, depends on the chosen EMBED_MODEL_NAME   | `1024`                                                                         |
-   | **EMBED_API_BASE**            | Embedding model API base URL                                        | `https://example.com/embedding_model`                                          |
-   | **EMBED_MODEL_NAME**          | Embedding model name                                                | `text-embedding-model`                                                         |
-   | **EMBED_API_KEY**             | Embedding model API key                                             | `sk-xxx`                                                                       |
-   | **EMBED_TIMEOUT**             | Embedding model request timeout (seconds), default value `60`     | `5`                                                                            |
-   | **EMBED_MAX_RETRIES**         | Max retries on embedding model request failure, default value `3` | `1`                                                                            |
    | **CODE_SANDBOX_URL**             | Code Sandbox url                                            | `http://localhost:8188/run`                                                                    |
    | **VITE_PLUGIN_SERVICE_URL**      | Plugin Server url                                           | `http://localhost:8185`                                                                    |
    | **VITE_PLUGIN_CONFIG_PATH**      | Plugin configuration file path for web                      | `/config.json`                                                                    |
@@ -471,10 +457,9 @@ The memory and knowledge base features require an embedding model. The steps bel
 
   ![Get api_base and model_name](../images/embed_api_base_and_model_name.png)
 
-* Record the API endpoint (EMBED_API_BASE) and the model parameter (EMBED_MODEL_NAME).
+* Record the API endpoint and the model parameter.
 
-* Click “API Key Management” and follow the instructions to obtain an API Key (EMBED_API_KEY).
-> **Note**: After configuring EMBEDDING_MODEL_DIMENTION and enabling memory, do not change it again, otherwise the memory feature will fail. Other embedding configuration changes are also not recommended, as they may affect results.
+* Click “API Key Management” and follow the instructions to obtain an API.
 
 ### <a id="windows-sandbox"></a> Question 2: How to enable the sandbox feature
 

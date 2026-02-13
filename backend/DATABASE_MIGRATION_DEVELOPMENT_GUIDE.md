@@ -275,46 +275,41 @@ done
 git pull
 ```
 
-**步骤 2：启动应用检查版本**
+**步骤 2：检查数据库版本**
+
+由于应用启动时 `main.py` 会尝试自动创建表（`Base.metadata.create_all`），如果在数据库版本未同步的情况下直接启动，可能会导致表结构冲突或覆盖。因此，建议在启动应用前先手动检查数据库版本。
+
+```bash
+# 查看当前数据库记录的版本
+alembic -n alembic_sqlite_agent current
+
+# 查看最新可用的版本
+alembic -n alembic_sqlite_agent heads
+```
+
+**步骤 3：同步数据库版本**
+
+根据检查结果进行操作：
+
+1.  **如果版本已是最新**（`current` 与 `heads` 一致）：无需操作，直接进行下一步。
+2.  **如果版本落后**（`current` 落后于 `heads`）：
+    ```bash
+    alembic -n alembic_sqlite_agent upgrade head
+    ```
+3.  **如果未显示当前版本但表已存在**（`current` 显示为空，但数据库里已有表）：
+    这通常发生在已有数据库但未初始化 Alembic 的情况。请先标记版本（Stamp），再进行升级。
+    *请参考下文 "6.1.3 如何处理已有数据但未使用 Alembic 迁移的数据库" 进行操作*
+
+**步骤 4：启动应用**
+
+确认数据库版本同步后，启动后端服务：
 
 ```bash
 cd backend
 python main.py
 ```
 
-应用启动时会自动执行版本检测，并输出详细的版本信息：
-
-```log
-================================================================================
-📊 Alembic 版本检测
-================================================================================
-正在检查 agent 数据库版本...
-   查询到当前版本: 7883f1b07bc2
-正在获取 alembic_sqlite_agent 的最新版本...
-✓ 使用 alembic heads 获取版本: alembic_sqlite_agent -> 7883f1b07bc3
-⚠️  agent 数据库: 版本需要更新
-   当前版本: 7883f1b07bc2
-   最新版本: 7883f1b07bc3
-```
-
-**步骤 3：根据提示更新数据库**
-
-- ✅ **如果版本已是最新**：无需任何操作，继续开发
-- ⚠️  **如果需要更新**：执行提示的命令
-
-示例如下：
-
-```bash
-# 更新 sqlite agent 数据库
-alembic -n alembic_sqlite_agent upgrade head
-
-# 更新 sqlite  ops 数据库
-alembic -n alembic_sqlite_ops upgrade head
-```
-
-**步骤 4：验证更新成功**
-
-再次启动应用，确认看到：
+此时应用启动日志中应显示版本一致：
 ```log
 ✅ agent 数据库: 版本已是最新
    当前版本: 7883f1b07bc3

@@ -94,9 +94,13 @@ scripts/
 
 ## 使用说明
 
-* 请确保 Docker 和 Docker Compose 满足以下版本要求：
-  * Docker：20.10 版本及以上
-  * Docker Compose：v2.19.1 及以上版本
+✔️ **版本要求**
+
+请确保部署环境满足以下版本要求：
+
+- Docker：20.10 版本及以上
+- Docker Compose：v2.19.1 及以上版本
+- Bash: 5.2及以上版本
 
 ✔️ **参数说明**
 
@@ -521,3 +525,48 @@ dial tcp 121.36.121.197:443: connectex: A connection attempt failed because the 
 
 **解决方案**
 无需做任何额外操作，重新执行一次即可，临时网络问题大概率会自动恢复。
+
+## 升级过程中，老实例的MySQL 容器远程连接失败（健康状态正常)
+
+**问题现象**
+
+老实例的MySQL 容器状态显示 healthy、日志无报错，但升级容器通过宿主机IP+外部映射端口连接老实例的MySQL容器时提示：
+
+```
+** (mydumper:20): CRITICAL **: 06:52:18.012: Error connecting to database: Lost connection to MySQL server at 'reading initial communication packet', system error: 2
+
+```
+
+**问题原因**
+
+这是容器端口映射的底层 iptables 转发规则缓存异常，虽 nc测试该端口，显示端口 open，但 MySQL 协议请求无法穿透到容器内；
+
+**解决方案**
+
+重启老实例系统，「重置网络状态」：重建端口转发规则、刷新网络命名空间、清空 MySQL 隐性连接缓存，可快速恢复。
+
+```
+./service.sh down
+./service.sh up
+```
+
+## 某些环境下低于 0.1.4 版本的部署工具关闭实例时报网络删除错误
+
+**问题现象**
+使用低于 0.1.4 版本的部署工具关闭实例时，部分环境会直接报错并退出：
+
+```
+error while removing network: network ... has active endpoints
+```
+
+**问题原因**
+该问题由 Docker Compose 版本差异 导致：
+
+- 旧版本 Compose对网络状态校验极严格，发现网络有活跃端点时，直接抛出 ERROR: error while removing network 并终止命令，返回非 0 退出码。
+
+- 新版本 Compose优化了容错逻辑，遇到网络有活跃容器时，不再直接报错终止，而是仅输出孤儿容器的 warning，跳过网络删除步骤，命令整体仍返回成功）。
+
+  0.1.4 及以上版本的部署工具，新增了 Docker Compose 版本校验机制，可在启动初期自动检测环境依赖，并提前提示用户将 Docker Compose 升级至符合要求的版本。
+
+**解决方案**
+请将 Docker 和 Docker Compose 升级至满足[版本要求](#使用说明)的版本，即可避免此类错误。

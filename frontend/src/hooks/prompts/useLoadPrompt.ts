@@ -104,10 +104,10 @@ export const useLoadPrompt = ({
       return
     }
 
-    // 只有在非新建提示词且有ID的情况下才加载
-    if (!isNew && id && userId) {
+    // 只有在非新建提示词且有ID、workspaceId的情况下才加载
+    if (!isNew && id && workspaceId) {
       try {
-        const response = await PromptService.getDebugContext(id, userId)
+        const response = await PromptService.getDebugContext(id, workspaceId)
 
         if (response.code === 0 && response.debug_context) {
           const { debug_core } = response.debug_context

@@ -35,6 +35,9 @@ interface UseQuickOptimizeDialogProps {
   modelConfig: ModelConfig
   availableModels: Model[]
 
+  // 工作空间
+  workspaceId: string
+
   // 辅助函数
   setSnackbar: (snackbar: { open: boolean; message: string; severity: 'success' | 'error' | 'warning' | 'info' }) => void
   setPromptMessages: React.Dispatch<React.SetStateAction<PromptMessage[]>>
@@ -80,6 +83,7 @@ export const useQuickOptimizeDialog = (props: UseQuickOptimizeDialogProps): UseQ
     setPromptMessages,
     setMessageInputValues,
     setComparisonGroupsData,
+    workspaceId,
     setHasUnsavedChanges,
     triggerAutoSave,
     handlePromptChange,
@@ -270,6 +274,7 @@ export const useQuickOptimizeDialog = (props: UseQuickOptimizeDialogProps): UseQ
       try {
         await FeedbackOptService.quickOptimize(
           quickOptimizeRequest,
+          workspaceId,
           (data: string) => {
             // 流式数据回调
             // 注意：错误JSON已经在feedbackOptService中通过onError回调处理，这里只需要累积正常的内容

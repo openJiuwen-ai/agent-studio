@@ -159,7 +159,7 @@ const SystemPromptTab: React.FC<{ agentDetailResponse?: AgentDetailResponse | nu
     }
     setVersionLoading(true)
     try {
-      const options = await getVersionOptions(pid)
+      const options = await getVersionOptions(pid, workspaceId)
       const merged = mergeCurrentVersionOption(options, pid, currentRelation?.promptVersion)
       setVersionOptions(merged)
     } catch (e) {
@@ -330,6 +330,7 @@ const SystemPromptTab: React.FC<{ agentDetailResponse?: AgentDetailResponse | nu
       quickOptimizeAbortRef.current = new AbortController()
       await FeedbackOptService.quickOptimize(
         quickOptimizeRequest,
+        workspaceId,
         (data: string) => {
           quickOptimizeStreamingRef.current += data
           setDisplayOverride(quickOptimizeStreamingRef.current)
@@ -483,7 +484,7 @@ const SystemPromptTab: React.FC<{ agentDetailResponse?: AgentDetailResponse | nu
       }
 
       // 2) Save draft (system prompt)
-      await PromptService.saveDraft(targetPromptId, userId, workspaceId, {
+      await PromptService.saveDraft(targetPromptId, workspaceId, {
         promptMessages: [
           {
             id: 'system-msg-1',
@@ -520,7 +521,7 @@ const SystemPromptTab: React.FC<{ agentDetailResponse?: AgentDetailResponse | nu
         setSaving(false)
         return
       }
-      await PromptService.commitVersion(targetPromptId, userId, {
+      await PromptService.commitVersion(targetPromptId, workspaceId, {
         commit_version: promptVersion,
         commit_description: promptDesc || t('messages.commitDescriptionFallback', { agentName: agentName || agentId }),
       })

@@ -249,14 +249,6 @@
    MILVUS_PORT=19530
    MILVUS_COLLECTION_NAME=memory_vector
 
-   # 记忆相关配置（如果不使用记忆功能，可以不提供下面的参数）
-   EMBEDDING_MODEL_DIMENTION=1024
-   EMBED_API_BASE=""
-   EMBED_MODEL_NAME=""
-   EMBED_API_KEY=""
-   EMBED_TIMEOUT=5
-   EMBED_MAX_RETRIES=1
-
    # 配置代码沙箱服务（样例，启动代码执行沙箱服务详情请见[问题二：如何启用沙箱功能]）
    CODE_SANDBOX_URL=http://localhost:8188/run
 
@@ -277,13 +269,7 @@
    | **MEMORY_DATA_PATH**          | 记忆数据存储路径,默认值：memory-data             | `memory-data`                         |
    | **MILVUS_HOST**                 | Milvus服务的主机地址                                                | `127.0.0.1`                                                                    |
    | **MILVUS_PORT**                 | Milvus服务的端口                                                | `19530`                                                                    |
-   | **MILVUS_COLLECTION_NAME**                | Milvus服务的数据库名                                                | `memory_vector`                                                                    
-   | **EMBEDDING_MODEL_DIMENTION**         | 嵌入模型的维度，根据EMBED_MODEL_NAME选择的模型确定                | `1024`                                                                    |                  
-   | **EMBED_API_BASE**                    | 嵌入模型的接口地址                                                  | `https://example.com/embedding_model`            |            
-   | **EMBED_MODEL_NAME**                  | 嵌入模型的名称                                                             | `text-embedding-model`                                                       |
-   | **EMBED_API_KEY**                     | 嵌入模型的API密钥，换成自己的                                                 | `sk-xxx`                                                                  |
-   | **EMBED_TIMEOUT**                     | 嵌入模型的最大等待时间（单位秒），默认值`60`             | `5`                                                                     |
-   | **EMBED_MAX_RETRIES**                 | 嵌入模型请求失败时的最大重试次数，默认值`3`              | `1`                                                                    |
+   | **MILVUS_COLLECTION_NAME**                | Milvus服务的数据库名                                                | `memory_vector`
    | **CODE_SANDBOX_URL**                 | 代码沙箱服务地址                          | `http://localhost:8188/run`                                                                    |
    | **VITE_PLUGIN_SERVICE_URL**                 | 插件服务地址                            | `http://localhost:8185`                                                                    |
    | **VITE_PLUGIN_CONFIG_PATH**                 | 前端使用的插件服务配置文件                     | `/config.json`                                                                    |
@@ -424,10 +410,9 @@
 
   ![获取api_base和model_name](../images/embed_api_base_and_model_name.png)
 
-* 记录API地址（对应 EMBED_API_BASE）、model参数（对应 EMBED_MODEL_NAME）。
+* 记录API地址、model参数。
 
-* 点击 "API Key 管理"，按照官方界面引导获取 API Key（对应 EMBED_API_KEY）。
-> **注意**：在配置 *EMBEDDING_MODEL_DIMENTION* 之后启用了记忆，请不要再次修改，否则记忆功能会无法使用。embedding模型的其他配置也不建议修改，可能会影响效果。
+* 点击 "API Key 管理"，按照官方界面引导获取 API Key。
 
 <a id="macos-sandbox"></a>
 ### 问题二：如何启用沙箱功能

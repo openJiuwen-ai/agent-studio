@@ -11,6 +11,7 @@ IPV4_REGEX="^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[
 declare -A CONFIG=(
     ["ENV_DIR"]="${SCRIPT_DIR}/.envs"
     ["ENV_FILE"]="${SCRIPT_DIR}/.env"
+    ["UPGRADE_DIR"]="${SCRIPT_DIR}/.upgrade"
     ["DEFAULT_DEPLOY_ENV_FILE"]="${SCRIPT_DIR}/.env.deploy.default"
     ["DEFAULT_RUNTIME_ENV_FILE"]="${SCRIPT_DIR}/.env.runtime.default"
     ["CUSTOM_ENV_FILE"]="${SCRIPT_DIR}/.env.custom"

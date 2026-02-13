@@ -109,6 +109,7 @@ export interface EditPromptBasicInfoResponse {
 // 删除提示词请求
 export interface DeletePromptRequest {
   prompt_id: number
+  workspace_id: string
 }
 
 // 删除提示词响应
@@ -202,7 +203,7 @@ export interface PromptDetail {
 
 // 草稿信息接口
 export interface DraftInfo {
-  user_id: string
+  user_id?: string // 可选，后端可从 token 解析用户身份
   base_version: string
   is_modified: boolean
   is_draft_edited?: boolean // 新增字段：是否有未提交的草稿编辑
@@ -426,6 +427,7 @@ export interface DebugStreamingResponse {
 // 保存调试上下文请求
 export interface SaveDebugContextRequest {
   prompt_id: string
+  workspace_id?: string
   debug_context: DebugContext
 }
 

@@ -14,6 +14,8 @@ from openjiuwen_studio.ops.modules.prompt.infra.database import get_async_sessio
 from openjiuwen_studio.ops.modules.prompt.infra.repositories.debug_repo import SQLDebugContextRepository, SQLDebugLogRepository
 from openjiuwen_studio.ops.modules.prompt.domain.entities import BaseResponse
 from openjiuwen_studio.routers.prompt_llm_router import get_llm_config_service
+from openjiuwen_studio.core.manager.login_manager.space import check_user_space
+from openjiuwen_studio.core.manager.login_manager.user import get_current_user
 
 # 创建子路由
 router = APIRouter(prefix="/api/v1/prompts", tags=["prompt-debug"])
@@ -32,9 +34,11 @@ def get_debug_service(session: AsyncSession = Depends(get_async_session_ops)) ->
 async def debug_streaming(
     body: DebugStreamingRequest = ...,
     service: PromptDebugService = Depends(get_debug_service),
-    llm_config_service: LLMConfigService = Depends(get_llm_config_service)
+    llm_config_service: LLMConfigService = Depends(get_llm_config_service),
+    current_user: dict = Depends(get_current_user)
 ):
     """组装 Prompt → 调用大模型 → 逐条 SSE 返回 → 完成后保存 debug_context"""
+    _ = check_user_space(str(body.workspace_id), current_user)
     prompt_detail = body.prompt.get("prompt_draft", {}).get("detail", {})
     model_cfg = prompt_detail.get("prompt_model_config", {})
     model_id = model_cfg.get("models_id")
@@ -56,12 +60,14 @@ async def debug_streaming(
 @handle_exceptions(response_model=BaseResponse)
 async def save_debug_context(
     prompt_id: int = Path(...),
-    user_id: str = ...,
     body: SaveDebugContextRequest = ...,
     service: PromptDebugService = Depends(get_debug_service),
+    current_user: dict = Depends(get_current_user)
 ):
     """ 保存调试上下文 """
+    _ = check_user_space(str(body.workspace_id), current_user)
     body.prompt_id = prompt_id
+    user_id = current_user.get("data")["user_id_str"]
     await service.save_debug_context(user_id=user_id, req=body)
     return BaseResponse()
 
@@ -70,10 +76,13 @@ async def save_debug_context(
 @handle_exceptions(response_model=DebugContextResponse)
 async def get_debug_context(
     prompt_id: int = Path(...),
-    user_id: str = ...,
+    workspace_id: int = Query(...),
     service: PromptDebugService = Depends(get_debug_service),
+    current_user: dict = Depends(get_current_user)
 ):
     """ 获取指定 prompt 的最新调试上下文 """
+    _ = check_user_space(str(workspace_id), current_user)
+    user_id = current_user.get("data")["user_id_str"]
     return DebugContextResponse(debug_context=await service.get_debug_context(prompt_id, user_id))
 
 
@@ -86,8 +95,10 @@ async def list_debug_history(
     page_size: int = Query(20, ge=1, le=100),
     page_token: int = Query(0, ge=0),
     service: PromptDebugService = Depends(get_debug_service),
+    current_user: dict = Depends(get_current_user)
 ):
     """ 分页查询调试历史记录 """
+    _ = check_user_space(str(workspace_id), current_user)
     return await service.list_debug_history(
         prompt_id, workspace_id, days_limit, page_size, str(page_token)
     )

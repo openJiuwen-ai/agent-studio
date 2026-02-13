@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Copy, Trash2, RefreshCw, History } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { MentionItem, DEFAULT_AGENTS, DEFAULT_RESOURCES } from './components/MentionPicker'
 import AgentConfigDialog, { DeepSearchConfig } from './components/AgentConfigDialog'
 import ChatInputArea from './components/ChatInputArea'
 import ModelPicker from './components/ModelPicker'
-import { useModels, getToken } from '@test-agentstudio/api-client'
+import { useModels, getToken, deepsearchHeartbeatService } from '@test-agentstudio/api-client'
 import { useAuthStore } from '../../stores/useAuthStore'
 import { useConversationStore, MessageType, TaskStatus, AgentType, type MessageItems } from '../../stores/useConversationStore'
 import { getDefaultSpaceId } from '../../utils/spaceUtils'
@@ -49,6 +49,8 @@ const AppsPage: React.FC = () => {
   const [isDeepSearchMode, setIsDeepSearchMode] = useState(false)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
   const [showPlaybackPanel, setShowPlaybackPanel] = useState(false)
+  const [deepsearchServiceAvailable, setDeepsearchServiceAvailable] = useState<boolean | null>(null)
+  const [checkingDeepsearch, setCheckingDeepsearch] = useState(false)
 
   // ===== 对话限制对话框状态 =====
   const [limitDialogOpen, setLimitDialogOpen] = useState(false)
@@ -617,7 +619,8 @@ const AppsPage: React.FC = () => {
       setIsFirstConfigMode(true)
       setConfigDialogOpen(true)
     } else {
-      // 已有配置：直接选中智能体，不跳转
+      // 已有配置：直接选中智能体
+      // 心跳检测由 useEffect 统一处理
       setSelectedAgent(agent)
     }
   }
@@ -649,10 +652,33 @@ const AppsPage: React.FC = () => {
     setSelectedAgent(null)
   }
 
+  // 检查 DeepSearch 服务心跳
+  const checkDeepsearchHeartbeatCallback = useCallback(async () => {
+    setCheckingDeepsearch(true)
+    try {
+      const result = await deepsearchHeartbeatService.checkHeartbeat()
+      setDeepsearchServiceAvailable(result.status === 'available')
+    } catch (error) {
+      setDeepsearchServiceAvailable(false)
+    } finally {
+      setCheckingDeepsearch(false)
+    }
+  }, [])
+
   // 处理资源选择
   const handleResourceSelect = (resource: MentionItem) => {
     // TODO: 后续可以实现资源选择逻辑
   }
+
+  // 当选择 DeepSearch 智能体时，自动进行心跳检测
+  useEffect(() => {
+    // 确保 selectedAgent 存在且是 deepsearch 时才检测
+    if (selectedAgent && selectedAgent.id === 'deepsearch') {
+      checkDeepsearchHeartbeatCallback()
+    } else {
+      setDeepsearchServiceAvailable(null)
+    }
+  }, [selectedAgent?.id, checkDeepsearchHeartbeatCallback])
 
   // 处理文件上传
   const handleFileUpload = (files: FileList) => {
@@ -1151,14 +1177,32 @@ const AppsPage: React.FC = () => {
               <div className="w-full max-w-3xl">
                 {/* 欢迎区域 */}
                 <div className="text-left mb-8">
-                  {/* 第一段话：用户名，你好 */}
-                  <p className={`${TEXT_BASE} text-gray-500 mb-1`}>
-                    {user?.username || t('apps.user.defaultUsername')}，{t('apps.chat.welcome')}
-                  </p>
-                  {/* 第二段话：选择智能体开始对话 */}
-                  <h1 className="text-2xl font-semibold text-gray-900 mb-6">
-                    {t('apps.chat.welcomeMessage')}
-                  </h1>
+                  {/* DeepSearch 服务不可用时的警告 */}
+                  {selectedAgent?.id === 'deepsearch' && deepsearchServiceAvailable === false ? (
+                    <p className={`${TEXT_BASE} text-orange-600 mb-2`}>
+                      {t('apps.chat.deepSearchServiceUnavailable')}
+                      <a
+                        href="https://openjiuwen.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-500 hover:text-blue-600 underline mx-0.5"
+                      >
+                        OpenJiuwen
+                      </a>
+                      {t('apps.chat.deepSearchConfigRetry')}
+                    </p>
+                  ) : (
+                    <>
+                      {/* 第一段话：用户名，你好 */}
+                      <p className={`${TEXT_BASE} text-gray-500 mb-1`}>
+                        {user?.username || t('apps.user.defaultUsername')}，{t('apps.chat.welcome')}
+                      </p>
+                      {/* 第二段话：选择智能体开始对话 */}
+                      <h1 className="text-2xl font-semibold text-gray-900 mb-6">
+                        {t('apps.chat.welcomeMessage')}
+                      </h1>
+                    </>
+                  )}
                 </div>
 
                 {/* 使用统一的输入区域组件 */}
@@ -1182,6 +1226,8 @@ const AppsPage: React.FC = () => {
                   onModelClick={handleModelButtonClick}
                   modelButtonRef={modelButtonRef}
                   onNewConversation={handleNewConversation}
+                  deepsearchUnavailable={selectedAgent?.id === 'deepsearch' && deepsearchServiceAvailable === false}
+                  checkingDeepsearch={checkingDeepsearch}
                   className="mb-6"
                   inputStyle={{ minHeight: '80px' }}
                 />

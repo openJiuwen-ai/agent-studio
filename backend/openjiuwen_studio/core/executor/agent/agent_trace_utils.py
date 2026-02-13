@@ -62,6 +62,7 @@ class TraceContext:
         trace_details: 批量收集的trace_detail，用于性能优化
         trace_logs: 批量收集的TraceAgentSpan，用于构建执行日志
         kb_retrieval_spans: 知识库检索的span列表，用于在agent执行前记录KB调用
+        mode: 执行模式，0-调试运行，1-发布运行，2-节点调试
     """
     agent_id: AgentId
     last_chunk: Any = None
@@ -72,10 +73,11 @@ class TraceContext:
     agent_ouput: Optional[dict] = None
     agent_input: Optional[dict] = None
     kb_retrieval_spans: List[TraceAgentSpan] = field(default_factory=list)
+    mode: int = 1  # Default to published run mode
 
 
 def initialize_trace_context(
-    space_id: str, agent_id: str, agent_version: str, mapping: Optional[Dict[str, str]] = None
+    space_id: str, agent_id: str, agent_version: str, mapping: Optional[Dict[str, str]] = None, mode: int = 1
 ) -> TraceContext:
     """
     初始化追踪上下文
@@ -85,6 +87,7 @@ def initialize_trace_context(
         agent_id: Agent ID
         agent_version: Agent版本号
         mapping: 映射表，用于存储invoke_type到invoke_name的映射
+        mode: 执行模式，0-调试运行，1-发布运行，2-节点调试
 
     Returns:
         TraceContext: 初始化的追踪上下文
@@ -101,6 +104,7 @@ def initialize_trace_context(
         agent_ouput={},
         agent_input={},
         kb_retrieval_spans=[],
+        mode=mode,
     )
 
 
@@ -242,9 +246,10 @@ async def finalize_trace(trace_context: TraceContext) -> None:
     if trace_context.trace_id is not None:
         try:
             trace_summary_repository.create_trace_summary_by_trace_id(
-                trace_context.trace_id, 
-                trace_context.agent_input, 
-                trace_context.agent_ouput
+                trace_context.trace_id,
+                trace_context.agent_input,
+                trace_context.agent_ouput,
+                mode=trace_context.mode
             )
             logger.debug(f"Created trace summary for trace_id: {trace_context.trace_id}")
         except Exception as e:
@@ -284,9 +289,10 @@ async def handle_trace_error(
     if trace_context.trace_id is not None:
         try:
             trace_summary_repository.create_trace_summary_by_trace_id(
-                trace_context.trace_id, 
-                trace_context.agent_input, 
-                trace_context.agent_ouput
+                trace_context.trace_id,
+                trace_context.agent_input,
+                trace_context.agent_ouput,
+                mode=trace_context.mode
             )
             logger.debug(f"Created trace summary after error for trace_id: {trace_context.trace_id}")
         except Exception as e:

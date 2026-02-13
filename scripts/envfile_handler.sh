@@ -21,13 +21,13 @@ generate_env_file() {
 
     write_env_to_file "${current_deploy_env_file}" "DEPLOY_VARS"
     info "Copy ${current_deploy_env_file} to ${deploy_env_file}"
-    mkdir -p ${env_dirs}
-    cp ${current_deploy_env_file} ${deploy_env_file}
+    exec_cmd "mkdir -p ${env_dirs}"
+    exec_cmd "cp ${current_deploy_env_file} ${deploy_env_file}"
 
     write_env_to_file "${runtime_env_file}" "RUNTIME_VARS"
 }
 
-# ===== Writes sorted key-value pairs to .env.** file =====
+# ===== Writes sorted key-value pairs to .env.<Instance ID> file =====
 write_env_to_file() {
     local env_file=$1
     local -n source_array=$2
@@ -100,7 +100,7 @@ read_custom_env_file() {
 }
 
 
-# == read key-value pairs from .env.** file into array (for first start-up) ==
+# == read key-value pairs from .env.<Instance ID> file into array (for first start-up) ==
 read_env_from_file() {
     local env_file=$1
     local -n target_array=$2
@@ -111,7 +111,7 @@ read_env_from_file() {
     fi
     info "Loading .env file into variable array: ${env_file}"
 
-    # Read .env.** line by line, exclude comments and empty lines, store in associative array
+    # Read .env.<Instance ID> line by line, exclude comments and empty lines, store in associative array
     while IFS= read -r line || [[ -n "${line}" ]]; do
         if [[
             ! "${line}" =~ ^[[:space:]]*# &&  # Not a comment line
@@ -148,7 +148,7 @@ read_env_from_file() {
 }
 
 
-# ==== load key-value pairs from .env.** files into array (for restart-up/down/stop) ===
+# ==== load key-value pairs from .env.<Instance ID> files into array (for restart-up/down/stop) ===
 load_env_from_file() {
     local deploy_env_file=$1
     read_env_from_file "${deploy_env_file}" "DEPLOY_VARS"
@@ -159,7 +159,7 @@ load_env_from_file() {
     read_env_from_file "${runtime_env_file}" "RUNTIME_VARS"
 }
 
-# ============ Processes .env.** file per command (up/down/stop) ========
+# ============ Processes .env.<Instance ID> file per command (up/down/stop) ========
 process_env_file() {
     local cmd=${ARGS["CMD"]}
     local arg_env_file=${ARGS["ENV_FILE"]}

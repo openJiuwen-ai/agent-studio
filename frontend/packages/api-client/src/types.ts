@@ -1187,6 +1187,7 @@ export interface UpdatePromptResponse extends ApiResponse<{
 // 删除提示词请求类型
 export interface DeletePromptRequest {
   prompt_id: string
+  workspace_id: string
 }
 
 // 删除提示词响应类型
