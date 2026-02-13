@@ -24,7 +24,6 @@ This module provides functionality to import workflows from various sources into
 
 ✅ **Flexible Integration**
 - REST API endpoint
-- CLI tool
 - Python API for programmatic use
 
 ## Architecture
@@ -69,28 +68,7 @@ curl -X POST "http://localhost:8000/workflows/import" \
   -F "validate_strict=true"
 ```
 
-### 2. CLI Tool
-
-```bash
-# Basic import
-python -m cli.workflow_import workflow.json \
-  --space-id abc123 \
-  --user-id user456
-
-# With strict validation
-python -m cli.workflow_import workflow.json \
-  --space-id abc123 \
-  --user-id user456 \
-  --validate
-
-# Verbose output
-python -m cli.workflow_import workflow.json \
-  --space-id abc123 \
-  --user-id user456 \
-  --verbose
-```
-
-### 3. Python API
+### 2. Python API
 
 ```python
 import asyncio
@@ -468,8 +446,7 @@ The import system handles errors at multiple levels:
 - Validate separately after import
 
 ### Batch Imports
-- Use CLI tool with shell scripts
-- Import in parallel for independent workflows
+- Import in parallel for independent workflows using Python API
 - Monitor database connection pool
 
 ### Memory Usage
