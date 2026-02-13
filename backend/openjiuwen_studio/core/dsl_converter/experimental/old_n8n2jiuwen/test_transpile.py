@@ -1,5 +1,5 @@
 """
-Test for the n8n2jiuwen transpiler.
+Test for the old_n8n2jiuwen transpiler.
 """
 import json
 from n8n2jiuwen.parser import parse_workflow

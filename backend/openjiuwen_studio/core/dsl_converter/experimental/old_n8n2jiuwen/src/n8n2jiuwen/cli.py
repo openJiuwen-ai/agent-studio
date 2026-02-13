@@ -1,4 +1,4 @@
-"""Command-line interface for n8n2jiuwen transpiler."""
+"""Command-line interface for old_n8n2jiuwen transpiler."""
 
 import typer
 from pathlib import Path
@@ -8,7 +8,7 @@ from .parser.parser import parse_workflow
 from .transformer.resolver import resolve_graph
 from .mapper.base import generate_python_code
 
-app = typer.Typer(help="n8n2jiuwen: Transpile n8n workflows to Python code")
+app = typer.Typer(help="old_n8n2jiuwen: Transpile n8n workflows to Python code")
 
 
 @app.command()

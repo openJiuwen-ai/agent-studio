@@ -1,5 +1,5 @@
 """
-Basic tests for n8n2jiuwen components.
+Basic tests for old_n8n2jiuwen components.
 """
 def test_example():
     assert True
