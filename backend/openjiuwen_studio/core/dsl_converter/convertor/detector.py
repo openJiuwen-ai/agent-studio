@@ -61,9 +61,6 @@ class WorkflowDetector:
         - Schema contains 'nodes' and 'edges'
         """
         # Check for required top-level fields
-        if "workflow_id" not in data:
-            return False
-
         if "schema" not in data:
             return False
 

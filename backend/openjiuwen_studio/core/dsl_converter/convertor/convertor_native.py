@@ -64,7 +64,7 @@ class NativeWorkflowConvertor(WorkflowConvertor):
     - workflow_id: Generated UUID
     - space_id: ALWAYS cleared (set by importer from import context - source space_id is ignored)
     - name: "Imported Workflow"
-    - desc: ""
+    - desc: "Imported Workflow"
     - url: ""
     - icon_uri: ""
     - input_parameters: []
@@ -106,7 +106,7 @@ class NativeWorkflowConvertor(WorkflowConvertor):
         - workflow_id: Generated UUID
         - space_id: ALWAYS cleared (source space_id ignored, set by importer from import context)
         - name: "Imported Workflow"
-        - desc: ""
+        - desc: "Imported Workflow"
         - url: ""
         - icon_uri: ""
         - input_parameters: []
@@ -159,7 +159,7 @@ class NativeWorkflowConvertor(WorkflowConvertor):
         # Set defaults for all optional fields
         defaults = {
             "name": "Imported Workflow",
-            "desc": "",
+            "desc": "Imported Workflow",
             "url": "",
             "icon_uri": "",
             "input_parameters": [],
