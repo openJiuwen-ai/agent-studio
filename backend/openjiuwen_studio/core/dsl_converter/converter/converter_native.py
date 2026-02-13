@@ -3,7 +3,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 """
-Native OpenJiuwen Workflow Convertor
+Native OpenJiuwen Workflow Converter
 
 Converts OpenJiuwen exported workflows to importable format.
 Minimal transformation needed since it's already in the correct format.
@@ -16,12 +16,12 @@ from typing import Dict, Any, List
 from openjiuwen.core.common.logging import logger
 from pydantic import ValidationError
 
-from openjiuwen_studio.core.dsl_converter.convertor.convertor import WorkflowConvertor, WorkflowImportResult
+from openjiuwen_studio.core.dsl_converter.converter.converter import WorkflowConverter, WorkflowImportResult
 from openjiuwen_studio.schemas.workflow import WorkflowBase
 from openjiuwen_studio.core.database import milliseconds
 
 
-class NativeWorkflowConvertor(WorkflowConvertor):
+class NativeWorkflowConverter(WorkflowConverter):
     """
     Converts OpenJiuwen native format workflows.
 
@@ -72,7 +72,7 @@ class NativeWorkflowConvertor(WorkflowConvertor):
     - create_time: Current timestamp
     - update_time: Current timestamp
 
-    Note: Convertor automatically handles:
+    Note: Converter automatically handles:
     - Schema as object → converts to JSON string
     - Missing fields → adds sensible defaults
     """

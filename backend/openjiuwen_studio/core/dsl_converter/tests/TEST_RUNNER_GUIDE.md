@@ -22,7 +22,7 @@ python run_tests.py all
 
 # Run specific test suites
 python run_tests.py detector      # Format detection tests (25 tests)
-python run_tests.py convertor     # Conversion tests (52 tests)
+python run_tests.py converter     # Conversion tests (52 tests)
 python run_tests.py validator     # Validation tests (20 tests)
 python run_tests.py importer      # Importer orchestration tests (20 tests)
 python run_tests.py integration   # End-to-end integration tests (19 tests)
@@ -65,7 +65,7 @@ pytest . -v
 pytest test_importer.py -v
 
 # Run with coverage
-pytest . --cov=openjiuwen_studio.core.dsl_converter.convertor \
+pytest . --cov=openjiuwen_studio.core.dsl_converter.converter \
   --cov-report=html \
   --cov-report=term
 ```
@@ -80,11 +80,11 @@ Total: **136 tests** covering the workflow import system
    - Format detection (OpenJiuwen, n8n, unsupported)
    - Edge cases and error handling
 
-2. **test_convertor_native.py** (25 tests)
+2. **test_converter_native.py** (25 tests)
    - OpenJiuwen native format conversion
    - ID regeneration and reference updates
 
-3. **test_convertor_n8n.py** (27 tests)
+3. **test_converter_n8n.py** (27 tests)
    - n8n to OpenJiuwen conversion
    - Node type mappings and transformations
 

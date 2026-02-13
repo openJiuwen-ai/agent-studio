@@ -3,7 +3,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 """
-Tests for N8nWorkflowConvertor
+Tests for N8nWorkflowConverter
 
 Tests conversion of n8n format workflows to OpenJiuwen format using actual fixture file.
 """
@@ -12,17 +12,17 @@ import pytest
 import json
 from pathlib import Path
 
-from openjiuwen_studio.core.dsl_converter.convertor.convertor_n8n import N8nWorkflowConvertor
+from openjiuwen_studio.core.dsl_converter.converter.converter_n8n import N8nWorkflowConverter
 from openjiuwen_studio.core.common.dsl import ComponentType
 
 
-class TestN8nWorkflowConvertor:
-    """Test suite for N8nWorkflowConvertor"""
+class TestN8nWorkflowConverter:
+    """Test suite for N8nWorkflowConverter"""
 
     @pytest.fixture
-    def convertor(self):
-        """Create convertor instance"""
-        return N8nWorkflowConvertor()
+    def converter(self):
+        """Create converter instance"""
+        return N8nWorkflowConverter()
 
     @pytest.fixture
     def fixtures_dir(self):
@@ -35,9 +35,9 @@ class TestN8nWorkflowConvertor:
         with open(fixtures_dir / "n8n_workflow.json") as f:
             return json.load(f)
 
-    def test_convert_from_n8n_fixture(self, convertor, n8n_workflow):
+    def test_convert_from_n8n_fixture(self, converter, n8n_workflow):
         """Test conversion from n8n_workflow.json fixture"""
-        result = convertor.convert(n8n_workflow)
+        result = converter.convert(n8n_workflow)
 
         assert result.workflow_data is not None
         # Metadata should track source format
@@ -46,9 +46,9 @@ class TestN8nWorkflowConvertor:
         # n8n_workflow has 5 nodes
         assert result.metadata["original_nodes"] == 5
 
-    def test_convert_creates_workflow_with_metadata(self, convertor, n8n_workflow):
+    def test_convert_creates_workflow_with_metadata(self, converter, n8n_workflow):
         """Test that conversion creates workflow with correct metadata"""
-        result = convertor.convert(n8n_workflow)
+        result = converter.convert(n8n_workflow)
 
         # Name should have "(Imported)" suffix
         assert "Example n8n Workflow" in result.workflow_data["name"]
@@ -58,9 +58,9 @@ class TestN8nWorkflowConvertor:
         assert result.workflow_data["workflow_id"] is not None
         assert result.workflow_data["create_time"] is not None
 
-    def test_convert_creates_openjiuwen_schema(self, convertor, n8n_workflow):
+    def test_convert_creates_openjiuwen_schema(self, converter, n8n_workflow):
         """Test that conversion creates valid OpenJiuwen schema"""
-        result = convertor.convert(n8n_workflow)
+        result = converter.convert(n8n_workflow)
 
         schema = json.loads(result.workflow_data["schema"])
         assert "nodes" in schema
@@ -68,9 +68,9 @@ class TestN8nWorkflowConvertor:
         assert isinstance(schema["nodes"], list)
         assert isinstance(schema["edges"], list)
 
-    def test_convert_adds_start_and_end_nodes(self, convertor, n8n_workflow):
+    def test_convert_adds_start_and_end_nodes(self, converter, n8n_workflow):
         """Test that START and END nodes are added"""
-        result = convertor.convert(n8n_workflow)
+        result = converter.convert(n8n_workflow)
 
         schema = json.loads(result.workflow_data["schema"])
         node_types = [str(node["type"]) for node in schema["nodes"]]
@@ -79,9 +79,9 @@ class TestN8nWorkflowConvertor:
         assert str(ComponentType.COMPONENT_TYPE_START) in node_types
         assert str(ComponentType.COMPONENT_TYPE_END) in node_types
 
-    def test_convert_http_request_node(self, convertor, n8n_workflow):
+    def test_convert_http_request_node(self, converter, n8n_workflow):
         """Test conversion of n8n httpRequest node to Plugin component"""
-        result = convertor.convert(n8n_workflow)
+        result = converter.convert(n8n_workflow)
         schema = json.loads(result.workflow_data["schema"])
 
         # n8n_workflow has http_request_1 node
@@ -93,9 +93,9 @@ class TestN8nWorkflowConvertor:
         # Check one has title from fixture
         assert any("HTTP Request" in n["data"]["title"] for n in plugin_nodes)
 
-    def test_convert_code_node(self, convertor, n8n_workflow):
+    def test_convert_code_node(self, converter, n8n_workflow):
         """Test conversion of n8n code node to Code component"""
-        result = convertor.convert(n8n_workflow)
+        result = converter.convert(n8n_workflow)
         schema = json.loads(result.workflow_data["schema"])
 
         # n8n_workflow has code_1 node
@@ -107,9 +107,9 @@ class TestN8nWorkflowConvertor:
         # Check one has title from fixture
         assert any("Process Data" in n["data"]["title"] for n in code_nodes)
 
-    def test_convert_if_node(self, convertor, n8n_workflow):
+    def test_convert_if_node(self, converter, n8n_workflow):
         """Test conversion of n8n IF node to Branch component"""
-        result = convertor.convert(n8n_workflow)
+        result = converter.convert(n8n_workflow)
         schema = json.loads(result.workflow_data["schema"])
 
         # n8n_workflow has if_1 node
@@ -121,9 +121,9 @@ class TestN8nWorkflowConvertor:
         # Check one has title from fixture
         assert any("Check Condition" in n["data"]["title"] for n in if_nodes)
 
-    def test_convert_preserves_node_positions(self, convertor, n8n_workflow):
+    def test_convert_preserves_node_positions(self, converter, n8n_workflow):
         """Test that node positions are preserved from fixture"""
-        result = convertor.convert(n8n_workflow)
+        result = converter.convert(n8n_workflow)
         schema = json.loads(result.workflow_data["schema"])
 
         # n8n_workflow webhook node is at [250, 300]
@@ -143,9 +143,9 @@ class TestN8nWorkflowConvertor:
         )
         assert positions_preserved
 
-    def test_convert_connections_to_edges(self, convertor, n8n_workflow):
+    def test_convert_connections_to_edges(self, converter, n8n_workflow):
         """Test that n8n connections are converted to edges"""
-        result = convertor.convert(n8n_workflow)
+        result = converter.convert(n8n_workflow)
 
         schema = json.loads(result.workflow_data["schema"])
 
@@ -159,18 +159,18 @@ class TestN8nWorkflowConvertor:
             assert "sourceNodeID" in edge
             assert "targetNodeID" in edge
 
-    def test_convert_extracts_input_output_parameters(self, convertor, n8n_workflow):
+    def test_convert_extracts_input_output_parameters(self, converter, n8n_workflow):
         """Test that input/output parameters are extracted"""
-        result = convertor.convert(n8n_workflow)
+        result = converter.convert(n8n_workflow)
 
         assert "input_parameters" in result.workflow_data
         assert "output_parameters" in result.workflow_data
         assert isinstance(result.workflow_data["input_parameters"], list)
         assert isinstance(result.workflow_data["output_parameters"], list)
 
-    def test_convert_includes_conversion_metadata(self, convertor, n8n_workflow):
+    def test_convert_includes_conversion_metadata(self, converter, n8n_workflow):
         """Test that result includes conversion metadata"""
-        result = convertor.convert(n8n_workflow)
+        result = converter.convert(n8n_workflow)
 
         assert "source" in result.metadata
         assert "original_name" in result.metadata
@@ -181,7 +181,7 @@ class TestN8nWorkflowConvertor:
         assert result.metadata["original_name"] == "Example n8n Workflow"
         assert result.metadata["original_nodes"] == 5
 
-    def test_convert_empty_workflow_raises_error(self, convertor):
+    def test_convert_empty_workflow_raises_error(self, converter):
         """Test that workflow with no nodes raises error"""
         n8n_workflow = {
             "name": "Empty",
@@ -190,16 +190,16 @@ class TestN8nWorkflowConvertor:
         }
 
         with pytest.raises(ValueError, match="n8n workflow has no nodes"):
-            convertor.convert(n8n_workflow)
+            converter.convert(n8n_workflow)
 
-    def test_add_start_end_nodes_adds_both(self, convertor):
+    def test_add_start_end_nodes_adds_both(self, converter):
         """Test that _add_start_end_nodes adds START and END nodes"""
         nodes = [
             {"id": "node1", "type": "3", "data": {"title": "Test"}}
         ]
         edges = []
 
-        result_nodes, result_edges = convertor._add_start_end_nodes(nodes, edges)
+        result_nodes, result_edges = converter._add_start_end_nodes(nodes, edges)
 
         # Should have START node
         start_nodes = [n for n in result_nodes
@@ -214,30 +214,30 @@ class TestN8nWorkflowConvertor:
         # Should have edges connecting START -> node1 -> END
         assert len(result_edges) >= 2
 
-    def test_convert_headers_from_dict(self, convertor):
+    def test_convert_headers_from_dict(self, converter):
         """Test _convert_headers with dict input"""
         headers = {"Authorization": "Bearer token", "Content-Type": "application/json"}
-        result = convertor._convert_headers(headers)
+        result = converter._convert_headers(headers)
         assert result == headers
 
-    def test_convert_headers_from_list(self, convertor):
+    def test_convert_headers_from_list(self, converter):
         """Test _convert_headers with list input (n8n format)"""
         # n8n_workflow has headers in list format
         headers = [
             {"name": "Authorization", "value": "Bearer token123"}
         ]
-        result = convertor._convert_headers(headers)
+        result = converter._convert_headers(headers)
         assert result["Authorization"] == "Bearer token123"
 
-    def test_convert_headers_empty(self, convertor):
+    def test_convert_headers_empty(self, converter):
         """Test _convert_headers with empty input"""
-        assert convertor._convert_headers(None) == {}
-        assert convertor._convert_headers({}) == {}
-        assert convertor._convert_headers([]) == {}
+        assert converter._convert_headers(None) == {}
+        assert converter._convert_headers({}) == {}
+        assert converter._convert_headers([]) == {}
 
-    def test_generate_node_id_format(self, convertor):
+    def test_generate_node_id_format(self, converter):
         """Test that _generate_node_id creates valid IDs"""
-        node_id = convertor._generate_node_id("n8n-nodes-base.httpRequest")
+        node_id = converter._generate_node_id("n8n-nodes-base.httpRequest")
 
         assert node_id.startswith("httpRequest_")
         assert len(node_id) > len("httpRequest_")

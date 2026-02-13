@@ -20,9 +20,9 @@ from openjiuwen.core.common.logging import logger
 from fastapi import status
 import asyncio
 
-from openjiuwen_studio.core.dsl_converter.convertor.detector import WorkflowDetector, WorkflowFormat
-from openjiuwen_studio.core.dsl_converter.convertor.convertor import ConvertorFactory
-from openjiuwen_studio.core.dsl_converter.convertor.validator import WorkflowValidator
+from openjiuwen_studio.core.dsl_converter.converter.detector import WorkflowDetector, WorkflowFormat
+from openjiuwen_studio.core.dsl_converter.converter.converter import ConverterFactory
+from openjiuwen_studio.core.dsl_converter.converter.validator import WorkflowValidator
 from openjiuwen_studio.schemas.workflow import WorkflowCreate, WorkflowSave, WorkflowPublish
 import openjiuwen_studio.core.manager.workflow as workflow_mgr
 
@@ -119,8 +119,8 @@ class WorkflowImporter:
 
         # Step 2: Convert to OpenJiuwen format
         try:
-            convertor = ConvertorFactory.create(format_type)
-            conversion_result = convertor.convert(json_data)
+            converter = ConverterFactory.create(format_type)
+            conversion_result = converter.convert(json_data)
 
             workflow_data = conversion_result.workflow_data
             all_warnings.extend(conversion_result.warnings)

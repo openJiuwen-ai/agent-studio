@@ -14,10 +14,10 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import status
 
-from openjiuwen_studio.core.dsl_converter.convertor import (
+from openjiuwen_studio.core.dsl_converter.converter import (
     WorkflowImporter,
     WorkflowDetector,
-    ConvertorFactory,
+    ConverterFactory,
     WorkflowValidator,
     WorkflowFormat,
     ImportOptions
@@ -61,8 +61,8 @@ class TestWorkflowImportIntegration:
         assert format_type == WorkflowFormat.OPENJIUWEN_NATIVE
 
         # 2. Convert
-        convertor = ConvertorFactory.create(format_type)
-        conversion_result = convertor.convert(openjiuwen_fixture)
+        converter = ConverterFactory.create(format_type)
+        conversion_result = converter.convert(openjiuwen_fixture)
         assert conversion_result.workflow_data is not None
         assert "workflow_id" in conversion_result.workflow_data
 
@@ -77,7 +77,7 @@ class TestWorkflowImportIntegration:
         assert validation_result.is_valid is True
 
         # 4. Import (with mocked manager)
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "e2e-oj-123"}},
@@ -109,8 +109,8 @@ class TestWorkflowImportIntegration:
         assert format_type == WorkflowFormat.N8N
 
         # 2. Convert
-        convertor = ConvertorFactory.create(format_type)
-        conversion_result = convertor.convert(n8n_fixture)
+        converter = ConverterFactory.create(format_type)
+        conversion_result = converter.convert(n8n_fixture)
         assert conversion_result.workflow_data is not None
 
         # Verify conversion added START/END nodes
@@ -130,7 +130,7 @@ class TestWorkflowImportIntegration:
         assert validation_result.is_valid is True
 
         # 4. Import (with mocked manager)
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "e2e-n8n-456"}},
@@ -159,7 +159,7 @@ class TestWorkflowImportIntegration:
         # Inject invalid data to cause conversion error
         invalid_fixture = {**openjiuwen_fixture, "schema": "invalid json"}
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "error-123"}},
@@ -199,7 +199,7 @@ class TestWorkflowImportIntegration:
             }]
         }
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "warn-123"}},
@@ -227,7 +227,7 @@ class TestWorkflowImportIntegration:
     @pytest.mark.asyncio
     async def test_strict_validation_mode(self, openjiuwen_fixture):
         """Test import with strict validation enabled"""
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "strict-123"}},
@@ -240,7 +240,7 @@ class TestWorkflowImportIntegration:
                 message="Success"
             ))
 
-            with patch('openjiuwen_studio.core.manager.convertor.workflow.workflow_convert') as mock_convert:
+            with patch('openjiuwen_studio.core.manager.converter.workflow.workflow_convert') as mock_convert:
                 mock_convert.return_value = MagicMock()  # Return any object
 
                 importer = WorkflowImporter()
@@ -257,29 +257,29 @@ class TestWorkflowImportIntegration:
 
     @pytest.mark.asyncio
     async def test_format_detection_to_conversion_mapping(self, openjiuwen_fixture, n8n_fixture):
-        """Test that format detection correctly maps to convertor"""
+        """Test that format detection correctly maps to converter"""
         detector = WorkflowDetector()
 
         # Test OpenJiuwen
         oj_format = detector.detect_format(openjiuwen_fixture)
-        oj_convertor = ConvertorFactory.create(oj_format)
-        assert oj_convertor is not None
-        oj_result = oj_convertor.convert(openjiuwen_fixture)
+        oj_converter = ConverterFactory.create(oj_format)
+        assert oj_converter is not None
+        oj_result = oj_converter.convert(openjiuwen_fixture)
         assert oj_result.metadata["source_format"] == "openjiuwen_native"
 
         # Test n8n
         n8n_format = detector.detect_format(n8n_fixture)
-        n8n_convertor = ConvertorFactory.create(n8n_format)
-        assert n8n_convertor is not None
-        n8n_result = n8n_convertor.convert(n8n_fixture)
+        n8n_converter = ConverterFactory.create(n8n_format)
+        assert n8n_converter is not None
+        n8n_result = n8n_converter.convert(n8n_fixture)
         assert n8n_result.metadata["source_format"] == "n8n"
 
     @pytest.mark.asyncio
     async def test_conversion_to_validation_integration(self, openjiuwen_fixture):
         """Test that converted workflows pass validation"""
         # Convert
-        convertor = ConvertorFactory.create(WorkflowFormat.OPENJIUWEN_NATIVE)
-        conversion_result = convertor.convert(openjiuwen_fixture)
+        converter = ConverterFactory.create(WorkflowFormat.OPENJIUWEN_NATIVE)
+        conversion_result = converter.convert(openjiuwen_fixture)
 
         # Validate
         validator = WorkflowValidator()
@@ -297,9 +297,9 @@ class TestWorkflowImportIntegration:
         """Test that IDs are properly regenerated during conversion"""
         original_id = openjiuwen_fixture["workflow_id"]
 
-        convertor = ConvertorFactory.create(WorkflowFormat.OPENJIUWEN_NATIVE)
-        result1 = convertor.convert(openjiuwen_fixture)
-        result2 = convertor.convert(openjiuwen_fixture)
+        converter = ConverterFactory.create(WorkflowFormat.OPENJIUWEN_NATIVE)
+        result1 = converter.convert(openjiuwen_fixture)
+        result2 = converter.convert(openjiuwen_fixture)
 
         # Each conversion should generate new IDs
         assert result1.workflow_data["workflow_id"] != original_id
@@ -309,7 +309,7 @@ class TestWorkflowImportIntegration:
     @pytest.mark.asyncio
     async def test_metadata_tracking_through_pipeline(self, openjiuwen_fixture):
         """Test that metadata is tracked through the entire pipeline"""
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "meta-track-123"}},
@@ -343,7 +343,7 @@ class TestWorkflowImportIntegration:
         """Test that imported workflow gets (imported) suffix"""
         original_name = openjiuwen_fixture["name"]
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "suffix-123"}},
@@ -373,7 +373,7 @@ class TestWorkflowImportIntegration:
         """Test importing different workflows concurrently"""
         import asyncio
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             # Use side_effect to return different IDs for each call
             workflow_ids = iter(["concurrent-1", "concurrent-2"])
             mock_mgr.workflow_create = MagicMock(side_effect=lambda *args, **kwargs: MockResponse(
@@ -430,7 +430,7 @@ class TestWorkflowImportIntegration:
         # Re-serialize to string because the Importer expects the schema field to be a string
         invalid["schema"] = json.dumps(schema)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "should-not-create"}},
@@ -453,7 +453,7 @@ class TestWorkflowImportIntegration:
     @pytest.mark.asyncio
     async def test_workflow_manager_integration(self, openjiuwen_fixture):
         """Test integration with workflow manager"""
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "mgr-int-123"}},
@@ -489,7 +489,7 @@ class TestWorkflowImportIntegration:
     async def test_full_pipeline_with_all_components(self, n8n_fixture):
         """Test complete pipeline: detect → convert → validate → save"""
         # This test exercises all components
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "full-pipeline-123"}},
@@ -508,8 +508,8 @@ class TestWorkflowImportIntegration:
             assert format_type == WorkflowFormat.N8N
 
             # 2. Conversion
-            convertor = ConvertorFactory.create(format_type)
-            conversion_result = convertor.convert(n8n_fixture)
+            converter = ConverterFactory.create(format_type)
+            conversion_result = converter.convert(n8n_fixture)
             assert conversion_result.workflow_data is not None
             assert "n8n" in conversion_result.metadata["source_format"]
 
@@ -541,7 +541,7 @@ class TestWorkflowImportIntegration:
     @pytest.mark.asyncio
     async def test_no_publishing_in_import(self, openjiuwen_fixture):
         """Test that import never attempts to publish (always draft)"""
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "no-publish-123"}},

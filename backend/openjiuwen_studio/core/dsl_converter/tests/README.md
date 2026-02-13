@@ -12,7 +12,7 @@ Comprehensive test suite for the workflow import system.
    - Unsupported format detection
    - Edge cases (empty data, invalid JSON, etc.)
 
-2. **test_convertor_native.py** (16 tests)
+2. **test_converter_native.py** (16 tests)
    - OpenJiuwen native format conversion using actual fixtures
    - Partial workflow support (only schema required)
    - ID regeneration (workflow_id, node IDs)
@@ -22,7 +22,7 @@ Comprehensive test suite for the workflow import system.
    - Space ID always ignored from source JSON
    - Default value injection for missing fields
 
-3. **test_convertor_n8n.py** (18 tests)
+3. **test_converter_n8n.py** (18 tests)
    - n8n format conversion to OpenJiuwen using actual fixture
    - Node type mappings from fixture (httpRequest, code, if, webhook, respondToWebhook)
    - START/END node generation
@@ -95,8 +95,8 @@ pytest openjiuwen_studio/core/dsl_converter/tests/ -v
 
 ```bash
 pytest openjiuwen_studio/core/dsl_converter/tests/test_detector.py -v
-pytest openjiuwen_studio/core/dsl_converter/tests/test_convertor_native.py -v
-pytest openjiuwen_studio/core/dsl_converter/tests/test_convertor_n8n.py -v
+pytest openjiuwen_studio/core/dsl_converter/tests/test_converter_native.py -v
+pytest openjiuwen_studio/core/dsl_converter/tests/test_converter_n8n.py -v
 pytest openjiuwen_studio/core/dsl_converter/tests/test_validator.py -v
 pytest openjiuwen_studio/core/dsl_converter/tests/test_importer.py -v
 pytest openjiuwen_studio/core/dsl_converter/tests/test_integration.py -v
@@ -105,7 +105,7 @@ pytest openjiuwen_studio/core/dsl_converter/tests/test_integration.py -v
 ### Run with Coverage
 
 ```bash
-pytest openjiuwen_studio/core/dsl_converter/tests/ --cov=openjiuwen_studio.core.dsl_converter.convertor --cov-report=html
+pytest openjiuwen_studio/core/dsl_converter/tests/ --cov=openjiuwen_studio.core.dsl_converter.converter --cov-report=html
 ```
 
 ### Run Specific Test
@@ -172,8 +172,8 @@ n8n workflow with 5 nodes:
 
 Test individual components in isolation:
 - `test_detector.py` - Format detection logic
-- `test_convertor_native.py` - Native conversion
-- `test_convertor_n8n.py` - n8n conversion
+- `test_converter_native.py` - Native conversion
+- `test_converter_n8n.py` - n8n conversion
 - `test_validator.py` - Validation logic
 
 ### 2. Integration Tests
@@ -272,8 +272,8 @@ Tests use pytest fixtures for reusability:
 
 ```python
 @pytest.fixture
-def convertor(self):
-    """Create convertor instance"""
+def converter(self):
+    """Create converter instance"""
     return N8nWorkflowConvertor()
 
 @pytest.fixture
@@ -330,7 +330,7 @@ Example GitHub Actions:
 - name: Run Import Tests
   run: |
     cd backend
-    pytest openjiuwen_studio/core/dsl_converter/tests/ --cov=openjiuwen_studio.core.dsl_converter.convertor
+    pytest openjiuwen_studio/core/dsl_converter/tests/ --cov=openjiuwen_studio.core.dsl_converter.converter
 ```
 
 ## Debugging Tests
@@ -365,7 +365,7 @@ pytest openjiuwen_studio/core/dsl_converter/tests/ -s
 
 When adding a new format:
 1. Add tests to `test_detector.py`
-2. Create `test_convertor_newformat.py`
+2. Create `test_converter_newformat.py`
 3. Add integration tests to `test_integration.py`
 4. Create fixture file in `fixtures/`
 

@@ -27,7 +27,7 @@ from openjiuwen.core.common.logging import logger
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from openjiuwen_studio.core.dsl_converter.convertor.importer import WorkflowImporter, ImportOptions
+from openjiuwen_studio.core.dsl_converter.converter.importer import WorkflowImporter, ImportOptions
 
 
 @click.command()
@@ -72,7 +72,7 @@ def import_workflow(json_file, space_id, user_id, validate, verbose):
     click.echo(f"  File size: {file_size:,} bytes")
 
     # Detect format
-    from openjiuwen_studio.core.dsl_converter.convertor.detector import WorkflowDetector
+    from openjiuwen_studio.core.dsl_converter.converter.detector import WorkflowDetector
     detector = WorkflowDetector()
     format_type = detector.detect_format(json_data)
     click.echo(f"  Detected format: {format_type.value}")

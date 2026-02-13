@@ -22,11 +22,11 @@ def run_command(cmd):
 
 def main():
     if len(sys.argv) < 2:
-        print(f"{RED}Usage: python run_tests.py {{all|detector|convertor|validator|importer|integration|coverage|quick}}{NC}\n")
+        print(f"{RED}Usage: python run_tests.py {{all|detector|converter|validator|importer|integration|coverage|quick}}{NC}\n")
         print("Examples:")
         print("  python run_tests.py all          # Run all 136 tests")
         print("  python run_tests.py detector     # Run format detection tests")
-        print("  python run_tests.py convertor    # Run conversion tests")
+        print("  python run_tests.py converter    # Run conversion tests")
         print("  python run_tests.py validator    # Run validation tests")
         print("  python run_tests.py importer     # Run importer orchestration tests")
         print("  python run_tests.py integration  # Run end-to-end integration tests")
@@ -45,11 +45,11 @@ def main():
     elif test_type == "detector":
         print(f"{GREEN}Running detector tests...{NC}")
         cmd = pytest_cmd + [str(TEST_DIR / "test_detector.py"), "-v"]
-    elif test_type == "convertor":
-        print(f"{GREEN}Running convertor tests...{NC}")
+    elif test_type == "converter":
+        print(f"{GREEN}Running converter tests...{NC}")
         cmd = pytest_cmd + [
-            str(TEST_DIR / "test_convertor_native.py"),
-            str(TEST_DIR / "test_convertor_n8n.py"),
+            str(TEST_DIR / "test_converter_native.py"),
+            str(TEST_DIR / "test_converter_n8n.py"),
             "-v"
         ]
     elif test_type == "validator":
@@ -65,7 +65,7 @@ def main():
         print(f"{GREEN}Running tests with coverage report...{NC}")
         cmd = pytest_cmd + [
             str(TEST_DIR),
-            "--cov=openjiuwen_studio.core.dsl_converter.convertor",
+            "--cov=openjiuwen_studio.core.dsl_converter.converter",
             "--cov-report=html",
             "--cov-report=term"
         ]

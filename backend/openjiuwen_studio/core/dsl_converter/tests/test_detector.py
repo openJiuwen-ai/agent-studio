@@ -12,7 +12,7 @@ import pytest
 import json
 from pathlib import Path
 
-from openjiuwen_studio.core.dsl_converter.convertor.detector import WorkflowDetector, WorkflowFormat
+from openjiuwen_studio.core.dsl_converter.converter.detector import WorkflowDetector, WorkflowFormat
 
 
 class TestWorkflowDetector:

@@ -650,7 +650,7 @@ async def workflow_import(
     """
     try:
         import json
-        from openjiuwen_studio.core.dsl_converter.convertor.importer import WorkflowImporter, ImportOptions
+        from openjiuwen_studio.core.dsl_converter.converter.importer import WorkflowImporter, ImportOptions
 
         logger.info(f"Workflow import request - User: {current_user.get('user_id', 'unknown')}, "
                    f"Space: {space_id}")

@@ -3,7 +3,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 """
-N8N Workflow Convertor
+N8N Workflow Converter
 
 Converts n8n workflow format to OpenJiuwen format.
 """
@@ -14,12 +14,12 @@ from typing import Dict, Any, List, Tuple
 
 from openjiuwen.core.common.logging import logger
 
-from openjiuwen_studio.core.dsl_converter.convertor.convertor import WorkflowConvertor, WorkflowImportResult
+from openjiuwen_studio.core.dsl_converter.converter.converter import WorkflowConverter, WorkflowImportResult
 from openjiuwen_studio.core.common.dsl import ComponentType
 from openjiuwen_studio.core.database import milliseconds
 
 
-class N8nWorkflowConvertor(WorkflowConvertor):
+class N8nWorkflowConverter(WorkflowConverter):
     """Converts n8n workflows to OpenJiuwen format"""
 
     # Node type mapping: n8n → OpenJiuwen

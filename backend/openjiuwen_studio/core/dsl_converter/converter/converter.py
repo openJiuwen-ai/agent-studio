@@ -3,16 +3,16 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 """
-Base Workflow Convertor and Factory
+Base Workflow Converter and Factory
 
-Defines abstract convertor interface and factory for creating appropriate convertors.
+Defines abstract converter interface and factory for creating appropriate converters.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, Any, List
 
-from openjiuwen_studio.core.dsl_converter.convertor.detector import WorkflowFormat
+from openjiuwen_studio.core.dsl_converter.converter.detector import WorkflowFormat
 
 
 @dataclass
@@ -23,8 +23,8 @@ class WorkflowImportResult:
     metadata: Dict[str, Any] = field(default_factory=dict)  # Original source info
 
 
-class WorkflowConvertor(ABC):
-    """Abstract base class for workflow convertors"""
+class WorkflowConverter(ABC):
+    """Abstract base class for workflow converters"""
 
     @abstractmethod
     def convert(self, json_data: Dict[str, Any]) -> WorkflowImportResult:
@@ -43,30 +43,30 @@ class WorkflowConvertor(ABC):
         pass
 
 
-class ConvertorFactory:
-    """Factory for creating appropriate workflow convertors"""
+class ConverterFactory:
+    """Factory for creating appropriate workflow converters"""
 
     @staticmethod
-    def create(format_type: WorkflowFormat) -> WorkflowConvertor:
+    def create(format_type: WorkflowFormat) -> WorkflowConverter:
         """
-        Create appropriate convertor for the given format.
+        Create appropriate converter for the given format.
 
         Args:
             format_type: Detected workflow format
 
         Returns:
-            Appropriate WorkflowConvertor instance
+            Appropriate WorkflowConverter instance
 
         Raises:
             ValueError: If format is unsupported
         """
         if format_type == WorkflowFormat.OPENJIUWEN_NATIVE:
-            from openjiuwen_studio.core.dsl_converter.convertor.convertor_native import NativeWorkflowConvertor
-            return NativeWorkflowConvertor()
+            from openjiuwen_studio.core.dsl_converter.converter.converter_native import NativeWorkflowConverter
+            return NativeWorkflowConverter()
 
         elif format_type == WorkflowFormat.N8N:
-            from openjiuwen_studio.core.dsl_converter.convertor.convertor_n8n import N8nWorkflowConvertor
-            return N8nWorkflowConvertor()
+            from openjiuwen_studio.core.dsl_converter.converter.converter_n8n import N8nWorkflowConverter
+            return N8nWorkflowConverter()
 
         else:
             raise ValueError(f"Unsupported workflow format: {format_type}")

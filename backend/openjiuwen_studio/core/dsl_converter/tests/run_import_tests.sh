@@ -27,9 +27,9 @@ case "$1" in
         echo -e "${GREEN}Running detector tests...${NC}"
         python -m pytest test_detector.py -v
         ;;
-    "convertor")
-        echo -e "${GREEN}Running convertor tests...${NC}"
-        python -m pytest test_convertor_native.py test_convertor_n8n.py -v
+    "converter")
+        echo -e "${GREEN}Running converter tests...${NC}"
+        python -m pytest test_converter_native.py test_converter_n8n.py -v
         ;;
     "validator")
         echo -e "${GREEN}Running validator tests...${NC}"
@@ -45,7 +45,7 @@ case "$1" in
         ;;
     "coverage")
         echo -e "${GREEN}Running tests with coverage report...${NC}"
-        python -m pytest . --cov=openjiuwen_studio.core.dsl_converter.convertor --cov-report=html --cov-report=term
+        python -m pytest . --cov=openjiuwen_studio.core.dsl_converter.converter --cov-report=html --cov-report=term
         echo -e "\n${GREEN}Coverage report generated in htmlcov/index.html${NC}"
         ;;
     "quick")
@@ -53,12 +53,12 @@ case "$1" in
         python -m pytest test_detector.py test_importer.py -v -k "test_detect_openjiuwen or test_import_openjiuwen_format_draft"
         ;;
     *)
-        echo "Usage: $0 {all|detector|convertor|validator|importer|integration|coverage|quick}"
+        echo "Usage: $0 {all|detector|converter|validator|importer|integration|coverage|quick}"
         echo ""
         echo "Examples:"
         echo "  ./run_import_tests.sh all          # Run all 136 tests"
         echo "  ./run_import_tests.sh detector     # Run format detection tests"
-        echo "  ./run_import_tests.sh convertor    # Run conversion tests"
+        echo "  ./run_import_tests.sh converter    # Run conversion tests"
         echo "  ./run_import_tests.sh validator    # Run validation tests"
         echo "  ./run_import_tests.sh importer     # Run importer orchestration tests"
         echo "  ./run_import_tests.sh integration  # Run end-to-end integration tests"

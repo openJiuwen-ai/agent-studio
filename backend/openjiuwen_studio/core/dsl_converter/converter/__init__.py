@@ -12,21 +12,21 @@ This module provides functionality to import workflows from various sources:
 
 Architecture:
     1. Detector: Identifies workflow format from JSON
-    2. Convertor: Transforms foreign formats to OpenJiuwen format
+    2. Converter: Transforms foreign formats to OpenJiuwen format
     3. Validator: Validates converted workflows
     4. Importer: Orchestrates the import process
 """
 
-from openjiuwen_studio.core.dsl_converter.convertor.detector import WorkflowDetector, WorkflowFormat
-from openjiuwen_studio.core.dsl_converter.convertor.convertor import (
-    WorkflowConvertor,
-    ConvertorFactory,
+from openjiuwen_studio.core.dsl_converter.converter.detector import WorkflowDetector, WorkflowFormat
+from openjiuwen_studio.core.dsl_converter.converter.converter import (
+    WorkflowConverter,
+    ConverterFactory,
     WorkflowImportResult,
 )
-from openjiuwen_studio.core.dsl_converter.convertor.convertor_native import NativeWorkflowConvertor
-from openjiuwen_studio.core.dsl_converter.convertor.convertor_n8n import N8nWorkflowConvertor
-from openjiuwen_studio.core.dsl_converter.convertor.validator import WorkflowValidator, ValidationResult
-from openjiuwen_studio.core.dsl_converter.convertor.importer import (
+from openjiuwen_studio.core.dsl_converter.converter.converter_native import NativeWorkflowConverter
+from openjiuwen_studio.core.dsl_converter.converter.converter_n8n import N8nWorkflowConverter
+from openjiuwen_studio.core.dsl_converter.converter.validator import WorkflowValidator, ValidationResult
+from openjiuwen_studio.core.dsl_converter.converter.importer import (
     WorkflowImporter,
     ImportOptions,
     ImportResult,
@@ -35,11 +35,11 @@ from openjiuwen_studio.core.dsl_converter.convertor.importer import (
 __all__ = [
     "WorkflowDetector",
     "WorkflowFormat",
-    "WorkflowConvertor",
-    "ConvertorFactory",
+    "WorkflowConverter",
+    "ConverterFactory",
     "WorkflowImportResult",
-    "NativeWorkflowConvertor",
-    "N8nWorkflowConvertor",
+    "NativeWorkflowConverter",
+    "N8nWorkflowConverter",
     "WorkflowValidator",
     "ValidationResult",
     "WorkflowImporter",

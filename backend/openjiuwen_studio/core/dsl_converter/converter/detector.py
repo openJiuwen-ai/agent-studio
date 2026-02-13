@@ -5,7 +5,7 @@
 """
 Workflow Format Detector
 
-Detects the format of workflow JSON to determine which convertor to use.
+Detects the format of workflow JSON to determine which converter to use.
 """
 
 from enum import Enum

@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import status
 
-from openjiuwen_studio.core.dsl_converter.convertor import (
+from openjiuwen_studio.core.dsl_converter.converter import (
     WorkflowImporter,
     ImportOptions,
     ImportResult,
@@ -70,7 +70,7 @@ class TestWorkflowImporter:
         """Test importing OpenJiuwen format in draft mode"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             # Mock workflow_create response
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
@@ -105,7 +105,7 @@ class TestWorkflowImporter:
         """Test importing n8n format in draft mode"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "new-456"}},
@@ -136,7 +136,7 @@ class TestWorkflowImporter:
         """Test that import always uses draft mode (no publish)"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "new-789"}},
@@ -167,7 +167,7 @@ class TestWorkflowImporter:
         """Test import with strict validation (compilation)"""
         options = ImportOptions(validate_strict=True)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "new-strict-123"}},
@@ -181,7 +181,7 @@ class TestWorkflowImporter:
             ))
 
             # Mock workflow_convert for strict validation
-            with patch('openjiuwen_studio.core.manager.convertor.workflow.workflow_convert') as mock_convert:
+            with patch('openjiuwen_studio.core.manager.converter.workflow.workflow_convert') as mock_convert:
                 mock_convert.return_value = MagicMock()  # Return any object, we just need it not to raise
 
                 result = await importer.import_workflow(
@@ -257,7 +257,7 @@ class TestWorkflowImporter:
         }
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "new-warn-123"}},
@@ -286,7 +286,7 @@ class TestWorkflowImporter:
         """Test import handles workflow creation errors"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 data={},
@@ -308,7 +308,7 @@ class TestWorkflowImporter:
         """Test import handles canvas save errors"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "new-123"}},
@@ -336,7 +336,7 @@ class TestWorkflowImporter:
         """Test import result contains expected metadata"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "new-meta-123"}},
@@ -367,7 +367,7 @@ class TestWorkflowImporter:
         """Test that workflow name gets (imported) suffix"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "new-name-123"}},
@@ -397,7 +397,7 @@ class TestWorkflowImporter:
         original_id = openjiuwen_workflow_data["workflow_id"]
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "completely-new-id"}},
@@ -433,7 +433,7 @@ class TestWorkflowImporter:
         """Test ImportResult structure for successful import"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             mock_mgr.workflow_create = MagicMock(return_value=MockResponse(
                 code=status.HTTP_200_OK,
                 data={'workflow': {"workflow_id": "struct-123"}},
@@ -486,7 +486,7 @@ class TestWorkflowImporter:
         """Test importing multiple workflows sequentially"""
         options = ImportOptions(validate_strict=False)
 
-        with patch('openjiuwen_studio.core.dsl_converter.convertor.importer.workflow_mgr') as mock_mgr:
+        with patch('openjiuwen_studio.core.dsl_converter.converter.importer.workflow_mgr') as mock_mgr:
             # Setup mocks for both imports
             mock_mgr.workflow_create = MagicMock(side_effect=[
                 MockResponse(code=status.HTTP_200_OK, data={'workflow': {"workflow_id": "seq-1"}}, message="Success"),

@@ -35,9 +35,9 @@ This module provides functionality to import workflows from various sources into
 └──────┬───────┘
        │
 ┌──────▼───────┐
-│  Convertor   │  Transforms to OpenJiuwen format
-│   Factory    │  - NativeConvertor (OpenJiuwen → OpenJiuwen)
-│              │  - N8nConvertor (n8n → OpenJiuwen)
+│  Converter   │  Transforms to OpenJiuwen format
+│   Factory    │  - NativeConverter (OpenJiuwen → OpenJiuwen)
+│              │  - N8nConverter (n8n → OpenJiuwen)
 └──────┬───────┘
        │
 ┌──────▼───────┐
@@ -94,7 +94,7 @@ python -m cli.workflow_import workflow.json \
 
 ```python
 import asyncio
-from openjiuwen_studio.core.dsl_converter.convertor import (
+from openjiuwen_studio.core.dsl_converter.converter import (
    WorkflowImporter,
    ImportOptions
 )
@@ -353,15 +353,15 @@ class WorkflowDetector:
         return "your_unique_field" in data
 ```
 
-### 2. Create Convertor
+### 2. Create Converter
 
 ```python
-# convertor_your_format.py
+# converter_your_format.py
 
-from openjiuwen_studio.core.dsl_converter.convertor.convertor import WorkflowConvertor
+from openjiuwen_studio.core.dsl_converter.converter.converter import WorkflowConverter
 
 
-class YourFormatConvertor(WorkflowConvertor):
+class YourFormatConverter(WorkflowConverter):
    def convert(self, json_data: dict) -> WorkflowImportResult:
       # Implement conversion logic
       # Must return OpenJiuwen format workflow
@@ -371,16 +371,16 @@ class YourFormatConvertor(WorkflowConvertor):
 ### 3. Register in Factory
 
 ```python
-# convertor.py
+# converter.py
 
-class ConvertorFactory:
+class ConverterFactory:
     @staticmethod
-    def create(format_type: WorkflowFormat) -> WorkflowConvertor:
+    def create(format_type: WorkflowFormat) -> WorkflowConverter:
         # ... existing formats ...
 
         elif format_type == WorkflowFormat.YOUR_FORMAT:
-            from openjiuwen_studio.core.importer.convertor_your_format import YourFormatConvertor
-            return YourFormatConvertor()
+            from openjiuwen_studio.core.importer.converter_your_format import YourFormatConverter
+            return YourFormatConverter()
 ```
 
 ## Error Handling
