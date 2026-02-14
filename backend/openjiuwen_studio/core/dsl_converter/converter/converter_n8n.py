@@ -200,7 +200,8 @@ class N8nWorkflowConverter(WorkflowConverter):
             }
         }
 
-    def _convert_code_node(self, n8n_node: Dict, node_id: str) -> Dict:
+    @staticmethod
+    def _convert_code_node(n8n_node: Dict, node_id: str) -> Dict:
         """Convert n8n Code/Function to OpenJiuwen Code component"""
         params = n8n_node.get("parameters", {})
         position = n8n_node.get("position", [0, 0])
@@ -241,7 +242,8 @@ class N8nWorkflowConverter(WorkflowConverter):
             }
         }
 
-    def _convert_if_node(self, n8n_node: Dict, node_id: str) -> Dict:
+    @staticmethod
+    def _convert_if_node(n8n_node: Dict, node_id: str) -> Dict:
         """Convert n8n IF/Switch to OpenJiuwen Branch component"""
         params = n8n_node.get("parameters", {})
         position = n8n_node.get("position", [0, 0])
@@ -277,7 +279,8 @@ class N8nWorkflowConverter(WorkflowConverter):
             }
         }
 
-    def _convert_merge_node(self, n8n_node: Dict, node_id: str) -> Dict:
+    @staticmethod
+    def _convert_merge_node(n8n_node: Dict, node_id: str) -> Dict:
         """Convert n8n Merge to OpenJiuwen Variable Merge component"""
         position = n8n_node.get("position", [0, 0])
 
@@ -307,8 +310,8 @@ class N8nWorkflowConverter(WorkflowConverter):
             }
         }
 
-    def _create_generic_node(self, n8n_node: Dict, node_id: str,
-                            component_type: ComponentType) -> Dict:
+    @staticmethod
+    def _create_generic_node(n8n_node: Dict, node_id: str, component_type: ComponentType) -> Dict:
         """Create generic OpenJiuwen node"""
         position = n8n_node.get("position", [0, 0])
 
@@ -357,7 +360,9 @@ class N8nWorkflowConverter(WorkflowConverter):
                 },
                 "configs": {
                     "language": "python3",
-                    "code": f"# TODO: Implement logic from n8n node type: {n8n_type}\n# Original node parameters: {json.dumps(n8n_node.get('parameters', {}), indent=2)}\nresult = 'Not implemented'"
+                    "code": f"# TODO: Implement logic from n8n node type: {n8n_type}\n# Original node parameters: "
+                            f"{json.dumps(n8n_node.get('parameters', {}), indent=2)}\nresult = "
+                            f"'Not implemented'"
                 },
                 "exception_config": {
                     "process_type": "break"
@@ -372,7 +377,9 @@ class N8nWorkflowConverter(WorkflowConverter):
         }
 
     # 1. Add node_name_to_id to the arguments
-    def _convert_connections(self, n8n_connections: Dict, n8n_nodes: List[Dict], node_name_to_id: Dict[str, str]) -> List[Dict]:
+    @staticmethod
+    def _convert_connections(n8n_connections: Dict, n8n_nodes: List[Dict], node_name_to_id: Dict[str, str]) \
+            -> List[Dict]:
         """Convert n8n connections to OpenJiuwen edges"""
         edges = []
 
@@ -402,8 +409,8 @@ class N8nWorkflowConverter(WorkflowConverter):
 
         return edges
 
-    def _add_start_end_nodes(self, nodes: List[Dict],
-                            edges: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+    @staticmethod
+    def _add_start_end_nodes(nodes: List[Dict], edges: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
         """Add START and END nodes to workflow"""
         # Find entry points (nodes with no incoming connections)
         all_targets = {edge["targetNodeID"] for edge in edges}
@@ -479,7 +486,8 @@ class N8nWorkflowConverter(WorkflowConverter):
         nodes.extend([start_node, end_node])
         return nodes, edges
 
-    def _extract_io_parameters(self, nodes: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+    @staticmethod
+    def _extract_io_parameters(nodes: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
         """Extract input/output parameters from START/END nodes"""
         inputs = []
         outputs = []
@@ -506,7 +514,8 @@ class N8nWorkflowConverter(WorkflowConverter):
 
         return inputs, outputs
 
-    def _convert_headers(self, header_params: Dict) -> Dict:
+    @staticmethod
+    def _convert_headers(header_params: Dict) -> Dict:
         """Convert n8n header parameters to dict"""
         if not header_params:
             return {}
@@ -528,7 +537,8 @@ class N8nWorkflowConverter(WorkflowConverter):
 
         return {}
 
-    def _generate_node_id(self, node_type: str) -> str:
+    @staticmethod
+    def _generate_node_id(node_type: str) -> str:
         """Generate unique node ID"""
         # Extract simple type name
         if node_type.startswith("n8n-nodes-base."):

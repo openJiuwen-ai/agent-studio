@@ -36,7 +36,10 @@ class NativeWorkflowConverter(WorkflowConverter):
         "space_id": "18630429",
         "url": "test",
         "icon_uri": "",
-        "schema": "{\"nodes\":[{\"id\":\"start_1\",\"type\":\"1\",\"data\":{\"title\":\"START\"}},{\"id\":\"llm_2\",\"type\":\"3\",\"data\":{\"title\":\"LLM\"}},{\"id\":\"end_3\",\"type\":\"2\",\"data\":{\"title\":\"END\"}}],\"edges\":[{\"source\":\"start_1\",\"target\":\"llm_2\"},{\"source\":\"llm_2\",\"target\":\"end_3\"}]}",
+        "schema": "{\"nodes\":[{\"id\":\"start_1\",\"type\":\"1\",\"data\":{\"title\":\"START\"}},{\"id\":\"llm_2\",
+                    \"type\":\"3\",\"data\":{\"title\":\"LLM\"}},{\"id\":\"end_3\",\"type\":\"2\",\"data\":
+                    {\"title\":\"END\"}}],\"edges\":[{\"source\":\"start_1\",\"target\":\"llm_2\"},{\"source\":
+                    \"llm_2\",\"target\":\"end_3\"}]}",
         "input_parameters": [{"name": "query", "type": "string"}],
         "output_parameters": [{"name": "response", "type": "string"}],
         "create_time": 1770709211479,
@@ -155,7 +158,8 @@ class NativeWorkflowConverter(WorkflowConverter):
         original_space_id = json_data.get("space_id")
         json_data["space_id"] = ""  # Will be set by importer to target space_id
         if original_space_id:
-            logger.info(f"Ignoring source space_id '{original_space_id}' - will use target space_id from import context")
+            logger.info(f"Ignoring source space_id '{original_space_id}' - will use target space_id from import "
+                        f"context")
 
         # Set defaults for all optional fields
         defaults = {
@@ -294,7 +298,8 @@ class NativeWorkflowConverter(WorkflowConverter):
             # Handle nested structures (loops, branches, sub-workflows)
             self._update_nested_references(node, id_mapping)
 
-    def _update_nested_references(self, node: Dict, id_mapping: Dict[str, str]) -> None:
+    @staticmethod
+    def _update_nested_references(node: Dict, id_mapping: Dict[str, str]) -> None:
         """
         Update node references in nested structures like loops.
 
@@ -337,7 +342,8 @@ class NativeWorkflowConverter(WorkflowConverter):
                     if target in id_mapping:
                         edge["targetNodeID"] = id_mapping[target]
 
-    def _check_missing_resources(self, workflow_data: Dict[str, Any]) -> List[str]:
+    @staticmethod
+    def _check_missing_resources(workflow_data: Dict[str, Any]) -> List[str]:
         """
         Check if referenced resources exist (models, plugins, sub-workflows).
 

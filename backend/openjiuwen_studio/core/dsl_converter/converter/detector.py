@@ -51,7 +51,8 @@ class WorkflowDetector:
         logger.warning("Unsupported workflow format")
         return WorkflowFormat.UNSUPPORTED
 
-    def _is_openjiuwen_format(self, data: Dict[str, Any]) -> bool:
+    @staticmethod
+    def _is_openjiuwen_format(data: Dict[str, Any]) -> bool:
         """
         Check if data matches OpenJiuwen native format.
 
@@ -87,7 +88,8 @@ class WorkflowDetector:
 
         return True
 
-    def _is_n8n_format(self, data: Dict[str, Any]) -> bool:
+    @staticmethod
+    def _is_n8n_format(data: Dict[str, Any]) -> bool:
         """
         Check if data matches n8n workflow format.
 
