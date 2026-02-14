@@ -32,21 +32,25 @@ write_env_to_file() {
     local env_file=$1
     local -n source_array=$2
 
-    info "Writing variable array DEPLOY_VARS to file: ${env_file}"
+    info "Writing $2 to config file: ${env_file}"
     > "${env_file}"
     printf "%s\n" "${!source_array[@]}" | sort | while read -r key; do
         if [ -n "${key}" ]; then
             echo "${key}=${source_array[${key}]}" >> "${env_file}"
         fi
     done
+    success "Generated config file : ${env_file}"
 }
 
 # read key-value pairs from .env.custom file into RUNTIME_VARS and DEPLOY_VARS array
 read_custom_env_file() {
     local custom_env_file=${CONFIG["CUSTOM_ENV_FILE"]}
     if [ ! -f ${custom_env_file} ]; then
+        info "Custom environment file does not exist: ${custom_env_file}, skip reading"
         return
     fi
+
+    info "Starting to process custom environment file: ${custom_env_file}"
     local os_type=${DEPLOY_VARS["OS_TYPE"]}
     local -a deploy_keys=(
         "${!DEPLOY_VARS[@]}"
@@ -97,6 +101,8 @@ read_custom_env_file() {
             fi
         fi
     done < "${custom_env_file}"
+
+    success "Processed custom config file: ${custom_env_file}"
 }
 
 
@@ -107,9 +113,9 @@ read_env_from_file() {
     local os_type=${DEPLOY_VARS["OS_TYPE"]}
 
     if [ ! -f "${env_file}" ]; then
-        error ".env file does not exist: ${env_file}"
+        error "config file does not exist: ${env_file}"
     fi
-    info "Loading .env file into variable array: ${env_file}"
+    info "Loading config file: ${env_file}"
 
     # Read .env.<Instance ID> line by line, exclude comments and empty lines, store in associative array
     while IFS= read -r line || [[ -n "${line}" ]]; do
@@ -145,8 +151,8 @@ read_env_from_file() {
             target_array["${key}"]="${value}"
         fi
     done < "${env_file}"
+    success "Loaded config file: ${env_file}"
 }
-
 
 # ==== load key-value pairs from .env.<Instance ID> files into array (for restart-up/down/stop) ===
 load_env_from_file() {

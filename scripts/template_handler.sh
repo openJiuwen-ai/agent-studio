@@ -57,7 +57,7 @@ generate_config_file() {
         replace_placeholder "${placeholder}" "${destfile}" "${var_name}"
     done
 
-    success "Final file: ${destfile}"
+    success "Generated config file: ${destfile}"
 }
 
 

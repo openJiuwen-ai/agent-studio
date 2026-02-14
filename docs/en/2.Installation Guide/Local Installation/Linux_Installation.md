@@ -74,23 +74,21 @@ If you need a proxy to access the internet or want to use a custom pip index, NV
 
 #### 3. Run the Installation Script
 
-* Go to the script directory:
+* Enter the script directory and grant execute permission:
 
   ```bash
-  cd setup_scripts_linux_v2
+  chmod +x *.sh
   ```
 
-* Run the main script (it will fix execute permissions if needed):
+* Run the main installation script:
 
   ```bash
   # Use MySQL by default
   ./setup.sh
 
-  # Or use SQLite
+  # Or specify SQLite
   ./setup.sh --db_type=sqlite
   ```
-
-  > **Note**: If you see permission errors, run `chmod +x *.sh` or use `bash setup.sh`.
 
 * When the script finishes, it will print backend and frontend PIDs, log paths, and the frontend URL. Open that URL in a browser to use openJiuwen.
 

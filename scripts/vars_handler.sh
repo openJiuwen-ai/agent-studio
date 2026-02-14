@@ -11,7 +11,7 @@ generate_final_names() {
         # info "Generating name for ${key}"
         set_if_empty "DEPLOY_VARS" "${key}" "${NAMES[${key}]}-${name_suffix}"
     done
-    info "Generating name Done!"
+    success "Generating name Done!"
 }
 
 # === Configures no_proxy/NO_PROXY env vars to bypass proxy for internal container/host connections =====

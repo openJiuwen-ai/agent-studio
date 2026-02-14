@@ -101,14 +101,24 @@ class PromptService:
                 )
             )
         order_by = None
-        if list_prompt.order_by:
-            order_by = getattr(orm_repo.PromptBasicModel, getattr(entities.PromptBasicMap, list_prompt.order_by))
-            if list_prompt.asc:
-                order_by = order_by.asc()
-            else:
-                order_by = order_by.desc()
-        prompts_basic, all_basic = self.prompt_repo.list_all(
-            list_prompt.page_num, list_prompt.page_size, conditions, order_by, orm_repo.PromptBasicModel)
+        use_max_updated_at_order = list_prompt.order_by == entities.ListPromptOrderBy.UPDATED_AT
+        if use_max_updated_at_order:
+            # 按 max(prompt_basic.updated_at, prompt_draft.updated_at) 排序
+            prompts_basic, all_basic = self.prompt_repo.list_all_order_by_max_updated_at(
+                list_prompt.page_num,
+                list_prompt.page_size,
+                conditions,
+                asc=list_prompt.asc if list_prompt.asc is not None else False,
+            )
+        else:
+            if list_prompt.order_by:
+                order_by = getattr(orm_repo.PromptBasicModel, getattr(entities.PromptBasicMap, list_prompt.order_by))
+                if list_prompt.asc:
+                    order_by = order_by.asc()
+                else:
+                    order_by = order_by.desc()
+            prompts_basic, all_basic = self.prompt_repo.list_all(
+                list_prompt.page_num, list_prompt.page_size, conditions, order_by, orm_repo.PromptBasicModel)
         list_prompt_res = [self.get_prompt_detail_service.get_prompt_from_basic(k, {}) for k in prompts_basic]
         for item in list_prompt_res:
             # 返回的结果中可能不需要prompt_draft和prompt_commit，临时删除

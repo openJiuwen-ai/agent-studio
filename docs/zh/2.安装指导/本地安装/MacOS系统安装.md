@@ -43,7 +43,6 @@
 * 进入脚本目录，赋予执行权限：
 
   ```bash
-  cd setup_scripts_macos
   chmod +x *.sh
   ```
 

@@ -40,10 +40,9 @@ The one-click script automates tool checks, code fetch, environment setup, and s
 
 #### 2. Run the Installation Script
 
-* Go to the script directory and make the scripts executable:
+* Enter the script directory and grant execute permission:
 
   ```bash
-  cd setup_scripts_macos_v2
   chmod +x *.sh
   ```
 
@@ -53,7 +52,7 @@ The one-click script automates tool checks, code fetch, environment setup, and s
   # Use MySQL by default
   ./setup.sh
 
-  # Or use SQLite
+  # Or specify SQLite
   ./setup.sh --db_type=sqlite
   ```
 

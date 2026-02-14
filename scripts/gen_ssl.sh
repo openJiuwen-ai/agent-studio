@@ -4,13 +4,15 @@ set -euo >/dev/null 2>&1
 # ======== Generate locally trusted SSL certificates ======== 
 generate_ssl_certs() {
     local ssl_dir="${1:-$(pwd)/ssl}"
+
+    info "Starting generation of SSL certificates..."
     if ! command -v openssl &> /dev/null; then
         error "Error: please install openssl first." >&2
     fi
 
     local ssl_password=$(openssl rand -base64 24 | tr -d '+/=' | cut -c1-32)
     export SSL_PASSWORD="$ssl_password"
-    info "Note: Private key is encrypted with AES-256. Use ssl_password to decrypt."
+    info "Generated AES-256 encryption password for private key (stored in SSL_PASSWORD env var)"
 
     # Since SSL_PASSWORD is only a temporarily exported variable in the 
     # shell environment where the current docker compose command is 
@@ -24,16 +26,17 @@ generate_ssl_certs() {
 
     local temp_key="$ssl_dir/private.unencrypted.key"
     if ! command -v mkcert &> /dev/null; then
+        info "mkcert not found, using openssl to generate self-signed SSL certificate"
         case "$(uname -s)" in
             MINGW*|MSYS*|CYGWIN*)
-                openssl req -x509 -nodes -days 365 \
+                openssl req -quiet -x509 -nodes -days 365 \
                 -newkey rsa:2048 \
                 -keyout "$temp_key" \
                 -out "$ssl_dir/certificate.crt" \
                 -subj "//CN=localhost"
                 ;;
             *)
-                openssl req -x509 -nodes -days 365 \
+                openssl req -quiet -x509 -nodes -days 365 \
                 -newkey rsa:2048 \
                 -keyout "$temp_key" \
                 -out "$ssl_dir/certificate.crt" \
@@ -41,18 +44,19 @@ generate_ssl_certs() {
                 ;;
         esac
     else
-        info "Generating certificate with mkcert..."
+        info "Using mkcert to generate SSL certificate"
         mkcert -cert-file "$ssl_dir/certificate.crt" -key-file "$temp_key" localhost 127.0.0.1 ::1
     fi
 
-    info "Encrypting private key with generated password..."
+    info "Encrypting private key with AES-256 (password protected)"
     openssl rsa -aes256 \
         -in "$temp_key" \
         -out "$ssl_dir/private.key" \
-        -passout "pass:$ssl_password"
+        -passout "pass:$ssl_password" 1> /dev/null
 
     rm -f "$temp_key"
 
     chmod 600 "$ssl_dir/private.key"
     chmod 644 "$ssl_dir/certificate.crt"
+    success "SSL certificates generation Done!"
 }

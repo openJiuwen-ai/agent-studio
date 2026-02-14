@@ -42,6 +42,13 @@ docker_exec_cmd_file() {
     local chmod_cmd="${docker_exec_prefix} docker exec -i ${container_name} chmod +x ${container_cmd_file}"
     exec_cmd "${chmod_cmd}"
 
-    local full_cmd="${docker_exec_prefix} docker exec -i ${container_name} /bin/bash -c \"${container_cmd_file}\""
+    local full_cmd=""
+    if [ $# -ge 3 ];then
+        local cmd_args=$3
+        full_cmd="${docker_exec_prefix} docker exec -i ${container_name} /bin/bash -c \"${container_cmd_file} ${cmd_args}\""
+    else
+        full_cmd="${docker_exec_prefix} docker exec -i ${container_name} /bin/bash -c \"${container_cmd_file}\""
+    fi
+
     exec_cmd "${full_cmd}"
 }

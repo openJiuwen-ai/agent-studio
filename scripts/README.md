@@ -44,10 +44,17 @@ scripts/
 ├── examples/                       # 后端业务示例配置目录
 ├── log-dirs/                       # 所有实例的服务日志、升级日志归档目录（自动生成）
 │   ├── logs-<实例ID>/              # 某实例的服务日志、升级日志目录
+│   │   ├──  deepsearch/            # deepsearch服务模块的log目录
+│   │   ├──  server/                # 后端服务模块的log目录
 │   └── ...
 ├── .sqlite-dirs/                   # SQLite数据库升级过程中的临时数据目录（自动生成，升级完成后可清理）
 │   ├── databases.preupgrade.<实例ID>
 │   ├── databases.postupgrade.<实例ID>
+│   └── ...
+├── .upgrade/                       # 实例级组件升级脚本存储目录（按组件+实例隔离）
+│   ├── upgrade-milvus-<实例ID>.sh
+│   ├── upgrade-mysql-<实例ID>.sh
+│   ├── upgrade-sqlite-<实例ID>.sh
 │   └── ...
 ├── readme-service-script.md        # 脚本使用直指导文档
 ├── service.sh                      # 部署脚本核心入口（接收用户指令，调度其他子脚本）
@@ -63,6 +70,7 @@ scripts/
 ├── cmd.sh                          # 命令封装脚本
 ├── template_handler.sh             # 模板渲染脚本
 ├── upgrade_handler.sh              # 升级流程核心处理脚本（封装版本检测、数据迁移、容器升级逻辑）
+├── version_handler.sh              # 版本管理脚本（封装版本号解析、版本对比、版本验证等版本相关逻辑）
 └── service_handler.sh              # 服务生命周期管理脚本（封装服务启动/停止/重启/状态检查逻辑）
 
 ```
@@ -570,3 +578,18 @@ error while removing network: network ... has active endpoints
 
 **解决方案**
 请将 Docker 和 Docker Compose 升级至满足[版本要求](#使用说明)的版本，即可避免此类错误。
+
+## 执行部署命令时出现 "Found orphan containers" 警告，是否需要处理？
+
+**问题现象**
+部署工具在启动服务的过程，终端输出类似如下警告信息：
+
+```
+time="2026-02-13T11:12:41+08:00" level=warning msg="Found orphan containers ([jiuwen-milvus-standalone-6vnaj ...]) for this project..."
+```
+
+**问题原因**
+本部署工具支持同一目录下多实例并行部署，每个实例会生成独立的容器（命名含唯一实例 ID，如 mysql-6vnaj、milvus-ujb38）。部署工具调用的Docker Compose命令 检测到当前 compose 文件未声明的、同目录下的其他实例容器时，会触发 "孤儿容器" 警告，属于正常现象。
+
+**处理建议**
+本部署工具采用实例 ID实现强隔离机制，不同实例的容器、数据卷、网络与配置文件均通过唯一实例 ID 进行维度隔离，彼此独立、互不干扰。同时，工具支持通过与实例 ID 绑定的专属配置文件，精细化控制每个实例的部署、启动、停止与升级流程。因此，Docker Compose 输出的孤儿容器警告仅为常规提示信息，可完全忽略，不会对任何实例的核心生命周期操作造成影响。

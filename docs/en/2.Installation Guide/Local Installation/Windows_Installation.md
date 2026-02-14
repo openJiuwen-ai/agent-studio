@@ -74,14 +74,13 @@ If you need a proxy to access the internet or want to use a custom pip index or 
   Set-ExecutionPolicy Unrestricted -Scope CurrentUser
   ```
 
-* Go to the script directory and run the main script:
+* Enter the script directory and run the main installation script:
 
   ```powershell
-  cd setup_scripts_windows_v2
   # Use MySQL by default
   .\setup.ps1
 
-  # Or use SQLite
+  # Or specify SQLite
   .\setup.ps1 -DbType sqlite
   ```
 

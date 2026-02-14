@@ -142,7 +142,7 @@ const api = {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
   },
-  
+
   /* 记忆库相关API */
   getMemoryBaseDetail: async (request: GetMemoryBaseDetailRequest): Promise<GetMemoryBaseDetailResponse> => {
     const response = await axios.get(`/api/memory-base/${request.id}`, {
@@ -150,57 +150,57 @@ const api = {
     });
     return response.data;
   },
-  
+
   updateMemoryBase: async (request: UpdateMemoryBaseRequest): Promise<UpdateMemoryBaseResponse> => {
     const response = await axios.put('/api/memory-base', request);
     return response.data;
   },
-  
+
   deleteMemoryBase: async (request: DeleteMemoryBaseRequest): Promise<DeleteMemoryBaseResponse> => {
     const response = await axios.delete('/api/memory-base', { data: request });
     return response.data;
   },
-  
+
   getDocumentsList: async (request: GetDocumentsListRequest): Promise<GetDocumentsListResponse> => {
     const response = await axios.get('/api/documents', { params: request });
     return response.data;
   },
-  
+
   updateDocument: async (request: UpdateDocumentRequest): Promise<UpdateDocumentResponse> => {
     const response = await axios.put('/api/document', request);
     return response.data;
   },
-  
+
   deleteDocuments: async (request: DeleteDocumentsRequest): Promise<DeleteDocumentsResponse> => {
     const response = await axios.delete('/api/documents', { data: request });
     return response.data;
   },
-  
+
   processDocuments: async (request: ProcessDocumentsRequest): Promise<ProcessDocumentsResponse> => {
     const response = await axios.post('/api/documents/process', request);
     return response.data;
   },
-  
+
   getDocumentStatus: async (request: GetDocumentStatusRequest): Promise<GetDocumentStatusResponse> => {
     const response = await axios.get('/api/documents/status', { params: request });
     return response.data;
   },
-  
+
   updateMemory: async (request: UpdateMemoryRequest): Promise<UpdateMemoryResponse> => {
     const response = await axios.put('/api/memory', request);
     return response.data;
   },
-  
+
   batchAddMemories: async (request: BatchAddMemoriesRequest): Promise<BatchAddMemoriesResponse> => {
     const response = await axios.post('/api/memory/batch', request);
     return response.data;
   },
-  
+
   searchMemoryBase: async (request: SearchMemoryBaseRequest): Promise<SearchMemoryBaseResponse> => {
     const response = await axios.post('/api/memory-base/search', request);
     return response.data;
   },
-  
+
   cleanExpiredMemories: async (request: CleanExpiredMemoriesRequest): Promise<CleanExpiredMemoriesResponse> => {
     const response = await axios.post('/api/memory/clean-expired', request);
     return response.data;
@@ -239,7 +239,7 @@ const MemoryBaseEditorPage: React.FC = () => {
   const [totalMemories, setTotalMemories] = useState(0);
   const [isMemoriesLoading, setIsMemoriesLoading] = useState(false);
   const [currentRequestPage, setCurrentRequestPage] = useState<number | null>(null);
-  
+
   const [memoryStatuses, setMemoryStatuses] = useState<Record<string, MemoryStatusItem>>({});
   const [isRefreshingAllStatuses, setIsRefreshingAllStatuses] = useState(false);
 
@@ -265,7 +265,7 @@ const MemoryBaseEditorPage: React.FC = () => {
 
   // 用于存储 memoryStatuses 的引用
   const memoryStatusesRef = React.useRef<Record<string, MemoryStatusItem>>({});
-  
+
   // 同步 memoryStatuses 到 ref
   React.useEffect(() => {
     memoryStatusesRef.current = memoryStatuses;
@@ -353,7 +353,7 @@ const MemoryBaseEditorPage: React.FC = () => {
       const res_var = await api.listVariables(spaceId, memoryBase.mdb_id);
       const response_var = Object.entries(res_var.data?.variable_data || {});
       const response_long = await api.listLongTerm(spaceId, memoryBase.mdb_id);
-      
+
       // 转换变量数据格式 - 添加ID
       const variableMemories: ExtendedMemoryItem[] = response_var.map(([key, value]) => ({
         id: key, // 使用key作为ID
@@ -361,7 +361,7 @@ const MemoryBaseEditorPage: React.FC = () => {
         content: typeof value === 'string' ? `{${key} : ${value}}` : `{${key}:${JSON.stringify(value)}}`,
         type: 'variable',
       }));
-      
+
       // 转换长期记忆数据格式 - 添加ID
       const longTermMemories: ExtendedMemoryItem[] = response_long.data?.longterm_mem_data?.map((mem: MemInfo) => ({
         id: mem.mem_id,
@@ -377,11 +377,11 @@ const MemoryBaseEditorPage: React.FC = () => {
       setAllMemories(allMemories);
       setTotalMemories(allMemories.length);
       setCurrentPage(page);
-      
+
       const memoryIds = allMemories.map(mem => mem.id);
       // 查询当前页记忆项的状态（合并到现有状态中，不替换）
       await fetchMemoryStatuses(memoryIds, true); // 合并状态，保留其他页面的记忆状态
-    
+
     } catch (error) {
       console.error('Failed to fetch memories:', error);
       // 不显示错误提示，因为没有记忆是正常情况
@@ -402,7 +402,7 @@ const MemoryBaseEditorPage: React.FC = () => {
       const res_var = await api.listVariables(spaceId, memoryBase.mdb_id);
       const response_var = Object.entries(res_var.data?.variable_data || {});
       const response_long = await api.listLongTerm(spaceId, memoryBase.mdb_id);
-      
+
       // 转换变量数据格式 - 添加ID
       const variableMemories: ExtendedMemoryItem[] = response_var.map(([key, value]) => ({
         id: key,
@@ -410,7 +410,7 @@ const MemoryBaseEditorPage: React.FC = () => {
         content: typeof value === 'string' ? `{${key} : ${value}}` : `{${key}:${JSON.stringify(value)}}`,
         type: 'variable',
       }));
-      
+
       // 转换长期记忆数据格式 - 添加ID
       const longTermMemories: ExtendedMemoryItem[] = response_long.data?.longterm_mem_data?.map((mem: MemInfo) => ({
         id: mem.mem_id,
@@ -440,7 +440,7 @@ const MemoryBaseEditorPage: React.FC = () => {
     try {
       // 不再调用不存在的 getMemoryStatus，而是直接构造模拟数据
       const statusMap: Record<string, MemoryStatusItem> = {};
-      
+
       // 为每个 memoryId 构造一个 active 状态项
       memoryIds.forEach(id => {
         statusMap[id] = {
@@ -469,7 +469,7 @@ const MemoryBaseEditorPage: React.FC = () => {
     if (memoryBase) {
       // 设置加载状态，避免显示"暂无记忆"
       setIsMemoriesLoading(true);
-      
+
       // 优化：一次性获取所有记忆ID和第一页数据，避免重复请求
       fetchAllMemoryIds()
         .then(async ({ allMemoryIds, firstPageItems, total }) => {
@@ -482,7 +482,7 @@ const MemoryBaseEditorPage: React.FC = () => {
           setMemories(firstPageItems);
           setTotalMemories(total);
           setCurrentPage(1);
-          
+
           // 关键：移到条件外，确保无论有没有记忆都重置加载状态
           setIsMemoriesLoading(false);
         })
@@ -508,11 +508,14 @@ const MemoryBaseEditorPage: React.FC = () => {
       }
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
-        filtered = allMemories.filter(mem => 
+        filtered = filtered.filter(mem => 
           mem.content.toLowerCase().includes(term)
         );
       }
       setTotalMemories(filtered.length);
+      // 分页
+      setCurrentPage(1);
+      filtered = filtered.slice(0, pageSize);
       setFilteredMemories(filtered);
       return;
     }
@@ -523,14 +526,24 @@ const MemoryBaseEditorPage: React.FC = () => {
       filtered = allMemories.filter(mem => 
         mem.content.toLowerCase().includes(term)
       );
+      if (selectedTypeFilter !== 'all') {
+        if (selectedTypeFilter === 'longterm') {
+          filtered = filtered.filter(mem => mem.type !== 'variable' && mem.type !== 'summary' );
+        } else {
+          filtered = filtered.filter(mem => mem.type === selectedTypeFilter);
+        }
+      }
       setTotalMemories(filtered.length);
+      // 分页
+      setCurrentPage(1);
+      filtered = filtered.slice(0, pageSize);
       setFilteredMemories(filtered);
       return
     }
-    
+
     setFilteredMemories(filtered);
-    
-  }, [memories, selectedTypeFilter, searchTerm, allMemories]);
+
+  }, [memories, selectedTypeFilter, searchTerm, allMemories, pageSize]);
 
   const handleBack = () => {
     navigate('/dashboard/memory-bases');
@@ -740,7 +753,7 @@ const MemoryBaseEditorPage: React.FC = () => {
     setIsBatchDeleting(true);
     try {
       const spaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID;
-      
+
       // 遍历选中的记忆项并根据类型分别删除
       for (const memoryId of selectedMemoryIds) {
         const memoryToDelete = memories.find(mem => mem.id === memoryId);
@@ -750,7 +763,7 @@ const MemoryBaseEditorPage: React.FC = () => {
           await api.deleteLongTerm(spaceId, memoryBase.mdb_id, memoryId);
         }
       }
-      
+
       const deletedCount = selectedMemoryIds.size;
 
       // 清空选中列表
@@ -866,7 +879,7 @@ const MemoryBaseEditorPage: React.FC = () => {
                 <div className="flex items-center space-x-4">
                   <h2 className="text-lg font-medium text-gray-900">{t('memoryBases.editor.memoryList')}</h2>
                 </div>
-                
+
                 {/* 搜索和过滤工具栏 */}
                 <div className="flex items-center space-x-4">
                   <div className="relative">
@@ -879,7 +892,7 @@ const MemoryBaseEditorPage: React.FC = () => {
                       className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
-                  
+
                   <div className="flex items-center space-x-2">
                     <Filter className="w-5 h-5 text-gray-500"/>
                     <select
@@ -893,7 +906,7 @@ const MemoryBaseEditorPage: React.FC = () => {
                       <option value="summary">{t('memoryBases.memoryType.summary')}</option>
                     </select>
                   </div>
-                  
+
                   {selectedMemoryIds.size > 0 && (
                     <button
                       onClick={handleOpenBatchDeleteDialog}

@@ -50,7 +50,7 @@ export const renderForm = () => {
         <FormModel showHistoryEnable={true} />
         <FormPrompt />
         <FormMaxResponse />
-        <FormOutput defaultFields={['user_response']} minProperties={2} expandable={true} excludeTypes={['object', 'date-time', 'file']} />
+        <FormOutput defaultFields={['user_response']} minProperties={2} expandable={true} excludeTypes={['object', 'date-time', 'array', 'file']} />
       </FormContent>
     </>
   )

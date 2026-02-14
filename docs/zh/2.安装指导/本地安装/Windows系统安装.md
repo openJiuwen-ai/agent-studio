@@ -94,7 +94,6 @@
 * 进入脚本目录，运行主安装脚本：
 
   ```powershell
-  cd setup_scripts_windows_v2
   # 默认使用 MySQL 数据库
   .\setup.ps1
 

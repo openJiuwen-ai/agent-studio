@@ -203,7 +203,10 @@ class CodeComponent(WorkflowComponent):
             if expect_type == "date-time":
                 if isinstance(value, str):
                     try:
-                        return datetime.strptime(value, '%Y-%m-%dT%H:%M:%S.%fZ')
+                        # 返回字符串更安全，避免后续状态序列化 datetime 对象时出现兼容问题
+                        normalized = value.replace("Z", "+00:00")
+                        dt = datetime.fromisoformat(normalized)
+                        return dt.isoformat()
                     except Exception as e:
                         raise ValueError(f"can not convert '{value}' into datetime") from e
                 raise ValueError(f"expected date-time, got {type(value).__name__}")

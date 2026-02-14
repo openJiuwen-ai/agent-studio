@@ -376,6 +376,18 @@ class PromptDebugService:
             yield f"event: error\ndata: {json.dumps({'code': 500, 'msg': f'{e.type} - {e.message}'})}\n\n"
             end_span(llm_span)
             return
+        except (TimeoutError, asyncio.TimeoutError) as e:
+            err_msg = str(e)
+            debug_logs.append({
+                "timestamp": time.time(),
+                "level": "error",
+                "message": f"大模型调用超时: {err_msg}",
+                "step": "llm_call"
+            })
+            hint = "Try increasing the timeout in the model configuration and retry."
+            yield f"event: error\ndata: {json.dumps({'code': 500, 'msg': f'{err_msg} {hint}'.strip()})}\n\n"
+            end_span(llm_span)
+            return
         except Exception as e:
             debug_logs.append({
                 "timestamp": time.time(),

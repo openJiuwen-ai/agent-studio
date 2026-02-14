@@ -67,7 +67,7 @@ class ToolExecutable(ComponentExecutable):
         tool_inputs = self._validate_inputs(inputs)
 
         try:
-            response = await self._tool.invoke(tool_inputs, skip_inputs_validate=False, skip_none_value=True)
+            response = await self._tool.invoke(tool_inputs, skip_inputs_validate=False, skip_none_value=False)
             response = self._post_process_tool_result(response)
         except Exception as e:
             if isinstance(e, BaseError):

@@ -267,8 +267,9 @@ const AgentEditorEditPage = () => {
   const handleSaveSettings = async (nextName: string, nextDescription: string, nextIcon: string) => {
     if (!agentId) return
     try {
-      const agentType = agentDetailResponse?.data?.agent_info?.agent_type || 'react'
-      const originalAgentName = agentDetailResponse?.data?.agent_info?.agent_name || ''
+      // 从 saveAgentRequest 获取最新的 agent_type，而不是从 agentDetailResponse
+      const agentType = displayedSaveAgentRequest?.agent_type || 'react'
+      const originalAgentName = displayedAgentDetailResponse?.data?.agent_info?.agent_name || ''
       const newAgentName = nextName.trim()
       const isNameChanged = newAgentName !== originalAgentName
 

@@ -73,9 +73,7 @@ check_containers() {
     IFS=' ' read -r -a containers <<< "${container_str}"
     for container in "${containers[@]}"; do
         if [ -n "${container}" ]; then
-            info "Checking health for container: ${container}"
             wait_for_container_healthy "${container}"
-            success "Container ${container} is healthy"
         fi
     done
 }
@@ -127,12 +125,12 @@ create_db() {
     local db_password=${DEPLOY_VARS["DB_ROOT_PASSWORD"]}
     local db_name="$1"
 
-    info "Checking if database ${db_name} is ready"
+    info "Checking if database ${db_name} is created"
     docker exec -i "${mysql_container}" mysql -u root -p"${db_password}" -h 127.0.0.1 << EOF
 CREATE DATABASE IF NOT EXISTS ${db_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 EOF
     if [ $? -eq 0 ]; then
-        success "Database ${db_name} are ready"
+        success "Database ${db_name} is created"
     else
         error "Database ${db_name} creation failed! Check container logs or network connection"
     fi
