@@ -9,7 +9,7 @@ import json
 
 from openjiuwen.core.workflow import WorkflowComponent, Input, Output
 from openjiuwen.core.context_engine import ModelContext
-from openjiuwen.core.session.node import Session
+from openjiuwen.core.workflow.components import Session
 from openjiuwen.core.session.stream import OutputSchema
 from openjiuwen.core.common.utils.dict_utils import extract_leaf_nodes, format_path
 from openjiuwen.core.common.logging import logger

@@ -5,7 +5,7 @@
 from typing import Any, Dict
 from openjiuwen.core.workflow import WorkflowComponent, Input, Output
 from openjiuwen.core.context_engine import ModelContext
-from openjiuwen.core.session.node import Session
+from openjiuwen.core.workflow.components import Session
 
 from openjiuwen_studio.core.common.dsl import VariMergeConfig
 

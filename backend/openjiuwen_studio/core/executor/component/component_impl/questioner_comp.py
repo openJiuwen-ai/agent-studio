@@ -8,7 +8,7 @@ from openjiuwen.core.workflow import QuestionerConfig, QuestionerComponent
 from openjiuwen.core.workflow.components.llm.questioner_comp import QuestionerExecutable, QuestionerState
 from openjiuwen.core.graph.executable import Executable, Input, Output
 from openjiuwen.core.context_engine import ModelContext
-from openjiuwen.core.session.node import Session
+from openjiuwen.core.workflow.components import Session
 from openjiuwen.core.common.logging import logger
 
 

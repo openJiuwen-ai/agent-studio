@@ -5,7 +5,7 @@ import re
 from typing import Any, Dict, List
 from openjiuwen.core.workflow import WorkflowComponent, Input, Output
 from openjiuwen.core.context_engine import ModelContext
-from openjiuwen.core.session.node import Session
+from openjiuwen.core.workflow.components import Session
 
 from openjiuwen_studio.core.executor.component.component_impl.user_output_comp import has_double_braces
 from openjiuwen_studio.core.common.dsl import TextEditorConfig, TextEditorType

@@ -225,7 +225,35 @@ done
     ```
     *SQLite 特别说明：SQLite 对 `ALTER TABLE` 支持有限。如果遇到错误，可能需要使用 batch mode（Alembic 默认配置通常已开启，但需留意）。*
 
-### 场景四：修改字段类型或属性（Alter）
+### 场景四：编写可重入（Idempotent）的迁移脚本
+
+由于 MySQL 的 DDL 操作（如 `CREATE TABLE`, `ADD COLUMN`）不支持事务回滚，如果迁移脚本在执行中途失败，再次运行 `upgrade` 会因为表或列已存在而报错。因此，建议编写**可重入**的迁移脚本。
+
+本项目提供了统一的辅助函数来检查表、列、索引是否存在：
+
+```python
+from openjiuwen_studio.core.database.migration_utils import table_exists, column_exists, index_exists
+
+def upgrade() -> None: 
+    # 1. 创建表前检查是否存在
+    if not table_exists('my_new_table'):
+        op.create_table('my_new_table', ...)
+
+    # 2. 添加列前检查是否存在
+    if not column_exists('users', 'new_column'):
+        op.add_column('users', sa.Column('new_column', sa.String(100)))
+
+    # 3. 创建索引前检查是否存在
+    if not index_exists('users', 'idx_user_email'):
+        op.create_index('idx_user_email', 'users', ['email'])
+```
+
+**注意事项：**
+- **SQLite 支持**: 这些辅助函数同样适用于 SQLite 迁移。
+- **Batch 模式**: 在 SQLite 中使用 `op.batch_alter_table` 时，同样可以在 `with` 块内使用这些检查。
+- **模板支持**: 新生成的迁移脚本已默认导入这些辅助函数。
+
+### 场景五：修改字段类型或属性（Alter）
 
 例如将 `String(50)` 改为 `String(100)`，或修改 `nullable` 属性。
 

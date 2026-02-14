@@ -133,7 +133,7 @@ def component_convert(edges: List[Edge], nodes: list[Node], space_id: str, sub_c
             except Exception as ce:
                 code = error_code_map.get(node_type, StatusCode.COMPONENT_CONVERT_FAILED.code)
                 raise JiuWenComponentException(
-                    error_code=code,
+                    code=code,
                     message=str(ce),
                     component_id=node.id,
                     component_type=node_type,

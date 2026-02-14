@@ -7,7 +7,7 @@ import threading
 from dataclasses import dataclass
 from typing import Dict, Optional
 from openjiuwen.core.common.logging import logger
-from openjiuwen.core.session.node import Session
+from openjiuwen.core.workflow.components import Session
 
 
 @dataclass

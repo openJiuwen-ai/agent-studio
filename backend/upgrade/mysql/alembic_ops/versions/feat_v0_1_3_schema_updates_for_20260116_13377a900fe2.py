@@ -10,6 +10,7 @@ Create Date: 2026-01-20 21:08:28.719074
 """
 
 from typing import Sequence, Union
+from openjiuwen_studio.core.database.migration_utils import table_exists, column_exists, index_exists
 
 
 

@@ -13,7 +13,7 @@ from openjiuwen.core.session import BaseSession
 
 from openjiuwen.core.workflow import WorkflowComponent, Input, Output
 from openjiuwen.core.context_engine import ModelContext
-from openjiuwen.core.session.node import Session
+from openjiuwen.core.workflow.components import Session
 
 from openjiuwen_studio.core.common.dsl import CodeLanguage, ExceptHandlingMethod, ExceptConfig, CodeConfig, ErrorBody
 from openjiuwen_studio.core.executor.component.code_runner.base import CodeRunner

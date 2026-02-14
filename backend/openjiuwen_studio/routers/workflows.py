@@ -130,7 +130,7 @@ async def workflow_get(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
-                "code": e.error_code,
+                "code": e.code,
                 "message": e.message,
                 "component_id": e.component_id,
                 "component_type": e.component_type,

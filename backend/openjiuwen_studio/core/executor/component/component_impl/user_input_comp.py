@@ -5,7 +5,7 @@ from typing import Any, List
 
 from openjiuwen.core.workflow import WorkflowComponent, Input, Output
 from openjiuwen.core.context_engine import ModelContext
-from openjiuwen.core.session.node import Session
+from openjiuwen.core.workflow.components import Session
 from openjiuwen.core.common.logging import logger
 
 from openjiuwen_studio.core.common.dsl import UserInputsConfig, UserInputElem

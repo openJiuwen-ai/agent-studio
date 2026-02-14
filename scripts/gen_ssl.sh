@@ -29,18 +29,18 @@ generate_ssl_certs() {
         info "mkcert not found, using openssl to generate self-signed SSL certificate"
         case "$(uname -s)" in
             MINGW*|MSYS*|CYGWIN*)
-                openssl req -quiet -x509 -nodes -days 365 \
+                openssl req -x509 -nodes -days 365 \
                 -newkey rsa:2048 \
                 -keyout "$temp_key" \
                 -out "$ssl_dir/certificate.crt" \
-                -subj "//CN=localhost"
+                -subj "//CN=localhost" 2> /dev/null
                 ;;
             *)
-                openssl req -quiet -x509 -nodes -days 365 \
+                openssl req -x509 -nodes -days 365 \
                 -newkey rsa:2048 \
                 -keyout "$temp_key" \
                 -out "$ssl_dir/certificate.crt" \
-                -subj "/CN=localhost"
+                -subj "/CN=localhost" 2> /dev/null
                 ;;
         esac
     else

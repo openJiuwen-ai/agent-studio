@@ -8,6 +8,7 @@ Create Date: 2026-02-07 11:16:02.133215
 from typing import Sequence, Union
 
 from alembic import op
+from openjiuwen_studio.core.database.migration_utils import table_exists, column_exists, index_exists
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
 from sqlalchemy import inspect
@@ -17,30 +18,6 @@ revision: str = '072ac1293a02'
 down_revision: Union[str, Sequence[str], None] = '54be202e347e'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
-
-
-def table_exists(table_name):
-    bind = op.get_bind()
-    inspector = inspect(bind)
-    return inspector.has_table(table_name)
-
-
-def column_exists(table_name, column_name):
-    bind = op.get_bind()
-    inspector = inspect(bind)
-    if not inspector.has_table(table_name):
-        return False
-    columns = [c['name'] for c in inspector.get_columns(table_name)]
-    return column_name in columns
-
-
-def index_exists(table_name, index_name):
-    bind = op.get_bind()
-    inspector = inspect(bind)
-    if not inspector.has_table(table_name):
-        return False
-    indexes = [i['name'] for i in inspector.get_indexes(table_name)]
-    return index_name in indexes
 
 
 def upgrade() -> None:
