@@ -8,9 +8,9 @@ Tests for N8nWorkflowConverter
 Tests conversion of n8n format workflows to OpenJiuwen format using actual fixture file.
 """
 
-import pytest
 import json
 from pathlib import Path
+import pytest
 
 from openjiuwen_studio.core.dsl_converter.converter.converter_n8n import N8nWorkflowConverter
 from openjiuwen_studio.core.common.dsl import ComponentType

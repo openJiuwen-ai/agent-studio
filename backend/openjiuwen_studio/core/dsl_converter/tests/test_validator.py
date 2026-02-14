@@ -8,9 +8,9 @@ Tests for WorkflowValidator
 Tests validation logic for imported workflows.
 """
 
-import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
+import pytest
 
 from openjiuwen_studio.core.dsl_converter.converter.validator import WorkflowValidator, ValidationResult
 

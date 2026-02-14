@@ -15,10 +15,12 @@ NC = '\033[0m'  # No Color
 
 TEST_DIR = Path(__file__).parent
 
+
 def run_command(cmd):
     """Run command and return exit code"""
     print(f"{BLUE}Running: {' '.join(cmd)}{NC}")
     return subprocess.call(cmd)
+
 
 def main():
     if len(sys.argv) < 2:
@@ -93,6 +95,7 @@ def main():
         print(f"\n{GREEN}Coverage report generated in htmlcov/index.html{NC}")
 
     sys.exit(exit_code)
+
 
 if __name__ == "__main__":
     main()

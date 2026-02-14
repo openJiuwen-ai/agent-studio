@@ -8,9 +8,9 @@ Tests for WorkflowDetector
 Tests format detection logic for OpenJiuwen native and n8n workflows.
 """
 
-import pytest
 import json
 from pathlib import Path
+import pytest
 
 from openjiuwen_studio.core.dsl_converter.converter.detector import WorkflowDetector, WorkflowFormat
 

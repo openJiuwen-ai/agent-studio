@@ -8,9 +8,9 @@ Tests for NativeWorkflowConverter
 Tests conversion of OpenJiuwen native format workflows using actual fixture files.
 """
 
-import pytest
 import json
 from pathlib import Path
+import pytest
 
 from openjiuwen_studio.core.dsl_converter.converter.converter_native import NativeWorkflowConverter
 
