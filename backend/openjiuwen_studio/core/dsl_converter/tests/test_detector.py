@@ -189,21 +189,21 @@ class TestWorkflowDetector:
 
     @staticmethod
     def test_is_openjiuwen_format_method(detector):
-        """Test private _is_openjiuwen_format method directly"""
+        """Test is_openjiuwen_format method directly"""
         data = {
             "workflow_id": "test-123",
             "schema": json.dumps({"nodes": [], "edges": []})
         }
-        assert detector._is_openjiuwen_format(data) is True
+        assert detector.is_openjiuwen_format(data) is True
 
     @staticmethod
     def test_is_n8n_format_method(detector):
-        """Test private _is_n8n_format method directly"""
+        """Test is_n8n_format method directly"""
         data = {
             "nodes": [{"id": "1", "type": "n8n-nodes-base.webhook"}],
             "connections": {}
         }
-        assert detector._is_n8n_format(data) is True
+        assert detector.is_n8n_format(data) is True
 
     @staticmethod
     def test_is_n8n_format_no_matching_type(detector):
@@ -212,7 +212,7 @@ class TestWorkflowDetector:
             "nodes": [{"id": "1", "type": "custom-node"}],
             "connections": {}
         }
-        assert detector._is_n8n_format(data) is False
+        assert detector.is_n8n_format(data) is False
 
     @staticmethod
     def test_is_n8n_format_empty_nodes(detector):
@@ -221,7 +221,7 @@ class TestWorkflowDetector:
             "nodes": [],
             "connections": {}
         }
-        assert detector._is_n8n_format(data) is False
+        assert detector.is_n8n_format(data) is False
 
     @staticmethod
     def test_is_n8n_format_missing_connections(detector):
@@ -229,4 +229,4 @@ class TestWorkflowDetector:
         data = {
             "nodes": [{"id": "1", "type": "n8n-nodes-base.webhook"}]
         }
-        assert detector._is_n8n_format(data) is False
+        assert detector.is_n8n_format(data) is False

@@ -105,7 +105,7 @@ class N8nWorkflowConverter(WorkflowConverter):
         edges = self._convert_connections(n8n_connections, n8n_nodes, node_name_to_id)
 
         # Add START and END nodes
-        openjiuwen_nodes, edges = self._add_start_end_nodes(openjiuwen_nodes, edges)
+        openjiuwen_nodes, edges = self.add_start_end_nodes(openjiuwen_nodes, edges)
 
         # Extract inputs/outputs
         inputs, outputs = self._extract_io_parameters(openjiuwen_nodes)
@@ -148,7 +148,7 @@ class N8nWorkflowConverter(WorkflowConverter):
         """Convert single n8n node to OpenJiuwen format"""
         n8n_type = n8n_node.get("type", "")
         n8n_name = n8n_node.get("name", "Node")
-        node_id = self._generate_node_id(n8n_type)
+        node_id = self.generate_node_id(n8n_type)
 
         # Get OpenJiuwen component type
         openjiuwen_type = self.N8N_TO_OPENJIUWEN.get(
@@ -187,7 +187,7 @@ class N8nWorkflowConverter(WorkflowConverter):
                     "tool": {
                         "url": params.get("url", ""),
                         "method": params.get("method", "GET"),
-                        "headers": self._convert_headers(params.get("headerParameters", {})),
+                        "headers": self.convert_headers(params.get("headerParameters", {})),
                         "body": params.get("body", "")
                     }
                 }
@@ -340,7 +340,7 @@ class N8nWorkflowConverter(WorkflowConverter):
 
     def _create_fallback_node(self, n8n_node: Dict) -> Dict:
         """Create fallback CODE node for unsupported n8n nodes"""
-        node_id = self._generate_node_id("fallback")
+        node_id = self.generate_node_id("fallback")
         position = n8n_node.get("position", [0, 0])
         n8n_type = n8n_node.get("type", "unknown")
 
@@ -410,7 +410,7 @@ class N8nWorkflowConverter(WorkflowConverter):
         return edges
 
     @staticmethod
-    def _add_start_end_nodes(nodes: List[Dict], edges: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+    def add_start_end_nodes(nodes: List[Dict], edges: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
         """Add START and END nodes to workflow"""
         # Find entry points (nodes with no incoming connections)
         all_targets = {edge["targetNodeID"] for edge in edges}
@@ -515,7 +515,7 @@ class N8nWorkflowConverter(WorkflowConverter):
         return inputs, outputs
 
     @staticmethod
-    def _convert_headers(header_params: Dict) -> Dict:
+    def convert_headers(header_params: Dict) -> Dict:
         """Convert n8n header parameters to dict"""
         if not header_params:
             return {}
@@ -538,7 +538,7 @@ class N8nWorkflowConverter(WorkflowConverter):
         return {}
 
     @staticmethod
-    def _generate_node_id(node_type: str) -> str:
+    def generate_node_id(node_type: str) -> str:
         """Generate unique node ID"""
         # Extract simple type name
         if node_type.startswith("n8n-nodes-base."):
@@ -551,4 +551,4 @@ class N8nWorkflowConverter(WorkflowConverter):
     def _get_converted_node_id(self, n8n_node: Dict) -> str:
         """Get the ID that would be assigned to this n8n node after conversion"""
         # This is a simplified version - in practice, we'd need to track IDs during conversion
-        return self._generate_node_id(n8n_node.get("type", "node"))
+        return self.generate_node_id(n8n_node.get("type", "node"))

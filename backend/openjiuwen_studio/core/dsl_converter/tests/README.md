@@ -303,7 +303,7 @@ Tests verify:
 For edge cases and error scenarios:
 - Minimal valid data (e.g., workflow with empty nodes array)
 - Invalid data structures (e.g., missing required fields)
-- Small test objects for testing helper methods (_convert_headers, _generate_node_id)
+- Small test objects for testing helper methods (convert_headers, generate_node_id)
 
 ## Coverage Goals
 

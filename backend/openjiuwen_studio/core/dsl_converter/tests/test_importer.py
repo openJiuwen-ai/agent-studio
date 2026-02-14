@@ -10,8 +10,8 @@ Tests the main import orchestration logic.
 
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from fastapi import status
 from pathlib import Path
+from fastapi import status
 import pytest
 
 from openjiuwen_studio.core.dsl_converter.converter import (

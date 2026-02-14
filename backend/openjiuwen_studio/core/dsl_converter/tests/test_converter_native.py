@@ -203,10 +203,10 @@ class TestNativeWorkflowConverter:
 
     @staticmethod
     def test_regenerate_canvas_ids_creates_mapping(converter, minimal_workflow):
-        """Test that _regenerate_canvas_ids creates correct ID mapping"""
+        """Test that regenerate_canvas_ids creates correct ID mapping"""
         schema = minimal_workflow["schema"]
 
-        new_schema, id_mapping = converter._regenerate_canvas_ids(schema)
+        new_schema, id_mapping = converter.regenerate_canvas_ids(schema)
 
         # minimal_workflow has 3 nodes: start_1, llm_1, end_1
         assert "start_1" in id_mapping

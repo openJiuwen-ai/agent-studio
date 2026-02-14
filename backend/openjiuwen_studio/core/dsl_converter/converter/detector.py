@@ -39,12 +39,12 @@ class WorkflowDetector:
             return WorkflowFormat.UNSUPPORTED
 
         # Check for OpenJiuwen native format
-        if self._is_openjiuwen_format(json_data):
+        if self.is_openjiuwen_format(json_data):
             logger.info("Detected OpenJiuwen native workflow format")
             return WorkflowFormat.OPENJIUWEN_NATIVE
 
         # Check for n8n format
-        if self._is_n8n_format(json_data):
+        if self.is_n8n_format(json_data):
             logger.info("Detected n8n workflow format")
             return WorkflowFormat.N8N
 
@@ -52,7 +52,7 @@ class WorkflowDetector:
         return WorkflowFormat.UNSUPPORTED
 
     @staticmethod
-    def _is_openjiuwen_format(data: Dict[str, Any]) -> bool:
+    def is_openjiuwen_format(data: Dict[str, Any]) -> bool:
         """
         Check if data matches OpenJiuwen native format.
 
@@ -89,7 +89,7 @@ class WorkflowDetector:
         return True
 
     @staticmethod
-    def _is_n8n_format(data: Dict[str, Any]) -> bool:
+    def is_n8n_format(data: Dict[str, Any]) -> bool:
         """
         Check if data matches n8n workflow format.
 

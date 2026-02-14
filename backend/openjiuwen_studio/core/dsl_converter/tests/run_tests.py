@@ -29,7 +29,8 @@ def run_command(cmd):
 
 def main():
     if len(sys.argv) < 2:
-        logger.error(f"{RED}Usage: python run_tests.py {{all|detector|converter|validator|importer|integration|coverage|quick}}{NC}\n")
+        logger.error(f"{RED}Usage: python run_tests.py {{all|detector|converter|validator|importer|integration|coverage"
+                     f"|quick}}{NC}\n")
         logger.info("Examples:")
         logger.info("  python run_tests.py all          # Run all 136 tests")
         logger.info("  python run_tests.py detector     # Run format detection tests")

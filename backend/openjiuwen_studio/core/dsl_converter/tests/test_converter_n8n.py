@@ -139,11 +139,17 @@ class TestN8nWorkflowConverter:
 
         # n8n_workflow webhook node is at [250, 300]
         # Find converted nodes (not START/END which have generated positions)
-        converted_nodes = [n for n in schema["nodes"]
-                          if str(n["type"]) not in [
-                              str(ComponentType.COMPONENT_TYPE_START),
-                              str(ComponentType.COMPONENT_TYPE_END)
-                          ]]
+        # Initialize an empty list
+        converted_nodes = []
+
+        excluded_types = {
+            str(ComponentType.COMPONENT_TYPE_START),
+            str(ComponentType.COMPONENT_TYPE_END)
+        }
+
+        for n in schema["nodes"]:
+            if str(n["type"]) not in excluded_types:
+                converted_nodes.append(n)
 
         # Should have preserved positions
         assert len(converted_nodes) >= 5  # Original 5 nodes from fixture
@@ -209,13 +215,13 @@ class TestN8nWorkflowConverter:
 
     @staticmethod
     def test_add_start_end_nodes_adds_both(converter):
-        """Test that _add_start_end_nodes adds START and END nodes"""
+        """Test that add_start_end_nodes adds START and END nodes"""
         nodes = [
             {"id": "node1", "type": "3", "data": {"title": "Test"}}
         ]
         edges = []
 
-        result_nodes, result_edges = converter._add_start_end_nodes(nodes, edges)
+        result_nodes, result_edges = converter.add_start_end_nodes(nodes, edges)
 
         # Should have START node
         start_nodes = [n for n in result_nodes
@@ -232,32 +238,32 @@ class TestN8nWorkflowConverter:
 
     @staticmethod
     def test_convert_headers_from_dict(converter):
-        """Test _convert_headers with dict input"""
+        """Test convert_headers with dict input"""
         headers = {"Authorization": "Bearer token", "Content-Type": "application/json"}
-        result = converter._convert_headers(headers)
+        result = converter.convert_headers(headers)
         assert result == headers
 
     @staticmethod
     def test_convert_headers_from_list(converter):
-        """Test _convert_headers with list input (n8n format)"""
+        """Test convert_headers with list input (n8n format)"""
         # n8n_workflow has headers in list format
         headers = [
             {"name": "Authorization", "value": "Bearer token123"}
         ]
-        result = converter._convert_headers(headers)
+        result = converter.convert_headers(headers)
         assert result["Authorization"] == "Bearer token123"
 
     @staticmethod
     def test_convert_headers_empty(converter):
-        """Test _convert_headers with empty input"""
-        assert converter._convert_headers(None) == {}
-        assert converter._convert_headers({}) == {}
-        assert converter._convert_headers([]) == {}
+        """Test convert_headers with empty input"""
+        assert converter.convert_headers(None) == {}
+        assert converter.convert_headers({}) == {}
+        assert converter.convert_headers([]) == {}
 
     @staticmethod
     def test_generate_node_id_format(converter):
-        """Test that _generate_node_id creates valid IDs"""
-        node_id = converter._generate_node_id("n8n-nodes-base.httpRequest")
+        """Test that generate_node_id creates valid IDs"""
+        node_id = converter.generate_node_id("n8n-nodes-base.httpRequest")
 
         assert node_id.startswith("httpRequest_")
         assert len(node_id) > len("httpRequest_")

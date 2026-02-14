@@ -196,7 +196,7 @@ class NativeWorkflowConverter(WorkflowConverter):
         if schema_str:
             try:
                 schema = json.loads(schema_str) if isinstance(schema_str, str) else schema_str
-                schema, id_mapping = self._regenerate_canvas_ids(schema)
+                schema, id_mapping = self.regenerate_canvas_ids(schema)
                 json_data["schema"] = json.dumps(schema)
                 logger.info(f"Regenerated {len(id_mapping)} node IDs in canvas")
             except (json.JSONDecodeError, TypeError) as e:
@@ -229,7 +229,7 @@ class NativeWorkflowConverter(WorkflowConverter):
             }
         )
 
-    def _regenerate_canvas_ids(self, schema: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, str]]:
+    def regenerate_canvas_ids(self, schema: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, str]]:
         """
         Regenerate all node IDs in canvas to avoid conflicts.
 
