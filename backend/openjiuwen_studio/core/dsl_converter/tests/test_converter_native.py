@@ -15,32 +15,37 @@ import pytest
 from openjiuwen_studio.core.dsl_converter.converter.converter_native import NativeWorkflowConverter
 
 
+@pytest.fixture
+def converter():
+    """Create converter instance"""
+    return NativeWorkflowConverter()
+
+
+@pytest.fixture
+def fixtures_dir():
+    """Get fixtures directory path"""
+    return Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture
+def openjiuwen_export(fixtures_dir):
+    """Load openjiuwen_export.json fixture"""
+    with open(fixtures_dir / "openjiuwen_export.json") as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def minimal_workflow(fixtures_dir):
+    """Load minimal_workflow.json fixture"""
+    with open(fixtures_dir / "minimal_workflow.json") as f:
+        return json.load(f)
+
+
 class TestNativeWorkflowConverter:
     """Test suite for NativeWorkflowConverter"""
 
-    @pytest.fixture
-    def converter(self):
-        """Create converter instance"""
-        return NativeWorkflowConverter()
-
-    @pytest.fixture
-    def fixtures_dir(self):
-        """Get fixtures directory path"""
-        return Path(__file__).parent / "fixtures"
-
-    @pytest.fixture
-    def openjiuwen_export(self, fixtures_dir):
-        """Load openjiuwen_export.json fixture"""
-        with open(fixtures_dir / "openjiuwen_export.json") as f:
-            return json.load(f)
-
-    @pytest.fixture
-    def minimal_workflow(self, fixtures_dir):
-        """Load minimal_workflow.json fixture"""
-        with open(fixtures_dir / "minimal_workflow.json") as f:
-            return json.load(f)
-
-    def test_convert_from_openjiuwen_export(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_from_openjiuwen_export(converter, openjiuwen_export):
         """Test conversion from openjiuwen_export.json fixture"""
         result = converter.convert(openjiuwen_export)
 
@@ -53,7 +58,8 @@ class TestNativeWorkflowConverter:
         assert result.metadata["original_workflow_id"] == openjiuwen_export["workflow_id"]
         assert result.metadata["source_format"] == "openjiuwen_native"
 
-    def test_convert_from_minimal_workflow(self, converter, minimal_workflow):
+    @staticmethod
+    def test_convert_from_minimal_workflow(converter, minimal_workflow):
         """Test conversion from minimal_workflow.json fixture (only schema)"""
         result = converter.convert(minimal_workflow)
 
@@ -66,7 +72,8 @@ class TestNativeWorkflowConverter:
         assert result.workflow_data["input_parameters"] == []
         assert result.workflow_data["output_parameters"] == []
 
-    def test_convert_regenerates_workflow_id(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_regenerates_workflow_id(converter, openjiuwen_export):
         """Test that workflow_id is regenerated"""
         original_id = openjiuwen_export["workflow_id"]
 
@@ -75,7 +82,8 @@ class TestNativeWorkflowConverter:
         assert result.workflow_data["workflow_id"] != original_id
         assert result.metadata["original_workflow_id"] == original_id
 
-    def test_convert_regenerates_node_ids(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_regenerates_node_ids(converter, openjiuwen_export):
         """Test that node IDs in canvas are regenerated"""
         original_schema = openjiuwen_export["schema"]
         original_node_ids = [node["id"] for node in original_schema["nodes"]]
@@ -90,7 +98,8 @@ class TestNativeWorkflowConverter:
         # Should have same count (3 nodes: start_1, llm_1, end_1)
         assert len(original_node_ids) == len(new_node_ids) == 3
 
-    def test_convert_updates_timestamps(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_updates_timestamps(converter, openjiuwen_export):
         """Test that timestamps are updated"""
         original_create_time = openjiuwen_export["create_time"]
 
@@ -100,7 +109,8 @@ class TestNativeWorkflowConverter:
         assert result.workflow_data["update_time"] != openjiuwen_export["update_time"]
         assert result.workflow_data["create_time"] == result.workflow_data["update_time"]
 
-    def test_convert_updates_edge_references(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_updates_edge_references(converter, openjiuwen_export):
         """Test that edge source/target IDs are updated to new node IDs"""
         result = converter.convert(openjiuwen_export)
 
@@ -114,7 +124,8 @@ class TestNativeWorkflowConverter:
             assert edge["sourceNodeID"] in node_ids
             assert edge["targetNodeID"] in node_ids
 
-    def test_convert_updates_input_parameter_references(self, converter, minimal_workflow):
+    @staticmethod
+    def test_convert_updates_input_parameter_references(converter, minimal_workflow):
         """Test that ref-type inputParameters are updated"""
         result = converter.convert(minimal_workflow)
 
@@ -131,7 +142,8 @@ class TestNativeWorkflowConverter:
         # First element of content should be a valid node ID (updated from start_1)
         assert input_param["content"][0] in node_ids
 
-    def test_convert_clears_version_fields(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_clears_version_fields(converter, openjiuwen_export):
         """Test that version fields are cleared"""
         # openjiuwen_export has workflow_version field
         assert "workflow_version" in openjiuwen_export
@@ -142,18 +154,21 @@ class TestNativeWorkflowConverter:
         assert "latest_publish_version" not in result.workflow_data
         assert "latest_publish_time" not in result.workflow_data
 
-    def test_convert_preserves_workflow_name(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_preserves_workflow_name(converter, openjiuwen_export):
         """Test that workflow name is preserved"""
         result = converter.convert(openjiuwen_export)
         # openjiuwen_export name is "check_weather"
         assert result.workflow_data["name"] == "check_weather"
 
-    def test_convert_preserves_description(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_preserves_description(converter, openjiuwen_export):
         """Test that description is preserved"""
         result = converter.convert(openjiuwen_export)
         assert result.workflow_data["desc"] == openjiuwen_export["desc"]
 
-    def test_convert_preserves_input_output_parameters(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_preserves_input_output_parameters(converter, openjiuwen_export):
         """Test that input/output parameters are preserved"""
         result = converter.convert(openjiuwen_export)
 
@@ -162,7 +177,8 @@ class TestNativeWorkflowConverter:
         assert result.workflow_data["input_parameters"] == openjiuwen_export["input_parameters"]
         assert result.workflow_data["output_parameters"] == openjiuwen_export["output_parameters"]
 
-    def test_convert_handles_schema_as_dict(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_handles_schema_as_dict(converter, openjiuwen_export):
         """Test conversion when schema is already a dict (not string)"""
         # openjiuwen_export.schema is already a dict
         assert isinstance(openjiuwen_export["schema"], dict)
@@ -173,7 +189,8 @@ class TestNativeWorkflowConverter:
         assert result.workflow_data is not None
         assert isinstance(result.workflow_data["schema"], str)
 
-    def test_convert_includes_metadata(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_includes_metadata(converter, openjiuwen_export):
         """Test that result includes conversion metadata"""
         result = converter.convert(openjiuwen_export)
 
@@ -184,7 +201,8 @@ class TestNativeWorkflowConverter:
         # Should have regenerated 3 nodes
         assert result.metadata["regenerated_nodes"] == 3
 
-    def test_regenerate_canvas_ids_creates_mapping(self, converter, minimal_workflow):
+    @staticmethod
+    def test_regenerate_canvas_ids_creates_mapping(converter, minimal_workflow):
         """Test that _regenerate_canvas_ids creates correct ID mapping"""
         schema = minimal_workflow["schema"]
 
@@ -198,7 +216,8 @@ class TestNativeWorkflowConverter:
         assert id_mapping["llm_1"] != "llm_1"
         assert id_mapping["end_1"] != "end_1"
 
-    def test_convert_partial_workflow_only_schema(self, converter, minimal_workflow):
+    @staticmethod
+    def test_convert_partial_workflow_only_schema(converter, minimal_workflow):
         """Test that partial workflow with only schema field is accepted"""
         # minimal_workflow.json has only schema field
         assert "schema" in minimal_workflow
@@ -227,7 +246,8 @@ class TestNativeWorkflowConverter:
         assert len(schema["nodes"]) == 3  # start, llm, end
         assert len(schema["edges"]) == 2  # start->llm, llm->end
 
-    def test_convert_partial_workflow_missing_schema_fails(self, converter):
+    @staticmethod
+    def test_convert_partial_workflow_missing_schema_fails(converter):
         """Test that workflow without schema field fails"""
         workflow_without_schema = {
             "name": "Test Workflow",
@@ -237,7 +257,8 @@ class TestNativeWorkflowConverter:
         with pytest.raises(ValueError, match="Missing required field: 'schema'"):
             converter.convert(workflow_without_schema)
 
-    def test_convert_ignores_source_space_id(self, converter, openjiuwen_export):
+    @staticmethod
+    def test_convert_ignores_source_space_id(converter, openjiuwen_export):
         """Test that space_id from source JSON is always ignored"""
         # openjiuwen_export has space_id "18630429"
         assert openjiuwen_export["space_id"] == "18630429"

@@ -5,6 +5,7 @@ Cross-platform test runner for Workflow Import tests
 
 import sys
 import subprocess
+import logging
 from pathlib import Path
 
 # Color codes
@@ -15,25 +16,29 @@ NC = '\033[0m'  # No Color
 
 TEST_DIR = Path(__file__).parent
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+logger = logging.getLogger(__name__)
+
 
 def run_command(cmd):
     """Run command and return exit code"""
-    print(f"{BLUE}Running: {' '.join(cmd)}{NC}")
+    logger.info(f"{BLUE}Running: {' '.join(cmd)}{NC}")
     return subprocess.call(cmd)
 
 
 def main():
     if len(sys.argv) < 2:
-        print(f"{RED}Usage: python run_tests.py {{all|detector|converter|validator|importer|integration|coverage|quick}}{NC}\n")
-        print("Examples:")
-        print("  python run_tests.py all          # Run all 136 tests")
-        print("  python run_tests.py detector     # Run format detection tests")
-        print("  python run_tests.py converter    # Run conversion tests")
-        print("  python run_tests.py validator    # Run validation tests")
-        print("  python run_tests.py importer     # Run importer orchestration tests")
-        print("  python run_tests.py integration  # Run end-to-end integration tests")
-        print("  python run_tests.py coverage     # Run all tests with coverage report")
-        print("  python run_tests.py quick        # Run quick smoke tests")
+        logger.error(f"{RED}Usage: python run_tests.py {{all|detector|converter|validator|importer|integration|coverage|quick}}{NC}\n")
+        logger.info("Examples:")
+        logger.info("  python run_tests.py all          # Run all 136 tests")
+        logger.info("  python run_tests.py detector     # Run format detection tests")
+        logger.info("  python run_tests.py converter    # Run conversion tests")
+        logger.info("  python run_tests.py validator    # Run validation tests")
+        logger.info("  python run_tests.py importer     # Run importer orchestration tests")
+        logger.info("  python run_tests.py integration  # Run end-to-end integration tests")
+        logger.info("  python run_tests.py coverage     # Run all tests with coverage report")
+        logger.info("  python run_tests.py quick        # Run quick smoke tests")
         sys.exit(1)
 
     test_type = sys.argv[1]
@@ -42,29 +47,29 @@ def main():
     pytest_cmd = [sys.executable, "-m", "pytest"]
 
     if test_type == "all":
-        print(f"{GREEN}Running all import tests...{NC}")
+        logger.info(f"{GREEN}Running all import tests...{NC}")
         cmd = pytest_cmd + [str(TEST_DIR), "-v"]
     elif test_type == "detector":
-        print(f"{GREEN}Running detector tests...{NC}")
+        logger.info(f"{GREEN}Running detector tests...{NC}")
         cmd = pytest_cmd + [str(TEST_DIR / "test_detector.py"), "-v"]
     elif test_type == "converter":
-        print(f"{GREEN}Running converter tests...{NC}")
+        logger.info(f"{GREEN}Running converter tests...{NC}")
         cmd = pytest_cmd + [
             str(TEST_DIR / "test_converter_native.py"),
             str(TEST_DIR / "test_converter_n8n.py"),
             "-v"
         ]
     elif test_type == "validator":
-        print(f"{GREEN}Running validator tests...{NC}")
+        logger.info(f"{GREEN}Running validator tests...{NC}")
         cmd = pytest_cmd + [str(TEST_DIR / "test_validator.py"), "-v"]
     elif test_type == "importer":
-        print(f"{GREEN}Running importer tests...{NC}")
+        logger.info(f"{GREEN}Running importer tests...{NC}")
         cmd = pytest_cmd + [str(TEST_DIR / "test_importer.py"), "-v"]
     elif test_type == "integration":
-        print(f"{GREEN}Running integration tests...{NC}")
+        logger.info(f"{GREEN}Running integration tests...{NC}")
         cmd = pytest_cmd + [str(TEST_DIR / "test_integration.py"), "-v"]
     elif test_type == "coverage":
-        print(f"{GREEN}Running tests with coverage report...{NC}")
+        logger.info(f"{GREEN}Running tests with coverage report...{NC}")
         cmd = pytest_cmd + [
             str(TEST_DIR),
             "--cov=openjiuwen_studio.core.dsl_converter.converter",
@@ -72,7 +77,7 @@ def main():
             "--cov-report=term"
         ]
     elif test_type == "quick":
-        print(f"{GREEN}Running quick smoke tests...{NC}")
+        logger.info(f"{GREEN}Running quick smoke tests...{NC}")
         cmd = pytest_cmd + [
             str(TEST_DIR / "test_detector.py"),
             str(TEST_DIR / "test_importer.py"),
@@ -80,19 +85,19 @@ def main():
             "-k", "test_detect_openjiuwen or test_import_openjiuwen_format_draft"
         ]
     else:
-        print(f"{RED}Unknown test type: {test_type}{NC}")
+        logger.error(f"{RED}Unknown test type: {test_type}{NC}")
         sys.exit(1)
 
     # Run the tests
     exit_code = run_command(cmd)
 
     if exit_code == 0:
-        print(f"\n{GREEN}✅ Tests passed!{NC}")
+        logger.info(f"\n{GREEN}✅ Tests passed!{NC}")
     else:
-        print(f"\n{RED}❌ Tests failed!{NC}")
+        logger.error(f"\n{RED}❌ Tests failed!{NC}")
 
     if test_type == "coverage":
-        print(f"\n{GREEN}Coverage report generated in htmlcov/index.html{NC}")
+        logger.info(f"\n{GREEN}Coverage report generated in htmlcov/index.html{NC}")
 
     sys.exit(exit_code)
 

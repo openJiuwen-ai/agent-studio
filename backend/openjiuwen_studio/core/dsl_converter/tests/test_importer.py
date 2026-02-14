@@ -30,43 +30,49 @@ class MockResponse:
         self.message = message
 
 
+@pytest.fixture
+def importer():
+    """Create importer instance"""
+    return WorkflowImporter()
+
+
+@pytest.fixture
+def fixtures_dir():
+    """Get fixtures directory path"""
+    return Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture
+def openjiuwen_workflow_data(fixtures_dir):
+    """Load OpenJiuwen fixture data"""
+    fixture_file = fixtures_dir / "openjiuwen_export.json"
+    with open(fixture_file) as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def n8n_workflow_data(fixtures_dir):
+    """Load n8n fixture data"""
+    fixture_file = fixtures_dir / "n8n_workflow.json"
+    with open(fixture_file) as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def import_context():
+    """Create import context"""
+    return {
+        "space_id": "test-space-123",
+        "current_user": {"user_id": "test-user-123"}
+    }
+
+
 class TestWorkflowImporter:
     """Test suite for WorkflowImporter"""
 
-    @pytest.fixture
-    def importer(self):
-        """Create importer instance"""
-        return WorkflowImporter()
-
-    @pytest.fixture
-    def fixtures_dir(self):
-        """Get fixtures directory path"""
-        return Path(__file__).parent / "fixtures"
-
-    @pytest.fixture
-    def openjiuwen_workflow_data(self, fixtures_dir):
-        """Load OpenJiuwen fixture data"""
-        fixture_file = fixtures_dir / "openjiuwen_export.json"
-        with open(fixture_file) as f:
-            return json.load(f)
-
-    @pytest.fixture
-    def n8n_workflow_data(self, fixtures_dir):
-        """Load n8n fixture data"""
-        fixture_file = fixtures_dir / "n8n_workflow.json"
-        with open(fixture_file) as f:
-            return json.load(f)
-
-    @pytest.fixture
-    def import_context(self):
-        """Create import context"""
-        return {
-            "space_id": "test-space-123",
-            "current_user": {"user_id": "test-user-123"}
-        }
-
     @pytest.mark.asyncio
-    async def test_import_openjiuwen_format_draft_mode(self, importer, openjiuwen_workflow_data, import_context):
+    @staticmethod
+    async def test_import_openjiuwen_format_draft_mode(importer, openjiuwen_workflow_data, import_context):
         """Test importing OpenJiuwen format in draft mode"""
         options = ImportOptions(validate_strict=False)
 
@@ -101,7 +107,8 @@ class TestWorkflowImporter:
             assert result.metadata["published"] is False
 
     @pytest.mark.asyncio
-    async def test_import_n8n_format_draft_mode(self, importer, n8n_workflow_data, import_context):
+    @staticmethod
+    async def test_import_n8n_format_draft_mode(importer, n8n_workflow_data, import_context):
         """Test importing n8n format in draft mode"""
         options = ImportOptions(validate_strict=False)
 
@@ -132,7 +139,8 @@ class TestWorkflowImporter:
             assert result.metadata["published"] is False
 
     @pytest.mark.asyncio
-    async def test_import_always_draft_mode(self, importer, openjiuwen_workflow_data, import_context):
+    @staticmethod
+    async def test_import_always_draft_mode(importer, openjiuwen_workflow_data, import_context):
         """Test that import always uses draft mode (no publish)"""
         options = ImportOptions(validate_strict=False)
 
@@ -163,7 +171,8 @@ class TestWorkflowImporter:
             assert not hasattr(mock_mgr, 'workflow_publish') or not mock_mgr.workflow_publish.called
 
     @pytest.mark.asyncio
-    async def test_import_with_strict_validation(self, importer, openjiuwen_workflow_data, import_context):
+    @staticmethod
+    async def test_import_with_strict_validation(importer, openjiuwen_workflow_data, import_context):
         """Test import with strict validation (compilation)"""
         options = ImportOptions(validate_strict=True)
 
@@ -196,7 +205,8 @@ class TestWorkflowImporter:
                 mock_convert.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_import_unsupported_format(self, importer, import_context):
+    @staticmethod
+    async def test_import_unsupported_format(importer, import_context):
         """Test import fails with unsupported format"""
         invalid_data = {"unknown": "format"}
         options = ImportOptions(validate_strict=False)
@@ -212,7 +222,8 @@ class TestWorkflowImporter:
         assert any("unsupported" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    async def test_import_validation_fails(self, importer, import_context):
+    @staticmethod
+    async def test_import_validation_fails(importer, import_context):
         """Test import fails when validation fails"""
         # Workflow without START node
         invalid_workflow = {
@@ -241,7 +252,8 @@ class TestWorkflowImporter:
         assert any("start" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    async def test_import_conversion_warnings(self, importer, import_context):
+    @staticmethod
+    async def test_import_conversion_warnings(importer, import_context):
         """Test import succeeds but includes conversion warnings"""
         # n8n workflow with unsupported node type
         n8n_with_unsupported = {
@@ -282,7 +294,8 @@ class TestWorkflowImporter:
             assert len(result.warnings) > 0
 
     @pytest.mark.asyncio
-    async def test_import_workflow_create_error(self, importer, openjiuwen_workflow_data, import_context):
+    @staticmethod
+    async def test_import_workflow_create_error(importer, openjiuwen_workflow_data, import_context):
         """Test import handles workflow creation errors"""
         options = ImportOptions(validate_strict=False)
 
@@ -304,7 +317,8 @@ class TestWorkflowImporter:
             assert any("creation failed" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    async def test_import_canvas_save_error(self, importer, openjiuwen_workflow_data, import_context):
+    @staticmethod
+    async def test_import_canvas_save_error(importer, openjiuwen_workflow_data, import_context):
         """Test import handles canvas save errors"""
         options = ImportOptions(validate_strict=False)
 
@@ -332,7 +346,8 @@ class TestWorkflowImporter:
             assert any("canvas save failed" in err.lower() for err in result.errors)
 
     @pytest.mark.asyncio
-    async def test_import_result_metadata(self, importer, openjiuwen_workflow_data, import_context):
+    @staticmethod
+    async def test_import_result_metadata(importer, openjiuwen_workflow_data, import_context):
         """Test import result contains expected metadata"""
         options = ImportOptions(validate_strict=False)
 
@@ -363,7 +378,8 @@ class TestWorkflowImporter:
             assert result.metadata["published"] is False
 
     @pytest.mark.asyncio
-    async def test_import_preserves_workflow_name_with_suffix(self, importer, openjiuwen_workflow_data, import_context):
+    @staticmethod
+    async def test_import_preserves_workflow_name_with_suffix(importer, openjiuwen_workflow_data, import_context):
         """Test that workflow name gets (imported) suffix"""
         options = ImportOptions(validate_strict=False)
 
@@ -392,7 +408,8 @@ class TestWorkflowImporter:
             assert result.metadata["original_name"] == original_name
 
     @pytest.mark.asyncio
-    async def test_import_generates_new_workflow_id(self, importer, openjiuwen_workflow_data, import_context):
+    @staticmethod
+    async def test_import_generates_new_workflow_id(importer, openjiuwen_workflow_data, import_context):
         """Test that new workflow_id is generated"""
         original_id = openjiuwen_workflow_data["workflow_id"]
         options = ImportOptions(validate_strict=False)
@@ -429,7 +446,8 @@ class TestWorkflowImporter:
         assert options.auto_fix is True
 
     @pytest.mark.asyncio
-    async def test_import_result_success_structure(self, importer, openjiuwen_workflow_data, import_context):
+    @staticmethod
+    async def test_import_result_success_structure(importer, openjiuwen_workflow_data, import_context):
         """Test ImportResult structure for successful import"""
         options = ImportOptions(validate_strict=False)
 
@@ -464,7 +482,8 @@ class TestWorkflowImporter:
             assert isinstance(result.metadata, dict)
 
     @pytest.mark.asyncio
-    async def test_import_result_failure_structure(self, importer, import_context):
+    @staticmethod
+    async def test_import_result_failure_structure(importer, import_context):
         """Test ImportResult structure for failed import"""
         invalid_data = {"invalid": "data"}
         options = ImportOptions(validate_strict=False)
@@ -481,7 +500,8 @@ class TestWorkflowImporter:
         assert isinstance(result.errors, list)
 
     @pytest.mark.asyncio
-    async def test_import_multiple_workflows_sequentially(self, importer, openjiuwen_workflow_data,
+    @staticmethod
+    async def test_import_multiple_workflows_sequentially(importer, openjiuwen_workflow_data,
                                                           n8n_workflow_data, import_context):
         """Test importing multiple workflows sequentially"""
         options = ImportOptions(validate_strict=False)
