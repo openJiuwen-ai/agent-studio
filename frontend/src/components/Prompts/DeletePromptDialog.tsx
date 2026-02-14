@@ -12,10 +12,11 @@ interface DeletePromptDialogProps {
   onClose: () => void
   onDeleteSuccess: () => void
   prompt: Prompt | null
+  workspaceId: string
   showSnackbar: (message: string, severity: 'success' | 'error' | 'warning' | 'info') => void
 }
 
-export const DeletePromptDialog: React.FC<DeletePromptDialogProps> = ({ open, onClose, onDeleteSuccess, prompt, showSnackbar }) => {
+export const DeletePromptDialog: React.FC<DeletePromptDialogProps> = ({ open, onClose, onDeleteSuccess, prompt, workspaceId, showSnackbar }) => {
   const { t } = useTranslation()
   const [deleteInputValue, setDeleteInputValue] = useState('')
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -48,7 +49,7 @@ export const DeletePromptDialog: React.FC<DeletePromptDialogProps> = ({ open, on
 
     setDeleteLoading(true)
     try {
-      const response = await PromptService.deletePrompt(prompt.id)
+      const response = await PromptService.deletePrompt(prompt.id, workspaceId)
 
       if (response.code === 0) {
         // 删除成功

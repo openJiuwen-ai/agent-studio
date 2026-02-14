@@ -831,7 +831,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                     </Typography>
                     {!isReadOnly && (
                       <Button variant="contained" startIcon={<Plus className="w-4 h-4" />} onClick={() => setIsToolDialogOpen(true)}>
-                        {t('plugins.pluginConfig.addTool')}
+                        {t('plugins.tools.addTool')}
                       </Button>
                     )}
                   </div>

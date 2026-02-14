@@ -2,6 +2,7 @@ from typing import List, Optional
 
 from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
+from openjiuwen_studio.core.utils.compatible_field import mask_sensitive_fields
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
@@ -181,7 +182,7 @@ async def create_model_config(
     """Create a new model configuration"""
     try:
         # Log the received data for debugging
-        logger.info(f"Creating model config with data: {model_config.dict()}")
+        logger.info(f"Creating model config with data: {mask_sensitive_fields(model_config.dict())}")
         db_model = manager.create_config(model_config)
         
         return ResponseModel(

@@ -16,7 +16,7 @@ dependencies = [
     "sqlalchemy==2.0.41",
     "pyjwt==2.10.1",
     "networkx==3.4.2",
-    "openjiuwen[chromadb]==0.1.5",
+    "openjiuwen[chromadb]==0.1.7",
     "pydantic-settings==2.5.2",
     "aiomysql==0.2.0",
     "jinja2==3.1.6",

@@ -23,9 +23,7 @@ count_undefined_ports() {
 
     # Update configuration: number of ports to allocate = undefined port count
     CONFIG["ALLOC_PORT_NUM"]=${undefined_count}
-    info "====================================="
     info "Total undefined ports: ${undefined_count} → Need to allocate ${undefined_count} available ports"
-    info "====================================="
 }
 
 # ======== Check if a single port is occupied ===============
@@ -119,27 +117,24 @@ find_available_ports() {
 
     # 5. Update global allocated port list (mark as allocated to avoid reuse)
     allocated_ports+=("${AVAILABLE_PORTS[@]}")
-    info "Successfully collected $need_port_num available ports: ${AVAILABLE_PORTS[*]}"
+    success "Collected $need_port_num available ports: ${AVAILABLE_PORTS[*]}"
 }
 
 # ===================== Dynamically assign ports to containers =====================
 assign_ports() {
     local port_index=0  # Available port index (starting from 0)
 
-    info "====================================="
     info "Starting to assign values to undefined ports..."
-    info "====================================="
-
     # Traverse all port names, assign dynamically
     for port_name in "${PORTS[@]}"; do
         if [ -n "${DEPLOY_VARS[${port_name}]:-}" ]; then
             # Already defined: keep original value
-            success "[${port_name}] already defined, keeping original value: ${DEPLOY_VARS[${port_name}]}"
+            info "[${port_name}] already defined, keeping original value: ${DEPLOY_VARS[${port_name}]}"
         else
             # Undefined: take value from available port list by index
             if [ ${port_index} -lt ${#AVAILABLE_PORTS[@]} ]; then
                 DEPLOY_VARS["${port_name}"]=${AVAILABLE_PORTS[${port_index}]}
-                success "[${port_name}] undefined, assigning available port: ${DEPLOY_VARS[${port_name}]}"
+                info "[${port_name}] undefined, assigning available port: ${DEPLOY_VARS[${port_name}]}"
                 port_index=$((port_index + 1))  # Increment index for next undefined port
             else
                 # Extreme case: insufficient available ports (shouldn't happen as find_available_ports already validates)
@@ -147,8 +142,7 @@ assign_ports() {
             fi
         fi
     done
-
-    info "============== All port assignments complete! =============="
+    success "All port assignments Done!"
 }
 
 

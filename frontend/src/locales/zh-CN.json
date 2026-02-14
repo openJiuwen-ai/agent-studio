@@ -94,7 +94,6 @@
       "disabled": "已禁用",
       "moreActions": "更多操作",
       "error": "发生错误",
-      "success": "操作成功",
       "confirmDelete": "确认删除此项目？",
       "deleteSuccess": "删除成功",
       "saveSuccess": "保存成功",
@@ -374,6 +373,10 @@
       "usernamePlaceholder": "请输入用户空间名称（邮箱格式）",
       "password": "密码",
       "passwordPlaceholder": "请设置密码",
+      "confirmPassword": "确认密码",
+      "confirmPasswordPlaceholder": "请再次输入密码",
+      "confirmPasswordRequired": "请确认密码",
+      "passwordsNotMatch": "两次输入的密码不一致",
       "verificationCode": "验证码",
       "verificationCodePlaceholder": "请输入验证码",
       "getVerificationCode": "获取验证码",
@@ -697,7 +700,9 @@
       "newConversation": "发起新对话",
       "conversationTimeout": "对话已超时，强制中断当前传输",
       "forceStop": "强制中断",
-      "generating": "正在生成中..."
+      "generating": "正在生成中...",
+      "deepSearchServiceUnavailable": "DeepSearch 服务暂不可用，请前往",
+      "deepSearchConfigRetry": "，参考文档进行配置后重试"
     },
     "picker": {
       "selectAgent": "选择智能体",
@@ -1186,7 +1191,22 @@
       "editDescriptionInfo": "点击修改描述，最多可输入500个字符",
       "showPerPage": "每页显示",
       "totalRecords": "共 {{total}} 条记录",
-      "pageInfo": "第 {{current}} 页 / 共 {{total}} 页"
+      "pageInfo": "第 {{current}} 页 / 共 {{total}} 页",
+      "workflowNameInvalid": "工作流名称只能包含字母、数字、下划线，且必须以字母开头",
+      "workflowNameEmpty": "工作流名称不能为空",
+      "workflowDescEmpty": "工作流描述不能为空",
+      "workflowNotFound": "找不到要编辑的工作流",
+      "formatError": "格式错误：只能包含字母、数字、下划线，且必须以字母开头",
+      "formatHint": "只能包含字母、数字、下划线，且必须以字母开头",
+      "errorAlreadyExists": "已存在",
+      "errorTooLong": "过长",
+      "errorTooShort": "过短",
+      "errorInvalidFormat": "格式无效",
+      "errorRequired": "为必填项",
+      "errorEmpty": "不能为空",
+      "errorLengthExceeded": "长度不能超过{{count}}个字符",
+      "fieldNameName": "工作流名称",
+      "fieldNameDesc": "工作流描述"
     },
     "workflowCreation": {
       "back": "返回",
@@ -2211,7 +2231,7 @@
         "topp": "核采样",
         "toppDesc": "Top-p:选择累计概率达到p的最小词集合进行采样。动态调整候选词的数量，平衡输出的多样性和质量。建议：通常设置为0.9-0.95，与温度配合使用时建议只调整其中一个。",
         "timeout": "超时时间(s)",
-        "timeoutDesc": "超时时间范围：1-300秒（输入超出范围将自动调整）"
+        "timeoutDesc": "超时时间范围：1-3600秒（输入超出范围将自动调整）"
       },
       "actions": {
         "save": "保存",
@@ -2247,7 +2267,7 @@
       "nameMaxLength": "模型名称不能超过100个字符",
       "modelIdMaxLength": "模型ID不能超过100个字符",
       "descriptionMaxLength": "描述不能超过500个字符",
-      "timeoutRange": "超时时间必须在1-300秒之间",
+      "timeoutRange": "超时时间必须在1-3600秒之间",
       "fillRequiredFields": "请填写所有必填字段",
       "systemModelNoEdit": "预置模型不支持编辑",
       "systemModelNoDelete": "预置模型不支持删除",
@@ -2824,6 +2844,8 @@
       "saveConfig": "保存配置",
       "pythonDescription": "适用于数据分析、机器学习、自动化脚本",
       "nodejsDescription": "适用于Web API、实时应用、前端构建工具",
+      "templateBasicFunction": "基础函数",
+      "templateBasicFunctionDesc": "简单的数据处理函数",
       "createTool": "创建工具",
       "toolNameTooltip": "为工具起一个简洁明了的名称，便于识别和使用",
       "toolNameExample": "例如：获取用户信息、查询天气数据",
@@ -3333,6 +3355,10 @@
       "fillParamsHint": "填写参数后点击\"执行测试\"查看结果",
       "testInfo": "测试信息",
       "copyResult": "复制结果",
+      "enterParamName": "请输入 {{name}}",
+      "headerSaveSuccess": "请求头保存成功",
+      "headerSaveFailed": "保存失败: {{message}}",
+      "headerSaveFailedRetry": "保存请求头失败，请稍后重试",
       "apiTestParameterHelper": "左侧填写测试参数，右侧查看API调用返回结果",
       "apiTestResultHelper": "系统将在隔离环境中执行代码，提供执行状态和错误日志",
       "testApiConfig": "测试工具配置是否正确",
@@ -3834,6 +3860,7 @@
         "versionNumber": "版本号",
         "versionNumberPlaceholder": "请输入版本号",
         "versionNumberFormat": "格式：主版本.次版本.修订版本（如：1.2.3）",
+        "versionNumberMustBeGreater": "版本号不能小于等于当前版本号",
         "versionDescription": "版本描述",
         "versionDescriptionPlaceholder": "请输入版本说明",
         "versionDescriptionHelper": "描述本次版本的变更内容",
@@ -3988,7 +4015,8 @@
         "loading": "加载模型中...",
         "noModels": "暂无可用模型",
         "providedBy": "由{{vendor}}提供",
-        "systemBuiltIn": "系统内置"
+        "systemBuiltIn": "系统内置",	 
+         "protocol": "协议"
       },
       "quickOptimizeDialog": {
         "title": "快捷优化",
@@ -4193,13 +4221,16 @@
       "selectEmbeddingModel": "请选择 Embedding 模型",
       "loadingModels": "加载模型中...",
       "noLlmModels": "没有可用的 LLM 模型",
+      "noEmbeddingModels": "没有可用的 Embedding 模型",
       "noModels": "没有可用的 Embedding 模型",
-      "createModelLink": "请先创建 Embedding 模型",
+      "createEmbeddingModelLink": "请先创建 Embedding 模型",
+      "createLLMModelLink": "请先创建 LLM 模型",
       "selectModel": "请选择 Embedding 模型",
       "noModelsError": "请先创建 Embedding 模型",
       "selectLlmModelError": "请选择 LLM 模型",
       "selectModelError": "请选择 Embedding 模型",
       "modelUnavailable": "所选模型不可用",
+      "modelDeleted": "所选模型已被删除",
       "testText": "你好，世界！",
       "testFailed": "测试失败",
       "testFailedDisableFailed": "选中的 Embedding 模型测试失败，且禁用操作失败。请手动在模型管理中禁用该模型。",
@@ -4214,8 +4245,10 @@
         "chunkOverlap": "分段重叠确保上下文连续性",
         "maxTokens": "最大令牌数影响检索效率和准确性"
       },
-      "modelTestSuccess": "模型测试成功",
-      "modelTestError": "模型测试失败",
+      "modelTestSuccess": "LLM模型测试成功",
+      "modelTestError": "LLM模型测试失败",
+      "embeddingModelTestFailed": "Embedding模型测试失败",
+      "embeddingModelTestSuccess": "Embedding模型测试成功",
       "selectLLMModelError": "请选择 LLM 模型",
       "selectLLMModel": "请选择 LLM 模型",
       "testingModel": "测试中...",
@@ -4600,5 +4633,98 @@
       "documentType": "文档知识库",
       "embeddingModel": "Embedding 模型"
     }
+  },
+  "hooks": {
+    "prompts": {
+      "useToolEditDialog": {
+        "toolDeleteSuccess": "工具删除成功！",
+        "toolNameRequired": "请输入工具名称！",
+        "toolNameExists": "工具名称已存在，请重新命名",
+        "toolSaveSuccess": "工具保存成功！",
+        "addToolContextBaseGroup": "设置工具上下文为组{{groupId}}(基准组)",
+        "addToolContextControlGroup": "设置工具上下文为组{{groupId}}(对照组)",
+        "addToolContextMain": "设置工具上下文为主页面",
+        "toolDialogOpened": "工具对话框已打开",
+        "editToolParametersMode": "工具 {{name}} 的 parametersMode:",
+        "editToolContextSet": "设置工具编辑上下文:",
+        "toolSaveTriggerLog": "handleSaveTool 主页面: 调用 triggerAutoSave，updatedTools="
+      },
+      "useSubmitVersionDialog": {
+        "getPromptDetailFailed": "获取prompt详情失败",
+        "cannotSubmitPromptNotSaved": "无法提交版本：提示词尚未保存",
+        "versionNumberRequired": "请输入版本号",
+        "submitSuccess": "新版本提交成功！",
+        "loadDebugContextFailed": "加载调试上下文失败",
+        "reloadAfterSubmitFailed": "提交后重新加载数据失败",
+        "submitNewVersionFailed": "提交新版本失败"
+      },
+      "useMultiRunDialog": {
+        "configValidModelFirst": "请先配置有效的模型",
+        "unknownError": "未知错误",
+        "retryFailedWithMessage": "重试失败: {{message}}",
+        "getPromptDetailFailedWithMessage": "获取提示词详情失败: {{message}}"
+      },
+      "useLoadPrompt": {
+        "loadModelsFailed": "加载模型列表失败，请稍后重试",
+        "getPromptDetailFailed": "查询提示词详情失败",
+        "loadPromptDetailFailed": "加载提示词详情失败，请稍后重试"
+      },
+      "useDebugInputAreaGroup": {
+        "requestPrepareFailedWithMessage": "请求准备失败: {{message}}",
+        "unknownError": "未知错误",
+        "baseGroup": "基准组",
+        "controlGroupWithId": "对照组{{id}}",
+        "groupConfigValidModelFirst": "{{groupName}} 请先配置有效的模型",
+        "retryFailedWithMessage": "重试失败: {{message}}"
+      },
+      "useDebugInputArea": {
+        "configValidModelFirst": "请先配置有效的模型"
+      }
+    }
+  },
+  "utils": { 
+     "prompts": { 
+       "utils": { 
+         "validateVersionNumber": { 
+           "empty": "版本号不能为空", 
+           "invalidFormat": "版本号格式错误，请使用 主版本.次版本.修订版本 格式（如：1.2.3）" 
+         }, 
+         "formatDateTime": { 
+           "invalidTime": "无效时间", 
+           "formatError": "时间格式错误" 
+         }, 
+         "copyToClipboard": { 
+           "defaultSuccess": "已复制到剪贴板", 
+           "emptyContent": "复制内容为空", 
+           "autoCopyFailed": "自动复制失败，请手动复制内容", 
+           "copyUnavailable": "复制功能不可用，请手动复制内容" 
+         }, 
+         "toolFormatConverter": { 
+           "generateJsonSchemaFailed": "从parameters生成JSON Schema失败:", 
+           "tool": "工具", 
+           "parseStringFailed": "解析字符串失败", 
+           "saveJsonSchemaFailed": "保存JSON Schema失败", 
+           "parseFailed": "解析失败", 
+           "parseToolJsonSchemaFailed": "解析工具JSON Schema失败，使用默认转换:" 
+         }, 
+         "promptEditPageUtils": { 
+           "unknownError": "未知错误", 
+           "failKeyword": "失败", 
+           "requestFailed": "请求失败", 
+           "variableNameFormatError": "不符合格式要求", 
+           "variableNameTooLong": "变量名长度超过50个字符（当前长度：{{length}}）", 
+           "variableNameCannotStartWithNumber": "变量名不能以数字开头", 
+           "variableNameInvalidCharacters": "变量名只能包含字母、数字、下划线和连字符", 
+           "variableNameNoSpacesInNormalMode": "Normal模式下变量名前后不能有空格", 
+           "skipInvalidVariableName": "跳过提取的无效变量名: \"{{name}}\"，{{error}}", 
+           "targetMessageNotFound": "未找到目标消息", 
+           "baseGroup": "基准组", 
+           "controlGroup": "对照组{{id}}", 
+           "targetMessageNotFoundInGroup": "{{groupName}}中未找到目标消息", 
+           "existingCallNotFound": "索引 {{index}} 的现有调用不存在，跳过处理", 
+           "calculateSelectionIndicesFailed": "计算选中位置失败 - 缺少必要参数" 
+         } 
+       } 
+     }
   }
 }

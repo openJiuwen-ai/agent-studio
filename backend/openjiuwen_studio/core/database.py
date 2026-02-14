@@ -1,5 +1,6 @@
 import time
 from pathlib import Path
+from urllib3 import PoolManager, Timeout
 
 from minio import Minio
 from minio.error import S3Error
@@ -130,12 +131,17 @@ class LazyMinioClient:
             if not all([settings.minio_host, settings.minio_port,
                         settings.minio_access_key, settings.minio_secret_key]):
                 raise ValueError("One or more required MinIO configuration settings are missing.")
-
+            # 配置带超时的 HTTP 客户端
+            http_client = PoolManager(
+                timeout=Timeout(connect=3.0, read=5.0),
+                retries=False
+            )
             client = Minio(
                 endpoint=f"{settings.minio_host}:{settings.minio_port}",
                 access_key=settings.minio_access_key,
                 secret_key=settings.minio_secret_key,
-                secure=settings.minio_secure
+                secure=settings.minio_secure,
+                http_client=http_client
             )
 
             # 进行一个简单的操作验证连接

@@ -11,6 +11,7 @@ from openjiuwen_studio.ops.modules.llm.model import ModelConfig, ListModelRespon
 from openjiuwen_studio.ops.modules.llm.schema import ListModelRequest
 from openjiuwen_studio.ops.modules.prompt.domain.repositories import AgentRepository
 from openjiuwen_studio.ops.modules.prompt.infra.repositories import orm_repo
+from openjiuwen_studio.core.utils.compatible_field import mask_fields
 
 
 class LLMService:
@@ -75,7 +76,7 @@ class LLMService:
                 logger.error(f"Query Model Config from DB {model_id} failed: {e}")
                 raise ValueError(f"Model with id {model_id} not found") from e
 
-        logger.info(f"base_url: {base_url}, api_key: {api_key}")
+        logger.info(f"base_url: {base_url}, api_key: {mask_fields(api_key)}")
         return base_url, api_key
 
     async def list_models(

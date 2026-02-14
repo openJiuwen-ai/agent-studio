@@ -40,13 +40,6 @@ export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children }) 
   }
 
   useEffect(() => {
-    const savedLanguage = localStorage.getItem('language')
-    if (savedLanguage && savedLanguage !== i18n.language) {
-      changeLanguage(savedLanguage)
-    }
-  }, [])
-
-  useEffect(() => {
     const handleLanguageChange = () => {
       setCurrentLanguage(i18n.language)
     }

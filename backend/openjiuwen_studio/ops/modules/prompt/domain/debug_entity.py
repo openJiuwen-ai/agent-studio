@@ -208,6 +208,7 @@ class DebugStreamingRequest(BaseModel):
     mock_tools: Optional[List[Dict[str, Any]]] = None
     single_step_debug: Optional[bool] = None
     debug_trace_key: Optional[str] = None
+    workspace_id: Optional[int] = None
 
     @model_validator(mode="after")
     def check_draft_present(self) -> "DebugStreamingRequest":

@@ -245,7 +245,7 @@ const PromptsPage: React.FC = () => {
   // 复制prompt_key函数
   const handleCopyPromptKey = async (promptKey: string) => {
     try {
-      await copyToClipboard(promptKey, setSnackbar, t('common.messages.success'))
+      await copyToClipboard(promptKey, setSnackbar)
       setCopiedKey(promptKey)
       setTimeout(() => setCopiedKey(null), 2000) // 2秒后重置状态
     } catch (error) {
@@ -913,6 +913,7 @@ const PromptsPage: React.FC = () => {
         onClose={handleCloseDeleteDialog}
         onDeleteSuccess={handleDeleteSuccess}
         prompt={promptToDelete}
+        workspaceId={workspaceId}
         showSnackbar={showSnackbar}
       />
 
@@ -922,6 +923,7 @@ const PromptsPage: React.FC = () => {
         onClose={handleCloseAssociationsDialog}
         associations={selectedAssociations}
         versionName={selectedPromptName}
+        workspaceId={workspaceId}
       />
 
       {/* 消息提示 */}

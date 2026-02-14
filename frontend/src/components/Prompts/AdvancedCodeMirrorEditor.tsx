@@ -594,13 +594,10 @@ const AdvancedCodeMirrorEditor: React.FC<AdvancedCodeMirrorEditorProps> = ({
                         // 使用选中起始位置的y坐标（确保按钮和选中文本在同一行高度）
                         const selectedTop = startCoords.top
 
-                        // 按钮应该显示在选中文本的起始位置上方1行
-                        // 考虑额外偏移（Tooltip或其他样式的padding/margin导致的）
-                        // 主页面需要较大的偏移量（183），对比模式布局不同，只需要较小的偏移量
-                        const extraOffset = optimizationSourceType === 'main' ? 183 : 0
+                        // 按钮应显示在选中文本起始位置上方 1 行（按钮底部与选中区域间距 1 行）
                         const position = {
                           x: selectedStartX, // 使用选中文本的起始位置（相对于视口）
-                          y: selectedTop - spacing - extraOffset, // 按钮底部会在 selectedTop - spacing
+                          y: selectedTop - spacing, // 按钮底部在 selectedTop - 1 行
                         }
 
                         onTextSelection(currentSelectedText, position, messageId)

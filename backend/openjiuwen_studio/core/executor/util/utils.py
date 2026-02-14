@@ -5,6 +5,39 @@ import json
 import time
 from typing import Any, Dict, Optional, List
 from openjiuwen.core.common.logging import logger
+
+# MySQL LONGTEXT 最大长度约为 4GB，但为了防止内存问题，设置一个合理的上限
+# 这里设置为 10MB，应该足够存储大多数正常输出，同时避免数据库问题
+MAX_OUTPUT_LENGTH = 10 * 1024 * 1024
+
+
+def _truncate_data(data: Any, max_length: int = MAX_OUTPUT_LENGTH) -> str:
+    """
+    将数据转换为字符串并截断到指定长度
+    
+    Args:
+        data: 任意数据
+        max_length: 最大长度限制
+        
+    Returns:
+        截断后的字符串
+    """
+    if data is None:
+        return ""
+    
+    try:
+        if isinstance(data, str):
+            text = data
+        else:
+            text = json.dumps(data, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        text = str(data)
+    
+    if len(text) > max_length:
+        truncation_warning = f"\n...[Content truncated: exceeded {max_length} characters]"
+        text = text[:max_length - len(truncation_warning)] + truncation_warning
+    
+    return text
 from openjiuwen.core.session.stream import TraceSchema, OutputSchema
 from openjiuwen.core.session.tracer.span import TraceAgentSpan, TraceWorkflowSpan
 from openjiuwen.core.session.interaction.interaction import InteractionOutput
@@ -48,8 +81,8 @@ def _workflowspan_2_tracedetail(business_type: str, workflowspan: TraceWorkflowS
         end_time_micros=int(time.mktime(workflowspan.end_time.timetuple()) * 1e6 +
                             workflowspan.end_time.microsecond) if workflowspan.end_time else None,
         status_code=workflowspan.status,
-        input=str(workflowspan.inputs),
-        output=str(workflowspan.outputs),
+        input=_truncate_data(workflowspan.inputs),
+        output=_truncate_data(workflowspan.outputs),
         attributes=None
     )
 
@@ -79,8 +112,8 @@ def _agentspan_2_tracedetail(business_type: str, agentspan: TraceAgentSpan, mapp
         end_time_micros=int(time.mktime(agentspan.end_time.timetuple()) * 1e6 +
                             agentspan.end_time.microsecond) if agentspan.end_time else None,
         status_code="error" if agentspan.error else ("finish" if agentspan.end_time else "start"),
-        input=str(agentspan.inputs),
-        output=str(agentspan.outputs),
+        input=_truncate_data(agentspan.inputs),
+        output=_truncate_data(agentspan.outputs),
         attributes=None
     )
 
@@ -110,10 +143,10 @@ def get_trace_workflow_output(data):
                     # 检查 payload 中是否有 response 字段
                     if 'response' in payload:
                         text_parts.append(str(payload['response']))
-                        output_key = "responseContent"
+                        output_key = "response"
                     if 'output' in payload:
                         text_parts.append(str(payload['output']))
-                        output_key = "responseContent"
+                        output_key = "response"
 
         if text_parts:
             combined_text = ''.join(text_parts)
@@ -321,11 +354,8 @@ def result_convert(chunk: Any, business_type: str, mapping: Optional[Dict[str, s
     if isinstance(chunk, OutputSchema) and chunk.type == "workflow_final":
         if business_type == "AGENT":
             answer_value = None
-            # 处理 responseContent 情况
-            if chunk.payload.get("responseContent"):
-                answer_value = chunk.payload.get("responseContent")
             # 处理 output 情况
-            elif chunk.payload.get("output"):
+            if chunk.payload.get("output"):
                 output_data = chunk.payload.get("output")
                 # 如果 output 是字典，转换为 key: value 格式的字符串
                 if isinstance(output_data, dict):

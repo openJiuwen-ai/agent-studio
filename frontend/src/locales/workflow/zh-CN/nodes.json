@@ -100,7 +100,7 @@
     },
     "end": {
       "description": "工作流的最终节点，用于返回工作流运行后的结果信息。",
-      "outputConfiguredNote": "已配置\"输出内容\"，工作流将仅返回字段 responseContent；若需返回输出变量，请清空\"输出内容\"配置。"
+      "outputConfiguredNote": "已配置\"输出内容\"，工作流将仅返回字段 response；若需返回输出变量，请清空\"输出内容\"配置。"
     },
     "questioner": {
       "titlePrefix": "提问器",
@@ -224,8 +224,8 @@
     "input": {
       "pleaseInputArray": "请输入数组",
       "pleaseSelectBoolean": "请选择布尔值",
-      "true": "真",
-      "false": "假",
+      "true": "True",
+      "false": "False",
       "pleaseInputInteger": "请输入整数",
       "pleaseInputMap": "请输入映射",
       "pleaseInputNumber": "请输入数字",

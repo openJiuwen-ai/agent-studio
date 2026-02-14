@@ -91,7 +91,7 @@ interface UseDebugInputAreaGroupOptions {
 
   // 辅助函数
   workspaceId: string
-  t: (key: string) => string
+  t: (key: string, options?: Record<string, unknown>) => string
   showSnackbar: (message: string, severity?: 'success' | 'error' | 'warning' | 'info') => void
 }
 
@@ -675,7 +675,9 @@ export const useDebugInputAreaGroup = (options: UseDebugInputAreaGroupOptions) =
         // 添加错误消息
         const errorMessage = {
           type: 'ai' as const,
-          content: `请求准备失败: ${error instanceof Error ? error.message : '未知错误'}`,
+          content: t('hooks.prompts.useDebugInputAreaGroup.requestPrepareFailedWithMessage', {
+            message: error instanceof Error ? error.message : t('hooks.prompts.useDebugInputAreaGroup.unknownError'),
+          }),
           timestamp: new Date().toLocaleString('zh-CN'),
           userInput: currentInput,
         }
@@ -722,6 +724,7 @@ export const useDebugInputAreaGroup = (options: UseDebugInputAreaGroupOptions) =
       disableAutoReadOnly,
       executeStreamingDebugRequest,
       modelConfigFieldMapping,
+      t,
     ],
   )
 
@@ -745,8 +748,10 @@ export const useDebugInputAreaGroup = (options: UseDebugInputAreaGroupOptions) =
 
       // 检查组的模型配置是否有效（对比模式下没有 selectedModel，所以传入 null）
       if (!checkValidModel(null, group.modelConfig, availableModels)) {
-        const groupName = group.isBaseGroup ? '基准组' : `对照组${groupId}`
-        showSnackbar(`${groupName} 请先配置有效的模型`, 'error')
+        const groupName = group.isBaseGroup
+          ? t('hooks.prompts.useDebugInputAreaGroup.baseGroup')
+          : t('hooks.prompts.useDebugInputAreaGroup.controlGroupWithId', { id: groupId })
+        showSnackbar(t('hooks.prompts.useDebugInputAreaGroup.groupConfigValidModelFirst', { groupName }), 'error')
         return
       }
     }
@@ -916,7 +921,9 @@ export const useDebugInputAreaGroup = (options: UseDebugInputAreaGroupOptions) =
                         ...g.chatMessages,
                         {
                           ...messageToRetry,
-                          content: `重试失败: ${error instanceof Error ? error.message : '未知错误'}`,
+                          content: t('hooks.prompts.useDebugInputAreaGroup.retryFailedWithMessage', {
+                            message: error instanceof Error ? error.message : t('hooks.prompts.useDebugInputAreaGroup.unknownError'),
+                          }),
                         },
                       ],
                     }
@@ -1286,7 +1293,9 @@ export const useDebugInputAreaGroup = (options: UseDebugInputAreaGroupOptions) =
                     ...g.chatMessages,
                     {
                       ...messageToRetry,
-                      content: `重试失败: ${error instanceof Error ? error.message : '未知错误'}`,
+                      content: t('hooks.prompts.useDebugInputAreaGroup.retryFailedWithMessage', {
+                        message: error instanceof Error ? error.message : t('hooks.prompts.useDebugInputAreaGroup.unknownError'),
+                      }),
                     },
                   ],
                 }
@@ -1315,6 +1324,7 @@ export const useDebugInputAreaGroup = (options: UseDebugInputAreaGroupOptions) =
       workspaceId,
       callGroupAPI,
       setGroupCompletedMessages,
+      t,
     ],
   )
 

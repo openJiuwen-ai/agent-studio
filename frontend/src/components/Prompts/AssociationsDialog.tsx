@@ -4,37 +4,29 @@ import { X, ExternalLink } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { type RelationObj } from '@test-agentstudio/api-client'
 import { useNavigate } from 'react-router-dom'
+import { handleRelationObjNavigate } from '@/utils/prompts/utils'
 
 interface AssociationsDialogProps {
   open: boolean
   onClose: () => void
   associations: RelationObj[]
   versionName: string
+  workspaceId: string
 }
 
-export const AssociationsDialog: React.FC<AssociationsDialogProps> = ({ open, onClose, associations, versionName }) => {
+export const AssociationsDialog: React.FC<AssociationsDialogProps> = ({
+  open,
+  onClose,
+  associations,
+  versionName,
+  workspaceId,
+}) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
 
   const handleNavigateToObject = (relationObj: RelationObj) => {
-    // 根据对象类型跳转到对应页面
-    const objTypeMap: { [key: string]: string } = {
-      // 支持中文
-      [t('components.prompts.versionHistory.objType.agent')]: 'agents',
-      [t('components.prompts.versionHistory.objType.workflow')]: 'workflows',
-      [t('components.prompts.versionHistory.objType.app')]: 'apps',
-      // 支持英文
-      'Agent': 'agents',
-      'Workflow': 'workflows',
-      'App': 'apps',
-      // 支持原始中文值（向后兼容）
-      '智能体': 'agents',
-      '工作流': 'workflows',
-      '应用': 'apps',
-    }
-    const routePath = objTypeMap[relationObj.obj_type_name] || 'agents'
-    navigate(`/dashboard/${routePath}/${relationObj.obj_id}`)
-    onClose() // 关闭对话框
+    handleRelationObjNavigate(relationObj, workspaceId, navigate)
+    onClose()
   }
 
   return (

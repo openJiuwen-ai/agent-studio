@@ -1,6 +1,9 @@
-This guide describes how to install openJiuwen locally on Windows.
+This guide describes how to install openJiuwen locally on Windows. Local advanced installation offers two approaches:
 
-## I. Prerequisites
+* **Method 1: One-click installation script** – Automates most installation and configuration steps and simplifies the process; suitable for quick deployment.
+* **Method 2: Manual installation of all dependencies** – Requires manually installing and configuring all dependent services; suitable for developers who need flexible configuration.
+
+## I. Environment Preparation
 
 Ensure your machine meets the following requirements:
 
@@ -18,24 +21,111 @@ Ensure your machine meets the following requirements:
   * uv 0.5.0 or later
   * MySQL 8.0 or later
   * Milvus 2.6.2 or later
+  * PowerShell 5.1 or later (run `$PSVersionTable.PSVersion` to check)
 
-## II. Install Dependencies
+## II. Installation Methods
 
-Before proceeding with the full installation, install the dependencies below, then continue with fetching and installing the source code.
+### Method 1: One-Click Installation Script
 
-### 1. Install Git
+The one-click script automates tool checks, code fetch, environment setup, and service startup to simplify installation.
+
+#### 1. Get the Installation Script
+
+* Download the <a href="https://openjiuwen-ci.obs.cn-north-4.myhuaweicloud.com/agentstudio/setup_scripts/setup_scripts_windows_v2.zip" target="_blank" rel="nofollow noopener noreferrer">installation script package</a>. The package includes:
+  * `setup.ps1` – Main installation script that runs the full flow
+  * `utils.ps1` – Common utilities
+  * `check_git.ps1` – Check/install Git
+  * `check_nodejs.ps1` – Check/install Node.js
+  * `check_python.ps1` – Check/install Python
+  * `check_mysql.ps1` – Check/install MySQL
+  * `config_mysql.ps1` – Configure MySQL (create database, user, etc.)
+  * `fetch_codes.ps1` – Clone the agent-studio repository (supports specifying a branch)
+  * `user_config.ps1` – User configuration (optional: proxy, pip index, npm registry)
+
+#### 2. Configure Proxy, pip Index, and npm Registry (Optional)
+
+If you need a proxy to access the internet or want to use a custom pip index or npm registry, edit `user_config.ps1`:
+
+* Open `user_config.ps1` and set the following variables as needed:
+
+  ```powershell
+  # Proxy (optional)
+  $HTTP_PROXY=""   # e.g. http://127.0.0.1:7890
+  $HTTPS_PROXY=""  # e.g. http://127.0.0.1:7890
+  $SSL_VERIFY=""   # optional: true/false (maps to git http.sslVerify)
+
+  # pip index (optional)
+  $PIP_INDEX_URL=""      # e.g. https://pypi.tuna.tsinghua.edu.cn/simple
+  $PIP_TRUSTED_HOST=""   # e.g. pypi.tuna.tsinghua.edu.cn
+
+  # npm registry (optional)
+  $NPM_REGISTRY=""       # e.g. https://registry.npmmirror.com
+  ```
+
+* **Proxy**: Leave variables empty to skip proxy; set full URL (e.g. `http://127.0.0.1:7890`) when needed. Authenticated proxy is supported (e.g. `http://user:pass@proxy.example.com:8080`). `$SSL_VERIFY`: `true` enables Git SSL verification, `false` disables it.
+* **pip**: Leave `$PIP_INDEX_URL` and `$PIP_TRUSTED_HOST` empty to use default index; when using a mirror, set both.
+* **npm**: Leave `$NPM_REGISTRY` empty to use default; set to your registry URL when needed.
+
+#### 3. Run the Installation Script
+
+* Run PowerShell as Administrator and set the execution policy:
+
+  ```powershell
+  Set-ExecutionPolicy Unrestricted -Scope CurrentUser
+  ```
+
+* Enter the script directory and run the main installation script:
+
+  ```powershell
+  # Use MySQL by default
+  .\setup.ps1
+
+  # Or specify SQLite
+  .\setup.ps1 -DbType sqlite
+  ```
+
+* When the script finishes, it will print backend and frontend PIDs, log paths, and the frontend URL. Open that URL in a browser to use openJiuwen.
+
+![image](../images/一键安装运行完成截图win.png)
+
+#### 4. Common Script Parameters
+
+  ```powershell
+  # Show status and access URLs
+  .\setup.ps1 -Status
+
+  # Stop backend and frontend
+  .\setup.ps1 -Stop
+
+  # Start backend and frontend
+  .\setup.ps1 -Start
+
+  # Restart backend and frontend
+  .\setup.ps1 -Restart
+
+  # List all supported parameters
+  .\setup.ps1 -Help
+  ```
+
+### Method 2: Manual Installation of All Dependencies
+
+Complete dependency installation first, then perform source retrieval and installation.
+
+#### 1. Install Dependencies
+
+##### 1.1. Install Git
 
 * Download the <a href="https://mirrors.huaweicloud.com/git-for-windows/v2.51.0.windows.1/Git-2.51.0-64-bit.exe" target="_blank" rel="nofollow noopener noreferrer">Git</a> installer. If the download is slow, switch networks and try again.
 
 * After installation, open PowerShell and run: `git --version`. If successful, it will print the Git version.
 
-### 2. Install Node.js and npm
+##### 1.2. Install Node.js and npm
 
 * Download the <a href="https://nodejs.org/dist/v22.21.1/node-v22.21.1-x64.msi" target="_blank" rel="nofollow noopener noreferrer">Node.js</a> installer and follow the prompts. If the download is slow, switch networks and try again.
 
 * After installation, open PowerShell and run: `node -v` and `npm -v`. If successful, both versions will be displayed.
 
-### 3. Install Python and uv
+##### 1.3. Install Python and uv
 
 * Download the <a href="https://www.python.org/ftp/python/3.11.4/python-3.11.4-amd64.exe" target="_blank" rel="nofollow noopener noreferrer">Python</a> installer and follow the prompts (it is recommended to check Add Python to PATH). If the download is slow, switch networks and try again.
 
@@ -45,17 +135,17 @@ Before proceeding with the full installation, install the dependencies below, th
 
 * After installation, run: `uv --version`. If successful, it will print the uv version.
 
-### 4. Install MySQL (Optional Component)
+##### 1.4. Install MySQL (Optional Component)
 
 * **SQLite vs MySQL**:
   * SQLite requires no extra setup and is suitable for development and testing, but it has limitations (e.g., no support for concurrent writes, no user permission management).
   * MySQL offers more robust features and is better suited for complex scenarios, making it the recommended choice for real-world projects and production environments.
 
-#### 4.1 SQLite
+###### 1.4.1 SQLite
 
 * **Note**: SQLite is used by default. Simply keep `DB_TYPE` as `sqlite` in `.env.example` to start the backend service directly—no additional installation or configuration is required.
 
-#### 4.2 MySQL
+###### 1.4.2 MySQL
 
 * **Note**: If you prefer to use MySQL, change `DB_TYPE` in `.env.example` to `mysql` and follow the steps below to install and configure MySQL.
 
@@ -96,7 +186,7 @@ Before proceeding with the full installation, install the dependencies below, th
   FLUSH PRIVILEGES;
   ```
 
-### 5. Milvus (Optional)
+##### 1.5. Milvus (Optional Component)
 
 * **Note**：`.env.example` uses Chroma by default. Simply keep `INDEX_MANAGER_TYPE` set to `chroma` to directly start the backend service without additional installation or configuration. If you need to use Milvus, please change `INDEX_MANAGER_TYPE` in `.env.example` to `milvus` and refer to [How to enable memory and knowledge base features](#windows-memory) to complete the installation and configuration of Milvus.
 
@@ -104,9 +194,9 @@ Before proceeding with the full installation, install the dependencies below, th
   * Chroma requires no additional installation and boasts a simple configuration. All you need to do is obtain the vector model, making it ideal for quick experimentation and suitable for development and testing environments. For obtaining the vector model, refer to [How to Obtain the Vector Model](#windows-embed-model).
   * Milvus has more comprehensive functions and can meet the needs of complex scenarios, so it is more recommended for use in practical engineering and production environments.
 
-## III. Install openJiuwen
+#### 2. openJiuwen Installation
 
-### 1. Get the source code
+##### 2.1. Get the Source Code
 
 * Ensure you have access to the <a href="https://gitcode.com/org/openJiuwen" target="_blank" rel="nofollow noopener noreferrer">openJiuwen code repositories</a>. If not, request access.
 
@@ -131,7 +221,7 @@ Before proceeding with the full installation, install the dependencies below, th
   cd agent-studio
   ```
 
-### 2. Generate an AES key (Optional)
+##### 2.2. Generate an AES Key (Optional)
 
 * If you do not need to encrypt sensitive fields at rest, skip this step.
 * In the project root, open PowerShell and run:
@@ -149,7 +239,7 @@ Before proceeding with the full installation, install the dependencies below, th
 
 * **Note**: The AES key must remain unchanged. Changing it later will make previously encrypted data impossible to decrypt.
 
-### 3. Start openJiuwen
+##### 2.3. Start openJiuwen
 
 * Open PowerShell in the project root.
 
@@ -176,18 +266,10 @@ Before proceeding with the full installation, install the dependencies below, th
    # Memory data storage path (example, default value: memory-data, can be modified according to actual situation)
    MEMORY_DATA_PATH=memory-data
 
-   # Milvus config (example)
+   # Milvus configuration (example, only when INDEX_MANAGER_TYPE=milvus)
    MILVUS_HOST=127.0.0.1
    MILVUS_PORT=19530
    MILVUS_COLLECTION_NAME=memory_vector
-
-   # Memory-related config (if you do not use the memory feature, you can omit the following)
-   EMBEDDING_MODEL_DIMENTION=1024
-   EMBED_API_BASE=""
-   EMBED_MODEL_NAME=""
-   EMBED_API_KEY=""
-   EMBED_TIMEOUT=5
-   EMBED_MAX_RETRIES=1
 
    # Code sandbox configuration (example, please see [Question 2: How to Enable the Sandbox Feature] to learn more)
    CODE_SANDBOX_URL=http://localhost:8188/run
@@ -205,17 +287,11 @@ Before proceeding with the full installation, install the dependencies below, th
    | **DB_PORT**                   | Database port                                                       | `3306`                                                                         |
    | **DB_USER**                   | Database username                                                   | `your_user_name`                                                               |
    | **DB_PASSWORD**               | Database password                                                   | `your_password`                                                                |
-   | **INDEX_MANAGER_TYPE**        | Vector index type configuration, default value: chroma            | `chroma`                              |
+   | **INDEX_MANAGER_TYPE**        | Vector database type; optional values: chroma, milvus; default: chroma | `chroma`                              |
    | **MEMORY_DATA_PATH**          | Memory data storage path, default value: memory-data              | `memory-data`                         |
    | **MILVUS_HOST**               | Milvus service host                                                 | `127.0.0.1`                                                                    |
    | **MILVUS_PORT**               | Milvus service port                                                 | `19530`                                                                        |
    | **MILVUS_COLLECTION_NAME**    | Milvus collection name                                              | `memory_vector`                                                                |
-   | **EMBEDDING_MODEL_DIMENTION** | Embedding model dimension, depends on the chosen EMBED_MODEL_NAME   | `1024`                                                                         |
-   | **EMBED_API_BASE**            | Embedding model API base URL                                        | `https://example.com/embedding_model`                                          |
-   | **EMBED_MODEL_NAME**          | Embedding model name                                                | `text-embedding-model`                                                         |
-   | **EMBED_API_KEY**             | Embedding model API key                                             | `sk-xxx`                                                                       |
-   | **EMBED_TIMEOUT**             | Embedding model request timeout (seconds), default value `60`     | `5`                                                                            |
-   | **EMBED_MAX_RETRIES**         | Max retries on embedding model request failure, default value `3` | `1`                                                                            |
    | **CODE_SANDBOX_URL**             | Code Sandbox url                                            | `http://localhost:8188/run`                                                                    |
    | **VITE_PLUGIN_SERVICE_URL**      | Plugin Server url                                           | `http://localhost:8185`                                                                    |
    | **VITE_PLUGIN_CONFIG_PATH**      | Plugin configuration file path for web                      | `/config.json`                                                                    |
@@ -265,11 +341,11 @@ Before proceeding with the full installation, install the dependencies below, th
 
 * On success, it will print Local access: *access URL*.
 
-### 4. Access the system
+##### 2.4. Access the System
 
 Copy the *access URL* from above into your browser’s address bar and press Enter. You should see the openJiuwen UI.
 
-## IV. FAQ
+## III. Frequently Asked Questions (FAQ)
 
 ### <a id="windows-memory"></a> Question 1: How to Enable the Memory and Knowledge Base Features
 
@@ -299,9 +375,8 @@ Older Windows versions do not support the full automation of this one-click comm
 **1.2 Install Docker Desktop**
 
 * Download: Go to the <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="nofollow noopener noreferrer">Docker website</a> to download the Windows installer (for x86 machines, choose the AMD64 version);
-* Run the installer: **Check the “Use WSL 2 instead of Hyper-V” option** and follow the wizard to complete installation:
+* Run the installer: Select only the “Use WSL 2 instead of Hyper-V” and “Add shortcut to desktop” options, then click “OK” to complete installation;
 
-  <img src="../images/docker_desktop_on_wsl.png" width="600"/>
 * Restart your computer after installation;
 * After restarting, open Docker Desktop and wait for it to finish loading (the first launch may take 5–10 minutes);
 * Once Docker Desktop starts, for a trial you can click “Continue without signing in” on the welcome screen; for long-term use, refer to the <a href="https://docs.docker.com/desktop/setup/sign-in" target="_blank" rel="nofollow noopener noreferrer">official guide</a>.
@@ -314,11 +389,13 @@ Older Windows versions do not support the full automation of this one-click comm
 
 * Create a local Milvus directory (it’s recommended to place it on D:, e.g., *D:\Milvus*).
 
-* Open Docker Desktop. As shown in the screenshot, enter your *Milvus local path* at step 4 (e.g., *D:\Milvus*).
+* Open Docker Desktop and click the ⚙️ icon in the upper-right corner to open settings. 
+ 	  	 
+* In the left-hand sidebar, select “Resources“ to enter the Resources configuration page. 
+ 	  	 
+* Click “File sharing“, type the *Milvus installation directory* (e.g., `D:\Milvus*`) into the text box, and then click the “➕“ button to add it.
 
 * Click Apply & restart to restart Docker Desktop.
-
-  <img src="../images/docker-milvus.png" width="600"/>
 
 * Open PowerShell as Administrator, switch to the Milvus directory, and save the “standalone.bat” script:
 
@@ -379,10 +456,9 @@ The memory and knowledge base features require an embedding model. The steps bel
 
   ![Get api_base and model_name](../images/embed_api_base_and_model_name.png)
 
-* Record the API endpoint (EMBED_API_BASE) and the model parameter (EMBED_MODEL_NAME).
+* Record the API endpoint and the model parameter.
 
-* Click “API Key Management” and follow the instructions to obtain an API Key (EMBED_API_KEY).
-> **Note**: After configuring EMBEDDING_MODEL_DIMENTION and enabling memory, do not change it again, otherwise the memory feature will fail. Other embedding configuration changes are also not recommended, as they may affect results.
+* Click “API Key Management” and follow the instructions to obtain an API.
 
 ### <a id="windows-sandbox"></a> Question 2: How to enable the sandbox feature
 

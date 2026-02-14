@@ -150,7 +150,7 @@ export const useSubmitVersionDialog = ({
         console.error('获取prompt详情失败:', detailResponse.msg)
         setSnackbar({
           open: true,
-          message: detailResponse.msg || '获取prompt详情失败',
+          message: detailResponse.msg || t('hooks.prompts.useSubmitVersionDialog.getPromptDetailFailed'),
           severity: 'error',
         })
       }
@@ -158,7 +158,7 @@ export const useSubmitVersionDialog = ({
       console.error('获取prompt详情API调用失败:', error)
       setSnackbar({
         open: true,
-        message: t('components.prompts.promptEditPage.getPromptDetailFailed'),
+        message: t('hooks.prompts.useSubmitVersionDialog.getPromptDetailFailed'),
         severity: 'error',
       })
     }
@@ -192,18 +192,18 @@ export const useSubmitVersionDialog = ({
   // 确认提交版本
   const handleConfirmSubmitVersion = useCallback(async () => {
     if (!id || isNew) {
-      showSnackbar('无法提交版本：提示词尚未保存', 'error')
+      showSnackbar(t('hooks.prompts.useSubmitVersionDialog.cannotSubmitPromptNotSaved'), 'error')
       return
     }
 
     if (!versionNumber.trim()) {
-      showSnackbar('请输入版本号', 'error')
+      showSnackbar(t('hooks.prompts.useSubmitVersionDialog.versionNumberRequired'), 'error')
       return
     }
 
     try {
       // 调用提交版本API
-      const response = await PromptService.commitVersion(id!, userId!, {
+      const response = await PromptService.commitVersion(id!, workspaceId!, {
         commit_version: versionNumber.replace('v', ''), // Remove 'v' prefix if present
         commit_description: versionDescription,
       })
@@ -218,7 +218,7 @@ export const useSubmitVersionDialog = ({
         setDraftSavedTime(null) // 清除草稿保存时间，因为已经提交了新版本
         setIsDraftEdited(false) // 提交后草稿状态变为未编辑
         setVersionHistoryOpen(false) // 关闭版本历史页签
-        showSnackbar('新版本提交成功！', 'success')
+        showSnackbar(t('hooks.prompts.useSubmitVersionDialog.submitSuccess'), 'success')
 
         // 提交成功后，重新获取prompt详情并用prompt_draft部分填充页面
         try {
@@ -269,7 +269,7 @@ export const useSubmitVersionDialog = ({
                     console.log('✅ [SUBMIT-VERSION] 提交成功后调试上下文加载完成')
                   } catch (error) {
                     console.error('❌ [SUBMIT-VERSION] 提交成功后加载调试上下文失败:', error)
-                    showSnackbar('加载调试上下文失败', 'error')
+                    showSnackbar(t('hooks.prompts.useSubmitVersionDialog.loadDebugContextFailed'), 'error')
                   }
                 } else {
                   console.warn('⚠️ [SUBMIT-VERSION] loadDebugContext 函数未提供，跳过调试上下文加载')
@@ -278,15 +278,15 @@ export const useSubmitVersionDialog = ({
             }
           } else {
             console.log('提交后获取prompt详情数据失败:', detailResponse.msg)
-            showSnackbar(detailResponse.msg || '提交后重新加载数据失败', 'error')
+            showSnackbar(detailResponse.msg || t('hooks.prompts.useSubmitVersionDialog.reloadAfterSubmitFailed'), 'error')
           }
         } catch (error) {
           console.error('提交后重新加载数据失败:', error)
-          showSnackbar('提交后重新加载数据失败', 'error')
+          showSnackbar(t('hooks.prompts.useSubmitVersionDialog.reloadAfterSubmitFailed'), 'error')
         }
       } else {
         // 提交失败（这个分支实际上不会被执行，因为API service会抛出异常）
-        const errorMessage = response.msg && response.msg.trim() ? response.msg : '提交新版本失败'
+        const errorMessage = response.msg && response.msg.trim() ? response.msg : t('hooks.prompts.useSubmitVersionDialog.submitNewVersionFailed')
         showSnackbar(errorMessage, 'error')
       }
     } catch (error) {
@@ -301,14 +301,14 @@ export const useSubmitVersionDialog = ({
         })
 
         // 显示API返回的具体错误信息，优先使用 response.msg
-        const errorMessage = error.response?.msg || error.response?.message || error.message || t('components.prompts.promptEditPage.submitNewVersionFailed')
+        const errorMessage = error.response?.msg || error.response?.message || error.message || t('hooks.prompts.useSubmitVersionDialog.submitNewVersionFailed')
         showSnackbar(errorMessage, 'error')
       } else if (error instanceof Error) {
         // 其他类型的错误（网络错误等）
-        showSnackbar(error.message || t('components.prompts.promptEditPage.submitNewVersionFailed'), 'error')
+        showSnackbar(error.message || t('hooks.prompts.useSubmitVersionDialog.submitNewVersionFailed'), 'error')
       } else {
         // 未知错误类型
-        showSnackbar(t('components.prompts.promptEditPage.submitNewVersionFailed'), 'error')
+        showSnackbar(t('hooks.prompts.useSubmitVersionDialog.submitNewVersionFailed'), 'error')
       }
     }
   }, [

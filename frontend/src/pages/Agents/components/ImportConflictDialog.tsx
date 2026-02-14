@@ -1,10 +1,11 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, AlertTriangle } from 'lucide-react'
+import { X, AlertTriangle, Loader2 } from 'lucide-react'
 
 interface ImportConflictDialogProps {
   isOpen: boolean
   agentName: string
+  isLoading?: boolean
   onOverwrite: () => void
   onCreateCopy: () => void
   onCancel: () => void
@@ -13,6 +14,7 @@ interface ImportConflictDialogProps {
 export const ImportConflictDialog: React.FC<ImportConflictDialogProps> = ({
   isOpen,
   agentName,
+  isLoading = false,
   onOverwrite,
   onCreateCopy,
   onCancel,
@@ -23,9 +25,13 @@ export const ImportConflictDialog: React.FC<ImportConflictDialogProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={onCancel} />
+      <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={isLoading ? undefined : onCancel} />
       <div className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 transform transition-all">
-        <button onClick={onCancel} className="absolute top-6 right-6 text-[#9ca3af] hover:text-[#374151]">
+        <button
+          onClick={onCancel}
+          disabled={isLoading}
+          className="absolute top-6 right-6 text-[#9ca3af] hover:text-[#374151] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <X className="w-6 h-6" />
         </button>
         <div className="flex justify-center mb-6">
@@ -44,19 +50,24 @@ export const ImportConflictDialog: React.FC<ImportConflictDialogProps> = ({
         <div className="flex flex-col gap-3">
           <button
             onClick={onOverwrite}
-            className="w-full px-6 py-3 bg-orange-600 text-white rounded-xl hover:bg-orange-700 font-medium transition-all"
+            disabled={isLoading}
+            className="w-full px-6 py-3 bg-orange-600 text-white rounded-xl hover:bg-orange-700 font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
+            {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
             {t('agents.importConflictDialog.overwriteButton')}
           </button>
           <button
             onClick={onCreateCopy}
-            className="w-full px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium transition-all"
+            disabled={isLoading}
+            className="w-full px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
+            {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
             {t('agents.importConflictDialog.createCopyButton')}
           </button>
           <button
             onClick={onCancel}
-            className="w-full px-6 py-3 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-all"
+            disabled={isLoading}
+            className="w-full px-6 py-3 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {t('agents.importConflictDialog.cancelButton')}
           </button>

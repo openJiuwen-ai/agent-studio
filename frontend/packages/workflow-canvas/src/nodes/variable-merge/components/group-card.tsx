@@ -124,7 +124,7 @@ export const GroupCard: React.FC<GroupCardProps> = ({
     if (group.items.length === 0) {
       return {}
     }
-    return { type: groupType as any }
+    return { type: groupType as any, extra: { weak: true } }
   }
 
   const isGroupEmpty = group.items.length === 0 || group.items.every(item => !item || item.trim() === '')

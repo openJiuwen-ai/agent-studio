@@ -200,7 +200,7 @@ def convert_orm_to_model_config(orm_obj, api_key_flag: bool = True) -> ModelConf
         {
             "name": "temperature",
             "label": "温度",
-            "desc": "temperature:控制模型生成结果的随机性与创造性。值越高，输出越随机、多样；值越低，结果越确定、保守。范围通常为0~2，"
+            "desc": "Temperature:控制模型生成结果的随机性与创造性。值越高，输出越随机、多样；值越低，结果越确定、保守。范围通常为0~2，"
                     "推荐设置0.1~1.0。示例：0.7（平衡随机性与一致性）、1.2（更具创造性的输出）。",
             "type": "float",
             "min": "0",
@@ -220,7 +220,7 @@ def convert_orm_to_model_config(orm_obj, api_key_flag: bool = True) -> ModelConf
         {
             "name": "timeout",
             "label": "超时时间",
-            "desc": "timeout:大模型返回等待时间，超过这个时间即终止等待并报错：API call timeout。取值范围为[1-3600]，默认值60秒。",
+            "desc": "Timeout:大模型返回等待时间，超过这个时间即终止等待并报错。取值范围为[1-3600]，默认值60秒。",
             "type": "int",
             "min": "1",
             "max": "3600",
@@ -257,11 +257,11 @@ def convert_orm_to_model_config(orm_obj, api_key_flag: bool = True) -> ModelConf
             "name": "timeout",
             "label": "Timeout",
             "desc": "Timeout: Maximum waiting time (in seconds) for the large language model to return a response. "
-                    "If exceeded, the request is terminated with an 'API call timeout' error. "
-                    "Valid range: [1–300]. Default value: 60 seconds.",
+                    "If exceeded, the request is terminated with an error. "
+                    "Valid range: [1–3600]. Default value: 60 seconds.",
             "type": "int",
             "min": "1",
-            "max": "300",
+            "max": "3600",
             "default_val": str(orm_obj.timeout or 60)
         }
     ]
@@ -285,7 +285,8 @@ def convert_orm_to_model_config(orm_obj, api_key_flag: bool = True) -> ModelConf
         "base_url": orm_obj.base_url,
         "api_key": SecurityUtils().decrypt_api_key(orm_obj.api_key) if api_key_flag else "",
         "model": orm_obj.model_type,
-        "provider": orm_obj.provider
+        "provider": orm_obj.provider,
+        "timeout": orm_obj.timeout if orm_obj.timeout is not None else 60,
     }
 
     # 创建并返回目标对象

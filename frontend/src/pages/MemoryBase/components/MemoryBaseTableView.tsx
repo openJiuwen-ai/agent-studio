@@ -76,14 +76,14 @@ export const MemoryBaseTableView: React.FC<MemoryBaseTableViewProps> = ({
         render: ({ row }) => {
           const configId = row.embedding_model_config_id?.toString();
           if (!configId) {
-            return <span className="text-gray-400">-</span>;
+            return <span className="text-gray-400">{t('memoryBases.form.modelDeleted')}</span>;
           }
           if (embeddingModelsLoading && !Object.keys(embeddingModelMap).length) {
             return <span className="text-gray-500">{t('memoryBases.form.loadingModels')}</span>;
           }
           const meta = embeddingModelMap[configId];
           if (!meta?.name) {
-            return <span className="text-gray-400">-</span>;
+            return <span className="text-gray-400">{t('memoryBases.form.modelDeleted')}</span>;
           }
           if (meta.isActive === false) {
             return (
@@ -106,17 +106,17 @@ export const MemoryBaseTableView: React.FC<MemoryBaseTableViewProps> = ({
         render: ({ row }) => {
           const llmId = row.llm_model_config_id;
           if (!llmId) {
-            return <span className="text-gray-400">-</span>;
+            return <span className="text-gray-400">{t('memoryBases.form.modelDeleted')}</span>;
           }
           
           const llmMeta = llmModels.find(model => model.model_id === llmId);
           if (!llmMeta) {
-            return <span className="text-gray-400">-</span>;
+            return <span className="text-gray-400">{t('memoryBases.form.modelDeleted')}</span>;
           }
           
           if (!llmMeta.is_active) {
             return (
-              <Tooltip title={t('memoryBases.form.llmModelUnavailable')} disableInteractive placement="top">
+              <Tooltip title={t('memoryBases.form.modelUnavailable')} disableInteractive placement="top">
                 <div className="text-red-600 flex items-center gap-1 min-w-0">
                   <span className="truncate">{llmMeta.model_name}</span>
                   <Info className="w-3 h-3 flex-shrink-0" />

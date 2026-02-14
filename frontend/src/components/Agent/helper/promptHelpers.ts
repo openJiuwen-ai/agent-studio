@@ -28,8 +28,8 @@ export function mergeCurrentVersionOption(options: VersionOption[], promptId: st
 }
 
 // 拉取指定提示词的版本选项（已格式化）
-export async function getVersionOptions(promptId: string): Promise<VersionOption[]> {
-  const commitResult = await PromptService.getVersionList(promptId, { page_size: 100 })
+export async function getVersionOptions(promptId: string, workspaceId: string): Promise<VersionOption[]> {
+  const commitResult = await PromptService.getVersionList(promptId, workspaceId, { page_size: 100 })
   return formatVersionListOptions(promptId, commitResult.prompt_commit_infos || [])
 }
 

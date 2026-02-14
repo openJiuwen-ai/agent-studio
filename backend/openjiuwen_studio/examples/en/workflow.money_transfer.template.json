@@ -1,6 +1,6 @@
 {
   "name": "money_transfer",
-  "desc": "Money transfer workflow",
+  "desc": "Money transfer workflow, capable of transferring funds to another account.",
   "icon_uri": "",
   "url": "test",
   "schema": {

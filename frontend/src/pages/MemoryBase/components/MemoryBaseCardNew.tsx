@@ -266,6 +266,8 @@ export const MemoryBaseCardNew: React.FC<MemoryBaseCardNewProps> = ({
     } else {
       tags.push({ label: embeddingModel.name });
     }
+  } else {
+    tags.push({label : t('memoryBases.form.modelDeleted')})
   }
 
   if (llmModel) {
@@ -273,11 +275,13 @@ export const MemoryBaseCardNew: React.FC<MemoryBaseCardNewProps> = ({
       tags.push({
         label: llmModel.model_name,
         variant: 'error',
-        tooltip: t('memoryBases.form.llmModelUnavailable'),
+        tooltip: t('memoryBases.form.modelUnavailable'),
       });
     } else {
       tags.push({ label: llmModel.model_name });
     }
+  } else {
+    tags.push({label : t('memoryBases.form.modelDeleted')})
   }
 
   return (

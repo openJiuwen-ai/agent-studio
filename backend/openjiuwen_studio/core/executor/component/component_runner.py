@@ -18,7 +18,7 @@ from openjiuwen_studio.core.common.dsl import LoopConfig
 from openjiuwen.core.session.internal.workflow import WorkflowSession, NodeSession
 from openjiuwen.core.session.stream.emitter import StreamEmitter
 from openjiuwen.core.session.stream.manager import StreamWriterManager
-from openjiuwen.core.session.node import Session
+from openjiuwen.core.workflow.components import Session
 from openjiuwen.core.workflow import WorkflowCard
 
 from openjiuwen.core.graph.base import INPUTS_KEY

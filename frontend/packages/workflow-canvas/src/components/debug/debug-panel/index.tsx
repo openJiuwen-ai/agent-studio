@@ -324,7 +324,7 @@ export const DebugSidePanel: FC<DebugSidePanelProps> = ({ visible, onCancel, wor
       setExecutionLogDebugData(null) // 清空执行日志调试数据
       setSelectedComponent(null) // 清空选中的组件
       setIsDebugDataLoading(true) // 设置加载状态
-      Toast.info(`${t('workflowCanvas.debugPanel.loadingDebugData')} ${formattedTime}...`)
+      Toast.info(t('workflowCanvas.debugPanel.loadingDebugData', { nodeName: formattedTime }))
 
       if (!workflowId || !spaceId) {
         Toast.error(t('workflowCanvas.debugPanel.missingWorkflowOrSpaceId'))
@@ -404,7 +404,7 @@ export const DebugSidePanel: FC<DebugSidePanelProps> = ({ visible, onCancel, wor
         setExecutionLogDebugData(result.data)
 
         setIsDebugDataLoading(false) // 重置加载状态
-        Toast.success(`${t('workflowCanvas.debugPanel.loadedExecutionLogDetails')} ${formattedTime}`)
+        Toast.success(t('workflowCanvas.debugPanel.loadedExecutionLogDetails', { nodeName: executionLogDetail.workflow_name || formattedTime }))
       } else {
         console.warn('⚠️ API响应数据为空或格式错误')
         Toast.warning(t('workflowCanvas.debugPanel.executionLogDetailsEmpty'))

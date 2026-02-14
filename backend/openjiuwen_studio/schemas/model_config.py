@@ -29,16 +29,16 @@ class ModelConfigBase(BaseModel):
     provider: ModelProvider = Field(..., description="AI model provider")
     space_id: str = Field("0", description="belong to spacific space")
     model_type: str = Field(..., min_length=1, max_length=100, description="Specific model name")
-    base_url: str = Field(..., description="Custom API endpoint URL")
-    is_active: bool = Field(default=True, description="Whether the model is active")
+    base_url: str = Field(..., min_length=1, description="Custom API endpoint URL")
+    is_active: Optional[bool] = Field(default=True, description="Whether the model is active")
     description: Optional[str] = Field(None, max_length=500, description="Model description")
     tags: List[str] = Field(default_factory=list, description="Model tags for categorization")
 
     # Model parameters
-    parameters: ModelParameters = Field(default_factory=ModelParameters)
+    parameters: Optional[ModelParameters] = Field(default_factory=ModelParameters)
 
     # Connection settings
-    timeout: int = Field(default=60, ge=1, le=3600, description="Request timeout in seconds")
+    timeout: Optional[int] = Field(default=60, ge=1, le=3600, description="Request timeout in seconds")
     retry_count: int = Field(default=3, ge=0, le=10, description="Number of retry attempts")
     enable_streaming: bool = Field(default=True, description="Enable streaming responses")
     enable_function_calling: bool = Field(default=False, description="Enable function calling")

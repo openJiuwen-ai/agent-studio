@@ -317,7 +317,7 @@ const PluginConfigurationPage: React.FC = () => {
       const response = await updatePluginApi.mutateAsync(updateRequest)
 
       if (response.code === 200) {
-        showSuccess(t('plugins.pluginConfig.saveSuccess'))
+        showSuccess(t('plugins.config.saveSuccess'))
 
         // Update local state
         setPluginConfigData(prev => ({

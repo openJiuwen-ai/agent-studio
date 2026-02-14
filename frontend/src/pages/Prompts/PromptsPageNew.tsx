@@ -18,19 +18,21 @@ import { ConfigTable, type TableColumn, type SortState } from '@/components/Comm
 import { Empty } from '@/components/Common/Empty'
 import { useOptimizedSearch } from '@/hooks/useSearchOptimization'
 
-/** +n 区域与间距预留 px，短标签最大宽 = (containerWidth - ASSOCIATIONS_RESERVE_PX) / 2 */
-const ASSOCIATIONS_RESERVE_PX = 32 + 4
+/** +n 区域与间距预留 px；多标签时每标签最大宽 = (containerWidth - ASSOCIATIONS_RESERVE_PX) / tagCount */
+const ASSOCIATIONS_RESERVE_PX = 40
+
+/** 列表模式最多展示的关联对象数量 */
+const LIST_VIEW_MAX_ASSOCIATIONS = 2
 
 interface AssociationTagProps {
   relationObj: RelationObj
-  shrinkable: boolean
   containerWidth: number
-  multiTag: boolean
+  tagCount: number
   onNavigate: (e?: React.MouseEvent) => void
 }
 
-/** 单个关联标签：短的不伸缩、可设 maxWidth；长的占剩余空间；溢出时 Tooltip 显示全文 */
-function AssociationTag({ relationObj, shrinkable, containerWidth, multiTag, onNavigate }: AssociationTagProps) {
+/** 单个关联标签：多标签时均分最大宽度，避免被拉得过宽；溢出时 Tooltip 显示全文 */
+function AssociationTag({ relationObj, containerWidth, tagCount, onNavigate }: AssociationTagProps) {
   const spanRef = useRef<HTMLSpanElement>(null)
   const [isOverflow, setIsOverflow] = useState(false)
   const { obj_type_name, obj_name } = relationObj
@@ -48,17 +50,17 @@ function AssociationTag({ relationObj, shrinkable, containerWidth, multiTag, onN
     return () => ro.disconnect()
   }, [])
 
-  const shortTagMax =
-    multiTag && containerWidth > 0 && !shrinkable ? (containerWidth - ASSOCIATIONS_RESERVE_PX) / 2 : undefined
+  const maxWidth =
+    tagCount > 1 && containerWidth > 0 ? (containerWidth - ASSOCIATIONS_RESERVE_PX) / tagCount : undefined
 
   const content = (
     <span
       ref={spanRef}
       className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded cursor-pointer hover:bg-blue-200 transition-colors truncate"
       style={{
-        flex: shrinkable ? '1 1 0%' : '0 0 auto',
+        flex: '0 1 auto',
         minWidth: 0,
-        maxWidth: shortTagMax,
+        maxWidth,
       }}
       onClick={e => {
         e.stopPropagation()
@@ -86,17 +88,14 @@ interface AssociationsCellProps {
   t: ReturnType<typeof useTranslation>['t']
 }
 
-/** 关联对象列内容：最多展示 2 个标签 + 溢出时 +n；按内容长度分短/长，短的不伸缩、长占剩余空间 */
+/** 关联对象列内容：最多展示 3 个标签 + 溢出时 +n；多标签时均分宽度，避免单个被拉得过宽 */
 function AssociationsCell({ row, workspaceId, navigate, onOpenAssociations, t }: AssociationsCellProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(0)
-  const objs = row.associations?.relationObjs?.slice(0, 2) ?? []
-  const hasOverflow = (row.associations?.relationObjs?.length ?? 0) > 2
-  const multiTag = objs.length > 1
-
-  const withLen = objs.map(obj => ({ obj, len: (obj.obj_type_name + obj.obj_name).length }))
-  const sorted = [...withLen].sort((a, b) => a.len - b.len)
-  const shrinkableIds = new Set(sorted.slice(1).map(x => x.obj.obj_id))
+  const objs = row.associations?.relationObjs?.slice(0, LIST_VIEW_MAX_ASSOCIATIONS) ?? []
+  const totalCount = row.associations?.relationObjs?.length ?? 0
+  const hasOverflow = totalCount > LIST_VIEW_MAX_ASSOCIATIONS
+  const tagCount = objs.length
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -115,9 +114,8 @@ function AssociationsCell({ row, workspaceId, navigate, onOpenAssociations, t }:
             <AssociationTag
               key={relationObj.obj_id}
               relationObj={relationObj}
-              shrinkable={shrinkableIds.has(relationObj.obj_id)}
               containerWidth={containerWidth}
-              multiTag={multiTag}
+              tagCount={tagCount}
               onNavigate={() => handleRelationObjNavigate(relationObj, workspaceId, navigate)}
             />
           ))}
@@ -126,7 +124,7 @@ function AssociationsCell({ row, workspaceId, navigate, onOpenAssociations, t }:
               className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded cursor-pointer hover:bg-gray-200 transition-colors flex-shrink-0"
               onClick={e => onOpenAssociations(row.associations!.relationObjs || [], row.name, e)}
             >
-              +{row.associations!.relationObjs!.length - 2}
+              +{totalCount - LIST_VIEW_MAX_ASSOCIATIONS}
             </span>
           )}
         </>
@@ -388,7 +386,7 @@ const PromptsPageNew: React.FC = () => {
     async (promptKey: string, e?: React.MouseEvent) => {
       e?.stopPropagation()
       try {
-        await copyToClipboard(promptKey, setSnackbar, t('common.messages.success'))
+        await copyToClipboard(promptKey, setSnackbar)
         setCopiedKey(promptKey)
         setTimeout(() => setCopiedKey(null), 2000)
       } catch (error) {
@@ -904,6 +902,7 @@ const PromptsPageNew: React.FC = () => {
         onClose={handleCloseDeleteDialog}
         onDeleteSuccess={handleDeleteSuccess}
         prompt={promptToDelete}
+        workspaceId={workspaceId}
         showSnackbar={showSnackbar}
       />
 
@@ -913,6 +912,7 @@ const PromptsPageNew: React.FC = () => {
         onClose={handleCloseAssociationsDialog}
         associations={selectedAssociations}
         versionName={selectedPromptName}
+        workspaceId={workspaceId}
       />
 
       {/* 消息提示 */}

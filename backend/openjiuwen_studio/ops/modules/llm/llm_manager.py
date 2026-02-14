@@ -81,7 +81,7 @@ def get_llm_client_by_protocol(protocol: Dict[str, Any]):
     )
     model = Model(
         model_client_config=model_client_config,
-        model_config=ModelRequestConfig()
+        model_config=ModelRequestConfig(model=protocol.get("model", ""))
     )
     return model
 

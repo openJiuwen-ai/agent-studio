@@ -63,9 +63,11 @@ const JsonCodeEditorWithEnhancedLogic: React.ForwardRefRenderFunction<JsonCodeEd
     return compact ? JSON.stringify(val) : JSON.stringify(val, null, 2)
   }, [compact])
 
+  const hasValue = value !== undefined && value !== null && value !== ''
+
   const [editorValue, setEditorValue] = useState<string>(() => {
     try {
-      if (value !== undefined && value !== null) {
+      if (hasValue) {
         return stringifyValue(value)
       } else if (defaultFormat) {
         return defaultFormat
@@ -85,7 +87,7 @@ const JsonCodeEditorWithEnhancedLogic: React.ForwardRefRenderFunction<JsonCodeEd
     isInternalUpdate?: boolean
   }>(() => ({
     isValid: true,
-    lastValidValue: value !== undefined && value !== null ? value : defaultFormat ? undefined : {},
+    lastValidValue: hasValue ? value : defaultFormat ? undefined : {},
     isInternalUpdate: false,
   }))
 
@@ -95,8 +97,9 @@ const JsonCodeEditorWithEnhancedLogic: React.ForwardRefRenderFunction<JsonCodeEd
   useEffect(() => {
     if (value !== lastValueRef.current && !isInternalUpdateRef.current) {
       try {
+        const newHasValue = value !== undefined && value !== null && value !== ''
         let newEditorValue: string
-        if (value !== undefined && value !== null) {
+        if (newHasValue) {
           newEditorValue = stringifyValue(value)
         } else if (defaultFormat) {
           newEditorValue = defaultFormat
@@ -108,7 +111,7 @@ const JsonCodeEditorWithEnhancedLogic: React.ForwardRefRenderFunction<JsonCodeEd
         setValidationState(prev => ({
           ...prev,
           isValid: true,
-          lastValidValue: value !== undefined && value !== null ? value : defaultFormat ? undefined : {},
+          lastValidValue: newHasValue ? value : defaultFormat ? undefined : {},
           isInternalUpdate: false,
         }))
         lastValueRef.current = value

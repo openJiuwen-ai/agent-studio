@@ -95,16 +95,26 @@ def convert_to_properties_format(input_list):
     requires = []
 
     if not input_list:
-        return {}
+        return properties, requires
 
     try:
         for item in input_list:
             property_name = item.get('name')
-            properties[property_name] = {
-                'type': item.get('type'),
-                'description': item.get('description'),
-            }
-            if item.get('required') and item.get('required') == True:
+            param_type = item.get('type')
+            
+            # 处理 date-time 类型：在 JSON Schema 中，date-time 应该作为 format 使用，type 应该是 string
+            if param_type == 'date-time':
+                properties[property_name] = {
+                    'type': 'string',
+                    'format': 'date-time',
+                    'description': item.get('description'),
+                }
+            else:
+                properties[property_name] = {
+                    'type': param_type,
+                    'description': item.get('description'),
+                }
+            if item.get('required') is True:
                 requires.append(property_name)
         return properties, requires
     except (KeyError, TypeError) as e:

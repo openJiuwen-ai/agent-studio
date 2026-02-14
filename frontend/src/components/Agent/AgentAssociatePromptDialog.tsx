@@ -110,7 +110,7 @@ const AgentAssociatePromptDialog: React.FC<AgentAssociatePromptDialogProps> = ({
     if (!targetId) return
     setVersionLoading(true)
     try {
-      const formatted = await getVersionOptions(targetId)
+      const formatted = await getVersionOptions(targetId, workspaceId)
       setCommitsList(formatted)
 
       // 根据 preferVersion 优先选中对应版本，否则选择最新

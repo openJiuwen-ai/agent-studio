@@ -40,7 +40,7 @@ class SystemLLMModelManager:
             if self.system_model_repo.check_model_exists(name=model.name):
                 raise ModelConfigNameExistsError(f"System llm model name already exists: {model.name}")
 
-            model_dict = model.model_dump(exclude_unset=True)
+            model_dict = model.model_dump(exclude_unset=True, exclude_none=True)
 
             # Encrypt API key
             encrypted_api_key = self.security_utils.encrypt_api_key(model.api_key) if model.api_key else None
@@ -93,7 +93,7 @@ class SystemLLMModelManager:
                 if self.system_model_repo.check_model_exists(name=model.name):
                     raise ModelConfigNameExistsError(f"System llm model name already exists: {model.name}")
 
-            model_dict = model.model_dump(exclude_unset=True)
+            model_dict = model.model_dump(exclude_unset=True, exclude_none=True)
 
             # Encrypt API key
             encrypted_api_key = self.security_utils.encrypt_api_key(model.api_key) if model.api_key else None

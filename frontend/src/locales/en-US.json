@@ -94,7 +94,6 @@
       "disabled": "Disabled",
       "moreActions": "More actions",
       "error": "An error occurred",
-      "success": "Operation successful",
       "confirmDelete": "Are you sure you want to delete this item?",
       "deleteSuccess": "Delete successful",
       "saveSuccess": "Save successful",
@@ -364,6 +363,10 @@
       "usernamePlaceholder": "Enter userspace name (email format)",
       "password": "Password",
       "passwordPlaceholder": "Enter password",
+      "confirmPassword": "Confirm Password",
+      "confirmPasswordPlaceholder": "Enter password again",
+      "confirmPasswordRequired": "Please confirm password",
+      "passwordsNotMatch": "Passwords do not match",
       "verificationCode": "Verification Code",
       "verificationCodePlaceholder": "Enter Verification Code",
       "getVerificationCode": "Get Verification Code",
@@ -687,7 +690,9 @@
       "newConversation": "Start new conversation",
       "conversationTimeout": "Conversation timed out, force stop current transmission",
       "forceStop": "Force stop",
-      "generating": "Generating..."
+      "generating": "Generating...",
+      "deepSearchServiceUnavailable": "DeepSearch service is temporarily unavailable, please visit ",
+      "deepSearchConfigRetry": ", refer to the documentation for configuration and try again"
     },
     "picker": {
       "selectAgent": "Select Agent",
@@ -1202,7 +1207,22 @@
       "editDescriptionInfo": "Click to edit description, maximum 500 characters",
       "showPerPage": "Show per page",
       "totalRecords": "Total {{total}} records",
-      "pageInfo": "Page {{current}} of {{total}}"
+      "pageInfo": "Page {{current}} of {{total}}",
+      "workflowNameInvalid": "Workflow name can only contain letters, numbers, underscores, and must start with a letter",
+      "workflowNameEmpty": "Workflow name cannot be empty",
+      "workflowDescEmpty": "Workflow description cannot be empty",
+      "workflowNotFound": "Workflow to edit not found",
+      "formatError": "Invalid format: only letters, numbers, underscores allowed, must start with a letter",
+      "formatHint": "Only letters, numbers, underscores allowed, must start with a letter",
+      "errorAlreadyExists": "already exists",
+      "errorTooLong": "too long",
+      "errorTooShort": "too short",
+      "errorInvalidFormat": "invalid format",
+      "errorRequired": "is required",
+      "errorEmpty": "cannot be empty",
+      "errorLengthExceeded": "length cannot exceed {{count}} characters",
+      "fieldNameName": "Workflow name",
+      "fieldNameDesc": "Workflow description"
     },
     "workflowCreation": {
       "back": "Back",
@@ -2226,7 +2246,7 @@
         "topp": "Top P",
         "toppDesc": "Top-p Sampling: Select the smallest set of words whose cumulative probability reaches p for sampling. Dynamically adjusts the number of candidate words to balance output diversity and quality. Typically set to 0.9-0.95. When used with temperature sampling, it is recommended to adjust only one of them.",
         "timeout": "Timeout(s)",
-        "timeoutDesc": "Timeout range: 1-300 seconds (out-of-range values will be automatically adjusted)"
+        "timeoutDesc": "Timeout range: 1-3600 seconds (out-of-range values will be automatically adjusted)"
       },
       "actions": {
         "save": "Save",
@@ -2262,7 +2282,7 @@
       "nameMaxLength": "Model name cannot exceed 100 characters",
       "modelIdMaxLength": "Model ID cannot exceed 100 characters",
       "descriptionMaxLength": "Description cannot exceed 500 characters",
-      "timeoutRange": "Timeout must be between 1-300 seconds",
+      "timeoutRange": "Timeout must be between 1-3600 seconds",
       "fillRequiredFields": "Please fill in all required fields",
       "systemModelNoEdit": "Pre-built models are not editable",
       "systemModelNoDelete": "Pre-built models cannot be deleted",
@@ -2839,6 +2859,8 @@
       "saveConfig": "Save Configuration",
       "pythonDescription": "Suitable for data analysis, machine learning, automation scripts",
       "nodejsDescription": "Suitable for Web API, real-time applications, frontend build tools",
+      "templateBasicFunction": "Basic Function",
+      "templateBasicFunctionDesc": "Simple data processing function",
       "createTool": "Create Tool",
       "toolNameTooltip": "Give the tool a concise and clear name for easy identification and use",
       "toolNameExample": "For example: Get User Info, Query Weather Data",
@@ -3348,6 +3370,10 @@
       "fillParamsHint": "Fill parameters and click \"Execute Test\" to view results",
       "testInfo": "Test Information",
       "copyResult": "Copy Result",
+      "enterParamName": "Enter {{name}}",
+      "headerSaveSuccess": "Headers saved successfully",
+      "headerSaveFailed": "Save failed: {{message}}",
+      "headerSaveFailedRetry": "Failed to save headers, please retry later",
       "apiTestParameterHelper": "Fill test parameters on the left, view API call return results on the right",
       "apiTestResultHelper": "System will execute code in isolated environment, providing execution status and error logs",
       "testApiConfig": "Test if tool configuration is correct",
@@ -3847,6 +3873,7 @@
         "versionNumber": "Version Number",
         "versionNumberPlaceholder": "Please enter version number",
         "versionNumberFormat": "Format: major.minor.patch (e.g.: 1.2.3)",
+        "versionNumberMustBeGreater": "Version number must be greater than the current version",
         "versionDescription": "Version Description",
         "versionDescriptionPlaceholder": "Please enter version description",
         "versionDescriptionHelper": "Describe the changes in this version",
@@ -4001,7 +4028,8 @@
         "loading": "Loading models...",
         "noModels": "No available models",
         "providedBy": "Provided by {{vendor}}",
-        "systemBuiltIn": "System Built-in"
+        "systemBuiltIn": "System Built-in",
+        "protocol": "Protocol"
       },
       "quickOptimizeDialog": {
         "title": "Quick Optimize",
@@ -4231,11 +4259,6 @@
       "description": "Create new knowledge base and upload documents",
       "success": "Knowledge base created successfully"
     },
-    "addDocument": {
-      "fileSizeLimit": "File size limit: each file must not exceed {{size}}",
-      "filesExceedLimit": "The following files exceed the {{size}} limit:",
-      "oversizedTitle": "File size exceeds limit"
-    },
     "edit": {
       "title": "Edit Knowledge Base",
       "description": "Modify knowledge base information and configuration"
@@ -4337,6 +4360,9 @@
       "noUploadedFiles": "No uploaded files",
       "settingsSuccess": "Document parameters set successfully",
       "settingsFailed": "Document parameter setup failed",
+      "fileSizeLimit": "File size limit: each file must not exceed {{size}}",
+ 	    "filesExceedLimit": "The following files exceed the {{size}} limit:",
+ 	    "oversizedTitle": "File size exceeds limit",
       "steps": {
         "upload": "Upload",
         "settings": "Parameters"
@@ -4425,13 +4451,16 @@
       "selectEmbeddingModel": "Please select an Embedding model",
       "loadingModels": "Loading models...",
       "noLlmModels": "No LLM models available",
+      "noEmbeddingModels": "No Embedding models available",
       "noModels": "No Embedding models available",
-      "createModelLink": "Please create an Embedding model first",
-      "selectModel": "Please select an Embedding model",
+      "createEmbeddingModelLink": "Please create an Embedding model first",
+      "createLLMModelLink": "Please create an LLM model first",
+      "selectModel": "Please select an LLM model",
       "noModelsError": "Please create an Embedding model first",
       "selectLlmModelError": "Please select an LLM model",
       "selectModelError": "Please select an Embedding model",
       "modelUnavailable": "Selected model is unavailable",
+      "modelDeleted": "Selected model has been deleted",
       "testText": "Hello, world!",
       "testFailed": "Test failed",
       "testFailedDisableFailed": "The selected Embedding model test failed, and disabling it also failed. Please manually disable the model in Model Management.",
@@ -4446,8 +4475,10 @@
         "chunkOverlap": "Chunk overlap ensures contextual continuity",
         "maxTokens": "Max tokens affect retrieval efficiency and accuracy"
       },
-      "modelTestSuccess": "Model test succeeded",
-      "modelTestError": "Model test failed",
+      "modelTestSuccess": "LLM Model test succeeded",
+      "modelTestError": "LLM Model test failed",
+      "embeddingModelTestFailed": "Embedding Model test failed",
+      "embeddingModelTestSuccess": "Embedding Model test succeeded",
       "selectLLMModelError": "Please select an LLM model",
       "selectLLMModel": "Please select an LLM model",
       "testingModel": "Testing...",
@@ -4601,6 +4632,99 @@
       "processing": "Processing",
       "error": "Error",
       "inactive": "Inactive"
+    }
+  },
+  "hooks": {
+    "prompts": {
+      "useToolEditDialog": {
+        "toolDeleteSuccess": "Tool deleted successfully!",
+        "toolNameRequired": "Please enter tool name!",
+        "toolNameExists": "Tool name already exists, please rename",
+        "toolSaveSuccess": "Tool saved successfully!",
+        "addToolContextBaseGroup": "Set tool context to group {{groupId}} (base group)",
+        "addToolContextControlGroup": "Set tool context to group {{groupId}} (control group)",
+        "addToolContextMain": "Set tool context to main page",
+        "toolDialogOpened": "Tool dialog opened",
+        "editToolParametersMode": "Tool {{name}} parametersMode:",
+        "editToolContextSet": "Set tool edit context:",
+        "toolSaveTriggerLog": "handleSaveTool main page: triggerAutoSave called, updatedTools="
+      },
+      "useSubmitVersionDialog": {
+        "getPromptDetailFailed": "Failed to get prompt details",
+        "cannotSubmitPromptNotSaved": "Cannot submit version: prompt not saved yet",
+        "versionNumberRequired": "Please enter version number",
+        "submitSuccess": "New version submitted successfully!",
+        "loadDebugContextFailed": "Failed to load debug context",
+        "reloadAfterSubmitFailed": "Failed to reload data after submit",
+        "submitNewVersionFailed": "Failed to submit new version"
+      },
+      "useMultiRunDialog": {
+        "configValidModelFirst": "Please configure a valid model first",
+        "unknownError": "Unknown error",
+        "retryFailedWithMessage": "Retry failed: {{message}}",
+        "getPromptDetailFailedWithMessage": "Failed to get prompt details: {{message}}"
+      },
+      "useLoadPrompt": {
+        "loadModelsFailed": "Failed to load model list, please try again later",
+        "getPromptDetailFailed": "Failed to get prompt details",
+        "loadPromptDetailFailed": "Failed to load prompt details, please try again later"
+      },
+      "useDebugInputAreaGroup": {
+        "requestPrepareFailedWithMessage": "Request preparation failed: {{message}}",
+        "unknownError": "Unknown error",
+        "baseGroup": "Base group",
+        "controlGroupWithId": "Control group {{id}}",
+        "groupConfigValidModelFirst": "{{groupName}} Please configure a valid model first",
+        "retryFailedWithMessage": "Retry failed: {{message}}"
+      },
+      "useDebugInputArea": {
+        "configValidModelFirst": "Please configure a valid model first"
+      }
+    }
+  },
+  "utils": {	 
+    "prompts": {	 
+      "utils": {	 
+        "validateVersionNumber": {	 
+          "empty": "Version number cannot be empty",	 
+          "invalidFormat": "Invalid version format. Please use Major.Minor.Patch format (e.g., 1.2.3)"	 
+        },	 
+        "formatDateTime": {	 
+          "invalidTime": "Invalid time",	 
+          "formatError": "Time format error"	 
+        },	 
+        "copyToClipboard": {	 
+          "defaultSuccess": "Copied to clipboard",	 
+          "emptyContent": "Copy content is empty",	 
+          "autoCopyFailed": "Auto copy failed, please copy manually",	 
+          "copyUnavailable": "Copy function unavailable, please copy manually"	 
+        },	 
+        "toolFormatConverter": {	 
+          "generateJsonSchemaFailed": "Failed to generate JSON Schema from parameters:",	 
+          "tool": "Tool",	 
+          "parseStringFailed": "Failed to parse string",	 
+          "saveJsonSchemaFailed": "Failed to save JSON Schema",	 
+          "parseFailed": "Parse failed",	 
+          "parseToolJsonSchemaFailed": "Failed to parse tool JSON Schema, using default conversion:"	 
+        },	 
+        "promptEditPageUtils": {	 
+          "unknownError": "Unknown error",	 
+          "failKeyword": "失败",	 
+          "requestFailed": "Request failed",	 
+          "variableNameFormatError": "Does not meet format requirements",	 
+          "variableNameTooLong": "Variable name exceeds 50 characters (current length: {{length}})",	 
+          "variableNameCannotStartWithNumber": "Variable name cannot start with a number",	 
+          "variableNameInvalidCharacters": "Variable name can only contain letters, numbers, underscores, and hyphens",	 
+          "variableNameNoSpacesInNormalMode": "Variable name cannot have spaces before or after in Normal mode",	 
+          "skipInvalidVariableName": "Skipping invalid variable name: \"{{name}}\", {{error}}",	 
+          "targetMessageNotFound": "Target message not found",	 
+          "baseGroup": "Base Group",	 
+          "controlGroup": "Control Group {{id}}",	 
+          "targetMessageNotFoundInGroup": "Target message not found in {{groupName}}",	 
+          "existingCallNotFound": "Existing call at index {{index}} does not exist, skipping",	 
+          "calculateSelectionIndicesFailed": "Failed to calculate selection indices - missing required parameters"	 
+        }	 
+      }
     }
   }
 }

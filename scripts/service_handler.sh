@@ -4,14 +4,16 @@ set -euo >/dev/null 2>&1
 # Perform post-start setup operations for specific service modules
 post_start_setup(){
     local module="$1"
-    if [ "${module}" == "MILVUS" ]; then
+    if [[ "${module}" == "MILVUS" 
+        && "${DEPLOY_VARS["IS_UPGRADE_MILVUS"]}" == "false" ]]; then
+        info "No need to waiting for MILVUS container ready!"
         return
     fi
 
     if [ "${module}" == "MYSQL" ]; then
         wait_for_mysql
         if [ "${ARGS["IS_UPGRADE"]}" == "false" ]; then
-            create_db_if_not_exist
+            create_all_dbs
         fi
         return
     fi
@@ -44,15 +46,16 @@ process_service() {
 
     if [[ "${DEPLOY_VARS["HAS_${module}"]}" == "false" ||
          "${DEPLOY_VARS["IS_UP_${component}"]}" == "false" ]]; then
+        info "Skip processing ${module}/${component}: disabled in deployment config"
         return
     fi
 
     if ! is_module_in_args "${module}"; then
+        info "Skip processing ${module}/${component}: not included in arg modules"
         return
     fi
 
     local cmd=${ARGS["CMD"]}
-    local docker_compose=${CONFIG["DOCKER_COMPOSE_CMD"]}
     local compose_file=${COMPOSE_FILES["${module}"]}
     local service="${DEPLOY_VARS["${component}_SERVICE"]}"
     local container="${DEPLOY_VARS["${component}_DOCKER"]}"
@@ -60,13 +63,14 @@ process_service() {
     if [ "${cmd}" = "up" ]; then
         cmd_args="-d"
     fi
-    
-    exec_cmd "${docker_compose} -f ${compose_file} ${cmd} ${cmd_args} ${service}"
+
+    info "[PROCESSING SERVICE] Module: ${module}, Component: ${component}, Cmd: ${cmd}"
+    exec_cmd "docker compose -f ${compose_file} ${cmd} ${cmd_args} ${service}"
     if [ "${cmd}" == "up" ]; then
         post_start_setup "${module}" "${container}"
     fi
 
-    success "${cmd} ${service} container"
+    success "${module}/${component} is ${cmd}!"
 }
 
 # Process all services of the specified module
@@ -78,7 +82,6 @@ process_services() {
             process_service "${module}" "${component}"
         done
     done
-
 }
 
 # Process all services of all modules

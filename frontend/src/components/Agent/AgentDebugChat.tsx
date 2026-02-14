@@ -72,7 +72,7 @@ const AgentDebugChat = ({ agentId, mdbId, onDebugInfoChange, enableLongTerm, hid
   // agent_version 为空字符串表示草稿状态，执行 API 使用空字符串或 'draft' 均可
   const agentVersion = saveAgentRequest.agent_version || 'draft'
 
-  const { t } = useScopedTranslation('agents.agentEditor.previewDebug.agentDebugChat')
+  const { t, i18n } = useScopedTranslation('agents.agentEditor.previewDebug.agentDebugChat')
 
   // 模型未配置的判断
   const modelNotConfigured = !model
@@ -287,7 +287,7 @@ const AgentDebugChat = ({ agentId, mdbId, onDebugInfoChange, enableLongTerm, hid
 
   const normalizeErrorSignature = (content: string) => {
     const trimmed = (content || '').trim()
-    const withoutCodePrefix = trimmed.replace(/^错误\s*\d+[:：]\s*/i, '')
+    const withoutCodePrefix = trimmed.replace(/^(?:错误|Error)\s*\d+[:：]\s*/i, '')
     return withoutCodePrefix.trim()
   }
 
@@ -506,14 +506,31 @@ const AgentDebugChat = ({ agentId, mdbId, onDebugInfoChange, enableLongTerm, hid
   }
 
   const formatError = (e: any): string => {
+    let errorMsg = ''
     try {
-      if (!e) return t('errors.executeFailed')
-      if (typeof e === 'string') return e
-      if (e && typeof e === 'object' && 'message' in e && e.message) return String(e.message)
-      return JSON.stringify(e)
+      if (!e) errorMsg = t('errors.executeFailed')
+      else if (typeof e === 'string') errorMsg = e
+      else if (e && typeof e === 'object' && 'message' in e && e.message) errorMsg = String(e.message)
+      else errorMsg = JSON.stringify(e)
     } catch {
-      return String(e)
+      errorMsg = String(e)
     }
+
+    // 处理错误码前缀的多语言显示
+    // 匹配 "error 120000:" 格式
+    const match = errorMsg.match(/^error\s+(\d+)[:：](.*)/i)
+    if (match) {
+      const code = match[1]
+      const rest = match[2]
+      // 如果是中文环境，替换为 "错误 120000："
+      if (i18n.language.startsWith('zh')) {
+        return `错误 ${code}：${rest}`
+      }
+      // 英文环境确保 Error 首字母大写
+      return `Error ${code}:${rest}`
+    }
+
+    return errorMsg
   }
 
   // 聊天历史更新时滚动到底部

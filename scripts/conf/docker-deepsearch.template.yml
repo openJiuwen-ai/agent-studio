@@ -8,13 +8,27 @@ services:
     environment:
       - LLM_SSL_VERIFY=False
       - TOOL_SSL_VERIFY=False
+      - HTTP_PROXY
+      - HTTPS_PROXY
+      - https_proxy
+      - http_proxy
+      - <<no_proxy_str>>
+      - <<NO_PROXY_STR>>
     env_file:
       - ../.envs/env.deepsearch.<<NAME_SUFFIX>>
+    volumes:
+      - ../log-dirs/logs-<<NAME_SUFFIX>>/deepsearch:/app/logs
     restart: unless-stopped
     networks:
       - <<JIUWEN_NETWORK_NAME>>
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')",
+        ]
       interval: 30s
       timeout: 10s
       start_period: 40s

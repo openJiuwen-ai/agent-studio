@@ -264,6 +264,19 @@
             "enabledLabel": "Enabled",
             "disabledLabel": "Disabled"
           },
+          "memoryBase":{
+            "title": "Memory Base",
+            "add": "Add Existing Memory Base",
+            "create": "Create New Memory Base",
+            "select": "Select Memory Base",
+            "cancel": "Cancel",
+            "confirm": "Confirm",
+            "selected": "Selected",
+            "needBind": "Need to bind a memory base",
+            "variable": "Please bind a memory base to enable memory variable feature",
+            "longTerm": "Please bind a memory base to enable long-term memory feature",
+            "noMemoryBase": "No memory base added, memory configuration will not take effect. Click the top-right corner to add a memory base."
+          },
           "longTermTitle": "Long-Term Memory",
           "longTermToggleLabel": "Enable Long-Term Memory",
           "longTermDescription": "When enabled, the agent can remember user personal information and preferences from the conversation history."
@@ -479,7 +492,8 @@
           "headers": {
             "longTerm": {
               "memory": "Memory",
-              "updatedAt": "Last Updated"
+              "updatedAt": "Last Updated",
+              "type": "Type"
             },
             "variables": {
               "field": "Field",

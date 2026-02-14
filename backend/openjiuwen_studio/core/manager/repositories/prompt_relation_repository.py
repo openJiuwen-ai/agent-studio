@@ -3,6 +3,7 @@ from functools import wraps
 from typing import Callable
 
 from fastapi import status
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from openjiuwen.core.common.logging import logger
@@ -136,6 +137,66 @@ class PromptRelationRepository():
             if only_active:
                 find_id["is_active"] = 1
             return prompt_relation_db.get_dl_in_sql(find_id=find_id, order_cols_desc=["update_time"])
-        
+
+    '''
+    description: 通用方法。当 workflow/agent 名称更新时，同步更新 prompt_relation 表中对应关联记录的 name。
+    - WORKFLOW: 关联表 id(aw_id) 格式为 "工作流id&工作流节点id"，用 LIKE 匹配。
+    - AGENT: 关联表 id(aw_id) 即为智能体id，精确匹配。
+    param {str} space_id 空间id
+    param {str} member_type "WORKFLOW" | "AGENT"
+    param {str} member_id 工作流id 或 智能体id
+    param {str} new_name 新名称
+    param {Session} db_session 可选的数据库会话
+    return {ResponseModel}
+    '''
+    @with_exception_handling
+    def update_member_name_in_prompt_relation(
+        self,
+        space_id: str,
+        member_type: str,
+        member_id: str,
+        new_name: str,
+        db_session: Session | None = None,
+    ) -> ResponseModel[None]:
+        with get_db_jw(db_session) as db:
+            prompt_relation_db = JiuwenBaseRepository(db, PromptRelationDB)
+            find_id = {
+                "space_id": space_id,
+                "type": member_type,
+            }
+            if member_type == "WORKFLOW":
+                # id 格式为 "workflow_id&node_id"
+                other_limitations = [PromptRelationDB.id.like(f"{member_id}&%")]
+            else:
+                # AGENT: id 即为智能体id
+                other_limitations = [PromptRelationDB.id == member_id]
+            result = prompt_relation_db.get_dl_in_sql(
+                find_id=find_id,
+                other_sqlalchemy_limitations=other_limitations,
+            )
+            if result.code != status.HTTP_200_OK or not result.data:
+                return ResponseModel(code=status.HTTP_200_OK, message="No prompt_relation to update.")
+            timestamp = milliseconds()
+            primary_ids = [row["primary_id"] for row in result.data]
+            stmt = (
+                update(PromptRelationDB)
+                .where(PromptRelationDB.primary_id.in_(primary_ids))
+                .values(name=new_name, update_time=timestamp)
+            )
+            try:
+                db.execute(stmt)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.error("Error updating member name in prompt_relation: %s", e)
+                return ResponseModel(
+                    code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    message=f"Error updating prompt_relation name: {e!s}",
+                )
+            return ResponseModel(
+                code=status.HTTP_200_OK,
+                message=f"Updated {member_type} name in {len(result.data)} prompt_relation record(s).",
+            )
+
 
 prompt_relation_repository = PromptRelationRepository()

@@ -100,7 +100,7 @@
     },
     "end": {
       "description": "Final node of the workflow, used to return the result information after the workflow runs.",
-      "outputConfiguredNote": "Output Content is configured. The workflow will only return the responseContent field. To return output variables, please clear the Output Content configuration."
+      "outputConfiguredNote": "Output Content is configured. The workflow will only return the response field. To return output variables, please clear the Output Content configuration."
     },
     "questioner": {
       "titlePrefix": "Questioner",

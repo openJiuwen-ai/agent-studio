@@ -38,7 +38,70 @@ import { testRunRuntimeService } from './components/testrun/runtime/testrun-runt
 import { clearLastTestRunValues } from './components/testrun/testrun-panel/test-run-panel'
 import { clearLastNodeTestValues } from './components/testrun/testdebug/test-debug-panel'
 
-// 内部组件：用于在编辑器上下文中打开节点面板
+const HistoryVersionHandler: React.FC<{
+  editorRef: React.RefObject<FreeLayoutPluginContext>
+  workflowId: string | undefined
+  spaceId: string | undefined
+  versionId: string | null
+}> = ({ editorRef, workflowId, spaceId, versionId }) => {
+  const historyService = useService(HistoryService)
+  const { t } = useTranslation()
+  const context = useWorkflowStore(s => s.context)
+  const setSelectedVersion = useWorkflowStore(s => s.setSelectedVersion)
+
+  useEffect(() => {
+    if (!versionId) return
+
+    const handleVersionSwitch = async () => {
+      try {
+        const response = await WorkflowService.getWorkflowCanvas({
+          workflow_id: context?.workflowId || workflowId || '',
+          space_id: context?.spaceId || spaceId || '',
+          version: versionId === 'draft' ? undefined : versionId,
+        })
+        if (response.code === 200) {
+          const schemaString = response?.data?.workflow?.schema
+          if (!schemaString) {
+            console.warn(t('workflowCanvas.editor.historyVersionSchemaEmpty'))
+            return
+          }
+          try {
+            const parsed = typeof schemaString === 'string' ? JSON.parse(schemaString) : schemaString
+            historyService.stop()
+            editorRef.current?.document.clear()
+            editorRef.current?.document.fromJSON(parsed)
+            historyService.start()
+            setTimeout(() => {
+              try {
+                const bounds = editorRef.current?.document.root.bounds.pad(30)
+                if (bounds) {
+                  editorRef.current?.playground.config.fitView(bounds)
+                }
+              } catch (e) {
+                // ignore
+              }
+            }, 100)
+            Toast.destroyAll()
+            const versionDisplay = versionId === 'draft' ? t('workflowCanvas.ui.draft') : versionId
+            Toast.success({ content: t('workflowCanvas.ui.switchedToVersion', { version: versionDisplay }) })
+          } catch (e) {
+            console.error(t('workflowCanvas.editor.historySchemaParseFailed'), e)
+            historyService.start()
+          }
+        } else {
+          console.error(t('workflowCanvas.editor.fetchHistoryVersionFailed'), response)
+        }
+      } catch (err) {
+        console.error(t('workflowCanvas.editor.fetchHistoryVersionFailed'), err)
+      }
+    }
+
+    handleVersionSwitch()
+  }, [versionId, historyService, editorRef, workflowId, spaceId, context, t])
+
+  return null
+}
+
 const AutoOpenNodePanel: React.FC<{ nodeId: string | undefined }> = ({ nodeId }) => {
   const ctx = useClientContext()
   const { document } = ctx
@@ -51,12 +114,10 @@ const AutoOpenNodePanel: React.FC<{ nodeId: string | undefined }> = ({ nodeId })
       return
     }
 
-    // 如果已经打开过该节点，不再重复打开
     if (nodeIdOpenedRef.current === nodeId) {
       return
     }
 
-    // 等待编辑器完全初始化
     const timer = setTimeout(() => {
       try {
         const node = document.getNode(nodeId)
@@ -66,7 +127,6 @@ const AutoOpenNodePanel: React.FC<{ nodeId: string | undefined }> = ({ nodeId })
           return
         }
 
-        // 选择节点
         if (selectService) {
           selectService.selectNode(node)
         }
@@ -79,15 +139,13 @@ const AutoOpenNodePanel: React.FC<{ nodeId: string | undefined }> = ({ nodeId })
           })
         }
 
-        // 滚动到节点位置
         scrollToView(ctx, node)
 
-        // 标记已打开
         nodeIdOpenedRef.current = nodeId
       } catch (error) {
         console.error(t('workflowCanvas.editor.openNodePanelFailed'), error)
       }
-    }, 500) // 延迟 500ms 确保编辑器完全初始化
+    }, 500)
 
     return () => clearTimeout(timer)
   }, [nodeId, document, selectService, panelManager, ctx])
@@ -101,8 +159,6 @@ export const Editor = () => {
   const spaceId = searchParams.get('spaceId') || undefined
   const version = searchParams.get('version') || undefined
   const nodeIdFromUrl = searchParams.get('node_id') || searchParams.get('nodeId') || undefined
-
-  const historyService = useService(HistoryService)
 
   const showHistoryPanel = useWorkflowStore(s => s.showHistoryPanel)
   const context = useWorkflowStore(s => s.context)
@@ -121,11 +177,10 @@ export const Editor = () => {
     try {
       useWorkflowStore.getState().resetStore()
     } catch {
-      // do nothing
+      // ignore
     }
   }, [])
 
-  // 离开当前编辑器页面时，清理试运行输入缓存，确保重新进入时使用默认值
   useEffect(() => {
     return () => {
       clearLastTestRunValues()
@@ -133,88 +188,44 @@ export const Editor = () => {
     }
   }, [])
 
-  // 当URL中有version参数时，自动选中对应的版本
+  const handleHistoryVersionSelect = (versionId: string) => {
+    setSelectedVersion(versionId)
+  }
+
   React.useEffect(() => {
     if (version && version !== 'draft') {
       setSelectedVersion(version)
     }
   }, [version, setSelectedVersion])
-  // 当用户选择历史版本时，查询历史版本信息并显示在画布中
-  const handleHistoryVersionSelect = async (versionId: string) => {
-    setSelectedVersion(versionId)
-    try {
-      const response = await WorkflowService.getWorkflowCanvas({
-        workflow_id: context?.workflowId || workflowId || '',
-        space_id: context?.spaceId || spaceId || '',
-        version: versionId === 'draft' ? undefined : versionId,
-      })
-      if (response.code === 200) {
-        const schemaString = response?.data?.workflow?.schema
-        if (!schemaString) {
-          console.warn(t('workflowCanvas.editor.historyVersionSchemaEmpty'))
-          return
-        }
-        try {
-          const parsed = typeof schemaString === 'string' ? JSON.parse(schemaString) : schemaString
-          historyService.stop()
-          editorRef.current?.document.clear()
-          editorRef.current?.document.fromJSON(parsed)
-          historyService.start()
-          // 加载后触发 fitView，让节点居中展示
-          setTimeout(() => {
-            try {
-              const bounds = editorRef.current?.document.root.bounds.pad(30)
-              if (bounds) {
-                editorRef.current?.playground.config.fitView(bounds)
-              }
-            } catch (e) {
-              // 忽略居中失败
-            }
-          }, 100)
-          // 切换成功后提示版本信息（先清空旧消息，再弹新消息）
-          Toast.destroyAll()
-          const versionDisplay = versionId === 'draft' ? t('workflowCanvas.ui.draft') : versionId
-          Toast.success({ content: t('workflowCanvas.ui.switchedToVersion', { version: versionDisplay }) })
-        } catch (e) {
-          console.error(t('workflowCanvas.editor.historySchemaParseFailed'), e)
-          historyService.start()
-        }
-      } else {
-        console.error(t('workflowCanvas.editor.fetchHistoryVersionFailed'), response)
-      }
-    } catch (err) {
-      console.error(t('workflowCanvas.editor.fetchHistoryVersionFailed'), err)
-    }
-  }
 
-  // 加载状态
   if (isLoading) {
     return <LoadingState />
   }
 
-  // 错误状态 - 只有在真正出错时才显示错误状态
   if (error) {
     return <ErrorState error={error instanceof Error ? error : error ? new Error(String(error)) : null} onRetry={() => window.location.reload()} />
   }
 
-  // 正常显示
   return (
     <div className="w-full h-full">
       <WorkflowCanvasWrapper>
         <DocFreeFeatureOverview>
           <FreeLayoutEditorProvider ref={editorRef} {...editorProps}>
             <ExecutionProvider>
-              {/* 自动打开节点详情面板 */}
+              <HistoryVersionHandler
+                editorRef={editorRef}
+                workflowId={context?.workflowId || workflowId}
+                spaceId={context?.spaceId || spaceId}
+                versionId={selectedVersion}
+              />
               {!isLoading && initialCanvasData && nodeIdFromUrl && <AutoOpenNodePanel nodeId={nodeIdFromUrl} />}
               <div className="w-full h-full" style={{ display: 'flex', height: '100%' }}>
-                {/* 左侧画布区域：在侧边面板打开时自动压缩 */}
                 <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                   <EditorContainer>
                     <EditorRenderer className="editor" />
                   </EditorContainer>
                 </div>
 
-                {/* 右侧固定宽度版本历史面板 */}
                 {showHistoryPanel && (
                   <HistoryPanel
                     title={t('workflowCanvas.editor.versionHistory')}

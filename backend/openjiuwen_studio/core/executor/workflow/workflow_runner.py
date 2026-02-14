@@ -13,7 +13,7 @@ from openjiuwen.core.common.logging import logger
 from openjiuwen.core.workflow.workflow import Workflow as InvokableWorkflow
 from openjiuwen.core.session.tracer.span import TraceWorkflowSpan
 from openjiuwen.core.session.stream import TraceSchema
-from openjiuwen.core.session.workflow import Session, create_workflow_session
+from openjiuwen.core.workflow import Session, create_workflow_session
 from openjiuwen.core.session.internal.workflow import WorkflowSession
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.context_engine import ModelContext, ContextEngine, ContextEngineConfig

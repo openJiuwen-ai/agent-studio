@@ -6,22 +6,20 @@ import { CreateOptimizationJobRequest, CaseCheckRequest, SaveJobDraftRequest } f
 interface CreateOptimizationJobParams {
   request: CreateOptimizationJobRequest
   workspaceId: string
-  userId: string
 }
 
 // 刷新优化任务详情的参数接口
 interface RefreshJobDetailParams {
   jobId: string
   workspaceId: string
-  userId: string
 }
 
 // 自优化相关的React Query hooks
 
 // 获取优化任务列表
-export const useOptimizationJobList = (idList?: string[], workspaceId?: string, userId?: string) => {
-  return useQuery(['selfOpt', 'jobList', idList, workspaceId, userId], () => SelfOptService.getJobList(idList || ['*'], workspaceId!, userId!), {
-    enabled: !!(workspaceId && userId), // 只有当workspaceId和userId都存在时才执行查询
+export const useOptimizationJobList = (idList?: string[], workspaceId?: string) => {
+  return useQuery(['selfOpt', 'jobList', idList, workspaceId], () => SelfOptService.getJobList(idList || ['*'], workspaceId!), {
+    enabled: !!workspaceId, // 只有当workspaceId存在时才执行查询
 
     // 🎯 禁用缓存，确保每次参数改变时都重新请求
     staleTime: 0, // 数据立即过期，每次参数改变时都重新请求
@@ -41,9 +39,9 @@ export const useOptimizationJobList = (idList?: string[], workspaceId?: string, 
 }
 
 // 获取优化任务详情
-export const useOptimizationJobDetail = (jobId?: string, workspaceId?: string, userId?: string) => {
-  return useQuery(['selfOpt', 'jobDetail', jobId, workspaceId, userId], () => SelfOptService.getJobDetail(jobId!, workspaceId!, userId!), {
-    enabled: !!(jobId && workspaceId && userId), // 只有当所有参数都存在时才执行查询
+export const useOptimizationJobDetail = (jobId?: string, workspaceId?: string) => {
+  return useQuery(['selfOpt', 'jobDetail', jobId, workspaceId], () => SelfOptService.getJobDetail(jobId!, workspaceId!), {
+    enabled: !!(jobId && workspaceId), // 只有当所有参数都存在时才执行查询
     staleTime: 30 * 1000, // 30秒内不重新获取
     cacheTime: 5 * 60 * 1000, // 缓存5分钟
     retry: 2,
@@ -58,7 +56,7 @@ export const useOptimizationJobDetail = (jobId?: string, workspaceId?: string, u
 export const useCreateOptimizationJob = () => {
   const queryClient = useQueryClient()
 
-  return useMutation(({ request, workspaceId, userId }: CreateOptimizationJobParams) => SelfOptService.createOptimizationJob(request, workspaceId, userId), {
+  return useMutation(({ request, workspaceId }: CreateOptimizationJobParams) => SelfOptService.createOptimizationJob(request, workspaceId), {
     onSuccess: (response: any) => {
       if (response.code === 200 || response.code === 0) {
         // 创建成功后，使任务列表缓存失效，触发重新获取
@@ -77,8 +75,8 @@ export const useDeleteOptimizationJob = () => {
   const queryClient = useQueryClient()
 
   return useMutation(
-    ({ jobId, workspaceId, userId, jobType = 'formal' }: { jobId: string; workspaceId: string; userId: string; jobType?: 'formal' | 'draft' }) =>
-      SelfOptService.deleteJob(jobId, workspaceId, userId, jobType),
+    ({ jobId, workspaceId, jobType = 'formal' }: { jobId: string; workspaceId: string; jobType?: 'formal' | 'draft' }) =>
+      SelfOptService.deleteJob(jobId, workspaceId, jobType),
     {
       onSuccess: (response: any, { jobId }: { jobId: string }) => {
         if (response.code === 200 || response.code === 0) {
@@ -114,12 +112,12 @@ export const useRefreshOptimizationJobList = () => {
   const queryClient = useQueryClient()
 
   return useMutation(
-    ({ idList, workspaceId, userId }: { idList?: string[]; workspaceId: string; userId: string }) =>
-      SelfOptService.getJobList(idList || ['*'], workspaceId, userId),
+    ({ idList, workspaceId }: { idList?: string[]; workspaceId: string }) =>
+      SelfOptService.getJobList(idList || ['*'], workspaceId),
     {
-      onSuccess: (response: any, { idList, workspaceId, userId }) => {
+      onSuccess: (response: any, { idList, workspaceId }) => {
         // 刷新成功后，更新缓存
-        queryClient.setQueryData(['selfOpt', 'jobList', idList, workspaceId, userId], response)
+        queryClient.setQueryData(['selfOpt', 'jobList', idList, workspaceId], response)
         console.log('优化任务列表刷新成功')
       },
       onError: (error: any) => {
@@ -133,10 +131,10 @@ export const useRefreshOptimizationJobList = () => {
 export const useRefreshOptimizationJobDetail = () => {
   const queryClient = useQueryClient()
 
-  return useMutation(({ jobId, workspaceId, userId }: RefreshJobDetailParams) => SelfOptService.getJobDetail(jobId, workspaceId, userId), {
-    onSuccess: (_response: any, { jobId, workspaceId, userId }: RefreshJobDetailParams) => {
+  return useMutation(({ jobId, workspaceId }: RefreshJobDetailParams) => SelfOptService.getJobDetail(jobId, workspaceId), {
+    onSuccess: (_response: any, { jobId, workspaceId }: RefreshJobDetailParams) => {
       // 刷新成功后，更新缓存
-      queryClient.invalidateQueries(['selfOpt', 'jobDetail', jobId, workspaceId, userId])
+      queryClient.invalidateQueries(['selfOpt', 'jobDetail', jobId, workspaceId])
       console.log('优化任务详情刷新成功')
     },
     onError: (error: any) => {
@@ -148,8 +146,8 @@ export const useRefreshOptimizationJobDetail = () => {
 // 保存优化任务草稿
 export const useSaveJobDraft = () => {
   return useMutation(
-    ({ data, workspaceId, userId, draftId }: { data: SaveJobDraftRequest; workspaceId: string; userId: string; draftId?: number }) =>
-      SelfOptService.saveJobDraft(data, workspaceId, userId, draftId),
+    ({ data, workspaceId, draftId }: { data: SaveJobDraftRequest; workspaceId: string; draftId?: number }) =>
+      SelfOptService.saveJobDraft(data, workspaceId, draftId),
     {
       onSuccess: (response: any) => {
         if (response.code === 200 || response.code === 0) {
@@ -164,15 +162,15 @@ export const useSaveJobDraft = () => {
 }
 
 // 获取草稿详情
-export const useJobDraftDetail = (draftId?: number, workspaceId?: string, userId?: string) => {
+export const useJobDraftDetail = (draftId?: number, workspaceId?: string) => {
   return useQuery(
-    ['selfOpt', 'draftDetail', draftId, workspaceId, userId],
+    ['selfOpt', 'draftDetail', draftId, workspaceId],
     async () => {
-      const response = await SelfOptService.getJobDraft(draftId!, workspaceId!, userId!)
+      const response = await SelfOptService.getJobDraft(draftId!, workspaceId!)
       return response
     },
     {
-      enabled: !!(draftId && workspaceId && userId), // 只有当所有参数都存在时才执行查询
+      enabled: !!(draftId && workspaceId), // 只有当所有参数都存在时才执行查询
       staleTime: 30 * 1000, // 30秒内不重新获取
       cacheTime: 5 * 60 * 1000, // 缓存5分钟
       retry: 2,
@@ -188,19 +186,18 @@ export const useJobDraftDetail = (draftId?: number, workspaceId?: string, userId
 export const useJobHistory = (
   jobId?: string,
   workspaceId?: string,
-  userId?: string,
   pageNum?: number,
   pageSize?: number,
   iterationRound?: number,
 ) => {
   return useQuery(
-    ['selfOpt', 'jobHistory', jobId, workspaceId, userId, pageNum, pageSize, iterationRound],
+    ['selfOpt', 'jobHistory', jobId, workspaceId, pageNum, pageSize, iterationRound],
     async () => {
-      const response = await SelfOptService.getJobHistory(jobId!, workspaceId!, userId!, pageNum!, pageSize!, iterationRound!)
+      const response = await SelfOptService.getJobHistory(jobId!, workspaceId!, pageNum!, pageSize!, iterationRound!)
       return response
     },
     {
-      enabled: !!(jobId && workspaceId && userId && pageNum !== undefined && pageSize !== undefined && iterationRound !== undefined), // 只有当所有参数都存在时才执行查询
+      enabled: !!(jobId && workspaceId && pageNum !== undefined && pageSize !== undefined && iterationRound !== undefined), // 只有当所有参数都存在时才执行查询
       staleTime: 30 * 1000, // 30秒内不重新获取
       cacheTime: 5 * 60 * 1000, // 缓存5分钟
       retry: 2,

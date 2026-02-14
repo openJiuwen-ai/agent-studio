@@ -22,7 +22,6 @@ export const numberRegistry: Partial<JsonSchemaTypeRegistry> = {
       disabled={props.readonly}
       hideButtons
       max={Number.MAX_VALUE}
-      min={Number.MIN_VALUE}
       {...props}
     />
   ),

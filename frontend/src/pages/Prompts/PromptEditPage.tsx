@@ -376,12 +376,12 @@ const PromptEditPage: React.FC = () => {
         setChatMessageMaxHeight('calc(100vh - 350px)')
       } else if (window.innerWidth < 2000) {
         // 中等屏幕：平板、14寸笔记本等
-        setVersionHistoryHeight('calc(100vh - 140px)')
-        setChatMessageMaxHeight('calc(100vh - 350px)')
+        setVersionHistoryHeight('calc(100vh - 120px)')
+        setChatMessageMaxHeight('calc(100vh - 200px)')
       } else {
         // 大屏幕：15寸以上笔记本、台式显示器
-        setVersionHistoryHeight('calc(100vh - 200px)')
-        setChatMessageMaxHeight('calc(100vh - 500px)')
+        setVersionHistoryHeight('calc(100vh - 120px)')
+        setChatMessageMaxHeight('calc(100vh - 400px)')
       }
     }
 
@@ -2119,7 +2119,7 @@ const PromptEditPage: React.FC = () => {
 
         if (version) {
           // 调用版本列表API
-          const response = await PromptService.getVersionList(id, { page_size: 20 })
+          const response = await PromptService.getVersionList(id, workspaceId, { page_size: 20 })
 
           if (response.code === 0) {
             const versionList = response.prompt_commit_infos
@@ -2458,6 +2458,7 @@ const PromptEditPage: React.FC = () => {
   }
 
   const deleteMessage = (index: number) => {
+    const updatedMessages = chatMessages.filter((_, i) => i !== index)
     setChatMessages(prev => prev.filter((_, i) => i !== index))
     // 同时清理对应的格式状态
     setMessageFormats(prev => {
@@ -2472,6 +2473,13 @@ const PromptEditPage: React.FC = () => {
       })
       return reindexed
     })
+
+    // 非对比模式下，删除消息后保存调试上下文
+    if (!isComparisonMode) {
+      saveDebugContext(updatedMessages, debugTraceInfo, undefined, undefined, parameters).catch(err => {
+        console.error('保存调试上下文失败:', err)
+      })
+    }
   }
 
   // 监听聊天消息变化，自动滚动到底部
@@ -2823,6 +2831,7 @@ const PromptEditPage: React.FC = () => {
       selectedModel,
       modelConfig,
       availableModels,
+      workspaceId,
       getPromptContentBySource,
       calculateSelectionIndices,
       setSnackbar,
@@ -2856,6 +2865,7 @@ const PromptEditPage: React.FC = () => {
     selectedModel,
     modelConfig,
     availableModels,
+    workspaceId,
     setSnackbar,
     setPromptMessages,
     setMessageInputValues,
@@ -2888,6 +2898,7 @@ const PromptEditPage: React.FC = () => {
     setAiReplyOptimizeDialogOpen,
     abortControllerRef,
     badcaseOptimizeStreamingRef,
+    workspaceId,
     optimizationSource,
     promptMessages,
     setPromptMessages,
@@ -3242,7 +3253,7 @@ const PromptEditPage: React.FC = () => {
       setParameters(prev => {
         const updatedParameters = prev.map(param => (param.name === paramName ? { ...param, value } : param))
 
-        // 在状态更新后触发自动保存
+        // 在状态更新后触发自动保存草稿（草稿保存成功后会统一调用 saveDebugContext，避免重复触发）
         setTimeout(() => {
           setHasUnsavedChanges(true)
           triggerAutoSave({ parameters: updatedParameters })
@@ -3279,7 +3290,7 @@ const PromptEditPage: React.FC = () => {
 
       {/* 自由对比模式 */}
       {isComparisonMode ? (
-        <div className="min-h-[calc(100vh-300px)]">
+        <div className="min-h-[calc(100vh-200px)]">
           {/* 动态列对比布局 */}
           <div
             className={`grid grid-cols-1 ${controlGroupCount === 1 ? 'xl:grid-cols-2' : controlGroupCount === 2 ? 'xl:grid-cols-3' : 'xl:grid-cols-4'} gap-0`}
@@ -3289,7 +3300,7 @@ const PromptEditPage: React.FC = () => {
               <div
                 key={group.id}
                 ref={el => (groupContainerRefs.current[group.id] = el)}
-                className="bg-white border border-gray-200 flex flex-col h-[calc(100vh-320px)]"
+                className="bg-white border border-gray-200 flex flex-col h-[calc(100vh-250px)]"
               >
                 <div className="p-4 border-b border-gray-200 bg-gray-50">
                   <div className="flex items-center justify-between">
@@ -4670,6 +4681,7 @@ const PromptEditPage: React.FC = () => {
         onClose={handleCloseAssociationsDialog}
         associations={selectedAssociations}
         versionName={selectedVersionName}
+        workspaceId={workspaceId}
       />
     </div>
   )

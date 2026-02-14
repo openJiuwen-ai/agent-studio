@@ -14,7 +14,6 @@
 * 操作系统：
   * Ubuntu：最低 Ubuntu 20.04，推荐 Ubuntu 22.04 (Jammy) 及以上
     > **注意**：Ubuntu 官方与主流软件源已停止支持 Ubuntu 20.04 (Focal) 及以下版本系统。
-  * EulerOS：Huawei Cloud EulerOS 2.0及以上
 
 * 软件（安装方法详见下文）	 
   * Git 2.40及以上 
@@ -35,21 +34,74 @@
 
 * 下载 <a href="https://openjiuwen-ci.obs.cn-north-4.myhuaweicloud.com/agentstudio/setup_scripts/setup_scripts_linux_v2.zip" target="_blank" rel="nofollow noopener noreferrer"> 安装包脚本</a>，安装包脚本包含以下文件：
   * `setup.sh`：主安装脚本，串联整个安装流程
-  * `check_curl.sh`：检查并安装 curl
-  * `check_git.sh`：检查并安装 Git
-  * `check_nodejs.sh`：检查并安装 Node.js（通过 NVM）
-  * `check_python.sh`：检查并安装 Python 3.11
-  * `fetch_codes.sh`：克隆 agent-studio 代码仓库
+  * `utils.sh`：公共工具
+  * `check_curl.sh`：检查 curl 是否安装，未安装则安装 curl
+  * `check_git.sh`：检查 Git 是否安装，未安装则安装 Git
+  * `check_nodejs.sh`：检查 Node.js 是否安装，未安装则通过 NVM 安装 Node.js
+  * `check_python.sh`：检查 Python 是否安装，未安装则安装 Python
+  * `check_mysql.sh`：检查 MySQL 是否安装，未安装则安装 MySQL
+  * `config_mysql.sh`：配置 MySQL（创建数据库、用户等）
+  * `fetch_codes.sh`：克隆 agent-studio 代码仓库（支持指定分支）
+  * `user_config.sh`：用户配置文件（可选，包含代理、NVM 镜像、pip 源、npm 源配置）
 
-#### 2. 运行安装脚本
+#### 2. 配置代理、pip 源、NVM 镜像和 npm 源（可选）
 
-* 进入脚本目录：
+如果您的网络环境需要通过代理访问外网，或者需要使用自定义的 pip 源、NVM Node.js 镜像或 npm 源，可以在 `user_config.sh` 文件中进行配置：
+
+* 打开 `user_config.sh` 文件，修改以下变量：
 
   ```bash
-  cd setup_scripts_linux
+  # 代理配置（可选）
+  HTTP_PROXY=""   # HTTP 代理地址，例如 http://127.0.0.1:7890
+  HTTPS_PROXY=""  # HTTPS 代理地址，例如 http://127.0.0.1:7890
+  SSL_VERIFY=""   # 可选：true/false（对应 git http.sslVerify）
+
+  # pip 源配置（可选）
+  PIP_INDEX_URL=""      # pip 源地址，例如 https://pypi.tuna.tsinghua.edu.cn/simple
+  PIP_TRUSTED_HOST=""   # 信任的主机地址，例如 pypi.tuna.tsinghua.edu.cn
+
+  # NVM Node.js 下载镜像（可选，安装 Node.js 时使用）
+  NVM_NODEJS_ORG_MIRROR=""  # 例如 https://npmmirror.com/mirrors/node
+
+  # npm 源配置（可选）
+  NPM_REGISTRY=""       # npm 源地址，例如 https://registry.npmmirror.com
   ```
 
-* 运行主安装脚本（脚本会自动检查和修复执行权限）：
+* 代理配置说明：
+  * **不需要代理**：保持变量为空即可（脚本会自动跳过代理配置）
+  * **需要代理**：填写完整代理地址，例如 `http://127.0.0.1:7890`
+  * **带认证的代理**：支持用户名密码，例如 `http://user:pass@proxy.example.com:8080`
+  * **SSL 验证**：`SSL_VERIFY` 设置为 `true` 或 `false`，`true` 表示开启 Git 的 SSL 证书验证，`false` 为不开启。
+
+* pip 源配置说明：
+  * **不需要配置 pip 源**：保持 `PIP_INDEX_URL` 和 `PIP_TRUSTED_HOST` 为空即可（脚本会自动跳过 pip 源配置，使用默认源）
+  * **需要配置 pip 源**：必须同时设置 `PIP_INDEX_URL` 和 `PIP_TRUSTED_HOST` 两个参数
+  * **常用国内镜像源示例**：
+    * 清华大学：`https://pypi.tuna.tsinghua.edu.cn/simple`，信任主机：`pypi.tuna.tsinghua.edu.cn`
+    * 阿里云：`https://mirrors.aliyun.com/pypi/simple/`，信任主机：`mirrors.aliyun.com`
+    * 中科大：`https://pypi.mirrors.ustc.edu.cn/simple/`，信任主机：`pypi.mirrors.ustc.edu.cn`
+
+* NVM Node.js 镜像说明：
+  * **不需要配置**：保持 `NVM_NODEJS_ORG_MIRROR` 为空，使用 nvm 默认源（nodejs.org）
+  * **需要加速或无法访问默认源**：可配置为 `https://npmmirror.com/mirrors/node` 等镜像，供 check_nodejs.sh 安装 Node.js 时使用。
+
+* npm 源配置说明：
+  * **不需要配置 npm 源**：保持 `NPM_REGISTRY` 为空即可（脚本会自动跳过 npm 源配置，使用默认源）
+  * **需要配置 npm 源**：设置 `NPM_REGISTRY` 为所需的 npm 源地址
+  * **常用国内镜像源示例**：
+    * 淘宝镜像：`https://registry.npmmirror.com`
+    * 腾讯云：`https://mirrors.cloud.tencent.com/npm/`
+    * 华为云：`https://repo.huaweicloud.com/repository/npm/`
+
+#### 3. 运行安装脚本
+
+* 进入脚本目录，赋予执行权限：
+
+  ```bash
+  chmod +x *.sh
+  ```
+
+* 运行主安装脚本：
 
   ```bash
   # 默认使用 MySQL 数据库
@@ -59,25 +111,19 @@
   ./setup.sh --db_type=sqlite
   ```
 
-  > **注意**：如果遇到权限问题，可以手动赋予执行权限：`chmod +x *.sh`，或使用 `bash setup.sh` 执行。
-
-* 脚本会自动执行以下步骤：
-  1. 检查并安装基础工具（curl、git、nodejs、python）
-  2. 拉取 agent-studio 代码仓库
-  3. 生成 AES 密钥
-  4. 配置 .env 文件（根据 --db_type 参数设置数据库类型）
-  5. 部署后端服务（创建虚拟环境、安装依赖、启动服务）
-  6. 部署前端服务（安装依赖、启动服务）
 
 * 脚本执行完成后，会输出后端和前端服务的PID、日志文件路径、前端页面访问地址，在浏览器中访问输出的页面访问地址即可进入openJiuwen界面。
 
  ![image](../images/一键安装运行完成截图linux.png)
 
-#### 3. 脚本常用参数说明
+#### 4. 脚本常用参数说明
 
   ```bash
   # 查看前后端服务状态和访问地址
   ./setup.sh --status
+
+  # 启动后端和前端服务
+  ./setup.sh --start
   
   # 停止后端和前端服务
   ./setup.sh --stop
@@ -265,14 +311,6 @@
    MILVUS_PORT=19530
    MILVUS_COLLECTION_NAME=memory_vector
 
-   # 记忆相关配置（如果不使用记忆功能，可以不提供下面的参数）
-   EMBEDDING_MODEL_DIMENTION=1024
-   EMBED_API_BASE=""
-   EMBED_MODEL_NAME=""
-   EMBED_API_KEY=""
-   EMBED_TIMEOUT=5
-   EMBED_MAX_RETRIES=1
-
    # 配置代码沙箱服务（样例，启动代码执行沙箱服务详情请见[问题二：如何启用沙箱功能]）
    CODE_SANDBOX_URL=http://localhost:8188/run
 
@@ -293,13 +331,7 @@
    | **MEMORY_DATA_PATH**          | 记忆数据存储路径,默认值：memory-data    | `memory-data`                         |
    | **MILVUS_HOST**                 | Milvus服务的主机地址                     | `127.0.0.1`                                                                    |
    | **MILVUS_PORT**                 | Milvus服务的端口                       | `19530`                                                                    |
-   | **MILVUS_COLLECTION_NAME**                | Milvus服务的数据库名                     | `memory_vector`                                                                    
-   | **EMBEDDING_MODEL_DIMENTION**         | 向量模型的维度，根据EMBED_MODEL_NAME选择的模型确定 | `1024`                                                                    |                  
-   | **EMBED_API_BASE**                    | 向量模型的接口地址                         | `https://example.com/embedding_model`            |            
-   | **EMBED_MODEL_NAME**                  | 向量模型的名称                           | `text-embedding-model`                                                       |
-   | **EMBED_API_KEY**                     | 向量模型的API密钥                        | `sk-xxx`                                                                  |
-   | **EMBED_TIMEOUT**                     | 向量模型的最大等待时间（单位秒），默认值`60`             | `5`                                                                     |
-   | **EMBED_MAX_RETRIES**                 | 向量模型请求失败时的最大重试次数，默认值`3`              | `1`                                                                    |
+   | **MILVUS_COLLECTION_NAME**                | Milvus服务的数据库名                     | `memory_vector`
    | **CODE_SANDBOX_URL**                 | 代码沙箱服务地址                          | `http://localhost:8188/run`                                                                    |
    | **VITE_PLUGIN_SERVICE_URL**                 | 插件服务地址                            | `http://localhost:8185`                                                                    |
    | **VITE_PLUGIN_CONFIG_PATH**                 | 前端使用的插件服务配置文件                     | `/config.json`                                                                    |
@@ -311,11 +343,24 @@
   uv venv
   uv sync
   ```
+* 执行数据库版本标识命令，确认当前数据库版本：
+  ```bash
+  # Agent数据库
+  alembic -n alembic_mysql_agent stamp head
+  alembic -n alembic_mysql_ops stamp head
+
+  # SQLite数据库
+  alembic -n alembic_sqlite_agent stamp head
+  alembic -n alembic_sqlite_ops stamp head
+  ```
+
+  > 详细说明：以上命令用于标识当前数据库已是最新版本，方便后续进行数据库操作。需要分别对agent和ops数据库执行。如使用MySQL需执行alembic -n alembic_mysql_agent stamp head和alembic -n alembic_mysql_ops stamp head，关于alembic的使用方法参考[DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md](../../../../backend/DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md)
 
   > **注意**：如果持续卡死超过 20 分钟，请按下 “Ctrl + C”，尝试修改本目录下 “pyproject.toml” 文件中 [[tool.uv.index]] 的 url 值，切换成其他可用源后，再重新执行 “uv sync”。
 
   > **注意**：若执行 `uv sync` 失败，可尝试：`uv sync --native-tls`  强制使用系统原生TLS库（解决HTTPS下载兼容问题）
 
+* 创建日志目录并启动后端服务
   ```bash
   mkdir -p logs/run
   source .venv/bin/activate
@@ -424,10 +469,9 @@
 
   ![获取api_base和model_name](../images/embed_api_base_and_model_name.png)
 
-* 记录API地址（对应 EMBED_API_BASE）、model参数（对应 EMBED_MODEL_NAME）。
+* 记录API地址、model参数。
 
-* 点击 "API Key 管理"，按照官方界面引导获取 API Key（对应 EMBED_API_KEY）。
-> **注意**：在配置 *EMBEDDING_MODEL_DIMENTION* 之后启用了记忆，请不要再次修改，否则记忆功能会无法使用。embedding模型的其他配置也不建议修改，可能会影响效果。
+* 点击 "API Key 管理"，按照官方界面引导获取 API Key。
 
 <a id="linux-sandbox"></a>
 ### 问题二：如何启用沙箱功能
@@ -464,26 +508,42 @@
 
    其中 `ENABLE_LINUX_SANDBOX` 表示是否启动 bwrap 沙箱，`PYTHON_SANDBOX_URL` 和 `JS_SANDBOX_URL` 为前面两步启动的 Python 和 JS 服务 URL。
 
-   如果需要启动 bwrap 沙箱，请将 `ENABLE_LINUX_SANDBOX` 设置为1，并修改 `sandbox_server/gateway/openjiuwen_sandbox_gateway/conf/sandbox_config.yaml`，确保 Python 解释器和 Js 解释器以及相关依赖都包的路径都在 `mount` 配置中，以及 `PATH` 环境变量中包含了 Python 解释器和 Js 解释器所在路径。示例如下：
+   如果需要启动 bwrap 沙箱，请将 `ENABLE_LINUX_SANDBOX` 设置为1，并在 `sandbox_server/gateway/openjiuwen_sandbox_gateway/conf/sandbox_config.yaml` 中按需修改安全配置。目前支持 `seccomp` 、`namespace` 、`mount` 文件系统等配置参数。请确保 Python 解释器和 Js 解释器以及相关依赖都包的路径都在 `mount` 配置中，以及 `PATH` 环境变量中包含了 Python 解释器和 Js 解释器所在路径。示例如下：
 
    ```
+   seccomp: # whitelist mode
+     allow:
+       x86_64: ["epoll_wait", "getcwd", "wait4", "pread64", "set_tid_address", "prlimit64", "capget", "pipe2", "eventfd2", "pkey_alloc", "madvise", "sysinfo", "readlink", "geteuid", "getegid", "statx", "access", "clone", "arch_prctl", "clone3", "execve", "open", "lstat", "stat", "newfstatat", "lseek", "getdents64", "write", "close", "openat", "read", "futex", "mmap", "brk", "mprotect", "munmap", "rt_sigreturn", "mremap", "getgid", "getuid", "getpid", "getppid", "gettid", "exit", "exit_group", "rt_sigaction", "sched_yield", "set_robust_list", "get_robust_list", "rseq", "clock_gettime", "gettimeofday", "nanosleep", "epoll_create1", "epoll_ctl", "clock_nanosleep", "pselect6", "time", "rt_sigprocmask", "sigaltstack", "getrandom", "mkdirat", "mkdir", "socket", "connect", "bind", "listen", "accept", "sendto", "recvfrom", "getsockname", "recvmsg", "getpeername", "ppoll", "uname", "sendmsg", "sendmmsg", "fstat", "fcntl", "fstatfs", "poll", "epoll_pwait", 'ioctl']
+       aarch64: ["statx", "getcwd", "readlinkat", "madvise", "sysinfo", "clone", "eventfd2", "pipe2", "fcntl", "prlimit64", "set_tid_address", "faccessat", "execve", "write", "close", "openat", "read", "lseek", "getdents64", "futex", "mmap", "brk", "mprotect", "munmap", "rt_sigreturn", "rt_sigprocmask", "sigaltstack", "mremap", "getuid", "getgid", "geteuid", "getegid", "getpid", "getppid", "gettid", "exit", "exit_group", "rt_sigaction", "sched_yield", "get_robust_list", "set_robust_list", "rseq", "epoll_create1", "clock_gettime", "gettimeofday", "nanosleep", "epoll_ctl", "clock_nanosleep", "pselect6", "timerfd_create", "timerfd_settime", "timerfd_gettime", "getrandom", "mkdirat", "socket", "connect", "bind", "listen", "accept", "sendto", "recvfrom", "recvmsg", "getsockname", "getpeername", "ppoll", "uname", "sendmmsg", "newfstatat", "fstat", "fstatfs", "epoll_pwait", "ioctl"]
+
+   namespace:
+     user: False
+     net: True
+     pid: True
+     ipc: True
+     uts: True
+     cgroup: True
+
    mount:
-   [
-     {src: '/lib', dst: '/lib', mode: 'read'},
-     {src: '/lib64', dst: '/lib64', mode: 'read'},
-     {src: '/usr/bin', dst: '/usr/bin', mode: 'read'},
-     {src: '/usr/lib', dst: '/usr/lib', mode: 'read'},
-     {src: '/usr/lib64', dst: '/usr/lib64', mode: 'read'},
-     {src: '/usr/share/nodejs', dst: '/usr/share/nodejs', mode: 'read'},
-   ]
+     [
+       {src: '/lib', dst: '/lib', mode: 'read'},
+       {src: '/lib64', dst: '/lib64', mode: 'read'},
+       {src: '/usr/bin', dst: '/usr/bin', mode: 'read'},
+       {src: '/usr/lib', dst: '/usr/lib', mode: 'read'},
+       {src: '/usr/lib64', dst: '/usr/lib64', mode: 'read'},
+       {src: '/usr/share/nodejs', dst: '/usr/share/nodejs', mode: 'read'},
+     ]
 
    sandbox:
      type: bubblewrap
      path: bwrap
 
+   # Please ensure that both the Python and JavaScript interpreters
+   # are already in the mount directory, and either provide their full
+   # paths or add those paths to the PATH environment variable.
    interpreter:
      python_path: python3
-     node_path: node
+     javascript_path: node
 
    environment:
      PATH: /bin:/usr/bin

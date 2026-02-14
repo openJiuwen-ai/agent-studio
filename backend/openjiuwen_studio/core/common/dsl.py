@@ -198,6 +198,7 @@ class FieldInfo(BaseModel):
     cn_field_name: str = Field(default="")
     required: bool = Field(default=False)
     default_value: Any = Field(default="")
+    type: str = Field(default="string")
 
 
 class QuestionerConfig(BaseModel):

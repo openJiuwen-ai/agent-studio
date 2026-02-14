@@ -81,7 +81,7 @@ export class EventConverter {
         this.finalOutputs ||
         (this.streamMessageOutput
           ? {
-              responseContent: this.streamMessageOutput,
+              response: this.streamMessageOutput,
             }
           : Object.fromEntries(this.nodeOutputs)),
     }
@@ -277,7 +277,7 @@ export class EventConverter {
     if (finishNodeId && finishNodeId.toString().startsWith('end_')) {
       if (this.streamMessageOutput) {
         this.finalOutputs = {
-          responseContent: this.streamMessageOutput,
+          response: this.streamMessageOutput,
         }
       } else {
         this.finalOutputs = outputs || {}

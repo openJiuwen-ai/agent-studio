@@ -149,7 +149,7 @@ export const useVersionHistory = ({
     // 调用API获取版本列表
     setVersionListLoading(true)
     try {
-      const response = await PromptService.getVersionList(id, { page_size: 20 })
+      const response = await PromptService.getVersionList(id, workspaceId!, { page_size: 20 })
 
       if (response.code === 0) {
         // 成功获取版本列表
@@ -497,7 +497,7 @@ export const useVersionHistory = ({
       setRevertConfirmOpen(false)
 
       // 调用从版本中恢复API
-      const response = await PromptService.revertToVersion(id!, userId!, {
+      const response = await PromptService.revertToVersion(id!, workspaceId!, {
         commit_version_reverting_from: selectedVersionData.version,
       })
 

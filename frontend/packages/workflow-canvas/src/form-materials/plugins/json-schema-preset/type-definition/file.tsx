@@ -14,6 +14,8 @@ import { useTranslation } from '../../../../i18n'
 
 import { type JsonSchemaTypeRegistry } from '../types'
 
+export const ENABLE_FILE_TYPE = false
+
 const loadFileUploadService = async () => {
   try {
     const module = await import('../../../../components/testrun/runtime')
@@ -306,8 +308,6 @@ export const fileRegistry: Partial<JsonSchemaTypeRegistry> = {
     return subtype ? `File<${subtype.label}>` : 'File'
   },
   conditionRule: {
-    [ConditionPresetOp.EQ]: { type: 'file' },
-    [ConditionPresetOp.NEQ]: { type: 'file' },
     [ConditionPresetOp.IS_EMPTY]: null,
     [ConditionPresetOp.IS_NOT_EMPTY]: null,
   },

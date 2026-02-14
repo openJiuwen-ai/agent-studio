@@ -533,29 +533,28 @@ const SubmitVersionDialog: React.FC<SubmitVersionDialogProps> = ({
                   value={versionNumber}
                   onChange={e => {
                     const value = e.target.value
-                    if (value.length <= 50) {
-                      setVersionNumber(value)
+                    setVersionNumber(value)
 
-                      // 先验证格式
-                      const formatError = validateVersionNumber(value)
-                      if (formatError) {
-                        setVersionNumberError(formatError)
+                    // 先验证格式
+                    const formatError = validateVersionNumber(value)
+                    if (formatError) {
+                      setVersionNumberError(formatError)
+                      return
+                    }
+
+                    // 如果格式正确，检查版本号是否小于等于当前版本号
+                    if (latestVersion && value.trim()) {
+                      const comparison = compareVersions(value, latestVersion)
+                      if (comparison <= 0) {
+                        setVersionNumberError(t('components.prompts.submitVersionDialog.versionNumberMustBeGreater'))
                         return
                       }
-
-                      // 如果格式正确，检查版本号是否小于等于当前版本号
-                      if (latestVersion && value.trim()) {
-                        const comparison = compareVersions(value, latestVersion)
-                        if (comparison <= 0) {
-                          setVersionNumberError('版本号不能小于等于当前版本号')
-                          return
-                        }
-                      }
-
-                      // 没有错误
-                      setVersionNumberError('')
                     }
+
+                    // 没有错误
+                    setVersionNumberError('')
                   }}
+                  inputProps={{ maxLength: 50 }}
                   placeholder={t('components.prompts.submitVersionDialog.versionNumberPlaceholder')}
                   className="bg-white/80"
                   error={!!versionNumberError}
@@ -578,11 +577,8 @@ const SubmitVersionDialog: React.FC<SubmitVersionDialogProps> = ({
                   multiline
                   rows={4}
                   value={versionDescription}
-                  onChange={e => {
-                    if (e.target.value.length <= 200) {
-                      setVersionDescription(e.target.value)
-                    }
-                  }}
+                  onChange={e => setVersionDescription(e.target.value)}
+                  inputProps={{ maxLength: 200 }}
                   placeholder={t('components.prompts.submitVersionDialog.versionDescriptionPlaceholder')}
                   className="bg-white/80"
                   size="small"

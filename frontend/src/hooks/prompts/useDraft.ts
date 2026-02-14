@@ -40,6 +40,7 @@ interface UseDraftProps {
     cost_ms?: number,
     lastResponse?: DebugStreamingResponse,
     customParameters?: any[],
+    customTools?: any[],
   ) => Promise<void>
   // 状态更新函数
   setDraftSavedTime: (time: Date | null) => void
@@ -239,27 +240,32 @@ export const useDraft = ({
           tools: customData?.tools || tools,
         }
 
-        const response = await PromptService.saveDraft(promptId, userId!, workspaceId!, editorData)
+        const response = await PromptService.saveDraft(promptId, workspaceId!, editorData)
 
         if (response.code === 0) {
           const now = new Date()
           setDraftSavedTime(now)
           setIsDraftEdited(true) // 保存草稿后标记为有未提交的更改
 
-          // 自动保存草稿成功后，保存调试上下文
-          if (chatMessages.length > 0) {
-            try {
-              // 将 ChatMessage[] 转换为 saveDebugContext 期望的格式
-              const messagesForContext = chatMessages.map(msg => ({
-                type: msg.type as 'user' | 'ai' | 'system',
-                content: msg.content || '',
-                timestamp: msg.timestamp || new Date().toISOString(),
-                userInput: (msg as any).userInput,
-              }))
-              await saveDebugContext(messagesForContext, debugTraceInfo, undefined, undefined, editorData.parameters)
-            } catch (contextError) {
-              console.error('❌ 自动保存时保存调试上下文失败:', contextError)
-            }
+          // 自动保存草稿成功后，统一保存调试上下文（含 mock_variables、mock_tools；无聊天消息时也保存，以便修改变量值/工具默认值时能持久化）
+          try {
+            const messagesForContext = chatMessages.map(msg => ({
+              type: msg.type as 'user' | 'ai' | 'system',
+              content: msg.content || '',
+              timestamp: msg.timestamp || new Date().toISOString(),
+              userInput: (msg as any).userInput,
+              ...(msg.type === 'ai' && {
+                toolCalls: (msg as any).toolCalls,
+                debug_id: (msg as any).debug_id,
+                reasoningContent: (msg as any).reasoningContent,
+                cost_ms: (msg as any).cost_ms,
+                input_tokens: (msg as any).input_tokens,
+                output_tokens: (msg as any).output_tokens,
+              }),
+            }))
+            await saveDebugContext(messagesForContext, debugTraceInfo, undefined, undefined, editorData.parameters, editorData.tools)
+          } catch (contextError) {
+            console.error('❌ 自动保存时保存调试上下文失败:', contextError)
           }
         } else {
           console.error('❌ [AUTO-SAVE-DRAFT] 自动保存失败:', response.msg)
@@ -295,6 +301,12 @@ export const useDraft = ({
   // 触发自动保存的函数（带防抖）
   const triggerAutoSave = useCallback(
     (customData?: CustomDraftData, forceSave = false) => {
+      console.log('📤 [DRAFT] triggerAutoSave 被调用', {
+        hasCustomData: !!customData,
+        hasCustomTools: !!customData?.tools,
+        customToolsLen: customData?.tools?.length,
+        customToolsPreview: customData?.tools?.slice(0, 2).map((t: any) => ({ name: t?.name, defaultValue: t?.defaultValue })),
+      })
       // 如果 customData 中有 promptMessages，说明这是用户操作导致的（API 加载时不会传递 customData）
       const isUserOperation = !!customData?.promptMessages
 
@@ -311,12 +323,18 @@ export const useDraft = ({
 
       // 清除之前的定时器
       if (timerRef.current) {
+        console.log('🔄 [DRAFT] 清除之前的自动保存定时器（新一次 triggerAutoSave 调用）', { hasCustomTools: !!customData?.tools })
         clearTimeout(timerRef.current)
         timerRef.current = null
       }
 
       // 设置新的定时器，1秒后自动保存
       const timer = setTimeout(() => {
+        console.log('⏱️ [DRAFT] 防抖定时器执行', {
+          hasCustomData: !!customData,
+          hasCustomTools: !!customData?.tools,
+          customToolsLen: customData?.tools?.length,
+        })
         // 在Normal模式下，如果没有提供自定义参数，动态获取最新的参数列表
         // 使用 customData.promptMessages（如果存在）或闭包中的 promptMessages
         const messagesToUse = customData?.promptMessages || promptMessages

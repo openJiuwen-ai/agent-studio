@@ -37,7 +37,7 @@ from openjiuwen.core.retrieval.simple_knowledge_base import (
 )
 from openjiuwen.core.runner import Runner
 from openjiuwen.core.session import InteractiveInput
-from openjiuwen.core.foundation.llm import Model
+from openjiuwen.core.foundation.llm import Model, ModelClientConfig, ModelRequestConfig
 
 import openjiuwen_studio.core.manager.agent as mgr
 from openjiuwen_studio.core.common.status_code import StatusCode
@@ -58,6 +58,25 @@ from openjiuwen_studio.memory_engine_start import MemoryEngineManager
 from openjiuwen_studio.schemas import AgentGetVersion
 from .agent import Agent
 from .agent_dl_adapter import AgentDlAdapter
+
+
+class _LLMInvokeModelWrapper:
+    """Wraps an openjiuwen Model so invoke() always receives a model name when missing.
+
+    AgenticRetriever calls llm.invoke(...) without model=; this wrapper injects model=model_name
+    so the API request always has a valid model parameter (no core change required).
+    """
+
+    __slots__ = ("_model", "_model_name")
+
+    def __init__(self, model: Model, model_name: str) -> None:
+        self._model = model
+        self._model_name = model_name or ""
+
+    async def invoke(self, *args, **kwargs) -> Any:
+        if self._model_name and kwargs.get("model") is None:
+            kwargs = {**kwargs, "model": self._model_name}
+        return await self._model.invoke(*args, **kwargs)
 
 
 def get_memory_engine():
@@ -529,14 +548,30 @@ class AgentRunner:
                 llm_client = None
                 model_name = None
                 if retrieval_config.use_graph:
-                    # 从 agent_config 中获取 LLM 配置
+                    # 从 agent_config 中获取 LLM 配置（使用 ModelClientConfig + ModelRequestConfig，保证基础/Agentic 模式均可用）
                     if hasattr(agent_config, 'model') and hasattr(agent_config.model, 'model_info'):
                         model_info = agent_config.model.model_info
-                        llm_client = Model(
-                            model_provider=agent_config.model.model_provider,
-                            model_info=model_info
+                        model_name = (
+                            getattr(model_info, "model_type", None)
+                            or getattr(model_info, "model_name", None)
+                            or getattr(model_info, "model", None)
+                            or ""
                         )
-                        model_name = model_info.model_name
+                        client_config = ModelClientConfig(
+                            client_provider=agent_config.model.model_provider,
+                            api_key=getattr(model_info, "api_key", "") or "",
+                            api_base=getattr(model_info, "api_base", "") or "",
+                            timeout=getattr(model_info, "timeout", 60.0) or 60.0,
+                            verify_ssl=False,
+                            ssl_cert=None,
+                        )
+                        request_config = ModelRequestConfig(
+                            model_name=model_name,
+                            temperature=getattr(model_info, "temperature", 0.7),
+                            top_p=getattr(model_info, "top_p", 0.9),
+                        )
+                        raw_llm = Model(client_config, request_config)
+                        llm_client = _LLMInvokeModelWrapper(raw_llm, model_name) if model_name else raw_llm
                         logger.debug(f"[KB_RETRIEVAL] Created LLM client for graph/agentic retrieval")
 
                 # 为每个知识库创建实例

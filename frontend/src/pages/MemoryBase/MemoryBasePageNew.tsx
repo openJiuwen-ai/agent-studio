@@ -7,7 +7,7 @@ import DeleteConfirmationDialog from '@/components/Common/DeleteConfirmationDial
 import { useUIStore } from '@/stores/useUIStore';
 import { useMemoryBaseStore } from '@/stores/useMemoryBaseStore';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { useEmbeddingModels, MemoryBaseService } from '@test-agentstudio/api-client';
+import { useEmbeddingModels, MemoryBaseService, useModels } from '@test-agentstudio/api-client';
 import { ENV_CONFIG } from '@/config/environment';
 import { MemoryBase } from '@/types/memoryBase';
 import { CommonPageLayout, SearchInput } from '@/components/Common/common-page';
@@ -50,6 +50,7 @@ const MemoryBasePageNew: React.FC = () => {
 
   const spaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID;
   const { data: embeddingModelsResponse, isLoading: embeddingModelsLoading } = useEmbeddingModels({ spaceId });
+  const { data: LLMModelsResponse, isLoading: LLMModelsLoading} = useModels({spaceId})
   const embeddingModelMap = useMemo(() => {
     const items = embeddingModelsResponse?.items || [];
     return items.reduce((acc, m) => {
@@ -57,6 +58,15 @@ const MemoryBasePageNew: React.FC = () => {
       return acc;
     }, {} as Record<string, { name: string; isActive: boolean }>);
   }, [embeddingModelsResponse?.items]);
+  const LLMModelMap = useMemo(() => {
+    const items = LLMModelsResponse?.items || [];
+    const transformedItems = items.map(item => ({
+      model_id: Number(item.id),
+      model_name: item.name,
+      is_active: item.isActive
+    }));
+    return transformedItems
+  }, [LLMModelsResponse?.items]);
 
   const { memoryBaseViewMode, setMemoryBaseViewMode } = useUIStore();
   const viewType: ViewType = memoryBaseViewMode === 'list' ? 'table' : 'grid';
@@ -117,27 +127,22 @@ const MemoryBasePageNew: React.FC = () => {
     }
   }, [location.pathname, user?.spaceId, setPage, pageSize, fetchMemoryBases, searchMemoryBases, searchTerm]);
 
-  // 搜索词由空变为非空时，重置到第一页
-  useEffect(() => {
-    const cur = debouncedSearchTerm.trim();
-    const prev = prevSearchTermRef.current.trim();
-    if (cur !== '' && prev === '') {
-      setPage(1);
-    }
-    prevSearchTermRef.current = debouncedSearchTerm;
-  }, [debouncedSearchTerm, setPage]);
-
   // 根据 debouncedSearchTerm、currentPage、pageSize 拉数
   useEffect(() => {
     if (isResettingRef.current) return;
     const spaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID;
     const term = debouncedSearchTerm.trim();
     if (term) {
-      searchMemoryBases(spaceId, term, currentPage, pageSize);
+      // 搜索时始终从第1页开始
+      if (currentPage !== 1) {
+        setPage(1);
+      } else {
+        searchMemoryBases(spaceId, term, 1, pageSize);
+      }
     } else {
       fetchMemoryBases(spaceId, currentPage, pageSize);
     }
-  }, [debouncedSearchTerm, currentPage, pageSize, user?.spaceId, fetchMemoryBases, searchMemoryBases]);
+  }, [debouncedSearchTerm, currentPage, pageSize, user?.spaceId, fetchMemoryBases, searchMemoryBases, setPage]);
 
   const handlePagerChange = useCallback(
     (page: number, newPageSize: number) => {
@@ -286,6 +291,7 @@ const MemoryBasePageNew: React.FC = () => {
         onCreateClick={handleCreateMemoryBase}
         onEdit={handleEditMemoryBase}
         onDelete={handleDeleteMemoryBase}
+        llmModels={LLMModelMap}
         embeddingModelMap={embeddingModelMap}
         embeddingModelsLoading={embeddingModelsLoading}
       />

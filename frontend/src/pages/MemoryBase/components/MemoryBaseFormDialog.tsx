@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { ExternalLink, X } from 'lucide-react';
 import { MemoryBase, CreateMemoryBaseRequest, UpdateMemoryBaseRequest } from '@/types/memoryBase';
 import { useMemoryBaseStore } from '@/stores/useMemoryBaseStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { ENV_CONFIG } from '@/config/environment';
-import { useEmbeddingModels, useTestEmbeddingModel, useToggleEmbeddingModelStatus, useModels } from '@test-agentstudio/api-client';
+import { useEmbeddingModels, useTestEmbeddingModel, useToggleEmbeddingModelStatus, useModels, useTestModel, useToggleModelStatus } from '@test-agentstudio/api-client';
 import { MemoryBaseService } from '@test-agentstudio/api-client';
 import { validateMemoryBaseName } from '../utils/validation';
 import { IconButton, Tooltip } from '@mui/material';
@@ -191,7 +191,8 @@ const MemoryBaseFormDialog: React.FC<MemoryBaseFormDialogProps> = ({ open, memor
   // 测试和禁用 embedding 模型的 hooks
   const testEmbeddingModelMutation = useTestEmbeddingModel();
   const toggleEmbeddingModelStatusMutation = useToggleEmbeddingModelStatus();
-
+  const testLLMModelMutation = useTestModel();
+  const toggleLLMModelStatusMutation = useToggleModelStatus();
   // 获取所有记忆库名称用于重复检查
   useEffect(() => {
     if (open && user?.spaceId) {
@@ -297,9 +298,9 @@ const MemoryBaseFormDialog: React.FC<MemoryBaseFormDialogProps> = ({ open, memor
     if (!memoryBase) {
       // 验证Embedding模型
       if (embeddingModels.length === 0) {
-        newErrors.embedding_model_config_id = t('memoryBases.form.noEmbeddingModelsError');
+        newErrors.embedding_model_config_id = t('memoryBases.form.noEmbeddingModels');
       } else if (!formData.embedding_model_config_id || formData.embedding_model_config_id === 0) {
-        newErrors.embedding_model_config_id = t('memoryBases.form.selectEmbeddingModelError');
+        newErrors.embedding_model_config_id = t('memoryBases.form.selectEmbeddingModel');
       } else {
         const selectedEmbeddingModel = embeddingModels.find(
           model => parseInt(model.id) === formData.embedding_model_config_id
@@ -311,7 +312,7 @@ const MemoryBaseFormDialog: React.FC<MemoryBaseFormDialogProps> = ({ open, memor
 
       // 验证LLM模型
       if (modelsList.length === 0) {
-        newErrors.llm_model_config_id = t('memoryBases.form.noLlmModelsError');
+        newErrors.llm_model_config_id = t('memoryBases.form.noLlmModels');
       } else if (!formData.llm_model_config_id || formData.llm_model_config_id === 0) {
         newErrors.llm_model_config_id = t('memoryBases.form.selectLlmModelError');
       } else {
@@ -319,7 +320,7 @@ const MemoryBaseFormDialog: React.FC<MemoryBaseFormDialogProps> = ({ open, memor
           model => model.model_id === formData.llm_model_config_id
         );
         if (!selectedLlmModel || !selectedLlmModel.is_active) {
-          newErrors.llm_model_config_id = t('memoryBases.form.llmModelUnavailable');
+          newErrors.llm_model_config_id = t('memoryBases.form.modelUnavailable');
         }
       }
     } else {
@@ -329,7 +330,7 @@ const MemoryBaseFormDialog: React.FC<MemoryBaseFormDialogProps> = ({ open, memor
           model => model.model_id === formData.llm_model_config_id
         );
         if (!selectedLlmModel || !selectedLlmModel.is_active) {
-          newErrors.llm_model_config_id = t('memoryBases.form.llmModelUnavailable');
+          newErrors.llm_model_config_id = t('memoryBases.form.modelUnavailable');
         }
       }
     }
@@ -377,7 +378,57 @@ const MemoryBaseFormDialog: React.FC<MemoryBaseFormDialogProps> = ({ open, memor
           } catch (toggleError) {
             console.error('禁用Embedding模型失败:', toggleError);
           }
+          
+          // 在测试失败后清除相关的表单字段和错误
+          setFormData(prev => ({ 
+            ...prev, 
+            embedding_model_config_id: 0 // 将embedding模型选择置为空
+          }));
+          
+          // 更新错误状态，移除embedding模型相关的错误
+          setErrors(prev => ({ 
+            ...prev, 
+            embedding_model_config_id: undefined 
+          }));
+          
+          // 重新抛出错误以便上层处理
           throw new Error(t('memoryBases.form.embeddingModelTestFailed') + ': ' + (testError.message || testError));
+        }
+
+        const selectedModelId = formData.llm_model_config_id.toString();
+        try {
+          // 测试 embedding 模型
+          await testLLMModelMutation.mutateAsync({
+            id: selectedModelId,
+            prompt: t('memoryBases.form.testText'),
+            spaceId: user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID
+          });
+        } catch (testError: any) {
+          // 测试失败，禁用该模型
+          console.error('LLM 模型测试失败，正在禁用模型:', testError);
+          try {
+            await toggleLLMModelStatusMutation.mutateAsync({
+              id: selectedModelId,
+              spaceId: user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID
+            });
+          } catch (toggleError) {
+            console.error('禁用LLM模型失败:', toggleError);
+          }
+          
+          // 在测试失败后清除相关的表单字段和错误
+          setFormData(prev => ({ 
+            ...prev, 
+            llm_model_config_id: 0 // 将embedding模型选择置为空
+          }));
+          
+          // 更新错误状态，移除embedding模型相关的错误
+          setErrors(prev => ({ 
+            ...prev, 
+            llm_model_config_id: undefined 
+          }));
+          
+          // 重新抛出错误以便上层处理
+          throw new Error(t('memoryBases.form.modelTestError') + ': ' + (testError.message || testError));
         }
 
         // 创建记忆库
@@ -416,6 +467,7 @@ const MemoryBaseFormDialog: React.FC<MemoryBaseFormDialogProps> = ({ open, memor
       }
     } finally {
       setIsLoading(false);
+      setErrors({});
     }
   };
 
@@ -498,13 +550,16 @@ const MemoryBaseFormDialog: React.FC<MemoryBaseFormDialogProps> = ({ open, memor
                     {isLoadingEmbeddingModels ? (
                       <div className="text-sm text-gray-500">{t('memoryBases.form.loadingModels')}</div>
                     ) : embeddingModels.length === 0 ? (
-                      <div className="text-sm text-red-500">
-                        {t('memoryBases.form.noModels')}{' '}
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm text-red-500">
+                          {t('memoryBases.form.noModels')}{' '}
+                        </p>
                         <Link
                           to="/dashboard/models"
-                          className="text-blue-600 hover:text-blue-800 underline"
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                         >
-                          {t('memoryBases.form.createModelLink')}
+                          {t('memoryBases.form.createEmbeddingModelLink')}
+                          <ExternalLink className="w-4 h-4" />
                         </Link>
                       </div>
                     ) : (
@@ -567,13 +622,16 @@ const MemoryBaseFormDialog: React.FC<MemoryBaseFormDialogProps> = ({ open, memor
                     {isLoadingLlmModels ? (
                       <div className="text-sm text-gray-500">{t('memoryBases.form.loadingModels')}</div>
                     ) : modelsList.length === 0 ? (
-                      <div className="text-sm text-red-500">
-                        {t('memoryBases.form.noLlmModels')}{' '}
+                      <div className="flex flex-col gap-2">
+                        <p className="text-sm text-red-500">
+                          {t('memoryBases.form.noLlmModels')}{' '}
+                        </p>
                         <Link
                           to="/dashboard/models"
-                          className="text-blue-600 hover:text-blue-800 underline"
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                         >
-                          {t('memoryBases.form.createModelLink')}
+                          {t('memoryBases.form.createLLMModelLink')}
+                          <ExternalLink className="w-4 h-4" />
                         </Link>
                       </div>
                     ) : (

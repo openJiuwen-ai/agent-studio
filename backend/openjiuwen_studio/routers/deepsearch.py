@@ -1,5 +1,6 @@
 from functools import wraps
 from typing import Dict, Any, Callable
+import httpx
 from httpx import HTTPStatusError
 from fastapi import APIRouter, Depends, status, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -9,6 +10,7 @@ from openjiuwen_studio.core.manager.convertor.components.llm import get_model_co
 from openjiuwen_studio.core.manager.login_manager.user import get_current_user
 from openjiuwen_studio.core.manager.login_manager.space import check_user_space
 from openjiuwen_studio.core.common.exceptions import DeepSearchClientError
+from openjiuwen_studio.core.config import settings
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.schemas.deepsearch import (
     DeepSearchRequest,
@@ -273,4 +275,50 @@ async def report_convert(
     payload = request.model_dump()
     _ = check_user_space(payload["space_id"], current_user)
     return await client.report_converts(payload)
+
+
+@deepsearch_router.get("/heartbeat")
+async def deepsearch_heartbeat():
+    """检查 DeepSearch 服务是否可用"""
+    try:
+        # 检查配置
+        if not settings.deepsearch_agent_host or not settings.deepsearch_agent_port:
+            return {
+                "status": "unavailable",
+                "message": "DeepSearch service not configured"
+            }
+
+        # 直接向 DeepSearch 服务发送健康检查请求
+        base_url = f"http://{settings.deepsearch_agent_host}:{settings.deepsearch_agent_port}"
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            response = await client.get(f"{base_url}/api/health")
+            response.raise_for_status()
+
+        # 检查响应内容
+        data = response.json()
+        if data.get("status") == "healthy":
+            return {
+                "status": "available",
+                "message": "DeepSearch service is available"
+            }
+        else:
+            return {
+                "status": "unavailable",
+                "message": "DeepSearch service is not healthy"
+            }
+    except httpx.ConnectError:
+        return {
+            "status": "unavailable",
+            "message": "Cannot connect to DeepSearch service"
+        }
+    except httpx.TimeoutException:
+        return {
+            "status": "unavailable",
+            "message": "DeepSearch service timeout"
+        }
+    except Exception as e:
+        return {
+            "status": "unavailable",
+            "message": f"DeepSearch service error: {str(e)}"
+        }
 

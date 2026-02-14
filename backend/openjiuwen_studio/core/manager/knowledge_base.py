@@ -79,7 +79,7 @@ from openjiuwen_studio.core.manager.repositories.knowledge_base_repository impor
     KBDocument,
 )
 
-_CURR_INDEX_TYPE = os.getenv("INDEX_MANAGER_TYPE", "chroma")
+_CURR_INDEX_TYPE = os.getenv("INDEX_MANAGER_TYPE", "milvus")
 
 # ==================== GraphRAG 配置和模型管理 ====================
 
@@ -667,7 +667,9 @@ def knowledge_base_update(req: KnowledgeBaseUpdateRequest, current_user: dict) -
     _ = check_user_space(req.space_id, current_user)
 
     # 2. 检查知识库是否存在
-    kb_get = KnowledgeBaseGet(space_id=req.space_id, kb_id=req.kb_id)
+    kb_get = KnowledgeBaseGet(
+        space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+    )
     get_result = knowledge_base_repository.knowledge_base_get(kb_get)
     if get_result.code == status.HTTP_404_NOT_FOUND or not get_result.data:
         logger.warning(f"[KB_UPDATE] Knowledge base not found - ID: {req.kb_id}, User: {user_id}")
@@ -708,7 +710,13 @@ def knowledge_base_update(req: KnowledgeBaseUpdateRequest, current_user: dict) -
     # 如果 desc 是空字符串，转换为 None 以便正确清空数据库字段
     description_value = req.desc if req.desc else None
     update_result = knowledge_base_repository.knowledge_base_update(
-        KBDetails(space_id=req.space_id, kb_id=req.kb_id), name=req.name, description=description_value
+        KBDetails(
+            space_id=req.space_id,
+            kb_id=req.kb_id,
+            index_manager_type=_CURR_INDEX_TYPE,
+        ),
+        name=req.name,
+        description=description_value,
     )
 
     if update_result.code != status.HTTP_200_OK:
@@ -1021,7 +1029,7 @@ def _check_index_connection() -> Union[ResponseModel, None]:
     Returns:
         _type_: `Union[ResponseModel, None]`
     """
-    index_manager_type = os.getenv("INDEX_MANAGER_TYPE", "chroma")
+    index_manager_type = _CURR_INDEX_TYPE
     if index_manager_type == "milvus":
         logger.info(f"[KB_CREATE] Checking Milvus connection...")
         milvus_connected, milvus_error = _check_milvus_connection()
@@ -1081,7 +1089,7 @@ def _create_index_manager() -> Union[MilvusIndexer, ChromaIndexer]:
     Returns:
         MilvusIndexer | ChromaIndexer
     """
-    index_manager_type = os.getenv("INDEX_MANAGER_TYPE", "chroma")
+    index_manager_type = _CURR_INDEX_TYPE
     if index_manager_type == "chroma":
         data_dir = _get_chroma_data_dir()
         return ChromaIndexer(
@@ -1201,7 +1209,7 @@ def _create_vector_store(collection_name: str) -> Union[MilvusVectorStore, Chrom
     Returns:
         MilvusVectorStore | ChromaVectorStore
     """
-    index_manager_type = os.getenv("INDEX_MANAGER_TYPE", "chroma")
+    index_manager_type = _CURR_INDEX_TYPE
 
     if index_manager_type == "chroma":
         data_dir = _get_chroma_data_dir()
@@ -1956,7 +1964,11 @@ def knowledge_base_search(req: KnowledgeBaseSearchRequest, current_user: dict) -
 
     # 2. 执行查询（带分页）
     search_result = knowledge_base_repository.knowledge_base_search(
-        space_id=req.space_id, query=req.query, page=page, page_size=page_size
+        space_id=req.space_id,
+        query=req.query,
+        page=page,
+        page_size=page_size,
+        index_manager_type=_CURR_INDEX_TYPE,
     )
 
     if search_result.code != status.HTTP_200_OK:

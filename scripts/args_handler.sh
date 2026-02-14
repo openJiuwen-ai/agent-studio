@@ -144,31 +144,31 @@ Examples:
           If .env file exists -> start the existing service.
 
   2. Start all services with specified .env file
-     ./$(basename "$0") up -f .envs/env.<*****>
+     ./$(basename "$0") up -f .envs/env.<Instance ID>
 
   3. Force start a new service (ignore existing .env)
      ./$(basename "$0") up -n
 
   4. Start all services with specified .env file
-     ./$(basename "$0") up -f .envs/env.<*****>
+     ./$(basename "$0") up -f .envs/env.<Instance ID>
  
   5. Start specified modules with current .env file
      ./$(basename "$0") milvus mysql up
 
   6. Start specified modules with specified .env file
-     ./$(basename "$0") milvus mysql up -f .envs/env.<*****>
+     ./$(basename "$0") milvus mysql up -f .envs/env.<Instance ID>
  
   7. Pause all running services with current .env file
      ./$(basename "$0") stop
 
   8. Pause all running services with specified .env file
-     ./$(basename "$0") stop -f .envs/env.<*****>
+     ./$(basename "$0") stop -f .envs/env.<Instance ID>
  
   9. Shutdown all services completely with current .env file
      ./$(basename "$0") down
 
   10. Shutdown all services completely with specified .env file
-     ./$(basename "$0") down -f .envs/env.<*****> 
+     ./$(basename "$0") down -f .envs/env.<Instance ID>
 EOF
     exit 0
 }

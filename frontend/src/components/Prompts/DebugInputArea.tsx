@@ -1,13 +1,16 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { TextField, Button, IconButton, Tooltip } from '@mui/material'
 import { Layers, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { handleInputEnterKey } from '@/utils/prompts/utils'
 
+const DEBOUNCE_MS = 150
+
 export interface DebugInputAreaProps {
   inputMessage: string
   onInputChange: (value: string) => void
-  onSend: () => void
+  /** 发送时可将当前输入值传入，避免依赖父组件 state 导致卡顿 */
+  onSend: (value?: string) => void
   onClear: () => void
   onMultiRunClick: () => void
   isProcessing: boolean
@@ -17,6 +20,65 @@ export interface DebugInputAreaProps {
 const DebugInputArea: React.FC<DebugInputAreaProps> = ({ inputMessage, onInputChange, onSend, onClear, onMultiRunClick, isProcessing, isReadOnlyMode }) => {
   const { t } = useTranslation()
   const [inputHeight, setInputHeight] = useState('100px') // 输入框高度
+  const [localValue, setLocalValue] = useState(inputMessage)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 仅当父组件清空（如点击清空）时同步到本地，避免覆盖用户正在输入的内容
+  useEffect(() => {
+    if (inputMessage === '') {
+      setLocalValue('')
+    }
+  }, [inputMessage])
+
+  const flushDebounce = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
+  }, [])
+
+  const debouncedOnInputChange = useCallback(
+    (value: string) => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null
+        onInputChange(value)
+      }, DEBOUNCE_MS)
+    },
+    [onInputChange],
+  )
+
+  // 输入变化：只更新本地 state，防抖同步到父组件，减少父组件重渲染
+  const handleChange = useCallback(
+    (value: string) => {
+      if (isReadOnlyMode) return
+      setLocalValue(value)
+      debouncedOnInputChange(value)
+    },
+    [isReadOnlyMode, debouncedOnInputChange],
+  )
+
+  const handleSendClick = useCallback(() => {
+    if (isReadOnlyMode) return
+    flushDebounce()
+    onInputChange(localValue)
+    onSend(localValue)
+  }, [isReadOnlyMode, localValue, onInputChange, onSend, flushDebounce])
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (isReadOnlyMode) return
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault()
+        flushDebounce()
+        onInputChange(localValue)
+        onSend(localValue)
+        return
+      }
+      handleInputEnterKey(isReadOnlyMode, (v: string) => handleChange(v), () => handleSendClick())(e)
+    },
+    [isReadOnlyMode, localValue, onInputChange, onSend, handleChange, handleSendClick, flushDebounce],
+  )
 
   // 响应式计算输入框高度
   useEffect(() => {
@@ -122,14 +184,9 @@ const DebugInputArea: React.FC<DebugInputAreaProps> = ({ inputMessage, onInputCh
             fullWidth
             multiline
             placeholder={t('prompts.promptEdit.promptDebug.inputPlaceholder')}
-            value={inputMessage}
-            onChange={e => {
-              if (isReadOnlyMode) {
-                return
-              }
-              onInputChange(e.target.value)
-            }}
-            onKeyDown={handleInputEnterKey(isReadOnlyMode, onInputChange, onSend) as React.KeyboardEventHandler<HTMLDivElement>}
+            value={localValue}
+            onChange={e => handleChange(e.target.value)}
+            onKeyDown={handleKeyDown as React.KeyboardEventHandler<HTMLDivElement>}
             disabled={isProcessing || isReadOnlyMode}
             sx={{
               backgroundColor: 'white',
@@ -166,12 +223,7 @@ const DebugInputArea: React.FC<DebugInputAreaProps> = ({ inputMessage, onInputCh
             <Button
               size="small"
               variant="contained"
-              onClick={() => {
-                if (isReadOnlyMode) {
-                  return
-                }
-                onSend()
-              }}
+              onClick={handleSendClick}
               disabled={isProcessing || isReadOnlyMode}
               startIcon={
                 <svg

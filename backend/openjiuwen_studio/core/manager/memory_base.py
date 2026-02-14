@@ -568,3 +568,40 @@ def memory_base_search(
         message="search memory base success",
         data=response_data.model_dump()
     )
+
+
+@with_exception_handling
+def memory_base_get_model_active_status(
+        mdb_id: str
+) -> tuple[int, int]:
+    """通过mdb_id获取LLM和embedding模型的is_active状态"""
+    logger.info(f"[MB_MODEL_STATUS] Getting model active status for memory base: {mdb_id}")
+
+    # 1. 从数据库获取记忆库信息
+    get_result = memory_base_repository.memory_base_get_by_id(mdb_id)
+    
+    if get_result.code != status.HTTP_200_OK or not get_result.data:
+        logger.error(f"[MB_MODEL_STATUS] Memory base not found: {mdb_id}")
+        raise ValueError(f"Memory base not found (Scope ID: {mdb_id})")
+    
+    mdb_data = get_result.data
+    embedding_model_config_id = mdb_data.get("embedding_model_config_id")
+    llm_model_config_id = mdb_data.get("llm_model_config_id")
+    space_id = mdb_data.get("space_id")
+    
+    db = SessionLocal()
+    try:
+        # 2. 获取embedding模型的is_active状态
+        embed_repo = EmbeddingModelConfigRepository(db)
+        embed_model = embed_repo.get_by_id(embedding_model_config_id)
+        embedding_active = embed_model.is_active
+        
+        # 3. 获取LLM模型的is_active状态
+        manager = ModelConfigManager(db)
+        llm_model = manager.get_config_by_id(int(llm_model_config_id), space_id)
+        llm_active = llm_model.is_active
+        
+        logger.info(f"[MB_MODEL_STATUS] Model active status retrieved successfully for memory base: {mdb_id}")
+        return llm_active, embedding_active
+    finally:
+        db.close()

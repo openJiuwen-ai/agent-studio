@@ -88,7 +88,6 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
   className = '',
   messageFormats,
   onToggleMessageFormat,
-  completedMessages,
   expandedReasoningMessages,
   onToggleReasoningExpanded,
   expandedToolCallMessages,
@@ -564,10 +563,10 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
                     </div>
                   )}
 
-                  {/* 消息控制按钮 */}
-                  {completedMessages.has(index) && message.content !== '......' && editingMessageIndex !== index && (
+                  {/* 消息控制按钮 - 从消息出现即展示（含 AI 输出过程中），编辑时隐藏 */}
+                  {editingMessageIndex !== index && (
                     <div
-                      className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} border-t ${message.type === 'user' ? 'border-blue-400/30' : 'border-gray-100'}`}
+                      className={`flex items-center ${message.type === 'user' ? 'justify-end' : 'justify-start'} border-t ${message.type === 'user' ? 'border-blue-400/30' : 'border-gray-100'}`}
                       style={{ 
                         gap: 'clamp(0.125rem, 0.5vw, 0.1875rem)',
                         padding: 'clamp(0.375rem, 1vw, 0.4375rem) clamp(0.5rem, 1.5vw, 0.625rem) clamp(0.25rem, 0.75vw, 0.4375rem)',
@@ -742,7 +741,7 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
 
                       {/* 删除按钮 */}
                       {onDeleteMessage && (
-                        <div className="relative">
+                        <div className="relative flex items-center">
                           <Tooltip title={t('components.prompts.chatMessageArea.deleteMessage')} arrow>
                             <Button
                               ref={deleteConfirmIndex === index ? deleteButtonRef : null}
@@ -761,10 +760,7 @@ const ChatMessageArea: React.FC<ChatMessageAreaProps> = ({
                                 minHeight: 'clamp(20px, 3vw, 22px)',
                                 padding: 'clamp(2px, 0.5vw, 3px)',
                                 color: message.type === 'user' ? 'rgba(255,255,255,0.8)' : '#9ca3af',
-                                '&:hover': {
-                                  backgroundColor: message.type === 'user' ? 'rgba(255,255,255,0.1)' : '#f3f4f6',
-                                  color: message.type === 'user' ? 'rgba(255,255,255,1)' : '#6b7280',
-                                },
+                                '&:hover': { backgroundColor: message.type === 'user' ? 'rgba(255,255,255,0.1)' : '#f3f4f6' },
                               }}
                             >
                               <Trash2 style={{ width: 'clamp(0.625rem, 1.5vw, 0.6875rem)', height: 'clamp(0.625rem, 1.5vw, 0.6875rem)' }} />

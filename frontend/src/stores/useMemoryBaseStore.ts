@@ -75,7 +75,6 @@ export const useMemoryBaseStore = create<MemoryBaseStore>()(
             page_size: size,
           }
           const response = await MemoryBaseService.getMemoryBases(request)
-          console.log(response)
           // 转换API响应的MemoryBaseItem格式为前端使用的MemoryBase格式
           const memoryBases: MemoryBase[] = response.data.items.map((item: MemoryBaseItem) => ({
             mdb_id: item.mdb_id,
@@ -95,8 +94,8 @@ export const useMemoryBaseStore = create<MemoryBaseStore>()(
           set({
             memoryBases,
             total: response.data.total,
-            currentPage: response.data.page,
-            pageSize: response.data.size,
+            currentPage: response.data.page || page,
+            pageSize: response.data.size || size, // 统一分页参数
             isLoading: false,
           })
         } catch (error) {
@@ -126,8 +125,8 @@ export const useMemoryBaseStore = create<MemoryBaseStore>()(
             space_id: item.space_id,
             embedding_model_config_id: item.embedding_model_config_id,
             llm_model_config_id: item.llm_model_config_id,
-            created_at: new Date(item.create_time * 1000).toISOString(), // 时间戳转换为ISO字符串
-            updated_at: new Date(item.update_time * 1000).toISOString(),
+            created_at: item.created_at, // 时间戳转换为ISO字符串
+            updated_at: item.updated_ad,
             created_by: '',
             memoryCount: 0,
             size: 0,
@@ -136,8 +135,8 @@ export const useMemoryBaseStore = create<MemoryBaseStore>()(
           set({
             memoryBases,
             total: response.data.total,
-            currentPage: response.data.page,
-            pageSize: response.data.page_size,
+            currentPage: response.data.page || page, // 容错：优先用返回值，无则用入参
+            pageSize: response.data.page_size || size, // 统一分页参数
             isSearching: false,
           })
         } catch (error) {

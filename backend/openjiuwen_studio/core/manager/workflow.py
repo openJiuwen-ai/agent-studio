@@ -34,6 +34,7 @@ from openjiuwen_studio.schemas.space import SpaceAWPQuery
 from openjiuwen_studio.core.manager.reference_extractor import extract_workflow_references, \
     check_referenced_dependencies
 from openjiuwen_studio.core.manager.repositories.reference_repository import reference_repository
+from openjiuwen_studio.core.manager.repositories.prompt_relation_repository import prompt_relation_repository
 from openjiuwen_studio.core.common.exceptions import BaseError
 from openjiuwen_studio.core.common.exceptions import JiuWenComponentException
 from openjiuwen_studio.core.manager.model_manager.managers.model_config_manager import ModelConfigManager
@@ -41,7 +42,6 @@ from openjiuwen_studio.core.manager.model_manager.managers.model_config_manager 
 # 生成随机字符串用于节点ID
 random_id = ''.join(random.choice('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_') for _ in range(5))
 
-# 国际化文本
 DEFAULT_WORKFLOW_TEXTS_ZH = {
     "start_title": "开始",
     "end_title": "结束",
@@ -102,9 +102,7 @@ def get_default_workflow_schema():
                     "title": texts["end_title"],
                     "inputs": {
                         "inputParameters": {
-                            "result": {
-                                "type": "ref",
-                            }
+                            "result": {}
                         }
                     },
                     "streaming": False
@@ -113,9 +111,6 @@ def get_default_workflow_schema():
         ],
         "edges": []
     }
-
-
-DEFAULT_WORKFLOW_SCHEMA = get_default_workflow_schema()
 
 
 def with_exception_handling(func: Callable) -> Callable:
@@ -291,7 +286,8 @@ def workflow_create(
     workflow_id = str(uuid.uuid4())
     current_time = milliseconds()
 
-    inputs, outputs = convert.extract_inputs_and_outputs_from_canvas(DEFAULT_WORKFLOW_SCHEMA)
+    workflow_schema = get_default_workflow_schema()
+    inputs, outputs = convert.extract_inputs_and_outputs_from_canvas(workflow_schema)
 
     workflow = WorkflowBaseDBPd(
         workflow_id=workflow_id,
@@ -302,7 +298,7 @@ def workflow_create(
         space_id=req.space_id,
         create_time=current_time,
         update_time=current_time,
-        schema=json.dumps(DEFAULT_WORKFLOW_SCHEMA),
+        schema=json.dumps(workflow_schema),
         input_parameters=inputs,
         output_parameters=outputs
     )
@@ -947,6 +943,19 @@ def workflow_meta_update(
             f"{sync_result.data['failed_count']} failed"
         )
 
+    # 6. 同步更新 prompt_relation 表中该工作流关联记录的 name（id 格式为 workflow_id&node_id）
+    if req.name is not None:
+        pr_result = prompt_relation_repository.update_member_name_in_prompt_relation(
+            space_id=req.space_id,
+            member_type="WORKFLOW",
+            member_id=req.workflow_id,
+            new_name=req.name,
+        )
+        if pr_result.code == status.HTTP_200_OK:
+            logger.info(f"Synced workflow name in prompt_relation: {pr_result.message}")
+        else:
+            logger.warning(f"Sync workflow name in prompt_relation failed: {pr_result.message}")
+
     res_data = WorkflowResponseUpdate(
         workflow_id=req.workflow_id,
         success=True
@@ -1529,18 +1538,22 @@ def workflow_version_list(
 # @with_exception_handling
 def get_upload_url(
         req: dict,
+        current_user: dict,
         minio_client: Minio
 ) -> ResponseModel:
     """获取文件上传自签名URL"""
+    space_id = req.get("space_id")
     object_key = req.get("object_key")
 
-    if not object_key:
+    if not all([space_id, object_key]):
         return ResponseModel(
             code=status.HTTP_400_BAD_REQUEST,
-            message="Missing required fields: object_key"
+            message="Missing required fields: object_key or space_id"
         )
+    # 1. 校验用户是否有权限访问该space
+    _ = check_user_space(space_id, current_user)
 
-    # 3. 生成 MinIO 上传 URL
+    # 2. 生成 MinIO 上传 URL
     bucket_name = settings.minio_bucket
 
     if not minio_client.bucket_exists(bucket_name):
@@ -1566,18 +1579,22 @@ def get_upload_url(
 # @with_exception_handling
 def get_download_url(
         req: dict,
+        current_user: dict,
         minio_client: Minio
 ) -> ResponseModel:
     """获取文件上传自签名URL"""
+    space_id = req.get("space_id")
     object_key = req.get("object_key")
 
-    if not object_key:
+    if not all([space_id, object_key]):
         return ResponseModel(
             code=status.HTTP_400_BAD_REQUEST,
-            message="Missing required fields: object_key"
+            message="Missing required fields: object_key or space_id"
         )
+    # 1. 校验用户是否有权限访问该space
+    _ = check_user_space(space_id, current_user)
 
-    # 3. 生成 MinIO 下载 URL
+    # 2. 生成 MinIO 下载 URL
     bucket_name = settings.minio_bucket
 
     try:

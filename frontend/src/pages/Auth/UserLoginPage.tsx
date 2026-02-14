@@ -20,6 +20,7 @@ import LanguageDropdown from '@/components/Common/LanguageDropdown.tsx'
 interface FormData {
   username: string // 邮箱字段（所有界面都有）
   password?: string // 密码字段（登录/注册界面）
+  confirmPassword?: string // 确认密码字段（注册界面）
   newPassword?: string // 新密码字段（忘记密码界面）
   verifyCode?: string // 验证码字段（注册/忘记密码界面）
 }
@@ -28,6 +29,22 @@ interface LoginInfo {
   remainingAttempts: number,
   isLocked: boolean,
   lockEndTime: number
+}
+
+const PASSWORD_MIN_LENGTH = 6
+const PASSWORD_MAX_LENGTH = 20
+
+const validatePasswordStrength = (value?: string) => {
+  if (!value) return true
+  const hasDigit = /\d/.test(value)
+  const hasLower = /[a-z]/.test(value)
+  const hasUpper = /[A-Z]/.test(value)
+  const hasSpecial = /[^\w]/.test(value)
+  const classCount = [hasDigit, hasLower, hasUpper, hasSpecial].filter(Boolean).length
+  if (classCount < 2) {
+    return '密码需包含数字/小写字母/大写字母/特殊字符中至少 2 种'
+  }
+  return true
 }
 
 const accountLockStorage = {
@@ -171,6 +188,7 @@ const UserLoginPage: React.FC = () => {
     defaultValues: {
       username: '',
       password: '',
+      confirmPassword: '',
       newPassword: '',
       verifyCode: '',
     },
@@ -327,9 +345,9 @@ const UserLoginPage: React.FC = () => {
   // 获取验证码处理函数
   const handleGetVerifyCode = async () => {
     // 获取当前表单值
-    const { username, password } = getValues()
+    const { username, password, confirmPassword } = getValues()
     // 账号密码都已经输入，才能获取验证码
-    const isValid = username && password
+    const isValid = username && password && confirmPassword && password === confirmPassword
 
     if (!isValid) return
     try {
@@ -635,8 +653,8 @@ const UserLoginPage: React.FC = () => {
   const handleRegister = async (data: FormData) => {
     const registerRequest = {
       username: data.username,
-      password: data.password,
-      verifyCode: data.verifyCode,
+      password: data.password ?? '',
+      verifyCode: data.verifyCode ?? '',
       grant_type: 'password',
     }
     try {
@@ -822,12 +840,12 @@ const UserLoginPage: React.FC = () => {
 
   // 判断获取验证码按钮是否可点击
   const isVerifyCodeBtnDisabled = () => {
-    const { username, password, newPassword } = getValues()
+    const { username, password, confirmPassword, newPassword } = getValues()
     // 倒计时中禁用，或输入不完整禁用
     if (isCountdownActive) return true
 
     if (activeTab === 'register') {
-      return !username || !password
+      return !username || !password || !confirmPassword || password !== confirmPassword
     } else if (activeTab === 'forgot') {
       return !username || !newPassword
     }
@@ -948,13 +966,14 @@ const UserLoginPage: React.FC = () => {
                           ? t('auth.register.passwordPlaceholder')
                           : t('auth.forgotPassword.newPasswordPlaceholder'),
                     minLength: {
-                      value: 6,
+                      value: PASSWORD_MIN_LENGTH,
                       message: t('auth.common.minPasswordLength'),
                     },
                     maxLength: {
-                      value: 20,
+                      value: PASSWORD_MAX_LENGTH,
                       message: t('auth.common.maxPasswordLength'),
                     },
+                    validate: validatePasswordStrength,
                   })}
                   type="password"
                   id={activeTab === 'forgot' ? 'newPassword' : 'password'}
@@ -969,6 +988,31 @@ const UserLoginPage: React.FC = () => {
                 />
                 <p className="mt-1 text-sm text-red-600">{errors.password?.message || errors.newPassword?.message}</p>
               </div>
+
+              {activeTab === 'register' && (
+                <div>
+                  <input
+                    {...register('confirmPassword', {
+                      required: t('auth.register.confirmPasswordRequired'),
+                      minLength: {
+                        value: PASSWORD_MIN_LENGTH,
+                        message: t('auth.common.minPasswordLength'),
+                      },
+                      maxLength: {
+                        value: PASSWORD_MAX_LENGTH,
+                        message: t('auth.common.maxPasswordLength'),
+                      },
+                      validate: value =>
+                        value === getValues('password') || t('auth.register.passwordsNotMatch'),
+                    })}
+                    type="password"
+                    id="confirmPassword"
+                    className={inputFieldClass}
+                    placeholder={t('auth.register.confirmPasswordPlaceholder')}
+                  />
+                  <p className="mt-1 text-sm text-red-600">{errors.confirmPassword?.message}</p>
+                </div>
+              )}
 
               {/* 验证码输入框 - 注册/忘记密码显示 */}
               {(activeTab === 'register' || activeTab === 'forgot') && (

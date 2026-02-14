@@ -44,7 +44,6 @@ export const inferVariableType = (variablePath: string, availableVariables: any[
         return 'string'
       }
     } catch (error) {
-      // 降级到手动遍历
     }
   }
 
@@ -91,7 +90,7 @@ export const checkIfObjectType = (type: any): boolean => {
 
   if (type.constructor && type.constructor.name === 'ObjectType') return true
 
-  if (type.properties || typeof type.getProperties === 'function') return true
+  if (type.type === 'object' && (type.properties || typeof type.getProperties === 'function')) return true
 
   return false
 }
@@ -107,7 +106,6 @@ export const getPropertiesFromType = (type: any): any => {
       const result = type.getProperties()
       return result
     } catch (error) {
-      // 获取属性失败
     }
   }
 
@@ -130,6 +128,17 @@ export const inferTypeFromAST = (ast: any): string => {
     return 'string'
   }
 
+  if (ast.type && typeof ast.type === 'string') {
+    const typeValue = ast.type
+    if (['date-time', 'file', 'string', 'number', 'integer', 'boolean', 'array', 'map'].includes(typeValue)) {
+      return typeValue
+    }
+    if (typeValue === 'object' && ast.properties) {
+      return 'object'
+    }
+    return typeValue
+  }
+
   if (ast.kind) {
     const kindToTypeMap: Record<string, string> = {
       String: 'string',
@@ -144,12 +153,12 @@ export const inferTypeFromAST = (ast: any): string => {
       Union: 'object',
     }
 
+    if (ast.kind === 'CustomType' && ast.typeName) {
+      return ast.typeName
+    }
+
     const resultType = kindToTypeMap[ast.kind] || 'string'
     return resultType
-  }
-
-  if (ast.constructor && ast.constructor.name === 'ObjectType') {
-    return 'object'
   }
 
   if (ast.flags !== undefined || ast._version !== undefined) {

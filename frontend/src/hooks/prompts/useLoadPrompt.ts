@@ -104,10 +104,10 @@ export const useLoadPrompt = ({
       return
     }
 
-    // 只有在非新建提示词且有ID的情况下才加载
-    if (!isNew && id && userId) {
+    // 只有在非新建提示词且有ID、workspaceId的情况下才加载
+    if (!isNew && id && workspaceId) {
       try {
-        const response = await PromptService.getDebugContext(id, userId)
+        const response = await PromptService.getDebugContext(id, workspaceId)
 
         if (response.code === 0 && response.debug_context) {
           const { debug_core } = response.debug_context
@@ -240,12 +240,12 @@ export const useLoadPrompt = ({
       // 如果没有选中的模型，不自动选择模型
     } catch (error) {
       console.error('加载模型列表失败:', error)
-      showSnackbar('加载模型列表失败，请稍后重试', 'error')
+      showSnackbar(t('hooks.prompts.useLoadPrompt.loadModelsFailed'), 'error')
     } finally {
       setModelsLoading(false)
       modelsLoadingRef.current = false
     }
-  }, [workspaceId, showSnackbar, selectedModel, setAvailableModels, setModelsLoading, modelsLoadingRef])
+  }, [workspaceId, showSnackbar, selectedModel, setAvailableModels, setModelsLoading, modelsLoadingRef, t])
 
   // 将已有的 prompt detail 数据填充到页面
   const loadPromptDetailToPage = useCallback(
@@ -467,7 +467,7 @@ export const useLoadPrompt = ({
         if (response.code !== 0) {
           setSnackbar({
             open: true,
-            message: response.msg || '查询提示词详情失败',
+            message: response.msg || t('hooks.prompts.useLoadPrompt.getPromptDetailFailed'),
             severity: 'error',
           })
           return
@@ -568,7 +568,7 @@ export const useLoadPrompt = ({
         console.error('加载提示词详情失败:', error)
         setSnackbar({
           open: true,
-          message: t('components.prompts.promptEditPage.loadPromptDetailFailed'),
+          message: t('hooks.prompts.useLoadPrompt.loadPromptDetailFailed'),
           severity: 'error',
         })
       } finally {

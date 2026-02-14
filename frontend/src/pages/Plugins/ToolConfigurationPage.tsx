@@ -2442,7 +2442,7 @@ const ToolConfigurationPage: React.FC = () => {
             {/* Right Side - Test Results */}
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
-                <Typography variant="h6">{t('plugins.toolConfig.testResults')}</Typography>
+                <Typography variant="h6">{t('plugins.tools.test.testResults')}</Typography>
                 <Typography variant="body2" color="text.secondary">
                   ({t('plugins.toolConfig.apiCallReturn', 'API调用返回')})
                 </Typography>

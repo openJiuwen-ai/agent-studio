@@ -16,15 +16,17 @@ export const useOptimizeFeedback = () => {
   return useMutation(
     ({
       request,
+      workspaceId,
       onData,
       onError,
       onComplete,
     }: {
       request: OptimizeFeedbackRequest
+      workspaceId: string
       onData: StreamDataCallback
       onError?: StreamErrorCallback
       onComplete?: StreamCompleteCallback
-    }) => FeedbackOptService.optimizeFeedback(request, onData, onError, onComplete),
+    }) => FeedbackOptService.optimizeFeedback(request, workspaceId, onData, onError, onComplete),
     {
       onError: (error: any) => {
         console.error('反馈优化失败:', error)
@@ -38,15 +40,17 @@ export const useQuickOptimize = () => {
   return useMutation(
     ({
       request,
+      workspaceId,
       onData,
       onError,
       onComplete,
     }: {
       request: QuickOptimizeRequest
+      workspaceId: string
       onData: StreamDataCallback
       onError?: StreamErrorCallback
       onComplete?: StreamCompleteCallback
-    }) => FeedbackOptService.quickOptimize(request, onData, onError, onComplete),
+    }) => FeedbackOptService.quickOptimize(request, workspaceId, onData, onError, onComplete),
     {
       onError: (error: any) => {
         console.error('快捷优化失败:', error)
@@ -60,15 +64,17 @@ export const useOptimizeBadcase = () => {
   return useMutation(
     ({
       request,
+      workspaceId,
       onData,
       onError,
       onComplete,
     }: {
       request: OptimizeBadcaseRequest
+      workspaceId: string
       onData: StreamDataCallback
       onError?: StreamErrorCallback
       onComplete?: StreamCompleteCallback
-    }) => FeedbackOptService.optimizeBadcase(request, onData, onError, onComplete),
+    }) => FeedbackOptService.optimizeBadcase(request, workspaceId, onData, onError, onComplete),
     {
       onError: (error: any) => {
         console.error('Badcase优化失败:', error)

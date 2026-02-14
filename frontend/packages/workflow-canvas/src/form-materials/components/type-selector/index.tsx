@@ -102,6 +102,8 @@ export function TypeSelector(props: TypeSelectorProps) {
                   .filter(_type => {
                     if (excludeTypes?.includes(_type.type)) return false
                     if (excludeNestedArray && _type.type === 'array') return false
+                    // Exclude object, file, and date-time from array subtypes
+                    if (['object', 'file', 'date-time'].includes(_type.type)) return false
                     return true
                   })
                   .map(_type => ({

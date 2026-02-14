@@ -8,6 +8,8 @@ Create Date: 2026-01-26 20:56:12.372693
 from typing import Sequence, Union
 
 from alembic import op
+from openjiuwen_studio.core.database.migration_utils import table_exists, column_exists, index_exists
+
 import sqlalchemy as sa
 
 

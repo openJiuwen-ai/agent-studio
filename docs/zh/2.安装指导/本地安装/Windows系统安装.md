@@ -33,12 +33,14 @@
 
 * 下载 <a href="https://openjiuwen-ci.obs.cn-north-4.myhuaweicloud.com/agentstudio/setup_scripts/setup_scripts_windows_v2.zip" target="_blank" rel="nofollow noopener noreferrer"> 安装包脚本</a>，安装包脚本包含以下文件：
   * `setup.ps1`：主安装脚本，串联整个安装流程
-  * `check_git.ps1`：检查 Git 是否安装
-  * `check_nodejs.ps1`：检查 Node.js 是否安装
-  * `check_python.ps1`：检查 Python 是否安装
-  * `check_mysql.ps1`：检查 MySQL 是否安装
-  * `fetch_codes.ps1`：克隆 agent-studio 代码仓库
-  * `user_config.ps1`：用户配置文件（可选，包含代理、pip源、npm源配置）
+  * `utils.ps1`：公共工具
+  * `check_git.ps1`：检查 Git 是否安装，未安装则安装 Git
+  * `check_nodejs.ps1`：检查 Node.js 是否安装，未安装则安装 Node.js
+  * `check_python.ps1`：检查 Python 是否安装，未安装则安装 Python
+  * `check_mysql.ps1`：检查 MySQL 是否安装，未安装则安装 MySQL
+  * `config_mysql.ps1`：配置 MySQL（创建数据库、用户等）
+  * `fetch_codes.ps1`：克隆 agent-studio 代码仓库（支持指定分支）
+  * `user_config.ps1`：用户配置文件（可选，包含代理、pip 源、npm 源配置）
 
 #### 2. 配置代理、pip源和npm源（可选）
 
@@ -92,7 +94,6 @@
 * 进入脚本目录，运行主安装脚本：
 
   ```powershell
-  cd setup_scripts_windows
   # 默认使用 MySQL 数据库
   .\setup.ps1
 
@@ -100,14 +101,6 @@
   .\setup.ps1 -DbType sqlite
   ```
 
-* 脚本会自动执行以下步骤：
-  1. 检查系统版本和 PowerShell 版本
-  2. 检查基础工具（git、nodejs、python），如未安装会提示安装
-  3. 拉取 agent-studio 代码仓库
-  4. 生成 AES 密钥
-  5. 配置 .env 文件（根据 -DbType 参数设置数据库类型）
-  6. 部署后端服务（创建虚拟环境、安装依赖、启动服务）
-  7. 部署前端服务（安装依赖、启动服务）
 
 * 脚本执行完成后，会输出后端和前端服务的PID、日志文件路径、前端页面访问地址，在浏览器中访问输出的页面访问地址即可进入openJiuwen界面。
 
@@ -296,14 +289,6 @@
    MILVUS_PORT=19530
    MILVUS_COLLECTION_NAME=memory_vector
 
-   # 记忆相关配置（如果不使用记忆功能，可以不提供下面的参数）
-   EMBEDDING_MODEL_DIMENTION=1024
-   EMBED_API_BASE=""
-   EMBED_MODEL_NAME=""
-   EMBED_API_KEY=""
-   EMBED_TIMEOUT=5
-   EMBED_MAX_RETRIES=1
-
    # 配置代码沙箱服务（样例，启动代码执行沙箱服务详情请见[问题二：如何启用沙箱功能]）
    CODE_SANDBOX_URL=http://localhost:8188/run
 
@@ -324,13 +309,7 @@
    | **MEMORY_DATA_PATH**          | 记忆数据存储路径,默认值：memory-data             | `memory-data`                         |
    | **MILVUS_HOST**                 | Milvus服务的主机地址                                                | `127.0.0.1`                                                                    |
    | **MILVUS_PORT**                 | Milvus服务的端口                                                | `19530`                                                                    |
-   | **MILVUS_COLLECTION_NAME**                | Milvus服务的数据库名                                                | `memory_vector`                                                                    
-   | **EMBEDDING_MODEL_DIMENTION**         | 向量模型的维度，根据EMBED_MODEL_NAME选择的模型确定                | `1024`                                                                    |                  
-   | **EMBED_API_BASE**                    | 向量模型的接口地址                                                  | `https://example.com/embedding_model`            |            
-   | **EMBED_MODEL_NAME**                  | 向量模型的名称                                                             | `text-embedding-model`                                                       |
-   | **EMBED_API_KEY**                     | 向量模型的API密钥                                                 | `sk-xxx`                                                                  |
-   | **EMBED_TIMEOUT**                     | 向量模型的最大等待时间（单位秒），默认值`60`             | `5`                                                                     |
-   | **EMBED_MAX_RETRIES**                 | 向量模型请求失败时的最大重试次数，默认值`3`              | `1`                                                                    |
+   | **MILVUS_COLLECTION_NAME**                | Milvus服务的数据库名                                                | `memory_vector`
    | **CODE_SANDBOX_URL**                 | 代码沙箱服务地址                          | `http://localhost:8188/run`                                                                    |
    | **VITE_PLUGIN_SERVICE_URL**                 | 插件服务地址                            | `http://localhost:8185`                                                                    |
    | **VITE_PLUGIN_CONFIG_PATH**                 | 前端使用的插件服务配置文件                     | `/config.json`                                                                    |
@@ -342,11 +321,23 @@
   uv venv
   uv sync
   ```
+* 执行数据库版本标识命令，方便后续数据库操作：
+  ```bash
+  # Agent数据库
+  alembic -n alembic_mysql_agent stamp head
+  alembic -n alembic_mysql_ops stamp head
+
+  # SQLite数据库
+  alembic -n alembic_sqlite_agent stamp head
+  alembic -n alembic_sqlite_ops stamp head
+  ```
+
+  > 说明：以上命令用于标识当前数据库已是最新版本，方便后续进行数据库操作。需要分别对agent和ops数据库执行。如使用MySQL需执行alembic -n alembic_mysql_agent stamp head和alembic -n alembic_mysql_ops stamp head，关于alembic的使用方法参考[DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md](../../../../backend/DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md)
 
   > **注意**：如果持续卡死超过 20 分钟，请按下 “Ctrl + C”，尝试修改本目录下 “pyproject.toml” 文件中 [[tool.uv.index]] 的 url 值，切换成其他可用源后，再重新执行 “uv sync”。
 
   > **注意**：若执行 `uv sync` 失败，可尝试：`uv sync --native-tls`  强制使用系统原生TLS库（解决HTTPS下载兼容问题）
-
+* 创建日志目录并启动后端服务
   ```bash
   mkdir logs
   mkdir logs\run
@@ -415,9 +406,9 @@ Windows 上运行 Docker Desktop 推荐使用 WSL 2（Windows Subsystem for Linu
 **1.2 安装 Docker Desktop**
 
 * 下载：前往 <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="nofollow noopener noreferrer"> Docker 官网</a> 下载 Windows 版本安装包（X86 机器请选择 AMD64 版本）；
-* 运行安装包：​**勾选​「Use WSL 2 instead of Hyper-V」选项**，跟随向导完成安装：
+ * 运行安装包：​**仅勾选​「Use WSL 2 instead of Hyper-V」、​「Add shortcut to desktop」选项**，点击​「OK」开始安装；
 
-  <img src="../images/docker_desktop_on_wsl.png" width="600"/>
+
 * 安装完成后，请重启电脑；
 * 重启后，打开 Docker Desktop，等待加载完成（首次启动可能需要 5 ~ 10 分钟）；
 * Docker Desktop 启动后，若临时试用，可点击欢迎界面的 `Continue without signing in` 直接进入；长期使用请参考 <a href="https://docs.docker.com/desktop/setup/sign-in" target="_blank" rel="nofollow noopener noreferrer"> 官方指导</a>。
@@ -430,11 +421,16 @@ Windows 上运行 Docker Desktop 推荐使用 WSL 2（Windows Subsystem for Linu
 
 * 新建 Milvus 本地安装目录（建议存放至 D 盘，示例路径：*D:\Milvus*）；
 
-* 打开 Docker Desktop，按照图示步骤，在序号 4 处输入 *Milvus 安装目录*（例如：*D:\Milvus*）；
+ * 打开 Docker Desktop，单击右上方 ⚙ 进入设置界面；
+ 	  	 
+ 	 * 单击左侧竖列导航栏​「Resources」，进入 Resources 配置界面；
+ 	  	 
+ 	 * 单击​「File sharing」，并在输入框中填写 *Milvus 的安装目录*（例如：*D:\Milvus*），最后单击右侧 ➕ 进行添加；
+
 
 * 点击 “Apply & restart” 重启 Docker Desktop。
 
-  <img src="../images/docker-milvus.png" width="600"/>
+
 
 * 以管理员身份打开 PowerShell，先切换至 Milvus 本地安装目录，再执行以下命令保存 “standalone.bat” 脚本：
 
@@ -495,10 +491,9 @@ Windows 上运行 Docker Desktop 推荐使用 WSL 2（Windows Subsystem for Linu
 
   ![获取api_base和model_name](../images/embed_api_base_and_model_name.png)
 
-* 记录API地址（对应 EMBED_API_BASE）、model参数（对应 EMBED_MODEL_NAME）。
+* 记录API地址、model参数。
 
-* 点击 "API Key 管理"，按照官方界面引导获取 API Key（对应 EMBED_API_KEY）。
-> **注意**：在配置 *EMBEDDING_MODEL_DIMENTION* 之后启用了记忆，请不要再次修改，否则记忆功能会无法使用。embedding模型的其他配置也不建议修改，可能会影响效果。
+* 点击 "API Key 管理"，按照官方界面引导获取 API Key。
 
 <a id="windows-sandbox"></a>
 ### 问题二：如何启用沙箱功能

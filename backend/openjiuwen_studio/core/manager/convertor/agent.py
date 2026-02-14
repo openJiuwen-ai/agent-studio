@@ -26,6 +26,7 @@ from openjiuwen_studio.schemas.agent import AgentPlugin
 from openjiuwen_studio.schemas.plugin import PluginToolId
 from openjiuwen_studio.schemas.workflow import WorkflowId
 from openjiuwen_studio.schemas.knowledge_base import KnowledgeBaseGet
+from openjiuwen_studio.core.manager.knowledge_base import _CURR_INDEX_TYPE
 
 
 def workflow_convert(space_id: str, workflow: AgentWorkflowListNodeBase):
@@ -206,7 +207,11 @@ def agent_plugins_convert(space_id: str, plugins: List[AgentPlugin]) -> List[dsl
 
 def knowledge_convert(space_id: str, knowledgeid: str) -> dsl.KnowledgeSchema:
     try:
-        knowledge_id = KnowledgeBaseGet(space_id=space_id, kb_id=knowledgeid)
+        knowledge_id = KnowledgeBaseGet(
+            space_id=space_id,
+            kb_id=knowledgeid,
+            index_manager_type=_CURR_INDEX_TYPE,
+        )
 
         get_result = knowledge_base_repository.knowledge_base_get(knowledge_id)
 
@@ -392,12 +397,12 @@ def react_agent_convert(
                 # Apply agent_model_config overrides if available
                 if hasattr(agent_info, 'agent_model_config') and agent_info.agent_model_config:
                     agent_model_config = agent_info.agent_model_config
-                    if 'temperature' in agent_model_config:
-                        model_dsl.model_info.temperature = agent_model_config['temperature']
-                    if 'top_p' in agent_model_config:
-                        model_dsl.model_info.top_p = agent_model_config['top_p']
-                    if 'timeout' in agent_model_config:
-                        model_dsl.model_info.timeout = agent_model_config['timeout']
+                    if 'temperature' in agent_model_config and model_dsl.request_config:
+                        model_dsl.request_config.temperature = agent_model_config['temperature']
+                    if 'top_p' in agent_model_config and model_dsl.request_config:
+                        model_dsl.request_config.top_p = agent_model_config['top_p']
+                    if 'timeout' in agent_model_config and model_dsl.model_client_config:
+                        model_dsl.model_client_config.timeout = agent_model_config['timeout']
 
         plugins: list[AgentPlugin] = [AgentPlugin(**p) for p in agent_info.plugins]
 
@@ -495,16 +500,18 @@ def workflow_agent_convert(
                     )
 
             model_dsl = ModelConfig(
-                model_provider=info.get("provider"),
-                model_info=BaseModelInfo(
+                model_client_config=ModelClientConfig(
+                    client_provider=info.get("provider"),
                     api_key=api_key,
                     api_base=model_info_dict.get("api_base"),
+                    timeout=model_info_dict.get("timeout", 60)
+                ),
+                request_config=ModelRequestConfig(
                     model_name=model_info_dict.get("model_type"),
                     temperature=model_info_dict.get("temperature", 0.7),
                     top_p=model_info_dict.get("top_p", 0.9),
-                    streaming=model_info_dict.get("streaming", False),
-                    timeout=model_info_dict.get("timeout", 60),
-                ),
+                    stream=model_info_dict.get("streaming", False),
+                )
             )
         elif hasattr(agent_info, 'model_id') and agent_info.model_id:
             # Get model config by model_id
@@ -521,27 +528,29 @@ def workflow_agent_convert(
                 parameters = model_config.parameters or {}
 
                 model_dsl = ModelConfig(
-                    model_provider=model_config.provider,
-                    model_info=BaseModelInfo(
+                    model_client_config=ModelClientConfig(
+                        client_provider=model_config.provider,
                         api_key=SecurityUtils().decrypt_api_key(model_config.api_key) if model_config.api_key else '',
                         api_base=model_config.base_url,
+                        timeout=model_config.timeout
+                    ),
+                    request_config=ModelRequestConfig(
                         model_name=model_config.model_type,
                         temperature=parameters.get('temperature', 0.7),
                         top_p=parameters.get('top_p', 0.9),
-                        streaming=model_config.enable_streaming,
-                        timeout=model_config.timeout
+                        stream=model_config.enable_streaming,
                     )
                 )
 
                 # Apply agent_model_config overrides if available
                 if hasattr(agent_info, 'agent_model_config') and agent_info.agent_model_config:
                     agent_model_config = agent_info.agent_model_config
-                    if 'temperature' in agent_model_config:
-                        model_dsl.model_info.temperature = agent_model_config['temperature']
-                    if 'top_p' in agent_model_config:
-                        model_dsl.model_info.top_p = agent_model_config['top_p']
-                    if 'timeout' in agent_model_config:
-                        model_dsl.model_info.timeout = agent_model_config['timeout']
+                    if 'temperature' in agent_model_config and model_dsl.request_config:
+                        model_dsl.request_config.temperature = agent_model_config['temperature']
+                    if 'top_p' in agent_model_config and model_dsl.request_config:
+                        model_dsl.request_config.top_p = agent_model_config['top_p']
+                    if 'timeout' in agent_model_config and model_dsl.model_client_config:
+                        model_dsl.model_client_config.timeout = agent_model_config['timeout']
 
         if agent_info.default_response and agent_info.default_response.strip():
             default_response = agent_info.default_response

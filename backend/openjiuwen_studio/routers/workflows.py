@@ -129,7 +129,7 @@ async def workflow_get(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
-                "code": e.error_code,
+                "code": e.code,
                 "message": e.message,
                 "component_id": e.component_id,
                 "component_type": e.component_type,
@@ -478,7 +478,9 @@ async def enter_workflow_execution_logs_debug(
 
 @workflows_router.get("/get_upload_url/{object_key}", response_model=ResponseModel[dict])
 async def get_upload_url(
+        space_id: str,
         object_key: str,
+        current_user: dict = Depends(get_current_user)
 ):
     """
     获取文件上传自签名URL
@@ -495,19 +497,20 @@ async def get_upload_url(
     try:
         minio_client = get_minio_client()
         logger.info(f"Get workflow execution logs create list start.")
-        req = {"object_key": object_key}
-        res = mgr.get_upload_url(req, minio_client)
+        req = {"space_id": space_id, "object_key": object_key}
+        res = mgr.get_upload_url(req, current_user, minio_client)
         return handle_response(res)
     except Exception as e:
         logger.error(f"Failed to generate upload URL: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to generate upload URL"
+            detail=f"Failed to generate upload URL: {e}"
         ) from e
 
 
 @workflows_router.get("/get_download_url/{object_key}", response_model=ResponseModel[dict])
 async def get_download_url(
+        space_id: str,
         object_key: Optional[str] = None,
         current_user: dict = Depends(get_current_user)
 ):
@@ -526,8 +529,8 @@ async def get_download_url(
     try:
         minio_client = get_minio_client()
         logger.info(f"Get workflow execution logs create list start.")
-        req = {"object_key": object_key}
-        res = mgr.get_download_url(req, minio_client)
+        req = {"space_id": space_id, "object_key": object_key}
+        res = mgr.get_download_url(req, current_user, minio_client)
         return handle_response(res)
     except Exception as e:
         logger.error(f"Failed to generate download URL: {e}")

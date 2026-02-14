@@ -2,9 +2,10 @@
 set -euo >/dev/null 2>&1
 
 # Validate the pre-upgrade environment directory and its env files format
-valid_pre_upgrade_env_dir(){
+read_pre_upgrade_env(){
     local pre_upgrade_env_dir=${CONFIG["PRE_UPGRADE_ENV_DIR"]}
-    info "Validate Pre-Upgrade-Env-Dir: ${pre_upgrade_env_dir} ..." 
+
+    info "Validating pre-upgrade environment directory: ${pre_upgrade_env_dir}"
     if [ ! -d "${pre_upgrade_env_dir}" ]; then
         error "Directory not found - ${pre_upgrade_env_dir}"
     fi
@@ -24,9 +25,26 @@ valid_pre_upgrade_env_dir(){
             if [[ ! "${single_file}" =~ ^\.?env\.([a-z0-9]{5})$ ]]; then
                 error "Expected format: env.<5-random-chars>, Actual: ${single_file}"
             fi
-            DEPLOY_VARS["PRE_UPGRADE_VERSION"]="0.1.2"
-            DEPLOY_VARS["PRE_UPGRADE_ENV_FILE"]="${pre_upgrade_env_dir}/${single_file}"
             info "1 valid file found: ${single_file}"
+
+            DEPLOY_VARS["PRE_UPGRADE_ENV_FILE"]="${pre_upgrade_env_dir}/${single_file}"
+            read_env_from_file "${DEPLOY_VARS["PRE_UPGRADE_ENV_FILE"]}" "PRE_UPGRADE_VARS"
+
+            if [ -z "${PRE_UPGRADE_VARS["HAS_JIUWEN_CONTAINER"]:-}" ]; then
+                DEPLOY_VARS["PRE_UPGRADE_VERSION"]="0.1.1"
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MYSQL"]="true"
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MILVUS"]="true"
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_BACKEND"]="true"
+                PRE_UPGRADE_VARS["DB_TYPE"]="mysql"
+            else
+                DEPLOY_VARS["PRE_UPGRADE_VERSION"]="0.1.2"
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MYSQL"]=${PRE_UPGRADE_VARS["HAS_MYSQL_CONTAINER"]}
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MILVUS"]=${PRE_UPGRADE_VARS["HAS_MILVUS_CONTAINER"]}
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_BACKEND"]=${PRE_UPGRADE_VARS["HAS_JIUWEN_CONTAINER"]}
+            fi
+
+            DEPLOY_VARS["PRE_UPGRADE_IM_TYPE"]="milvus"
+            DEPLOY_VARS["PRE_UPGRADE_BACKEND_DOCKER"]=${PRE_UPGRADE_VARS["BACKEND_DOCKER_NAME"]}
             ;;
         2)
             local deploy_file=""
@@ -48,59 +66,36 @@ valid_pre_upgrade_env_dir(){
                 print_array env_files
                 error "5 random chars mismatched between deploy and runtime files."
             fi
-            DEPLOY_VARS["PRE_UPGRADE_VERSION"]="0.1.3"
+            info "2 valid files found - ${deploy_file} ${runtime_file}"
+
+            read_env_from_file "${pre_upgrade_env_dir}/${deploy_file}" "PRE_UPGRADE_VARS"
+            read_env_from_file "${pre_upgrade_env_dir}/${runtime_file}" "PRE_UPGRADE_VARS"
+
             DEPLOY_VARS["PRE_UPGRADE_DEPLOY_ENV_FILE"]="${pre_upgrade_env_dir}/${deploy_file}"
             DEPLOY_VARS["PRE_UPGRADE_RUNTIME_ENV_FILE"]="${pre_upgrade_env_dir}/${runtime_file}"
-            info "2 valid files found - ${deploy_file} ${runtime_file}"
+            DEPLOY_VARS["PRE_UPGRADE_IM_TYPE"]=${PRE_UPGRADE_VARS["INDEX_MANAGER_TYPE"]}
+            DEPLOY_VARS["PRE_UPGRADE_BACKEND_DOCKER"]=${PRE_UPGRADE_VARS["BACKEND_DOCKER"]}
+
+            if [ -n "${PRE_UPGRADE_VARS["HAS_JIUWEN_CONTAINER"]:-}" ]; then
+                DEPLOY_VARS["PRE_UPGRADE_VERSION"]="0.1.3"
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MYSQL"]=${PRE_UPGRADE_VARS["HAS_MYSQL_CONTAINER"]}
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MILVUS"]=${PRE_UPGRADE_VARS["HAS_MILVUS_CONTAINER"]}
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_BACKEND"]=${PRE_UPGRADE_VARS["HAS_JIUWEN_CONTAINER"]}
+            else
+                DEPLOY_VARS["PRE_UPGRADE_VERSION"]=$(extract_version "${PRE_UPGRADE_VARS["VERSION"]}") 
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MYSQL"]=${PRE_UPGRADE_VARS["IS_UP_MYSQL"]}
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MILVUS"]=${PRE_UPGRADE_VARS["IS_UP_MILVUS"]}
+                DEPLOY_VARS["PRE_UPGRADE_IS_UP_BACKEND"]=${PRE_UPGRADE_VARS["IS_UP_BACKEND"]}
+            fi
             ;;
         *)
             error "Too many files (max 2 allowed). Found ${file_count} files."
             ;;
     esac
     info "PRE_UPGRADE_VERSION: ${DEPLOY_VARS["PRE_UPGRADE_VERSION"]}"
-    info "Validate Pre-Upgrade-Env-Dir passed."
+    success "Pre-upgrade environment validation Done!"
 }
 
-# Read pre-upgrade environment files and set related variables
-read_pre_upgrade_env_file(){
-    local pre_version=${DEPLOY_VARS["PRE_UPGRADE_VERSION"]}
-    case ${pre_version} in
-        0.1.2)
-            read_env_from_file "${DEPLOY_VARS["PRE_UPGRADE_ENV_FILE"]}" "PRE_UPGRADE_VARS"
-            
-            if [ -z "${PRE_UPGRADE_VARS["HAS_JIUWEN_CONTAINER"]:-}" ]; then
-                DEPLOY_VARS["PRE_UPGRADE_VERSION"]="0.1.1"
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MYSQL"]="true"
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MILVUS"]="true"
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_BACKEND"]="true"
-                PRE_UPGRADE_VARS["DB_TYPE"]="mysql"
-            else
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MYSQL"]=${PRE_UPGRADE_VARS["HAS_MYSQL_CONTAINER"]}
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MILVUS"]=${PRE_UPGRADE_VARS["HAS_MILVUS_CONTAINER"]}
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_BACKEND"]=${PRE_UPGRADE_VARS["HAS_JIUWEN_CONTAINER"]}
-            fi
-
-            DEPLOY_VARS["PRE_UPGRADE_IM_TYPE"]="milvus"
-            DEPLOY_VARS["PRE_UPGRADE_BACKEND_DOCKER"]=${PRE_UPGRADE_VARS["BACKEND_DOCKER_NAME"]}
-            ;;
-        *)
-            read_env_from_file "${DEPLOY_VARS["PRE_UPGRADE_DEPLOY_ENV_FILE"]}" "PRE_UPGRADE_VARS"
-            read_env_from_file "${DEPLOY_VARS["PRE_UPGRADE_RUNTIME_ENV_FILE"]}" "PRE_UPGRADE_VARS"
-            DEPLOY_VARS["PRE_UPGRADE_IM_TYPE"]=${PRE_UPGRADE_VARS["INDEX_MANAGER_TYPE"]}
-            DEPLOY_VARS["PRE_UPGRADE_BACKEND_DOCKER"]=${PRE_UPGRADE_VARS["BACKEND_DOCKER"]}
-
-            if [ "${pre_version}" == "0.1.3" ]; then
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MYSQL"]=${PRE_UPGRADE_VARS["HAS_MYSQL_CONTAINER"]}
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MILVUS"]=${PRE_UPGRADE_VARS["HAS_MILVUS_CONTAINER"]}
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_BACKEND"]=${PRE_UPGRADE_VARS["HAS_JIUWEN_CONTAINER"]}
-            else
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MYSQL"]=${PRE_UPGRADE_VARS["IS_UP_MYSQL"]}
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_MILVUS"]=${PRE_UPGRADE_VAR["IS_UP_MILVUS"]}
-                DEPLOY_VARS["PRE_UPGRADE_IS_UP_BACKEND"]=${PRE_UPGRADE_VARS["IS_UP_BACKEND"]}
-            fi
-            ;;
-    esac
-}
 
 # Check compatibility of pre-upgrade and post-upgrade environment parameters
 check_upgrade_env() {
@@ -129,8 +124,7 @@ check_upgrade_env() {
 
 # validation of pre-upgrade (dir, env, compatibility)
 valid_upgrade(){
-    valid_pre_upgrade_env_dir
-    read_pre_upgrade_env_file
+    read_pre_upgrade_env
     check_upgrade_env
 
     if [[ "${RUNTIME_VARS["DB_TYPE"]}" != "sqlite" &&
@@ -142,15 +136,29 @@ valid_upgrade(){
     if [[ "${DEPLOY_VARS["IS_UPGRADE_MYSQL"]}" == "true" || 
           "${DEPLOY_VARS["IS_UPGRADE_MILVUS"]}" == "true" ]]; then
         if [ -z "${PRE_UPGRADE_VARS["IP"]:-}" ]; then
-            error "Please define IP in ${CONFIG["PRE_UPGRADE_ENV_DIR"]}/env.deploy.***"
+            if version_is_less_than "${DEPLOY_VARS["PRE_UPGRADE_VERSION"]}" "0.1.3"; then
+                error "Please define IP in ${CONFIG["PRE_UPGRADE_ENV_DIR"]}/env.<Instance ID>"
+            else
+                error "Please define IP in ${CONFIG["PRE_UPGRADE_ENV_DIR"]}/env.deploy.<Instance ID>"
+            fi
         fi
     fi
 
-    info "Pre-upgrade validation fully passed"
-    info "Version: ${DEPLOY_VARS["PRE_UPGRADE_VERSION"]} to ${DEPLOY_VARS["VERSION"]}"
-    info "DB_TYPE: ${RUNTIME_VARS["DB_TYPE"]}"
-    info "IS_UPGRADE_MYSQL: ${DEPLOY_VARS["IS_UPGRADE_MYSQL"]}"
+    success "Pre-upgrade validation fully passed"
+    info "======================================="
+    info "Version:           ${DEPLOY_VARS["PRE_UPGRADE_VERSION"]} to ${DEPLOY_VARS["VERSION"]}"
+    info "DB_TYPE:           ${RUNTIME_VARS["DB_TYPE"]}"
+    info "IS_UPGRADE_MYSQL:  ${DEPLOY_VARS["IS_UPGRADE_MYSQL"]}"
     info "IS_UPGRADE_MILVUS: ${DEPLOY_VARS["IS_UPGRADE_MILVUS"]}"
+    info "======================================="
+}
+
+set_sqlite_vars() {
+    if [[ "${RUNTIME_VARS["DB_TYPE"]}" != "sqlite" ]]; then
+        return
+    fi
+
+    DEPLOY_VARS["UPGRADE_SQLITE_SCRIPT"]="${CONFIG["UPGRADE_DIR"]}/upgrade-sqlite-${DEPLOY_VARS["NAME_SUFFIX"]}.sh"
 }
 
 # Set upgrade-related variables of MySQL
@@ -164,11 +172,18 @@ set_mysql_vars() {
     set_if_empty "DEPLOY_VARS" "PRE_UPGRADE_DB_PWD" "${PRE_UPGRADE_VARS["DB_ROOT_PASSWORD"]}"
     set_if_empty "DEPLOY_VARS" "PRE_UPGRADE_AGENT_DB_NAME" "${PRE_UPGRADE_VARS["AGENT_DB_NAME"]}"
     set_if_empty "DEPLOY_VARS" "PRE_UPGRADE_OPS_DB_NAME" "${PRE_UPGRADE_VARS["OPS_DB_NAME"]}"
-    set_if_empty "DEPLOY_VARS"  "POST_UPGRADE_DB_HOST" "${RUNTIME_VARS["DB_HOST"]}"
-    set_if_empty "DEPLOY_VARS"  "POST_UPGRADE_DB_PORT" "${RUNTIME_VARS["DB_PORT"]}"
-    set_if_empty "DEPLOY_VARS"  "POST_UPGRADE_DB_PWD" "${DEPLOY_VARS["DB_ROOT_PASSWORD"]}"
-    set_if_empty "DEPLOY_VARS"  "POST_UPGRADE_AGENT_DB_NAME" "${RUNTIME_VARS["AGENT_DB_NAME"]}"
+    if ! version_is_less_than "${DEPLOY_VARS["PRE_UPGRADE_VERSION"]}" "0.1.4"; then
+        set_if_empty "DEPLOY_VARS" "PRE_UPGRADE_DEEPSEARCH_DB_NAME" "${PRE_UPGRADE_VARS["DEEPSEARCH_DB_NAME"]}"
+    fi
+
+    set_if_empty "DEPLOY_VARS" "POST_UPGRADE_DB_HOST" "${RUNTIME_VARS["DB_HOST"]}"
+    set_if_empty "DEPLOY_VARS" "POST_UPGRADE_DB_PORT" "${RUNTIME_VARS["DB_PORT"]}"
+    set_if_empty "DEPLOY_VARS" "POST_UPGRADE_DB_PWD" "${DEPLOY_VARS["DB_ROOT_PASSWORD"]}"
+    set_if_empty "DEPLOY_VARS" "POST_UPGRADE_AGENT_DB_NAME" "${RUNTIME_VARS["AGENT_DB_NAME"]}"
     set_if_empty "DEPLOY_VARS" "POST_UPGRADE_OPS_DB_NAME" "${RUNTIME_VARS["OPS_DB_NAME"]}"
+    set_if_empty "DEPLOY_VARS" "POST_UPGRADE_DEEPSEARCH_DB_NAME" "${DEPLOY_VARS["DEEPSEARCH_DB_NAME"]}"
+
+    DEPLOY_VARS["UPGRADE_MYSQL_SCRIPT"]="${CONFIG["UPGRADE_DIR"]}/upgrade-mysql-${DEPLOY_VARS["NAME_SUFFIX"]}.sh"
 }
 
 # Set upgrade-related variables of Milvus
@@ -210,6 +225,8 @@ set_milvus_vars() {
     set_if_empty "DEPLOY_VARS" "POST_UPGRADE_MINIO_ACCESS_KEY" "${RUNTIME_VARS["MINIO_ACCESS_KEY"]}"
     set_if_empty "DEPLOY_VARS" "POST_UPGRADE_MINIO_SECRET_KEY" "${RUNTIME_VARS["MINIO_SECRET_KEY"]}"
     set_if_empty "DEPLOY_VARS" "POST_UPGRADE_MILVUS_HTTP_HOST_PORT" "${DEPLOY_VARS["MILVUS_HTTP_HOST_PORT"]}"
+
+    DEPLOY_VARS["UPGRADE_MILVUS_SCRIPT"]="${CONFIG["UPGRADE_DIR"]}/upgrade-milvus-${DEPLOY_VARS["NAME_SUFFIX"]}.sh"
 }
 
 # Generate Milvus backup/restore config file for pre/post upgrade phase
@@ -238,11 +255,12 @@ gen_mysql_download_cmds() {
     local host=${DEPLOY_VARS["PRE_UPGRADE_DB_HOST"]}
     local port=${DEPLOY_VARS["PRE_UPGRADE_DB_PORT"]}
     local pass=${DEPLOY_VARS["PRE_UPGRADE_DB_PWD"]}
+    local cmd_file="${DEPLOY_VARS["UPGRADE_MYSQL_SCRIPT"]}"
 
-    cat << EOF
-echo ======================== start: download mysql data ========================
-mydumper -h ${host} -P ${port} -u root -p ${pass} -o /root/mysql_backup -t 4 -c --trx-consistency-only
-echo ======================== end: download mysql data ========================
+    cat >> "${cmd_file}" << EOF
+echo =============== [INFO] Starting MySQL data download ============
+mydumper -h ${host} -P ${port} -u root -p ${pass} -o /root/mysql_backup -t 4 -c --trx-consistency-only || exit 1
+echo =============== [SUCCESS] MySQL data download Done ============
 EOF
 }
 
@@ -252,60 +270,76 @@ gen_mysql_upload_cmds() {
     local port=${DEPLOY_VARS["POST_UPGRADE_DB_PORT"]}
     local pass=${DEPLOY_VARS["POST_UPGRADE_DB_PWD"]}
 
-    for db_key in AGENT_DB_NAME OPS_DB_NAME
+    local db_keys=("AGENT_DB_NAME" "OPS_DB_NAME")
+    if ! version_is_less_than "${DEPLOY_VARS["PRE_UPGRADE_VERSION"]}" "0.1.4"; then
+        db_keys+=("DEEPSEARCH_DB_NAME")
+    fi
+
+    local cmd_file="${DEPLOY_VARS["UPGRADE_MYSQL_SCRIPT"]}"
+    for db_key in "${db_keys[@]}"
     do
         src_db=${DEPLOY_VARS["PRE_UPGRADE_${db_key}"]}
         dest_db=${DEPLOY_VARS["POST_UPGRADE_${db_key}"]}
-        cat << EOF
-echo ======================== start: upload mysql data ========================
-myloader -h ${host} -P ${port} -u root -p ${pass} -B ${dest_db} -s ${src_db}  -d /root/mysql_backup -t 4 -o --overwrite-tables -v 3 --ssl
-echo ======================== end: upload mysql data ========================
+        cat >> "${cmd_file}" << EOF
+echo =============== [INFO] Starting MySQL data of ${dest_db} upload ============
+myloader -h ${host} -P ${port} -u root -p ${pass} -B ${dest_db} -s ${src_db}  -d /root/mysql_backup -t 4 -o --overwrite-tables -v 3 --ssl || exit 1
+echo =============== [SUCCESS] MySQL data of ${dest_db} upload Done ============
 EOF
     done
-
 }
 
 # Generate database schema upgrade commands (alembic stamp + upgrade)
 gen_db_upgrade_cmds() {
-    local db_type=${RUNTIME_VARS["DB_TYPE"]}
-    local db_type_key=${db_type^^}
-    local src_db_ver=${DEPLOY_VARS["PRE_UPGRADE_VERSION"]}
-    local agent_revision_id=${REVISION_ID["${db_type_key}_AGENT_${src_db_ver}"]}
-    local ops_revision_id=${REVISION_ID["${db_type_key}_OPS_${src_db_ver}"]}
+    local pre_version=${DEPLOY_VARS["PRE_UPGRADE_VERSION"]}
+    if [ "${pre_version}" == "${DEPLOY_VARS["VERSION"]}" ]; then
+        info "No upgrade needed for database (version: ${pre_version}) - same version detected"
+        return
+    fi
 
-    cat << EOF
-
+    local db_type_lower=${RUNTIME_VARS["DB_TYPE"]}
+    local db_type_upper=${db_type_lower^^}
+    local cmd_file="${DEPLOY_VARS["UPGRADE_${db_type_upper}_SCRIPT"]}"
+    cat >> "${cmd_file}" << EOF
 cd /root/backend
 source .venv/bin/activate
-echo ==================== start: upgrade ${db_type}_agent data ====================
-alembic -n alembic_${db_type}_agent stamp ${agent_revision_id}
-alembic -n alembic_${db_type}_agent upgrade head
-echo ==================== end: upgrade ${db_type}_agent data ======================
-
-echo ==================== start: upgrade ${db_type}_ops data ======================
-alembic -n alembic_${db_type}_ops stamp ${ops_revision_id}
-alembic -n alembic_${db_type}_ops upgrade head
-echo ==================== end: upgrade ${db_type}_ops data =======================
 EOF
+
+    for db_lower in agent ops
+    do
+        local db_upper=${db_lower^^}
+        local revision_id=${REVISION_ID["${db_type_upper}_${db_upper}_${pre_version}"]}
+        local alembic_tag="alembic_${db_type_lower}_${db_lower}"
+        cat >> "${cmd_file}" << EOF
+echo =============== [INFO] Starting ${db_type_upper}/${db_lower} data upgrade ============
+alembic -n ${alembic_tag} stamp ${revision_id} || exit 1
+alembic -n ${alembic_tag} upgrade head || exit 1
+echo =============== [SUCCESS] ${db_type_upper}/${db_lower} data upgrade Done ============
+EOF
+    done
 }
 
 # Generate Milvus data migration commands (backup + restore)
 gen_milvus_migrate_cmds() {
-    cat << EOF
-cd /root
-echo =============== start: backup milvus data from src milvus ============
-milvus-backup create -n backup_milvus --config milvus-backup-pre-upgrade.yml
-echo =============== end: backup milvus data from src milvus ==============
+    local cmd_file="${DEPLOY_VARS["UPGRADE_MILVUS_SCRIPT"]}"
 
-echo =============== start: restore milvus data to dest milvus ============
-milvus-backup restore -n backup_milvus --config milvus-backup-post-upgrade.yml --drop_exist_collection --drop_exist_index --rebuild_index failed
-echo =============== end: restore milvus data to dest milvus ============
+    cat >> "${cmd_file}" << EOF
+cd /root
+echo =============== [INFO] Starting Milvus data backup ============
+milvus-backup create -n \$1 --config milvus-backup-pre-upgrade.yml || exit 1
+echo =============== [SUCCESS] Milvus data backup Done ============
+
+echo =============== [INFO] Starting Milvus data restoration ============
+milvus-backup restore -n \$1 --config milvus-backup-post-upgrade.yml --drop_exist_collection --drop_exist_index --rebuild_index failed || exit 1
+echo =============== [SUCCESS] Milvus data restoration Done ============
 EOF
 }
 
 # Generate migration commands based on target module
 gen_cmds() {
-    case "$1" in
+    local module="$1"
+
+    info "Generating upgrade command script for ${module}"
+    case "${module}" in
         sqlite)
             gen_db_upgrade_cmds
             ;;
@@ -318,33 +352,55 @@ gen_cmds() {
             gen_milvus_migrate_cmds
             ;;
     esac
+    info "Generated upgrade command script for ${module}"
 }
 
 # Execute data upgrade for specified module in upgrade container
 upgrade_data() {
     local module="$1"
-    local cmds="$(gen_cmds ${module})"
     local docker_exec_prefix=""
+    local cmd_file="${DEPLOY_VARS["UPGRADE_${module^^}_SCRIPT"]}"
 
-    info "Start migration ${module} data ..."
-    if [ "${DEPLOY_VARS["OS_TYPE"]}" == "windows" ]; then
-        docker_exec_prefix="MSYS_NO_PATHCONV=1"
+    exec_cmd "mkdir -p ${CONFIG["UPGRADE_DIR"]}"
+    exec_cmd "rm -f ${cmd_file}"
+    gen_cmds "${module}"
+
+     # If no command file was generated, no data migration is required for this module
+    if [ -f "${cmd_file}" ]; then
+        info "[UPGRADING] starting ${module} migration..."
+        if [ "${DEPLOY_VARS["OS_TYPE"]}" == "windows" ]; then
+            docker_exec_prefix="MSYS_NO_PATHCONV=1"
+        fi
+        if [ "${module}" == "milvus" ]; then
+            docker_exec_cmd_file "${upgrade_container}" "${cmd_file}" "backup_milvus_${DEPLOY_VARS["NAME_SUFFIX"]}"
+        else
+            docker_exec_cmd_file "${upgrade_container}" "${cmd_file}"
+        fi
+        success "[UPGRADING] ${module} data migration Done!"
+     else
+        info "${module} data migration skipped: No migration scripts generated (no data changes required)"
     fi
-    docker_exec_cmd "${upgrade_container}" "${cmds}"
-    info "Migrate ${module} Done！"
 }
 
 # Handle MySQL upgrade (copy env file + execute migration commands)
 uprade_mysql() {
     if [[ "${ARGS["IS_UPGRADE"]}" == "false" 
         || "${DEPLOY_VARS["IS_UPGRADE_MYSQL"]}" == "false" ]]; then
+        info "Skip upgrade MySQL: disabled in deployment config"
         return
     fi
 
+    info "[UPGRADING] starting MySQL upgrade process...."
     local upgrade_container=${DEPLOY_VARS["UPGRADE_TOOL_DOCKER"]}
     local env_file="${CONFIG["ENV_DIR"]}/env.runtime.${DEPLOY_VARS["NAME_SUFFIX"]}"
     exec_cmd "docker cp ${env_file} ${upgrade_container}:/root/.env"
     upgrade_data "mysql"
+
+    if version_is_less_than "${DEPLOY_VARS["PRE_UPGRADE_VERSION"]}" "0.1.4" \
+        && ! version_is_less_than "${DEPLOY_VARS["VERSION"]}" "0.1.4"; then
+        create_db "${DEPLOY_VARS["DEEPSEARCH_DB_NAME"]}"
+    fi
+    success "[UPGRADING] MySQL upgrade process Done!"
 }
 
 # Handle SQLite upgrade (copy db files + execute schema upgrade + restore)
@@ -352,9 +408,11 @@ upgrade_sqlite(){
     if [[ "${ARGS["IS_UPGRADE"]}" == "false" ||
           "${RUNTIME_VARS["DB_TYPE"]}" != "sqlite" || 
           "${DEPLOY_VARS["IS_UP_BACKEND"]}" == "false" ]]; then
+        info "Skip upgrade SQLITE: disabled in deployment config"
         return
     fi
 
+    info "[UPGRADING] starting SQLITE upgrade process...."
     local src_container=${DEPLOY_VARS["PRE_UPGRADE_BACKEND_DOCKER"]}
     local src_path=${PRE_UPGRADE_VARS["SQLITE_DB_PATH"]}
     local src_path_name=$(basename "${src_path}")
@@ -372,21 +430,26 @@ upgrade_sqlite(){
     exec_cmd "docker cp ${src_container}:/app/${src_path} ${pre_upgrade_db_dir}"
     docker_exec_cmd ${upgrade_container} "mkdir -p /root/backend/${dest_path} && rm -rf /root/backend/${dest_path}"
     exec_cmd "docker cp ${pre_upgrade_db_dir} ${upgrade_container}:/root/backend/${dest_path}"
+
     upgrade_data "sqlite"
+
     exec_cmd "rm -rf ${post_upgrade_db_dir}"
     exec_cmd "docker cp ${upgrade_container}:/root/backend/${dest_path} ${post_upgrade_db_dir}"
     exec_cmd "docker cp ${post_upgrade_db_dir}/agent.db ${dest_container}:/app/${dest_path}/agent.db"
     exec_cmd "docker cp ${post_upgrade_db_dir}/ops.db ${dest_container}:/app/${dest_path}/ops.db"
     exec_cmd "docker restart ${dest_container}"
+    success "[UPGRADING] SQLITE upgrade process Done!"
 }
 
 # Handle Milvus upgrade (generate conf + copy conf + execute migration commands)
 upgrade_milvus(){
     if [[ "${ARGS["IS_UPGRADE"]}" == "false" ||
           "${DEPLOY_VARS["IS_UPGRADE_MILVUS"]}" == "false" ]]; then
+          info "Skip upgrade Milvus: disabled in deployment config"
         return
     fi
 
+    info "[UPGRADING] starting Milvus upgrade process...."
     gen_milvus_backup_conf "PRE_UPGRADE"
     gen_milvus_backup_conf "POST_UPGRADE"
 
@@ -398,15 +461,23 @@ upgrade_milvus(){
     exec_cmd "docker cp ${post_upgrade_milvus_file} ${upgrade_container}:/root"
 
     upgrade_data "milvus"
+    success "[UPGRADING] Milvus upgrade process Done!"
+}
+
+set_upgrade_vars() {
+    set_mysql_vars
+    set_milvus_vars
+    set_sqlite_vars
 }
 
 # Prepare upgrade environment if upgrade enabled
 prepare_upgrade_env() {
     if [ "${ARGS["IS_UPGRADE"]}" == "false" ]; then
+        info "Upgrade environment preparation skipped"
         return
     fi
 
     valid_upgrade
-    set_mysql_vars
-    set_milvus_vars
+    set_upgrade_vars
+    success "Upgrade environment preparation Done!"
 }

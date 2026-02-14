@@ -41,7 +41,7 @@ const PromptOptimizePageNew: React.FC = () => {
     { debounceDelay: 300, minChars: 0, immediateOnEmpty: false, respectComposition: true },
   )
 
-  const { data: jobListData, isLoading, refetch: refetchJobList } = useOptimizationJobList(['*'], workspaceId, userId)
+  const { data: jobListData, isLoading, refetch: refetchJobList } = useOptimizationJobList(['*'], workspaceId)
   const refreshJobListMutation = useRefreshOptimizationJobList()
   const deleteJobMutation = useDeleteOptimizationJob()
 
@@ -161,7 +161,7 @@ const PromptOptimizePageNew: React.FC = () => {
     const { jobId, jobType } = deleteDialog
     setDeleteDialog(d => ({ ...d, open: false }))
     try {
-      await deleteJobMutation.mutateAsync({ jobId, workspaceId, userId, jobType })
+      await deleteJobMutation.mutateAsync({ jobId, workspaceId, jobType })
       showSnackbar(t('prompts.optimizePage.messages.deleteSuccess'), 'success')
       refetchJobList()
       const newTotal = Math.max(0, totalFiltered - 1)
@@ -171,20 +171,20 @@ const PromptOptimizePageNew: React.FC = () => {
       console.error(e)
       showSnackbar(t('prompts.optimizePage.messages.deleteFailed'), 'error')
     }
-  }, [deleteDialog, deleteJobMutation, workspaceId, userId, showSnackbar, t, refetchJobList, totalFiltered, pageSize, currentPage])
+  }, [deleteDialog, deleteJobMutation, workspaceId, showSnackbar, t, refetchJobList, totalFiltered, pageSize, currentPage])
 
   const handleCreateNew = useCallback(() => navigate('/dashboard/prompts/optimize/new'), [navigate])
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      await refreshJobListMutation.mutateAsync({ idList: ['*'], workspaceId, userId })
+      await refreshJobListMutation.mutateAsync({ idList: ['*'], workspaceId })
     } catch (e) {
       showSnackbar(t('prompts.optimizePage.messages.refreshFailed'), 'error')
     } finally {
       setRefreshing(false)
     }
-  }, [refreshJobListMutation, workspaceId, userId, showSnackbar, t])
+  }, [refreshJobListMutation, workspaceId, showSnackbar, t])
 
   useEffect(() => {
     const timer = setInterval(() => refetchJobList(), 300000)

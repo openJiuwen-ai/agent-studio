@@ -5,9 +5,8 @@ import os
 from dotenv import load_dotenv
 from openjiuwen.core.common.logging import logger
 from openjiuwen.core.foundation.llm import ModelRequestConfig, ModelClientConfig
-from openjiuwen.core.foundation.store import DbBasedKVStore, DefaultDbStore
+from openjiuwen.core.foundation.store import DbBasedKVStore, DefaultDbStore, create_vector_store
 from openjiuwen.core.memory import LongTermMemory, MemoryEngineConfig
-from openjiuwen.core.memory import MemoryMilvusVectorStore
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from openjiuwen_studio.ops.modules.prompt.infra.database import get_database_url
@@ -32,7 +31,6 @@ class MemoryEngineManager:
             data_dir = memory_data_path
 
         os.makedirs(data_dir, exist_ok=True)
-        kv_db_path = os.path.join(data_dir, 'dbmstore')
 
         try:
             master_aes_key = base64.b64decode(os.getenv("SERVER_AES_MASTER_KEY_ENV", ""))
@@ -42,16 +40,16 @@ class MemoryEngineManager:
             master_aes_key = b''
         vector_db_type = os.getenv("INDEX_MANAGER_TYPE", "milvus")
         if vector_db_type == "milvus":
-            vector_store = MemoryMilvusVectorStore(
-                milvus_host=os.getenv("MILVUS_HOST"),
-                milvus_port=os.getenv("MILVUS_PORT"),
-                embedding_dims=int(os.getenv("EMBEDDING_MODEL_DIMENTION", 1024)),
-                token=os.getenv("MILVUS_TOKEN", None)
+            milvus_host = os.getenv("MILVUS_HOST")
+            milvus_port = os.getenv("MILVUS_PORT")
+            vector_store = create_vector_store(
+                store_type=vector_db_type,
+                milvus_uri=f"http://{milvus_host}:{milvus_port}",
+                milvus_token=os.getenv("MILVUS_TOKEN", None)
             )
             logger.info("✅ milvus vector store created")
         elif vector_db_type == "chroma":
-            from openjiuwen.core.memory import MemoryChromaVectorStore
-            vector_store = MemoryChromaVectorStore(persist_directory=data_dir)
+            vector_store = create_vector_store(vector_db_type, persist_directory=data_dir)
             logger.info("✅ chroma vector store created")
         else:
             raise ValueError(f"Unknown vector db type: {vector_db_type}, please set VECTOR_DB_TYPE to milvus or chroma")

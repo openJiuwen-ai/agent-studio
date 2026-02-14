@@ -140,9 +140,10 @@ export class WorkflowService {
   // 获取文件上传URL
   static async getUploadUrl(request: GetUploadUrlRequest): Promise<GetUploadUrlResponse> {
     const apiClient = getApiClient()
-    const { object_key } = request
+    const { object_key, space_id } = request
+    const queryParams = space_id ? `?space_id=${encodeURIComponent(space_id)}` : ''
     const response = await apiClient.get<GetUploadUrlResponse>(
-      `${API_ENDPOINTS.WORKFLOWS.GET_UPLOAD_URL}/${object_key}`
+      `${API_ENDPOINTS.WORKFLOWS.GET_UPLOAD_URL}/${object_key}${queryParams}`
     )
     return response.data
   }
@@ -150,9 +151,10 @@ export class WorkflowService {
   // 获取文件下载URL
   static async getDownloadUrl(request: GetDownloadUrlRequest): Promise<GetDownloadUrlResponse> {
     const apiClient = getApiClient()
-    const { object_key } = request
+    const { object_key, space_id } = request
+    const queryParams = space_id ? `?space_id=${encodeURIComponent(space_id)}` : ''
     const response = await apiClient.get<GetDownloadUrlResponse>(
-      `${API_ENDPOINTS.WORKFLOWS.GET_DOWNLOAD_URL}/${object_key || ''}`
+      `${API_ENDPOINTS.WORKFLOWS.GET_DOWNLOAD_URL}/${object_key || ''}${queryParams}`
     )
     return response.data
   }

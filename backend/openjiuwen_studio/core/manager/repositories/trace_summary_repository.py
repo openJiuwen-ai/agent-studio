@@ -564,7 +564,8 @@ class TraceSummaryRepository:
         self, 
         trace_id: str, 
         input: Optional[dict] = None, 
-        output: Optional[dict] = None
+        output: Optional[dict] = None,
+        mode: int = 1
     ) -> ResponseModel[None]:
         """
         Create TraceSummary record from TraceDetail data
@@ -768,7 +769,7 @@ class TraceSummaryRepository:
                 business_id=business_id,
                 business_type=business_type,
                 trace_id=trace_id,
-                mode=1,  # Default to published run mode
+                mode=mode,  # Use the passed mode parameter
                 duration=duration,
                 status=overall_status,
                 inputs=inputs,

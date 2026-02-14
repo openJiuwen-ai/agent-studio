@@ -244,6 +244,7 @@ const AgentsPage: React.FC = () => {
       <ImportConflictDialog
         isOpen={importConflict?.isOpen || false}
         agentName={importConflict?.agentName || ''}
+        isLoading={isImporting}
         onOverwrite={() => executeImport(importConflict!.data, true)}
         onCreateCopy={() => executeImport(importConflict!.data, false)}
         onCancel={closeImportConflict}

@@ -12,7 +12,7 @@ from openjiuwen.core.common.security.exception_utils import ExceptionUtils
 from openjiuwen.core.context_engine import ModelContext
 from openjiuwen.core.foundation.tool import RestfulApi, Tool
 from openjiuwen.core.graph.executable import Executable, Input, Output
-from openjiuwen.core.session.node import Session
+from openjiuwen.core.workflow.components import Session
 from openjiuwen.core.workflow.components.base import ComponentConfig
 from openjiuwen.core.workflow.components.component import ComponentComposable, ComponentExecutable
 
@@ -67,7 +67,7 @@ class ToolExecutable(ComponentExecutable):
         tool_inputs = self._validate_inputs(inputs)
 
         try:
-            response = await self._tool.invoke(tool_inputs, skip_inputs_validate=False, skip_none_value=True)
+            response = await self._tool.invoke(tool_inputs, skip_inputs_validate=False, skip_none_value=False)
             response = self._post_process_tool_result(response)
         except Exception as e:
             if isinstance(e, BaseError):

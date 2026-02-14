@@ -12,6 +12,8 @@ from openjiuwen.core.foundation.llm import BaseModelInfo, ModelConfig
 from openjiuwen.core.memory.config.config import AgentMemoryConfig
 from openjiuwen.core.common import Param
 from openjiuwen.core.workflow import WorkflowCard
+from openjiuwen_studio.core.manager.memory_base import memory_base_get_model_active_status
+from openjiuwen.core.common.logging import logger
 
 
 VARIABLE_PROMPT_SYS = """
@@ -139,7 +141,13 @@ class AgentDlAdapter:
         mdb_id = memory_base_dict.get("mdb_id", "")
         # 如果绑定了记忆库
         if mdb_id:
-            react_agent_config.memory_scope_id = mdb_id
+            llm_active, embedding_active = memory_base_get_model_active_status(mdb_id=mdb_id)
+            if llm_active and embedding_active:
+                react_agent_config.memory_scope_id = mdb_id
+            else:
+                logger.warning(
+                    f"LLM model(active:{llm_active}) or Embedding model(active:{embedding_active}) "
+                    f"is not active for memory base: {mdb_id}")
 
         # 3.拼接prompt
         if not react_agent_config.prompt_template:

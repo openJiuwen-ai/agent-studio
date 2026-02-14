@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Brain, Plus, Search, Edit, Trash2, Copy, ChevronLeft, ChevronRight, AlertCircle, Check, X, Upload, Download, AlertTriangle } from 'lucide-react'
-import { AgentService, useAgents, useUpdateAgent, useCopyAgent, useSearchAgents, useModels, AgentSortBy, AgentSortOrder } from '@test-agentstudio/api-client'
+import { AgentService, useAgents, useUpdateAgent, useCopyAgent, useSearchAgents, useModels, AgentSortBy, AgentSortOrder, RelatedMemberService, MemberType, type RelatedMemberInfo } from '@test-agentstudio/api-client'
 import AgentIcon from '@/assets/icons/agent.svg?react'
 import { getDefaultSpaceId } from '../../utils/spaceUtils'
 import { useAuthStore } from '../../stores/useAuthStore'
@@ -484,21 +484,61 @@ const AgentsPage: React.FC = () => {
   const handleSaveEditing = () => {
     if (!editingAgentId || !editingAgentField) return
 
+    const originalAgent = agents.find(a => a.agent_id === editingAgentId)
+    const originalAgentName = originalAgent?.agent_name || ''
+    const newAgentName = editingAgentName.trim()
+    const isNameChanged = editingAgentField === 'name' && newAgentName !== originalAgentName
+
     const updateData = {
       agent_id: editingAgentId,
-      agent_name: editingAgentName,
+      agent_name: newAgentName,
       space_id: user?.spaceId || getDefaultSpaceId(),
       description: editingAgentDescription,
-      icon: agents.find(a => a.agent_id === editingAgentId)?.icon || '',
-      agent_type: agents.find(a => a.agent_id === editingAgentId)?.agent_type || '',
+      icon: originalAgent?.icon || '',
+      agent_type: originalAgent?.agent_type || '',
     }
 
     updateAgent(updateData, {
-      onSuccess: response => {
+      onSuccess: async (response) => {
         if (response.code === 200) {
           // 更新成功，刷新智能体列表
           const spaceId = user?.spaceId || getDefaultSpaceId()
           queryClient.invalidateQueries(['agents', 'api', 'list', spaceId])
+
+          // 如果名称发生变化，更新关联表中的智能体名称
+          if (isNameChanged) {
+            try {
+              // 获取与该智能体关联的所有提示词
+              const agentInfo: RelatedMemberInfo = {
+                id: editingAgentId,
+                version: 'draft',
+                name: newAgentName,
+                type: MemberType.AGENT,
+              }
+
+              const relationsResponse = await RelatedMemberService.getPromptRelations(spaceId, agentInfo, false)
+
+              if (relationsResponse.code === 200 && relationsResponse.data && relationsResponse.data.length > 0) {
+                // 遍历所有关联的提示词，重新注册关联关系以更新智能体名称
+                const updatePromises = relationsResponse.data.map(async (relation) => {
+                  const promptInfo: RelatedMemberInfo = {
+                    id: relation.prompt_id,
+                    version: relation.prompt_version,
+                    name: relation.prompt_name,
+                    type: MemberType.PROMPT,
+                  }
+
+                  return RelatedMemberService.registerPromptRelation(spaceId, promptInfo, agentInfo)
+                })
+
+                await Promise.all(updatePromises)
+                console.log(`已更新智能体 "${newAgentName}" 的 ${relationsResponse.data.length} 个关联关系`)
+              }
+            } catch (error) {
+              // 更新关联关系失败不影响主流程
+              console.warn('更新智能体关联关系失败:', error)
+            }
+          }
 
           // 显示成功提示
           showSuccess(t('common.messages.agentUpdateSuccess'))

@@ -31,6 +31,7 @@ def _output_and_extract_field_convert(outputs: Outputs):
                 cn_field_name="",
                 default_value=base_value.default,
                 required=required,
+                type=value.get("type"),
             )
             result.append(field_info)
 

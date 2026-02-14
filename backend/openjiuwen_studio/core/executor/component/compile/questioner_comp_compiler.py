@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 from openjiuwen.core.workflow import QuestionerConfig, FieldInfo, QuestionerComponent
 from openjiuwen_studio.core.executor.component.compile.llm_comp_compiler import parse_model_config
 from openjiuwen_studio.core.executor.component.compile.base_comp_compiler import BaseCompCompiler
+from openjiuwen_studio.core.executor.component.component_impl.questioner_comp import QuestionerComponentWrapper
 
 
 class QuestionerCompCompiler(BaseCompCompiler):
@@ -25,7 +26,8 @@ class QuestionerCompCompiler(BaseCompCompiler):
                 description=field_info_dict['description'],
                 cn_field_name=field_info_dict['cn_field_name'],
                 required=field_info_dict['required'],
-                default_value=field_info_dict['default_value']
+                default_value=field_info_dict['default_value'],
+                type=field_info_dict['type'],
             )
 
             field_infos.append(field_info)
@@ -43,4 +45,6 @@ class QuestionerCompCompiler(BaseCompCompiler):
             max_response=max_response
         )
 
-        return QuestionerComponent(questioner_comp_config)
+        # 使用 QuestionerComponentWrapper 替代原始的 QuestionerComponent
+        # 以支持 stream() 方法，解决 End 节点启用 stream_output 时的报错问题
+        return QuestionerComponentWrapper(questioner_comp_config)

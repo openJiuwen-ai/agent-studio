@@ -113,7 +113,7 @@ export const buildOutputsSchemaFromNodes = (nodesList: any[]) => {
   })
 
   const props: Record<string, any> = {}
-  let idx = 2 // Start from index 2 since responseContent is index 1
+  let idx = 2 // Start from index 2 since response is index 1
   Object.keys(inputParams || {}).forEach(key => {
     const v = inputParams[key]
     let fieldSchema: any = { type: 'string' }
@@ -146,7 +146,7 @@ export const buildOutputsSchemaFromNodes = (nodesList: any[]) => {
   return {
     type: 'object',
     properties: {
-      responseContent: { type: 'string', extra: { index: 1 } },
+      response: { type: 'string', extra: { index: 1 } },
       output: {
         type: 'object',
         extra: {
@@ -156,7 +156,7 @@ export const buildOutputsSchemaFromNodes = (nodesList: any[]) => {
         required: Object.keys(props),
       },
     },
-    required: ['responseContent', 'output'],
+    required: ['response', 'output'],
   }
 }
 

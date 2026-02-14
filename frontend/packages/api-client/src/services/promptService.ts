@@ -1,5 +1,5 @@
-import { apiClient, apiRequest } from '../client'
-import { API_ENDPOINTS, API_CONFIG } from '../config'
+import { getApiClient, stream } from '../utils/apiClientFactory'
+import { API_ENDPOINTS } from '../config'
 import { PromptModelService } from './promptModelService'
 import {
   CreatePromptRequest,
@@ -33,15 +33,6 @@ import {
   ApiUser,
   RelationObj,
 } from '../types/promptTypes'
-
-/**
- * 构建完整的 API URL
- * @param endpoint 端点路径
- * @returns 完整的 URL
- */
-const buildApiUrl = (endpoint: string): string => {
-  return endpoint.startsWith('http') ? endpoint : `${API_CONFIG.BASE_URL}${endpoint}`
-}
 
 /**
  * 提示词管理服务类
@@ -147,7 +138,7 @@ export class PromptService {
     }
 
     // 调用API
-    const response = await apiClient.post<ApiPromptListResponse>(API_ENDPOINTS.PROMPTS.LIST, apiParams)
+    const response = await getApiClient().post<ApiPromptListResponse>(API_ENDPOINTS.PROMPTS.LIST, apiParams)
 
     const apiResponse = response.data
 
@@ -206,7 +197,7 @@ export class PromptService {
       ...(options?.commitVersion && { commit_version: options.commitVersion }),
     }
 
-    const response = await apiClient.get<GetPromptDetailResponse>(API_ENDPOINTS.PROMPTS.DETAIL.replace(':id', promptId), { params })
+    const response = await getApiClient().get<GetPromptDetailResponse>(API_ENDPOINTS.PROMPTS.DETAIL.replace(':id', promptId), { params })
 
     if (response.data.code !== 0) {
       throw new Error(response.data.msg || '获取提示词详情失败')
@@ -221,7 +212,7 @@ export class PromptService {
    * @returns 创建提示词响应
    */
   static async createPrompt(data: CreatePromptRequest): Promise<CreatePromptResponse> {
-    const response = await apiClient.post<CreatePromptResponse>(API_ENDPOINTS.PROMPTS.CREATE, data)
+    const response = await getApiClient().post<CreatePromptResponse>(API_ENDPOINTS.PROMPTS.CREATE, data)
 
     if (response.data.code !== 0) {
       throw new Error(response.data.msg || '创建提示词失败')
@@ -249,7 +240,7 @@ export class PromptService {
       prompt_description: data.prompt_description,
     }
 
-    const response = await apiClient.put<EditPromptBasicInfoResponse>(API_ENDPOINTS.PROMPTS.UPDATE.replace(':id', promptId), requestData)
+    const response = await getApiClient().put<EditPromptBasicInfoResponse>(API_ENDPOINTS.PROMPTS.UPDATE.replace(':id', promptId), requestData)
 
     if (response.data.code !== 0) {
       throw new Error(response.data.msg || '编辑提示词基本信息失败')
@@ -261,14 +252,16 @@ export class PromptService {
   /**
    * 删除提示词
    * @param promptId 提示词ID
+   * @param workspaceId 工作空间ID（请求体 workspace_id）
    * @returns 删除响应
    */
-  static async deletePrompt(promptId: string): Promise<DeletePromptResponse> {
+  static async deletePrompt(promptId: string, workspaceId: string): Promise<DeletePromptResponse> {
     const requestData: DeletePromptRequest = {
       prompt_id: parseInt(promptId),
+      workspace_id: workspaceId,
     }
 
-    const response = await apiClient.delete<DeletePromptResponse>(API_ENDPOINTS.PROMPTS.DELETE.replace(':id', promptId), { data: requestData })
+    const response = await getApiClient().delete<DeletePromptResponse>(API_ENDPOINTS.PROMPTS.DELETE.replace(':id', promptId), { data: requestData })
 
     if (response.data.code !== 0) {
       throw new Error(response.data.msg || '删除提示词失败')
@@ -339,8 +332,7 @@ export class PromptService {
         enum?: string[] // 枚举值
       }>
     }>
-    userId: string
-    spaceId: string // 新增工作空间ID参数
+    spaceId: string
   }): Promise<SaveDraftRequest> {
     // 转换messages
     const messages = editorData.promptMessages.map(msg => ({
@@ -505,7 +497,6 @@ export class PromptService {
           created_at: currentTime,
           is_modified: true,
           updated_at: currentTime,
-          user_id: editorData.userId,
           space_id: editorData.spaceId,
           base_version: '', // 暂时为空
         },
@@ -516,22 +507,19 @@ export class PromptService {
   /**
    * 保存草稿
    * @param promptId 提示词ID
-   * @param userId 用户ID
-   * @param spaceId 工作空间ID
+   * @param workspaceId 工作空间ID（放在请求体 workspace_id）
    * @param editorData 编辑器数据
    * @returns 保存草稿响应
    */
-  static async saveDraft(promptId: string, userId: string, spaceId: string, editorData: any): Promise<SaveDraftResponse> {
+  static async saveDraft(promptId: string, workspaceId: string, editorData: any): Promise<SaveDraftResponse> {
     try {
       const requestData = await this.transformToApiDraftFormat({
         ...editorData,
-        userId,
-        spaceId,
+        spaceId: workspaceId,
       })
 
-      const url = API_ENDPOINTS.PROMPTS.SAVE_DRAFT.replace(':id', promptId) + `?user_id=${userId}`
-
-      const response = await apiClient.post<SaveDraftResponse>(url, requestData)
+      const url = API_ENDPOINTS.PROMPTS.SAVE_DRAFT.replace(':id', promptId)
+      const response = await getApiClient().post<SaveDraftResponse>(url, requestData)
 
       if (response.data.code !== 0) {
         throw new Error(response.data.msg || '保存草稿失败')
@@ -547,12 +535,13 @@ export class PromptService {
   /**
    * 提交版本
    * @param promptId 提示词ID
-   * @param userId 用户ID
+   * @param workspaceId 工作空间ID
    * @param data 提交数据
    * @returns 提交版本响应
    */
-  static async commitVersion(promptId: string, userId: string, data: CommitVersionRequest): Promise<CommitVersionResponse> {
-    const response = await apiClient.post<CommitVersionResponse>(API_ENDPOINTS.PROMPTS.COMMIT_DRAFT.replace(':id', promptId) + `?user_id=${userId}`, data)
+  static async commitVersion(promptId: string, workspaceId: string, data: CommitVersionRequest): Promise<CommitVersionResponse> {
+    const url = API_ENDPOINTS.PROMPTS.COMMIT_DRAFT.replace(':id', promptId) + `?workspace_id=${workspaceId}`
+    const response = await getApiClient().post<CommitVersionResponse>(url, data)
 
     if (response.data.code !== 0) {
       throw new Error(response.data.msg || '提交版本失败')
@@ -564,16 +553,14 @@ export class PromptService {
   /**
    * 还原为指定版本
    * @param promptId 提示词ID
-   * @param userId 用户ID
+   * @param workspaceId 工作空间ID
    * @param data 还原数据
    * @returns 还原响应
    */
-  static async revertToVersion(promptId: string, userId: string, data: RevertToVersionRequest): Promise<RevertToVersionResponse> {
+  static async revertToVersion(promptId: string, workspaceId: string, data: RevertToVersionRequest): Promise<RevertToVersionResponse> {
     try {
-      const response = await apiClient.post<RevertToVersionResponse>(
-        API_ENDPOINTS.PROMPTS.REVERT_FROM_COMMIT.replace(':id', promptId) + `?user_id=${userId}`,
-        data,
-      )
+      const url = API_ENDPOINTS.PROMPTS.REVERT_FROM_COMMIT.replace(':id', promptId) + `?workspace_id=${workspaceId}`
+      const response = await getApiClient().post<RevertToVersionResponse>(url, data)
 
       if (response.data.code !== 0) {
         throw new Error(response.data.msg || '还原版本失败')
@@ -589,11 +576,13 @@ export class PromptService {
   /**
    * 获取版本列表
    * @param promptId 提示词ID
+   * @param workspaceId 工作空间ID
    * @param params 查询参数
    * @returns 版本列表响应
    */
-  static async getVersionList(promptId: string, params?: GetVersionListRequest): Promise<GetVersionListResponse> {
-    const response = await apiClient.get<GetVersionListResponse>(API_ENDPOINTS.PROMPTS.LIST_COMMITS.replace(':id', promptId), { params })
+  static async getVersionList(promptId: string, workspaceId: string, params?: GetVersionListRequest): Promise<GetVersionListResponse> {
+    const queryParams = { ...params, workspace_id: workspaceId }
+    const response = await getApiClient().get<GetVersionListResponse>(API_ENDPOINTS.PROMPTS.LIST_COMMITS.replace(':id', promptId), { params: queryParams })
 
     if (response.data.code !== 0) {
       throw new Error(response.data.msg || '获取版本列表失败')
@@ -610,7 +599,7 @@ export class PromptService {
    */
   static async clonePrompt(promptId: string, data: ClonePromptRequest): Promise<ClonePromptResponse> {
     try {
-      const response = await apiClient.post<ClonePromptResponse>(API_ENDPOINTS.PROMPTS.CLONE.replace(':id', promptId), data)
+      const response = await getApiClient().post<ClonePromptResponse>(API_ENDPOINTS.PROMPTS.CLONE.replace(':id', promptId), data)
 
       if (response.data.code !== 0) {
         throw new Error(response.data.msg || '克隆提示词失败')
@@ -626,29 +615,13 @@ export class PromptService {
   /**
    * 保存调试上下文
    * @param request 保存请求
-   * @param userId 用户ID
    * @returns 保存响应
    */
-  static async saveDebugContext(request: SaveDebugContextRequest, userId: string): Promise<any> {
+  static async saveDebugContext(request: SaveDebugContextRequest): Promise<any> {
     try {
-      // 构建保存调试上下文的 URL，需要 promptId 和 userId
-      const url = buildApiUrl(API_ENDPOINTS.PROMPTS.SAVE_DEBUG_CONTEXT.replace(':id', request.prompt_id) + `?user_id=${userId}`)
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`保存调试上下文失败: ${response.status} ${response.statusText}: ${errorText}`)
-      }
-
-      const result = await response.json()
-      return result
+      const path = API_ENDPOINTS.PROMPTS.SAVE_DEBUG_CONTEXT.replace(':id', request.prompt_id)
+      const response = await getApiClient().post(path, request)
+      return response.data
     } catch (error) {
       console.error('❌ 保存调试上下文失败:', error)
       throw error
@@ -658,28 +631,14 @@ export class PromptService {
   /**
    * 获取调试上下文
    * @param promptId 提示词ID
-   * @param userId 用户ID
+   * @param workspaceId 工作空间ID
    * @returns 调试上下文响应
    */
-  static async getDebugContext(promptId: string, userId: string): Promise<GetDebugContextResponse> {
+  static async getDebugContext(promptId: string, workspaceId: string): Promise<GetDebugContextResponse> {
     try {
-      const url = buildApiUrl(API_ENDPOINTS.PROMPTS.GET_DEBUG_CONTEXT.replace(':id', promptId) + `?user_id=${userId}`)
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`查询调试上下文失败: ${response.status} ${response.statusText}: ${errorText}`)
-      }
-
-      const result = (await response.json()) as GetDebugContextResponse
-
-      return result
+      const path = API_ENDPOINTS.PROMPTS.GET_DEBUG_CONTEXT.replace(':id', promptId) + `?workspace_id=${workspaceId}`
+      const response = await getApiClient().get<GetDebugContextResponse>(path)
+      return response.data
     } catch (error) {
       console.error('❌ 查询调试上下文失败:', error)
       throw error
@@ -710,8 +669,8 @@ export class PromptService {
 
       const url = `${endpoint}?${queryParams.toString()}`
 
-      const response = await apiRequest.get<DebugHistoryListResponse>(url)
-      return response
+      const response = await getApiClient().get<DebugHistoryListResponse>(url)
+      return response.data
     } catch (error) {
       console.error('获取调试历史列表失败:', error)
       throw error
@@ -722,6 +681,7 @@ export class PromptService {
    * 调试流式请求
    * @param promptId 提示词ID
    * @param data 调试请求数据
+   * @param workspaceId 工作空间ID（workspace_id）
    * @param onMessage 消息回调
    * @param onError 错误回调
    * @param onComplete 完成回调
@@ -730,15 +690,17 @@ export class PromptService {
   static async debugStreaming(
     promptId: string,
     data: DebugStreamingRequest,
+    workspaceId: string,
     onMessage: (response: any) => void,
     onError?: (error: Error) => void,
     onComplete?: () => void,
     abortController?: AbortController,
   ): Promise<{ cancel: () => void }> {
     try {
-      // 添加时间戳防止缓存
+      // 添加时间戳防止缓存，请求体带上 space_id
       const endpoint = API_ENDPOINTS.PROMPTS.DEBUG_STREAMING.replace(':id', promptId)
       const url = `${endpoint}?_t=${Date.now()}&_r=${Math.random()}`
+      const requestData = { ...data, workspace_id: workspaceId }
 
       let messageCount = 0 // 用于跟踪已处理的消息数量
       let isCancelled = false // 取消标志
@@ -911,15 +873,14 @@ export class PromptService {
         },
       }
 
-      // 在后台异步执行流式请求（不等待完成）
-      apiRequest
-        .stream(url, data, {
-          onData: handleData,
-          onError: handleError,
-          onComplete: handleComplete,
-          parseData: parseData,
-          abortController: internalAbortController,
-        })
+      // 在后台异步执行流式请求（不等待完成），stream 内部会自动带 Authorization
+      stream(url, requestData, {
+        onData: handleData,
+        onError: handleError,
+        onComplete: handleComplete,
+        parseData: parseData,
+        abortController: internalAbortController,
+      })
         .catch(error => {
           // 处理流式请求启动失败的情况
           console.error('❌ 流式请求启动失败:', error)

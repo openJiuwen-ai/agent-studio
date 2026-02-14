@@ -1,6 +1,6 @@
-# Openjiuwen Agent Studio 部署工具使用手册
+# openJiuwen Agent Studio 部署工具使用手册
 
-本脚本是 Openjiuwen Agent Studio 一站式自动化容器部署工具，与本地部署方式存在本质差异 —— 全程基于容器化技术实现，不依赖本地系统环境配置，彻底规避本地部署的环境冲突、版本兼容等问题。本工具实现单机单点部署，支持配置集中化管理、多实例隔离部署，可一键完成服务的部署、启停、卸载等全生命周期操作，操作简洁高效，无需复杂的手动配置。
+本脚本是 openJiuwen Agent Studio 一站式自动化容器部署工具，与本地部署方式存在本质差异 —— 全程基于容器化技术实现，不依赖本地系统环境配置，彻底规避本地部署的环境冲突、版本兼容等问题。本工具实现单机单点部署，支持配置集中化管理、多实例隔离部署，可一键完成服务的部署、启停、卸载等全生命周期操作，操作简洁高效，无需复杂的手动配置。
 
 ## 部署目录说明
 
@@ -44,10 +44,17 @@ scripts/
 ├── examples/                       # 后端业务示例配置目录
 ├── log-dirs/                       # 所有实例的服务日志、升级日志归档目录（自动生成）
 │   ├── logs-<实例ID>/              # 某实例的服务日志、升级日志目录
+│   │   ├──  deepsearch/            # deepsearch服务模块的log目录
+│   │   ├──  server/                # 后端服务模块的log目录
 │   └── ...
 ├── .sqlite-dirs/                   # SQLite数据库升级过程中的临时数据目录（自动生成，升级完成后可清理）
 │   ├── databases.preupgrade.<实例ID>
 │   ├── databases.postupgrade.<实例ID>
+│   └── ...
+├── .upgrade/                       # 实例级组件升级脚本存储目录（按组件+实例隔离）
+│   ├── upgrade-milvus-<实例ID>.sh
+│   ├── upgrade-mysql-<实例ID>.sh
+│   ├── upgrade-sqlite-<实例ID>.sh
 │   └── ...
 ├── readme-service-script.md        # 脚本使用直指导文档
 ├── service.sh                      # 部署脚本核心入口（接收用户指令，调度其他子脚本）
@@ -63,6 +70,7 @@ scripts/
 ├── cmd.sh                          # 命令封装脚本
 ├── template_handler.sh             # 模板渲染脚本
 ├── upgrade_handler.sh              # 升级流程核心处理脚本（封装版本检测、数据迁移、容器升级逻辑）
+├── version_handler.sh              # 版本管理脚本（封装版本号解析、版本对比、版本验证等版本相关逻辑）
 └── service_handler.sh              # 服务生命周期管理脚本（封装服务启动/停止/重启/状态检查逻辑）
 
 ```
@@ -93,6 +101,14 @@ scripts/
 - 数据清理：如需清理服务数据，需手动删除对应的数据卷，脚本不会自动清理任何持久化数据。
 
 ## 使用说明
+
+✔️ **版本要求**
+
+请确保部署环境满足以下版本要求：
+
+- Docker：20.10 版本及以上
+- Docker Compose：v2.19.1 及以上版本
+- Bash: 5.2及以上版本
 
 ✔️ **参数说明**
 
@@ -517,3 +533,63 @@ dial tcp 121.36.121.197:443: connectex: A connection attempt failed because the 
 
 **解决方案**
 无需做任何额外操作，重新执行一次即可，临时网络问题大概率会自动恢复。
+
+## 升级过程中，老实例的MySQL 容器远程连接失败（健康状态正常)
+
+**问题现象**
+
+老实例的MySQL 容器状态显示 healthy、日志无报错，但升级容器通过宿主机IP+外部映射端口连接老实例的MySQL容器时提示：
+
+```
+** (mydumper:20): CRITICAL **: 06:52:18.012: Error connecting to database: Lost connection to MySQL server at 'reading initial communication packet', system error: 2
+
+```
+
+**问题原因**
+
+这是容器端口映射的底层 iptables 转发规则缓存异常，虽 nc测试该端口，显示端口 open，但 MySQL 协议请求无法穿透到容器内；
+
+**解决方案**
+
+重启老实例系统，「重置网络状态」：重建端口转发规则、刷新网络命名空间、清空 MySQL 隐性连接缓存，可快速恢复。
+
+```
+./service.sh down
+./service.sh up
+```
+
+## 某些环境下低于 0.1.4 版本的部署工具关闭实例时报网络删除错误
+
+**问题现象**
+使用低于 0.1.4 版本的部署工具关闭实例时，部分环境会直接报错并退出：
+
+```
+error while removing network: network ... has active endpoints
+```
+
+**问题原因**
+该问题由 Docker Compose 版本差异 导致：
+
+- 旧版本 Compose对网络状态校验极严格，发现网络有活跃端点时，直接抛出 ERROR: error while removing network 并终止命令，返回非 0 退出码。
+
+- 新版本 Compose优化了容错逻辑，遇到网络有活跃容器时，不再直接报错终止，而是仅输出孤儿容器的 warning，跳过网络删除步骤，命令整体仍返回成功）。
+
+  0.1.4 及以上版本的部署工具，新增了 Docker Compose 版本校验机制，可在启动初期自动检测环境依赖，并提前提示用户将 Docker Compose 升级至符合要求的版本。
+
+**解决方案**
+请将 Docker 和 Docker Compose 升级至满足[版本要求](#使用说明)的版本，即可避免此类错误。
+
+## 执行部署命令时出现 "Found orphan containers" 警告，是否需要处理？
+
+**问题现象**
+部署工具在启动服务的过程，终端输出类似如下警告信息：
+
+```
+time="2026-02-13T11:12:41+08:00" level=warning msg="Found orphan containers ([jiuwen-milvus-standalone-6vnaj ...]) for this project..."
+```
+
+**问题原因**
+本部署工具支持同一目录下多实例并行部署，每个实例会生成独立的容器（命名含唯一实例 ID，如 mysql-6vnaj、milvus-ujb38）。部署工具调用的Docker Compose命令 检测到当前 compose 文件未声明的、同目录下的其他实例容器时，会触发 "孤儿容器" 警告，属于正常现象。
+
+**处理建议**
+本部署工具采用实例 ID实现强隔离机制，不同实例的容器、数据卷、网络与配置文件均通过唯一实例 ID 进行维度隔离，彼此独立、互不干扰。同时，工具支持通过与实例 ID 绑定的专属配置文件，精细化控制每个实例的部署、启动、停止与升级流程。因此，Docker Compose 输出的孤儿容器警告仅为常规提示信息，可完全忽略，不会对任何实例的核心生命周期操作造成影响。

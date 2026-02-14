@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, AsyncGenerator, List
 import asyncio
 
 from jinja2 import Environment, BaseLoader, TemplateError, UndefinedError
+from jinja2.sandbox import SandboxedEnvironment, SecurityError
 from openai import OpenAIError
 
 from openjiuwen.core.common.logging import logger
@@ -32,6 +33,7 @@ from openjiuwen_studio.ops.modules.prompt.domain.debug_entity import (
     DebugStreamingResponse,
 )
 from openjiuwen_studio.ops.modules.prompt.domain.debug_repository import DebugContextRepository, DebugLogRepository
+from openjiuwen_studio.core.utils.compatible_field import mask_sensitive_fields
 
 
 headers = {}
@@ -84,7 +86,8 @@ class PromptDebugService:
     ):
         self.debug_ctx_repo = debug_ctx_repo
         self.debug_log_repo = debug_log_repo
-        self.jinja_env = Environment(
+        self.jinja_env = SandboxedEnvironment(
+            autoescape=False,
             loader=BaseLoader(),
             trim_blocks=True,
             lstrip_blocks=True,
@@ -231,8 +234,8 @@ class PromptDebugService:
         reasoning_content, normal_content = "", ""
         for chunk in stream_items:
             delta = chunk
-            if getattr(delta, "reason_content", None):
-                reasoning_content += delta.reason_content
+            if getattr(delta, "reasoning_content", None):
+                reasoning_content += delta.reasoning_content
             if delta.tool_calls is not None:
                 for tc in delta.tool_calls:
                     tool_calls_delta.append(tc.model_dump())
@@ -299,17 +302,21 @@ class PromptDebugService:
                 "step": "llm_call"
             })
             llm_span.set_start_time_first_rest()
+            call_kwargs.pop('model', None)
+            call_kwargs.pop('model_name', None)
             openai_coroutine = get_llm_client_by_protocol(llm_protocol_config).stream(**call_kwargs)
-            logger.info(f"llm config:\n {json.dumps(llm_protocol_config, indent=4, ensure_ascii=False)}")
-            logger.info(f"llm call_params:\n {json.dumps(call_kwargs, indent=4, ensure_ascii=False)}")
+            logger.info(
+                f"llm config:\n {json.dumps(mask_sensitive_fields(llm_protocol_config), indent=4, ensure_ascii=False)}")
+            logger.info(
+                f"llm call_params:\n {json.dumps(mask_sensitive_fields(call_kwargs), indent=4, ensure_ascii=False)}")
 
             async for chk in llm_span.set_async_stream_output(
                 openai_coroutine, process_outputs=self._parse_llm_stream_res):
                 delta = chk
                 # 1. 思维链
-                if getattr(delta, "reason_content", None):
+                if getattr(delta, "reasoning_content", None):
                     yield f"""data: {DebugStreamingResponse(
-                        delta={'reasoning_content': delta.reason_content},
+                        delta={'reasoning_content': delta.reasoning_content},
                         finish_reason=None,
                         debug_id=str(debug_id),
                         debug_trace_key=req.debug_trace_key
@@ -367,6 +374,18 @@ class PromptDebugService:
                 "step": "llm_call"
             })
             yield f"event: error\ndata: {json.dumps({'code': 500, 'msg': f'{e.type} - {e.message}'})}\n\n"
+            end_span(llm_span)
+            return
+        except (TimeoutError, asyncio.TimeoutError) as e:
+            err_msg = str(e)
+            debug_logs.append({
+                "timestamp": time.time(),
+                "level": "error",
+                "message": f"大模型调用超时: {err_msg}",
+                "step": "llm_call"
+            })
+            hint = "Try increasing the timeout in the model configuration and retry."
+            yield f"event: error\ndata: {json.dumps({'code': 500, 'msg': f'{err_msg} {hint}'.strip()})}\n\n"
             end_span(llm_span)
             return
         except Exception as e:
@@ -622,7 +641,7 @@ class PromptDebugService:
                     for k, v in var_map.items():
                         content = content.replace(f"{{{k}}}", str(v))
 
-            except (TemplateError, TypeError, UndefinedError) as e:
+            except (TemplateError, TypeError, UndefinedError, SecurityError) as e:
                 raise TemplateRenderError(
                     "Jinja2 渲染失败，变量 map=%s，错误=%s", var_map, str(e)) from e
 

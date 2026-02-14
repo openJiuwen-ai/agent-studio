@@ -264,6 +264,19 @@
             "enabledLabel": "启用",
             "disabledLabel": "禁用"
           },
+          "memoryBase":{
+            "title": "记忆库",
+            "add": "添加已有记忆库",
+            "create": "创建新记忆库",
+            "cancel": "取消",
+            "confirm": "确定",
+            "selected": "已选择",
+            "needBind": "需绑定记忆库",
+            "select": "选择记忆库",
+            "variable": "请先绑定记忆库以启用记忆变量功能",
+            "longTerm": "请先绑定记忆库以启用长期记忆功能",
+            "noMemoryBase": "未添加记忆库，记忆配置不生效，可点击右上角进行添加"
+          },
           "longTermTitle": "长期记忆",
           "longTermToggleLabel": "启用长期记忆",
           "longTermDescription": "启用后，智能体将能够记住与用户的对话过程中的用户个人信息和偏好数据"
@@ -479,7 +492,8 @@
           "headers": {
             "longTerm": {
               "memory": "记忆",
-              "updatedAt": "修改时间"
+              "updatedAt": "修改时间",
+              "type": "类型"
             },
             "variables": {
               "field": "字段名",

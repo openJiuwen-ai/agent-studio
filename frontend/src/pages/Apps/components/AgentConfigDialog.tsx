@@ -1493,7 +1493,7 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
     { name: 'xunfei', labelKey: 'presets.xunfei', url: 'https://api.xunfei.cn' },
     { name: 'petal', labelKey: 'presets.petal', url: 'https://api.petal.dev' },
     { name: 'tavily', labelKey: 'presets.tavily', url: 'https://api.tavily.com' },
-    { name: 'google', labelKey: 'presets.google', url: 'https://www.googleapis.com/customsearch/v1' },
+    { name: 'google', labelKey: 'presets.google', url: 'https://google.serper.dev' },
     { name: 'custom', labelKey: 'presets.custom', url: '' },
   ]
 

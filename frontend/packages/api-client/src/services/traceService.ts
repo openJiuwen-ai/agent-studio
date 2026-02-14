@@ -1,4 +1,4 @@
-import { apiRequest, apiUtils } from '../client'
+import { getApiClient } from '../utils/apiClientFactory'
 import { API_ENDPOINTS } from '../config'
 import type {
   TraceListRequest,
@@ -24,9 +24,8 @@ export class TraceService {
    */
   static async getTraceList(params: TraceListRequest): Promise<TraceListResponse> {
     try {
-      // 使用通用API客户端
-      const response = await apiRequest.post<TraceListResponse>(API_ENDPOINTS.OBSERVABILITY.TRACE_LIST, params)
-      return response
+      const response = await getApiClient().post<TraceListResponse>(API_ENDPOINTS.OBSERVABILITY.TRACE_LIST, params)
+      return response.data
     } catch (error) {
       console.error('获取Trace列表失败:', error)
       throw error
@@ -40,10 +39,8 @@ export class TraceService {
    */
   static async getTraceTree(params: TraceTreeRequest): Promise<TraceTreeResponse> {
     try {
-      // 直接使用API端点，所有参数通过POST body传递
-      // API支持debug_id或trace_id其中一个参数
-      const response = await apiRequest.post<TraceTreeResponse>(API_ENDPOINTS.OBSERVABILITY.TRACE_TREE, params)
-      return response
+      const response = await getApiClient().post<TraceTreeResponse>(API_ENDPOINTS.OBSERVABILITY.TRACE_TREE, params)
+      return response.data
     } catch (error) {
       console.error('获取调用树信息失败:', error)
       throw error

@@ -62,30 +62,6 @@ generate_random_chars() {
     echo "$random_str"
 }
 
-# ===================== Check Docker availability =====================
-check_docker() {
-    info "Checking Docker..."
-    
-    command -v docker >/dev/null 2>&1 || {
-        error "Docker is not installed. Please install it first."
-    }
-    
-    docker info >/dev/null 2>&1 || {
-        error "Docker daemon is not running. Please start it first."
-    }
-    
-    # Detect Docker Compose command
-    if docker compose version >/dev/null 2>&1; then
-        CONFIG["DOCKER_COMPOSE_CMD"]="docker compose"
-    elif command -v docker-compose >/dev/null 2>&1; then
-        CONFIG["DOCKER_COMPOSE_CMD"]="docker-compose"
-    else
-        error "Docker Compose is not installed. Please install it first."
-    fi
-    
-    success "Docker is ready"
-}
-
 # ===================== Fetch public IP =====================
 get_public_ip() {
     local local_ip=""

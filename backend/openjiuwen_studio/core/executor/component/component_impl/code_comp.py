@@ -13,7 +13,7 @@ from openjiuwen.core.session import BaseSession
 
 from openjiuwen.core.workflow import WorkflowComponent, Input, Output
 from openjiuwen.core.context_engine import ModelContext
-from openjiuwen.core.session.node import Session
+from openjiuwen.core.workflow.components import Session
 
 from openjiuwen_studio.core.common.dsl import CodeLanguage, ExceptHandlingMethod, ExceptConfig, CodeConfig, ErrorBody
 from openjiuwen_studio.core.executor.component.code_runner.base import CodeRunner
@@ -130,7 +130,7 @@ class CodeComponent(WorkflowComponent):
             if response:
                 for param in output_params:
                     raw_value = response.get(param.name)
-                    if not raw_value:
+                    if not raw_value and param.type != "bool":
                         response_result[param.name] = None
                         continue
                     # 按 ParamConfig.type 做类型校验和强制转换
@@ -203,7 +203,10 @@ class CodeComponent(WorkflowComponent):
             if expect_type == "date-time":
                 if isinstance(value, str):
                     try:
-                        return datetime.strptime(value, '%Y-%m-%dT%H:%M:%S.%fZ')
+                        # 返回字符串更安全，避免后续状态序列化 datetime 对象时出现兼容问题
+                        normalized = value.replace("Z", "+00:00")
+                        dt = datetime.fromisoformat(normalized)
+                        return dt.isoformat()
                     except Exception as e:
                         raise ValueError(f"can not convert '{value}' into datetime") from e
                 raise ValueError(f"expected date-time, got {type(value).__name__}")

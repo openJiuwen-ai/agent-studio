@@ -48,8 +48,8 @@ export class SingleNodeExecutor {
         let outputData = null
         if (result.data?.output?.result) {
           outputData = result.data.output.result
-        } else if (result.data?.responseContent) {
-          outputData = result.data.responseContent
+        } else if (result.data?.response) {
+          outputData = result.data.response
         } else {
           outputData = result.data
         }

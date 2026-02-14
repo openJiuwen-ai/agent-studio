@@ -116,7 +116,7 @@ const AgentModelSelector = (props: {
   const { user } = useAuthStore()
   const { t } = useScopedTranslation('agents.agentEditor.orchestration')
   const user_id = saveAgentRequest?.space_id || ''
-  const group_id = saveAgentRequest?.agent_id || ''
+  const group_id = saveAgentRequest?.memory?.memory_base?.mdb_id || ''
 
   const [selectedModelName, setSelectedModelName] = useState<string>('')
   const [selectedModel, setSelectedModel] = useState<ModelDetail | null>(null)
@@ -1200,7 +1200,7 @@ const handleMemoryBaseConfirm = async (selectedId: string | null) => { // ✅ �
         <Accordion>
           <AccordionSummary aria-controls="memory-bases-content" id="memory-bases-header">
             <Typography component="span" className="flex items-center">
-              记忆库
+              {t('orchestrationPage.memory.memoryBase.title')}
               <span
                 className={`inline-flex items-center justify-center ml-2 w-[18px] h-[18px] text-xs font-medium text-white rounded-full ${
                   memoryBaseObject ? 'bg-blue-500' : 'bg-gray-400'
@@ -1211,8 +1211,8 @@ const handleMemoryBaseConfirm = async (selectedId: string | null) => { // ✅ �
             </Typography>
             <AddButton
               options={[
-                { label: '添加已有记忆库', value: 'existing' },
-                { label: '创建新记忆库', value: 'new' },
+                { label: t('orchestrationPage.memory.memoryBase.add'), value: 'existing' },
+                { label: t('orchestrationPage.memory.memoryBase.create'), value: 'new' },
               ]}
               onSelect={addType => {
                 if (addType === 'existing') {
@@ -1241,7 +1241,18 @@ const handleMemoryBaseConfirm = async (selectedId: string | null) => { // ✅ �
                       </svg>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <Typography sx={{ fontWeight: 'bold', fontSize: '1rem' }}>{memoryBaseObject.name}</Typography>
+                      <Typography
+                        sx={{
+                          fontWeight: 'bold',
+                          fontSize: '1rem',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={memoryBaseObject.name}
+                      >
+                        {memoryBaseObject.name}
+                      </Typography>
                       {memoryBaseObject.description && (
                         <Typography
                           variant="body2"
@@ -1256,6 +1267,7 @@ const handleMemoryBaseConfirm = async (selectedId: string | null) => { // ✅ �
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                           }}
+                          title={memoryBaseObject.description}
                         >
                           {memoryBaseObject.description}
                         </Typography>
@@ -1288,7 +1300,7 @@ const handleMemoryBaseConfirm = async (selectedId: string | null) => { // ✅ �
                   </div>
                 </div>
               ))}
-              {!memoryBaseObject && <div className="text-center py-6 text-gray-500">未添加记忆库，记忆配置不生效，可点击右上角进行添加</div>}
+              {!memoryBaseObject && <div className="text-center py-6 text-gray-500">{t('orchestrationPage.memory.memoryBase.noMemoryBase')}</div>}
             </div>
           </AccordionDetails>
         </Accordion>
@@ -1348,7 +1360,7 @@ const handleMemoryBaseConfirm = async (selectedId: string | null) => { // ✅ �
                 )}
                 {!hasMemoryBases && (
                   <Typography variant="caption" color="warning.main">
-                    请先绑定记忆库以启用记忆变量功能
+                    {t('orchestrationPage.memory.memoryBase.variable')}
                   </Typography>
                 )}
               </Box>
@@ -1379,7 +1391,7 @@ const handleMemoryBaseConfirm = async (selectedId: string | null) => { // ✅ �
                         )}
                         {!hasMemoryBases && (
                           <Typography variant="caption" color="text.disabled">
-                            需绑定记忆库
+                            {t('orchestrationPage.memory.memoryBase.variable')}
                           </Typography>
                         )}
                       </>
@@ -1424,7 +1436,7 @@ const handleMemoryBaseConfirm = async (selectedId: string | null) => { // ✅ �
               </Typography>
               {!hasMemoryBases && (
                 <Typography variant="caption" color="warning.main" sx={{ mt: 1, display: 'block' }}>
-                  请先绑定记忆库以启用长期记忆功能
+                  {t('orchestrationPage.memory.memoryBase.longTerm')}
                 </Typography>
               )}
             </Box>

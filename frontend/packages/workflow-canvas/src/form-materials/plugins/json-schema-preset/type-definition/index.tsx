@@ -13,7 +13,7 @@ import { integerRegistry } from './integer'
 import { dateTimeRegistry } from './date-time'
 import { booleanRegistry } from './boolean'
 import { arrayRegistry } from './array'
-import { fileRegistry, FILE_SUBTYPES, ENABLE_FILE_TYPE } from './file'
+import { fileRegistry, ENABLE_FILE_TYPE } from './file'
 import { type JsonSchemaTypeRegistry } from '../types'
 
 export const jsonSchemaTypePreset = [
@@ -25,7 +25,7 @@ export const jsonSchemaTypePreset = [
   arrayRegistry,
   mapRegistry,
   dateTimeRegistry,
-  fileRegistry,
+  ...(ENABLE_FILE_TYPE ? [fileRegistry] : []),
 ]
 
 export const initRegistries = () => {

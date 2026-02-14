@@ -1,5 +1,5 @@
 import { API_ENDPOINTS } from '../config'
-import { apiRequest } from '../client'
+import { stream } from '../utils/apiClientFactory'
 import {
   OptimizeFeedbackRequest,
   OptimizeBadcaseRequest,
@@ -28,46 +28,72 @@ export class FeedbackOptService {
    * 3. 'select' - 选中反馈优化：替换选中的内容，需要传递 start_pos 和 end_pos
    *
    * @param request 反馈优化请求参数
-   * @param onData 流式数据回调
-   * @param onError 错误回调
-   * @param onComplete 完成回调
+   * @param workspaceId 工作空间ID
    */
   static async optimizeFeedback(
     request: OptimizeFeedbackRequest,
+    workspaceId: string,
     onData: StreamDataCallback,
     onError?: StreamErrorCallback,
     onComplete?: StreamCompleteCallback,
     abortController?: AbortController,
   ): Promise<void> {
-    return this.callStreamAPI(API_ENDPOINTS.FEEDBACK_OPTIMIZATION.OPTIMIZE_FEEDBACK, request, onData, onError, onComplete, abortController)
+    return this.callStreamAPI(
+      API_ENDPOINTS.FEEDBACK_OPTIMIZATION.OPTIMIZE_FEEDBACK,
+      { ...request, workspace_id: workspaceId },
+      onData,
+      onError,
+      onComplete,
+      abortController,
+    )
   }
 
   /**
    * 快捷优化API调用
    * 用于编辑提示词页面右上角的快捷优化按钮
    * 流式输出优化结果
+   * @param request 快捷优化请求参数
+   * @param workspaceId 工作空间ID
    */
   static async quickOptimize(
     request: QuickOptimizeRequest,
+    workspaceId: string,
     onData: StreamDataCallback,
     onError?: StreamErrorCallback,
     onComplete?: StreamCompleteCallback,
     abortController?: AbortController,
   ): Promise<void> {
-    return this.callStreamAPI(API_ENDPOINTS.FEEDBACK_OPTIMIZATION.QUICK_OPTIMIZE, request, onData, onError, onComplete, abortController)
+    return this.callStreamAPI(
+      API_ENDPOINTS.FEEDBACK_OPTIMIZATION.QUICK_OPTIMIZE,
+      { ...request, workspace_id: workspaceId },
+      onData,
+      onError,
+      onComplete,
+      abortController,
+    )
   }
 
   /**
    * 调用badcase优化API（流式）
+   * @param request badcase优化请求参数
+   * @param workspaceId 工作空间ID
    */
   static async optimizeBadcase(
     request: OptimizeBadcaseRequest,
+    workspaceId: string,
     onData: StreamDataCallback,
     onError?: StreamErrorCallback,
     onComplete?: StreamCompleteCallback,
     abortController?: AbortController,
   ): Promise<void> {
-    return this.callStreamAPI(API_ENDPOINTS.FEEDBACK_OPTIMIZATION.OPTIMIZE_BADCASE, request, onData, onError, onComplete, abortController)
+    return this.callStreamAPI(
+      API_ENDPOINTS.FEEDBACK_OPTIMIZATION.OPTIMIZE_BADCASE,
+      { ...request, workspace_id: workspaceId },
+      onData,
+      onError,
+      onComplete,
+      abortController,
+    )
   }
 
   // 核心的流式API调用方法
@@ -79,7 +105,7 @@ export class FeedbackOptService {
     onComplete?: StreamCompleteCallback,
     abortController?: AbortController,
   ): Promise<void> {
-    return apiRequest.stream<OptimizeResponse | any>(endpoint, request, {
+    return stream<OptimizeResponse | any>(endpoint, request, {
       onData: (response: OptimizeResponse | any) => {
         // 如果响应包含错误信息但没有content，直接调用错误回调，而不是转换为字符串传递
         if ((response.error || (response.code && response.code !== 200 && response.code !== 0)) && !response.content) {

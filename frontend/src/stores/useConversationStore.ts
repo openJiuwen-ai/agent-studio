@@ -51,7 +51,7 @@ const LEGACY_FINAL_REPORT_TITLES = ['最终报告', 'Final Report'] as const;
 
 // ===== SSE超时监控配置 =====
 // SSE超时时间（分钟）- 超过这个时间没有收到SSE事件，将标记未完成消息为FAILED
-export const SSE_TIMEOUT_MINUTES = 10;
+export const SSE_TIMEOUT_MINUTES = 30;
 
 /**
  * 判断消息是否为最终报告

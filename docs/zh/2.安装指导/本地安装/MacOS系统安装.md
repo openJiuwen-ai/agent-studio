@@ -43,7 +43,6 @@
 * 进入脚本目录，赋予执行权限：
 
   ```bash
-  cd setup_scripts_macos
   chmod +x *.sh
   ```
 
@@ -249,14 +248,6 @@
    MILVUS_PORT=19530
    MILVUS_COLLECTION_NAME=memory_vector
 
-   # 记忆相关配置（如果不使用记忆功能，可以不提供下面的参数）
-   EMBEDDING_MODEL_DIMENTION=1024
-   EMBED_API_BASE=""
-   EMBED_MODEL_NAME=""
-   EMBED_API_KEY=""
-   EMBED_TIMEOUT=5
-   EMBED_MAX_RETRIES=1
-
    # 配置代码沙箱服务（样例，启动代码执行沙箱服务详情请见[问题二：如何启用沙箱功能]）
    CODE_SANDBOX_URL=http://localhost:8188/run
 
@@ -277,13 +268,7 @@
    | **MEMORY_DATA_PATH**          | 记忆数据存储路径,默认值：memory-data             | `memory-data`                         |
    | **MILVUS_HOST**                 | Milvus服务的主机地址                                                | `127.0.0.1`                                                                    |
    | **MILVUS_PORT**                 | Milvus服务的端口                                                | `19530`                                                                    |
-   | **MILVUS_COLLECTION_NAME**                | Milvus服务的数据库名                                                | `memory_vector`                                                                    
-   | **EMBEDDING_MODEL_DIMENTION**         | 嵌入模型的维度，根据EMBED_MODEL_NAME选择的模型确定                | `1024`                                                                    |                  
-   | **EMBED_API_BASE**                    | 嵌入模型的接口地址                                                  | `https://example.com/embedding_model`            |            
-   | **EMBED_MODEL_NAME**                  | 嵌入模型的名称                                                             | `text-embedding-model`                                                       |
-   | **EMBED_API_KEY**                     | 嵌入模型的API密钥，换成自己的                                                 | `sk-xxx`                                                                  |
-   | **EMBED_TIMEOUT**                     | 嵌入模型的最大等待时间（单位秒），默认值`60`             | `5`                                                                     |
-   | **EMBED_MAX_RETRIES**                 | 嵌入模型请求失败时的最大重试次数，默认值`3`              | `1`                                                                    |
+   | **MILVUS_COLLECTION_NAME**                | Milvus服务的数据库名                                                | `memory_vector`
    | **CODE_SANDBOX_URL**                 | 代码沙箱服务地址                          | `http://localhost:8188/run`                                                                    |
    | **VITE_PLUGIN_SERVICE_URL**                 | 插件服务地址                            | `http://localhost:8185`                                                                    |
    | **VITE_PLUGIN_CONFIG_PATH**                 | 前端使用的插件服务配置文件                     | `/config.json`                                                                    |
@@ -295,11 +280,24 @@
   uv venv
   uv sync
   ```
+* 执行数据库版本标识命令，确认当前数据库版本：
+  ```bash
+  # Agent数据库
+  alembic -n alembic_mysql_agent stamp head
+  alembic -n alembic_mysql_ops stamp head
+
+  # SQLite数据库
+  alembic -n alembic_sqlite_agent stamp head
+  alembic -n alembic_sqlite_ops stamp head
+  ```
+
+  > 详细说明：以上命令用于标识当前数据库已是最新版本，方便后续进行数据库操作。需要分别对agent和ops数据库执行。如使用MySQL需执行alembic -n alembic_mysql_agent stamp head和alembic -n alembic_mysql_ops stamp head，关于alembic的使用方法参考[DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md](../../../../backend/DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md)
 
   > **注意**：如果持续卡死超过 20 分钟，请按下 “Ctrl + C”，尝试修改本目录下 “pyproject.toml” 文件中 [[tool.uv.index]] 的 url 值，切换成其他可用源后，再重新执行 “uv sync”。
 
   > **注意**：若执行 `uv sync` 失败，可尝试：`uv sync --native-tls`  强制使用系统原生TLS库（解决HTTPS下载兼容问题）
 
+* 创建日志目录并启动后端服务
   ```bash
   mkdir logs
   mkdir logs/run
@@ -356,8 +354,6 @@
 
 * 下载：访问 <a href="https://www.docker.com/products/docker-desktop/" rel="nofollow">Docker Desktop 官网</a>，点击 “Download for Mac” 获取 .dmg 安装包。；
 * 双击下载的文件，将 **Docker** 图标 拖拽到 Applications 文件夹；
-
-  ![docker1](../images/docker拖拽.png)
 
 * 打开 Launchpad，找到并启动 Docker 应用；
 * 首次运行时，系统会提示输入 macOS 密码以授权安装虚拟机组件，点击 OK 继续；
@@ -426,10 +422,9 @@
 
   ![获取api_base和model_name](../images/embed_api_base_and_model_name.png)
 
-* 记录API地址（对应 EMBED_API_BASE）、model参数（对应 EMBED_MODEL_NAME）。
+* 记录API地址、model参数。
 
-* 点击 "API Key 管理"，按照官方界面引导获取 API Key（对应 EMBED_API_KEY）。
-> **注意**：在配置 *EMBEDDING_MODEL_DIMENTION* 之后启用了记忆，请不要再次修改，否则记忆功能会无法使用。embedding模型的其他配置也不建议修改，可能会影响效果。
+* 点击 "API Key 管理"，按照官方界面引导获取 API Key。
 
 <a id="macos-sandbox"></a>
 ### 问题二：如何启用沙箱功能

@@ -182,7 +182,7 @@ if (require.main === module) {
               multiline
               rows={3}
               placeholder={t('plugins.toolConfig.toolDescriptionHelper', '详细描述工具的功能、用途、参数说明等...')}
-              helperText={`${t('plugins.toolConfig.toolDescriptionPlaceholder', '建议包含：主要功能、输入参数、输出结果、使用示例等信息')} (${form.description.length}/256)`}
+              helperText={t('plugins.toolConfig.toolDescriptionPlaceholder', { count: form.description.length })}
               inputProps={{ maxLength: 256 }}
             />
           </div>

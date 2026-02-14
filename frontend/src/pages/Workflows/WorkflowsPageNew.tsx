@@ -224,13 +224,13 @@ const WorkflowsPage: React.FC = () => {
 
   const getValidationError = (): string => {
     if (!editingState.value || editingState.value.trim() === '') {
-      return editingState.field === 'name' ? '工作流名称不能为空' : '工作流描述不能为空'
+      return editingState.field === 'name' ? t('workflows.workflowList.workflowNameEmpty') : t('workflows.workflowList.workflowDescEmpty')
     }
 
     if (editingState.field === 'name') {
       const namePattern = /^[a-zA-Z][a-zA-Z0-9_]*$/
       if (!namePattern.test(editingState.value.trim())) {
-        return '工作流名称只能包含字母、数字、下划线，且必须以字母开头'
+        return t('workflows.workflowList.workflowNameInvalid')
       }
     }
 
@@ -248,7 +248,7 @@ const WorkflowsPage: React.FC = () => {
 
     const workflow = processedWorkflows.find(w => w.workflow_id === editingState.id)
     if (!workflow) {
-      showError('找不到要编辑的工作流')
+      showError(t('workflows.workflowList.workflowNotFound'))
       return
     }
 
@@ -310,16 +310,16 @@ const WorkflowsPage: React.FC = () => {
   }
 
   const getFriendlyErrorMessage = (errorMsg: string): string => {
-    if (errorMsg.includes('already exists')) return '已存在'
-    if (errorMsg.includes('too long')) return '过长'
-    if (errorMsg.includes('too short') || errorMsg.includes('minimum length')) return '过短'
-    if (errorMsg.includes('invalid') || errorMsg.includes('format')) return '格式无效'
-    if (errorMsg.includes('required') || errorMsg.includes('field required')) return '为必填项'
-    if (errorMsg.includes('empty') || errorMsg.includes('blank')) return '不能为空'
+    if (errorMsg.includes('already exists')) return t('workflows.workflowList.errorAlreadyExists')
+    if (errorMsg.includes('too long')) return t('workflows.workflowList.errorTooLong')
+    if (errorMsg.includes('too short') || errorMsg.includes('minimum length')) return t('workflows.workflowList.errorTooShort')
+    if (errorMsg.includes('invalid') || errorMsg.includes('format')) return t('workflows.workflowList.errorInvalidFormat')
+    if (errorMsg.includes('required') || errorMsg.includes('field required')) return t('workflows.workflowList.errorRequired')
+    if (errorMsg.includes('empty') || errorMsg.includes('blank')) return t('workflows.workflowList.errorEmpty')
 
     const lengthMatch = errorMsg.match(/(\d+) characters?/)
     if (lengthMatch) {
-      return `长度不能超过${lengthMatch[1]}个字符`
+      return t('workflows.workflowList.errorLengthExceeded', { count: lengthMatch[1] })
     }
 
     return errorMsg

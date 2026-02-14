@@ -62,8 +62,8 @@ export interface SearchMemoryBaseItem {
   description: string;
   embedding_model_config_id: number;
   llm_model_config_id: number;
-  create_time: number;
-  update_time: number;
+  created_at: string;
+  updated_ad: string;
 }
 
 export interface MemoryBaseSearchRequest {
@@ -267,8 +267,8 @@ export interface SearchMemoryBaseItem {
   description: string
   embedding_model_config_id: number
   llm_model_config_id: number
-  create_time: number
-  update_time: number
+  created_at: string;
+  updated_ad: string;
 }
 
 // 获取记忆库列表响应

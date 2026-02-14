@@ -135,7 +135,7 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseStore>()(
             knowledgeBases,
             total: response.data.total,
             currentPage: response.data.page,
-            pageSize: size, 
+            pageSize: size,
             isSearching: false,
           })
         } catch (error) {
@@ -159,21 +159,18 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseStore>()(
 
       updateKnowledgeBase: async (data: UpdateKnowledgeBaseRequest) => {
         try {
-          set({ isLoading: true, error: null })
-          const response = await KnowledgeBaseService.updateKnowledgeBase(data)
+          await KnowledgeBaseService.updateKnowledgeBase(data)
 
-          // 更新本地状态 - 同时更新 description 和 desc 字段以确保显示正确
           set(state => ({
             knowledgeBases: state.knowledgeBases.map(kb => (kb.id === data.kb_id ? { ...kb, name: data.name, description: data.desc, desc: data.desc } : kb)),
             currentKnowledgeBase:
               state.currentKnowledgeBase?.id === data.kb_id
                 ? { ...state.currentKnowledgeBase, name: data.name, description: data.desc, desc: data.desc }
                 : state.currentKnowledgeBase,
-            isLoading: false,
           }))
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to update knowledge base'
-          set({ error: errorMessage, isLoading: false })
+          set({ error: errorMessage })
           throw error
         }
       },
@@ -259,4 +256,3 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseStore>()(
     },
   ),
 )
-

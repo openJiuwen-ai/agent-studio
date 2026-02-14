@@ -651,8 +651,9 @@ const PromptContentEditor: React.FC<PromptContentEditorProps> = ({
             className="fixed z-[1600]"
             style={{
               left: `${selectionPosition.x}px`,
-              top: `${selectionPosition.y}px`,
-              transform: 'translate(0, -100%)', // 按钮左边缘对齐到 left 值
+              // 上移约 3 行（66px），使按钮出现在选中文本上方 1 行（position 可能受容器/滚动影响偏下）
+              top: `${selectionPosition.y - 80}px`,
+              transform: 'translate(0, -100%)', // 按钮底部对齐该 top
               marginLeft: '0', // 初始值，会被动态调整覆盖
               marginRight: '0',
               padding: '0',

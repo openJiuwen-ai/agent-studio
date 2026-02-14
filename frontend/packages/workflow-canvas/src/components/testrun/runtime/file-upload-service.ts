@@ -21,15 +21,14 @@ export interface FileUploadResult {
   }
 }
 
-export interface FileUploadServiceOptions {
-  apiBase?: string
-}
-
 export class FileUploadService {
-  private apiBase: string
-
-  constructor(options: FileUploadServiceOptions = {}) {
-    this.apiBase = options.apiBase || '/api/v1'
+  /**
+   * Get space_id from URL query parameters
+   */
+  private getSpaceIdFromUrl(): string | undefined {
+    if (typeof window === 'undefined') return undefined
+    const params = new URLSearchParams(window.location.search)
+    return params.get('spaceId') || undefined
   }
 
   /**
@@ -39,9 +38,14 @@ export class FileUploadService {
    */
   async uploadFile(params: FileUploadParams): Promise<{ object_key: string; name: string; size: number }> {
     const { file, onProgress } = params
+    const spaceId = this.getSpaceIdFromUrl()
+
+    if (!spaceId) {
+      throw new Error('failed to found spaceId')
+    }
 
     const objectKey = `${uuidv4()}_${file.name}`
-    const uploadUrl = await this.getUploadUrl(objectKey)
+    const uploadUrl = await this.getUploadUrl(objectKey, spaceId)
     await this.uploadToMinio(file, uploadUrl, onProgress)
 
     return {
@@ -58,9 +62,14 @@ export class FileUploadService {
    */
   async uploadFileAndGetUrl(params: FileUploadParams): Promise<FileUploadResult> {
     const { file, onProgress } = params
+    const spaceId = this.getSpaceIdFromUrl()
+
+    if (!spaceId) {
+      throw new Error('failed to found spaceId')
+    }
 
     const uploadResult = await this.uploadFile({ file, onProgress })
-    const downloadUrl = await this.getDownloadUrl(uploadResult.object_key)
+    const downloadUrl = await this.getDownloadUrl(uploadResult.object_key, spaceId)
 
     return {
       url: downloadUrl,
@@ -76,11 +85,13 @@ export class FileUploadService {
   /**
    * Get presigned upload URL from backend
    * @param objectKey - Object key for the file
+   * @param space_id - Space ID
    * @returns Presigned upload URL
    */
-  private async getUploadUrl(objectKey: string): Promise<string> {
+  private async getUploadUrl(objectKey: string, space_id: string): Promise<string> {
     const response = await WorkflowService.getUploadUrl({
       object_key: objectKey,
+      space_id,
     })
 
     if (response.code !== 200) {
@@ -96,15 +107,11 @@ export class FileUploadService {
    * @param uploadUrl - Presigned upload URL
    * @param onProgress - Optional progress callback
    */
-  private uploadToMinio(
-    file: File,
-    uploadUrl: string,
-    onProgress?: (percent: number) => void
-  ): Promise<void> {
+  private uploadToMinio(file: File, uploadUrl: string, onProgress?: (percent: number) => void): Promise<void> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
 
-      xhr.upload.addEventListener('progress', (e) => {
+      xhr.upload.addEventListener('progress', e => {
         if (e.lengthComputable && onProgress) {
           const percent = Math.round((e.loaded / e.total) * 100)
           onProgress(percent)
@@ -133,13 +140,14 @@ export class FileUploadService {
    * @param objectKey - Object key for the file
    * @returns Presigned download URL
    */
-  async getDownloadUrl(objectKey: string): Promise<string> {
+  async getDownloadUrl(objectKey: string, space_id: string): Promise<string> {
     const response = await WorkflowService.getDownloadUrl({
       object_key: objectKey,
+      space_id: space_id,
     })
 
     if (response.code !== 200) {
-      throw new Error(response.msg || 'Failed to get download URL')
+      throw new Error(response.message || 'Failed to get download URL')
     }
 
     return response.data.download_url

@@ -65,6 +65,14 @@ export interface TemplateContentResponse {
   template_content: string
 }
 
+/**
+ * 心跳检测响应类型
+ */
+export interface HeartbeatResponse {
+  status: 'available' | 'unavailable'
+  message: string
+}
+
 // ==================== 工具函数 ====================
 
 /**
@@ -104,7 +112,7 @@ export const deepsearchTemplateService = {
     const response = await client.get<TemplateListResponse>(
       `/agent/deepsearch/template/${spaceId}`
     )
-    return response.data.data
+    return response.data
   },
 
   /**
@@ -179,5 +187,23 @@ export const deepsearchTemplateService = {
       `/agent/deepsearch/template/${spaceId}/${templateId}`
     )
     return response.data.template_content
+  }
+}
+
+/**
+ * DeepSearch 心跳检测服务
+ */
+export const deepsearchHeartbeatService = {
+  /**
+   * 检查 DeepSearch 服务是否可用
+   * 通过 Agent Studio 后端接口查询 DeepSearch 服务状态
+   * @returns 心跳检测结果
+   */
+  async checkHeartbeat(): Promise<HeartbeatResponse> {
+    const client = getApiClient()
+    const response = await client.get<{status: string, message: string}>(
+      '/agent/deepsearch/heartbeat'
+    )
+    return response.data
   }
 }

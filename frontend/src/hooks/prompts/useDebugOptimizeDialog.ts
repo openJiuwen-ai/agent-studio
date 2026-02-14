@@ -23,6 +23,9 @@ interface UseDebugOptimizeDialogProps {
   abortControllerRef: React.MutableRefObject<AbortController | null>
   badcaseOptimizeStreamingRef: React.MutableRefObject<string>
 
+  // 工作空间
+  workspaceId: string
+
   // 数据
   optimizationSource: OptimizationSource
   promptMessages: PromptMessage[]
@@ -71,6 +74,7 @@ export const useDebugOptimizeDialog = (props: UseDebugOptimizeDialogProps): UseD
     setAiReplyOptimizeDialogOpen,
     abortControllerRef,
     badcaseOptimizeStreamingRef,
+    workspaceId,
     optimizationSource,
     promptMessages,
     setPromptMessages,
@@ -203,6 +207,7 @@ export const useDebugOptimizeDialog = (props: UseDebugOptimizeDialogProps): UseD
 
         await FeedbackOptService.optimizeBadcase(
           request,
+          workspaceId,
           data => {
             // 使用类似快捷优化的流式处理逻辑
             badcaseOptimizeStreamingRef.current += data

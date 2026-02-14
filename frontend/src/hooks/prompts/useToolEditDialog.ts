@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { EditingTool } from '@/components/Prompts'
 import type { ComparisonGroupData } from '@/types/promptType'
 
@@ -27,6 +28,7 @@ export const useToolEditDialog = ({
   setHasUnsavedChanges,
   triggerAutoSave,
 }: UseToolEditDialogProps) => {
+  const { t } = useTranslation()
   // 工具编辑相关状态
   const [editingTool, setEditingTool] = useState<EditingTool | null>(null)
   const [toolDialogOpen, setToolDialogOpen] = useState(false)
@@ -47,16 +49,16 @@ export const useToolEditDialog = ({
     // 根据参数设置上下文 - 统一使用 {groupId} 格式
     setCurrentToolContext({ groupId })
     if (groupId !== undefined) {
-      // 对比模式
-      console.log(`🔧 [ADD-TOOL] 设置工具上下文为组${groupId}(${groupId === 0 ? '基准组' : '对照组'})`)
+      console.log(
+        `🔧 [ADD-TOOL] ${groupId === 0 ? t('hooks.prompts.useToolEditDialog.addToolContextBaseGroup', { groupId }) : t('hooks.prompts.useToolEditDialog.addToolContextControlGroup', { groupId })}`,
+      )
     } else {
-      // 主页面模式
-      console.log(`🔧 [ADD-TOOL] 设置工具上下文为主页面`)
+      console.log(`🔧 [ADD-TOOL] ${t('hooks.prompts.useToolEditDialog.addToolContextMain')}`)
     }
 
     setToolDialogOpen(true)
-    console.log(`🔧 [ADD-TOOL] 工具对话框已打开`)
-  }, [])
+    console.log(`🔧 [ADD-TOOL] ${t('hooks.prompts.useToolEditDialog.toolDialogOpened')}`)
+  }, [t])
 
   // 工具编辑函数
   const handleEditTool = useCallback((tool: any, context?: 'main' | 'base' | number | { type: 'control'; groupId: number }) => {
@@ -71,7 +73,7 @@ export const useToolEditDialog = ({
       parametersJsonSchema: tool.parametersJsonSchema, // 保留JSON Schema，用于在对话框中自动切换到JSON模式
       parametersMode: tool.parametersMode, // 保留参数模式
     }
-    console.log(`🔧 [EDIT-TOOL] 工具 ${tool.name} 的 parametersMode:`, tool.parametersMode)
+    console.log(`🔧 [EDIT-TOOL] ${t('hooks.prompts.useToolEditDialog.editToolParametersMode', { name: tool.name })}`, tool.parametersMode)
     setEditingTool(editingTool)
 
     // 统一转换为新的格式 {groupId}
@@ -89,16 +91,16 @@ export const useToolEditDialog = ({
     }
 
     setCurrentToolContext({ groupId })
-    console.log(`🔧 [EDIT-TOOL] 设置工具编辑上下文:`, { groupId })
+    console.log(`🔧 [EDIT-TOOL] ${t('hooks.prompts.useToolEditDialog.editToolContextSet')}`, { groupId })
     setToolDialogOpen(true)
-  }, [])
+  }, [t])
 
   // 工具删除函数
   const handleDeleteTool = useCallback(
     (toolId: string) => {
       const newTools = tools.filter(tool => tool.id !== toolId)
       setTools(newTools)
-      showSnackbar('工具删除成功！', 'success')
+      showSnackbar(t('hooks.prompts.useToolEditDialog.toolDeleteSuccess'), 'success')
 
       // 使用更新后的工具列表触发自动保存
       setHasUnsavedChanges(true)
@@ -107,7 +109,7 @@ export const useToolEditDialog = ({
         toolsEnabled: toolsEnabled,
       })
     },
-    [tools, setTools, toolsEnabled, showSnackbar, setHasUnsavedChanges, triggerAutoSave],
+    [tools, setTools, toolsEnabled, showSnackbar, setHasUnsavedChanges, triggerAutoSave, t],
   )
 
   // 工具保存函数 - 接收ToolEditDialog传递的updatedTool（包含parametersJsonSchema）
@@ -121,7 +123,7 @@ export const useToolEditDialog = ({
       }
 
       if (!toolToProcess.name.trim()) {
-        showSnackbar('请输入工具名称！', 'error')
+        showSnackbar(t('hooks.prompts.useToolEditDialog.toolNameRequired'), 'error')
         return
       }
 
@@ -168,7 +170,7 @@ export const useToolEditDialog = ({
         if (isNewTool) {
           // 新增工具：检查名称是否已存在
           if (checkToolNameDuplicate(tools, toolToSave.name)) {
-            showSnackbar('工具名称已存在，请重新命名', 'error')
+            showSnackbar(t('hooks.prompts.useToolEditDialog.toolNameExists'), 'error')
             return
           }
           // 新增工具：添加到列表
@@ -176,7 +178,7 @@ export const useToolEditDialog = ({
         } else {
           // 编辑工具：检查名称是否与其他工具重复（排除当前编辑的工具）
           if (checkToolNameDuplicate(tools, toolToSave.name, toolToSave.id)) {
-            showSnackbar('工具名称已存在，请重新命名', 'error')
+            showSnackbar(t('hooks.prompts.useToolEditDialog.toolNameExists'), 'error')
             return
           }
           // 编辑工具：更新列表中对应的工具
@@ -187,7 +189,7 @@ export const useToolEditDialog = ({
             // 如果找不到，作为新增处理（兜底逻辑）
             // 但需要检查名称是否重复
             if (checkToolNameDuplicate(tools, toolToSave.name)) {
-              showSnackbar('工具名称已存在，请重新命名', 'error')
+              showSnackbar(t('hooks.prompts.useToolEditDialog.toolNameExists'), 'error')
               return
             }
             updatedTools = [...tools, toolToSave]
@@ -197,6 +199,7 @@ export const useToolEditDialog = ({
 
         // 主页面工具操作：先更新状态，然后触发自动保存
         setHasUnsavedChanges(true)
+        console.log('🔧 [TOOL-SAVE]', t('hooks.prompts.useToolEditDialog.toolSaveTriggerLog'), updatedTools?.length, updatedTools?.map((toolItem: any) => ({ name: toolItem.name, defaultValue: toolItem.defaultValue })))
         triggerAutoSave({
           tools: updatedTools,
           toolsEnabled: toolsEnabled,
@@ -213,13 +216,13 @@ export const useToolEditDialog = ({
         if (isNewTool) {
           // 新增工具：检查名称是否已存在
           if (checkToolNameDuplicate(groupTools, toolToSave.name)) {
-            showSnackbar('工具名称已存在，请重新命名', 'error')
+            showSnackbar(t('hooks.prompts.useToolEditDialog.toolNameExists'), 'error')
             return
           }
         } else {
           // 编辑工具：检查名称是否与其他工具重复（排除当前编辑的工具）
           if (checkToolNameDuplicate(groupTools, toolToSave.name, toolToSave.id)) {
-            showSnackbar('工具名称已存在，请重新命名', 'error')
+            showSnackbar(t('hooks.prompts.useToolEditDialog.toolNameExists'), 'error')
             return
           }
         }
@@ -263,7 +266,7 @@ export const useToolEditDialog = ({
       setEditingTool(null)
 
       setCurrentToolContext({ groupId: undefined }) // 重置为默认上下文（主页面）
-      showSnackbar('工具保存成功！', 'success')
+      showSnackbar(t('hooks.prompts.useToolEditDialog.toolSaveSuccess'), 'success')
     },
     [
       editingTool,
@@ -276,6 +279,7 @@ export const useToolEditDialog = ({
       setHasUnsavedChanges,
       triggerAutoSave,
       showSnackbar,
+      t,
     ],
   )
 

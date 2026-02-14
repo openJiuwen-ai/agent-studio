@@ -8,7 +8,15 @@ export type { TokenProvider, AuthStateUpdater } from './client'
 export { ApiClientProvider, useApiClient, useToken } from './context/ApiClientProvider'
 
 // 工具函数
-export { getApiClient, getToken, setGlobalTokenProvider, isApiClientInitialized, waitForApiClientInitialization } from './utils/apiClientFactory'
+export {
+  getApiClient,
+  getToken,
+  setGlobalTokenProvider,
+  isApiClientInitialized,
+  waitForApiClientInitialization,
+  stream,
+} from './utils/apiClientFactory'
+export type { StreamOptions } from './utils/apiClientFactory'
 export { isApiError, getErrorMessage, getErrorResponse } from './utils/errorHandling'
 export type { ApiError } from './utils/errorHandling'
 
@@ -226,7 +234,7 @@ export { TagService } from './services/tagService'
 export { TraceService, traceService } from './services/traceService'
 export { KnowledgeBaseService } from './services/knowledgeBaseService'
 export { MemoryBaseService } from './services/memoryBaseService'
-export { deepsearchTemplateService, fileToBase64 } from './services/deepsearchTemplateService'
+export { deepsearchTemplateService, deepsearchHeartbeatService, fileToBase64 } from './services/deepsearchTemplateService'
 export { webSearchEngineService } from './services/webSearchEngineService'
 export type { FrontendModelConfig } from './services/modelService'
 export type { Space, SpaceResponse } from './services/spaceService'
@@ -238,7 +246,8 @@ export type {
   TemplateImportResponse,
   TemplateListResponse,
   TemplateDeleteResponse,
-  TemplateContentResponse
+  TemplateContentResponse,
+  HeartbeatResponse
 } from './services/deepsearchTemplateService'
 export type {
   WebSearchEngineConfig,

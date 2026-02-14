@@ -60,6 +60,9 @@ interface UseFeedbackOptimizeDialogProps {
   modelConfig: ModelConfig
   availableModels: Model[]
 
+  // 工作空间
+  workspaceId: string
+
   // 辅助函数
   getPromptContentBySource: (messageId?: string, optimizationSourceOverride?: OptimizationSource) => string
   calculateSelectionIndices: (selectedText: string, promptContent: string) => { start: number; end: number } | null
@@ -129,6 +132,7 @@ export const useFeedbackOptimizeDialog = (props: UseFeedbackOptimizeDialogProps)
     selectedModel,
     modelConfig,
     availableModels,
+    workspaceId,
     getPromptContentBySource,
     calculateSelectionIndices,
     setSnackbar,
@@ -651,6 +655,7 @@ export const useFeedbackOptimizeDialog = (props: UseFeedbackOptimizeDialogProps)
           // 场景1：反馈优化 - 不传递位置参数
           await FeedbackOptService.optimizeFeedback(
             { ...baseRequest, mode: 'general' },
+            workspaceId,
             handleData,
             handleError,
             handleComplete,
@@ -675,6 +680,7 @@ export const useFeedbackOptimizeDialog = (props: UseFeedbackOptimizeDialogProps)
             }
             await FeedbackOptService.optimizeFeedback(
               { ...baseRequest, mode: 'insert', start_pos: cursorPosition.position },
+              workspaceId,
               handleData,
               handleError,
               handleComplete,
@@ -737,6 +743,7 @@ export const useFeedbackOptimizeDialog = (props: UseFeedbackOptimizeDialogProps)
               if (updatedIndices) {
                 await FeedbackOptService.optimizeFeedback(
                   { ...baseRequest, mode: 'select', start_pos: updatedIndices.start, end_pos: updatedIndices.end },
+                  workspaceId,
                   handleData,
                   handleError,
                   handleComplete,

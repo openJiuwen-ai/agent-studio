@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { DebugMessage, DebugMockTool, DebugStreamingRequest, DebugStreamingResponse } from '@test-agentstudio/api-client'
 import type { ChatMessage } from '@/components/Prompts'
 import type { Model, ModelConfig } from '@/types/promptType'
@@ -89,8 +90,10 @@ export const useMultiRunDialog = (options: UseMultiRunDialogOptions) => {
     scrollToBottom,
     saveDebugContext,
     debugTraceInfo,
-    setMultiRunDialogOpen,
-  } = options
+  setMultiRunDialogOpen,
+} = options
+
+  const { t } = useTranslation()
 
   // 处理单个多实例的调试接口调用
   const handleMultiRunInstanceCall = useCallback(
@@ -459,7 +462,7 @@ export const useMultiRunDialog = (options: UseMultiRunDialogOptions) => {
 
       // 检查是否配置了有效的模型
       if (!checkValidModel(selectedModel, modelConfig, availableModels)) {
-        showSnackbar('请先配置有效的模型', 'error')
+        showSnackbar(t('hooks.prompts.useMultiRunDialog.configValidModelFirst'), 'error')
         return
       }
 
@@ -573,7 +576,9 @@ export const useMultiRunDialog = (options: UseMultiRunDialogOptions) => {
                     ...updated[instanceIndex],
                     {
                       ...messageToRetry,
-                      content: `重试失败: ${error instanceof Error ? error.message : '未知错误'}`,
+                      content: t('hooks.prompts.useMultiRunDialog.retryFailedWithMessage', {
+                        message: error instanceof Error ? error.message : t('hooks.prompts.useMultiRunDialog.unknownError'),
+                      }),
                     },
                   ]
                   return updated
@@ -656,7 +661,9 @@ export const useMultiRunDialog = (options: UseMultiRunDialogOptions) => {
         // 为所有实例添加错误消息
         const errorMessage = {
           type: 'ai' as const,
-          content: `获取提示词详情失败: ${error instanceof Error ? error.message : '未知错误'}`,
+          content: t('hooks.prompts.useMultiRunDialog.getPromptDetailFailedWithMessage', {
+            message: error instanceof Error ? error.message : t('hooks.prompts.useMultiRunDialog.unknownError'),
+          }),
           timestamp: new Date().toLocaleString('zh-CN'),
           userInput: currentInput,
         }
@@ -682,6 +689,7 @@ export const useMultiRunDialog = (options: UseMultiRunDialogOptions) => {
       promptId,
       workspaceId,
       handleMultiRunInstanceCall,
+      t,
     ],
   )
 
@@ -762,7 +770,9 @@ export const useMultiRunDialog = (options: UseMultiRunDialogOptions) => {
         // 添加错误消息
         const errorMessage = {
           type: 'ai' as const,
-          content: `重试失败: ${error instanceof Error ? error.message : '未知错误'}`,
+          content: t('hooks.prompts.useMultiRunDialog.retryFailedWithMessage', {
+            message: error instanceof Error ? error.message : t('hooks.prompts.useMultiRunDialog.unknownError'),
+          }),
           timestamp: new Date().toLocaleString('zh-CN'),
         }
 
@@ -782,6 +792,7 @@ export const useMultiRunDialog = (options: UseMultiRunDialogOptions) => {
       promptId,
       workspaceId,
       handleMultiRunInstanceCall,
+      t,
     ],
   )
 

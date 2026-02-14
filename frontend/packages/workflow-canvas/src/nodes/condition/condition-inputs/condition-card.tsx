@@ -217,7 +217,7 @@ const ConditionContent: React.FC<{
         const handleLogicChange = useCallback(
           (value: string | number | unknown[] | Record<string, unknown> | undefined) => {
             if (value !== undefined && (typeof value === 'string' || typeof value === 'number')) {
-              const logic = typeof value === 'number' ? value : parseInt(value as string, 10) as 1 | 2
+              const logic = typeof value === 'number' ? value : (parseInt(value as string, 10) as 1 | 2)
               onUpdate(branchIndex, { ...branch, logic })
             }
           },
@@ -269,7 +269,7 @@ const ConditionContent: React.FC<{
                                   const updatedValue: ConditionValue = {
                                     left: newValue.left ?? currentValue.left,
                                     operator: newValue.operator,
-                                    right: newValue.right ?? currentValue.right,
+                                    right: 'right' in (newValue as object) ? newValue.right : currentValue.right,
                                   }
 
                                   conditionField.onChange(updatedValue)

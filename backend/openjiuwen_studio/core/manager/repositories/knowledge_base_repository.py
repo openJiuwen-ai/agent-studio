@@ -368,6 +368,7 @@ class KnowledgeBaseRepository:
         query: str,
         page: int = 1,
         page_size: int = 10,
+        index_manager_type: str | None = None,
         db_session: Session | None = None,
     ) -> ResponseModel[dict]:
         with get_db_jw(db_session) as db:
@@ -382,9 +383,11 @@ class KnowledgeBaseRepository:
             )
 
             # 构建基础查询条件
-            find_id = {
+            find_id: dict = {
                 "space_id": space_id,
             }
+            if index_manager_type:
+                find_id["index_manager_type"] = index_manager_type
 
             # 验证分页参数
             page = max(1, page)

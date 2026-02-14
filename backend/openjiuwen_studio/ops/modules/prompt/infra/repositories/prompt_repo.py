@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional, Any, Tuple, Union
 import yaml
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func, case
 
 from openjiuwen_studio.ops.common.date_time_util import get_china_datetime
 from openjiuwen_studio.ops.modules.prompt.domain import entities
@@ -97,6 +97,54 @@ class SQLPromptRepository(PromptRepository):
             query = query.order_by(order_by)
         prompts_basic = query.offset(skip).limit(page_size).all()
         all_basic = self.db.query(promptmodel).filter(and_(*conditions)).all()
+        return prompts_basic, all_basic
+
+    def list_all_order_by_max_updated_at(
+        self,
+        page_num: int,
+        page_size: int,
+        conditions: list,
+        asc: bool,
+    ) -> Tuple[List[Base], List[Base]]:
+        """
+        按 max(prompt_basic.updated_at, prompt_user_draft.updated_at) 排序分页查询。
+        使用左连接 draft 子查询（按 prompt_id 取 max(updated_at)），排序键为两者较大值。
+        """
+        Basic = orm_repo.PromptBasicModel
+        Draft = orm_repo.PromptUserDraftModel
+        draft_subq = (
+            self.db.query(
+                Draft.prompt_id,
+                func.max(Draft.updated_at).label("max_draft_updated_at"),
+            )
+            .filter(Draft.deleted_at == 0)
+            .group_by(Draft.prompt_id)
+            .subquery()
+        )
+        # 排序键: max(basic.updated_at, coalesce(draft.max_updated_at, basic.updated_at))
+        order_col = case(
+            (
+                Basic.updated_at >= func.coalesce(draft_subq.c.max_draft_updated_at, Basic.updated_at),
+                Basic.updated_at,
+            ),
+            else_=func.coalesce(draft_subq.c.max_draft_updated_at, Basic.updated_at),
+        )
+        order_by_clause = order_col.asc() if asc else order_col.desc()
+        skip = (page_num - 1) * page_size
+        query = (
+            self.db.query(Basic)
+            .outerjoin(draft_subq, Basic.id == draft_subq.c.prompt_id)
+            .filter(and_(*conditions))
+            .order_by(order_by_clause)
+        )
+        prompts_basic = query.offset(skip).limit(page_size).all()
+        all_basic = (
+            self.db.query(Basic)
+            .outerjoin(draft_subq, Basic.id == draft_subq.c.prompt_id)
+            .filter(and_(*conditions))
+            .order_by(order_by_clause)
+            .all()
+        )
         return prompts_basic, all_basic
 
     def delete(self, prompt_id: int, promptmodel: Base) -> None:

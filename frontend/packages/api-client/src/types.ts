@@ -1187,6 +1187,7 @@ export interface UpdatePromptResponse extends ApiResponse<{
 // 删除提示词请求类型
 export interface DeletePromptRequest {
   prompt_id: string
+  workspace_id: string
 }
 
 // 删除提示词响应类型
@@ -2003,7 +2004,7 @@ export interface ComponentExecuteRequest {
 // 单节点调试响应类型
 export interface ComponentExecuteResponse {
   data: {
-    responseContent: string
+    response: string
     output: {
       result: string
     }
@@ -2311,6 +2312,7 @@ export interface AgentVersionListResponse {
 // 获取文件上传URL请求类型
 export interface GetUploadUrlRequest {
   object_key: string
+  space_id?: string
 }
 
 // 获取文件上传URL响应类型
@@ -2325,6 +2327,7 @@ export interface GetUploadUrlResponse {
 // 获取文件下载URL请求类型
 export interface GetDownloadUrlRequest {
   object_key?: string
+  space_id?: string
 }
 
 // 获取文件下载URL响应类型

@@ -1,8 +1,10 @@
+from typing import Any, Dict
 from fastapi import APIRouter, Depends, status, BackgroundTasks, Request
 from fastapi.security.oauth2 import OAuth2PasswordRequestForm
 from openjiuwen_studio.core.manager.email_manager.email_utils import EmailUtils
 from openjiuwen_studio.core.manager.login_manager.auth_service import AuthService
 from openjiuwen_studio.core.manager.login_manager.session_auth import oauth2_scheme
+from openjiuwen_studio.core.manager.login_manager.user import get_current_user
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.core.common.language_thread_context import get_highest_priority_language
 from openjiuwen_studio.schemas.user import (
@@ -11,9 +13,6 @@ from openjiuwen_studio.schemas.user import (
     ResetPasswordRequest,
     RefreshTokenRequest
 )
-
-
-
 
 auth_router = APIRouter()
 
@@ -90,7 +89,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 
 @auth_router.post("/logout", response_model=ResponseModel[dict])
-async def logout(request: Request):
+async def logout(request: Request,
+                 current_user: Dict[str, Any] = Depends(get_current_user)):
     """用户登出接口，删除access token和refresh token（置空session_key和refresh_token）"""
     access_token = None
     # 获取access token

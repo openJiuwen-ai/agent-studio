@@ -93,8 +93,8 @@ export function useTestExecution(options: UseTestExecutionOptions): UseTestExecu
             let outputData = null
             if (response.data?.output?.result) {
               outputData = response.data.output.result
-            } else if (response.data?.responseContent) {
-              outputData = response.data.responseContent
+            } else if (response.data?.response) {
+              outputData = response.data.response
             } else {
               outputData = response.data
             }
