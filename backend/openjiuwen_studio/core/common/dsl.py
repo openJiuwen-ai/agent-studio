@@ -81,7 +81,7 @@ class HttpContentType(StrEnum):
 
 
 class HttpResponseFormat(StrEnum):
-    AUTO = "auto"
+    AUTO = "autodetect"
     JSON = "json"
     TEXT = "text"
     BINARY = "binary"

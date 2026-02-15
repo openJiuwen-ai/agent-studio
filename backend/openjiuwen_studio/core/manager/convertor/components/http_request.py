@@ -106,7 +106,7 @@ def _http_request_config_convert(node: Node) -> dsl.HttpRequestConfig:
     # Use default values for response handling, retry, rate limit, and advanced options
     # These can be extended later if needed in the UI
     response_handling = dsl.HttpResponseHandlingConfig(
-        response_format=dsl.HttpResponseFormat("auto"),
+        response_format=dsl.HttpResponseFormat(dsl.HttpResponseFormat.AUTO),
         success_status_codes=[200, 201, 202, 204],
         failure_status_codes=[],
         response_mode="full",

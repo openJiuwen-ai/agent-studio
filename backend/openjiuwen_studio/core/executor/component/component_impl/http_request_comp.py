@@ -14,7 +14,7 @@ from openjiuwen.core.session.node import Session
 # Import agent-core's HTTPRequestComponent
 from openjiuwen.core.workflow.components.http.http_request_component import (
     HTTPRequestComponent as CoreHTTPRequestComponent,
-    HttpComponentConfig,
+    HttpComponentConfig as CoreHttpComponentConfig,
     HttpRequestParamConfig as CoreHttpRequestParamConfig,
 )
 
@@ -84,13 +84,13 @@ class HttpRequestComponent(WorkflowComponent):
             core_config = self._convert_to_core_config(inputs)
 
             # Validate URL before making request
-            logger.info(f"HTTP Request Component - URL: {core_config.url}, Method: {core_config.method}")
-            if not core_config.url or not isinstance(core_config.url, str):
-                raise ValueError(f"Invalid URL: {core_config.url}")
+            logger.info(f"HTTP Request Component - URL: {core_config.request_params.url}, Method: {core_config.request_params.method}")
+            if not core_config.request_params.url or not isinstance(core_config.request_params.url, str):
+                raise ValueError(f"Invalid URL: {core_config.request_params.url}")
 
             # Create and invoke agent-core's HTTPRequestComponent
             core_component = CoreHTTPRequestComponent(core_config)
-            response = await core_component.invoke(inputs, session, context)
+            response = await core_component.to_executable().invoke(inputs, session, context)
 
             # Process successful response
             final_result = self._process_response(response)
@@ -109,7 +109,7 @@ class HttpRequestComponent(WorkflowComponent):
             final_result = self._process_error(error_body, exception_config)
             return final_result
 
-    def _convert_to_core_config(self, inputs: Input) -> HttpComponentConfig:
+    def _convert_to_core_config(self, inputs: Input) -> CoreHttpComponentConfig:
         """Convert studio HttpRequestConfig to agent-core HttpComponentConfig"""
         from openjiuwen.core.workflow.components.http.http_request_component import (
             HttpAuthConfig,
@@ -118,34 +118,31 @@ class HttpRequestComponent(WorkflowComponent):
             HttpRateLimitConfig,
             HttpAdvancedOptionsConfig,
             HttpResponseHandlingConfig,
+            HttpContentType
         )
 
-        # Replace variable placeholders in URL
-        url = self._replace_variables(self.conf.url, inputs)
+        method = inputs["method"]
+
+        url =  inputs["url"]
+        # url = self._replace_variables(self.conf.url, inputs)
 
         # Convert headers
-        headers = {}
-        for header in self.conf.headers:
-            key = header.key
-            value = self._replace_variables(str(header.value), inputs)
-            headers[key] = value
+        headers = inputs["headers"]
+        # headers =  {}
+        # for header in self.conf.headers:
+        #     key = header.key
+        #     value = self._replace_variables(str(header.value), inputs)
+        #     headers[key] = value
 
         # Convert query params
-        query_params = {}
-        for param in self.conf.query_params:
-            key = param.key
-            value = self._replace_variables(str(param.value), inputs)
-            query_params[key] = value
-
+        query_params = inputs["query"]
+ 
         # Convert body
         body_config = None
-        if self.conf.body:
-            body_content = self.conf.body.content
-            if isinstance(body_content, str):
-                body_content = self._replace_variables(body_content, inputs)
+        body_content = inputs["body"]
+        if body_content is not None:
             body_config = HttpRequestBodyConfig(
-                content_type=self.conf.body.content_type, content=body_content
-            )
+                content_type=HttpContentType.JSON, json_data=self.parse_body_content(body_content))
 
         # Convert auth config
         auth_config = HttpAuthConfig(
@@ -192,18 +189,37 @@ class HttpRequestComponent(WorkflowComponent):
         )
 
         # Create core config
-        return HttpComponentConfig(
-            url=url,
-            method=self.conf.method,
-            headers=headers,
-            query_params=query_params,
-            body=body_config,
-            auth=auth_config,
-            response_handling=response_handling,
-            retry=retry_config,
-            rate_limit=rate_limit_config,
-            advanced=advanced_options,
+        return CoreHttpComponentConfig(
+             request_params=CoreHttpRequestParamConfig(
+                url=url,
+                method=method,
+                headers=headers,
+                query_params=query_params,
+                body=body_config,
+                authentication=auth_config,
+                response_handling=response_handling,
+                retry_config=retry_config,
+                rate_limit_config=rate_limit_config,
+                advanced_options=advanced_options # HttpAdvancedOptionsConfig(ignore_ssl_issues=True) 
+            ),
+            # url=url,
+            # method=self.conf.method,
+            # retry=retry_config,
+            # rate_limit=rate_limit_config,
+            # advanced=advanced_options,
         )
+
+    def parse_body_content(self, body_content):
+        '''Parse body content, if it's a JSON string, convert to dict, otherwise return as is'''
+        if isinstance(body_content, str):
+            import json
+
+            try:
+                body_content = json.loads(body_content)
+            except json.JSONDecodeError:
+                    # Not a JSON string, keep as is
+                pass
+        return body_content
 
     def _replace_variables(self, text: str, inputs: Input) -> str:
         """Replace {{variable}} placeholders with values from inputs"""
@@ -213,7 +229,7 @@ class HttpRequestComponent(WorkflowComponent):
             return text
 
         # Find all {{variable}} patterns
-        pattern = r'\{\{([^}]+)\}\}'
+        pattern = r'\$\{(?:[^}.]+\.)?([^}.]+)\}' #    r'\{\{([^}]+)\}\}'
         matches = re.findall(pattern, text)
 
         for var_name in matches:
@@ -221,7 +237,8 @@ class HttpRequestComponent(WorkflowComponent):
             # Get value from inputs
             value = inputs.get(var_name, f"{{{{{var_name}}}}}")
             # Replace placeholder with value
-            text = text.replace(f"{{{{{var_name}}}}}", str(value))
+            text = value if isinstance(value, str) else str(value)
+            # text = text.replace(f"{{{{{var_name}}}}}", str(value))
 
         return text
 
