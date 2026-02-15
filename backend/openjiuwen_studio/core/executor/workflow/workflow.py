@@ -24,6 +24,7 @@ from openjiuwen_studio.core.executor.component.compile.llm_comp_compiler import 
 from openjiuwen_studio.core.executor.component.compile.questioner_comp_compiler import QuestionerCompCompiler
 from openjiuwen_studio.core.executor.component.compile.branch_comp_compiler import BranchCompCompiler
 from openjiuwen_studio.core.executor.component.compile.code_comp_compiler import CodeCompCompiler
+from openjiuwen_studio.core.executor.component.compile.http_request_comp_compiler import HttpRequestCompCompiler
 from openjiuwen_studio.core.executor.component.component_impl.empty_comp import EmptyComponent
 from openjiuwen_studio.core.executor.component.compile.text_editor_comp_compiler import TextEditorCompCompiler
 from openjiuwen_studio.core.executor.component.compile.user_input_comp_compiler import UserInputCompCompiler
@@ -108,6 +109,7 @@ class Workflow:
         ComponentType.COMPONENT_TYPE_TEXT_EDITOR: '_compile_text_editor_component',
         ComponentType.COMPONENT_TYPE_VARIABLE_MERGE: '_compile_variable_merge_component',
         ComponentType.COMPONENT_TYPE_CODE: '_compile_code_component',
+        ComponentType.COMPONENT_TYPE_HTTP_REQUEST: '_compile_http_request_component',
     }
 
     # 特殊组件类型（需要异步处理或特殊参数）
@@ -302,6 +304,11 @@ class Workflow:
         """编译代码组件"""
         code_compiler = CodeCompCompiler(comp.id, comp.configs, workflow_dl.connections)
         return code_compiler.compile()
+
+    async def _compile_http_request_component(self, comp: Component, workflow_dl: BaseFlow):
+        """编译HTTP请求组件"""
+        http_request_compiler = HttpRequestCompCompiler(comp.id, comp.configs, workflow_dl.connections)
+        return http_request_compiler.compile()
 
     async def _compile_special_component(self, context: Context, workflow_dl: BaseFlow, comp: Component, loader):
         """处理特殊组件（保持原有逻辑）"""

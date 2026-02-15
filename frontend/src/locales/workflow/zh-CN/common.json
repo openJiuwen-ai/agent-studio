@@ -40,7 +40,8 @@
     "Node": "节点",
     "Unknown": "未知",
     "Plugin": "插件",
-    "Workflow": "工作流"
+    "Workflow": "工作流",
+    "HttpRequest": "HTTP请求"
   },
   "validators": {
     "workflowMustContainPath": "工作流必须包含从开始节点到结束节点的完整路径",
