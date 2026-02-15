@@ -1484,6 +1484,9 @@ const ToolConfigurationPage: React.FC = () => {
                       <Select value={tool.method} onChange={e => setTool({ ...tool, method: e.target.value as number })} disabled={isReadOnly}>
                         <MenuItem value={1}>GET</MenuItem>
                         <MenuItem value={2}>POST</MenuItem>
+                        <MenuItem value={3}>PUT</MenuItem>
+                        <MenuItem value={4}>DELETE</MenuItem>
+                        <MenuItem value={5}>PATCH</MenuItem>
                       </Select>
                     </FormControl>
                   </div>

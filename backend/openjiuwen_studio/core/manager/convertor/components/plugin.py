@@ -27,6 +27,7 @@ api_method_mapping = {
     PluginApiMethod.PLUGIN_API_METHOD_POST: "POST",
     PluginApiMethod.PLUGIN_API_METHOD_PUT: "PUT",
     PluginApiMethod.PLUGIN_API_METHOD_DELETE: "DELETE",
+    PluginApiMethod.PLUGIN_API_METHOD_PATCH: "PATCH",
 }
 
 param_type_mapping = {
