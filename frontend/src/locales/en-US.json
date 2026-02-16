@@ -2758,9 +2758,13 @@
       "add": "Add",
       "update": "Update",
       "delete": "Delete",
+      "noneParam": "None",
+
       "addSuccess": "Parameter added successfully",
       "updateSuccess": "Parameter updated successfully",
       "deleteSuccess": "Parameter deleted successfully",
+      "pathParam": "Path Parameter",
+
       "nameRequired": "Parameter name cannot be empty",
       "nonRuntimeValueRequired": "Non-runtime parameters must have a default value",
       "name": "Parameter Name",
@@ -3252,9 +3256,11 @@
     "toolConfig": {
       "noDescription": "No description",
       "defaultValueLabel": "Default Value",
+      "noneParam": "None",
       "headerParam": "Header Parameter",
       "queryParameter": "Query Parameter",
       "bodyParameter": "Body Parameter",
+      "pathParam": "Path Parameter",
       "thisRequiredField": "This field is required",
       "required": "Required",
       "enterDefaultValue": "Enter default value",
