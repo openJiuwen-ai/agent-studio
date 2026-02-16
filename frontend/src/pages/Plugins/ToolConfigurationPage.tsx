@@ -2110,6 +2110,7 @@ const ToolConfigurationPage: React.FC = () => {
                     </Typography>
                     <FormControl fullWidth>
                       <Select value={parameterForm.method} onChange={e => handleParameterFormChange('method', e.target.value)}>
+                        <MenuItem value={0}>{t('plugins.toolConfig.pathParam', 'Path (路径参数)')}</MenuItem>
                         <MenuItem value={1}>{t('plugins.toolConfig.headerParam')}</MenuItem>
                         <MenuItem value={2}>{t('plugins.toolConfig.queryParameter')}</MenuItem>
                         {tool.method !== 1 && <MenuItem value={3}>{t('plugins.toolConfig.bodyParameter')}</MenuItem>}

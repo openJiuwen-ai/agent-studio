@@ -33,12 +33,12 @@ export const validateToolPath = (path: string): { isValid: boolean; error: strin
     }
   }
 
-  // 检查是否只包含英文、数字、下划线、连字符和斜杠
-  const validPathRegex = /^\/[a-zA-Z0-9\-_/]*$/
+  // 检查是否只包含英文、数字、下划线、连字符、斜杠和花括号（用于路径参数）
+  const validPathRegex = /^\/[a-zA-Z0-9\-_/{}]*$/
   if (!validPathRegex.test(path)) {
     return {
       isValid: false,
-      error: '工具路径只能包含英文、数字、下划线(_)、连字符(-)和斜杠(/)',
+      error: '工具路径只能包含英文、数字、下划线(_)、连字符(-)、斜杠(/)和花括号({}，用于路径参数)',
     }
   }
 
@@ -77,14 +77,14 @@ export const validateToolPathRealtime = (path: string): string => {
 /**
  * 常见路径示例（用于帮助提示）
  */
-export const TOOL_PATH_EXAMPLES = ['/api/users', '/weather/query', '/user/profile', '/data/search', '/v1/auth/login', '/files/upload', '/notifications/send']
+export const TOOL_PATH_EXAMPLES = ['/api/users', '/api/users/{id}', '/api/v1/Activities/{id}', '/weather/query', '/user/{userId}/profile', '/data/search', '/v1/auth/login', '/files/{fileId}/download']
 
 /**
  * 生成路径提示信息
  * @returns 路径格式说明
  */
 export const getPathHelpText = (): string => {
-  return '路径必须以"/"开头，只能包含英文、数字、下划线(_)、连字符(-)和斜杠(/)，例如：/api/users'
+  return '路径必须以"/"开头，只能包含英文、数字、下划线(_)、连字符(-)、斜杠(/)和花括号({}，用于路径参数)，例如：/api/users 或 /api/users/{id}'
 }
 
 /**
