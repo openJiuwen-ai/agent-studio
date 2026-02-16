@@ -595,15 +595,17 @@ const ToolConfigurationPage: React.FC = () => {
     const methodNum = typeof method === 'string' ? parseInt(method) : method
     switch (methodNum) {
       case 0:
-        return 'Path'
+        return 'None'
       case 1:
         return 'Header'
       case 2:
         return 'Query'
       case 3:
         return 'Body'
-      default:
+      case 4:
         return 'Path'
+      default:
+        return 'None'
     }
   }
 
@@ -2110,10 +2112,11 @@ const ToolConfigurationPage: React.FC = () => {
                     </Typography>
                     <FormControl fullWidth>
                       <Select value={parameterForm.method} onChange={e => handleParameterFormChange('method', e.target.value)}>
-                        <MenuItem value={0}>{t('plugins.toolConfig.pathParam', 'Path (路径参数)')}</MenuItem>
+                        <MenuItem value={0}>{t('plugins.toolConfig.noneParam', 'None')}</MenuItem>
                         <MenuItem value={1}>{t('plugins.toolConfig.headerParam')}</MenuItem>
                         <MenuItem value={2}>{t('plugins.toolConfig.queryParameter')}</MenuItem>
                         {tool.method !== 1 && <MenuItem value={3}>{t('plugins.toolConfig.bodyParameter')}</MenuItem>}
+                        <MenuItem value={4}>{t('plugins.toolConfig.pathParam', 'Path (路径参数)')}</MenuItem>
                       </Select>
                     </FormControl>
                   </div>

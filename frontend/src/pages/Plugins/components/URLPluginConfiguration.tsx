@@ -1177,10 +1177,11 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                 </Typography>
                 <FormControl fullWidth>
                   <Select value={parameterForm.method} onChange={e => handleParameterFormChange('method', e.target.value)}>
-                    <MenuItem value={0}>{t('plugins.paramConfig.pathParam', 'Path (路径参数)')}</MenuItem>
+                    <MenuItem value={0}>{t('plugins.paramConfig.noneParam', 'None')}</MenuItem>
                     <MenuItem value={1}>{t('plugins.paramConfig.headerParam')}</MenuItem>
                     <MenuItem value={2}>{t('plugins.paramConfig.queryParam')}</MenuItem>
                     <MenuItem value={3}>{t('plugins.paramConfig.bodyParam')}</MenuItem>
+                    <MenuItem value={4}>{t('plugins.paramConfig.pathParam', 'Path (路径参数)')}</MenuItem>
                   </Select>
                 </FormControl>
               </div>

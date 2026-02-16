@@ -75,7 +75,7 @@ class ServiceTool:
                 elif i.method == "header" and i.default_value is not None:
                     headers[i.name] = i.default_value
                 # Non-runtime path parameter: substitute into URL template
-                elif i.method == "" and i.default_value is not None:
+                elif i.method == "path" and i.default_value is not None:
                     # Replace {param_name} with actual value in the URL
                     placeholder = f"{{{i.name}}}"
                     if placeholder in url:

@@ -29,6 +29,7 @@ class ParamSendMethod(IntEnum):
     PARAM_SEND_METHOD_HEADER = 1,
     PARAM_SEND_METHOD_QUERY = 2,
     PARAM_SEND_METHOD_BODY = 3,
+    PARAM_SEND_METHOD_PATH = 4,
 
 
 class Priority(IntEnum):

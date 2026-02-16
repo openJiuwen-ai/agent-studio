@@ -47,6 +47,7 @@ param_send_method_type_mapping = {
     ParamSendMethod.PARAM_SEND_METHOD_HEADER: "header",
     ParamSendMethod.PARAM_SEND_METHOD_QUERY: "query",
     ParamSendMethod.PARAM_SEND_METHOD_BODY: "body",
+    ParamSendMethod.PARAM_SEND_METHOD_PATH: "path",
 }
 
 
