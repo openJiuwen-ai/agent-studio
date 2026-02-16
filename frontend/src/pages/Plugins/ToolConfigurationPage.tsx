@@ -595,7 +595,7 @@ const ToolConfigurationPage: React.FC = () => {
     const methodNum = typeof method === 'string' ? parseInt(method) : method
     switch (methodNum) {
       case 0:
-        return 'None'
+        return 'Path'
       case 1:
         return 'Header'
       case 2:
@@ -603,7 +603,7 @@ const ToolConfigurationPage: React.FC = () => {
       case 3:
         return 'Body'
       default:
-        return 'None'
+        return 'Path'
     }
   }
 
@@ -2362,6 +2362,7 @@ const ToolConfigurationPage: React.FC = () => {
                                 {param.is_required && <span className="text-red-500 ml-1">*</span>}
                               </Typography>
                               <Chip label={param.type} size="small" variant="outlined" color="success" />
+                              {pluginType === 'api' && <Chip label={getMethodLabel(param.method)} size="small" variant="outlined" color="primary" />}
                               {param.is_required && <Chip label={t('plugins.toolConfig.required')} size="small" color="error" variant="outlined" />}
                             </div>
                             <Typography variant="body2" color="text.secondary" className="text-sm">

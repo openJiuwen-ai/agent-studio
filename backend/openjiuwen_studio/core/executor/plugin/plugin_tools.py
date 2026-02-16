@@ -63,18 +63,34 @@ class ServiceTool:
     def compile(self) -> RestfulApi:
         queries = {}
         headers = self.restfulapischema.headers
+        url = self.restfulapischema.path  # Start with URL template (may contain {param} placeholders)
+
+        # Process parameters: handle non-runtime defaults for query, header, and path parameters
         for i in self.restfulapischema.params:
             if not i.runtime:
+                # Non-runtime query parameter: add to queries dict
                 if i.method == "query" and i.default_value is not None:
                     queries[i.name] = i.default_value
+                # Non-runtime header parameter: add to headers dict
                 elif i.method == "header" and i.default_value is not None:
                     headers[i.name] = i.default_value
+                # Non-runtime path parameter: substitute into URL template
+                elif i.method == "" and i.default_value is not None:
+                    # Replace {param_name} with actual value in the URL
+                    placeholder = f"{{{i.name}}}"
+                    if placeholder in url:
+                        url = url.replace(placeholder, str(i.default_value))
+
+        # Note: Runtime path parameters (is_runtime=True) are handled by RestfulApi at execution time
+        # The input_params schema includes location="" for path params, which tells RestfulApi
+        # to substitute {param} placeholders with values from runtime inputs
 
         tool_name = self.restfulapischema.name or self.restfulapischema.tool_id
         input_params = convert_params_to_json_schema(self.restfulapischema.params)
         restfulapi_card = RestfulApiCard(name=tool_name,
                                          description=self.restfulapischema.description, input_params=input_params,
-                                         url=self.restfulapischema.path, method=self.restfulapischema.method,
+                                         url=url,  # URL with non-runtime path params already substituted
+                                         method=self.restfulapischema.method,
                                          headers=headers, queries=queries)  # 不能配置id,否则会跑到Runner.get_tool
         restfulapi_tool = RestfulApi(restfulapi_card)
         return restfulapi_tool
