@@ -84,7 +84,10 @@ class HttpRequestComponent(WorkflowComponent):
             core_config = self._convert_to_core_config(inputs)
 
             # Validate URL before making request
-            logger.info(f"HTTP Request Component - URL: {core_config.request_params.url}, Method: {core_config.request_params.method}")
+            logger.info(
+                f"HTTP Request Component - URL: {core_config.request_params.url}, "
+                f"Method: {core_config.request_params.method}"
+            )
             if not core_config.request_params.url or not isinstance(core_config.request_params.url, str):
                 raise ValueError(f"Invalid URL: {core_config.request_params.url}")
 
@@ -123,7 +126,7 @@ class HttpRequestComponent(WorkflowComponent):
 
         method = inputs["method"]
 
-        url =  inputs["url"]
+        url = inputs["url"]
         # url = self._replace_variables(self.conf.url, inputs)
 
         # Convert headers
@@ -142,7 +145,9 @@ class HttpRequestComponent(WorkflowComponent):
         body_content = inputs["body"]
         if body_content is not None:
             body_config = HttpRequestBodyConfig(
-                content_type=HttpContentType.JSON, json_data=self.parse_body_content(body_content))
+                content_type=HttpContentType.JSON,
+                json_data=self.parse_body_content(body_content)
+            )
 
         # Convert auth config
         auth_config = HttpAuthConfig(
@@ -200,7 +205,7 @@ class HttpRequestComponent(WorkflowComponent):
                 response_handling=response_handling,
                 retry_config=retry_config,
                 rate_limit_config=rate_limit_config,
-                advanced_options=advanced_options # HttpAdvancedOptionsConfig(ignore_ssl_issues=True) 
+                advanced_options=advanced_options  # HttpAdvancedOptionsConfig(ignore_ssl_issues=True) 
             ),
             # url=url,
             # method=self.conf.method,
@@ -217,7 +222,7 @@ class HttpRequestComponent(WorkflowComponent):
             try:
                 body_content = json.loads(body_content)
             except json.JSONDecodeError:
-                    # Not a JSON string, keep as is
+                # Not a JSON string, keep as is
                 pass
         return body_content
 
@@ -229,7 +234,7 @@ class HttpRequestComponent(WorkflowComponent):
             return text
 
         # Find all {{variable}} patterns
-        pattern = r'\$\{(?:[^}.]+\.)?([^}.]+)\}' #    r'\{\{([^}]+)\}\}'
+        pattern = r'\$\{(?:[^}.]+\.)?([^}.]+)\}'
         matches = re.findall(pattern, text)
 
         for var_name in matches:

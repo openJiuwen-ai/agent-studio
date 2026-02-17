@@ -128,7 +128,8 @@ class PluginParam(BaseModel):
 class HttpRetryConfigSchema(BaseModel):
     enabled: bool = Field(False, alias="enabled")
     max_retries: int = Field(3, alias="maxRetries")
-    retry_on_status_codes: List[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504], alias="retryOnStatusCodes")
+    retry_on_status_codes: List[int] = Field(
+        default_factory=lambda: [429, 500, 502, 503, 504], alias="retryOnStatusCodes")
     retry_delay_ms: int = Field(1000, alias="retryDelayMs")
     backoff_type: str = Field("exponential", alias="backoffType")
 

@@ -539,6 +539,7 @@ async def get_download_url(
             detail="Failed to generate download URL"
         ) from e
 
+
 @workflows_router.post("/import", response_model=ResponseModel[Dict])
 async def workflow_import(
     file: UploadFile = File(...),
@@ -601,7 +602,17 @@ async def workflow_import(
             "space_id": "18630429",
             "url": "test",
             "icon_uri": "",
-            "schema": "{\"nodes\":[{\"id\":\"start_abc\",\"type\":\"1\",\"position\":{\"x\":100,\"y\":100},\"data\":{\"title\":\"START\",\"inputs\":{\"inputParameters\":{\"message\":{\"type\":\"value\",\"content\":\"Hello\"}}}}},{\"id\":\"llm_def\",\"type\":\"3\",\"position\":{\"x\":300,\"y\":100},\"data\":{\"title\":\"LLM\",\"inputs\":{\"inputParameters\":{\"prompt\":{\"type\":\"ref\",\"content\":[\"start_abc\",\"message\"]}},\"llmParam\":{\"model\":{\"id\":\"gpt-4\"}}}}},{\"id\":\"end_ghi\",\"type\":\"2\",\"position\":{\"x\":500,\"y\":100},\"data\":{\"title\":\"END\"}}],\"edges\":[{\"id\":\"e1\",\"source\":\"start_abc\",\"target\":\"llm_def\"},{\"id\":\"e2\",\"source\":\"llm_def\",\"target\":\"end_ghi\"}]}",
+            "schema": "{\"nodes\":[{\"id\":\"start_abc\",\"type\":\"1\",
+                \"position\":{\"x\":100,\"y\":100},\"data\":{\"title\":\"START\",
+                \"inputs\":{\"inputParameters\":{\"message\":{\"type\":\"value\",
+                \"content\":\"Hello\"}}}}},{\"id\":\"llm_def\",\"type\":\"3\",
+                \"position\":{\"x\":300,\"y\":100},\"data\":{\"title\":\"LLM\",
+                \"inputs\":{\"inputParameters\":{\"prompt\":{\"type\":\"ref\",
+                \"content\":[\"start_abc\",\"message\"]}},\"llmParam\":{
+                    \"model\":{\"id\":\"gpt-4\"}}}}},{\"id\":\"end_ghi\",\"type\":\"2\",
+                    \"position\":{\"x\":500,\"y\":100},\"data\":{\"title\":\"END\"}}],
+                    \"edges\":[{\"id\":\"e1\",\"source\":\"start_abc\",\"target\":\"llm_def\"},
+                    {\"id\":\"e2\",\"source\":\"llm_def\",\"target\":\"end_ghi\"}]}",
             "input_parameters": [
                 {
                     "name": "customer_query",

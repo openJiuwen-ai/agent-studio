@@ -6,7 +6,12 @@ from typing import Any, Dict, List
 
 from openjiuwen.core.common.logging import logger
 
-from openjiuwen_studio.core.common.dsl import HttpRequestConfig, ExceptHandlingMethod, ExceptConfig, Connection
+from openjiuwen_studio.core.common.dsl import (
+    HttpRequestConfig,
+    ExceptHandlingMethod,
+    ExceptConfig,
+    Connection
+)
 from openjiuwen_studio.core.executor.component.compile import util
 from openjiuwen_studio.core.executor.component.component_impl.http_request_comp import (
     HttpRequestComponent,
@@ -50,7 +55,10 @@ class HttpRequestCompCompiler(BaseCompCompiler):
         http_request_component = HttpRequestComponent(self.node_id, http_request_config)
 
         # Only add exception routing if the exception handling method requires it
-        if http_request_config.exception_config.except_handling_method == ExceptHandlingMethod.EXECUTE_EXCEPT_STEP:
+        if (
+            http_request_config.exception_config.except_handling_method
+            == ExceptHandlingMethod.EXECUTE_EXCEPT_STEP
+        ):
             http_request_component = self._add_except_router(
                 http_request_config.exception_config, http_request_component
             )
@@ -82,7 +90,10 @@ class HttpRequestCompCompiler(BaseCompCompiler):
             raise JiuWenExecuteException(
                 StatusCode.HTTP_REQUEST_COMP_COMPILER_ERROR.code,
                 StatusCode.HTTP_REQUEST_COMP_COMPILER_ERROR.errmsg.format(
-                    msg=f"Failed to add exception route: Component [{self.node_id}] exception branch configuration is empty"
+                    msg=(
+                        f"Failed to add exception route: Component [{self.node_id}] "
+                        f"exception branch configuration is empty"
+                    )
                 ),
                 node_id=self.node_id,
             )
