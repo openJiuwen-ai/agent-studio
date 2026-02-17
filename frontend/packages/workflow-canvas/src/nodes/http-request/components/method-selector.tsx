@@ -46,9 +46,11 @@ export function MethodSelector() {
               }}
               style={{ width: '100%' }}
             >
-              {methodOptions.map((option) => (
-                <Select.Option key={option.value} value={option.value}>
-                  {option.label}
+              {methodOptions.map((methodOption) => (
+                <Select.Option 
+                  key={methodOption.value} 
+                  value={methodOption.value}>
+                  {methodOption.label}
                 </Select.Option>
               ))}
             </Select>
