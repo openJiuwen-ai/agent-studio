@@ -58,7 +58,9 @@ class NativeWorkflowConverter(WorkflowConverter):
     - create_time, update_time: REGENERATED (current timestamp)
 
     Import Requirements (PARTIAL WORKFLOWS SUPPORTED):
-    ✓ ONLY 'schema' is required - all other fields are optional and get defaults
+    ✓ Supports two formats:
+      - Format 1: Top-level 'nodes' and 'edges' (without 'schema')
+      - Format 2: 'schema' field containing 'nodes' and 'edges'
     ✓ Schema has START node (type="1") and END node (type="2")
     ✓ Schema is valid JSON with nodes array and edges array
     ✓ Field constraints if provided: name (1-255 chars), desc (max 500), url (max 500)
@@ -84,10 +86,12 @@ class NativeWorkflowConverter(WorkflowConverter):
         """
         Convert OpenJiuwen native workflow for import.
 
-        Supports PARTIAL workflows - only 'schema' is required, all other fields get defaults.
+        Supports PARTIAL workflows - supports two input formats:
+        - Format 1: Top-level 'nodes' and 'edges' (without 'schema')
+        - Format 2: 'schema' field containing 'nodes' and 'edges'
 
         Steps:
-        0. Validate that schema field exists (the only required field)
+        0. Detect format and normalize to full format with 'schema' field
         1. Pre-process schema field:
            - Convert schema from object to JSON string if needed (some exports have it as object)
         2. Add default values for missing fields
@@ -104,6 +108,7 @@ class NativeWorkflowConverter(WorkflowConverter):
         Handles both schema formats:
         - String format: "schema": "{\"nodes\":[...],\"edges\":[...]}" (standard)
         - Object format: "schema": {"nodes":[...], "edges":[...]} (some exports)
+        - Top-level format: {"nodes":[...], "edges":[...]} (without "schema" field)
 
         Default values for missing fields:
         - workflow_id: Generated UUID
@@ -118,20 +123,33 @@ class NativeWorkflowConverter(WorkflowConverter):
         - update_time: Current timestamp
 
         Args:
-            json_data: OpenJiuwen workflow JSON (only 'schema' required)
+            json_data: OpenJiuwen workflow JSON (nodes/edges required, either top-level or in schema)
 
         Returns:
             WorkflowImportResult with processed workflow data
 
         Raises:
-            ValueError: If schema field is missing or invalid
+            ValueError: If neither 'schema' nor top-level 'nodes'/'edges' are present
         """
         warnings = []
 
-        # Step 0: Validate that schema exists (the ONLY required field)
+        # Step 0: Detect format and normalize to full format with 'schema' field
         json_data = copy.deepcopy(json_data)
-        if "schema" not in json_data:
-            raise ValueError("Missing required field: 'schema'. Only the schema field is required for import.")
+
+        # Format 1: Top-level nodes and edges (without schema)
+        if "schema" not in json_data and "nodes" in json_data and "edges" in json_data:
+            logger.info("Detected Format 1: Top-level nodes/edges. Converting to full format with schema.")
+            # Wrap nodes and edges into schema field
+            schema_obj = {
+                "nodes": json_data.pop("nodes"),
+                "edges": json_data.pop("edges")
+            }
+            json_data["schema"] = schema_obj
+        # Format 2: Schema field exists
+        elif "schema" not in json_data:
+            raise ValueError(
+                "Missing required fields: Either 'schema' field or top-level 'nodes' and 'edges' are required for import."
+            )
 
         # Store original workflow_id for metadata
         original_workflow_id = json_data.get("workflow_id", "unknown")

@@ -56,37 +56,44 @@ class WorkflowDetector:
         """
         Check if data matches OpenJiuwen native format.
 
-        OpenJiuwen signature:
-        - Has 'workflow_id' field
-        - Has 'schema' field (canvas JSON string)
-        - Schema contains 'nodes' and 'edges'
+        OpenJiuwen signature supports two formats:
+        1. With 'schema' field containing 'nodes' and 'edges'
+        2. With top-level 'nodes' and 'edges' (without 'schema')
+
+        The full workflow format uses format 1, but imported workflows may use either.
         """
-        # Check for required top-level fields
-        if "schema" not in data:
-            return False
-
-        # Optionally verify schema structure
-        schema = data.get("schema")
-        if isinstance(schema, str):
-            # Schema is JSON string - this is the expected format
-            try:
-                import json
-                schema_obj = json.loads(schema)
-                if not isinstance(schema_obj, dict):
+        # Format 1: Check for schema field containing nodes/edges
+        if "schema" in data:
+            schema = data.get("schema")
+            if isinstance(schema, str):
+                # Schema is JSON string - this is the expected format
+                try:
+                    import json
+                    schema_obj = json.loads(schema)
+                    if not isinstance(schema_obj, dict):
+                        return False
+                    # Check for nodes/edges structure
+                    if "nodes" not in schema_obj or "edges" not in schema_obj:
+                        return False
+                except (json.JSONDecodeError, TypeError):
                     return False
-                # Check for nodes/edges structure
-                if "nodes" not in schema_obj or "edges" not in schema_obj:
+            elif isinstance(schema, dict):
+                # Schema is already a dict (alternative format)
+                if "nodes" not in schema or "edges" not in schema:
                     return False
-            except (json.JSONDecodeError, TypeError):
+            else:
                 return False
-        elif isinstance(schema, dict):
-            # Schema is already a dict (alternative format)
-            if "nodes" not in schema or "edges" not in schema:
-                return False
-        else:
-            return False
+            return True
 
-        return True
+        # Format 2: Check for top-level nodes and edges (without schema)
+        if "nodes" in data and "edges" in data:
+            # Verify nodes is a list and edges is a list
+            nodes = data.get("nodes")
+            edges = data.get("edges")
+            if isinstance(nodes, list) and isinstance(edges, list):
+                return True
+
+        return False
 
     @staticmethod
     def is_n8n_format(data: Dict[str, Any]) -> bool:
