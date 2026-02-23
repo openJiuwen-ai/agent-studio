@@ -148,7 +148,8 @@ class NativeWorkflowConverter(WorkflowConverter):
         # Format 2: Schema field exists
         elif "schema" not in json_data:
             raise ValueError(
-                "Missing required fields: Either 'schema' field or top-level 'nodes' and 'edges' are required for import."
+                "Missing required fields: Either 'schema' field or top-level 'nodes' and 'edges' are required for "
+                "import."
             )
 
         # Store original workflow_id for metadata
