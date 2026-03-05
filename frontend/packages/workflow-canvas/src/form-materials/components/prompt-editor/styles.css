@@ -4,6 +4,7 @@
  */
 
 .gedit-m-prompt-editor-container {
+  position: relative;
   background-color: var(--semi-color-fill-0);
 }
 

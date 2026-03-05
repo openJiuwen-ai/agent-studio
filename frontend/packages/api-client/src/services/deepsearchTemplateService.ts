@@ -112,7 +112,7 @@ export const deepsearchTemplateService = {
     const response = await client.get<TemplateListResponse>(
       `/agent/deepsearch/template/${spaceId}`
     )
-    return response.data
+    return response.data.data
   },
 
   /**

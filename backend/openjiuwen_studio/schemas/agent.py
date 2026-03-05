@@ -242,11 +242,28 @@ class AgentExportMetadata(BaseModel):
     agent_studio_version: Optional[str] = None
 
 
+class ModelReference(BaseModel):
+    """
+    模型配置模板，用于跨环境迁移和运行时加载
+    
+    包含完整的模型配置信息，支持后续运行时进行环境变量注入。
+    字段值可以是字符串、数字，或环境变量占位符如 "${ENV_NAME}" "${ENV_NAME:-default}"
+    """
+    provider: str
+    model_type: str
+    name: str
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None  # 运行时注入，导出时为 null
+    timeout: int = 300
+    parameters: Optional[Dict[str, Any]] = None
+
+
 class AgentExportData(BaseModel):
     version: str = ""
     agent: Dict[str, Any]
     dependencies: AgentDependencies
     metadata: AgentExportMetadata
+    model_references: Optional[Dict[str, ModelReference]] = None
 
 
 class AgentImportRequest(BaseModel):

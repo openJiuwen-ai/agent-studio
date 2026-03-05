@@ -83,6 +83,7 @@ const AppsPage: React.FC = () => {
   const selectedResultMessageId = useConversationStore(state => state.selectedResultMessageId)
   const isLoading = useConversationStore(state => state.isLoading)
   const sseProcessingQueue = useConversationStore(state => state.sseProcessingQueue)
+  const SESSION_CONVERSATION_ID = useConversationStore(state => state.SESSION_CONVERSATION_ID)
 
   // 订阅 conversation 来触发 messageItemsList 重新计算
   const conversation = useConversationStore(state =>
@@ -610,7 +611,23 @@ const AppsPage: React.FC = () => {
 
   // 处理智能体选择（首次配置弹出配置弹窗，非首次配置直接选中）
   const handleAgentSelect = (agent: MentionItem) => {
-    // 检查该智能体是否已有配置
+    // 如果是 DeepSearch 智能体，总是检查服务状态
+    if (agent.id === 'deepsearch') {
+      // 如果正在检查心跳，避免重复检查
+      if (checkingDeepsearch) {
+        setPendingAgent(agent)
+        return
+      }
+
+      // 总是重新检查心跳，确保获取最新状态
+      // 这修复了 stale state 问题（服务从可用变为不可用时）
+      checkDeepsearchHeartbeatCallback()
+      // 暂时保存待选择的智能体，等心跳检查完成后再处理
+      setPendingAgent(agent)
+      return
+    }
+
+    // 其他智能体：检查该智能体是否已有配置
     const hasConfig = agentConfigs[agent.id] !== undefined
 
     if (!hasConfig) {
@@ -620,7 +637,6 @@ const AppsPage: React.FC = () => {
       setConfigDialogOpen(true)
     } else {
       // 已有配置：直接选中智能体
-      // 心跳检测由 useEffect 统一处理
       setSelectedAgent(agent)
     }
   }
@@ -679,6 +695,33 @@ const AppsPage: React.FC = () => {
       setDeepsearchServiceAvailable(null)
     }
   }, [selectedAgent?.id, checkDeepsearchHeartbeatCallback])
+
+  // 心跳检查完成后，处理待选择的智能体
+  useEffect(() => {
+    if (pendingAgent && deepsearchServiceAvailable !== null && !checkingDeepsearch) {
+      if (pendingAgent.id === 'deepsearch') {
+        if (deepsearchServiceAvailable === false) {
+          // 服务不可用：选中智能体以显示警告
+          setSelectedAgent(pendingAgent)
+          setPendingAgent(null)
+        } else {
+          // 服务可用：检查配置
+          const hasConfig = agentConfigs[pendingAgent.id] !== undefined
+          if (!hasConfig) {
+            // 无配置：打开配置弹窗（使用 pendingAgent 作为 agent prop）
+            // 不选中智能体，避免触发心跳检查 useEffect
+            setIsFirstConfigMode(true)
+            setConfigDialogOpen(true)
+            // 注意：这里不清除 pendingAgent，等用户保存配置或关闭弹窗后再清除
+          } else {
+            // 有配置：直接选中智能体
+            setSelectedAgent(pendingAgent)
+            setPendingAgent(null)
+          }
+        }
+      }
+    }
+  }, [pendingAgent, deepsearchServiceAvailable, checkingDeepsearch])
 
   // 处理文件上传
   const handleFileUpload = (files: FileList) => {
@@ -939,6 +982,8 @@ const AppsPage: React.FC = () => {
               console.log('[HITL] Agent not matched, cancelling interrupt message. hitlAgent:', hitlAgent)
             }
           } else {
+            // 不是 HITL interrupt 消息，清除 SESSION_CONVERSATION_ID
+            useConversationStore.getState().setSessionConversationId(null)
             console.log('[HITL Debug] Last message is not HITL interrupt. type:', lastMessage?.type, 'status:', lastMessage?.status)
           }
         } else {
@@ -949,20 +994,19 @@ const AppsPage: React.FC = () => {
       }
 
       // ===== 计算 DeepSearch 运行 Session ID =====
-      // sessionId = 当前对话中用户消息的数量
       // 因为已经添加了用户消息，所以用户消息数量就是应该用的 sessionId
       const userMessageCount = messageItemsList.filter(items =>
         useConversationStore.getState().getMessageItemsIsUser(items)
       ).length
 
-      // sessionId 计算逻辑：
-      // - 如果是新的 deepsearch：sessionId = 用户消息数量（新添加的消息被计算在内）
-      // - 如果是 HITL 延续：sessionId = 用户消息数量 - 1（HITL 回复不是新的 deepsearch）
-      const sessionId = isNewDeepSearchRun ? userMessageCount : (userMessageCount - 1)
-      console.log('[DeepSearch] Session ID:', sessionId, '(user message count:', userMessageCount, ', isNewRun:', isNewDeepSearchRun, ')')
+      console.log('[DeepSearch]:', '(user message count:', userMessageCount, ', isNewRun:', isNewDeepSearchRun, ')')
 
       // ===== 生成后端使用的 conversation_id =====
-      const backendConversationId = `${conversationId}.${sessionId}`
+      // 如果是新的 deepsearch 运行，或者没有 SESSION_CONVERSATION_ID，则生成新的后端 conversation_id
+      // 否则使用现有的 SESSION_CONVERSATION_ID
+      const backendConversationId = (isNewDeepSearchRun || !SESSION_CONVERSATION_ID)
+        ? `${conversationId}_${Math.random().toString(36).substring(2, 6)}_${String(userMessageCount).padStart(3, '0')}`
+        : SESSION_CONVERSATION_ID
       console.log('[DeepSearch] Backend conversation_id:', backendConversationId, '(original:', conversationId, ')')
 
       // ===== SSE 录制：开始录制（仅开发模式） =====
@@ -1182,7 +1226,7 @@ const AppsPage: React.FC = () => {
                     <p className={`${TEXT_BASE} text-orange-600 mb-2`}>
                       {t('apps.chat.deepSearchServiceUnavailable')}
                       <a
-                        href="https://openjiuwen.com"
+                        href="https://gitcode.com/openJiuwen/deepsearch/blob/v0.1.0/docs/zh/2.%E5%AE%89%E8%A3%85%E6%8C%87%E5%AF%BC/DeepSearch%E5%AE%8C%E6%95%B4%E7%89%88%E5%AE%89%E8%A3%85%E6%8C%87%E5%AF%BC.md"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-500 hover:text-blue-600 underline mx-0.5"
@@ -1331,11 +1375,9 @@ const AppsPage: React.FC = () => {
         open={configDialogOpen}
         onClose={() => {
           setConfigDialogOpen(false)
-          // 如果是首次配置模式且用户取消了，清除待选择的智能体
-          if (isFirstConfigMode) {
-            setPendingAgent(null)
-            setIsFirstConfigMode(false)
-          }
+          // 无论是否是首次配置模式，都清除待选择的智能体
+          setPendingAgent(null)
+          setIsFirstConfigMode(false)
         }}
         onSave={handleSaveAgentConfig}
         savedConfigs={agentConfigs}

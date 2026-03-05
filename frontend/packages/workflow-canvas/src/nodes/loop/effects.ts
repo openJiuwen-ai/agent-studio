@@ -75,6 +75,7 @@ const parseLoopEffect = (value: any, ctx: EffectFuncProps['context']) => {
               return ASTFactory.createProperty({
                 key,
                 type: elementType,
+                meta: { title: `item (in ${key})` },
               })
             }
           }
@@ -93,6 +94,7 @@ const parseLoopEffect = (value: any, ctx: EffectFuncProps['context']) => {
                 return ASTFactory.createProperty({
                   key,
                   type: elementType,
+                  meta: { title: `item (in ${key})` },
                 })
               }
             } catch (error) {
@@ -103,6 +105,7 @@ const parseLoopEffect = (value: any, ctx: EffectFuncProps['context']) => {
           return ASTFactory.createProperty({
             key,
             type: resolveFlowValueType(flowValue, scope, privateScope),
+            meta: { title: `item (in ${key})` },
           })
         })
       : []

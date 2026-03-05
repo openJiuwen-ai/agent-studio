@@ -117,8 +117,8 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
               multiline
               rows={3}
               placeholder={t('plugins.dialog.cloudPluginForm.descriptionPlaceholder')}
-              helperText={`${t('plugins.dialog.cloudPluginForm.descriptionHelperText')} (${form.description.length}/40)`}
-              inputProps={{ maxLength: 40 }}
+              helperText={`${t('plugins.dialog.cloudPluginForm.descriptionHelperText')} (${form.description.length}/258)`}
+              inputProps={{ maxLength: 258 }}
             />
           </div>
 

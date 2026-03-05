@@ -614,7 +614,8 @@ async def agent_export(
     """
     try:
         req = validate_request(request, AgentExportRequest)
-        res = mgr.agent_export(req, current_user)
+        # agent_export is async (OBS download when building ZIP); must await to get result
+        res = await mgr.agent_export(req, current_user)
 
         if isinstance(res, tuple) and len(res) == 2:
             zip_buffer, filename = res
@@ -697,5 +698,5 @@ async def agent_import(
         logger.error(f"[AGENT_IMPORT] Unexpected error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Import failed: {str(e)}"
+            detail="Import failed: an internal error occurred. Please try again or contact the administrator."
         ) from e

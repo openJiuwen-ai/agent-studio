@@ -249,6 +249,7 @@
         },
         "memory": {
           "memoryTitle": "Memory",
+          "loading": "Loading...",
           "variablesTitle": "Variable Configuration",
           "fields": {
             "nameLabel": "Variable Name",
@@ -268,6 +269,9 @@
             "title": "Memory Base",
             "add": "Add Existing Memory Base",
             "create": "Create New Memory Base",
+            "empty": "No memory bases added yet",
+            "embeddingModel": "Embedding Model",
+            "LLMModel": "LLM Model",
             "select": "Select Memory Base",
             "cancel": "Cancel",
             "confirm": "Confirm",

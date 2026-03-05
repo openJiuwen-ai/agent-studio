@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.manager.repositories import BaseRepository
+from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import escape_like
 from openjiuwen_studio.models.model_config import ModelConfig
 from openjiuwen_studio.schemas.model_config import ModelProvider
 
@@ -65,11 +66,12 @@ class ModelConfigRepository(BaseRepository[ModelConfig]):
         Returns:
             List of matching model configs
         """
+        escaped_term = escape_like(search_term)
         search_filter = or_(
-            ModelConfig.name.ilike(f"%{search_term}%"),
-            ModelConfig.description.ilike(f"%{search_term}%"),
-            ModelConfig.model_type.ilike(f"%{search_term}%"),
-            ModelConfig.space_id.ilike(f"%{search_term}%")
+            ModelConfig.name.ilike(f"%{escaped_term}%", escape="\\"),
+            ModelConfig.description.ilike(f"%{escaped_term}%", escape="\\"),
+            ModelConfig.model_type.ilike(f"%{escaped_term}%", escape="\\"),
+            ModelConfig.space_id.ilike(f"%{escaped_term}%", escape="\\")
         )
         return self.query().filter(search_filter).all()
     
@@ -140,10 +142,11 @@ class ModelConfigRepository(BaseRepository[ModelConfig]):
             query = query.filter(ModelConfig.is_active == is_active)
         
         if search:
+            escaped_search = escape_like(search)
             search_filter = or_(
-                ModelConfig.name.ilike(f"%{search}%"),
-                ModelConfig.description.ilike(f"%{search}%"),
-                ModelConfig.model_type.ilike(f"%{search}%")
+                ModelConfig.name.ilike(f"%{escaped_search}%", escape="\\"),
+                ModelConfig.description.ilike(f"%{escaped_search}%", escape="\\"),
+                ModelConfig.model_type.ilike(f"%{escaped_search}%", escape="\\")
             )
             query = query.filter(search_filter)
         

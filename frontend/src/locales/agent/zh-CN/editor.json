@@ -249,6 +249,7 @@
         },
         "memory": {
           "memoryTitle": "记忆",
+          "loading": "加载中...",
           "variablesTitle": "变量配置",
           "fields": {
             "nameLabel": "变量名称",
@@ -268,6 +269,9 @@
             "title": "记忆库",
             "add": "添加已有记忆库",
             "create": "创建新记忆库",
+            "empty": "暂无记忆库",
+            "embeddingModel": "Embedding 模型",
+            "LLMModel": "LLM 模型",
             "cancel": "取消",
             "confirm": "确定",
             "selected": "已选择",

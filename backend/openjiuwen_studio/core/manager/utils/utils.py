@@ -101,7 +101,7 @@ def convert_to_properties_format(input_list):
         for item in input_list:
             property_name = item.get('name')
             param_type = item.get('type')
-            
+
             # 处理 date-time 类型：在 JSON Schema 中，date-time 应该作为 format 使用，type 应该是 string
             if param_type == 'date-time':
                 properties[property_name] = {

@@ -8,6 +8,7 @@ from email.utils import formataddr
 
 from openjiuwen.core.common.logging import logger
 
+from openjiuwen_studio.core.manager.model_manager.utils.security_utils import SecurityUtils
 from openjiuwen_studio.core.config import settings
 from openjiuwen_studio.core.manager.email_manager import EmailTemplates
 
@@ -18,7 +19,8 @@ class EmailUtils:
     def _send_base_html_email(recipient_email: str, subject: str, html_content: str):
         sender = settings.smtp_user
         sender_alias = settings.smtp_alias
-        sender_pwd = settings.smtp_password
+        smtp_password = SecurityUtils.get_decrypted_secret("SMTP_PASSWORD", settings.smtp_password)
+        sender_pwd = smtp_password
         host = settings.smtp_host
         port = settings.smtp_port
 

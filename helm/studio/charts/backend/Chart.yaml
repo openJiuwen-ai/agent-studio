@@ -1,0 +1,6 @@
+apiVersion: v2
+name: backend
+description: Backend service for the openJiuwen studio system
+type: application
+
+version: 0.0.1

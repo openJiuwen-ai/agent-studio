@@ -5,7 +5,7 @@
 
 import React from 'react'
 
-import { FieldArray, FieldArrayRenderProps } from '@flowgram.ai/editor'
+import { BaseVariableField, FieldArray, FieldArrayRenderProps } from '@flowgram.ai/editor'
 import { Button } from '@douyinfe/semi-ui'
 import { IconPlus } from '@douyinfe/semi-icons'
 
@@ -15,10 +15,11 @@ interface AssignRowsProps {
   name: string
   readonly?: boolean
   enableDeclaration?: boolean
+  skipVariable?: (variable?: BaseVariableField) => boolean
 }
 
 export function AssignRows(props: AssignRowsProps) {
-  const { name, readonly, enableDeclaration } = props
+  const { name, readonly, enableDeclaration, skipVariable } = props
 
   return (
     <FieldArray name={name}>
@@ -33,6 +34,7 @@ export function AssignRows(props: AssignRowsProps) {
                 childField.onChange(value)
               }}
               onDelete={() => field.remove(index)}
+              skipVariable={skipVariable}
             />
           ))}
           <div style={{ display: 'flex', gap: 5 }}>

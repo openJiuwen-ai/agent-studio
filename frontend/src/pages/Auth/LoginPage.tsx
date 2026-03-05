@@ -254,6 +254,13 @@ const LoginPage: React.FC = () => {
                         value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
                         message: t('auth.login.invalidEmailFormat'),
                       },
+                      validate: (value) => {
+                        const localPart = value.split('@')[0];
+                        if (!localPart || localPart.length < 3) {
+                          return t('auth.login.invalidEmailLength');
+                        }
+                        return true; // 验证通过
+                      },
                     })}
                     maxLength={50}
                     type="text"

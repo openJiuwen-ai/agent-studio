@@ -286,6 +286,17 @@ const PluginConfigurationPage: React.FC = () => {
       return
     }
 
+    // Validate required fields
+    if (!configForm.name.trim()) {
+      showError(t('plugins.errors.pluginNameRequired'))
+      return
+    }
+
+    if (!configForm.desc.trim()) {
+      showError(t('plugins.errors.pluginDescRequired'))
+      return
+    }
+
     // Validate URL if it's a URL plugin (plugin_type === 1)
     if (pluginConfigData.plugin_type === 1) {
       const { validateHttpUrl } = await import('../../utils/validationUtils')

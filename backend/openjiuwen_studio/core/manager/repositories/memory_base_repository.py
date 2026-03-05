@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from openjiuwen_studio.core.database import milliseconds
 from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
-from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
+from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import escape_like, get_db_jw
 from openjiuwen_studio.models import memory_base as mb_models
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.schemas.memory_base import MemoryBaseGet
@@ -273,11 +273,12 @@ class MemoryBaseRepository:
             mb_db = JiuwenBaseRepository(db, mb_models.MemoryBaseDB)
 
             # 构建查询条件：查询词完整出现在名称或描述中（大小写不敏感）
-            # 使用 func.lower() 实现大小写不敏感匹配
+            # 使用 func.lower() + ilike 实现大小写不敏感匹配，escape_like 防止 LIKE 通配符注入
             query_lower = query.lower()
+            escaped_query = escape_like(query_lower)
             search_conditions = or_(
-                func.lower(mb_models.MemoryBaseDB.name).contains(query_lower),
-                func.lower(mb_models.MemoryBaseDB.description).contains(query_lower)
+                func.lower(mb_models.MemoryBaseDB.name).ilike(f"%{escaped_query}%", escape="\\"),
+                func.lower(mb_models.MemoryBaseDB.description).ilike(f"%{escaped_query}%", escape="\\")
             )
 
             # 构建基础查询条件

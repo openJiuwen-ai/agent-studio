@@ -13,12 +13,14 @@ from sqlalchemy.orm import sessionmaker
 
 from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.config import settings
+from openjiuwen_studio.core.manager.model_manager.utils.security_utils import SecurityUtils
 
 
 def get_database_url() -> str:
     """根据数据库类型生成数据库连接URL"""
     if settings.db_type.lower() == "mysql":
-        return (f"mysql+pymysql://{settings.db_user}:{settings.db_password}@"
+        db_password = SecurityUtils.get_decrypted_secret("DB_PASSWORD", settings.db_password)
+        return (f"mysql+pymysql://{settings.db_user}:{db_password}@"
                    f"{settings.db_host}:{settings.db_port}/{settings.agent_db_name}?charset=utf8mb4")
 
     elif settings.db_type.lower() == "sqlite":

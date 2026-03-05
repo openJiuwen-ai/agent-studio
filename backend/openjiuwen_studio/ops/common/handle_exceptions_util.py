@@ -5,8 +5,27 @@
 import functools
 import inspect
 import json
+import logging
 
 from starlette.responses import StreamingResponse, JSONResponse
+
+logger = logging.getLogger(__name__)
+
+# 业务异常类型，其消息可安全返回给客户端
+SAFE_EXCEPTION_TYPES = (ValueError, PermissionError)
+
+
+def _is_safe_exception(exc: Exception) -> bool:
+    """判断异常消息是否可以安全返回给客户端（业务异常或已知安全类型）"""
+    return hasattr(exc, "status_code") or isinstance(exc, SAFE_EXCEPTION_TYPES)
+
+
+def _get_safe_message(exc: Exception) -> str:
+    """获取可安全返回给客户端的错误消息，内部异常仅记录日志并返回通用提示"""
+    if _is_safe_exception(exc):
+        return str(exc)
+    logger.exception("Unhandled internal exception: %s", exc)
+    return "Internal server error"
 
 
 def handle_exceptions(response_model=JSONResponse):
@@ -31,9 +50,9 @@ def handle_exceptions(response_model=JSONResponse):
                                 async for chunk in original_gen:
                                     yield chunk
                             except Exception as e:
-                                # 将异常转换为SSE错误帧
+                                # 将异常转换为SSE错误帧，不向客户端泄露内部异常详情
                                 code = getattr(e, "code", getattr(e, "status_code", 500))
-                                msg = getattr(e, "message", str(e))
+                                msg = _get_safe_message(e)
                                 error_data = {
                                     "error": True,
                                     "code": code,
@@ -69,7 +88,7 @@ def handle_exceptions(response_model=JSONResponse):
 
 def _build_error(exc, is_stream: bool, response_model):
     code = getattr(exc, "status_code", 500)
-    msg = str(exc)
+    msg = _get_safe_message(exc)
 
     if is_stream:
         # SSE 错误帧

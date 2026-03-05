@@ -88,7 +88,7 @@ process_services() {
 process_all_services() {
     process_services "UPGRADE"
     process_services "MYSQL"
-    uprade_mysql
+    upgrade_mysql
     process_services "MILVUS"
     upgrade_milvus
     process_services "PLUGIN"

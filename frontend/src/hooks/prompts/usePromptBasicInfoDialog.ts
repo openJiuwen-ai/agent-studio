@@ -187,8 +187,8 @@ export const usePromptBasicInfoDialog = ({
       try {
         setLoading(true)
 
-        // 调用API保存基本信息
-        const response = await PromptService.editPromptBasicInfo(id!, {
+        // 调用API保存基本信息（需要携带 workspaceId）
+        const response = await PromptService.editPromptBasicInfo(id!, workspaceId || '', {
           prompt_name: basicInfo.name,
           prompt_description: basicInfo.description,
         })

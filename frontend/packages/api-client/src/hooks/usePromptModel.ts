@@ -23,9 +23,12 @@ export const usePromptModelsList = (params?: GetModelsListParams) => {
 }
 
 // 获取模型详情
-export const usePromptModelDetail = (modelId?: string, modelFrom?: string) => {
-  return useQuery(['promptModels', 'detail', modelId, modelFrom], () => PromptModelService.getModelDetail(modelId!, modelFrom), {
-    enabled: !!modelId, // 只有当modelId存在时才执行查询
+export const usePromptModelDetail = (modelId?: string, modelFrom?: string, workspaceId?: string) => {
+  return useQuery(
+    ['promptModels', 'detail', modelId, modelFrom, workspaceId],
+    () => PromptModelService.getModelDetail(modelId!, modelFrom, workspaceId),
+    {
+      enabled: !!modelId, // 只有当modelId存在时才执行查询
     staleTime: 10 * 60 * 1000, // 10分钟内不重新获取
     cacheTime: 30 * 60 * 1000, // 缓存30分钟
     retry: 2,

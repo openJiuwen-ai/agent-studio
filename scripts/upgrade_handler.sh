@@ -45,6 +45,8 @@ read_pre_upgrade_env(){
 
             DEPLOY_VARS["PRE_UPGRADE_IM_TYPE"]="milvus"
             DEPLOY_VARS["PRE_UPGRADE_BACKEND_DOCKER"]=${PRE_UPGRADE_VARS["BACKEND_DOCKER_NAME"]}
+            DEPLOY_VARS["PRE_UPGRADE_MYSQL_DOCKER"]=${PRE_UPGRADE_VARS["MYSQL_DOCKER_NAME"]}
+            DEPLOY_VARS["PRE_UPGRADE_MILVUS_DOCKER"]=${PRE_UPGRADE_VARS["MILVUS_DOCKER_NAME"]}
             ;;
         2)
             local deploy_file=""
@@ -75,6 +77,8 @@ read_pre_upgrade_env(){
             DEPLOY_VARS["PRE_UPGRADE_RUNTIME_ENV_FILE"]="${pre_upgrade_env_dir}/${runtime_file}"
             DEPLOY_VARS["PRE_UPGRADE_IM_TYPE"]=${PRE_UPGRADE_VARS["INDEX_MANAGER_TYPE"]}
             DEPLOY_VARS["PRE_UPGRADE_BACKEND_DOCKER"]=${PRE_UPGRADE_VARS["BACKEND_DOCKER"]}
+            DEPLOY_VARS["PRE_UPGRADE_MYSQL_DOCKER"]=${PRE_UPGRADE_VARS["MYSQL_DOCKER"]}
+            DEPLOY_VARS["PRE_UPGRADE_MILVUS_DOCKER"]=${PRE_UPGRADE_VARS["MILVUS_DOCKER"]}
 
             if [ -n "${PRE_UPGRADE_VARS["HAS_JIUWEN_CONTAINER"]:-}" ]; then
                 DEPLOY_VARS["PRE_UPGRADE_VERSION"]="0.1.3"
@@ -383,12 +387,15 @@ upgrade_data() {
 }
 
 # Handle MySQL upgrade (copy env file + execute migration commands)
-uprade_mysql() {
+upgrade_mysql() {
     if [[ "${ARGS["IS_UPGRADE"]}" == "false" 
         || "${DEPLOY_VARS["IS_UPGRADE_MYSQL"]}" == "false" ]]; then
         info "Skip upgrade MySQL: disabled in deployment config"
         return
     fi
+
+    info "[UPGRADING] Verifying the health status of the pre-upgrade MySQL container"
+    check_container_healthy "${DEPLOY_VARS["PRE_UPGRADE_MYSQL_DOCKER"]}"
 
     info "[UPGRADING] starting MySQL upgrade process...."
     local upgrade_container=${DEPLOY_VARS["UPGRADE_TOOL_DOCKER"]}
@@ -411,6 +418,9 @@ upgrade_sqlite(){
         info "Skip upgrade SQLITE: disabled in deployment config"
         return
     fi
+
+    info "[UPGRADING] Verifying the status of the pre-upgrade backend container"
+    check_container_running "${DEPLOY_VARS["PRE_UPGRADE_BACKEND_DOCKER"]}"
 
     info "[UPGRADING] starting SQLITE upgrade process...."
     local src_container=${DEPLOY_VARS["PRE_UPGRADE_BACKEND_DOCKER"]}
@@ -448,6 +458,9 @@ upgrade_milvus(){
           info "Skip upgrade Milvus: disabled in deployment config"
         return
     fi
+
+    info "[UPGRADING] Verifying the status of the pre-upgrade Milvus container"
+    check_container_healthy "${DEPLOY_VARS["PRE_UPGRADE_MILVUS_DOCKER"]}"
 
     info "[UPGRADING] starting Milvus upgrade process...."
     gen_milvus_backup_conf "PRE_UPGRADE"

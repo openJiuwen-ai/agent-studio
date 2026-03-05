@@ -8,25 +8,25 @@ When exporting an agent, the required basic configurations and components (workf
 
 The agent export method is very simple: on the Agent List page — target agent card column, click the `Export` button to automatically generate a JSON or ZIP file (agents with knowledge base text information will be exported as a .zip file). In addition, during export, sensitive information such as `api_key` and `api_url` in the model configuration will be masked.
 
-![image](./images/agent_export.png)
+![image](../images/agent_export.png)
 
 ## Agent Import
 
 Import Agent: Agent Development Page - click the `Import` button:
 
-![image](./images/agent_import.png)
+![image](../images/agent_import.png)
 
 **1. Cross-Account/Platform Import**
 
 When importing across accounts/platforms, since there is no possibility of conflict, a new agent and its dependencies (workflows, plugins, knowledge bases) will be created directly in the current user space. As shown in the figure:
 
-![images](./images/travel_agent.png)
+![images](../images/travel_agent.png)
 
-![images](./images/imported_travel_agent.png)
+![images](../images/imported_travel_agent.png)
 
 Example of importing workflows depended on by the agent:
 
-![images](./images/workflows_import.png)
+![images](../images/workflows_import.png)
 
 Due to different users and platforms, user model configurations may differ, so the imported agent needs to **reconfigure model** information, including LLM nodes, Questioner nodes, Intent Recognition nodes, etc., in the workflows imported with the agent.
 
@@ -41,6 +41,6 @@ When importing on the same platform and same account, ID conflicts for the agent
 
 Example of agent and its dependent workflows after creating a copy:
 
-![images](./images/imported_copy.png)
+![images](../images/imported_copy.png)
 
-![images](./images/imported_wf_copy.png)
+![images](../images/imported_wf_copy.png)

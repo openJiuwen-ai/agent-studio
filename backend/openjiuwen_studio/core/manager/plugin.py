@@ -230,7 +230,39 @@ def plugin_delete(
             message="Unable to verify plugin dependencies, deletion blocked for safety",
         )
 
-    # 2. 执行删除操作
+    # 2. 删除所有与该插件相关的工具
+    try:
+        tools_list_res = tool_repository.tool_list({
+            "space_id": req.space_id
+        })
+        tools_result = ResponseModel(**tools_list_res)
+
+        if tools_result.code == status.HTTP_200_OK and tools_result.data:
+            tools = tools_result.data if isinstance(tools_result.data, list) else []
+
+            for tool in tools:
+                tool_dict = tool if isinstance(tool, dict) else tool.model_dump() if hasattr(tool,
+                                                                                                 'model_dump') else {}
+                if tool_dict.get("plugin_id") == req.plugin_id:
+                    tool_id = tool_dict.get("tool_id", "")
+                    if tool_id:
+                        # Use plugin_delete_tool for proper validation and reference checking
+                        delete_tool_result = plugin_delete_tool(
+                            PluginToolId(
+                                space_id=req.space_id,
+                                plugin_id=req.plugin_id,
+                                tool_id=tool_id
+                            ),
+                            current_user
+                        )
+                        if delete_tool_result.code != status.HTTP_200_OK:
+                            logger.warning(
+                                f"Failed to delete tool {tool_id} for plugin {req.plugin_id}: "
+                                f"{delete_tool_result.message}")
+    except Exception as e:
+        logger.warning(f"Error deleting tools for plugin {req.plugin_id}: {e}", exc_info=True)
+
+    # 3. 执行删除操作
     res = plugin_repository.plugin_delete(req.model_dump())
     delete_result = ResponseModel(**res)
     logger.info(f"delete plugin info in db result: {delete_result}")

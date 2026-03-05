@@ -3,49 +3,72 @@
  * SPDX-License-Identifier: MIT
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 
 import { testRunRuntimeService } from '../runtime/testrun-runtime-service'
 import { InputInterruption } from '../runtime/types'
 
 export function useInputInterruption() {
-  const [interruption, setInterruption] = useState<InputInterruption | null>(null)
+  const [interruptionQueue, setInterruptionQueue] = useState<InputInterruption[]>([])
   const [inputValues, setInputValues] = useState<Record<string, unknown>>({})
+  const isResumingRef = useRef(false)
+
+  const currentInterruption = useMemo(
+    () => (interruptionQueue.length > 0 ? interruptionQueue[0] : null),
+    [interruptionQueue]
+  )
+
+  const pendingCount = useMemo(
+    () => Math.max(0, interruptionQueue.length - 1),
+    [interruptionQueue.length]
+  )
 
   const handleInputRequired = useCallback((data: InputInterruption) => {
-    setInterruption(data)
+    setInterruptionQueue(prev => {
+      if (prev.some(item => item.nodeId === data.nodeId)) {
+        return prev
+      }
+      return [...prev, data]
+    })
   }, [])
 
   const resume = useCallback(
     async (values: Record<string, unknown>) => {
-      if (!interruption) return false
+      if (isResumingRef.current) return false
 
-      const nodeId = interruption.nodeId
+      const current = interruptionQueue[0]
+      if (!current) return false
 
-      setInterruption(null)
+      isResumingRef.current = true
+      setInterruptionQueue(prev => prev.slice(1))
       setInputValues({})
 
       try {
         await testRunRuntimeService.resumeStreamExecution({
-          node_id: nodeId,
+          node_id: current.nodeId,
           input_value: values,
         })
         return true
       } catch (error) {
-        setInterruption({ nodeId, message: interruption.message })
+        setInterruptionQueue(prev => [{ nodeId: current.nodeId, message: current.message }, ...prev])
         return false
+      } finally {
+        isResumingRef.current = false
       }
     },
-    [interruption],
+    [interruptionQueue],
   )
 
   const clear = useCallback(() => {
-    setInterruption(null)
+    setInterruptionQueue([])
     setInputValues({})
   }, [])
 
   return {
-    interruption,
+    interruption: currentInterruption,
+    interruptionQueue,
+    pendingCount,
+    hasPendingInterruptions: pendingCount > 0,
     inputValues,
     setInputValues,
     handleInputRequired,

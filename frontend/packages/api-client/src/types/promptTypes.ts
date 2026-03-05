@@ -98,6 +98,7 @@ export interface EditPromptBasicInfoRequest {
   prompt_id: number
   prompt_name: string
   prompt_description: string
+  workspace_id: string
 }
 
 // 编辑提示词基本信息响应

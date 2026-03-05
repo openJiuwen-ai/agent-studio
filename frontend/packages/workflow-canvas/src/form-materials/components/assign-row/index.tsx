@@ -12,6 +12,7 @@ import { IFlowConstantRefValue } from '../../'
 import { InjectVariableSelector } from '../../'
 import { InjectDynamicValueInput } from '../../'
 import { BlurInput } from '../../'
+import { VariableSelectorProvider } from '../variable-selector'
 
 import { AssignRowProps } from './types'
 
@@ -23,36 +24,45 @@ export function AssignRow(props: AssignRowProps) {
     onChange,
     onDelete,
     readonly,
+    skipVariable,
   } = props
+
+  const leftSelector = value?.operator === 'assign' ? (
+    <InjectVariableSelector
+      style={{ width: '100%', height: 26 }}
+      value={value?.left?.content}
+      config={{ placeholder: 'Select Left' }}
+      onChange={v =>
+        onChange?.({
+          ...value,
+          left: { type: 'ref', content: v },
+        })
+      }
+    />
+  ) : (
+    <BlurInput
+      style={{ height: 26 }}
+      size="small"
+      placeholder="Input Name"
+      value={value?.left}
+      onChange={v =>
+        onChange?.({
+          ...value,
+          left: v,
+        })
+      }
+    />
+  )
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
       <div style={{ width: 150, minWidth: 150, maxWidth: 150 }}>
-        {value?.operator === 'assign' ? (
-          <InjectVariableSelector
-            style={{ width: '100%', height: 26 }}
-            value={value?.left?.content}
-            config={{ placeholder: 'Select Left' }}
-            onChange={v =>
-              onChange?.({
-                ...value,
-                left: { type: 'ref', content: v },
-              })
-            }
-          />
+        {skipVariable ? (
+          <VariableSelectorProvider skipVariable={skipVariable}>
+            {leftSelector}
+          </VariableSelectorProvider>
         ) : (
-          <BlurInput
-            style={{ height: 26 }}
-            size="small"
-            placeholder="Input Name"
-            value={value?.left}
-            onChange={v =>
-              onChange?.({
-                ...value,
-                left: v,
-              })
-            }
-          />
+          leftSelector
         )}
       </div>
       <div style={{ flexGrow: 1 }}>

@@ -17,6 +17,16 @@ from openjiuwen_studio.schemas.common import ResponseModel
 T = TypeVar('T')
 
 
+def escape_like(value: str, escape_char: str = "\\") -> str:
+    """Escape LIKE metacharacters (%, _, \\) in user input to prevent wildcard injection."""
+    return (
+        value
+        .replace(escape_char, escape_char + escape_char)
+        .replace("%", escape_char + "%")
+        .replace("_", escape_char + "_")
+    )
+
+
 @contextmanager
 def generate_db_jw():
     db_session = SessionLocal()
@@ -71,7 +81,7 @@ class JiuwenBaseRepository(BaseRepository[DBFunBase]):
             try:
                 return func(self, *args, **kwargs)
             except Exception as e:
-                logger.error(f"message: DB error: {str(e)}")
+                logger.error(f"DB error: {str(e)}", exc_info=True)
                 if "find_id" in kwargs:
                     if "dl" in kwargs:
                         logger.error(
@@ -79,7 +89,9 @@ class JiuwenBaseRepository(BaseRepository[DBFunBase]):
                     else:
                         logger.error(
                             f"db_table_name: {self._model_class.__tablename__}, find_ids: {kwargs['find_id']}")
-                return ResponseModel(code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=f"DB error: {str(e)}")
+                return ResponseModel(
+                    code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    message="Internal server error: database operation failed")
         return wrapper
 
     '''
@@ -136,17 +148,18 @@ class JiuwenBaseRepository(BaseRepository[DBFunBase]):
             search_cols = []
             search_vals = []
             for search, cols in searchs.items():
+                escaped = escape_like(search)
                 if not cols:
                     this_search_cols = [c for c in mapper.columns if isinstance(c.type, (String, Text, Unicode))]
-                    search_vals += [f"%{search}%" for _ in this_search_cols]
+                    search_vals += [f"%{escaped}%" for _ in this_search_cols]
                     search_cols += this_search_cols
                 else:
                     cols = self._model_class._json_key_filter(cols)
                     this_search_cols = [mapper.columns[c] for c in cols]
-                    search_vals += [f"%{search}%" for _ in this_search_cols]
+                    search_vals += [f"%{escaped}%" for _ in this_search_cols]
                     search_cols += this_search_cols
 
-            stmt = stmt.where(or_(*[c.ilike(v) for c, v in zip(search_cols, search_vals)]))
+            stmt = stmt.where(or_(*[c.ilike(v, escape="\\") for c, v in zip(search_cols, search_vals)]))
 
         # Execute count query
         result = self.db.execute(stmt).scalar()
@@ -226,16 +239,17 @@ class JiuwenBaseRepository(BaseRepository[DBFunBase]):
             searchs_code = searchs.pop(self._model_class.__searchs_by_sqlalchemy_code__, [])
             searchs_code = searchs_code if isinstance(searchs_code, list) else [searchs_code]
             for search, cols in searchs.items():
+                escaped = escape_like(search)
                 if not cols:
                     this_search_cols = [c for c in mapper.columns if isinstance(c.type, (String, Text, Unicode))]
-                    search_vals += [f"%{search}%" for _ in this_search_cols]
+                    search_vals += [f"%{escaped}%" for _ in this_search_cols]
                     search_cols += this_search_cols
                 else:
                     cols = self.model_class._json_key_filter(cols)
                     this_search_cols = [mapper.columns[c] for c in cols]
-                    search_vals += [f"%{search}%" for _ in this_search_cols]
+                    search_vals += [f"%{escaped}%" for _ in this_search_cols]
                     search_cols += this_search_cols
-            searchs_code += [c.ilike(v) for c, v in zip(search_cols, search_vals)]
+            searchs_code += [c.ilike(v, escape="\\") for c, v in zip(search_cols, search_vals)]
             stmt = stmt.where(or_(*searchs_code))
         # 2.4 其他限制条件, 直接用sqlalchemy语句拼接
         if other_sqlalchemy_limitations:

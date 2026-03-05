@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "backend.fullname" . }}
+  labels:
+    {{- include "backend.labels" . | nindent 4 }}
+
+spec:
+  replicas: {{ .Values.deployment.replicaCount }}
+  revisionHistoryLimit: {{ .Values.deployment.revisionHistoryLimit }}
+  progressDeadlineSeconds: {{ .Values.deployment.progressDeadlineSeconds }}
+
+  selector:
+    matchLabels:
+      app: {{ include "backend.name" . }}
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.deployment.strategy.maxSurge }}
+      maxUnavailable: {{ .Values.deployment.strategy.maxUnavailable }}
+
+  template:
+    metadata:
+      labels:
+        app: {{ include "backend.name" . }}
+        {{- include "backend.labels" . | nindent 8 }}
+
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.deployment.imagePullSecret }}
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: topology.kubernetes.io/zone
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - {{ include "backend.name" . }}
+
+      tolerations:
+        {{- toYaml .Values.deployment.tolerations | nindent 8 }}
+
+      containers:
+        - name: {{ include "backend.name" . }}
+          image: "{{ .Values.deployment.image.repository }}:{{ .Values.deployment.image.tag }}"
+          imagePullPolicy: {{ .Values.deployment.image.pullPolicy }}
+
+          env:
+            - name: PAAS_APP_NAME
+              value: {{ include "backend.name" . }}
+            - name: PAAS_NAMESPACE
+              value: {{ .Release.Namespace }}
+
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.deployment.configMapName }}
+
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.deployment.livenessProbe.path }}
+              port: {{ .Values.deployment.livenessProbe.port }}
+            initialDelaySeconds: {{ .Values.deployment.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.deployment.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.deployment.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.deployment.livenessProbe.failureThreshold }}
+
+          resources:
+            {{- toYaml .Values.deployment.resources | nindent 12 }}
+
+          volumeMounts:
+            {{- if .Values.deployment.extraVolumeMounts }}
+              {{- toYaml .Values.deployment.extraVolumeMounts | nindent 12 }}
+              {{- end }}
+
+
+      volumes:
+        {{- if .Values.deployment.extraVolumes }}
+        {{- toYaml .Values.deployment.extraVolumes | nindent 8 }}
+        {{- end }}

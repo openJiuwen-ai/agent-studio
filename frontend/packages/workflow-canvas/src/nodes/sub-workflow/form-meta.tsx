@@ -28,6 +28,7 @@ import WorkflowService from '../../../../api-client/src/services/workflowService
 import { DataEvent, type Effect } from '@flowgram.ai/editor'
 import { isContentConfigured } from './utils'
 import { canvasDetailCache, buildOutputsSchemaFromNodes } from './index'
+import { useWorkflowVersions } from '@/hooks/useWorkflowVersions'
 
 const renderForm = () => {
   const isSidebar = useIsSidebar()
@@ -41,11 +42,25 @@ const renderForm = () => {
         <FormContent>
           <FormItem name={t('workflowCanvas.formVersion.version')} vertical>
             <Field<string> name="configs.subWorkflow.workflowId">
-              {({ field: { value: workflowId } }) => (
-                <Field<string | undefined> name="configs.subWorkflow.workflowVersion">
-                  {({ field: { value, onChange } }) => <VersionField workflowId={workflowId} value={value} onChange={onChange} spaceId={spaceId} />}
-                </Field>
-              )}
+              {({ field: { value: workflowId } }) => {
+                const workflows = useMemo(() => (workflowId ? [{ workflow_id: workflowId }] : []), [workflowId])
+                const { versionsMap, loadingMap, refresh } = useWorkflowVersions(workflows as any, spaceId, !!workflowId)
+                return (
+                  <Field<string | undefined> name="configs.subWorkflow.workflowVersion">
+                    {({ field: { value, onChange } }) => (
+                      <VersionField
+                        workflowId={workflowId}
+                        value={value}
+                        onChange={onChange}
+                        spaceId={spaceId}
+                        versionsMap={versionsMap}
+                        loadingMap={loadingMap}
+                        onRefresh={refresh}
+                      />
+                    )}
+                  </Field>
+                )
+              }}
             </Field>
           </FormItem>
 
@@ -98,11 +113,24 @@ const renderForm = () => {
           label={t('workflowCanvas.formVersion.version')}
           content={
             <Field<string> name="configs.subWorkflow.workflowId">
-              {({ field: { value: wfId } }) => (
-                <Field<string> name="configs.subWorkflow.workflowVersion">
-                  {({ field: { value } }) => <VersionField workflowId={wfId} value={value || 'draft'} spaceId={spaceId} readonly />}
-                </Field>
-              )}
+              {({ field: { value: wfId } }) => {
+                const workflows = useMemo(() => (wfId ? [{ workflow_id: wfId }] : []), [wfId])
+                const { versionsMap, loadingMap } = useWorkflowVersions(workflows as any, spaceId, !!wfId)
+                return (
+                  <Field<string> name="configs.subWorkflow.workflowVersion">
+                    {({ field: { value } }) => (
+                      <VersionField
+                        workflowId={wfId}
+                        value={value || 'draft'}
+                        spaceId={spaceId}
+                        readonly
+                        versionsMap={versionsMap}
+                        loadingMap={loadingMap}
+                      />
+                    )}
+                  </Field>
+                )
+              }}
             </Field>
           }
         />

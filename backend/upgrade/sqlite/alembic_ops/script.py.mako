@@ -10,7 +10,9 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
-from openjiuwen_studio.core.database.migration_utils import table_exists, column_exists, index_exists
+from openjiuwen_studio.core.database.migration_utils import (
+    table_exists, column_exists, index_exists, unique_constraint_exists
+)
 ${imports if imports else ""}
 
 # revision identifiers, used by Alembic.

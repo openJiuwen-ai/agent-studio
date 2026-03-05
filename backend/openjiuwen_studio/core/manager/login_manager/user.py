@@ -5,7 +5,6 @@ import string
 import jwt
 from fastapi import HTTPException, Depends, status
 
-from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.config import settings
 from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.login_manager.session_auth import hash_password, oauth2_scheme
@@ -102,12 +101,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     user = ret.get("data")
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    # 如果启用新认证系统，进行 session_key 验证
-    if settings.enable_new_auth:
-        db_session_key = user.get("session_key")
-        # 检查是否为空 (处理登出、重置密码后的情况)
-        if not db_session_key:
-            raise HTTPException(status_code=401, detail="Session expired")
+    # 进行 session_key 验证
+    db_session_key = user.get("session_key")
+    # 检查是否为空 (处理登出、重置密码后的情况)
+    if not db_session_key:
+        raise HTTPException(status_code=401, detail="Session expired")
     user_db = UserDBPd(**user)
 
     return {"code": status.HTTP_200_OK,
@@ -126,6 +124,23 @@ def get_user_id(current_user: dict) -> str:
         if user_db is None:
             raise HTTPException(status_code=400, detail="User data not found")
         return user_db["user_id_str"]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal server error") from e
+
+
+def get_user_email(current_user: dict) -> str:
+    """Get current user email from JWT token"""
+    try:
+        ret = current_user.get("code")
+        if ret != status.HTTP_200_OK:
+            raise HTTPException(status_code=ret, detail=current_user.get("message", "get user error"))
+
+        user_db = current_user.get("data")
+        if user_db is None:
+            raise HTTPException(status_code=400, detail="User data not found")
+        return user_db["email"]
     except HTTPException:
         raise
     except Exception as e:

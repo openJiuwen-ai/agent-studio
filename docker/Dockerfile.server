@@ -46,6 +46,9 @@ USER root
 ENV PYTHONPATH=/app/site-packages/openjiuwen_studio:/app/site-packages
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+COPY backend/openjiuwen_studio/examples /app/examples
+RUN chown -R app:app /app/examples
+ENV EXAMPLES_DIR=/app/examples
 WORKDIR /app
 EXPOSE 8000
 

@@ -8,14 +8,7 @@ This guide provides a detailed introduction to prompt debugging features, includ
 
 **3. Comparison Mode**: Creates a baseline group and comparison groups to evaluate the effects of different prompts or configurations under the same input, helping you quickly identify the optimal solution. It supports independent editing and testing, making it convenient to experiment with different configurations. This mode is suitable for comparing different model parameters or prompt versions, testing multiple configurations in parallel, and identifying the best solution through side-by-side comparison.
 
-## Notes
-
-- **Pay attention to model parameters**: Different models or parameter configurations can significantly affect response quality. Adjust them in **Advanced Configuration** if necessary before debugging.
-- **Keep conversations concise**: During debugging, periodically clear historical messages to avoid overly long contexts that may affect results.
-
-## Steps
-
-### 1. Normal Debug Mode
+## 1. Normal Debug Mode
 
 **Method 1**: After configuring variable values in **Variable Definition**, directly click **Send**. This method is suitable for precise testing of specific functionality and quick logic verification, such as testing whether a particular plugin is correctly invoked when the user input contains specific keywords.
 
@@ -32,7 +25,7 @@ I want to find a Sichuan cuisine restaurant in Beijing
 
 Review the AI response to confirm whether the behavior meets expectations.
 
-### 2. Multi-Instance Debug Mode
+## 2. Multi-Instance Debug Mode
 
 **Multi-Instance Execution** is suitable for batch validation of output behavior under the same configuration and is used to verify prompt stability.
 
@@ -56,7 +49,7 @@ Review the AI response to confirm whether the behavior meets expectations.
 
 ![image](../images/multi-case-5.png)
 
-### 3. Comparison Mode
+## 3. Comparison Mode
 
 Comparison mode allows you to evaluate prompt effectiveness under different configurations and quickly identify the optimal solution.
 
@@ -77,5 +70,10 @@ The page will switch to a multi-column layout, including:
 ![image](../images/multi-case-8.png)
 
 4. Debug inputs are executed simultaneously across all groups, making side-by-side comparison convenient.
-
+ 
 ![image](../images/multi-case-9.png)
+
+## Debugging Tips
+
+- **Pay attention to model parameters**: Different models or parameter configurations can significantly affect response quality. Adjust them in **Advanced Configuration** if necessary before debugging.
+- **Keep conversations concise**: During debugging, periodically clear historical messages to avoid overly long contexts that may affect results.

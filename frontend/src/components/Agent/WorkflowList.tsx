@@ -2,67 +2,115 @@ import Typography from '@mui/material/Typography'
 import Tooltip from '@mui/material/Tooltip'
 import { WorkflowDetail } from '../../types/agentTypes'
 import { AlertCircle, LoaderCircle, Settings, Trash2, Workflow } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import DeleteConfirmationDialog from '@/components/Common/DeleteConfirmationDialog'
 import { getDefaultSpaceId } from '@/utils/spaceUtils'
 import { useAgentStore } from '@/stores/useAgentStore'
-import { useWorkflowVersions, useSelectedVersions } from '@/hooks/useWorkflowVersions'
+import { useWorkflowVersions } from '@/hooks/useWorkflowVersions'
 import { isVersionValid } from '@/utils/versionMenu'
 import { VersionField } from '@/components/Agent/VersionField'
 import type { WorkflowValidationResult } from '@/hooks/useWorkflowValidation'
-
-// 工作流列表组件
 import { useScopedTranslation } from '@/i18n'
+
 const WorkflowList = ({
   workflowObjects,
   onClick,
   disabled = false,
   refreshToken,
   validationResults,
+  onVersionChange,
 }: {
   workflowObjects: WorkflowDetail[]
   onClick: (operate: 'delete' | 'setting', workflowId: string, version?: string) => void
   disabled?: boolean
   refreshToken?: number
   validationResults?: Record<string, WorkflowValidationResult>
+  onVersionChange?: (workflowId: string, version: string) => void
 }) => {
   const { t } = useScopedTranslation('agents.agentEditor.orchestration.workflowSetting.workflowList')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
+
   const [selectedVersions, setSelectedVersions] = useState<Record<string, string>>({})
   const updateWorkflowDetail = useAgentStore(s => s.updateWorkflowDetail)
 
+  const initializedIdsRef = useRef<Set<string>>(new Set())
+
   const spaceId = useMemo(() => getDefaultSpaceId() || '', [])
-  const { versionsMap } = useWorkflowVersions(workflowObjects, spaceId)
+  const { versionsMap, loadingMap, refresh } = useWorkflowVersions(workflowObjects, spaceId)
 
-  const computedSelected = useSelectedVersions(workflowObjects, versionsMap)
+  // 刷新按钮触发版本列表刷新
+  const prevRefreshTokenRef = useRef(refreshToken)
   useEffect(() => {
-    setSelectedVersions(computedSelected)
-  }, [computedSelected])
+    if (refreshToken !== undefined && refreshToken !== prevRefreshTokenRef.current) {
+      prevRefreshTokenRef.current = refreshToken
+      refresh()
+    }
+  }, [refreshToken, refresh])
 
+  // 版本初始化：只为新增的工作流设置版本，刷新时不覆盖用户选择
   useEffect(() => {
-    const invalids = workflowObjects.filter(w => {
-      const val = selectedVersions[w.workflow_id] ?? 'draft'
-      return versionsMap[w.workflow_id] && !isVersionValid(w.workflow_id, versionsMap, val)
+    const currentIds = new Set(workflowObjects.map(w => w.workflow_id))
+    const newIds = [...currentIds].filter(id => !initializedIdsRef.current.has(id))
+
+    if (newIds.length === 0) return
+
+    newIds.forEach(id => initializedIdsRef.current.add(id))
+
+    setSelectedVersions(prev => {
+      const next = { ...prev }
+      newIds.forEach(id => {
+        const workflow = workflowObjects.find(w => w.workflow_id === id)
+        if (workflow) {
+          next[id] = workflow.workflow_version || 'draft'
+        }
+      })
+      Object.keys(next).forEach(id => {
+        if (!currentIds.has(id)) {
+          delete next[id]
+          initializedIdsRef.current.delete(id)
+        }
+      })
+      return next
     })
-    if (invalids.length) {
+  }, [workflowObjects])
+
+  // 版本有效性检查：如果版本被删除，重置为 draft
+  useEffect(() => {
+    if (Object.values(loadingMap).some(v => v)) return
+
+    const invalidWorkflows = workflowObjects.filter(w => {
+      if (!initializedIdsRef.current.has(w.workflow_id)) return false
+      const version = selectedVersions[w.workflow_id]
+      if (!version || version === 'draft') return false
+      return !isVersionValid(w.workflow_id, versionsMap, version)
+    })
+
+    if (invalidWorkflows.length > 0) {
       setSelectedVersions(prev => {
         const next = { ...prev }
-        invalids.forEach(w => {
+        invalidWorkflows.forEach(w => {
           next[w.workflow_id] = 'draft'
         })
         return next
       })
-      const updated = workflowObjects.map(w => (invalids.find(i => i.workflow_id === w.workflow_id) ? { ...w, workflow_version: 'draft' } : w))
-      updateWorkflowDetail(updated)
+      updateWorkflowDetail(
+        workflowObjects.map(w =>
+          invalidWorkflows.find(i => i.workflow_id === w.workflow_id)
+            ? { ...w, workflow_version: 'draft' }
+            : w
+        )
+      )
     }
-  }, [versionsMap, workflowObjects, selectedVersions])
+  }, [workflowObjects, versionsMap, loadingMap, selectedVersions])
 
   const handleVersionChange = (workflowId: string, ver: string) => {
     setSelectedVersions(prev => ({ ...prev, [workflowId]: ver }))
     const updated = workflowObjects.map(w => (w.workflow_id === workflowId ? { ...w, workflow_version: ver } : w))
     updateWorkflowDetail(updated)
+    onVersionChange?.(workflowId, ver)
   }
+
   return (
     <div className="space-y-4">
       {workflowObjects.map(workflow => (
@@ -143,7 +191,8 @@ const WorkflowList = ({
                   onChange={ver => handleVersionChange(workflow.workflow_id, ver)}
                   spaceId={spaceId}
                   readonly={disabled}
-                  refreshToken={refreshToken}
+                  versionsMap={versionsMap}
+                  loadingMap={loadingMap}
                 />
               </div>
             </div>

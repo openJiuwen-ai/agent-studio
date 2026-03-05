@@ -1,0 +1,66 @@
+milvus:
+  image:
+    all:
+      tag: "v2.6.9"
+
+  cluster:
+    enabled: false
+
+  etcd:
+    replicaCount: 1
+
+  pulsarv3:
+    enabled: false
+
+  minio:
+    mode: standalone
+
+configmap:
+  name: studio-env-config
+  description: "openJiuwen studio environment variables"
+
+  data:
+    ACCESS_TOKEN_EXPIRE_MINUTES: "2880"
+    AGENT_DB_NAME: "openjiuwen_agent"
+    ALGORITHM: "HS256"
+    ALLOWED_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000"]'
+    DB_HOST: ""
+    DB_PASSWORD: ""
+    DB_PORT: "3306"
+    DB_TYPE: "mysql"
+    DB_USER: "studio_backend"
+    DEBUG: "false"
+    ENABLE_LINUX_SANDBOX: "True"
+    FORCE_DEL_WORKFLOW_STATE: "True"
+    FRONTEND_PORT: "3000"
+    HOST: "0.0.0.0"
+    IS_SENSITIVE: "False"
+    LLM_SSL_VERIFY: "False"
+    INDEX_MANAGER_TYPE: "milvus"
+    MILVUS_COLLECTION_NAME: "memory_vector"
+    MILVUS_TOKEN: ""
+    NODE_ENV: "development"
+    OPS_DB_NAME: "openjiuwen_ops"
+    REDIS_DB: "0"
+    REDIS_HOST: ""
+    REDIS_PASSWORD: ""
+    REDIS_PORT: "6379"
+    REFRESH_TOKEN_EXPIRE_DAYS: "2"
+    RESTFUL_SSL_CERT: "False"
+    RESTFUL_SSL_VERIFY: "False"
+    SERVICE_MODE: "develop"
+    SMTP_ALIAS: ""
+    SMTP_HOST: ""
+    SMTP_PASSWORD: ""
+    SMTP_PORT: ""
+    SMTP_USER: ""
+    OBS_BUCKET: ""
+    OBS_SERVER: ""
+    OBS_ACCESS_KEY_ID: ""
+    OBS_SECRET_ACCESS_KEY: ""
+    SSL_PASSWORD: ""
+    SSRF_PROTECT_ENABLED: "False"
+    WORKER_NUM: "1"
+    WORKFLOW_EXECUTE_TIMEOUT: "300"
+    VITE_ENABLE_NEW_AUTH: "True"
+    ENABLE_REDIS_CHECKPOINT: "True"

@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect } from 'react'
 import { Select, CircularProgress } from '@mui/material'
 import { AlertCircle } from 'lucide-react'
-import { useWorkflowVersions } from '@/hooks/useWorkflowVersions'
+import type { VersionsMap, LoadingMap } from '@/hooks/useWorkflowVersions'
 import { renderVersionMenuItems } from '@/utils/versionMenu'
 import { useScopedTranslation } from '@/i18n'
 
@@ -11,14 +11,14 @@ export const VersionField: React.FC<{
   onChange?: (v: string) => void
   spaceId: string
   readonly?: boolean
-  refreshToken?: number
-}> = ({ workflowId, value, onChange, spaceId, readonly = false, refreshToken }) => {
+  versionsMap: VersionsMap
+  loadingMap?: LoadingMap
+}> = ({ workflowId, value, onChange, readonly = false, versionsMap, loadingMap = {} }) => {
   const { t } = useScopedTranslation('agents.agentEditor.orchestration.workflowSetting.versionField')
-  const workflows = useMemo(() => (workflowId ? ([{ workflow_id: workflowId }] as any[]) : []), [workflowId])
-  const { versionsMap, loading, refresh } = useWorkflowVersions(workflows as any, spaceId, !!workflowId)
   const latest = workflowId ? versionsMap[workflowId]?.latestPublished || 'draft' : 'draft'
   const normalized = !value || value === '' ? 'draft' : value
-  const lastRefreshRef = useRef<number | undefined>(refreshToken)
+  const isLoading = workflowId ? loadingMap[workflowId] : false
+
   useEffect(() => {
     if ((value === undefined || value === null) && workflowId) {
       onChange?.(latest)
@@ -26,14 +26,7 @@ export const VersionField: React.FC<{
       onChange?.('draft')
     }
   }, [latest, workflowId])
-  useEffect(() => {
-    if (!workflowId) return
-    if (refreshToken === undefined) return
-    if (lastRefreshRef.current === refreshToken) return
-    lastRefreshRef.current = refreshToken
-    refresh().catch(() => {})
-  }, [refreshToken, refresh, workflowId])
-  const ready = !!workflowId && !loading && !!versionsMap[workflowId]
+  const ready = !!workflowId && !isLoading && !!versionsMap[workflowId]
   if (!workflowId) return null
   if (!ready) {
     return (
@@ -72,7 +65,7 @@ export const VersionField: React.FC<{
         value={normalized}
         onChange={e => onChange(e.target.value as string)}
         displayEmpty
-        disabled={!workflowId || loading}
+        disabled={!workflowId || isLoading}
         sx={{ minWidth: 120, width: 'fit-content', fontSize: '0.8rem', '& .MuiSelect-select': { py: 0.25, px: 1.25, lineHeight: '18px', fontSize: '0.8rem' } }}
         MenuProps={{ PaperProps: { sx: { maxHeight: 180 } } }}
       >

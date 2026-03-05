@@ -1,0 +1,58 @@
+deployment:
+  replicaCount: 2
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  imagePullSecret: default-secret
+
+  configMapName: studio-env-config
+
+  strategy:
+    maxSurge: "25%"
+    maxUnavailable: "25%"
+
+  livenessProbe:
+    path: /health
+    port: 3000
+    initialDelaySeconds: 2
+    periodSeconds: 10
+    timeoutSeconds: 1
+    failureThreshold: 3
+
+  resources:
+    limits:
+      cpu: '2'
+      memory: 4000Mi
+    requests:
+      cpu: '1'
+      memory: 2000Mi
+
+  tolerations:
+    - key: "node.kubernetes.io/not-ready"
+      operator: "Exists"
+      effect: "NoExecute"
+      tolerationSeconds: 300
+    - key: "node.kubernetes.io/unreachable"
+      operator: "Exists"
+      effect: "NoExecute"
+      tolerationSeconds: 300
+
+  extraVolumeMounts: [ ]
+  extraVolumes: [ ]
+
+service:
+  type: LoadBalancer
+  port: 3000
+  targetPort: 3000
+  nodePort: null   # automatic allocation
+
+  elb:
+    class: performance
+    healthCheckFlag: "off"
+    algorithm: ROUND_ROBIN
+    protocol: http

@@ -203,7 +203,7 @@
 * 运行以下命令生成密钥：
 
   ```bash
-  cd backend
+  cd scripts
     
   bash build_AES_master_key.sh
   ```

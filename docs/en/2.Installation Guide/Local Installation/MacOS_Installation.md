@@ -208,7 +208,7 @@ Complete dependency installation first, then perform source retrieval and instal
 * Run the following commands to generate the key: 
 
   ```bash
-  cd backend
+  cd scripts
     
   bash build_AES_master_key.sh
   ```
@@ -286,10 +286,24 @@ Complete dependency installation first, then perform source retrieval and instal
   uv sync
   ```
 
-  > **Note**: If the process remains stuck for more than 20 minutes, press "Ctrl + C", try modifying the url value under [[tool.uv.index]] in the "pyproject.toml" file in this directory to switch to another available source. Then, rerun "uv sync". 
+* Execute database version stamp commands to confirm current database version:
+  ```bash
+  # Agent database
+  alembic -n alembic_mysql_agent stamp head
+  alembic -n alembic_mysql_ops stamp head
 
-  > **Note**: If `uv sync` fails, you can try `uv sync --native-tls` to force the use of the system's native TLS library (to resolve HTTPS download compatibility issues). 
+  # SQLite database
+  alembic -n alembic_sqlite_agent stamp head
+  alembic -n alembic_sqlite_ops stamp head
+  ```
 
+  > Detailed description: The above commands are used to mark that the current database is already the latest version, facilitating subsequent database operations. Need to be executed separately for agent and ops databases. If using MySQL, execute `alembic -n alembic_mysql_agent stamp head` and `alembic -n alembic_mysql_ops stamp head`. For alembic usage methods, refer to [DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md](../../../../backend/DATABASE_MIGRATION_DEVELOPMENT_GUIDE_EN.md)
+
+  > **Note**: If the process remains stuck for more than 20 minutes, press "Ctrl + C", try modifying the url value under [[tool.uv.index]] in the "pyproject.toml" file in this directory to switch to another available source. Then, rerun "uv sync".
+
+  > **Note**: If `uv sync` fails, you can try `uv sync --native-tls` to force the use of the system's native TLS library (to resolve HTTPS download compatibility issues).
+
+* Create log directory and start backend service
   ```bash
   mkdir logs
   mkdir logs/run

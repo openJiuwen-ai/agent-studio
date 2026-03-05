@@ -1247,6 +1247,7 @@ const ModelsPage: React.FC = () => {
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
+                autoComplete="new-password"
                 required
                 label={t('models.modelConfig.parameters.apiKey')}
                 sx={{
