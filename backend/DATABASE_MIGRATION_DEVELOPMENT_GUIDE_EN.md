@@ -26,7 +26,7 @@ This project adopted different database upgrade methods during different version
 - **Description**: These versions did not yet use Alembic for database version management. The code includes automatic database synchronization functionality that automatically synchronizes newly added table fields.
 - **Operation**: No need to execute the Alembic upgrade commands in this document. Database changes are completed automatically when the application starts.
 
-#### 0.1.x → 0.1.4 (including 0.1.1→0.1.4, 0.1.2→0.1.4, 0.1.3→0.1.4)
+#### 0.1.x → 0.1.4 (and later versions) (including 0.1.1/0.1.2/0.1.3→0.1.4 and later versions)
 - **Upgrade Method**: Alembic Migration
 - **Description**: Starting from version 0.1.4, the project officially adopted Alembic for database version management.
 - **Operation**: Need to use `alembic stamp` command to tag and `alembic upgrade` command to upgrade the database.
@@ -393,16 +393,16 @@ alembic -n alembic_sqlite_agent current
 alembic -n alembic_sqlite_agent revision --autogenerate -m "feat: add new column"
 ```
 
-#### 6.1.4 v0.1.2 and Earlier Version Baseline Stamping
+#### 6.1.4 Released Version Baseline Marking After 0.1.2
 
 The following is a reference table of key version Revision IDs for each database type, for use when manually stamping versions (Stamp).
 
-| Database Type | Service Component | v0.1.2 Revision ID | v0.1.3 Revision ID |
-| :--- | :--- | :--- | :--- |
-| **MySQL** | **Agent** | `54351e123cf0` | `06a1f79bce8b` |
-| **MySQL** | **Ops** | `80f110f929fc` | `13377a900fe2` |
-| **SQLite** | **Agent** | `f458c7fb17a5` | `031b34b4dd30` |
-| **SQLite** | **Ops** | `b4f4c6589bc5` | `f6e49cd8c97d` |
+| Database Type | Service Component | v0.1.2 Revision ID | v0.1.3 Revision ID | v0.1.4 Revision ID |
+| :--- | :--- | :--- | :--- | :--- |
+| **MySQL** | **Agent** | `54351e123cf0` | `06a1f79bce8b` | `072ac1293a02` |
+| **MySQL** | **Ops** | `80f110f929fc` | `13377a900fe2` | `13377a900fe2` |
+| **SQLite** | **Agent** | `f458c7fb17a5` | `031b34b4dd30` | `8f4846812221` |
+| **SQLite** | **Ops** | `b4f4c6589bc5` | `f6e49cd8c97d` | `f6e49cd8c97d` |
 
 The baseline for database migration scripts in the current code repository is version v0.1.2. For users upgrading from v0.1.1 to v0.1.2, since there are no database structure changes, users need to manually stamp their database with a v0.1.2 label, otherwise running `alembic upgrade head` directly will fail because it tries to create existing tables.
 
