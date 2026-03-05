@@ -182,7 +182,9 @@
       "leftRefPathNoEmpty": "左侧变量引用路径不能包含空值",
       "rightValueEmpty": "右侧值不能为空",
       "rightValueTypeEmpty": "右侧值类型不能为空",
-      "rightValueTypeInvalid": "右侧值类型无效"
+      "rightValueTypeInvalid": "右侧值类型无效",
+      "typeMismatch": "类型不匹配：左侧为 {{leftType}}，右侧为 {{rightType}}",
+      "duplicateVariableName": "变量名重复：{{name}}"
     }
   },
   "editorStates": {
@@ -315,6 +317,7 @@
     "testRunInput": "试运行输入",
     "completeInputToContinue": "完成以下输入后，继续试运行",
     "continueRunning": "继续运行",
+    "continueRunningWithCount": "继续运行 (还有 {{count}} 个待处理)",
     "cancel": "取消",
     "run": "运行",
     "testRun": "试运行"

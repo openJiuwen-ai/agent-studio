@@ -4,15 +4,12 @@ This guide walks you through a complete example to help you quickly understand t
 
 **Example scenario:** Create a food recommendation expert that can recommend suitable foods and restaurants based on user preferences, location, and other information.
 
-## Create a Prompt
 
-### Steps
-
-### 1. Go to the prompt list page
+## 1. Go to the prompt list page
 
 Navigate to the prompt management page and click the **“Create Prompt”** button.
 
-### 2. Fill in basic information
+## 2. Fill in basic information
 
 In the pop-up dialog, fill in the prompt key, name, and description:
 
@@ -26,7 +23,7 @@ Click the **“Create”** button.
 
 ![image](../images/prompt2025-12-17160234.png)
 
-### 3. Write the prompt content
+## 3. Write the prompt content
 
 After the system navigates to the editing page, add messages in the **“Write Prompt”** module:
 
@@ -88,7 +85,7 @@ If you need more information or have other requirements, please let me know.
 
 ![image](../images/6b387783-4784-4e5e-80ae-8d30f0cdec1c.png)
 
-### 4. Configure variables
+## 4. Configure variables
 
 In **“Advanced Configuration” → “Variable Definition”**, set default values for variables:
 
@@ -98,7 +95,7 @@ In **“Advanced Configuration” → “Variable Definition”**, set default v
 
 ![image](../images/aada7887-4d36-4996-8737-91e8c226a36f.png)
 
-### 5. Configure the model
+## 5. Configure the model
 
 In **“Advanced Configuration” → “Model”**:
 
@@ -107,7 +104,7 @@ In **“Advanced Configuration” → “Model”**:
 
 ![image](../images/206e89ac-2279-41c4-98c6-0b558460f1bb.png)
 
-### 6. Configure tools
+## 6. Configure tools
 
 In **“Advanced Configuration” → “Tool Settings”**, add a tool for calling an external restaurant search capability:
 
@@ -141,7 +138,7 @@ In **“Advanced Configuration” → “Tool Settings”**, add a tool for call
 }
 ```
 ![image](../images/prompt2025-12-17155835.png)
-### 7. Debug the Prompt
+## 7. Debug the Prompt
 
 In the **“Prompt Debugging”** module, enter a test message and click **Send**:
 ```
@@ -155,7 +152,7 @@ Review the AI response to confirm that the behavior meets expectations and verif
 - Check the tool call information returned by the model to confirm that a tool call was triggered and that the parameters include `city` and `food_preference`.
 - Observe whether the restaurant list returned by the tool is incorporated and reflected in the final response.
 
-### 8. Submit the Prompt
+## 8. Submit the Prompt
 
 Click the **“Submit New Version”** button, enter the version number and version description, and confirm submission.
 

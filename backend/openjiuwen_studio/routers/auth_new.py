@@ -5,6 +5,7 @@ from openjiuwen_studio.core.manager.email_manager.email_utils import EmailUtils
 from openjiuwen_studio.core.manager.login_manager.auth_service import AuthService
 from openjiuwen_studio.core.manager.login_manager.session_auth import oauth2_scheme
 from openjiuwen_studio.core.manager.login_manager.user import get_current_user
+from openjiuwen_studio.core.manager.login_manager.security_manager import SecurityManager
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.core.common.language_thread_context import get_highest_priority_language
 from openjiuwen_studio.schemas.user import (
@@ -29,6 +30,8 @@ async def send_code(req: SendCodeRequest, background_tasks: BackgroundTasks):
 @auth_router.post("/register", response_model=ResponseModel[dict])
 async def register(req: RegisterRequest, request: Request):
     """用户注册"""
+    # 对注册进行频率控制
+    SecurityManager.register_rate_limit(request.client.host)
     accept_language = request.headers.get("accept-language", "")
     language = "zh"
     
@@ -82,8 +85,10 @@ async def verify_access_token(token: str = Depends(oauth2_scheme)):
 
 
 @auth_router.post("/login", response_model=ResponseModel[dict])
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     """需要密码的登录"""
+    # 对登录进行频率控制
+    SecurityManager.login_rate_limit(request.client.host)
     result = await AuthService.login_user(form_data)
     return ResponseModel(code=200, message="登录成功", data=result)
 

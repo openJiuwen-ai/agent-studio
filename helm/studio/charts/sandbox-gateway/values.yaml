@@ -1,0 +1,43 @@
+deployment:
+  replicaCount: 1
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  imagePullSecret: default-secret
+
+  configMapName: studio-env-config
+
+  strategy:
+    maxSurge: "25%"
+    maxUnavailable: "25%"
+
+  resources:
+    limits:
+      cpu: '1'
+      memory: 1000Mi
+    requests:
+      cpu: '1'
+      memory: 1000Mi
+
+  tolerations:
+    - key: "node.kubernetes.io/not-ready"
+      operator: "Exists"
+      effect: "NoExecute"
+      tolerationSeconds: 300
+    - key: "node.kubernetes.io/unreachable"
+      operator: "Exists"
+      effect: "NoExecute"
+      tolerationSeconds: 300
+
+  extraVolumeMounts: [ ]
+  extraVolumes: [ ]
+
+service:
+  type: ClusterIP
+  port: 8188
+  targetPort: 8188

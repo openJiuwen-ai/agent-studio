@@ -13,8 +13,6 @@ import {
   Hash,
   MessageSquare,
   User,
-  Target,
-  Brain,
   Search,
   Filter
 } from 'lucide-react';
@@ -231,7 +229,6 @@ const MemoryBaseEditorPage: React.FC = () => {
   const { user } = useAuthStore();
   const { snackbar, showSuccess, showError, closeSnackbar } = useUnifiedSnackbar();
 
-  const [memories, setMemories] = useState<ExtendedMemoryItem[]>([]);
   const [allMemories, setAllMemories] = useState<ExtendedMemoryItem[]>([]);
   const [filteredMemories, setFilteredMemories] = useState<ExtendedMemoryItem[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -341,7 +338,7 @@ const MemoryBaseEditorPage: React.FC = () => {
   }, [id]); // 只依赖 id，当 id 变化时重新加载
 
   // 获取记忆项列表
-  const fetchMemories = async (page: number = 1, pageSize: number = 10) => {
+  const fetchMemories = async (page: number = 1) => {
     if (!memoryBase || !memoryBase.mdb_id || isMemoriesLoading || currentRequestPage === page) return;
 
     const spaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID;
@@ -372,8 +369,6 @@ const MemoryBaseEditorPage: React.FC = () => {
 
       // 合并两个数组
       const allMemories = [...variableMemories, ...longTermMemories];
-      const paginatedMemories = allMemories.slice((page - 1) * pageSize, page * pageSize);
-      setMemories(paginatedMemories);
       setAllMemories(allMemories);
       setTotalMemories(allMemories.length);
       setCurrentPage(page);
@@ -414,6 +409,7 @@ const MemoryBaseEditorPage: React.FC = () => {
       // 转换长期记忆数据格式 - 添加ID
       const longTermMemories: ExtendedMemoryItem[] = response_long.data?.longterm_mem_data?.map((mem: MemInfo) => ({
         id: mem.mem_id,
+        mb_id: memoryBase.mdb_id,
         content: mem.content,
         type: mem.type,
       })) || [];
@@ -479,7 +475,6 @@ const MemoryBaseEditorPage: React.FC = () => {
           }
 
           // 始终更新记忆列表（空数组也会设置）
-          setMemories(firstPageItems);
           setTotalMemories(total);
           setCurrentPage(1);
 
@@ -490,60 +485,39 @@ const MemoryBaseEditorPage: React.FC = () => {
           console.error('Failed to fetch all memory IDs:', error);
           // 如果失败，回退到原来的方式
           setIsMemoriesLoading(false);
-          fetchMemories(1, 10);
+          fetchMemories(1);
         });
     }
   }, [memoryBase?.mdb_id, user?.spaceId]); // 只依赖ID和spaceId，避免重复调用
 
   // 过滤记忆项
   useEffect(() => {
-    let filtered = memories;
-    setTotalMemories(allMemories.length);
-    // 按类型过滤
+    let filtered = [...allMemories];
+    
+    // 应用类型过滤
     if (selectedTypeFilter !== 'all') {
       if (selectedTypeFilter === 'longterm') {
-        filtered = allMemories.filter(mem => mem.type !== 'variable' && mem.type !== 'summary' );
+        filtered = filtered.filter(mem => mem.type === 'longterm' || mem.type === 'user_profile' || mem.type === 'scenario' || mem.type === 'semantic');
       } else {
-        filtered = allMemories.filter(mem => mem.type === selectedTypeFilter);
+        filtered = filtered.filter(mem => mem.type === selectedTypeFilter);
       }
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        filtered = filtered.filter(mem => 
-          mem.content.toLowerCase().includes(term)
-        );
-      }
-      setTotalMemories(filtered.length);
-      // 分页
-      setCurrentPage(1);
-      filtered = filtered.slice(0, pageSize);
-      setFilteredMemories(filtered);
-      return;
     }
-
-    // 按搜索词过滤
+    
+    // 应用搜索词过滤
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      filtered = allMemories.filter(mem => 
+      filtered = filtered.filter(mem => 
         mem.content.toLowerCase().includes(term)
       );
-      if (selectedTypeFilter !== 'all') {
-        if (selectedTypeFilter === 'longterm') {
-          filtered = filtered.filter(mem => mem.type !== 'variable' && mem.type !== 'summary' );
-        } else {
-          filtered = filtered.filter(mem => mem.type === selectedTypeFilter);
-        }
-      }
-      setTotalMemories(filtered.length);
-      // 分页
-      setCurrentPage(1);
-      filtered = filtered.slice(0, pageSize);
-      setFilteredMemories(filtered);
-      return
     }
-
-    setFilteredMemories(filtered);
-
-  }, [memories, selectedTypeFilter, searchTerm, allMemories, pageSize]);
+    
+    setTotalMemories(filtered.length);
+    setCurrentPage(1);
+    
+    // 分页
+    const paginatedFiltered = filtered.slice(0, pageSize);
+    setFilteredMemories(paginatedFiltered);
+  }, [selectedTypeFilter, searchTerm, allMemories, pageSize]);
 
   const handleBack = () => {
     navigate('/dashboard/memory-bases');
@@ -555,63 +529,81 @@ const MemoryBaseEditorPage: React.FC = () => {
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
-      fetchMemories(newPage, pageSize);
+      setCurrentPage(newPage);
+      
+      // 在当前筛选结果中进行分页
+      let filtered = allMemories;
+      
+      // 应用相同的筛选逻辑
+      if (selectedTypeFilter !== 'all') {
+        if (selectedTypeFilter === 'longterm') {
+          filtered = filtered.filter(mem => mem.type !== 'variable' && mem.type !== 'summary' );
+        } else {
+          filtered = filtered.filter(mem => mem.type === selectedTypeFilter);
+        }
+      }
+      
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        filtered = filtered.filter(mem => 
+          mem.content.toLowerCase().includes(term)
+        );
+      }
+      
+      // 根据新页码进行分页
+      const startIndex = (newPage - 1) * pageSize;
+      const paginatedFiltered = filtered.slice(startIndex, startIndex + pageSize);
+      setFilteredMemories(paginatedFiltered);
     }
   };
 
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize);
-    setCurrentPage(1); // 重置到第一页
-    // 由于pageSize变化，需要重新获取数据
+    const newPage = 1; // 重置到第一页
+    setCurrentPage(newPage);
+    
+    // 在当前筛选结果中重新计算分页
+    let filtered = allMemories;
+    
+    // 应用相同的筛选逻辑
+    if (selectedTypeFilter !== 'all') {
+      if (selectedTypeFilter === 'longterm') {
+        filtered = filtered.filter(mem => mem.type !== 'variable' && mem.type !== 'summary' );
+      } else {
+        filtered = filtered.filter(mem => mem.type === selectedTypeFilter);
+      }
+    }
+    
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(mem => 
+        mem.content.toLowerCase().includes(term)
+      );
+    }
+    
+    // 根据新的页面大小进行分页
+    const startIndex = (newPage - 1) * newPageSize;
+    const paginatedFiltered = filtered.slice(startIndex, startIndex + newPageSize);
+    setFilteredMemories(paginatedFiltered);
   };
 
-  // 当页面大小改变时，重新获取数据
-  React.useEffect(() => {
-    // 只有在 memoryBase 已加载且 pageSize 变化时才重新获取数据
-    // 避免在初始加载时重复请求（初始加载时已经通过 fetchAllMemoryIds 获取了数据）
-    if (memoryBase && totalMemories > 0) {
-      fetchMemories(currentPage, pageSize);
-    }
-  }, [pageSize]); // 当pageSize变化时重新获取数据
-
-  // 刷新所有记忆状态
+  // 重新获取记忆
   const handleRefreshAllStatuses = async () => {
-    if (!memoryBase || filteredMemories.length === 0 || isRefreshingAllStatuses) return;
+    if (!memoryBase || isRefreshingAllStatuses) return;
 
     setIsRefreshingAllStatuses(true);
     try {
-      const spaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID;
-
-      const memoryIds = filteredMemories.map(mem => mem.id);
-
-      // 模拟获取状态（实际实现中应调用真实API）
-      const statusResponse = {
-        data: {
-          items: memoryIds.map(id => ({
-            id: memoryBase.mdb_id,
-            memory_id: id,
-            status: 'success'
-          }))
-        }
-      };
-
-      // 更新所有状态数据
-      if (statusResponse.data?.items) {
-        const statusMap: Record<string, MemoryStatusItem> = {};
-        statusResponse.data.items.forEach(statusItem => {
-          if (statusItem.memory_id) {
-            statusMap[statusItem.memory_id] = statusItem;
-          }
-        });
-        setMemoryStatuses(prev => ({
-          ...prev,
-          ...statusMap,
-        }));
-      }
+      // 清空当前记忆数据
+      setAllMemories([]);
+      setFilteredMemories([]);
+      setTotalMemories(0);
+      
+      // 重新获取记忆数据
+      await fetchMemories(currentPage);
 
       showSuccess(t('memoryBases.editor.refreshAllSuccess'));
     } catch (error) {
-      console.error('Failed to refresh all memory statuses:', error);
+      console.error('Failed to refresh all memories:', error);
       showError(t('memoryBases.editor.refreshAllFailed'));
     } finally {
       setIsRefreshingAllStatuses(false);
@@ -681,7 +673,7 @@ const MemoryBaseEditorPage: React.FC = () => {
       const spaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID;
 
       // 根据记忆类型调用不同的删除API
-      const memoryToDelete = memories.find(mem => mem.id === deleteDialog.memoryId);
+      const memoryToDelete = allMemories.find(mem => mem.id === deleteDialog.memoryId);
       if (memoryToDelete && memoryToDelete.type === 'variable') {
         // 删除变量
         await api.deleteUserVariable(spaceId, memoryBase.mdb_id, deleteDialog.memoryId);
@@ -693,7 +685,7 @@ const MemoryBaseEditorPage: React.FC = () => {
       showSuccess(t('memoryBases.editor.deleteSuccess'));
 
       // 刷新记忆列表，确保数据同步
-      await fetchMemories(currentPage, pageSize);
+      await fetchMemories(currentPage);
     } catch (error) {
       console.error('Failed to delete memory:', error);
       showError(t('memoryBases.editor.deleteFailed'));
@@ -756,7 +748,7 @@ const MemoryBaseEditorPage: React.FC = () => {
 
       // 遍历选中的记忆项并根据类型分别删除
       for (const memoryId of selectedMemoryIds) {
-        const memoryToDelete = memories.find(mem => mem.id === memoryId);
+        const memoryToDelete = allMemories.find(mem => mem.id === memoryId);
         if (memoryToDelete && memoryToDelete.type === 'variable') {
           await api.deleteUserVariable(spaceId, memoryBase.mdb_id, memoryId);
         } else {
@@ -772,7 +764,7 @@ const MemoryBaseEditorPage: React.FC = () => {
       showSuccess(t('memoryBases.editor.batchDeleteSuccess', { count: deletedCount }));
 
       // 刷新记忆列表，确保数据同步
-      await fetchMemories(currentPage, pageSize);
+      await fetchMemories(currentPage);
     } catch (error) {
       console.error('Failed to batch delete memories:', error);
       showError(t('memoryBases.editor.batchDeleteFailed'));
@@ -918,7 +910,7 @@ const MemoryBaseEditorPage: React.FC = () => {
                   )}
                   <button
                     onClick={handleRefreshAllStatuses}
-                    disabled={filteredMemories.length === 0 || isRefreshingAllStatuses}
+                    disabled={isRefreshingAllStatuses}
                     className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   >
                     <RefreshCw className={`w-4 h-4 ${isRefreshingAllStatuses ? 'animate-spin' : ''}`}/>

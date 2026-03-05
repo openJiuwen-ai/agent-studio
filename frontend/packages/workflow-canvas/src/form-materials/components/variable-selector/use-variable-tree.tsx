@@ -51,6 +51,8 @@ export function useVariableTree(params: {
       return null
     }
 
+    const keyPath = [...parentFields.map(_field => _field.key), variable.key]
+
     let children: TreeNodeData[] | undefined
 
     if (ASTMatch.isObject(type)) {
@@ -59,12 +61,12 @@ export function useVariableTree(params: {
         .filter(Boolean) as TreeNodeData[]
     }
 
-    const keyPath = [...parentFields.map(_field => _field.key), variable.key]
     const key = keyPath.join('.')
 
     const isSchemaInclude = includeSchema ? JsonSchemaUtils.isASTMatchSchema(type, includeSchema) : true
     const isSchemaExclude = excludeSchema ? JsonSchemaUtils.isASTMatchSchema(type, excludeSchema) : false
-    const isCustomSkip = skipVariable ? skipVariable(variable) : false
+    // Pass keyPath to skipVariable function
+    const isCustomSkip = skipVariable ? skipVariable({ ...variable, keyPath } as VariableField & { keyPath: string[] }) : false
 
     // disabled in meta when created
     const isMetaDisabled = variable.meta?.disabled

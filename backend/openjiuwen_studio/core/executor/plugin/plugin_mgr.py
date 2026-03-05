@@ -132,26 +132,87 @@ class PluginManager:
             current_user: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
         tool = await self.get_compiled_tool(plugin_id, tool_id, space_id, version, current_user)
-        data = await tool.invoke(inputs)
+        data = await tool.invoke(inputs, raise_for_status=False)
+        # 记录 HTTP 调用结果
+        http_code = data.get("code")
+        if http_code != status.HTTP_200_OK and http_code != 0:
+            logger.error(
+                f"Plugin tool HTTP request failed: "
+                f"plugin_id={plugin_id}, tool_id={tool_id}, "
+                f"http_code={http_code}, reason={data.get('reason')}, "
+                f"url={data.get('url')}, "
+                f"response={data.get('data')}"
+            )
+        else:
+            logger.info(
+                f"Plugin tool HTTP request succeeded: "
+                f"plugin_id={plugin_id}, tool_id={tool_id}, "
+                f"http_code={http_code}"
+            )
+
         available = True
-        if data.get("code") != status.HTTP_200_OK and data.get("code") != 0:
+        if http_code != status.HTTP_200_OK and http_code != 0:
             available = False
         available_res = plugin_tool_update_available(tool_id, space_id, available, version)
+
+        # 永不覆盖原始 HTTP 状态码
         if available_res.code != status.HTTP_200_OK:
-            data["code"] = available_res.code
-            data["message"] = available_res.message
+            # 记录可用性更新失败
+            logger.warning(
+                f"Failed to update plugin availability status: "
+                f"tool_id={tool_id}, space_id={space_id}, version={version}, "
+                f"error_code={available_res.code}, error_message={available_res.message}"
+            )
+            # 将可用性更新错误作为附加信息，不覆盖主错误码
+            if "metadata" not in data:
+                data["metadata"] = {}
+            data["metadata"]["availability_update_failed"] = {
+                "code": available_res.code,
+                "message": available_res.message
+            }
+
+        # 如果原始调用成功，但可用性更新失败，添加警告但不改变成功状态
+        if (http_code == status.HTTP_200_OK or http_code == 0) and available_res.code != status.HTTP_200_OK:
+            data["warning"] = f"Tool executed successfully but availability update failed: {available_res.message}"
+
         return PluginManager.result_convert(data)
 
     @staticmethod
     def result_convert(data: Any) -> Dict[str, Any]:
         from openjiuwen_studio.core.common.message import ExecuteResponseType, ExecuteResponse
+
+        # 提取用户友好的错误消息
+        error_message = data.get("message", "success")
+        response_data = data.get("data")
+
+        # 如果响应数据中包含更详细的错误信息，优先使用
+        if response_data and isinstance(response_data, dict):
+            # 检查是否有 OpenAI 格式的错误响应
+            if "error" in response_data and isinstance(response_data["error"], dict):
+                error_info = response_data["error"]
+                # 优先使用 error.message，其次 error.type
+                if "message" in error_info:
+                    error_message = error_info["message"]
+                elif "type" in error_info:
+                    error_message = error_info["type"]
+
+        payload = {
+            "error_code": data.get("code"),
+            "error_message": error_message,
+            "output": response_data,
+        }
+
+        # 透传HTTP响应详细信息，便于前端调试
+        if "url" in data:
+            payload["url"] = data.get("url")
+        if "headers" in data:
+            payload["headers"] = data.get("headers")
+        if "reason" in data:
+            payload["reason"] = data.get("reason")
+
         return ExecuteResponse(
             type=ExecuteResponseType.Plugin,
-            payload={
-                "error_code": data.get("code"),
-                "error_message": data.get("message"),
-                "output": data.get("data"),
-            }
+            payload=payload
         ).model_dump()
 
 

@@ -5,6 +5,8 @@ from httpx import HTTPStatusError
 from fastapi import APIRouter, Depends, status, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
+from openjiuwen.core.common.logging import logger
+
 from openjiuwen_studio.core.thirdparty_client import DeepSearchAgentClient
 from openjiuwen_studio.core.manager.convertor.components.llm import get_model_config
 from openjiuwen_studio.core.manager.login_manager.user import get_current_user
@@ -60,7 +62,7 @@ def get_model_configs(model_id, space_id):
 
 def handle_deepsearch_errors(func: Callable[..., Any]) -> Callable[..., Any]:
     """
-    装饰器：自动捕获 HTTPStatusError 并返回 DeepSearch 原始错误响应。
+    装饰器：自动捕获 HTTPStatusError 并返回通用错误响应。
     适用于返回 JSONResponse 或 dict 的非流式接口。
     """
     @wraps(func)
@@ -68,13 +70,17 @@ def handle_deepsearch_errors(func: Callable[..., Any]) -> Callable[..., Any]:
         try:
             return await func(*args, **kwargs)
         except HTTPStatusError as exc:
-            try:
-                content = exc.response.json()
-            except Exception:
-                content = {"detail": exc.response.text or "DeepSearch service error"}
+            # 记录原始错误详情到服务器日志，便于排查问题
+            logger.error(
+                "DeepSearch service error: status=%s, body=%s",
+                exc.response.status_code,
+                exc.response.text[:1000] if exc.response.text else "",
+            )
+            # 状态码规范化：内部服务的5xx错误统一返回502，4xx错误保留原始状态码
+            status_code = exc.response.status_code if 400 <= exc.response.status_code < 500 else 502
             return JSONResponse(
-                status_code=exc.response.status_code,
-                content=content,
+                status_code=status_code,
+                content={"detail": "DeepSearch service request failed. Please try again later."},
             )
     return wrapper
 
@@ -97,12 +103,14 @@ async def run(
                 if line:
                     yield line + "\n\n"
         except Exception as e:
+            # 记录原始错误详情到服务器日志
+            logger.error("DeepSearch client init error: %s", str(e))
             if isinstance(e, DeepSearchClientError):
                 error = e
             else:
                 error = DeepSearchClientError(
                     error_code="CLIENT_INIT_ERROR",
-                    message=str(e)
+                    message="Failed to connect to DeepSearch service"
                 )
             conversation_id = payload.get("conversation_id", "")
             for event_str in error.generate_error_stream(conversation_id):
@@ -307,18 +315,21 @@ async def deepsearch_heartbeat():
                 "message": "DeepSearch service is not healthy"
             }
     except httpx.ConnectError:
+        logger.error("DeepSearch heartbeat: connection error")
         return {
             "status": "unavailable",
             "message": "Cannot connect to DeepSearch service"
         }
     except httpx.TimeoutException:
+        logger.error("DeepSearch heartbeat: timeout")
         return {
             "status": "unavailable",
             "message": "DeepSearch service timeout"
         }
     except Exception as e:
+        logger.error("DeepSearch heartbeat: %s", str(e))
         return {
             "status": "unavailable",
-            "message": f"DeepSearch service error: {str(e)}"
+            "message": "DeepSearch service error"
         }
 

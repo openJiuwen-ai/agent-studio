@@ -108,8 +108,10 @@ const ToolSettingsPanel: React.FC<ToolSettingsPanelProps> = ({
                   requestAnimationFrame(() => {
                     onToolsEnabledChange(newToolsEnabled)
                     onHasUnsavedChanges(true)
-                    // 注意：不在这里触发自动保存，因为父组件的 onToolsEnabledChange 已经会触发自动保存
-                    // 避免重复调用保存草稿API
+                    // 启用工具开关变化时触发自动保存
+                    if (enableAutoSave) {
+                      onTriggerAutoSave({ toolsEnabled: newToolsEnabled })
+                    }
                   })
                 }}
                 color="primary"

@@ -236,6 +236,8 @@ del load_seccomp_filter
 
         cmd = cmd + self._generate_mount_params()
 
+        cmd = cmd + self._generate_namespace_params()
+
         if seccomp_fd:
             cmd = cmd + ['--seccomp', str(seccomp_fd)]
 

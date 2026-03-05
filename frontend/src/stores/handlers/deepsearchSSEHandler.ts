@@ -25,6 +25,7 @@ export interface SSEData {
   section_idx?: string | number;
   plan_idx?: string | number;
   step_idx?: string | number;
+  conversation_id?: string;  // 对话的conversationId
 }
 
 interface StoreDependencies {
@@ -39,6 +40,7 @@ interface StoreDependencies {
   getMessageTree: (messageId: string) => Message | null;  // 新增：获取消息树
   getChildMessages: (messageId: string) => Message[];
   getMessageItemsIsUser: (messageItems: MessageItems) => boolean;  // 新增：兼容历史数据
+  setSessionConversationId: (conversationId: string | null) => void;  // 新增：设置连续对话系列ID
 }
 
 interface StreamCache {
@@ -825,6 +827,81 @@ export class DeepsearchSSEHandler {
       return;
     }
 
+    // sub_reporter: 处理章节子报告（summary_response 事件）
+    if (sseData.agent === 'sub_reporter' &&
+        sectionIdx !== undefined &&
+        sectionIdx > 0 &&
+        planIdx === 0 &&
+        stepIdx === 0) {
+
+      // 1. 检查 content 是否为 SUCCESS，如果是则跳过
+      const contentStr = typeof sseData.content === 'string'
+        ? sseData.content.trim()
+        : String(sseData.content || '').trim();
+
+      if (contentStr === 'SUCCESS') {
+        return; // 直接跳过，不处理
+      }
+
+      // 2. 找到对应的 sectionTask
+      const sectionTask = this.findTaskInMessages(
+        lastMessageItems.messagesIds,
+        msg => msg.type === MessageType.TASK && msg.sectionIdx === sectionIdx,
+        `section_${sectionIdx}` // 添加缓存key
+      );
+
+      if (!sectionTask) {
+        console.warn('[sub_reporter summary_response] Section task not found, sectionIdx:', sectionIdx);
+        return;
+      }
+
+      // 3. 获取 sectionTask 下的所有子 messages
+      const sectionChildren = this.store.getChildMessages(sectionTask.id);
+      const lastChild = sectionChildren.length > 0 ? sectionChildren[sectionChildren.length - 1] : null;
+
+      // 4. 判断是创建还是更新：检查最后一个 child 是否是 REPORT 类型
+      if (lastChild && lastChild.type === MessageType.REPORT) {
+        // 情况A: 最后一个 child 是 REPORT - 更新现有消息
+        updateMessage(lastMessageItems.id, lastChild.id, {
+          content: sseData.content,
+          isStreaming: false,
+          status: TaskStatus.FAILED,
+        });
+      } else {
+        // 情况B: 最后一个 child 不是 REPORT 或不存在 - 创建新消息
+        const subTitle = `${i18n.t('deepResearch.handler.chapterReport')}: ${sectionTask.title}`;
+        const newReport = this.store.addMessageAsChild(
+          lastMessageItems.id,
+          sectionTask.id,
+          MessageType.REPORT,
+          sseData.content,
+          subTitle
+        );
+
+        updateMessage(lastMessageItems.id, newReport.id, {
+          isStreaming: false,
+          status: TaskStatus.FAILED,
+        });
+      }
+
+      // 5. 递归更新倒数第二个 child message（task_x_(N-1)_0_0）
+      // 条件：N > 1 且该 message 的状态是 PENDING 或 IN_PROGRESS
+      if (sectionChildren.length > 1) {
+        const secondLastChild = sectionChildren[sectionChildren.length - 2];
+        if (secondLastChild &&
+            (secondLastChild.status === TaskStatus.PENDING ||
+             secondLastChild.status === TaskStatus.IN_PROGRESS)) {
+          this.updateUnfinishedTasksRecursively(
+            secondLastChild.id,
+            lastMessageItems.id,
+            TaskStatus.COMPLETED
+          );
+        }
+      }
+
+      return;
+    }
+
     // end 事件
     if (sseData.agent === 'end') {
       const outlineTask = this.findTaskInMessages(lastMessageItems.messagesIds, msg =>
@@ -880,11 +957,11 @@ export class DeepsearchSSEHandler {
         // 2. 检查 outline 的所有 childTasks 是否都完成
         if (outlineTask) {
           const outlineChildren = this.store.getChildMessages(outlineTask.id);
-          const allChildrenCompleted = outlineChildren.every(child =>
-            child.status === TaskStatus.COMPLETED
+          const allChildrenFinished = outlineChildren.every(child =>
+            child.status !== TaskStatus.PENDING && child.status !== TaskStatus.IN_PROGRESS
           );
 
-          if (allChildrenCompleted) {
+          if (allChildrenFinished) {
             // 创建最终报告 message（与 outline_task 同级）
             const finalReportMessage = addSystemMessage(
               this.conversationId,
@@ -1076,13 +1153,17 @@ export class DeepsearchSSEHandler {
         });
       }
     }
+    /// 给SESSION_CONVERSATION_ID赋值
+    if (sseData.conversation_id) {
+      this.store.setSessionConversationId(sseData.conversation_id);
+    }
   }
 
   /**
    * 处理 error 事件
    * error 事件包含 exception_info，需要更新到最终报告
    */
-  private handleError(sseData: SSEData, _sectionIdx?: number, _planIdx?: number, _stepIdx?: number): void {
+  private handleError(sseData: SSEData, sectionIdx?: number, planIdx?: number, stepIdx?: number): void {
     const { updateMessage, addSystemMessage, getMessageItemsIsUser } = this.store;
     const lastMessageItems = this.store.getCurrentMessageItems();
 
@@ -1133,6 +1214,123 @@ export class DeepsearchSSEHandler {
           });
         }
       }
+    }
+
+    // collector_info_retrieval 和 collector_summary 的错误处理
+    if (['collector_info_retrieval', 'collector_summary'].includes(sseData.agent) &&
+        sectionIdx !== undefined && planIdx !== undefined && stepIdx !== undefined) {
+
+      const sectionTask = this.findTaskInMessages(
+        lastMessageItems.messagesIds,
+        msg => msg.type === MessageType.TASK && msg.sectionIdx === sectionIdx,
+        `section_${sectionIdx}`
+      );
+
+      if (!sectionTask) {
+        console.warn('[DeepsearchSSEHandler] Section task not found for error, sectionIdx:', sectionIdx);
+        // 跳过后续处理，继续执行 end agent 的清理逻辑（如果是 end 的话）
+      } else {
+        const sectionChildren = this.store.getChildMessages(sectionTask.id);
+        const planTitle = i18n.t('apps.deepSearch.informationCollection', { index: planIdx });
+        const planTask = sectionChildren.find(task =>
+          task.title && task.title.includes(planTitle)
+        );
+
+        if (!planTask) {
+          console.warn('[DeepsearchSSEHandler] Plan task not found for error, planIdx:', planIdx);
+          // 跳过后续处理
+        } else {
+          const planChildren = this.store.getChildMessages(planTask.id);
+          const stepTask = planChildren[stepIdx - 1];
+
+          if (!stepTask) {
+            console.warn('[DeepsearchSSEHandler] Step task not found for error, stepIdx:', stepIdx);
+            // 跳过后续处理
+          } else {
+            // collector_info_retrieval 错误处理
+            if (sseData.agent === 'collector_info_retrieval') {
+              // 和正常流程一样，解析 content
+              let parsedContent: JSONObject;
+              if (typeof sseData.content === 'string') {
+                try {
+                  parsedContent = JSON.parse(sseData.content);
+                } catch (e) {
+                  console.error('[DeepsearchSSEHandler] Failed to parse error content as JSON:', e);
+                  parsedContent = { title: sseData.content };
+                }
+              } else if (sseData.content && typeof sseData.content === 'object') {
+                parsedContent = sseData.content;
+              } else {
+                parsedContent = {};
+              }
+
+              const contentTitle = (parsedContent?.title as string | undefined) || i18n.t('deepResearch.handler.searchResult');
+              const messageTitle = `collector_info_retrieval: ${contentTitle || i18n.t('deepResearch.handler.searchResult')}`;
+
+              const childMessage = this.store.addMessageAsChild(
+                lastMessageItems.id,
+                stepTask.id,
+                MessageType.LINK,
+                parsedContent,
+                messageTitle
+              );
+
+              updateMessage(lastMessageItems.id, childMessage.id, {
+                status: TaskStatus.FAILED,
+                isStreaming: false,
+              });
+              // 不更新 stepTask 状态
+            }
+            // collector_summary 错误处理
+            else if (sseData.agent === 'collector_summary') {
+              // 和正常流程一样，content 是字符串
+              const summaryContent = typeof sseData.content === 'string'
+                ? sseData.content
+                : String(sseData.content || '');
+
+              const childMessage = this.store.addMessageAsChild(
+                lastMessageItems.id,
+                stepTask.id,
+                MessageType.TEXT,
+                summaryContent,
+                i18n.t('deepResearch.handler.informationSummary')
+              );
+
+              updateMessage(lastMessageItems.id, childMessage.id, {
+                status: TaskStatus.FAILED,
+                isStreaming: false,
+              });
+
+              // 更新 stepTask 状态为 FAILED
+              updateMessage(lastMessageItems.id, stepTask.id, {
+                status: TaskStatus.FAILED,
+              });
+
+              // 检查 plan 的所有子任务是否都完成或失败
+              const planChildren = this.store.getChildMessages(planTask.id);
+              const allStepsFinished = planChildren.every(step =>
+                step.status !== TaskStatus.PENDING && step.status !== TaskStatus.IN_PROGRESS
+              );
+
+              if (allStepsFinished) {
+                // 检查是否有任何一个 step 失败，如果有则 planTask 也失败
+                const hasFailedStep = planChildren.some(step => step.status === TaskStatus.FAILED);
+                updateMessage(lastMessageItems.id, planTask.id, {
+                  status: hasFailedStep ? TaskStatus.FAILED : TaskStatus.COMPLETED,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 如果是 end agent 的 error, 更新 lastMessageItems的状态为COMPLETED，所有未完成的Message标志为FAILED
+    if (sseData.agent === 'end') {
+      // 先将所有未完成的消息标记为 FAILED
+      this.markAllIncompleteMessages(lastMessageItems, false);
+      // 再更新 MessageItems 的状态
+      this.store.updateMessageItems(lastMessageItems.id, { status: TaskStatus.COMPLETED });
     }
   }
 

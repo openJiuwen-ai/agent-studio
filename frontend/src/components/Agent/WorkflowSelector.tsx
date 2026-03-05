@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Typography, Button, Pagination, Box } from '@mui/material'
 import { X, Search } from 'lucide-react'
-import { WorkflowService, useWorkflows, useSearchWorkflows } from '@test-agentstudio/api-client'
+import { useWorkflows, useSearchWorkflows } from '@test-agentstudio/api-client'
 import { getDefaultSpaceId } from '@/utils/spaceUtils'
 import i18n, { useScopedTranslation } from '@/i18n'
-import { WorkflowSelectDetail, WorkflowDetail } from '../../types/agentTypes'
-import { useAgentStore } from '@/stores/useAgentStore'
-import { mapWorkflow, buildDetails } from '@/hooks/useWorkflowVersions'
+import { WorkflowSelectDetail } from '../../types/agentTypes'
+import { mapWorkflow } from '@/hooks/useWorkflowVersions'
 
 interface WorkflowSelectorProps {
   open: boolean
   onClose: () => void
-  onConfirm: (selectedWorkflows: string[], selectedWorkflowObjects: WorkflowSelectDetail[]) => void
-  initialSelected?: string[]
+  onConfirm: (
+    selectedIds: string[],                      // 完整的选中 ID 列表（确认后的最终状态）
+    newObjects: WorkflowSelectDetail[]         // 只返回本次新增的工作流详情（增量：不在 initialSelected 中）
+  ) => void
+  initialSelected?: string[]                   // 已选的 ID（用于初始化 + 计算增量）
   excludeWorkflowId?: string
 }
 
@@ -20,7 +22,6 @@ const WorkflowSelector: React.FC<WorkflowSelectorProps> = ({ open, onClose, onCo
   const { t } = useScopedTranslation('agents.agentEditor.orchestration.workflowSelector')
   const [selectedWorkflows, setSelectedWorkflows] = useState<string[]>(initialSelected)
   const [selectedWorkflowsCache, setSelectedWorkflowsCache] = useState<Map<string, WorkflowSelectDetail>>(new Map())
-  const updateWorkflowDetail = useAgentStore(s => s.updateWorkflowDetail)
 
   // 搜索相关状态
   const [searchTerm, setSearchTerm] = useState<string>('')
@@ -121,19 +122,16 @@ const WorkflowSelector: React.FC<WorkflowSelectorProps> = ({ open, onClose, onCo
     }
   }, [workflowData])
 
-  useEffect(() => {
-    setSelectedWorkflows(initialSelected)
-  }, [initialSelected])
-
-  // 当页面变化时重置当前页码到第1页，完全保留缓存
+  // 当弹框打开时，初始化 selectedWorkflows（只在 open 变化时执行，不在 initialSelected 变化时重置）
   useEffect(() => {
     if (open) {
+      setSelectedWorkflows(initialSelected)
       setCurrentPage(1)
       setSearchTerm('') // 打开时清空搜索词
       // 完全不重置缓存，保留所有已缓存的工作流数据
       // 这确保了从其他页面选择的工作流不会丢失
     }
-  }, [open])
+  }, [open]) // 只监听 open，不监听 initialSelected
 
   // 当搜索词变化时，重置到第一页
   useEffect(() => {
@@ -145,90 +143,38 @@ const WorkflowSelector: React.FC<WorkflowSelectorProps> = ({ open, onClose, onCo
     setCurrentPage(value)
   }
 
-  const existingWorkflows = useAgentStore(s => (s.saveAgentRequest as any)?.workflows || [])
-
-  const handleConfirm = async () => {
-    if (selectedWorkflows.length > 0) {
-      // Use cached workflows first, then fallback to current page workflows
-      let selectedWorkflowObjects: WorkflowSelectDetail[] = []
-      const missingWorkflowIds: string[] = []
-
-      selectedWorkflows.forEach(workflowId => {
-        const cachedWorkflow = selectedWorkflowsCache.get(workflowId)
-        if (cachedWorkflow) {
-          selectedWorkflowObjects.push(cachedWorkflow)
-        } else {
-          missingWorkflowIds.push(workflowId)
-        }
-      })
-
-      // For any workflows not in cache, try to get them from current page
-      const currentWorkflowObjects = workflowList.filter(workflow => missingWorkflowIds.includes(workflow.id))
-
-      // Update arrays with found workflows
-      selectedWorkflowObjects = [...selectedWorkflowObjects, ...currentWorkflowObjects]
-
-      // Remove found workflows from missing list
-      const stillMissingIds = missingWorkflowIds.filter(id => !currentWorkflowObjects.some(w => w.id === id))
-
-      // If there are still missing workflows, fetch them with a more efficient approach
-      if (stillMissingIds.length > 0) {
-        try {
-          // 批量获取所有页面，找到缺失的工作流
-          let allWorkflows: any[] = []
-          let currentPage = 1
-          let hasMore = true
-
-          // 循环获取所有页面直到找到所有缺失的工作流
-          while (hasMore && stillMissingIds.some(id => !allWorkflows.some(w => w.workflow_id === id))) {
-            const response = await WorkflowService.getWorkflows({
-              space_id: spaceId,
-              page: currentPage,
-              page_size: 10,
-            })
-
-            const pageWorkflows = response.data?.workflow_list || []
-            allWorkflows = [...allWorkflows, ...pageWorkflows]
-
-            // 检查是否还有更多页面
-            const totalPages = response.data?.total_pages || 1
-            hasMore = currentPage < totalPages
-            currentPage++
-          }
-
-          // 从获取的工作流中找到缺失的
-          const foundMissingWorkflows = allWorkflows.filter(workflow => stillMissingIds.includes(workflow.workflow_id)).map(workflow => mapWorkflow(workflow))
-
-          const validFetchedWorkflows = foundMissingWorkflows.filter(w => w !== null) as WorkflowSelectDetail[]
-          selectedWorkflowObjects = [...selectedWorkflowObjects, ...validFetchedWorkflows]
-
-          // 更新缓存以包含新获取的工作流
-          setSelectedWorkflowsCache(prev => {
-            const newCache = new Map(prev)
-            validFetchedWorkflows.forEach(workflow => {
-              newCache.set(workflow.id, workflow)
-            })
-            return newCache
-          })
-        } catch (error) {
-          console.error('Failed to fetch missing workflows:', error)
-        }
-      }
-
-      // Ensure we have all selected workflows (filter out any that couldn't be found)
-      const finalSelectedObjects = selectedWorkflowObjects.filter(w => selectedWorkflows.includes(w.id))
-
-      const details = await buildDetails(existingWorkflows as WorkflowDetail[], finalSelectedObjects, spaceId)
-      updateWorkflowDetail(details)
-      const versionMap = new Map(details.map(d => [d.workflow_id, d.workflow_version]))
-      const enriched = finalSelectedObjects.map(w => ({ ...w, version: versionMap.get(w.workflow_id) || 'draft' }))
-
-      // Ensure we pass the correct selected workflow IDs (only those we found)
-      const finalSelectedIds = finalSelectedObjects.map(w => w.id)
-      onConfirm(finalSelectedIds, enriched)
-    } else {
+  const handleConfirm = () => {
+    if (selectedWorkflows.length === 0) {
+      onConfirm([], [])
       onClose()
+      return
     }
+
+    // 步骤1: 从缓存中获取当前选中工作流的详情（无需接口调用）
+    const currentDetails: WorkflowSelectDetail[] = []
+    const missingIds: string[] = []
+
+    selectedWorkflows.forEach(workflowId => {
+      const cached = selectedWorkflowsCache.get(workflowId)
+      if (cached) {
+        currentDetails.push(cached)
+      } else {
+        missingIds.push(workflowId)
+      }
+    })
+
+    // 如果有缺失的 ID（可能是 initialSelected 中的，父组件已有），记录日志
+    if (missingIds.length > 0) {
+      console.warn('[WorkflowSelector] 部分选中的工作流不在缓存中（可能是 initialSelected 中的，父组件已有）:', missingIds)
+    }
+
+    // 步骤2: 计算增量（只返回本次新增的，不在 initialSelected 中）
+    const initialSet = new Set(initialSelected || [])
+    const newObjects = currentDetails.filter(d => !initialSet.has(d.id))
+
+    // 步骤3: 传递完整的 ID 列表 + 本次新增的详情（从缓存获取的）
+    onConfirm(selectedWorkflows, newObjects)
+    onClose()
   }
 
   const handleCancel = () => {

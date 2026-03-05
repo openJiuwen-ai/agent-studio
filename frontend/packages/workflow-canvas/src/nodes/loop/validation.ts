@@ -97,6 +97,29 @@ export const validateIntermediateVarField = ({ value, context, name, formValues 
   return validationResult?.message
 }
 
+export const validateIntermediateVarDuplicate = ({ value, formValues }: LoopValidationContext) => {
+  const loopType = formValues?.inputs?.loopParam?.type
+
+  if (loopType !== 'arrayLoop') {
+    return undefined
+  }
+
+  const loopArray = formValues?.inputs?.loopParam?.loopArray || {}
+  const arrayKeys = Object.keys(loopArray).filter(key => key && key.trim() !== '')
+
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+
+  for (const key of Object.keys(value)) {
+    if (key && arrayKeys.includes(key)) {
+      return t('workflowCanvas.loop.variableNameDuplicate')
+    }
+  }
+
+  return undefined
+}
+
 export const validateLoopArrayField = ({ value, context, name, formValues }: LoopValidationContext) => {
   const fieldName = name?.replace(/^inputs\.loopParam\.loopArray\./, '') || ''
   const loopType = formValues?.inputs?.loopParam?.type
@@ -231,6 +254,7 @@ export const validation = {
   'inputs.loopParam.loopNum': validateLoopNum,
   'inputs.loopParam.loopArray': validateLoopArray,
   'inputs.loopParam.loopArray.*': validateLoopArrayField,
+  'inputs.loopParam.intermediateVar': validateIntermediateVarDuplicate,
   'inputs.loopParam.intermediateVar.*': validateIntermediateVarField,
   blocks: validateLoopBlocks,
 }

@@ -138,26 +138,17 @@ const ArrayInputsValues = ({
                       style={{ width: '100%' }}
                       value={item.value.content}
                       onChange={handleRefChange}
-                      includeSchema={{ type: 'array', extra: { weak: true } } }
+                      includeSchema={{ type: 'array', extra: { weak: true } }}
                     />
                   </div>
                   <div className="gedit-m-dynamic-value-input-trigger">
-                    <IconButton
-                      theme="borderless"
-                      icon={<IconDelete size="small" />}
-                      size="small"
-                      onClick={() => handleRefChange(undefined)}
-                    />
+                    <IconButton theme="borderless" icon={<IconDelete size="small" />} size="small" onClick={() => handleRefChange(undefined)} />
                   </div>
                 </>
               ) : (
                 <>
                   <div className="gedit-m-dynamic-value-input-type">
-                    <TypeSelector
-                      value={{ type: itemsType }}
-                      onChange={handleTypeChange}
-                      excludeTypes={['array', 'object']}
-                    />
+                    <TypeSelector value={{ type: itemsType }} onChange={handleTypeChange} excludeTypes={['array', 'object']} />
                   </div>
                   <div className="gedit-m-dynamic-value-input-main">
                     <ConstantInput
@@ -165,11 +156,7 @@ const ArrayInputsValues = ({
                       onChange={handleContentChange}
                       schema={fullSchema}
                       fallbackRenderer={() => (
-                        <InjectVariableSelector
-                          style={{ width: '100%' }}
-                          onChange={handleRefChange}
-                          includeSchema={{ type: 'array', extra: { weak: true } } }
-                        />
+                        <InjectVariableSelector style={{ width: '100%' }} onChange={handleRefChange} includeSchema={{ type: 'array', extra: { weak: true } }} />
                       )}
                     />
                   </div>
@@ -177,21 +164,14 @@ const ArrayInputsValues = ({
                     <InjectVariableSelector
                       value={undefined}
                       onChange={handleRefChange}
-                      includeSchema={{ type: 'array', extra: { weak: true } } }
-                      triggerRender={() => (
-                        <IconButton theme="borderless" icon={<IconSetting size="small" />} size="small" />
-                      )}
+                      includeSchema={{ type: 'array', extra: { weak: true } }}
+                      triggerRender={() => <IconButton theme="borderless" icon={<IconSetting size="small" />} size="small" />}
                     />
                   </div>
                 </>
               )}
             </div>
-            <IconButton
-              theme="borderless"
-              icon={<IconDelete size="small" />}
-              size="small"
-              onClick={() => remove(item.id)}
-            />
+            <IconButton theme="borderless" icon={<IconDelete size="small" />} size="small" onClick={() => remove(item.id)} />
           </div>
         )
       })}
@@ -205,9 +185,7 @@ const ArrayInputsValues = ({
             schema: { type: 'array', items: { type: 'string' } },
           })
         }
-      >
-        {t('workflowCanvas.formMaterials.common.add')}
-      </Button>
+      />
     </div>
   )
 }
@@ -280,11 +258,20 @@ export const LoopFormRender = () => {
             return (
               <FormItem name={t('workflowCanvas.loop.loopArray')} vertical>
                 <Field<Record<string, IFlowValue | undefined> | undefined> name={`inputs.loopParam.loopArray`}>
-                  {({ field: arrayField }) => (
-                    <PrivateScopeProvider>
-                      <ArrayInputsValues value={arrayField.value} onChange={value => arrayField.onChange(value)} />
-                    </PrivateScopeProvider>
-                  )}
+                  {({ field: arrayField }) => {
+                    const validKeys = Object.keys(arrayField.value || {}).filter(key => key && key.trim() !== '')
+                    const showHint = validKeys.length >= 2
+                    return (
+                      <PrivateScopeProvider>
+                        <ArrayInputsValues value={arrayField.value} onChange={value => arrayField.onChange(value)} />
+                        {showHint && (
+                          <div style={{ color: 'var(--semi-color-text-2)', fontSize: 12, marginTop: 4 }}>
+                            {t('workflowCanvas.loop.arrayTruncateHint')}
+                          </div>
+                        )}
+                      </PrivateScopeProvider>
+                    )
+                  }}
                 </Field>
               </FormItem>
             )
@@ -296,22 +283,32 @@ export const LoopFormRender = () => {
       <FormItem name={t('workflowCanvas.loop.intermediateVar')} vertical>
         <Field<Record<string, IFlowValue | undefined> | undefined> name="inputs.loopParam.intermediateVar">
           {({ field }) => (
-            <PrivateScopeProvider>
-              <InputsValues
-                value={field.value}
-                onChange={value => field.onChange(value)}
-                onValidateKey={(key, itemId, allItems) => {
-                  if (key === 'index') {
-                    return t('workflowCanvas.loop.indexReserved')
-                  }
-                  const isDuplicate = allItems.some(item => item.id !== itemId && item.key === key)
-                  if (isDuplicate && key) {
-                    return t('workflowCanvas.loop.variableExists', { key })
-                  }
-                  return undefined
-                }}
-              />
-            </PrivateScopeProvider>
+            <Field<Record<string, IFlowValue | undefined> | undefined> name="inputs.loopParam.loopArray">
+              {({ field: arrayField }) => {
+                const arrayKeys = Object.keys(arrayField.value || {}).filter(k => k && k.trim() !== '')
+                return (
+                  <PrivateScopeProvider>
+                    <InputsValues
+                      value={field.value}
+                      onChange={value => field.onChange(value)}
+                      onValidateKey={(key, itemId, allItems) => {
+                        if (key === 'index') {
+                          return t('workflowCanvas.loop.indexReserved')
+                        }
+                        const isDuplicate = allItems.some(item => item.id !== itemId && item.key === key)
+                        if (isDuplicate && key) {
+                          return t('workflowCanvas.loop.variableExists', { key })
+                        }
+                        if (arrayKeys.includes(key)) {
+                          return t('workflowCanvas.loop.variableNameDuplicate')
+                        }
+                        return undefined
+                      }}
+                    />
+                  </PrivateScopeProvider>
+                )
+              }}
+            </Field>
           )}
         </Field>
       </FormItem>

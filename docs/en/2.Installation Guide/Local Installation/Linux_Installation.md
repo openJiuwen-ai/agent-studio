@@ -247,7 +247,7 @@ Complete dependency installation first, then perform source retrieval and instal
 - If you do not need to encrypt critical fields for storage, you can skip this step.
 - Run the following commands to generate a key:
   ```bash
-  cd backend
+  cd scripts
     
   bash build_AES_master_key.sh
   ```
@@ -321,10 +321,24 @@ Complete dependency installation first, then perform source retrieval and instal
   uv sync
   ```
 
-  > **Note**: If it stalls for more than 20 minutes, press “Ctrl + C”, try changing the url value of [[tool.uv.index]] in “pyproject.toml” in this directory to another available source, then re-run “uv sync”.
+* Execute database version stamp commands to confirm current database version:
+  ```bash
+  # Agent database
+  alembic -n alembic_mysql_agent stamp head
+  alembic -n alembic_mysql_ops stamp head
+
+  # SQLite database
+  alembic -n alembic_sqlite_agent stamp head
+  alembic -n alembic_sqlite_ops stamp head
+  ```
+
+  > Detailed description: The above commands are used to mark that the current database is already the latest version, facilitating subsequent database operations. Need to be executed separately for agent and ops databases. If using MySQL, execute `alembic -n alembic_mysql_agent stamp head` and `alembic -n alembic_mysql_ops stamp head`. For alembic usage methods, refer to [DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md](../../../../backend/DATABASE_MIGRATION_DEVELOPMENT_GUIDE_EN.md)
+
+  > **Note**: If it stalls for more than 20 minutes, press "Ctrl + C", try changing the url value of [[tool.uv.index]] in "pyproject.toml" in this directory to another available source, then re-run "uv sync".
 
   > **Note**: If `uv sync` fails, try: `uv sync --native-tls` to force using the system native TLS library (to resolve HTTPS download compatibility issues)
 
+* Create log directory and start backend service
   ```bash
   mkdir -p logs/run
   source .venv/bin/activate

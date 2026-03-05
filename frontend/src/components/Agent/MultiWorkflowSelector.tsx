@@ -96,7 +96,7 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
   const maxGreetingLength = 2000
   const maxDefaultResponseLength = 2000
 
-  const { validationResults, setValidationResults, validateWorkflows, isValidating, workflowValidationErrorCount } = useWorkflowValidation({
+  const { validationResults, validateWorkflows, isValidating, workflowValidationErrorCount, cleanupDeletedWorkflows } = useWorkflowValidation({
     workflows: workflowObjects,
     spaceId,
   })
@@ -115,16 +115,7 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
     if (!initializedRef.current) return
     const newWorkflows = saveAgentRequest?.workflows || []
     setWorkflowObjects(newWorkflows)
-  }, [saveAgentRequest?.workflows])
-
-  useEffect(() => {
-    if (!initializedRef.current) return
-    if (!spaceId) return
-    const t = setTimeout(() => {
-      validateWorkflows(workflowObjects).catch(() => {})
-    }, 200)
-    return () => clearTimeout(t)
-  }, [workflowObjects, spaceId, validateWorkflows])
+  }, [])
 
   // 将模型管理API的数据转换为ModelDetail格式
   useEffect(() => {
@@ -238,6 +229,14 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
       const initWorkflows = saveAgentRequest?.workflows || []
       setWorkflowObjects(initWorkflows)
 
+      // 初始化时验证所有工作流（只执行一次）
+      if (initWorkflows.length > 0 && spaceId) {
+        setTimeout(() => {
+          const initIds = initWorkflows.map(w => w.workflow_id)
+          validateWorkflows(initWorkflows, initIds).catch(() => {})
+        }, 100)
+      }
+
       // 获取详情中的开场白数据
       const initGreeting = saveAgentRequest?.opening_remarks || ''
       setGreeting(initGreeting)
@@ -307,17 +306,38 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
     setModelExpanded(isExpanded)
   }
 
-  const handleWorkflowConfirm = (workflowsIds: string[], workflowObjects: WorkflowSelectDetail[]) => {
-    const workflowDetails = workflowObjects.map(workflow => ({
-      workflow_id: workflow.workflow_id,
-      workflow_name: workflow.name || '',
-      workflow_version: workflow.version || '',
-      description: workflow.desc || '',
+  const handleWorkflowConfirm = (selectedIds: string[], newObjects: WorkflowSelectDetail[]) => {
+    // 步骤1: 从 store 获取已存在的工作流详情
+    const existingWorkflows = workflowObjects || []
+
+    // 步骤2: 将 newObjects 转换为 WorkflowDetail 格式
+    const newWorkflows: WorkflowDetail[] = newObjects.map(obj => ({
+      workflow_id: obj.id,
+      workflow_name: obj.name || '',
+      workflow_version: obj.version || 'draft',  // 空字符串或 undefined 时默认为 'draft'
+      description: obj.desc || '',
     }))
-    setWorkflowObjects(workflowDetails)
-    updateWorkflowDetail(workflowDetails)
+
+    // 步骤3: 合并所有来源的工作流详情
+    const allWorkflows: WorkflowDetail[] = [
+      // 保留 existingWorkflows 中仍在 selectedIds 中的
+      ...existingWorkflows.filter(w => selectedIds.includes(w.workflow_id)),
+      // 添加从 WorkflowSelector 传递的新增详情
+      ...newWorkflows,
+    ]
+
+    // 步骤4: 更新状态
+    setWorkflowObjects(allWorkflows)
+    updateWorkflowDetail(allWorkflows)
     setShowWorkflowSelector(false)
-    validateWorkflows(workflowDetails).catch(() => {})
+
+    // 步骤5: 只对新增的工作流进行验证
+    if (newWorkflows.length > 0) {
+      setTimeout(() => {
+        const newIds = newWorkflows.map(w => w.workflow_id)
+        validateWorkflows(allWorkflows, newIds).catch(() => {})
+      }, 100)
+    }
   }
 
   // 处理工作流操作（删除/设置）
@@ -326,18 +346,25 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
       setWorkflowObjects(prevWorkflows => {
         const updatedWorkflows = prevWorkflows.filter(workflow => workflow.workflow_id !== workflowId)
         updateWorkflowDetail(updatedWorkflows)
+        // 清理已删除工作流的验证结果
+        cleanupDeletedWorkflows(updatedWorkflows)
         return updatedWorkflows
-      })
-      setValidationResults(prev => {
-        const next = { ...prev }
-        delete next[workflowId]
-        return next
       })
     } else if (operate === 'setting') {
       // 处理设置操作，打开新页面设置工作流，携带版本信息
       const versionParam = version && version !== 'draft' ? `&version=${version}` : ''
       window.open(`/dashboard/workflows/editor/${workflowId}?spaceId=${spaceId}${versionParam}`, '_blank')
     }
+  }
+
+  // 处理工作流版本切换
+  const handleWorkflowVersionChange = (workflowId: string, version: string) => {
+    setWorkflowObjects(prev => {
+      const updated = prev.map(w => (w.workflow_id === workflowId ? { ...w, workflow_version: version } : w))
+      // 触发验证
+      validateWorkflows(updated, [workflowId]).catch(() => {})
+      return updated
+    })
   }
 
   const handleRefreshWorkflows = useCallback(() => {
@@ -431,6 +458,7 @@ const MultiWorkflowSelector = (props: { agentDetailResponse: AgentDetailResponse
               disabled={readonly}
               refreshToken={workflowListRefreshToken}
               validationResults={validationResults}
+              onVersionChange={handleWorkflowVersionChange}
             />
             {workflowObjects.length === 0 && (
               <Alert severity="info" sx={{ mt: 2 }}>

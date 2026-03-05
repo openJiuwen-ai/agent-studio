@@ -3,17 +3,46 @@
  * SPDX-License-Identifier: MIT
  */
 
+import { useCallback } from 'react'
 import { FieldArray, FormMeta, ValidateTrigger } from '@flowgram.ai/free-layout-editor'
 
 import { AssignRows, createInferAssignPlugin, type AssignValueType } from '../../form-materials'
 import { FormHeader, FormContent, FormDisplay, FormItem } from '../../form-components'
 import { defaultFormMeta } from '../default-form-meta'
-import { useIsSidebar } from '../../hooks'
+import { useIsSidebar, useNodeRenderContext } from '../../hooks'
 import { t, useTranslation } from '../../i18n'
+import { validation } from './validation'
 
 export const FormRender = (): JSX.Element => {
   const { t } = useTranslation()
   const isSidebar = useIsSidebar()
+  const { node } = useNodeRenderContext()
+
+  // Filter variables from parent loop container: only allow intermediate variables for left side
+  const skipVariable = useCallback(
+    (variable: any) => {
+      if (!variable?.keyPath || !node?.parent?.id) {
+        return false
+      }
+
+      // Check if variable is from parent loop's private scope
+      const loopLocalsKey = `${node.parent.id}_locals`
+      const isFromParentLoop = variable.keyPath[0] === loopLocalsKey
+
+      if (isFromParentLoop) {
+        // Get intermediate variable keys from parent loop node's form data
+        const intermediateVar = (node.parent as any).form?.getValueIn?.('inputs.loopParam.intermediateVar') || {}
+        const intermediateKeys = Object.keys(intermediateVar)
+        // variable.keyPath[1] is the variable name inside the loop locals
+        const varName = variable.keyPath[1]
+        // Only allow variables that are in intermediateVar
+        return !intermediateKeys.includes(varName)
+      }
+
+      return false
+    },
+    [node?.parent],
+  )
 
   return (
     <>
@@ -21,7 +50,7 @@ export const FormRender = (): JSX.Element => {
       <FormContent>
         {isSidebar ? (
           <FormItem name={t('workflowCanvas.nodes.variable.settings')}>
-            <AssignRows name="assign" enableDeclaration={false} />
+            <AssignRows name="assign" enableDeclaration={false} skipVariable={skipVariable} />
           </FormItem>
         ) : (
           <>
@@ -71,67 +100,5 @@ export const formMeta: FormMeta = {
     }),
   ],
   validateTrigger: ValidateTrigger.onChange,
-  validate: {
-    assign: ({ value }) => {
-      if (!value || !Array.isArray(value)) {
-        return t('workflowCanvas.nodes.variable.assignmentConfigEmpty')
-      }
-      if (value.length === 0) {
-        return t('workflowCanvas.nodes.variable.atLeastOneAssignment')
-      }
-      return undefined
-    },
-    'assign.*.operator': ({ value }) => {
-      if (!value) {
-        return t('workflowCanvas.nodes.variable.operatorEmpty')
-      }
-      if (value !== 'assign') {
-        return t('workflowCanvas.nodes.variable.onlyAssignSupported')
-      }
-      return undefined
-    },
-    'assign.*.left': ({ value }) => {
-      if (!value) {
-        return t('workflowCanvas.nodes.variable.leftVariableEmpty')
-      }
-      return undefined
-    },
-    'assign.*.left.type': ({ value }) => {
-      if (!value) {
-        return t('workflowCanvas.nodes.variable.leftVariableTypeEmpty')
-      }
-      if (value !== 'ref') {
-        return t('workflowCanvas.nodes.variable.leftVariableMustBeRef')
-      }
-      return undefined
-    },
-    'assign.*.left.content': ({ value }) => {
-      if (!value || !Array.isArray(value)) {
-        return t('workflowCanvas.nodes.variable.leftRefPathEmpty')
-      }
-      if (value.length < 2) {
-        return t('workflowCanvas.nodes.variable.leftRefPathMustContain')
-      }
-      if (value.some(item => !item || typeof item !== 'string')) {
-        return t('workflowCanvas.nodes.variable.leftRefPathNoEmpty')
-      }
-      return undefined
-    },
-    'assign.*.right': ({ value }) => {
-      if (!value) {
-        return t('workflowCanvas.nodes.variable.rightValueEmpty')
-      }
-      return undefined
-    },
-    'assign.*.right.type': ({ value }) => {
-      if (!value) {
-        return t('workflowCanvas.nodes.variable.rightValueTypeEmpty')
-      }
-      const validTypes = ['constant', 'ref', 'expression', 'template']
-      if (!validTypes.includes(value)) {
-        return t('workflowCanvas.nodes.variable.rightValueTypeInvalid')
-      }
-      return undefined
-    },
-  },
+  validate: validation,
 }

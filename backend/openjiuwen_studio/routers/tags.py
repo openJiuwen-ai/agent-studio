@@ -13,6 +13,7 @@ from openjiuwen_studio.core.manager.tag import (
     tag_get_by_id, tag_search, tag_get_or_create, tag_batch_create
 )
 from openjiuwen_studio.core.manager.login_manager.user import get_current_user
+from openjiuwen.core.common.logging import logger
 
 tags_router = APIRouter()
 
@@ -45,9 +46,10 @@ async def create_tag(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Failed to create tag: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create tag: {str(e)}"
+            detail="Failed to create tag: an internal error occurred"
         ) from e
 
 

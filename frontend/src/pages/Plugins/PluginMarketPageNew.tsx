@@ -567,7 +567,7 @@ const PluginMarketPageNew: React.FC = () => {
           total: displayTotalItems,
           currentPage,
           pageSize,
-          pageSizeOptions: [20, 60, 100, 200],
+          pageSizeOptions: [20, 60, 100],
         }}
         onPagerChange={(page, size) => {
           setCurrentPage(page)

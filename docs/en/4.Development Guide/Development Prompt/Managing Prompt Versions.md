@@ -69,9 +69,7 @@ Version history records all official versions for easy traceability and collabor
 
 # Restore a Version
 
-## Notes
-
-- Restoring a version will overwrite the latest edited prompt. Please proceed with caution.
+> **Caution**: Restoring a version will overwrite the latest edited prompt. Please proceed with caution.
 
 ## Steps
 

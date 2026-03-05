@@ -54,7 +54,16 @@ export const TestRunSidePanel: FC<TestRunSidePanelProps> = ({ workflowId, spaceI
   const [isStreamExecuting, setIsStreamExecuting] = useState(false)
 
   const { messages, handleStreamEvent: handleStreamMessageEvent, clearMessages, setRef } = useStreamMessages()
-  const { interruption, inputValues, setInputValues, handleInputRequired, resume: resumeInput, clear: clearInterruption } = useInputInterruption()
+  const {
+    interruption,
+    pendingCount,
+    hasPendingInterruptions,
+    inputValues,
+    setInputValues,
+    handleInputRequired,
+    resume: resumeInput,
+    clear: clearInterruption,
+  } = useInputInterruption()
   const { validate: validateForm } = useFormValidation()
 
   const formMeta = useFormMeta()
@@ -368,7 +377,9 @@ export const TestRunSidePanel: FC<TestRunSidePanelProps> = ({ workflowId, spaceI
 
   const renderButton = interruption ? (
     <Button onClick={handleInputResume} className={classnames(styles.button, styles.save)}>
-      {t('workflowCanvas.testrunPanel.continueRunning')}
+      {hasPendingInterruptions
+        ? t('workflowCanvas.testrunPanel.continueRunningWithCount', { count: pendingCount })
+        : t('workflowCanvas.testrunPanel.continueRunning')}
     </Button>
   ) : (
     <Button

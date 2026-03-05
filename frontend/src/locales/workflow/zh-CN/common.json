@@ -292,6 +292,8 @@
     "loopOutput": "循环输出",
     "indexReserved": "不允许使用 \"index\" 作为变量名（保留字）",
     "variableExists": "变量名 \"{{key}}\" 已存在",
-    "input": "输入"
+    "input": "输入",
+    "arrayTruncateHint": "当配置多个数组时，将以最短数组的长度为准",
+    "variableNameDuplicate": "变量名不可重复"
   }
 }

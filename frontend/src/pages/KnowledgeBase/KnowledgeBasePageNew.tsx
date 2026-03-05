@@ -119,7 +119,9 @@ const KnowledgeBasePageNew: React.FC = () => {
         sessionStorage.setItem('kb_last_non_kb_path', currentPath)
       }
     }
-  }, [location.pathname, user?.spaceId, setPage, pageSize, fetchKnowledgeBases, searchKnowledgeBases, searchTerm])
+    // 仅依赖路由与空间；fetch/search 为 store 方法，放入 deps 会导致每次渲染重新执行
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, user?.spaceId, pageSize, searchTerm])
 
   // 搜索词由空变为非空时，重置到第一页
   useEffect(() => {
@@ -131,7 +133,7 @@ const KnowledgeBasePageNew: React.FC = () => {
     prevSearchTermRef.current = debouncedSearchTerm
   }, [debouncedSearchTerm, setPage])
 
-  // 根据 debouncedSearchTerm、currentPage、pageSize 拉数
+  // 根据 debouncedSearchTerm、currentPage、pageSize 拉数（仅依赖请求参数，避免 store 方法引用变化导致重复请求）
   useEffect(() => {
     if (isResettingRef.current) return
     const spaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID
@@ -141,21 +143,17 @@ const KnowledgeBasePageNew: React.FC = () => {
     } else {
       fetchKnowledgeBases(spaceId, currentPage, pageSize)
     }
-  }, [debouncedSearchTerm, currentPage, pageSize, user?.spaceId, fetchKnowledgeBases, searchKnowledgeBases])
+    // 不将 fetchKnowledgeBases/searchKnowledgeBases 放入 deps：Zustand 每次渲染返回新引用，会导致无限请求循环
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchTerm, currentPage, pageSize, user?.spaceId])
 
   const handlePagerChange = useCallback(
     (page: number, newPageSize: number) => {
       setPage(page)
       setPageSize(newPageSize)
-      const spaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID
-      const term = debouncedSearchTerm.trim()
-      if (term) {
-        searchKnowledgeBases(spaceId, term, page, newPageSize)
-      } else {
-        fetchKnowledgeBases(spaceId, page, newPageSize)
-      }
+      // 不在此处请求：由上面的 useEffect(debouncedSearchTerm, currentPage, pageSize) 统一拉数，避免重复请求
     },
-    [user?.spaceId, debouncedSearchTerm, setPage, setPageSize, fetchKnowledgeBases, searchKnowledgeBases],
+    [setPage, setPageSize],
   )
 
   const handleCreateKnowledgeBase = useCallback(() => {

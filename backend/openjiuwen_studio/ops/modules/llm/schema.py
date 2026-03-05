@@ -23,4 +23,5 @@ class GetModelRequest(BaseModel):
     """
     查询某个空间中模型信息列表的请求结构
     """
+    workspace_id: str = Field(...)
     model_from: Optional[str] = None

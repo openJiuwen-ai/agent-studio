@@ -5,6 +5,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from openjiuwen_studio.core.manager.login_manager.user import get_current_user
+from openjiuwen_studio.core.manager.login_manager.space import check_user_space
 from openjiuwen_studio.ops.modules.llm.llm_config_service import LLMConfigService
 from openjiuwen_studio.ops.config import ModelConfigManager
 from openjiuwen_studio.ops.modules.llm.llm_manager import init_llm_manager
@@ -43,10 +45,12 @@ async def get_model(
     model_id: str,
     request: GetModelRequest,
     llm_service: LLMConfigService = Depends(get_llm_config_service),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     获取单个模型信息
     """
+    _ = check_user_space(str(request.workspace_id), current_user)
     try:
         return await llm_service.get_model(model_id, request.model_from)
     except ValueError as e:
@@ -59,10 +63,12 @@ async def get_model(
 async def list_models(
     request: ListModelRequest,
     llm_service: LLMConfigService = Depends(get_llm_config_service),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     获取所有可用模型列表
     """
+    _ = check_user_space(str(request.workspace_id), current_user)
     try:
         return await llm_service.list_models(request)
     except Exception as e:

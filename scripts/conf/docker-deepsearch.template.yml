@@ -17,7 +17,7 @@ services:
     env_file:
       - ../.envs/env.deepsearch.<<NAME_SUFFIX>>
     volumes:
-      - ../log-dirs/logs-<<NAME_SUFFIX>>/deepsearch:/app/logs
+      - ../log-dirs/logs-<<NAME_SUFFIX>>/deepsearch:/app/output
     restart: unless-stopped
     networks:
       - <<JIUWEN_NETWORK_NAME>>

@@ -41,14 +41,18 @@ export class PromptModelService {
    * 根据模型ID获取模型详情
    * @param modelId 模型ID
    * @param modelFrom 模型来源
+   * @param workspaceId 工作空间ID
    * @returns 模型详情响应
    */
-  static async getModelDetail(modelId: string, modelFrom?: string): Promise<Model> {
+  static async getModelDetail(modelId: string, modelFrom?: string, workspaceId?: string): Promise<Model> {
     const url = API_ENDPOINTS.PROMPT_MODELS.DETAIL.replace(':modelId', modelId)
 
     try {
       const apiClient = getApiClient()
-      const requestData = modelFrom ? { model_from: modelFrom } : {}
+      const requestData = {
+        model_from: modelFrom || '',
+        workspace_id: workspaceId || '',
+      }
       const response = await apiClient.post<GetModelDetailResponse>(url, requestData)
 
       const data = response.data

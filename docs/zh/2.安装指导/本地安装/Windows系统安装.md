@@ -242,17 +242,30 @@
 ##### 2.2. 生成 AES 密钥（可选）
 
 * 如果不需要对关键字段加密存储，可跳过当前步骤
-* 在源码根目录打开 “PowerShell”，运行以下命令生成密钥：
+* 在源码根目录打开 “Git Bash”，运行以下命令生成密钥：
 
   ```bash
-  cd backend
-  powershell -ExecutionPolicy Bypass -File .\build_AES_master_key.ps1
+  cd scripts
+  bash build_AES_master_key.sh
   ```
 
 * 脚本执行完，会将密钥打屏输出，可按需使用，推荐作为环境变量使用并另行保存。
 
   ```bash
-  $env:SERVER_AES_MASTER_KEY_ENV = .\build_AES_master_key.ps1
+  # 如果你的安装部署在git bash中执行
+  export SERVER_AES_MASTER_KEY_ENV=your_aes_key
+  
+  # 如果你的安装部署在power shell中执行
+  # 方法1：打开power shell设置临时环境变量
+  $env:SERVER_AES_MASTER_KEY_ENV="your_aes_key"
+  # 方法2：添加到 Windows 系统环境变量
+  """
+    1、按 Win + R，输入 sysdm.cpl
+    2、点击‘高级’，然后点击‘环境变量’
+    3、在‘系统变量’或‘用户变量’中添加：
+      变量名：SERVER_AES_MASTER_KEY_ENV
+      变量值：your_aes_key
+  """
   ```
 
 * 注意，AES密钥需要保持稳定，中途更换密钥会导致已加密数据无法解密。

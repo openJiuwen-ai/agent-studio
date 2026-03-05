@@ -6,7 +6,7 @@
 import { FC } from 'react'
 
 import classNames from 'classnames'
-import { Input, Switch, InputNumber, DatePicker } from '@douyinfe/semi-ui'
+import { Input, Select, InputNumber, DatePicker } from '@douyinfe/semi-ui'
 import dayjs from 'dayjs'
 import { useTranslation } from '../../../i18n'
 
@@ -54,21 +54,43 @@ export const TestRunForm: FC<TestRunFormProps> = ({ values, setValues, inputForm
       case 'boolean':
         return (
           <div className={styles.fieldInput}>
-            <Switch checked={field.value} onChange={checked => field.onChange(checked)} />
+            <Select
+              size="small"
+              placeholder={t('workflowCanvas.formMaterials.input.pleaseSelectBoolean')}
+              optionList={[
+                { label: t('workflowCanvas.formMaterials.input.true'), value: 1 },
+                { label: t('workflowCanvas.formMaterials.input.false'), value: 0 },
+              ]}
+              value={field.value !== undefined && field.value !== null ? (field.value ? 1 : 0) : undefined}
+              onChange={value => field.onChange(value !== undefined ? !!value : undefined)}
+            />
             {hasError && <div className={styles.errorMessage}>{field.error}</div>}
           </div>
         )
       case 'integer':
         return (
           <div className={styles.fieldInput}>
-            <InputNumber precision={0} value={field.value} onChange={value => field.onChange(value)} type={hasError ? 'error' : 'default'} />
+            <InputNumber
+              precision={0}
+              max={Number.MAX_SAFE_INTEGER}
+              min={Number.MIN_SAFE_INTEGER}
+              value={field.value}
+              onChange={value => field.onChange(value)}
+              type={hasError ? 'error' : 'default'}
+            />
             {hasError && <div className={styles.errorMessage}>{field.error}</div>}
           </div>
         )
       case 'number':
         return (
           <div className={styles.fieldInput}>
-            <InputNumber value={field.value} onChange={value => field.onChange(value)} type={hasError ? 'error' : 'default'} />
+            <InputNumber
+              hideButtons
+              max={Number.MAX_VALUE}
+              value={field.value}
+              onChange={value => field.onChange(value)}
+              type={hasError ? 'error' : 'default'}
+            />
             {hasError && <div className={styles.errorMessage}>{field.error}</div>}
           </div>
         )

@@ -1604,7 +1604,7 @@ const ToolConfigurationPage: React.FC = () => {
                             </Typography>
                             <Chip label={param.type} size="small" />
                             {pluginType === 'api' && <Chip label={getMethodLabel(param.method)} size="small" variant="outlined" />}
-                            {param.is_required && <Chip label="必选" size="small" color="error" variant="outlined" />}
+                            {param.is_required && <Chip label={t('plugins.toolConfig.required')} size="small" color="error" variant="outlined" />}
                           </div>
                           <Typography variant="body2" color="text.secondary" className="mt-1">
                             {param.description}
@@ -1666,7 +1666,7 @@ const ToolConfigurationPage: React.FC = () => {
                               {param.name}
                             </Typography>
                             <Chip label={param.type} size="small" />
-                            {param.is_required && <Chip label="必选" size="small" color="error" variant="outlined" />}
+                            {param.is_required && <Chip label={t('plugins.toolConfig.required')} size="small" color="error" variant="outlined" />}
                           </div>
                           <Typography variant="body2" color="text.secondary" className="mt-1">
                             {param.description}

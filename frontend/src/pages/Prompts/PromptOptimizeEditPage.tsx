@@ -5241,7 +5241,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                         })()}
                                       </div>
                                       <Box
-                                        className="flex flex-shrink-0"
+                                        className="flex flex-shrink-0 items-center"
                                         style={{
                                           gap: 'clamp(0.125rem, 0.25vw, 0.25rem)',
                                         }}
@@ -5262,24 +5262,20 @@ const PromptOptimizeEditPage: React.FC = () => {
                                             }}
                                           />
                                         </IconButton>
-                                        {true && (
-                                          <IconButton
-                                            size="small"
-                                            onClick={() => handleShowDetail('original', 0)}
-                                            sx={{
-                                              color: '#6b7280',
-                                              width: 'clamp(1rem, 2vw, 1.5rem)',
-                                              height: 'clamp(1rem, 2vw, 1.5rem)',
-                                            }}
-                                          >
-                                            <Info
-                                              style={{
-                                                width: 'clamp(0.5rem, 0.8vw, 0.75rem)',
-                                                height: 'clamp(0.5rem, 0.8vw, 0.75rem)',
-                                              }}
-                                            />
-                                          </IconButton>
-                                        )}
+                                        <Button
+                                          size="small"
+                                          variant="text"
+                                          onClick={() => handleShowDetail('original', 0)}
+                                          sx={{
+                                            color: '#2563eb',
+                                            fontSize: 'clamp(0.5rem, 0.9vw, 0.875rem)',
+                                            minWidth: 'auto',
+                                            padding: 'clamp(0.125rem, 0.2vw, 0.25rem) clamp(0.25rem, 0.5vw, 0.5rem)',
+                                            textTransform: 'none',
+                                          }}
+                                        >
+                                          {t('prompts.optimizeEditPage.optimizationResult.optimizationDetail')}
+                                        </Button>
                                       </Box>
                                     </Box>
                                   </div>
@@ -5354,7 +5350,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                         })()}
                                       </div>
                                       <Box
-                                        className="flex flex-shrink-0"
+                                        className="flex flex-shrink-0 items-center"
                                         style={{
                                           gap: 'clamp(0.125rem, 0.25vw, 0.25rem)',
                                         }}
@@ -5400,24 +5396,20 @@ const PromptOptimizeEditPage: React.FC = () => {
                                             }}
                                           />
                                         </IconButton>
-                                        {true && (
-                                          <IconButton
-                                            size="small"
-                                            onClick={() => handleShowDetail('optimized', currentOptimizedVersion + 1)}
-                                            sx={{
-                                              color: '#059669',
-                                              width: 'clamp(1rem, 2vw, 1.5rem)',
-                                              height: 'clamp(1rem, 2vw, 1.5rem)',
-                                            }}
-                                          >
-                                            <Info
-                                              style={{
-                                                width: 'clamp(0.5rem, 0.8vw, 0.75rem)',
-                                                height: 'clamp(0.5rem, 0.8vw, 0.75rem)',
-                                              }}
-                                            />
-                                          </IconButton>
-                                        )}
+                                        <Button
+                                          size="small"
+                                          variant="text"
+                                          onClick={() => handleShowDetail('optimized', currentOptimizedVersion + 1)}
+                                          sx={{
+                                            color: '#2563eb',
+                                            fontSize: 'clamp(0.5rem, 0.9vw, 0.875rem)',
+                                            minWidth: 'auto',
+                                            padding: 'clamp(0.125rem, 0.2vw, 0.25rem) clamp(0.25rem, 0.5vw, 0.5rem)',
+                                            textTransform: 'none',
+                                          }}
+                                        >
+                                          {t('prompts.optimizeEditPage.optimizationResult.optimizationDetail')}
+                                        </Button>
                                       </Box>
                                     </Box>
                                   </div>
@@ -5773,15 +5765,24 @@ const PromptOptimizeEditPage: React.FC = () => {
                           return null
                         })()}
                       </div>
-                      <Box className="flex gap-1">
+                      <Box className="flex gap-1 items-center">
                         <IconButton size="small" onClick={() => copyToClipboard(originalPrompt, setSnackbar)} sx={{ color: '#6b7280' }}>
                           <Copy className="w-3 h-3" />
                         </IconButton>
-                        {true && (
-                          <IconButton size="small" onClick={() => handleShowDetail('original', 0)} sx={{ color: '#6b7280' }}>
-                            <Info className="w-3 h-3" />
-                          </IconButton>
-                        )}
+                        <Button
+                          size="small"
+                          variant="text"
+                          onClick={() => handleShowDetail('original', 0)}
+                          sx={{
+                            color: '#2563eb',
+                            fontSize: '0.875rem',
+                            minWidth: 'auto',
+                            padding: '4px 8px',
+                            textTransform: 'none',
+                          }}
+                        >
+                          {t('prompts.optimizeEditPage.optimizationResult.optimizationDetail')}
+                        </Button>
                       </Box>
                     </Box>
                   </div>
@@ -5818,15 +5819,24 @@ const PromptOptimizeEditPage: React.FC = () => {
                           return null
                         })()}
                       </div>
-                      <Box className="flex gap-1">
+                      <Box className="flex gap-1 items-center">
                         <IconButton size="small" onClick={() => copyToClipboard(currentOptimizedPrompt, setSnackbar)} sx={{ color: '#6b7280' }}>
                           <Copy className="w-3 h-3" />
                         </IconButton>
-                        {true && (
-                          <IconButton size="small" onClick={() => handleShowDetail('optimized', currentOptimizedVersion + 1)} sx={{ color: '#6b7280' }}>
-                            <Info className="w-3 h-3" />
-                          </IconButton>
-                        )}
+                        <Button
+                          size="small"
+                          variant="text"
+                          onClick={() => handleShowDetail('optimized', currentOptimizedVersion + 1)}
+                          sx={{
+                            color: '#2563eb',
+                            fontSize: '0.875rem',
+                            minWidth: 'auto',
+                            padding: '4px 8px',
+                            textTransform: 'none',
+                          }}
+                        >
+                          {t('prompts.optimizeEditPage.optimizationResult.optimizationDetail')}
+                        </Button>
                       </Box>
                     </Box>
                   </div>

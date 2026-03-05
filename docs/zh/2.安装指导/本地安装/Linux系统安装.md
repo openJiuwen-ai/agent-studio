@@ -270,7 +270,7 @@
 * 如果不需要对关键字段加密存储，可跳过当前步骤
 * 运行以下命令生成密钥：
   ```bash
-  cd backend
+  cd scripts
     
   bash build_AES_master_key.sh
   ```

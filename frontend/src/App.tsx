@@ -22,6 +22,7 @@ import PromptsPageNew from './pages/Prompts/PromptsPageNew'
 import KnowledgeBasePageNew from './pages/KnowledgeBase/KnowledgeBasePageNew'
 import MemoryBasePageNew from './pages/MemoryBase/MemoryBasePageNew'
 import UserLoginPage from '@/pages/Auth/UserLoginPage.tsx'
+import PrivacyPolicyPage from '@/pages/Auth/PrivacyPolicyPage.tsx'
 import { ENV_CONFIG } from '@/config/environment.ts'
 import { getLoginPagePath } from '@/Common/LoginPage.ts'
 
@@ -97,6 +98,8 @@ const App: React.FC = () => {
           <Route path="/" element={<Navigate to={isAuthenticated ? '/dashboard/agents' : loginPath} replace />} />
           {/* Dynamic login route*/}
           <Route path={loginRouteConfig.path} element={loginRouteConfig.element} />
+          {/* Privacy policy page - 仅在 VITE_ENABLE_NEW_AUTH 为 true 时启用 */}
+          {enable_pwd && <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />}
           {/* Protected routes */}
           <Route
             path="/dashboard"
@@ -106,7 +109,7 @@ const App: React.FC = () => {
               </ProtectedRoute>
             }
           >
-            <Route path="apps" element={<AppsPage />} />
+            {!enable_pwd && <Route path="apps" element={<AppsPage />} />}
             <Route path="agents" element={<AgentsPageNew />} />
             <Route
               path="agents/new"

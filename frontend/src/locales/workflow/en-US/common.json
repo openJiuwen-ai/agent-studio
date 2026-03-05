@@ -292,6 +292,8 @@
     "loopOutput": "Loop Output",
     "indexReserved": "Cannot use \"index\" as variable name (reserved word)",
     "variableExists": "Variable name \"{{key}}\" already exists",
-    "input": "Input"
+    "input": "Input",
+    "arrayTruncateHint": "When multiple arrays are configured, the shortest array length will be used",
+    "variableNameDuplicate": "Variable name cannot be duplicated"
   }
 }

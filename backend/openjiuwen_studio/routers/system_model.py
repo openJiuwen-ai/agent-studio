@@ -43,7 +43,10 @@ def get_security_utils() -> SecurityUtils:
 
 async def verify_system_token(api_key: str = Security(api_key_header)):
     """Check system token"""
-    system_admin_token = os.getenv("SYSTEM_ADMIN_TOKEN", "")
+    system_admin_token = SecurityUtils.get_decrypted_secret(
+        "SYSTEM_ADMIN_TOKEN",
+        os.getenv("SYSTEM_ADMIN_TOKEN", ""),
+    )
     if api_key != system_admin_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid system token")
 

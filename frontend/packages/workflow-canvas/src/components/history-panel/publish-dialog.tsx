@@ -50,9 +50,10 @@ const PublishDialog: React.FC<PublishModalProps> = ({ open, workflowId, spaceId,
   const [description, setDescription] = React.useState<string>('')
   const [loading, setLoading] = React.useState<boolean>(false)
 
-  // 表单字段错误状态
-  const [versionError, setVersionError] = React.useState<string>('')
-  const [descriptionError, setDescriptionError] = React.useState<string>('')
+  // 仅用于控制错误展示时机，不用于控制提交有效性
+  const [versionTouched, setVersionTouched] = React.useState<boolean>(false)
+  const [descriptionTouched, setDescriptionTouched] = React.useState<boolean>(false)
+  const [hasSubmitted, setHasSubmitted] = React.useState<boolean>(false)
 
   // 校验函数：版本号与描述
   const validateVersionInput = React.useCallback((val: string): string => {
@@ -71,10 +72,20 @@ const PublishDialog: React.FC<PublishModalProps> = ({ open, workflowId, spaceId,
     return ''
   }, [t])
 
+  const versionValidationError = validateVersionInput(version)
+  const descriptionValidationError = validateDescriptionInput(description)
+  const showVersionError = (versionTouched || hasSubmitted) && !!versionValidationError
+  const showDescriptionError = (descriptionTouched || hasSubmitted) && !!descriptionValidationError
+  // 允许用户在输入不合法时也能点击提交，由 handleConfirm 统一拦截并给出错误提示
+  const isSubmitDisabled = loading
+
   React.useEffect(() => {
     if (!open) return
     // 打开时初始化描述
     setDescription('')
+    setVersionTouched(false)
+    setDescriptionTouched(false)
+    setHasSubmitted(false)
 
     // 若缺少必要参数，则使用默认版本
     if (!workflowId || !spaceId) {
@@ -92,11 +103,8 @@ const PublishDialog: React.FC<PublishModalProps> = ({ open, workflowId, spaceId,
     }
 
     // 提交时静默校验，阻止无效提交（不弹 Toast）
-    const isVersionValidate = validateVersionInput(version)
-    const isDescriptionValidate = validateDescriptionInput(description)
-    if (isVersionValidate || isDescriptionValidate) {
-      setVersionError(isVersionValidate)
-      setDescriptionError(isDescriptionValidate)
+    if (versionValidationError || descriptionValidationError) {
+      setHasSubmitted(true)
       return
     }
 
@@ -125,6 +133,9 @@ const PublishDialog: React.FC<PublishModalProps> = ({ open, workflowId, spaceId,
         onClose()
         setVersion('')
         setDescription('')
+        setVersionTouched(false)
+        setDescriptionTouched(false)
+        setHasSubmitted(false)
       } else {
         Toast.error(response.message || t('workflowCanvas.publishDialog.publishFailed'))
       }
@@ -140,6 +151,9 @@ const PublishDialog: React.FC<PublishModalProps> = ({ open, workflowId, spaceId,
     onClose()
     setVersion('')
     setDescription('')
+    setVersionTouched(false)
+    setDescriptionTouched(false)
+    setHasSubmitted(false)
   }
 
   if (!open) return null
@@ -185,24 +199,19 @@ const PublishDialog: React.FC<PublishModalProps> = ({ open, workflowId, spaceId,
             style={{
               width: '100%',
               padding: '12px 16px',
-              border: `1.5px solid ${versionError ? '#ff4d4f' : '#d9d9d9'}`,
+              border: `1.5px solid ${showVersionError ? '#ff4d4f' : '#d9d9d9'}`,
               borderRadius: '6px',
               fontSize: '14px',
               outline: 'none',
               transition: 'border-color 0.2s ease',
             }}
-            onFocus={(e: React.FocusEvent<HTMLInputElement>) => {
-              e.target.style.borderColor = versionError ? '#ff4d4f' : '#1890ff'
-            }}
-            onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-              const err = validateVersionInput(e.target.value)
-              setVersionError(err)
-              e.target.style.borderColor = err ? '#ff4d4f' : '#d9d9d9'
+            onBlur={() => {
+              setVersionTouched(true)
             }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-            {versionError ? (
-              <div style={{ fontSize: '12px', color: '#ff4d4f' }}>{versionError}</div>
+            {showVersionError ? (
+              <div style={{ fontSize: '12px', color: '#ff4d4f' }}>{versionValidationError}</div>
             ) : (
               <div />
             )}
@@ -225,7 +234,7 @@ const PublishDialog: React.FC<PublishModalProps> = ({ open, workflowId, spaceId,
               width: '100%',
               minHeight: '120px',
               padding: '12px 16px',
-              border: `1.5px solid ${descriptionError ? '#ff4d4f' : '#d9d9d9'}`,
+              border: `1.5px solid ${showDescriptionError ? '#ff4d4f' : '#d9d9d9'}`,
               borderRadius: '6px',
               fontSize: '14px',
               lineHeight: '1.5',
@@ -234,17 +243,12 @@ const PublishDialog: React.FC<PublishModalProps> = ({ open, workflowId, spaceId,
               outline: 'none',
               transition: 'border-color 0.2s ease',
             }}
-            onFocus={(e: React.FocusEvent<HTMLTextAreaElement>) => {
-              e.target.style.borderColor = descriptionError ? '#ff4d4f' : '#1890ff'
-            }}
-            onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => {
-              const err = validateDescriptionInput(e.target.value)
-              setDescriptionError(err)
-              e.target.style.borderColor = err ? '#ff4d4f' : '#d9d9d9'
+            onBlur={() => {
+              setDescriptionTouched(true)
             }}
             maxLength={200}
           />
-          {descriptionError && <div style={{ fontSize: '12px', color: '#ff4d4f', marginTop: '4px' }}>{descriptionError}</div>}
+          {showDescriptionError && <div style={{ fontSize: '12px', color: '#ff4d4f', marginTop: '4px' }}>{descriptionValidationError}</div>}
           <div style={{ fontSize: '12px', color: '#999', textAlign: 'right', marginTop: '4px' }}>{description.length}/200</div>
         </div>
 
@@ -266,16 +270,16 @@ const PublishDialog: React.FC<PublishModalProps> = ({ open, workflowId, spaceId,
           </button>
           <button
             onClick={handleConfirm}
-            disabled={loading || !!versionError || !!descriptionError || !version.trim() || !description.trim()}
+            disabled={isSubmitDisabled}
             style={{
               padding: '8px 16px',
               border: 'none',
               borderRadius: '6px',
               backgroundColor: '#1890ff',
               color: 'white',
-              cursor: loading || !!versionError || !!descriptionError || !version.trim() || !description.trim() ? 'not-allowed' : 'pointer',
+              cursor: isSubmitDisabled ? 'not-allowed' : 'pointer',
               fontSize: '14px',
-              opacity: loading || !!versionError || !!descriptionError || !version.trim() || !description.trim() ? 0.6 : 1,
+              opacity: isSubmitDisabled ? 0.6 : 1,
             }}
           >
             {loading ? t('workflowCanvas.publishDialog.publishing') : t('workflowCanvas.publishDialog.confirmPublish')}

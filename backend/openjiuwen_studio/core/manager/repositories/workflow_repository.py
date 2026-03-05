@@ -9,7 +9,7 @@ from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import (
-    get_db_jw, get_val_from_dict)
+    escape_like, get_db_jw, get_val_from_dict)
 from openjiuwen_studio.core.manager.repositories.workflow_tag_repository import \
     workflow_tag_repository
 from openjiuwen_studio.models.workflow import (WorkflowBaseDB, WorkflowBaseDBPd,
@@ -545,9 +545,9 @@ class WorkflowRepository():
             from sqlalchemy import or_
             from openjiuwen_studio.models.tag import TagDB
 
-            # OPTIMIZATION: 批量查询所有搜索词的标签
+            # OPTIMIZATION: 批量查询所有搜索词的标签，escape_like 防止 LIKE 通配符注入
             search_conditions = [
-                TagDB.tag_name.ilike(f"%{term}%") for term in search_terms
+                TagDB.tag_name.ilike(f"%{escape_like(term)}%", escape="\\") for term in search_terms
             ]
 
             tag_results = db.execute(

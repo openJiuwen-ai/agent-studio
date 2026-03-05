@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from sqlalchemy import or_
 
+from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import escape_like
 from openjiuwen_studio.ops.common.date_time_util import get_china_datetime
 from openjiuwen_studio.ops.modules.prompt.application.debug_service import logger
 from openjiuwen_studio.ops.modules.prompt.domain import entities
@@ -93,11 +94,12 @@ class PromptService:
         if list_prompt.created_bys:
             conditions.append(orm_repo.PromptBasicModel.created_by == list_prompt.created_bys[0])
         if list_prompt.key_word:
+            escaped_keyword = escape_like(list_prompt.key_word)
             conditions.append(
                 or_(
-                    orm_repo.PromptBasicModel.prompt_key.contains(list_prompt.key_word),
-                    orm_repo.PromptBasicModel.name.contains(list_prompt.key_word),
-                    orm_repo.PromptBasicModel.description.contains(list_prompt.key_word)
+                    orm_repo.PromptBasicModel.prompt_key.ilike(f"%{escaped_keyword}%", escape="\\"),
+                    orm_repo.PromptBasicModel.name.ilike(f"%{escaped_keyword}%", escape="\\"),
+                    orm_repo.PromptBasicModel.description.ilike(f"%{escaped_keyword}%", escape="\\")
                 )
             )
         order_by = None

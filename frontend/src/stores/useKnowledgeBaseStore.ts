@@ -91,10 +91,13 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseStore>()(
             size: 0,
           }))
 
+          const total = response.data.total
+          const totalPages = Math.max(1, Math.ceil(total / size))
+          const safePage = Math.min(Math.max(1, response.data.page), totalPages)
           set({
             knowledgeBases,
-            total: response.data.total,
-            currentPage: response.data.page,
+            total,
+            currentPage: safePage,
             pageSize: size, // 使用请求参数，与分页器一致，避免被后端返回值覆盖
             isLoading: false,
           })
@@ -131,10 +134,13 @@ export const useKnowledgeBaseStore = create<KnowledgeBaseStore>()(
             size: 0,
           }))
 
+          const total = response.data.total
+          const totalPages = Math.max(1, Math.ceil(total / size))
+          const safePage = Math.min(Math.max(1, response.data.page), totalPages)
           set({
             knowledgeBases,
-            total: response.data.total,
-            currentPage: response.data.page,
+            total,
+            currentPage: safePage,
             pageSize: size,
             isSearching: false,
           })

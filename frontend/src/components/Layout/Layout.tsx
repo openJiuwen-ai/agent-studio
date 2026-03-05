@@ -12,6 +12,10 @@ import { getLoginPagePath } from '@/Common/LoginPage.ts'
 const Layout: React.FC = () => {
   const { t } = useTranslation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // 隐私提示弹窗状态（仅在 VITE_ENABLE_NEW_AUTH 为 true 时启用，首次登录成功后显示）
+  const [showPrivacyDialog, setShowPrivacyDialog] = useState(false)
+
   const sidebarCollapsed = useUIStore(state => state.sidebarCollapsed)
   const setSidebarCollapsed = useUIStore(state => state.setSidebarCollapsed)
   const sidebarRef = useRef<HTMLDivElement>(null)
@@ -21,6 +25,22 @@ const Layout: React.FC = () => {
   const location = useLocation()
   const [isInitializingSpace, setIsInitializingSpace] = useState(false)
   const initializationRef = useRef(false)
+
+  // 隐私提示弹窗：根据当前用户判断是否需要显示（按用户区分，每个用户首次登录显示一次）
+  useEffect(() => {
+    if (!ENV_CONFIG.VITE_ENABLE_NEW_AUTH || !user?.email) return
+    const key = `privacy_notice_acknowledged_${user.email}`
+    if (!localStorage.getItem(key)) {
+      setShowPrivacyDialog(true)
+    }
+  }, [user?.email])
+
+  const handleAcknowledgePrivacy = () => {
+    if (user?.email) {
+      localStorage.setItem(`privacy_notice_acknowledged_${user.email}`, 'true')
+    }
+    setShowPrivacyDialog(false)
+  }
 
   // 获取用户空间列表的 hook
   const userSpacesQuery = useUserSpaces({ enabled: false })
@@ -150,7 +170,7 @@ const Layout: React.FC = () => {
       </div>
 
       {/* Main content */}
-      <div ref={contentRef} className="flex-1 overflow-hidden flex flex-col transition-all duration-300 ease-in-out h-full">
+      <div ref={contentRef} className="flex-1 overflow-hidden flex flex-col transition-all duration-300 ease-in-out h-full relative">
         {/* Page content */}
         <main className="flex-1 overflow-auto bg-[#F8F9FC]">
           <div className="h-full min-w-full">
@@ -159,6 +179,36 @@ const Layout: React.FC = () => {
             </div>
           </div>
         </main>
+
+        {/* 隐私提示弹窗 - 仅覆盖主内容区域，不遮挡侧边栏 */}
+        {showPrivacyDialog && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 p-6 animate-in fade-in zoom-in">
+              <div className="flex items-center gap-2 mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 className="text-lg font-semibold text-gray-800">{t('privacy.notice.title', '重要提示')}</h3>
+              </div>
+              <div className="text-sm text-gray-600 leading-relaxed mb-6">
+                <p>
+                  {t(
+                    'privacy.notice.content',
+                    '本平台仅供体验使用，请勿上传真实个人隐私数据。平台会定期清理数据，请善用导出功能及时备份重要数据。'
+                  )}
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleAcknowledgePrivacy}
+                  className="px-6 py-2 text-sm font-medium text-white rounded-lg btn-login hover:opacity-90 transition-opacity"
+                >
+                  {t('privacy.notice.acknowledge', '我已了解')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
