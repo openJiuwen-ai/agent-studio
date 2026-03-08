@@ -265,6 +265,8 @@ Complete dependency installation first, then perform source retrieval and instal
 * Open .env in a text editor and update the following variables according to your environment (do not overwrite other variables):
 
   > **Note**: Replace DB_HOST, DB_PORT, etc. with your actual database information. DB_USER and DB_PASSWORD are the MySQL user and password you created above. If the password contains special characters, see the [Special Character Escape Table](#windows-special-char) to replace them with URL encoding.
+  >
+  > **OBS config**: For standalone/local deployment without object storage, OBS-related variables (OBS_BUCKET, OBS_SERVER, etc.) are left empty in `.env.example`; after copying to `.env` you do not need to fill them. Only fill real values when using object storage (e.g. distributed deployment). See [Distributed Installation](../Distributed%20Installation/README.md).
 
   ```env
    # Database config (example)

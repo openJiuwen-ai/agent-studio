@@ -11,13 +11,9 @@ import { LanguageProvider } from './contexts/LanguageContext'
 
 // 立即加载的核心页面（用户可能立即访问）- 统一使用新版
 import LoginPage from './pages/Auth/LoginPage'
-import DashboardPage from './pages/Dashboard/DashboardPage'
 import AppsPage from './pages/Apps/AppsPage'
-import AgentsPage from './pages/Agents/AgentsPage'
 import AgentsPageNew from './pages/Agents/AgentsPageNew'
-import WorkflowsPage from './pages/Workflows/WorkflowsPage'
 import WorkflowsPageNew from './pages/Workflows/WorkflowsPageNew'
-import PromptsPage from './pages/Prompts/PromptsPage'
 import PromptsPageNew from './pages/Prompts/PromptsPageNew'
 import KnowledgeBasePageNew from './pages/KnowledgeBase/KnowledgeBasePageNew'
 import MemoryBasePageNew from './pages/MemoryBase/MemoryBasePageNew'

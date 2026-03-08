@@ -117,17 +117,12 @@ const SidebarNew: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Mobile backdrop */}
-      {isOpen && <div className="fixed inset-0 z-40 bg-gray-600 bg-opacity-75 lg:hidden" onClick={onClose} />}
-
       {/* Sidebar */}
       <div
         className={`
-        fixed inset-0 left-0 z-50 bg-white
-        border-r transition-all duration-200
-        lg:translate-x-0 lg:static lg:inset-0 flex flex-col h-screen
-        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        ${isCollapsed ? 'lg:w-14' : 'lg:w-[190px]'}
+        bg-white border-r transition-all duration-200
+        flex flex-col h-screen shrink-0
+        ${isCollapsed ? 'w-14' : 'w-[190px]'}
       `}
       >
         {/* Logo section */}
@@ -140,10 +135,6 @@ const SidebarNew: React.FC<SidebarProps> = ({
               <span className="text-[16px] font-[800] leading-5 text-common-text-black whitespace-nowrap ml-2">openJiuwen</span>
             </div>
           </div>
-          {/* Mobile close button */}
-          <button onClick={onClose} className="lg:hidden p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100">
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Navigation */}

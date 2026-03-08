@@ -108,7 +108,7 @@ scripts/
 
 - Docker：20.10 版本及以上
 - Docker Compose：v2.19.1 及以上版本
-- Bash: 5.2及以上版本
+- Bash: 5.0及以上版本
 
 ✔️ **参数说明**
 
@@ -610,4 +610,70 @@ time="2026-02-13T11:12:41+08:00" level=warning msg="Found orphan containers ([ji
 该问题在 macOS 环境中尤为常见，其根本原因是 macOS 系统默认搭载的 Bash 版本为 3.2（发布于 2007 年）。此版本对现代 Bash 语法支持有限，无法正确解析关联数组中 ["ENV_DIR"] 格式的键名，会将其错误地识别为独立变量 $ENV_DIR，从而触发 “未绑定变量” 的解析错误。
 
 **处理建议**
-将Bash 升级至 5.2 及以上版本，使用新版bash运行脚本。
+将Bash 升级至 5.0 及以上版本，使用新版bash运行脚本。
+
+```
+/path/to/bash service.sh <command>
+```
+
+## 部署工具拉取镜像的过程中报SSL 证书校验不通过的解决方案
+
+**问题现象**
+
+部署工具拉取镜像的过程中，提示如下问题:
+
+```
+tls: failed to verify certificate: x509: certificate signed by unknown authority
+```
+
+**问题原因**
+Docker 拉取镜像时，检测到镜像仓库的 SSL 证书是「未知机构签发」，出于安全校验拒绝连接，导致拉取失败。
+
+**处理建议**
+在 /etc/docker/daemon.json 里把该仓库加入 insecure-registries，跳过证书校验：
+
+```
+{
+  "insecure-registries": ["swr.cn-north-4.myhuaweicloud.com"]
+}
+```
+
+配置完成之后，重启 Docker 生效
+
+```
+systemctl daemon-reload
+systemctl restart docker
+```
+
+## 我已经装了 docker-compose，为什么部署工具还是报错
+
+**问题现象**
+部署工具在运行的过程中报如下错误:
+
+```
+Docker Compose not installed. Please install Docker Compose v2.19.1 or higher first..
+```
+
+部分情况下，即使已安装 Docker Compose v2.19.1 及以上版本，仍出现该提示。
+
+**问题原因**
+
+1. 本部署工具仅支持 Docker Compose V2 插件版，只识别 docker compose（空格形式），不识别 docker-compose（横杠形式）；
+2. docker-compose 通常对应已停止维护的 V1 版本，或不规范安装的 V2 独立二进制包；
+3. Docker Compose V2 为 Docker 官方原生插件，正常安装 Docker 后会自带 docker compose 命令；
+4. 出现该问题，说明环境中为独立手动安装的 docker-compose 二进制文件，未以插件形式注册到 Docker CLI，导致无法识别。
+
+**处理建议**
+
+1. 优先使用官方一键安装 Docker 的方式，自动获得标准的 docker compose 命令；
+2. 若已单独下载满足版本要求的 docker-compose 二进制文件，在确保与当前 Docker 版本兼容的前提下，必须将其放置到 Docker 官方插件目录，才能正常识别：
+
+```
+/usr/libexec/docker/cli-plugins
+```
+
+放置后添加可执行权限，再通过以下命令验证是否生效：
+
+```
+docker compose version
+```

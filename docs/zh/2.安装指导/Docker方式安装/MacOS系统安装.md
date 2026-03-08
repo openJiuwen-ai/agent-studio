@@ -38,13 +38,15 @@
 
 ## 二、openJiuwen 安装
 
-### 1. 下载版本包（若已获取版本包跳过此步骤）
+以下以安装 openJiuwen agent-studio v0.1.5 版本为例，可以按需替换成需要安装的版本。
+
+### 1. 下载版本包
 
 * 单击版本下载链接，下载对应版本包至本地。
 
-  x86_64 架构下载链接：<a href="https://openjiuwen-ci.obs.cn-north-4.myhuaweicloud.com/agentstudio/deployTool_0.1.3_amd64.zip" target="_blank" rel="nofollow noopener noreferrer">openJiuwen v0.1.3</a>
+  x86_64 架构下载链接：<a href="https://openjiuwen-ci.obs.cn-north-4.myhuaweicloud.com/agentstudio/deployTool_0.1.5_amd64.zip" target="_blank" rel="nofollow noopener noreferrer">openJiuwen v0.1.5</a>
 
-  arm 架构下载链接：<a href="https://openjiuwen-ci.obs.cn-north-4.myhuaweicloud.com/agentstudio/deployTool_0.1.3_arm64.zip" target="_blank" rel="nofollow noopener noreferrer">openJiuwen v0.1.3</a>
+  arm 架构下载链接：<a href="https://openjiuwen-ci.obs.cn-north-4.myhuaweicloud.com/agentstudio/deployTool_0.1.5_arm64.zip" target="_blank" rel="nofollow noopener noreferrer">openJiuwen v0.1.5</a>
 
 ### 2. 启动 openJiuwen
 

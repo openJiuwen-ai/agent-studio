@@ -26,7 +26,7 @@ export const booleanRegistry: Partial<JsonSchemaTypeRegistry> = {
           { label: t('workflowCanvas.formMaterials.input.true'), value: 1 },
           { label: t('workflowCanvas.formMaterials.input.false'), value: 0 },
         ]}
-        value={value !== undefined && value !== null ? (value ? 1 : 0) : undefined}
+        value={typeof value === 'boolean' ? (value ? 1 : 0) : undefined}
         onChange={value => onChange?.(value !== undefined ? !!value : undefined)}
         {...rest}
       />
