@@ -1,7 +1,7 @@
 import { TextField, InputAdornment, IconButton, Tooltip, Button, Divider } from '@mui/material'
 import type { ChatMessage } from './chatTypes'
 import { useMemo, useState, useEffect } from 'react'
-import { Type, Hash, List, Braces, ToggleLeft, Calendar, X } from 'lucide-react'
+import { Type, Hash, List, Braces, ToggleLeft, Calendar, X, HelpCircle } from 'lucide-react'
 import { useScopedTranslation } from '@/i18n'
 import { MessageContent } from './NormalMessage'
 
@@ -198,7 +198,12 @@ export function InteractionMessage({
                 <div key={field.input_name} className="space-y-1">
                   <div className="text-sm text-gray-700 flex items-center gap-1">
                     {field.required ? <span className="text-red-500">*</span> : null}
-                    <span>{field.description || field.input_name}</span>
+                    <span>{field.input_name}</span>
+                    {field.description && (
+                      <Tooltip title={field.description} placement="top" arrow>
+                        <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
+                      </Tooltip>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-full">

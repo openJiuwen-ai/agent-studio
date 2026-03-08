@@ -41,7 +41,16 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
   const [localError, setLocalError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // 重置表单
+  const getAllowedExtensions = (mode: ImportMode): string[] => {
+    return mode === 'extract' ? ['.md', '.html', '.doc', '.docx', '.pdf'] : ['.md']
+  }
+
+  const validateFileType = (selectedFile: File, mode: ImportMode): boolean => {
+    const allowedExtensions = getAllowedExtensions(mode)
+    const fileName = selectedFile.name.toLowerCase()
+    return allowedExtensions.some(ext => fileName.endsWith(ext))
+  }
+
   const resetForm = () => {
     setFile(null)
     setTemplateName('')
@@ -64,12 +73,18 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
 
   // 处理文件选择
   const handleFileSelect = (selectedFile: File | null) => {
-    if (selectedFile) {
-      setFile(selectedFile)
-      // 自动填充模板名称（去掉扩展名）
-      const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, '')
-      setTemplateName(nameWithoutExt)
+    if (!selectedFile) return
+
+    if (!validateFileType(selectedFile, importMode)) {
+      const allowedExtensions = getAllowedExtensions(importMode)
+      setLocalError(t('apps.config.template.invalidFileType', { formats: allowedExtensions.join(', ') }))
+      return
     }
+
+    setLocalError(null)
+    setFile(selectedFile)
+    const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, '')
+    setTemplateName(nameWithoutExt)
   }
 
   // 拖拽相关处理
@@ -151,7 +166,16 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setImportMode('extract')}
+                onClick={() => {
+                  if (file && !validateFileType(file, 'extract')) {
+                    setFile(null)
+                    setTemplateName('')
+                    setLocalError(t('apps.config.template.fileTypeChanged'))
+                  } else {
+                    setLocalError(null)
+                  }
+                  setImportMode('extract')
+                }}
                 disabled={uploading}
                 className={`
                   flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all
@@ -168,7 +192,16 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setImportMode('direct')}
+                onClick={() => {
+                  if (file && !validateFileType(file, 'direct')) {
+                    setFile(null)
+                    setTemplateName('')
+                    setLocalError(t('apps.config.template.fileTypeChanged'))
+                  } else {
+                    setLocalError(null)
+                  }
+                  setImportMode('direct')
+                }}
                 disabled={uploading}
                 className={`
                   flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all
@@ -229,6 +262,14 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
             )}
           </div>
 
+          {/* 文件类型错误提示 */}
+          {localError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700 flex-1">{localError}</p>
+            </div>
+          )}
+
           {/* 模板名称 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -269,14 +310,6 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
             />
           </div>
         </div>
-
-        {/* 错误提示 */}
-        {localError && (
-          <div className="mx-6 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-700 flex-1">{localError}</p>
-          </div>
-        )}
 
         {/* 底部按钮 */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">

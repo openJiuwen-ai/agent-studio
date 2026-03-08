@@ -233,7 +233,9 @@ Complete dependency installation first, then perform source retrieval and instal
 
 * In the *.env* file, modify the following variables according to your actual environment (do not overwrite other variables): 
    
-   > **Note**: Values such as DB_HOST and DB_PORT can be replaced with your actual database information. DB_USER and DB_PASSWORD should be the MySQL username and password created earlier. If the password contains special characters, refer to [Special Character Escaping Table](#macos-special-char) to replace them with URL-encoded values. 
+   > **Note**: Values such as DB_HOST and DB_PORT can be replaced with your actual database information. DB_USER and DB_PASSWORD should be the MySQL username and password created earlier. If the password contains special characters, refer to [Special Character Escaping Table](#macos-special-char) to replace them with URL-encoded values.
+   >
+   > **OBS config**: For standalone/local deployment without object storage, OBS-related variables (OBS_BUCKET, OBS_SERVER, etc.) are left empty in `.env.example`; after copying to `.env` you do not need to fill them. Only fill real values when using object storage (e.g. distributed deployment). See [Distributed Installation](../Distributed%20Installation/README.md). 
     
    ```env
    # Database configuration (Example)

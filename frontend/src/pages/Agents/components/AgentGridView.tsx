@@ -47,7 +47,7 @@ export const AgentGridView: React.FC<AgentGridViewProps> = ({
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {agents.map(agent => {
         const isEditingThis = editingState.id === agent.agent_id && editingState.isEditing
         const isUpdatingThis = savingAgentId === agent.agent_id

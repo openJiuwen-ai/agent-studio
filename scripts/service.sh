@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+
+# Require Bash >= 5.0
+if [[ -z "${BASH_VERSINFO:-}" ]] || (( BASH_VERSINFO[0] < 5 )); then
+  echo "Error: This script requires Bash >= 5.0"
+  echo "Your bash version: ${BASH_VERSION:-unknown} (shell: ${BASH:-unknown})"
+  exit 1
+fi
+
 set -euo >/dev/null 2>&1
 
 source "./global_vars.sh"

@@ -57,7 +57,7 @@ The core of Alembic's operation is based on **state comparison** and **version t
    * Each time `upgrade` or `downgrade` is executed, Alembic updates the version number in this table, thereby establishing the "current coordinate" of the database.
 
 2. **State Comparison (Autogenerate)**:
-   * When you run `alembic revision --autogenerate`, Alembic does two things:
+   * When you run `alembic -n <db_name> revision --autogenerate`, Alembic does two things:
        * **Read Model**: Load the SQLAlchemy models defined in your Python code (i.e., your expected database structure).
        * **Read Database**: Connect to the actual database and read the current table structure.
    * It compares the differences between the two (for example: the model has an `age` field, but the database does not).
@@ -68,20 +68,22 @@ The core of Alembic's operation is based on **state comparison** and **version t
    * This forms a linked list structure: `Base -> Rev1 -> Rev2 -> ... -> Head`.
    * Alembic follows this chain and executes scripts in sequence, thereby safely migrating the database from any old version to the latest version.
 
-## 4. Common Commands Quick Reference
+## 4. Practical Scenario Guide
+
+### 4.1 Common Commands Quick Reference
 
 Please execute the following commands in the `backend` directory:
 
 | Operation | Command | Description |
 | :--- | :--- | :--- |
-| **Generate Migration Script** | `alembic revision --autogenerate -m "description"` | Automatically detect model changes and generate scripts |
-| **Apply Migration (Upgrade)** | `alembic upgrade head` | Upgrade database to the latest version |
-| **Rollback Migration (Downgrade)** | `alembic downgrade -1` | Rollback the most recent migration |
-| **View History** | `alembic history` | View all migration version history |
-| **View Current Version** | `alembic current` | View the current version of the database |
-| **Stamp Version** | `alembic stamp <version>` | Tag an existing database with a version label (without executing changes) |
+| **Generate Migration Script** | `alembic -n <db_name> revision --autogenerate -m "description"` | Automatically detect model changes and generate scripts |
+| **Apply Migration (Upgrade)** | `alembic -n <db_name> upgrade head` | Upgrade database to the latest version |
+| **Rollback Migration (Downgrade)** | `alembic -n <db_name> downgrade -1` | Rollback the most recent migration |
+| **View History** | `alembic -n <db_name> history` | View all migration version history |
+| **View Current Version** | `alembic -n <db_name> current` | View the current version of the database |
+| **Stamp Version** | `alembic -n <db_name> stamp <version>` | Tag an existing database with a version label (without executing changes) |
 
-### 4.1 `-n` Parameter Description: Multi-Database Configuration
+#### 4.1.1 `-n` Parameter Description: Multi-Database Configuration
 
 This project uses **multiple independent Alembic configurations** to manage different databases. The `-n` parameter is used to specify the database instance to operate on.
 
@@ -153,9 +155,7 @@ done
 
 ---
 
-## 5. Practical Scenario Guide
-
-### Scenario 1: Add New Table or Field (Create/Add)
+### 4.2 Scenario 1: Add New Table or Field (Create/Add)
 
 This is the simplest scenario. Alembic's automatic detection feature (`--autogenerate`) can usually handle it perfectly.
 
@@ -164,15 +164,15 @@ This is the simplest scenario. Alembic's automatic detection feature (`--autogen
 1. **Modify Model Code**: Add new classes or fields in SQLAlchemy model files (such as `backend/app/models/`).
 2. **Generate Script**:
     ```bash
-    alembic revision --autogenerate -m "add_user_age_column"
+    alembic -n alembic_sqlite_agent revision --autogenerate -m "add_user_age_column"
     ```
 3. **Check Script**: Open the generated `versions/xxxx_add_user_age_column.py` file and confirm that the `upgrade()` function contains the correct `op.create_table` or `op.add_column` instructions.
 4. **Apply Migration**:
     ```bash
-    alembic upgrade head
+    alembic -n alembic_sqlite_agent upgrade head
     ```
 
-### Scenario 2: Drop Field or Table (Drop)
+### 4.3 Scenario 2: Drop Field or Table (Drop)
 
 ⚠️ **Note**: Alembic's automatic detection feature **does not** detect deletion operations by default (to prevent accidental data deletion). You must handle it manually or explicitly confirm.
 
@@ -181,7 +181,7 @@ This is the simplest scenario. Alembic's automatic detection feature (`--autogen
 1. **Modify Model Code**: Delete the corresponding class or field from the code.
 2. **Generate Base Script**:
     ```bash
-    alembic revision --autogenerate -m "drop_unused_column"
+    alembic -n alembic_sqlite_agent revision --autogenerate -m "drop_unused_column"
     ```
     *At this point, the generated script may be empty or not contain drop statements.*
 3. **Manually Edit Script**: Open the generated migration file and manually add deletion instructions in the `upgrade()` function:
@@ -196,10 +196,10 @@ This is the simplest scenario. Alembic's automatic detection feature (`--autogen
     ```
 4. **Apply Migration**:
     ```bash
-    alembic upgrade head
+    alembic -n alembic_sqlite_agent upgrade head
     ```
 
-### Scenario 3: Rename Field (Rename)
+### 4.4 Scenario 3: Rename Field (Rename)
 
 ⚠️ **Note**: Alembic cannot automatically identify renaming. It usually recognizes it as "delete old field" + "add new field". This will cause **data loss**! You must manually use `alter_column`.
 
@@ -208,7 +208,7 @@ This is the simplest scenario. Alembic's automatic detection feature (`--autogen
 1. **Modify Model Code**: Change the field name from `old_name` to `new_name`.
 2. **Generate Base Script**:
     ```bash
-    alembic revision --autogenerate -m "rename_column"
+    alembic -n alembic_sqlite_agent revision --autogenerate -m "rename_column"
     ```
 3. **Manually Edit Script**: Open the generated migration file, **delete** the automatically generated `drop_column` and `add_column` statements, and replace with `alter_column`:
     ```python
@@ -222,7 +222,7 @@ This is the simplest scenario. Alembic's automatic detection feature (`--autogen
     ```
     *SQLite Special Note: SQLite has limited support for `ALTER TABLE`. If you encounter an error, you may need to use batch mode (Alembic default configuration usually has this enabled, but pay attention).*
 
-### Scenario 4: Write Idempotent Migration Scripts
+### 4.5 Scenario 4: Write Idempotent Migration Scripts
 
 Since MySQL's DDL operations (such as `CREATE TABLE`, `ADD COLUMN`) do not support transaction rollback, if the migration script fails midway through execution, running `upgrade` again will cause errors because tables or columns already exist. Therefore, it is recommended to write **idempotent** migration scripts.
 
@@ -250,7 +250,7 @@ def upgrade() -> None:
 - **Batch Mode**: When using `op.batch_alter_table` in SQLite, you can also use these checks within the `with` block.
 - **Template Support**: Newly generated migration scripts have imported these helper functions by default.
 
-### Scenario 5: Modify Field Type or Attributes (Alter)
+### 4.6 Scenario 5: Modify Field Type or Attributes (Alter)
 
 For example, changing `String(50)` to `String(100)`, or modifying `nullable` attributes.
 
@@ -259,7 +259,7 @@ For example, changing `String(50)` to `String(100)`, or modifying `nullable` att
 1. **Modify Model Code**: Update field definitions.
 2. **Generate Script**:
     ```bash
-    alembic revision --autogenerate -m "change_column_type"
+    alembic -n alembic_sqlite_agent revision --autogenerate -m "change_column_type"
     ```
 3. **Check Script**: Alembic can usually detect type changes, but it is recommended to carefully verify whether the parameters in `op.alter_column` meet expectations.
     ```python
@@ -271,12 +271,12 @@ For example, changing `String(50)` to `String(100)`, or modifying `nullable` att
     ```
 4. **Apply Migration**:
     ```bash
-    alembic upgrade head
+    alembic -n alembic_sqlite_agent upgrade head
     ```
 
 ---
 
-## 6. openJiuWen Studio Backend Database Migration Development Core Steps
+## 5. openJiuWen Studio Backend Database Migration Development Core Steps
 
 > **Important Note**: All backend developers must follow the following database migration development process when developing code.
 >
@@ -288,11 +288,11 @@ For example, changing `String(50)` to `String(100)`, or modifying `nullable` att
 
 ⚠️ **Special Attention**: If the upgrade script involves operations related to the `user_message` table, please do not execute any changes. This table is managed by the memory module. Please contact the personnel responsible for the memory module to handle it.
 
-### 6.1 How to Sync Database Changes in Development Branches
+### 5.1 How to Sync Database Changes in Development Branches
 
 When doing collaborative development, keeping your local database synchronized with the code repository is very important. The following process helps you correctly update your local database after pulling code.
 
-#### 6.1.1 Standard Sync Process
+#### 5.1.1 Standard Sync Process
 
 **Step 1: Pull Latest Code**
 
@@ -341,7 +341,7 @@ At this point, the application startup log should show consistent versions:
    Latest version: 7883f1b07bc3
 ```
 
-#### 6.1.2 Pre-Commit Checklist
+#### 5.1.2 Pre-Commit Checklist
 
 Before committing code, please ensure:
 
@@ -350,7 +350,7 @@ Before committing code, please ensure:
 - [ ] All migration scripts have been correctly generated
 - [ ] Tests passed, functionality works normally
 
-#### 6.1.3 How to Handle Existing Databases That Have Not Used Alembic Migration
+#### 5.1.3 How to Handle Existing Databases That Have Not Used Alembic Migration
 
 **Scenario Description**: When your database already has data (for example, currently version v0.1.2), but has never used Alembic for version management, special handling is required.
 
@@ -368,17 +368,17 @@ Before committing code, please ensure:
 2. **Stamp Database Version**:
     ```bash
     # Tag the database with the corresponding alembic version
-    alembic stamp <version_number>
+    alembic -n alembic_sqlite_agent stamp <version_number>
     ```
     ⚠️ **Do not run `upgrade`**! The `stamp` command only records the version number to the `alembic_version` table and does not execute any SQL operations
 
 3. **Verify Stamp Result**:
     ```bash
-    alembic current
+    alembic -n alembic_sqlite_agent current
     ```
     Should display the just-stamped version number
 
-4. **Subsequent Development**: Afterward, you can normally use `alembic revision --autogenerate` to generate new migration scripts
+4. **Subsequent Development**: Afterward, you can normally use `alembic -n alembic_sqlite_agent revision --autogenerate` to generate new migration scripts
 
 **Example**:
 ```bash
@@ -393,7 +393,7 @@ alembic -n alembic_sqlite_agent current
 alembic -n alembic_sqlite_agent revision --autogenerate -m "feat: add new column"
 ```
 
-#### 6.1.4 Released Version Baseline Marking After 0.1.2
+#### 5.1.4 Released Version Baseline Marking After 0.1.2
 
 The following is a reference table of key version Revision IDs for each database type, for use when manually stamping versions (Stamp).
 
@@ -404,7 +404,7 @@ The following is a reference table of key version Revision IDs for each database
 | **SQLite** | **Agent** | `f458c7fb17a5` | `031b34b4dd30` | `8f4846812221` |
 | **SQLite** | **Ops** | `b4f4c6589bc5` | `f6e49cd8c97d` | `f6e49cd8c97d` |
 
-The baseline for database migration scripts in the current code repository is version v0.1.2. For users upgrading from v0.1.1 to v0.1.2, since there are no database structure changes, users need to manually stamp their database with a v0.1.2 label, otherwise running `alembic upgrade head` directly will fail because it tries to create existing tables.
+The baseline for database migration scripts in the current code repository is version v0.1.2. For users upgrading from v0.1.1 to v0.1.2, since there are no database structure changes, users need to manually stamp their database with a v0.1.2 label, otherwise running `alembic -n <db_name> upgrade head` directly will fail because it tries to create existing tables.
 
 **Solution**: Use the `alembic stamp` command to stamp to a **v0.1.2 baseline version number**.
 
@@ -426,11 +426,11 @@ alembic -n alembic_sqlite_agent stamp f458c7fb17a5
 alembic -n alembic_sqlite_ops stamp b4f4c6589bc5
 ```
 
-#### 6.1.5 Execute Incremental Upgrade
+#### 5.1.5 Execute Incremental Upgrade
 
 After stamping is complete, Alembic knows that the current database version is v0.1.2. Now running `upgrade head` will only execute all incremental migrations between the baseline version and the latest version.
 
-### 6.2 Standard Migration Process
+### 5.2 Standard Migration Process
 The standard migration process is divided into three steps:
 
 ### Step 1: Modify Model Code
@@ -536,7 +536,7 @@ The generated script is just a plan. Run the `upgrade head` command to execute t
 
 ---
 
-## 7. How to Collaborate as a Team
+## 6. How to Collaborate as a Team
 
 When multiple developers perform database structure changes simultaneously, conflicts may arise. Following the following process can effectively avoid and resolve these issues.
 
@@ -547,17 +547,17 @@ When multiple developers perform database structure changes simultaneously, conf
 2. **Update Local Database**:
     - Start application to check version: `python main.py`
     - View version detection log to confirm if update is needed
-    - update needed, run: `alembic upgrade head` (and/or `-n alembic_ops`)
+    - update needed, run: `alembic -n <db_name> upgrade head`
     - Ensure local database is updated to the latest version before proceeding with development
 
 3. **Make Your Changes**: Now, modify your model code on the latest database structure.
 
 4. **Generate Your Migration Scripts**:
     - Recommended: Use `python generate_migration.py --autogenerate -m "feat: xxx"`
-    - Or manual: Run `alembic revision --autogenerate ...`
+    - Or manual: Run `alembic -n <db_name> revision --autogenerate ...`
     - Check that the generated migration scripts meet expectations
 
-5. **Apply and Test Migration**: Execute `alembic upgrade head` locally to test if the migration succeeds.
+5. **Apply and Test Migration**: Execute `alembic -n <db_name> upgrade head` locally to test if the migration succeeds.
 
 6. **Commit Code**: Commit your model code and newly generated migration scripts together.
 
@@ -569,11 +569,11 @@ If you forget step 2, you may encounter migration branch conflicts.
 
 **Solution**:
 
-1. First, upgrade the database to the head of one branch, for example `alembic upgrade B1`.
-2. Then, run `alembic merge heads -m "Merge parallel migrations B1 and B2"`.
+1. First, upgrade the database to the head of one branch, for example `alembic -n <db_name> upgrade B1`.
+2. Then, run `alembic -n <db_name> merge heads -m "Merge parallel migrations B1 and B2"`.
 3. This will create a new merge migration file `C` that merges the two branches together.
     > **Note**: The original migration files `B1` and `B2` **will not be deleted**. They still exist in the `versions` directory. The `merge` operation only creates a new node `C` that points to both `B1` and `B2` in terms of dependencies, thereby reconnecting the two forked paths.
-4. Finally, upgrade the database to this new merge head: `alembic upgrade head`.
+4. Finally, upgrade the database to this new merge head: `alembic -n <db_name> upgrade head`.
 
 ### Advanced: What if two branches modified the same field?
 
@@ -587,16 +587,70 @@ If you forget step 2, you may encounter migration branch conflicts.
    - **Alternative (Manual Edit)**:
      If it's just simple attribute modifications, you can manually edit the `upgrade()` function to ensure the logic order is correct.
 
-## 8. Best Practices and Notes
+## 7. Best Practices and Notes
 
 1. **Never Modify Database Directly**: Strictly prohibit using tools such as Navicat, DBeaver to directly modify table structures. This will cause the database state to be inconsistent with the Alembic version history, leading to subsequent migration failures.
 2. **Maintain Atomicity**: Each migration should preferably contain only related changes. Do not mix "add new feature table" and "modify old table fields" operations in one migration script.
 3. **Test Before Commit**: Before committing code, be sure to execute `upgrade` and `downgrade` tests locally to ensure that migration scripts can both upgrade forward and rollback backward.
 4. **Team Collaboration**:
-    * After pulling others' code, execute `alembic upgrade head` immediately.
-    * If you encounter version conflicts (multiple heads), you need to manually merge version history (`alembic merge`) or regenerate migration scripts.
+    * After pulling others' code, execute `alembic -n <db_name> upgrade head` immediately.
+    * If you encounter version conflicts (multiple heads), you need to manually merge version history (`alembic -n <db_name> merge`) or regenerate migration scripts.
 
-## 9. Reference Documentation
+## 8. Reference Documentation
 
 * [Alembic Official Documentation](https://alembic.sqlalchemy.org/en/latest/)
 * [SQLAlchemy Official Documentation](https://docs.sqlalchemy.org/)
+
+## 9. Frequently Asked Questions (FAQ)
+
+### 9.1 Error when executing alembic command: file has no '[alembic]' section
+
+**Error Message**:
+```
+ERROR: ConfigurationError: File has no '[alembic]' section which is absent from the ./backend/ini file
+```
+
+**Problem Cause**:
+This error is caused by not specifying the `-n` parameter in the migration command. The current code repository uses multiple independent Alembic configurations to manage different databases, and you need to specify the specific database name through the `-n` parameter.
+
+**Solution**:
+
+Add the `-n <db_name>` parameter to all alembic commands to specify the specific database name.
+
+**Correct Command Examples**:
+
+```bash
+# SQLite Agent Database
+alembic -n alembic_sqlite_agent upgrade head
+alembic -n alembic_sqlite_agent revision --autogenerate -m "feat: add new column"
+alembic -n alembic_sqlite_agent current
+
+# SQLite Ops Database
+alembic -n alembic_sqlite_ops upgrade head
+alembic -n alembic_sqlite_ops revision --autogenerate -m "feat: add new column"
+
+# MySQL Agent Database
+alembic -n alembic_mysql_agent upgrade head
+alembic -n alembic_mysql_agent revision --autogenerate -m "feat: add new column"
+
+# MySQL Ops Database
+alembic -n alembic_mysql_ops upgrade head
+alembic -n alembic_mysql_ops revision --autogenerate -m "feat: add new column"
+```
+
+**Incorrect Command Examples**:
+```bash
+# ❌ Error: Missing -n parameter
+alembic upgrade head
+alembic revision --autogenerate -m "feat: add new column"
+```
+
+**How to Choose the Correct Database Name**:
+
+Please refer to the [4.1.1 `-n` Parameter Description: Multi-Database Configuration](#411--n-parameter-description-multi-database-configuration) section in this document to understand how to choose the correct database instance name.
+
+**Available Database Names**:
+- `alembic_sqlite_agent` - SQLite Agent Database
+- `alembic_sqlite_ops` - SQLite Ops Database
+- `alembic_mysql_agent` - MySQL Agent Database
+- `alembic_mysql_ops` - MySQL Ops Database

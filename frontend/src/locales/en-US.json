@@ -991,7 +991,9 @@
         "optional": "(optional)",
         "emptyTitle": "No templates available",
         "emptyDescription": "Upload templates to use",
-        "uploadButton": "Upload Template"
+        "uploadButton": "Upload Template",
+        "invalidFileType": "Unsupported file type. Please upload files in {{formats}} format",
+        "fileTypeChanged": "Mode switched. The previous file type is no longer supported. Please select a new file"
       }
     },
     "time": {
