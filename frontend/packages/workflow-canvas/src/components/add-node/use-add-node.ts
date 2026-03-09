@@ -90,12 +90,18 @@ export const useAddNode = () => {
             }
             const { nodeType, nodeJSON } = panelParams
 
-            const position = containerNode
-              ? getAntiOverlapPosition(workflowDocument, {
-                  x: 0,
-                  y: 200,
-                })
-              : undefined
+            const position = getAntiOverlapPosition(
+              workflowDocument,
+              containerNode
+                ? {
+                    x: 0,
+                    y: 200,
+                  }
+                : {
+                    x: panelPosition.x + 350,
+                    y: panelPosition.y - 200,
+                  },
+            )
             // create new workflow node based on selected type - 根据选择的类型创建新的工作流节点
             const node: WorkflowNodeEntity = workflowDocument.createWorkflowNodeByType(
               nodeType,

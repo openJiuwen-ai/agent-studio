@@ -120,10 +120,23 @@ def build_call_kwargs(params: ModelCallParams, cfg: Dict[str, Any]) -> Dict[str,
                 return cast(schema["default_val"])
         return default_cast_value
 
+    # 清理 messages，移除不支持的字段
+    cleaned_messages = []
+    for msg in params.messages:
+        # 只保留支持的字段
+        cleaned_msg = {
+            "role": msg.get("role"),
+            "content": msg.get("content")
+        }
+        # 保留工具调用相关字段（如果存在）
+        if "tool_calls" in msg:
+            cleaned_msg["tool_calls"] = msg["tool_calls"]
+        if "tool_call_id" in msg:
+            cleaned_msg["tool_call_id"] = msg["tool_call_id"]
+        cleaned_messages.append(cleaned_msg)
+
     call_kwargs = {
-        "model": cfg["protocol_config"]["model"],
-        "model_name": cfg["protocol_config"]["model"],
-        "messages": params.messages,
+        "messages": cleaned_messages,
         "temperature": (
             params.temperature if params.temperature is not None
             else _default("temperature", float, 1.0)

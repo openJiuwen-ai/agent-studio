@@ -15,19 +15,53 @@ export const useWorkflowValidation = ({ workflows, spaceId }: { workflows: Workf
     [workflows, validationResults],
   )
 
+  // 清理已删除工作流的验证结果
+  const cleanupDeletedWorkflows = useCallback((currentWorkflows: WorkflowDetail[]) => {
+    const currentIds = new Set(currentWorkflows.map(w => w.workflow_id))
+    setValidationResults(prev => {
+      const next: Record<string, WorkflowValidationResult> = { ...prev }
+      let hasChanges = false
+      Object.keys(next).forEach(id => {
+        if (!currentIds.has(id)) {
+          delete next[id]
+          hasChanges = true
+        }
+      })
+      return hasChanges ? next : prev
+    })
+  }, [])
+
+  /**
+   * 验证工作流
+   * @param nextWorkflows - 所有工作流列表
+   * @param targetIds - 可选，只验证指定 ID 的工作流。不传则验证全部并清理已删除的
+   */
   const validateWorkflows = useCallback(
-    async (nextWorkflows: WorkflowDetail[]) => {
+    async (nextWorkflows: WorkflowDetail[], targetIds?: string[]) => {
       if (!spaceId) return
 
       const seq = ++validationSeqRef.current
 
+      // 确定要验证的工作流
+      const toValidate = targetIds
+        ? nextWorkflows.filter(w => targetIds.includes(w.workflow_id))
+        : nextWorkflows
+
+      if (toValidate.length === 0) return
+
       setValidationResults(prev => {
         const next: Record<string, WorkflowValidationResult> = { ...prev }
-        const currentIds = new Set(nextWorkflows.map(w => w.workflow_id))
-        Object.keys(next).forEach(id => {
-          if (!currentIds.has(id)) delete next[id]
-        })
-        nextWorkflows.forEach(w => {
+
+        // 只在全量验证时清理已删除的工作流
+        if (!targetIds) {
+          const currentIds = new Set(nextWorkflows.map(w => w.workflow_id))
+          Object.keys(next).forEach(id => {
+            if (!currentIds.has(id)) delete next[id]
+          })
+        }
+
+        // 设置待验证工作流的状态为 loading
+        toValidate.forEach(w => {
           next[w.workflow_id] = { status: 'loading' }
         })
         return next
@@ -35,7 +69,7 @@ export const useWorkflowValidation = ({ workflows, spaceId }: { workflows: Workf
 
       const apiClient = getApiClient()
       await Promise.all(
-        nextWorkflows.map(async w => {
+        toValidate.map(async w => {
           const version = w.workflow_version || 'draft'
           try {
             await apiClient.post(API_ENDPOINTS.EXECUTION.WORKFLOW_VALIDATE, {
@@ -56,5 +90,5 @@ export const useWorkflowValidation = ({ workflows, spaceId }: { workflows: Workf
     [spaceId],
   )
 
-  return { validationResults, setValidationResults, validateWorkflows, isValidating, workflowValidationErrorCount }
+  return { validationResults, setValidationResults, validateWorkflows, isValidating, workflowValidationErrorCount, cleanupDeletedWorkflows }
 }

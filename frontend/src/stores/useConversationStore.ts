@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { conversationDB, conversationEventEmitter } from '../utils/conversationDB'
+import i18n from '../i18n'
 
 // ===== LocalStorage 键名常量 =====
 const STORAGE_KEYS = {
@@ -37,6 +38,16 @@ export enum TaskStatus {
 export enum AgentType {
   ORDINARY = 'ordinary',   // 普通agent
   DEEPSEARCH = 'deepsearch', // 深度研究
+}
+
+// ===== 错误消息配置 =====
+/**
+ * 错误消息配置接口
+ * 用于在消息处理失败时添加错误提示
+ */
+export interface ErrorMessageConfig {
+  title: string;
+  content: string;
 }
 
 // ===== 消息标题常量 =====
@@ -146,6 +157,7 @@ export interface Conversation {
     [key: string]: any;
   };
   messageItemsIds: string[];    // 消息MessageItems的id列表
+  last_session_conversation_id?: string; // 连续对话系列中的上一个会话ID，用于恢复对话上下文；连续对话类型包括：deepsearch,
 }
 
 // ===== 数据导出类型 =====
@@ -191,6 +203,9 @@ export interface ConversationStore {
   // ========== SSE超时监控状态 ==========
   lastSSEEventTime: number | null;  // 上次SSE事件时间戳
   sseTimeoutCheckInterval: number | null;  // 超时检查定时器ID
+
+  // ========== 连续对话系列状态 ==========
+  SESSION_CONVERSATION_ID: string | null;  // 连续对话系列的conversationId（null表示非连续对话）
 
   // ========== Conversation 层级：查询函数 ==========
 
@@ -396,7 +411,6 @@ export interface ConversationStore {
   generateMessageId: (sectionIdx?: number, planIdx?: number, stepIdx?: number, ...extra: number[]) => string;
   generateMessageItemsId: () => string;
   generateConversationId: () => string;
-  findOrCreateTaskHierarchy: (messageItemsId: string, sectionIdx?: number, planIdx?: number, stepIdx?: number) => string[] | null;
   debugLogMessageItems: (messageItemsId?: string, label?: string) => void;
   debugLogConversation: (conversationId?: string) => void;
 
@@ -489,8 +503,15 @@ export interface ConversationStore {
 
   /**
    * 标记当前对话中最后一个MessageItems（及其所有未完成的消息）为FAILED
+   * @param errorMessage 可选的错误消息配置，如果提供则添加错误消息到MessageItems中
    */
-  markCurrentConversationIncompleteAsFailed: () => void;
+  markCurrentConversationIncompleteAsFailed: (errorMessage?: ErrorMessageConfig | null) => void;
+
+  /**
+   * 设置 SESSION_CONVERSATION_ID
+   * @param conversationId 连续对话系列的conversationId
+   */
+  setSessionConversationId: (conversationId: string | null) => void;
 }
 
 // ===== Store实现 =====
@@ -529,6 +550,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   sseProcessingQueue: false,
   lastSSEEventTime: null,
   sseTimeoutCheckInterval: null,
+  SESSION_CONVERSATION_ID: null,
 
   // ========== Conversation 层级：查询函数 ==========
 
@@ -702,7 +724,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     }
 
     // 切换到新对话
-    set({ currentConversationId: conversationId });
+    set({ currentConversationId: conversationId, SESSION_CONVERSATION_ID: null });
 
     // 加载新对话的完整数据
     await get().loadConversationFullData(conversationId);
@@ -914,7 +936,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       messageItems &&
       !get().getMessageItemsIsUser(messageItems) &&  // 只保存系统消息（AI回复）
       updates.status &&
-      [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED].includes(updates.status)
+      [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED, TaskStatus.UNKNOWN].includes(updates.status)
     ) {
       get().saveConversationToDB(messageItems.conversationId);
     }
@@ -1440,6 +1462,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
             getMessageTree: get().getMessageTree,
             getChildMessages: get().getChildMessages,
             getMessageItemsIsUser: get().getMessageItemsIsUser,
+            setSessionConversationId: get().setSessionConversationId,
           },
           {
             get: (key: string) => get().sseStreamCache.get(key),
@@ -1558,93 +1581,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
   generateConversationId: () => {
     return `conv_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-  },
-
-  findOrCreateTaskHierarchy: (messageItemsId: string, sectionIdx?: number, planIdx?: number, stepIdx?: number) => {
-    const state = get();
-    const messageItems = state.messageItemsMap.get(messageItemsId);
-    if (!messageItems) return null;
-
-    // 递归查找消息
-    const findMessageInTree = (messageIds: string[], predicate: (msg: Message) => boolean): Message | null => {
-      for (const id of messageIds) {
-        const msg = state.messagesMap.get(id);
-        if (msg && predicate(msg)) {
-          return msg;
-        }
-        if (msg?.childMessageIds) {
-          const found = findMessageInTree(msg.childMessageIds, predicate);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-
-    // 1. 查找 outline 任务 (sectionIdx=0)
-    let outlineTask = findMessageInTree(messageItems.messagesIds, msg =>
-      msg.type === MessageType.TASK &&
-      msg.sectionIdx === 0 &&
-      !msg.parentMessageId
-    );
-
-    if (!outlineTask) {
-      console.warn('[findOrCreateTaskHierarchy] Outline task not found');
-      return null;
-    }
-
-    const hierarchy = [outlineTask.id];
-
-    // 2. 如果有 sectionIdx，查找对应的 section 任务
-    if (sectionIdx !== undefined && sectionIdx > 0) {
-      const sectionTask = findMessageInTree(messageItems.messagesIds, msg =>
-        msg.type === MessageType.TASK &&
-        msg.sectionIdx === sectionIdx &&
-        msg.parentMessageId === outlineTask!.id
-      );
-
-      if (!sectionTask) {
-        console.warn('[findOrCreateTaskHierarchy] Section task not found for sectionIdx:', sectionIdx);
-        return null;
-      }
-      hierarchy.push(sectionTask.id);
-    }
-
-    // 3. 如果有 planIdx，查找对应的 plan任务
-    if (planIdx !== undefined && sectionIdx !== undefined && sectionIdx > 0) {
-      const sectionId = hierarchy[1];
-      const planTask = findMessageInTree(messageItems.messagesIds, msg =>
-        msg.type === MessageType.TASK &&
-        msg.sectionIdx === sectionIdx &&
-        msg.parentMessageId === sectionId
-      );
-
-      if (!planTask && planIdx === 0) {
-        console.warn('[findOrCreateTaskHierarchy] Plan task not found for sectionIdx:', sectionIdx);
-        return null;
-      }
-
-      if (planTask) {
-        hierarchy.push(planTask.id);
-      }
-    }
-
-    // 4. 如果有 stepIdx，查找对应的 step任务
-    if (stepIdx !== undefined && planIdx !== undefined && sectionIdx !== undefined) {
-      const planId = hierarchy[2];
-      const stepTask = findMessageInTree(messageItems.messagesIds, msg =>
-        msg.type === MessageType.TASK &&
-        msg.sectionIdx === sectionIdx &&
-        msg.parentMessageId === planId
-      );
-
-      if (!stepTask) {
-        console.warn('[findOrCreateTaskHierarchy] Step task not found for stepIdx:', stepIdx);
-        return null;
-      }
-      hierarchy.push(stepTask.id);
-    }
-
-    return hierarchy;
   },
 
   debugLogMessageItems: (messageItemsId?: string, label?: string) => {
@@ -2107,9 +2043,11 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       // 检查是否超时
       if (lastSSEEventTime && timeSinceLastEvent > timeoutMs) {
-        // 标记未完成消息为失败
-        get().markCurrentConversationIncompleteAsFailed();
-
+        // 标记未完成消息为失败，并添加超时错误消息
+        get().markCurrentConversationIncompleteAsFailed({
+          title: i18n.t('common.messages.sse.timeoutError.title'),
+          content: i18n.t('common.messages.sse.timeoutError.content'),
+        });
         // 停止监控
         get().stopSSETimeoutMonitor();
       }
@@ -2171,8 +2109,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
   /**
    * 标记当前对话中最后一个MessageItems（及其所有未完成的消息）为FAILED
+   * @param errorMessage 可选的错误消息配置，如果提供则添加错误消息到MessageItems中
    */
-  markCurrentConversationIncompleteAsFailed: () => {
+  markCurrentConversationIncompleteAsFailed: (errorMessage?: ErrorMessageConfig | null) => {
     const { currentConversationId } = get();
     if (!currentConversationId) {
       return;
@@ -2195,6 +2134,24 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       );
       // 调用公共方法标记为失败
       handler.markAllIncompleteMessages(lastMessageItems, false);  // false = 标记为 FAILED
+
+      // 添加错误消息（如果提供）
+      if (errorMessage) {
+        const errorMsg: Message = {
+          id: get().generateMessageId(),
+          type: MessageType.ERROR,
+          status: TaskStatus.FAILED,
+          content: errorMessage.content,
+          title: errorMessage.title,
+          messageItemsId: lastMessageItems.id,
+          conversationId: lastMessageItems.conversationId,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        get().addMessage(lastMessageItems.id, errorMsg, true);
+        // 手动保存到 IndexDB
+        get().saveConversationToDB(lastMessageItems.conversationId);
+      }
     }).catch((error) => {
       console.error('[markCurrentConversationIncompleteAsFailed] Failed to load handler:', error);
 
@@ -2218,7 +2175,32 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       // 更新 MessageItems 状态
       get().updateMessageItems(lastMessageItems.id, { status: TaskStatus.FAILED });
+
+      // 添加错误消息（如果提供）
+      if (errorMessage) {
+        const errorMsg: Message = {
+          id: get().generateMessageId(),
+          type: MessageType.ERROR,
+          status: TaskStatus.FAILED,
+          content: errorMessage.content,
+          title: errorMessage.title,
+          messageItemsId: lastMessageItems.id,
+          conversationId: lastMessageItems.conversationId,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        get().addMessage(lastMessageItems.id, errorMsg, true);
+        // 手动保存到 IndexDB
+        get().saveConversationToDB(lastMessageItems.conversationId);
+      }
     });
+  },
+
+  /**
+   * 设置 SESSION_CONVERSATION_ID
+   */
+  setSessionConversationId: (conversationId: string | null) => {
+    set({ SESSION_CONVERSATION_ID: conversationId });
   },
 }));
 // ===== 监听 IndexDB 删除事件，同步删除内存中的对话 =====

@@ -81,7 +81,7 @@ The Optimization Based on Debug Results feature allows you to improve prompts by
 
 ## Self-Optimization
 
-### Steps
+### Creating a Self-Optimization Task
 
 **Method 1: Create from the Task List**
 
@@ -103,13 +103,13 @@ The Optimization Based on Debug Results feature allows you to improve prompts by
 
 ![image](../images/b9f0418c-a6c7-4da2-96c2-87f5f1074159.png)
 
-## Test Case Set Management
+### Test Case Set Management
 
 The test case set is the core of an optimization task. It contains test cases used to evaluate prompt performance and guide prompt optimization. Each test case consists of inputs and an expected output (label).
 
 A high-quality test case set should cover scenarios of varying difficulty levels, edge cases, and abnormal inputs to comprehensively evaluate prompt performance across real-world scenarios. By comparing actual outputs with expected outputs, the system can identify gaps and guide optimization directions to improve overall effectiveness.
 
-### Test Case Format
+#### Test Case Format
 
 Each test case uses JSON format and contains two main parts:
 
@@ -121,9 +121,9 @@ Each test case uses JSON format and contains two main parts:
    - `output` is used for normal text output, while `tool_calls` is used for tool invocation scenarios.
    - Field names must not exceed 50 characters.
 
-### Adding Test Cases
+#### Adding Test Cases
 
-#### Manual Entry
+##### Manual Entry
 
 1. Click the **“Add Test Case”** button. A blank test case will appear in the list. Click the edit button next to the blank test case to open the edit page.
 2. Fill in the message content on the edit page.
@@ -131,7 +131,7 @@ Each test case uses JSON format and contains two main parts:
 
 ![image](../images/4659e2db-0cbe-4b9a-8362-d142f2b30442.png)
 
-#### Batch Upload
+##### Batch Upload
 
 1. Click the **“Upload File”** button.
 2. Select an Excel file (.xlsx, .xls, or .csv). You can first click **“Download Dataset Template”** to download a sample Excel file.
@@ -167,9 +167,9 @@ The Excel file must contain the following columns:
 
 ![image](../images/00fcb88e-3bf3-4944-ac9c-16b8c62c1908.png)
 
-## Optimization Strategy
+### Optimization Strategy
 
-**Optimization Parameters**:
+ **Optimization Parameters**:
 
 - **Number of Examples**: The number of examples used in each optimization round. A certain number of examples are selected according to a strategy and appended to the end of the prompt as sample guidance (default: min(total number of test cases, 20); range: 0 to min(total number of test cases, 20)).
 - **Target Accuracy**: The accuracy target that the optimization task aims to reach. The task can terminate early once the target is achieved (default: 90%; range: 0–100%).
@@ -182,7 +182,7 @@ The Excel file must contain the following columns:
 
 ![image](../images/7634342c-121d-4a3a-9a01-9afd0a47cf09.png)
 
-## Evaluation Criteria
+### Evaluation Criteria
 
 **Evaluation Types**:
 
@@ -191,16 +191,16 @@ The Excel file must contain the following columns:
 
 **Evaluation Rules**: A detailed description of evaluation rules and scoring standards used to guide the system in judging output quality. This should include specific scoring dimensions, weight distribution, and qualification criteria.  
 For example: “Answer accuracy accounts for 60%, language fluency for 30%, and format compliance for 10%.”
-
+ 
 **Background Knowledge**: Provide professional knowledge, contextual information, or domain-specific rules related to the task to help the optimization process better understand the business context and requirements. This may include industry terminology, business rules, and special constraints.
 
 ![image](../images/16cedba5-7983-4a8d-aa36-edd10bae4545.png)
 
-## Tool Settings
+### Tool Settings
 
 Tool settings allow you to configure callable tools for prompts, suitable for scenarios where the AI needs to execute tools.
 
-### Tool Configuration Steps
+#### Tool Configuration Steps
 
 1. In the **“Optimization Configuration > Tool Settings”** tab, enable the **“Enable Tools”** switch and click **“Add Tool”**.
 2. In the dialog, fill in the tool information:
@@ -210,13 +210,13 @@ Tool settings allow you to configure callable tools for prompts, suitable for sc
 
      ![image](../images/f20a886b-f570-4b6f-8cdf-583ce04a5318.png)
 
-### Parameter Configuration Method
+#### Parameter Configuration Method
 
 The parameter configuration method is the same as described in **Prompt Writing > Tool Configuration > Parameter Configuration**.
 
-## Launching and Viewing Results
+### Launching and Viewing Results
 
-### Start Optimization
+#### Start Optimization
 
 Click the **“Start Optimization”** button. The system will automatically perform the following validations:
 
@@ -231,7 +231,7 @@ After validation passes, the system will create an optimization task and begin e
 
 ![image](../images/eb148920-a2f1-4399-b3b8-26b3908ad995.png)
 
-## Viewing Results
+### Viewing Results
 
 After optimization is complete, you can view:
 

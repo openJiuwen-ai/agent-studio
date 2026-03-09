@@ -207,8 +207,9 @@ async def handler(
     except Exception as e:
         log_exception(e)
         safe_message = get_safe_error_message(e)
+        error_code = getattr(e, 'code', -1)
         yield ResponseModel(
-            code=-1,
+            code=error_code,
             message=safe_message,
             data=None
         ).model_dump_json()

@@ -818,7 +818,7 @@ const AgentDebugChat = ({ agentId, mdbId, onDebugInfoChange, enableLongTerm, hid
             onSend={handleSendMessage}
             onCancel={handleCancel}
             disabled={!inputMessage.trim() || isProcessing || modelNotConfigured || modelDisabled || chatBlocked}
-            inputDisabled={modelNotConfigured || modelDisabled || chatBlocked}
+            inputDisabled={modelNotConfigured || modelDisabled || chatBlocked || (agentType === 'react' && isInterrupted && !isSimpleInteraction)}
             onClearChat={async () => {
               // 重置交互状态
               resetInteractionState()

@@ -49,6 +49,15 @@ operator_type_mapping = {
 }
 
 
+def _needs_quoting(condition_value) -> bool:
+    """Check if a constant value needs to be quoted in the expression."""
+    if condition_value.type != "constant":
+        return False
+    if condition_value.schema is None:
+        return False
+    return condition_value.schema.type in ("string", "date-time")
+
+
 def _bool_expression_assemble(left: str, right: str, operator: int) -> str:
     operator_map = {
         OperatorType.EQUAL: lambda left_operand, right_operand: f"{left_operand} == {right_operand}",
@@ -120,11 +129,7 @@ def _switch_conditions_convert(logic: int, conditions: List[BranchCondition]) ->
                 right_expression = ""
                 if condition.right is not None:
                     right_expression = base_value_convert(condition.right)
-                    if (
-                            condition.right.type == "constant"
-                            and condition.right.schema is not None
-                            and condition.right.schema.type == "string"
-                    ):
+                    if _needs_quoting(condition.right):
                         # 转义字符串中的双引号，然后添加外层引号
                         escaped_expression = right_expression.replace('"', '\\"')
                         right_expression = f'"{escaped_expression}"'

@@ -1,4 +1,5 @@
 import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -17,15 +18,46 @@ from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="v1/auth/login")
 
 
-def hash_password(plain_password: str):
-    return hashlib.sha256(plain_password.encode()).hexdigest()
+_PBKDF2_ALGORITHM = "sha256"
+_PBKDF2_ITERATIONS = 10000
+_PBKDF2_SALT_BYTES = 16
+_PBKDF2_PREFIX = "pbkdf2"
+
+
+def _pbkdf2_hash(plain_password: str, salt: bytes, iterations: int) -> str:
+    dk = hashlib.pbkdf2_hmac(
+        _PBKDF2_ALGORITHM,
+        plain_password.encode(),
+        salt,
+        iterations,
+    )
+    return dk.hex()
+
+
+def hash_password(plain_password: str) -> str:
+    salt = secrets.token_bytes(_PBKDF2_SALT_BYTES)
+    hashed = _pbkdf2_hash(plain_password, salt, _PBKDF2_ITERATIONS)
+    return f"{_PBKDF2_PREFIX}${_PBKDF2_ITERATIONS}${salt.hex()}${hashed}"
 
 
 def verify_password(plain_password: str, user_db: UserDBPd) -> bool:
-    # 查找用户
-    if hash_password(plain_password) == user_db.password:
-        return True
-    return False
+    stored = user_db.password or ""
+    if stored.startswith(f"{_PBKDF2_PREFIX}$"):
+        parts = stored.split("$")
+        if len(parts) != 4:
+            return False
+        _, iterations_str, salt_hex, hashed_hex = parts
+        try:
+            iterations = int(iterations_str)
+            if iterations < _PBKDF2_ITERATIONS:
+                return False
+            salt = bytes.fromhex(salt_hex)
+        except (ValueError, TypeError):
+            return False
+        computed = _pbkdf2_hash(plain_password, salt, iterations)
+        return secrets.compare_digest(computed, hashed_hex)
+    # 兼容历史 SHA256 哈希
+    return hashlib.sha256(plain_password.encode()).hexdigest() == stored
 
 
 def authenticate_user(email: str, password: str):

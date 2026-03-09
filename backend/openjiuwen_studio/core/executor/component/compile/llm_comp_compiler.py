@@ -98,6 +98,7 @@ class LLMCompCompiler(BaseCompCompiler):
             },
             output_config=self.llm_config_dl.output_config,
             enable_history=self.llm_config_dl.enable_history,
+            cache_stream=True
         )
 
         return LLMComponent(llm_comp_config)

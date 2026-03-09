@@ -304,21 +304,37 @@ const SystemPromptTab: React.FC<{ agentDetailResponse?: AgentDetailResponse | nu
     setCandidatePrompt('')
     setDisplayOverride('')
 
-    // Find current model's model_id from model list
-    const modelList = agentDetailResponse?.data?.agent_option_info?.model_list || []
-    const currentModelName = saveAgentRequest.model?.model_info?.model_name || ''
-    const matchedModel = modelList.find(model => model.model_name === currentModelName)
-    const modelId = matchedModel?.model_id
+    // 优先从 store 中读取当前模型的 model_id（由 AgentModelSelector 维护）
+    const storeModelId = saveAgentRequest?.model?.model_info?.model_id
 
+    // 如果 store 中没有，则从 agentDetail 的 model_list 中按名称匹配一次作为兜底
+    let modelId = storeModelId
     if (modelId === undefined || modelId === null) {
-      console.warn('⚠️ [SystemPromptTab] No matching model ID found. Current model name:', currentModelName, 'model list:', modelList)
-      setSnackbar({ open: true, severity: 'warning', message: t('messages.modelIdNotFound') })
+      const modelList = agentDetailResponse?.data?.agent_option_info?.model_list || []
+      const currentModelName = saveAgentRequest.model?.model_info?.model_name || ''
+      const matchedModel = modelList.find((model: any) => model.model_name === currentModelName)
+      modelId = matchedModel?.model_id
+
+      if (modelId === undefined || modelId === null) {
+        console.warn(
+          '⚠️ [SystemPromptTab] No matching model ID found for quick optimize.',
+          'Current model name:',
+          currentModelName,
+          'storeModelId:',
+          storeModelId,
+          'model list:',
+          modelList,
+        )
+        setSnackbar({ open: true, severity: 'warning', message: t('messages.modelIdNotFound') })
+      } else {
+        console.log('✅ [SystemPromptTab] Found matching model ID from detail:', modelId, 'model name:', currentModelName)
+      }
     } else {
-      console.log('✅ [SystemPromptTab] Found matching model ID:', modelId, 'model name:', currentModelName)
+      console.log('✅ [SystemPromptTab] Using model_id from store for quick optimize:', storeModelId)
     }
 
-    // Convert AgentModelInfo to QuickOptimizeModelInfo format
-    const modelInfo = buildModelInfoFromAgent(saveAgentRequest.model, modelId)
+    // Convert AgentModelInfo to QuickOptimizeModelInfo format（始终传入最终的 modelId，避免为 0）
+    const modelInfo = buildModelInfoFromAgent(saveAgentRequest.model, modelId ?? undefined)
 
     const quickOptimizeRequest = {
       modelInfo,

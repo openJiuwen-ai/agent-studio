@@ -13,16 +13,6 @@
 
 * 操作系统：Windows10及以上
 
-* 软件（安装方法详见下文）
-  * Git 2.40及以上
-  * Node.js 20.0及以上
-  * npm 9.0及以上
-  * Python 3.11.4及以上
-  * uv 0.5.0及以上
-  * MySQL 8.0及以上
-  * Milvus 2.6.2及以上
-  * PowerShell 5.1及以上（可运行 `$PSVersionTable.PSVersion` 查看）
-
 ## 二、安装方法
 
 ### 方法一：使用一键安装部署脚本
@@ -242,17 +232,30 @@
 ##### 2.2. 生成 AES 密钥（可选）
 
 * 如果不需要对关键字段加密存储，可跳过当前步骤
-* 在源码根目录打开 “PowerShell”，运行以下命令生成密钥：
+* 在源码根目录打开 “Git Bash”，运行以下命令生成密钥：
 
   ```bash
-  cd backend
-  powershell -ExecutionPolicy Bypass -File .\build_AES_master_key.ps1
+  cd scripts
+  bash build_AES_master_key.sh
   ```
 
 * 脚本执行完，会将密钥打屏输出，可按需使用，推荐作为环境变量使用并另行保存。
 
   ```bash
-  $env:SERVER_AES_MASTER_KEY_ENV = .\build_AES_master_key.ps1
+  # 如果你的安装部署在git bash中执行
+  export SERVER_AES_MASTER_KEY_ENV=your_aes_key
+  
+  # 如果你的安装部署在power shell中执行
+  # 方法1：打开power shell设置临时环境变量
+  $env:SERVER_AES_MASTER_KEY_ENV="your_aes_key"
+  # 方法2：添加到 Windows 系统环境变量
+  """
+    1、按 Win + R，输入 sysdm.cpl
+    2、点击‘高级’，然后点击‘环境变量’
+    3、在‘系统变量’或‘用户变量’中添加：
+      变量名：SERVER_AES_MASTER_KEY_ENV
+      变量值：your_aes_key
+  """
   ```
 
 * 注意，AES密钥需要保持稳定，中途更换密钥会导致已加密数据无法解密。
@@ -270,6 +273,8 @@
 * 使用文本编辑器打开 *.env* 文件，请根据实际情况修改文件中以下变量的值（勿覆盖其他变量）：
 
   > **说明**：DB_HOST、DB_PORT 等变量的值可替换为实际数据库信息，DB_USER、DB_PASSWORD 为上文新建的 MySQL 用户与密码。如果密码中包含特殊字符，可参考 [特殊字符转义表](#windows-special-char) 将特殊字符替换为 URL 编码。
+  >
+  > **OBS 配置**：单机/本地部署且不使用对象存储时，OBS 相关项（OBS_BUCKET、OBS_SERVER 等）在 `.env.example` 中已留空，复制为 `.env` 后无需填写；仅在使用对象存储（如分布式部署）时再填写真实值，详见 [分布式部署安装](../分布式部署安装/README.md)。
 
   ```env
    # 配置数据库（样例）

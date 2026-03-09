@@ -50,7 +50,7 @@ const MemoryBaseItemComponent: React.FC<{
             </h4>
             {mb.description && <p className="text-gray-600 text-sm truncate" title={mb.description}>{mb.description}</p>}
             {embeddingModel && (
-              <div className="flex items-center space-x-1 mt-1" title={`Embedding 模型: ${embeddingModel.name} (${embeddingModel.modelId})`}>
+              <div className="flex items-center space-x-1 mt-1" title={`${t('orchestrationPage.memory.memoryBase.embeddingModel')}: ${embeddingModel.name} (${embeddingModel.modelId})`}>
                 <Cpu className="w-3 h-3 text-gray-500" />
                 <span className="text-xs text-gray-500 truncate max-w-[200px]">
                   {embeddingModel.name}
@@ -167,12 +167,12 @@ const MemoryBaseSelector: React.FC<MemoryBaseSelectorProps> = ({ open, onClose, 
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                <span className="ml-2 text-gray-600">加载中...</span>
+                <span className="ml-2 text-gray-600">{t('orchestrationPage.memory.loading')}</span>
               </div>
             ) : error ? (
               <div className="text-center py-12 text-red-500">{error}</div>
             ) : memoryBaseList.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">暂无记忆库</div>
+              <div className="text-center py-12 text-gray-500">{t('orchestrationPage.memory.memoryBase.empty')}</div>
             ) : memoryBaseList.length > 0 && (
               <>
                 <div className="space-y-3">
@@ -180,8 +180,7 @@ const MemoryBaseSelector: React.FC<MemoryBaseSelectorProps> = ({ open, onClose, 
                     <MemoryBaseItemComponent
                       key={mb.mdb_id}
                       mb={mb}
-                      // isSelected={selectedMemoryBases.includes(mb.mdb_id)} // ❌ 旧的判断方式
-                      isSelected={selectedMemoryBase === mb.mdb_id} // ✅ 新的判断方式
+                      isSelected={selectedMemoryBase === mb.mdb_id}
                       spaceId={spaceId}
                       onToggle={() => handleToggle(mb.mdb_id)}
                     />
@@ -209,10 +208,8 @@ const MemoryBaseSelector: React.FC<MemoryBaseSelectorProps> = ({ open, onClose, 
             <Button
               variant="contained"
               onClick={handleConfirm}
-              // disabled={!!embeddingModelError || selectedMemoryBases.length === 0} // ❌ 旧的禁用条件
               disabled={selectedMemoryBase === null} // ✅ 新的禁用条件：未选择任何项
             >
-              {/* 确认 ({selectedMemoryBases.length}) // ❌ 旧的带计数文本 */}
               {t('orchestrationPage.memory.memoryBase.confirm')} {/* ✅ 简单的确认文本 */}
             </Button>
           </div>

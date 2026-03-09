@@ -247,7 +247,7 @@ Complete dependency installation first, then perform source retrieval and instal
 - If you do not need to encrypt critical fields for storage, you can skip this step.
 - Run the following commands to generate a key:
   ```bash
-  cd backend
+  cd scripts
     
   bash build_AES_master_key.sh
   ```
@@ -269,6 +269,8 @@ Complete dependency installation first, then perform source retrieval and instal
 - In the .env file, modify the following variables according to your actual environment (do not overwrite other variables):
 
   > **Tip**: You may replace values such as DB_HOST and DB_PORT with your actual database info. DB_USER and DB_PASSWORD should be the MySQL user and password you created earlier. If the password contains special characters, refer to the [Special Character Escape Table](#linux-special-char) to replace special characters with URL encoding.
+  >
+  > **OBS config**: For standalone/local deployment without object storage, OBS-related variables (OBS_BUCKET, OBS_SERVER, etc.) are left empty in `.env.example`; after copying to `.env` you do not need to fill them. Only fill real values when using object storage (e.g. distributed deployment). See [Distributed Installation](../Distributed%20Installation/README.md).
 
   ```env
    # Database configuration (example)
@@ -321,10 +323,24 @@ Complete dependency installation first, then perform source retrieval and instal
   uv sync
   ```
 
-  > **Note**: If it stalls for more than 20 minutes, press “Ctrl + C”, try changing the url value of [[tool.uv.index]] in “pyproject.toml” in this directory to another available source, then re-run “uv sync”.
+* Execute database version stamp commands to confirm current database version:
+  ```bash
+  # Agent database
+  alembic -n alembic_mysql_agent stamp head
+  alembic -n alembic_mysql_ops stamp head
+
+  # SQLite database
+  alembic -n alembic_sqlite_agent stamp head
+  alembic -n alembic_sqlite_ops stamp head
+  ```
+
+  > Detailed description: The above commands are used to mark that the current database is already the latest version, facilitating subsequent database operations. Need to be executed separately for agent and ops databases. If using MySQL, execute `alembic -n alembic_mysql_agent stamp head` and `alembic -n alembic_mysql_ops stamp head`. For alembic usage methods, refer to [DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md](../../../../backend/DATABASE_MIGRATION_DEVELOPMENT_GUIDE_EN.md)
+
+  > **Note**: If it stalls for more than 20 minutes, press "Ctrl + C", try changing the url value of [[tool.uv.index]] in "pyproject.toml" in this directory to another available source, then re-run "uv sync".
 
   > **Note**: If `uv sync` fails, try: `uv sync --native-tls` to force using the system native TLS library (to resolve HTTPS download compatibility issues)
 
+* Create log directory and start backend service
   ```bash
   mkdir -p logs/run
   source .venv/bin/activate

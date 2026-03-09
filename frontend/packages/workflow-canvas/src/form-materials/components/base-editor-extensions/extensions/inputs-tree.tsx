@@ -13,14 +13,12 @@ import { IInputsValues } from '../../../'
 import { FlowValueUtils } from '../../../'
 import { useEditor, useEditorEvent } from '../../prompt-editor'
 
-// 扁平化的可选项
 interface FlatOption {
   key: string
   label: string
   depth: number
 }
 
-// 树节点数据
 interface TreeNodeData {
   key: string | number
   label: ReactNode
@@ -28,7 +26,6 @@ interface TreeNodeData {
   children?: TreeNodeData[]
 }
 
-// EditorAPI interface from prompt-editor
 interface EditorAPI {
   replaceText?: (_options: { from: number; to: number; text: string }) => void
   $view: {
@@ -62,104 +59,6 @@ interface EditorAPI {
   }
 }
 
-// Simple Mention component
-interface MentionProps {
-  triggerCharacters: string[]
-  onOpenChange: (e: { value: boolean; state: EditorState }) => void
-}
-
-function Mention({ triggerCharacters, onOpenChange }: MentionProps) {
-  const editor = useEditor() as EditorAPI | undefined
-
-  // 使用 React Context 的事件系统
-  const handleEditorChange = useCallback(
-    (update: { docChanged: boolean; selectionSet?: boolean; state: EditorState }) => {
-      // 检查文档变化或选择变化，都应该触发变量选择检查
-      if (!update.docChanged && !update.selectionSet) return
-
-      const view = editor?.$view
-      const state: EditorState = update.state || (view?.state as EditorState | undefined)
-
-      if (!state || !state.selection) {
-        return
-      }
-
-      const selection = state.selection.main || state.selection
-      const pos = selection && selection.head
-
-      if (pos === undefined || pos === null) {
-        return
-      }
-
-      let triggerFound = false
-
-      for (const trigger of triggerCharacters) {
-        const startPos = pos - trigger.length
-        if (startPos >= 0 && state?.doc) {
-          const charsBefore = state.doc.sliceString(startPos, pos)
-
-          if (charsBefore === trigger) {
-            triggerFound = true
-            onOpenChange({ value: true, state })
-            break
-          }
-        }
-      }
-
-      if (!triggerFound) {
-        onOpenChange({ value: false, state })
-      }
-    },
-    [editor, triggerCharacters, onOpenChange],
-  )
-
-  // 使用 React Context 的事件监听
-  useEditorEvent(handleEditorChange)
-
-  // Mention组件不渲染任何内容，只处理逻辑
-  return null
-}
-
-// Simple PositionMirror component
-interface PositionMirrorProps {
-  position: number
-  onChange?: () => void
-}
-
-const PositionMirror = forwardRef<HTMLDivElement, PositionMirrorProps>(function PositionMirror({ position, onChange: _onChange }, ref) {
-  const editor = useEditor() as EditorAPI | undefined
-  const [coords, setCoords] = useState({ left: 0, top: 0 })
-
-  useEffect(() => {
-    if (editor && position >= 0) {
-      const view = editor.getView?.()
-      if (view) {
-        try {
-          // CodeMirror 6 standard API: get coordinates for cursor position
-          const rect = view.coordsAtPos?.(position)
-
-          if (rect) {
-            const editorElement = view.dom?.parentElement
-            if (editorElement) {
-              const editorRect = editorElement.getBoundingClientRect()
-              const newCoords = {
-                left: rect.left - editorRect.left,
-                top: rect.bottom - editorRect.top,
-              }
-              setCoords(newCoords)
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to get cursor coordinates:', error)
-        }
-      }
-    }
-  }, [editor, position])
-
-  return <div ref={ref} style={{ position: 'absolute', left: coords.left, top: coords.top, width: 1, height: 1 }} />
-})
-
-// Helper function to get mention replace range
 interface EditorState {
   doc: {
     toString(): string
@@ -173,7 +72,7 @@ interface EditorState {
   }
 }
 
-function getCurrentMentionReplaceRange(state: EditorState) {
+function getMentionInfo(state: EditorState, triggerCharacters: string[]) {
   if (!state || !state.selection) {
     return null
   }
@@ -185,78 +84,60 @@ function getCurrentMentionReplaceRange(state: EditorState) {
 
   const pos = selection.head
 
-  // Check if state.doc is available and has the expected methods
   if (!state.doc || typeof state.doc.toString !== 'function') {
     return null
   }
 
   const text = state.doc.toString()
 
-  // Check if text is valid
   if (!text || pos < 0 || pos > text.length) {
     return null
   }
 
-  // 从当前位置向前查找触发字符，同时检查是否有自动补全的 }
-  let from = pos
-  let to = pos
-  let triggerLength = 0
+  // 从光标位置向前搜索触发符
+  let triggerPos = -1
+  let foundTrigger: string | null = null
 
-  // 检查 {{ 和 { 触发符
-  // 获取各个位置的字符片段
-  const sliceMinus2 = text.slice(pos - 2, pos)
-  const sliceMinus1 = text.slice(pos - 1, pos)
-  const sliceCurrent = text.slice(pos, pos + 1)
-
-  if (pos >= 2 && text.slice(pos - 2, pos) === '{{') {
-    from = pos - 2
-    triggerLength = 2
-  } else if (pos >= 1 && text.slice(pos - 1, pos) === '{') {
-    from = pos - 1
-    triggerLength = 1
-
-    // 检查是否后面有自动补全的 }
-    if (text.length > pos && text.slice(pos, pos + 1) === '}') {
-      // 如果有自动补全的 }，将其也包含在替换范围内
-      to = pos + 1
+  // 优先检查较长触发符
+  for (const trigger of triggerCharacters.sort((a, b) => b.length - a.length)) {
+    const idx = text.lastIndexOf(trigger, pos - trigger.length)
+    if (idx !== -1 && idx + trigger.length <= pos) {
+      // 检查触发符后到光标之间是否有结束符
+      const textAfterTrigger = text.slice(idx + trigger.length, pos)
+      if (!/[}\s]/.test(textAfterTrigger)) {
+        triggerPos = idx
+        foundTrigger = trigger
+        break
+      }
     }
-  } else if (pos >= 1 && text.slice(pos - 1, pos) === '@') {
-    from = pos - 1
-    triggerLength = 1
-  } else if (pos >= 1 && sliceMinus1 === '{' && sliceCurrent === '}') {
-    // 新增支持：输入法输入{}后光标在{和}中间的情况
-    from = pos - 1
-    to = pos + 1
-    triggerLength = 1
-  } else if (pos >= 2 && sliceMinus2 === '{}' && sliceCurrent !== '}') {
-    // 新增支持：输入法输入{}后光标在}后面的情况
-    from = pos - 2
-    to = pos
-    triggerLength = 2
-  } else {
+  }
+
+  if (!foundTrigger || triggerPos === -1) {
     return null
   }
 
-  return { from, to, triggerLength }
+  let from = triggerPos
+  let to = pos
+  const filterText = text.slice(triggerPos + foundTrigger.length, pos)
+
+  // 检查光标后是否有自动补全的 }
+  const charAfterCursor = text.slice(pos, pos + 1)
+  if (charAfterCursor === '}' && foundTrigger === '{') {
+    to = pos + 1
+  }
+
+  return { from, to, triggerLength: foundTrigger.length, filterText, trigger: foundTrigger }
 }
 
 type VariableField = BaseVariableField<{ icon?: string | JSX.Element; title?: string }>
 
-interface InputsPickerProps {
-  inputsValues: IInputsValues
-  onSelect: (v: string) => void
-}
-
-// 将树结构扁平化为可选项列表
 function flattenTreeData(node: TreeNodeData, depth = 0): FlatOption[] {
   const result: FlatOption[] = []
   const key = node.key as string
   const label = node.label as string
 
-  // 添加当前节点
   result.push({ key, label, depth })
 
-  // 递归处理子节点
   if (node.children && node.children.length > 0) {
     for (const child of node.children) {
       result.push(...flattenTreeData(child, depth + 1))
@@ -266,9 +147,17 @@ function flattenTreeData(node: TreeNodeData, depth = 0): FlatOption[] {
   return result
 }
 
-export function InputsPicker({ inputsValues, onSelect }: InputsPickerProps) {
+interface InputsPickerProps {
+  inputsValues: IInputsValues
+  onSelect: (v: string) => void
+  filterText: string
+  selectedIndex: number
+  onSelectedIndexChange: (index: number) => void
+  onFilteredOptionsChange?: (options: FlatOption[]) => void
+}
+
+export function InputsPicker({ inputsValues, onSelect, filterText, selectedIndex, onSelectedIndexChange, onFilteredOptionsChange }: InputsPickerProps) {
   const scope = useCurrentScope()
-  const [selectedIndex, setSelectedIndex] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const getArrayDrilldown = (type: ArrayType, depth = 1): { type: BaseType; depth: number } => {
@@ -345,15 +234,28 @@ export function InputsPicker({ inputsValues, onSelect }: InputsPickerProps) {
     [],
   )
 
-  // 扁平化选项
-  const flatOptions: FlatOption[] = useMemo(() => treeData.flatMap(node => flattenTreeData(node)), [treeData])
+  const allOptions: FlatOption[] = useMemo(() => treeData.flatMap(node => flattenTreeData(node)), [treeData])
 
-  // 重置选中索引当选项变化时
+  // 根据输入过滤选项（前缀匹配）
+  const filteredOptions: FlatOption[] = useMemo(() => {
+    if (!filterText) {
+      return allOptions
+    }
+    const lowerFilter = filterText.toLowerCase()
+    return allOptions.filter(option => {
+      const lowerKey = option.key.toLowerCase()
+      const lowerLabel = option.label.toLowerCase()
+      return lowerKey.startsWith(lowerFilter) || lowerLabel.startsWith(lowerFilter)
+    })
+  }, [allOptions, filterText])
+
   useEffect(() => {
-    setSelectedIndex(0)
-  }, [flatOptions])
+    if (selectedIndex >= filteredOptions.length) {
+      onSelectedIndexChange(0)
+    }
+    onFilteredOptionsChange?.(filteredOptions)
+  }, [filteredOptions, selectedIndex, onSelectedIndexChange, onFilteredOptionsChange])
 
-  // 滚动到选中项
   useEffect(() => {
     if (containerRef.current) {
       const selectedElement = containerRef.current.children[selectedIndex] as HTMLElement
@@ -363,44 +265,25 @@ export function InputsPicker({ inputsValues, onSelect }: InputsPickerProps) {
     }
   }, [selectedIndex])
 
-  // 键盘事件处理
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setSelectedIndex(prev => (prev + 1) % flatOptions.length)
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setSelectedIndex(prev => (prev - 1 + flatOptions.length) % flatOptions.length)
-      } else if (e.key === 'Enter') {
-        e.preventDefault()
-        if (flatOptions[selectedIndex]) {
-          onSelect(flatOptions[selectedIndex].key)
-        }
-      }
-    },
-    [flatOptions, selectedIndex, onSelect],
-  )
-
-  // 暴露键盘处理方法给父组件
-  useEffect(() => {
-    if (containerRef.current) {
-      const element = containerRef.current
-      element.focus()
-    }
-  }, [])
+  if (filteredOptions.length === 0) {
+    return (
+      <div style={{ padding: 8, color: 'var(--semi-color-text-2)' }}>
+        无匹配变量
+      </div>
+    )
+  }
 
   return (
-    <div ref={containerRef} tabIndex={0} style={{ width: '100%', outline: 'none' }} onKeyDown={handleKeyDown}>
-      {flatOptions.map((option, index) => (
+    <div ref={containerRef} style={{ width: '100%', outline: 'none' }}>
+      {filteredOptions.map((option, index) => (
         <div
           key={option.key}
           onClick={() => onSelect(option.key)}
-          onMouseEnter={() => setSelectedIndex(index)}
+          onMouseEnter={() => onSelectedIndexChange(index)}
           style={{
             padding: `8px ${8 + option.depth * 16}px`,
             cursor: 'pointer',
-            backgroundColor: index === selectedIndex ? 'var(--semi-color-fill-0)' : 'transparent',
+            backgroundColor: index === selectedIndex ? 'var(--semi-color-fill-1)' : 'transparent',
             borderRadius: 4,
             margin: '2px 0',
           }}
@@ -412,6 +295,43 @@ export function InputsPicker({ inputsValues, onSelect }: InputsPickerProps) {
   )
 }
 
+interface PositionMirrorProps {
+  position: number
+  onChange?: () => void
+}
+
+const PositionMirror = forwardRef<HTMLDivElement, PositionMirrorProps>(function PositionMirror({ position, onChange: _onChange }, ref) {
+  const editor = useEditor() as EditorAPI | undefined
+  const [coords, setCoords] = useState({ left: 0, top: 0 })
+
+  useEffect(() => {
+    if (editor && position >= 0) {
+      const view = editor.getView?.()
+      if (view) {
+        try {
+          const rect = view.coordsAtPos?.(position)
+
+          if (rect) {
+            const editorElement = view.dom?.parentElement
+            if (editorElement) {
+              const editorRect = editorElement.getBoundingClientRect()
+              const newCoords = {
+                left: rect.left - editorRect.left,
+                top: rect.bottom - editorRect.top,
+              }
+              setCoords(newCoords)
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to get cursor coordinates:', error)
+        }
+      }
+    }
+  }, [editor, position])
+
+  return <div ref={ref} style={{ position: 'absolute', left: coords.left, top: coords.top, width: 1, height: 1 }} />
+})
+
 const DEFAULT_TRIGGER_CHARACTERS = ['{', '{}', '@']
 
 export function InputsTree({ inputsValues, triggerCharacters = DEFAULT_TRIGGER_CHARACTERS }: { inputsValues: IInputsValues; triggerCharacters?: string[] }) {
@@ -419,10 +339,12 @@ export function InputsTree({ inputsValues, triggerCharacters = DEFAULT_TRIGGER_C
   const [visible, setVisible] = useState(false)
   const [position, setPosition] = useState(-1)
   const [savedRange, setSavedRange] = useState<{ from: number; to: number } | null>(null)
+  const [filterText, setFilterText] = useState('')
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [filteredOptions, setFilteredOptions] = useState<FlatOption[]>([])
   const editor = useEditor() as EditorAPI | undefined
-  const pickerRef = useRef<HTMLDivElement>(null)
 
-  function insert(variablePath: string) {
+  const insert = useCallback((variablePath: string) => {
     if (!editor || !savedRange) {
       return
     }
@@ -430,15 +352,11 @@ export function InputsTree({ inputsValues, triggerCharacters = DEFAULT_TRIGGER_C
     const { from, to } = savedRange
     const insertText = '{{' + variablePath + '}}'
 
-    // 先将焦点返回到编辑器
     const view = editor.getView?.()
     if (!view) {
       return
     }
 
-    view.focus?.()
-
-    // 直接使用 view.dispatch 执行插入操作
     view.dispatch?.({
       changes: {
         from,
@@ -453,72 +371,112 @@ export function InputsTree({ inputsValues, triggerCharacters = DEFAULT_TRIGGER_C
 
     setVisible(false)
     setSavedRange(null)
-  }
+    setFilterText('')
+    setSelectedIndex(0)
+  }, [editor, savedRange])
 
-  function handleOpenChange(e: { value: boolean; state: EditorState }) {
-    if (e.state && e.state.selection) {
-      const selection = e.state.selection.main || e.state.selection
-      if (selection && selection.head !== undefined) {
-        setPosition(selection.head)
-        setPosKey(String(Math.random()))
+  const handleEditorChange = useCallback(
+    (update: { docChanged: boolean; selectionSet?: boolean; state: EditorState }) => {
+      const view = editor?.$view
+      const state: EditorState = update.state || (view?.state as EditorState | undefined)
 
-        if (e.value && editor) {
-          const range = getCurrentMentionReplaceRange(e.state)
-          if (range) {
-            setSavedRange({ from: range.from, to: range.to })
-          }
-        }
+      if (!state || !state.selection) {
+        return
       }
-    }
-    setVisible(e.value)
-  }
 
-  // 弹窗打开时聚焦到选择器
+      const selection = state.selection.main || state.selection
+      const pos = selection && selection.head
+
+      if (pos === undefined || pos === null) {
+        return
+      }
+
+      const mentionInfo = getMentionInfo(state, triggerCharacters)
+
+      if (mentionInfo) {
+        setPosition(pos)
+        setPosKey(String(Math.random()))
+        setSavedRange({ from: mentionInfo.from, to: mentionInfo.to })
+        setFilterText(mentionInfo.filterText)
+        setVisible(true)
+      } else {
+        setVisible(false)
+        setSavedRange(null)
+        setFilterText('')
+        setSelectedIndex(0)
+      }
+    },
+    [editor, triggerCharacters],
+  )
+
+  useEditorEvent(handleEditorChange)
+
   useEffect(() => {
-    if (visible && pickerRef.current) {
-      const timer = setTimeout(() => {
-        pickerRef.current?.focus()
-      }, 50)
-      return () => clearTimeout(timer)
-    }
-  }, [visible])
+    if (!visible) return
 
-  // 全局键盘事件处理 - Escape 关闭弹窗
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape') {
+    const view = editor?.getView?.()
+    if (!view?.dom) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const count = Math.max(filteredOptions.length, 1)
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        e.stopPropagation()
+        setSelectedIndex(prev => (prev + 1) % count)
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        e.stopPropagation()
+        setSelectedIndex(prev => (prev - 1 + count) % count)
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        e.stopPropagation()
+        if (filteredOptions[selectedIndex]) {
+          insert(filteredOptions[selectedIndex].key)
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
         e.stopPropagation()
         setVisible(false)
         setSavedRange(null)
-        const view = editor?.getView?.()
-        if (view?.focus) {
-          view.focus()
-        }
+        setFilterText('')
+        setSelectedIndex(0)
       }
-    },
-    [editor],
-  )
+    }
+
+    const editorDom = view.dom as HTMLElement
+    editorDom.addEventListener('keydown', handleKeyDown, true)
+
+    return () => {
+      editorDom.removeEventListener('keydown', handleKeyDown, true)
+    }
+  }, [visible, editor, selectedIndex, filteredOptions, insert])
 
   return (
     <>
-      <Mention triggerCharacters={triggerCharacters} onOpenChange={handleOpenChange} />
-
       <Popover
         visible={visible}
         trigger="custom"
         position="bottomLeft"
         rePosKey={posKey}
         clickToHide={false}
+        autoAdjustOverflow={false}
+        spacing={4}
         content={
           <div
-            ref={pickerRef}
+            data-inputs-picker-content
             style={{ width: 300, maxHeight: 300, overflowY: 'auto' }}
             onClick={e => e.stopPropagation()}
             onMouseDown={e => e.stopPropagation()}
-            onKeyDown={handleKeyDown}
-            tabIndex={-1}
           >
-            <InputsPicker inputsValues={inputsValues} onSelect={insert} />
+            <InputsPicker
+              inputsValues={inputsValues}
+              onSelect={insert}
+              filterText={filterText}
+              selectedIndex={selectedIndex}
+              onSelectedIndexChange={setSelectedIndex}
+              onFilteredOptionsChange={setFilteredOptions}
+            />
           </div>
         }
       >

@@ -296,7 +296,7 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
       const response = await deleteToolApi.mutateAsync(deleteRequest)
 
       if (response.code === 200) {
-        showSuccess(t('plugins.pluginConfig.toolDeletedSuccess', { name: tool.name || t('plugins.pluginConfig.unnamedTool') }))
+        showSuccess(t('plugins.pluginConfig.toolDeletedSuccess', { name: toolToDelete.name || t('plugins.pluginConfig.unnamedTool') }))
         // Refresh the tool list after successful deletion (only in edit mode)
         if (configTabValue === 'advanced' && !isReadOnly) {
           setTimeout(async () => {
@@ -381,8 +381,8 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="w-16 h-16 rounded-lg flex items-center justify-center text-3xl bg-gray-100">{plugin.icon}</div>
-            <div>
+            <div className="w-16 h-16 rounded-lg flex items-center justify-center text-3xl bg-gray-100 flex-shrink-0">{plugin.icon}</div>
+            <div className="min-w-0 flex-1">
               {isEditingName ? (
                 <div className="flex items-center space-x-2">
                   <TextField
@@ -407,12 +407,12 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
                   onClick={handleEditName}
                   title={t('plugins.actions.editPluginName')}
                 >
-                  <Typography variant="h4" className="font-bold text-gray-900 hover:text-blue-600">
+                  <Typography variant="h4" className="font-bold text-gray-900 hover:text-blue-600 truncate" title={configForm.name || plugin.name}>
                     {configForm.name || plugin.name}
                   </Typography>
                 </div>
               )}
-              <Typography variant="body1" color="text.secondary">
+              <Typography variant="body1" color="text.secondary" className="truncate" title={plugin.description}>
                 {plugin.description}
               </Typography>
             </div>
@@ -427,12 +427,14 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
               <Info className="w-5 h-5 mr-2 text-blue-600" />
               {t('plugins.basicInfoLabel')}
             </Typography>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="min-w-0">
                 <Typography variant="subtitle2" color="text.secondary">
                   {t('plugins.basicInfo.name', '插件名称')}
                 </Typography>
-                <Typography variant="body1">{plugin.name}</Typography>
+                <Typography variant="body1" className="truncate" title={plugin.name}>
+                  {plugin.name}
+                </Typography>
               </div>
               <div>
                 <Typography variant="subtitle2" className="font-medium text-gray-700 mb-2">
@@ -462,7 +464,9 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
               <div className="space-y-6">
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-bold text-gray-800 mb-3">{t('plugins.pluginConfig.pluginDescription')}</label>
+                    <label className="block text-sm font-bold text-gray-800 mb-3">
+                      {t('plugins.pluginConfig.pluginDescription')} <span className="text-red-500">*</span>
+                    </label>
                     <TextField
                       fullWidth
                       multiline
@@ -473,6 +477,13 @@ const CodePluginConfiguration: React.FC<CodePluginConfigurationProps> = ({
                       helperText={`${t('plugins.pluginConfig.descriptionHelper')} (${configForm.desc.length}/258)`}
                       inputProps={{ maxLength: 258 }}
                       disabled={isReadOnly}
+                      required
+                      error={!configForm.desc.trim()}
+                      FormHelperTextProps={{
+                        sx: {
+                          color: !configForm.desc.trim() ? 'error.main' : 'text.primary'
+                        }
+                      }}
                     />
                   </div>
                   <div>

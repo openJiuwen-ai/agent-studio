@@ -274,7 +274,8 @@ def knowledges_convert(space_id: str, knowledges: List[str]):
 
 def knowledges_retrieval_config_convert(configs: dict[str, Any]):
     if "retrieval_config" not in configs.keys():
-        return None
+        logger.warning(f"Key retrieval_config is not in the configs JSON: {configs}")
+        return KBRetrievalConfig()
     retrieval_config = configs["retrieval_config"]
     logger.warning(f"knowledges_retrieval_config_convert retrieval_config: {retrieval_config}")
 

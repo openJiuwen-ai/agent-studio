@@ -16,6 +16,7 @@
       "save": "保存",
       "cancel": "取消",
       "confirm": "确认",
+      "deleting": "删除中...",
       "delete": "删除",
       "edit": "编辑",
       "view": "查看",
@@ -147,7 +148,13 @@
       "publishNotImplemented": "发布功能暂未实现",
       "publishFailed": "发布失败，请重试",
       "enterVersionNumber": "请输入版本号",
-      "executionFailed": "抱歉，处理您的请求时遇到了问题。请稍后再试"
+      "executionFailed": "抱歉，处理您的请求时遇到了问题。请稍后再试",
+      "sse": {
+        "timeoutError": {
+          "title": "连接超时",
+          "content": "由于长时间未接收到数据，请求已超时。请检查网络连接后重试。"
+        }
+      }
     },
     "pagination": {
       "previous": "上一页",
@@ -358,11 +365,12 @@
       "logInNow": "立即登录",
       "signUp": "注册账号",
       "loginSuccess": "登录成功",
-      "loginFailed": "登录失败，请检查用户名和密码",
+      "loginFailed": "登录失败",
       "invalidCredentials": "用户名或密码错误",
       "invalidEmailFormat": "请输入正确的邮箱",
+      "invalidEmailLength": "邮箱前缀至少需要3个字符",
       "passwordTooShort": "密码长度至少需要6位",
-      "networkError": "网络错误，请稍后重试",
+      "networkError": "网络请求失败，请检查网络连接",
       "registerLink": "还没有账号?",
       "remainingAttempts": "剩余登录次数{{count}}",
       "lockedMessage": "登录失败次数过多,账号已锁定{{time}}后可重试"
@@ -393,6 +401,10 @@
       "usernamePlaceholder": "请输入用户空间名称（邮箱格式）",
       "newPassword": "新密码",
       "newPasswordPlaceholder": "请输入新密码",
+      "confirmPassword": "确认新密码",
+      "confirmPasswordPlaceholder": "请再次输入新密码",
+      "confirmPasswordRequired": "请确认新密码",
+      "passwordsNotMatch": "两次输入的密码不一致",
       "verificationCode": "验证码",
       "verificationCodePlaceholder": "请输入验证码",
       "getVerificationCode": "获取验证码",
@@ -678,7 +690,7 @@
       "featureNotImplemented": "该功能还未实现",
       "configError": "配置错误",
       "selectKnowledgeBase": "请先在配置中选择本地知识库",
-      "selectSearchEngine": "请先在配置中选择搜索引擎",
+      "selectSearchEngine": "请先在配置中选择联网增强引擎",
       "localSearch": "本地搜索",
       "webSearch": "网络搜索",
       "comprehensiveSearch": "综合搜索",
@@ -702,7 +714,9 @@
       "forceStop": "强制中断",
       "generating": "正在生成中...",
       "deepSearchServiceUnavailable": "DeepSearch 服务暂不可用，请前往",
-      "deepSearchConfigRetry": "，参考文档进行配置后重试"
+      "deepSearchConfigRetry": "，参考文档进行配置后重试",
+      "checkingDeepsearch": "正在检查 DeepSearch 服务状态...",
+      "deepsearchServiceDown": "DeepSearch 服务暂时不可用"
     },
     "picker": {
       "selectAgent": "选择智能体",
@@ -826,7 +840,7 @@
         "search": "搜索配置",
         "template": "模板配置",
         "generalDesc": "交互、规划等基础设置",
-        "searchDesc": "搜索引擎与结果设置",
+        "searchDesc": "联网增强引擎与结果设置",
         "templateDesc": "报告模板管理",
         "needsConfig": "需配置"
       },
@@ -845,15 +859,15 @@
         "mode": "搜索方式",
         "local": "本地搜索",
         "localDesc": "仅使用本地知识库",
-        "web": "网络搜索",
-        "webDesc": "使用网络搜索引擎",
+        "web": "联网增强",
+        "webDesc": "使用联网增强引擎",
         "all": "综合搜索",
         "allDesc": "结合本地和网络",
         "source": "搜索来源",
-        "webEngine": "网络搜索引擎",
+        "webEngine": "联网增强引擎",
         "configure": "配置",
-        "noEngine": "暂无搜索引擎配置",
-        "clickToConfig": "点击上方\"配置\"按钮添加搜索引擎",
+        "noEngine": "暂无联网增强引擎配置",
+        "clickToConfig": "点击上方\"配置\"按钮添加联网增强引擎",
         "localKB": "本地知识库",
         "noKB": "暂无知识库配置",
         "clickToAddKB": "点击上方\"添加知识库\"按钮选择"
@@ -861,26 +875,26 @@
       "validation": {
         "chapterCountRange": "规划章节数量必须在 1-10 之间",
         "allModeRequires": "综合搜索模式下必须配置：{{items}}",
-        "webModeRequires": "网络搜索模式下必须选择一个搜索引擎",
+        "webModeRequires": "联网增强模式下必须选择一个联网增强引擎",
         "localModeRequires": "本地搜索模式下必须选择至少一个知识库",
-        "webResultCountRange": "网络搜索结果数量必须在 1-10 之间",
+        "webResultCountRange": "联网增强结果数量必须在 1-10 之间",
         "localResultCountRange": "本地搜索结果数量必须在 1-10 之间"
       },
       "engine": {
-        "select": "选择搜索引擎",
-        "noEngine": "暂无搜索引擎配置",
+        "select": "选择联网增强引擎",
+        "noEngine": "暂无联网增强引擎配置",
         "create": "+ 创建新引擎",
         "createNew": "创建新引擎",
-        "config": "配置搜索引擎",
-        "edit": "修改搜索引擎",
-        "delete": "删除搜索引擎",
-        "deleteConfirm": "确定要删除搜索引擎\"{{name}}\"吗？此操作无法撤销。",
-        "title": "搜索引擎",
+        "config": "配置联网增强引擎",
+        "edit": "修改联网增强引擎",
+        "delete": "删除联网增强引擎",
+        "deleteConfirm": "确定要删除联网增强引擎\"{{name}}\"吗？此操作无法撤销。",
+        "title": "联网增强引擎",
         "selectType": "请选择一种类型",
         "type": "引擎类型",
-        "selectPreset": "请从上方选择搜索引擎",
+        "selectPreset": "请从上方选择联网增强引擎",
         "apiKey": "API Key",
-        "apiKeyPlaceholder": "输入搜索引擎 API Key",
+        "apiKeyPlaceholder": "输入联网增强引擎 API Key",
         "searchUrl": "搜索URL",
         "searchUrlPlaceholder": "https://api.example.com",
         "required": "必填",
@@ -888,7 +902,7 @@
         "cancel": "取消",
         "confirm": "确认",
         "error": {
-          "selectType": "请选择一个搜索引擎类型",
+          "selectType": "请选择一个联网增强引擎类型",
           "invalidName": "引擎名称必须是预设值之一",
           "fillRequired": "请填写 API Key 和搜索URL"
         },
@@ -914,8 +928,8 @@
           }
         },
         "test": {
-          "title": "测试搜索引擎",
-          "engineLabel": "测试引擎:",
+          "title": "测试联网增强引擎",
+          "engineLabel": "测试联网增强引擎:",
           "queryLabel": "测试查询",
           "queryPlaceholder": "输入要搜索的内容",
           "quickQuestions": {
@@ -987,7 +1001,9 @@
         "templateDesc": "模板描述",
         "emptyTitle": "暂无可用模板",
         "emptyDescription": "上传模板后即可使用",
-        "uploadButton": "上传模板"
+        "uploadButton": "上传模板",
+        "invalidFileType": "不支持的文件类型，请上传 {{formats}} 格式的文件",
+        "fileTypeChanged": "已切换模式，原文件类型不再支持，请重新选择文件"
       }
     },
     "time": {
@@ -1011,9 +1027,9 @@
       "unableToGetSpaceId": "无法获取用户空间ID，请重新登录",
       "unableToGetAuthToken": "无法获取认证信息，请重新登录",
       "reportRequestFailed": "报告转换请求失败，请稍后重试",
-      "fetchEnginesFailed": "获取搜索引擎列表失败",
-      "createEngineFailed": "创建搜索引擎失败",
-      "deleteEngineFailed": "删除搜索引擎失败",
+      "fetchEnginesFailed": "获取联网增强引擎列表失败",
+      "createEngineFailed": "创建联网增强引擎失败",
+      "deleteEngineFailed": "删除联网增强引擎失败",
       "fetchTemplatesFailed": "获取模板列表失败",
       "uploadTemplateFailed": "上传模板失败",
       "deleteTemplateFailed": "删除模板失败",
@@ -1034,7 +1050,7 @@
       "link": "链接",
       "collapse": "收起",
       "expand": "展开 {{count}} 项",
-      "statusUnknown": "状态未知",
+      "statusUnknown": "准完成",
       "collapseContent": "折叠内容",
       "expandContent": "展开内容",
       "status": {
@@ -1043,7 +1059,7 @@
         "completed": "报告已生成",
         "failed": "生成失败",
         "cancelled": "已手动结束",
-        "unknown": "状态未知",
+        "unknown": "准完成",
         "default": "未知状态"
       },
       "loading": "加载中...",
@@ -1668,6 +1684,7 @@
         "originalPrompt": "原始提示词",
         "optimizedPrompt": "优化后的提示词",
         "evaluationDetail": "评测详情",
+        "optimizationDetail": "优化详情",
         "comparison": "对比",
         "viewDiff": "查看差异",
         "applyOptimization": "应用优化",
@@ -2599,7 +2616,9 @@
       "getVersionInfoFailed": "获取插件版本信息失败",
       "pluginDataNotLoaded": "插件数据未加载，请刷新页面",
       "saveFailed": "保存失败",
-      "savePluginVersionConfigFailed": "保存插件版本配置失败"
+      "savePluginVersionConfigFailed": "保存插件版本配置失败",
+      "pluginNameRequired": "请输入插件名称",
+      "pluginDescRequired": "请输入插件描述"
     },
     "loading": "加载中",
     "loadingDescription": "正在加载插件列表...",
@@ -2607,6 +2626,7 @@
     "loadFailedDescription": "加载插件列表失败，请稍后重试",
     "noMatching": "未找到匹配的插件",
     "noMatchingDescription": "没有找到符合条件的插件，请尝试调整筛选条件",
+    "noDescription": "暂无描述",
     "categories": {
       "tools": "工具",
       "uncategorized": "未分类",
@@ -2652,7 +2672,7 @@
         "name": "网页搜索",
         "description": "提供网页搜索、信息检索、内容索引等功能",
         "category": "搜索服务",
-        "author": "搜索引擎",
+        "author": "联网增强引擎",
         "tag1": "搜索",
         "tag2": "网页",
         "tag3": "信息",
@@ -4713,5 +4733,19 @@
          } 
        } 
      }
+  },
+  "privacy": {
+    "title": "隐私声明",
+    "close": "关闭",
+    "link": "隐私声明",
+    "notice": {
+      "title": "重要提示",
+      "content": "本平台仅供体验使用，请勿上传真实个人隐私数据。平台会定期清理数据，请善用导出功能及时备份重要数据。",
+      "acknowledge": "我已了解"
+    },
+    "policy": {
+      "paragraph1": "本平台<bold>仅用于用户体验使用</bold>，请勿上传、录入或提交真实个人隐私信息（包括但不限于姓名、身份证号、手机号、银行卡信息、住址、社交账号、敏感业务数据等）。",
+      "paragraph2": "平台将对相关使用数据进行<bold>定期清理</bold>，请您在使用过程中<bold>善用系统导出功能，及时备份、妥善保存重要数据</bold>，避免因数据清理、服务调整等原因造成数据丢失或无法恢复。"
+    }
   }
 }

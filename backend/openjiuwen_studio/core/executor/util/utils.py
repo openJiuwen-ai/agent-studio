@@ -155,7 +155,7 @@ def get_trace_workflow_output(data):
     return outputs_value
 
 
-def get_trace_workflow_input(data):
+def get_trace_workflow_input(data, output_value=None):
     """
     获取trace_workflow中streamInputs或inputs
     """
@@ -183,6 +183,10 @@ def get_trace_workflow_input(data):
             combined_text = ''.join(value_list)
             inputs_value[key] = combined_text
 
+    # 特殊处理：对于 UserInputComponent，如果 inputs 为空，则从 outputs 中提取
+    if not inputs_value and output_value and data.component_type == "UserInputComponent":
+        inputs_value = output_value.copy() if isinstance(output_value, dict) else {}
+
     if not inputs_value:
         inputs_value=None
 
@@ -203,8 +207,8 @@ def result_convert(chunk: Any, business_type: str, mapping: Optional[Dict[str, s
         if EMPTY_NODE_ID_PREFIX in data.invoke_id:
             return None, None, None
 
-        input_value = get_trace_workflow_input(data)
         output_value = get_trace_workflow_output(data)
+        input_value = get_trace_workflow_input(data, output_value)
         data.inputs = input_value
         data.outputs = output_value
 
@@ -312,6 +316,9 @@ def result_convert(chunk: Any, business_type: str, mapping: Optional[Dict[str, s
                     answer_value = json.dumps(answer_value, ensure_ascii=False)
                 except (TypeError, ValueError):
                     answer_value = str(answer_value)
+            # 仅对最终答案做后处理
+            if business_type == "AGENT" and answer_value and answer_value.lstrip().startswith("#"):
+                answer_value = "\n\n" + answer_value
 
             transformed_payload = {
                 "output": answer_value,
@@ -346,7 +353,18 @@ def result_convert(chunk: Any, business_type: str, mapping: Optional[Dict[str, s
         response_type = ExecuteResponseType.Workflow
         if business_type == "AGENT":
             response_type = ExecuteResponseType.Agent
-
+        # 仅在被改为 Agent 模式下为最终答案添加前缀，解决工作流和agent输出间衔接问题
+        # 由于可能存在多个 end node stream（如循环输出），不能仅靠 index==0 判断
+        is_agent_first_chunk = (business_type == "AGENT" and chunk.index == 0)
+        is_valid_dict = (
+                isinstance(transformed_payload, dict) and "output" in transformed_payload
+        )
+        if is_agent_first_chunk and is_valid_dict:
+            output = transformed_payload["output"]
+            if not isinstance(output, str):  # 可选安全检查
+                output = str(output)
+            if not output.startswith("\n\n"):
+                transformed_payload["output"] = "\n\n" + output
         return ExecuteResponse(type=response_type, payload=transformed_payload).model_dump(), None, None
 
     # Agent workflow run result
@@ -379,6 +397,9 @@ def result_convert(chunk: Any, business_type: str, mapping: Optional[Dict[str, s
                     answer_value = "\n".join(formatted_items)
                 else:
                     answer_value = str(response_data)
+            # 仅对最终答案做后处理
+            if answer_value and answer_value.lstrip().startswith("#"):
+                answer_value = "\n\n" + answer_value
 
             if answer_value:
                 agent_payload = {"output": answer_value, "result_type": "answer"}
@@ -387,6 +408,14 @@ def result_convert(chunk: Any, business_type: str, mapping: Optional[Dict[str, s
 
     # Agent Token 粒度输出处理
     if isinstance(chunk, OutputSchema) and chunk.type == "llm_output":
+        # 仅在一二级标题等特殊字符时添加换行，虽然会部分增大行间距，但可以解决工作流和agent输出间衔接问题
+        sp_title = ["#", "##"]
+        is_agent_first_chunk = (business_type == "AGENT")
+        is_sp_key = (
+                isinstance(chunk.payload, dict) and chunk.payload.get("output") in sp_title
+        )
+        if is_agent_first_chunk and is_sp_key:
+            chunk.payload["output"] = "\n\n" + chunk.payload.get("output")
         return ExecuteResponse(type=ExecuteResponseType.Agent, payload=chunk.payload).model_dump(), None, None
 
     # Interaction

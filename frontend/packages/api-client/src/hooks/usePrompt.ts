@@ -87,12 +87,13 @@ export const useEditPromptBasicInfo = () => {
   const queryClient = useQueryClient()
 
   return useMutation(
-    ({ promptId, data }: { promptId: string; data: { prompt_name: string; prompt_description: string } }) => PromptService.editPromptBasicInfo(promptId, data),
+    ({ promptId, workspaceId, data }: { promptId: string; workspaceId: string; data: { prompt_name: string; prompt_description: string } }) =>
+      PromptService.editPromptBasicInfo(promptId, workspaceId, data),
     {
       onSuccess: (response: any, variables) => {
         if (response.code === 0) {
           // 编辑成功后，使提示词列表和详情缓存失效
-          queryClient.invalidateQueries(['prompts', 'list'])
+          queryClient.invalidateQueries(['prompts', 'list', variables.workspaceId])
           queryClient.invalidateQueries(['prompts', 'detail', variables.promptId])
           console.log('提示词基本信息编辑成功')
         }

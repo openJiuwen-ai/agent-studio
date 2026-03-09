@@ -1,0 +1,19 @@
+apiVersion: v2
+name: studio
+description: Umbrella chart for the openJiuwen studio system
+type: application
+version: 0.0.1
+
+dependencies:
+  - name: backend
+    version: 0.0.1
+    repository: "file://charts/backend"
+  - name: frontend
+    version: 0.0.1
+    repository: "file://charts/frontend"
+  - name: sandbox-gateway
+    version: 0.0.1
+    repository: "file://charts/sandbox-gateway"
+  - name: milvus
+    version: 5.0.13
+    repository: "https://zilliztech.github.io/milvus-helm/"

@@ -136,3 +136,32 @@ EOF
     fi
 }
 
+# Check if container exists and is in running status
+check_container_running() {
+    local container_name="$1"
+
+    # Check if container exists
+    if ! docker ps -a --format "{{.Names}}" | grep -qw "$container_name"; then
+        error "Container $container_name does not exist"
+    fi
+
+    # Check if container is running
+    local status=$(docker inspect --format "{{.State.Status}}" "$container_name" 2>/dev/null)
+    if [[ "$status" != "running" ]]; then
+        error "Container $container_name is not running. Current status: $status"
+    fi
+    success "Container $container_name is running"
+}
+
+# Check if container exists and is in healthy status
+check_container_healthy() {
+    local container_name="$1"
+    check_container_running ${container_name}
+
+    local health=$(docker inspect --format "{{.State.Health.Status}}" "$container_name" 2>/dev/null)
+    if [[ "$health" == "unhealthy" ]]; then
+        error "Container $container_name is unhealthy"
+    fi
+
+    success "Container $container_name is healthy"
+}

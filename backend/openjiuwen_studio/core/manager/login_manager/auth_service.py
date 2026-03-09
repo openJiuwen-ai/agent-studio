@@ -278,7 +278,8 @@ class AuthService:
                     detail="Token has expired: Please log in again."
                 ) from e
             else:
+                # 防止错误消息泄露系统内部信息
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail=f"Invalid Token: Format error or signature verification failure（{str(e)}）"
+                    detail=f"Invalid Token: Format error or signature verification failure"
                 ) from e

@@ -223,7 +223,38 @@ export class PluginService {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        // 尝试读取错误响应体
+        let errorBody = ''
+        let errorMessage = `HTTP ${response.status}` // 默认至少包含状态码
+
+        try {
+          errorBody = await response.text()
+          if (errorBody && errorBody.trim()) {
+            // 尝试解析JSON错误响应
+            try {
+              const errorJson = JSON.parse(errorBody)
+              if (errorJson.error) {
+                errorMessage = `HTTP ${response.status}: ${errorJson.error}`
+              } else if (errorJson.message) {
+                errorMessage = `HTTP ${response.status}: ${errorJson.message}`
+              } else {
+                errorMessage = `HTTP ${response.status}: ${errorBody}`
+              }
+            } catch {
+              // 不是JSON，使用原始文本
+              errorMessage = `HTTP ${response.status}: ${errorBody}`
+            }
+          }
+          // 如果errorBody为空，errorMessage保持为 "HTTP ${response.status}"
+        } catch {
+          // 无法读取响应体，使用默认消息
+          errorMessage = `HTTP ${response.status}`
+        }
+
+        const error = new Error(errorMessage)
+        ;(error as any).status = response.status
+        ;(error as any).responseBody = errorBody
+        throw error
       }
 
       if (!response.body) {

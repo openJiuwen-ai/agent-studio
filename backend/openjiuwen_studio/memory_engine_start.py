@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from openjiuwen_studio.ops.modules.prompt.infra.database import get_database_url
 from openjiuwen_studio.ops.modules.prompt.infra.database import get_async_database_url
+from openjiuwen_studio.core.manager.model_manager.utils.security_utils import SecurityUtils
 
 
 class MemoryEngineManager:
@@ -34,18 +35,24 @@ class MemoryEngineManager:
 
         try:
             master_aes_key = base64.b64decode(os.getenv("SERVER_AES_MASTER_KEY_ENV", ""))
+            if os.getenv('HUAWEICLOUD_KMS_ENABLED', 'false').lower() == 'true':
+                master_aes_key = SecurityUtils(use_kms=True).get_initialized_master_key()
         except binascii.Error:
             master_aes_key = b''
         except Exception:
             master_aes_key = b''
         vector_db_type = os.getenv("INDEX_MANAGER_TYPE", "milvus")
         if vector_db_type == "milvus":
+            milvus_token = SecurityUtils.get_decrypted_secret(
+                "MILVUS_TOKEN",
+                os.getenv("MILVUS_TOKEN", None),
+            )
             milvus_host = os.getenv("MILVUS_HOST")
             milvus_port = os.getenv("MILVUS_PORT")
             vector_store = create_vector_store(
                 store_type=vector_db_type,
                 milvus_uri=f"http://{milvus_host}:{milvus_port}",
-                milvus_token=os.getenv("MILVUS_TOKEN", None)
+                milvus_token=milvus_token
             )
             logger.info("✅ milvus vector store created")
         elif vector_db_type == "chroma":

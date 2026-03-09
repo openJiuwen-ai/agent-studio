@@ -182,7 +182,9 @@
       "leftRefPathNoEmpty": "Left variable reference path cannot contain empty values",
       "rightValueEmpty": "Right value cannot be empty",
       "rightValueTypeEmpty": "Right value type cannot be empty",
-      "rightValueTypeInvalid": "Right value type is invalid"
+      "rightValueTypeInvalid": "Right value type is invalid",
+      "typeMismatch": "Type mismatch: left is {{leftType}}, right is {{rightType}}",
+      "duplicateVariableName": "Duplicate variable name: {{name}}"
     }
   },
   "editorStates": {
@@ -316,6 +318,7 @@
     "testRunInput": "Test Run Input",
     "completeInputToContinue": "Complete the following input to continue test run",
     "continueRunning": "Continue Running",
+    "continueRunningWithCount": "Continue ({{count}} more pending)",
     "cancel": "Cancel",
     "run": "Run",
     "testRun": "Test Run"

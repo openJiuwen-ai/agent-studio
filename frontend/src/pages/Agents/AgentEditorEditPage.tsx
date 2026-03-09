@@ -49,7 +49,7 @@ const AgentEditorEditPage = () => {
   const [historyAgentDetailResponse, setHistoryAgentDetailResponse] = useState<AgentDetailResponse | null>(null)
 
   // 获取模型管理API的完整模型列表（最新数据，包含is_active状态）
-  const { data: modelsData } = useModels({
+  const { data: modelsData, isLoading: modelsLoading } = useModels({
     spaceId: user?.spaceId || '0',
     size: 100,
     sort_by: 'update_time',
@@ -537,12 +537,14 @@ const AgentEditorEditPage = () => {
 
   // 检查当前选择的模型是否可用
   const isModelActive = useMemo(() => {
+    // 模型列表仍在加载时，默认认为可用，避免刷新时短暂闪烁错误提示
+    if (modelsLoading) return true
     const currentModelName = displayedSaveAgentRequest?.model?.model_info?.model_name || ''
     if (!currentModelName) return false // 如果没有选择模型，认为不可用
     const matchedModel = modelsList.find(model => model.model_name === currentModelName)
     // 只有找到模型且is_active为true时才认为可用
     return matchedModel?.is_active === true
-  }, [modelsList, displayedSaveAgentRequest?.model?.model_info?.model_name])
+  }, [modelsLoading, modelsList, displayedSaveAgentRequest?.model?.model_info?.model_name])
 
   return (
     <div className="agent-editor-enhanced-page flex flex-col h-full w-full overflow-x-hidden px-6 py-6" key={selectedHistoryVersion || 'draft'}>

@@ -40,7 +40,6 @@ is_port_occupied() {
             fi
             ;;
         linux)
-            # Linux: prefer ss command (more efficient)
             netstat_output=$(netstat -tuln 2>&1)
             if echo "${netstat_output}" | grep -q ":$port"; then
                 port_occupied=1

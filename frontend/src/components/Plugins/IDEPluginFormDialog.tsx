@@ -115,8 +115,8 @@ const IDEPluginFormDialog: React.FC<IDEPluginFormDialogProps> = ({
               multiline
               rows={3}
               placeholder={t('plugins.dialog.idePlugin.descriptionPlaceholder')}
-              helperText={`${t('plugins.dialog.idePlugin.descriptionHelperText')} (${form.description.length}/40)`}
-              inputProps={{ maxLength: 40 }}
+              helperText={`${t('plugins.dialog.idePlugin.descriptionHelperText')} (${form.description.length}/258)`}
+              inputProps={{ maxLength: 258 }}
             />
           </div>
 

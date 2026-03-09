@@ -88,7 +88,7 @@ async def knowledge_base_get_referencing_agents(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            detail="Internal server error"
         ) from e
 
 
@@ -167,7 +167,7 @@ async def knowledge_base_update(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            detail="Internal server error"
         ) from e
 
 
@@ -277,7 +277,7 @@ async def knowledge_base_upload_documents(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            detail="Internal server error"
         ) from e
 
 
@@ -329,7 +329,7 @@ async def knowledge_base_search(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            detail="Internal server error"
         ) from e
 
 
@@ -426,7 +426,7 @@ async def document_get_status(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            detail="Internal server error"
         ) from e
 
 
@@ -507,7 +507,7 @@ async def task_progress(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            detail="Internal server error"
         ) from e
 
 
@@ -594,7 +594,7 @@ async def document_update(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            detail="Internal server error"
         ) from e
 
 
@@ -643,5 +643,5 @@ async def document_delete(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            detail="Internal server error"
         ) from e

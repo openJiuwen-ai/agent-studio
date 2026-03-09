@@ -16,6 +16,7 @@
       "save": "Save",
       "cancel": "Cancel",
       "confirm": "Confirm",
+      "deleting": "Deleting...",
       "delete": "Delete",
       "edit": "Edit",
       "view": "View",
@@ -147,7 +148,13 @@
       "publishNotImplemented": "Publish feature is not yet implemented",
       "publishFailed": "Publish failed, please try again",
       "enterVersionNumber": "Please enter version number",
-      "executionFailed": "Sorry, an error occurred while processing your request. Please try again later"
+      "executionFailed": "Sorry, an error occurred while processing your request. Please try again later",
+      "sse": {
+        "timeoutError": {
+          "title": "Connection Timeout",
+          "content": "The request timed out because no data was received for an extended period. Please check your network connection and try again."
+        }
+      }
     },
     "pagination": {
       "previous": "Previous",
@@ -350,9 +357,9 @@
       "noAccount": "Don't have an account?",
       "signUp": "Sign up now",
       "loginSuccess": "Login successful",
-      "loginFailed": "Login failed, please check username and password",
+      "loginFailed": "Login failed",
       "invalidCredentials": "Invalid username or password",
-      "networkError": "Network error, please try again later",
+      "networkError": "The network request failed. Please check your network connection.",
       "registerLink": "Don't have an account yet?",
       "remainingAttempts": "Remaining login attempts {{count}}",
       "lockedMessage": "Too many login failures, the account has been locked {{time}}. After the lock time, you can try again"
@@ -383,6 +390,10 @@
       "usernamePlaceholder": "Enter userspace name (email format)",
       "newPassword": "New Password",
       "newPasswordPlaceholder": "Enter new password",
+      "confirmPassword": "Confirm New Password",
+      "confirmPasswordPlaceholder": "Enter new password again",
+      "confirmPasswordRequired": "Please confirm new password",
+      "passwordsNotMatch": "Passwords do not match",
       "verificationCode": "Verification Code",
       "verificationCodePlaceholder": "Enter Verification Code",
       "getVerificationCode": "Get Verification Code",
@@ -668,7 +679,7 @@
       "featureNotImplemented": "This feature is not yet implemented",
       "configError": "Configuration error",
       "selectKnowledgeBase": "Please select a local knowledge base in settings first",
-      "selectSearchEngine": "Please select a search engine in settings first",
+      "selectSearchEngine": "Please select an online enhancement engine in settings first",
       "localSearch": "Local Search",
       "webSearch": "Web Search",
       "comprehensiveSearch": "Comprehensive Search",
@@ -692,7 +703,9 @@
       "forceStop": "Force stop",
       "generating": "Generating...",
       "deepSearchServiceUnavailable": "DeepSearch service is temporarily unavailable, please visit ",
-      "deepSearchConfigRetry": ", refer to the documentation for configuration and try again"
+      "deepSearchConfigRetry": ", refer to the documentation for configuration and try again",
+      "checkingDeepsearch": "Checking DeepSearch service status...",
+      "deepsearchServiceDown": "DeepSearch service is temporarily unavailable"
     },
     "picker": {
       "selectAgent": "Select Agent",
@@ -816,7 +829,7 @@
         "search": "Search",
         "template": "Template",
         "generalDesc": "Interaction and planning settings",
-        "searchDesc": "Search engine and result settings",
+        "searchDesc": "Online enhancement engine and result settings",
         "templateDesc": "Report template management",
         "needsConfig": "Needs Config"
       },
@@ -835,15 +848,15 @@
         "mode": "Search Mode",
         "local": "Local Search",
         "localDesc": "Use local knowledge bases only",
-        "web": "Web Search",
-        "webDesc": "Use web search engines",
+        "web": "Online Enhancement",
+        "webDesc": "Use online enhancement engines",
         "all": "Comprehensive Search",
         "allDesc": "Combine local and web",
         "source": "Search Sources",
-        "webEngine": "Web Search Engine",
+        "webEngine": "Online Enhancement Engine",
         "configure": "Configure",
-        "noEngine": "No search engine configured",
-        "clickToConfig": "Click \"Configure\" above to add search engine",
+        "noEngine": "No online enhancement engine configured",
+        "clickToConfig": "Click \"Configure\" above to add online enhancement engine",
         "localKB": "Local Knowledge Base",
         "noKB": "No knowledge base configured",
         "clickToAddKB": "Click \"Add Knowledge Base\" above to select"
@@ -851,26 +864,26 @@
       "validation": {
         "chapterCountRange": "Chapter count must be between 1-10",
         "allModeRequires": "Comprehensive search mode requires: {{items}}",
-        "webModeRequires": "Web search mode requires a search engine",
+        "webModeRequires": "Online enhancement mode requires an online enhancement engine",
         "localModeRequires": "Local search mode requires at least one knowledge base",
-        "webResultCountRange": "Web search result count must be between 1-10",
+        "webResultCountRange": "Online enhancement result count must be between 1-10",
         "localResultCountRange": "Local search result count must be between 1-10"
       },
       "engine": {
-        "select": "Select Search Engine",
-        "noEngine": "No search engine configured",
+        "select": "Select Online Enhancement Engine",
+        "noEngine": "No online enhancement engine configured",
         "create": "+ Create New Engine",
         "createNew": "Create New Engine",
-        "config": "Configure Search Engine",
-        "edit": "Edit Search Engine",
-        "delete": "Delete Search Engine",
-        "deleteConfirm": "Are you sure you want to delete search engine \"{{name}}\"? This action cannot be undone.",
-        "title": "Search Engine",
+        "config": "Configure Online Enhancement Engine",
+        "edit": "Edit Online Enhancement Engine",
+        "delete": "Delete Online Enhancement Engine",
+        "deleteConfirm": "Are you sure you want to delete online enhancement engine \"{{name}}\"? This action cannot be undone.",
+        "title": "Online Enhancement Engine",
         "selectType": "Please select a type",
         "type": "Engine Type",
-        "selectPreset": "Please select a search engine from above",
+        "selectPreset": "Please select an online enhancement engine from above",
         "apiKey": "API Key",
-        "apiKeyPlaceholder": "Enter search engine API Key",
+        "apiKeyPlaceholder": "Enter online enhancement engine API Key",
         "searchUrl": "Search URL",
         "searchUrlPlaceholder": "https://api.example.com",
         "required": "Required",
@@ -878,7 +891,7 @@
         "cancel": "Cancel",
         "confirm": "Confirm",
         "error": {
-          "selectType": "Please select a search engine type",
+          "selectType": "Please select an online enhancement engine type",
           "invalidName": "Engine name must be one of the preset values",
           "fillRequired": "Please enter API Key and Search URL"
         },
@@ -904,8 +917,8 @@
           }
         },
         "test": {
-          "title": "Test Search Engine",
-          "engineLabel": "Test Engine:",
+          "title": "Test Online Enhancement Engine",
+          "engineLabel": "Test Online Enhancement Engine:",
           "queryLabel": "Test Query",
           "queryPlaceholder": "Enter content to search",
           "quickQuestions": {
@@ -978,7 +991,9 @@
         "optional": "(optional)",
         "emptyTitle": "No templates available",
         "emptyDescription": "Upload templates to use",
-        "uploadButton": "Upload Template"
+        "uploadButton": "Upload Template",
+        "invalidFileType": "Unsupported file type. Please upload files in {{formats}} format",
+        "fileTypeChanged": "Mode switched. The previous file type is no longer supported. Please select a new file"
       }
     },
     "time": {
@@ -1002,9 +1017,9 @@
       "unableToGetSpaceId": "Unable to get user space ID, please login again",
       "unableToGetAuthToken": "Unable to get authentication information, please login again",
       "reportRequestFailed": "Report conversion request failed, please try again later",
-      "fetchEnginesFailed": "Failed to fetch search engines",
-      "createEngineFailed": "Failed to create search engine",
-      "deleteEngineFailed": "Failed to delete search engine",
+      "fetchEnginesFailed": "Failed to fetch online enhancement engines",
+      "createEngineFailed": "Failed to create online enhancement engine",
+      "deleteEngineFailed": "Failed to delete online enhancement engine",
       "fetchTemplatesFailed": "Failed to fetch templates",
       "uploadTemplateFailed": "Failed to upload template",
       "deleteTemplateFailed": "Failed to delete template",
@@ -1025,7 +1040,7 @@
       "link": "Link",
       "collapse": "Collapse",
       "expand": "Expand {{count}} items",
-      "statusUnknown": "Status Unknown",
+      "statusUnknown": "Conditionally Complete",
       "collapseContent": "Collapse Content",
       "expandContent": "Expand Content",
       "status": {
@@ -1034,7 +1049,7 @@
         "completed": "Report Generated",
         "failed": "Generation Failed",
         "cancelled": "Manually Ended",
-        "unknown": "Status Unknown",
+        "unknown": "Conditionally Complete",
         "default": "Unknown Status"
       },
       "loading": "Loading...",
@@ -1683,6 +1698,7 @@
         "originalPrompt": "Original Prompt",
         "optimizedPrompt": "Optimized Prompt",
         "evaluationDetail": "Evaluation Details",
+        "optimizationDetail": "Optimization Details",
         "comparison": "Comparison",
         "viewDiff": "View Diff",
         "applyOptimization": "Apply Optimization",
@@ -2614,7 +2630,9 @@
       "getVersionInfoFailed": "Failed to get plugin version information",
       "pluginDataNotLoaded": "Plugin data not loaded, please refresh the page",
       "saveFailed": "Save failed",
-      "savePluginVersionConfigFailed": "Failed to save plugin version configuration"
+      "savePluginVersionConfigFailed": "Failed to save plugin version configuration",
+      "pluginNameRequired": "Please enter plugin name",
+      "pluginDescRequired": "Please enter plugin description"
     },
     "loading": "Loading",
     "loadingDescription": "Loading plugin list...",
@@ -2622,6 +2640,7 @@
     "loadFailedDescription": "Failed to load plugin list, please try again later",
     "noMatching": "No matching plugins",
     "noMatchingDescription": "No plugins found matching the criteria, please try adjusting filters",
+    "noDescription": "No description",
     "categories": {
       "tools": "Tools",
       "uncategorized": "Uncategorized",
@@ -2667,7 +2686,7 @@
         "name": "Web Search",
         "description": "Provides web search, information retrieval, content indexing and other functions",
         "category": "Search Service",
-        "author": "Search Engine",
+        "author": "Online Enhancement Engine",
         "tag1": "Search",
         "tag2": "Web",
         "tag3": "Information",
@@ -4712,6 +4731,20 @@
           "calculateSelectionIndicesFailed": "Failed to calculate selection indices - missing required parameters"	 
         }	 
       }
+    }
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "close": "Close",
+    "link": "Privacy Policy",
+    "notice": {
+      "title": "Important Notice",
+      "content": "This platform is for trial use only. Please do not upload real personal data. The platform periodically clears data. Please use the export function to back up important data in time.",
+      "acknowledge": "I Understand"
+    },
+    "policy": {
+      "paragraph1": "This platform is <bold>for trial and demonstration purposes only</bold>. Please do not upload, enter, or submit real personal information (including but not limited to name, ID number, phone number, bank card information, address, social media accounts, sensitive business data, etc.).",
+      "paragraph2": "The platform will <bold>periodically clean up</bold> usage data. Please <bold>make good use of the export function to back up and properly save important data</bold> during use, to avoid data loss or inability to recover due to data cleanup, or service adjustments."
     }
   }
 }

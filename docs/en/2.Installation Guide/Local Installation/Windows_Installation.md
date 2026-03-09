@@ -224,17 +224,30 @@ Complete dependency installation first, then perform source retrieval and instal
 ##### 2.2. Generate an AES Key (Optional)
 
 * If you do not need to encrypt sensitive fields at rest, skip this step.
-* In the project root, open PowerShell and run:
+* In the project root, open GitBash and run:
 
   ```bash
-  cd backend
-  powershell -ExecutionPolicy Bypass -File .\build_AES_master_key.ps1
+  cd scripts
+  bash build_AES_master_key.sh
   ```
 
 * When the script finishes, it will print the key. Use it as needed. It’s recommended to set it as an environment variable and store it separately.
 
   ```bash
-  $env:SERVER_AES_MASTER_KEY_ENV = .\build_AES_master_key.ps1
+  # If your installation/deployment is executed in Git Bash
+  export SERVER_AES_MASTER_KEY_ENV=your_aes_key
+    
+  # If your installation/deployment is executed in PowerShell
+  # Method 1: Set a temporary environment variable in PowerShell
+  $env:SERVER_AES_MASTER_KEY_ENV="your_aes_key"
+  # Method 2: Add it as a Windows system environment variable
+  """
+    1. Press Win + R, type sysdm.cpl, and press Enter.
+    2. Click on the 'Advanced' tab, then click 'Environment Variables'.
+    3. Under 'System variables' or 'User variables', add:
+         Variable name: SERVER_AES_MASTER_KEY_ENV
+         Variable value: your_aes_key
+  """
   ```
 
 * **Note**: The AES key must remain unchanged. Changing it later will make previously encrypted data impossible to decrypt.
@@ -252,6 +265,8 @@ Complete dependency installation first, then perform source retrieval and instal
 * Open .env in a text editor and update the following variables according to your environment (do not overwrite other variables):
 
   > **Note**: Replace DB_HOST, DB_PORT, etc. with your actual database information. DB_USER and DB_PASSWORD are the MySQL user and password you created above. If the password contains special characters, see the [Special Character Escape Table](#windows-special-char) to replace them with URL encoding.
+  >
+  > **OBS config**: For standalone/local deployment without object storage, OBS-related variables (OBS_BUCKET, OBS_SERVER, etc.) are left empty in `.env.example`; after copying to `.env` you do not need to fill them. Only fill real values when using object storage (e.g. distributed deployment). See [Distributed Installation](../Distributed%20Installation/README.md).
 
   ```env
    # Database config (example)
@@ -304,10 +319,24 @@ Complete dependency installation first, then perform source retrieval and instal
   uv sync
   ```
 
+* Execute database version stamp commands to facilitate subsequent database operations:
+  ```bash
+  # Agent database
+  alembic -n alembic_mysql_agent stamp head
+  alembic -n alembic_mysql_ops stamp head
+
+  # SQLite database
+  alembic -n alembic_sqlite_agent stamp head
+  alembic -n alembic_sqlite_ops stamp head
+  ```
+
+  > Description: The above commands are used to mark that the current database is already the latest version, facilitating subsequent database operations. Need to be executed separately for agent and ops databases. If using MySQL, execute `alembic -n alembic_mysql_agent stamp head` and `alembic -n alembic_mysql_ops stamp head`. For alembic usage methods, refer to [DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md](../../../../backend/DATABASE_MIGRATION_DEVELOPMENT_GUIDE_EN.md)
+
   > **Note**: If it hangs for more than 20 minutes, press Ctrl + C, then try editing the url of [[tool.uv.index]] in pyproject.toml to another available mirror, and re-run uv sync.
 
   > **Note**: If uv sync fails, try: `uv sync --native-tls` to force using the system native TLS library (fix HTTPS download compatibility issues).
 
+* Create log directory and start backend service
   ```bash
   mkdir logs
   mkdir logs\run

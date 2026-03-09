@@ -6,12 +6,11 @@ import json
 import os
 import time
 import hashlib
-import ast
 from typing import List, Dict, Any
 
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from concurrent.futures import ThreadPoolExecutor
-from fastapi import APIRouter, Request
+from fastapi import HTTPException, APIRouter, Request
 from fastapi.openapi.models import Response
 from fastapi.params import Depends, Query
 from sqlalchemy.orm import Session
@@ -413,7 +412,7 @@ class OptimizationTaskExecutor:
             api_base=llm_config.get("base_url"),
             api_key=llm_config.get("api_key"),
             timeout=llm_config.get("params").get("timeout"),
-            verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
+            verify_ssl=os.getenv("LLM_SSL_VERIFY", "false").lower() == "true",
         )
         model_config = ModelRequestConfig(
             model=llm_config.get("model_name"),
@@ -451,7 +450,7 @@ class OptimizationTaskExecutor:
             api_base=llm_config.get("base_url"),
             api_key=llm_config.get("api_key"),
             timeout=llm_config.get("params").get("timeout"),
-            verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
+            verify_ssl=os.getenv("LLM_SSL_VERIFY", "false").lower() == "true",
         )
         model_config = ModelRequestConfig(
             model=llm_config.get("model_name"),
@@ -627,7 +626,7 @@ class OptimizationTaskExecutor:
             }
 
         except Exception as e:
-            logger.warning(f"优化任务异常: {e}")
+            logger.error(f"优化任务异常: {e}")
             # 更新任务状态为失败
             try:
                 update_data = {
@@ -643,13 +642,13 @@ class OptimizationTaskExecutor:
                     update_data=update_data
                 )
             except Exception as db_error:
-                logger.warning(f"更新失败状态失败: {db_error}")
+                logger.error(f"更新失败状态失败: {db_error}")
 
             return {
                 "task_id": task_id,
                 "status": "failed",
-                "error_message": str(e),
-                "message": f"优化任务失败: {str(e)}"
+                "error_message": "execute optimization failed",
+                "message": "execute optimization failed"
             }
 
     def execute_optimization(
@@ -726,7 +725,7 @@ async def prompt_optimize(
         logger.warning(f"创建任务记录失败: {e}")
         return OptimizeTaskCreationResponse(
             code=500,
-            msg=f"创建任务记录失败: {str(e)}",
+            msg="Failed to create optimization task due to an internal error.",
             jobInfo=None
         )
 
@@ -968,7 +967,7 @@ async def prompt_generate(
                 api_base=llm_config.get("base_url"),
                 api_key=llm_config.get("api_key"),
                 timeout=llm_config.get("params").get("timeout"),
-                verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
+                verify_ssl=os.getenv("LLM_SSL_VERIFY", "false").lower() == "true",
             )
             model_config = ModelRequestConfig(
                 model=llm_config.get("model_name"),
@@ -995,7 +994,7 @@ async def prompt_generate(
                 api_base=model_info.get("base_url", ""),
                 api_key=model_info.get("api_key", ""),
                 timeout=model_info.get("params").get("timeout", 60),
-                verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
+                verify_ssl=os.getenv("LLM_SSL_VERIFY", "false").lower() == "true",
             )
             model_config = ModelRequestConfig(
                 model=model_info.get("model_name", ""),
@@ -1066,7 +1065,7 @@ async def prompt_generate(
     except Exception as e:
         logger.error(f"Error in prompt_generate: {str(e)}")
         return JSONResponse(
-            content={"error": str(e)},
+            content={"error": "prompt generate failed"},
             status_code=500
         )
 
@@ -1113,7 +1112,7 @@ async def optimize_feedback(
             api_base=llm_config.get("base_url"),
             api_key=llm_config.get("api_key"),
             timeout=llm_config.get("params").get("timeout"),
-            verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
+            verify_ssl=os.getenv("LLM_SSL_VERIFY", "false").lower() == "true",
         )
         model_config = ModelRequestConfig(
             model=llm_config.get("model_name"),
@@ -1171,7 +1170,7 @@ async def optimize_feedback(
     except Exception as e:
         logger.error(f"Error in optimize_feedback: {str(e)}")
         return JSONResponse(
-            content={"error": str(e)},
+            content={"error": "optimize feedback failed"},
             status_code=500
         )
 
@@ -1200,8 +1199,29 @@ async def prompt_bad_cases(
 
         cases = []
         for badcase in badcases:
-            messages = ast.literal_eval(badcase.get('query', ''))
             query, answer = '', ''
+            raw_query = badcase.get('query', '')
+            if not raw_query or not isinstance(raw_query, str):
+                continue
+            # 限制输入长度，防止资源耗尽
+            if len(raw_query) > 65536:
+                raise HTTPException(status_code=400, detail="query field too large")
+            try:
+                messages = json.loads(raw_query)
+            except (json.JSONDecodeError) as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"query field must be valid JSON: {str(e)}"
+                ) from e
+            # 结构验证：messages为嵌套列表，内层元素为字典
+            if (not isinstance(messages, list) or len(messages) == 0):
+                raise HTTPException(status_code=400, detail="query field has invalid message structure")
+
+            last_turn = messages[-1]
+            if (not isinstance(last_turn, list) or len(last_turn) == 0):
+                raise HTTPException(status_code=400, detail="query field has invalid message structure")
+            if not isinstance(last_turn[-1], dict):
+                raise HTTPException(status_code=400, detail="query field has invalid message structure")
             if messages[-1][-1].get('role') == 'assistant':
                 answer = {'answer': messages[-1][-1].get('content', '')}
             query = str(messages[-1][:-1])
@@ -1230,7 +1250,7 @@ async def prompt_bad_cases(
             api_base=llm_config.get("base_url"),
             api_key=llm_config.get("api_key"),
             timeout=llm_config.get("params").get("timeout"),
-            verify_ssl=os.getenv("LLM_SSL_VERIFY", "true") == "false",
+            verify_ssl=os.getenv("LLM_SSL_VERIFY", "false").lower() == "true",
         )
         model_config = ModelRequestConfig(
             model=llm_config.get("model_name"),
@@ -1281,7 +1301,7 @@ async def prompt_bad_cases(
     except Exception as e:
         logger.error(f"Error in optimize_badcase: {str(e)}")
         return JSONResponse(
-            content={"error": str(e)},
+            content={"error": "optimize badcase failed"},
             status_code=500
         )
 

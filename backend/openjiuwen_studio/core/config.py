@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     ]
 
     # Redis配置
+    enable_redis_checkpoint: bool = False
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_db: int = 0

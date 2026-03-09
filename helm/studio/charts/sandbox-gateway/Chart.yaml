@@ -1,0 +1,6 @@
+apiVersion: v2
+name: sandbox-gateway
+description: Sandbox-gateway service for the openJiuwen studio system
+type: application
+
+version: 0.0.1

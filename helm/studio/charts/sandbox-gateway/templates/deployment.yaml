@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sandbox-gateway.fullname" . }}
+  labels:
+    {{- include "sandbox-gateway.labels" . | nindent 4 }}
+
+spec:
+  replicas: {{ .Values.deployment.replicaCount }}
+  revisionHistoryLimit: {{ .Values.deployment.revisionHistoryLimit }}
+  progressDeadlineSeconds: {{ .Values.deployment.progressDeadlineSeconds }}
+
+  selector:
+    matchLabels:
+      app: {{ include "sandbox-gateway.name" . }}
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.deployment.strategy.maxSurge }}
+      maxUnavailable: {{ .Values.deployment.strategy.maxUnavailable }}
+
+  template:
+    metadata:
+      labels:
+        app: {{ include "sandbox-gateway.name" . }}
+        {{- include "sandbox-gateway.labels" . | nindent 8 }}
+
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.deployment.imagePullSecret }}
+
+      tolerations:
+        {{- toYaml .Values.deployment.tolerations | nindent 8 }}
+
+      containers:
+        - name: {{ include "sandbox-gateway.name" . }}
+          image: "{{ .Values.deployment.image.repository }}:{{ .Values.deployment.image.tag }}"
+          imagePullPolicy: {{ .Values.deployment.image.pullPolicy }}
+
+          env:
+            - name: PAAS_APP_NAME
+              value: {{ include "sandbox-gateway.name" . }}
+            - name: PAAS_NAMESPACE
+              value: {{ .Release.Namespace }}
+
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.deployment.configMapName }}
+
+          resources:
+            {{- toYaml .Values.deployment.resources | nindent 12 }}
+
+          volumeMounts:
+            {{- if .Values.deployment.extraVolumeMounts }}
+            {{- toYaml .Values.deployment.extraVolumeMounts | nindent 12 }}
+            {{- end }}
+
+      volumes:
+        {{- if .Values.deployment.extraVolumes }}
+        {{- toYaml .Values.deployment.extraVolumes | nindent 8 }}
+        {{- end }}

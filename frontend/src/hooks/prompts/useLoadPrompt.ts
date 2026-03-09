@@ -342,7 +342,11 @@ export const useLoadPrompt = ({
 
             // 如果在模型列表中没找到（或列表未加载），调用模型详情API
             if (!targetModel) {
-              targetModel = await PromptModelService.getModelDetail(modelConfig.models_id, modelConfig.model_from)
+              targetModel = await PromptModelService.getModelDetail(
+                modelConfig.models_id,
+                modelConfig.model_from,
+                workspaceId,
+              )
             }
 
             // 设置选中的模型（如果没找到则设置为null表示未选中）

@@ -1,6 +1,7 @@
 import io
 import os
 import sys
+import time
 from contextlib import asynccontextmanager
 
 # 添加项目根目录到 Python 路径，以便直接运行时能找到所有模块
@@ -10,9 +11,9 @@ if backend_dir not in sys.path:
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-
+from starlette.middleware.base import BaseHTTPMiddleware
 # Load environment variables from project root (上级目录)
 project_root = os.path.dirname(backend_dir)
 load_dotenv(os.path.join(project_root, '.env'))
@@ -31,13 +32,20 @@ from openjiuwen_studio.models import ModelConfig, ModelUsageLog, EmbeddingModelC
     AgentWorkflowRelationDB, KnowledgeBaseDB, KnowledgeBaseDocumentDB, ReferenceDB, SystemEmbeddingModelDB, \
     SystemLLMModelDB, MemoryBaseDB
 # Import alembic version check
-from openjiuwen.core.common.logging import logger
+from openjiuwen.core.common.logging import logger, interface_logger
+from openjiuwen_studio.core.common.logging.events import CustomLogEventType
 from openjiuwen_studio.core.alembic_version_check import check_alembic_versions
 from openjiuwen_studio.ops.config import settings as ops_settings
+from openjiuwen_studio.core.config import settings
 # Import Trace models
 from openjiuwen_studio.models.trace_detail import TraceDetailDB
 from openjiuwen_studio.models.trace_summary import TraceSummaryDB
 from openjiuwen_studio.models.tag import workflow_tag_association
+
+from openjiuwen_studio.core.manager.redis_manager.redis_client import redis_manager_bytes
+from openjiuwen.core.runner import Runner
+from openjiuwen.core.runner.runner_config import get_runner_config
+from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerConfig
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
@@ -116,6 +124,21 @@ async def lifespan_func(app: FastAPI):
     create_database_tables()
     logger.info("✅ Database tables created")
 
+    # 初始化 Runner
+    if settings.enable_redis_checkpoint:
+        runner_config = get_runner_config()
+        runner_config.checkpointer_config = CheckpointerConfig(
+            type="redis",
+            conf={
+                "connection": {
+                    "redis_client": redis_manager_bytes.client
+                }
+            }
+        )
+        Runner.set_config(runner_config)
+
+    await Runner.start()
+
     yield
 
     # Shutdown
@@ -139,6 +162,66 @@ app = FastAPI(
     }
 )
 
+
+class LogMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception as e:
+            interface_logger.error(
+                "Request failed",
+                event_type=CustomLogEventType.INTERFACE_SRV.value,
+                interface_name=request.url.path,
+                execution_time_ms=round((time.perf_counter() - start_time) * 1000),
+                exception=str(e),
+                error_code=str(status.HTTP_500_INTERNAL_SERVER_ERROR),
+                metadata={
+                    "route_path": request.url.path
+                }
+            )
+            logger.error(f"Request failed: {e}")
+            raise
+
+        route_path = self._get_route_path(request)
+        endpoint_name = self._truncate_path(route_path, max_parts=3)
+
+        interface_logger.info(
+            "",
+            event_type=CustomLogEventType.INTERFACE_SRV.value,
+            interface_name=endpoint_name,
+            execution_time_ms=round((time.perf_counter() - start_time) * 1000),
+            error_code=str(response.status_code),
+            metadata={
+                "route_path": route_path
+            }
+        )
+        return response
+
+
+    def _truncate_path(self, path: str, max_parts: int = 3) -> str:
+        if not path or path == "/":
+            return "/"
+        parts = path.strip("/").split("/")
+        truncated = parts[:max_parts]
+        return "/" + "/".join(truncated) if truncated else "/"
+
+
+    def _get_route_path(self, request: Request) -> str:
+        try:
+            # route 在 request.scope 中，由 Starlette 路由器在匹配后注入
+            route = request.scope.get("route")
+            if route and hasattr(route, "path") and isinstance(route.path, str):
+                return route.path
+            else:
+                # 路由未匹配（如 404）或 route 对象异常
+                return request.url.path
+        except Exception:
+            # 安全兜底：任何异常都返回原始路径
+            return request.url.path
+
+
+app.add_middleware(LogMiddleware)
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,

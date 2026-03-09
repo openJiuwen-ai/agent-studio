@@ -1,3 +1,5 @@
+import os
+import sys
 from functools import wraps
 
 from dataclasses import dataclass
@@ -8,7 +10,7 @@ from sqlalchemy.orm import Session
 from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.database import milliseconds
 from openjiuwen_studio.core.manager.repositories import JiuwenBaseRepository
-from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw
+from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import escape_like, get_db_jw
 from openjiuwen_studio.models import knowledge_base as kb_models
 from openjiuwen_studio.models import knowledge_base_document as kb_doc_models
 from openjiuwen_studio.schemas.common import ResponseModel
@@ -43,8 +45,11 @@ class KnowledgeBaseRepository:
             try:
                 return func_(self, *args, **kwargs)
             except Exception as e:
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                fname = os.path.split(exc_traceback.tb_frame.f_code.co_filename)[1]
                 logger.error("Error: knowledge base db data preprocessing error")
                 logger.debug(f"Exception details: {type(e).__name__}", exc_info=True)
+                logger.error(f"{e}: {func_.__name__}({args=}, {kwargs=}) {exc_type} {fname}:{exc_traceback.tb_lineno}")
                 return ResponseModel(
                     code=status.HTTP_400_BAD_REQUEST,
                     message=f"Error: knowledge base db data preprocessing error: {type(e).__name__}",
@@ -375,11 +380,12 @@ class KnowledgeBaseRepository:
             kb_db = JiuwenBaseRepository(db, kb_models.KnowledgeBaseDB)
 
             # 构建查询条件：查询词完整出现在名称或描述中（大小写不敏感）
-            # 使用 func.lower() 实现大小写不敏感匹配
+            # 使用 func.lower() + ilike 实现大小写不敏感匹配，escape_like 防止 LIKE 通配符注入
             query_lower = query.lower()
+            escaped_query = escape_like(query_lower)
             search_conditions = or_(
-                func.lower(kb_models.KnowledgeBaseDB.name).contains(query_lower),
-                func.lower(kb_models.KnowledgeBaseDB.description).contains(query_lower),
+                func.lower(kb_models.KnowledgeBaseDB.name).ilike(f"%{escaped_query}%", escape="\\"),
+                func.lower(kb_models.KnowledgeBaseDB.description).ilike(f"%{escaped_query}%", escape="\\"),
             )
 
             # 构建基础查询条件
@@ -629,7 +635,7 @@ class KnowledgeBaseRepository:
     def has_graph_enhancement_documents(
         self, space_id: str, kb_id: str, db_session: Session | None = None
     ) -> bool:
-        """检查知识库中是否有图增强构建的文档"""
+        """检查知识库中是否有图增强构建的文档。"""
         with get_db_jw(db_session) as db:
             # 查询该知识库下所有已索引的文档
             docs = (

@@ -38,8 +38,11 @@ const AppWrapper: React.FC = () => {
     () => ({
       logout,
       updateToken: (newToken: string) => {
-        // Token更新逻辑由上层处理
+        // 401 刷新成功后同步更新 localStorage 与 Zustand
+        localStorage.setItem('access_token', newToken)
+        useAuthStore.setState({ token: newToken, isAuthenticated: true })
       },
+      getRefreshToken: () => useAuthStore.getState().refreshToken || localStorage.getItem('refresh_token'),
     }),
     [logout],
   )

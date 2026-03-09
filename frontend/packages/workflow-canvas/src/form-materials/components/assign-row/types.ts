@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: MIT
  */
 
+import { BaseVariableField } from '@flowgram.ai/editor'
+
 import { IFlowRefValue, IFlowValue } from '../../'
 
 export type AssignValueType =
@@ -22,4 +24,5 @@ export interface AssignRowProps {
   onChange?: (value?: AssignValueType) => void
   onDelete?: () => void
   readonly?: boolean
+  skipVariable?: (variable?: BaseVariableField) => boolean
 }

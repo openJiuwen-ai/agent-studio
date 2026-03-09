@@ -19,10 +19,13 @@ from openjiuwen_studio.core.manager.login_manager.session_auth import (create_ac
 from openjiuwen_studio.core.manager.login_manager.user import create_user_db
 from openjiuwen_studio.core.manager.repositories.user_repository import user_repository
 from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
+from openjiuwen_studio.core.manager.login_manager.user import get_user_email
+from openjiuwen_studio.core.manager.login_manager.security_manager import SecurityManager
 from openjiuwen_studio.routers.users import create_user_response, get_current_user
+
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.schemas.space import SpaceDBPd
-from openjiuwen_studio.schemas.user import RefreshTokenRequest, RoleType, UserDBPd, UserLogin
+from openjiuwen_studio.schemas.user import RefreshTokenRequest, RoleType, UserDBPd
 
 auth_router = APIRouter()
 security_utils = SecurityUtils()
@@ -58,6 +61,7 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     不需要密码验证
     """
     try:
+        SecurityManager.login_rate_limit(request.client.host)
         username = form_data.username
         logger.info(f"username: {username}")
 
@@ -81,13 +85,13 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
         # 如果用户不存在，则调用register流程
         if ret["code"] != status.HTTP_200_OK:
             # 用户不存在，自动注册
-            return await register_internal(username, language)
+            return await register_internal(username, language, request.client.host)
 
         # 用户存在，直接登录（不需要密码验证）
         user_data = ret.get("data")
         if not user_data:
             # 如果data为空，也当作用户不存在处理
-            return await register_internal(username, language)
+            return await register_internal(username, language, request.client.host)
 
         logger.info(f"user_data: {user_data}")
 
@@ -121,12 +125,13 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
         raise HTTPException(status_code=500, detail="Login process failed")
 
 
-async def register_internal(username: str, language: str = "zh"):
+async def register_internal(username: str, language: str = "zh", host: str = ""):
     """
     内部注册函数：创建新用户和空间
     不需要密码，使用空密码或默认密码
     """
     try:
+        SecurityManager.register_rate_limit(host)
         # 检查用户是否已存在（双重检查）
         ret = user_repository.find_user_tbl(email=username)
         if ret["code"] == status.HTTP_500_INTERNAL_SERVER_ERROR:
@@ -242,6 +247,8 @@ async def register(request: Request, form_data: OAuth2PasswordRequestForm = Depe
 @auth_router.post("/logout", response_model=ResponseModel[dict])
 async def logout(current_user: Dict[str, Any] = Depends(get_current_user)):
     """User logout endpoint"""
+    # 清空用户的session_key
+    user_repository.update_session_key(get_user_email(current_user), '')
     # In a real application, you might want to blacklist the token
     return ResponseModel(
         code=status.HTTP_200_OK,

@@ -3,10 +3,11 @@ import { WorkflowService } from '@test-agentstudio/api-client'
 import { WorkflowDetail, WorkflowSelectDetail } from '@/types/agentTypes'
 
 export type VersionsMap = Record<string, { published: { version: string; create_time: number }[]; latestPublished: string | null }>
+export type LoadingMap = Record<string, boolean>
 
 export const useWorkflowVersions = (workflows: WorkflowDetail[], spaceId: string, enabled: boolean = true) => {
   const [versionsMap, setVersionsMap] = useState<VersionsMap>({})
-  const [loading, setLoading] = useState(false)
+  const [loadingMap, setLoadingMap] = useState<LoadingMap>({})
   const idsKey = useMemo(
     () =>
       workflows
@@ -18,12 +19,18 @@ export const useWorkflowVersions = (workflows: WorkflowDetail[], spaceId: string
 
   const loadVersions = async (force: boolean) => {
     if (!spaceId) return
-    setLoading(true)
     const toFetch = force ? workflows : workflows.filter(w => !versionsMap[w.workflow_id])
-    if (toFetch.length === 0) {
-      setLoading(false)
-      return
-    }
+    if (toFetch.length === 0) return
+
+    // 只设置要获取的工作流的 loading 状态
+    setLoadingMap(prev => {
+      const next = { ...prev }
+      toFetch.forEach(w => {
+        next[w.workflow_id] = true
+      })
+      return next
+    })
+
     const entries = await Promise.all(
       toFetch.map(async w => {
         try {
@@ -38,7 +45,15 @@ export const useWorkflowVersions = (workflows: WorkflowDetail[], spaceId: string
     )
     const map = Object.fromEntries(entries)
     setVersionsMap(prev => ({ ...prev, ...map }))
-    setLoading(false)
+
+    // 清除已完成的 loading 状态
+    setLoadingMap(prev => {
+      const next = { ...prev }
+      toFetch.forEach(w => {
+        delete next[w.workflow_id]
+      })
+      return next
+    })
   }
 
   useEffect(() => {
@@ -52,7 +67,7 @@ export const useWorkflowVersions = (workflows: WorkflowDetail[], spaceId: string
     await loadVersions(true)
   }
 
-  return { versionsMap, loading, refresh }
+  return { versionsMap, loadingMap, refresh }
 }
 
 export const resolveVersion = (w: WorkflowDetail, versionsMap: VersionsMap, prevSelected: Record<string, string>) => {

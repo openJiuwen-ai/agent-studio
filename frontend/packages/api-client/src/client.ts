@@ -86,6 +86,30 @@ const renewToken = async (authStateUpdater: AuthStateUpdater): Promise<string | 
   }
 }
 
+// 刷新 access token（带短重试，降低瞬时网络抖动导致的误登出）
+const renewTokenWithRetry = async (authStateUpdater: AuthStateUpdater, retries: number = 2, delayMs: number = 1000): Promise<string | null> => {
+  let lastError: unknown = null
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const token = await renewToken(authStateUpdater)
+      if (token) {
+        return token
+      }
+    } catch (error) {
+      lastError = error
+    }
+
+    if (attempt < retries) {
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+    }
+  }
+
+  if (lastError) {
+    throw lastError
+  }
+  return null
+}
+
 // 语言获取函数类型
 export type LanguageProvider = () => string | null
 
@@ -223,7 +247,7 @@ const createApiClient = (
         if (authStateUpdater) {
           try {
             // 尝试刷新token
-            const newToken = await renewToken(authStateUpdater)
+            const newToken = await renewTokenWithRetry(authStateUpdater, 2, 1000)
             if (newToken) {
               // 更新token
               authStateUpdater.updateToken?.(newToken)
@@ -423,7 +447,7 @@ const performTokenRenewal = async (authStateUpdater: AuthStateUpdater) => {
   try {
     console.log('🔄 [Token Renewal] Starting automatic token refresh...')
 
-    const newToken = await renewToken(authStateUpdater)
+    const newToken = await renewTokenWithRetry(authStateUpdater, 2, 1000)
 
     if (newToken) {
       authStateUpdater.updateToken?.(newToken)

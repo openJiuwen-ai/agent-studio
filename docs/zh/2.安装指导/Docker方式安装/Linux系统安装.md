@@ -33,20 +33,22 @@
     docker-compose version
     ```
 
-## 二、openJiuwen 安装（以下以 Ubuntu 22.04 为例）
+## 二、openJiuwen 安装（以 Ubuntu 22.04 为例）
 
-### 1. 下载版本包（若已获取版本包跳过此步骤）
+以下以安装 openJiuwen agent-studio v0.1.5 版本为例，可以按需替换成需要安装的版本。
+
+### 1. 下载版本包
 
 * 根据机器架构下载版本包：
 
   - 下载 x86_64 架构版本包
     ```
-    wget https://openjiuwen-ci.obs.cn-north-4.myhuaweicloud.com/agentstudio/deployTool_0.1.3_amd64.zip
+    wget https://openjiuwen-ci.obs.cn-north-4.myhuaweicloud.com/agentstudio/deployTool_0.1.5_amd64.zip
     ```
 
   - 下载 arm 架构版本包：
     ```
-    wget https://openjiuwen-ci.obs.cn-north-4.myhuaweicloud.com/agentstudio/deployTool_0.1.3_arm64.zip
+    wget https://openjiuwen-ci.obs.cn-north-4.myhuaweicloud.com/agentstudio/deployTool_0.1.5_arm64.zip
     ```
 
 ### 2. 启动 openJiuwen
@@ -61,15 +63,15 @@
 * 解压对应的架构版本包。
   - 解压 x86_64 架构版本包
     ```
-    unzip deployTool_0.1.3_amd64.zip
+    unzip deployTool_0.1.5_amd64.zip
     ```
 
   - 解压 arm 架构版本包
     ```
-    unzip deployTool_0.1.3_arm64.zip
+    unzip deployTool_0.1.5_arm64.zip
     ```
 
-* 进入 *deployTool_0.1.3_xxx64* 目录，输入以下命令确认 Docker 已启动：
+* 进入 *deployTool_0.1.5_xxx64* 目录，输入以下命令确认 Docker 已启动：
 
   ```bash
   sudo systemctl start docker

@@ -175,6 +175,7 @@ export const GraphIframe: React.FC<GraphIframeProps> = ({
         <iframe
           key={iframeKey}
           src={inferFileUrl}
+          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
           className="h-full w-full border-0"
           onLoad={handleLoad}
           onError={handleError}

@@ -105,6 +105,15 @@ class PluginRepository():
             # 获取分页参数
             page = int(query_body.get("page", 1))
             size = int(query_body.get("size", 10))
+
+            # 校验size参数，防止除零错误
+            if size <= 0:
+                logger.error(f"Invalid size parameter: {size}. Size must be greater than 0.")
+                return ResponseModel(
+                    code=status.HTTP_400_BAD_REQUEST,
+                    message=f"Invalid parameter: size must be greater than 0, got {size}"
+                ).model_dump(exclude_none=True)
+
             offset = (page - 1) * size
             return_range = [offset, size]
             

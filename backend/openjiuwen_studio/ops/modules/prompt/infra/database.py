@@ -10,16 +10,18 @@ from sqlalchemy.orm import sessionmaker
 from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.ops.config import settings
 from openjiuwen_studio.ops.common.date_time_util import get_china_datetime
+from openjiuwen_studio.core.manager.model_manager.utils.security_utils import SecurityUtils
 
 
 def get_database_url(db_name: str = None) -> str:
     """根据数据库类型生成数据库连接URL"""
     if settings.DB_TYPE.lower() == "mysql":
+        db_password = SecurityUtils.get_decrypted_secret("DB_PASSWORD", settings.DB_PASSWORD)
         if db_name == "ops":
-            return (f"mysql+pymysql://{settings.DB_USER}:{settings.DB_PASSWORD}@"
+            return (f"mysql+pymysql://{settings.DB_USER}:{db_password}@"
                    f"{settings.DB_HOST}:{settings.DB_PORT}/{settings.OPS_DB_NAME}?charset=utf8mb4")
         elif db_name == "agent":
-            return (f"mysql+pymysql://{settings.DB_USER}:{settings.DB_PASSWORD}@"
+            return (f"mysql+pymysql://{settings.DB_USER}:{db_password}@"
                    f"{settings.DB_HOST}:{settings.DB_PORT}/{settings.AGENT_DB_NAME}?charset=utf8mb4")
         else:
             raise ValueError(f"Unknown database name: {db_name}")

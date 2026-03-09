@@ -17,6 +17,7 @@
 - [4. Development Guide](4.Development%20Guide)
   - [Model Management](4.Development%20Guide/Model%20Management.md)
   - [Knowledge Base Management](4.Development%20Guide/Knowledge%20Base%20Management.md)
+  - [Memory Base Management](4.Development%20Guide/Memory%20Base%20Management.md)
   - [Development Agent](4.Development%20Guide/Development%20Agent/README.md)
     - [Overview](4.Development%20Guide/Development%20Agent/README.md)
     - [Building Custom Agents](4.Development%20Guide/Development%20Agent/Building%20Autonomous%20Planning%20Agent.md)

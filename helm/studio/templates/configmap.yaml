@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.configmap.name }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.configmap.name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: Helm
+
+data:
+  BACKEND_URL: {{ include "backend.fullname" (index .Subcharts "backend") }}
+  BACKEND_PORT: "{{ .Values.backend.service.port }}"
+
+  CODE_SANDBOX_URL: "http://{{ .Release.Name }}-sandbox-gateway:8188/run"
+
+  MILVUS_HOST: "{{ .Release.Name }}-milvus"
+  MILVUS_PORT: "{{ .Values.milvus.service.port }}"
+
+  MINIO_HOST: "{{ .Release.Name }}-{{ .Values.milvus.minio.name }}"
+  MINIO_PORT: "{{ .Values.milvus.minio.service.port }}"
+
+{{- range $key, $value := .Values.configmap.data }}
+  {{ $key }}: {{ $value | quote }}
+{{- end }}

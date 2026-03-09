@@ -5,6 +5,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from openjiuwen_studio.core.manager.repositories import BaseRepository
+from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import escape_like
 from openjiuwen_studio.models.embedding_model_config import EmbeddingModelConfig
 from openjiuwen_studio.models.knowledge_base import KnowledgeBaseDB
 from openjiuwen_studio.schemas.embedding_model_config import EmbeddingProtocol
@@ -65,9 +66,10 @@ class EmbeddingModelConfigRepository(BaseRepository[EmbeddingModelConfig]):
             query = query.filter(EmbeddingModelConfig.is_active == is_active)
 
         if search:
+            escaped_search = escape_like(search)
             search_filter = or_(
-                EmbeddingModelConfig.model_name.ilike(f"%{search}%"),
-                EmbeddingModelConfig.model_id.ilike(f"%{search}%")
+                EmbeddingModelConfig.model_name.ilike(f"%{escaped_search}%", escape="\\"),
+                EmbeddingModelConfig.model_id.ilike(f"%{escaped_search}%", escape="\\")
             )
             query = query.filter(search_filter)
 

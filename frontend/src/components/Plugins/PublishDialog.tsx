@@ -123,7 +123,7 @@ const PublishDialog: React.FC<PublishDialogProps> = ({
             <Typography variant="subtitle2" color="text.secondary" className="mb-1">
               {t('plugins.basicInfo.name', '插件名称')}
             </Typography>
-            <Typography variant="body1" className="font-medium">
+            <Typography variant="body1" className="font-medium truncate">
               {pluginName}
             </Typography>
             <Typography variant="subtitle2" color="text.secondary" className="mb-1 mt-2">

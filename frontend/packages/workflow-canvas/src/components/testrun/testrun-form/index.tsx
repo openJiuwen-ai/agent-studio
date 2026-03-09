@@ -6,7 +6,9 @@
 import { FC } from 'react'
 
 import classNames from 'classnames'
-import { Input, Switch, InputNumber, DatePicker } from '@douyinfe/semi-ui'
+import { Tooltip } from '@douyinfe/semi-ui'
+import { HelpCircle } from 'lucide-react'
+import { Input, Select, InputNumber, DatePicker } from '@douyinfe/semi-ui'
 import dayjs from 'dayjs'
 import { useTranslation } from '../../../i18n'
 
@@ -54,21 +56,43 @@ export const TestRunForm: FC<TestRunFormProps> = ({ values, setValues, inputForm
       case 'boolean':
         return (
           <div className={styles.fieldInput}>
-            <Switch checked={field.value} onChange={checked => field.onChange(checked)} />
+            <Select
+              size="small"
+              placeholder={t('workflowCanvas.formMaterials.input.pleaseSelectBoolean')}
+              optionList={[
+                { label: t('workflowCanvas.formMaterials.input.true'), value: 1 },
+                { label: t('workflowCanvas.formMaterials.input.false'), value: 0 },
+              ]}
+              value={field.value !== undefined && field.value !== null ? (field.value ? 1 : 0) : undefined}
+              onChange={value => field.onChange(value !== undefined ? !!value : undefined)}
+            />
             {hasError && <div className={styles.errorMessage}>{field.error}</div>}
           </div>
         )
       case 'integer':
         return (
           <div className={styles.fieldInput}>
-            <InputNumber precision={0} value={field.value} onChange={value => field.onChange(value)} type={hasError ? 'error' : 'default'} />
+            <InputNumber
+              precision={0}
+              max={Number.MAX_SAFE_INTEGER}
+              min={Number.MIN_SAFE_INTEGER}
+              value={field.value}
+              onChange={value => field.onChange(value)}
+              type={hasError ? 'error' : 'default'}
+            />
             {hasError && <div className={styles.errorMessage}>{field.error}</div>}
           </div>
         )
       case 'number':
         return (
           <div className={styles.fieldInput}>
-            <InputNumber value={field.value} onChange={value => field.onChange(value)} type={hasError ? 'error' : 'default'} />
+            <InputNumber
+              hideButtons
+              max={Number.MAX_VALUE}
+              value={field.value}
+              onChange={value => field.onChange(value)}
+              type={hasError ? 'error' : 'default'}
+            />
             {hasError && <div className={styles.errorMessage}>{field.error}</div>}
           </div>
         )
@@ -152,7 +176,12 @@ export const TestRunForm: FC<TestRunFormProps> = ({ values, setValues, inputForm
       {fields.map(field => (
         <div key={field.name} className={styles.fieldGroup}>
           <label htmlFor={field.name} className={styles.fieldLabel}>
-            {field.description || field.name}
+            {field.name}
+            {field.description && (
+              <Tooltip content={field.description} spacing={5}>
+                <HelpCircle size={14} className={styles.helpIcon} />
+              </Tooltip>
+            )}
             {field.required && <span className={styles.requiredIndicator}>*</span>}
             <span className={styles.fieldTypeIndicator}>
               <DisplaySchemaTag
