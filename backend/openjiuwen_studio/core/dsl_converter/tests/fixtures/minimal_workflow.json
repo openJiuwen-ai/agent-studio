@@ -1,0 +1,111 @@
+{
+  "nodes": [
+    {
+      "id": "start_1",
+      "type": "1",
+      "meta": {
+        "position": {
+          "x": 180,
+          "y": 38
+        }
+      },
+      "data": {
+        "title": "Start",
+        "outputs": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "string",
+              "description": "User input"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "llm_1",
+      "type": "3",
+      "meta": {
+        "position": {
+          "x": 640,
+          "y": 38
+        }
+      },
+      "data": {
+        "title": "LLM",
+        "inputs": {
+          "llmParam": {
+            "systemPrompt": {
+              "type": "template",
+              "content": "You are a helpful assistant."
+            },
+            "prompt": {
+              "type": "template",
+              "content": "{{input}}"
+            },
+            "model": {
+              "id": "1",
+              "name": "my_model",
+              "type": "deepseek-chat"
+            }
+          },
+          "inputParameters": {
+            "input": {
+              "type": "ref",
+              "content": [
+                "start_1",
+                "input"
+              ]
+            }
+          }
+        },
+        "outputs": {
+          "type": "object",
+          "properties": {
+            "output": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "end_1",
+      "type": "2",
+      "meta": {
+        "position": {
+          "x": 1100,
+          "y": 38
+        }
+      },
+      "data": {
+        "title": "End",
+        "inputs": {
+          "inputParameters": {
+            "result": {
+              "type": "ref",
+              "content": [
+                "llm_1",
+                "output"
+              ]
+            }
+          },
+          "content": {
+            "type": "template",
+            "content": "{{result}}"
+          }
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "sourceNodeID": "start_1",
+      "targetNodeID": "llm_1"
+    },
+    {
+      "sourceNodeID": "llm_1",
+      "targetNodeID": "end_1"
+    }
+  ]
+}

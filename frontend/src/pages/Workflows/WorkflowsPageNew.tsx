@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, Upload } from 'lucide-react'
 
 import {
   useCopyWorkflow,
@@ -12,6 +12,7 @@ import {
   WorkflowSortBy,
   WorkflowSortOrder,
 } from '@test-agentstudio/api-client'
+import ImportWorkflowDialog from '../../components/Workflows/ImportWorkflowDialog'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '../../Common/UnifiedSnackbar'
 import DeleteConfirmationDialog from '../../components/Common/DeleteConfirmationDialog'
 import { ENV_CONFIG } from '../../config/environment'
@@ -63,6 +64,7 @@ const WorkflowsPage: React.FC = () => {
     workflowName: '',
     workflowVersion: defaultWorkflowVersion,
   })
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
 
   const deleteWorkflow = useDeleteWorkflow()
   const updateWorkflow = useUpdateWorkflow()
@@ -345,6 +347,12 @@ const WorkflowsPage: React.FC = () => {
     )
   }
 
+  const handleImportSuccess = () => {
+    showSuccess(t('workflows.import.success'))
+    refetch() // Refresh workflow list
+    setImportDialogOpen(false)
+  }
+
   // 刷新工作流列表
   const location = useLocation()
   useEffect(() => {
@@ -398,16 +406,19 @@ const WorkflowsPage: React.FC = () => {
     [searchOptimization.searchTerm, searchOptimization.setSearchTerm, searchOptimization.handleCompositionStart, searchOptimization.handleCompositionEnd, viewType, sortBy, sortOrder, t],
   )
 
-  // 工具栏右侧（新建）
+  // 工具栏右侧（导入 + 新建）
   const toolbarRight = useMemo(
     () => (
-      <Link
-        to="/dashboard/workflows/new"
-        className="btn-primary h-8 flex items-center gap-2 text-sm px-4"
-      >
-        <Plus className="w-4 h-4" />
-        <span>{t('workflows.createWorkflow')}</span>
-      </Link>
+      <div className="flex items-center gap-2">
+        <button onClick={() => setImportDialogOpen(true)} className="btn-primary h-8 flex items-center gap-2 text-sm px-4">
+          <Upload className="w-4 h-4" />
+          <span>{t('workflows.importWorkflow')}</span>
+        </button>
+        <Link to="/dashboard/workflows/new" className="btn-primary h-8 flex items-center gap-2 text-sm px-4">
+          <Plus className="w-4 h-4" />
+          <span>{t('workflows.createWorkflow')}</span>
+        </Link>
+      </div>
     ),
     [t],
   )
@@ -514,6 +525,14 @@ const WorkflowsPage: React.FC = () => {
         itemType="workflow"
         itemName={deleteDialog.workflowName}
         isLoading={deleteWorkflow.isLoading}
+      />
+
+      {/* Import Workflow Dialog */}
+      <ImportWorkflowDialog
+        isOpen={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        onSuccess={handleImportSuccess}
+        spaceId={user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID}
       />
 
       {/* Unified Snackbar */}

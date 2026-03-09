@@ -8,6 +8,7 @@ import { Empty } from '@/components/Common/Empty'
 import WorkflowIcon from '@/assets/icons/workflow.svg?react'
 import dayjs from 'dayjs'
 import { Workflow } from '../../../utils/workflowUtils'
+import { isWorkflowNewlyImported, clearNewlyImportedFlag } from '../../../utils/newlyImportedWorkflows'
 
 interface WorkflowTableViewProps {
   workflows: Workflow[]
@@ -50,17 +51,34 @@ export const WorkflowTableView: React.FC<WorkflowTableViewProps> = ({
         sortable: true,
         sortField: 'name',
         render: ({ row }) => {
+          const isNewlyImported = isWorkflowNewlyImported(row.workflow_id)
+
           return (
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl bg-blue-50 text-blue-600">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl ${
+                isNewlyImported ? 'bg-green-100 text-green-600' : 'bg-blue-50 text-blue-600'
+              }`}>
                 <WorkflowIcon className="w-5 h-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div
-                  className="font-semibold text-gray-900 cursor-pointer truncate"
-                  onClick={() => navigate(`/dashboard/workflows/editor/${row.workflow_id}?spaceId=${row.space_id}`)}
-                >
-                  {row.name}
+                <div className="flex items-center gap-2">
+                  <div
+                    className="font-semibold text-gray-900 cursor-pointer truncate"
+                    onClick={() => {
+                      // Clear newly imported flag when user opens workflow
+                      if (isNewlyImported) {
+                        clearNewlyImportedFlag(row.workflow_id)
+                      }
+                      navigate(`/dashboard/workflows/editor/${row.workflow_id}?spaceId=${row.space_id}`)
+                    }}
+                  >
+                    {row.name}
+                  </div>
+                  {isNewlyImported && (
+                    <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full bg-green-100 text-green-700">
+                      IMPORTED
+                    </span>
+                  )}
                 </div>
                 <div className="mt-1 text-xs text-gray-500 truncate">{row.desc || '-'}</div>
               </div>
@@ -99,7 +117,13 @@ export const WorkflowTableView: React.FC<WorkflowTableViewProps> = ({
             icon: <Edit className="w-4 h-4" />,
             label: t('workflows.workflowList.editWorkflow'),
             tooltip: t('workflows.workflowList.editWorkflow'),
-            onClick: row => navigate(`/dashboard/workflows/editor/${row.workflow_id}?spaceId=${row.space_id}`),
+            onClick: row => {
+              // Clear newly imported flag when user edits workflow
+              if (isWorkflowNewlyImported(row.workflow_id)) {
+                clearNewlyImportedFlag(row.workflow_id)
+              }
+              navigate(`/dashboard/workflows/editor/${row.workflow_id}?spaceId=${row.space_id}`)
+            },
           },
           {
             key: 'copy',

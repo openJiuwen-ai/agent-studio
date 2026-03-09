@@ -1,10 +1,11 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Clock, Copy, Edit, Trash2 } from 'lucide-react'
-import { ConfigCard, ConfigCardAction, EditingState } from '../../../components/Common/common-grid'
+import { ConfigCard, ConfigCardAction, ConfigCardTag, EditingState } from '../../../components/Common/common-grid'
 import { CardFooterRow } from '../../../components/Common/common-grid'
 import WorkflowIcon from '@/assets/icons/workflow.svg?react'
 import { ENV_CONFIG } from '../../../config/environment'
+import { isWorkflowNewlyImported, clearNewlyImportedFlag } from '../../../utils/newlyImportedWorkflows'
 
 
 export interface Workflow {
@@ -65,6 +66,10 @@ export const WorkflowCard: React.FC<WorkflowCardProps> = ({
   isUpdating = false,
 }) => {
   const { t } = useTranslation()
+
+  // Check if this workflow is newly imported
+  const isNewlyImported = isWorkflowNewlyImported(workflow.workflow_id)
+
   // 构建操作按钮
   const actions: ConfigCardAction[] = [
     {
@@ -72,6 +77,10 @@ export const WorkflowCard: React.FC<WorkflowCardProps> = ({
       label: t('common.buttons.edit'),
       icon: <Edit className="w-4 h-4" />,
       onClick: () => {
+        // Clear the newly imported flag when user opens the workflow
+        if (isNewlyImported) {
+          clearNewlyImportedFlag(workflow.workflow_id)
+        }
         window.location.href = `/dashboard/workflows/editor/${workflow.workflow_id}?spaceId=${workflow.space_id || ENV_CONFIG.DEFAULT_SPACE_ID}`
       },
     },
@@ -94,18 +103,35 @@ export const WorkflowCard: React.FC<WorkflowCardProps> = ({
 
   const timeDisplay = formatRelativeTime(workflow.update_time || workflow.create_time, t)
 
+  // Add "IMPORTED" badge for newly imported workflows
+  const tags: ConfigCardTag[] = isNewlyImported
+    ? [
+        {
+          label: 'IMPORTED',
+          color: 'text-green-700',
+          bgColor: 'bg-green-100',
+        },
+      ]
+    : []
+
   return (
     <ConfigCard
       id={workflow.workflow_id}
       icon={workflowIcon}
-      iconBgColor="bg-gradient-to-br from-blue-50 to-indigo-50"
-      iconTextColor="text-blue-600"
+      iconBgColor={isNewlyImported ? 'bg-green-100' : 'bg-gradient-to-br from-blue-50 to-indigo-50'}
+      iconTextColor={isNewlyImported ? 'text-green-600' : 'text-blue-600'}
       title={workflow.name}
       description={workflow.desc}
+      tags={tags}
       editingState={editingState}
       actions={actions}
       isUpdating={isUpdating}
+      className={isNewlyImported ? '!bg-green-100' : ''}
       onClick={() => {
+        // Clear the newly imported flag when user clicks the card
+        if (isNewlyImported) {
+          clearNewlyImportedFlag(workflow.workflow_id)
+        }
         window.location.href = `/dashboard/workflows/editor/${workflow.workflow_id}?spaceId=${workflow.space_id || ENV_CONFIG.DEFAULT_SPACE_ID}`
       }}
       onEdit={onEdit}
