@@ -5,6 +5,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import DOMPurify from 'dompurify'
 import mermaid from 'mermaid'
 import type { MermaidCodeBlockProps } from '../types'
 import { initMermaid, adjustViewBox } from './utils'
@@ -94,8 +95,19 @@ export const MermaidChart: React.FC<MermaidCodeBlockProps> = ({ code }) => {
 
       if (!ref.current) return
 
-      // 插入 SVG
-      ref.current.innerHTML = svg
+      // 插入消毒后的 SVG，防止 XSS 攻击
+      ref.current.innerHTML = DOMPurify.sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true },
+        ADD_TAGS: ['foreignObject'],
+        ADD_ATTR: [
+          'transform', 'viewBox', 'preserveAspectRatio', 'x', 'y', 'width', 'height',
+          'd', 'cx', 'cy', 'r', 'rx', 'ry', 'x1', 'y1', 'x2', 'y2',
+          'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin',
+          'font-size', 'font-weight', 'font-family', 'text-anchor', 'dominant-baseline',
+          'class', 'id', 'aria-roledescription', 'aria-label', 'role',
+        ],
+        FORBID_ATTR: ['xlink:href', 'onclick', 'onload', 'onerror', 'onmouseover', 'onfocus', 'onblur'],
+      })
       const svgElement = ref.current.querySelector('svg')
       if (!svgElement) return
 

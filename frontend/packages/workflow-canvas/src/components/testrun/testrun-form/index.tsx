@@ -6,6 +6,8 @@
 import { FC } from 'react'
 
 import classNames from 'classnames'
+import { Tooltip } from '@douyinfe/semi-ui'
+import { HelpCircle } from 'lucide-react'
 import { Input, Select, InputNumber, DatePicker } from '@douyinfe/semi-ui'
 import dayjs from 'dayjs'
 import { useTranslation } from '../../../i18n'
@@ -174,7 +176,12 @@ export const TestRunForm: FC<TestRunFormProps> = ({ values, setValues, inputForm
       {fields.map(field => (
         <div key={field.name} className={styles.fieldGroup}>
           <label htmlFor={field.name} className={styles.fieldLabel}>
-            {field.description || field.name}
+            {field.name}
+            {field.description && (
+              <Tooltip content={field.description} spacing={5}>
+                <HelpCircle size={14} className={styles.helpIcon} />
+              </Tooltip>
+            )}
             {field.required && <span className={styles.requiredIndicator}>*</span>}
             <span className={styles.fieldTypeIndicator}>
               <DisplaySchemaTag

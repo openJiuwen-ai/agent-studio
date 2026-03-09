@@ -17,9 +17,6 @@ interface UIState {
   knowledgeBaseViewMode: 'grid' | 'list'
   memoryBaseViewMode: 'grid' | 'list'
 
-  // 是否使用新版 Dashboard UI
-  isNewDashboard: boolean
-
   // 其他可以扩展的UI状态
   // 例如：主题模式、侧边栏状态、面板大小等
   theme: 'light' | 'dark' | 'auto'
@@ -42,9 +39,6 @@ interface UIActions {
   setKnowledgeBaseViewMode: (mode: 'grid' | 'list') => void
   // 知识库显示模式操作
   setMemoryBaseViewMode: (mode: 'grid' | 'list') => void
-  // Dashboard 版本切换
-  setIsNewDashboard: (isNew: boolean) => void
-  toggleDashboardVersion: () => void
 
   // 主题相关操作
   setTheme: (theme: 'light' | 'dark' | 'auto') => void
@@ -68,7 +62,6 @@ const initialState: UIState = {
   promptsViewMode: 'grid', // 默认为网格模式
   knowledgeBaseViewMode: 'grid', // 默认为网格模式
   memoryBaseViewMode: 'grid',
-  isNewDashboard: false, // 默认使用旧版 Dashboard
   theme: 'light',
   sidebarCollapsed: false,
   mainLayoutSize: 100,
@@ -127,20 +120,6 @@ export const useUIStore = create<UIState & UIActions>()(
         set({ memoryBaseViewMode: mode })
       },
 
-      // 设置 Dashboard 版本
-      setIsNewDashboard: (isNew: boolean) => {
-        console.log(`🎨 [UIStore] Dashboard version changed to: ${isNew ? 'new' : 'old'}`)
-        set({ isNewDashboard: isNew })
-      },
-
-      // 切换 Dashboard 版本
-      toggleDashboardVersion: () => {
-        const current = get().isNewDashboard
-        const next = !current
-        console.log(`🎨 [UIStore] Toggling dashboard version from ${current ? 'new' : 'old'} to ${next ? 'new' : 'old'}`)
-        set({ isNewDashboard: next })
-      },
-
       // 设置主题
       setTheme: (theme: 'light' | 'dark' | 'auto') => {
         console.log(`🎨 [UIStore] Theme changed to: ${theme}`)
@@ -176,7 +155,6 @@ export const useUIStore = create<UIState & UIActions>()(
         workflowViewMode: state.workflowViewMode,
         promptsViewMode: state.promptsViewMode,
         knowledgeBaseViewMode: state.knowledgeBaseViewMode,
-        isNewDashboard: state.isNewDashboard,
         theme: state.theme,
         sidebarCollapsed: state.sidebarCollapsed,
         mainLayoutSize: state.mainLayoutSize,

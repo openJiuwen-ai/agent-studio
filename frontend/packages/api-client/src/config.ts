@@ -111,6 +111,7 @@ export const API_ENDPOINTS = {
     ENTER_EXECUTION_DEBUG: '/workflows/enter_execution_logs_debug',
     GET_UPLOAD_URL: '/workflows/get_upload_url',
     GET_DOWNLOAD_URL: '/workflows/get_download_url',
+    IMPORT: '/workflows/import',
   },
 
   // 执行管理

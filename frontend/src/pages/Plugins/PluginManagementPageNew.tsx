@@ -393,7 +393,7 @@ const PluginManagementPageNew: React.FC = () => {
     }
 
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {displayPlugins.map(plugin => (
           <ConfigCard
             key={plugin.plugin_id}

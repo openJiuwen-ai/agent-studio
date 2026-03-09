@@ -6,7 +6,7 @@ import { useUIStore } from '../../stores/useUIStore'
 import { useUserSpaces } from '@test-agentstudio/api-client'
 import { ENV_CONFIG } from '@/config/environment'
 import { CircularProgress } from '@mui/material'
-import SidebarNew from './SidebarNew'
+import Sidebar from './SidebarNew'
 import { getLoginPagePath } from '@/Common/LoginPage.ts'
 
 const Layout: React.FC = () => {
@@ -157,7 +157,7 @@ const Layout: React.FC = () => {
     <div className="h-full flex overflow-hidden bg-gray-50">
       {/* Sidebar - 新版 */}
       <div ref={sidebarRef} className="h-full flex flex-col overflow-hidden">
-        <SidebarNew
+        <Sidebar
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           isCollapsed={sidebarCollapsed}

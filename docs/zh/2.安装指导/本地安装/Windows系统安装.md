@@ -13,16 +13,6 @@
 
 * 操作系统：Windows10及以上
 
-* 软件（安装方法详见下文）
-  * Git 2.40及以上
-  * Node.js 20.0及以上
-  * npm 9.0及以上
-  * Python 3.11.4及以上
-  * uv 0.5.0及以上
-  * MySQL 8.0及以上
-  * Milvus 2.6.2及以上
-  * PowerShell 5.1及以上（可运行 `$PSVersionTable.PSVersion` 查看）
-
 ## 二、安装方法
 
 ### 方法一：使用一键安装部署脚本

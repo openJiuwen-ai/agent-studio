@@ -339,7 +339,7 @@ export const ConfigCard: React.FC<ConfigCardProps> = ({
           <CardHeaderIcon bgColor={iconBgColor} textColor={`${iconTextColor} text-2xl`}>
             {icon}
           </CardHeaderIcon>
-          <CardHeaderContent className={tags.length > 0 ? 'justify-between' : 'justify-center'}>
+          <CardHeaderContent className={tags.length > 0 ? 'justify-between !h-auto gap-1' : 'justify-center'}>
             {isEditingThis && editingState.field === 'name' ? (
               <div className="flex items-center gap-1 min-w-0 flex-1">
                 <Tooltip

@@ -991,7 +991,9 @@
         "optional": "(optional)",
         "emptyTitle": "No templates available",
         "emptyDescription": "Upload templates to use",
-        "uploadButton": "Upload Template"
+        "uploadButton": "Upload Template",
+        "invalidFileType": "Unsupported file type. Please upload files in {{formats}} format",
+        "fileTypeChanged": "Mode switched. The previous file type is no longer supported. Please select a new file"
       }
     },
     "time": {
@@ -1152,6 +1154,25 @@
     "title": "Workflows",
     "subtitle": "Design, manage and monitor your automated workflows, build efficient business processes",
     "createWorkflow": "Create Workflow",
+    "importWorkflow": "Import Workflow",
+    "import": {
+      "title": "Import Workflow",
+      "subtitle": "Import a workflow from JSON file (OpenJiuwen or n8n format)",
+      "file": "Workflow File",
+      "dragDrop": "Drag and drop your JSON file here, or click to select",
+      "selectFile": "Select File",
+      "fileFormat": "Supported formats: .json (OpenJiuwen native or n8n)",
+      "validateStrict": "Strict Validation",
+      "validateStrictDesc": "Validate workflow can be compiled and executed",
+      "importButton": "Import Workflow",
+      "importing": "Importing...",
+      "success": "Workflow imported successfully",
+      "errors": {
+        "noFile": "Please select a file to import",
+        "invalidFileType": "Please select a valid JSON file",
+        "importFailed": "Failed to import workflow"
+      }
+    },
     "workflowList": {
       "title": "Workflow List",
       "noWorkflows": "No workflows available",

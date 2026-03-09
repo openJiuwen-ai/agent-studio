@@ -128,9 +128,9 @@ export class WorkflowService {
 
   // 删除工作流版本
   static async deleteWorkflowVersion(request: {
-    workflow_id: string;
-    space_id: string;
-    workflow_version: string;
+    workflow_id: string
+    space_id: string
+    workflow_version: string
   }): Promise<{ code: number; message: string; data?: any }> {
     const apiClient = getApiClient()
     const response = await apiClient.post(API_ENDPOINTS.WORKFLOWS.DELETE_PUBLISH_VERSION, request)
@@ -156,6 +156,17 @@ export class WorkflowService {
     const response = await apiClient.get<GetDownloadUrlResponse>(
       `${API_ENDPOINTS.WORKFLOWS.GET_DOWNLOAD_URL}/${object_key || ''}${queryParams}`
     )
+    return response.data
+  }
+
+  // 导入工作流
+  static async importWorkflow(formData: FormData): Promise<{ code: number; message: string; data?: any }> {
+    const apiClient = getApiClient()
+    const response = await apiClient.post<{ code: number; message: string; data?: any }>(API_ENDPOINTS.WORKFLOWS.IMPORT, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
     return response.data
   }
 }
