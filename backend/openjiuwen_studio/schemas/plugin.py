@@ -29,6 +29,7 @@ class ParamSendMethod(IntEnum):
     PARAM_SEND_METHOD_HEADER = 1,
     PARAM_SEND_METHOD_QUERY = 2,
     PARAM_SEND_METHOD_BODY = 3,
+    PARAM_SEND_METHOD_PATH = 4,
 
 
 class Priority(IntEnum):
@@ -138,6 +139,7 @@ class PluginApiMethod(IntEnum):
     PLUGIN_API_METHOD_POST = 2,
     PLUGIN_API_METHOD_PUT = 3,
     PLUGIN_API_METHOD_DELETE = 4,
+    PLUGIN_API_METHOD_PATCH = 5,
 
 
 class PluginApiBase(PluginBase):

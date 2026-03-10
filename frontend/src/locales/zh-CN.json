@@ -2799,9 +2799,13 @@
       "descriptionPlaceholder": "请输入参数描述",
       "nonRuntimeNeedsDefaultValue": "非运行时参数必须设置默认值",
       "addParam": "添加参数",
+      "noneParam": "无",
+
       "headerParam": "请求头参数",
       "queryParam": "查询参数",
       "bodyParam": "请求体参数",
+      "pathParam": "Path参数（路径参数）",
+
       "inputMethod": "传入方式",
       "nonRuntimeParam": "非运行时参数",
       "nonRuntimeParamDesc": "非运行时参数在配置时填写，工具执行期间保持固定",
@@ -3278,9 +3282,11 @@
     "toolConfig": {
       "noDescription": "暂无描述",
       "defaultValueLabel": "默认值",
+      "noneParam": "无",
       "headerParam": "Header参数",
       "queryParameter": "Query参数",
       "bodyParameter": "Body参数",
+      "pathParam": "Path参数（路径参数）",
       "thisRequiredField": "此字段为必填项",
       "required": "必填",
       "enterDefaultValue": "输入默认值",

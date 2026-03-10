@@ -27,6 +27,7 @@ api_method_mapping = {
     PluginApiMethod.PLUGIN_API_METHOD_POST: "POST",
     PluginApiMethod.PLUGIN_API_METHOD_PUT: "PUT",
     PluginApiMethod.PLUGIN_API_METHOD_DELETE: "DELETE",
+    PluginApiMethod.PLUGIN_API_METHOD_PATCH: "PATCH",
 }
 
 param_type_mapping = {
@@ -46,6 +47,7 @@ param_send_method_type_mapping = {
     ParamSendMethod.PARAM_SEND_METHOD_HEADER: "header",
     ParamSendMethod.PARAM_SEND_METHOD_QUERY: "query",
     ParamSendMethod.PARAM_SEND_METHOD_BODY: "body",
+    ParamSendMethod.PARAM_SEND_METHOD_PATH: "path",
 }
 
 

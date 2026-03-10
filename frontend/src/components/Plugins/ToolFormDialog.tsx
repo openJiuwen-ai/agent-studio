@@ -142,6 +142,9 @@ const ToolFormDialog: React.FC<ToolFormDialogProps> = ({ open, loading = false, 
                   </MenuItem>
                   <MenuItem value="GET">GET</MenuItem>
                   <MenuItem value="POST">POST</MenuItem>
+                  <MenuItem value="PUT">PUT</MenuItem>
+                  <MenuItem value="DELETE">DELETE</MenuItem>
+                  <MenuItem value="PATCH">PATCH</MenuItem>
                 </Select>
               </FormControl>
             </div>
