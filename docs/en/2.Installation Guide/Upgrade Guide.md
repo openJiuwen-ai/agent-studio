@@ -56,7 +56,7 @@ Please carefully read this guide before upgrading and follow the steps to comple
    ```
 
 3. Database upgrade:
-   Please refer to the [DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md](../../../backend/DATABASE_MIGRATION_DEVELOPMENT_GUIDE_EN.md#2-version-upgrade-notes) section [2. Version Upgrade Notes](../../../backend/DATABASE_MIGRATION_DEVELOPMENT_GUIDE_EN.md#2-version-upgrade-notes) for backend database upgrade.
+   Please refer to the <a href="https://gitcode.com/openJiuwen/agent-studio/blob/develop/backend/DATABASE_MIGRATION_DEVELOPMENT_GUIDE_EN.md" target="_blank" rel="nofollow noopener noreferrer">DATABASE_MIGRATION_DEVELOPMENT_GUIDE.md</a> section <a href="https://gitcode.com/openJiuwen/agent-studio/blob/develop/backend/DATABASE_MIGRATION_DEVELOPMENT_GUIDE_EN.md#2-Version-Upgrade-Notes" target="_blank" rel="nofollow noopener noreferrer">[2. Version Upgrade Notes]</a> for backend database upgrade.
 
 4. Activate the virtual environment and start the backend service:
 

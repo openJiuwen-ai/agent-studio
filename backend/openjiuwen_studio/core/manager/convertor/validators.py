@@ -565,7 +565,11 @@ def validate_branch_node(node: Node, all_nodes: list[Node], all_edges: list[Edge
                             error_stage="validate"
                         )
                 # 检查 right 值（如果存在）
-                if condition.right is not None and condition.right.type == "constant":
+                operator = condition.operator
+                unary_operators = {"is_empty", "is_not_empty"}
+                requires_right = operator not in unary_operators
+
+                if requires_right and condition.right is not None and condition.right.type == "constant":
                     if condition.right.content is None or condition.right.content == "":
                         raise JiuWenComponentException(
                             code=StatusCode.IF_COMPONENT_CONVERT_FAILED.code,
