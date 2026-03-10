@@ -22,14 +22,37 @@ Comprehensive test suite for the workflow import system.
    - Space ID always ignored from source JSON
    - Default value injection for missing fields
 
-3. **test_converter_n8n.py** (18 tests)
-   - n8n format conversion to OpenJiuwen using actual fixture
-   - Node type mappings from fixture (httpRequest, code, if, webhook, respondToWebhook)
+3. **test_converter_n8n.py** (102 tests)
+
+   **Fixture-based integration tests** (`TestN8nWorkflowConverter` — 17 tests)
+   - Full pipeline conversion from `n8n_workflow.json` fixture
+   - Node type mappings (httpRequest, code, if, webhook, respondToWebhook)
    - START/END node generation
-   - Connections to edges conversion (n8n connections → OpenJiuwen edges with sourceNodeID/targetNodeID)
+   - Connections to edges conversion
    - Position preservation
-   - Header conversion
-   - Input/output parameter extraction
+   - Header conversion, input/output parameter extraction
+
+   **Per-node unit tests** (85 tests) — each class builds a minimal `start → node → end`
+   workflow programmatically and asserts on the resulting Jiuwen schema:
+
+   | Class | Tests | What it covers |
+   |---|---|---|
+   | `TestIDGenerator` | 3 | Sequential ID generation, reset, independent prefixes |
+   | `TestStartEndNodes` | 6 | Start/End creation, edge connectivity, generic outputs |
+   | `TestTriggerNodes` | 5 | Webhook, chat, form, cron → Start node merging |
+   | `TestLLMNode` | 7 | Agent/LLM prompts, model config, outputs, edges |
+   | `TestIFNode` | 7 | Selector branches, port IDs, **else→end fallback fix** |
+   | `TestLoopNode` | 5 | Batch size, block structure, output properties |
+   | `TestCodeNode` | 9 | JS/Python wrapping, `def main`, exception config |
+   | `TestSetNode` | 5 | Assignments, raw mode, passthrough optimisation |
+   | `TestPluginNode` | 6 | HTTP/app nodes, plugin param, raw param forwarding |
+   | `TestMergeNode` | 3 | Variable Merge node structure |
+   | `TestWorkflowNode` | 4 | SubWorkflow node, workflowId/mode preservation |
+   | `TestConnections` | 5 | Edge wiring, no duplicates, sourcePortID correctness |
+   | `TestExpressions` | 8 | `{{ $json.x }}` → `{{x}}` conversion, field mapping |
+   | `TestModelMapping` | 7 | GPT-4, Claude, Qwen, DeepSeek, Ollama, Gemini |
+   | `TestNormalizePythonMain` | 3 | `def main(args):` wrapping logic |
+   | `TestFallbackNode` | 2 | Unknown node → Code fallback with warning |
 
 4. **test_validator.py** (20 tests)
    - Schema validation
@@ -54,7 +77,7 @@ Comprehensive test suite for the workflow import system.
    - Error propagation
    - Warning propagation
 
-**Total: 118 test cases** (reduced from 136 - removed tests for non-existent features, now only test actual fixture data)
+**Total: 202 test cases**
 
 ## Running Tests
 
@@ -65,17 +88,26 @@ Comprehensive test suite for the workflow import system.
 ```bash
 # From tests directory
 cd backend/openjiuwen_studio/core/dsl_converter/tests
-python run_tests.py all          # Run all 118 tests
+python run_tests.py all          # Run all 202 tests
 python run_tests.py importer     # Run just importer tests
 python run_tests.py integration  # Run integration tests
 python run_tests.py coverage     # Run with coverage report
 python run_tests.py quick        # Run quick smoke tests
 ```
 
+**Run a specific n8n converter suite:**
+
+```bash
+python -m pytest tests/test_converter_n8n.py::TestN8nWorkflowConverter -v  # fixture-based
+python -m pytest tests/test_converter_n8n.py::TestIFNode -v
+python -m pytest tests/test_converter_n8n.py::TestLLMNode -v
+python -m pytest tests/test_converter_n8n.py::TestCodeNode -v
+# ... any class name from the table above
+```
+
 **Or on Linux/Mac using the shell script:**
 
 ```bash
-# From tests directory
 cd backend/openjiuwen_studio/core/dsl_converter/tests
 ./run_import_tests.sh all
 ./run_import_tests.sh importer
@@ -120,11 +152,11 @@ pytest openjiuwen_studio/core/dsl_converter/tests/test_detector.py::TestWorkflow
 # Run all n8n-related tests
 pytest openjiuwen_studio/core/dsl_converter/tests/ -k "n8n" -v
 
+# Run all IF node tests
+pytest openjiuwen_studio/core/dsl_converter/tests/test_converter_n8n.py -k "TestIFNode" -v
+
 # Run all validation tests
 pytest openjiuwen_studio/core/dsl_converter/tests/ -k "validate" -v
-
-# Run all integration tests
-pytest openjiuwen_studio/core/dsl_converter/tests/test_integration.py -v
 ```
 
 ## Test Fixtures
@@ -147,7 +179,7 @@ Complete OpenJiuwen workflow export with all fields:
 
 **File:** `fixtures/minimal_workflow.json`
 
-**✨ NEW:** Demonstrates partial workflow import - only has `schema` field:
+Demonstrates partial workflow import - only has `schema` field:
 - 3 nodes: START, LLM, END
 - 2 edges using sourceNodeID/targetNodeID
 - LLM has `input` parameter
@@ -164,29 +196,32 @@ n8n workflow with 5 nodes:
 - if_1: IF condition at [850, 300]
 - respond_1: Respond to Webhook at [1050, 300]
 - 4 connections: Webhook → HTTP Request → Process Data → Check Condition → Respond
-- Uses n8n "connections" format (converted to OpenJiuwen "edges")
 
-## Test Categories
+## Test Design
 
-### 1. Unit Tests
+### Fixture-Based Integration Tests (`TestN8nWorkflowConverter`)
 
-Test individual components in isolation:
-- `test_detector.py` - Format detection logic
-- `test_converter_native.py` - Native conversion
-- `test_converter_n8n.py` - n8n conversion
-- `test_validator.py` - Validation logic
+Load a real n8n workflow JSON fixture and run the full `converter.convert()` pipeline,
+asserting on the complete `WorkflowImportResult`. These tests verify the end-to-end
+contract between n8n input and Jiuwen output.
 
-### 2. Integration Tests
+### Per-Node Unit Tests (all other classes)
 
-Test component interactions:
-- `test_importer.py` - Import orchestration
-- `test_integration.py` - End-to-end workflows
+Each class builds a **minimal n8n workflow programmatically** using shared helpers:
+
+```python
+node = make_node("Agent", "n8n-nodes-base.agent", {"text": "Hello {{input}}"})
+nodes, edges = schema_from(make_workflow(node))
+llm = node_of_type(nodes, ComponentType.COMPONENT_TYPE_LLM)
+assert "{{input}}" in llm["data"]["inputs"]["llmParam"]["prompt"]["content"]
+```
+
+The typical shape is **start → node under test → end**, keeping each test isolated
+while still exercising the full conversion pipeline.
 
 ## Mocking Strategy
 
 ### Database Mocking
-
-Tests mock the workflow repository to avoid database dependencies:
 
 ```python
 with patch('openjiuwen_studio.repositories.workflow_repository') as mock_repo:
@@ -195,16 +230,12 @@ with patch('openjiuwen_studio.repositories.workflow_repository') as mock_repo:
 
 ### Workflow Manager Mocking
 
-Tests mock the workflow manager for publish operations:
-
 ```python
 with patch('openjiuwen_studio.core.manager.workflow.mgr') as mock_mgr:
     mock_mgr.workflow_publish = AsyncMock(return_value={"version": "1.0.0"})
 ```
 
 ### Flow Manager Mocking
-
-Tests mock flow manager for strict validation:
 
 ```python
 with patch('openjiuwen_studio.core.manager.workflow.flow_mgr') as mock_flow_mgr:
@@ -227,8 +258,9 @@ with patch('openjiuwen_studio.core.manager.workflow.flow_mgr') as mock_flow_mgr:
 ✅ Converts OpenJiuwen → OpenJiuwen (ID regeneration)
 ✅ Converts n8n → OpenJiuwen (node mapping, connections → edges)
 ✅ **Edge format standardized** - all edges use sourceNodeID/targetNodeID
-✅ Preserves workflow structure
-✅ Updates references correctly (edges, input parameters)
+✅ **IF else-branch fallback** - unwired else branch connects to End node
+✅ **Passthrough Set node optimisation** - pure `$json` refs merged into predecessor
+✅ Preserves workflow structure and node positions
 ✅ Generates START/END nodes for n8n
 ✅ Default value injection for missing fields
 
@@ -266,52 +298,13 @@ async def test_import_workflow(self, importer):
     assert result.success is True
 ```
 
-## Fixtures
-
-Tests use pytest fixtures for reusability:
-
-```python
-@pytest.fixture
-def converter(self):
-    """Create converter instance"""
-    return N8nWorkflowConverter()
-
-@pytest.fixture
-def simple_n8n_workflow(self):
-    """Create simple n8n workflow"""
-    return {...}
-```
-
-## Assertions
-
-Tests verify:
-- Success/failure status
-- Error messages
-- Warning messages
-- Metadata content
-- Database calls
-- ID regeneration
-- Reference updates
-
-## Test Data
-
-**All tests use ONLY actual fixture files** - no synthetic test data:
-- **fixtures/openjiuwen_export.json** - Full OpenJiuwen workflow export
-- **fixtures/minimal_workflow.json** - Partial workflow (only schema field)
-- **fixtures/n8n_workflow.json** - n8n format workflow
-
-For edge cases and error scenarios:
-- Minimal valid data (e.g., workflow with empty nodes array)
-- Invalid data structures (e.g., missing required fields)
-- Small test objects for testing helper methods (convert_headers, generate_node_id)
-
 ## Coverage Goals
 
 Target coverage: **>90%**
 
 Critical paths to cover:
 - ✅ All format detection paths
-- ✅ All conversion paths (per format)
+- ✅ All conversion paths (per format, per node type)
 - ✅ All validation layers
 - ✅ Draft import mode
 - ✅ All error paths
@@ -335,35 +328,22 @@ Example GitHub Actions:
 
 ## Debugging Tests
 
-### Verbose Output
-
 ```bash
-pytest openjiuwen_studio/core/dsl_converter/tests/ -v -s
-```
-
-### Failed Tests Only
-
-```bash
-pytest openjiuwen_studio/core/dsl_converter/tests/ --lf
-```
-
-### Stop on First Failure
-
-```bash
-pytest openjiuwen_studio/core/dsl_converter/tests/ -x
-```
-
-### Show Print Statements
-
-```bash
-pytest openjiuwen_studio/core/dsl_converter/tests/ -s
+pytest openjiuwen_studio/core/dsl_converter/tests/ -v -s   # verbose + print
+pytest openjiuwen_studio/core/dsl_converter/tests/ --lf    # failed tests only
+pytest openjiuwen_studio/core/dsl_converter/tests/ -x      # stop on first failure
 ```
 
 ## Test Maintenance
 
-### Adding New Format
+### Adding a New n8n Node Type
 
-When adding a new format:
+1. Add a `TestXxxNode` class to `test_converter_n8n.py`
+2. Use `make_node` / `make_workflow` / `schema_from` helpers
+3. Cover: node created, key fields preserved, connected to end node
+
+### Adding a New Format
+
 1. Add tests to `test_detector.py`
 2. Create `test_converter_newformat.py`
 3. Add integration tests to `test_integration.py`
@@ -371,17 +351,9 @@ When adding a new format:
 
 ### Adding New Validation
 
-When adding new validation:
 1. Add tests to `test_validator.py`
 2. Test both success and failure cases
 3. Test warning generation
-
-### Adding New Feature
-
-When adding new feature:
-1. Add unit tests
-2. Add integration tests
-3. Update this README
 
 ## Known Issues
 

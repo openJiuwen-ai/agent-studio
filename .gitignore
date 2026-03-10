@@ -101,6 +101,7 @@ scripts/examples
 scripts/ssl
 scripts/.ssl-dirs/*
 scripts/.envs/*
+scripts/conf/.nginx-files/*backend/openjiuwen_studio/core/dsl_converter/experimental/
 scripts/conf/.nginx-files/*
 
 # Code assist
