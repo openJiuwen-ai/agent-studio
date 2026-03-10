@@ -386,6 +386,7 @@
     "previewDebug": {
       "title": "Preview & Debug",
       "agentDebugChat": {
+        "title": "Preview & Debug",
         "header": {
           "debugInfo": "Debug Info"
         },

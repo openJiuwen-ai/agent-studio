@@ -36,10 +36,12 @@ const PromptOptimizePageNew: React.FC = () => {
     jobType: 'formal' as 'formal' | 'draft',
   })
 
-  const { searchTerm, debouncedSearchTerm, setSearchTerm, handleCompositionStart, handleCompositionEnd } = useOptimizedSearch(
-    undefined,
-    { debounceDelay: 300, minChars: 0, immediateOnEmpty: false, respectComposition: true },
-  )
+  const { searchTerm, debouncedSearchTerm, setSearchTerm, handleCompositionStart, handleCompositionEnd } = useOptimizedSearch(undefined, {
+    debounceDelay: 300,
+    minChars: 0,
+    immediateOnEmpty: false,
+    respectComposition: true,
+  })
 
   const { data: jobListData, isLoading, refetch: refetchJobList } = useOptimizationJobList(['*'], workspaceId)
   const refreshJobListMutation = useRefreshOptimizationJobList()
@@ -251,7 +253,7 @@ const PromptOptimizePageNew: React.FC = () => {
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value as PromptOptimizationRow['status'] | 'all')}
-          className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]"
+          className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6]"
         >
           <option value="all">{t('prompts.optimizePage.filters.allStatuses')}</option>
           <option value="optimizing">{t('prompts.optimizePage.status.optimizing')}</option>
@@ -264,7 +266,7 @@ const PromptOptimizePageNew: React.FC = () => {
           <button
             type="button"
             onClick={handleClearFilters}
-            className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] hover:border-[#d1d5db]"
+            className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] dark:hover:bg-gray-700 hover:border-[#d1d5db] dark:hover:border-gray-500"
           >
             {t('prompts.optimizePage.clearFilters')}
           </button>
@@ -281,17 +283,13 @@ const PromptOptimizePageNew: React.FC = () => {
           type="button"
           onClick={handleRefresh}
           disabled={refreshing}
-          className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] disabled:opacity-50 flex items-center gap-2"
+          className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] dark:hover:bg-gray-700 hover:border-[#d1d5db] dark:hover:border-gray-500 disabled:opacity-50 flex items-center gap-2"
           title={refreshing ? t('prompts.optimizePage.refreshing') : t('prompts.optimizePage.refresh')}
         >
           <RotateCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           <span>{t('prompts.optimizePage.refresh')}</span>
         </button>
-        <button
-          type="button"
-          onClick={handleCreateNew}
-          className="btn-primary h-8 flex items-center gap-2 text-sm px-4"
-        >
+        <button type="button" onClick={handleCreateNew} className="btn-primary h-8 flex items-center gap-2 text-sm px-4">
           <Plus className="w-4 h-4" />
           <span>{t('prompts.optimizePage.createTask')}</span>
         </button>
@@ -338,7 +336,9 @@ const PromptOptimizePageNew: React.FC = () => {
       />
       <DeleteConfirmationDialog
         isOpen={deleteDialog.open}
-        title={deleteDialog.jobType === 'draft' ? t('prompts.optimizePage.deleteDialog.deleteDraftTitle') : t('prompts.optimizePage.deleteDialog.deleteTaskTitle')}
+        title={
+          deleteDialog.jobType === 'draft' ? t('prompts.optimizePage.deleteDialog.deleteDraftTitle') : t('prompts.optimizePage.deleteDialog.deleteTaskTitle')
+        }
         message={
           deleteDialog.jobType === 'draft'
             ? t('prompts.optimizePage.deleteDialog.deleteDraftMessage', { name: deleteDialog.jobName })

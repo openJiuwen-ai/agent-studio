@@ -59,7 +59,7 @@ const styles = `
 
   .color-hover:hover {
     transform: scale(1.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--workflow-shadow-node);
   }
 
   /* 响应式布局优化 */

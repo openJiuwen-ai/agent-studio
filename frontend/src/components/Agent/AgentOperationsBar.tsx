@@ -31,7 +31,7 @@ const AgentOperationsBar = ({
   const { t } = useScopedTranslation('agents.agentEditor.previewDebug.operationsBar')
   const inputRef = useRef<HTMLInputElement | null>(null)
   return (
-    <div className="bg-white rounded-xl p-3 border border-gray-200 shadow-sm">
+    <div className="bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-200 dark:border-gray-700 shadow-sm">
       <div className="flex items-center space-x-3">
         <Tooltip title={t('tooltips.clearChat')} placement="top">
           <Button
@@ -52,6 +52,10 @@ const AgentOperationsBar = ({
               '&:hover': {
                 backgroundColor: '#F3F4F6',
                 color: '#374151',
+              },
+              '.dark &:hover': {
+                backgroundColor: '#374151',
+                color: '#E5E7EB',
               },
             }}
           >
@@ -79,6 +83,10 @@ const AgentOperationsBar = ({
           sx={{
             '& .MuiOutlinedInput-root': {
               borderRadius: '12px',
+              backgroundColor: inputDisabled ? '#F5F5F5' : 'white',
+              '&.Mui-disabled': {
+                backgroundColor: '#F5F5F5',
+              },
               '&:hover fieldset': {
                 borderColor: '#3B82F6',
               },
@@ -87,11 +95,53 @@ const AgentOperationsBar = ({
                 borderColor: '#D1D5DB',
               },
             },
+            '& .MuiOutlinedInput-notchedOutline': {
+              borderColor: '#E5E7EB',
+            },
+            '&:hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: '#3B82F6',
+            },
+            '& .MuiInputBase-input': {
+              color: '#1F2937',
+            },
+            '& .MuiInputBase-input::placeholder': {
+              color: '#9CA3AF',
+            },
+            '& .Mui-disabled .MuiInputBase-input': {
+              color: '#9CA3AF',
+              WebkitTextFillColor: '#9CA3AF',
+            },
+            // Dark mode overrides
+            '.dark & .MuiOutlinedInput-root': {
+              backgroundColor: inputDisabled ? '#374151' : '#1F2937',
+              '&.Mui-disabled': {
+                backgroundColor: '#374151',
+              },
+            },
+            '.dark & .MuiOutlinedInput-notchedOutline': {
+              borderColor: '#4B5563',
+            },
+            '.dark &:hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: '#5B8CFF',
+            },
+            '.dark & .MuiInputBase-input': {
+              color: '#E5E7EB',
+            },
+            '.dark & .MuiInputBase-input::placeholder': {
+              color: '#6B7280',
+            },
+            '.dark & .Mui-disabled .MuiInputBase-input': {
+              color: '#6B7280',
+              WebkitTextFillColor: '#6B7280',
+            },
+            '.dark & .Mui-disabled fieldset': {
+              borderColor: '#4B5563',
+            },
           }}
           disabled={inputDisabled}
           InputProps={{
             style: {
-              backgroundColor: inputDisabled ? '#F5F5F5' : 'white',
+              backgroundColor: inputDisabled ? '#F5F5F5' : 'transparent',
               cursor: inputDisabled ? 'not-allowed' : 'text',
             },
             readOnly: inputDisabled, // 使用 readOnly 作为额外的保护

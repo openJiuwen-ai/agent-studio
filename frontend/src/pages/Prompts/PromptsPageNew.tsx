@@ -50,8 +50,7 @@ function AssociationTag({ relationObj, containerWidth, tagCount, onNavigate }: A
     return () => ro.disconnect()
   }, [])
 
-  const maxWidth =
-    tagCount > 1 && containerWidth > 0 ? (containerWidth - ASSOCIATIONS_RESERVE_PX) / tagCount : undefined
+  const maxWidth = tagCount > 1 && containerWidth > 0 ? (containerWidth - ASSOCIATIONS_RESERVE_PX) / tagCount : undefined
 
   const content = (
     <span
@@ -136,34 +135,33 @@ function AssociationsCell({ row, workspaceId, navigate, onOpenAssociations, t }:
 }
 
 /** 关联对象下拉：头部固定，仅下方 item 列表区域滚动 */
-const AssociationMenuListWrapper = React.forwardRef<
-  HTMLUListElement,
-  React.ComponentProps<typeof MenuList> & { children?: React.ReactNode }
->(function AssociationMenuListWrapper(props, ref) {
-  const { children, sx, ...listSlotProps } = props
-  const arr = React.Children.toArray(children)
-  const header = arr[0]
-  const items = arr.slice(1)
-  return (
-    <div className="flex flex-col overflow-hidden max-h-[320px]">
-      <div className="flex-shrink-0">{header}</div>
-      <MenuList
-        ref={ref}
-        {...listSlotProps}
-        sx={{
-          ...(typeof sx === 'object' && sx !== null ? sx : {}),
-          flex: 1,
-          minHeight: 0,
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          py: 0,
-        }}
-      >
-        {items}
-      </MenuList>
-    </div>
-  )
-})
+const AssociationMenuListWrapper = React.forwardRef<HTMLUListElement, React.ComponentProps<typeof MenuList> & { children?: React.ReactNode }>(
+  function AssociationMenuListWrapper(props, ref) {
+    const { children, sx, ...listSlotProps } = props
+    const arr = React.Children.toArray(children)
+    const header = arr[0]
+    const items = arr.slice(1)
+    return (
+      <div className="flex flex-col overflow-hidden max-h-[320px]">
+        <div className="flex-shrink-0">{header}</div>
+        <MenuList
+          ref={ref}
+          {...listSlotProps}
+          sx={{
+            ...(typeof sx === 'object' && sx !== null ? sx : {}),
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            py: 0,
+          }}
+        >
+          {items}
+        </MenuList>
+      </div>
+    )
+  },
+)
 
 const PromptsPageNew: React.FC = () => {
   const { t } = useTranslation()
@@ -176,15 +174,12 @@ const PromptsPageNew: React.FC = () => {
   const viewType: ViewType = viewMode === 'grid' ? 'grid' : 'table'
 
   // 搜索和排序 - 使用防抖搜索
-  const { searchTerm, debouncedSearchTerm, setSearchTerm } = useOptimizedSearch(
-    undefined,
-    {
-      debounceDelay: 300,
-      minChars: 0,
-      immediateOnEmpty: false,
-      respectComposition: false,
-    },
-  )
+  const { searchTerm, debouncedSearchTerm, setSearchTerm } = useOptimizedSearch(undefined, {
+    debounceDelay: 300,
+    minChars: 0,
+    immediateOnEmpty: false,
+    respectComposition: false,
+  })
   const [sortState, setSortState] = useState<SortState>({ field: 'updated_at', order: 'desc' })
 
   // 数据状态
@@ -303,10 +298,8 @@ const PromptsPageNew: React.FC = () => {
   // - 搜索或排序变化时由本 effect 统一拉数
   useEffect(() => {
     const isGrid = viewType === 'grid'
-    const orderBy = sortState.field
-      ? (columnMapping[sortState.field] || sortState.field)
-      : (isGrid ? 'updated_at' : undefined)
-    const asc = sortState.field ? sortState.order === 'asc' : (isGrid ? false : undefined)
+    const orderBy = sortState.field ? columnMapping[sortState.field] || sortState.field : isGrid ? 'updated_at' : undefined
+    const asc = sortState.field ? sortState.order === 'asc' : isGrid ? false : undefined
 
     if (!hasInitialLoaded.current) {
       hasInitialLoaded.current = true
@@ -326,10 +319,8 @@ const PromptsPageNew: React.FC = () => {
   const handlePagerChange = useCallback(
     (page: number, size: number) => {
       const isGrid = viewType === 'grid'
-      const orderBy = sortState.field
-        ? (columnMapping[sortState.field] || sortState.field)
-        : (isGrid ? 'updated_at' : undefined)
-      const asc = sortState.field ? sortState.order === 'asc' : (isGrid ? false : undefined)
+      const orderBy = sortState.field ? columnMapping[sortState.field] || sortState.field : isGrid ? 'updated_at' : undefined
+      const asc = sortState.field ? sortState.order === 'asc' : isGrid ? false : undefined
       if (size !== pageSize) {
         setPageSize(size)
         setCurrentPage(1)
@@ -505,10 +496,7 @@ const PromptsPageNew: React.FC = () => {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span
-                  className="font-semibold text-gray-900 cursor-pointer truncate"
-                  onClick={() => navigate(`/dashboard/prompts/${row.id}`)}
-                >
+                <span className="font-semibold text-gray-900 cursor-pointer truncate" onClick={() => navigate(`/dashboard/prompts/${row.id}`)}>
                   {row.name}
                 </span>
                 {row.isDraftEdited && (
@@ -526,9 +514,7 @@ const PromptsPageNew: React.FC = () => {
                   </button>
                 </Tooltip>
               </div>
-              <div className="mt-1 text-xs text-gray-500 truncate">
-                {row.description || '-'}
-              </div>
+              <div className="mt-1 text-xs text-gray-500 truncate">{row.description || '-'}</div>
             </div>
           </div>
         ),
@@ -540,9 +526,7 @@ const PromptsPageNew: React.FC = () => {
         width: 100,
         render: ({ row }) => {
           const hasVersion = row.version && row.version !== '-'
-          return (
-            <span className="text-sm text-gray-700">{hasVersion ? row.version : t('common.status.draft')}</span>
-          )
+          return <span className="text-sm text-gray-700">{hasVersion ? row.version : t('common.status.draft')}</span>
         },
       },
       {
@@ -550,13 +534,7 @@ const PromptsPageNew: React.FC = () => {
         title: t('prompts.promptList.associatedObjects'),
         width: 200,
         render: ({ row }) => (
-          <AssociationsCell
-            row={row}
-            workspaceId={workspaceId}
-            navigate={navigate}
-            onOpenAssociations={handleOpenAssociationsDialog}
-            t={t}
-          />
+          <AssociationsCell row={row} workspaceId={workspaceId} navigate={navigate} onOpenAssociations={handleOpenAssociationsDialog} t={t} />
         ),
       },
       {
@@ -655,7 +633,9 @@ const PromptsPageNew: React.FC = () => {
               <div className="flex items-center gap-1.5 text-[11px] text-[#9CA3AF]">
                 <div className="flex items-center">
                   <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
-                  <span>{t('common.card.editedAgo')} {timeDisplay}</span>
+                  <span>
+                    {t('common.card.editedAgo')} {timeDisplay}
+                  </span>
                 </div>
                 <span className="text-[#E5E7EB]">|</span>
                 <button
@@ -725,11 +705,7 @@ const PromptsPageNew: React.FC = () => {
   const toolbarLeft = useMemo(
     () => (
       <>
-        <SearchInput
-          searchTerm={searchTerm}
-          placeholder={t('prompts.promptList.searchPlaceholder')}
-          onChange={setSearchTerm}
-        />
+        <SearchInput searchTerm={searchTerm} placeholder={t('prompts.promptList.searchPlaceholder')} onChange={setSearchTerm} />
         {viewType === 'grid' && (
           <>
             <select
@@ -740,7 +716,7 @@ const PromptsPageNew: React.FC = () => {
                   order: sortState.order || 'desc',
                 })
               }
-              className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
+              className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
             >
               <option value="name">{t('prompts.promptList.sortByName')}</option>
               <option value="created_at">{t('prompts.promptList.sortByCreated')}</option>
@@ -754,7 +730,7 @@ const PromptsPageNew: React.FC = () => {
                   order: sortState.order === 'asc' ? 'desc' : 'asc',
                 })
               }
-              className="h-8 w-8 bg-white border border-[#e5e7eb] text-[#6b7280] hover:text-[#374151] hover:bg-[#f9fafb] hover:border-[#d1d5db] rounded-[4px] transition-colors flex items-center justify-center"
+              className="h-8 w-8 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#6b7280] dark:text-gray-300 hover:text-[#374151] dark:hover:text-gray-100 hover:bg-[#f9fafb] dark:hover:bg-gray-700 hover:border-[#d1d5db] dark:hover:border-gray-500 rounded-[4px] transition-colors flex items-center justify-center"
               aria-label={sortState.order === 'asc' ? 'asc' : 'desc'}
             >
               {sortState.order === 'asc' ? <span className="text-sm">↑</span> : <span className="text-sm">↓</span>}
@@ -769,10 +745,7 @@ const PromptsPageNew: React.FC = () => {
   // 工具栏右侧
   const toolbarRight = useMemo(
     () => (
-      <button
-        onClick={() => setBasicInfoDialogOpen(true)}
-        className="btn-primary h-8 flex items-center gap-2 text-sm px-4"
-      >
+      <button onClick={() => setBasicInfoDialogOpen(true)} className="btn-primary h-8 flex items-center gap-2 text-sm px-4">
         <Plus className="w-4 h-4" />
         <span>{t('prompts.createPrompt')}</span>
       </button>
@@ -866,17 +839,16 @@ const PromptsPageNew: React.FC = () => {
                   boxSizing: 'border-box',
                 }}
               >
-                <div
-                  className="text-gray-900 text-[12px] truncate min-w-0"
-                  title={`${obj.obj_type_name}：${obj.obj_name}`}
-                >
+                <div className="text-gray-900 text-[12px] truncate min-w-0" title={`${obj.obj_type_name}：${obj.obj_name}`}>
                   {obj.obj_type_name}：{obj.obj_name}
                 </div>
-                <div
-                  className="text-gray-500 text-[11px] truncate min-w-0 mt-0.5"
-                  title={`${obj.obj_version || '-'} | ${obj.obj_id}`}
-                >
-                  {obj.obj_version || '-'} <span className="text-gray-400 shrink-0 opacity-70" aria-hidden> ｜ </span> {obj.obj_id}
+                <div className="text-gray-500 text-[11px] truncate min-w-0 mt-0.5" title={`${obj.obj_version || '-'} | ${obj.obj_id}`}>
+                  {obj.obj_version || '-'}{' '}
+                  <span className="text-gray-400 shrink-0 opacity-70" aria-hidden>
+                    {' '}
+                    ｜{' '}
+                  </span>{' '}
+                  {obj.obj_id}
                 </div>
               </MenuItem>
             ))

@@ -17,6 +17,42 @@
   --g-workflow-line-color-hover: #37d0ff;
   --g-workflow-line-color-selected: #37d0ff;
   --g-workflow-line-color-error: red;
+
+  /* Workflow Canvas - Light Mode (default) */
+  --workflow-bg-canvas: rgba(0, 0, 0, 0);
+  --workflow-bg-node: #ffffff;
+  --workflow-bg-toolbar: #ffffff;
+  --workflow-bg-surface: #ffffff;
+  --workflow-bg-input: #f9fafb;
+  --workflow-border-node: rgba(6, 7, 9, 0.15);
+  --workflow-border-toolbar: rgba(68, 83, 130, 0.25);
+  --workflow-border-input: rgba(0, 0, 0, 0.1);
+  --workflow-text-primary: #1a1a1a;
+  --workflow-text-secondary: #6b7280;
+  --workflow-text-tertiary: #9ca3af;
+  --workflow-shadow-node: 0 2px 6px 0 rgba(0, 0, 0, 0.04), 0 4px 12px 0 rgba(0, 0, 0, 0.02);
+  --workflow-shadow-toolbar: 0 2px 6px 0 rgba(0, 0, 0, 0.04), 0 4px 12px 0 rgba(0, 0, 0, 0.02);
+  --workflow-bg-hover: rgba(0, 0, 0, 0.04);
+  --workflow-bg-selected: rgba(78, 64, 229, 0.08);
+}
+
+.dark {
+  /* Workflow Canvas - Dark Mode */
+  --workflow-bg-canvas: #0f1115;
+  --workflow-bg-node: #1b2130;
+  --workflow-bg-toolbar: #1b2130;
+  --workflow-bg-surface: #151922;
+  --workflow-bg-input: #232a3a;
+  --workflow-border-node: rgba(255, 255, 255, 0.15);
+  --workflow-border-toolbar: rgba(255, 255, 255, 0.15);
+  --workflow-border-input: rgba(255, 255, 255, 0.1);
+  --workflow-text-primary: #e6eaf2;
+  --workflow-text-secondary: #9aa4b2;
+  --workflow-text-tertiary: #6f7a8c;
+  --workflow-shadow-node: 0 2px 6px 0 rgba(0, 0, 0, 0.3), 0 4px 12px 0 rgba(0, 0, 0, 0.35);
+  --workflow-shadow-toolbar: 0 2px 6px 0 rgba(0, 0, 0, 0.3), 0 4px 12px 0 rgba(0, 0, 0, 0.35);
+  --workflow-bg-hover: rgba(255, 255, 255, 0.08);
+  --workflow-bg-selected: rgba(91, 140, 255, 0.15);
 }
 
 .gedit-selector-bounds-foreground {
@@ -54,6 +90,160 @@
   flex-grow: 1;
   position: relative;
   height: 100%;
+  background-color: var(--workflow-bg-canvas) !important;
+}
+
+.gedit-playground-container {
+  background-color: var(--workflow-bg-canvas) !important;
+}
+
+.gedit-playground {
+  background-color: var(--workflow-bg-canvas) !important;
+}
+
+/* Override Flowgram library node content background */
+.gedit-flow-activity-node [class^='sc-'],
+.gedit-flow-activity-node > div > div {
+  background: var(--workflow-bg-node) !important;
+  background-image: none !important;
+}
+
+/* Override text colors in dark mode for node content */
+.gedit-flow-activity-node .form-content,
+.gedit-flow-activity-node .gedit-m-display-inputs-wrapper,
+.gedit-flow-activity-node .gedit-m-display-outputs-wrapper,
+.gedit-flow-activity-node .gedit-m-output-item,
+.gedit-flow-activity-node .gedit-m-variable-item,
+.gedit-flow-activity-node span:not([class]) {
+  color: var(--workflow-text-primary) !important;
+}
+
+.gedit-flow-activity-node .form-label,
+.gedit-flow-activity-node label {
+  color: var(--workflow-text-secondary) !important;
+}
+
+/* Override Semi UI tag background in workflow nodes */
+.gedit-flow-activity-node .semi-tag,
+.gedit-flow-activity-node .gedit-m-display-schema-tag-tag {
+  background-color: var(--workflow-bg-input) !important;
+  color: var(--workflow-text-primary) !important;
+  border-color: var(--workflow-border-input) !important;
+}
+
+/* Override Semi UI variables in toolbars for dark mode */
+.tools > div > div[style*='background-color'],
+.workflow-control-section > div[style*='background-color'] {
+  background-color: var(--workflow-bg-toolbar) !important;
+  border-color: var(--workflow-border-toolbar) !important;
+}
+
+/* Override toolbar element backgrounds */
+.tools .semi-button,
+.workflow-control-section .semi-button {
+  color: var(--workflow-text-primary) !important;
+}
+
+.tools .semi-button:hover,
+.workflow-control-section .semi-button:hover {
+  background-color: var(--workflow-bg-hover) !important;
+}
+
+/* Node Panel dark mode overrides */
+.gedit-node-panel-layer .semi-input-wrapper {
+  background-color: var(--workflow-bg-input) !important;
+  border-color: var(--workflow-border-input) !important;
+}
+
+.gedit-node-panel-layer .semi-input-wrapper input {
+  color: var(--workflow-text-primary) !important;
+}
+
+.gedit-node-panel-layer .semi-popover-content {
+  background-color: var(--workflow-bg-surface) !important;
+  border-color: var(--workflow-border-node) !important;
+}
+
+/* Sidebar Panel dark mode overrides */
+.gedit-flow-panel-right-area {
+  background-color: var(--workflow-bg-canvas) !important;
+}
+
+.gedit-flow-panel-right-area [style*="background: rgb(251, 251, 251)"],
+.gedit-flow-panel-right-area [style*="background-color: rgb(251, 251, 251)"] {
+  background-color: var(--workflow-bg-surface) !important;
+  border-color: var(--workflow-border-node) !important;
+}
+
+/* Form Components dark mode overrides */
+.gedit-flow-panel-right-area .form-label {
+  color: var(--workflow-text-secondary) !important;
+}
+
+.gedit-flow-panel-right-area .form-content {
+  color: var(--workflow-text-primary) !important;
+}
+
+.gedit-flow-panel-right-area .group-item {
+  border-color: var(--workflow-border-input) !important;
+}
+
+.gedit-flow-panel-right-area .group-item:hover {
+  border-color: var(--accent-primary) !important;
+  background-color: var(--workflow-bg-hover) !important;
+}
+
+.gedit-flow-panel-right-area .drag-handle,
+.gedit-flow-panel-right-area .delete-button {
+  color: var(--workflow-text-tertiary) !important;
+}
+
+.gedit-flow-panel-right-area .drag-handle:hover,
+.gedit-flow-panel-right-area .delete-button:hover {
+  color: var(--workflow-text-secondary) !important;
+}
+
+.gedit-flow-panel-right-area .empty-state {
+  border-color: var(--workflow-border-input) !important;
+}
+
+.gedit-flow-panel-right-area .empty-content {
+  color: var(--workflow-text-tertiary) !important;
+}
+
+.gedit-flow-panel-right-area [style*="color: #999"] {
+  color: var(--workflow-text-secondary) !important;
+}
+
+.gedit-flow-panel-right-area [style*="color: #333"] {
+  color: var(--workflow-text-primary) !important;
+}
+
+/* Semi UI components in sidebar dark mode */
+.gedit-flow-panel-right-area .semi-input-wrapper {
+  background-color: var(--workflow-bg-input) !important;
+  border-color: var(--workflow-border-input) !important;
+}
+
+.gedit-flow-panel-right-area .semi-input-wrapper input {
+  color: var(--workflow-text-primary) !important;
+}
+
+.gedit-flow-panel-right-area .semi-select-wrapper .semi-input-wrapper {
+  background-color: var(--workflow-bg-input) !important;
+}
+
+.gedit-flow-panel-right-area .semi-divider-horizontal {
+  border-top-color: var(--workflow-border-input) !important;
+}
+
+.gedit-flow-panel-right-area .semi-tag-default {
+  background-color: var(--workflow-bg-input) !important;
+  border-color: var(--workflow-border-input) !important;
+}
+
+.gedit-flow-panel-right-area .semi-switch-checked .semi-switch-inner-text {
+  color: var(--workflow-text-primary) !important;
 }
 
 .container {
@@ -93,3 +283,5 @@
   -ms-translate: none !important;
   -o-translate: none !important;
 }
+
+

@@ -1187,12 +1187,12 @@ const AppsPage: React.FC = () => {
   }
 
   return (
-    <div className={`${FONT_FAMILY} flex flex-col h-full w-full min-h-0`}>
+    <div className={`${FONT_FAMILY} flex flex-col h-full w-full min-h-0 bg-gray-50 dark:bg-gray-900`}>
       {/* SSE 回放浮动按钮（仅开发模式） */}
       {ENABLE_SSE_DEBUG && (
         <button
           onClick={() => setShowPlaybackPanel(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm font-medium rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-500 dark:to-purple-500 hover:from-blue-700 hover:to-purple-700 dark:hover:from-blue-600 dark:hover:to-purple-600 text-white text-sm font-medium rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
           title={t('apps.chat.openSSEPanel')}
         >
           <History className="w-4 h-4" />
@@ -1223,13 +1223,13 @@ const AppsPage: React.FC = () => {
                 <div className="text-left mb-8">
                   {/* DeepSearch 服务不可用时的警告 */}
                   {selectedAgent?.id === 'deepsearch' && deepsearchServiceAvailable === false ? (
-                    <p className={`${TEXT_BASE} text-orange-600 mb-2`}>
+                    <p className={`${TEXT_BASE} text-orange-600 dark:text-orange-400 mb-2`}>
                       {t('apps.chat.deepSearchServiceUnavailable')}
                       <a
                         href="https://gitcode.com/openJiuwen/deepsearch/blob/v0.1.0/docs/zh/2.%E5%AE%89%E8%A3%85%E6%8C%87%E5%AF%BC/DeepSearch%E5%AE%8C%E6%95%B4%E7%89%88%E5%AE%89%E8%A3%85%E6%8C%87%E5%AF%BC.md"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-500 hover:text-blue-600 underline mx-0.5"
+                        className="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 underline mx-0.5"
                       >
                         OpenJiuwen
                       </a>
@@ -1238,11 +1238,11 @@ const AppsPage: React.FC = () => {
                   ) : (
                     <>
                       {/* 第一段话：用户名，你好 */}
-                      <p className={`${TEXT_BASE} text-gray-500 mb-1`}>
+                      <p className={`${TEXT_BASE} text-gray-500 dark:text-gray-400 mb-1`}>
                         {user?.username || t('apps.user.defaultUsername')}，{t('apps.chat.welcome')}
                       </p>
                       {/* 第二段话：选择智能体开始对话 */}
-                      <h1 className="text-2xl font-semibold text-gray-900 mb-6">
+                      <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-6">
                         {t('apps.chat.welcomeMessage')}
                       </h1>
                     </>
@@ -1285,16 +1285,16 @@ const AppsPage: React.FC = () => {
                         onClick={() => handleSuggestionClick(suggestion.text)}
                         className="
                           flex items-center gap-2 px-4 py-2
-                          bg-white
-                          border border-gray-200 rounded-xl
-                          hover:border-blue-500 hover:bg-blue-50 hover:shadow-md
-                          focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white
+                          bg-white dark:bg-gray-800
+                          border border-gray-200 dark:border-gray-700 rounded-xl
+                          hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:shadow-md
+                          focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-gray-900
                           transition-all duration-200
                           text-left w-fit
                         "
                       >
                         <span className={TEXT_BASE}>{suggestion.icon}</span>
-                        <span className={`${TEXT_SMALL} text-gray-600`}>{suggestion.text}</span>
+                        <span className={`${TEXT_SMALL} text-gray-600 dark:text-gray-400`}>{suggestion.text}</span>
                       </button>
                     ))}
                   </div>
@@ -1308,7 +1308,7 @@ const AppsPage: React.FC = () => {
             <>
               {/* 对话区域 */}
               <div className={`flex flex-col min-h-0 ${selectedResultMessageId ? 'w-2/5' : 'flex-1'}`}>
-                <div ref={messagesContainerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
+                <div ref={messagesContainerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-6 bg-gray-50 dark:bg-gray-900">
                 <div className="max-w-4xl mx-auto space-y-4">
                   {messageItemsList.map((messageItems) => (
                     <SystemMessageItem key={messageItems.id} messageItems={messageItems} />
@@ -1316,15 +1316,15 @@ const AppsPage: React.FC = () => {
 
                   {/* AI 正在输入指示器 */}
                   {isSending && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[70%] rounded-2xl px-5 py-3 text-gray-900">
-                        <div className="flex items-center gap-1">
-                          <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                          <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                          <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      <div className="flex justify-start">
+                        <div className="max-w-[70%] rounded-2xl px-5 py-3 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800">
+                          <div className="flex items-center gap-1">
+                            <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                          </div>
                         </div>
                       </div>
-                    </div>
                   )}
                   <div ref={messagesEndRef} />
                 </div>
@@ -1360,7 +1360,7 @@ const AppsPage: React.FC = () => {
 
             {/* 右侧：结果面板（分屏显示） */}
             {selectedResultMessageId && (
-              <div className="w-3/5 h-full bg-white border border-gray-200 rounded-lg ml-4 overflow-hidden">
+              <div className="w-3/5 h-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg ml-4 overflow-hidden">
                 <ResultPanel />
               </div>
             )}

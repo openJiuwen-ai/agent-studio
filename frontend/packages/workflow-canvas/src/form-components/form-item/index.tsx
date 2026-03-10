@@ -41,7 +41,7 @@ export function FormItem({
       <div style={{ width: '0', display: 'flex', flex: '1' }}>
         <Text style={{ width: '100%' }} ellipsis={{ showTooltip: !!showTooltip }}>
           {name}
-          {required && <span style={{ color: '#f93920', paddingLeft: '2px' }}>*</span>}
+          {required && <span style={{ color: 'var(--semi-color-danger)', paddingLeft: '2px' }}>*</span>}
         </Text>
       </div>
     ),
@@ -132,9 +132,10 @@ export function FormItem({
               borderRadius: '4px',
               transition: 'background-color 0.2s',
               flexShrink: 0,
+              color: 'var(--workflow-text-secondary)'
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.04)'
+              e.currentTarget.style.backgroundColor = 'var(--workflow-bg-hover)'
             }}
             onMouseLeave={e => {
               e.currentTarget.style.backgroundColor = 'transparent'

@@ -518,7 +518,9 @@
       "switchToChinese": "中文",
       "switchToNewVersion": "Try New Version",
       "switchToOldVersion": "Back to Old Version",
-      "beta": "Beta"
+      "beta": "Beta",
+      "darkMode": "Dark Mode",
+      "lightMode": "Light Mode"
     },
     "sidebar": {
       "toggleCollapse": "Toggle sidebar",

@@ -134,7 +134,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
               className={`w-10 h-10 flex items-center justify-center rounded-full transition-all duration-200 shrink-0 ${
                 isStreaming
                   ? 'text-gray-400 cursor-not-allowed opacity-50'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
               }`}
               title={isStreaming ? t('apps.chat.conversationInProgress') : t('apps.chat.startNewConversation')}
             >
@@ -151,12 +151,12 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
               transition-all duration-200 shrink-0
               ${
                 isStreaming || checkingDeepsearch
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
                   : deepsearchUnavailable
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
                     : selectedAgent && selectedModel && inputValue.trim()
                       ? 'bg-blue-500 hover:bg-blue-600 active:scale-95 text-white shadow-sm hover:shadow'
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
               }
             `}
             title={

@@ -144,17 +144,17 @@ const Layout: React.FC = () => {
   // 如果正在初始化 spaceId，显示加载状态
   if (isInitializingSpace || !user.spaceId || user.spaceId.trim() === '') {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50">
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="flex flex-col items-center space-y-4">
           <CircularProgress />
-          <div className="text-gray-600">{t('initializing')}</div>
+          <div className="text-gray-600 dark:text-gray-400">{t('initializing')}</div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-full flex overflow-hidden bg-gray-50">
+    <div className="h-full flex overflow-hidden bg-gray-50 dark:bg-gray-900">
       {/* Sidebar - 新版 */}
       <div ref={sidebarRef} className="h-full flex flex-col overflow-hidden">
         <Sidebar
@@ -170,9 +170,9 @@ const Layout: React.FC = () => {
       </div>
 
       {/* Main content */}
-      <div ref={contentRef} className="flex-1 overflow-hidden flex flex-col transition-all duration-300 ease-in-out h-full relative">
+      <div ref={contentRef} className="flex-1 overflow-hidden flex flex-col transition-all duration-300 ease-in-out h-full relative bg-gray-50 dark:bg-gray-900">
         {/* Page content */}
-        <main className="flex-1 overflow-auto bg-[#F8F9FC]">
+        <main className="flex-1 overflow-auto bg-[#F8F9FC] dark:bg-gray-900">
           <div className="h-full min-w-full">
             <div className="min-w-full h-full">
               <Outlet />
@@ -183,14 +183,14 @@ const Layout: React.FC = () => {
         {/* 隐私提示弹窗 - 仅覆盖主内容区域，不遮挡侧边栏 */}
         {showPrivacyDialog && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full mx-4 p-6 animate-in fade-in zoom-in">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full mx-4 p-6 animate-in fade-in zoom-in border border-gray-200 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <h3 className="text-lg font-semibold text-gray-800">{t('privacy.notice.title', '重要提示')}</h3>
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">{t('privacy.notice.title', '重要提示')}</h3>
               </div>
-              <div className="text-sm text-gray-600 leading-relaxed mb-6">
+              <div className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-6">
                 <p>
                   {t(
                     'privacy.notice.content',

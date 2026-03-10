@@ -729,44 +729,49 @@ const AgentDebugChat = ({ agentId, mdbId, onDebugInfoChange, enableLongTerm, hid
   }
 
   return (
-    <Paper elevation={0} className="flex flex-col bg-gradient-to-br h-full overflow-x-hidden overflow-y-hidden">
-      {/* 头部区域 */}
-      <div className="flex items-center justify-between">
-        <ActionSlotMount name="debug-title-actions">
-          <div className="flex items-center space-x-2">
-            {!hideMemoryButton && <MemoryButton userId={userIdForMem} groupId={groupIdForMem} enableLongTerm={enableLongTerm} />}
-            <Switch
-              checked={showDebugInfo}
-              onChange={() => {
-                const next = !showDebugInfo
-                setShowDebugInfo(next)
-                onDebugInfoChange?.(next)
-              }}
-              size="small"
-              color="primary"
-              sx={{
-                '& .MuiSwitch-switchBase.Mui-checked': {
-                  color: '#6366F1',
-                },
-                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                  backgroundColor: '#818CF8',
-                },
-              }}
-            />
-            <span className="text-sm text-gray-600">{t('header.debugInfo')}</span>
-          </div>
-        </ActionSlotMount>
+    <Paper 
+      elevation={0} 
+      className="flex flex-col h-full overflow-hidden bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl"
+      sx={{
+        '& .MuiSwitch-root': {
+          '& .MuiSwitch-switchBase.Mui-checked': {
+            color: '#818CF8',
+          },
+          '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+            backgroundColor: '#818CF8',
+          },
+        },
+      }}
+    >
+      <div className="flex items-center justify-between px-4 py-3 border-b dark:border-gray-700">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('title')}</span>
+          <ActionSlotMount name="debug-title-actions">
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={showDebugInfo}
+                onChange={e => {
+                  const newOpen = e.target.checked
+                  setShowDebugInfo(newOpen)
+                  onDebugInfoChange?.(newOpen)
+                }}
+                size="small"
+              />
+              <span className="text-sm text-gray-600 dark:text-gray-400">{t('header.debugInfo')}</span>
+            </div>
+          </ActionSlotMount>
+        </div>
       </div>
-      {/* 主体区域 - 根据showDebugInfo状态决定布局 */}
+      {/* 主体区域 - 根据 showDebugInfo 状态决定布局 */}
       <div className={`flex-1 flex ${showDebugInfo ? 'gap-4' : ''} min-h-0`}>
         {/* 聊天消息区域 */}
         <div className={`${showDebugInfo ? 'flex-1' : 'w-full'} flex flex-col min-w-0 min-h-0`}>
           {/* 未配置模型的提示 */}
           {modelNotConfigured && (
-            <div className="mx-4 mt-4 mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="mx-4 mt-4 mb-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
               <div className="flex items-start">
                 <div className="flex-shrink-0">
-                  <svg className="w-5 h-5 text-amber-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                  <svg className="w-5 h-5 text-amber-400 dark:text-amber-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
                     <path
                       fillRule="evenodd"
                       d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
@@ -775,18 +780,18 @@ const AgentDebugChat = ({ agentId, mdbId, onDebugInfoChange, enableLongTerm, hid
                   </svg>
                 </div>
                 <div className="ml-3">
-                  <h3 className="text-sm font-medium text-amber-800">{t('tips.modelNotConfiguredTitle')}</h3>
-                  <p className="mt-1 text-sm text-amber-700">{t('tips.modelNotConfiguredDescription')}</p>
+                  <h3 className="text-sm font-medium text-amber-800 dark:text-amber-300">{t('tips.modelNotConfiguredTitle')}</h3>
+                  <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">{t('tips.modelNotConfiguredDescription')}</p>
                 </div>
               </div>
             </div>
           )}
           {/* 模型已被禁用的提示 */}
           {modelDisabled && !modelNotConfigured && (
-            <div className="mx-4 mt-4 mb-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="mx-4 mt-4 mb-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <div className="flex items-start">
                 <div className="flex-shrink-0">
-                  <svg className="w-5 h-5 text-red-400 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                  <svg className="w-5 h-5 text-red-400 dark:text-red-500 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
                     <path
                       fillRule="evenodd"
                       d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
@@ -795,13 +800,13 @@ const AgentDebugChat = ({ agentId, mdbId, onDebugInfoChange, enableLongTerm, hid
                   </svg>
                 </div>
                 <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">{t('tips.modelDisabledTitle')}</h3>
-                  <p className="mt-1 text-sm text-red-700">{t('tips.modelDisabledDescription')}</p>
+                  <h3 className="text-sm font-medium text-red-800 dark:text-red-300">{t('tips.modelDisabledTitle')}</h3>
+                  <p className="mt-1 text-sm text-red-700 dark:text-red-400">{t('tips.modelDisabledDescription')}</p>
                 </div>
               </div>
             </div>
           )}
-          <div ref={chatContainerRef} className="flex-1 bg-white p-4 mb-4 overflow-y-auto overflow-x-hidden">
+          <div ref={chatContainerRef} className="flex-1 bg-white dark:bg-gray-800 p-4 mb-4 overflow-y-auto overflow-x-hidden">
             <ChatMessageList
               messages={chatHistory}
               onSubmitInteraction={handleInlineInteractionSubmit}
@@ -947,11 +952,12 @@ const ChatMessageItem = memo(
             inputFocused={inputFocused}
           />
 
-          {message.role === 'user' && (
-            <div className="flex items-center justify-end space-x-2 mt-2">
-              <div className="w-5 h-5 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-xs font-bold">{t('messages.userLabel')}</span>
+          {message.role === 'assistant' && (
+            <div className="flex items-center space-x-2 mb-2">
+              <div className="w-6 h-6 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center">
+                <span className="text-white text-xs font-bold">AI</span>
               </div>
+              <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">{agentName || t('messages.assistantLabel')}</span>
             </div>
           )}
         </div>

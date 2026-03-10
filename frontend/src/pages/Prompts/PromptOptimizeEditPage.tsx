@@ -2762,7 +2762,7 @@ const PromptOptimizeEditPage: React.FC = () => {
       <div style={{ margin: '0 auto', minWidth: '1100px', height: '100%' }}>
         {/* 页面头部 */}
         <div
-          className="flex items-center bg-white/60 backdrop-blur-sm border border-gray-200/60 shadow-sm"
+          className="flex items-center bg-white/60 backdrop-blur-sm border border-gray-200 dark:border-gray-700/60 dark:bg-gray-800/60 dark:border-gray-700/60 shadow-sm"
           style={{
             padding: 'clamp(0.5rem, 0.6vw, 0.875rem)',
             minHeight: 'clamp(3.5rem, 4.5vh, 4rem)',
@@ -2785,7 +2785,7 @@ const PromptOptimizeEditPage: React.FC = () => {
             }}
           >
             <ArrowLeft
-              className="text-gray-600"
+              className="text-gray-600 dark:text-gray-400"
               style={{
                 width: 'clamp(0.875rem, 1vw, 1.125rem)',
                 height: 'clamp(0.875rem, 1vw, 1.125rem)',
@@ -2832,7 +2832,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                 }
               >
                 <p
-                  className="text-gray-600"
+                  className="text-gray-600 dark:text-gray-400"
                   style={{
                     fontSize: 'clamp(0.6875rem, 0.65vw, 0.8125rem)',
                     marginTop: 'clamp(0.125rem, 0.1vh, 0.1875rem)',
@@ -2934,7 +2934,7 @@ const PromptOptimizeEditPage: React.FC = () => {
               onClick={handleStartOptimization}
               disabled={isCreatingJob}
               sx={{
-                background: isCreatingJob ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                background: isCreatingJob ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 dark:#9CA3AF 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                 fontSize: 'clamp(0.6875rem, 0.7vw, 0.8125rem)',
                 padding: 'clamp(0.3125rem, 0.45vh, 0.4375rem) clamp(0.625rem, 0.75vw, 0.875rem)',
                 minHeight: 'clamp(1.875rem, 2.75vh, 2.25rem)',
@@ -2945,7 +2945,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                 },
                 '&:disabled': {
                   background: 'linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%)',
-                  color: '#6b7280',
+                  color: '#6b7280 dark:#9CA3AF',
                 },
                 transition: 'all 0.2s ease',
                 borderRadius: 'clamp(0.3125rem, 0.45vw, 0.4375rem)',
@@ -3090,7 +3090,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                 >
                   {/* 任务信息配置 */}
                   <div
-                    className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100/60 flex-shrink-0"
+                    className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100 dark:border-gray-800/60 flex-shrink-0"
                     style={{
                       padding: 'clamp(0.5rem, 1.5vw, 1rem)',
                       gap: 'clamp(0.5rem, 1.5vw, 1rem)',
@@ -3165,7 +3165,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                               {...params}
                               label={t('prompts.optimizeEditPage.basicInfo.selectPrompt')}
                               placeholder={t('prompts.optimizeEditPage.basicInfo.selectPromptPlaceholder')}
-                              className="bg-white"
+                              className="bg-white dark:bg-gray-800"
                               sx={{
                                 '& .MuiInputLabel-root': {
                                   fontSize: 'clamp(0.65rem, 1.5vw, 0.875rem)',
@@ -3198,7 +3198,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                         placeholder={t('prompts.optimizeEditPage.basicInfo.taskNamePlaceholder')}
                         required
                         size="small"
-                        className="bg-white"
+                        className="bg-white dark:bg-gray-800"
                         inputProps={{ maxLength: 32 }}
                         sx={{
                           '& .MuiInputLabel-root': {
@@ -3217,7 +3217,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                             <Box sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
                               <Typography
                                 variant="caption"
-                                sx={{ color: taskName.length >= 32 ? '#ef4444' : '#6b7280', fontSize: 'clamp(0.6rem, 1.25vw, 0.75rem)' }}
+                                sx={{ color: taskName.length >= 32 ? '#ef4444' : '#6b7280 dark:#9CA3AF', fontSize: 'clamp(0.6rem, 1.25vw, 0.75rem)' }}
                               >
                                 {taskName.length}/32
                               </Typography>
@@ -3235,7 +3235,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                         size="small"
                         multiline
                         rows={3}
-                        className="bg-white"
+                        className="bg-white dark:bg-gray-800"
                         inputProps={{ maxLength: 256 }}
                         sx={{
                           '& .MuiInputLabel-root': {
@@ -3255,7 +3255,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                             <Box sx={{ position: 'absolute', right: 8, bottom: 0, pointerEvents: 'none' }}>
                               <Typography
                                 variant="caption"
-                                sx={{ color: description.length >= 256 ? '#ef4444' : '#6b7280', fontSize: 'clamp(0.6rem, 1.25vw, 0.75rem)' }}
+                                sx={{ color: description.length >= 256 ? '#ef4444' : '#6b7280 dark:#9CA3AF', fontSize: 'clamp(0.6rem, 1.25vw, 0.75rem)' }}
                               >
                                 {description.length}/256
                               </Typography>
@@ -3270,7 +3270,7 @@ const PromptOptimizeEditPage: React.FC = () => {
 
                   {/* Original Prompt */}
                   <div
-                    className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100/60 flex flex-col flex-shrink-0"
+                    className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100 dark:border-gray-800/60 flex flex-col flex-shrink-0"
                     style={{
                       padding: 'clamp(0.5rem, 1.5vw, 1rem)',
                     }}
@@ -3316,7 +3316,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                         placeholder={t('prompts.optimizeEditPage.basicInfo.originalPromptPlaceholder')}
                         value={originalPrompt}
                         onChange={value => setOriginalPromptWithAutoSave(value)}
-                        className="bg-white"
+                        className="bg-white dark:bg-gray-800"
                         sx={{
                           flex: 1,
                           minHeight: 'clamp(200px, 25vh, 350px)',
@@ -3347,7 +3347,7 @@ const PromptOptimizeEditPage: React.FC = () => {
               }`}
               onMouseDown={handleColumnMouseDown(0)}
             >
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-12 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200/60">
+              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-12 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200 dark:border-gray-700/60">
                 <div className="w-0.5 h-6 bg-gradient-to-b from-gray-400 to-gray-500 rounded-full mr-0.5"></div>
                 <div className="w-0.5 h-6 bg-gradient-to-b from-gray-400 to-gray-500 rounded-full ml-0.5"></div>
               </div>
@@ -3362,7 +3362,7 @@ const PromptOptimizeEditPage: React.FC = () => {
               }`}
               onMouseDown={handleColumnMouseDown(0)}
             >
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-12 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200/60">
+              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-12 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200 dark:border-gray-700/60">
                 <div className="w-0.5 h-6 bg-gradient-to-b from-gray-400 to-gray-500 rounded-full mr-0.5"></div>
                 <div className="w-0.5 h-6 bg-gradient-to-b from-gray-400 to-gray-500 rounded-full ml-0.5"></div>
               </div>
@@ -3579,7 +3579,7 @@ const PromptOptimizeEditPage: React.FC = () => {
 
                     {/* Tab内容区域 */}
                     <div
-                      className="flex-1 bg-gradient-to-r from-gray-50/50 to-slate-50/50 border border-gray-100/60 border-t-0 rounded-b-lg"
+                      className="flex-1 bg-gradient-to-r from-gray-50/50 to-slate-50/50 border border-gray-100 dark:border-gray-800/60 border-t-0 rounded-b-lg"
                       style={{
                         overflowY: 'auto',
                         scrollbarWidth: 'none',
@@ -3740,7 +3740,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                 }}
                               >
                                 <TableContainer
-                                  className="bg-white rounded border border-gray-200"
+                                  className="bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700"
                                   style={{
                                     overflowX: 'auto',
                                     overflowY: 'auto',
@@ -3753,7 +3753,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                       <TableRow>
                                         <TableCell
                                           width="60"
-                                          className="bg-gray-50 font-medium"
+                                          className="bg-gray-50 dark:bg-gray-800 font-medium"
                                           sx={{
                                             minWidth: 'clamp(40px, 8vw, 60px)',
                                             fontSize: 'clamp(0.5rem, 0.9vw, 0.75rem)',
@@ -3763,7 +3763,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                           {t('prompts.optimizeEditPage.testCases.number')}
                                         </TableCell>
                                         <TableCell
-                                          className="bg-gray-50 font-medium"
+                                          className="bg-gray-50 dark:bg-gray-800 font-medium"
                                           sx={{
                                             minWidth: 'clamp(150px, 25vw, 200px)',
                                             fontSize: 'clamp(0.5rem, 0.9vw, 0.75rem)',
@@ -3775,7 +3775,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                         <TableCell
                                           width="80"
                                           align="center"
-                                          className="bg-gray-50 font-medium"
+                                          className="bg-gray-50 dark:bg-gray-800 font-medium"
                                           sx={{
                                             minWidth: 'clamp(80px, 15vw, 120px)',
                                             fontSize: 'clamp(0.5rem, 0.9vw, 0.75rem)',
@@ -3800,7 +3800,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                               {testCase.id}
                                             </TableCell>
                                             <TableCell
-                                              className="cursor-pointer hover:bg-gray-50"
+                                              className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                                               onClick={() => handleViewCase(testCase)}
                                               sx={{
                                                 fontSize: 'clamp(0.5rem, 0.9vw, 0.75rem)',
@@ -3967,7 +3967,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                   <div className="flex items-center whitespace-nowrap">
                                     <Typography
                                       variant="body2"
-                                      className="text-gray-700"
+                                      className="text-gray-700 dark:text-gray-300"
                                       sx={{
                                         fontSize: 'clamp(0.5rem, 0.9vw, 0.75rem)',
                                       }}
@@ -3980,7 +3980,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                         setTestCaseRowsPerPage(parseInt(e.target.value, 10))
                                         setTestCasePage(0)
                                       }}
-                                      className="border border-gray-300 rounded bg-white"
+                                      className="border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
                                       style={{
                                         fontSize: 'clamp(0.5rem, 0.9vw, 0.75rem)',
                                         padding: 'clamp(0.125rem, 0.3vw, 0.25rem) clamp(0.25rem, 0.5vw, 0.5rem)',
@@ -3994,7 +3994,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                     </select>
                                     <Typography
                                       variant="body2"
-                                      className="text-gray-700"
+                                      className="text-gray-700 dark:text-gray-300"
                                       sx={{
                                         fontSize: 'clamp(0.5rem, 0.9vw, 0.75rem)',
                                       }}
@@ -4007,7 +4007,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                   <div className="flex items-center whitespace-nowrap">
                                     <Typography
                                       variant="body2"
-                                      className="text-gray-700"
+                                      className="text-gray-700 dark:text-gray-300"
                                       sx={{
                                         fontSize: 'clamp(0.5rem, 0.9vw, 0.75rem)',
                                       }}
@@ -4063,7 +4063,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                     </Button>
 
                                     <div
-                                      className="flex items-center text-gray-700 whitespace-nowrap"
+                                      className="flex items-center text-gray-700 dark:text-gray-300 whitespace-nowrap"
                                       style={{
                                         margin: '0 clamp(0.125rem, 0.3vw, 0.25rem)',
                                         gap: 'clamp(0.125rem, 0.25vw, 0.25rem)',
@@ -4083,7 +4083,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                         onChange={handlePageInputChange}
                                         onKeyPress={handlePageInputKeyPress}
                                         onBlur={handlePageInputBlur}
-                                        className="text-center border border-gray-300 rounded bg-white"
+                                        className="text-center border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
                                         style={{
                                           width: 'clamp(1.5rem, 3vw, 2rem)',
                                           fontSize: 'clamp(0.5rem, 0.9vw, 0.75rem)',
@@ -4168,7 +4168,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                             >
                               {/* 优化参数 */}
                               <div
-                                className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100/60"
+                                className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100 dark:border-gray-800/60"
                                 style={{
                                   padding: 'clamp(0.25rem, 1vw, 1rem)',
                                 }}
@@ -4260,7 +4260,7 @@ const PromptOptimizeEditPage: React.FC = () => {
 
                               {/* 分割线 */}
                               <div
-                                className="border-t border-gray-200"
+                                className="border-t border-gray-200 dark:border-gray-700"
                                 style={{
                                   marginTop: 'clamp(0.25rem, 1vw, 1rem)',
                                   marginBottom: 'clamp(0.25rem, 1vw, 1rem)',
@@ -4269,7 +4269,7 @@ const PromptOptimizeEditPage: React.FC = () => {
 
                               {/* 模型配置 */}
                               <div
-                                className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100/60"
+                                className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100 dark:border-gray-800/60"
                                 style={{
                                   padding: 'clamp(0.25rem, 1vw, 1rem)',
                                 }}
@@ -4442,7 +4442,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                           >
                             {/* 评价类型选择 */}
                             <div
-                              className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100/60"
+                              className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100 dark:border-gray-800/60"
                               style={{
                                 padding: 'clamp(0.25rem, 1vw, 1rem)',
                               }}
@@ -4559,7 +4559,7 @@ const PromptOptimizeEditPage: React.FC = () => {
 
                             {/* 分割线 */}
                             <div
-                              className="border-t border-gray-200"
+                              className="border-t border-gray-200 dark:border-gray-700"
                               style={{
                                 marginTop: 'clamp(0.125rem, 0.5vw, 0.5rem)',
                                 marginBottom: 'clamp(0.125rem, 0.5vw, 0.5rem)',
@@ -4568,7 +4568,7 @@ const PromptOptimizeEditPage: React.FC = () => {
 
                             {/* 评价标准 */}
                             <div
-                              className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100/60 flex flex-col flex-shrink-0"
+                              className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100 dark:border-gray-800/60 flex flex-col flex-shrink-0"
                               style={{
                                 minHeight: 'clamp(250px, 40vh, 350px)',
                                 padding: 'clamp(0.25rem, 1vw, 1rem)',
@@ -4647,7 +4647,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                       : t('prompts.optimizeEditPage.optimizationConfig.subjectiveCriteriaPlaceholder')
                                   }
                                   size="small"
-                                  className="bg-white"
+                                  className="bg-white dark:bg-gray-800"
                                   sx={{
                                     '& .MuiInputBase-root': {
                                       alignItems: 'flex-start',
@@ -4664,7 +4664,7 @@ const PromptOptimizeEditPage: React.FC = () => {
 
                             {/* 分割线 */}
                             <div
-                              className="border-t border-gray-200"
+                              className="border-t border-gray-200 dark:border-gray-700"
                               style={{
                                 marginTop: 'clamp(0.125rem, 0.5vw, 0.5rem)',
                                 marginBottom: 'clamp(0.125rem, 0.5vw, 0.5rem)',
@@ -4673,7 +4673,7 @@ const PromptOptimizeEditPage: React.FC = () => {
 
                             {/* 背景知识 */}
                             <div
-                              className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100/60 flex flex-col flex-shrink-0"
+                              className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100 dark:border-gray-800/60 flex flex-col flex-shrink-0"
                               style={{
                                 minHeight: 'clamp(250px, 40vh, 350px)',
                                 padding: 'clamp(0.25rem, 1vw, 1rem)',
@@ -4735,7 +4735,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                   onChange={e => setBackgroundKnowledgeWithAutoSave(e.target.value)}
                                   placeholder={t('prompts.optimizeEditPage.optimizationConfig.backgroundKnowledgePlaceholder')}
                                   size="small"
-                                  className="bg-white"
+                                  className="bg-white dark:bg-gray-800"
                                   sx={{
                                     '& .MuiInputBase-root': {
                                       alignItems: 'flex-start',
@@ -4795,7 +4795,7 @@ const PromptOptimizeEditPage: React.FC = () => {
               }`}
               onMouseDown={handleColumnMouseDown(1)}
             >
-              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-12 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200/60">
+              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-12 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200 dark:border-gray-700/60">
                 <div className="w-0.5 h-6 bg-gradient-to-b from-gray-400 to-gray-500 rounded-full mr-0.5"></div>
                 <div className="w-0.5 h-6 bg-gradient-to-b from-gray-400 to-gray-500 rounded-full ml-0.5"></div>
               </div>
@@ -4964,7 +4964,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                       >
                         {/* 优化评分趋势 */}
                         <div
-                          className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100/60 flex-shrink-0"
+                          className="bg-gradient-to-r from-gray-50/50 to-slate-50/50 rounded-xl border border-gray-100 dark:border-gray-800/60 flex-shrink-0"
                           style={{
                             padding: 'clamp(0.25rem, 1vw, 1rem)',
                           }}
@@ -5129,7 +5129,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                               </IconButton>
                               <Typography
                                 variant="caption"
-                                className="text-gray-600"
+                                className="text-gray-600 dark:text-gray-400"
                                 sx={{
                                   fontSize: 'clamp(0.5rem, 0.9vw, 0.75rem)',
                                   padding: '0 clamp(0.125rem, 0.5vw, 0.5rem)',
@@ -5194,7 +5194,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                               <Box className="bg-gray-100 border-b flex-shrink-0">
                                 <div className="flex w-full">
                                   {/* 左侧：原始提示词 - 50% */}
-                                  <div className="w-1/2 border-r border-gray-300">
+                                  <div className="w-1/2 border-r border-gray-300 dark:border-gray-600">
                                     <Box
                                       className="flex flex-wrap items-center"
                                       sx={{
@@ -5250,7 +5250,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                           size="small"
                                           onClick={() => copyToClipboard(originalPrompt, setSnackbar)}
                                           sx={{
-                                            color: '#6b7280',
+                                            color: '#6b7280 dark:#9CA3AF',
                                             width: 'clamp(1rem, 2vw, 1.5rem)',
                                             height: 'clamp(1rem, 2vw, 1.5rem)',
                                           }}
@@ -5384,7 +5384,7 @@ const PromptOptimizeEditPage: React.FC = () => {
                                           size="small"
                                           onClick={() => copyToClipboard(currentOptimizedPrompt, setSnackbar)}
                                           sx={{
-                                            color: '#6b7280',
+                                            color: '#6b7280 dark:#9CA3AF',
                                             width: 'clamp(1rem, 2vw, 1.5rem)',
                                             height: 'clamp(1rem, 2vw, 1.5rem)',
                                           }}
@@ -5494,7 +5494,7 @@ const PromptOptimizeEditPage: React.FC = () => {
           </DialogTitle>
           <DialogContent>
             <Box className="mt-2">
-              <TableContainer className="border border-gray-200 rounded">
+              <TableContainer className="border border-gray-200 dark:border-gray-700 rounded">
                 <Table size="small">
                   <TableHead>
                     <TableRow className="bg-gray-50">
@@ -5749,7 +5749,7 @@ const PromptOptimizeEditPage: React.FC = () => {
               <Box className="bg-gray-100 border-b flex-shrink-0">
                 <div className="flex w-full">
                   {/* 左侧：原始提示词 - 50% */}
-                  <div className="w-1/2 border-r border-gray-300">
+                  <div className="w-1/2 border-r border-gray-300 dark:border-gray-600">
                     <Box className="px-4 py-3 flex items-center justify-between">
                       <div className="flex items-center space-x-2">
                         <Typography variant="subtitle2" className="font-semibold text-gray-700">

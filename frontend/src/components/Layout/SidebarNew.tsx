@@ -120,7 +120,7 @@ const SidebarNew: React.FC<SidebarProps> = ({
       {/* Sidebar */}
       <div
         className={`
-        bg-white border-r transition-all duration-200
+        bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transition-all duration-200
         flex flex-col h-screen shrink-0
         ${isCollapsed ? 'w-14' : 'w-[190px]'}
       `}
@@ -132,19 +132,19 @@ const SidebarNew: React.FC<SidebarProps> = ({
               <img src="/jiuwen-logo.svg" width={20} height={20} alt="Jiuwen Logo" />
             </div>
             <div className={`overflow-hidden transition-all duration-200 ${isCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}>
-              <span className="text-[16px] font-[800] leading-5 text-common-text-black whitespace-nowrap ml-2">openJiuwen</span>
+              <span className="text-[16px] font-[800] leading-5 text-common-text-black dark:text-gray-100 whitespace-nowrap ml-2">openJiuwen</span>
             </div>
           </div>
         </div>
 
         {/* Navigation */}
-        <nav ref={navRef} className={`flex-1 ${isCollapsed ? 'px-2' : 'px-3'} overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-400 flex flex-col min-h-0`}>
-          {navigationSections.map((section, sectionIndex) => (
+        <nav ref={navRef} className={`flex-1 ${isCollapsed ? 'px-2' : 'px-3'} overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 dark:[&::-webkit-scrollbar-track]:bg-gray-800 [&::-webkit-scrollbar-thumb]:bg-gray-300 dark:[&::-webkit-scrollbar-thumb]:bg-gray-600 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-400 dark:hover:[&::-webkit-scrollbar-thumb]:bg-gray-500 flex flex-col min-h-0`}>
+              {navigationSections.map((section, sectionIndex) => (
             <div key={section.title}>
               {(sectionIndex > 0 || !isCollapsed) && (
                 <div className={`${isCollapsed ? 'mb-1 mt-1' : 'mb-1 mt-3'} h-5 flex items-center`}>
                   {isCollapsed ? (
-                    <div className="w-full border-t border-gray-200" />
+                    <div className="w-full border-t border-gray-200 dark:border-gray-700" />
                   ) : (
                     <div>
                       <span className="text-[12px] font-normal menu-section-title whitespace-nowrap block">{t(section.title)}</span>

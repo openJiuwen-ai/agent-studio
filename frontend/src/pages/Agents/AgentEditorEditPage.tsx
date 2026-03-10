@@ -547,7 +547,7 @@ const AgentEditorEditPage = () => {
   }, [modelsLoading, modelsList, displayedSaveAgentRequest?.model?.model_info?.model_name])
 
   return (
-    <div className="agent-editor-enhanced-page flex flex-col h-full w-full overflow-x-hidden px-6 py-6" key={selectedHistoryVersion || 'draft'}>
+    <div className="agent-editor-enhanced-page flex flex-col h-full w-full overflow-x-hidden px-6 py-6 bg-gray-50 dark:bg-gray-900" key={selectedHistoryVersion || 'draft'}>
       {loading ? (
         <div className="flex items-center justify-center h-full w-full">
           <CircularProgress />
@@ -556,23 +556,23 @@ const AgentEditorEditPage = () => {
         <>
           <div className="header flex items-center justify-between p-4">
             <div className="flex items-center">
-              <IconButton onClick={() => navigate('/dashboard/agents')}>
+              <IconButton onClick={() => navigate('/dashboard/agents')} className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800">
                 <ChevronLeft className="w-6 h-6" />
               </IconButton>
               <div className="ml-2 flex items-center">
                 <div className="mr-3 text-3xl">{displayedAgentDetailResponse?.data?.agent_info?.icon}</div>
-                <div className="text-lg text-gray-800 font-bold max-w-[200px] truncate" title={displayedAgentDetailResponse?.data?.agent_info?.agent_name}>
+                <div className="text-lg font-bold text-gray-800 dark:text-gray-100 max-w-[200px] truncate" title={displayedAgentDetailResponse?.data?.agent_info?.agent_name}>
                   {displayedAgentDetailResponse?.data?.agent_info?.agent_name}
                 </div>
                 {selectedHistoryVersion && (
-                  <span className="ml-2 px-2 py-0.5 text-xs rounded border border-yellow-300 bg-yellow-50 text-yellow-800">
+                  <span className="ml-2 px-2 py-0.5 text-xs rounded border border-yellow-300 dark:border-yellow-700 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300">
                     {t('labels.historyVersionPrefix')} {selectedHistoryVersion}
                   </span>
                 )}
                 {!selectedHistoryVersion && (
                   <>
-                    <IconButton size="small" onClick={handleOpenSettings}>
-                      <Settings className="w-4 h-4 text-gray-600" />
+                    <IconButton size="small" onClick={handleOpenSettings} className="text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800">
+                      <Settings className="w-4 h-4" />
                     </IconButton>
                     <Select
                       value={agentMode}
@@ -580,11 +580,16 @@ const AgentEditorEditPage = () => {
                       disabled={isReadOnly}
                       size="small"
                       style={{ minWidth: 180, marginLeft: '8px' }}
-                      className="bg-white hover:bg-gray-50"
+                      className="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      MenuProps={{
+                        PaperProps: {
+                          className: 'dark:bg-gray-800 dark:border-gray-700',
+                        },
+                      }}
                     >
-                      <MenuItem value="single-react-agent">{t('mode.singleReact')}</MenuItem>
-                      <MenuItem value="multi-workflow">{t('mode.multiWorkflow')}</MenuItem>
-                      <MenuItem value="multi-agents" disabled>
+                      <MenuItem value="single-react-agent" className="dark:text-gray-200 dark:hover:bg-gray-700">{t('mode.singleReact')}</MenuItem>
+                      <MenuItem value="multi-workflow" className="dark:text-gray-200 dark:hover:bg-gray-700">{t('mode.multiWorkflow')}</MenuItem>
+                      <MenuItem value="multi-agents" disabled className="dark:text-gray-500">
                         {t('mode.multiAgents')}
                       </MenuItem>
                     </Select>
@@ -596,12 +601,12 @@ const AgentEditorEditPage = () => {
               {/* 显示自动保存时间 */}
               {lastAutoSaveTime && (
                 <>
-                  <div className="text-sm text-gray-500 flex items-center">
-                    <Clock className="w-4 h-4 mr-1" />
-                    <span className="text-gray-700">{t('labels.lastSavedAt')}</span>
-                    <span className="font-medium">{lastAutoSaveTime}</span>
+                  <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+                    <Clock className="w-4 h-4 mr-1 text-gray-600 dark:text-gray-400" />
+                    <span className="text-gray-700 dark:text-gray-300">{t('labels.lastSavedAt')}</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{lastAutoSaveTime}</span>
                   </div>
-                  <Divider orientation="vertical" variant="middle" flexItem />
+                  <Divider orientation="vertical" variant="middle" flexItem className="dark:border-gray-700" />
                 </>
               )}
 
@@ -609,7 +614,7 @@ const AgentEditorEditPage = () => {
                 variant="outlined"
                 color="secondary"
                 startIcon={<Save className="w-4 h-4" />}
-                className="hover:bg-gray-50"
+                className="hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-200 dark:border-gray-600"
                 onClick={onAgentSave}
                 disabled={isSaving || isReadOnly}
               >
@@ -619,7 +624,7 @@ const AgentEditorEditPage = () => {
                 variant="outlined"
                 color="secondary"
                 startIcon={<History className="w-4 h-4" />}
-                className="hover:bg-gray-50"
+                className="hover:bg-gray-50 dark:hover:bg-gray-800 dark:text-gray-200 dark:border-gray-600"
                 onClick={handleOpenVersionHistoryDialog}
               >
                 {t('buttons.versionHistory')}
@@ -640,12 +645,12 @@ const AgentEditorEditPage = () => {
             <div className="flex flex-row flex-1 min-w-0" ref={containerRef}>
               {/* 左侧面板 */}
               {shouldShowSystemPrompt && (
-                <Paper className="h-full overflow-hidden p-4 flex-none relative" style={{ width: `${leftPanelWidth}%` }} elevation={1}>
+                <Paper className="h-full overflow-hidden p-4 flex-none relative bg-white dark:bg-gray-800 border dark:border-gray-700" style={{ width: `${leftPanelWidth}%` }} elevation={1}>
                   <div className="flex items-center mb-4">
-                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-2 rounded-lg mr-3">
-                      <Brain className="w-5 h-5 text-blue-600" />
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-2 rounded-lg mr-3">
+                      <Brain className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <span className="text-lg font-semibold text-gray-800">{i18n.t('agents.agentEditor.systemPrompt.title')}</span>
+                    <span className="text-lg font-semibold text-gray-800 dark:text-gray-100">{i18n.t('agents.agentEditor.systemPrompt.title')}</span>
                     <ActionSlotTarget name="system-title-actions" className="ml-auto flex items-center gap-2" />
                   </div>
                   <div className="h-[calc(100%-52px)]">
@@ -658,19 +663,19 @@ const AgentEditorEditPage = () => {
               {shouldShowSystemPrompt && (
                 <div className="top-0 h-full w-2 group cursor-col-resize select-none justify-items-center" onMouseDown={beginDragLeft} style={{ zIndex: 10 }}>
                   <div
-                    className={`top-0 h-full w-1 transition-colors duration-200 ${isDragging && draggingDivider === 'left' ? 'bg-blue-500' : 'bg-gray-300'} group-hover:bg-blue-500`}
+                    className={`top-0 h-full w-1 transition-colors duration-200 ${isDragging && draggingDivider === 'left' ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'} group-hover:bg-blue-500`}
                   />
                 </div>
               )}
               {/* 中间面板 */}
-              <Paper className="h-full py-4 px-4 relative overflow-x-hidden flex-none" elevation={1} style={{ width: `${adjustedMiddleWidth}%` }}>
+              <Paper className="h-full py-4 px-4 relative overflow-x-hidden flex-none bg-white dark:bg-gray-800 border dark:border-gray-700" elevation={1} style={{ width: `${adjustedMiddleWidth}%` }}>
                 <div className="flex items-center mb-4 h-18">
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-2 rounded-lg mr-3">
-                    <Settings className="w-5 h-5 text-blue-600" />
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-2 rounded-lg mr-3">
+                    <Settings className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <span className="text-lg font-semibold text-gray-800">{i18n.t('agents.agentEditor.orchestration.title')}</span>
+                  <span className="text-lg font-semibold text-gray-800 dark:text-gray-100">{i18n.t('agents.agentEditor.orchestration.title')}</span>
                 </div>
-                <div className="h-[calc(100%-52px)] text-gray-600 overflow-auto border rounded-xl p-2">
+                <div className="h-[calc(100%-52px)] text-gray-600 dark:text-gray-300 overflow-auto border rounded-xl p-2 dark:border-gray-700 bg-white dark:bg-gray-800">
                   {agentMode === 'multi-workflow' ? (
                     <MultiWorkflowSelector agentDetailResponse={displayedAgentDetailResponse || null} saveAgentRequest={displayedSaveAgentRequest} />
                   ) : (
@@ -686,21 +691,21 @@ const AgentEditorEditPage = () => {
               {shouldShowSystemPrompt && (
                 <div className="top-0 h-full w-2 group cursor-col-resize select-none justify-items-center" onMouseDown={beginDragRight} style={{ zIndex: 10 }}>
                   <div
-                    className={`top-0 h-full w-1 transition-colors duration-200 ${isDragging && draggingDivider === 'right' ? 'bg-blue-500' : 'bg-gray-300'} group-hover:bg-blue-500`}
+                    className={`top-0 h-full w-1 transition-colors duration-200 ${isDragging && draggingDivider === 'right' ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'} group-hover:bg-blue-500`}
                   />
                 </div>
               )}
               {/* 右侧面板 */}
-              <Paper className="h-full overflow-y-auto overflow-x-hidden p-4 relative flex-none" style={{ width: `${adjustedRightWidth}%` }} elevation={1}>
+              <Paper className="h-full overflow-y-auto overflow-x-hidden p-4 relative flex-none bg-white dark:bg-gray-800 border dark:border-gray-700" style={{ width: `${adjustedRightWidth}%` }} elevation={1}>
                 <div className="flex items-center mb-4">
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-2 rounded-lg mr-3">
-                    <Eye className="w-5 h-5 text-blue-600" />
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-2 rounded-lg mr-3">
+                    <Eye className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <span className="text-lg font-semibold text-gray-800">{i18n.t('agents.agentEditor.previewDebug.title')}</span>
+                  <span className="text-lg font-semibold text-gray-800 dark:text-gray-100">{i18n.t('agents.agentEditor.previewDebug.title')}</span>
                   <ActionSlotTarget name="debug-title-actions" className="ml-auto flex items-center gap-2" />
                 </div>
                 {/* 对话调试面板 - 使用独立组件 */}
-                <div className="flex flex-col h-[calc(100%-52px)] border rounded-xl p-2">
+                <div className="flex flex-col h-[calc(100%-52px)] border rounded-xl p-2 dark:border-gray-700 bg-white dark:bg-gray-800">
                   {agentId && (
                     <AgentDebugChat
                       key={agentMode}

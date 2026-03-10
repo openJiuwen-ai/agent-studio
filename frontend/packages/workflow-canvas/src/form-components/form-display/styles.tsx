@@ -16,7 +16,7 @@ export const FormDisplayStyle = styled.div`
   gap: 8px;
 
   .form-label {
-    color: #999;
+    color: var(--workflow-text-secondary);
     font-weight: 500;
     flex-shrink: 0;
     line-height: 16px;
@@ -24,7 +24,7 @@ export const FormDisplayStyle = styled.div`
   }
 
   .form-content {
-    color: #333;
+    color: var(--workflow-text-primary);
     flex: 1;
     white-space: pre-wrap;
     word-wrap: break-word;

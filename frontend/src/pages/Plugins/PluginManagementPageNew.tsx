@@ -434,8 +434,7 @@ const PluginManagementPageNew: React.FC = () => {
                   e.stopPropagation()
                   handlePluginAction('view', plugin)
                 }}
-                className="text-xs flex items-center gap-1"
-                style={{ color: '#777777' }}
+                className="text-xs flex items-center gap-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
               >
                 <Eye className="w-3 h-3" />
                 {t('plugins.actions.view')}
@@ -457,17 +456,17 @@ const PluginManagementPageNew: React.FC = () => {
         width: 400,
         render: ({ row }) => (
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl bg-gradient-to-r from-blue-100 to-indigo-100">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl bg-gradient-to-r from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30">
               {renderPluginIcon(row.icon_uri)}
             </div>
             <div className="min-w-0 flex-1">
               <div
-                className="font-semibold text-gray-900 cursor-pointer truncate"
+                className="font-semibold text-gray-900 dark:text-gray-100 cursor-pointer truncate"
                 onClick={() => handlePluginAction('configure', row)}
               >
                 {row.name}
               </div>
-              <div className="mt-1 text-xs text-gray-500 truncate">
+              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
                 {row.desc || t('plugins.noDescription')}
               </div>
             </div>
@@ -480,7 +479,7 @@ const PluginManagementPageNew: React.FC = () => {
         dataIndex: 'plugin_type',
         width: 150,
         render: ({ row }) => (
-          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+          <span className="px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full">
             {getPluginTypeText(row.plugin_type)}
           </span>
         ),
@@ -540,7 +539,7 @@ const PluginManagementPageNew: React.FC = () => {
       <select
         value={categoryFilter}
         onChange={e => setCategoryFilter(e.target.value)}
-        className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
+        className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-700 text-[#1f2937] dark:text-gray-300 rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
       >
         <option value="all">{t('plugins.filters.allCategories')}</option>
         {categories.slice(1).map(category => (
@@ -555,7 +554,7 @@ const PluginManagementPageNew: React.FC = () => {
     <>
       <button
         onClick={handleRefresh}
-        className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] hover:border-[#d1d5db] transition-colors flex items-center space-x-2"
+        className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-700 text-[#1f2937] dark:text-gray-300 rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] dark:hover:bg-gray-700 hover:border-[#d1d5db] dark:hover:border-gray-600 transition-colors flex items-center space-x-2"
       >
         <RefreshCw className="w-4 h-4" />
         <span>{t('plugins.actions.refresh')}</span>
@@ -598,46 +597,46 @@ const PluginManagementPageNew: React.FC = () => {
       <Dialog open={detailDialogOpen} onClose={() => setDetailDialogOpen(false)} maxWidth="md" fullWidth>
         {selectedPlugin && (
           <>
-            <DialogTitle className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-lg flex items-center justify-center text-3xl bg-gray-100">
+            <DialogTitle className="flex items-center space-x-3 bg-white dark:bg-gray-800">
+              <div className="w-12 h-12 rounded-lg flex items-center justify-center text-3xl bg-gray-100 dark:bg-gray-700">
                 {renderPluginIcon(selectedPlugin.icon_uri)}
               </div>
               <div>
-                <Typography variant="h6">{selectedPlugin.name}</Typography>
+                <Typography variant="h6" className="text-gray-900 dark:text-gray-100">{selectedPlugin.name}</Typography>
               </div>
             </DialogTitle>
-            <DialogContent>
+            <DialogContent className="bg-white dark:bg-gray-800">
               <div className="space-y-4">
                 <div>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>{t('plugins.description')}</Typography>
-                  <Typography variant="body1">{selectedPlugin.desc}</Typography>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom className="text-gray-500 dark:text-gray-400">{t('plugins.description')}</Typography>
+                  <Typography variant="body1" className="text-gray-900 dark:text-gray-100">{selectedPlugin.desc}</Typography>
                 </div>
                 {selectedPlugin.desc_mk && (
                   <div>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>{t('plugins.dialog.pluginDetails.basicInfo')}</Typography>
-                    <div className="prose prose-sm max-w-none p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <ReactMarkdown>{selectedPlugin.desc_mk}</ReactMarkdown>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom className="text-gray-500 dark:text-gray-400">{t('plugins.dialog.pluginDetails.basicInfo')}</Typography>
+                    <div className="prose prose-sm max-w-none p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <ReactMarkdown className="dark:prose-invert">{selectedPlugin.desc_mk}</ReactMarkdown>
                     </div>
                   </div>
                 )}
                 <div>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>{t('plugins.url')}</Typography>
-                  <Typography variant="body1" color="text.primary">{selectedPlugin.url}</Typography>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom className="text-gray-500 dark:text-gray-400">{t('plugins.url')}</Typography>
+                  <Typography variant="body1" color="text.primary" className="text-gray-900 dark:text-gray-100">{selectedPlugin.url}</Typography>
                 </div>
               </div>
             </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setDetailDialogOpen(false)}>{t('common.buttons.close')}</Button>
+            <DialogActions className="bg-white dark:bg-gray-800 border-t dark:border-gray-700">
+              <Button onClick={() => setDetailDialogOpen(false)} className="text-gray-700 dark:text-gray-300">{t('common.buttons.close')}</Button>
             </DialogActions>
           </>
         )}
       </Dialog>
 
       {/* 安装插件对话框 */}
-      <Dialog open={installDialogOpen} onClose={() => setInstallDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{t('plugins.dialog.installNewPlugin')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText className="mb-4">{t('plugins.dialog.selectInstallMethod')}</DialogContentText>
+      <Dialog open={installDialogOpen} onClose={() => setInstallDialogOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { bgcolor: "background.paper" } }}>
+        <DialogTitle className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">{t('plugins.dialog.installNewPlugin')}</DialogTitle>
+        <DialogContent className="bg-white dark:bg-gray-800">
+          <DialogContentText className="mb-4 text-gray-500 dark:text-gray-400">{t('plugins.dialog.selectInstallMethod')}</DialogContentText>
           <div className="space-y-3">
             <Button
               variant="outlined"
@@ -649,42 +648,42 @@ const PluginManagementPageNew: React.FC = () => {
             >
               <div className="text-left">
                 <div className="flex items-center justify-between w-full">
-                  <Typography variant="subtitle1" className="text-gray-500">{t('plugins.uploadFile')}</Typography>
-                  <div className="px-2 py-1 bg-yellow-100 border border-yellow-200 rounded-full">
-                    <Typography variant="caption" className="text-yellow-700 font-medium">{t('plugins.comingSoon')}</Typography>
+                  <Typography variant="subtitle1" className="text-gray-500 dark:text-gray-400">{t('plugins.uploadFile')}</Typography>
+                  <div className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-full">
+                    <Typography variant="caption" className="text-yellow-700 dark:text-yellow-400 font-medium">{t('plugins.comingSoon')}</Typography>
                   </div>
                 </div>
-                <Typography variant="body2" color="text.secondary" className="text-gray-400">{t('plugins.uploadFileDesc')}</Typography>
+                <Typography variant="body2" color="text.secondary" className="text-gray-400 dark:text-gray-500">{t('plugins.uploadFileDesc')}</Typography>
               </div>
             </Button>
             <Button
               variant="outlined"
               fullWidth
-              startIcon={<Cloud className="w-4 h-4" />}
+              startIcon={<Cloud className="w-4 h-4 text-gray-500 dark:text-gray-400" />}
               onClick={() => { setCloudPluginDialogOpen(true); setInstallDialogOpen(false) }}
-              className="justify-start p-3"
+              className="justify-start p-3 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               <div className="text-left">
-                <Typography variant="subtitle1">{t('plugins.dialog.cloudPluginForm.title')}-{t('plugins.dialog.cloudPluginForm.subtitle')}</Typography>
-                <Typography variant="body2" color="text.secondary">{t('plugins.cloudPlugin.createFromServiceDescription')}</Typography>
+                <Typography variant="subtitle1" className="text-gray-900 dark:text-gray-100">{t('plugins.dialog.cloudPluginForm.title')}-{t('plugins.dialog.cloudPluginForm.subtitle')}</Typography>
+                <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">{t('plugins.cloudPlugin.createFromServiceDescription')}</Typography>
               </div>
             </Button>
             <Button
               variant="outlined"
               fullWidth
-              startIcon={<Code className="w-4 h-4" />}
+              startIcon={<Code className="w-4 h-4 text-gray-500 dark:text-gray-400" />}
               onClick={() => { setIdePluginDialogOpen(true); setInstallDialogOpen(false) }}
-              className="justify-start p-3"
+              className="justify-start p-3 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               <div className="text-left">
-                <Typography variant="subtitle1">{t('plugins.types.ide')}-{t('plugins.cloudPlugin.createFromIDE')}</Typography>
-                <Typography variant="body2" color="text.secondary">{t('plugins.cloudPlugin.createFromIDEDescription')}</Typography>
+                <Typography variant="subtitle1" className="text-gray-900 dark:text-gray-100">{t('plugins.types.ide')}-{t('plugins.cloudPlugin.createFromIDE')}</Typography>
+                <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">{t('plugins.cloudPlugin.createFromIDEDescription')}</Typography>
               </div>
             </Button>
           </div>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setInstallDialogOpen(false)}>{t('common.buttons.cancel')}</Button>
+        <DialogActions className="bg-white dark:bg-gray-800 border-t dark:border-gray-700">
+          <Button onClick={() => setInstallDialogOpen(false)} className="text-gray-700 dark:text-gray-300">{t('common.buttons.cancel')}</Button>
         </DialogActions>
       </Dialog>
 
@@ -718,12 +717,12 @@ const PluginManagementPageNew: React.FC = () => {
 
       {/* 删除确认对话框 */}
       <Dialog open={deleteDialog.isOpen} onClose={() => setDeleteDialog({ isOpen: false, plugin: null })}>
-        <DialogTitle>{t('plugins.dialog.confirmDelete')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>{t('plugins.dialog.deleteConfirmMessage', { name: deleteDialog.plugin?.name })}</DialogContentText>
+        <DialogTitle className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">{t('plugins.dialog.confirmDelete')}</DialogTitle>
+        <DialogContent className="bg-white dark:bg-gray-800">
+          <DialogContentText className="text-gray-500 dark:text-gray-400">{t('plugins.dialog.deleteConfirmMessage', { name: deleteDialog.plugin?.name })}</DialogContentText>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialog({ isOpen: false, plugin: null })} disabled={deletePluginMutation.isLoading}>
+        <DialogActions className="bg-white dark:bg-gray-800 border-t dark:border-gray-700">
+          <Button onClick={() => setDeleteDialog({ isOpen: false, plugin: null })} disabled={deletePluginMutation.isLoading} className="text-gray-700 dark:text-gray-300">
             {t('common.buttons.cancel')}
           </Button>
           <Button

@@ -6,15 +6,15 @@
 import styled from 'styled-components'
 
 export const GroupCardWrapper = styled.div`
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--workflow-border-input);
   border-radius: 8px;
   padding: 8px;
   margin-bottom: 12px;
-  background: #ffffff;
+  background: var(--workflow-bg-surface);
 
   &.read-only {
-    border-color: #e8e8e8;
-    background: #f5f5f5;
+    border-color: var(--workflow-border-input);
+    background: var(--workflow-bg-input);
   }
 `
 
@@ -40,14 +40,14 @@ export const GroupInfo = styled.div`
 export const GroupName = styled.span`
   font-size: 12px;
   font-weight: 500;
-  color: #333333;
+  color: var(--workflow-text-primary);
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 4px;
   transition: background-color 0.15s ease-in-out;
 
   &:hover {
-    background: #f5f5f5;
+    background: var(--workflow-bg-hover);
   }
 `
 
@@ -68,17 +68,17 @@ export const TypeTag = styled.div`
 `
 
 export const InfoIcon = styled.div`
-  color: #666666;
+  color: var(--workflow-text-secondary);
   cursor: help;
   transition: color 0.15s ease-in-out;
 
   &:hover {
-    color: #333333;
+    color: var(--workflow-text-primary);
   }
 `
 
 export const DeleteGroupButton = styled.div`
-  color: #666666;
+  color: var(--workflow-text-secondary);
   transition: color 0.15s ease-in-out;
 
   &:hover {
@@ -100,14 +100,14 @@ export const VariableItem = styled.div`
   gap: 4px;
   padding: 4px 6px;
   background: #fafafa;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--workflow-border-input);
   border-radius: 6px;
   transition: all 0.15s ease-in-out;
   flex: 0 0 auto;
 
   &:hover {
-    border-color: #1890ff;
-    background: #f5f5f5;
+    border-color: var(--accent-primary);
+    background: var(--workflow-bg-hover);
   }
 
   &.dragging {
@@ -205,15 +205,15 @@ export const VariableItemWrapper = styled.div`
   gap: 4px;
   padding: 4px 6px;
   background: #fafafa;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--workflow-border-input);
   border-radius: 6px;
   transition: all 0.15s ease-in-out;
   flex: 0 0 auto;
   width: 100%;
 
   &:hover {
-    border-color: #1890ff;
-    background: #f5f5f5;
+    border-color: var(--accent-primary);
+    background: var(--workflow-bg-hover);
   }
 
   &.dragging {

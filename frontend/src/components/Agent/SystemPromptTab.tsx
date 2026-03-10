@@ -35,7 +35,7 @@ const PromptEditor: React.FC<{
   onChange: (value: string) => void
   placeholder?: string
 }> = ({ textAreaRef, effectiveText, readonly, isLockedForCandidate, onChange, placeholder }) => (
-  <Paper elevation={0} className="relative flex-1 min-h-0 flex flex-col">
+  <Paper elevation={0} className="relative flex-1 min-h-0 flex flex-col bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl">
     <textarea
       ref={textAreaRef}
       value={effectiveText}
@@ -45,7 +45,7 @@ const PromptEditor: React.FC<{
         onChange(newPrompt)
       }}
       placeholder={placeholder}
-      className={`h-full w-full p-2 text-sm placeholder:text-gray-400 text-gray-600 border rounded-xl resize-y min-h-[240px] max-h-[80vh] overflow-auto${readonly || isLockedForCandidate ? ' cursor-not-allowed' : ''}`}
+      className={`h-full w-full p-2 text-sm placeholder:text-gray-400 dark:placeholder:text-gray-500 text-gray-600 dark:text-gray-300 border-0 rounded-xl resize-y min-h-[240px] max-h-[80vh] overflow-auto bg-transparent dark:bg-gray-800${readonly || isLockedForCandidate ? ' cursor-not-allowed' : ''}`}
       readOnly={readonly || isLockedForCandidate}
     />
   </Paper>

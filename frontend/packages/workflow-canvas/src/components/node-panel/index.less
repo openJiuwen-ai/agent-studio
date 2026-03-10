@@ -6,27 +6,27 @@
 .node-placeholder {
   width: 360px;
 
-  background-color: rgba(252, 252, 255, 1);
-  border: 1px solid rgba(68, 83, 130, 0.25);
+  background-color: var(--workflow-bg-surface);
+  border: 1px solid var(--workflow-border-node);
   border-radius: 8px;
-  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 2%), 0 2px 6px 0 rgba(0, 0, 0, 4%);
+  box-shadow: var(--workflow-shadow-node);
 }
 
 
 .node-placeholder-skeleton {
   width: 100%;
   padding: 12px;
-  background-color: rgba(252, 252, 255, 1);
+  background-color: var(--workflow-bg-surface);
   border-radius: 8px;
 
 
   .semi-skeleton-avatar {
-    background-color: rgba(68, 83, 130, 0.25);
+    background-color: var(--workflow-border-input);
   }
 
   .semi-skeleton-title {
     height: 16px;
-    background-color: rgba(82, 100, 154, 0.13);
+    background-color: var(--workflow-bg-hover);
     border-radius: 4px;
   }
 }

@@ -8,12 +8,7 @@ import { ENV_CONFIG } from '../../config/environment'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '../../Common/UnifiedSnackbar'
 import { usePluginMarketConfigs } from '../../hooks/usePluginMarketConfigs'
 import ReactMarkdown from 'react-markdown'
-import {
-  Eye,
-  Download,
-  Check,
-  RefreshCw,
-} from 'lucide-react'
+import { Eye, Download, Check, RefreshCw } from 'lucide-react'
 import { Button, Dialog, DialogTitle, DialogContent, DialogActions, Typography, CircularProgress, IconButton, Tooltip } from '@mui/material'
 import { CommonPageLayout, SearchInput } from '../../components/Common/common-page'
 import type { ViewType } from '../../components/Common/common-page'
@@ -81,7 +76,11 @@ const PluginMarketPageNew: React.FC = () => {
   const currentSpaceId = getDefaultSpaceId()
 
   // 获取已安装插件列表（用于检查安装状态）
-  const { data: pluginListData, isLoading: pluginListLoading, refetch: refetchPluginList } = usePluginList({
+  const {
+    data: pluginListData,
+    isLoading: pluginListLoading,
+    refetch: refetchPluginList,
+  } = usePluginList({
     space_id: currentSpaceId,
     page: 1,
     size: 100,
@@ -156,11 +155,7 @@ const PluginMarketPageNew: React.FC = () => {
   // 检查插件是否已安装
   const isPluginInstalled = (plugin: Plugin) => {
     if (!plugin) return false
-    return installedPlugins.some(
-      p =>
-        p.plugin_id === plugin.plugin_id ||
-        (p.name === plugin.name && p.plugin_type === plugin.plugin_type),
-    )
+    return installedPlugins.some(p => p.plugin_id === plugin.plugin_id || (p.name === plugin.name && p.plugin_type === plugin.plugin_type))
   }
 
   // 安装插件
@@ -250,7 +245,9 @@ const PluginMarketPageNew: React.FC = () => {
           })
 
           const results = await Promise.allSettled(apiCreationPromises)
-          const successCount = results.filter(r => r.status === 'fulfilled' && (r as PromiseFulfilledResult<{ code?: number } | null>).value?.code === 200).length
+          const successCount = results.filter(
+            r => r.status === 'fulfilled' && (r as PromiseFulfilledResult<{ code?: number } | null>).value?.code === 200,
+          ).length
           const totalTools = tools.length
 
           await queryClient.invalidateQueries({ queryKey: ['pluginList', currentSpaceId], exact: false })
@@ -344,16 +341,14 @@ const PluginMarketPageNew: React.FC = () => {
                 iconTextColor="text-blue-600"
                 title={plugin.name}
                 description={plugin.desc || t('plugins.noDescription')}
-                tags={[
-                  { label: getPluginTypeText(plugin.plugin_type), color: '#3B82F6' },
-                ]}
+                tags={[{ label: getPluginTypeText(plugin.plugin_type), color: '#3B82F6' }]}
                 editingState={editingState}
                 actions={[]}
                 onClick={() => handleViewPlugin(plugin)}
                 footer={
                   <div className="flex items-center justify-between w-full">
                     <button
-                      onClick={(e) => {
+                      onClick={e => {
                         e.stopPropagation()
                         handleViewPlugin(plugin)
                       }}
@@ -364,7 +359,7 @@ const PluginMarketPageNew: React.FC = () => {
                       {t('plugins.actions.view')}
                     </button>
                     <button
-                      onClick={(e) => {
+                      onClick={e => {
                         e.stopPropagation()
                         if (!installed && !isInstalling && !checkingInstall) {
                           handleInstallPlugin(plugin)
@@ -426,15 +421,10 @@ const PluginMarketPageNew: React.FC = () => {
               {renderPluginIcon(row.icon_uri)}
             </div>
             <div className="min-w-0 flex-1">
-              <div
-                className="font-semibold text-gray-900 cursor-pointer truncate"
-                onClick={() => handleViewPlugin(row)}
-              >
+              <div className="font-semibold text-gray-900 cursor-pointer truncate" onClick={() => handleViewPlugin(row)}>
                 {row.name}
               </div>
-              <div className="mt-1 text-xs text-gray-500 truncate">
-                {row.desc || t('plugins.noDescription')}
-              </div>
+              <div className="mt-1 text-xs text-gray-500 truncate">{row.desc || t('plugins.noDescription')}</div>
             </div>
           </div>
         ),
@@ -444,11 +434,7 @@ const PluginMarketPageNew: React.FC = () => {
         title: t('plugins.tableView.columns.type'),
         dataIndex: 'plugin_type',
         width: 150,
-        render: ({ row }) => (
-          <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
-            {getPluginTypeText(row.plugin_type)}
-          </span>
-        ),
+        render: ({ row }) => <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">{getPluginTypeText(row.plugin_type)}</span>,
       },
       {
         key: 'actions',
@@ -463,11 +449,7 @@ const PluginMarketPageNew: React.FC = () => {
           return (
             <div className="flex items-center justify-start gap-2">
               <Tooltip title={t('plugins.actions.view')}>
-                <IconButton
-                  size="small"
-                  onClick={() => handleViewPlugin(row)}
-                  sx={{ color: '#777777' }}
-                >
+                <IconButton size="small" onClick={() => handleViewPlugin(row)} sx={{ color: '#777777' }}>
                   <Eye className="w-4 h-4" />
                 </IconButton>
               </Tooltip>
@@ -517,52 +499,52 @@ const PluginMarketPageNew: React.FC = () => {
   // 列表视图
   const tableView = useMemo(() => {
     const tableData = { columns: tableColumns, rows: displayPlugins }
-    return (
-      <ConfigTable
-        tableData={tableData}
-        loading={marketLoading}
-        size="small"
-        stickyHeader
-        emptyState={<Empty searchTerm={searchTerm} type="plugins" />}
-      />
-    )
+    return <ConfigTable tableData={tableData} loading={marketLoading} size="small" stickyHeader emptyState={<Empty searchTerm={searchTerm} type="plugins" />} />
   }, [tableColumns, displayPlugins, marketLoading, searchTerm])
 
   // 工具栏左侧
-  const toolbarLeft = useMemo(() => (
-    <>
-      <SearchInput searchTerm={searchTerm} placeholder={t('plugins.searchPlaceholder')} onChange={setSearchTerm} />
-      <select
-        value={categoryFilter}
-        onChange={e => setCategoryFilter(e.target.value)}
-        className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
-      >
-        <option value="all">{t('plugins.filters.allCategories')}</option>
-        {categories.slice(1).map(category => (
-          <option key={category} value={category}>{category}</option>
-        ))}
-      </select>
-    </>
-  ), [searchTerm, categoryFilter, categories, t])
+  const toolbarLeft = useMemo(
+    () => (
+      <>
+        <SearchInput searchTerm={searchTerm} placeholder={t('plugins.searchPlaceholder')} onChange={setSearchTerm} />
+        <select
+          value={categoryFilter}
+          onChange={e => setCategoryFilter(e.target.value)}
+          className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
+        >
+          <option value="all">{t('plugins.filters.allCategories')}</option>
+          {categories.slice(1).map(category => (
+            <option key={category} value={category}>
+              {category}
+            </option>
+          ))}
+        </select>
+      </>
+    ),
+    [searchTerm, categoryFilter, categories, t],
+  )
 
   // 工具栏右侧
-  const toolbarRight = useMemo(() => (
-    <button
-      onClick={handleRefresh}
-      disabled={loading || marketLoading}
-      className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] hover:border-[#d1d5db] transition-colors flex items-center space-x-2"
-    >
-      {loading || marketLoading ? <CircularProgress size={16} /> : <RefreshCw className="w-4 h-4" />}
-      <span>{t('plugins.actions.refresh')}</span>
-    </button>
-  ), [loading, marketLoading, t])
+  const toolbarRight = useMemo(
+    () => (
+      <button
+        onClick={handleRefresh}
+        disabled={loading || marketLoading}
+        className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] dark:hover:bg-gray-700 hover:border-[#d1d5db] dark:hover:border-gray-500 transition-colors flex items-center space-x-2"
+      >
+        {loading || marketLoading ? <CircularProgress size={16} /> : <RefreshCw className="w-4 h-4" />}
+        <span>{t('plugins.actions.refresh')}</span>
+      </button>
+    ),
+    [loading, marketLoading, t],
+  )
 
   return (
     <>
       <CommonPageLayout
         title={t('plugins.tabs.market')}
         viewType={viewType}
-        onViewTypeChange={(type) => setViewMode(type === 'grid' ? 'grid' : 'list')}
+        onViewTypeChange={type => setViewMode(type === 'grid' ? 'grid' : 'list')}
         pager={{
           total: displayTotalItems,
           currentPage,
@@ -586,9 +568,7 @@ const PluginMarketPageNew: React.FC = () => {
         {selectedPlugin && (
           <>
             <DialogTitle className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-lg flex items-center justify-center text-3xl bg-gray-100">
-                {renderPluginIcon(selectedPlugin.icon_uri)}
-              </div>
+              <div className="w-12 h-12 rounded-lg flex items-center justify-center text-3xl bg-gray-100">{renderPluginIcon(selectedPlugin.icon_uri)}</div>
               <div>
                 <Typography variant="h6">{selectedPlugin.name}</Typography>
               </div>
@@ -596,12 +576,16 @@ const PluginMarketPageNew: React.FC = () => {
             <DialogContent>
               <div className="space-y-4">
                 <div>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>{t('plugins.description')}</Typography>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    {t('plugins.description')}
+                  </Typography>
                   <Typography variant="body1">{selectedPlugin.desc}</Typography>
                 </div>
                 {selectedPlugin.desc_mk && (
                   <div>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>{t('plugins.dialog.pluginDetails.basicInfo')}</Typography>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      {t('plugins.dialog.pluginDetails.basicInfo')}
+                    </Typography>
                     <div className="prose prose-sm max-w-none p-4 bg-gray-50 rounded-lg border border-gray-200">
                       <ReactMarkdown>{selectedPlugin.desc_mk}</ReactMarkdown>
                     </div>
@@ -609,10 +593,14 @@ const PluginMarketPageNew: React.FC = () => {
                 )}
                 {selectedPlugin.tags && selectedPlugin.tags.length > 0 && (
                   <div>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>{t('plugins.dialog.pluginDetails.tags')}</Typography>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      {t('plugins.dialog.pluginDetails.tags')}
+                    </Typography>
                     <div className="flex flex-wrap gap-2">
                       {selectedPlugin.tags.map(tag => (
-                        <span key={tag} className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-full">{tag}</span>
+                        <span key={tag} className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-full">
+                          {tag}
+                        </span>
                       ))}
                     </div>
                   </div>

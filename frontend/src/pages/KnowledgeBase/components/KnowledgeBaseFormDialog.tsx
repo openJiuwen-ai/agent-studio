@@ -29,15 +29,15 @@ const CustomInput = ({
   required?: boolean
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'required'>) => (
   <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1">
-      {label} {required && <span className="text-red-500">*</span>}
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+      {label} {required && <span className="text-red-500 dark:text-red-400">*</span>}
     </label>
     <input
       type={type}
       value={value}
       onChange={onChange}
       placeholder={placeholder}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-gray-100"
       {...props}
     />
   </div>
@@ -58,13 +58,13 @@ const CustomTextarea = ({
   rows?: number
 } & React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
   <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
     <textarea
       value={value}
       onChange={onChange}
       placeholder={placeholder}
       rows={rows}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-gray-100"
       {...props}
     />
   </div>
@@ -83,15 +83,15 @@ const CustomSelect = ({
   options: { value: string; label: string }[]
 } & React.SelectHTMLAttributes<HTMLSelectElement>) => (
   <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
     <select
       value={value}
       onChange={onChange}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:text-gray-100"
       {...props}
     >
       {options.map(option => (
-        <option key={option.value} value={option.value}>
+        <option key={option.value} value={option.value} className="dark:bg-gray-800 dark:text-gray-100">
           {option.label}
         </option>
       ))}
@@ -129,7 +129,11 @@ const KnowledgeBaseFormDialog: React.FC<KnowledgeBaseFormDialogProps> = ({ open,
   const queryClient = useQueryClient()
 
   // 获取 Embedding 模型列表
-  const { data: embeddingModelsResponse, isLoading: isLoadingEmbeddingModels, refetch: refetchEmbeddingModels } = useEmbeddingModels({
+  const {
+    data: embeddingModelsResponse,
+    isLoading: isLoadingEmbeddingModels,
+    refetch: refetchEmbeddingModels,
+  } = useEmbeddingModels({
     spaceId: user?.spaceId,
     page: 1,
     size: 100,
@@ -147,10 +151,10 @@ const KnowledgeBaseFormDialog: React.FC<KnowledgeBaseFormDialogProps> = ({ open,
     if (open && user?.spaceId && !knowledgeBase) {
       // 创建知识库时，强制刷新模型列表
       setIsRefreshingModels(true)
-      
+
       // 先 invalidate queries，然后 refetch
       queryClient.invalidateQueries(['embeddingModels', 'list'])
-      
+
       refetchEmbeddingModels()
         .then(() => {
           setIsRefreshingModels(false)
@@ -272,9 +276,7 @@ const KnowledgeBaseFormDialog: React.FC<KnowledgeBaseFormDialogProps> = ({ open,
           newErrors.embedding_model_config_id = t('knowledgeBases.form.selectModelError')
         } else {
           // 检查选中的 embedding 模型是否在可用列表中
-          const selectedModel = embeddingModels.find(
-            model => parseInt(model.id) === formData.embedding_model_config_id
-          )
+          const selectedModel = embeddingModels.find(model => parseInt(model.id) === formData.embedding_model_config_id)
           if (!selectedModel) {
             newErrors.embedding_model_config_id = t('knowledgeBases.form.modelUnavailable')
           }
@@ -314,14 +316,15 @@ const KnowledgeBaseFormDialog: React.FC<KnowledgeBaseFormDialogProps> = ({ open,
           // 提取错误信息
           // embeddingModelService.handleError 返回的是 error.response.data，所以 error 对象本身就是响应体
           // 同时也要兼容原始的 axios error 格式
-          const errorMessage = testError?.detail || 
-                              testError?.message || 
-                              testError?.error ||
-                              testError?.response?.data?.detail || 
-                              testError?.response?.data?.message || 
-                              testError?.response?.data?.error ||
-                              t('knowledgeBases.form.testFailed')
-          
+          const errorMessage =
+            testError?.detail ||
+            testError?.message ||
+            testError?.error ||
+            testError?.response?.data?.detail ||
+            testError?.response?.data?.message ||
+            testError?.response?.data?.error ||
+            t('knowledgeBases.form.testFailed')
+
           // 设置错误信息并阻止创建
           setErrors({
             embedding_model_config_id: errorMessage,
@@ -364,18 +367,22 @@ const KnowledgeBaseFormDialog: React.FC<KnowledgeBaseFormDialogProps> = ({ open,
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4">
-        <div className="fixed inset-0 bg-black opacity-25" onClick={onClose}></div>
+        <div className="fixed inset-0 bg-black opacity-25 dark:opacity-50" onClick={onClose}></div>
 
-        <div className="relative bg-white rounded-lg max-w-2xl w-full">
-          <div className="flex items-center justify-between p-6 border-b">
-            <h2 className="text-xl font-semibold text-gray-900">{knowledgeBase ? t('knowledgeBases.settings.title') : t('knowledgeBases.create.title')}</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+        <div className="relative bg-white dark:bg-gray-900 rounded-lg max-w-2xl w-full border dark:border-gray-700">
+          <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              {knowledgeBase ? t('knowledgeBases.settings.title') : t('knowledgeBases.create.title')}
+            </h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
               <X className="w-6 h-6" />
             </button>
           </div>
 
           <div className="p-6">
-            <p className="text-gray-600 mb-6">{knowledgeBase ? t('knowledgeBases.edit.description') : t('knowledgeBases.create.description')}</p>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              {knowledgeBase ? t('knowledgeBases.edit.description') : t('knowledgeBases.create.description')}
+            </p>
 
             <form onSubmit={handleSubmit}>
               <div className="space-y-4">
@@ -414,19 +421,17 @@ const KnowledgeBaseFormDialog: React.FC<KnowledgeBaseFormDialogProps> = ({ open,
                 {/* Embedding 模型选择器 - 仅在创建时显示 */}
                 {!knowledgeBase && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t('knowledgeBases.form.embeddingModelRequired')} <span className="text-red-500">*</span>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {t('knowledgeBases.form.embeddingModelRequired')} <span className="text-red-500 dark:text-red-400">*</span>
                     </label>
-                    {(isLoadingEmbeddingModels || isRefreshingModels) ? (
-                      <div className="text-sm text-gray-500 flex items-center">
+                    {isLoadingEmbeddingModels || isRefreshingModels ? (
+                      <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         {t('knowledgeBases.form.loadingModels')}
                       </div>
                     ) : embeddingModels.length === 0 ? (
                       <div className="flex flex-col gap-2">
-                        <p className="text-sm text-red-500">
-                          {t('knowledgeBases.form.noModels')}
-                        </p>
+                        <p className="text-sm text-red-500">{t('knowledgeBases.form.noModels')}</p>
                         <Link
                           to="/dashboard/models"
                           className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
@@ -456,9 +461,11 @@ const KnowledgeBaseFormDialog: React.FC<KnowledgeBaseFormDialogProps> = ({ open,
                         }`}
                         style={!formData.embedding_model_config_id ? { color: '#9ca3af' } : {}}
                       >
-                        <option value="" disabled hidden style={{ color: '#9ca3af' }}>{t('knowledgeBases.form.selectModel')}</option>
+                        <option value="" disabled hidden style={{ color: '#9ca3af' }} className="dark:text-gray-500">
+                          {t('knowledgeBases.form.selectModel')}
+                        </option>
                         {embeddingModels.map(model => (
-                          <option key={model.id} value={parseInt(model.id)} style={{ color: '#111827' }}>
+                          <option key={model.id} value={parseInt(model.id)} style={{ color: '#111827' }} className="dark:text-gray-100 dark:bg-gray-800">
                             {model.name} ({model.modelId})
                           </option>
                         ))}
@@ -478,23 +485,19 @@ const KnowledgeBaseFormDialog: React.FC<KnowledgeBaseFormDialogProps> = ({ open,
 
               {/* 对话框底部按钮 */}
               <div className="mt-6 pt-6 border-t">
-                {isAtLimit && (
-                  <p className="text-sm text-red-500 mb-3">{t('knowledgeBases.form.limitReached')}</p>
-                )}
+                {isAtLimit && <p className="text-sm text-red-500 mb-3">{t('knowledgeBases.form.limitReached')}</p>}
                 <div className="flex items-center justify-end space-x-2">
-                  <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
                     {t('common.cancel')}
                   </button>
 
                   <button
                     type="submit"
-                    disabled={
-                      isLoading ||
-                      !!errors.name ||
-                      !!errors.embedding_model_config_id ||
-                      isAtLimit ||
-                      (!knowledgeBase && embeddingModels.length === 0)
-                    }
+                    disabled={isLoading || !!errors.name || !!errors.embedding_model_config_id || isAtLimit || (!knowledgeBase && embeddingModels.length === 0)}
                     className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isLoading ? t('common.saving') : knowledgeBase ? t('common.buttons.update') : t('common.buttons.create')}
@@ -510,4 +513,3 @@ const KnowledgeBaseFormDialog: React.FC<KnowledgeBaseFormDialogProps> = ({ open,
 }
 
 export default KnowledgeBaseFormDialog
-

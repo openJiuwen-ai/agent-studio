@@ -160,7 +160,7 @@ const AgentsPage: React.FC = () => {
             <select
               value={sortBy || AgentSortBy.update_time}
               onChange={e => setSortBy(e.target.value as any)}
-              className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
+              className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
             >
               <option value={AgentSortBy.name}>{t('agents.agentList.sortByName')}</option>
               <option value={AgentSortBy.create_time}>{t('agents.agentList.sortByCreated')}</option>
@@ -168,7 +168,7 @@ const AgentsPage: React.FC = () => {
             </select>
             <button
               onClick={() => setSortOrder((sortOrder === 'asc' ? 'desc' : 'asc') as any)}
-              className="h-8 w-8 bg-white border border-[#e5e7eb] text-[#6b7280] hover:text-[#374151] hover:bg-[#f9fafb] hover:border-[#d1d5db] rounded-[4px] transition-colors flex items-center justify-center"
+              className="h-8 w-8 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#6b7280] dark:text-gray-400 hover:text-[#374151] dark:hover:text-gray-300 hover:bg-[#f9fafb] dark:hover:bg-gray-700 hover:border-[#d1d5db] dark:hover:border-gray-500 rounded-[4px] transition-colors flex items-center justify-center"
             >
               {sortOrder === 'asc' ? <span className="text-sm">↑</span> : <span className="text-sm">↓</span>}
             </button>
@@ -185,11 +185,11 @@ const AgentsPage: React.FC = () => {
       <>
         {/* 导入按钮 */}
         <button
-          className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] hover:border-[#d1d5db] transition-colors flex items-center space-x-2"
+          className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] dark:hover:bg-gray-700 hover:border-[#d1d5db] dark:hover:border-gray-500 transition-colors flex items-center space-x-2"
           onClick={handleImportClick}
           disabled={isImporting}
         >
-          {isImporting ? <CircularProgress size={16} /> : <Upload className="w-4 h-4" />}
+          {isImporting ? <CircularProgress size={16} className="text-blue-500 dark:text-blue-400" /> : <Upload className="w-4 h-4" />}
           <span>{isImporting ? t('agents.importing') : t('agents.import')}</span>
         </button>
         {/* 新建按钮 */}

@@ -257,9 +257,9 @@ const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           rows={4}
           className={`
             w-full px-5 py-4
-            bg-white border border-gray-200 ${RADIUS_CONTAINER}
-            text-[15px] text-gray-900 placeholder:text-gray-400
-            focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100
+            bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 ${RADIUS_CONTAINER}
+            text-[15px] text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500
+            focus:outline-none focus:border-blue-400 dark:focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/30
             transition-all duration-200
             resize-none
           `}

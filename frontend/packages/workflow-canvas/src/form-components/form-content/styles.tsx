@@ -11,13 +11,13 @@ export const FormWrapper = styled.div`
   display: flex;
   flex-direction: column;
   gap: 6px;
-  background-color: rgb(251, 251, 251);
+  background-color: var(--workflow-bg-surface);
   border-radius: 0 0 8px 8px;
   padding: 0 12px 12px;
 `
 
 export const FormTitleDescription = styled.div`
-  color: var(--semi-color-text-2);
+  color: var(--workflow-text-secondary);
   font-size: 12px;
   line-height: 20px;
   padding: 0px 4px;

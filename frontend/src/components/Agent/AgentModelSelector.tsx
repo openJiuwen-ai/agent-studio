@@ -36,9 +36,11 @@ const Accordion = styled((props: AccordionProps) => <MuiAccordion disableGutters
   '::before': {
     display: 'none',
   },
-  backgroundColor: '#f9fafb',
+  backgroundColor: theme.palette.mode === 'dark' ? '#1f2937' : '#f9fafb',
   '&.Mui-expanded': {
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    boxShadow: theme.palette.mode === 'dark' 
+      ? '0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3)'
+      : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
   },
 }))
 
@@ -71,10 +73,10 @@ const AccordionSummary = styled((props: AccordionSummaryProps) => {
   },
 }))
 
-const AccordionDetails = styled(MuiAccordionDetails)(() => ({
+const AccordionDetails = styled(MuiAccordionDetails)(({ theme }) => ({
   padding: 16,
-  borderTop: '1px solid rgba(0, 0, 0, .125)',
-  backgroundColor: '#fff',
+  borderTop: `1px solid ${theme.palette.divider}`,
+  backgroundColor: theme.palette.mode === 'dark' ? '#111827' : '#fff',
 }))
 
 // 记忆变量类型定义 - 描述、默认值设为可选，增加启用状态

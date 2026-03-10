@@ -108,27 +108,27 @@ const AgentDebugPanel = ({ agentId, agentVersion, agentName }: AgentDebugPanelPr
         {selectedLogInfo && <SummaryDetail logInfo={selectedLogInfo} />}
         <div className="mt-3">
           <div className="flex items-center justify-between mb-1">
-            <Typography variant="body2" className="text-gray-700">
+            <Typography variant="body2" className="text-gray-700 dark:text-gray-300">
               {viewMode === 'tree' ? t('viewMode.tree') : t('viewMode.flame')}
             </Typography>
             <div className="flex items-center gap-2">
               <button
-                className={`text-xs px-2 py-1 rounded ${viewMode === 'tree' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-800'}`}
+                className={`text-xs px-2 py-1 rounded ${viewMode === 'tree' ? 'bg-gray-800 text-white dark:bg-gray-600' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'}`}
                 onClick={() => setViewMode('tree')}
               >
                 {t('viewMode.tree')}
               </button>
               <button
-                className={`text-xs px-2 py-1 rounded ${viewMode === 'flame' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-800'}`}
+                className={`text-xs px-2 py-1 rounded ${viewMode === 'flame' ? 'bg-gray-800 text-white dark:bg-gray-600' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'}`}
                 onClick={() => setViewMode('flame')}
               >
                 {t('viewMode.flame')}
               </button>
             </div>
           </div>
-          <div className="rounded-md border border-gray-100 bg-white p-2">
+          <div className="rounded-md border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-900 p-2">
             {execList.length === 0 ? (
-              <div className="text-xs text-gray-500">{t('empty.noExecData')}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">{t('empty.noExecData')}</div>
             ) : viewMode === 'tree' ? (
               <CallTree execList={execList} onSelect={setSelectedNode} selectedId={selectedNode?.invokeId as string | undefined} rootLabel={agentName} />
             ) : (
@@ -137,10 +137,10 @@ const AgentDebugPanel = ({ agentId, agentVersion, agentName }: AgentDebugPanelPr
           </div>
         </div>
         <div className="mt-3">
-          <Typography variant="body2" className="text-gray-700 mb-1">
+          <Typography variant="body2" className="text-gray-700 dark:text-gray-300 mb-1">
             {t('sections.nodeDetail')}
           </Typography>
-          <div className="mt-2 rounded-md border border-gray-100 bg-gray-50 p-2">
+          <div className="mt-2 rounded-md border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2">
             <NodeDetail node={selectedNode} rootName={agentName} rootId={rootId} />
           </div>
         </div>
@@ -150,9 +150,9 @@ const AgentDebugPanel = ({ agentId, agentVersion, agentName }: AgentDebugPanelPr
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0">
-      <div className="flex-1 bg-white p-4 overflow-y-auto overflow-x-hidden shadow-inner border border-gray-100">
+      <div className="flex-1 bg-white dark:bg-gray-800 p-4 overflow-y-auto overflow-x-hidden shadow-inner border border-gray-100 dark:border-gray-700">
         <div className="flex items-center gap-2 mb-3">
-          <Typography variant="body2" className="text-gray-700 flex-shrink-0">
+          <Typography variant="body2" className="text-gray-700 dark:text-gray-300 flex-shrink-0">
             {t('filters.executionLog')}
           </Typography>
           <FormControl size="small" className="w-full">
@@ -167,12 +167,40 @@ const AgentDebugPanel = ({ agentId, agentVersion, agentName }: AgentDebugPanelPr
               }}
               MenuProps={{
                 PaperProps: {
+                  className: 'dark:bg-gray-800 dark:border-gray-700',
                   style: { maxHeight: 280 },
+                },
+              }}
+              className="dark:text-gray-300"
+              sx={{
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#E5E7EB',
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#3B82F6',
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#3B82F6',
+                },
+                '& .MuiSvgIcon-root': {
+                  color: '#6B7280',
+                },
+                '.dark & .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#4B5563',
+                },
+                '.dark &:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#5B8CFF',
+                },
+                '.dark &.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#5B8CFF',
+                },
+                '.dark & .MuiSvgIcon-root': {
+                  color: '#9CA3AF',
                 },
               }}
             >
               {logsCreateList.map(item => (
-                <MenuItem key={item.trace_id} value={item.trace_id}>
+                <MenuItem key={item.trace_id} value={item.trace_id} className="dark:text-gray-300 dark:hover:bg-gray-700">
                   {dayjs(item.create_time).format('YYYY/MM/DD HH:mm:ss')}
                 </MenuItem>
               ))}
@@ -180,7 +208,7 @@ const AgentDebugPanel = ({ agentId, agentVersion, agentName }: AgentDebugPanelPr
           </FormControl>
           <Tooltip title={loadingList ? t('refresh.loading') : t('refresh.label')} placement="top">
             <span>
-              <IconButton size="small" onClick={handleRefresh} disabled={loadingList} aria-label={t('refresh.ariaLabel')}>
+              <IconButton size="small" onClick={handleRefresh} disabled={loadingList} aria-label={t('refresh.ariaLabel')} className="text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
                 <RefreshCcw className={`w-4 h-4 ${loadingList ? 'animate-spin' : ''}`} />
               </IconButton>
             </span>
@@ -196,12 +224,12 @@ const AgentDebugPanel = ({ agentId, agentVersion, agentName }: AgentDebugPanelPr
 const SummaryDetail = ({ logInfo }: { logInfo?: AgentExecutionDebugDetailResponse['data'] }) => {
   const { t } = useScopedTranslation('agents.agentEditor.previewDebug.agentDebugPanel.summary')
   return (
-    <div className="summary border border-gray-100 p-2 rounded-md bg-gray-50 gap-2 flex flex-col">
-      <span className="text-gray-700 text-xs">
+    <div className="summary border border-gray-100 dark:border-gray-700 p-2 rounded-md bg-gray-50 dark:bg-gray-900 gap-2 flex flex-col">
+      <span className="text-gray-700 dark:text-gray-300 text-xs">
         {t('traceId')}：{logInfo?.trace_id}
         <CopyButton text={logInfo?.trace_id} />
       </span>
-      <span className="text-gray-700 text-xs">
+      <span className="text-gray-700 dark:text-gray-300 text-xs">
         {t('duration')}：{logInfo?.duration || 0} ms
         <span className={`text-xs py-0.5 ml-2 px-2 rounded-full ${getStatusMeta(logInfo?.status as string).className}`}>
           {getStatusMeta(logInfo?.status as string).label}
@@ -249,7 +277,7 @@ const CopyButton = ({ text }: { text?: string }) => {
   return (
     <Tooltip title={copied ? t('copied') : t('tooltip')} placement="top">
       <span>
-        <IconButton size="small" onClick={handleCopy} disabled={!text} className="ml-2 text-gray-500 hover:text-gray-700" aria-label={t('ariaLabel')}>
+        <IconButton size="small" onClick={handleCopy} disabled={!text} className="ml-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" aria-label={t('ariaLabel')}>
           {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         </IconButton>
       </span>

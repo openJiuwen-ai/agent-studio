@@ -1361,22 +1361,22 @@ const ToolConfigurationPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center space-x-4">
-            <Button variant="outlined" startIcon={<ArrowLeft className="w-4 h-4" />} onClick={handleBackNavigation} className="mb-4">
+            <Button variant="outlined" startIcon={<ArrowLeft className="w-4 h-4" />} onClick={handleBackNavigation} className="mb-4 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
               {source === 'agent' ? t('plugins.toolConfig.returnAgentConfig', '返回智能体配置') : t('plugins.toolConfig.returnPluginConfig', '返回插件配置')}
             </Button>
           </div>
 
           <div className="flex items-center justify-between">
             <div>
-              <Typography variant="h4" className="font-bold text-gray-900 mb-2">
+              <Typography variant="h4" className="font-bold text-gray-900 dark:text-gray-100 mb-2">
                 {tool.name}
               </Typography>
-              <Typography variant="body1" color="text.secondary">
+              <Typography variant="body1" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                 {tool.description}
               </Typography>
               <div className="flex items-center space-x-4 mt-2">
@@ -1388,16 +1388,17 @@ const ToolConfigurationPage: React.FC = () => {
                 />
                 {pluginType === 'code' ? (
                   <>
-                    <Chip label={`${t('plugins.toolConfig.language', '语言')}: ${tool.language || 'python'}`} size="small" />
-                    <Chip label={t('plugins.toolConfig.codeTool', '代码工具')} size="small" variant="outlined" />
+                    <Chip label={`${t('plugins.toolConfig.language', '语言')}: ${tool.language || 'python'}`} size="small" className="text-gray-700 dark:text-gray-300" />
+                    <Chip label={t('plugins.toolConfig.codeTool', '代码工具')} size="small" variant="outlined" className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600" />
                   </>
                 ) : (
                   <>
-                    <Chip label={`${t('plugins.toolConfig.method', '方法')}: ${getMethodString(tool.method || 1)}`} size="small" />
+                    <Chip label={`${t('plugins.toolConfig.method', '方法')}: ${getMethodString(tool.method || 1)}`} size="small" className="text-gray-700 dark:text-gray-300" />
                     <Chip
                       label={`${t('plugins.toolConfig.path', '路径')}: ${tool.path || ''}`}
                       size="small"
                       variant="outlined"
+                      className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600"
                       sx={{
                         maxWidth: '80ch',
                         '& .MuiChip-label': {
@@ -1419,6 +1420,7 @@ const ToolConfigurationPage: React.FC = () => {
                 startIcon={<Trash2 className="w-4 h-4" />}
                 onClick={() => setDeleteDialogOpen(true)}
                 disabled={deletePluginApiMutation.isPending || isReadOnly}
+                className="text-red-600 dark:text-red-400 border-red-600 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
               >
                 {deletePluginApiMutation.isPending ? t('plugins.actions.deleting', '删除中...') : t('plugins.actions.deleteTool', '删除工具')}
               </Button>
@@ -1435,14 +1437,14 @@ const ToolConfigurationPage: React.FC = () => {
         </div>
 
         {/* Configuration Tabs */}
-        <Card className="p-6">
-          <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)} className="mb-6">
-            <Tab label={t('plugins.tools.tabs.basic')} value="basic" />
-            <Tab label={t('plugins.tools.tabs.input')} value="input" />
-            <Tab label={t('plugins.tools.tabs.output')} value="output" />
-            {pluginType === 'api' && <Tab label={t('plugins.tools.tabs.headersConfig')} value="headers" />}
-            {pluginType === 'code' && <Tab label={t('plugins.tools.tabs.code')} value="code" />}
-            <Tab label={t('plugins.tools.tabs.test')} value="test" />
+        <Card className="p-6 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)} className="mb-6 border-b border-gray-200 dark:border-gray-700">
+            <Tab label={t('plugins.tools.tabs.basic')} value="basic" className="text-gray-700 dark:text-gray-300" />
+            <Tab label={t('plugins.tools.tabs.input')} value="input" className="text-gray-700 dark:text-gray-300" />
+            <Tab label={t('plugins.tools.tabs.output')} value="output" className="text-gray-700 dark:text-gray-300" />
+            {pluginType === 'api' && <Tab label={t('plugins.tools.tabs.headersConfig')} value="headers" className="text-gray-700 dark:text-gray-300" />}
+            {pluginType === 'code' && <Tab label={t('plugins.tools.tabs.code')} value="code" className="text-gray-700 dark:text-gray-300" />}
+            <Tab label={t('plugins.tools.tabs.test')} value="test" className="text-gray-700 dark:text-gray-300" />
           </Tabs>
 
           {/* Basic Info Tab */}
@@ -1702,8 +1704,8 @@ const ToolConfigurationPage: React.FC = () => {
           {tabValue === 'headers' && pluginType === 'api' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <Typography variant="h6">{t('plugins.toolConfig.headers', '请求头配置')}</Typography>
-                <Button variant="outlined" startIcon={<Plus className="w-4 h-4" />} onClick={handleAddHeader} disabled={isReadOnly}>
+                <Typography variant="h6" className="text-gray-900 dark:text-gray-100">{t('plugins.toolConfig.headers', '请求头配置')}</Typography>
+                <Button variant="outlined" startIcon={<Plus className="w-4 h-4" />} onClick={handleAddHeader} disabled={isReadOnly} className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
                   {t('plugins.toolConfig.addHeader', '添加请求头')}
                 </Button>
               </div>
@@ -1711,25 +1713,25 @@ const ToolConfigurationPage: React.FC = () => {
               <div className="space-y-4">
                 {/* Header Row */}
                 {tool.headers.length > 0 && (
-                  <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-gray-50 rounded-lg border-b">
-                    <div className="col-span-5 text-sm font-medium text-gray-700">Key</div>
-                    <div className="col-span-5 text-sm font-medium text-gray-700">Value</div>
-                    <div className="col-span-2 text-sm font-medium text-gray-700">操作</div>
+                  <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-lg border-b border-gray-200 dark:border-gray-700">
+                    <div className="col-span-5 text-sm font-medium text-gray-700 dark:text-gray-300">Key</div>
+                    <div className="col-span-5 text-sm font-medium text-gray-700 dark:text-gray-300">Value</div>
+                    <div className="col-span-2 text-sm font-medium text-gray-700 dark:text-gray-300">操作</div>
                   </div>
                 )}
 
                 {tool.headers.length === 0 ? (
-                  <div className="bg-gray-50 rounded-lg p-6 text-center">
-                    <Typography variant="body2" color="text.secondary" className="mb-2">
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center">
+                    <Typography variant="body2" color="text.secondary" className="mb-2 text-gray-500 dark:text-gray-400">
                       暂无请求头配置
                     </Typography>
-                    <Button variant="outlined" startIcon={<Plus className="w-4 h-4" />} onClick={handleAddHeader}>
+                    <Button variant="outlined" startIcon={<Plus className="w-4 h-4" />} onClick={handleAddHeader} className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
                       添加请求头
                     </Button>
                   </div>
                 ) : (
                   tool.headers.map((header, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-2 items-center p-4 border border-gray-200 rounded-lg">
+                  <div key={index} className="grid grid-cols-12 gap-2 items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
                     <div className="col-span-5">
                       <TextField
                         value={header.key}
@@ -1738,6 +1740,14 @@ const ToolConfigurationPage: React.FC = () => {
                         fullWidth
                         placeholder={t('plugins.tools.headers.keyPlaceholder')}
                         disabled={isReadOnly}
+                        sx={{
+                          '& .MuiInputBase-input': {
+                            color: '#1F2937',
+                          },
+                          '.dark & .MuiInputBase-input': {
+                            color: '#E5E7EB',
+                          },
+                        }}
                       />
                     </div>
                     <div className="col-span-5">
@@ -1748,6 +1758,14 @@ const ToolConfigurationPage: React.FC = () => {
                         fullWidth
                         placeholder={t('plugins.tools.headers.valuePlaceholder')}
                         disabled={isReadOnly}
+                        sx={{
+                          '& .MuiInputBase-input': {
+                            color: '#1F2937',
+                          },
+                          '.dark & .MuiInputBase-input': {
+                            color: '#E5E7EB',
+                          },
+                        }}
                       />
                     </div>
                     <div className="col-span-2 flex justify-center gap-1">
@@ -1757,6 +1775,7 @@ const ToolConfigurationPage: React.FC = () => {
                         title="保存此行"
                         disabled={isReadOnly || updatePluginApiMutation.isLoading}
                         color="success"
+                        className="text-green-600 dark:text-green-400"
                       >
                         <Check className="w-4 h-4" />
                       </IconButton>
@@ -1766,6 +1785,7 @@ const ToolConfigurationPage: React.FC = () => {
                         color="error"
                         title="删除此行"
                         disabled={isReadOnly}
+                        className="text-red-600 dark:text-red-400"
                       >
                         <Trash2 className="w-4 h-4" />
                       </IconButton>
@@ -1813,8 +1833,8 @@ const ToolConfigurationPage: React.FC = () => {
 
                 {/* Template Selection */}
                 {showTemplates && availableTemplates.length > 0 && (
-                  <div className="bg-white border border-gray-200 rounded-lg p-4">
-                    <Typography variant="subtitle2" className="mb-3 flex items-center">
+                  <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                    <Typography variant="subtitle2" className="mb-3 flex items-center text-gray-700 dark:text-gray-300">
                       <FileText className="w-4 h-4 mr-2" />
                       {t('plugins.pluginConfig.selectCodeTemplate', '选择代码模板')}
                     </Typography>
@@ -1825,18 +1845,18 @@ const ToolConfigurationPage: React.FC = () => {
                           key={template.name}
                           className={`p-3 border rounded-lg cursor-pointer transition-all duration-200 ${
                             selectedTemplate === template.name
-                              ? 'border-blue-500 bg-blue-50 shadow-sm'
-                              : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                              ? 'border-blue-500 bg-blue-50 dark:border-blue-500 dark:bg-blue-900/30 shadow-sm'
+                              : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20'
                           }`}
                           onClick={() => handleTemplateSelect(template.name)}
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <Typography variant="body2" className="font-medium">
+                            <Typography variant="body2" className="font-medium text-gray-900 dark:text-gray-100">
                               {template.name}
                             </Typography>
                             <Chip label={(tool?.language || 'python') === 'javascript' ? 'JS' : 'PY'} size="small" color={(tool?.language || 'python') === 'javascript' ? 'success' : 'info'} />
                           </div>
-                          <Typography variant="body2" className="text-gray-600 text-sm">
+                          <Typography variant="body2" className="text-gray-600 dark:text-gray-400 text-sm">
                             {template.description}
                           </Typography>
                         </div>
@@ -1844,18 +1864,18 @@ const ToolConfigurationPage: React.FC = () => {
                     </div>
 
                     <div className="mt-3 flex justify-end">
-                      <Button size="small" onClick={() => setShowTemplates(false)}>
+                      <Button size="small" onClick={() => setShowTemplates(false)} className="text-gray-700 dark:text-gray-300">
                         {t('common.buttons.close', '关闭')}
                       </Button>
                     </div>
                   </div>
                 )}
 
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                   {/* Code editor based on runtime language - no selector here */}
-                  <div className="bg-gray-50 border-b border-gray-200 p-3">
-                    <Typography variant="body2" className="text-gray-600">
-                      {t('plugins.pluginConfig.programmingLanguage', '编程语言')}: <span className="font-medium">{tool.language === 'javascript' ? 'JavaScript' : 'Python'}</span>
+                  <div className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-3">
+                    <Typography variant="body2" className="text-gray-600 dark:text-gray-400">
+                      {t('plugins.pluginConfig.programmingLanguage', '编程语言')}: <span className="font-medium text-gray-900 dark:text-gray-100">{tool.language === 'javascript' ? 'JavaScript' : 'Python'}</span>
                     </Typography>
                   </div>
 
@@ -1924,26 +1944,26 @@ const ToolConfigurationPage: React.FC = () => {
           {tabValue === 'test' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <Typography variant="h6">{t('plugins.tools.test.toolTest', '工具测试')}</Typography>
+                <Typography variant="h6" className="text-gray-900 dark:text-gray-100">{t('plugins.tools.test.toolTest', '工具测试')}</Typography>
                 <Button variant="contained" onClick={handleTestConnection} startIcon={<Settings className="w-4 h-4" />}>
                   {t('plugins.tools.test.startTest', '开始测试')}
                 </Button>
               </div>
 
-              <Card className="p-6 border border-gray-200">
+              <Card className="p-6 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                 <div className="space-y-4">
                   <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                      {pluginType === 'code' ? <Code className="w-4 h-4 text-blue-600" /> : <Settings className="w-4 h-4 text-blue-600" />}
+                    <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                      {pluginType === 'code' ? <Code className="w-4 h-4 text-blue-600 dark:text-blue-400" /> : <Settings className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
                     </div>
                     <div>
-                      <Typography variant="subtitle1" className="font-medium">
-                        {pluginType === 'code' ? t('plugins.toolConfig.codeToolTest', '代码工具测试') : t('plugins.toolConfig.apiToolTest', 'API工具测试')}
+                      <Typography variant="subtitle1" className="font-medium text-gray-900 dark:text-gray-100">
+                        {pluginType === 'code' ? t('plugins.toolConfig.codeToolTest', '代码工具测试') : t('plugins.toolConfig.apiToolTest', 'API 工具测试')}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                         {pluginType === 'code'
                           ? t('plugins.toolConfig.testCodeConfig', '测试代码配置是否正确，验证代码执行是否可用')
-                          : t('plugins.toolConfig.testApiConfig', '测试工具配置是否正确，验证API调用是否可用')}
+                          : t('plugins.toolConfig.testApiConfig', '测试工具配置是否正确，验证 API 调用是否可用')}
                       </Typography>
                     </div>
                   </div>
@@ -1953,19 +1973,19 @@ const ToolConfigurationPage: React.FC = () => {
                       <>
                         <div className="flex items-center space-x-2">
                           <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                             {t('plugins.pluginConfig.runtimeEnvironment', '运行时环境')}: {tool.language === 'javascript' ? 'Node.js' : (tool.language === 'python' ? 'Python 3' : 'Python')}
                           </Typography>
                         </div>
                         <div className="flex items-center space-x-2">
                           <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                             {t('plugins.toolConfig.codeLength', '代码长度')}: {tool.code?.length || 0} {t('plugins.toolConfig.characterCount', '字符')}
                           </Typography>
                         </div>
                         <div className="flex items-center space-x-2">
                           <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                             {t('plugins.toolConfig.inputParametersName', '输入参数')}: {tool.input_parameters.length} {t('plugins.toolConfig.number', '个')}
                           </Typography>
                         </div>
@@ -1977,6 +1997,7 @@ const ToolConfigurationPage: React.FC = () => {
                           <Typography
                             variant="body2"
                             color="text.secondary"
+                            className="text-gray-500 dark:text-gray-400"
                             sx={{
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
@@ -1984,24 +2005,24 @@ const ToolConfigurationPage: React.FC = () => {
                               maxWidth: '70ch',
                             }}
                           >
-                            {t('plugins.toolConfig.apiPath', 'API路径')}: {tool.path}
+                            {t('plugins.toolConfig.apiPath', 'API 路径')}: {tool.path}
                           </Typography>
                         </div>
                         <div className="flex items-center space-x-2">
                           <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                             {t('plugins.pluginConfig.method', '请求方法')}: {getMethodString(tool.method)}
                           </Typography>
                         </div>
                         <div className="flex items-center space-x-2">
                           <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                             {t('plugins.toolConfig.inputParametersName', '输入参数')}: {tool.input_parameters.length} {t('plugins.toolConfig.number', '个')}
                           </Typography>
                         </div>
                         <div className="flex items-center space-x-2">
                           <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                             {t('plugins.toolConfig.headers', '请求头配置')}: {tool.headers.length} {t('plugins.toolConfig.number', '个')}
                           </Typography>
                         </div>
@@ -2009,16 +2030,16 @@ const ToolConfigurationPage: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                    <Typography variant="body2" color="text.secondary" className="mb-2">
+                  <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                    <Typography variant="body2" color="text.secondary" className="mb-2 text-gray-500 dark:text-gray-400">
                       {pluginType === 'code'
                         ? t('plugins.toolConfig.testCodeConfigHelper', '点击"开始测试"按钮打开代码测试对话框，可以测试代码执行并查看输出结果')
-                        : t('plugins.toolConfig.testApiConfigHelper', '点击"开始测试"按钮打开测试对话框，填写参数并查看API调用返回结果')}
+                        : t('plugins.toolConfig.testApiConfigHelper', '点击"开始测试"按钮打开测试对话框，填写参数并查看 API 调用返回结果')}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                       {pluginType === 'code'
                         ? t('plugins.toolConfig.apiTestResultHelper', '系统将在隔离环境中执行代码，提供执行状态和错误日志')
-                        : t('plugins.toolConfig.apiTestParameterHelper', '左侧填写测试参数，右侧查看API调用返回结果')}
+                        : t('plugins.toolConfig.apiTestParameterHelper', '左侧填写测试参数，右侧查看 API 调用返回结果')}
                     </Typography>
                   </div>
                 </div>
@@ -2038,16 +2059,17 @@ const ToolConfigurationPage: React.FC = () => {
         }}
         maxWidth="sm"
         fullWidth
+        className="dark"
       >
-        <DialogTitle>
+        <DialogTitle className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
           {editingParameter ? t('plugins.toolConfig.editParameter', '编辑参数') : t('plugins.toolConfig.addParameter', '添加参数')}
           {isInputDialogOpen ? ` (${t('plugins.toolConfig.inputParameter', '输入')})` : ` (${t('plugins.toolConfig.outputParameter', '输出')})`}
         </DialogTitle>
-        <DialogContent>
+        <DialogContent className="bg-white dark:bg-gray-800">
           <div className="space-y-4 mt-2">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <Typography variant="subtitle2">
+                <Typography variant="subtitle2" className="text-gray-700 dark:text-gray-300">
                   {t('plugins.toolConfig.parameterName', '参数名称')} <span className="text-red-500 ml-1">*</span>
                 </Typography>
                 {isInputDialogOpen && (
@@ -2059,7 +2081,7 @@ const ToolConfigurationPage: React.FC = () => {
                       onChange={e => handleParameterFormChange('is_required', e.target.checked)}
                       className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                     />
-                    <label htmlFor="is_required" className="text-sm font-medium text-gray-700 cursor-pointer whitespace-nowrap">
+                    <label htmlFor="is_required" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer whitespace-nowrap">
                       {t('plugins.toolConfig.isRequired', '必选参数')}
                     </label>
                   </div>
@@ -2072,10 +2094,24 @@ const ToolConfigurationPage: React.FC = () => {
                 placeholder={t('plugins.toolConfig.parameterNameHelper', '请输入参数名称...')}
                 helperText={`${t('plugins.toolConfig.parameterName', '参数名称')} (${parameterForm.name.length}/128)`}
                 inputProps={{ maxLength: 128 }}
+                sx={{
+                  '& .MuiInputBase-input': {
+                    color: '#1F2937',
+                  },
+                  '& .MuiFormHelperText-root': {
+                    color: '#6B7280',
+                  },
+                  '.dark & .MuiInputBase-input': {
+                    color: '#E5E7EB',
+                  },
+                  '.dark & .MuiFormHelperText-root': {
+                    color: '#9CA3AF',
+                  },
+                }}
               />
             </div>
             <div>
-              <Typography variant="subtitle2" className="mb-2">
+              <Typography variant="subtitle2" className="mb-2 text-gray-700 dark:text-gray-300">
                 {t('plugins.toolConfig.parameterDescription', '参数描述')} <span className="text-red-500 ml-1">*</span>
               </Typography>
               <TextField
@@ -2087,6 +2123,20 @@ const ToolConfigurationPage: React.FC = () => {
                 placeholder={t('plugins.toolConfig.parameterDescriptionHelper', '请输入参数描述...')}
                 helperText={`${t('plugins.toolConfig.parameterDescription', '参数描述')} (${parameterForm.description.length}/256)`}
                 inputProps={{ maxLength: 256 }}
+                sx={{
+                  '& .MuiInputBase-input': {
+                    color: '#1F2937',
+                  },
+                  '& .MuiFormHelperText-root': {
+                    color: '#6B7280',
+                  },
+                  '.dark & .MuiInputBase-input': {
+                    color: '#E5E7EB',
+                  },
+                  '.dark & .MuiFormHelperText-root': {
+                    color: '#9CA3AF',
+                  },
+                }}
               />
             </div>
             {isInputDialogOpen ? (
@@ -2231,30 +2281,32 @@ const ToolConfigurationPage: React.FC = () => {
         onClose={() => setTestDialogOpen(false)}
         maxWidth="lg"
         fullWidth
+        className="dark"
         PaperProps={{
           sx: { minHeight: '600px' },
+          className: 'dark:bg-gray-800 dark:border-gray-700',
         }}
       >
-        <DialogTitle>
+        <DialogTitle className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
           <div className="flex items-center justify-between">
             <span>
               {t('plugins.toolConfig.testTool', '测试工具')}: {tool?.name}
             </span>
           </div>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent className="bg-white dark:bg-gray-800">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
             {/* Left Side - Test Parameters */}
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
-                <Typography variant="h6">{t('plugins.toolConfig.testParameters', '测试参数')}</Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="h6" className="text-gray-900 dark:text-gray-100">{t('plugins.toolConfig.testParameters', '测试参数')}</Typography>
+                <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                   ({t('plugins.toolConfig.testParametersHelper', '根据工具配置填写测试参数')})
                 </Typography>
               </div>
 
               <div className="space-y-6">
-                {/* Plugin-level Parameters - 只显示运行时参数，且排除与工具参数同名的参数 */}
+                {/* Plugin-level Parameters */}
                 {pluginData?.data?.plugin_info?.request_params && (() => {
                   const toolParamNames = new Set(tool?.input_parameters?.map(p => p.name) || [])
                   const visiblePluginParams = pluginData.data.plugin_info.request_params.filter(p =>
@@ -2264,7 +2316,7 @@ const ToolConfigurationPage: React.FC = () => {
                 })() && (
                   <div className="space-y-4">
                     <div className="flex items-center space-x-2">
-                      <Typography variant="subtitle1" className="font-medium text-blue-600">
+                      <Typography variant="subtitle1" className="font-medium text-blue-600 dark:text-blue-400">
                         {t('plugins.toolConfig.pluginParams', '插件参数')}
                       </Typography>
                       <Chip label={`${(() => {
@@ -2288,17 +2340,17 @@ const ToolConfigurationPage: React.FC = () => {
                         return (
                           <div
                             key={`plugin-param-${index}`}
-                            className={`space-y-2 p-3 rounded-lg border ${hasError ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-200'}`}
+                            className={`space-y-2 p-3 rounded-lg border ${hasError ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-800' : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'}`}
                           >
                             <div className="flex items-center space-x-2">
-                              <Typography variant="subtitle2" className={`font-medium ${hasError ? 'text-red-700' : ''}`}>
+                              <Typography variant="subtitle2" className={`font-medium ${hasError ? 'text-red-700 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>
                                 {param.name}
                                 {param.is_required && <span className="text-red-500 ml-1">*</span>}
                               </Typography>
-                              <Chip label={typeString} size="small" variant="outlined" color="primary" />
-                              {param.is_required && <Chip label={t('plugins.toolConfig.required')} size="small" color="error" variant="outlined" />}
+                              <Chip label={typeString} size="small" variant="outlined" color="primary" className="dark:text-gray-300" />
+                              {param.is_required && <Chip label={t('plugins.toolConfig.required')} size="small" color="error" variant="outlined" className="dark:text-gray-300" />}
                             </div>
-                            <Typography variant="body2" color="text.secondary" className="text-sm">
+                            <Typography variant="body2" color="text.secondary" className="text-sm text-gray-500 dark:text-gray-400">
                               {param.desc || t('plugins.toolConfig.noDescription')}
                             </Typography>
                             {typeString === 'boolean' ? (
@@ -2335,10 +2387,10 @@ const ToolConfigurationPage: React.FC = () => {
                 {tool?.input_parameters && tool.input_parameters.filter(p => p.is_runtime !== false).length > 0 && (
                   <div className="space-y-4">
                     <div className="flex items-center space-x-2">
-                      <Typography variant="subtitle1" className="font-medium text-green-600">
+                      <Typography variant="subtitle1" className="font-medium text-green-600 dark:text-green-400">
                         {t('plugins.toolConfig.toolParams', '工具参数')}
                       </Typography>
-                      <Chip label={`${tool.input_parameters.filter(p => p.is_runtime !== false).length}`} size="small" color="success" />
+                      <Chip label={`${tool.input_parameters.filter(p => p.is_runtime !== false).length}`} size="small" color="success" className="dark:text-gray-300" />
                     </div>
                     {tool.input_parameters
                       .filter(p => p.is_runtime !== false)
@@ -2350,17 +2402,17 @@ const ToolConfigurationPage: React.FC = () => {
                         return (
                           <div
                             key={param.id}
-                            className={`space-y-2 p-3 rounded-lg border ${hasError ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-200'}`}
+                            className={`space-y-2 p-3 rounded-lg border ${hasError ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'}`}
                           >
                             <div className="flex items-center space-x-2">
-                              <Typography variant="subtitle2" className={`font-medium ${hasError ? 'text-red-700' : ''}`}>
+                              <Typography variant="subtitle2" className={`font-medium ${hasError ? 'text-red-700 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>
                                 {param.name}
                                 {param.is_required && <span className="text-red-500 ml-1">*</span>}
                               </Typography>
-                              <Chip label={param.type} size="small" variant="outlined" color="success" />
-                              {param.is_required && <Chip label={t('plugins.toolConfig.required')} size="small" color="error" variant="outlined" />}
+                              <Chip label={param.type} size="small" variant="outlined" color="success" className="dark:text-gray-300" />
+                              {param.is_required && <Chip label={t('plugins.toolConfig.required')} size="small" color="error" variant="outlined" className="dark:text-gray-300" />}
                             </div>
-                            <Typography variant="body2" color="text.secondary" className="text-sm">
+                            <Typography variant="body2" color="text.secondary" className="text-sm text-gray-500 dark:text-gray-400">
                               {param.description}
                             </Typography>
                             {param.type === 'boolean' ? (
@@ -2396,28 +2448,28 @@ const ToolConfigurationPage: React.FC = () => {
                 {/* No parameters message */}
                 {(!pluginData?.data?.plugin_info?.request_params || pluginData.data.plugin_info.request_params.length === 0) &&
                   (!tool?.input_parameters || tool.input_parameters.length === 0) && (
-                    <div className="bg-gray-50 rounded-lg p-6 text-center">
-                      <Typography variant="body1" color="text.secondary">
+                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center">
+                      <Typography variant="body1" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                         {t('plugins.toolConfig.noInputParams', '该工具没有输入参数')}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                         {t('plugins.toolConfig.canExecuteTest', '可以直接执行测试')}
                       </Typography>
                     </div>
                   )}
               </div>
 
-              <div className="pt-4 border-t space-y-3">
+              <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
                 {(() => {
                   const { isValid, missingParams } = validateRequiredParameters()
                   return (
                     <>
                       {!isValid && missingParams.length > 0 && (
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                          <Typography variant="body2" color="error" className="font-medium">
+                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                          <Typography variant="body2" color="error" className="font-medium text-red-700 dark:text-red-400">
                             {t('plugins.toolConfig.missingRequiredParams', '缺少必填参数')}
                           </Typography>
-                          <Typography variant="caption" color="error">
+                          <Typography variant="caption" color="error" className="text-red-600 dark:text-red-400">
                             {t('plugins.toolConfig.pleaseFillRequiredParams', '请填写以下必填参数')}: {missingParams.join(', ')}
                           </Typography>
                         </div>
@@ -2428,6 +2480,7 @@ const ToolConfigurationPage: React.FC = () => {
                         disabled={isTestRunning || executePluginMutation.isPending || !isValid}
                         fullWidth
                         startIcon={isTestRunning || executePluginMutation.isPending ? <CircularProgress size={16} /> : <Settings className="w-4 h-4" />}
+                        className="bg-blue-600 hover:bg-blue-700"
                       >
                         {isTestRunning || executePluginMutation.isPending
                           ? t('plugins.tools.test.executing', '执行中...')
@@ -2442,23 +2495,23 @@ const ToolConfigurationPage: React.FC = () => {
             {/* Right Side - Test Results */}
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
-                <Typography variant="h6">{t('plugins.tools.test.testResults')}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  ({t('plugins.toolConfig.apiCallReturn', 'API调用返回')})
+                <Typography variant="h6" className="text-gray-900 dark:text-gray-100">{t('plugins.tools.test.testResults')}</Typography>
+                <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
+                  ({t('plugins.toolConfig.apiCallReturn', 'API 调用返回')})
                 </Typography>
               </div>
 
               {testError ? (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <Typography variant="body1" color="error" className="font-medium">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                  <Typography variant="body1" color="error" className="font-medium text-red-700 dark:text-red-400">
                     {t('plugins.toolConfig.testFailed', '测试失败')}
                   </Typography>
-                  <Typography variant="body2" color="error">
+                  <Typography variant="body2" color="error" className="text-red-600 dark:text-red-400">
                     {testError}
                   </Typography>
                 </div>
               ) : testResults ? (
-                <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-auto">
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 max-h-96 overflow-auto">
                   {(() => {
                     try {
                       const results = JSON.parse(testResults)
@@ -2467,7 +2520,7 @@ const ToolConfigurationPage: React.FC = () => {
                           {/* 执行状态 */}
                           <div className="flex items-center space-x-2">
                             <div className={`w-3 h-3 rounded-full ${results.execution_success ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                            <Typography variant="subtitle2" className="font-medium">
+                            <Typography variant="subtitle2" className="font-medium text-gray-900 dark:text-gray-100">
                               {t('plugins.toolConfig.executionStatus', '执行状态')}: {results.execution_success ? 'success' : 'error'}
                             </Typography>
                             {results.error_code !== null && (
@@ -2476,17 +2529,18 @@ const ToolConfigurationPage: React.FC = () => {
                                 size="small"
                                 variant={results.error_message === 'success' ? 'outlined' : 'filled'}
                                 color={results.error_message === 'success' ? 'success' : 'error'}
+                                className="dark:text-gray-300"
                               />
                             )}
                           </div>
 
                           {/* 错误信息 */}
                           {results.error_message && (
-                            <div className={`p-3 rounded border ${results.execution_success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                              <Typography variant="body2" className="font-medium mb-1">
+                            <div className={`p-3 rounded border ${results.execution_success ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'}`}>
+                              <Typography variant="body2" className="font-medium mb-1 text-gray-900 dark:text-gray-100">
                                 {t('plugins.toolConfig.executionMessage', '执行消息')}:
                               </Typography>
-                              <Typography variant="body2" className={results.execution_success ? 'text-green-800' : 'text-red-800'}>
+                              <Typography variant="body2" className={results.execution_success ? 'text-green-800 dark:text-green-400' : 'text-red-800 dark:text-red-400'}>
                                 {results.error_message}
                               </Typography>
                             </div>
@@ -2494,26 +2548,26 @@ const ToolConfigurationPage: React.FC = () => {
 
                           {/* 结构化输出参数显示 */}
                           {tool?.output_parameters && tool.output_parameters.length > 0 && (
-                            <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                              <Typography variant="subtitle2" className="font-medium text-blue-800 mb-3">
+                            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3">
+                              <Typography variant="subtitle2" className="font-medium text-blue-800 dark:text-blue-400 mb-3">
                                 {t('plugins.toolConfig.outputResult', '📊 输出参数结果')}
                               </Typography>
                               <div className="space-y-3">
                                 {(() => {
                                   const outputValues = extractOutputParameterValues(results)
                                   return tool.output_parameters.map(param => (
-                                    <div key={param.id} className="bg-white rounded p-3 border border-blue-100">
+                                    <div key={param.id} className="bg-white dark:bg-gray-800 rounded p-3 border border-blue-100 dark:border-blue-900">
                                       <div className="flex items-center justify-between mb-1">
-                                        <Typography variant="body2" className="font-medium text-gray-700">
+                                        <Typography variant="body2" className="font-medium text-gray-700 dark:text-gray-100">
                                           {param.name}
                                         </Typography>
-                                        <Chip label={param.type} size="small" variant="outlined" />
+                                        <Chip label={param.type} size="small" variant="outlined" className="dark:text-gray-300" />
                                       </div>
-                                      <Typography variant="body2" color="text.secondary" className="mb-2 text-sm">
+                                      <Typography variant="body2" color="text.secondary" className="mb-2 text-sm text-gray-500 dark:text-gray-400">
                                         {param.description}
                                       </Typography>
-                                      <div className="bg-gray-50 rounded p-2 border border-gray-200">
-                                        <Typography variant="body2" className="font-mono text-sm break-all">
+                                      <div className="bg-gray-50 dark:bg-gray-900 rounded p-2 border border-gray-200 dark:border-gray-700">
+                                        <Typography variant="body2" className="font-mono text-sm break-all text-gray-800 dark:text-gray-200">
                                           {formatOutputValue(outputValues[param.name], param.type)}
                                         </Typography>
                                       </div>
@@ -2527,11 +2581,11 @@ const ToolConfigurationPage: React.FC = () => {
                           {/* 原始输出结果 */}
                           {results.output && (
                             <details className="text-sm">
-                              <summary className="cursor-pointer text-blue-600 hover:text-blue-800 font-medium mb-2">
+                              <summary className="cursor-pointer text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium mb-2">
                                 {t('plugins.toolConfig.viewRawOutput', '📄 查看完整原始输出')}
                               </summary>
-                              <div className="bg-white border border-gray-200 rounded p-3 mt-2">
-                                <pre className="text-sm text-gray-800 whitespace-pre-wrap bg-gray-100 p-2 rounded">
+                              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 mt-2">
+                                <pre className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap bg-gray-100 dark:bg-gray-900 p-2 rounded">
                                   {JSON.stringify(results.output, null, 2)}
                                 </pre>
                               </div>
@@ -2541,10 +2595,10 @@ const ToolConfigurationPage: React.FC = () => {
                           {/* 原始响应（仅在有错误或调试时显示） */}
                           {results.raw_response && !results.execution_success && (
                             <details className="text-sm">
-                              <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
+                              <summary className="cursor-pointer text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
                                 {t('plugins.toolConfig.viewRawResponse', '查看原始响应数据')}
                               </summary>
-                              <pre className="text-xs text-gray-600 mt-2 whitespace-pre-wrap bg-gray-100 p-2 rounded">
+                              <pre className="text-xs text-gray-600 dark:text-gray-400 mt-2 whitespace-pre-wrap bg-gray-100 dark:bg-gray-900 p-2 rounded">
                                 {JSON.stringify(results.raw_response, null, 2)}
                               </pre>
                             </details>
@@ -2552,19 +2606,19 @@ const ToolConfigurationPage: React.FC = () => {
 
                           {/* 解析错误信息 */}
                           {results.parse_error && (
-                            <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
-                              <Typography variant="body2" className="font-medium text-yellow-800 mb-1">
+                            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded p-3">
+                              <Typography variant="body2" className="font-medium text-yellow-800 dark:text-yellow-400 mb-1">
                                 {t('plugins.toolConfig.parseError', '解析错误:')}
                               </Typography>
-                              <Typography variant="body2" className="text-yellow-700">
+                              <Typography variant="body2" className="text-yellow-700 dark:text-yellow-400">
                                 {results.parse_error}
                               </Typography>
                               {results.raw_buffer && (
                                 <details className="text-sm mt-2">
-                                  <summary className="cursor-pointer text-yellow-600 hover:text-yellow-800">
+                                  <summary className="cursor-pointer text-yellow-600 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300">
                                     {t('plugins.toolConfig.viewRawData', '查看原始数据')}
                                   </summary>
-                                  <pre className="text-xs text-gray-600 mt-1 whitespace-pre-wrap bg-yellow-50 p-2 rounded">{results.raw_buffer}</pre>
+                                  <pre className="text-xs text-gray-600 dark:text-gray-400 mt-1 whitespace-pre-wrap bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded border border-yellow-200 dark:border-yellow-800">{results.raw_buffer}</pre>
                                 </details>
                               )}
                             </div>
@@ -2572,41 +2626,41 @@ const ToolConfigurationPage: React.FC = () => {
 
                           {/* 执行时间戳 */}
                           {results.timestamp && (
-                            <div className="text-xs text-gray-500 border-t pt-2">
+                            <div className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-2">
                               {t('plugins.toolConfig.executionTime', '执行时间:')} {new Date(results.timestamp).toLocaleString('zh-CN')}
                             </div>
                           )}
                         </div>
                       )
                     } catch {
-                      // 如果JSON解析失败，直接显示原始文本
+                      // 如果 JSON 解析失败，直接显示原始文本
                       return (
                         <div className="space-y-2">
-                          <Typography variant="body2" color="error">
+                          <Typography variant="body2" color="error" className="text-red-700 dark:text-red-400">
                             {t('plugins.toolConfig.resultParseFailed', '结果解析失败，显示原始数据')}:
                           </Typography>
-                          <pre className="text-sm text-gray-800 whitespace-pre-wrap bg-red-50 p-2 rounded border border-red-200">{testResults}</pre>
+                          <pre className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-200 dark:border-red-800">{testResults}</pre>
                         </div>
                       )
                     }
                   })()}
                 </div>
               ) : (
-                <div className="bg-gray-50 rounded-lg p-6 text-center">
-                  <Typography variant="body1" color="text.secondary">
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center">
+                  <Typography variant="body1" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                     {t('plugins.toolConfig.noResults', '暂无测试结果')}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                     {t('plugins.toolConfig.fillParamsHint', '填写参数后点击"执行测试"查看结果')}
                   </Typography>
                 </div>
               )}
 
-              <div className="pt-4 border-t space-y-2">
-                <Typography variant="subtitle2" className="font-medium">
+              <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                <Typography variant="subtitle2" className="font-medium text-gray-900 dark:text-gray-100">
                   {t('plugins.toolConfig.testInfo', '测试信息')}
                 </Typography>
-                <div className="space-y-1 text-sm text-gray-600">
+                <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
                   <Typography
                     component="div"
                     sx={{
@@ -2616,7 +2670,7 @@ const ToolConfigurationPage: React.FC = () => {
                       maxWidth: '70ch',
                     }}
                   >
-                    {t('plugins.tools.test.apiPath', 'API路径')}: {tool?.path}
+                    {t('plugins.tools.test.apiPath', 'API 路径')}: {tool?.path}
                   </Typography>
                   <div>
                     {t('plugins.tools.test.requestMethod', '请求方法')}: {tool && getMethodString(tool.method)}
@@ -2629,14 +2683,17 @@ const ToolConfigurationPage: React.FC = () => {
             </div>
           </div>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setTestDialogOpen(false)}>{t('common.buttons.close', '关闭')}</Button>
+        <DialogActions className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+          <Button onClick={() => setTestDialogOpen(false)} className="text-gray-700 dark:text-gray-300">
+            {t('common.buttons.close', '关闭')}
+          </Button>
           {testResults && (
             <Button
               variant="outlined"
               onClick={() => {
                 copyToClipboard(testResults, setSnackbar, t('plugins.toolConfig.resultCopied'))
               }}
+              className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               {t('plugins.toolConfig.copyResult', '复制结果')}
             </Button>

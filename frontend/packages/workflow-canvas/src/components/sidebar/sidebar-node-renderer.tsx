@@ -6,6 +6,7 @@
 import { useNodeRender, FlowNodeEntity } from '@flowgram.ai/free-layout-editor'
 
 import { NodeRenderContext } from '../../context'
+import './sidebar.css'
 
 export function SidebarNodeRenderer(props: { node: FlowNodeEntity }) {
   const { node } = props
@@ -13,16 +14,7 @@ export function SidebarNodeRenderer(props: { node: FlowNodeEntity }) {
 
   return (
     <NodeRenderContext.Provider value={nodeRender}>
-      <div
-        style={{
-          background: 'rgb(251, 251, 251)',
-          height: '100%',
-          width: '100%',
-          borderRadius: 8,
-          border: '1px solid rgba(82,100,154, 0.13)',
-          boxSizing: 'border-box',
-        }}
-      >
+      <div className="sidebar-node-container">
         {nodeRender.form?.render()}
       </div>
     </NodeRenderContext.Provider>

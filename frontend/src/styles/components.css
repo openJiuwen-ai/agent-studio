@@ -4,13 +4,21 @@
  */
 
 @layer components {
+  /* ========== 全局 ========== */
+  .global-bg {
+    background-color: var(--global-bg-page);
+  }
+
   /* ========== 卡片阴影 hover（ConfigCard 等） ========== */
   .shadow-card-hover {
     box-shadow: var(--shadow-card);
-    transition: box-shadow 180ms ease, transform 180ms ease, background 180ms ease;
+    transition:
+      box-shadow 180ms ease,
+      transform 180ms ease,
+      background 180ms ease;
   }
   .shadow-card-hover:hover {
-    background-color: transparent;
+    background-color: #f9fafb;
     background-image: url(/images/card-hover.svg);
     background-size: cover;
     background-position: center;
@@ -19,9 +27,13 @@
     transform: translateY(-2px);
   }
 
-  /* ========== 全局 ========== */
-  .global-bg {
-    background-color: var(--global-bg-page);
+  .dark .shadow-card-hover {
+    background-color: #1b2130;
+  }
+
+  .dark .shadow-card-hover:hover {
+    background-color: #232a3a;
+    background-image: none;
   }
 
   /* ========== 菜单 ========== */
@@ -54,6 +66,7 @@
     border-radius: 4px;
     background: var(--primary-gradient);
     color: white !important;
+    border: 1px solid transparent; /* Default to transparent border */
   }
   .btn-primary:hover:not(:disabled) {
     filter: brightness(1.08);
@@ -73,13 +86,27 @@
     color: white;
   }
 
+  .dark .btn-login {
+    background: linear-gradient(90.12deg, #7b61ff 0%, #5b8cff 50%, #4a7cff 100%);
+  }
+
   .login-card-bg {
     background-color: var(--global-bg-white);
+  }
+
+  .dark .login-card-bg {
+    background-color: #1b2130;
+    border: 1px solid var(--border-default);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   }
 
   .openjiuwen-login-logo {
     color: var(--text-black);
     @apply font-extrabold text-2xl;
+  }
+
+  .dark .openjiuwen-login-logo {
+    color: #e6eaf2;
   }
 
   .openjiuwen-login-title {
@@ -88,8 +115,81 @@
     font-size: 22px;
   }
 
+  .dark .openjiuwen-login-title {
+    color: #e6eaf2;
+  }
+
   /* ========== Apps 报告：仅居中 div 内的 p（如图表标题） ========== */
-  .markdown-content div[style*="text-align: center"] > p {
+  .markdown-content div[style*='text-align: center'] > p {
     margin-top: 0.25rem;
   }
+}
+
+/* =========================================================
+   DARK MODE OVERRIDES
+   ========================================================= */
+
+/* Menu items in dark mode */
+.dark .menu-item-active {
+  background: rgba(91, 140, 255, 0.12);
+  color: #5b8cff;
+}
+
+.dark .menu-item-active:hover {
+  background: rgba(91, 140, 255, 0.15);
+}
+
+.dark .menu-item-hover:hover:not(.menu-item-active) {
+  background-color: var(--menu-hover-bg);
+  color: var(--menu-hover-text);
+}
+
+.dark .menu-text {
+  color: var(--text-gray);
+}
+
+.dark .menu-section-title {
+  color: var(--menu-section-text);
+}
+
+/* Button styles in dark mode */
+.dark .btn-primary {
+  background: var(--primary-gradient);
+  border: 1px solid transparent; /* Maintain transparent border in dark mode */
+}
+
+.dark .btn-primary:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+/* Card shadows in dark mode - already handled inline above */
+
+/* MUI TextField in dark mode */
+.dark .MuiOutlinedInput-root {
+  background-color: var(--bg-surface-2) !important;
+}
+
+.dark .MuiOutlinedInput-notchedOutline {
+  border-color: var(--border-default) !important;
+}
+
+.dark .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline {
+  border-color: var(--accent-primary) !important;
+}
+
+.dark .MuiInputLabel-root {
+  color: var(--text-secondary) !important;
+}
+
+.dark .MuiFormHelperText-root {
+  color: var(--text-secondary) !important;
+}
+
+.dark .Mui-disabled {
+  background-color: var(--bg-surface-1) !important;
+  color: var(--text-tertiary) !important;
+}
+
+.dark .Mui-disabled .MuiOutlinedInput-notchedOutline {
+  border-color: var(--border-subtle) !important;
 }

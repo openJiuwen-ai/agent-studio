@@ -1,0 +1,14 @@
+/**
+ * Copyright (c) 2025 Bytedance Ltd. and/or its affiliates
+ * SPDX-License-Identifier: MIT
+ */
+
+.sidebar-node-container {
+  background-color: var(--workflow-bg-surface);
+  height: 100%;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--workflow-border-node);
+  box-sizing: border-box;
+  overflow: auto;
+}

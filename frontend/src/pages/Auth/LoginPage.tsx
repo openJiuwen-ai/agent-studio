@@ -208,8 +208,8 @@ const LoginPage: React.FC = () => {
               </div>
             </div>
             <div className="mt-6 flex items-center justify-center space-x-2">
-              <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-              <span className="text-lg text-gray-600">{t('auth.login.loggingIn')}</span>
+              <Loader2 className="w-6 h-6 animate-spin text-blue-600 dark:text-blue-400" />
+              <span className="text-lg text-gray-600 dark:text-gray-400">{t('auth.login.loggingIn')}</span>
             </div>
           </div>
         </div>
@@ -269,7 +269,7 @@ const LoginPage: React.FC = () => {
                     placeholder={t('auth.login.usernamePlaceholder')}
                   />
                   {/* 显示校验错误或接口错误 */}
-                  <p className="mt-1 text-sm text-red-600">{errors.root ? errors.root.message : errors.username ? errors.username.message : ''}</p>
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.root ? errors.root.message : errors.username ? errors.username.message : ''}</p>
                 </div>
               </div>
 

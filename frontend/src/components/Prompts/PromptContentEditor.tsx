@@ -798,7 +798,7 @@ const PromptContentEditor: React.FC<PromptContentEditorProps> = ({
             return (
               <div
                 key={message.id}
-                className={`bg-white/80 border ${roleStyles.border} rounded-lg shadow-sm hover:shadow-sm transition-shadow ${draggedMessageId === message.id ? 'opacity-50' : ''}`}
+                className={`bg-white/80 dark:bg-gray-800/80 border ${roleStyles.border} rounded-lg shadow-sm hover:shadow-sm transition-shadow ${draggedMessageId === message.id ? 'opacity-50' : ''}`}
                 draggable={false}
                 onDragOver={isReadOnly ? undefined : onDragOver}
                 onDrop={isReadOnly ? undefined : e => onDrop?.(e, index)}
@@ -821,7 +821,7 @@ const PromptContentEditor: React.FC<PromptContentEditorProps> = ({
                     }}
                   >
                     <div
-                      className={`${isReadOnly ? 'cursor-not-allowed text-gray-300' : 'cursor-move text-gray-400 hover:text-gray-600'} drag-handle`}
+                      className={`${isReadOnly ? 'cursor-not-allowed text-gray-300 dark:text-gray-600' : 'cursor-move text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'} drag-handle`}
                       draggable={!isReadOnly}
                       onDragStart={isReadOnly ? undefined : e => onDragStart?.(e, message.id)}
                       onDragEnd={isReadOnly ? undefined : onDragEnd}
@@ -912,20 +912,74 @@ const PromptContentEditor: React.FC<PromptContentEditorProps> = ({
                             if (isReadOnly) {
                               return
                             }
-                            // 创建包含当前消息ID的优化目标
-                            // 确保使用当前消息的ID，不继承optimizationSource中可能存在的旧messageId
+                            // 创建包含当前消息 ID 的优化目标
+                            // 确保使用当前消息的 ID，不继承 optimizationSource 中可能存在的旧 messageId
                             const targetWithMessageId = {
                               type: optimizationSource?.type || 'main',
                               groupId: optimizationSource?.groupId,
-                              messageId: message.id, // 明确使用当前消息的ID
+                              messageId: message.id, // 明确使用当前消息的 ID
                             }
                             onOptimizingTargetChange?.(targetWithMessageId)
                             onOptimizePrompt?.(targetWithMessageId)
                           }}
-                          className="text-orange-500 hover:bg-orange-50 transition-colors"
+                          className="text-orange-500 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
                           title={t('components.prompts.promptContentEditor.quickOptimize')}
                         >
-                          <Zap className="w-4 h-4 text-blue-500 hover:bg-blue-50 transition-colors" />
+                          <Zap className="w-4 h-4 text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" />
+                        </IconButton>
+
+                        {/* 全文反馈优化按钮 */}
+                        <IconButton
+                          size="small"
+                          disabled={isReadOnly}
+                          onClick={e => {
+                            if (isReadOnly) {
+                              return
+                            }
+                            // 阻止事件冒泡，防止触发其他事件
+                            e.stopPropagation()
+                            e.preventDefault()
+
+                            // 设置按钮点击标记（最高优先级，必须在最前面）
+                            onSetClickedOptimizationType?.('general')
+
+                            // 立即设置忽略文本选中事件标记，防止后续干扰
+                            onIgnoreTextSelectionRefChange?.(true) // 立即生效的 ref 标记
+                            onIgnoreTextSelectionChange?.(true) // React 状态标记
+
+                            // 清除选中文本和选择索引，确保是全文优化
+                            onSelectedTextChange?.('')
+                            onSelectionIndicesChange?.(null)
+                            // 清除浏览器中的选中文本，防止被误判为选中反馈优化
+                            const selection = window.getSelection()
+                            if (selection) {
+                              selection.removeAllRanges()
+                            }
+
+                            // 先强制设置为全文反馈优化（必须在打开对话框之前）
+                            onCurrentOptimizationTypeChange?.('general')
+
+                            // 传递包含当前消息 ID 的优化源信息
+                            // 注意：在对比模式下，props 中的 optimizationSource 可能属于错误的组
+                            // 所以我们只使用它的 type 和 groupId（这些是固定的），然后添加 messageId
+                            const newOptimizationSource = { ...optimizationSource, messageId: message.id }
+                            onOptimizationSourceChange?.(newOptimizationSource)
+
+                            // 最后打开对话框和清空输入
+                            onOptimizeInput?.('')
+                            // 传递新的优化源信息作为参数，解决状态更新延迟问题
+                            onOptimizeDialogOpen?.(newOptimizationSource)
+
+                            // 延迟后恢复文本选中事件监听（延长恢复时间，确保对话框打开后光标位置变化事件也被忽略）
+                            setTimeout(() => {
+                              onIgnoreTextSelectionRefChange?.(false) // 恢复 ref 标记
+                              onIgnoreTextSelectionChange?.(false) // 恢复 React 状态标记
+                            }, 1000) // 延长到 1000ms，确保对话框完全打开后光标位置变化事件也被忽略
+                          }}
+                          className="text-purple-500 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors"
+                          title={t('components.prompts.promptContentEditor.fullTextFeedbackOptimize')}
+                        >
+                          <Wrench className="w-4 h-4" />
                         </IconButton>
 
                         {/* 全文反馈优化按钮 */}

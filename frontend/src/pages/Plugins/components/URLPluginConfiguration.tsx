@@ -586,26 +586,26 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
           <div className="mb-6 flex items-center justify-between">
-            <Button variant="outlined" startIcon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/dashboard/plugins')}>
+            <Button variant="outlined" startIcon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/dashboard/plugins')} className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
               {t('plugins.actions.returnToPluginManagement')}
             </Button>
             <Button
               variant="outlined"
               startIcon={<History className="w-4 h-4" />}
               onClick={() => setIsHistoryDialogOpen(true)}
-              className="text-blue-600 border-blue-600 hover:bg-blue-50"
+              className="text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
             >
               {t('plugins.actions.versionHistory')}
             </Button>
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="w-16 h-16 rounded-lg flex items-center justify-center text-3xl bg-gray-100 flex-shrink-0">{plugin.icon}</div>
+            <div className="w-16 h-16 rounded-lg flex items-center justify-center text-3xl bg-gray-100 dark:bg-gray-700 flex-shrink-0">{plugin.icon}</div>
             <div className="min-w-0 flex-1">
               {isEditingName ? (
                 <div className="flex items-center space-x-2">
@@ -618,26 +618,34 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                     variant="outlined"
                     placeholder={t('plugins.basicInfo.name')}
                     inputProps={{ maxLength: 20, style: { fontSize: '2rem', fontWeight: 'bold' } }}
-                    className="font-bold text-gray-900"
+                    className="font-bold text-gray-900 dark:text-gray-100"
+                    sx={{
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#D1D5DB',
+                      },
+                      '.dark & .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#4B5563',
+                      },
+                    }}
                     autoFocus
                   />
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">
                     ({tempName.length}/20)
                   </Typography>
                 </div>
               ) : (
                 <div
-                  className="cursor-pointer hover:text-blue-600 transition-colors"
+                  className="cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                   onClick={handleEditName}
                   title={t('plugins.actions.clickToEditName')}
                 >
                   {' '}
-                  <Typography variant="h4" className="font-bold text-gray-900 hover:text-blue-600 truncate" title={configForm.name || plugin.name}>
+                  <Typography variant="h4" className="font-bold text-gray-900 dark:text-gray-100 hover:text-blue-600 dark:hover:text-blue-400 truncate" title={configForm.name || plugin.name}>
                     {configForm.name || plugin.name}
                   </Typography>
                 </div>
               )}
-              <Typography variant="body1" color="text.secondary" className="truncate" title={plugin.description}>
+              <Typography variant="body1" color="text.secondary" className="text-gray-500 dark:text-gray-400 truncate" title={plugin.description}>
                 {plugin.description}
               </Typography>
             </div>
@@ -679,10 +687,10 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
               {t('plugins.pluginConfig.configOptions')}
             </Typography>
 
-            <Tabs value={configTabValue} onChange={(e, newValue) => setConfigTabValue(newValue)} className="mb-6">
-              <Tab label={t('plugins.pluginConfig.basicTab')} value="basic" />
-              <Tab label={t('plugins.pluginConfig.toolsTab')} value="advanced" />
-              <Tab label={t('plugins.pluginConfig.paramsTab')} value="params" />
+            <Tabs value={configTabValue} onChange={(e, newValue) => setConfigTabValue(newValue)} className="mb-6 border-b border-gray-200 dark:border-gray-700">
+              <Tab label={t('plugins.pluginConfig.basicTab')} value="basic" className="text-gray-700 dark:text-gray-300" />
+              <Tab label={t('plugins.pluginConfig.toolsTab')} value="advanced" className="text-gray-700 dark:text-gray-300" />
+              <Tab label={t('plugins.pluginConfig.paramsTab')} value="params" className="text-gray-700 dark:text-gray-300" />
             </Tabs>
 
             {/* Tab Content */}
@@ -690,7 +698,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
               <div className="space-y-6">
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-bold text-gray-800 mb-3">
+                    <label className="block text-sm font-bold text-gray-800 dark:text-gray-200 mb-3">
                       {t('plugins.pluginConfig.pluginDescription')} <span className="text-red-500">*</span>
                     </label>
                     <TextField
@@ -714,12 +722,12 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                   </div>
                   <div>
                     <div className="flex items-center gap-2 mb-3">
-                      <label className="block text-sm font-bold text-gray-800">{t('plugins.pluginConfig.pluginDetailsMarkdown')}</label>
+                      <label className="block text-sm font-bold text-gray-800 dark:text-gray-200">{t('plugins.pluginConfig.pluginDetailsMarkdown')}</label>
                       {configForm.desc_mk && (
                         <IconButton
                           size="small"
                           onClick={() => setIsMarkdownPreviewOpen(true)}
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 -ml-1 -mt-1"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 -ml-1 -mt-1"
                           title={t('plugins.pluginConfig.previewMarkdown')}
                         >
                           <Eye className="w-4 h-4" />
@@ -735,21 +743,35 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                       placeholder={t('plugins.pluginConfig.markdownDetailedDesc')}
                       helperText={t('plugins.pluginConfig.useMarkdownSyntax', { count: (configForm.desc_mk || '').length })}
                       disabled={isReadOnly}
+                      sx={{
+                        '& .MuiInputBase-input': {
+                          color: '#1F2937',
+                        },
+                        '& .MuiFormHelperText-root': {
+                          color: '#6B7280',
+                        },
+                        '.dark & .MuiInputBase-input': {
+                          color: '#E5E7EB',
+                        },
+                        '.dark & .MuiFormHelperText-root': {
+                          color: '#9CA3AF',
+                        },
+                      }}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-gray-800 mb-3">{t('plugins.versionHistory.pluginIcon')}</label>
+                    <label className="block text-sm font-bold text-gray-800 dark:text-gray-200 mb-3">{t('plugins.versionHistory.pluginIcon')}</label>
 
                     {/* Icon selection grid - Hidden in read-only mode */}
                     {!isReadOnly && (
                       <>
-                        <div className="grid grid-cols-10 gap-3 p-6 bg-gray-50 rounded-xl border border-gray-200">
+                        <div className="grid grid-cols-10 gap-3 p-6 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
                           {iconOptions.map((icon, index) => (
                             <IconButton
                               key={index}
                               onClick={() => handleIconSelect(icon)}
-                              className={`w-14 h-14 text-2xl hover:bg-white hover:shadow-sm transition-all duration-200 ${
-                                configForm.icon_uri === icon ? 'bg-blue-100 border-2 border-blue-500 shadow-sm scale-110' : 'hover:scale-105'
+                              className={`w-14 h-14 text-2xl hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm transition-all duration-200 ${
+                                configForm.icon_uri === icon ? 'bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-500 shadow-sm scale-110' : 'hover:scale-105'
                               }`}
                             >
                               {icon}
@@ -759,7 +781,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
 
                         {/* Current selection display */}
                         <div className="mt-4 text-center">
-                          <Typography variant="body2" className="text-gray-500">
+                          <Typography variant="body2" className="text-gray-500 dark:text-gray-400">
                             {t('plugins.pluginConfig.currentSelection')}: <span className="text-2xl ml-2">{configForm.icon_uri || '☁️'}</span>
                           </Typography>
                         </div>
@@ -769,9 +791,9 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                 </div>
 
                 {/* API Configuration */}
-                <div className="mt-6 pt-6 border-t border-gray-200">
+                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
                   <Typography variant="h6" className="mb-4 flex items-center">
-                    <Code className="w-5 h-5 mr-2 text-green-600" />
+                    <Code className="w-5 h-5 mr-2 text-green-600 dark:text-green-400" />
                     {t('plugins.pluginConfig.apiConfig')}
                   </Typography>
 

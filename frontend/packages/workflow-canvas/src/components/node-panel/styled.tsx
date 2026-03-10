@@ -11,10 +11,11 @@ export const NodeWrap = styled.div<{ disabled?: boolean }>`
   padding: 0 15px;
   transition: all 0.2s ease-in-out;
   opacity: ${props => (props.disabled ? 0.3 : 1)};
+  color: var(--workflow-text-primary);
 
   &:hover {
-    background-color: hsl(252deg 62% 55% / 9%);
-    color: hsl(252 62% 54.9%);
+    background-color: var(--workflow-bg-hover);
+    color: var(--accent-primary);
     transform: translateX(2px);
   }
 `
@@ -22,6 +23,7 @@ export const NodeWrap = styled.div<{ disabled?: boolean }>`
 export const NodeLabel = styled.div`
   font-size: 12px;
   margin-left: 10px;
+  color: var(--workflow-text-primary);
 `
 
 export const NodesContainer = styled.div`
@@ -29,7 +31,7 @@ export const NodesContainer = styled.div`
   overflow: auto;
   border-radius: 8px;
   width: 100%;
-  background-color: white;
+  background-color: var(--workflow-bg-surface);
   cursor: pointer;
 
   &::-webkit-scrollbar {
@@ -39,7 +41,7 @@ export const NodesContainer = styled.div`
 
 export const SearchContainer = styled.div`
   padding: 12px 12px 8px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid var(--workflow-border-input);
 `
 
 export const CategoriesContainer = styled.div`
@@ -49,7 +51,7 @@ export const CategoriesContainer = styled.div`
 export const CategoryTitle = styled.div`
   font-size: 12px;
   font-weight: 500;
-  color: #999;
+  color: var(--workflow-text-tertiary);
   padding: 4px 4px;
 `
 

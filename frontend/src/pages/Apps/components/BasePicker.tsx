@@ -129,7 +129,7 @@ export const BasePickerContainer = ({ onClose, position, children }: BasePickerP
   return (
     <div
       ref={pickerRef}
-      className={`fixed z-50 w-72 max-h-64 overflow-y-auto bg-white border border-gray-200 ${RADIUS_BUTTON} shadow-lg`}
+      className={`fixed z-50 w-72 max-h-64 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 ${RADIUS_BUTTON} shadow-lg dark:shadow-xl`}
       style={{
         left: `${adjustedPosition.x}px`,
         top: `${adjustedPosition.y}px`,

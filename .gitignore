@@ -102,3 +102,13 @@ scripts/ssl
 scripts/.ssl-dirs/*
 scripts/.envs/*
 scripts/conf/.nginx-files/*
+
+# Code assist
+.qwenignore
+.qwen
+QWEN.md
+.clinerules
+.claudeignore
+CLAUDE.md
+AGENTS.md
+

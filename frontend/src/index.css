@@ -101,7 +101,6 @@
 }
 
 @layer components {
-
   .card {
     @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
   }
@@ -113,7 +112,7 @@
 
   /* Input field styling */
   .input-field {
-    @apply w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white shadow-sm;
+    @apply w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all duration-200 bg-white dark:bg-gray-800 shadow-sm;
   }
 
   /* Sidebar specific styles */
@@ -241,7 +240,8 @@
   height: 100%;
 }
 
-html, body {
+html,
+body {
   height: 100%;
 }
 
@@ -632,3 +632,527 @@ html, body {
   font-style: italic;
 }
 
+/* =========================================================
+   PROFESSIONAL DARK MODE THEME
+   ========================================================= */
+
+/* Root tokens for dark mode */
+.dark {
+  /* Backgrounds */
+  --bg-app: #0f1115;
+  --bg-surface-1: #151922;
+  --bg-surface-2: #1b2130;
+  --bg-surface-3: #232a3a;
+
+  /* Borders */
+  --border-subtle: #232a3a;
+  --border-default: #2a3245;
+
+  /* Text */
+  --text-primary: #e6eaf2;
+  --text-secondary: #9aa4b2;
+  --text-tertiary: #6f7a8c;
+
+  /* Brand */
+  --accent-primary: #5b8cff;
+  --accent-hover: #4a7cff;
+  --accent-active: #3c6ef5;
+  --accent-soft: rgba(91, 140, 255, 0.12);
+  --accent-focus: rgba(91, 140, 255, 0.35);
+
+  /* States */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #38bdf8;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Transition */
+  --transition-fast: 0.15s ease;
+  --transition: 0.2s ease;
+}
+
+/* Global styles for dark mode */
+.dark body {
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+}
+
+.dark * {
+  border-color: var(--border-subtle);
+}
+
+.dark hr {
+  border-color: var(--border-subtle);
+}
+
+/* Sidebar in dark mode */
+.dark .fixed.inset-0.left-0.z-50,
+.dark .fixed.inset-0.left-0.z-50.bg-white {
+  background-color: #121620 !important;
+  border-right-color: var(--border-subtle);
+}
+
+.dark .sidebar-nav-item,
+.dark .menu-item {
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+  transition: var(--transition);
+}
+
+.dark .sidebar-nav-item:hover,
+.dark .menu-item-hover:hover:not(.menu-item-active) {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+
+.dark .menu-item-active {
+  background: var(--accent-soft);
+  color: #ffffff;
+  position: relative;
+}
+
+.dark .menu-item-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent-primary);
+}
+
+.dark .menu-item i,
+.dark .menu-item svg,
+.dark .sidebar-nav-item i,
+.dark .sidebar-nav-item svg {
+  color: var(--text-tertiary);
+  transition: var(--transition);
+}
+
+.dark .menu-item:hover i,
+.dark .menu-item-active i,
+.dark .sidebar-nav-item:hover i,
+.dark .sidebar-nav-item-active i {
+  color: var(--accent-primary);
+}
+
+/* Top bar in dark mode */
+.dark .topbar,
+.dark header {
+  background: rgba(21, 25, 34, 0.75);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Cards in dark mode */
+.dark .card,
+.dark .MuiCard-root,
+.dark .shadow-card-hover {
+  background-color: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+
+.dark .card:hover,
+.dark .MuiCard-root:hover,
+.dark .shadow-card-hover:hover {
+  background-color: var(--bg-surface-3);
+  border-color: var(--border-default);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.dark .card-title {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dark .card-description {
+  color: var(--text-secondary);
+}
+
+.dark .card-meta {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* Search input in dark mode */
+.dark input[type='text'],
+.dark .search-input,
+.dark input[type='email'],
+.dark input[type='password'] {
+  background-color: var(--bg-surface-1);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  transition: var(--transition-fast);
+}
+
+.dark input::placeholder,
+.dark input[type='text']::placeholder,
+.dark input[type='email']::placeholder,
+.dark input[type='password']::placeholder {
+  color: var(--text-tertiary);
+}
+
+.dark input:focus,
+.dark input[type='text']:focus,
+.dark input[type='email']:focus,
+.dark input[type='password']:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-focus);
+}
+
+/* Buttons in dark mode */
+.dark .btn-primary,
+.dark button[type='submit'],
+.dark .MuiButton-containedPrimary {
+  background-color: var(--accent-primary);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-md);
+  transition: var(--transition-fast);
+}
+
+.dark .btn-primary:hover,
+.dark button[type='submit']:hover,
+.dark .MuiButton-containedPrimary:hover {
+  background-color: var(--accent-hover);
+}
+
+.dark .btn-primary:active,
+.dark button[type='submit']:active {
+  background-color: var(--accent-active);
+}
+
+.dark .btn-secondary,
+.dark .MuiButton-outlinedPrimary {
+  background-color: var(--bg-surface-2);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  transition: var(--transition-fast);
+}
+
+.dark .btn-secondary:hover,
+.dark .MuiButton-outlinedPrimary:hover {
+  background-color: var(--bg-surface-3);
+}
+
+/* Pagination in dark mode */
+.dark .pagination button {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.dark .pagination button:hover {
+  background: var(--bg-surface-3);
+  color: var(--text-primary);
+}
+
+.dark .pagination .active {
+  background: var(--accent-primary);
+  color: white;
+  border-color: var(--accent-primary);
+}
+
+/* Dropdowns in dark mode */
+.dark .dropdown-menu,
+.dark .MuiPaper-root,
+.dark .MuiMenu-paper,
+.dark .MuiSelect-paper {
+  background-color: var(--bg-surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.dark .dropdown-item,
+.dark .MuiMenuItem-root {
+  color: var(--text-secondary);
+  transition: var(--transition-fast);
+}
+
+.dark .dropdown-item:hover,
+.dark .MuiMenuItem-root:hover {
+  background: var(--bg-surface-3);
+  color: var(--text-primary);
+}
+
+/* Scrollbar in dark mode */
+.dark ::-webkit-scrollbar {
+  width: 10px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: var(--bg-surface-1);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #2a3245;
+  border-radius: 8px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #35405a;
+}
+
+/* Modal dialogs in dark mode */
+.dark .MuiDialog-paper {
+  background-color: var(--bg-surface-2);
+  border: 1px solid var(--border-default);
+}
+
+.dark .MuiDialogTitle-root,
+.dark .MuiDialogContent-root {
+  color: var(--text-primary);
+}
+
+/* Tables in dark mode */
+.dark table,
+.dark .MuiTable-root {
+  background-color: var(--bg-surface-2);
+}
+
+.dark th,
+.dark .MuiTableCell-head {
+  background-color: var(--bg-surface-1);
+  color: var(--text-secondary);
+  border-bottom-color: var(--border-default);
+}
+
+.dark td,
+.dark .MuiTableCell-body,
+.dark .MuiTableCell-root {
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+.dark tr:hover td {
+  background-color: var(--bg-surface-3);
+}
+
+/* Form elements in dark mode */
+.dark .MuiFormLabel-root,
+.dark .MuiFormLabel-root.Mui-focused {
+  color: var(--text-secondary);
+}
+
+.dark .MuiInputBase-root {
+  background-color: var(--bg-surface-1);
+  color: var(--text-primary);
+}
+
+.dark .MuiOutlinedInput-notchedOutline {
+  border-color: var(--border-default);
+}
+
+.dark .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-color: var(--accent-primary);
+}
+
+/* Checkbox and radio in dark mode */
+.dark .MuiCheckbox-root,
+.dark .MuiRadio-root {
+  color: var(--text-secondary);
+}
+
+.dark .MuiCheckbox-root.Mui-checked,
+.dark .MuiRadio-root.Mui-checked {
+  color: var(--accent-primary);
+}
+
+/* Switch in dark mode */
+.dark .MuiSwitch-switchBase.Mui-checked {
+  color: var(--accent-primary);
+}
+
+.dark .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track {
+  background-color: var(--accent-primary);
+}
+
+/* Tooltip in dark mode */
+.dark .MuiTooltip-tooltip {
+  background-color: var(--bg-surface-3);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+}
+
+/* Alert in dark mode */
+.dark .MuiAlert-standardInfo {
+  background-color: rgba(56, 189, 248, 0.1);
+  color: var(--info);
+}
+
+.dark .MuiAlert-standardSuccess {
+  background-color: rgba(34, 197, 94, 0.1);
+  color: var(--success);
+}
+
+.dark .MuiAlert-standardWarning {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+}
+
+.dark .MuiAlert-standardError {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+}
+
+/* Chip in dark mode */
+.dark .MuiChip-root {
+  background-color: var(--bg-surface-1);
+  color: var(--text-secondary);
+}
+
+.dark .MuiChip-outlined {
+  border-color: var(--border-default);
+}
+
+/* Tabs in dark mode */
+.dark .MuiTabs-indicator {
+  background-color: var(--accent-primary);
+}
+
+.dark .MuiTab-root {
+  color: var(--text-secondary);
+}
+
+.dark .MuiTab-root.Mui-selected {
+  color: var(--accent-primary);
+}
+
+/* Divider in dark mode */
+.dark .MuiDivider-root {
+  border-color: var(--border-subtle);
+}
+
+/* List in dark mode */
+.dark .MuiList-root {
+  background-color: var(--bg-surface-2);
+}
+
+.dark .MuiListItem-root {
+  color: var(--text-secondary);
+}
+
+.dark .MuiListItem-root:hover {
+  background-color: var(--bg-surface-3);
+}
+
+/* Drawer in dark mode */
+.dark .MuiDrawer-paper {
+  background-color: #121620;
+  border-right: 1px solid var(--border-subtle);
+}
+
+/* AppBar in dark mode */
+.dark .MuiAppBar-root {
+  background: rgba(21, 25, 34, 0.75);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Badge in dark mode */
+.dark .MuiBadge-badge {
+  background-color: var(--accent-primary);
+  color: white;
+}
+
+/* Linear progress in dark mode */
+.dark .MuiLinearProgress-root {
+  background-color: var(--bg-surface-1);
+}
+
+.dark .MuiLinearProgress-bar {
+  background-color: var(--accent-primary);
+}
+
+/* Snackbar in dark mode */
+.dark .MuiSnackbarContent-root {
+  background-color: var(--bg-surface-3);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+}
+
+/* Accordion in dark mode */
+.dark .MuiAccordion-root {
+  background-color: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+}
+
+.dark .MuiAccordionSummary-root {
+  background-color: var(--bg-surface-2);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dark .MuiAccordionSummary-root:hover {
+  background-color: var(--bg-surface-3);
+}
+
+.dark .MuiAccordionDetails-root {
+  background-color: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+/* Popover in dark mode */
+.dark .MuiPopover-paper {
+  background-color: var(--bg-surface-2);
+  border: 1px solid var(--border-default);
+}
+
+/* Autocomplete in dark mode */
+.dark .MuiAutocomplete-popupIndicator,
+.dark .MuiAutocomplete-clearIndicator {
+  color: var(--text-secondary);
+}
+
+.dark .MuiAutocomplete-option {
+  color: var(--text-secondary);
+}
+
+.dark .MuiAutocomplete-option:hover {
+  background-color: var(--bg-surface-3);
+}
+
+.dark .MuiAutocomplete-option[aria-selected='true'] {
+  background-color: var(--accent-soft);
+  color: var(--accent-primary);
+}
+
+/* Loading button in dark mode */
+.dark .MuiLoadingButton-root {
+  background-color: var(--accent-primary);
+}
+
+/* Select in dark mode */
+.dark .MuiSelect-select {
+  color: var(--text-primary);
+}
+
+/* FormControlLabel in dark mode */
+.dark .MuiFormControlLabel-label {
+  color: var(--text-secondary);
+}
+
+/* Login page in dark mode */
+.dark .global-bg {
+  background-color: #0f1115;
+}

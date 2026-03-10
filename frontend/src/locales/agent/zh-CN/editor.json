@@ -386,6 +386,7 @@
     "previewDebug": {
       "title": "调试预览",
       "agentDebugChat": {
+        "title": "调试预览",
         "header": {
           "debugInfo": "调试信息"
         },

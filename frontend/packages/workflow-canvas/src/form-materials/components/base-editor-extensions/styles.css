@@ -9,7 +9,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--semi-color-text-2);
+  color: var(--workflow-text-secondary);
 }
 
 .gedit-m-base-editor-var-name {
