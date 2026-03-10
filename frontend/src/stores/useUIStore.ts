@@ -124,6 +124,24 @@ export const useUIStore = create<UIState & UIActions>()(
       setTheme: (theme: 'light' | 'dark' | 'auto') => {
         console.log(`🎨 [UIStore] Theme changed to: ${theme}`)
         set({ theme })
+
+        // 同步更新 ThemeContext 使用的 localStorage 键
+        localStorage.setItem('theme', theme)
+
+        // 应用 dark class 到 HTML 元素以支持 Tailwind CSS 的深色模式
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark')
+        } else if (theme === 'light') {
+          document.documentElement.classList.remove('dark')
+        } else {
+          // auto 模式 - 检查系统偏好
+          const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          if (isDark) {
+            document.documentElement.classList.add('dark')
+          } else {
+            document.documentElement.classList.remove('dark')
+          }
+        }
       },
 
       // 设置侧边栏折叠状态
@@ -162,6 +180,21 @@ export const useUIStore = create<UIState & UIActions>()(
       version: 1, // 版本号，用于状态迁移
       onRehydrateStorage: () => state => {
         console.log('🎨 [UIStore] UI state rehydrated from storage:', state)
+        // 应用主题到 HTML 元素
+        if (state?.theme) {
+          if (state.theme === 'dark') {
+            document.documentElement.classList.add('dark')
+          } else if (state.theme === 'light') {
+            document.documentElement.classList.remove('dark')
+          } else if (state.theme === 'auto') {
+            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+            if (isDark) {
+              document.documentElement.classList.add('dark')
+            } else {
+              document.documentElement.classList.remove('dark')
+            }
+          }
+        }
       },
     },
   ),

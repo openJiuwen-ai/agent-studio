@@ -418,15 +418,15 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" translate="no">
-      <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col notranslate">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col notranslate">
         <div className="flex justify-between items-center mb-4">
           <div>
-            <Typography variant="h6">{t('workflowCanvas.pluginSelector.selectPluginTools')}</Typography>
-            <Typography variant="caption" color="textSecondary">
+            <Typography variant="h6" className="text-gray-900 dark:text-gray-100">{t('workflowCanvas.pluginSelector.selectPluginTools')}</Typography>
+            <Typography variant="caption" color="textSecondary" className="text-gray-500 dark:text-gray-400">
               {t('workflowCanvas.pluginSelector.supportMultipleSelection')}
             </Typography>
           </div>
-          <IconButton onClick={handleCancel}>
+          <IconButton onClick={handleCancel} className="text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
             <X />
           </IconButton>
         </div>
@@ -434,18 +434,18 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
         {/* 搜索框 */}
         <div className="mb-4">
           <div className="relative group">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-blue-500 transition-colors duration-200" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500 group-focus-within:text-blue-500 transition-colors duration-200" />
             <input
               type="text"
               placeholder={t('workflowCanvas.pluginSelector.searchPlaceholder')}
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-300 transition-all duration-200 bg-white"
+              className="w-full pl-12 pr-4 py-3 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-300 transition-all duration-200 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -461,7 +461,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
           <>
             <div className="flex-1 overflow-y-auto mb-4">
               {filteredPluginList.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">
+                <div className="text-center text-gray-500 dark:text-gray-400 py-8">
                   {debouncedSearchTerm.trim()
                     ? t('workflowCanvas.pluginSelector.noSearchResults')
                     : t('workflowCanvas.pluginSelector.noAvailablePlugins')}
@@ -470,22 +470,22 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                 <div className="space-y-2">
                   {filteredPluginList.map(plugin => {
                     return (
-                      <div key={plugin.plugin_id} className="border rounded-lg border-gray-200">
+                      <div key={plugin.plugin_id} className="border rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                         <div className="p-3">
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
                               <div className="flex items-center space-x-2">
-                                <Typography variant="subtitle1" className="font-medium">
+                                <Typography variant="subtitle1" className="font-medium text-gray-900 dark:text-gray-100">
                                   {plugin.name || `${t('workflowCanvas.pluginSelector.plugin')} ${plugin.plugin_id.slice(-5)}`}
                                 </Typography>
                               </div>
-                              <Typography variant="body2" color="textSecondary" className="mt-1">
+                              <Typography variant="body2" color="textSecondary" className="mt-1 text-gray-500 dark:text-gray-400">
                                 {plugin.desc || t('workflowCanvas.pluginSelector.noDescription')}
                               </Typography>
 
                               {/* 版本下拉选择器 */}
                               <div className="flex items-center space-x-2 mt-2">
-                                <Typography variant="caption" color="textSecondary">
+                                <Typography variant="caption" color="textSecondary" className="text-gray-500 dark:text-gray-400">
                                   {t('workflowCanvas.pluginSelector.version')}:
                                 </Typography>
                                 <Select
@@ -504,9 +504,36 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                     height: 24,
                                     position: 'relative',
                                     zIndex: 10000,
+                                    '& .MuiOutlinedInput-notchedOutline': {
+                                      borderColor: '#E5E7EB',
+                                    },
+                                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                                      borderColor: '#3B82F6',
+                                    },
+                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                      borderColor: '#3B82F6',
+                                    },
+                                    '& .MuiSvgIcon-root': {
+                                      color: '#6B7280',
+                                    },
+                                    '.dark & .MuiOutlinedInput-notchedOutline': {
+                                      borderColor: '#4B5563',
+                                    },
+                                    '.dark &:hover .MuiOutlinedInput-notchedOutline': {
+                                      borderColor: '#5B8CFF',
+                                    },
+                                    '.dark &.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                      borderColor: '#5B8CFF',
+                                    },
+                                    '.dark & .MuiSvgIcon-root': {
+                                      color: '#9CA3AF',
+                                    },
+                                    '.dark & .MuiInputBase-input': {
+                                      color: '#E5E7EB',
+                                    },
                                   }}
                                   disabled={loadingVersions.has(plugin.plugin_id)}
-                                  className="notranslate"
+                                  className="notranslate text-gray-700 dark:text-gray-300"
                                   MenuProps={{
                                     disablePortal: false,
                                     anchorOrigin: {
@@ -524,7 +551,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                         zIndex: 9999,
                                         maxWidth: 250,
                                       },
-                                      className: 'notranslate',
+                                      className: 'notranslate dark:bg-gray-800 dark:border-gray-700',
                                     },
                                     MenuListProps: {
                                       className: 'notranslate',
@@ -537,7 +564,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                       value={version.plugin_version}
                                       sx={{ fontSize: '0.75rem' }}
                                       translate="no"
-                                      className="notranslate"
+                                      className="notranslate dark:text-gray-300 dark:hover:bg-gray-700"
                                     >
                                       {version.plugin_version} {version.plugin_version === 'draft' ? `(${t('workflowCanvas.pluginSelector.draft')})` : ''}
                                     </MenuItem>
@@ -547,7 +574,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                       value="draft"
                                       sx={{ fontSize: '0.75rem' }}
                                       translate="no"
-                                      className="notranslate"
+                                      className="notranslate dark:text-gray-300 dark:hover:bg-gray-700"
                                     >
                                       {t('workflowCanvas.pluginSelector.selectVersion')}
                                     </MenuItem>,
@@ -563,7 +590,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                 return selectedVersion ? (
                                   <div className="mt-3">
                                     <div className="flex items-center space-x-2 mb-2">
-                                      <Typography variant="caption" color="textSecondary">
+                                      <Typography variant="caption" color="textSecondary" className="text-gray-500 dark:text-gray-400">
                                         {t('workflowCanvas.pluginSelector.toolList')}:
                                       </Typography>
                                       {loadingTools.has(toolsKey) && <CircularProgress size={12} />}
@@ -581,10 +608,10 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                                   key={tool.tool_id}
                                                   className={`rounded p-2 text-xs transition-colors ${
                                                     isDisabled
-                                                      ? 'bg-gray-100 opacity-60 cursor-not-allowed'
+                                                      ? 'bg-gray-100 dark:bg-gray-800 opacity-60 cursor-not-allowed'
                                                       : isSelected
-                                                        ? 'bg-blue-100 border border-blue-300 cursor-pointer'
-                                                        : 'bg-gray-50 hover:bg-gray-100 cursor-pointer'
+                                                        ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700 cursor-pointer'
+                                                        : 'bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer'
                                                   }`}
                                                   onClick={e => {
                                                     e.stopPropagation()
@@ -592,7 +619,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                                   }}
                                                 >
                                                   <div className="flex items-center justify-between">
-                                                    <Typography variant="caption" className={`font-medium ${isDisabled ? 'text-gray-500' : ''}`}>
+                                                    <Typography variant="caption" className={`font-medium ${isDisabled ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>
                                                       {tool.name || tool.tool_id}
                                                     </Typography>
                                                     <div className="flex items-center space-x-1">
@@ -605,6 +632,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                                         size="small"
                                                         color={tool.available === true ? 'success' : 'default'}
                                                         sx={{ height: 18, fontSize: '0.65rem', '& .MuiChip-label': { px: 0.5 } }}
+                                                        className={tool.available !== true ? 'dark:bg-gray-700 dark:text-gray-400' : ''}
                                                       />
                                                       {isSelected && <span className="bg-blue-500 text-white text-xs px-1 py-0.5 rounded">✓</span>}
                                                     </div>
@@ -613,7 +641,7 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                                     <Typography
                                                       variant="caption"
                                                       color="textSecondary"
-                                                      className={`mt-1 block ${isDisabled ? 'text-gray-400' : ''}`}
+                                                      className={`mt-1 block ${isDisabled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-500 dark:text-gray-400'}`}
                                                     >
                                                       {tool.desc}
                                                     </Typography>
@@ -625,11 +653,11 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
                                         )
                                       } else {
                                         return loadingTools.has(toolsKey) ? (
-                                          <Typography variant="caption" color="textSecondary">
+                                          <Typography variant="caption" color="textSecondary" className="text-gray-500 dark:text-gray-400">
                                             {t('workflowCanvas.pluginSelector.loadingTools')}
                                           </Typography>
                                         ) : (
-                                          <Typography variant="caption" color="textSecondary">
+                                          <Typography variant="caption" color="textSecondary" className="text-gray-500 dark:text-gray-400">
                                             {t('workflowCanvas.pluginSelector.noTools')}
                                           </Typography>
                                         )
@@ -649,10 +677,10 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
             </div>
 
             <div className="flex justify-end space-x-2">
-              <Button variant="outlined" onClick={handleCancel}>
+              <Button variant="outlined" onClick={handleCancel} className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
                 {t('workflowCanvas.pluginSelector.cancel')}
               </Button>
-              <Button variant="contained" onClick={handleConfirm} disabled={Array.from(selectedTools.values()).every(toolSet => toolSet.size === 0)}>
+              <Button variant="contained" onClick={handleConfirm} disabled={Array.from(selectedTools.values()).every(toolSet => toolSet.size === 0)} className="bg-blue-600 hover:bg-blue-700">
                 {t('workflowCanvas.pluginSelector.confirm')}
               </Button>
             </div>

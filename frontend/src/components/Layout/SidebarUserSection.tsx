@@ -1,10 +1,11 @@
 import React, { useState, useRef, useCallback, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ChevronLeft, ChevronRight, Globe, LogOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Globe, LogOut, Moon, Sun } from 'lucide-react'
 import { Popover } from '@mui/material'
 import { useLogout } from '@test-agentstudio/api-client'
 import { resolveAvatar } from '../../utils/avatar'
+import { useTheme } from '../../contexts/ThemeContext'
 interface SidebarUserSectionProps {
   user: any
   isCollapsed: boolean
@@ -15,6 +16,7 @@ interface SidebarUserSectionProps {
 const SidebarUserSection: React.FC<SidebarUserSectionProps> = ({ user, isCollapsed, onLogout, onToggleCollapse }) => {
   const { t, i18n } = useTranslation()
   const location = useLocation()
+  const { isDarkMode, toggleDarkMode } = useTheme()
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const userButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -27,6 +29,10 @@ const SidebarUserSection: React.FC<SidebarUserSectionProps> = ({ user, isCollaps
     },
     [i18n],
   )
+
+  const handleToggleDarkMode = useCallback(() => {
+    toggleDarkMode()
+  }, [toggleDarkMode])
 
   const handleLogout = useCallback(async () => {
     try {
@@ -100,7 +106,7 @@ const SidebarUserSection: React.FC<SidebarUserSectionProps> = ({ user, isCollaps
         transformOrigin={popoverTransformOrigin}
         slotProps={{
           paper: {
-            className: 'bg-white rounded-lg border border-gray-200 overflow-hidden min-w-[150px]',
+            className: 'bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden min-w-[150px]',
             sx: {
               mt: isCollapsed ? 0 : -0.5,
               ml: isCollapsed ? 0.5 : 0,
@@ -134,8 +140,29 @@ const SidebarUserSection: React.FC<SidebarUserSectionProps> = ({ user, isCollaps
           </div>
         </div>
 
+        {/* Dark mode toggle section */}
+        <div className="px-2 py-1 border-t border-gray-100 dark:border-border-subtle">
+          <div className="text-[10px] menu-section-title px-1 pb-1">{isDarkMode ? t('layout.header.darkMode') : t('layout.header.lightMode')}</div>
+          <button
+            onClick={handleToggleDarkMode}
+            className="w-full flex items-center px-2 py-1 rounded text-[12px] menu-text menu-item-hover transition-colors"
+          >
+            {isDarkMode ? (
+              <>
+                <Sun className="w-3 h-3 mr-1.5" />
+                <span>{t('layout.header.lightMode')}</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3 h-3 mr-1.5" />
+                <span>{t('layout.header.darkMode')}</span>
+              </>
+            )}
+          </button>
+        </div>
+
         {/* Actions section */}
-        <div className="px-2 py-1 border-t border-gray-100">
+        <div className="px-2 py-1 border-t border-gray-100 dark:border-border-subtle">
           <button onClick={handleLogout} className="w-full flex items-center px-2 py-1 rounded text-[12px] menu-text menu-item-hover transition-colors">
             <LogOut className="w-3 h-3 mr-1.5" />
             <span>{t('layout.header.switchUser')}</span>

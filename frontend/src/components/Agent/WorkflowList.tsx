@@ -116,11 +116,11 @@ const WorkflowList = ({
       {workflowObjects.map(workflow => (
         <div
           key={workflow.workflow_id}
-          className="flex items-start justify-between py-4 px-5 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-sm transition-all duration-200"
+          className="flex items-start justify-between py-4 px-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-sm transition-all duration-200"
         >
           <div className="flex items-start space-x-3 flex-1 min-w-0">
-            <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-r from-blue-100 to-indigo-100 rounded-lg flex items-center justify-center border border-blue-200 mt-1">
-              <Workflow className="w-4 h-4 text-blue-600" />
+            <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-r from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-lg flex items-center justify-center border border-blue-200 dark:border-blue-800 mt-1">
+              <Workflow className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="flex-1 min-w-0 max-w-[320px]">
               <div className="flex items-center gap-1 min-w-0 mb-2">
@@ -132,13 +132,13 @@ const WorkflowList = ({
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                   }}
-                  className="min-w-0"
+                  className="min-w-0 text-gray-900 dark:text-gray-100"
                   title={workflow.workflow_name}
                 >
                   {workflow.workflow_name}
                 </Typography>
                 {validationResults?.[workflow.workflow_id]?.status === 'loading' && (
-                  <span className="inline-flex items-center gap-2 text-xs text-gray-500 flex-shrink-0">
+                  <span className="inline-flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
                     <LoaderCircle className="w-4 h-4 animate-spin" />
                     <span>{t('validating')}</span>
                   </span>
@@ -155,7 +155,7 @@ const WorkflowList = ({
                           onClick('setting', workflow.workflow_id, currentVersion)
                         }}
                         disabled={disabled}
-                        className={`inline-flex items-center text-red-600 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        className={`inline-flex items-center text-red-600 dark:text-red-400 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                         aria-label={t('validationFailedAria')}
                       >
                         <AlertCircle className="w-4 h-4" />
@@ -178,13 +178,14 @@ const WorkflowList = ({
                     whiteSpace: 'nowrap',
                     maxWidth: '400px',
                   }}
+                  className="text-gray-500 dark:text-gray-400"
                   title={workflow.description}
                 >
                   {workflow.description}
                 </Typography>
               )}
               <div className="flex items-center space-x-3 mt-1">
-                <span className="text-xs font-medium text-gray-600">{t('versionLabel')}</span>
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{t('versionLabel')}</span>
                 <VersionField
                   workflowId={workflow.workflow_id}
                   value={selectedVersions[workflow.workflow_id] ?? 'draft'}
@@ -206,7 +207,7 @@ const WorkflowList = ({
                 onClick('setting', workflow.workflow_id, currentVersion)
               }}
             >
-              <Settings className="w-4 h-4 text-gray-600" />
+              <Settings className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             </button>
             <button
               title={t('deleteTitle')}
@@ -220,12 +221,12 @@ const WorkflowList = ({
               disabled={disabled}
               className={`${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              <Trash2 className="w-4 h-4 text-gray-600" />
+              <Trash2 className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             </button>
           </div>
         </div>
       ))}
-      {workflowObjects.length === 0 && <div className="text-center py-6 text-gray-500">{t('emptyText')}</div>}
+      {workflowObjects.length === 0 && <div className="text-center py-6 text-gray-500 dark:text-gray-400">{t('emptyText')}</div>}
       <DeleteConfirmationDialog
         isOpen={confirmOpen}
         onClose={() => {

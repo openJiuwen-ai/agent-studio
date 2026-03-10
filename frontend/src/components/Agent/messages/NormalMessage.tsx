@@ -7,12 +7,12 @@ export function MessageContent({ message }: { message: ChatMessage }) {
   const renderContent = (content: string) => {
     if (isOpening) {
       return (
-        <div className={`text-sm leading-relaxed break-words whitespace-pre-wrap ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}>{content}</div>
+        <div className={`text-sm leading-relaxed break-words whitespace-pre-wrap ${message.role === 'user' ? 'text-white' : 'text-gray-800 dark:text-gray-200'}`}>{content}</div>
       )
     }
     return (
       <Markdown
-        className={`text-sm leading-relaxed break-words ${message.role === 'user' ? 'text-white' : 'text-gray-800'}`}
+        className={`text-sm leading-relaxed break-words ${message.role === 'user' ? 'text-white' : 'text-gray-800 dark:text-gray-200'}`}
         content={content}
         enableMath={false}
       />
@@ -26,9 +26,9 @@ export function MessageContent({ message }: { message: ChatMessage }) {
     if (!showTypeLabel && !displayNodeLabel) return null
 
     return (
-      <div className="text-xs text-gray-400 mb-1 flex items-center gap-1 select-none">
-        {showTypeLabel && <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 font-medium scale-90 origin-left">{type}</span>}
-        {displayNodeLabel && <span className="font-mono text-gray-400 scale-90 origin-left">{displayNodeLabel}</span>}
+      <div className="text-xs text-gray-400 dark:text-gray-500 mb-1 flex items-center gap-1 select-none">
+        {showTypeLabel && <span className="bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-500 dark:text-gray-400 font-medium scale-90 origin-left">{type}</span>}
+        {displayNodeLabel && <span className="font-mono text-gray-400 dark:text-gray-500 scale-90 origin-left">{displayNodeLabel}</span>}
       </div>
     )
   }
@@ -52,11 +52,11 @@ export function MessageContent({ message }: { message: ChatMessage }) {
     return (
       <div className="space-y-3">
         {groups.map(([key, groupChunks]) => (
-          <div key={key} className="p-3 rounded-xl shadow-sm overflow-x-hidden bg-white border border-gray-200 text-gray-800">
+          <div key={key} className="p-3 rounded-xl shadow-sm overflow-x-hidden bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200">
             <div className="space-y-3">
               {groupChunks.map((chunk, idx) => (
                 <div key={chunk.id} className="relative">
-                  {idx > 0 && <div className="h-px bg-black my-3" />}
+                  {idx > 0 && <div className="h-px bg-gray-200 dark:bg-gray-600 my-3" />}
                   {renderChunkHeader(chunk.type, chunk.nodeId, chunk.nodeName)}
                   {renderContent(chunk.content)}
                 </div>
@@ -72,9 +72,9 @@ export function MessageContent({ message }: { message: ChatMessage }) {
     <>
       {message.role === 'assistant' && message.detailInfo?.streaming && !(message.content || '').trim() ? (
         <div className="flex items-center justify-center space-x-2">
-          <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
-          <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-          <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+          <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-pulse"></div>
+          <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+          <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
         </div>
       ) : (
         renderContent(message.content)
@@ -94,7 +94,9 @@ export function NormalMessage({ message }: { message: ChatMessage }) {
   return (
     <div
       className={`p-3 rounded-xl shadow-sm overflow-x-hidden ${
-        message.role === 'user' ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-800'
+        message.role === 'user' 
+          ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white' 
+          : 'bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200'
       }`}
     >
       <MessageContent message={message} />

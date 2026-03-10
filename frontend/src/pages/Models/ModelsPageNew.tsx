@@ -889,7 +889,10 @@ const ModelsPage: React.FC = () => {
         const localizedError = errorMessage
           .replace(/Model call failed, please check model configuration/gi, t('models.messages.modelTestError.modelCallFailedCheckConfig'))
           .replace(/API Key or model ID invalid, please check model configuration/gi, t('models.messages.modelTestError.apiKeyOrModelInvalid'))
-          .replace(/Model service address unreachable, please check base URL or network configuration/gi, t('models.messages.modelTestError.serviceUnreachable'))
+          .replace(
+            /Model service address unreachable, please check base URL or network configuration/gi,
+            t('models.messages.modelTestError.serviceUnreachable'),
+          )
         setTestResult(
           `${t('models.testFailed')}: ${localizedError}\n${t('models.modelList.name')}: ${selectedModel.name}\n${t('models.testPrompt')}: ${testPrompt}`,
         )
@@ -1000,7 +1003,7 @@ const ModelsPage: React.FC = () => {
             }
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full h-8 pl-8 pr-7 bg-white border border-[#E5E7EB] rounded-[6px] text-sm text-[#1F2937] placeholder-[#9CA3AF] focus:outline-none focus:border-[#3B82F6] focus:ring-1 focus:ring-[#3B82F6] transition-colors"
+            className="w-full h-8 pl-8 pr-7 bg-white dark:bg-gray-800 border border-[#E5E7EB] dark:border-gray-600 rounded-[6px] text-sm text-[#1F2937] dark:text-gray-200 placeholder-[#9CA3AF] dark:placeholder-gray-400 focus:outline-none focus:border-[#3B82F6] focus:ring-1 focus:ring-[#3B82F6] transition-colors"
           />
           {searchTerm && (
             <button
@@ -1017,7 +1020,7 @@ const ModelsPage: React.FC = () => {
         <select
           value={filterProvider}
           onChange={e => setFilterProvider(e.target.value)}
-          className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
+          className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
         >
           <option value="all">{t('models.modelList.allProviders')}</option>
           <option value={ModelProvider.OPENAI}>OpenAI</option>
@@ -1028,7 +1031,7 @@ const ModelsPage: React.FC = () => {
         <select
           value={filterStatus}
           onChange={e => setFilterStatus(e.target.value)}
-          className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
+          className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
         >
           <option value="all">{t('models.modelList.allStatuses')}</option>
           <option value="active">{t('models.status.active')}</option>
@@ -1039,7 +1042,7 @@ const ModelsPage: React.FC = () => {
         {(searchTerm || filterProvider !== 'all' || filterStatus !== 'all') && (
           <button
             onClick={handleClearFilters}
-            className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] hover:border-[#d1d5db] transition-colors"
+            className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm font-medium hover:bg-[#f9fafb] dark:hover:bg-gray-700 hover:border-[#d1d5db] dark:hover:border-gray-500 transition-colors"
           >
             {t('models.modelList.clearFilters')}
           </button>
@@ -1051,10 +1054,7 @@ const ModelsPage: React.FC = () => {
 
   const toolbarRight = useMemo(
     () => (
-      <button
-        onClick={() => handleOpenModelDialog(null)}
-        className="btn-primary h-8 flex items-center gap-2 text-sm px-4"
-      >
+      <button onClick={() => handleOpenModelDialog(null)} className="btn-primary h-8 flex items-center gap-2 text-sm px-4">
         <Plus className="w-4 h-4" />
         <span>{t('models.addModel')}</span>
       </button>
@@ -1143,12 +1143,12 @@ const ModelsPage: React.FC = () => {
         // 禁用ESC键
         disableEscapeKeyDown={true}
       >
-        <DialogTitle className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
+        <DialogTitle className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
               {editMode ? <Settings className="w-4 h-4 text-white" /> : <Plus className="w-4 h-4 text-white" />}
             </div>
-            <Typography variant="h6" className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-blue-800">
+            <Typography variant="h6" className="font-bold text-gray-900 dark:text-gray-100">
               {editMode ? t('models.dialog.editModel') : t('models.dialog.addNewModel')}
             </Typography>
           </div>
@@ -1157,7 +1157,7 @@ const ModelsPage: React.FC = () => {
           <Grid container spacing={3} className="pt-4">
             {/* 模型基础信息区域 */}
             <Grid item xs={12}>
-              <Typography variant="h6" className="text-gray-800 mb-3 font-semibold border-b border-gray-200 pb-2">
+              <Typography variant="h6" className="text-gray-900 dark:text-gray-100 font-semibold border-b border-gray-200 dark:border-gray-700 pb-2">
                 {t('models.dialog.basicInfo')}
               </Typography>
             </Grid>
@@ -1185,7 +1185,7 @@ const ModelsPage: React.FC = () => {
                   (newModel.name || '').length > 80 ? (
                     <span style={{ color: 'orange' }}>{t('models.modelConfig.basicInfo.nameError')}</span>
                   ) : (
-                    <span style={{ color: '#666' }}>
+                    <span className="text-gray-600 dark:text-gray-400">
                       {modelType === 'Embedding' ? t('models.modelConfig.basicInfo.embeddingNameHint') : t('models.modelConfig.basicInfo.nameHint')} |{' '}
                       {t('models.modelConfig.basicInfo.charNum')}
                       {newModel.name?.length || 0}/100
@@ -1206,7 +1206,7 @@ const ModelsPage: React.FC = () => {
                   <MenuItem value={ModelProvider.OPENAI}>OpenAI</MenuItem>
                   {modelType === 'LLM' && <MenuItem value={ModelProvider.SILICONFLOW}>SiliconFlow</MenuItem>}
                 </Select>
-                <Typography variant="caption" className="text-gray-600 mt-1">
+                <Typography variant="caption" className="text-gray-600 dark:text-gray-400 mt-1">
                   {modelType === 'Embedding' ? t('models.modelConfig.basicInfo.embeddingProviderHint') : t('models.modelConfig.basicInfo.providerHint')}
                 </Typography>
               </FormControl>
@@ -1235,7 +1235,7 @@ const ModelsPage: React.FC = () => {
                   (newModel.modelId || '').length > 80 ? (
                     <span style={{ color: 'orange' }}>{t('models.messages.modelIdMaxLength')}</span>
                   ) : (
-                    <span style={{ color: '#666' }}>
+                    <span className="text-gray-600 dark:text-gray-400">
                       {modelType === 'Embedding' ? t('models.modelConfig.basicInfo.embeddingTypeHint') : t('models.modelConfig.basicInfo.typeHint')} |{' '}
                       {t('models.modelConfig.basicInfo.charNum')}
                       {newModel.modelId?.length || 0}/100
@@ -1270,7 +1270,7 @@ const ModelsPage: React.FC = () => {
                   (newModel.apiKey || '').length > 500 ? (
                     <span style={{ color: 'orange' }}>{t('models.messages.apiKeyMaxLength')}</span>
                   ) : (
-                    <span style={{ color: '#666' }}>
+                    <span className="text-gray-600 dark:text-gray-400">
                       {editMode ? t('models.messages.apiKeyEditHint') : t('models.modelConfig.parameters.apiKeyHint')}: {newModel.apiKey?.length || 0}/500
                     </span>
                   )
@@ -1305,7 +1305,7 @@ const ModelsPage: React.FC = () => {
                   ) : (newModel.baseUrl || '').length > 100 ? (
                     <span style={{ color: 'orange' }}>{t('models.messages.baseUrlMaxLength')}</span>
                   ) : (
-                    <span style={{ color: '#666' }}>
+                    <span className="text-gray-600 dark:text-gray-400">
                       {modelType === 'Embedding' ? t('models.messages.embeddingBaseUrlHint') : t('models.modelConfig.parameters.baseUrlHint')}:{' '}
                       {newModel.baseUrl?.length || 0}/100
                     </span>
@@ -1364,7 +1364,7 @@ const ModelsPage: React.FC = () => {
                       disabled={(newModel.tags || []).length >= 10}
                       helperText={t('models.messages.tagLength', { length: newTag.length })}
                       FormHelperTextProps={{
-                        className: newTag.length >= 100 ? 'text-red-600' : 'text-gray-600',
+                        className: newTag.length >= 100 ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400',
                       }}
                     />
                     <Button
@@ -1378,7 +1378,10 @@ const ModelsPage: React.FC = () => {
                     </Button>
                   </div>
                   <div className="flex items-center justify-between mb-2">
-                    <Typography variant="caption" className={(newModel.tags || []).length >= 10 ? 'text-red-600' : 'text-gray-600'}>
+                    <Typography
+                      variant="caption"
+                      className={(newModel.tags || []).length >= 10 ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'}
+                    >
                       {t('models.modelConfig.basicInfo.tagsNum')}：{(newModel.tags || []).length}/10
                       {(newModel.tags || []).length >= 10 && ` (${t('models.modelConfig.basicInfo.tagsLimit')})`}
                     </Typography>
@@ -1419,7 +1422,7 @@ const ModelsPage: React.FC = () => {
                     (newModel.description || '').length > 500 ? (
                       <span style={{ color: 'orange' }}>{t('models.messages.descriptionMaxLength')}</span>
                     ) : (
-                      <span style={{ color: '#666' }}>
+                      <span className="text-gray-600 dark:text-gray-400">
                         {t('models.modelConfig.basicInfo.descriptionLimit')} {newModel.description?.length || 0}/500
                       </span>
                     )
@@ -1430,7 +1433,7 @@ const ModelsPage: React.FC = () => {
 
             {/* 模型参数配置区域 */}
             <Grid item xs={12}>
-              <Typography variant="h6" className="text-gray-800 mb-3 font-semibold border-b border-gray-200 pb-2 mt-4">
+              <Typography variant="h6" className="text-gray-900 dark:text-gray-100 font-semibold border-b border-gray-200 dark:border-gray-700 pb-2 mt-4">
                 {t('models.modelConfig.parameters.title')}
               </Typography>
             </Grid>
@@ -1617,10 +1620,10 @@ const ModelsPage: React.FC = () => {
             )}
           </Grid>
         </DialogContent>
-        <DialogActions className="bg-gray-50 px-6 py-4">
+        <DialogActions className="bg-gray-50 dark:bg-gray-800 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
           <Button
             onClick={() => setShowModelDialog(false)}
-            className="text-gray-600 hover:text-gray-700 hover:bg-gray-100 px-4 py-2 rounded-lg transition-all duration-200"
+            className="text-gray-600 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 px-4 py-2 rounded-lg transition-all duration-200"
           >
             {t('common.buttons.cancel')}
           </Button>
@@ -1630,8 +1633,8 @@ const ModelsPage: React.FC = () => {
             disabled={!isFormValid()}
             className={`px-6 py-2 rounded-lg font-semibold transform transition-all duration-300 shadow-sm ${
               !isFormValid()
-                ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
-                : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white hover:scale-105 hover:shadow-xl'
+                ? 'bg-gray-400 text-gray-600 dark:text-gray-400 cursor-not-allowed'
+                : 'bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-700 hover:from-blue-700 hover:to-indigo-700 dark:hover:from-blue-800 dark:hover:to-indigo-800 text-white hover:scale-105 hover:shadow-xl'
             }`}
           >
             {editMode ? t('models.saveModel') : t('models.addModel')}

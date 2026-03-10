@@ -99,7 +99,7 @@ const ConversationHistorySidebar: React.FC<ConversationHistorySidebarProps> = ({
   // 统一的图标按钮样式
   const iconButtonClass = `
     flex items-center justify-center
-    text-gray-500 hover:text-gray-700
+    text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200
     ${BUTTON_HOVER_EFFECTS}
     ${RADIUS_BUTTON}
     ${BUTTON_TRANSITION}
@@ -108,9 +108,9 @@ const ConversationHistorySidebar: React.FC<ConversationHistorySidebarProps> = ({
   // 收起状态的展开按钮样式（圆形）
   const collapsedExpandButtonClass = `
     w-10 h-10 flex items-center justify-center
-    bg-white ${RADIUS_CIRCLE}
-    border border-gray-200 shadow-sm
-    text-gray-400 hover:text-gray-600 hover:border-gray-300 hover:bg-gray-50
+    bg-white dark:bg-gray-800 ${RADIUS_CIRCLE}
+    border border-gray-200 dark:border-gray-700 shadow-sm
+    text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700
     ${BUTTON_TRANSITION}
     hover:scale-110 active:scale-95
   `
@@ -131,12 +131,12 @@ const ConversationHistorySidebar: React.FC<ConversationHistorySidebarProps> = ({
 
   // Expanded state - full sidebar
   return (
-    <div className="flex flex-col border-r border-gray-200 w-[260px] h-full min-h-0">
+    <div className="flex flex-col border-r border-gray-200 dark:border-gray-700 w-[260px] h-full min-h-0 bg-white dark:bg-gray-800">
       {/* Header */}
       <div className={`flex items-center justify-between ${i18n.language === 'en-US' ? 'px-1.5 py-4' : 'px-4 py-4'}`}>
         <div className="flex items-center gap-1.5 min-w-0">
-          <Clock className="w-5 h-5 text-gray-500 flex-shrink-0" />
-          <h2 className={`font-bold text-gray-700 truncate ${
+          <Clock className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+          <h2 className={`font-bold text-gray-700 dark:text-gray-200 truncate ${
             i18n.language === 'en-US' ? 'text-base' : 'text-lg'
           }`}>
             {t('apps.chat.allConversations')}
@@ -177,10 +177,10 @@ const ConversationHistorySidebar: React.FC<ConversationHistorySidebarProps> = ({
 
       {/* Force stop button - 只在超时时显示 */}
       {showForceStop && (
-        <div className="px-4 py-3 border-t border-gray-200">
+        <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
           <button
             onClick={handleForceStop}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors duration-200 text-sm font-medium"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg transition-colors duration-200 text-sm font-medium"
             title={t('apps.chat.conversationTimeout')}
           >
             <AlertCircle className="w-4 h-4" />

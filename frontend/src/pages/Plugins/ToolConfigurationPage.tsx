@@ -1400,6 +1400,7 @@ const ToolConfigurationPage: React.FC = () => {
                       label={`${t('plugins.toolConfig.path', '路径')}: ${tool.path || ''}`}
                       size="small"
                       variant="outlined"
+                      className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600"
                       sx={{
                         maxWidth: '80ch',
                         '& .MuiChip-label': {
@@ -1421,6 +1422,7 @@ const ToolConfigurationPage: React.FC = () => {
                 startIcon={<Trash2 className="w-4 h-4" />}
                 onClick={() => setDeleteDialogOpen(true)}
                 disabled={deletePluginApiMutation.isPending || isReadOnly}
+                className="text-red-600 dark:text-red-400 border-red-600 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
               >
                 {deletePluginApiMutation.isPending ? t('plugins.actions.deleting', '删除中...') : t('plugins.actions.deleteTool', '删除工具')}
               </Button>
@@ -1743,6 +1745,14 @@ const ToolConfigurationPage: React.FC = () => {
                         fullWidth
                         placeholder={t('plugins.tools.headers.keyPlaceholder')}
                         disabled={isReadOnly}
+                        sx={{
+                          '& .MuiInputBase-input': {
+                            color: '#1F2937',
+                          },
+                          '.dark & .MuiInputBase-input': {
+                            color: '#E5E7EB',
+                          },
+                        }}
                       />
                     </div>
                     <div className="col-span-5">
@@ -1753,6 +1763,14 @@ const ToolConfigurationPage: React.FC = () => {
                         fullWidth
                         placeholder={t('plugins.tools.headers.valuePlaceholder')}
                         disabled={isReadOnly}
+                        sx={{
+                          '& .MuiInputBase-input': {
+                            color: '#1F2937',
+                          },
+                          '.dark & .MuiInputBase-input': {
+                            color: '#E5E7EB',
+                          },
+                        }}
                       />
                     </div>
                     <div className="col-span-2 flex justify-center gap-1">
@@ -1762,6 +1780,7 @@ const ToolConfigurationPage: React.FC = () => {
                         title="保存此行"
                         disabled={isReadOnly || updatePluginApiMutation.isLoading}
                         color="success"
+                        className="text-green-600 dark:text-green-400"
                       >
                         <Check className="w-4 h-4" />
                       </IconButton>
@@ -1771,6 +1790,7 @@ const ToolConfigurationPage: React.FC = () => {
                         color="error"
                         title="删除此行"
                         disabled={isReadOnly}
+                        className="text-red-600 dark:text-red-400"
                       >
                         <Trash2 className="w-4 h-4" />
                       </IconButton>
@@ -1982,6 +2002,7 @@ const ToolConfigurationPage: React.FC = () => {
                           <Typography
                             variant="body2"
                             color="text.secondary"
+                            className="text-gray-500 dark:text-gray-400"
                             sx={{
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
@@ -2043,6 +2064,7 @@ const ToolConfigurationPage: React.FC = () => {
         }}
         maxWidth="sm"
         fullWidth
+        className="dark"
       >
         <DialogTitle>
           {editingParameter ? t('plugins.toolConfig.editParameter', '编辑参数') : t('plugins.toolConfig.addParameter', '添加参数')}
@@ -2077,6 +2099,20 @@ const ToolConfigurationPage: React.FC = () => {
                 placeholder={t('plugins.toolConfig.parameterNameHelper', '请输入参数名称...')}
                 helperText={`${t('plugins.toolConfig.parameterName', '参数名称')} (${parameterForm.name.length}/128)`}
                 inputProps={{ maxLength: 128 }}
+                sx={{
+                  '& .MuiInputBase-input': {
+                    color: '#1F2937',
+                  },
+                  '& .MuiFormHelperText-root': {
+                    color: '#6B7280',
+                  },
+                  '.dark & .MuiInputBase-input': {
+                    color: '#E5E7EB',
+                  },
+                  '.dark & .MuiFormHelperText-root': {
+                    color: '#9CA3AF',
+                  },
+                }}
               />
             </div>
             <div>
@@ -2092,6 +2128,20 @@ const ToolConfigurationPage: React.FC = () => {
                 placeholder={t('plugins.toolConfig.parameterDescriptionHelper', '请输入参数描述...')}
                 helperText={`${t('plugins.toolConfig.parameterDescription', '参数描述')} (${parameterForm.description.length}/256)`}
                 inputProps={{ maxLength: 256 }}
+                sx={{
+                  '& .MuiInputBase-input': {
+                    color: '#1F2937',
+                  },
+                  '& .MuiFormHelperText-root': {
+                    color: '#6B7280',
+                  },
+                  '.dark & .MuiInputBase-input': {
+                    color: '#E5E7EB',
+                  },
+                  '.dark & .MuiFormHelperText-root': {
+                    color: '#9CA3AF',
+                  },
+                }}
               />
             </div>
             {isInputDialogOpen ? (
@@ -2238,8 +2288,10 @@ const ToolConfigurationPage: React.FC = () => {
         onClose={() => setTestDialogOpen(false)}
         maxWidth="lg"
         fullWidth
+        className="dark"
         PaperProps={{
           sx: { minHeight: '600px' },
+          className: 'dark:bg-gray-800 dark:border-gray-700',
         }}
       >
         <DialogTitle>
@@ -2364,9 +2416,11 @@ const ToolConfigurationPage: React.FC = () => {
                                 {param.name}
                                 {param.is_required && <span className="text-red-500 ml-1">*</span>}
                               </Typography>
-                              <Chip label={param.type} size="small" variant="outlined" color="success" />
+                              <Chip label={param.type} size="small" variant="outlined" color="success" className="dark:text-gray-300" />
                               {pluginType === 'api' && <Chip label={getMethodLabel(param.method)} size="small" variant="outlined" color="primary" />}
                               {param.is_required && <Chip label={t('plugins.toolConfig.required')} size="small" color="error" variant="outlined" />}
+
+                              {param.is_required && <Chip label={t('plugins.toolConfig.required')} size="small" color="error" variant="outlined" className="dark:text-gray-300" />}
                             </div>
                             <Typography variant="body2" color="text.secondary" className="text-sm">
                               {param.description}
@@ -2436,6 +2490,7 @@ const ToolConfigurationPage: React.FC = () => {
                         disabled={isTestRunning || executePluginMutation.isPending || !isValid}
                         fullWidth
                         startIcon={isTestRunning || executePluginMutation.isPending ? <CircularProgress size={16} /> : <Settings className="w-4 h-4" />}
+                        className="bg-blue-600 hover:bg-blue-700"
                       >
                         {isTestRunning || executePluginMutation.isPending
                           ? t('plugins.tools.test.executing', '执行中...')
@@ -2484,6 +2539,7 @@ const ToolConfigurationPage: React.FC = () => {
                                 size="small"
                                 variant={results.error_message === 'success' ? 'outlined' : 'filled'}
                                 color={results.error_message === 'success' ? 'success' : 'error'}
+                                className="dark:text-gray-300"
                               />
                             )}
                           </div>
@@ -2645,6 +2701,7 @@ const ToolConfigurationPage: React.FC = () => {
               onClick={() => {
                 copyToClipboard(testResults, setSnackbar, t('plugins.toolConfig.resultCopied'))
               }}
+              className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               {t('plugins.toolConfig.copyResult', '复制结果')}
             </Button>

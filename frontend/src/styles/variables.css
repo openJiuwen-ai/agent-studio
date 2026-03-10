@@ -34,3 +34,41 @@
   --shadow-card: 0 1px 4px 0 rgb(0 0 0 / 4%);
   --shadow-card-hover: 0 4px 12px -2px rgb(0 0 0 / 8%), 0 2px 4px -1px rgb(0 0 0 / 4%);
 }
+
+/* =========================================================
+   DARK THEME - Professional Dark Mode
+   ========================================================= */
+
+.dark {
+  /* Backgrounds */
+  --global-bg-page: #0F1115;
+  --global-bg-white: #151922;
+
+  /* Borders */
+  --border-subtle: #232A3A;
+  --border-default: #2A3245;
+
+  /* Text */
+  --text-black: #E6EAF2;
+  --text-gray: #9AA4B2;
+  --text-blue: #5B8CFF;
+
+  /* Menu */
+  --menu-hover-bg: #1B2130;
+  --menu-hover-text: #E6EAF2;
+  --menu-section-text: #6F7A8C;
+
+  /* Table */
+  --table-bg-container: #0F1115;
+  --table-bg-cell: #151922;
+  --table-bg-cell-hover: #1B2130;
+  --table-text-head: #9AA4B2;
+
+  /* Card shadows */
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.35);
+
+  /* Primary colors for dark mode */
+  --primary-color: #5B8CFF;
+  --primary-gradient: linear-gradient(93.91deg, #5B8CFF 0%, #7B61FF 100%);
+}

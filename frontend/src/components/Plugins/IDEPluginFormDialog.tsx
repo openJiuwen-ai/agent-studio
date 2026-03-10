@@ -1,15 +1,6 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Button,
-  Tooltip,
-  CircularProgress,
-} from '@mui/material'
+import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Tooltip, CircularProgress } from '@mui/material'
 import { Info, Code } from 'lucide-react'
 
 interface IDEPluginForm {
@@ -58,7 +49,6 @@ interface IDEPluginFormDialogProps {
   onCancel: () => void
 }
 
-
 const IDEPluginFormDialog: React.FC<IDEPluginFormDialogProps> = ({
   open,
   isEditing,
@@ -73,19 +63,21 @@ const IDEPluginFormDialog: React.FC<IDEPluginFormDialogProps> = ({
 
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="md" fullWidth>
-      <DialogTitle className="flex items-center space-x-2">
-        <Code className="w-5 h-5 text-blue-600" />
-        <span>{isEditing ? t('plugins.dialog.idePlugin.editTitle') : t('plugins.dialog.idePlugin.createTitle')}</span>
+      <DialogTitle className="flex items-center space-x-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+        <Code className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+        <span className="text-gray-900 dark:text-gray-100">
+          {isEditing ? t('plugins.dialog.idePlugin.editTitle') : t('plugins.dialog.idePlugin.createTitle')}
+        </span>
       </DialogTitle>
 
-      <DialogContent>
+      <DialogContent className="bg-white dark:bg-gray-800">
         <div className="space-y-6">
           {/* Plugin Name */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 flex items-center">
-              {t('plugins.dialog.cloudPluginForm.name')} <span className="text-red-500 ml-1">*</span>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center">
+              {t('plugins.dialog.cloudPluginForm.name')} <span className="text-red-500 dark:text-red-400 ml-1">*</span>
               <Tooltip title={t('plugins.dialog.idePlugin.nameTooltip')} placement="top">
-                <Info className="w-4 h-4 ml-1 text-gray-400 cursor-help" />
+                <Info className="w-4 h-4 ml-1 text-gray-400 dark:text-gray-500 cursor-help" />
               </Tooltip>
             </label>
             <TextField
@@ -96,15 +88,16 @@ const IDEPluginFormDialog: React.FC<IDEPluginFormDialogProps> = ({
               placeholder={t('plugins.dialog.idePlugin.namePlaceholder')}
               helperText={`${t('plugins.dialog.idePlugin.nameHelperText')} (${form.name.length}/128)`}
               inputProps={{ maxLength: 128 }}
+              FormHelperTextProps={{ className: 'text-gray-500 dark:text-gray-400' }}
             />
           </div>
 
           {/* Plugin Description */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 flex items-center">
-              {t('plugins.description')} <span className="text-red-500 ml-1">*</span>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center">
+              {t('plugins.description')} <span className="text-red-500 dark:text-red-400 ml-1">*</span>
               <Tooltip title={t('plugins.dialog.idePlugin.descriptionTooltip')} placement="top">
-                <Info className="w-4 h-4 ml-1 text-gray-400 cursor-help" />
+                <Info className="w-4 h-4 ml-1 text-gray-400 dark:text-gray-500 cursor-help" />
               </Tooltip>
             </label>
             <TextField
@@ -122,8 +115,9 @@ const IDEPluginFormDialog: React.FC<IDEPluginFormDialogProps> = ({
 
           {/* Plugin Markdown Description */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 flex items-center">
-              {t('plugins.dialog.cloudPluginForm.detailsLabel')} <span className="text-gray-400 ml-1">{t('plugins.dialog.cloudPluginForm.optional')}</span>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center">
+              {t('plugins.dialog.cloudPluginForm.detailsLabel')}{' '}
+              <span className="text-gray-400 dark:text-gray-500 ml-1">{t('plugins.dialog.cloudPluginForm.optional')}</span>
             </label>
             <TextField
               value={form.desc_mk || ''}
@@ -133,14 +127,14 @@ const IDEPluginFormDialog: React.FC<IDEPluginFormDialogProps> = ({
               rows={6}
               placeholder={t('plugins.dialog.cloudPluginForm.detailsPlaceholder')}
               helperText={t('plugins.dialog.cloudPluginForm.detailsHelperText', { count: (form.desc_mk || '').length })}
+              FormHelperTextProps={{ className: 'text-gray-500 dark:text-gray-400' }}
             />
           </div>
-
         </div>
       </DialogContent>
 
-      <DialogActions className="px-6 pb-4">
-        <Button onClick={onCancel} variant="outlined" disabled={loading}>
+      <DialogActions className="bg-white dark:bg-gray-800 border-t dark:border-gray-700 px-6 pb-4">
+        <Button onClick={onCancel} variant="outlined" disabled={loading} className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600">
           {t('common.buttons.cancel')}
         </Button>
         <Button
@@ -148,7 +142,7 @@ const IDEPluginFormDialog: React.FC<IDEPluginFormDialogProps> = ({
           variant="contained"
           color="primary"
           disabled={loading || !form.name.trim() || !form.description.trim()}
-          className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+          className="bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-700 dark:to-purple-700 hover:from-blue-700 hover:to-purple-700 dark:hover:from-blue-800 dark:hover:to-purple-800"
         >
           {loading ? (
             <>

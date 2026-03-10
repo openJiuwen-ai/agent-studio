@@ -19,7 +19,7 @@ export const IntentRowContainer = styled.div<{ isDragging: boolean }>`
   transition: opacity 0.2s ease;
 
   &:hover {
-    background-color: ${props => (props.isDragging ? 'transparent' : '#f8f9fa')};
+    background-color: ${props => (props.isDragging ? 'transparent' : 'var(--workflow-bg-hover)')};
     border-radius: 4px;
   }
 `
@@ -33,12 +33,12 @@ export const DragHandle = styled.div`
   justify-content: center;
   align-items: center;
   cursor: grab;
-  color: #999;
+  color: var(--workflow-text-tertiary);
   font-size: 12px;
   transition: color 0.2s ease;
 
   &:hover {
-    color: #666;
+    color: var(--workflow-text-secondary);
   }
 
   &.dragging {
@@ -55,12 +55,12 @@ export const DragHandleLines = styled.div`
   div {
     width: 12px;
     height: 2px;
-    background-color: #ccc;
+    background-color: var(--workflow-border-input);
     transition: background-color 0.2s ease;
   }
 
   &:hover div {
-    background-color: #999;
+    background-color: var(--workflow-text-tertiary);
   }
 `
 

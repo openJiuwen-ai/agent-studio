@@ -11,8 +11,8 @@ import { ViewPlugin, Decoration, DecorationSet, ViewUpdate } from '@codemirror/v
 import type { Range } from '@codemirror/state'
 import { createMaxLengthExtension } from '@/utils/codemirror/maxLengthExtension'
 
-// 样式化的容器
-const EditorContainer = styled(Box)({
+// 样式化的容器 - 支持暗色主题
+const EditorContainer = styled(Box)(({ theme }) => ({
   position: 'relative',
   width: '100%',
   height: '100%',
@@ -27,14 +27,17 @@ const EditorContainer = styled(Box)({
     fontFamily: '"SF Mono", Monaco, Inconsolata, "Roboto Mono", "Source Code Pro", monospace',
     height: '100%',
     flex: 1,
+    backgroundColor: theme.palette.mode === 'dark' ? '#1f2937' : '#ffffff',
 
     '&:hover': {
-      borderColor: '#9ca3af',
+      borderColor: theme.palette.mode === 'dark' ? '#6b7280' : '#9ca3af',
     },
 
     '&.cm-focused': {
-      borderColor: '#1976d2',
-      boxShadow: '0 0 0 2px rgba(25, 118, 210, 0.2)',
+      borderColor: theme.palette.mode === 'dark' ? '#60a5fa' : '#1976d2',
+      boxShadow: theme.palette.mode === 'dark' 
+        ? '0 0 0 2px rgba(96, 165, 250, 0.2)' 
+        : '0 0 0 2px rgba(25, 118, 210, 0.2)',
       outline: 'none',
     },
   },
@@ -44,8 +47,8 @@ const EditorContainer = styled(Box)({
     minHeight: '120px',
     maxHeight: '100%',
     lineHeight: '1.6',
-    caretColor: '#374151',
-    color: '#374151',
+    caretColor: theme.palette.mode === 'dark' ? 'var(--text-secondary)' : '#374151',
+    color: theme.palette.mode === 'dark' ? 'var(--text-secondary)' : '#374151',
     overflow: 'auto',
   },
 
@@ -61,38 +64,40 @@ const EditorContainer = styled(Box)({
 
   // 语法高亮样式 - 直接针对 CodeMirror 的类
   '& .tok-heading': {
-    color: '#0891b2 !important',
+    color: theme.palette.mode === 'dark' ? '#22d3ee' : '#0891b2',
     fontWeight: 'bold !important',
   },
 
   '& .tok-list': {
-    color: '#2563eb !important',
+    color: theme.palette.mode === 'dark' ? '#60a5fa' : '#2563eb',
     fontWeight: '500 !important',
   },
 
   '& .tok-variable': {
-    color: '#16a34a !important',
+    color: theme.palette.mode === 'dark' ? '#4ade80' : '#16a34a',
     fontWeight: '500 !important',
-    backgroundColor: 'rgba(22, 163, 74, 0.1) !important',
+    backgroundColor: theme.palette.mode === 'dark' 
+      ? 'rgba(74, 222, 128, 0.1) !important' 
+      : 'rgba(22, 163, 74, 0.1) !important',
     borderRadius: '2px !important',
     padding: '0 2px !important',
   },
 
   // 有效变量的样式（整个变量包括 {{}} 和内容都是绿色，无背景）
   '& .cm-variable-valid': {
-    color: '#16a34a !important',
+    color: theme.palette.mode === 'dark' ? '#4ade80' : '#16a34a',
     fontWeight: '500 !important',
   },
 
   // 无效变量的括号样式（只有 {{ 和 }} 是绿色）
   '& .cm-variable-bracket': {
-    color: '#16a34a !important',
+    color: theme.palette.mode === 'dark' ? '#4ade80' : '#16a34a',
     fontWeight: '500 !important',
   },
 
   // Jinja2 控制结构样式（粉色）
   '& .cm-jinja2-control': {
-    color: '#e91e63 !important',
+    color: theme.palette.mode === 'dark' ? '#f472b6' : '#e91e63',
     fontWeight: '500 !important',
   },
 
@@ -107,10 +112,10 @@ const EditorContainer = styled(Box)({
 
   // 占位符样式
   '& .cm-placeholder': {
-    color: '#9ca3af',
+    color: theme.palette.mode === 'dark' ? '#6b7280' : '#9ca3af',
     opacity: 0.8,
   },
-})
+}))
 
 // 创建自定义语言定义
 const promptLanguage = StreamLanguage.define({

@@ -16,7 +16,7 @@ export const Card: React.FC<CardProps> = ({ children, className, onClick }) => {
   return (
     <CardContext.Provider value={{ onClick }}>
       <div
-        className={`group bg-white rounded-[8px] shadow-card-hover cursor-pointer flex flex-col ${className || ''}`}
+        className={`group bg-white dark:bg-gray-900 rounded-[8px] shadow-card-hover dark:shadow-lg cursor-pointer flex flex-col border border-gray-100 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-600 transition-colors ${className || ''}`}
         onClick={onClick}
       >
         {children}
@@ -87,7 +87,7 @@ interface CardFooterProps {
 
 export const CardFooter: React.FC<CardFooterProps> = ({ children, className, showBorder = true }) => {
   return (
-    <div className={`px-5 pb-3 pt-0 ${showBorder ? 'border-t border-transparent' : ''} ${className || ''}`}>
+    <div className={`px-5 pb-3 pt-0 ${showBorder ? 'border-t border-gray-100 dark:border-gray-800' : ''} ${className || ''}`}>
       {children}
     </div>
   )

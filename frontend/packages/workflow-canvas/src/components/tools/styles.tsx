@@ -23,12 +23,10 @@ export const ToolContainer = styled.div`
 export const ToolSection = styled.div`
   display: flex;
   align-items: center;
-  background-color: #fff;
-  border: 1px solid rgba(68, 83, 130, 0.25);
+  background-color: var(--workflow-bg-toolbar);
+  border: 1px solid var(--workflow-border-toolbar);
   border-radius: 10px;
-  box-shadow:
-    rgba(0, 0, 0, 0.04) 0px 2px 6px 0px,
-    rgba(0, 0, 0, 0.02) 0px 4px 12px 0px;
+  box-shadow: var(--workflow-shadow-toolbar);
   column-gap: 2px;
   height: 40px;
   padding: 0 4px;
@@ -38,7 +36,7 @@ export const ToolSection = styled.div`
 export const SelectZoom = styled.span`
   padding: 4px;
   border-radius: 8px;
-  border: 1px solid rgba(68, 83, 130, 0.25);
+  border: 1px solid var(--workflow-border-toolbar);
   font-size: 12px;
   width: 50px;
   cursor: pointer;

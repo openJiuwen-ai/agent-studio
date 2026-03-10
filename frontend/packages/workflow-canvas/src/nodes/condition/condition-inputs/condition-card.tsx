@@ -35,13 +35,13 @@ const StyledSelect = styled.select`
   transition: all 0.2s ease;
 
   &:hover {
-    border-color: #1890ff;
+    border-color: var(--accent-primary);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
   &:focus {
     outline: none;
-    border-color: #1890ff;
+    border-color: var(--accent-primary);
     box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
   }
 

@@ -41,7 +41,7 @@ const ConditionTag = styled.div`
   align-items: center;
   padding: 2px 6px;
   background-color: #f0f0f0;
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--workflow-border-input);
   border-radius: 3px;
   font-size: 12px;
   color: #333;

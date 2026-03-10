@@ -14,7 +14,7 @@ export interface TabConfig {
 
 const LoadingState: React.FC = () => (
   <div className="flex items-center justify-center py-12">
-    <CircularProgress />
+    <CircularProgress className="text-blue-500 dark:text-blue-400" />
   </div>
 )
 
@@ -47,7 +47,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   return (
     <div className={`mb-4 ${className}`}>
       <div className="mb-4 mt-6">
-        <span className="text-[20px] font-semibold text-[#1F2937]">{title}</span>
+        <span className="text-[20px] font-semibold text-[#1F2937] dark:text-gray-100">{title}</span>
       </div>
 
       {tabs && tabs.length > 0 && (
@@ -202,7 +202,7 @@ function CommonPageLayoutInner(props: CommonPageLayoutProps) {
   )
 
   return (
-    <div className={`h-full flex flex-col bg-[#F8F9FC] px-6 ${className || ''}`}>
+    <div className={`h-full flex flex-col bg-[#F8F9FC] dark:bg-gray-900 px-6 ${className || ''}`}>
       <PageHeader
         title={title}
         tabs={tabs}
@@ -216,10 +216,10 @@ function CommonPageLayoutInner(props: CommonPageLayoutProps) {
       />
 
       {error && (
-        <div className="mx-6 mt-4 bg-red-50 border border-red-200 rounded-[4px] p-3">
+        <div className="mx-6 mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-[4px] p-3">
           <div className="flex items-center">
-            <AlertCircle className="w-4 h-4 text-red-500 mr-2" />
-            <span className="text-red-800 text-sm">{error}</span>
+            <AlertCircle className="w-4 h-4 text-red-500 dark:text-red-400 mr-2" />
+            <span className="text-red-800 dark:text-red-300 text-sm">{error}</span>
           </div>
         </div>
       )}
@@ -239,7 +239,7 @@ function CommonPageLayoutInner(props: CommonPageLayoutProps) {
       {renderContentBelow?.()}
 
       {showPagination && pager.total > 0 && (
-        <div className="border-t border-[#e5e7eb] px-6 pt-4 mb-4">
+        <div className="border-t border-[#e5e7eb] dark:border-gray-700 px-6 pt-4 mb-4">
           {renderPagination ? (
             renderPagination()
           ) : (

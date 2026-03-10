@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useScopedTranslation } from '@/i18n'
-import { X, Loader2, Sparkles } from 'lucide-react'
+import { X, Loader2 } from 'lucide-react'
 import CreateAgentIcon from '@/assets/icons/create-agent-react.svg?react'
 import CreateAgentWorkflowIcon from '@/assets/icons/create-agent-workflow.svg?react'
 import CreateAgentReactPreview from '@/assets/icons/create-agent-react-preview.png'
@@ -188,7 +188,7 @@ const AgentCreatePage: React.FC = () => {
 
   return (
     <div
-      className="bg-gray-50 flex flex-col px-6 py-6"
+      className="bg-gray-50 dark:bg-gray-900 flex flex-col px-6 py-6"
       style={{
         width: '100%',
         maxWidth: '100vw',
@@ -197,7 +197,7 @@ const AgentCreatePage: React.FC = () => {
     >
       {/* Header */}
       <div
-        className="flex-shrink-0 bg-white flex items-center justify-between"
+        className="flex-shrink-0 bg-white dark:bg-gray-800 flex items-center justify-between"
         style={{
           paddingLeft: 'clamp(0.5rem, 1vw, 1.25rem)',
           paddingRight: 'clamp(0.5rem, 1vw, 1.25rem)',
@@ -210,9 +210,8 @@ const AgentCreatePage: React.FC = () => {
       >
         <Typography
           variant="h5"
-          className="font-bold"
+          className="font-bold text-gray-900 dark:text-gray-100"
           sx={{
-            color: '#191919',
             fontSize: 'clamp(0.875rem, 1.5vw, 1.25rem)',
             lineHeight: 1.2,
           }}
@@ -222,7 +221,7 @@ const AgentCreatePage: React.FC = () => {
         <IconButton
           onClick={handleClose}
           size="small"
-          className="hover:bg-gray-100"
+          className="hover:bg-gray-100 dark:hover:bg-gray-700"
           sx={{
             width: 'clamp(1.75rem, 3vw, 2.25rem)',
             height: 'clamp(1.75rem, 3vw, 2.25rem)',
@@ -230,7 +229,7 @@ const AgentCreatePage: React.FC = () => {
           }}
         >
           <X
-            className="text-gray-600"
+            className="text-gray-600 dark:text-gray-400"
             style={{
               width: 'clamp(1rem, 2vw, 1.5rem)',
               height: 'clamp(1rem, 2vw, 1.5rem)',
@@ -249,7 +248,7 @@ const AgentCreatePage: React.FC = () => {
       >
         {/* Left Panel */}
         <div
-          className="bg-white flex flex-col overflow-hidden"
+          className="bg-white dark:bg-gray-800 flex flex-col overflow-hidden"
           style={{
             flex: '1 1 35%',
             minWidth: 0,
@@ -279,9 +278,8 @@ const AgentCreatePage: React.FC = () => {
               <div className="flex-shrink-0">
                 <Typography
                   variant="subtitle1"
-                  className="font-normal"
+                  className="font-normal text-gray-900 dark:text-gray-100"
                   sx={{
-                    color: 'rgba(0, 0, 0, 0.9)',
                     fontSize: 'clamp(0.6875rem, 1.1vw, 0.8125rem)',
                     marginBottom: 'clamp(0.25rem, 0.5vh, 0.5rem)',
                     lineHeight: 1.2,
@@ -301,7 +299,9 @@ const AgentCreatePage: React.FC = () => {
                   <div
                     onClick={() => setAgentData(prev => ({ ...prev, mode: 'single-react-agent' }))}
                     className={`flex-1 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                      agentData.mode === 'single-react-agent' ? 'border-blue-500' : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                      agentData.mode === 'single-react-agent'
+                        ? 'border-blue-500'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                     style={{
                       padding: 'clamp(0.5rem, 1vw, 0.875rem)',
@@ -328,9 +328,8 @@ const AgentCreatePage: React.FC = () => {
                       <div className="w-full flex-1 flex flex-col justify-center">
                         <Typography
                           variant="h6"
-                          className="font-bold text-left"
+                          className="font-bold text-left text-gray-900 dark:text-gray-100"
                           sx={{
-                            color: 'rgba(0, 0, 0, 0.9)',
                             fontSize: 'clamp(0.6875rem, 1.2vw, 0.875rem)',
                             marginBottom: 'clamp(0.125rem, 0.25vh, 0.25rem)',
                             lineHeight: 1.2,
@@ -340,9 +339,8 @@ const AgentCreatePage: React.FC = () => {
                         </Typography>
                         <Typography
                           variant="body2"
-                          className="text-left"
+                          className="text-left text-gray-600 dark:text-gray-400"
                           sx={{
-                            color: 'rgba(0, 0, 0, 0.4)',
                             fontSize: 'clamp(0.5625rem, 0.9vw, 0.6875rem)',
                             lineHeight: 1.3,
                             display: '-webkit-box',
@@ -361,7 +359,9 @@ const AgentCreatePage: React.FC = () => {
                   <div
                     onClick={() => setAgentData(prev => ({ ...prev, mode: 'multi-workflow' }))}
                     className={`flex-1 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                      agentData.mode === 'multi-workflow' ? 'border-blue-500' : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                      agentData.mode === 'multi-workflow'
+                        ? 'border-blue-500'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-blue-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                     style={{
                       padding: 'clamp(0.375rem, 0.75vw, 0.625rem)',
@@ -388,9 +388,8 @@ const AgentCreatePage: React.FC = () => {
                       <div className="w-full flex-1 flex flex-col justify-center">
                         <Typography
                           variant="h6"
-                          className="font-bold text-left"
+                          className="font-bold text-left text-gray-900 dark:text-gray-100"
                           sx={{
-                            color: 'rgba(0, 0, 0, 0.9)',
                             fontSize: 'clamp(0.6875rem, 1.2vw, 0.875rem)',
                             marginBottom: 'clamp(0.125rem, 0.25vh, 0.25rem)',
                             lineHeight: 1.2,
@@ -400,9 +399,8 @@ const AgentCreatePage: React.FC = () => {
                         </Typography>
                         <Typography
                           variant="body2"
-                          className="text-left"
+                          className="text-left text-gray-600 dark:text-gray-400"
                           sx={{
-                            color: 'rgba(0, 0, 0, 0.4)',
                             fontSize: 'clamp(0.5625rem, 0.9vw, 0.6875rem)',
                             lineHeight: 1.3,
                             display: '-webkit-box',
@@ -441,9 +439,8 @@ const AgentCreatePage: React.FC = () => {
                     </span>
                     <Typography
                       variant="subtitle1"
-                      className="font-semibold"
+                      className="font-semibold text-gray-900 dark:text-gray-100"
                       sx={{
-                        color: '#191919',
                         fontSize: 'clamp(0.6875rem, 1.1vw, 0.8125rem)',
                         lineHeight: 1.2,
                       }}
@@ -601,9 +598,8 @@ const AgentCreatePage: React.FC = () => {
                   </span>
                   <Typography
                     variant="subtitle1"
-                    className="font-semibold"
+                    className="font-semibold text-gray-900 dark:text-gray-100"
                     sx={{
-                      color: '#191919',
                       fontSize: 'clamp(0.6875rem, 1.1vw, 0.8125rem)',
                       lineHeight: 1.2,
                     }}
@@ -669,7 +665,7 @@ const AgentCreatePage: React.FC = () => {
 
           {/* Action Buttons - Fixed at bottom */}
           <div
-            className="flex-shrink-0 bg-white border-t lg:border-t-0 lg:border-r-0 border-gray-200"
+            className="flex-shrink-0 bg-white dark:bg-gray-800 border-t lg:border-t-0 lg:border-r-0 border-gray-200 dark:border-gray-600"
             style={{
               paddingLeft: 'clamp(0.5rem, 1vw, 1rem)',
               paddingRight: 'clamp(0.5rem, 1vw, 1rem)',
@@ -729,7 +725,7 @@ const AgentCreatePage: React.FC = () => {
 
         {/* Right Panel - Mode Details */}
         <div
-          className="hidden lg:flex bg-white border-l border-gray-200 flex-col overflow-hidden"
+          className="hidden lg:flex bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-600 flex-col overflow-hidden"
           style={{
             flex: '1 1 65%',
             minWidth: 0,
@@ -748,9 +744,8 @@ const AgentCreatePage: React.FC = () => {
               {/* Name */}
               <Typography
                 variant="h4"
-                className="font-bold text-left"
+                className="font-bold text-left text-gray-900 dark:text-gray-100"
                 sx={{
-                  color: 'rgba(0, 0, 0, 0.9)',
                   fontSize: 'clamp(0.9375rem, 1.6vw, 1.25rem)',
                   lineHeight: 1.3,
                 }}
@@ -761,9 +756,8 @@ const AgentCreatePage: React.FC = () => {
               {/* Description */}
               <Typography
                 variant="body1"
-                className="text-left"
+                className="text-left text-gray-600 dark:text-gray-400"
                 sx={{
-                  color: 'rgba(0, 0, 0, 0.4)',
                   fontSize: 'clamp(0.6875rem, 1.1vw, 0.8125rem)',
                   lineHeight: 1.5,
                 }}

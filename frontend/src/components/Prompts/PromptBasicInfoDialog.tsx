@@ -110,6 +110,7 @@ export const PromptBasicInfoDialog: React.FC<PromptBasicInfoDialogProps> = ({
       PaperProps={{
         sx: {
           borderRadius: 2,
+          bgcolor: 'background.paper',
         },
       }}
     >
@@ -121,7 +122,11 @@ export const PromptBasicInfoDialog: React.FC<PromptBasicInfoDialogProps> = ({
           background: 'linear-gradient(to right, #eff6ff, #f0f9ff)',
           borderBottom: '1px solid #dbeafe',
           p: 3,
+          '.MuiTypography-root': {
+            color: 'text.primary',
+          },
         }}
+        className="dark:!bg-gradient-to-r dark:from-gray-800 dark:to-gray-700 dark:border-gray-600"
       >
         <Box display="flex" alignItems="center" gap={2}>
           <Box
@@ -134,26 +139,27 @@ export const PromptBasicInfoDialog: React.FC<PromptBasicInfoDialogProps> = ({
               alignItems: 'center',
               justifyContent: 'center',
             }}
+            className="dark:from-blue-700 dark:to-blue-900"
           >
             <FileText size={24} color="white" />
           </Box>
           <Box>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }} className="text-gray-900 dark:text-gray-100">
               {defaultTitle}
             </Typography>
-            <Typography variant="caption" sx={{ color: '#6b7280' }}>
+            <Typography variant="caption" sx={{ color: '#6b7280' }} className="dark:text-gray-400">
               {t('components.prompts.promptBasicInfoDialog.subtitle')}
             </Typography>
           </Box>
         </Box>
-        <IconButton onClick={onClose} size="small">
+        <IconButton onClick={onClose} size="small" className="text-gray-600 dark:text-gray-400">
           <X size={20} />
         </IconButton>
       </DialogTitle>
 
-      <DialogContent sx={{ p: 3 }}>
+      <DialogContent sx={{ p: 3 }} className="dark:bg-gray-800">
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 1 }}>
-          {/* 提示词key */}
+          {/* 提示词 key */}
           <TextField
             fullWidth
             label={t('components.prompts.promptBasicInfoDialog.keyLabel')}
@@ -190,11 +196,18 @@ export const PromptBasicInfoDialog: React.FC<PromptBasicInfoDialogProps> = ({
                   paddingRight: '60px',
                 },
               },
+              '& .MuiFormHelperText-root': {
+                color: '#6b7280',
+              },
             }}
             InputProps={{
               endAdornment: (
                 <Box sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                  <Typography variant="caption" sx={{ color: (key || '').length >= 100 ? '#ef4444' : '#6b7280', fontSize: '0.75rem' }}>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: (key || '').length >= 100 ? '#ef4444' : '#6b7280', fontSize: '0.75rem' }}
+                    className="dark:text-gray-400"
+                  >
                     {(key || '').length}/100
                   </Typography>
                 </Box>
@@ -224,11 +237,18 @@ export const PromptBasicInfoDialog: React.FC<PromptBasicInfoDialogProps> = ({
                   paddingRight: '60px',
                 },
               },
+              '& .MuiInputLabel-root': {
+                color: '#6b7280',
+              },
             }}
             InputProps={{
               endAdornment: (
                 <Box sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                  <Typography variant="caption" sx={{ color: (name || '').length >= 100 ? '#ef4444' : '#6b7280', fontSize: '0.75rem' }}>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: (name || '').length >= 100 ? '#ef4444' : '#6b7280', fontSize: '0.75rem' }}
+                    className="dark:text-gray-400"
+                  >
                     {(name || '').length}/100
                   </Typography>
                 </Box>
@@ -260,11 +280,18 @@ export const PromptBasicInfoDialog: React.FC<PromptBasicInfoDialogProps> = ({
                   paddingBottom: '24px',
                 },
               },
+              '& .MuiInputLabel-root': {
+                color: '#6b7280',
+              },
             }}
             InputProps={{
               endAdornment: (
                 <Box sx={{ position: 'absolute', right: 8, bottom: 0, pointerEvents: 'none' }}>
-                  <Typography variant="caption" sx={{ color: (description || '').length >= 500 ? '#ef4444' : '#6b7280', fontSize: '0.75rem' }}>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: (description || '').length >= 500 ? '#ef4444' : '#6b7280', fontSize: '0.75rem' }}
+                    className="dark:text-gray-400"
+                  >
                     {(description || '').length}/500
                   </Typography>
                 </Box>
@@ -280,7 +307,11 @@ export const PromptBasicInfoDialog: React.FC<PromptBasicInfoDialogProps> = ({
           py: 2,
           backgroundColor: 'rgba(255,255,255,0.9)',
           borderTop: '1px solid #dbeafe',
+          '.MuiButton-root': {
+            color: 'text.primary',
+          },
         }}
+        className="dark:bg-gray-800 dark:border-gray-600"
       >
         <Button
           onClick={onClose}
@@ -293,6 +324,7 @@ export const PromptBasicInfoDialog: React.FC<PromptBasicInfoDialogProps> = ({
               backgroundColor: 'rgba(107, 114, 128, 0.04)',
             },
           }}
+          className="dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
         >
           {t('components.prompts.promptBasicInfoDialog.cancel')}
         </Button>
@@ -309,6 +341,7 @@ export const PromptBasicInfoDialog: React.FC<PromptBasicInfoDialogProps> = ({
               background: '#e5e7eb',
             },
           }}
+          className="dark:from-blue-700 dark:to-blue-900 dark:hover:from-blue-800 dark:hover:to-blue-900"
         >
           {loading ? defaultButtonText.loading : defaultButtonText.normal}
         </Button>

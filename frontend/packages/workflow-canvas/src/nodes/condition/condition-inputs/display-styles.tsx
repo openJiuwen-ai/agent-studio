@@ -16,20 +16,20 @@ export const ConditionCardContainer = styled.div`
 // 条件卡片标签
 export const ConditionCardLabel = styled.div`
   font-size: 13px;
-  color: #1f2329;
+  color: var(--workflow-text-primary);
   font-weight: 500;
   margin-bottom: 4px;
   padding: 4px 8px;
-  background: #f5f5f5;
+  background: var(--workflow-bg-input);
   border-radius: 4px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--workflow-border-input);
 `
 
 // 条件内容容器
 export const ConditionContentContainer = styled.div`
   padding: 8px;
-  background: #fafafa;
-  border: 1px solid #e0e0e0;
+  background: var(--workflow-bg-surface);
+  border: 1px solid var(--workflow-border-input);
   border-radius: 4px;
   min-height: 32px;
   margin-bottom: 4px;
@@ -38,7 +38,7 @@ export const ConditionContentContainer = styled.div`
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #999;
+    color: var(--workflow-text-tertiary);
     font-size: 12px;
     min-height: 32px;
   }
@@ -51,7 +51,7 @@ export const ConditionItem = styled.div`
   gap: 4px;
   margin-bottom: 4px;
   font-size: 12px;
-  color: #333;
+  color: var(--workflow-text-secondary);
   line-height: 1.4;
 
   &:last-child {
@@ -64,11 +64,11 @@ export const ConditionTag = styled.div`
   display: inline-flex;
   align-items: center;
   padding: 2px 6px;
-  background: white;
-  border: 1px solid #d9d9d9;
+  background: var(--workflow-bg-surface);
+  border: 1px solid var(--workflow-border-input);
   border-radius: 4px;
   font-size: 12px;
-  color: #333;
+  color: var(--workflow-text-primary);
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -82,11 +82,11 @@ export const LogicOperator = styled.div`
   justify-content: center;
   min-width: 28px;
   height: 20px;
-  background: #f0f0f0;
-  border: 1px solid #d0d0d0;
+  background: var(--workflow-bg-input);
+  border: 1px solid var(--workflow-border-input);
   border-radius: 3px;
   font-size: 12px;
-  color: #666;
+  color: var(--workflow-text-secondary);
   margin: 0 4px;
   font-weight: 500;
 `
@@ -103,7 +103,7 @@ export const PortContainer = styled.div<{ top?: number; style?: React.CSSPropert
 // 分割线
 export const Divider = styled.div`
   height: 1px;
-  background: #e0e0e0;
+  background: var(--workflow-border-input);
   margin: 4px 0;
   position: relative;
 
@@ -113,7 +113,7 @@ export const Divider = styled.div`
     left: 16px;
     right: 16px;
     height: 1px;
-    background: #e0e0e0;
+    background: var(--workflow-border-input);
   }
 `
 
@@ -125,6 +125,6 @@ export const OperatorIcon = styled.span`
   width: 16px;
   height: 16px;
   margin: 0 4px;
-  color: #666;
+  color: var(--workflow-text-secondary);
   font-size: 14px;
 `

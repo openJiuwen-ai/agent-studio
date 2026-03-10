@@ -23,6 +23,13 @@ const SCROLLBAR_STYLES = `
   .conversation-scroll::-webkit-scrollbar-thumb:hover {
     background-color: rgba(156, 163, 175, 0.5);
   }
+  
+  .dark .conversation-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(75, 85, 99, 0.5);
+  }
+  .dark .conversation-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(75, 85, 99, 0.7);
+  }
 `
 
 const ConversationList: React.FC<ConversationListProps> = ({
@@ -95,12 +102,12 @@ const ConversationList: React.FC<ConversationListProps> = ({
   return (
     <>
       <style>{SCROLLBAR_STYLES}</style>
-      <div className="flex-1 overflow-y-auto conversation-scroll px-2 py-3 min-h-0">
+      <div className="flex-1 overflow-y-auto conversation-scroll px-2 py-3 min-h-0 bg-white dark:bg-gray-800">
         {conversations.length === 0 ? (
           // Empty state
           <div className="flex flex-col items-center justify-center h-full">
-            <MessageSquare className="w-12 h-12 opacity-30 mb-3" />
-            <p className="text-sm">{t('apps.chat.noConversationHistory')}</p>
+            <MessageSquare className="w-12 h-12 opacity-30 dark:opacity-50 mb-3 text-gray-400 dark:text-gray-500" />
+            <p className="text-sm text-gray-500 dark:text-gray-400">{t('apps.chat.noConversationHistory')}</p>
           </div>
         ) : (
           // Conversation list

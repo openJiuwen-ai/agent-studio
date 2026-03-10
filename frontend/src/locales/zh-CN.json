@@ -529,7 +529,9 @@
       "switchToChinese": "中文",
       "switchToNewVersion": "体验新版",
       "switchToOldVersion": "返回旧版",
-      "beta": "Beta"
+      "beta": "Beta",
+      "darkMode": "深色模式",
+      "lightMode": "浅色模式"
     },
     "sidebar": {
       "toggleCollapse": "切换侧边栏",

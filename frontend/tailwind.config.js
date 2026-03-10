@@ -2,6 +2,7 @@
 const tailwindExtend = require('./src/styles/tailwind.extend')
 
 module.exports = {
+  darkMode: 'class',
   content: [
     './index.html',
     './src/**/*.{js,ts,jsx,tsx}',

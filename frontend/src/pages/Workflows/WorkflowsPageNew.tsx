@@ -386,7 +386,7 @@ const WorkflowsPage: React.FC = () => {
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value as WorkflowSortBy)}
-              className="h-8 px-3 bg-white border border-[#e5e7eb] text-[#1f2937] rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
+              className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
             >
               <option value={WorkflowSortBy.name}>{t('workflows.workflowList.sortByName')}</option>
               <option value={WorkflowSortBy.create_time}>{t('workflows.workflowList.sortByCreateTime')}</option>
@@ -394,7 +394,7 @@ const WorkflowsPage: React.FC = () => {
             </select>
             <button
               onClick={() => setSortOrder(sortOrder === WorkflowSortOrder.asc ? WorkflowSortOrder.desc : WorkflowSortOrder.asc)}
-              className="h-8 w-8 bg-white border border-[#e5e7eb] text-[#6b7280] hover:text-[#374151] hover:bg-[#f9fafb] hover:border-[#d1d5db] rounded-[4px] transition-colors flex items-center justify-center"
+              className="h-8 w-8 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#6b7280] dark:text-gray-300 hover:text-[#374151] dark:hover:text-gray-100 hover:bg-[#f9fafb] dark:hover:bg-gray-700 hover:border-[#d1d5db] dark:hover:border-gray-500 rounded-[4px] transition-colors flex items-center justify-center"
               title={sortOrder === 'asc' ? t('workflows.workflowList.ascending') : t('workflows.workflowList.descending')}
             >
               {sortOrder === 'asc' ? <span className="text-sm">↑</span> : <span className="text-sm">↓</span>}
@@ -403,7 +403,16 @@ const WorkflowsPage: React.FC = () => {
         )}
       </>
     ),
-    [searchOptimization.searchTerm, searchOptimization.setSearchTerm, searchOptimization.handleCompositionStart, searchOptimization.handleCompositionEnd, viewType, sortBy, sortOrder, t],
+    [
+      searchOptimization.searchTerm,
+      searchOptimization.setSearchTerm,
+      searchOptimization.handleCompositionStart,
+      searchOptimization.handleCompositionEnd,
+      viewType,
+      sortBy,
+      sortOrder,
+      t,
+    ],
   )
 
   // 工具栏右侧（导入 + 新建）
@@ -439,7 +448,18 @@ const WorkflowsPage: React.FC = () => {
         savingWorkflowId={savingWorkflowId}
       />
     ),
-    [processedWorkflows, editingState, savingWorkflowId, searchOptimization.debouncedSearchTerm, handleStartEditing, handleUpdateValue, handleSaveEditing, handleCancelEditing, handleCopyWorkflow, handleDeleteWorkflow],
+    [
+      processedWorkflows,
+      editingState,
+      savingWorkflowId,
+      searchOptimization.debouncedSearchTerm,
+      handleStartEditing,
+      handleUpdateValue,
+      handleSaveEditing,
+      handleCancelEditing,
+      handleCopyWorkflow,
+      handleDeleteWorkflow,
+    ],
   )
 
   // 处理表格数据获取和排序变化
@@ -483,15 +503,18 @@ const WorkflowsPage: React.FC = () => {
   }, [error])
 
   // 处理视图切换
-  const handleViewTypeChange = useCallback((newViewType: ViewType) => {
-    setViewType(newViewType)
-    setPagerState(prev => ({ ...prev, page: 1 }))
-    // 如果切换到 Grid 视图且排序为 null，重置为默认排序
-    if (newViewType === 'grid' && sortBy === null) {
-      setSortBy(WorkflowSortBy.update_time)
-      setSortOrder(WorkflowSortOrder.desc)
-    }
-  }, [sortBy])
+  const handleViewTypeChange = useCallback(
+    (newViewType: ViewType) => {
+      setViewType(newViewType)
+      setPagerState(prev => ({ ...prev, page: 1 }))
+      // 如果切换到 Grid 视图且排序为 null，重置为默认排序
+      if (newViewType === 'grid' && sortBy === null) {
+        setSortBy(WorkflowSortBy.update_time)
+        setSortOrder(WorkflowSortOrder.desc)
+      }
+    },
+    [sortBy],
+  )
 
   return (
     <>

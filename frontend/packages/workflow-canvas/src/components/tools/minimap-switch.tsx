@@ -16,7 +16,7 @@ export const MinimapSwitch = (props: { minimapVisible: boolean; setMinimapVisibl
       <IconButton
         type="tertiary"
         theme="borderless"
-        icon={<UIIconMinimap height={18} width={18} style={{ opacity: minimapVisible ? 1 : 0.7 }} color={minimapVisible ? undefined : '#060709cc'} />}
+        icon={<UIIconMinimap height={18} width={18} style={{ opacity: minimapVisible ? 1 : 0.7 }} />}
         onClick={() => setMinimapVisible(!minimapVisible)}
       />
     </Tooltip>

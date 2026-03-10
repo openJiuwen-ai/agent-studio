@@ -85,13 +85,15 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
   const isFormValid = form.name.trim() && form.description.trim() && form.url.trim() && isUrlValid && isUrlLengthValid
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="md" fullWidth>
-      <DialogTitle>{isEditing ? t('plugins.dialog.editPlugin.title') : t('plugins.dialog.cloudPluginForm.create')}</DialogTitle>
-      <DialogContent>
+      <DialogTitle className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+        {isEditing ? t('plugins.dialog.editPlugin.title') : t('plugins.dialog.cloudPluginForm.create')}
+      </DialogTitle>
+      <DialogContent className="bg-white dark:bg-gray-800">
         <div className="space-y-6">
           {/* Plugin Name */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 flex items-center">
-              {t('plugins.dialog.cloudPluginForm.name')} <span className="text-red-500 ml-1">*</span>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center">
+              {t('plugins.dialog.cloudPluginForm.name')} <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             </label>
             <TextField
               value={form.name}
@@ -101,13 +103,14 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
               placeholder={t('plugins.dialog.cloudPluginForm.namePlaceholder')}
               helperText={`${t('plugins.dialog.cloudPluginForm.nameHelperText')} (${form.name.length}/128)`}
               inputProps={{ maxLength: 128 }}
+              FormHelperTextProps={{ className: 'text-gray-500 dark:text-gray-400' }}
             />
           </div>
 
           {/* Plugin Description */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 flex items-center">
-              {t('plugins.dialog.cloudPluginForm.description')} <span className="text-red-500 ml-1">*</span>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center">
+              {t('plugins.dialog.cloudPluginForm.description')} <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             </label>
             <TextField
               value={form.description}
@@ -124,8 +127,9 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
 
           {/* Plugin Markdown Description */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 flex items-center">
-              {t('plugins.dialog.cloudPluginForm.detailsLabel')} <span className="text-gray-400 ml-1">{t('plugins.dialog.cloudPluginForm.optional')}</span>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center">
+              {t('plugins.dialog.cloudPluginForm.detailsLabel')}{' '}
+              <span className="text-gray-400 dark:text-gray-500 ml-1">{t('plugins.dialog.cloudPluginForm.optional')}</span>
             </label>
             <TextField
               value={form.desc_mk || ''}
@@ -135,13 +139,14 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
               rows={6}
               placeholder={t('plugins.dialog.cloudPluginForm.detailsPlaceholder')}
               helperText={t('plugins.dialog.cloudPluginForm.detailsHelperText', { count: (form.desc_mk || '').length })}
+              FormHelperTextProps={{ className: 'text-gray-500 dark:text-gray-400' }}
             />
           </div>
 
           {/* Plugin URL */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700 flex items-center">
-              {t('plugins.dialog.cloudPluginForm.url')} <span className="text-red-500 ml-1">*</span>
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center">
+              {t('plugins.dialog.cloudPluginForm.url')} <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             </label>
             <TextField
               value={form.url}
@@ -157,12 +162,15 @@ const CloudPluginFormDialog: React.FC<CloudPluginFormDialogProps> = ({
                     : t('plugins.dialog.cloudPluginForm.urlHelper', { current: form.url ? getUrlByteLength(form.url) : 0, max: MAX_URL_BYTES })
               }
               error={Boolean(form.url && (!isUrlValid || !isUrlLengthValid))}
+              FormHelperTextProps={{ className: 'text-gray-500 dark:text-gray-400' }}
             />
           </div>
         </div>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel}>{t('common.buttons.cancel')}</Button>
+      <DialogActions className="bg-white dark:bg-gray-800 border-t dark:border-gray-700">
+        <Button onClick={onCancel} className="text-gray-700 dark:text-gray-300">
+          {t('common.buttons.cancel')}
+        </Button>
         <Button onClick={() => onSubmit(isEditing)} variant="contained" color="primary" disabled={!isFormValid || loading}>
           {loading ? (
             <>

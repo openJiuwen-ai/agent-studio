@@ -65,15 +65,15 @@ const getTypeIcon = (type: MentionType): React.ReactNode => {
 const getTypeColor = (type: MentionType): string => {
   switch (type) {
     case 'agent':
-      return 'text-blue-600 bg-blue-50'
+      return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
     case 'knowledge':
-      return 'text-purple-600 bg-purple-50'
+      return 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30'
     case 'document':
-      return 'text-green-600 bg-green-50'
+      return 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
     case 'websearch':
-      return 'text-orange-600 bg-orange-50'
+      return 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30'
     default:
-      return 'text-gray-600 bg-gray-50'
+      return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800'
   }
 }
 
@@ -139,8 +139,8 @@ export const MentionPicker: React.FC<MentionPickerProps> = ({
   return (
     <BasePickerContainer onClose={onClose} position={position}>
       {/* 标题 */}
-      <div className="px-3 py-2 border-b border-gray-100">
-        <span className="text-xs font-medium text-gray-500">
+      <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
           {trigger === '@' ? t('apps.picker.selectAgent') : t('apps.picker.selectResource')}
         </span>
       </div>
@@ -156,7 +156,7 @@ export const MentionPicker: React.FC<MentionPickerProps> = ({
               key={item.id}
               className={`
                 flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors
-                ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}
+                ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800'}
               `}
               onClick={() => onSelect(item)}
               onMouseEnter={() => setSelectedIndex(index)}
@@ -169,13 +169,13 @@ export const MentionPicker: React.FC<MentionPickerProps> = ({
               {/* 内容 */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className={`text-sm font-medium ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>
+                  <span className={`text-sm font-medium ${isSelected ? 'text-blue-700 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'}`}>
                     {item.name}
                   </span>
-                  {isSelected && <Check className="w-3 h-3 text-blue-600" />}
+                  {isSelected && <Check className="w-3 h-3 text-blue-600 dark:text-blue-400" />}
                 </div>
                 {item.description && (
-                  <p className="text-xs text-gray-500 truncate">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     {item.description.startsWith('apps.') ? t(item.description) : item.description}
                   </p>
                 )}
@@ -188,7 +188,7 @@ export const MentionPicker: React.FC<MentionPickerProps> = ({
         {trigger === '#' && (
           <>
             {/* 分隔线 - 仅在有知识库时显示 */}
-            {filteredItems.length > 0 && <div className="my-1 border-t border-gray-100" />}
+            {filteredItems.length > 0 && <div className="my-1 border-t border-gray-100 dark:border-gray-700" />}
 
             {/* 暂无知识库选项 (禁用状态) */}
             {filteredItems.length === 0 && (
@@ -197,34 +197,34 @@ export const MentionPicker: React.FC<MentionPickerProps> = ({
                 onMouseEnter={() => setSelectedIndex(filteredItems.length)}
               >
                 {/* 图标 */}
-                <div className={`flex-shrink-0 p-1 ${RADIUS_SMALL} text-gray-400 bg-gray-50`}>
+                <div className={`flex-shrink-0 p-1 ${RADIUS_SMALL} text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800`}>
                   <Database className="w-4 h-4" />
                 </div>
 
                 {/* 内容 */}
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-gray-400">{t('apps.picker.noKnowledgeBase')}</span>
-                  <p className="text-xs text-gray-400">{t('apps.picker.noKnowledgeBaseConnected')}</p>
+                  <span className={`text-sm font-medium text-gray-400 dark:text-gray-500`}>{t('apps.picker.noKnowledgeBase')}</span>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">{t('apps.picker.noKnowledgeBaseConnected')}</p>
                 </div>
               </div>
             )}
 
-            {/* 文件上传选项 */}
+              {/* 文件上传选项 */}
             {onFileUpload && (
               <div
-                className="flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors hover:bg-gray-50"
+                className="flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
                 onClick={handleUploadClick}
                 onMouseEnter={() => setSelectedIndex(filteredItems.length + (filteredItems.length === 0 ? 1 : 0))}
               >
                 {/* 图标 */}
-                <div className={`flex-shrink-0 p-1 ${RADIUS_SMALL} text-green-600 bg-green-50`}>
+                <div className={`flex-shrink-0 p-1 ${RADIUS_SMALL} text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30`}>
                   <Upload className="w-4 h-4" />
                 </div>
 
                 {/* 内容 */}
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-gray-900">{t('apps.picker.uploadLocalFiles')}</span>
-                  <p className="text-xs text-gray-500">{t('apps.picker.uploadFileDescription')}</p>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('apps.picker.uploadLocalFiles')}</span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('apps.picker.uploadFileDescription')}</p>
                 </div>
               </div>
             )}
