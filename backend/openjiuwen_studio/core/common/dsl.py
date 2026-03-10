@@ -41,6 +41,7 @@ class ComponentType(IntEnum):
     COMPONENT_TYPE_SET_VARIABLE = 17,
     COMPONENT_TYPE_VARIABLE_MERGE = 18,
     COMPONENT_TYPE_PLUGIN = 19,
+    COMPONENT_TYPE_HTTP_REQUEST = 20,
 
 
 class LLMResponseFormatType(StrEnum):
@@ -54,13 +55,56 @@ class TextEditorType(StrEnum):
     SPLITTING = "StringSplitting"
 
 
+class HttpMethod(StrEnum):
+    GET = "GET"
+    POST = "POST"
+    PUT = "PUT"
+    DELETE = "DELETE"
+    PATCH = "PATCH"
+    HEAD = "HEAD"
+    OPTIONS = "OPTIONS"
+
+
+class HttpAuthType(StrEnum):
+    NONE = "none"
+    BASIC = "basic"
+    BEARER = "bearer"
+    API_KEY = "api_key"
+
+
+class HttpContentType(StrEnum):
+    JSON = "application/json"
+    FORM = "application/x-www-form-urlencoded"
+    MULTIPART = "multipart/form-data"
+    TEXT = "text/plain"
+    BINARY = "application/octet-stream"
+
+
+class HttpResponseFormat(StrEnum):
+    AUTO = "autodetect"
+    JSON = "json"
+    TEXT = "text"
+    BINARY = "binary"
+
+
+class BackoffType(StrEnum):
+    FIXED = "fixed"
+    LINEAR = "linear"
+    EXPONENTIAL = "exponential"
+
+
 class BaseModel(PydanticBaseModel):
     model_config = {
         "use_enum_values": True,  # 序列化时输出枚举值而非对象
         "json_encoders": {AgentType: lambda v: v.value,
                           LLMResponseFormatType: lambda v: v.value,
                           TextEditorType: lambda v: v.value,
-                          ComponentType: lambda v: v.value}  # 明确指定枚举序列化方式
+                          ComponentType: lambda v: v.value,
+                          HttpMethod: lambda v: v.value,
+                          HttpAuthType: lambda v: v.value,
+                          HttpContentType: lambda v: v.value,
+                          HttpResponseFormat: lambda v: v.value,
+                          BackoffType: lambda v: v.value}  # 明确指定枚举序列化方式
     }
 
 
@@ -406,3 +450,66 @@ class UserInputsConfig(BaseModel):
 class UserOutputConfig(BaseModel):
     streaming: Optional[bool] = Field(False)
     output_message: Optional[str] = Field("")
+
+
+class HttpAuthConfig(BaseModel):
+    auth_type: HttpAuthType = Field(HttpAuthType.NONE)
+    username: Optional[str] = Field("")
+    password: Optional[str] = Field("")
+    token: Optional[str] = Field("")
+    api_key: Optional[str] = Field("")
+    api_key_location: Optional[str] = Field("header")  # header, query, body
+    api_key_param_name: Optional[str] = Field("X-API-Key")
+
+
+class HttpRequestBodyConfig(BaseModel):
+    content_type: HttpContentType = Field(HttpContentType.JSON)
+    content: Optional[Any] = Field(None)
+
+
+class HttpRetryConfig(BaseModel):
+    enabled: bool = Field(False)
+    max_retries: int = Field(3)
+    retry_on_status_codes: List[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
+    retry_delay_ms: int = Field(1000)
+    backoff_type: BackoffType = Field(BackoffType.EXPONENTIAL)
+
+
+class HttpRateLimitConfig(BaseModel):
+    enabled: bool = Field(False)
+    requests_per_unit: int = Field(10)
+    unit: str = Field("minute")  # second, minute, hour
+
+
+class HttpResponseHandlingConfig(BaseModel):
+    response_format: HttpResponseFormat = Field(HttpResponseFormat.AUTO)
+    success_status_codes: List[int] = Field(default_factory=lambda: [200, 201, 202, 204])
+    failure_status_codes: List[int] = Field(default_factory=list)
+    response_mode: str = Field("full")  # full, on-success, on-error
+    data_property: Optional[str] = Field(None)  # e.g., "data.results"
+
+
+class HttpAdvancedOptionsConfig(BaseModel):
+    follow_redirects: bool = Field(True)
+    ignore_ssl_issues: bool = Field(False)
+    proxy_url: Optional[str] = Field(None)
+    timeout: int = Field(60)
+
+
+class HttpRequestParamConfig(BaseModel):
+    key: str = Field("")
+    value: Any = Field("")
+
+
+class HttpRequestConfig(BaseModel):
+    url: str = Field("")
+    method: HttpMethod = Field(HttpMethod.GET)
+    headers: List[HttpRequestParamConfig] = Field(default_factory=list)
+    query_params: List[HttpRequestParamConfig] = Field(default_factory=list)
+    body: Optional[HttpRequestBodyConfig] = Field(None)
+    auth: HttpAuthConfig = Field(default_factory=HttpAuthConfig)
+    response_handling: HttpResponseHandlingConfig = Field(default_factory=HttpResponseHandlingConfig)
+    retry: HttpRetryConfig = Field(default_factory=HttpRetryConfig)
+    rate_limit: HttpRateLimitConfig = Field(default_factory=HttpRateLimitConfig)
+    advanced: HttpAdvancedOptionsConfig = Field(default_factory=HttpAdvancedOptionsConfig)
+    exception_config: ExceptConfig = Field(default_factory=ExceptConfig)

@@ -1141,25 +1141,6 @@
     "title": "工作流编排",
     "subtitle": "设计、管理和监控您的自动化工作流，构建高效的业务流程",
     "createWorkflow": "创建工作流",
-    "importWorkflow": "导入工作流",
-    "import": {
-      "title": "导入工作流",
-      "subtitle": "从JSON文件导入工作流（支持OpenJiuwen或n8n格式）",
-      "file": "工作流文件",
-      "dragDrop": "拖拽JSON文件到此处，或点击选择文件",
-      "selectFile": "选择文件",
-      "fileFormat": "支持格式：.json（OpenJiuwen原生格式或n8n格式）",
-      "validateStrict": "严格验证",
-      "validateStrictDesc": "验证工作流是否可以编译和执行",
-      "importButton": "导入工作流",
-      "importing": "导入中...",
-      "success": "工作流导入成功",
-      "errors": {
-        "noFile": "请选择要导入的文件",
-        "invalidFileType": "请选择有效的JSON文件",
-        "importFailed": "工作流导入失败"
-      }
-    },
     "workflowList": {
       "title": "工作流列表",
       "noWorkflows": "暂无工作流",

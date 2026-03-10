@@ -125,6 +125,64 @@ class PluginParam(BaseModel):
     plugin_version: Optional[str] = Field("draft", alias="pluginVersion")
 
 
+class HttpRetryConfigSchema(BaseModel):
+    enabled: bool = Field(False, alias="enabled")
+    max_retries: int = Field(3, alias="maxRetries")
+    retry_on_status_codes: List[int] = Field(
+        default_factory=lambda: [429, 500, 502, 503, 504], alias="retryOnStatusCodes")
+    retry_delay_ms: int = Field(1000, alias="retryDelayMs")
+    backoff_type: str = Field("exponential", alias="backoffType")
+
+
+class HttpRateLimitConfigSchema(BaseModel):
+    enabled: bool = Field(False, alias="enabled")
+    requests_per_unit: int = Field(10, alias="requestsPerUnit")
+    unit: str = Field("minute", alias="unit")
+
+
+class HttpAuthenticationConfig(BaseModel):
+    auth_type: str = Field("none", alias="authType")
+    username: Optional[str] = Field("", alias="username")
+    password: Optional[str] = Field("", alias="password")
+    token: Optional[str] = Field("", alias="token")
+    api_key: Optional[str] = Field("", alias="apiKey")
+    api_key_location: Optional[str] = Field("header", alias="apiKeyLocation")
+    api_key_param_name: Optional[str] = Field("X-API-Key", alias="apiKeyParamName")
+
+
+class HttpBodyConfig(BaseModel):
+    content_type: str = Field("application/json", alias="contentType")
+    content: Optional[Any] = Field(None, alias="content")
+
+
+class HttpResponseConfig(BaseModel):
+    response_format: str = Field("auto", alias="responseFormat")
+    success_status_codes: List[int] = Field(default_factory=lambda: [200, 201, 202, 204], alias="successStatusCodes")
+    failure_status_codes: List[int] = Field(default_factory=list, alias="failureStatusCodes")
+    response_mode: str = Field("full", alias="responseMode")
+    data_property: Optional[str] = Field(None, alias="dataProperty")
+
+
+class HttpAdvancedConfig(BaseModel):
+    follow_redirects: bool = Field(True, alias="followRedirects")
+    ignore_ssl_issues: bool = Field(False, alias="ignoreSslIssues")
+    proxy_url: Optional[str] = Field(None, alias="proxyUrl")
+    timeout: int = Field(60, alias="timeout")
+    retry: HttpRetryConfigSchema = Field(default_factory=HttpRetryConfigSchema, alias="retry")
+    rate_limit: HttpRateLimitConfigSchema = Field(default_factory=HttpRateLimitConfigSchema, alias="rateLimit")
+
+
+class HttpRequestParam(BaseModel):
+    url: BaseValue = Field(..., alias="url")
+    method: str = Field("GET", alias="method")
+    headers: Optional[Dict[str, BaseValue]] = Field(None, alias="headers")
+    query_params: Optional[Dict[str, BaseValue]] = Field(None, alias="queryParams")
+    body: Optional[HttpBodyConfig] = Field(None, alias="body")
+    auth: HttpAuthenticationConfig = Field(default_factory=HttpAuthenticationConfig, alias="auth")
+    response: HttpResponseConfig = Field(default_factory=HttpResponseConfig, alias="response")
+    advanced: HttpAdvancedConfig = Field(default_factory=HttpAdvancedConfig, alias="advanced")
+
+
 class Inputs(BaseModel):
     input_parameters: Optional[Dict[str, BaseValue]] = Field(None, alias="inputParameters")
     llm_param: Optional[LLMParam] = Field(None, alias="llmParam")
@@ -137,6 +195,8 @@ class Inputs(BaseModel):
     code: Optional[str] = Field("", alias="code")
     variable_merge: Optional[list[VariableMerge]] = Field(None, alias="variableMerge")
     plugin_param: Optional[PluginParam] = Field(None, alias="pluginParam")
+    http_request_param: Optional[HttpRequestParam] = Field(None, alias="httpRequestParam")
+    method: Optional[BaseValue] = Field(None, alias="method")
     streaming: Optional[bool] = Field(False)
     max_response: Optional[int] = Field(3, alias="max_response")
     enable_history: Optional[bool] = Field(False, alias="historyEnable")

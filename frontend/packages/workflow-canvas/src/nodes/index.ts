@@ -25,6 +25,7 @@ import { WorkflowNodeRegistry } from './sub-workflow'
 import { VariableNodeRegistry } from './variable'
 import { VariableMergeNodeRegistry } from './variable-merge'
 import { PluginNodeRegistry } from './plugin'
+import { HttpRequestNodeRegistry } from './http-request'
 export { WorkflowNodeType } from './constants'
 
 export const nodeRegistries: FlowNodeRegistry[] = [
@@ -48,4 +49,5 @@ export const nodeRegistries: FlowNodeRegistry[] = [
   VariableNodeRegistry,
   VariableMergeNodeRegistry,
   PluginNodeRegistry,
+  HttpRequestNodeRegistry,
 ]

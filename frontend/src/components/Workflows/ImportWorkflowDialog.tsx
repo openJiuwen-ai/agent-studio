@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import { X, Upload, Loader2, AlertCircle, CheckCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getToken } from '@test-agentstudio/api-client'
-import { markWorkflowAsNewlyImported } from '../../utils/newlyImportedWorkflows'
 
 export interface ImportWorkflowDialogProps {
   isOpen: boolean
@@ -15,9 +14,9 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
   const { t } = useTranslation()
 
   const [file, setFile] = useState<File | null>(null)
+  const [importMode, setImportMode] = useState<'draft' | 'draft_and_publish'>('draft')
   const [validateStrict, setValidateStrict] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
 
@@ -73,6 +72,7 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
       const formData = new FormData()
       formData.append('file', file)
       formData.append('space_id', spaceId)
+      formData.append('import_mode', importMode)
       formData.append('validate_strict', String(validateStrict))
 
       const token = getToken()
@@ -88,23 +88,12 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
       const result = await response.json()
 
       if (result.code === 200) {
-        // Mark workflow as newly imported
-        if (result.data?.workflow_id) {
-          markWorkflowAsNewlyImported(result.data.workflow_id)
-        }
-
-        // Show success state
-        setIsSuccess(true)
-
-        // Wait 1.5 seconds to show success message, then close
-        setTimeout(() => {
-          onSuccess()
-          onClose()
-          // Reset form
-          setFile(null)
-          setValidateStrict(false)
-          setIsSuccess(false)
-        }, 1500)
+        onSuccess()
+        onClose()
+        // Reset form
+        setFile(null)
+        setImportMode('draft')
+        setValidateStrict(false)
       } else {
         setError(result.message || t('workflows.import.errors.importFailed'))
       }
@@ -116,9 +105,10 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
   }
 
   const handleClose = () => {
-    if (!isLoading && !isSuccess) {
+    if (!isLoading) {
       setFile(null)
       setError(null)
+      setImportMode('draft')
       setValidateStrict(false)
       onClose()
     }
@@ -188,8 +178,35 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
           </div>
         </div>
 
-        {/* Validate Strict Toggle - HIDDEN */}
-        <div className="mb-6 hidden">
+        {/* Import Mode */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t('workflows.import.importMode')}</label>
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              onClick={() => setImportMode('draft')}
+              disabled={isLoading}
+              className={`p-4 border-2 rounded-xl transition-all ${
+                importMode === 'draft' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:border-purple-300'
+              }`}
+            >
+              <div className="font-medium">{t('workflows.import.modes.draft')}</div>
+              <div className="text-sm text-gray-500 mt-1">{t('workflows.import.modes.draftDesc')}</div>
+            </button>
+            <button
+              onClick={() => setImportMode('draft_and_publish')}
+              disabled={isLoading}
+              className={`p-4 border-2 rounded-xl transition-all ${
+                importMode === 'draft_and_publish' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:border-purple-300'
+              }`}
+            >
+              <div className="font-medium">{t('workflows.import.modes.publish')}</div>
+              <div className="text-sm text-gray-500 mt-1">{t('workflows.import.modes.publishDesc')}</div>
+            </button>
+          </div>
+        </div>
+
+        {/* Validate Strict Toggle */}
+        <div className="mb-6">
           <label className="flex items-center justify-between p-4 border-2 border-gray-200 rounded-xl hover:border-purple-300 transition-colors cursor-pointer">
             <div>
               <div className="font-medium text-gray-900">{t('workflows.import.validateStrict')}</div>
@@ -205,14 +222,6 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
           </label>
         </div>
 
-        {/* Success Message */}
-        {isSuccess && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-start gap-3">
-            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-green-700">{t('workflows.import.success')}</div>
-          </div>
-        )}
-
         {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
@@ -225,26 +234,17 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
         <div className="flex gap-4">
           <button
             onClick={handleClose}
-            disabled={isLoading || isSuccess}
+            disabled={isLoading}
             className="flex-1 px-6 py-3 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {t('common.cancel')}
           </button>
           <button
             onClick={handleImport}
-            disabled={isLoading || !file || isSuccess}
-            className={`flex-1 px-6 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
-              isSuccess
-                ? 'bg-green-600 text-white'
-                : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700'
-            }`}
+            disabled={isLoading || !file}
+            className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {isSuccess ? (
-              <>
-                <CheckCircle className="w-5 h-5" />
-                {t('workflows.import.success')}
-              </>
-            ) : isLoading ? (
+            {isLoading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
                 {t('workflows.import.importing')}

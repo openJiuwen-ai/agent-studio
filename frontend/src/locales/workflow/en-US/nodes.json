@@ -19,6 +19,82 @@
     "plugin": {
       "description": "Tool node for calling specific plugin tools to perform tasks."
     },
+    "httpRequest": {
+      "titlePrefix": "HTTP Request",
+      "description": "Make HTTP/HTTPS requests to external APIs with authentication, retry logic, and response handling.",
+      "urlSection": {
+        "title": "URL Configuration",
+        "description": "Configure the request URL and HTTP method"
+      },
+      "headersSection": {
+        "title": "Headers"
+      },
+      "queryParamsSection": {
+        "title": "Query Parameters"
+      },
+      "bodySection": {
+        "title": "Request Body"
+      },
+      "authSection": {
+        "title": "Authentication"
+      },
+      "responseSection": {
+        "title": "Response Handling"
+      },
+      "advancedSection": {
+        "title": "Advanced Options"
+      },
+      "errorSection": {
+        "title": "Error Handling"
+      },
+      "url": {
+        "label": "URL"
+      },
+      "method": {
+        "label": "HTTP Method"
+      },
+      "body": {
+        "contentType": "Content Type",
+        "content": "Body Content"
+      },
+      "auth": {
+        "type": "Authentication Type",
+        "username": "Username",
+        "password": "Password",
+        "token": "Bearer Token",
+        "apiKey": "API Key",
+        "location": "API Key Location",
+        "paramName": "Parameter Name"
+      },
+      "response": {
+        "format": "Response Format",
+        "mode": "Response Mode"
+      },
+      "advanced": {
+        "timeout": "Timeout (seconds)",
+        "followRedirects": "Follow Redirects",
+        "ignoreSsl": "Ignore SSL Issues",
+        "retry": {
+          "enabled": "Enable Retry",
+          "maxRetries": "Max Retries",
+          "backoffType": "Backoff Strategy"
+        },
+        "rateLimit": {
+          "enabled": "Enable Rate Limiting",
+          "requestsPerUnit": "Requests Per Unit",
+          "unit": "Time Unit"
+        }
+      },
+      "error": {
+        "processType": "Error Handling Type",
+        "timeout": "Timeout"
+      },
+      "output": {
+        "errorCode": "Error code (0 for success)",
+        "errorMsg": "Error message (empty for success)",
+        "data": "Response data (JSON object for 200 OK)"
+      }
+    },
     "condition": {
       "titlePrefix": "Selector",
       "description": "Connect multiple downstream branches. Only the branch that meets the set condition will be executed.",
@@ -388,7 +464,8 @@
     "modelNotExists": "Model does not exist, please reselect"
   },
   "formInput": {
-    "input": "Input"
+    "input": "Input",
+    "method": "Method"
   },
   "formOutput": {
     "output": "Output"

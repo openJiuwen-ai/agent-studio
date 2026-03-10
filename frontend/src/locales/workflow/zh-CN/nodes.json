@@ -19,6 +19,82 @@
     "plugin": {
       "description": "工具节点，用于调用具体的插件工具执行特定任务。"
     },
+    "httpRequest": {
+      "titlePrefix": "HTTP请求",
+      "description": "向外部API发起HTTP/HTTPS请求，支持认证、重试逻辑和响应处理。",
+      "urlSection": {
+        "title": "URL配置",
+        "description": "配置请求URL和HTTP方法"
+      },
+      "headersSection": {
+        "title": "请求头"
+      },
+      "queryParamsSection": {
+        "title": "查询参数"
+      },
+      "bodySection": {
+        "title": "请求体"
+      },
+      "authSection": {
+        "title": "身份认证"
+      },
+      "responseSection": {
+        "title": "响应处理"
+      },
+      "advancedSection": {
+        "title": "高级选项"
+      },
+      "errorSection": {
+        "title": "错误处理"
+      },
+      "url": {
+        "label": "URL地址"
+      },
+      "method": {
+        "label": "HTTP方法"
+      },
+      "body": {
+        "contentType": "内容类型",
+        "content": "请求体内容"
+      },
+      "auth": {
+        "type": "认证类型",
+        "username": "用户名",
+        "password": "密码",
+        "token": "Bearer令牌",
+        "apiKey": "API密钥",
+        "location": "API密钥位置",
+        "paramName": "参数名称"
+      },
+      "response": {
+        "format": "响应格式",
+        "mode": "响应模式"
+      },
+      "advanced": {
+        "timeout": "超时时间（秒）",
+        "followRedirects": "跟随重定向",
+        "ignoreSsl": "忽略SSL问题",
+        "retry": {
+          "enabled": "启用重试",
+          "maxRetries": "最大重试次数",
+          "backoffType": "退避策略"
+        },
+        "rateLimit": {
+          "enabled": "启用速率限制",
+          "requestsPerUnit": "单位时间请求数",
+          "unit": "时间单位"
+        }
+      },
+      "error": {
+        "processType": "错误处理类型",
+        "timeout": "超时时间"
+      },
+      "output": {
+        "errorCode": "错误码（成功时为0）",
+        "errorMsg": "错误消息（成功时为空）",
+        "data": "响应数据（200 OK时的JSON对象）"
+      }
+    },
     "condition": {
       "titlePrefix": "选择器",
       "description": "连接多个下游分支。只有满足设定条件的对应分支才会被执行。",
@@ -387,7 +463,8 @@
     "modelNotExists": "模型不存在或已禁用，请重新选择"
   },
   "formInput": {
-    "input": "输入"
+    "input": "输入",
+    "method": "方法"
   },
   "formOutput": {
     "output": "输出"

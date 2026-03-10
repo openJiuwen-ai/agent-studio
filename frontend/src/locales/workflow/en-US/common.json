@@ -40,7 +40,8 @@
     "Node": "Node",
     "Unknown": "Unknown",
     "Plugin": "Plugin",
-    "Workflow": "Workflow"
+    "Workflow": "Workflow",
+    "HttpRequest": "HTTP Request"
   },
   "validators": {
     "workflowMustContainPath": "Workflow must contain a complete path from start node to end node",
