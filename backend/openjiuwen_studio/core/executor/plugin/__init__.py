@@ -7,10 +7,11 @@ Plugin module for executor components.
 """
 
 from .plugin_mgr import PluginManager
-from .plugin_tools import ServiceTool, CodeTool
+from .plugin_tools import ServiceTool, CodeTool, McpTool
 
 __all__ = [
     "PluginManager",
     "ServiceTool",
-    "CodeTool"
+    "CodeTool",
+    "McpTool",
 ]

@@ -168,3 +168,31 @@ export const validateHttpUrlRealtime = (url: string): string => {
 export const getHttpUrlHelpText = (): string => {
   return '服务地址必须以http://或https://开头，例如：http://api.example.com'
 }
+
+/**
+ * 校验文件路径是否合法（仅格式校验，不检查文件是否存在）
+ * @param path 待校验的路径
+ * @returns 是否合法
+ */
+export const isFilePathValid = (path: string): boolean => {
+  if (!path || path.trim() === '') return false
+  const trimmed = path.trim()
+  // Must not be a URL
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return false
+  // Must not contain null bytes
+  if (trimmed.includes('\0')) return false
+  // Max length 4096 (typical OS max)
+  if (trimmed.length > 4096) return false
+  return true
+}
+
+/**
+ * 实时校验文件路径（用于输入时的即时反馈）
+ * @param path 待校验的路径
+ * @returns 错误信息字符串，如果校验通过返回空字符串
+ */
+export const validateFilePathRealtime = (path: string): string => {
+  if (!path || path.trim() === '') return ''
+  if (!isFilePathValid(path)) return 'Please enter a valid file path'
+  return ''
+}

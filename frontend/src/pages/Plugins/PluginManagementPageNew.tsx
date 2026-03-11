@@ -7,6 +7,7 @@ import { usePluginManagementViewMode } from '../../stores/useUIStore'
 import { ENV_CONFIG } from '../../config/environment'
 import CloudPluginFormDialog from '../../components/Plugins/CloudPluginFormDialog'
 import IDEPluginFormDialog from '../../components/Plugins/IDEPluginFormDialog'
+import MCPPluginFormDialog, { MCP_TRANSPORT_OPTIONS, MCP_TRANSPORT_DEFAULT } from '../../components/Plugins/MCPPluginFormDialog'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '../../Common/UnifiedSnackbar'
 import ReactMarkdown from 'react-markdown'
 import {
@@ -19,6 +20,7 @@ import {
   RefreshCw,
   Cloud,
   Code,
+  Cpu,
 } from 'lucide-react'
 import { Button, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, Typography, CircularProgress } from '@mui/material'
 import { CommonPageLayout, SearchInput } from '../../components/Common/common-page'
@@ -40,6 +42,7 @@ interface Plugin {
   icon_uri: string
   status?: 'active' | 'inactive' | 'error' | 'updating'
   config?: Record<string, unknown>
+  mcp_transport?: number
 }
 
 interface CloudPluginFormState {
@@ -54,6 +57,14 @@ interface IDEPluginFormState {
   name: string
   description: string
   desc_mk?: string
+}
+
+interface MCPPluginFormState {
+  name: string
+  description: string
+  desc_mk?: string
+  url: string
+  transport: number
 }
 
 const PluginManagementPageNew: React.FC = () => {
@@ -85,6 +96,7 @@ const PluginManagementPageNew: React.FC = () => {
   })
   const [cloudPluginDialogOpen, setCloudPluginDialogOpen] = useState(false)
   const [idePluginDialogOpen, setIdePluginDialogOpen] = useState(false)
+  const [mcpPluginDialogOpen, setMcpPluginDialogOpen] = useState(false)
   const [editingPlugin, setEditingPlugin] = useState<Plugin | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
 
@@ -111,6 +123,12 @@ const PluginManagementPageNew: React.FC = () => {
     name: '',
     description: '',
   })
+  const [mcpPluginForm, setMcpPluginForm] = useState<MCPPluginFormState>({
+    name: '',
+    description: '',
+    url: '',
+    transport: MCP_TRANSPORT_DEFAULT,
+  })
 
   // 表单处理函数
   const handleCloudPluginFormChange = (field: string, value: unknown) => {
@@ -129,6 +147,19 @@ const PluginManagementPageNew: React.FC = () => {
   }
   const resetIDEForm = () => {
     setIdePluginForm({ name: '', description: '' })
+  }
+  const handleMCPPluginFormChange = (field: string, value: unknown) => {
+    setMcpPluginForm(prev => ({ ...prev, [field]: value }))
+  }
+  const resetMCPForm = () => {
+    setMcpPluginForm({ name: '', description: '', url: '', transport: MCP_TRANSPORT_DEFAULT })
+  }
+  const validateMCPForm = () => {
+    const errors: string[] = []
+    if (!mcpPluginForm.name.trim()) errors.push(t('plugins.dialog.mcpPluginForm.validation.nameRequired', 'Plugin name is required'))
+    if (!mcpPluginForm.description.trim()) errors.push(t('plugins.dialog.mcpPluginForm.validation.descRequired', 'Description is required'))
+    if (!mcpPluginForm.url.trim()) errors.push(t('plugins.dialog.mcpPluginForm.validation.urlRequired', 'MCP server URL is required'))
+    return { isValid: errors.length === 0, errors }
   }
   const validateForm = () => {
     const errors: string[] = []
@@ -176,6 +207,7 @@ const PluginManagementPageNew: React.FC = () => {
     url: String(pluginInfo.url || ''),
     icon_uri: String(pluginInfo.icon_uri || '📦'),
     status: 'active',
+    mcp_transport: pluginInfo.mcp_transport,
   })
 
   // 分页信息
@@ -203,13 +235,15 @@ const PluginManagementPageNew: React.FC = () => {
         return t('plugins.types.cloud')
       case 2:
         return t('plugins.types.ide')
+      case 3:
+        return t('plugins.types.mcp')
       default:
         return t('plugins.types.pluginTypeUnknown', { type: pluginType })
     }
   }
 
   // 分类选项
-  const pluginTypeCategories = [t('plugins.types.cloud'), t('plugins.types.ide')]
+  const pluginTypeCategories = [t('plugins.types.cloud'), t('plugins.types.ide'), t('plugins.types.mcp')]
   const categories = ['all', ...pluginTypeCategories]
 
   // 过滤插件
@@ -374,6 +408,37 @@ const PluginManagementPageNew: React.FC = () => {
     } catch (error: any) {
       console.error(t('plugins.messages.ideCreateFailedRetry'), error)
       showError(t('plugins.messages.ideCreateFailedRetry'))
+    }
+  }
+
+  const handleMCPPluginSubmit = async () => {
+    const validation = validateMCPForm()
+    if (!validation.isValid) {
+      showError(validation.errors[0])
+      return
+    }
+    try {
+      const pluginResponse = await createPluginMutation.mutateAsync({
+        space_id: getDefaultSpaceId(),
+        plugin_type: 3,
+        name: mcpPluginForm.name.trim(),
+        desc: mcpPluginForm.description.trim(),
+        desc_mk: mcpPluginForm.desc_mk?.trim(),
+        url: mcpPluginForm.url.trim(),
+        icon_uri: '🔌',
+        mcp_transport: mcpPluginForm.transport,
+      })
+      if (pluginResponse.code !== 200) {
+        showError(t('plugins.messages.createFailed') + ': ' + (pluginResponse.message || t('plugins.errors.unknownError')))
+        return
+      }
+      setMcpPluginDialogOpen(false)
+      resetMCPForm()
+      refetchPluginList()
+      showSuccess(t('plugins.messages.mcpPluginCreated', { name: mcpPluginForm.name.trim() }))
+    } catch (error: any) {
+      console.error('MCP plugin creation failed', error)
+      showError(t('plugins.messages.mcpCreateFailedRetry'))
     }
   }
 
@@ -623,6 +688,16 @@ const PluginManagementPageNew: React.FC = () => {
                   <Typography variant="subtitle2" color="text.secondary" gutterBottom className="text-gray-500 dark:text-gray-400">{t('plugins.url')}</Typography>
                   <Typography variant="body1" color="text.primary" className="text-gray-900 dark:text-gray-100">{selectedPlugin.url}</Typography>
                 </div>
+                {selectedPlugin.plugin_type === 3 && (
+                  <div>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>{t('plugins.dialog.mcpPluginForm.transport')}</Typography>
+                    <Typography variant="body1" color="text.primary">
+                      {selectedPlugin.mcp_transport != null
+                        ? t(MCP_TRANSPORT_OPTIONS.find(o => o.value === selectedPlugin.mcp_transport)?.labelKey ?? 'plugins.mcpTransport.sse')
+                        : t('plugins.mcpTransport.sse')}
+                    </Typography>
+                  </div>
+                )}
               </div>
             </DialogContent>
             <DialogActions className="bg-white dark:bg-gray-800 border-t dark:border-gray-700">
@@ -680,6 +755,18 @@ const PluginManagementPageNew: React.FC = () => {
                 <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">{t('plugins.cloudPlugin.createFromIDEDescription')}</Typography>
               </div>
             </Button>
+            <Button
+              variant="outlined"
+              fullWidth
+              startIcon={<Cpu className="w-4 h-4" />}
+              onClick={() => { setMcpPluginDialogOpen(true); setInstallDialogOpen(false) }}
+              className="justify-start p-3"
+            >
+              <div className="text-left">
+                <Typography variant="subtitle1">{t('plugins.types.mcp')}-{t('plugins.cloudPlugin.createFromMCP')}</Typography>
+                <Typography variant="body2" color="text.secondary">{t('plugins.cloudPlugin.createFromMCPDescription')}</Typography>
+              </div>
+            </Button>
           </div>
         </DialogContent>
         <DialogActions className="bg-white dark:bg-gray-800 border-t dark:border-gray-700">
@@ -713,6 +800,18 @@ const PluginManagementPageNew: React.FC = () => {
         onFormChange={handleIDEPluginFormChange}
         onSubmit={() => handleIDEPluginSubmit()}
         onCancel={() => { setIdePluginDialogOpen(false); resetIDEForm() }}
+      />
+
+      {/* MCP插件表单对话框 */}
+      <MCPPluginFormDialog
+        open={mcpPluginDialogOpen}
+        isEditing={false}
+        loading={createPluginMutation.isLoading}
+        form={mcpPluginForm}
+        editingPlugin={null}
+        onFormChange={handleMCPPluginFormChange}
+        onSubmit={() => handleMCPPluginSubmit()}
+        onCancel={() => { setMcpPluginDialogOpen(false); resetMCPForm() }}
       />
 
       {/* 删除确认对话框 */}

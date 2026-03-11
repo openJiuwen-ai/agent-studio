@@ -7,8 +7,9 @@ from openjiuwen.core.common.logging import logger
 from openjiuwen_studio.core.common.dsl import RestfulApiSchema as DlRestfulApiSchema
 from openjiuwen_studio.core.common.dsl import Plugin as DlPlugin
 from openjiuwen_studio.core.common.dsl import PluginCodeConfig as DlPluginCodeConfig
+from openjiuwen_studio.core.common.dsl import McpConfig as DlMcpConfig
 from openjiuwen_studio.core.common.dsl import PluginType
-from openjiuwen_studio.core.executor.plugin.plugin_tools import CodeTool, ServiceTool
+from openjiuwen_studio.core.executor.plugin.plugin_tools import CodeTool, McpTool, ServiceTool
 import openjiuwen_studio.core.manager.plugin as mgr
 from openjiuwen_studio.schemas.plugin import ToolId, PluginId
 from openjiuwen_studio.core.common.exceptions import JiuWenExecuteException
@@ -97,6 +98,8 @@ class PluginManager:
             if tool_dl["tool_id"] == tool_id:
                 if plugin.plugin_type == PluginType.SERVICE:
                     tool = ServiceTool(DlRestfulApiSchema.model_validate(tool_dl))
+                elif plugin.plugin_type == PluginType.MCP:
+                    tool = McpTool(DlMcpConfig.model_validate(tool_dl))
                 else:
                     tool = CodeTool(DlPluginCodeConfig.model_validate(tool_dl))
                 break
@@ -187,7 +190,7 @@ class PluginManager:
 
         # 如果响应数据中包含更详细的错误信息，优先使用
         if response_data and isinstance(response_data, dict):
-            # 检查是否有 OpenAI 格式的错误响应
+            # 检查是否有 OpenAPI 格式的错误响应
             if "error" in response_data and isinstance(response_data["error"], dict):
                 error_info = response_data["error"]
                 # 优先使用 error.message，其次 error.type

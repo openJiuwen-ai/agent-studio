@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class PluginType(IntEnum):
     PLUGIN_TYPE_CLOUD_API = 1,
     PLUGIN_TYPE_CLOUD_CODE = 2,
+    PLUGIN_TYPE_CLOUD_MCP = 3,
 
 
 class ParamType(IntEnum):
@@ -57,6 +58,11 @@ class PluginCreate(BaseModel):
     url: Optional[str] = Field("", alias="url")
     icon_uri: Optional[str] = Field("", alias="icon_uri")
     request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
+    mcp_transport: Optional[int] = Field(None, alias="mcp_transport")
+    # stdio transport fields
+    command: Optional[str] = Field("", alias="command")
+    args: Optional[List[str]] = Field(default_factory=list, alias="args")
+    env: Optional[Dict[str, str]] = Field(None, alias="env")
 
 
 class PluginId(BaseModel):
@@ -88,6 +94,7 @@ class PluginInfo(PluginBase):
     url: Optional[str] = Field("", alias="url")
     icon_uri: Optional[str] = Field("", alias="icon_uri")
     request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
+    mcp_transport: Optional[int] = Field(None, alias="mcp_transport")
 
     class Config:
         populate_by_name = True
@@ -106,6 +113,12 @@ class PluginInfo(PluginBase):
         # 如果数据中有 inputs 字段，映射到 request_params
         if "inputs" in data_dict and data_dict["inputs"] is not None:
             data_dict["request_params"] = data_dict.pop("inputs")
+
+        # Extract mcp_transport from _rest_ if present
+        rest = data_dict.get("_rest_")
+        if isinstance(rest, dict) and "mcp_transport" in rest:
+            data_dict["mcp_transport"] = rest["mcp_transport"]
+
         return cls(**data_dict)
 
 
@@ -140,6 +153,14 @@ class PluginApiMethod(IntEnum):
     PLUGIN_API_METHOD_PUT = 3,
     PLUGIN_API_METHOD_DELETE = 4,
     PLUGIN_API_METHOD_PATCH = 5,
+
+
+class PluginMcpTransport(IntEnum):
+    PLUGIN_MCP_TRANSPORT_STDIO = 1,
+    PLUGIN_MCP_TRANSPORT_SSE = 2,
+    PLUGIN_MCP_TRANSPORT_STREAMABLE_HTTP = 3,
+    PLUGIN_MCP_TRANSPORT_OPENAPI = 4,
+    PLUGIN_MCP_TRANSPORT_PLAYWRIGHT = 5,
 
 
 class PluginApiBase(PluginBase):
@@ -205,6 +226,35 @@ class PluginCodeInfoDB(PluginCodeInfo):
 
 class PluginCodeInfoResponse(BaseModel):
     code_info: List[PluginCodeInfo] = Field(..., alias="code_info")
+    total: int = Field(..., alias="total")
+
+
+class PluginMcpBase(PluginBase):
+    name: str = Field(..., alias="name")
+    desc: str = Field(..., alias="desc")
+    transport: PluginMcpTransport = Field(PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STDIO, alias="transport")
+    command: Optional[str] = Field("", alias="command")
+    args: Optional[List[str]] = Field(default_factory=list, alias="args")
+    env: Optional[Dict[str, str]] = Field(None, alias="env")
+    url: Optional[str] = Field("", alias="url")
+    headers: Optional[Dict[str, str]] = Field(None, alias="headers")
+    mcp_tool_name: str = Field("", alias="mcp_tool_name")
+
+
+class PluginMcpInfo(PluginMcpBase):
+    tool_id: str = Field(..., alias="tool_id")
+    request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
+    response_params: Optional[List[PluginToolParam]] = Field([], alias="response_params")
+    available: Optional[bool] = Field(False, alias="available")
+
+
+class PluginMcpInfoDB(PluginMcpInfo):
+    input_parameters: Optional[List[Dict[str, Any]]] = Field([], alias="input_parameters")
+    output_parameters: Optional[List[Dict[str, Any]]] = Field([], alias="output_parameters")
+
+
+class PluginMcpInfoResponse(BaseModel):
+    mcp_info: List[PluginMcpInfo] = Field(..., alias="mcp_info")
     total: int = Field(..., alias="total")
 
 

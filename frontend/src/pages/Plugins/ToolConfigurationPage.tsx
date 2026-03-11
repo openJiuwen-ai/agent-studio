@@ -38,6 +38,7 @@ import {
   usePluginUpdateApi,
   usePluginUpdateCode,
   usePluginGetApi,
+  usePluginGetMcpTool,
   usePluginDeleteApi,
   usePluginGetCode,
   usePluginDeleteCode,
@@ -177,7 +178,7 @@ const ToolConfigurationPage: React.FC = () => {
   const fromPublishVersion = location.state?.fromPublishVersion || false
   const publishVersion = location.state?.publishVersion || null
   const toolsData = location.state?.toolsData || null // Tools data from publish info
-  const isReadOnly = fromPublishVersion // Disable editing when from published version
+  const isReadOnly = fromPublishVersion || pluginType === 'mcp' // Disable editing when from published version or MCP plugin
 
   // Parameter dialogs
   const [isInputDialogOpen, setIsInputDialogOpen] = useState(false)
@@ -229,7 +230,7 @@ const ToolConfigurationPage: React.FC = () => {
       return null
     }
 
-    const dataKey = pluginType === 'code' ? 'code_info' : 'api_info'
+    const dataKey = pluginType === 'code' ? 'code_info' : pluginType === 'mcp' ? 'mcp_info' : 'api_info'
 
     return {
       code: 200,
@@ -244,7 +245,9 @@ const ToolConfigurationPage: React.FC = () => {
   const shouldFetchApi = !toolsData && !!apiRequest
   const { data: apiData, isLoading: isLoadingApi, error: apiError } = pluginType === 'code'
     ? usePluginGetCode(shouldFetchApi ? apiRequest! : ({} as any), { enabled: shouldFetchApi })
-    : usePluginGetApi(shouldFetchApi ? apiRequest! : ({} as any), { enabled: shouldFetchApi })
+    : pluginType === 'mcp'
+      ? usePluginGetMcpTool(shouldFetchApi ? apiRequest! : ({} as any), { enabled: shouldFetchApi })
+      : usePluginGetApi(shouldFetchApi ? apiRequest! : ({} as any), { enabled: shouldFetchApi })
 
   // Use mock data if available, otherwise use API data
   const effectiveApiData = mockApiData || apiData
@@ -262,7 +265,7 @@ const ToolConfigurationPage: React.FC = () => {
 
   // Transform API data to Tool interface when data is loaded
   useEffect(() => {
-    const dataKey = pluginType === 'code' ? 'code_info' : 'api_info'
+    const dataKey = pluginType === 'code' ? 'code_info' : pluginType === 'mcp' ? 'mcp_info' : 'api_info'
 
     if (effectiveApiData?.code === 200 && effectiveApiData?.data?.[dataKey] && Array.isArray(effectiveApiData.data[dataKey])) {
       const infoArray = effectiveApiData.data[dataKey]
@@ -1216,7 +1219,7 @@ const ToolConfigurationPage: React.FC = () => {
                 queryClient.setQueryData(queryKey, (oldData: any) => {
                   if (!oldData || oldData.code !== 200) return oldData
 
-                  const dataKey = pluginType === 'code' ? 'code_info' : 'api_info'
+                  const dataKey = pluginType === 'code' ? 'code_info' : pluginType === 'mcp' ? 'mcp_info' : 'api_info'
                   const updatedList = oldData.data[dataKey].map((item: any) =>
                     item.tool_id === tool_id ? { ...item, available: true } : item
                   )
@@ -1235,7 +1238,7 @@ const ToolConfigurationPage: React.FC = () => {
                 queryClient.setQueryData(singleQueryKey, (oldData: any) => {
                   if (!oldData || oldData.code !== 200) return oldData
 
-                  const dataKey = pluginType === 'code' ? 'code_info' : 'api_info'
+                  const dataKey = pluginType === 'code' ? 'code_info' : pluginType === 'mcp' ? 'mcp_info' : 'api_info'
                   return {
                     ...oldData,
                     data: {

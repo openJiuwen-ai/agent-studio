@@ -1,12 +1,15 @@
 # Plugin Management
 
-In the openJiuwen platform, plugins are a key method for extending the capabilities of workflows and agents. The platform supports three types of plugins: local custom plugin servers, external API calls, and code plugins. Each plugin can include multiple tools, and these tools must belong to the same domain. Each tool corresponds to an independent API.
+In the openJiuwen platform, plugins are a key method for extending the capabilities of workflows and agents. The platform supports four types of plugins: RESTful API cloud plugins, MCP server plugins, local custom plugin servers, and code plugins. Each plugin can include multiple tools, and these tools must belong to the same domain. Each tool corresponds to an independent API.
 
 # Add Plugin and Tool
-In openJiuwen, you can add plugins in the following two ways:
+In openJiuwen, you can add plugins in the following three ways:
 
 `Cloud Plugin-Create plugin based on existing service`: Create from an existing service
 Connect to an existing service, which can be either a custom plugin service you are running locally via [Running the Plugin Service in the Background](#run-plugin-service-in-background), or an external API that follows the RESTful format.
+
+`MCP Server Plugin`: Connect to an MCP (Model Context Protocol) server
+Connect to any MCP-compliant server using one of five transport protocols. All tools exposed by the server are automatically discovered and registered.
 
 `IDE Plugin-Create in IDE`: Create manually code plugin
 Define plugin tools by writing code and run the code plugin by [Starting the Local Sandbox Service](../../2.Installation%20Guide/Local%20Installation/Windows_Installation.md#windows-sandbox).
@@ -120,7 +123,77 @@ Assume a user has a deployed weather plugin service. Plugin parameters can be co
 
 6. After creation is complete, plugins that have been created can be managed in the installed plugins list on the **Plugin Management** page.
 
-## Method 2: Manually Create Local Code Plugin
+## Method 2: Connect to an MCP Server Plugin
+
+The openJiuwen platform supports connecting to **MCP (Model Context Protocol)** servers. MCP is an open standard that lets AI applications connect to external data sources and tools through a unified protocol. When you install an MCP plugin, every tool exposed by that server is automatically discovered and made available to agents and workflows.
+
+### Supported Transport Types
+
+| Transport | Description | Required Field |
+|:---:|:---|:---:|
+| STDIO | Spawns a local MCP server process via standard input/output | Path to the server script |
+| SSE | Connects using Server-Sent Events | Server URL |
+| Streamable HTTP | Connects using streamable HTTP | Server URL |
+| OpenAPI | Connects to an OpenAPI-compatible MCP endpoint | Spec file path or URL |
+| Playwright | Connects to a browser-based MCP server via Playwright | Server URL |
+
+### Steps
+
+1. Navigate to the **Plugin Management** module in the left sidebar.
+
+2. Click the **Install Plugin** button and select **MCP Server Plugin**.
+
+3. Fill in the plugin information:
+
+   | Configuration Item | Description |
+   |:---:|:---|
+   | Plugin Name | Display name of the plugin, used to identify it. |
+   | Plugin Description | A short description of the plugin's purpose. |
+   | Plugin Details | Detailed description in Markdown format (optional). |
+   | Transport Type | The protocol used to connect to the MCP server: STDIO, SSE, Streamable HTTP, OpenAPI, or Playwright. |
+   | Server URL / File Location | The server endpoint URL (SSE, Streamable HTTP, Playwright) or the path to the server script / spec file (STDIO, OpenAPI). |
+
+4. Click **Create Plugin**. The plugin record is saved immediately — no connection to the MCP server is made at this stage.
+
+### Discover Tools
+
+After creating the plugin, you must trigger tool discovery manually:
+
+1. Click **Configure** on the plugin card to open the plugin configuration page.
+
+2. Navigate to the **Tool Settings** tab.
+
+3. Click the **Discover Tools** button.
+
+   The platform connects to the MCP server, retrieves all available tools, and saves them to the database. If tools were previously discovered, they are deleted first and then replaced with the freshly discovered set.
+
+4. Once discovery completes, the tool list displays every discovered tool with its name, description, and parameters — all populated automatically from the MCP server.
+
+> **Note:** MCP tools are **read-only**. You cannot manually add, edit, or delete individual tools. Click **Discover Tools** again at any time to refresh the tool list after the MCP server changes.
+
+### Authorization Headers
+
+If the MCP server requires authentication, add the credentials as plugin parameters:
+
+1. On the plugin configuration page, go to the **Plugin Parameters** tab.
+
+2. Click **Add Parameter** and configure it as follows:
+
+   | Configuration Item | Value |
+   |:---:|:---|
+   | Parameter Name | The HTTP header name, e.g. `Authorization` |
+   | Send Method | `Header` |
+   | Un-Runtime Parameter | Enable and set the token as the **Default Value**, e.g. `Bearer YOUR_TOKEN` |
+
+The platform automatically includes this header in every connection to the MCP server — both during tool discovery and during tool execution at runtime.
+
+### Using MCP Tools in Agents and Workflows
+
+Once tools are discovered and their status is `Enabled`, they are available in agents and workflows exactly like any other plugin tool. Select the plugin and its tools from the tool panel; input parameters are filled in at runtime by the agent or the workflow node.
+
+---
+
+## Method 3: Manually Create Local Code Plugin
 openJiuwen supports manually creating local code plugins. Users can write code directly (currently supports Python and JavaScript), and the written code is provided as a plugin for use.
 
 ### Steps

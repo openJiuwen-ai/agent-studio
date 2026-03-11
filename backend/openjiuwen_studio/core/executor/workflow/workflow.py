@@ -13,6 +13,7 @@ from openjiuwen.core.workflow.workflow import Workflow as InvokableWorkflow
 from openjiuwen.core.workflow import WorkflowCard
 from openjiuwen.core.workflow import ComponentAbility
 
+from openjiuwen_studio.core.common.dsl import McpConfig as DlMcpConfig
 from openjiuwen_studio.core.common.dsl import PluginCodeConfig as DlPluginCodeConfig
 from openjiuwen_studio.core.common.dsl import PluginType
 from openjiuwen_studio.core.common.dsl import RestfulApiSchema as DlRestfulApiSchema
@@ -31,7 +32,7 @@ from openjiuwen_studio.core.executor.component.compile.user_input_comp_compiler 
 from openjiuwen_studio.core.executor.component.compile.user_output_comp_compiler import UserOutputCompCompiler, \
     find_llm_to_stream_out, change_stream_input
 from openjiuwen_studio.core.executor.component.compile.variable_merge_comp_compiler import VariableMergeCompCompiler
-from openjiuwen_studio.core.executor.plugin.plugin_tools import ServiceTool, CodeTool
+from openjiuwen_studio.core.executor.plugin.plugin_tools import ServiceTool, CodeTool, McpTool
 from openjiuwen_studio.core.executor.workflow.context import Context
 from openjiuwen_studio.core.executor.workflow.pregel_graph_adapter import PregelGraphAdapter
 from openjiuwen.core.graph.executable import Executable
@@ -332,6 +333,8 @@ class Workflow:
         tool_config = ToolCompConfig.model_validate(comp.configs)
         if tool_config.type == PluginType.SERVICE:
             plugin_tool = ServiceTool(DlRestfulApiSchema.model_validate(tool_config.tool)).compile()
+        elif tool_config.type == PluginType.MCP:
+            plugin_tool = McpTool(DlMcpConfig.model_validate(tool_config.tool)).compile()
         else:
             plugin_tool = CodeTool(DlPluginCodeConfig.model_validate(tool_config.tool)).compile()
         tool_config = ToolComponentConfig(tool_id=comp.id)

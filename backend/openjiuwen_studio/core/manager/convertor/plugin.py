@@ -6,7 +6,7 @@ from typing import Dict, List, Any
 
 from openjiuwen_studio.core.common import dsl
 from openjiuwen_studio.core.manager.convertor.components.plugin import plugin_api_tool_convert, \
-    plugin_code_tool_convert, plugin_type_mapping
+    plugin_code_tool_convert, plugin_mcp_tool_convert, plugin_type_mapping
 from openjiuwen_studio.models.plugin import PluginBaseDBPd
 from openjiuwen_studio.schemas.plugin import PluginType
 
@@ -27,9 +27,19 @@ def _plugin_code_tools_convert(code_info: Dict[str, Any]) -> List[Dict[str, Any]
     return code_tools
 
 
+def _plugin_mcp_tools_convert(plugin_info, mcp_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+    mcp_tools: List[Dict[str, Any]] = []
+    convert_mcp = plugin_mcp_tool_convert(plugin_info, mcp_info)
+    mcp_tools.append(convert_mcp)
+
+    return mcp_tools
+
+
 def plugin_tool_convert(plugin_info, tool: Dict[str, Any]) -> List[Dict[str, Any]]:
     if plugin_info.plugin_type == PluginType.PLUGIN_TYPE_CLOUD_API:
         return _plugin_api_tools_convert(plugin_info, tool)
+    elif plugin_info.plugin_type == PluginType.PLUGIN_TYPE_CLOUD_MCP:
+        return _plugin_mcp_tools_convert(plugin_info, tool)
     else:
         return _plugin_code_tools_convert(tool)
 

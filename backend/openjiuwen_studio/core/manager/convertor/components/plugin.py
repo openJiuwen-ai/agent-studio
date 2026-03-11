@@ -14,12 +14,14 @@ from openjiuwen_studio.schemas.node import Node
 from openjiuwen_studio.core.manager.convertor.components.common import input_params_convert, exception_config_convert
 from openjiuwen_studio.core.common.dsl import ComponentType
 from openjiuwen_studio.schemas.plugin import PluginApiInfo, PluginApiHeader, PluginToolParam, ParamType, \
-    PluginApiMethod, PluginId, PluginToolId, PluginType, PluginCodeInfo, ParamSendMethod, Priority
+    PluginApiMethod, PluginId, PluginToolId, PluginType, PluginCodeInfo, PluginMcpInfo, \
+    PluginMcpTransport, ParamSendMethod, Priority
 from openjiuwen_studio.schemas.plugin import PluginPublishInfo
 
 plugin_type_mapping = {
     PluginType.PLUGIN_TYPE_CLOUD_API: dsl.PluginType.SERVICE,
     PluginType.PLUGIN_TYPE_CLOUD_CODE: dsl.PluginType.CODE,
+    PluginType.PLUGIN_TYPE_CLOUD_MCP: dsl.PluginType.MCP,
 }
 
 api_method_mapping = {
@@ -28,6 +30,14 @@ api_method_mapping = {
     PluginApiMethod.PLUGIN_API_METHOD_PUT: "PUT",
     PluginApiMethod.PLUGIN_API_METHOD_DELETE: "DELETE",
     PluginApiMethod.PLUGIN_API_METHOD_PATCH: "PATCH",
+}
+
+mcp_transport_mapping = {
+    PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STDIO: "stdio",
+    PluginMcpTransport.PLUGIN_MCP_TRANSPORT_SSE: "sse",
+    PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STREAMABLE_HTTP: "streamable_http",
+    PluginMcpTransport.PLUGIN_MCP_TRANSPORT_OPENAPI: "openapi",
+    PluginMcpTransport.PLUGIN_MCP_TRANSPORT_PLAYWRIGHT: "playwright",
 }
 
 param_type_mapping = {
@@ -148,9 +158,39 @@ def plugin_code_tool_convert(code_info: Dict[str, Any]) -> Dict[str, Any]:
     return convert_code.model_dump()
 
 
+def plugin_mcp_tool_convert(plugin_info, mcp_info: Dict[str, Any]) -> Dict[str, Any]:
+    plugin_params: List[PluginToolParam] = []
+    if hasattr(plugin_info, "inputs") and plugin_info.inputs:
+        for i in plugin_info.inputs:
+            plugin_params.append(PluginToolParam(**i))
+    elif hasattr(plugin_info, "request_params") and plugin_info.request_params:
+        for i in plugin_info.request_params:
+            plugin_params.append(i)
+    mcp = PluginMcpInfo(**mcp_info)
+    merged_params = _merge_plugin_params(mcp.request_params, plugin_params)
+    # For SSE/streamable_http, fall back to plugin-level URL if tool URL is empty
+    url = mcp.url or (plugin_info.url if hasattr(plugin_info, "url") else None)
+    convert_mcp = dsl.McpConfig(
+        tool_id=mcp.tool_id,
+        name=mcp.name,
+        description=mcp.desc,
+        transport=mcp_transport_mapping.get(mcp.transport, "stdio"),
+        command=mcp.command,
+        args=mcp.args or [],
+        env=mcp.env,
+        url=url,
+        headers=mcp.headers,
+        mcp_tool_name=mcp.mcp_tool_name,
+        input_params=_plugin_tool_param_convert(merged_params),
+    )
+    return convert_mcp.model_dump()
+
+
 def plugin_tool_convert(plugin_info, tool: Dict[str, Any]) -> Dict[str, Any]:
     if plugin_info.plugin_type == PluginType.PLUGIN_TYPE_CLOUD_API:
         return plugin_api_tool_convert(plugin_info, tool)
+    elif plugin_info.plugin_type == PluginType.PLUGIN_TYPE_CLOUD_MCP:
+        return plugin_mcp_tool_convert(plugin_info, tool)
     else:
         return plugin_code_tool_convert(tool)
 

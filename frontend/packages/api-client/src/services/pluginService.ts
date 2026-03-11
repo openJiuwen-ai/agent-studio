@@ -44,6 +44,10 @@ import {
   PluginPublishDeleteResponse,
   PluginGetMarketRequest,
   PluginGetMarketResponse,
+  PluginListMcpToolsRequest,
+  PluginMcpInfoResponse,
+  PluginDiscoverMcpToolsRequest,
+  PluginDiscoverMcpToolsResponse,
 } from '../types'
 
 // 插件服务
@@ -182,6 +186,30 @@ export class PluginService {
   static async getPluginMarket(request: PluginGetMarketRequest): Promise<PluginGetMarketResponse> {
     const apiClient = getApiClient()
     const response = await apiClient.post<PluginGetMarketResponse>(API_ENDPOINTS.PLUGINS.GET_MARKET, request)
+    return response.data
+  }
+
+  // 获取插件 MCP 工具列表
+  static async getPluginMcpToolsList(request: PluginListMcpToolsRequest): Promise<PluginMcpInfoResponse> {
+    const apiClient = getApiClient()
+    const response = await apiClient.post<PluginMcpInfoResponse>(API_ENDPOINTS.PLUGINS.LIST_MCP_TOOLS, request)
+    return response.data
+  }
+
+  // 获取单个插件 MCP 工具
+  static async getPluginMcpTool(request: PluginGetApiRequest): Promise<PluginMcpInfoResponse> {
+    const apiClient = getApiClient()
+    const response = await apiClient.post<PluginMcpInfoResponse>(API_ENDPOINTS.PLUGINS.GET_MCP_TOOL, request)
+    return response.data
+  }
+
+  // 发现 MCP 工具（在创建插件后调用）
+  static async discoverMcpTools(request: PluginDiscoverMcpToolsRequest): Promise<PluginDiscoverMcpToolsResponse> {
+    const apiClient = getApiClient()
+    const response = await apiClient.post<PluginDiscoverMcpToolsResponse>(
+      API_ENDPOINTS.PLUGINS.DISCOVER_MCP_TOOLS,
+      request,
+    )
     return response.data
   }
 

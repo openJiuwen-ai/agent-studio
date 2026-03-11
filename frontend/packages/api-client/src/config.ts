@@ -295,6 +295,9 @@ export const API_ENDPOINTS = {
     DELETE_CODE: '/plugin/delete_code',
     GET_CODE: '/plugin/get_code',
     LIST_CODE: '/plugin/list_code',
+    LIST_MCP_TOOLS: '/plugin/list_mcp_tools',
+    GET_MCP_TOOL: '/plugin/get_mcp_tool',
+    DISCOVER_MCP_TOOLS: '/plugin/discover_mcp_tools',
   },
 
   // 可观测性管理

@@ -17,7 +17,7 @@ from openjiuwen_studio.schemas.plugin import (
     PluginApiInfoResponse, PluginListTool, PluginApiInfo, PluginApiInfoCreate, PluginListResponse,
     PluginList, PluginInfo, PluginToolId, ToolId, PluginCodeBase,
     PluginCodeInfo, PluginCodeInfoResponse, PluginPublishResponse, PluginPublish, PluginPublishListResponse,
-    PluginPublishInfoResponse
+    PluginPublishInfoResponse, PluginMcpBase, PluginMcpInfo, PluginMcpInfoResponse
 )
 from openjiuwen_studio.schemas.common import ResponseModel
 
@@ -552,3 +552,155 @@ async def plugin_read_json_file(
         return handle_response(res)
     except ValidationError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request validation failed") from e
+
+
+@plugin_router.post("/create_mcp_tool", response_model=ResponseModel[Dict])
+async def plugin_create_mcp_tool(
+        request: PluginMcpBase,
+        current_user: dict = Depends(get_current_user)
+):
+    """
+    Create plugin MCP tool
+
+    Args:
+        request: Plugin MCP tool creation information
+        current_user: Current user information
+
+    Returns:
+        ResponseModel[Dict]: Creation result containing tool_id
+    """
+    try:
+        logger.info(f"plugin create_mcp_tool start")
+        res = mgr.plugin_create_mcp_tool(request, current_user)
+        return handle_response(res)
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request validation failed") from e
+    except Exception as e:
+        logger.error(f"plugin create_mcp_tool error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+
+
+@plugin_router.post("/update_mcp_tool", response_model=ResponseModel[Dict])
+async def plugin_update_mcp_tool(
+        request: PluginMcpInfo,
+        current_user: dict = Depends(get_current_user)
+):
+    """
+    Update plugin MCP tool
+
+    Args:
+        request: Plugin MCP tool update information
+        current_user: Current user information
+
+    Returns:
+        ResponseModel[Dict]: Update result
+    """
+    try:
+        logger.info(f"plugin update_mcp_tool start")
+        res = mgr.plugin_update_mcp_tool(request, current_user)
+        return handle_response(res)
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request validation failed") from e
+    except Exception as e:
+        logger.error(f"plugin update_mcp_tool error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
+
+
+@plugin_router.post("/delete_mcp_tool", response_model=ResponseModel[Dict])
+async def plugin_delete_mcp_tool(
+        request: PluginToolId,
+        current_user: dict = Depends(get_current_user)
+):
+    """
+    Delete plugin MCP tool
+
+    Args:
+        request: Plugin MCP tool identifier
+        current_user: Current user information
+
+    Returns:
+        ResponseModel[Dict]: Deletion result
+    """
+    try:
+        logger.info(f"plugin delete_mcp_tool start")
+        res = mgr.plugin_delete_tool(request, current_user)
+        return handle_response(res)
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request validation failed") from e
+
+
+@plugin_router.post("/get_mcp_tool", response_model=ResponseModel[PluginMcpInfoResponse])
+async def plugin_get_mcp_tool(
+        request: PluginToolId,
+        current_user: dict = Depends(get_current_user)
+):
+    """
+    Retrieve plugin MCP tool information
+
+    Args:
+        request: Plugin MCP tool identifier
+        current_user: Current user information
+
+    Returns:
+        ResponseModel[PluginMcpInfoResponse]: Plugin MCP tool details
+    """
+    try:
+        logger.info(f"plugin get_mcp_tool start")
+        res = mgr.plugin_get_mcp_tool(request, current_user)
+        return handle_response(res)
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request validation failed") from e
+
+
+@plugin_router.post("/list_mcp_tools", response_model=ResponseModel[PluginMcpInfoResponse])
+async def plugin_list_mcp_tools(
+        request: PluginListTool,
+        current_user: dict = Depends(get_current_user)
+):
+    """
+    Retrieve plugin MCP tool list
+
+    Args:
+        request: Plugin list request parameters
+        current_user: Current user information
+
+    Returns:
+        ResponseModel[PluginMcpInfoResponse]: Plugin MCP tool list
+    """
+    try:
+        logger.info(f"plugin list_mcp_tools start")
+        res = mgr.plugin_list_mcp_tools(request, current_user)
+        return handle_response(res)
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request validation failed") from e
+
+
+@plugin_router.post("/discover_mcp_tools", response_model=ResponseModel[Dict])
+async def plugin_discover_mcp_tools(
+        request: PluginId,
+        current_user: dict = Depends(get_current_user)
+):
+    """
+    Connect to the MCP server for a previously created plugin, discover its tools,
+    and persist them to the database.
+
+    This endpoint is intentionally separate from /create so that plugin creation is
+    instantaneous and the (potentially slow) MCP connection happens only when the
+    caller is ready.
+
+    Args:
+        request: Plugin identifier (space_id + plugin_id)
+        current_user: Current user information
+
+    Returns:
+        ResponseModel[Dict]: Discovery result containing tool_ids
+    """
+    try:
+        logger.info(f"plugin discover_mcp_tools start for plugin_id={request.plugin_id}")
+        res = mgr.plugin_discover_mcp_tools(request, current_user)
+        return handle_response(res)
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request validation failed") from e
+    except Exception as e:
+        logger.error(f"plugin discover_mcp_tools error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e

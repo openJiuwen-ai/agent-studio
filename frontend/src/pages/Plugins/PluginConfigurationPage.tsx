@@ -249,7 +249,14 @@ const PluginConfigurationPage: React.FC = () => {
           name: response.data.plugin_info.name || '',
           description: response.data.plugin_info.desc || '',
           icon: response.data.plugin_info.icon_uri || '⚙️',
-          category: response.data.plugin_info.plugin_type === 1 ? t('plugins.types.cloud') : t('plugins.types.ide'),
+          category: (() => {
+            switch (response.data.plugin_info.plugin_type) {
+              case 1: return t('plugins.types.cloud')
+              case 2: return t('plugins.types.ide')
+              case 3: return t('plugins.types.mcp')
+              default: return t('plugins.types.pluginTypeUnknown', { type: response.data.plugin_info.plugin_type })
+            }
+          })(),
           status: 'active',
           version: 'v1.0.0',
           author: t('plugins.dialog.pluginDetails.author'),

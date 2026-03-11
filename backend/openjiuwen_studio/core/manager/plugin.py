@@ -1,10 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+import asyncio
+import concurrent.futures
 import json
 import os
+import sys
 import uuid
-from typing import Any, Callable, Dict, List
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 from enum import Enum
 from pydantic import BaseModel
 from fastapi import status
@@ -26,9 +31,11 @@ from openjiuwen_studio.schemas.plugin import (
     PluginApiInfo, PluginApiInfoCreate, PluginToolId, PluginApiInfoResponse,
     PluginListTool, PluginList, PluginListResponse, PluginListPagination,
     PluginType, PluginToolParam, ToolId, PluginCodeBase, PluginCodeInfo,
-    PluginCodeInfoResponse, PluginApiInfoDB, PluginCodeInfoDB, PluginPublish,
-    PluginPublishResponse, PluginPublishInfo, PluginPublishListResponse,
-    PluginPublishInfoResponse, ParamType
+    PluginCodeInfoResponse, PluginApiInfoDB, PluginCodeInfoDB,
+    PluginMcpBase, PluginMcpInfo, PluginMcpInfoDB, PluginMcpInfoResponse,
+    PluginMcpTransport,
+    PluginPublish, PluginPublishResponse, PluginPublishInfo,
+    PluginPublishListResponse, PluginPublishInfoResponse, ParamType, ParamSendMethod
 )
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.core.manager.reference_extractor import check_referenced_dependencies
@@ -55,6 +62,297 @@ def with_exception_handling(func: Callable) -> Callable:
     return wrapper
 
 
+_JSON_SCHEMA_TYPE_TO_PARAM_TYPE: Dict[str, ParamType] = {
+    "string": ParamType.PARAM_TYPE_STRING,
+    "integer": ParamType.PARAM_TYPE_INT,
+    "number": ParamType.PARAM_TYPE_FLOAT,
+    "boolean": ParamType.PARAM_TYPE_BOOL,
+    "object": ParamType.PARAM_TYPE_OBJECT,
+    "array": ParamType.PARAM_TYPE_ARRAY_STRING,
+}
+
+
+def _mcp_card_input_params_to_tool_params(input_params: dict) -> List[PluginToolParam]:
+    """
+    Convert a McpToolCard's JSON-Schema input_params dict into a list of PluginToolParam.
+
+    input_params shape:
+    {
+        "type": "object",
+        "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
+        "required": ["a", "b"]
+    }
+    """
+    if not input_params or not isinstance(input_params, dict):
+        return []
+
+    properties: Dict[str, Any] = input_params.get("properties", {})
+    required_names: set = set(input_params.get("required", []))
+
+    params: List[PluginToolParam] = []
+    for name, prop in properties.items():
+        json_type = prop.get("type", "string") if isinstance(prop, dict) else "string"
+        param_type = _JSON_SCHEMA_TYPE_TO_PARAM_TYPE.get(json_type, ParamType.PARAM_TYPE_STRING)
+        desc = prop.get("description", name) if isinstance(prop, dict) else name
+
+        params.append(PluginToolParam(
+            name=name,
+            desc=desc or name,
+            type=param_type,
+            is_required=name in required_names,
+            method=ParamSendMethod.PARAM_SEND_METHOD_NONE,
+            is_runtime=True,
+            value="",
+        ))
+
+    return params
+
+
+def _extract_auth_headers(plugin_data: dict) -> Dict[str, str]:
+    """
+    Build a header dict from plugin inputs that have method == PARAM_SEND_METHOD_HEADER (1).
+
+    Each qualifying input contributes one entry:  { input["name"]: input["value"] }
+
+    Non-header inputs and inputs with an empty name or value are silently skipped.
+    """
+    inputs = plugin_data.get("inputs") or []
+    headers: Dict[str, str] = {}
+    for inp in inputs:
+        if not isinstance(inp, dict):
+            continue
+        method = inp.get("method", 0)
+        # Accept both the raw integer and the enum object.
+        method_int = method.value if hasattr(method, "value") else int(method)
+        if method_int != int(ParamSendMethod.PARAM_SEND_METHOD_HEADER):
+            continue
+        name = (inp.get("name") or "").strip()
+        value = (inp.get("value") or "").strip()
+        if name and value:
+            headers[name] = value
+    return headers
+
+
+@dataclass
+class _McpConnectionConfig:
+    """MCP server connection parameters, grouped to keep function signatures concise."""
+    transport: int
+    url: str
+    command: str = ""
+    args: Optional[List[str]] = field(default_factory=list)
+    env: Optional[dict] = None
+    auth_headers: Optional[Dict[str, str]] = field(default_factory=dict)
+
+
+async def _discover_and_create_mcp_tools(
+        config: _McpConnectionConfig,
+        plugin_id: str,
+        space_id: str,
+        current_user: dict,
+) -> ResponseModel:
+    """
+    Connect to an MCP server using the appropriate transport, discover all available tools,
+    and persist each one to the database with fully populated input_parameters.
+
+    Supported transports (PluginMcpTransport):
+        1 = STDIO          – spawns a local subprocess via StdioClient
+        2 = SSE            – Server-Sent Events endpoint via SseClient
+        3 = STREAMABLE_HTTP – Streamable HTTP endpoint via StreamableHttpClient
+        4 = OPENAPI         – OpenAPI-compatible endpoint via OpenApiClient
+        5 = PLAYWRIGHT     – Playwright browser session via PlaywrightClient
+    """
+    mcp_transport_enum = PluginMcpTransport(config.transport)
+    server_name = plugin_id
+
+    if mcp_transport_enum == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STDIO:
+        from openjiuwen.core.foundation.tool.mcp.client.stdio_client import StdioClient
+
+        client = StdioClient(
+            server_path="",  # Not used for Stdio; command/args come from params
+            name=server_name,
+            params={
+                "command": sys.executable,  # Current Python interpreter
+                "args": [config.url],  # The server script to run
+                "env": None,  # Inherit environment (or pass a dict)
+                "cwd": os.getcwd(),  # Working directory
+                "encoding_error_handler": "strict",  # 'strict' | 'ignore' | 'replace'
+            },)
+        transport_label = "STDIO"
+
+    elif mcp_transport_enum == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_SSE:
+        from openjiuwen.core.foundation.tool.mcp.client.sse_client import SseClient
+        client = SseClient(
+            server_path=config.url,
+            name=server_name,
+            auth_headers=config.auth_headers or {},
+        )
+        transport_label = "SSE"
+
+    elif mcp_transport_enum == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STREAMABLE_HTTP:
+        from openjiuwen.core.foundation.tool.mcp.client.streamable_http_client import StreamableHttpClient
+        client = StreamableHttpClient(
+            server_path=config.url,
+            name=server_name,
+            auth_headers=config.auth_headers or {},
+        )
+        transport_label = "Streamable HTTP"
+
+    elif mcp_transport_enum == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_OPENAPI:
+        from openjiuwen.core.foundation.tool.mcp.client.openapi_client import OpenApiClient
+        client = OpenApiClient(
+            server_path=config.url,
+            name=server_name,
+        )
+        transport_label = "OpenAPI"
+
+    elif mcp_transport_enum == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_PLAYWRIGHT:
+        from openjiuwen.core.foundation.tool.mcp.client.playwright_client import PlaywrightClient
+        client = PlaywrightClient(
+            server_path=config.url,
+            name=server_name,
+        )
+        transport_label = "Playwright"
+
+    else:
+        return ResponseModel(
+            code=status.HTTP_400_BAD_REQUEST,
+            message=f"Unsupported MCP transport value: {config.transport}",
+        )
+
+    try:
+        connected = await client.connect()
+        if not connected:
+            return ResponseModel(
+                code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=f"Failed to connect to MCP {transport_label} server at '{config.url}'",
+            )
+
+        try:
+            tool_cards = await client.list_tools()
+        finally:
+            await client.disconnect()
+
+    except Exception as e:
+        logger.error(
+            f"MCP {transport_label} discovery error for plugin '{plugin_id}': {e}",
+            exc_info=True,
+        )
+        return ResponseModel(
+            code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=f"MCP {transport_label} connection/discovery failed: {str(e)}",
+        )
+
+    # Discovery succeeded — purge every previously stored tool for this plugin
+    # before inserting the freshly discovered set.
+    _, existing_tools = plugin_repository.plugin_get(
+        {"plugin_id": plugin_id, "space_id": space_id}
+    )
+    deleted_count = 0
+    for existing in existing_tools or []:
+        existing_tool_id = existing.get("tool_id", "") if isinstance(existing, dict) else ""
+        if not existing_tool_id:
+            continue
+        del_res = tool_repository.tool_delete(
+            {"tool_id": existing_tool_id, "space_id": space_id}
+        )
+        if ResponseModel(**del_res).code == status.HTTP_200_OK:
+            deleted_count += 1
+        else:
+            logger.warning(
+                f"Failed to delete old MCP tool '{existing_tool_id}' "
+                f"for plugin '{plugin_id}' before re-discovery"
+            )
+    if deleted_count:
+        logger.info(
+            f"Deleted {deleted_count} existing MCP tool(s) for plugin '{plugin_id}' "
+            f"before inserting newly discovered tools"
+        )
+
+    created_tool_ids: List[str] = []
+    for card in tool_cards:
+        tool_name = getattr(card, "name", "") or ""
+        tool_desc = getattr(card, "description", "") or ""
+        card_input_params = getattr(card, "input_params", None) or {}
+        request_params = _mcp_card_input_params_to_tool_params(card_input_params)
+
+        # Step 1: create the base record (available=False, input_parameters empty)
+        mcp_req = PluginMcpBase(
+            space_id=space_id,
+            plugin_id=plugin_id,
+            plugin_type=PluginType.PLUGIN_TYPE_CLOUD_MCP,
+            name=tool_name,
+            desc=tool_desc,
+            transport=mcp_transport_enum,
+            command=config.command,
+            args=config.args or [],
+            env=config.env,
+            url=config.url,
+            mcp_tool_name=tool_name,
+        )
+
+        create_result = plugin_create_mcp_tool(mcp_req, current_user)
+        if create_result.code != status.HTTP_200_OK:
+            logger.warning(
+                f"Failed to create MCP tool '{tool_name}' for plugin '{plugin_id}': "
+                f"{create_result.message}"
+            )
+            continue
+
+        tool_id = create_result.data.get("tool_id") if isinstance(create_result.data, dict) else None
+        if not tool_id:
+            logger.warning(f"No tool_id returned for MCP tool '{tool_name}', skipping")
+            continue
+
+        # Step 2: update with parsed input_parameters so the column is properly populated.
+        # plugin_update_mcp_tool() converts request_params → input_parameters via
+        # _plugin_input_output_parameters(), which is what we need.
+        mcp_info = PluginMcpInfo(
+            space_id=space_id,
+            plugin_id=plugin_id,
+            plugin_type=PluginType.PLUGIN_TYPE_CLOUD_MCP,
+            tool_id=tool_id,
+            name=tool_name,
+            desc=tool_desc,
+            transport=mcp_transport_enum,
+            command=config.command,
+            args=config.args or [],
+            env=config.env,
+            url=config.url,
+            mcp_tool_name=tool_name,
+            request_params=request_params,
+            response_params=[],
+            available=False,
+        )
+        update_result = plugin_update_mcp_tool(mcp_info, current_user)
+        if update_result.code != status.HTTP_200_OK:
+            logger.warning(
+                f"Failed to update input_parameters for MCP tool '{tool_name}' "
+                f"(tool_id={tool_id}): {update_result.message}"
+            )
+            # Tool exists in DB, so still mark it available below.
+
+        # Step 3: mark tool available
+        plugin_tool_update_available(tool_id, space_id, True)
+        created_tool_ids.append(tool_id)
+
+    logger.info(
+        f"MCP {transport_label} discovery complete for plugin '{plugin_id}': "
+        f"{len(created_tool_ids)}/{len(tool_cards)} tools stored"
+    )
+    return ResponseModel(
+        code=status.HTTP_200_OK,
+        message=f"Discovered and stored {len(created_tool_ids)} MCP tools",
+        data={"tool_ids": created_tool_ids},
+    )
+
+
+def _run_async_in_thread(coro) -> Any:
+    """Run an async coroutine in a dedicated thread with its own event loop."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(asyncio.run, coro)
+        return future.result()
+
+
 @with_exception_handling
 def plugin_create(
         req: PluginCreate,
@@ -66,6 +364,16 @@ def plugin_create(
     current_time = milliseconds()
 
     plugin_id = str(uuid.uuid4())
+
+    rest_data: dict = {}
+    if req.plugin_type == PluginType.PLUGIN_TYPE_CLOUD_MCP and req.mcp_transport is not None:
+        rest_data["mcp_transport"] = req.mcp_transport
+        if req.command:
+            rest_data["command"] = req.command
+        if req.args:
+            rest_data["args"] = req.args
+        if req.env:
+            rest_data["env"] = req.env
 
     plugin_dict = {
         "plugin_id": plugin_id,
@@ -87,7 +395,11 @@ def plugin_create(
     plugin = PluginBaseDBPd(**plugin_dict)
     logger.info(f"create plugin info: {plugin}")
 
-    res = plugin_repository.plugin_create(plugin.model_dump())
+    save_dict = plugin.model_dump()
+    if rest_data:
+        save_dict["_rest_"] = rest_data
+
+    res = plugin_repository.plugin_create(save_dict)
     create_result = ResponseModel(**res)
     logger.info(f"create plugin info into db result: {create_result}")
     if create_result.code != status.HTTP_200_OK:
@@ -104,6 +416,97 @@ def plugin_create(
             space_id=req.space_id,
         )
     )
+
+
+@with_exception_handling
+def plugin_discover_mcp_tools(
+        req: PluginId,
+        current_user: dict
+) -> ResponseModel:
+    """
+    Connect to an MCP server and discover its tools, persisting each one to the database.
+
+    This is intentionally separate from plugin_create() so that the creation step
+    is fast and the (potentially slow) MCP connection happens only when explicitly
+    requested by the caller.
+    """
+    _ = check_user_space(req.space_id, current_user)
+
+    # Load the plugin record from the database.
+    res, _ = plugin_repository.plugin_get(req.model_dump())
+    get_result = ResponseModel(**res)
+    if get_result.code != status.HTTP_200_OK:
+        return ResponseModel(
+            code=get_result.code,
+            message=get_result.message,
+        )
+
+    data = get_result.data
+    if hasattr(data, 'model_dump'):
+        data_dict = data.model_dump()
+    elif hasattr(data, 'dict'):
+        data_dict = data.dict()
+    else:
+        data_dict = dict(data) if data else {}
+
+    plugin_type = data_dict.get("plugin_type")
+    if plugin_type != PluginType.PLUGIN_TYPE_CLOUD_MCP:
+        return ResponseModel(
+            code=status.HTTP_400_BAD_REQUEST,
+            message="Plugin is not an MCP plugin",
+        )
+
+    url = data_dict.get("url", "")
+    rest = data_dict.get("_rest_") or {}
+    transport = rest.get("mcp_transport", PluginMcpTransport.PLUGIN_MCP_TRANSPORT_SSE)
+    command = rest.get("command", "")
+    args = rest.get("args", [])
+    env = rest.get("env")
+
+    # Collect header-type plugin inputs so they can be forwarded to the MCP client.
+    auth_headers = _extract_auth_headers(data_dict)
+    if auth_headers:
+        logger.info(
+            f"Passing {len(auth_headers)} auth header(s) to MCP client "
+            f"for plugin '{req.plugin_id}': {list(auth_headers.keys())}"
+        )
+
+    is_stdio = transport == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STDIO
+    if not url and not (is_stdio and command):
+        return ResponseModel(
+            code=status.HTTP_400_BAD_REQUEST,
+            message="MCP plugin requires a server URL (or a command for stdio transport)",
+        )
+
+    transport_name = (
+        PluginMcpTransport(transport).name
+        if transport in [t.value for t in PluginMcpTransport]
+        else str(transport)
+    )
+    logger.info(
+        f"Starting MCP {transport_name} tool discovery for plugin '{req.plugin_id}' at '{url}'"
+    )
+
+    mcp_result = _run_async_in_thread(
+        _discover_and_create_mcp_tools(
+            config=_McpConnectionConfig(
+                transport=transport,
+                url=url,
+                command=command,
+                args=args or [],
+                env=env,
+                auth_headers=auth_headers,
+            ),
+            plugin_id=req.plugin_id,
+            space_id=req.space_id,
+            current_user=current_user,
+        )
+    )
+
+    logger.info(
+        f"MCP {transport_name} tool discovery for plugin '{req.plugin_id}': {mcp_result.message}"
+    )
+    return mcp_result
 
 
 @with_exception_handling
@@ -809,6 +1212,142 @@ def plugin_list_code(
         data=PluginCodeInfoResponse(
             code_info=code_infos,
             total=len(code_infos),
+        )
+    )
+
+
+@with_exception_handling
+def plugin_create_mcp_tool(
+        req: PluginMcpBase,
+        current_user: dict
+) -> ResponseModel:
+    """创建插件MCP工具"""
+    _ = check_user_space(req.space_id, current_user)
+
+    logger.info("create plugin mcp tool info")
+
+    mcp_info = PluginMcpInfo(
+        space_id=req.space_id,
+        plugin_id=req.plugin_id,
+        plugin_type=PluginType.PLUGIN_TYPE_CLOUD_MCP,
+        tool_id=str(uuid.uuid4()),
+        name=req.name,
+        desc=req.desc,
+        transport=req.transport,
+        command=req.command,
+        args=req.args,
+        env=req.env,
+        url=req.url,
+        headers=req.headers,
+        mcp_tool_name=req.mcp_tool_name,
+        available=False,
+    )
+
+    res = tool_repository.tool_create(mcp_info.model_dump())
+    result = ResponseModel(**res)
+    logger.info(f"create plugin mcp info in db result: {result}")
+    if result.code != status.HTTP_200_OK:
+        return ResponseModel(
+            code=result.code,
+            message=result.message,
+        )
+
+    return ResponseModel(
+        code=status.HTTP_200_OK,
+        message="create plugin mcp success",
+        data={"tool_id": mcp_info.tool_id},
+    )
+
+
+@with_exception_handling
+def plugin_update_mcp_tool(
+        req: PluginMcpInfo,
+        current_user: dict
+) -> ResponseModel:
+    """更新插件MCP工具"""
+    _ = check_user_space(req.space_id, current_user)
+
+    logger.info("update plugin mcp tool info")
+    update_mcp = PluginMcpInfoDB(**(req.model_dump()))
+    update_mcp.input_parameters = _plugin_input_output_parameters(req.request_params)
+    update_mcp.output_parameters = _plugin_input_output_parameters(req.response_params)
+    return _plugin_update_tool(req.plugin_id, update_mcp.model_dump())
+
+
+@with_exception_handling
+def plugin_get_mcp_tool(
+        req: PluginToolId,
+        current_user: dict
+) -> ResponseModel:
+    """获取插件MCP工具信息"""
+    _ = check_user_space(req.space_id, current_user)
+
+    logger.info("get plugin mcp tool")
+    get_res, _ = tool_repository.tool_get(req.model_dump())
+    get_result = ResponseModel(**get_res)
+    if get_result.code != status.HTTP_200_OK:
+        return ResponseModel(
+            code=get_result.code,
+            message=get_result.message,
+        )
+
+    tool = get_result.data
+    tool_plugin_id = tool.get('plugin_id') if isinstance(tool, dict) else tool.plugin_id
+
+    if tool_plugin_id != req.plugin_id:
+        return ResponseModel(
+            code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message="plugin id is not match",
+        )
+
+    tool_dict = tool if isinstance(tool, dict) else tool.model_dump()
+
+    if 'input_parameters' in tool_dict and tool_dict['input_parameters']:
+        request_params = _input_parameters_to_request_params(tool_dict['input_parameters'])
+        tool_dict['request_params'] = [param.model_dump() for param in request_params]
+
+    return ResponseModel(
+        code=status.HTTP_200_OK,
+        message="get plugin mcp success",
+        data=PluginMcpInfoResponse(
+            mcp_info=[PluginMcpInfo(**tool_dict)],
+            total=1,
+        )
+    )
+
+
+@with_exception_handling
+def plugin_list_mcp_tools(
+        req: PluginListTool,
+        current_user: dict
+) -> ResponseModel:
+    """获取插件MCP工具列表"""
+    _ = check_user_space(req.space_id, current_user)
+
+    logger.info("list plugin mcp tools")
+    list_res, tool_list = plugin_repository.plugin_get(req.model_dump())
+    list_result = ResponseModel(**list_res)
+    if list_result.code != status.HTTP_200_OK and list_result.code != status.HTTP_404_NOT_FOUND:
+        return ResponseModel(
+            code=list_result.code,
+            message=list_result.message,
+        )
+
+    mcp_infos: List[PluginMcpInfo] = []
+    for info_dict in tool_list:
+        if 'input_parameters' in info_dict and info_dict['input_parameters']:
+            request_params = _input_parameters_to_request_params(info_dict['input_parameters'])
+            info_dict['request_params'] = [param.model_dump() for param in request_params]
+        info = PluginMcpInfo(**info_dict)
+        if info.plugin_id == req.plugin_id:
+            mcp_infos.append(info)
+
+    return ResponseModel(
+        code=status.HTTP_200_OK,
+        message="list plugin mcp success",
+        data=PluginMcpInfoResponse(
+            mcp_info=mcp_infos,
+            total=len(mcp_infos),
         )
     )
 

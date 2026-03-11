@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+import os
 import re
+import sys
 from typing import List, Dict, Any
 
 from openjiuwen.core.foundation.tool import Tool, ToolCard, Input, Output
@@ -9,6 +11,7 @@ from openjiuwen.core.foundation.tool import RestfulApiCard, RestfulApi
 
 from openjiuwen_studio.core.common.dsl import PluginCodeConfig as DlPluginCodeConfig
 from openjiuwen_studio.core.common.dsl import RestfulApiSchema as DlRestfulApiSchema, Param
+from openjiuwen_studio.core.common.dsl import McpConfig as DlMcpConfig, McpTransport
 
 from openjiuwen_studio.core.executor.component.component_impl.code_comp import CodeComponent
 from openjiuwen_studio.core.common.exceptions import JiuWenExecuteException
@@ -20,13 +23,13 @@ REQUIRED = "required"
 PROPERTIES = "properties"
 
 
-# OpenAI工具函数名称验证正则表达式
+# OpenAPI工具函数名称验证正则表达式
 _FUNCTION_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
 
 
 def sanitize_tool_name(name: str) -> str:
     """
-    清理工具名称，确保符合OpenAI API的命名规范 ^[a-zA-Z0-9_-]+$
+    清理工具名称，确保符合OpenAPI API的命名规范 ^[a-zA-Z0-9_-]+$
     """
     if not name:
         return "unnamed_tool"
@@ -203,3 +206,189 @@ class PluginCodeTool(CodeComponent, Tool):
             result_data = {key: value for key, value in result.items() if key != "error_body"}
         final_result: Dict[str, Any] = {'code': err_code, 'message': err_msg, 'data': result_data}
         return final_result
+
+
+class McpTool:
+    def __init__(self, mcpconfig: DlMcpConfig) -> None:
+        self.mcpconfig: DlMcpConfig = mcpconfig
+
+    def compile(self) -> Tool:
+        return PluginMcpTool.create(self.mcpconfig)
+
+
+class PluginMcpCard(ToolCard):
+    """插件MCP工具卡片，用于适配 Tool 框架的元数据管理"""
+    pass
+
+
+class PluginMcpTool(Tool):
+    def __init__(self, card: PluginMcpCard, conf: DlMcpConfig) -> None:
+        Tool.__init__(self, card=card)
+        self.conf: DlMcpConfig = conf
+        raw_name = conf.name or conf.tool_id
+        self.name: str = sanitize_tool_name(raw_name)
+        self.description = conf.description
+
+    @classmethod
+    def create(cls, conf: DlMcpConfig):
+        """工厂方法：从 DSL 配置创建符合 Tool 规范的实例"""
+        input_schema = convert_params_to_json_schema(conf.input_params)
+        raw_name = conf.name or conf.tool_id
+        sanitized_name = sanitize_tool_name(raw_name)
+        card = PluginMcpCard(
+            name=sanitized_name,
+            description=conf.description,
+            input_params=input_schema
+        )  # 不能配置id,否则会跑到Runner.get_tool
+        return cls(card=card, conf=conf)
+
+    def _build_auth_headers(self, inputs: Input) -> Dict[str, str]:
+        """Collect header-typed parameters from card.input_params and merge with conf.headers.
+
+        card.input_params is the JSON-Schema dict produced by convert_params_to_json_schema().
+        Each property carries a "location" key (== param.method).  Properties whose location
+        is "header" contribute an auth/custom header entry; their value is taken from the
+        runtime inputs first, falling back to the stored default.
+
+        The result is then merged on top of conf.headers so that explicitly configured
+        headers (e.g. set during plugin creation) are always present.
+        """
+        # Start from the headers already stored on the tool config.
+        merged: Dict[str, str] = dict(self.conf.headers or {})
+
+        properties: Dict[str, Any] = (self.card.input_params or {}).get("properties", {})
+        for name, prop in properties.items():
+            if not isinstance(prop, dict):
+                continue
+            if prop.get("location") != "header":
+                continue
+            # Prefer the runtime value supplied by the caller; fall back to the stored default.
+            value = str((inputs or {}).get(name) or prop.get("default") or "").strip()
+            if value:
+                merged[name] = value
+
+        return merged
+
+    async def stream(self, inputs: Input, **kwargs):
+        """Satisfy the abstract stream() contract by delegating to invoke().
+
+        PluginMcpTool is not a streaming source — it performs a single
+        request/response cycle.  Yielding the complete result as one chunk
+        lets the workflow's streaming pipeline proceed normally.
+        """
+        result = await self.invoke(inputs, **kwargs)
+        yield result
+
+    async def invoke(self, inputs: Input, **kwargs) -> Output:
+        from openjiuwen.core.foundation.tool.mcp.base import MCPTool
+        from openjiuwen.core.foundation.tool.mcp.client.stdio_client import StdioClient
+        from openjiuwen.core.foundation.tool.mcp.client.sse_client import SseClient
+        from openjiuwen.core.foundation.tool.mcp.client.streamable_http_client import StreamableHttpClient
+        from openjiuwen.core.foundation.tool.mcp.client.playwright_client import PlaywrightClient
+        from openjiuwen.core.foundation.tool.mcp.client.openapi_client import OpenApiClient
+
+        conf = self.conf
+        tool_name = conf.mcp_tool_name or conf.name
+        arguments = dict(inputs) if inputs else {}
+        server_name = conf.tool_id or tool_name
+        auth_headers = self._build_auth_headers(inputs)
+
+        try:
+            # ── 1. Build the appropriate transport client ─────────────────────
+            if conf.transport == McpTransport.STDIO:
+                client = StdioClient(
+                    server_path="",  # Not used for Stdio; command/args come from params
+                    name=server_name,
+                    params={
+                        "command": sys.executable,  # Current Python interpreter
+                        "args": [conf.url],  # The server script to run
+                        "env": None,  # Inherit environment (or pass a dict)
+                        "cwd": os.getcwd(),  # Working directory
+                        "encoding_error_handler": "strict",  # 'strict' | 'ignore' | 'replace'
+                    }, )
+            elif conf.transport == McpTransport.PLAYWRIGHT:
+                if not conf.url and not conf.command:
+                    raise JiuWenExecuteException(
+                        StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
+                        message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
+                            msg="MCP playwright transport requires 'url' or 'command'"),
+                        node_id=conf.tool_id
+                    )
+                client = PlaywrightClient(server_path=conf.url or conf.command, name=server_name)
+            elif conf.transport == McpTransport.SSE:
+                if not conf.url:
+                    raise JiuWenExecuteException(
+                        StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
+                        message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
+                            msg="MCP SSE transport requires 'url'"),
+                        node_id=conf.tool_id
+                    )
+                client = SseClient(
+                    server_path=conf.url,
+                    name=server_name,
+                    auth_headers=auth_headers or None,
+                )
+            elif conf.transport == McpTransport.OPENAPI:
+                if not conf.url and not conf.command:
+                    raise JiuWenExecuteException(
+                        StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
+                        message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
+                            msg="MCP OpenAPI transport requires 'url' (spec URL or file path)"),
+                        node_id=conf.tool_id
+                    )
+                client = OpenApiClient(server_path=conf.url or conf.command, name=server_name)
+            else:  # STREAMABLE_HTTP
+                if not conf.url:
+                    raise JiuWenExecuteException(
+                        StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
+                        message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
+                            msg="MCP streamable HTTP transport requires 'url'"),
+                        node_id=conf.tool_id
+                    )
+                client = StreamableHttpClient(
+                    server_path=conf.url,
+                    name=server_name,
+                    auth_headers=auth_headers or None,
+                )
+
+            # ── 2. Connect ────────────────────────────────────────────────────
+            connected = await client.connect()
+            if not connected:
+                raise JiuWenExecuteException(
+                    StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
+                    message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
+                        msg=f"Failed to connect to MCP server for tool '{tool_name}'"),
+                    node_id=conf.tool_id
+                )
+
+            try:
+                # ── 3. Discover tools and locate the target card ──────────────
+                tool_cards = await client.list_tools()
+                target_card = next((c for c in tool_cards if c.name == tool_name), None)
+                if target_card is None:
+                    available = [c.name for c in tool_cards]
+                    raise JiuWenExecuteException(
+                        StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
+                        message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
+                            msg=f"Tool '{tool_name}' not found on MCP server. Available: {available}"),
+                        node_id=conf.tool_id
+                    )
+
+                # ── 4. Wrap in MCPTool and invoke ─────────────────────────────
+                mcp_tool = MCPTool(mcp_client=client, tool_info=target_card)
+                result = await mcp_tool.invoke(arguments)
+            finally:
+                # ── 5. Disconnect ─────────────────────────────────────────────
+                await client.disconnect()
+
+        except JiuWenExecuteException as e:
+            return {'code': e.code, 'message': e.message, 'data': None}
+        except Exception as e:
+            return {
+                'code': StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
+                'message': StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
+                    msg=f"MCP tool invocation failed: {str(e)}"),
+                'data': None
+            }
+
+        return {'code': 0, 'message': 'success', 'data': result}

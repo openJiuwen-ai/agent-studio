@@ -34,6 +34,10 @@ import {
   PluginPublishDeleteResponse,
   PluginGetMarketRequest,
   PluginGetMarketResponse,
+  PluginListMcpToolsRequest,
+  PluginMcpInfoResponse,
+  PluginDiscoverMcpToolsRequest,
+  PluginDiscoverMcpToolsResponse,
 } from '../types'
 
 // 插件相关的React Query hooks
@@ -312,7 +316,7 @@ export const usePluginGetApi = (request: PluginGetApiRequest) => {
 }
 
 // 获取插件 API 列表
-export const usePluginListApi = (request: PluginListApiRequest) => {
+export const usePluginListApi = (request: PluginListApiRequest, options?: { enabled?: boolean }) => {
   return useQuery(
     ['pluginApiList', request.space_id, request.plugin_id, request.page, request.size],
     async () => {
@@ -321,7 +325,7 @@ export const usePluginListApi = (request: PluginListApiRequest) => {
       return PluginService.getPluginApiList(request)
     },
     {
-      enabled: !!request.space_id && !!request.plugin_id,
+      enabled: (options?.enabled !== false) && !!request.space_id && !!request.plugin_id,
 
       // 优化缓存策略
       staleTime: 30 * 1000, // 30秒内数据视为新鲜
@@ -350,6 +354,75 @@ export const usePluginListApi = (request: PluginListApiRequest) => {
         if (error?.response?.status === 403) {
           console.warn(`没有权限访问插件 ${request.plugin_id} 的 API 列表`)
         }
+      },
+    },
+  )
+}
+
+// 获取插件 MCP 工具列表
+export const usePluginListMcpTools = (request: PluginListMcpToolsRequest, options?: { enabled?: boolean }) => {
+  return useQuery(
+    ['pluginMcpToolsList', request.space_id, request.plugin_id, request.page, request.size],
+    async () => {
+      await new Promise(resolve => setTimeout(resolve, 100))
+      return PluginService.getPluginMcpToolsList(request)
+    },
+    {
+      enabled: (options?.enabled !== false) && !!request.space_id && !!request.plugin_id,
+      staleTime: 30 * 1000,
+      cacheTime: 5 * 60 * 1000,
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      retry: (failureCount, error) => {
+        if ((error as any)?.message?.includes('API client not initialized')) return false
+        if (failureCount >= 3) return false
+        return (error as any)?.message?.includes('Network Error') || (error as any)?.message?.includes('timeout')
+      },
+      retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+      onError: (error: any) => {
+        console.error('获取插件 MCP 工具列表失败:', error)
+      },
+    },
+  )
+}
+
+// 获取单个插件 MCP 工具
+export const usePluginGetMcpTool = (request: PluginGetApiRequest, options?: { enabled?: boolean }) => {
+  return useQuery(
+    ['pluginMcpTool', request.space_id, request.plugin_id, request.tool_id],
+    async () => {
+      await new Promise(resolve => setTimeout(resolve, 100))
+      return PluginService.getPluginMcpTool(request)
+    },
+    {
+      enabled: (options?.enabled !== false) && !!request.space_id && !!request.plugin_id && !!request.tool_id,
+      staleTime: 30 * 1000,
+      cacheTime: 5 * 60 * 1000,
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      retry: (failureCount, error) => {
+        if ((error as any)?.message?.includes('API client not initialized')) return false
+        if (failureCount >= 3) return false
+        return (error as any)?.message?.includes('Network Error') || (error as any)?.message?.includes('timeout')
+      },
+      retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+      onError: (error: any) => {
+        console.error('获取插件 MCP 工具失败:', error)
+      },
+    },
+  )
+}
+
+// 发现 MCP 工具（在创建插件后立即调用）
+export const useDiscoverMcpTools = () => {
+  return useMutation(
+    (request: PluginDiscoverMcpToolsRequest): Promise<PluginDiscoverMcpToolsResponse> =>
+      PluginService.discoverMcpTools(request),
+    {
+      onError: (error: any) => {
+        console.error('MCP tool discovery failed:', error)
       },
     },
   )
@@ -704,6 +777,7 @@ export default {
   usePluginDeleteApi,
   usePluginGetApi,
   usePluginListApi,
+  usePluginListMcpTools,
   usePluginCreateCode,
   usePluginUpdateCode,
   usePluginDeleteCode,

@@ -343,6 +343,15 @@ class ExceptHandlingMethod(StrEnum):
 class PluginType(StrEnum):
     CODE = "code"
     SERVICE = "service"
+    MCP = "mcp"
+
+
+class McpTransport(StrEnum):
+    OPENAPI = "openapi"
+    PLAYWRIGHT = "playwright"
+    STDIO = "stdio"
+    SSE = "sse"
+    STREAMABLE_HTTP = "streamable_http"
 
 
 class ParamConfig(BaseModel):
@@ -385,6 +394,20 @@ class PluginCodeConfig(CodeConfig):
     tool_id: str = Field("")
     name: str = Field(default="")
     description: Optional[str] = Field("")
+    input_params: List[Param] = Field(default_factory=list)
+
+
+class McpConfig(BaseModel):
+    tool_id: str = Field("")
+    name: str = Field(default="")
+    description: Optional[str] = Field("")
+    transport: McpTransport = Field(default=McpTransport.STDIO)
+    command: Optional[str] = Field(default=None)
+    args: Optional[List[str]] = Field(default_factory=list)
+    env: Optional[Dict[str, str]] = Field(default=None)
+    url: Optional[str] = Field(default=None)
+    headers: Optional[Dict[str, str]] = Field(default=None)
+    mcp_tool_name: str = Field("")
     input_params: List[Param] = Field(default_factory=list)
 
 

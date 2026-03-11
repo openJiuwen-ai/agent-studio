@@ -5,18 +5,23 @@ import { useAuthStore } from '../../../stores/useAuthStore'
 import { ENV_CONFIG } from '../../../config/environment'
 import {
   usePluginListApi,
+  usePluginListMcpTools,
+  useDiscoverMcpTools,
   usePluginCreateApi,
   usePluginDeleteApi,
   useUpdatePlugin,
   type PluginApiInfo,
+  type PluginMcpInfo,
+  PluginApiMethod,
   ParamSendMethod,
   Priority,
 } from '@test-agentstudio/api-client'
 import CloudPluginFormDialog from '../../../components/Plugins/CloudPluginFormDialog'
+import { MCP_TRANSPORT_OPTIONS } from '../../../components/Plugins/MCPPluginFormDialog'
 import ToolFormDialog from '../../../components/Plugins/ToolFormDialog'
 import PluginVersionHistory from '../../../components/Plugins/PluginVersionHistory'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '../../../Common/UnifiedSnackbar'
-import { Settings, ArrowLeft, Info, Code, Edit, Plus, Trash2, Rocket, History, Eye } from 'lucide-react'
+import { Settings, ArrowLeft, Info, Code, Edit, Plus, Trash2, Rocket, History, Eye, RefreshCw } from 'lucide-react'
 import {
   Card,
   Typography,
@@ -163,7 +168,13 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
   // URL validation state
   const [urlError, setUrlError] = useState('')
 
-  // API工具列表查询 - only for URL plugins and not in read-only mode
+  const pluginType = Number(pluginConfigData?.plugin_type)
+  const isMcpPlugin = pluginType === 3
+
+  // Wait until pluginConfigData is loaded so we know the type before firing any query
+  const pluginTypeKnown = pluginConfigData !== null
+
+  // API工具列表查询 - disabled for MCP plugins (they use list_mcp_tools instead)
   const urlToolsQuery = usePluginListApi(
     {
       space_id: getDefaultSpaceId(),
@@ -171,11 +182,49 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
       page: 1,
       size: 20,
     },
-    { enabled: configTabValue === 'advanced' && !isReadOnly },
+    { enabled: pluginTypeKnown && !isMcpPlugin },
   )
 
-  // Use the provided toolsQuery in read-only mode, otherwise use the API query
-  const currentToolsQuery = isReadOnly && toolsQuery ? toolsQuery : urlToolsQuery
+  // MCP工具列表查询 - only for MCP plugins (plugin_type = 3)
+  const mcpToolsQuery = usePluginListMcpTools(
+    {
+      space_id: getDefaultSpaceId(),
+      plugin_id: plugin_id || '',
+      page: 1,
+      size: 20,
+    },
+    { enabled: pluginTypeKnown && isMcpPlugin },
+  )
+
+  // Normalize MCP response to match the api_info shape expected by the render code
+  const normalizedMcpQuery = isMcpPlugin
+    ? {
+        ...mcpToolsQuery,
+        data: mcpToolsQuery.data
+          ? {
+              ...mcpToolsQuery.data,
+              data: {
+                api_info: (mcpToolsQuery.data.data?.mcp_info || []).map((mcpTool: PluginMcpInfo) => ({
+                  tool_id: mcpTool.tool_id,
+                  space_id: mcpTool.space_id,
+                  plugin_id: mcpTool.plugin_id,
+                  name: mcpTool.name,
+                  desc: mcpTool.desc,
+                  path: mcpTool.tool_id,
+                  method: PluginApiMethod.get,
+                  request_params: mcpTool.request_params || [],
+                  response_params: mcpTool.response_params || [],
+                  headers: [],
+                  available: mcpTool.available,
+                })) as PluginApiInfo[],
+              },
+            }
+          : undefined,
+      }
+    : null
+
+  // Use the provided toolsQuery in read-only mode; for MCP plugins use the normalized MCP query
+  const currentToolsQuery = isReadOnly && toolsQuery ? toolsQuery : isMcpPlugin ? normalizedMcpQuery : urlToolsQuery
 
   // Tool creation state for URL plugins
   const [isToolDialogOpen, setIsToolDialogOpen] = useState(false)
@@ -196,6 +245,32 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
 
   // Tool deletion API
   const deleteToolApi = usePluginDeleteApi()
+
+  // MCP tool discovery
+  const discoverMcpToolsMutation = useDiscoverMcpTools()
+  const [isDiscovering, setIsDiscovering] = useState(false)
+
+  const handleDiscoverTools = async () => {
+    if (!plugin_id || isDiscovering) return
+    setIsDiscovering(true)
+    try {
+      const response = await discoverMcpToolsMutation.mutateAsync({
+        space_id: getDefaultSpaceId(),
+        plugin_id,
+      })
+      if (response.code === 200) {
+        await mcpToolsQuery.refetch()
+        showSuccess(t('plugins.pluginConfig.discoverSuccess'))
+      } else {
+        showError(t('plugins.pluginConfig.discoverFailed') + ': ' + (response.message || t('common.messages.unknownError')))
+      }
+    } catch (err: any) {
+      console.error('MCP tool discovery failed', err)
+      showError(t('plugins.pluginConfig.discoverFailed'))
+    } finally {
+      setIsDiscovering(false)
+    }
+  }
 
   // Plugin update API
   const updatePluginApi = useUpdatePlugin()
@@ -673,8 +748,15 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                 <Typography variant="subtitle2" color="text.secondary">
                   {t('plugins.versionHistory.pluginType')}
                 </Typography>
-                <Typography variant="div" component="div">
+                <Typography variant="div" component="div" className="flex flex-wrap gap-1">
                   <Chip label={plugin.category} size="small" />
+                  {pluginConfigData?.plugin_type === 3 && pluginConfigData?.mcp_transport != null && (
+                    <Chip
+                      label={t(MCP_TRANSPORT_OPTIONS.find(o => o.value === pluginConfigData.mcp_transport)?.labelKey ?? 'plugins.mcpTransport.sse')}
+                      size="small"
+                      variant="outlined"
+                    />
+                  )}
                 </Typography>
               </div>
             </div>
@@ -836,7 +918,26 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                   <Typography variant="subtitle2" className="font-medium">
                     {t('plugins.pluginConfig.apiToolsList')}
                   </Typography>
-                  {toolsLoading && <CircularProgress size={20} />}
+                  <div className="flex items-center gap-2">
+                    {toolsLoading && <CircularProgress size={20} />}
+                    {isMcpPlugin && !isReadOnly && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={
+                          isDiscovering
+                            ? <CircularProgress size={14} />
+                            : <RefreshCw className="w-3.5 h-3.5" />
+                        }
+                        onClick={handleDiscoverTools}
+                        disabled={isDiscovering}
+                      >
+                        {isDiscovering
+                          ? t('plugins.pluginConfig.discoveringTools')
+                          : t('plugins.pluginConfig.discoverTools')}
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {currentToolsQuery?.isLoading ? (
@@ -862,9 +963,25 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                     <Typography variant="body1" color="text.secondary" className="mb-4">
                       {t('plugins.pluginConfig.noToolsConfig')}
                     </Typography>
-                    {!isReadOnly && (
+                    {!isReadOnly && !isMcpPlugin && (
                       <Button variant="contained" startIcon={<Plus className="w-4 h-4" />} onClick={() => setIsToolDialogOpen(true)}>
                         {t('plugins.tools.addTool')}
+                      </Button>
+                    )}
+                    {!isReadOnly && isMcpPlugin && (
+                      <Button
+                        variant="contained"
+                        startIcon={
+                          isDiscovering
+                            ? <CircularProgress size={16} />
+                            : <RefreshCw className="w-4 h-4" />
+                        }
+                        onClick={handleDiscoverTools}
+                        disabled={isDiscovering}
+                      >
+                        {isDiscovering
+                          ? t('plugins.pluginConfig.discoveringTools')
+                          : t('plugins.pluginConfig.discoverTools')}
                       </Button>
                     )}
                   </div>
@@ -878,7 +995,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                           navigate(`/dashboard/plugins/${plugin_id}/tools/${tool.tool_id}`, {
                             state: {
                               source: 'plugin',
-                              pluginType: 'api',
+                              pluginType: isMcpPlugin ? 'mcp' : 'api',
                               fromPublishVersion: isReadOnly,
                               publishVersion: pluginConfigData?.plugin_version,
                               toolsData: isReadOnly ? currentToolsQuery?.data?.data?.api_info : undefined,
@@ -919,7 +1036,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
-                            {!isReadOnly && (
+                            {!isReadOnly && !isMcpPlugin && (
                               <IconButton
                                 size="small"
                                 onClick={(e) => {
@@ -927,7 +1044,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                                   navigate(`/dashboard/plugins/${plugin_id}/tools/${tool.tool_id}`, {
                                     state: {
                                       source: 'plugin',
-                                      pluginType: 'api',
+                                      pluginType: isMcpPlugin ? 'mcp' : 'api',
                                       fromPublishVersion: isReadOnly,
                                       publishVersion: pluginConfigData?.plugin_version,
                                       toolsData: isReadOnly ? currentToolsQuery?.data?.data?.api_info : undefined,
@@ -939,7 +1056,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                                 <Edit className="w-4 h-4" />
                               </IconButton>
                             )}
-                            {!isReadOnly &&
+                            {!isReadOnly && !isMcpPlugin &&
                               (deletingToolId === tool.tool_id ? (
                                 <Button
                                   size="small"
@@ -965,7 +1082,7 @@ const URLPluginConfiguration: React.FC<URLPluginConfigurationProps> = ({
                         </div>
                       </Card>
                     ))}
-                    {!isReadOnly && (
+                    {!isReadOnly && !isMcpPlugin && (
                       <div className="flex justify-center mt-4">
                         <Button variant="outlined" startIcon={<Plus className="w-4 h-4" />} onClick={() => setIsToolDialogOpen(true)}>
                           {t('plugins.pluginConfig.addNewTool')}

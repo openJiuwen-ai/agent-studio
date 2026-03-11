@@ -36,6 +36,7 @@ export const handlePluginNodesSelection = (
       type: nodeType,
       data: {
         title: pluginInfo.title,
+        pluginName: pluginInfo.plugin?.name || pluginInfo.title || '',
         pluginId: pluginInfo.id,
         plugin: pluginInfo.plugin, // 保存完整的插件对象
       },
@@ -275,6 +276,7 @@ export const PluginNodeRegistry: FlowNodeRegistry = {
             type: WorkflowNodeType.Plugin,
             data: {
               title: selectedTool?.name || plugin.name || 'Plugin',
+              pluginName: plugin.name || `Plugin ${plugin.plugin_id.slice(-5)}`,
               inputs: formattedInputs,
               outputs: {
                 type: 'object',
@@ -337,6 +339,7 @@ export const PluginNodeRegistry: FlowNodeRegistry = {
         type: WorkflowNodeType.Plugin,
         data: {
           title: selectedTool?.name || plugin.name || 'Plugin',
+          pluginName: plugin.name || `Plugin ${plugin.plugin_id.slice(-5)}`,
           inputs: formattedInputs,
           outputs: {
             type: 'object',

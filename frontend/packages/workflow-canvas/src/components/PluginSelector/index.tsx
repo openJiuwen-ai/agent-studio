@@ -240,6 +240,9 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
 
       if (version === 'draft') {
         // 对于draft版本，需要调用get接口获取最新的插件信息
+        // Hoist outside try so it's accessible for type-based routing below
+        let freshPluginInfo: PluginInfo | undefined
+
         try {
           const response = await PluginService.getPlugin({
             space_id: spaceId,
@@ -247,19 +250,20 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
           })
 
           if (response.code === 200 && response.data?.plugin_info) {
-            const freshPluginInfo = response.data.plugin_info
+            freshPluginInfo = response.data.plugin_info
             // 更新插件列表中的插件信息
-            setPluginList(prev => prev.map(plugin => (plugin.plugin_id === pluginId ? freshPluginInfo : plugin)))
+            setPluginList(prev => prev.map(plugin => (plugin.plugin_id === pluginId ? freshPluginInfo! : plugin)))
             console.log(`Updated plugin info for draft version: ${pluginId}`)
           }
         } catch (error) {
           console.warn(`Failed to load plugin info for ${pluginId}, continuing with tools loading:`, error)
         }
 
-        // 对于draft版本，需要根据插件类型选择不同的API
-        const plugin = pluginList.find(p => p.plugin_id === pluginId)
+        // Use freshPluginInfo if available; pluginList state may still be stale at this point
+        const plugin = freshPluginInfo || pluginList.find(p => p.plugin_id === pluginId)
+        const pluginType = Number(plugin?.plugin_type)
 
-        if (plugin?.plugin_type === 2) {
+        if (pluginType === 2) {
           // 本地代码插件 (plugin_type = 2)，调用 list_code API
           console.log(`Loading draft code tools for plugin ${pluginId}`)
           const response = await PluginService.getPluginCodeList({
@@ -286,6 +290,33 @@ const PluginSelector: React.FC<PluginSelectorProps> = ({ open, onClose, onConfir
             console.log(`Loaded ${tools.length} draft code tools for plugin ${pluginId}`)
           } else {
             console.warn(`No draft code tools found for plugin ${pluginId}, response:`, response)
+          }
+        } else if (pluginType === 3) {
+          // MCP插件 (plugin_type = 3)，调用 list_mcp_tools API
+          console.log(`Loading draft MCP tools for plugin ${pluginId}`)
+          const response = await PluginService.getPluginMcpToolsList({
+            space_id: spaceId,
+            plugin_id: pluginId,
+          })
+
+          if (response.code === 200 && Array.isArray(response.data?.mcp_info)) {
+            tools = response.data.mcp_info.map(mcpTool => ({
+              tool_id: mcpTool.tool_id,
+              space_id: mcpTool.space_id,
+              plugin_id: mcpTool.plugin_id,
+              name: mcpTool.name,
+              desc: mcpTool.desc,
+              path: mcpTool.tool_id,
+              method: 1 as PluginApiMethod,
+              plugin_version: mcpTool.plugin_version,
+              request_params: mcpTool.request_params || [],
+              response_params: mcpTool.response_params || [],
+              headers: [],
+              available: mcpTool.available,
+            }))
+            console.log(`Loaded ${tools.length} draft MCP tools for plugin ${pluginId}`)
+          } else {
+            console.warn(`No draft MCP tools found for plugin ${pluginId}, response:`, response)
           }
         } else {
           // URL插件 (plugin_type = 1) 或未知类型，调用原有的 list_tools API
