@@ -91,7 +91,9 @@
     "saveSuccessToConsole": "工作流保存成功！工作流数据已保存到控制台。",
     "saveError": "保存失败：{{error}}",
     "exportSuccess": "工作流导出成功",
-    "exportError": "导出失败：{{error}}"
+    "exportError": "导出失败：{{error}}",
+    "exportPySuccess": "Python 脚本下载成功",
+    "exportPyError": "Python 脚本下载失败：{{error}}"
   },
   "category": {
     "llmAndWorkflow": "LLM与工作流",
@@ -113,6 +115,7 @@
     "save": "保存工作流",
     "import": "导入工作流",
     "export": "导出工作流",
+    "exportPy": "下载为 Python",
     "backToList": "返回工作流列表"
   },
   "nodeMenu": {

@@ -388,6 +388,53 @@ async def workflow_version_list(
         ) from e
 
 
+@workflows_router.get("/export_py/{workflow_id}", response_model=ResponseModel[dict])
+async def workflow_export_py(
+    workflow_id: str,
+    space_id: Optional[str] = None,
+    version: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Export a workflow as a runnable Python script.
+
+    Retrieves the workflow from the database, converts it through the full
+    canvas → DSL pipeline, then generates a standalone Python file that
+    uses the openjiuwen SDK to rebuild and run the same workflow.
+
+    Args:
+        workflow_id: The workflow ID.
+        space_id: The space ID (optional).
+        version: The workflow version (optional).
+        current_user: The current authenticated user.
+
+    Returns:
+        ResponseModel[dict]: A dict with keys:
+            - workflow_id: str
+            - python_code: str  (the full .py file content)
+    """
+    try:
+        req = {"workflow_id": workflow_id, "space_id": space_id, "version": version}
+        res = mgr.workflow_export_py(WorkflowId(**req), current_user)
+        return handle_response(res)
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Request validation failed"
+        ) from e
+    except JiuWenComponentException as e:
+        logger.info(f"JiuWenComponentException during export_py: {repr(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": e.code,
+                "message": e.message,
+                "component_id": e.component_id,
+                "component_type": e.component_type,
+                "error_stage": e.error_stage,
+            },
+        ) from e
+
+
 @workflows_router.post(
     "/get_execution_logs_create_list",
     response_model=ResponseModel[ExecutionLogsCreateList],

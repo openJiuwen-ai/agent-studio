@@ -112,6 +112,7 @@ export const API_ENDPOINTS = {
     GET_UPLOAD_URL: '/workflows/get_upload_url',
     GET_DOWNLOAD_URL: '/workflows/get_download_url',
     IMPORT: '/workflows/import',
+    EXPORT_PY: '/workflows/export_py',
   },
 
   // 执行管理

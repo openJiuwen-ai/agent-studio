@@ -6,7 +6,7 @@
 import React, { useRef } from 'react'
 
 import { useClientContext, useService, HistoryService } from '@flowgram.ai/free-layout-editor'
-import { useSaveWorkflow } from '@test-agentstudio/api-client'
+import { useSaveWorkflow, WorkflowService } from '@test-agentstudio/api-client'
 import { Toast, Modal } from '@douyinfe/semi-ui'
 import { CheckCircle, XCircle, Info } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/useWorkflowStore'
@@ -169,6 +169,29 @@ export const WorkflowOperationsHandler = ({ workflowId, canvasData, spaceId, onS
     }
   }
 
+  const handleExportWorkflowPy = async () => {
+    if (!workflowId) {
+      showToast(t('workflowCanvas.workflow.notFound'), 'error')
+      return
+    }
+    try {
+      const result = await WorkflowService.exportWorkflowPy(workflowId, spaceId)
+      const workflowName = canvasData?.name || result.workflow_id || 'workflow'
+      const filename = `${workflowName.replace(/\s+/g, '_')}.py`
+      const blob = new Blob([result.python_code], { type: 'text/x-python' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(link.href)
+      showToast(t('workflowCanvas.ui.exportPySuccess'), 'success')
+    } catch (error: unknown) {
+      console.error('Export Python failed:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      showToast(t('workflowCanvas.ui.exportPyError', { error: errorMessage }), 'error')
+    }
+  }
+
   // Expose the save function through ref for the WorkflowControl component
   React.useEffect(() => {
     if (onSaveRef) {
@@ -183,15 +206,18 @@ export const WorkflowOperationsHandler = ({ workflowId, canvasData, spaceId, onS
     }
     const handleImportEvent = () => handleImportWorkflow()
     const handleExportEvent = () => handleExportWorkflow()
+    const handleExportPyEvent = () => handleExportWorkflowPy()
 
     window.addEventListener('workflow-save', handleSaveEvent)
     window.addEventListener('workflow-import', handleImportEvent)
     window.addEventListener('workflow-export', handleExportEvent)
+    window.addEventListener('workflow-export-py', handleExportPyEvent)
 
     return () => {
       window.removeEventListener('workflow-save', handleSaveEvent)
       window.removeEventListener('workflow-import', handleImportEvent)
       window.removeEventListener('workflow-export', handleExportEvent)
+      window.removeEventListener('workflow-export-py', handleExportPyEvent)
       // Clean up global reference
       delete (window as any).__saveWorkflowFunction
     }

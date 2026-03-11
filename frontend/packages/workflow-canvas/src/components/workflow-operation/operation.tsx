@@ -30,6 +30,10 @@ export function WorkflowOperation({ workflowId, spaceId, canvasData }: WorkflowO
     window.dispatchEvent(new CustomEvent('workflow-export'))
   }
 
+  const handleExportWorkflowPy = () => {
+    window.dispatchEvent(new CustomEvent('workflow-export-py'))
+  }
+
   return (
     <>
       {/* Workflow Control Panel */}
@@ -37,6 +41,7 @@ export function WorkflowOperation({ workflowId, spaceId, canvasData }: WorkflowO
         onSave={handleSaveWorkflow}
         onImport={handleImportWorkflow}
         onExport={handleExportWorkflow}
+        onExportPy={handleExportWorkflowPy}
         workflowId={workflowId}
         spaceId={spaceId}
         asyncSaveRef={saveWorkflowRef}

@@ -91,7 +91,9 @@
     "saveSuccessToConsole": "Workflow saved successfully! Workflow data has been saved to console.",
     "saveError": "Save failed: {{error}}",
     "exportSuccess": "Workflow exported successfully",
-    "exportError": "Export failed: {{error}}"
+    "exportError": "Export failed: {{error}}",
+    "exportPySuccess": "Python script downloaded successfully",
+    "exportPyError": "Failed to download Python script: {{error}}"
   },
   "category": {
     "llmAndWorkflow": "LLM & Workflow",
@@ -113,6 +115,7 @@
     "save": "Save Workflow",
     "import": "Import Workflow",
     "export": "Export Workflow",
+    "exportPy": "Download as Python",
     "backToList": "Back to Workflow List"
   },
   "nodeMenu": {

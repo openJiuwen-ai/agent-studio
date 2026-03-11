@@ -482,6 +482,34 @@ def workflow_convert(
 
 
 @with_exception_handling
+def workflow_export_py(
+        req: WorkflowId,
+        current_user: dict
+) -> ResponseModel:
+    """Export a workflow as a runnable Python script."""
+    from openjiuwen_studio.core.manager.workflow_code_generator import generate_workflow_python
+
+    _ = check_user_space(req.space_id, current_user)
+
+    canvas_result = workflow_repository.workflow_canvas(req)
+    if canvas_result.code != status.HTTP_200_OK:
+        return ResponseModel(
+            code=canvas_result.code,
+            message=canvas_result.message,
+        )
+
+    dl_workflow = convert.workflow_convert(WorkflowBase(**canvas_result.data), skip_validation=True)
+    python_code = generate_workflow_python(dl_workflow)
+
+    logger.info(f"Exported workflow as Python script: {req.workflow_id}")
+    return ResponseModel(
+        code=status.HTTP_200_OK,
+        message="export workflow python success",
+        data={"workflow_id": req.workflow_id, "python_code": python_code}
+    )
+
+
+@with_exception_handling
 def workflow_delete(
         req: WorkflowId,
         current_user: dict

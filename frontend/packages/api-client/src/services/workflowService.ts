@@ -137,6 +137,16 @@ export class WorkflowService {
     return response.data
   }
 
+  // 导出工作流为 Python 脚本
+  static async exportWorkflowPy(workflowId: string, spaceId?: string): Promise<{ workflow_id: string; python_code: string }> {
+    const apiClient = getApiClient()
+    const queryParams = spaceId ? `?space_id=${encodeURIComponent(spaceId)}` : ''
+    const response = await apiClient.get<{ code: number; message: string; data: { workflow_id: string; python_code: string } }>(
+      `${API_ENDPOINTS.WORKFLOWS.EXPORT_PY}/${workflowId}${queryParams}`
+    )
+    return response.data.data
+  }
+
   // 获取文件上传URL
   static async getUploadUrl(request: GetUploadUrlRequest): Promise<GetUploadUrlResponse> {
     const apiClient = getApiClient()
