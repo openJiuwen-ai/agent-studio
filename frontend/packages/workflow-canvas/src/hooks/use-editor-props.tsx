@@ -155,6 +155,12 @@ export function useEditorProps(
         ) {
           return false
         }
+        /** Allow circular connections for condition nodes (type '4')
+        * This enables condition nodes to connect back to previous nodes in the workflow
+        */
+        if (fromPort.node.flowNodeType === '4') { // Condition node type
+          return true
+        }
         /**
          * 线条环检测，不允许连接到前面的节点
          * Line loop detection, which is not allowed to connect to the node in front of it
