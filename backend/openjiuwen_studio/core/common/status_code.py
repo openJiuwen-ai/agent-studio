@@ -88,6 +88,14 @@ class StatusCode(Enum):
                                          "工作流图中存在非开始类型的孤立起始节点",
                                          "Workflow graph contains non-start type isolated source node")
 
+    # React Agent组件错误 2150~2159
+    REACT_AGENT_COMPONENT_CONVERT_FAILED = (BASE_CODE + 2150, "React智能体组件转换失败: {msg}",
+                                             "React agent component convert failed: {msg}")
+    REACT_AGENT_COMPONENT_COMPILE_ERROR = (BASE_CODE + 2151, "React智能体组件编译失败: {msg}",
+                                            "React agent component compile failed: {msg}")
+    REACT_AGENT_COMPONENT_RUN_ERROR = (BASE_CODE + 2152, "React智能体组件运行失败: {msg}",
+                                        "React agent component run failed: {msg}")
+
     # Component模块 3001~3999
     COMPONENT_UNSUPPORT_RUN_ERROR = (BASE_CODE + 3001, "不支持该组件单独运行",
                                      "Unsupported component type for single component run")

@@ -95,6 +95,19 @@
         "data": "响应数据（200 OK时的JSON对象）"
       }
     },
+      "reactAgent": {
+      "ReactAgent": "反应代理",
+      "titlePrefix": "反应代理",
+      "description": "反应代理节点",
+      "maxIterations": "最大迭代次数",
+      "maxIterationsDescription": "设置智能体的最大迭代次数，范围为 1-20",
+      "skills": "技能",
+      "skillsDescription": "选择插件和工作流作为 ReAct 代理的工具",
+      "plugins": "插件",
+      "pluginsPlaceholder": "选择插件",
+      "workflows": "工作流程",
+      "workflowsPlaceholder": "选择工作流程"
+    },
     "condition": {
       "titlePrefix": "选择器",
       "description": "连接多个下游分支。只有满足设定条件的对应分支才会被执行。",

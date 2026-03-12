@@ -24,5 +24,6 @@ export enum WorkflowNodeType {
   VariableMerge = '18',
   Plugin = '19',
   HttpRequest = '20',
+  ReactAgent = '21',
   Comment = '99',
 }

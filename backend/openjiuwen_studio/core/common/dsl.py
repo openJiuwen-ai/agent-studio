@@ -42,6 +42,7 @@ class ComponentType(IntEnum):
     COMPONENT_TYPE_VARIABLE_MERGE = 18
     COMPONENT_TYPE_PLUGIN = 19
     COMPONENT_TYPE_HTTP_REQUEST = 20
+    COMPONENT_TYPE_REACT_AGENT = 21
 
 
 class LLMResponseFormatType(StrEnum):
@@ -201,6 +202,19 @@ class LLMConfig(BaseModel):
     response_format_type: LLMResponseFormatType = Field(LLMResponseFormatType.Text)
     output_config: Dict[str, Any] = Field(default_factory=dict)
     enable_history: bool = Field(default=False)
+
+
+class ReactAgentConfig(BaseModel):
+    model: ModelConfig = Field(default_factory=ModelConfig)
+    prompt_template: List[Dict] = Field(default_factory=list)
+    prompt_template_name: str = Field(default="")
+    max_iterations: int = Field(default=5)
+    mem_scope_id: Optional[str] = Field(default=None)
+    sys_operation_id: Optional[str] = Field(default=None)
+    selected_plugins: List[str] = Field(default_factory=list)
+    selected_workflows: List[str] = Field(default_factory=list)
+    max_context_message_num: Optional[int] = Field(default=None)
+    default_window_round_num: Optional[int] = Field(default=None)
 
 
 class BaseMessage(BaseModel):

@@ -41,7 +41,8 @@
     "Unknown": "Unknown",
     "Plugin": "Plugin",
     "Workflow": "Workflow",
-    "HttpRequest": "HTTP Request"
+    "HttpRequest": "HTTP Request",
+    "ReactAgent": "React Agent"
   },
   "validators": {
     "workflowMustContainPath": "Workflow must contain a complete path from start node to end node",

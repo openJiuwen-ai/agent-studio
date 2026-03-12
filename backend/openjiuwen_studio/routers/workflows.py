@@ -591,7 +591,6 @@ async def get_download_url(
 async def workflow_import(
     file: UploadFile = File(...),
     space_id: str = Form(...),
-    import_mode: str = Form("draft"),
     validate_strict: bool = Form(False),
     current_user: dict = Depends(get_current_user)
 ):
@@ -613,7 +612,6 @@ async def workflow_import(
     Args:
         file: JSON file containing workflow
         space_id: Target workspace ID
-        import_mode: "draft" (save only) or "draft_and_publish" (save + publish as v1.0.0)
         validate_strict: If True, compile workflow to validate (slower but more thorough)
         current_user: Current user information
 
@@ -649,17 +647,14 @@ async def workflow_import(
             "space_id": "18630429",
             "url": "test",
             "icon_uri": "",
-            "schema": "{\"nodes\":[{\"id\":\"start_abc\",\"type\":\"1\",
-                \"position\":{\"x\":100,\"y\":100},\"data\":{\"title\":\"START\",
-                \"inputs\":{\"inputParameters\":{\"message\":{\"type\":\"value\",
-                \"content\":\"Hello\"}}}}},{\"id\":\"llm_def\",\"type\":\"3\",
-                \"position\":{\"x\":300,\"y\":100},\"data\":{\"title\":\"LLM\",
-                \"inputs\":{\"inputParameters\":{\"prompt\":{\"type\":\"ref\",
-                \"content\":[\"start_abc\",\"message\"]}},\"llmParam\":{
-                    \"model\":{\"id\":\"gpt-4\"}}}}},{\"id\":\"end_ghi\",\"type\":\"2\",
-                    \"position\":{\"x\":500,\"y\":100},\"data\":{\"title\":\"END\"}}],
-                    \"edges\":[{\"id\":\"e1\",\"source\":\"start_abc\",\"target\":\"llm_def\"},
-                    {\"id\":\"e2\",\"source\":\"llm_def\",\"target\":\"end_ghi\"}]}",
+            "schema": "{\"nodes\":[{\"id\":\"start_abc\",\"type\":\"1\",\"position\":{\"x\":100,\"y\":100},\"data\":
+                        {\"title\":\"START\",\"inputs\":{\"inputParameters\":{\"message\":{\"type\":\"value\",
+                        \"content\":\"Hello\"}}}}},{\"id\":\"llm_def\",\"type\":\"3\",\"position\":{\"x\":300,
+                        \"y\":100},\"data\":{\"title\":\"LLM\",\"inputs\":{\"inputParameters\":{\"prompt\":
+                        {\"type\":\"ref\",\"content\":[\"start_abc\",\"message\"]}},\"llmParam\":{\"model\":
+                        {\"id\":\"gpt-4\"}}}}},{\"id\":\"end_ghi\",\"type\":\"2\",\"position\":{\"x\":500,\"y\":100},
+                        \"data\":{\"title\":\"END\"}}],\"edges\":[{\"id\":\"e1\",\"source\":\"start_abc\",
+                        \"target\":\"llm_def\"},{\"id\":\"e2\",\"source\":\"llm_def\",\"target\":\"end_ghi\"}]}",
             "input_parameters": [
                 {
                     "name": "customer_query",
@@ -709,15 +704,14 @@ async def workflow_import(
              -H "Authorization: Bearer {token}" \\
              -F "file=@workflow.json" \\
              -F "space_id=abc123" \\
-             -F "import_mode=draft" \\
              -F "validate_strict=false"
     """
     try:
         import json
-        from openjiuwen_studio.core.dsl_converter.convertor.importer import WorkflowImporter, ImportOptions
+        from openjiuwen_studio.core.dsl_converter.converter.importer import WorkflowImporter, ImportOptions
 
         logger.info(f"Workflow import request - User: {current_user.get('user_id', 'unknown')}, "
-                   f"Space: {space_id}, Mode: {import_mode}")
+                   f"Space: {space_id}")
 
         # Read and parse JSON file
         try:
@@ -736,18 +730,9 @@ async def workflow_import(
                 detail=f"Failed to read file: {e}"
             ) from e
 
-        # Validate import_mode
-        if import_mode not in ["draft", "draft_and_publish"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid import_mode: {import_mode}. Must be 'draft' or 'draft_and_publish'"
-            )
-
         # Build import options
         options = ImportOptions(
-            mode=import_mode,
-            validate_strict=validate_strict,
-            dry_run=False
+            validate_strict=validate_strict
         )
 
         # Perform import

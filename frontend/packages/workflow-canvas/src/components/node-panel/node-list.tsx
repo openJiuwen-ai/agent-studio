@@ -39,6 +39,7 @@ const nodeTypeKeyNames: Record<WorkflowNodeType, string> = {
   [WorkflowNodeType.Variable]: 'Variable',
   [WorkflowNodeType.Plugin]: 'Plugin',
   [WorkflowNodeType.HttpRequest]: 'HttpRequest',
+  [WorkflowNodeType.ReactAgent]: 'ReactAgent',
 }
 
 // Node type to i18n key mapping
@@ -64,6 +65,7 @@ const nodeTypeI18nKeys: Record<WorkflowNodeType, string> = {
   [WorkflowNodeType.Variable]: 'workflowCanvas.node.Variable',
   [WorkflowNodeType.Plugin]: 'workflowCanvas.node.Plugin',
   [WorkflowNodeType.HttpRequest]: 'workflowCanvas.node.HttpRequest',
+  [WorkflowNodeType.ReactAgent]: 'workflowCanvas.node.ReactAgent',
 }
 
 // Get translated node name (moved to component to use useTranslation hook)
@@ -72,7 +74,7 @@ const nodeTypeI18nKeys: Record<WorkflowNodeType, string> = {
 const nodeCategories = {
   llmAndWorkflow: {
     nameKey: 'workflowCanvas.category.llmAndWorkflow',
-    nodes: [WorkflowNodeType.LLM, WorkflowNodeType.Workflow, WorkflowNodeType.Plugin],
+    nodes: [WorkflowNodeType.LLM, WorkflowNodeType.Workflow, WorkflowNodeType.Plugin, WorkflowNodeType.ReactAgent],
   },
   businessLogic: {
     nameKey: 'workflowCanvas.category.businessLogic',

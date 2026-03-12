@@ -95,6 +95,19 @@
         "data": "Response data (JSON object for 200 OK)"
       }
     },
+    "reactAgent": {
+      "ReactAgent": "ReAct Agent",
+      "titlePrefix": "React Agent",
+      "description": "A ReAct agent node.",
+      "maxIterations": "Max Iterations",
+      "maxIterationsDescription": "Set maximum number of iterations for the agent, range 1-20",
+      "skills": "Skills",
+      "skillsDescription": "Select plugins and workflows as tools for the ReAct agent",
+      "plugins": "Plugins",
+      "pluginsPlaceholder": "Select plugins",
+      "workflows": "Workflows",
+      "workflowsPlaceholder": "Select workflows"
+    },
     "condition": {
       "titlePrefix": "Selector",
       "description": "Connect multiple downstream branches. Only the branch that meets the set condition will be executed.",

@@ -23,6 +23,7 @@ from openjiuwen_studio.core.common.dsl import Workflow as DlWorkflow, Component,
 from openjiuwen_studio.core.executor.component.compile.intent_detection_comp_compiler import IntentDetectionCompCompiler
 from openjiuwen_studio.core.executor.component.compile.llm_comp_compiler import LLMCompCompiler
 from openjiuwen_studio.core.executor.component.compile.questioner_comp_compiler import QuestionerCompCompiler
+from openjiuwen_studio.core.executor.component.compile.react_agent_comp_compiler import ReactAgentCompCompiler
 from openjiuwen_studio.core.executor.component.compile.branch_comp_compiler import BranchCompCompiler
 from openjiuwen_studio.core.executor.component.compile.code_comp_compiler import CodeCompCompiler
 from openjiuwen_studio.core.executor.component.compile.http_request_comp_compiler import HttpRequestCompCompiler
@@ -111,6 +112,7 @@ class Workflow:
         ComponentType.COMPONENT_TYPE_VARIABLE_MERGE: '_compile_variable_merge_component',
         ComponentType.COMPONENT_TYPE_CODE: '_compile_code_component',
         ComponentType.COMPONENT_TYPE_HTTP_REQUEST: '_compile_http_request_component',
+        ComponentType.COMPONENT_TYPE_REACT_AGENT: '_compile_react_agent_component',
     }
 
     # 特殊组件类型（需要异步处理或特殊参数）
@@ -310,6 +312,11 @@ class Workflow:
         """编译HTTP请求组件"""
         http_request_compiler = HttpRequestCompCompiler(comp.id, comp.configs, workflow_dl.connections)
         return http_request_compiler.compile()
+
+    async def _compile_react_agent_component(self, comp: Component, workflow_dl: BaseFlow):
+        """编译React智能体组件"""
+        compiler = ReactAgentCompCompiler(comp.configs)
+        return compiler.compile()
 
     async def _compile_special_component(self, context: Context, workflow_dl: BaseFlow, comp: Component, loader):
         """处理特殊组件（保持原有逻辑）"""
