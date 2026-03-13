@@ -719,16 +719,24 @@ async def workflow_import(
             json_data = json.loads(content)
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON file: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid JSON file: {e}"
-            ) from e
+            return ResponseModel(
+                code=status.HTTP_400_BAD_REQUEST,
+                message="Workflow import failed",
+                data={
+                    "errors": [f"Invalid JSON file: {e}"],
+                    "warnings": []
+                }
+            )
         except Exception as e:
             logger.error(f"Failed to read file: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to read file: {e}"
-            ) from e
+            return ResponseModel(
+                code=status.HTTP_400_BAD_REQUEST,
+                message="Workflow import failed",
+                data={
+                    "errors": [f"Failed to read file: {e}"],
+                    "warnings": []
+                }
+            )
 
         # Build import options
         options = ImportOptions(

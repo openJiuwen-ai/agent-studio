@@ -19,6 +19,7 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [errorDetails, setErrorDetails] = useState<string[] | null>(null)
   const [dragActive, setDragActive] = useState(false)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,6 +87,7 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
       })
 
       const result = await response.json()
+      console.log('Import response:', result)
 
       if (result.code === 200) {
         // Mark workflow as newly imported
@@ -104,12 +106,22 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
           setFile(null)
           setValidateStrict(false)
           setIsSuccess(false)
+          setErrorDetails(null)
         }, 1500)
+        onSuccess()
+        onClose()
+        // Reset form
+        setFile(null)
+        setImportMode('draft')
+        setValidateStrict(false)
       } else {
         setError(result.message || t('workflows.import.errors.importFailed'))
+        setErrorDetails(result.data?.errors)
       }
     } catch (err: any) {
+      console.error('Import error:', err)
       setError(err.message || t('workflows.import.errors.importFailed'))
+      setErrorDetails(null)
     } finally {
       setIsLoading(false)
     }
@@ -119,6 +131,8 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
     if (!isLoading && !isSuccess) {
       setFile(null)
       setError(null)
+      setErrorDetails(null)
+      setImportMode('draft')
       setValidateStrict(false)
       onClose()
     }
@@ -217,7 +231,16 @@ const ImportWorkflowDialog: React.FC<ImportWorkflowDialogProps> = ({ isOpen, onC
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-red-700">{error}</div>
+            <div className="text-sm text-red-700">
+              <div>{error}</div>
+              {errorDetails && errorDetails.length > 0 && (
+                <ul className="mt-2 list-disc list-inside space-y-1">
+                  {errorDetails.map((err, idx) => (
+                    <li key={idx} className="text-xs">{err}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         )}
 

@@ -24,6 +24,7 @@ from openjiuwen_studio.core.dsl_converter.converter.converter import ConverterFa
 from openjiuwen_studio.core.dsl_converter.converter.validator import WorkflowValidator
 from openjiuwen_studio.schemas.workflow import WorkflowCreate, WorkflowSave, WorkflowPublish
 import openjiuwen_studio.core.manager.workflow as workflow_mgr
+from openjiuwen_studio.core.dsl_converter.converter.reporter import Reporter
 
 
 @dataclass
@@ -49,7 +50,8 @@ class WorkflowImporter:
 
     def __init__(self):
         self.detector = WorkflowDetector()
-        self.validator = WorkflowValidator()
+        self.validator = WorkflowValidator()       
+        self.reporter = Reporter()   
 
     async def import_workflow(
         self,
@@ -92,6 +94,10 @@ class WorkflowImporter:
         Returns:
             ImportResult with import status, new workflow_id, name, warnings, and metadata
         """
+        
+        # initialize reporter
+        self.reporter.add_step("Starting import workflow", True)
+
         if options is None:
             options = ImportOptions()
 
@@ -102,18 +108,25 @@ class WorkflowImporter:
         try:
             format_type = self.detector.detect_format(json_data)
             logger.info(f"Detected workflow format: {format_type}")
-
+            self.reporter.add_step(f"Detect workflow format {format_type}", True)            
+           
             if format_type == WorkflowFormat.UNSUPPORTED:
+                error_msg = "Unsupported workflow format. Supported formats: OpenJiuwen native, n8n"
+                self.reporter.add_step("Validate format support", False, error_msg)
                 return ImportResult(
-                    success=False,
-                    errors=["Unsupported workflow format. Supported formats: OpenJiuwen native, n8n"]
+                    success=False,                    
+                    errors=self.reporter.log_trace()
                 )
+            
+            self.reporter.add_step("Validate format support", True)
 
         except Exception as e:
-            logger.error(f"Format detection failed: {e}")
+            error_msg = f"Format detection failed: {e}"
+            logger.error(error_msg)
+            self.reporter.add_step("Detect workflow format", False, error_msg)
             return ImportResult(
                 success=False,
-                errors=[f"Format detection failed: {e}"]
+                errors=self.reporter.log_trace()
             )
 
         # Step 2: Convert to OpenJiuwen format
@@ -128,12 +141,15 @@ class WorkflowImporter:
             workflow_data["space_id"] = space_id
 
             logger.info(f"Conversion completed: {conversion_result.metadata}")
+            self.reporter.add_step("Convert to OpenJiuwen format", True)
 
         except Exception as e:
-            logger.error(f"Conversion failed: {e}")
+            error_msg = f"Conversion failed: {e}"
+            logger.error(error_msg)
+            self.reporter.add_step("Convert to OpenJiuwen format", False, error_msg)
             return ImportResult(
                 success=False,
-                errors=[f"Conversion failed: {e}"],
+                errors=self.reporter.log_trace(),
                 warnings=all_warnings
             )
 
@@ -149,22 +165,27 @@ class WorkflowImporter:
             all_warnings.extend(validation_result.warnings)
 
             if not validation_result.is_valid:
-                logger.error(f"Validation failed: {validation_result.errors}")
+                error_msg = f"Validation failed: {', '.join(validation_result.errors)}"
+                logger.error(error_msg)
+                self.reporter.add_step("Validate workflow structure", False, error_msg)
                 return ImportResult(
                     success=False,
-                    errors=validation_result.errors,
+                    errors=self.reporter.log_trace(),
                     warnings=all_warnings,
                     workflow_id=workflow_data.get("workflow_id"),
                     workflow_name=workflow_data.get("name")
                 )
 
             logger.info("Validation passed")
+            self.reporter.add_step("Validate workflow structure", True)
 
         except Exception as e:
-            logger.error(f"Validation error: {e}")
+            error_msg = f"Validation error: {e}"
+            logger.error(error_msg)
+            self.reporter.add_step("Validate workflow structure", False, error_msg)
             return ImportResult(
                 success=False,
-                errors=[f"Validation error: {e}"],
+                errors=self.reporter.log_trace(),
                 warnings=all_warnings
             )
 
@@ -184,21 +205,26 @@ class WorkflowImporter:
             create_result = workflow_mgr.workflow_create(create_req, current_user)
 
             if create_result.code != status.HTTP_200_OK:
-                logger.error(f"Workflow creation failed: {create_result.message}")
+                error_msg = f"Workflow creation failed: {create_result.message}"
+                logger.error(error_msg)
+                self.reporter.add_step("Create workflow", False, error_msg)
                 return ImportResult(
                     success=False,
-                    errors=[f"Workflow creation failed: {create_result.message}"],
+                    errors=self.reporter.log_trace(),
                     warnings=all_warnings
                 )
 
             workflow_id = create_result.data['workflow']["workflow_id"]
             logger.info(f"Workflow created via manager: {workflow_id}")
+            self.reporter.add_step("Create workflow in database", True)
 
         except Exception as e:
-            logger.error(f"Failed to create workflow: {e}")
+            error_msg = f"Failed to create workflow: {e}"
+            logger.error(error_msg)
+            self.reporter.add_step("Create workflow", False, error_msg)
             return ImportResult(
                 success=False,
-                errors=[f"Failed to create workflow: {e}"],
+                errors=self.reporter.log_trace(),
                 warnings=all_warnings
             )
 
@@ -211,28 +237,35 @@ class WorkflowImporter:
             )
 
             save_result = workflow_mgr.workflow_canvas_save(save_req, current_user)
-
+           
             if save_result.code != status.HTTP_200_OK:
-                logger.error(f"Canvas save failed: {save_result.message}")
+                error_msg = f"Save workflow Canvas failed: {save_result.message}"
+                logger.error(error_msg)
+                self.reporter.add_step("Save workflow Canvas", False, error_msg)
                 return ImportResult(
                     success=False,
-                    errors=[f"Canvas save failed: {save_result.message}"],
+                    errors=self.reporter.log_trace(),
                     warnings=all_warnings,
                     workflow_id=workflow_id
                 )
 
-            logger.info(f"Canvas saved for workflow: {workflow_id}")
+            logger.info(f"Save workflow Canvas: {workflow_id}")
+            self.reporter.add_step(f"Save workflow Canvas: {workflow_id}", True)
 
         except Exception as e:
-            logger.error(f"Failed to save canvas: {e}")
+            error_msg = f"Failed to save canvas: {e}"
+            logger.error(error_msg)
+            self.reporter.add_step("Save canvas schema", False, error_msg)
             return ImportResult(
                 success=False,
-                errors=[f"Failed to save canvas: {e}"],
+                errors=self.reporter.log_trace(),
                 warnings=all_warnings,
                 workflow_id=workflow_id
             )
 
         # Success!
+        self.reporter.add_step("Import workflow completed successfully", True)
+        
         return ImportResult(
             success=True,
             workflow_id=workflow_id,
