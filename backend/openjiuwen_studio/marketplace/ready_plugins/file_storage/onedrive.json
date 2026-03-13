@@ -1,0 +1,274 @@
+{
+  "ready": false,
+  "plugin_id": "onedrive_api",
+  "name": "OneDrive API",
+  "description": "Microsoft OneDrive cloud storage API via Microsoft Graph. Upload, download, list, search, and share files and folders stored in OneDrive personal and OneDrive for Business.",
+  "category": "file_storage",
+  "category_name": "File Storage",
+  "category_icon": "📂",
+  "icon_uri": "🔵",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "storage",
+    "onedrive",
+    "microsoft",
+    "files",
+    "cloud"
+  ],
+  "api_prefix": "https://graph.microsoft.com/v1.0/me/drive",
+  "documentation": "https://learn.microsoft.com/en-us/graph/api/resources/onedrive",
+  "desc_mk": "Microsoft OneDrive is a cloud file storage service integrated with Microsoft 365. This plugin uses the Microsoft Graph API to list, upload, download, search, and share files and folders in OneDrive.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "Access Token",
+        "env_var": "MICROSOFT_GRAPH_ACCESS_TOKEN",
+        "description": "Microsoft Graph OAuth2 access token with Files.ReadWrite and Files.ReadWrite.All scopes"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "List Root Items",
+      "path": "/root/children",
+      "method": "GET",
+      "description": "List files and folders in the OneDrive root",
+      "request_params": {
+        "$top": {
+          "type": "integer",
+          "description": "Maximum number of items to return (default: 100)",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        },
+        "$orderby": {
+          "type": "string",
+          "description": "Sort order (e.g., 'lastModifiedDateTime desc', 'name asc')",
+          "required": false,
+          "default": "lastModifiedDateTime desc",
+          "send_method": "Query"
+        },
+        "$select": {
+          "type": "string",
+          "description": "Comma-separated fields to return",
+          "required": false,
+          "default": "id,name,size,lastModifiedDateTime,file,folder,webUrl",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Folder Children",
+      "path": "/items/{itemId}/children",
+      "method": "GET",
+      "description": "List contents of a specific folder",
+      "request_params": {
+        "itemId": {
+          "type": "string",
+          "description": "OneDrive folder item ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "$top": {
+          "type": "integer",
+          "description": "Maximum number of items to return",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        },
+        "$orderby": {
+          "type": "string",
+          "description": "Sort order",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Item",
+      "path": "/items/{itemId}",
+      "method": "GET",
+      "description": "Get metadata for a file or folder by its item ID",
+      "request_params": {
+        "itemId": {
+          "type": "string",
+          "description": "OneDrive item ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "$select": {
+          "type": "string",
+          "description": "Fields to return",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Item by Path",
+      "path": "/root:/{path}",
+      "method": "GET",
+      "description": "Get a file or folder by its path relative to the OneDrive root",
+      "request_params": {
+        "path": {
+          "type": "string",
+          "description": "File path relative to root (e.g., 'Documents/report.docx')",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "Create Folder",
+      "path": "/root/children",
+      "method": "POST",
+      "description": "Create a new folder in the OneDrive root",
+      "request_params": {
+        "name": {
+          "type": "string",
+          "description": "Folder name",
+          "required": true,
+          "send_method": "Body"
+        },
+        "folder": {
+          "type": "object",
+          "description": "Folder facet object (use empty object {})",
+          "required": true,
+          "default": {},
+          "send_method": "Body"
+        },
+        "@microsoft.graph.conflictBehavior": {
+          "type": "string",
+          "description": "Conflict behavior: rename, fail, replace",
+          "required": false,
+          "default": "rename",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Item",
+      "path": "/items/{itemId}",
+      "method": "DELETE",
+      "description": "Delete a file or folder (moves to Recycle Bin)",
+      "request_params": {
+        "itemId": {
+          "type": "string",
+          "description": "Item ID to delete",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "Move or Rename Item",
+      "path": "/items/{itemId}",
+      "method": "PATCH",
+      "description": "Move or rename a file or folder",
+      "request_params": {
+        "itemId": {
+          "type": "string",
+          "description": "Item ID to move/rename",
+          "required": true,
+          "is_path_param": true
+        },
+        "name": {
+          "type": "string",
+          "description": "New name for the item",
+          "required": false,
+          "send_method": "Body"
+        },
+        "parentReference": {
+          "type": "object",
+          "description": "Parent reference object with 'id' field for the destination folder ID",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Copy Item",
+      "path": "/items/{itemId}/copy",
+      "method": "POST",
+      "description": "Asynchronously copy a file or folder",
+      "request_params": {
+        "itemId": {
+          "type": "string",
+          "description": "Item ID to copy",
+          "required": true,
+          "is_path_param": true
+        },
+        "name": {
+          "type": "string",
+          "description": "New name for the copy",
+          "required": false,
+          "send_method": "Body"
+        },
+        "parentReference": {
+          "type": "object",
+          "description": "Destination parent reference object with 'id' (folder ID)",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Search Files",
+      "path": "/root/search(q='{query}')",
+      "method": "GET",
+      "description": "Search for files and folders in OneDrive",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Search query text",
+          "required": true,
+          "is_path_param": true
+        },
+        "$top": {
+          "type": "integer",
+          "description": "Maximum number of results to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Sharing Link",
+      "path": "/items/{itemId}/createLink",
+      "method": "POST",
+      "description": "Create a shareable link for a file or folder",
+      "request_params": {
+        "itemId": {
+          "type": "string",
+          "description": "Item ID to share",
+          "required": true,
+          "is_path_param": true
+        },
+        "type": {
+          "type": "string",
+          "description": "Link type: view (read-only), edit (read-write), embed",
+          "required": true,
+          "default": "view",
+          "send_method": "Body"
+        },
+        "scope": {
+          "type": "string",
+          "description": "Scope: anonymous (anyone with link), organization",
+          "required": false,
+          "default": "anonymous",
+          "send_method": "Body"
+        },
+        "expirationDateTime": {
+          "type": "string",
+          "description": "Link expiration date/time in ISO 8601 format",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

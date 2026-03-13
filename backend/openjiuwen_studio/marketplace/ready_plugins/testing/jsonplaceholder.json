@@ -1,0 +1,306 @@
+{
+  "ready": true,
+  "plugin_id": "jsonplaceholder_api",
+  "name": "JSONPlaceholder",
+  "description": "Free fake REST API for testing and prototyping. Provides posts, comments, albums, photos, todos, and users data for development.",
+  "category": "testing",
+  "category_name": "Developer Testing Tools",
+  "icon_uri": "📝",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "data",
+    "testing",
+    "mock",
+    "api",
+    "prototype"
+  ],
+  "api_prefix": "https://jsonplaceholder.typicode.com",
+  "desc_mk": "JSONPlaceholder is a free online REST API for developers who need fake data for testing and prototyping. Perfect for tutorials, demos, and learning API integration.",
+  "tools": [
+    {
+      "name": "Get All Posts",
+      "path": "/posts",
+      "method": "GET",
+      "description": "Retrieve all posts (100 items)",
+      "request_params": {
+        "_limit": {
+          "type": "integer",
+          "description": "Limit number of results",
+          "required": false,
+          "send_method": "Query"
+        },
+        "userId": {
+          "type": "integer",
+          "description": "Filter posts by user ID",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Post",
+      "path": "/posts/{id}",
+      "method": "GET",
+      "description": "Get a specific post by ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Post ID (1-100)",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Create Post",
+      "path": "/posts",
+      "method": "POST",
+      "description": "Create a new post (simulated - won't persist)",
+      "request_params": {
+        "title": {
+          "type": "string",
+          "description": "Post title",
+          "required": true,
+          "send_method": "Body"
+        },
+        "body": {
+          "type": "string",
+          "description": "Post content",
+          "required": true,
+          "send_method": "Body"
+        },
+        "userId": {
+          "type": "integer",
+          "description": "User ID who created the post",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Post",
+      "path": "/posts/{id}",
+      "method": "PUT",
+      "description": "Update a post (simulated)",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Post ID to update",
+          "required": true,
+          "send_method": "Path"
+        },
+        "title": {
+          "type": "string",
+          "description": "New title",
+          "required": false,
+          "send_method": "Body"
+        },
+        "body": {
+          "type": "string",
+          "description": "New body content",
+          "required": false,
+          "send_method": "Body"
+        },
+        "userId": {
+          "type": "integer",
+          "description": "User ID",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Patch Post",
+      "path": "/posts/{id}",
+      "method": "PATCH",
+      "description": "Partially update a post (simulated)",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Post ID to update",
+          "required": true,
+          "send_method": "Path"
+        },
+        "title": {
+          "type": "string",
+          "description": "New title",
+          "required": false,
+          "send_method": "Body"
+        },
+        "body": {
+          "type": "string",
+          "description": "New body",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Post",
+      "path": "/posts/{id}",
+      "method": "DELETE",
+      "description": "Delete a post (simulated)",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Post ID to delete",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Post Comments",
+      "path": "/posts/{id}/comments",
+      "method": "GET",
+      "description": "Get all comments for a specific post",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Post ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get All Comments",
+      "path": "/comments",
+      "method": "GET",
+      "description": "Get all comments (500 items)",
+      "request_params": {
+        "postId": {
+          "type": "integer",
+          "description": "Filter by post ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "_limit": {
+          "type": "integer",
+          "description": "Limit results",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get All Users",
+      "path": "/users",
+      "method": "GET",
+      "description": "Get all users (10 items)",
+      "request_params": {}
+    },
+    {
+      "name": "Get User",
+      "path": "/users/{id}",
+      "method": "GET",
+      "description": "Get a specific user by ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "User ID (1-10)",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get User Posts",
+      "path": "/users/{id}/posts",
+      "method": "GET",
+      "description": "Get all posts by a specific user",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "User ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get All Todos",
+      "path": "/todos",
+      "method": "GET",
+      "description": "Get all todos (200 items)",
+      "request_params": {
+        "userId": {
+          "type": "integer",
+          "description": "Filter by user ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "completed": {
+          "type": "boolean",
+          "description": "Filter by completion status",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Todo",
+      "path": "/todos/{id}",
+      "method": "GET",
+      "description": "Get a specific todo by ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Todo ID (1-200)",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get All Albums",
+      "path": "/albums",
+      "method": "GET",
+      "description": "Get all albums (100 items)",
+      "request_params": {
+        "userId": {
+          "type": "integer",
+          "description": "Filter by user ID",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Album Photos",
+      "path": "/albums/{id}/photos",
+      "method": "GET",
+      "description": "Get all photos in an album",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Album ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get All Photos",
+      "path": "/photos",
+      "method": "GET",
+      "description": "Get all photos (5000 items)",
+      "request_params": {
+        "albumId": {
+          "type": "integer",
+          "description": "Filter by album ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "_limit": {
+          "type": "integer",
+          "description": "Limit results",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,288 @@
+{
+  "ready": false,
+  "plugin_id": "paypal",
+  "name": "PayPal",
+  "description": "Create and manage PayPal orders, payments, refunds, and invoices using the PayPal REST API.",
+  "category": "payments",
+  "category_name": "Payments & Finance",
+  "category_icon": "💳",
+  "icon_uri": "🅿️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["payments", "paypal", "orders", "invoices", "refunds"],
+  "api_prefix": "https://api-m.paypal.com",
+  "documentation": "https://developer.paypal.com/api/rest/",
+  "desc_mk": "PayPal is a leading global digital payments platform. Use this plugin to create and capture orders, manage refunds, issue invoices, and retrieve transaction reports.\n\n**Authentication:** Requires a PayPal OAuth2 Access Token obtained via `client_credentials` grant. Call the Get OAuth2 Token tool first using your Client ID and Secret with Basic auth, then use the returned access token as the Bearer token for subsequent calls.\n\n**Sandbox vs Production:** Use `https://api-m.sandbox.paypal.com` for testing and `https://api-m.paypal.com` for production.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "PayPal Access Token",
+        "env_var": "PAYPAL_ACCESS_TOKEN"
+      }
+    ]
+  },
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_PAYPAL_ACCESS_TOKEN",
+      "description": "OAuth2 access token obtained from PayPal (Environment variable: PAYPAL_ACCESS_TOKEN)"
+    },
+    "Content-Type": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "application/json",
+      "description": "Request content type"
+    }
+  },
+  "tools": [
+    {
+      "name": "Create Order",
+      "description": "Creates a PayPal order for a payment or authorization flow.",
+      "path": "/v2/checkout/orders",
+      "method": "POST",
+      "request_params": {
+        "intent": {
+          "type": "string",
+          "description": "Payment intent: CAPTURE to capture immediately, or AUTHORIZE to authorize only",
+          "required": true,
+          "send_method": "Body"
+        },
+        "purchase_units": {
+          "type": "array",
+          "description": "Array of purchase unit objects, each containing an amount object with currency_code and value",
+          "required": true,
+          "send_method": "Body"
+        },
+        "application_context": {
+          "type": "object",
+          "description": "Application context with return_url, cancel_url, brand_name, and user_action",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Get Order",
+      "description": "Retrieves the details of a PayPal order by its ID.",
+      "path": "/v2/checkout/orders/{id}",
+      "method": "GET",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The PayPal order ID",
+          "required": true,
+          "send_method": "Path",
+          "is_path_param": true
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Capture Order",
+      "description": "Captures payment for an existing approved PayPal order.",
+      "path": "/v2/checkout/orders/{id}/capture",
+      "method": "POST",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The PayPal order ID to capture",
+          "required": true,
+          "send_method": "Path",
+          "is_path_param": true
+        },
+        "note_to_payer": {
+          "type": "string",
+          "description": "Optional note to the payer included in the capture",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Authorize Order",
+      "description": "Authorizes payment for an existing approved PayPal order without capturing it.",
+      "path": "/v2/checkout/orders/{id}/authorize",
+      "method": "POST",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The PayPal order ID to authorize",
+          "required": true,
+          "send_method": "Path",
+          "is_path_param": true
+        },
+        "note_to_payer": {
+          "type": "string",
+          "description": "Optional note to the payer",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Create Refund",
+      "description": "Refunds a captured PayPal payment in full or partially.",
+      "path": "/v2/payments/captures/{capture_id}/refund",
+      "method": "POST",
+      "request_params": {
+        "capture_id": {
+          "type": "string",
+          "description": "The ID of the captured payment to refund",
+          "required": true,
+          "send_method": "Path",
+          "is_path_param": true
+        },
+        "amount": {
+          "type": "object",
+          "description": "Partial refund amount object with value (string) and currency_code (string). Omit for full refund.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "note_to_payer": {
+          "type": "string",
+          "description": "Reason for the refund shown to the payer",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Get Capture",
+      "description": "Retrieves the details of a captured PayPal payment.",
+      "path": "/v2/payments/captures/{capture_id}",
+      "method": "GET",
+      "request_params": {
+        "capture_id": {
+          "type": "string",
+          "description": "The ID of the captured payment",
+          "required": true,
+          "send_method": "Path",
+          "is_path_param": true
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "List Transactions",
+      "description": "Retrieves a list of transactions for a date range from the PayPal reporting API.",
+      "path": "/v1/reporting/transactions",
+      "method": "GET",
+      "request_params": {
+        "start_date": {
+          "type": "string",
+          "description": "Start of the date range in ISO 8601 format (e.g. 2024-01-01T00:00:00-0700)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End of the date range in ISO 8601 format (e.g. 2024-01-31T23:59:59-0700)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "transaction_status": {
+          "type": "string",
+          "description": "Filter by status: S (Success), P (Pending), V (Reversed), etc.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (1-500, default 100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number for pagination (starting at 1)",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Get OAuth2 Token",
+      "description": "Exchanges Client ID and Secret for an OAuth2 access token using client_credentials grant. Note: this endpoint requires Basic auth (not Bearer). Encode client_id:secret in Base64 and pass as Authorization header.",
+      "path": "/v1/oauth2/token",
+      "method": "POST",
+      "request_params": {
+        "grant_type": {
+          "type": "string",
+          "description": "Must be client_credentials",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Create Invoice",
+      "description": "Creates a draft invoice in PayPal that can then be sent to a recipient.",
+      "path": "/v2/invoicing/invoices",
+      "method": "POST",
+      "request_params": {
+        "detail": {
+          "type": "object",
+          "description": "Invoice details object with invoice_number, invoice_date, currency_code, and payment_term",
+          "required": true,
+          "send_method": "Body"
+        },
+        "invoicer": {
+          "type": "object",
+          "description": "Invoicer (sender) information object with name, address, email_address",
+          "required": false,
+          "send_method": "Body"
+        },
+        "primary_recipients": {
+          "type": "array",
+          "description": "Array of recipient objects each with billing_info containing email_address",
+          "required": false,
+          "send_method": "Body"
+        },
+        "items": {
+          "type": "array",
+          "description": "Array of line item objects with name, quantity, unit_amount (object with currency_code and value)",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Send Invoice",
+      "description": "Sends a draft invoice to the recipient(s) via email.",
+      "path": "/v2/invoicing/invoices/{invoice_id}/send",
+      "method": "POST",
+      "request_params": {
+        "invoice_id": {
+          "type": "string",
+          "description": "The ID of the invoice to send",
+          "required": true,
+          "send_method": "Path",
+          "is_path_param": true
+        },
+        "send_to_recipient": {
+          "type": "boolean",
+          "description": "Whether to send to the primary recipient. Defaults to true.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "additional_recipients": {
+          "type": "array",
+          "description": "Array of additional email addresses to CC",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    }
+  ]
+}

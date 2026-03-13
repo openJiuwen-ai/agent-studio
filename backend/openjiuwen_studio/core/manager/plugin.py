@@ -17,6 +17,14 @@ from openjiuwen.core.common.logging import logger
 from packaging import version
 from pydantic import ValidationError
 
+try:
+    import jsonschema
+
+    JSONSCHEMA_AVAILABLE = True
+except ImportError:
+    JSONSCHEMA_AVAILABLE = False
+    logger.warning("jsonschema library not available, plugin validation will be skipped")
+
 from openjiuwen_studio.core.database import milliseconds
 import openjiuwen_studio.core.manager.convertor.plugin as convert
 from openjiuwen_studio.core.manager.convertor.components.plugin import param_type_mapping
@@ -62,6 +70,69 @@ def with_exception_handling(func: Callable) -> Callable:
     return wrapper
 
 
+def _normalize_header_configuration(header_config: Any) -> Dict[str, Any]:
+    """Normalize header_configuration to dict format regardless of whether it's an array or dict.
+
+    Array format:  [{"name": "access-token", "value": "...", "description": "..."}]
+    Dict format:   {"Authorization": {"value": "...", "description": "..."}}
+    Both are normalized to dict format.
+    """
+    if isinstance(header_config, list):
+        result = {}
+        for item in header_config:
+            if isinstance(item, dict) and "name" in item:
+                name = item["name"]
+                entry: Dict[str, Any] = {
+                    "value": item.get("value", ""),
+                    "description": item.get("description", ""),
+                }
+                if "type" in item:
+                    entry["type"] = item["type"]
+                if "send_method" in item:
+                    entry["send_method"] = item["send_method"]
+                result[name] = entry
+        return result
+    if isinstance(header_config, dict):
+        return header_config
+    return {}
+
+
+def _header_configuration_to_plugin_params(header_config: Any) -> List[PluginToolParam]:
+    """Convert header_configuration (array or dict) to PluginToolParam list for plugin-level inputs."""
+    normalized = _normalize_header_configuration(header_config)
+    params = []
+    for header_name, header_details in normalized.items():
+        if not isinstance(header_details, dict):
+            continue
+
+        # Resolve type: use declared type string if present, default to STRING
+        type_str = header_details.get("type", "string")
+        if isinstance(type_str, str):
+            param_type = _JSON_SCHEMA_TYPE_TO_PARAM_TYPE.get(type_str.lower(), ParamType.PARAM_TYPE_STRING)
+        else:
+            param_type = ParamType.PARAM_TYPE_STRING
+
+        # Resolve send_method: use declared string if present, default to HEADER
+        method_str = header_details.get("send_method", "Header")
+        if isinstance(method_str, str):
+            method_int = _SEND_METHOD_STR_TO_INT.get(method_str, 1)
+            method = ParamSendMethod(method_int)
+        else:
+            method = ParamSendMethod.PARAM_SEND_METHOD_HEADER
+
+        param = PluginToolParam(
+            name=header_name,
+            desc=header_details.get("description", ""),
+            type=param_type,
+            is_required=True,
+            method=method,
+            is_runtime=False,
+            value=header_details.get("value", ""),
+        )
+        params.append(param)
+    return params
+
+
 _JSON_SCHEMA_TYPE_TO_PARAM_TYPE: Dict[str, ParamType] = {
     "string": ParamType.PARAM_TYPE_STRING,
     "integer": ParamType.PARAM_TYPE_INT,
@@ -69,6 +140,19 @@ _JSON_SCHEMA_TYPE_TO_PARAM_TYPE: Dict[str, ParamType] = {
     "boolean": ParamType.PARAM_TYPE_BOOL,
     "object": ParamType.PARAM_TYPE_OBJECT,
     "array": ParamType.PARAM_TYPE_ARRAY_STRING,
+}
+
+_SEND_METHOD_STR_TO_INT: Dict[str, int] = {
+    "None": 0,    # PARAM_SEND_METHOD_NONE
+    "Header": 1,  # PARAM_SEND_METHOD_HEADER
+    "Query": 2,   # PARAM_SEND_METHOD_QUERY
+    "Body": 3,    # PARAM_SEND_METHOD_BODY
+    "Path": 4,    # PARAM_SEND_METHOD_PATH
+    "none": 0,
+    "header": 1,
+    "query": 2,
+    "body": 3,
+    "path": 4,
 }
 
 
@@ -353,6 +437,293 @@ def _run_async_in_thread(coro) -> Any:
         return future.result()
 
 
+_JSON_SCHEMA_TYPE_TO_PARAM_TYPE: Dict[str, ParamType] = {
+    "string": ParamType.PARAM_TYPE_STRING,
+    "integer": ParamType.PARAM_TYPE_INT,
+    "number": ParamType.PARAM_TYPE_FLOAT,
+    "boolean": ParamType.PARAM_TYPE_BOOL,
+    "object": ParamType.PARAM_TYPE_OBJECT,
+    "array": ParamType.PARAM_TYPE_ARRAY_STRING,
+}
+
+
+def _mcp_card_input_params_to_tool_params(input_params: dict) -> List[PluginToolParam]:
+    """
+    Convert a McpToolCard's JSON-Schema input_params dict into a list of PluginToolParam.
+
+    input_params shape:
+    {
+        "type": "object",
+        "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
+        "required": ["a", "b"]
+    }
+    """
+    if not input_params or not isinstance(input_params, dict):
+        return []
+
+    properties: Dict[str, Any] = input_params.get("properties", {})
+    required_names: set = set(input_params.get("required", []))
+
+    params: List[PluginToolParam] = []
+    for name, prop in properties.items():
+        json_type = prop.get("type", "string") if isinstance(prop, dict) else "string"
+        param_type = _JSON_SCHEMA_TYPE_TO_PARAM_TYPE.get(json_type, ParamType.PARAM_TYPE_STRING)
+        desc = prop.get("description", name) if isinstance(prop, dict) else name
+
+        params.append(PluginToolParam(
+            name=name,
+            desc=desc or name,
+            type=param_type,
+            is_required=name in required_names,
+            method=ParamSendMethod.PARAM_SEND_METHOD_NONE,
+            is_runtime=True,
+            value="",
+        ))
+
+    return params
+
+
+def _extract_auth_headers(plugin_data: dict) -> Dict[str, str]:
+    """
+    Build a header dict from plugin inputs that have method == PARAM_SEND_METHOD_HEADER (1).
+
+    Each qualifying input contributes one entry:  { input["name"]: input["value"] }
+
+    Non-header inputs and inputs with an empty name or value are silently skipped.
+    """
+    inputs = plugin_data.get("inputs") or []
+    headers: Dict[str, str] = {}
+    for inp in inputs:
+        if not isinstance(inp, dict):
+            continue
+        method = inp.get("method", 0)
+        # Accept both the raw integer and the enum object.
+        method_int = method.value if hasattr(method, "value") else int(method)
+        if method_int != int(ParamSendMethod.PARAM_SEND_METHOD_HEADER):
+            continue
+        name = (inp.get("name") or "").strip()
+        value = (inp.get("value") or "").strip()
+        if name and value:
+            headers[name] = value
+    return headers
+
+
+@dataclass
+class _McpConnectionConfig:
+    """MCP server connection parameters, grouped to keep function signatures concise."""
+    transport: int
+    url: str
+    params: Dict[str, Any] = field(default_factory=dict)
+    auth_headers: Optional[Dict[str, str]] = field(default_factory=dict)
+
+
+async def _discover_and_create_mcp_tools(
+        config: _McpConnectionConfig,
+        plugin_id: str,
+        space_id: str,
+        current_user: dict,
+) -> ResponseModel:
+    """
+    Connect to an MCP server using the appropriate transport, discover all available tools,
+    and persist each one to the database with fully populated input_parameters.
+
+    Supported transports (PluginMcpTransport):
+        1 = STDIO          – spawns a local subprocess via StdioClient
+        2 = SSE            – Server-Sent Events endpoint via SseClient
+        3 = STREAMABLE_HTTP – Streamable HTTP endpoint via StreamableHttpClient
+        4 = OPENAPI         – OpenAPI-compatible endpoint via OpenApiClient
+        5 = PLAYWRIGHT     – Playwright browser session via PlaywrightClient
+    """
+    mcp_transport_enum = PluginMcpTransport(config.transport)
+    server_name = plugin_id
+
+    from openjiuwen.core.foundation.tool.mcp.base import McpServerConfig
+
+    _transport_to_client_type = {
+        PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STDIO: "stdio",
+        PluginMcpTransport.PLUGIN_MCP_TRANSPORT_SSE: "sse",
+        PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STREAMABLE_HTTP: "streamable-http",
+        PluginMcpTransport.PLUGIN_MCP_TRANSPORT_OPENAPI: "openapi",
+        PluginMcpTransport.PLUGIN_MCP_TRANSPORT_PLAYWRIGHT: "playwright",
+    }
+    client_type = _transport_to_client_type.get(mcp_transport_enum)
+    if client_type is None:
+        return ResponseModel(
+            code=status.HTTP_400_BAD_REQUEST,
+            message=f"Unsupported MCP transport value: {config.transport}",
+        )
+
+    mcp_params = dict(config.params or {})
+    if mcp_transport_enum == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STDIO:
+        mcp_params.setdefault("command", sys.executable)
+        mcp_params.setdefault("args", [config.url])
+        mcp_params.setdefault("env", None)
+        mcp_params.setdefault("cwd", os.getcwd())
+        mcp_params.setdefault("encoding_error_handler", "strict")
+
+    server_config = McpServerConfig(
+        server_name=server_name,
+        server_path=config.url or "",
+        client_type=client_type,
+        params=mcp_params,
+        auth_headers=config.auth_headers or {},
+    )
+
+    if mcp_transport_enum == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STDIO:
+        from openjiuwen.core.foundation.tool.mcp.client.stdio_client import StdioClient
+        client = StdioClient(server_config)
+        transport_label = "STDIO"
+    elif mcp_transport_enum == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_SSE:
+        from openjiuwen.core.foundation.tool.mcp.client.sse_client import SseClient
+        client = SseClient(server_config)
+        transport_label = "SSE"
+    elif mcp_transport_enum == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STREAMABLE_HTTP:
+        from openjiuwen.core.foundation.tool.mcp.client.streamable_http_client import StreamableHttpClient
+        client = StreamableHttpClient(server_config)
+        transport_label = "Streamable HTTP"
+    elif mcp_transport_enum == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_OPENAPI:
+        from openjiuwen.core.foundation.tool.mcp.client.openapi_client import OpenApiClient
+        client = OpenApiClient(server_config)
+        transport_label = "OpenAPI"
+    else:  # PLAYWRIGHT
+        from openjiuwen.core.foundation.tool.mcp.client.playwright_client import PlaywrightClient
+        client = PlaywrightClient(server_config)
+        transport_label = "Playwright"
+
+    try:
+        connected = await client.connect()
+        if not connected:
+            return ResponseModel(
+                code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                message=f"Failed to connect to MCP {transport_label} server at '{config.url}'",
+            )
+
+        try:
+            tool_cards = await client.list_tools()
+        finally:
+            await client.disconnect()
+
+    except Exception as e:
+        logger.error(
+            f"MCP {transport_label} discovery error for plugin '{plugin_id}': {e}",
+            exc_info=True,
+        )
+        return ResponseModel(
+            code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            message=f"MCP {transport_label} connection/discovery failed: {str(e)}",
+        )
+
+    # Discovery succeeded — purge every previously stored tool for this plugin
+    # before inserting the freshly discovered set.
+    _, existing_tools = plugin_repository.plugin_get(
+        {"plugin_id": plugin_id, "space_id": space_id}
+    )
+    deleted_count = 0
+    for existing in existing_tools or []:
+        existing_tool_id = existing.get("tool_id", "") if isinstance(existing, dict) else ""
+        if not existing_tool_id:
+            continue
+        del_res = tool_repository.tool_delete(
+            {"tool_id": existing_tool_id, "space_id": space_id}
+        )
+        if ResponseModel(**del_res).code == status.HTTP_200_OK:
+            deleted_count += 1
+        else:
+            logger.warning(
+                f"Failed to delete old MCP tool '{existing_tool_id}' "
+                f"for plugin '{plugin_id}' before re-discovery"
+            )
+    if deleted_count:
+        logger.info(
+            f"Deleted {deleted_count} existing MCP tool(s) for plugin '{plugin_id}' "
+            f"before inserting newly discovered tools"
+        )
+
+    created_tool_ids: List[str] = []
+    for card in tool_cards:
+        tool_name = getattr(card, "name", "") or ""
+        tool_desc = getattr(card, "description", "") or ""
+        card_input_params = getattr(card, "input_params", None) or {}
+        request_params = _mcp_card_input_params_to_tool_params(card_input_params)
+
+        # Step 1: create the base record (available=False, input_parameters empty)
+        mcp_req = PluginMcpBase(
+            space_id=space_id,
+            plugin_id=plugin_id,
+            plugin_type=PluginType.PLUGIN_TYPE_CLOUD_MCP,
+            name=tool_name,
+            desc=tool_desc,
+            transport=mcp_transport_enum,
+            command=config.params.get("command", ""),
+            args=config.params.get("args", []),
+            env=config.params.get("env"),
+            url=config.url,
+            mcp_tool_name=tool_name,
+        )
+
+        create_result = plugin_create_mcp_tool(mcp_req, current_user)
+        if create_result.code != status.HTTP_200_OK:
+            logger.warning(
+                f"Failed to create MCP tool '{tool_name}' for plugin '{plugin_id}': "
+                f"{create_result.message}"
+            )
+            continue
+
+        tool_id = create_result.data.get("tool_id") if isinstance(create_result.data, dict) else None
+        if not tool_id:
+            logger.warning(f"No tool_id returned for MCP tool '{tool_name}', skipping")
+            continue
+
+        # Step 2: update with parsed input_parameters so the column is properly populated.
+        # plugin_update_mcp_tool() converts request_params → input_parameters via
+        # _plugin_input_output_parameters(), which is what we need.
+        mcp_info = PluginMcpInfo(
+            space_id=space_id,
+            plugin_id=plugin_id,
+            plugin_type=PluginType.PLUGIN_TYPE_CLOUD_MCP,
+            tool_id=tool_id,
+            name=tool_name,
+            desc=tool_desc,
+            transport=mcp_transport_enum,
+            command=config.params.get("command", ""),
+            args=config.params.get("args", []),
+            env=config.params.get("env"),
+            url=config.url,
+            mcp_tool_name=tool_name,
+            request_params=request_params,
+            response_params=[],
+            available=False,
+        )
+        update_result = plugin_update_mcp_tool(mcp_info, current_user)
+        if update_result.code != status.HTTP_200_OK:
+            logger.warning(
+                f"Failed to update input_parameters for MCP tool '{tool_name}' "
+                f"(tool_id={tool_id}): {update_result.message}"
+            )
+            # Tool exists in DB, so still mark it available below.
+
+        # Step 3: mark tool available
+        plugin_tool_update_available(tool_id, space_id, True)
+        created_tool_ids.append(tool_id)
+
+    logger.info(
+        f"MCP {transport_label} discovery complete for plugin '{plugin_id}': "
+        f"{len(created_tool_ids)}/{len(tool_cards)} tools stored"
+    )
+    return ResponseModel(
+        code=status.HTTP_200_OK,
+        message=f"Discovered and stored {len(created_tool_ids)} MCP tools",
+        data={"tool_ids": created_tool_ids},
+    )
+
+
+def _run_async_in_thread(coro) -> Any:
+    """Run an async coroutine in a dedicated thread with its own event loop."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(asyncio.run, coro)
+        return future.result()
+
+
 @with_exception_handling
 def plugin_create(
         req: PluginCreate,
@@ -368,12 +739,15 @@ def plugin_create(
     rest_data: dict = {}
     if req.plugin_type == PluginType.PLUGIN_TYPE_CLOUD_MCP and req.mcp_transport is not None:
         rest_data["mcp_transport"] = req.mcp_transport
+        mcp_params = {}
         if req.command:
-            rest_data["command"] = req.command
+            mcp_params["command"] = req.command
         if req.args:
-            rest_data["args"] = req.args
+            mcp_params["args"] = req.args
         if req.env:
-            rest_data["env"] = req.env
+            mcp_params["env"] = req.env
+        if mcp_params:
+            rest_data["params"] = mcp_params
 
     plugin_dict = {
         "plugin_id": plugin_id,
@@ -388,9 +762,13 @@ def plugin_create(
         "update_time": current_time,
     }
 
-    # 将 request_params 映射到数据库字段 inputs
-    if hasattr(req, 'request_params') and req.request_params:
-        plugin_dict["inputs"] = [param.model_dump() for param in req.request_params]
+    # Build plugin-level inputs from request_params and header_configuration
+    all_inputs: List[PluginToolParam] = list(req.request_params or [])
+    if hasattr(req, 'header_configuration') and req.header_configuration:
+        header_params = _header_configuration_to_plugin_params(req.header_configuration)
+        all_inputs = all_inputs + header_params
+    if all_inputs:
+        plugin_dict["inputs"] = [param.model_dump() for param in all_inputs]
 
     plugin = PluginBaseDBPd(**plugin_dict)
     logger.info(f"create plugin info: {plugin}")
@@ -495,6 +873,93 @@ def plugin_discover_mcp_tools(
                 command=command,
                 args=args or [],
                 env=env,
+                auth_headers=auth_headers,
+            ),
+            plugin_id=req.plugin_id,
+            space_id=req.space_id,
+            current_user=current_user,
+        )
+    )
+
+    logger.info(
+        f"MCP {transport_name} tool discovery for plugin '{req.plugin_id}': {mcp_result.message}"
+    )
+    return mcp_result
+
+
+@with_exception_handling
+def plugin_discover_mcp_tools(
+        req: PluginId,
+        current_user: dict
+) -> ResponseModel:
+    """
+    Connect to an MCP server and discover its tools, persisting each one to the database.
+
+    This is intentionally separate from plugin_create() so that the creation step
+    is fast and the (potentially slow) MCP connection happens only when explicitly
+    requested by the caller.
+    """
+    _ = check_user_space(req.space_id, current_user)
+
+    # Load the plugin record from the database.
+    res, _ = plugin_repository.plugin_get(req.model_dump())
+    get_result = ResponseModel(**res)
+    if get_result.code != status.HTTP_200_OK:
+        return ResponseModel(
+            code=get_result.code,
+            message=get_result.message,
+        )
+
+    data = get_result.data
+    if hasattr(data, 'model_dump'):
+        data_dict = data.model_dump()
+    elif hasattr(data, 'dict'):
+        data_dict = data.dict()
+    else:
+        data_dict = dict(data) if data else {}
+
+    plugin_type = data_dict.get("plugin_type")
+    if plugin_type != PluginType.PLUGIN_TYPE_CLOUD_MCP:
+        return ResponseModel(
+            code=status.HTTP_400_BAD_REQUEST,
+            message="Plugin is not an MCP plugin",
+        )
+
+    url = data_dict.get("url", "")
+    rest = data_dict.get("_rest_") or {}
+    transport = rest.get("mcp_transport", PluginMcpTransport.PLUGIN_MCP_TRANSPORT_SSE)
+    mcp_params = rest.get("params", {})
+
+    # Collect header-type plugin inputs so they can be forwarded to the MCP client.
+    auth_headers = _extract_auth_headers(data_dict)
+    if auth_headers:
+        logger.info(
+            f"Passing {len(auth_headers)} auth header(s) to MCP client "
+            f"for plugin '{req.plugin_id}': {list(auth_headers.keys())}"
+        )
+
+    is_stdio = transport == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STDIO
+    if not url and not (is_stdio and mcp_params.get("command")):
+        return ResponseModel(
+            code=status.HTTP_400_BAD_REQUEST,
+            message="MCP plugin requires a server URL (or params['command'] for stdio transport)",
+        )
+
+    transport_name = (
+        PluginMcpTransport(transport).name
+        if transport in [t.value for t in PluginMcpTransport]
+        else str(transport)
+    )
+    logger.info(
+        f"Starting MCP {transport_name} tool discovery for plugin '{req.plugin_id}' at '{url}'"
+    )
+
+    mcp_result = _run_async_in_thread(
+        _discover_and_create_mcp_tools(
+            config=_McpConnectionConfig(
+                transport=transport,
+                url=url,
+                params=mcp_params,
                 auth_headers=auth_headers,
             ),
             plugin_id=req.plugin_id,
@@ -774,6 +1239,19 @@ def plugin_create_api(
 
     logger.info(f"create plugin api info: {req}")
 
+    # Ensure request_params have proper method set for all parameter types
+    request_params = req.request_params if hasattr(req, 'request_params') else []
+    for param in request_params:
+        # Only set method if it's not already set (NONE or falsy)
+        if param.method == ParamSendMethod.PARAM_SEND_METHOD_NONE or not param.method:
+            # Check if parameter name is in the path template
+            if f"{{{param.name}}}" in req.path:
+                param.method = ParamSendMethod.PARAM_SEND_METHOD_PATH
+            else:
+                # For non-path parameters, default to query if method is not set
+                param.method = ParamSendMethod.PARAM_SEND_METHOD_QUERY
+        # If method is already explicitly set (HEADER, QUERY, BODY, PATH), keep it as is
+
     api_info = PluginApiInfo(
         space_id=req.space_id,
         plugin_id=req.plugin_id,
@@ -784,12 +1262,21 @@ def plugin_create_api(
         path=req.path,
         method=req.method,
         available=False,
-        request_params=req.request_params if hasattr(req, 'request_params') else [],
+        request_params=request_params,
         response_params=req.response_params if hasattr(req, 'response_params') else [],
         headers=req.headers if hasattr(req, 'headers') else [],
     )
 
-    res = tool_repository.tool_create(api_info.model_dump())
+    # Convert to PluginApiInfoDB format for database storage
+    # This ensures request_params are converted to input_parameters for the database
+    # Header-method params belong at the plugin level (plugin.inputs), not tool level
+    tool_params = [p for p in request_params if p.method != ParamSendMethod.PARAM_SEND_METHOD_HEADER]
+    api_info_db = PluginApiInfoDB(**(api_info.model_dump()))
+    api_info_db.input_parameters = _plugin_input_output_parameters(tool_params)
+    api_info_db.output_parameters = _plugin_input_output_parameters(req.response_params
+                                                                    if hasattr(req, 'response_params') else [])
+
+    res = tool_repository.tool_create(api_info_db.model_dump())
     result = ResponseModel(**res)
     logger.info(f"create plugin api info in db result: {result}")
     if result.code != status.HTTP_200_OK:
@@ -821,11 +1308,21 @@ def _input_parameters_to_request_params(input_parameters: List[Dict[str, Any]]) 
 
     request_params = []
     for param in input_parameters:
+        # Convert type field from string to enum if needed
         if isinstance(param.get("type"), str):
             for key, value in param_type_mapping.items():
                 if value == param.get('type'):
                     param["type"] = key
                     break
+
+        # Convert method field: if it's an integer, convert to ParamSendMethod enum
+        if "method" in param and isinstance(param.get("method"), int):
+            try:
+                param["method"] = ParamSendMethod(param["method"])
+            except (ValueError, KeyError):
+                # If conversion fails, leave it as is
+                pass
+
         request_param = PluginToolParam(**param)
         request_params.append(request_param)
 
@@ -919,7 +1416,7 @@ def _plugin_update_tool(
             tool_id = req.get('tool_id')
             space_id = req.get('space_id')
             new_name = req.get('name')
-            
+
             if tool_id and space_id and new_name:
                 agent_repository.update_tool_name_in_agents(
                     space_id=space_id,
@@ -944,8 +1441,29 @@ def plugin_update_api(
     _ = check_user_space(req.space_id, current_user)
 
     logger.info("update plugin api info")
-    update_api = PluginApiInfoDB(**(req.model_dump()))
-    update_api.input_parameters = _plugin_input_output_parameters(req.request_params)
+
+    # Ensure request_params have proper method set for all parameter types
+    request_params = req.request_params if hasattr(req, 'request_params') else []
+    for param in request_params:
+        # Only set method if it's not already set (NONE or falsy)
+        if param.method == ParamSendMethod.PARAM_SEND_METHOD_NONE or not param.method:
+            # Check if parameter name is in the path template
+            if f"{{{param.name}}}" in req.path:
+                param.method = ParamSendMethod.PARAM_SEND_METHOD_PATH
+            else:
+                # For non-path parameters, default to query if method is not set
+                param.method = ParamSendMethod.PARAM_SEND_METHOD_QUERY
+        # If method is already explicitly set (HEADER, QUERY, BODY, PATH), keep it as is
+
+    # Create a dict from req - this properly serializes all fields including enums
+    api_dict = req.model_dump()
+    # Serialize the modified request_params to dicts (converts enums to integers)
+    api_dict['request_params'] = [param.model_dump() for param in request_params]
+
+    # Header-method params belong at plugin level (plugin.inputs), not tool level
+    tool_params = [p for p in request_params if p.method != ParamSendMethod.PARAM_SEND_METHOD_HEADER]
+    update_api = PluginApiInfoDB(**api_dict)
+    update_api.input_parameters = _plugin_input_output_parameters(tool_params)
     update_api.output_parameters = _plugin_input_output_parameters(req.response_params)
     return _plugin_update_tool(req.plugin_id, update_api.model_dump())
 
@@ -1560,13 +2078,370 @@ def plugin_publish_delete(
     )
 
 
+def _process_header_configuration(plugin_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Process the header_configuration section of a plugin and extract header definitions.
+
+    Returns a list of PluginApiHeader-compatible dicts that can be stored at plugin level
+    and included with each API call.
+
+    Args:
+        plugin_data: Plugin configuration data
+
+    Returns:
+        List of header dicts with name, value, description fields
+    """
+    raw = plugin_data.get("header_configuration")
+    if not raw:
+        return []
+
+    header_config = _normalize_header_configuration(raw)
+    if not header_config:
+        return []
+
+    headers = []
+
+    # Each key in header_configuration is a header name (e.g., "Authorization")
+    for header_name, header_details in header_config.items():
+        if not isinstance(header_details, dict):
+            continue
+
+        # Resolve type integer
+        type_str = header_details.get("type", "string")
+        if isinstance(type_str, str):
+            param_type_enum = _JSON_SCHEMA_TYPE_TO_PARAM_TYPE.get(type_str.lower(), ParamType.PARAM_TYPE_STRING)
+            type_int = param_type_enum.value
+        else:
+            type_int = ParamType.PARAM_TYPE_STRING.value
+
+        # Resolve send_method integer
+        method_str = header_details.get("send_method", "Header")
+        if isinstance(method_str, str):
+            method_int = _SEND_METHOD_STR_TO_INT.get(method_str, 1)
+        else:
+            method_int = 1  # PARAM_SEND_METHOD_HEADER
+
+        header_dict = {
+            "name": header_name,
+            "value": header_details.get("value", ""),
+            "description": header_details.get("description", ""),
+            "type": type_int,
+            "method": method_int,
+        }
+
+        headers.append(header_dict)
+        logger.info(f"Processed header configuration for '{header_name}' (type={type_int}, method={method_int})")
+
+    return headers
+
+
+def _process_plugin_parameters(plugin_data: Dict[str, Any]) -> None:
+    """
+    Process plugin parameters to handle format conversion and path parameters.
+    Converts marketplace JSON parameter format to database PluginToolParam format:
+    - "description" -> "desc"
+    - "required" -> "is_required"
+    - "send_method" string (Path/Query/Body/Header/None) -> "method" integer (0-4)
+    - "type" string values -> ParamType enum integers (e.g., "string" -> 1)
+
+    Also processes the "header_configuration" section and stores headers at plugin level.
+    Headers are NOT added to request_params - they are kept separate in a "headers" field.
+
+    Args:
+        plugin_data: Plugin configuration data (modified in place)
+    """
+    # Mapping from string type names to ParamType enum integer values
+    # Using integer values directly so they serialize/deserialize correctly with JSON
+    type_mapping = {
+        "string": 1,  # PARAM_TYPE_STRING
+        "integer": 2,  # PARAM_TYPE_INT
+        "number": 3,  # PARAM_TYPE_FLOAT
+        "boolean": 4,  # PARAM_TYPE_BOOL
+        "object": 5,  # PARAM_TYPE_OBJECT
+        "array": 6,  # PARAM_TYPE_ARRAY_STRING (default array type)
+    }
+
+    # Mapping for array element types to specific array enum values
+    array_type_mapping = {
+        "string": 6,   # PARAM_TYPE_ARRAY_STRING
+        "integer": 7,  # PARAM_TYPE_ARRAY_INT
+        "number": 8,   # PARAM_TYPE_ARRAY_FLOAT
+        "boolean": 9,  # PARAM_TYPE_ARRAY_BOOL
+        # Aliases
+        "int": 7,
+        "float": 8,
+        "bool": 9,
+    }
+
+    # Mapping from send_method string to ParamSendMethod enum integer values
+    send_method_mapping = {
+        "None": 0,   # PARAM_SEND_METHOD_NONE
+        "Header": 1,  # PARAM_SEND_METHOD_HEADER
+        "Query": 2,   # PARAM_SEND_METHOD_QUERY
+        "Body": 3,    # PARAM_SEND_METHOD_BODY
+        "Path": 4,    # PARAM_SEND_METHOD_PATH
+        # Lowercase variants for compatibility
+        "none": 0,
+        "header": 1,
+        "query": 2,
+        "body": 3,
+        "path": 4,
+    }
+
+    # Process header_configuration section and store at plugin level
+    # Headers are NOT added to request_params - they're kept separate
+    headers = _process_header_configuration(plugin_data)
+    if headers:
+        plugin_data["headers"] = headers
+
+    tools = plugin_data.get("tools", [])
+    for tool in tools:
+        request_params = tool.get("request_params", {})
+        if not isinstance(request_params, dict):
+            continue
+
+        for param_name, param_config in request_params.items():
+            if not isinstance(param_config, dict):
+                continue
+
+            # Convert "description" to "desc" if present
+            if "description" in param_config and "desc" not in param_config:
+                param_config["desc"] = param_config.pop("description")
+
+            # Convert "required" to "is_required" if present
+            if "required" in param_config and "is_required" not in param_config:
+                param_config["is_required"] = param_config.pop("required")
+
+            # Convert "type" from string to ParamType integer value
+            if "type" in param_config and isinstance(param_config["type"], str):
+                type_str = param_config["type"].lower()
+
+                # Handle array types with item_type specification
+                if type_str == "array":
+                    if "item_type" in param_config:
+                        # Specific array type based on item_type
+                        item_type = param_config["item_type"].lower()
+                        param_config["type"] = array_type_mapping.get(item_type, 6)  # Default to ARRAY_STRING
+                        # Remove item_type as it's now encoded in the type value
+                        del param_config["item_type"]
+                    else:
+                        # Array without item_type - default to ARRAY_STRING (generic array)
+                        param_config["type"] = 6  # PARAM_TYPE_ARRAY_STRING
+                else:
+                    param_config["type"] = type_mapping.get(type_str, 1)  # Default to string type
+
+            # Handle send_method field
+            method_value = None
+
+            # Check for send_method (standard)
+            if "send_method" in param_config:
+                method_str = param_config.pop("send_method")
+                method_value = send_method_mapping.get(method_str, 2)  # Default to Query
+
+            # Set method value if determined
+            if method_value is not None:
+                param_config["method"] = method_value
+            elif "method" not in param_config or param_config.get("method") is None:
+                # Default to Query if no method specified
+                param_config["method"] = 2  # PARAM_SEND_METHOD_QUERY
+
+        # Note: Headers are now stored at plugin level, not added to request_params
+        # This keeps them separate from input parameters in the GUI
+
+
+def _load_plugin_schema() -> Dict[str, Any]:
+    """
+    Load the JSON schema for plugin validation.
+
+    Returns:
+        Dict containing the JSON schema, or None if not found
+    """
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../marketplace/"))
+    schema_file = os.path.join(base_dir, "ready_plugins", "schema.json")
+
+    if not os.path.exists(schema_file):
+        logger.warning(f"Plugin schema file not found: {schema_file}")
+        return None
+
+    try:
+        with open(schema_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load plugin schema: {str(e)}")
+        return None
+
+
+def _validate_plugin_config(plugin_data: Dict[str, Any], plugin_file: str = "") -> tuple[bool, str]:
+    """
+    Validate a plugin configuration against the JSON schema.
+
+    Args:
+        plugin_data: The plugin configuration data
+        plugin_file: The file path (for error messages)
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not JSONSCHEMA_AVAILABLE:
+        logger.debug("Skipping plugin validation (jsonschema not available)")
+        return True, ""
+
+    schema = _load_plugin_schema()
+    if not schema:
+        logger.debug("Skipping plugin validation (schema not found)")
+        return True, ""
+
+    try:
+        jsonschema.validate(instance=plugin_data, schema=schema)
+        return True, ""
+    except jsonschema.ValidationError as e:
+        error_msg = f"Validation error in {plugin_file}: {e.message} at path {'.'.join(str(p) for p in e.path)}"
+        logger.error(error_msg)
+        return False, error_msg
+    except jsonschema.SchemaError as e:
+        error_msg = f"Schema error: {str(e)}"
+        logger.error(error_msg)
+        return False, error_msg
+    except Exception as e:
+        error_msg = f"Unexpected validation error: {str(e)}"
+        logger.error(error_msg)
+        return False, error_msg
+
+
+def _load_legacy_plugins() -> Dict[str, Any]:
+    """
+    Load plugins from legacy config.json file.
+
+    Returns:
+        Dict of legacy plugins or empty dict if not found
+    """
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../conf/"))
+    config_file_path = os.path.join(base_dir, "config.json")
+
+    if not os.path.exists(config_file_path):
+        return {}
+
+    try:
+        with open(config_file_path, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+
+        legacy_plugins = config_data.get("plugins", {})
+        logger.info(f"Loaded {len(legacy_plugins)} legacy plugins from config.json")
+        return legacy_plugins
+    except Exception as e:
+        logger.error(f"Failed to load legacy plugins from config.json: {str(e)}")
+        return {}
+
+
+def _load_plugins_from_directory() -> Dict[str, Any]:
+    """
+    Load plugins from the new multi-file structure.
+    Reads index.json and loads individual plugin files from category directories.
+    Also merges in legacy plugins from config.json if they exist.
+
+    Returns:
+        Dict containing merged plugin data with category metadata
+    """
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../marketplace/"))
+    plugins_dir = os.path.join(base_dir, "ready_plugins")
+    index_file = os.path.join(plugins_dir, "index.json")
+
+    # Check if new structure exists
+    if not os.path.exists(index_file):
+        return None
+
+    try:
+        # Load index
+        with open(index_file, 'r', encoding='utf-8') as f:
+            index_data = json.load(f)
+
+        # Merge all plugins
+        all_plugins = {}
+        categories_info = index_data.get("categories", {})
+
+        # Load plugins from multi-file structure
+        for category_key, category_info in categories_info.items():
+            plugin_files = category_info.get("plugins", [])
+
+            for plugin_file_path in plugin_files:
+                plugin_full_path = os.path.join(plugins_dir, plugin_file_path)
+
+                try:
+                    with open(plugin_full_path, 'r', encoding='utf-8') as pf:
+                        plugin_data = json.load(pf)
+
+                    # Process plugin parameters (convert send_method strings to method integers)
+                    _process_plugin_parameters(plugin_data)
+
+                    # Validate plugin configuration
+                    is_valid, validation_error = _validate_plugin_config(plugin_data, plugin_file_path)
+                    if not is_valid:
+                        logger.warning(f"Plugin validation failed for {plugin_file_path}: {validation_error}")
+                        # Continue loading even if validation fails (non-blocking)
+                        # You can change this to 'continue' if you want to skip invalid plugins
+
+                    # Inject "ready": True for plugins missing the field (backward compat)
+                    if "ready" not in plugin_data:
+                        plugin_data["ready"] = True
+
+                    # Add category metadata to plugin
+                    plugin_data["category"] = category_key
+                    plugin_data["category_name"] = category_info.get("name", category_key)
+                    plugin_data["category_icon"] = category_info.get("icon", "📦")
+
+                    # Use plugin_id as key, or filename if not present
+                    plugin_id = plugin_data.get("plugin_id") or plugin_file_path.replace("/", "_").replace(".json", "")
+                    all_plugins[plugin_id] = plugin_data
+
+                    logger.info(f"Loaded plugin: {plugin_id} from {plugin_file_path}")
+                except Exception as e:
+                    logger.error(f"Failed to load plugin file {plugin_file_path}: {str(e)}")
+                    continue
+
+        # Merge legacy plugins from config.json
+        legacy_plugins = _load_legacy_plugins()
+        for plugin_key, plugin_config in legacy_plugins.items():
+            # Only add if not already present in new structure
+            if plugin_key not in all_plugins:
+                # Convert legacy format to new format
+                plugin_data = {
+                    "ready": True,
+                    "plugin_id": plugin_key,
+                    "name": plugin_config.get("name", plugin_key),
+                    "description": plugin_config.get("description", ""),
+                    "api_prefix": plugin_config.get("api_prefix", ""),
+                    "icon_uri": plugin_config.get("icon_uri", "🛠️"),
+                    "plugin_type": plugin_config.get("plugin_type", 1),
+                    "tools": plugin_config.get("tools", []),
+                    "category": "testing",
+                    "category_name": "Developer Testing & Legacy",
+                    "category_icon": "🛠️",
+                    "tags": ["legacy"]
+                }
+                # Process plugin parameters for legacy plugins as well
+                _process_plugin_parameters(plugin_data)
+                all_plugins[plugin_key] = plugin_data
+                logger.info(f"Added legacy plugin: {plugin_key} from config.json")
+
+        return {
+            "version": index_data.get("version", "1.0.0"),
+            "categories": categories_info,
+            "plugins": all_plugins
+        }
+    except Exception as e:
+        logger.error(f"Failed to load plugins from directory structure: {str(e)}")
+        return None
+
+
 @with_exception_handling
 def plugin_read_market_json(
         req: PluginList,
         current_user: dict
 ) -> ResponseModel:
     """
-    读取backend目录下的config.json文件内容并以JSON字符串形式返回
+    读取插件市场配置。
+    优先从新的多文件结构 (marketplace/ready_plugins/) 加载，
+    如果不存在则回退到旧的 config.json 单文件结构。
 
     Args:
         req: 用户空间
@@ -1578,25 +2453,48 @@ def plugin_read_market_json(
     # 1. 校验Space_id是否有权限
     _ = check_user_space(req.space_id, current_user)
 
-    # 2. 构造config.json文件路径
+    # 2. Try loading from new multi-file structure first
+    plugins_data = _load_plugins_from_directory()
+
+    if plugins_data:
+        # New structure found, use it
+        try:
+            plugins_data["VITE_PLUGIN_SERVICE_URL"] = os.getenv("VITE_PLUGIN_SERVICE_URL", "")
+            json_string = json.dumps(plugins_data, ensure_ascii=False, indent=2)
+
+            logger.info(f"Loaded {len(plugins_data.get('plugins', {}))} plugins from multi-file structure")
+
+            return ResponseModel(
+                code=status.HTTP_200_OK,
+                message="JSON file read successfully (multi-file)",
+                data=json_string
+            )
+        except Exception as e:
+            logger.error(f"Error processing multi-file plugin data: {str(e)}")
+            # Fall through to legacy loading
+
+    # 3. Fallback to legacy config.json (backward compatibility)
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../conf/"))
     config_file_path = os.path.join(base_dir, "config.json")
+
     try:
         with open(config_file_path, 'r', encoding='utf-8') as f:
             json_content = json.load(f)
         json_content["VITE_PLUGIN_SERVICE_URL"] = os.getenv("VITE_PLUGIN_SERVICE_URL", "")
         json_string = json.dumps(json_content, ensure_ascii=False, indent=2)
 
+        logger.info("Loaded plugins from legacy config.json")
+
         return ResponseModel(
             code=status.HTTP_200_OK,
-            message="JSON file read successfully",
+            message="JSON file read successfully (legacy)",
             data=json_string
         )
     except FileNotFoundError:
         logger.error(f"JSON file not found: {config_file_path}")
         return ResponseModel(
             code=status.HTTP_404_NOT_FOUND,
-            message=f"JSON file not found: {config_file_path}",
+            message=f"No plugin configuration found (checked both multi-file and legacy)",
             data=""
         )
     except json.JSONDecodeError as e:

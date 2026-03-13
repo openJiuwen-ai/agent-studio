@@ -1,0 +1,216 @@
+{
+  "ready": false,
+  "plugin_id": "pinterest",
+  "name": "Pinterest",
+  "description": "Access Pinterest API to manage boards, pins, and user accounts.",
+  "category": "social",
+  "category_name": "Social & Communication",
+  "category_icon": "💬",
+  "icon_uri": "📌",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["pinterest", "social", "visual", "boards", "pins"],
+  "api_prefix": "https://api.pinterest.com/v5",
+  "documentation": "https://developers.pinterest.com/docs/api/v5/",
+  "desc_mk": "## Pinterest API\n\nManage Pinterest boards and pins, and access user account data through the Pinterest REST API.\n\n**Note:** Get your access token at [Pinterest Developers](https://developers.pinterest.com/).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_PINTEREST_ACCESS_TOKEN",
+      "description": "Pinterest OAuth 2.0 access token (Environment variable: PINTEREST_ACCESS_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get User Account",
+      "path": "/user_account",
+      "method": "GET",
+      "description": "Get the authenticated user's Pinterest account information.",
+      "request_params": {}
+    },
+    {
+      "name": "List Boards",
+      "path": "/boards",
+      "method": "GET",
+      "description": "Get a list of the authenticated user's boards.",
+      "request_params": {
+        "bookmark": {
+          "type": "string",
+          "description": "Cursor for pagination to get the next page of results",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Maximum number of boards to return per page (default 25, max 250)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "privacy": {
+          "type": "string",
+          "description": "Filter boards by privacy: ALL, PROTECTED, PUBLIC, SECRET",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Board",
+      "path": "/boards",
+      "method": "POST",
+      "description": "Create a new Pinterest board for the authenticated user.",
+      "request_params": {
+        "name": {
+          "type": "string",
+          "description": "Name of the board (max 180 characters)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the board (max 500 characters)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "privacy": {
+          "type": "string",
+          "description": "Privacy setting for the board: PUBLIC, PROTECTED, SECRET",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Board",
+      "path": "/boards/{board_id}",
+      "method": "GET",
+      "description": "Get information about a specific Pinterest board.",
+      "request_params": {
+        "board_id": {
+          "type": "string",
+          "description": "The unique identifier of the board",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Board Pins",
+      "path": "/boards/{board_id}/pins",
+      "method": "GET",
+      "description": "Get a list of pins on a specific Pinterest board.",
+      "request_params": {
+        "board_id": {
+          "type": "string",
+          "description": "The unique identifier of the board",
+          "required": true,
+          "send_method": "Path"
+        },
+        "bookmark": {
+          "type": "string",
+          "description": "Cursor for pagination to get the next page of results",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Maximum number of pins to return per page (default 25, max 250)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Pin",
+      "path": "/pins/{pin_id}",
+      "method": "GET",
+      "description": "Get information about a specific Pinterest pin.",
+      "request_params": {
+        "pin_id": {
+          "type": "string",
+          "description": "The unique identifier of the pin",
+          "required": true,
+          "send_method": "Path"
+        },
+        "pin_metrics": {
+          "type": "boolean",
+          "description": "If true, include pin metrics (impressions, saves, clicks) in the response",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Pin",
+      "path": "/pins",
+      "method": "POST",
+      "description": "Create a new pin on a Pinterest board.",
+      "request_params": {
+        "board_id": {
+          "type": "string",
+          "description": "The ID of the board to save the pin to",
+          "required": true,
+          "send_method": "Body"
+        },
+        "media_source": {
+          "type": "object",
+          "description": "Media source object containing source_type and url or content (e.g. {source_type: image_url, url: https://...})",
+          "required": true,
+          "send_method": "Body"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the pin (max 100 characters)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the pin (max 500 characters)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "link": {
+          "type": "string",
+          "description": "Destination URL when the pin is clicked",
+          "required": false,
+          "send_method": "Body"
+        },
+        "board_section_id": {
+          "type": "string",
+          "description": "ID of a board section to save the pin into",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Pins",
+      "path": "/pins",
+      "method": "GET",
+      "description": "Get a list of the authenticated user's pins.",
+      "request_params": {
+        "bookmark": {
+          "type": "string",
+          "description": "Cursor for pagination to get the next page of results",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Maximum number of pins to return per page (default 25, max 250)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "pin_filter": {
+          "type": "string",
+          "description": "Filter pins: exclude_native, exclude_repins, has_been_promoted",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

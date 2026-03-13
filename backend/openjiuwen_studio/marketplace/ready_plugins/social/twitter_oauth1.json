@@ -1,0 +1,336 @@
+{
+  "ready": false,
+  "plugin_id": "twitter_api_v2_oauth1",
+  "name": "Twitter API v2 (OAuth 1.0a)",
+  "description": "Perform user actions on Twitter using OAuth 1.0a - post tweets, like, retweet, follow, and more",
+  "category": "social",
+  "icon_uri": "𝕏",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "twitter",
+    "social",
+    "api",
+    "oauth1",
+    "user-actions"
+  ],
+  "api_prefix": "https://api.twitter.com",
+  "documentation": "https://developer.twitter.com/en/docs/authentication/oauth-1-0a",
+  "header_configuration": {
+    "Consumer Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "TWITTER_CONSUMER_KEY",
+      "description": "OAuth 1.0a Consumer Key (API Key)"
+    },
+    "Consumer Secret": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "TWITTER_CONSUMER_SECRET",
+      "description": "OAuth 1.0a Consumer Secret (API Secret)"
+    },
+    "Access Token": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "TWITTER_ACCESS_TOKEN",
+      "description": "OAuth 1.0a Access Token"
+    },
+    "Access Token Secret": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "TWITTER_ACCESS_TOKEN_SECRET",
+      "description": "OAuth 1.0a Access Token Secret"
+    }
+  },
+  "tools": [
+    {
+      "name": "Post Tweet",
+      "path": "/2/tweets",
+      "method": "POST",
+      "description": "Create a new tweet. Supports text content up to 280 characters.",
+      "request_params": {
+        "text": {
+          "type": "string",
+          "description": "Text content of the tweet (max 280 characters)",
+          "required": true,
+          "max_length": 280
+        },
+        "reply_settings": {
+          "type": "string",
+          "description": "Who can reply to this tweet (everyone, mentionedUsers, following)",
+          "required": false,
+          "enum": [
+            "everyone",
+            "mentionedUsers",
+            "following"
+          ]
+        },
+        "poll_options": {
+          "type": "array",
+          "description": "List of poll options (2-4 options, each max 25 characters)",
+          "required": false,
+          "item_type": "string"
+        },
+        "poll_duration_minutes": {
+          "type": "integer",
+          "description": "Poll duration in minutes (5-10080, i.e., 5 min to 1 week)",
+          "required": false,
+          "min": 5,
+          "max": 10080
+        },
+        "media_ids": {
+          "type": "array",
+          "description": "Array of media IDs to attach to the tweet",
+          "required": false,
+          "item_type": "string"
+        },
+        "quote_tweet_id": {
+          "type": "string",
+          "description": "Tweet ID to quote",
+          "required": false
+        },
+        "for_super_followers_only": {
+          "type": "boolean",
+          "description": "Whether this tweet is only for super followers",
+          "required": false
+        }
+      }
+    },
+    {
+      "name": "Delete Tweet",
+      "path": "/2/tweets/{tweet_id}",
+      "method": "DELETE",
+      "description": "Delete a tweet posted by the authenticated user. This action is permanent.",
+      "request_params": {
+        "tweet_id": {
+          "type": "string",
+          "description": "The ID of the tweet to delete",
+          "required": true,
+          "send_method": "path"
+        }
+      }
+    },
+    {
+      "name": "Like Tweet",
+      "path": "/2/users/{user_id}/likes",
+      "method": "POST",
+      "description": "Like a tweet on behalf of the authenticated user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The authenticated user's ID",
+          "required": true,
+          "send_method": "path"
+        },
+        "tweet_id": {
+          "type": "string",
+          "description": "The ID of the tweet to like",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "Unlike Tweet",
+      "path": "/2/users/{user_id}/likes/{tweet_id}",
+      "method": "DELETE",
+      "description": "Unlike a previously liked tweet",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The authenticated user's ID",
+          "required": true,
+          "send_method": "path"
+        },
+        "tweet_id": {
+          "type": "string",
+          "description": "The ID of the tweet to unlike",
+          "required": true,
+          "send_method": "path"
+        }
+      }
+    },
+    {
+      "name": "Retweet",
+      "path": "/2/users/{user_id}/retweets",
+      "method": "POST",
+      "description": "Retweet a tweet on behalf of the authenticated user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The authenticated user's ID",
+          "required": true,
+          "send_method": "path"
+        },
+        "tweet_id": {
+          "type": "string",
+          "description": "The ID of the tweet to retweet",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "Remove Retweet",
+      "path": "/2/users/{user_id}/retweets/{tweet_id}",
+      "method": "DELETE",
+      "description": "Remove a retweet (undo retweet)",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The authenticated user's ID",
+          "required": true,
+          "send_method": "path"
+        },
+        "tweet_id": {
+          "type": "string",
+          "description": "The ID of the tweet to un-retweet",
+          "required": true,
+          "send_method": "path"
+        }
+      }
+    },
+    {
+      "name": "Follow User",
+      "path": "/2/users/{user_id}/following",
+      "method": "POST",
+      "description": "Follow a user on behalf of the authenticated user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The authenticated user's ID",
+          "required": true,
+          "send_method": "path"
+        },
+        "target_user_id": {
+          "type": "string",
+          "description": "The ID of the user to follow",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "Unfollow User",
+      "path": "/2/users/{user_id}/following/{target_user_id}",
+      "method": "DELETE",
+      "description": "Unfollow a user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The authenticated user's ID",
+          "required": true,
+          "send_method": "path"
+        },
+        "target_user_id": {
+          "type": "string",
+          "description": "The ID of the user to unfollow",
+          "required": true,
+          "send_method": "path"
+        }
+      }
+    },
+    {
+      "name": "Get User Timeline",
+      "path": "/2/users/{user_id}/tweets",
+      "method": "GET",
+      "description": "Get tweets posted by a specific user. Returns the most recent tweets from their timeline.",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The user ID whose tweets you want to retrieve",
+          "required": true,
+          "send_method": "path"
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "Maximum number of tweets to return (5-100)",
+          "required": false,
+          "min": 5,
+          "max": 100,
+          "default": 10
+        },
+        "pagination_token": {
+          "type": "string",
+          "description": "Token for pagination to get next page of results",
+          "required": false
+        },
+        "start_time": {
+          "type": "string",
+          "description": "Start time for tweets (ISO 8601 format)",
+          "required": false,
+          "format": "date-time"
+        },
+        "end_time": {
+          "type": "string",
+          "description": "End time for tweets (ISO 8601 format)",
+          "required": false,
+          "format": "date-time"
+        },
+        "exclude": {
+          "type": "string",
+          "description": "Comma-separated list of tweet types to exclude (retweets,replies)",
+          "required": false,
+          "enum": [
+            "retweets",
+            "replies"
+          ]
+        },
+        "tweet.fields": {
+          "type": "string",
+          "description": "Comma-separated list of tweet fields to return",
+          "required": false,
+          "default": "created_at,author_id,text"
+        },
+        "expansions": {
+          "type": "string",
+          "description": "Comma-separated list of expansions",
+          "required": false
+        },
+        "media.fields": {
+          "type": "string",
+          "description": "Comma-separated list of media fields to return",
+          "required": false
+        },
+        "user.fields": {
+          "type": "string",
+          "description": "Comma-separated list of user fields to return",
+          "required": false
+        }
+      }
+    },
+    {
+      "name": "Get Tweet",
+      "path": "/2/tweets/{tweet_id}",
+      "method": "GET",
+      "description": "Get details of a specific tweet by its ID",
+      "request_params": {
+        "tweet_id": {
+          "type": "string",
+          "description": "The ID of the tweet to retrieve",
+          "required": true,
+          "send_method": "path"
+        },
+        "tweet.fields": {
+          "type": "string",
+          "description": "Comma-separated list of tweet fields to return",
+          "required": false,
+          "default": "created_at,author_id,text,public_metrics"
+        },
+        "expansions": {
+          "type": "string",
+          "description": "Comma-separated list of expansions",
+          "required": false
+        },
+        "media.fields": {
+          "type": "string",
+          "description": "Comma-separated list of media fields to return",
+          "required": false
+        },
+        "user.fields": {
+          "type": "string",
+          "description": "Comma-separated list of user fields to return",
+          "required": false
+        }
+      }
+    }
+  ]
+}

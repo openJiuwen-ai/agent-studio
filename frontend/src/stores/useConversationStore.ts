@@ -345,6 +345,7 @@ export interface ConversationStore {
   /**
    * 添加系统消息（快捷方法）
    * @param agentType Agent类型（如：deepsearch），用于设置MessageItems.agentType，用于HITL场景匹配
+   * @returns 返回创建的 Message，如果对话已取消则返回 null
    */
   addSystemMessage: (
     conversationId: string,
@@ -353,7 +354,7 @@ export interface ConversationStore {
     parentId?: string,
     title?: string,
     agentType?: string
-  ) => Message;
+  ) => Message | null;
 
   /**
    * 添加 Message 到 MessageItems
@@ -512,6 +513,12 @@ export interface ConversationStore {
    * @param conversationId 连续对话系列的conversationId
    */
   setSessionConversationId: (conversationId: string | null) => void;
+  /**
+   * 更新当前 MessageItems 状态为 CANCELLED（用于 DeepSearch 取消功能）
+   * 同时更新所有子消息的状态，确保 UI 正确显示取消状态
+   * 如果没有 INTERRUPT 消息，会创建一个 CANCELLED 状态的 INTERRUPT 消息用于显示取消提示
+   */
+  updateMessageItemsStatusToCancelled: () => void;
 }
 
 // ===== Store实现 =====
@@ -1043,6 +1050,13 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
     // 如果最后一个MessageItems是用户消息，或者不存在，创建新的系统MessageItems
     if (!lastMessageItems || get().getMessageItemsIsUser(lastMessageItems)) {
+      // 在创建新的 MessageItems 之前，检查是否存在已取消的非用户 MessageItems
+      // 如果存在，说明用户已取消对话，不应该继续添加消息
+      const prevMessageItems = currentMessageItemsList[currentMessageItemsList.length - 2];
+      if (prevMessageItems && !get().getMessageItemsIsUser(prevMessageItems) && prevMessageItems.status === TaskStatus.CANCELLED) {
+        console.log('[addSystemMessage] Previous MessageItems is cancelled, skipping adding new message');
+        return null;
+      }
       messageItemsId = get().generateMessageItemsId();
       lastMessageItems = {
         id: messageItemsId,
@@ -1057,6 +1071,11 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       get().addMessageItems(lastMessageItems, conversationId);
     } else {
+      // 检查最后一个非用户 MessageItems 是否已被取消，如果是则不应该添加新消息
+      if (lastMessageItems.status === TaskStatus.CANCELLED) {
+        console.log('[addSystemMessage] MessageItems is cancelled, skipping adding message');
+        return null;
+      }
       messageItemsId = lastMessageItems.id;
       // 添加到现有的MessageItems
       const newMessageItemsMap = new Map(get().messageItemsMap);
@@ -1486,6 +1505,12 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
         // 批量处理事件
         eventsToProcess.forEach(event => {
+          // 在处理每个事件之前，检查是否已取消
+          const currentMessageItems = getCurrentMessageItems();
+          if (currentMessageItems && currentMessageItems.status === TaskStatus.CANCELLED) {
+            console.log('[SSE Processor] MessageItems cancelled during processing, skipping event');
+            return;  // 跳过此事件
+          }
           // 使用类型断言，因为 useConversationStore 不应该知道具体的 SSE 数据结构
           handler.handleSSEMessage(event.sseData as any);
         });
@@ -2201,6 +2226,263 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
    */
   setSessionConversationId: (conversationId: string | null) => {
     set({ SESSION_CONVERSATION_ID: conversationId });
+  },
+
+  /**
+   * 更新当前 MessageItems 状态为 CANCELLED（用于 DeepSearch 取消功能）
+   * 同时更新所有子消息的状态，确保 UI 正确显示取消状态
+   * 如果没有 MessageItems（SSE 还未返回数据），会创建一个 CANCELLED 状态的 INTERRUPT 消息
+   * 如果没有 INTERRUPT 消息，会创建一个 CANCELLED 状态的 INTERRUPT 消息用于显示取消提示
+   */
+  updateMessageItemsStatusToCancelled: () => {
+    const { getCurrentMessageItems, updateMessageItems, updateMessage, getMessageById, getChildMessages, getCurrentConversation, saveConversationToDB, addMessageItems } = get();
+    const messageItems = getCurrentMessageItems();
+
+    // 清空 SSE 队列，防止取消后仍有事件被处理
+    set({ sseEventQueue: [] });
+
+    // 场景 1：没有任何 MessageItems（SSE 还未返回数据）
+    if (!messageItems || messageItems.length === 0) {
+      const currentConversation = getCurrentConversation();
+      if (currentConversation) {
+        // 创建新的 MessageItems
+        const messageItemsId = get().generateMessageItemsId();
+        const messageId = get().generateMessageId();
+
+        // 创建 CANCELLED 状态的 INTERRUPT 消息
+        const interruptMessage: Message = {
+          id: messageId,
+          type: MessageType.INTERRUPT,
+          status: TaskStatus.CANCELLED,
+          content: '',
+          title: undefined,
+          messageItemsId,
+          conversationId: currentConversation.id,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          isStreaming: false,
+          parentMessageId: undefined,
+          childMessageIds: undefined,
+        };
+
+        // 创建 MessageItems
+        const newMessageItems: MessageItems = {
+          id: messageItemsId,
+          isUser: false,
+          status: TaskStatus.CANCELLED,
+          messagesIds: [messageId],
+          conversationId: currentConversation.id,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          agentType: AgentType.DEEPSEARCH,
+        };
+
+        // 添加到 stores
+        set((state) => {
+          const newMessagesMap = new Map(state.messagesMap);
+          newMessagesMap.set(messageId, interruptMessage);
+
+          const newMessageItemsMap = new Map(state.messageItemsMap);
+          newMessageItemsMap.set(messageItemsId, newMessageItems);
+
+          return {
+            messagesMap: newMessagesMap,
+            messageItemsMap: newMessageItemsMap,
+          };
+        });
+
+        // 添加到 conversation 的 messageItemsIds
+        set((state) => {
+          const conversation = state.conversationsMap.get(currentConversation.id);
+          if (conversation) {
+            const updatedConversation = {
+              ...conversation,
+              messageItemsIds: [...conversation.messageItemsIds, messageItemsId],
+              updatedAt: Date.now(),
+            };
+            const newConversationsMap = new Map(state.conversationsMap);
+            newConversationsMap.set(currentConversation.id, updatedConversation);
+            return { conversationsMap: newConversationsMap };
+          }
+          return state;
+        });
+      }
+      return;
+    }
+
+    // 场景 2：已有 MessageItems（SSE 已返回数据，可能已经有消息）
+    const lastMessageItems = messageItems[messageItems.length - 1];
+
+    // 检查最后一个 MessageItems 是否是用户消息
+    // 如果是用户消息，需要创建一个新的系统 MessageItems 来显示取消状态
+    const isLastMessageUser = lastMessageItems.isUser === true;
+
+    if (isLastMessageUser) {
+      // 用户消息后面没有系统消息，创建一个新的系统 MessageItems
+      const currentConversation = getCurrentConversation();
+      if (currentConversation) {
+        const messageItemsId = get().generateMessageItemsId();
+        const messageId = get().generateMessageId();
+
+        // 创建 CANCELLED 状态的 INTERRUPT 消息
+        const interruptMessage: Message = {
+          id: messageId,
+          type: MessageType.INTERRUPT,
+          status: TaskStatus.CANCELLED,
+          content: '',
+          title: undefined,
+          messageItemsId,
+          conversationId: currentConversation.id,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          isStreaming: false,
+          parentMessageId: undefined,
+          childMessageIds: undefined,
+        };
+
+        // 创建系统 MessageItems
+        const newMessageItems: MessageItems = {
+          id: messageItemsId,
+          isUser: false,
+          status: TaskStatus.CANCELLED,
+          messagesIds: [messageId],
+          conversationId: currentConversation.id,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          agentType: AgentType.DEEPSEARCH,
+        };
+
+        // 添加到 stores
+        set((state) => {
+          const newMessagesMap = new Map(state.messagesMap);
+          newMessagesMap.set(messageId, interruptMessage);
+
+          const newMessageItemsMap = new Map(state.messageItemsMap);
+          newMessageItemsMap.set(messageItemsId, newMessageItems);
+
+          return {
+            messagesMap: newMessagesMap,
+            messageItemsMap: newMessageItemsMap,
+          };
+        });
+
+        // 添加到 conversation 的 messageItemsIds
+        set((state) => {
+          const conversation = state.conversationsMap.get(currentConversation.id);
+          if (conversation) {
+            const updatedConversation = {
+              ...conversation,
+              messageItemsIds: [...conversation.messageItemsIds, messageItemsId],
+              updatedAt: Date.now(),
+            };
+            const newConversationsMap = new Map(state.conversationsMap);
+            newConversationsMap.set(currentConversation.id, updatedConversation);
+            return { conversationsMap: newConversationsMap };
+          }
+          return state;
+        });
+      }
+      // 场景 2a 结束：已为用户消息创建新的系统 MessageItems
+    } else {
+      // 场景 2b：最后一个 MessageItems 是系统消息，继续原来的逻辑
+      // 1. 更新 MessageItems 状态为 CANCELLED（无论当前状态是什么）
+      updateMessageItems(lastMessageItems.id, { status: TaskStatus.CANCELLED });
+
+      // 2. 递归更新所有子消息的状态为 CANCELLED
+      const updateMessageToCancelled = (messageId: string) => {
+        const message = getMessageById(messageId);
+        if (message) {
+          // 只要消息状态不是已经完成的或失败的，都更新为 CANCELLED
+          if (message.status === TaskStatus.IN_PROGRESS || message.status === TaskStatus.PENDING || message.status === TaskStatus.COMPLETED) {
+            updateMessage(lastMessageItems.id, messageId, {
+              status: TaskStatus.CANCELLED,
+              isStreaming: false,  // 清除流式标志
+            });
+          }
+        }
+        // 递归处理子消息
+        const children = getChildMessages(messageId);
+        children?.forEach(child => updateMessageToCancelled(child.id));
+      };
+
+      // 遍历所有顶级消息
+      lastMessageItems.messagesIds.forEach(messageId => {
+        updateMessageToCancelled(messageId);
+      });
+
+      // 3. 检查是否存在 INTERRUPT 消息，如果存在则更新其状态为 CANCELLED，如果不存在则创建
+      const hasInterruptMessage = lastMessageItems.messagesIds.some(messageId => {
+        const message = getMessageById(messageId);
+        return message?.type === MessageType.INTERRUPT;
+      });
+
+      if (hasInterruptMessage) {
+        // 找到 INTERRUPT 消息并更新其状态为 CANCELLED
+        lastMessageItems.messagesIds.forEach(messageId => {
+          const message = getMessageById(messageId);
+          if (message?.type === MessageType.INTERRUPT) {
+            updateMessage(lastMessageItems.id, messageId, {
+              status: TaskStatus.CANCELLED,
+              isStreaming: false,
+            });
+          }
+        });
+      } else {
+        // 创建 INTERRUPT 消息（用于显示"对话已取消"提示）
+        // 直接添加消息到当前 MessageItems，不检查状态
+        const currentConversation = getCurrentConversation();
+        if (currentConversation) {
+          // 手动创建消息，绕过 addSystemMessage 的状态检查
+          const messageId = get().generateMessageId();
+          const messageItemsId = lastMessageItems.id;
+
+          // 创建消息
+          const interruptMessage: Message = {
+            id: messageId,
+            type: MessageType.INTERRUPT,
+            status: TaskStatus.CANCELLED,  // 直接设置为 CANCELLED
+            content: '',
+            title: undefined,
+            messageItemsId,
+            conversationId: currentConversation.id,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            isStreaming: false,
+            parentMessageId: undefined,
+            childMessageIds: undefined,
+          };
+
+          // 添加到 messagesMap
+          set((state) => {
+            const newMessagesMap = new Map(state.messagesMap);
+            newMessagesMap.set(messageId, interruptMessage);
+            return { messagesMap: newMessagesMap };
+          });
+
+          // 添加到 MessageItems 的 messagesIds 数组
+          set((state) => {
+            const newMessageItemsMap = new Map(state.messageItemsMap);
+            const existingItems = newMessageItemsMap.get(messageItemsId);
+            if (existingItems) {
+              newMessageItemsMap.set(messageItemsId, {
+                ...existingItems,
+                messagesIds: [...existingItems.messagesIds, messageId],
+                updatedAt: Date.now(),
+              });
+            } else {
+              console.warn('[updateMessageItemsStatusToCancelled] MessageItems not found in map:', messageItemsId);
+            }
+            return { messageItemsMap: newMessageItemsMap };
+          });
+        }
+      }
+    }
+
+    // 4. 确保保存到 IndexDB
+    const finalMessageItems = getCurrentMessageItems();
+    if (finalMessageItems && finalMessageItems.length > 0) {
+      saveConversationToDB(lastMessageItems.conversationId);
+    }
   },
 }));
 // ===== 监听 IndexDB 删除事件，同步删除内存中的对话 =====

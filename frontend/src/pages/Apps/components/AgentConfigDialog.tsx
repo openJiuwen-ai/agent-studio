@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback } from 'react'
-import { X, Check, Settings, Search, FileText, Loader2, AlertCircle, Plus, Edit, Trash2, XCircle, CheckCircle, Play } from 'lucide-react'
+import { X, Check, Settings, Search, FileText, Loader2, AlertCircle, Plus, Edit, Trash2, XCircle, CheckCircle, Play, Cpu } from 'lucide-react'
 import { IconButton, Tooltip } from '@mui/material'
 import { useTranslation } from 'react-i18next'
 import { MentionItem } from './MentionPicker'
@@ -15,7 +15,7 @@ import { TemplateUploadDialog } from './config/template/TemplateUploadDialog'
 import { TemplateViewDialog } from './config/template/TemplateViewDialog'
 import { useTemplateApi } from './hooks/useTemplateApi'
 import { useWebSearchEngineApi } from './hooks/useWebSearchEngineApi'
-import { deepsearchTemplateService } from '@test-agentstudio/api-client'
+import { deepsearchTemplateService, PromptModel } from '@test-agentstudio/api-client'
 import DeleteConfirmationDialog from '../../../components/Common/DeleteConfirmationDialog'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '../../../Common/UnifiedSnackbar'
 import { DEFAULT_DEEPSEARCH_CONFIG } from '../utils/deepsearchConstants'
@@ -27,6 +27,7 @@ import { ConfigTabPanel } from './config/tabs/ConfigTabPanel'
 import { GeneralConfigTab } from './config/tabs/GeneralConfigTab'
 import { SearchConfigTab } from './config/tabs/SearchConfigTab'
 import { TemplateConfigTab } from './config/tabs/TemplateConfigTab'
+import { ModelConfigTab } from './config/tabs/ModelConfigTab'
 import { KnowledgeBaseConfigDialog } from './config/dialogs/KnowledgeBaseConfigDialog'
 
 // ==================== 类型定义 ====================
@@ -59,6 +60,12 @@ export interface DeepSearchConfig {
   // 模板配置
   enableTemplate: boolean // 是否启用模板
   selectedTemplateId?: number // 选中的模板ID
+
+  // 模型配置（可选，undefined 表示未配置）
+  generalModelId?: string // 通用模型ID（与对话框双向同步）
+  planUnderstandingModelId?: string // 计划理解模型ID
+  infoCollectingModelId?: string // 信息收集模型ID
+  writingCheckingModelId?: string // 写作检查模型ID
 }
 
 export interface AgentConfigDialogProps {
@@ -74,6 +81,9 @@ export interface AgentConfigDialogProps {
   modelConfigId?: number
   // 是否是首次配置模式（配置完成后才选中智能体）
   isFirstConfig?: boolean
+  // 模型配置相关
+  availableModels?: PromptModel[]
+  modelsLoading?: boolean
 }
 
 // ==================== 辅助组件 ====================
@@ -117,7 +127,7 @@ const RangeSlider: React.FC<{
   max: number
   onChange: (value: number) => void
   step?: number
-}> = ({ label, description, value, min, max, onChange, step = 1 }) => {
+}> = ({ description, value, min, max, onChange, step = 1 }) => {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -147,7 +157,9 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
   savedConfigs = {},
   spaceId = '',
   modelConfigId = -1,
-  isFirstConfig = false
+  isFirstConfig = false,
+  availableModels = [],
+  modelsLoading = false,
 }) => {
   const { t } = useTranslation()
   const { snackbar, closeSnackbar } = useUnifiedSnackbar()
@@ -275,6 +287,14 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
         component: TemplateConfigTab,
         order: 3,
       },
+      {
+        id: 'model',
+        label: '模型配置',
+        icon: <Cpu className="w-5 h-5" />,
+        description: '模型配置管理',
+        component: ModelConfigTab,
+        order: 4,
+      },
     ])
     return manager
   })
@@ -321,6 +341,11 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
     // 规划章节数量验证
     if (config.planChapterCount < 1 || config.planChapterCount > 10) {
       errors.push(t('apps.config.validation.chapterCountRange'))
+    }
+
+    // 通用模型验证（必选项）
+    if (!config.generalModelId) {
+      errors.push(t('apps.config.model.general.required'))
     }
 
     // 综合搜索模式：需要同时配置搜索引擎和知识库
@@ -376,6 +401,7 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
     }
 
     onSave(agent.id, config)
+
     setShowSaved(true)
     setTimeout(() => {
       setShowSaved(false)
@@ -820,7 +846,7 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
                     onShowKnowledgeBaseSelector: handleShowKnowledgeBaseSelector,
                     onRemoveKnowledgeBase: handleRemoveKnowledgeBase,
                     embeddingModelError,
-                  } : {
+                  } : activeTab === 'template' ? {
                     config,
                     updateConfig,
                     errors,
@@ -833,6 +859,15 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
                     onDeleteTemplate: handleDeleteTemplate,
                     onShowUploadDialog: () => setShowUploadDialog(true),
                     onViewTemplate: handleViewTemplate,
+                  } : {
+                    // model tab
+                    config,
+                    updateConfig,
+                    errors,
+                    disabled: false,
+                    availableModels,
+                    modelsLoading,
+                    spaceId: spaceId || '',
                   }
                 }
               />

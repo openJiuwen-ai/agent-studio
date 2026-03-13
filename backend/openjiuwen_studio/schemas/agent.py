@@ -104,6 +104,10 @@ class AgentMemoryConfig(BaseModel):
     max_tokens: int = Field(default=1000, ge=1, le=5000)
     variable_config: Optional[List[MemoryVariableConfig]] | None = None
     longterm_memory_config: bool | None = False
+    user_profile_config: bool | None = False
+    semantic_memory_config: bool | None = False
+    episodic_memory_config: bool | None = False
+    summary_memory_config: bool | None = False
     memory_base: Optional[MemoryBaseConfig] | None = None
 
 

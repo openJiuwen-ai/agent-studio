@@ -1,0 +1,271 @@
+{
+  "ready": false,
+  "plugin_id": "google_drive_api",
+  "name": "Google Drive API",
+  "description": "Google Drive cloud storage API for listing, uploading, downloading, searching, and sharing files and folders. Full access to Google Drive via the Google Drive REST API v3.",
+  "category": "file_storage",
+  "category_name": "File Storage",
+  "category_icon": "📂",
+  "icon_uri": "📁",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "storage",
+    "google",
+    "drive",
+    "files",
+    "cloud"
+  ],
+  "api_prefix": "https://www.googleapis.com/drive/v3",
+  "documentation": "https://developers.google.com/drive/api/reference/rest/v3",
+  "desc_mk": "Google Drive is Google's cloud storage platform. This plugin uses the Drive REST API v3 to list files, get metadata, search, create/move/delete files and folders, manage permissions, and generate shareable links.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "OAuth2 Access Token",
+        "env_var": "GOOGLE_DRIVE_ACCESS_TOKEN",
+        "description": "Google OAuth2 access token with drive or drive.file scope"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "List Files",
+      "path": "/files",
+      "method": "GET",
+      "description": "List files and folders in Google Drive",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query (e.g., \"mimeType='application/vnd.google-apps.folder'\" or \"name contains 'report'\")",
+          "required": false,
+          "send_method": "Query"
+        },
+        "pageSize": {
+          "type": "integer",
+          "description": "Maximum number of files to return (max: 1000, default: 100)",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Fields to return (e.g., 'files(id,name,mimeType,size,modifiedTime)')",
+          "required": false,
+          "default": "files(id,name,mimeType,size,modifiedTime,webViewLink)",
+          "send_method": "Query"
+        },
+        "orderBy": {
+          "type": "string",
+          "description": "Sort order (e.g., 'modifiedTime desc', 'name', 'createdTime desc')",
+          "required": false,
+          "default": "modifiedTime desc",
+          "send_method": "Query"
+        },
+        "pageToken": {
+          "type": "string",
+          "description": "Token for next page of results",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get File",
+      "path": "/files/{fileId}",
+      "method": "GET",
+      "description": "Get metadata for a specific file or folder",
+      "request_params": {
+        "fileId": {
+          "type": "string",
+          "description": "Google Drive file or folder ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "fields": {
+          "type": "string",
+          "description": "Fields to return",
+          "required": false,
+          "default": "id,name,mimeType,size,modifiedTime,createdTime,webViewLink,parents",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Folder",
+      "path": "/files",
+      "method": "POST",
+      "description": "Create a new folder in Google Drive",
+      "request_params": {
+        "name": {
+          "type": "string",
+          "description": "Folder name",
+          "required": true,
+          "send_method": "Body"
+        },
+        "mimeType": {
+          "type": "string",
+          "description": "Must be 'application/vnd.google-apps.folder' for folders",
+          "required": true,
+          "default": "application/vnd.google-apps.folder",
+          "send_method": "Body"
+        },
+        "parents": {
+          "type": "array",
+          "description": "Array of parent folder IDs (omit for root)",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update File Metadata",
+      "path": "/files/{fileId}",
+      "method": "PATCH",
+      "description": "Update file or folder metadata (rename, move to different folder)",
+      "request_params": {
+        "fileId": {
+          "type": "string",
+          "description": "File or folder ID to update",
+          "required": true,
+          "is_path_param": true
+        },
+        "name": {
+          "type": "string",
+          "description": "New name for the file/folder",
+          "required": false,
+          "send_method": "Body"
+        },
+        "addParents": {
+          "type": "string",
+          "description": "Comma-separated list of parent folder IDs to add (for moving files)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "removeParents": {
+          "type": "string",
+          "description": "Comma-separated list of parent folder IDs to remove (for moving files)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Delete File",
+      "path": "/files/{fileId}",
+      "method": "DELETE",
+      "description": "Permanently delete a file or folder",
+      "request_params": {
+        "fileId": {
+          "type": "string",
+          "description": "File or folder ID to delete",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "Copy File",
+      "path": "/files/{fileId}/copy",
+      "method": "POST",
+      "description": "Create a copy of a file",
+      "request_params": {
+        "fileId": {
+          "type": "string",
+          "description": "ID of the file to copy",
+          "required": true,
+          "is_path_param": true
+        },
+        "name": {
+          "type": "string",
+          "description": "Name for the copy (defaults to 'Copy of [original name]')",
+          "required": false,
+          "send_method": "Body"
+        },
+        "parents": {
+          "type": "array",
+          "description": "Parent folder IDs for the copy",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Permission (Share)",
+      "path": "/files/{fileId}/permissions",
+      "method": "POST",
+      "description": "Share a file or folder with a user, group, or make it public",
+      "request_params": {
+        "fileId": {
+          "type": "string",
+          "description": "File or folder ID to share",
+          "required": true,
+          "is_path_param": true
+        },
+        "role": {
+          "type": "string",
+          "description": "Permission role: owner, organizer, fileOrganizer, writer, commenter, reader",
+          "required": true,
+          "send_method": "Body"
+        },
+        "type": {
+          "type": "string",
+          "description": "Permission type: user, group, domain, anyone",
+          "required": true,
+          "send_method": "Body"
+        },
+        "emailAddress": {
+          "type": "string",
+          "description": "Email address (required for user/group type)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "sendNotificationEmail": {
+          "type": "boolean",
+          "description": "Whether to send a notification email to the new user",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Permissions",
+      "path": "/files/{fileId}/permissions",
+      "method": "GET",
+      "description": "List all permissions for a file or folder",
+      "request_params": {
+        "fileId": {
+          "type": "string",
+          "description": "File or folder ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "fields": {
+          "type": "string",
+          "description": "Fields to return",
+          "required": false,
+          "default": "permissions(id,role,type,emailAddress,displayName)",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Storage Quota",
+      "path": "/about",
+      "method": "GET",
+      "description": "Get storage quota and usage information for the account",
+      "request_params": {
+        "fields": {
+          "type": "string",
+          "description": "Fields to return",
+          "required": true,
+          "default": "storageQuota,user",
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

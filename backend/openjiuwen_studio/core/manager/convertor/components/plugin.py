@@ -60,6 +60,21 @@ param_send_method_type_mapping = {
     ParamSendMethod.PARAM_SEND_METHOD_PATH: "path",
 }
 
+# Reverse mapping: Convert marketplace JSON string values to ParamSendMethod enum integers
+send_method_string_to_enum = {
+    "None": ParamSendMethod.PARAM_SEND_METHOD_NONE,
+    "Header": ParamSendMethod.PARAM_SEND_METHOD_HEADER,
+    "Query": ParamSendMethod.PARAM_SEND_METHOD_QUERY,
+    "Body": ParamSendMethod.PARAM_SEND_METHOD_BODY,
+    "Path": ParamSendMethod.PARAM_SEND_METHOD_PATH,
+    # Legacy lowercase support
+    "none": ParamSendMethod.PARAM_SEND_METHOD_NONE,
+    "header": ParamSendMethod.PARAM_SEND_METHOD_HEADER,
+    "query": ParamSendMethod.PARAM_SEND_METHOD_QUERY,
+    "body": ParamSendMethod.PARAM_SEND_METHOD_BODY,
+    "path": ParamSendMethod.PARAM_SEND_METHOD_PATH,
+}
+
 
 def _plugin_tool_param_convert(params: List[PluginToolParam]) -> List[dsl.Param]:
     converted_params: List[dsl.Param] = []
@@ -170,16 +185,22 @@ def plugin_mcp_tool_convert(plugin_info, mcp_info: Dict[str, Any]) -> Dict[str, 
     merged_params = _merge_plugin_params(mcp.request_params, plugin_params)
     # For SSE/streamable_http, fall back to plugin-level URL if tool URL is empty
     url = mcp.url or (plugin_info.url if hasattr(plugin_info, "url") else None)
+    # Consolidate transport-specific parameters into a single params dict
+    mcp_config_params = {}
+    if mcp.command:
+        mcp_config_params["command"] = mcp.command
+    if mcp.args:
+        mcp_config_params["args"] = mcp.args
+    if mcp.env:
+        mcp_config_params["env"] = mcp.env
     convert_mcp = dsl.McpConfig(
         tool_id=mcp.tool_id,
         name=mcp.name,
         description=mcp.desc,
         transport=mcp_transport_mapping.get(mcp.transport, "stdio"),
-        command=mcp.command,
-        args=mcp.args or [],
-        env=mcp.env,
         url=url,
         headers=mcp.headers,
+        params=mcp_config_params,
         mcp_tool_name=mcp.mcp_tool_name,
         input_params=_plugin_tool_param_convert(merged_params),
     )

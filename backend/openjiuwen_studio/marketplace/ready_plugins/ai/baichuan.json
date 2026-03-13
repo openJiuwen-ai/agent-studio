@@ -1,0 +1,144 @@
+{
+  "ready": false,
+  "plugin_id": "baichuan_ai",
+  "name": "Baichuan AI",
+  "description": "Baichuan 4 flagship model with enhanced reasoning, math, and coding abilities. Improved 10%+ in general tasks, 14% in math, 9% in coding. Includes medical model M3 Plus.",
+  "category": "ai",
+  "category_name": "AI & ML Services",
+  "category_icon": "🤖",
+  "icon_uri": "🏔️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "llm",
+    "ai",
+    "chat",
+    "baichuan",
+    "china",
+    "medical"
+  ],
+  "api_prefix": "https://api.baichuan-ai.com",
+  "desc_mk": "Baichuan AI (百川智能) provides Baichuan 4 flagship model with significant improvements in general ability (+10%), mathematics (+14%), and coding (+9%) compared to Baichuan 3. Includes specialized medical model M3 Plus with low hallucination rates. Four APIs available: Baichuan 4, Baichuan3-Turbo, Baichuan3-Turbo-128k, and Assistant API. **Note:** Requires API key from [Baichuan Developer Center](https://platform.baichuan-ai.com/).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer BAICHUAN_API_KEY",
+      "description": "Bearer token for Baichuan AI API authentication"
+    }
+  },
+  "tools": [
+    {
+      "name": "Create Chat Completion",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "description": "Generate conversational responses using Baichuan models",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model: 'Baichuan4', 'Baichuan3-Turbo', 'Baichuan3-Turbo-128k', 'Baichuan2-Turbo'",
+          "required": true,
+          "default": "Baichuan4",
+          "send_method": "Body"
+        },
+        "messages": {
+          "type": "array",
+          "description": "Array of message objects with 'role' and 'content' fields",
+          "required": true,
+          "send_method": "Body"
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Sampling temperature (0-1, default: 0.3)",
+          "required": false,
+          "default": 0.3,
+          "send_method": "Body"
+        },
+        "top_p": {
+          "type": "number",
+          "description": "Nucleus sampling (default: 0.85)",
+          "required": false,
+          "default": 0.85,
+          "send_method": "Body"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "description": "Maximum tokens to generate (default: 2048)",
+          "required": false,
+          "default": 2048,
+          "send_method": "Body"
+        },
+        "stream": {
+          "type": "boolean",
+          "description": "Stream response",
+          "required": false,
+          "default": false,
+          "send_method": "Body"
+        },
+        "tools": {
+          "type": "array",
+          "description": "Function calling tools",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Embeddings",
+      "path": "/v1/embeddings",
+      "method": "POST",
+      "description": "Create vector embeddings for text using Baichuan embedding models",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Embedding model: 'Baichuan-Text-Embedding'",
+          "required": true,
+          "default": "Baichuan-Text-Embedding",
+          "send_method": "Body"
+        },
+        "input": {
+          "type": "string",
+          "description": "Text or array of texts to create embeddings for",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Medical Consultation (M3 Plus)",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "description": "Use specialized medical model M3 Plus for healthcare queries",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Medical model: 'Baichuan-M3-Plus'",
+          "required": true,
+          "default": "Baichuan-M3-Plus",
+          "send_method": "Body"
+        },
+        "messages": {
+          "type": "array",
+          "description": "Medical consultation messages",
+          "required": true,
+          "send_method": "Body"
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Lower temperature recommended for medical queries (0.1-0.3)",
+          "required": false,
+          "default": 0.2,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Available Models",
+      "path": "/v1/models",
+      "method": "GET",
+      "description": "Get list of all available Baichuan models",
+      "request_params": {}
+    }
+  ]
+}

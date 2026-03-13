@@ -1,0 +1,464 @@
+{
+  "ready": true,
+  "plugin_id": "deezer_api",
+  "name": "Deezer",
+  "description": "Global music streaming service. Search tracks, albums, artists, playlists, and access a vast catalog of music from around the world.",
+  "category": "entertainment",
+  "category_name": "Entertainment & Events",
+  "category_icon": "🎭",
+  "icon_uri": "🎶",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "music",
+    "streaming",
+    "deezer",
+    "audio",
+    "playlist",
+    "entertainment"
+  ],
+  "api_prefix": "https://api.deezer.com",
+  "desc_mk": "Deezer is a music streaming service with access to millions of songs. This plugin provides access to search functionality, track information, artist data, album details, and playlist management.",
+  "header_configuration": {
+    "Content-Type": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "application/json",
+      "description": "JSON content type header"
+    }
+  },
+  "tools": [
+    {
+      "name": "Search",
+      "path": "/search",
+      "method": "GET",
+      "description": "Search for tracks on Deezer",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results to return (max 100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "index": {
+          "type": "integer",
+          "description": "Index of the first item to return",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "strict": {
+          "type": "string",
+          "description": "Enable strict search mode (on/off)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Albums",
+      "path": "/search/album",
+      "method": "GET",
+      "description": "Search specifically for albums",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Artists",
+      "path": "/search/artist",
+      "method": "GET",
+      "description": "Search specifically for artists",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Playlists",
+      "path": "/search/playlist",
+      "method": "GET",
+      "description": "Search specifically for playlists",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Track",
+      "path": "/track/{track_id}",
+      "method": "GET",
+      "description": "Get detailed information about a track",
+      "request_params": {
+        "track_id": {
+          "type": "string",
+          "description": "Deezer track ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Album",
+      "path": "/album/{album_id}",
+      "method": "GET",
+      "description": "Get detailed information about an album",
+      "request_params": {
+        "album_id": {
+          "type": "string",
+          "description": "Deezer album ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Album Tracks",
+      "path": "/album/{album_id}/tracks",
+      "method": "GET",
+      "description": "Get all tracks from an album",
+      "request_params": {
+        "album_id": {
+          "type": "string",
+          "description": "Deezer album ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of tracks to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Artist",
+      "path": "/artist/{artist_id}",
+      "method": "GET",
+      "description": "Get detailed information about an artist",
+      "request_params": {
+        "artist_id": {
+          "type": "string",
+          "description": "Deezer artist ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Artist Top Tracks",
+      "path": "/artist/{artist_id}/top",
+      "method": "GET",
+      "description": "Get an artist's top tracks",
+      "request_params": {
+        "artist_id": {
+          "type": "string",
+          "description": "Deezer artist ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of tracks to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Artist Albums",
+      "path": "/artist/{artist_id}/albums",
+      "method": "GET",
+      "description": "Get all albums by an artist",
+      "request_params": {
+        "artist_id": {
+          "type": "string",
+          "description": "Deezer artist ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of albums to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Artist Related",
+      "path": "/artist/{artist_id}/related",
+      "method": "GET",
+      "description": "Get related artists",
+      "request_params": {
+        "artist_id": {
+          "type": "string",
+          "description": "Deezer artist ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of artists to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Playlist",
+      "path": "/playlist/{playlist_id}",
+      "method": "GET",
+      "description": "Get detailed information about a playlist",
+      "request_params": {
+        "playlist_id": {
+          "type": "string",
+          "description": "Deezer playlist ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Playlist Tracks",
+      "path": "/playlist/{playlist_id}/tracks",
+      "method": "GET",
+      "description": "Get all tracks from a playlist",
+      "request_params": {
+        "playlist_id": {
+          "type": "string",
+          "description": "Deezer playlist ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of tracks to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User",
+      "path": "/user/{user_id}",
+      "method": "GET",
+      "description": "Get information about a Deezer user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "Deezer user ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get User Playlists",
+      "path": "/user/{user_id}/playlists",
+      "method": "GET",
+      "description": "Get a user's public playlists",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "Deezer user ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of playlists to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Flow",
+      "path": "/user/{user_id}/flow",
+      "method": "GET",
+      "description": "Get a user's Flow tracks (personalized recommendations)",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "Deezer user ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Chart Tracks",
+      "path": "/chart/0/tracks",
+      "method": "GET",
+      "description": "Get the top tracks chart",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Number of tracks to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Chart Albums",
+      "path": "/chart/0/albums",
+      "method": "GET",
+      "description": "Get the top albums chart",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Number of albums to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Chart Artists",
+      "path": "/chart/0/artists",
+      "method": "GET",
+      "description": "Get the top artists chart",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Number of artists to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Chart Playlists",
+      "path": "/chart/0/playlists",
+      "method": "GET",
+      "description": "Get the top playlists chart",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Number of playlists to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Radio",
+      "path": "/radio",
+      "method": "GET",
+      "description": "Get a list of radio stations",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Number of radio stations to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Radio Tracks",
+      "path": "/radio/{radio_id}/tracks",
+      "method": "GET",
+      "description": "Get tracks from a specific radio station",
+      "request_params": {
+        "radio_id": {
+          "type": "string",
+          "description": "Deezer radio ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Genre",
+      "path": "/genre/{genre_id}",
+      "method": "GET",
+      "description": "Get information about a music genre",
+      "request_params": {
+        "genre_id": {
+          "type": "string",
+          "description": "Deezer genre ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Genre Artists",
+      "path": "/genre/{genre_id}/artists",
+      "method": "GET",
+      "description": "Get artists from a specific genre",
+      "request_params": {
+        "genre_id": {
+          "type": "string",
+          "description": "Deezer genre ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of artists to return",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

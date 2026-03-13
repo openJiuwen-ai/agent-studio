@@ -19,6 +19,7 @@ from openjiuwen.core.common.logging import logger
 from openjiuwen.core.retrieval.common.config import (
     KnowledgeBaseConfig,
     EmbeddingConfig,
+    StoreType,
     VectorStoreConfig,
 )
 from openjiuwen.core.retrieval.common.document import Document
@@ -1161,7 +1162,12 @@ def _get_chroma_data_dir() -> Path:
 
 def _default_index_config() -> VectorStoreConfig:
     """Default VectorStoreConfig for index manager."""
-    return VectorStoreConfig(collection_name="default", database_name="")
+    store_provider = StoreType.Milvus if _CURR_INDEX_TYPE == "milvus" else StoreType.Chroma
+    return VectorStoreConfig(
+        store_provider=store_provider,
+        collection_name="default",
+        database_name="",
+    )
 
 
 def _get_milvus_connection_params() -> Tuple[str, int, Optional[str]]:
@@ -1175,21 +1181,22 @@ def _get_milvus_connection_params() -> Tuple[str, int, Optional[str]]:
     return host, port, token
 
 
-def _create_milvus_index_manager() -> MilvusIndexer:
-    """Create Milvus index manager (used by _check_milvus_connection and _create_index_manager)."""
+def _create_milvus_index_manager(kb_id: str = "", doc_id: str = "") -> MilvusIndexer:
+    """Create Milvus index manager."""
     host, port, token = _get_milvus_connection_params()
     milvus_uri = f"http://{host}:{port}"
+    alias = f"idx_{kb_id}_{doc_id}" if kb_id else None
     return MilvusIndexer(
         config=_default_index_config(),
         milvus_uri=milvus_uri,
         milvus_token=token,
+        milvus_alias=alias,
     )
 
 
-def _create_index_manager() -> Union[MilvusIndexer, ChromaIndexer]:
+def _create_index_manager(kb_id: str = "", doc_id: str = "") -> Union[MilvusIndexer, ChromaIndexer]:
     """
-    Creates either a Milvus or Chroma index manager
-    based on the `INDEX_MANAGER_TYPE` variable set in `.env`.
+    Creates either a Milvus or Chroma index manager based on INDEX_MANAGER_TYPE.
     Returns:
         MilvusIndexer | ChromaIndexer
     """
@@ -1201,7 +1208,7 @@ def _create_index_manager() -> Union[MilvusIndexer, ChromaIndexer]:
             chroma_path=str(data_dir),
         )
     elif index_manager_type == "milvus":
-        return _create_milvus_index_manager()
+        return _create_milvus_index_manager(kb_id=kb_id, doc_id=doc_id)
     else:
         raise ValueError(f"Un-supported {index_manager_type=} for env variable INDEX_MANAGER_TYPE")
 
@@ -1274,40 +1281,46 @@ async def _delete_kb_indices(kb_id: str, space_id: str) -> dict:
         logger.info(f"[KB_DELETE] Deleting indices for {len(documents)} documents in KB {kb_id}")
 
         # 创建索引管理器
-        index_manager = _create_index_manager()
+        index_manager = _create_index_manager(kb_id=kb_id)
         chunk_index = f"kb_{kb_id}_chunks"
         triple_index = f"kb_{kb_id}_triples"
 
-        # 循环删除每个文档的索引
-        for doc in documents:
-            doc_id = doc.get("doc_id") or doc.get("id")
-            if not doc_id:
-                continue
+        try:
+            # 循环删除每个文档的索引
+            for doc in documents:
+                doc_id = doc.get("doc_id") or doc.get("id")
+                if not doc_id:
+                    continue
 
+                try:
+                    # 删除 chunks 索引
+                    await _delete_document_from_index(
+                        index_manager=index_manager,
+                        index_name=chunk_index,
+                        doc_id=doc_id,
+                        kb_id=kb_id,
+                        index_type="chunks",
+                    )
+
+                    # 删除 triples 索引（如果有图增强）
+                    await _delete_document_from_index(
+                        index_manager=index_manager,
+                        index_name=triple_index,
+                        doc_id=doc_id,
+                        kb_id=kb_id,
+                        index_type="triples",
+                    )
+
+                    result["success_count"] += 1
+                except Exception as e:
+                    result["failed_count"] += 1
+                    result["errors"].append(f"Doc {doc_id}: {str(e)}")
+                    logger.warning(f"[KB_DELETE] Failed to delete index for doc {doc_id}: {e}")
+        finally:
             try:
-                # 删除 chunks 索引
-                await _delete_document_from_index(
-                    index_manager=index_manager,
-                    index_name=chunk_index,
-                    doc_id=doc_id,
-                    kb_id=kb_id,
-                    index_type="chunks",
-                )
-
-                # 删除 triples 索引（如果有图增强）
-                await _delete_document_from_index(
-                    index_manager=index_manager,
-                    index_name=triple_index,
-                    doc_id=doc_id,
-                    kb_id=kb_id,
-                    index_type="triples",
-                )
-
-                result["success_count"] += 1
+                index_manager.close()
             except Exception as e:
-                result["failed_count"] += 1
-                result["errors"].append(f"Doc {doc_id}: {str(e)}")
-                logger.warning(f"[KB_DELETE] Failed to delete index for doc {doc_id}: {e}")
+                logger.warning(f"[KB_DELETE] Failed to close index manager: {e}")
 
         logger.info(
             f"[KB_DELETE] Index deletion completed - KB: {kb_id}, "
@@ -1322,7 +1335,12 @@ async def _delete_kb_indices(kb_id: str, space_id: str) -> dict:
     return result
 
 
-def _create_vector_store(collection_name: str) -> Union[MilvusVectorStore, ChromaVectorStore]:
+def _create_vector_store(
+    collection_name: str,
+    kb_id: str = "",
+    doc_id: str = "",
+    for_retrieval: bool = False,
+) -> Union[MilvusVectorStore, ChromaVectorStore]:
     """
     Creates either a Milvus or Chroma vector store
     based on the `INDEX_MANAGER_TYPE` variable set in `.env`.
@@ -1338,6 +1356,7 @@ def _create_vector_store(collection_name: str) -> Union[MilvusVectorStore, Chrom
     if index_manager_type == "chroma":
         data_dir = _get_chroma_data_dir()
         vector_store_config = VectorStoreConfig(
+            store_provider=StoreType.Chroma,
             collection_name=collection_name,
         )
         return ChromaVectorStore(config=vector_store_config, chroma_path=str(data_dir))
@@ -1355,10 +1374,17 @@ def _create_vector_store(collection_name: str) -> Union[MilvusVectorStore, Chrom
         milvus_uri = f"http://{milvus_host}:{milvus_port}"
 
         vector_store_config = VectorStoreConfig(
+            store_provider=StoreType.Milvus,
             collection_name=collection_name,
         )
+        alias = None
+        if kb_id:
+            alias = f"ret_{kb_id}_{collection_name}" if for_retrieval else f"vs_{kb_id}_{doc_id}_{collection_name}"
         return MilvusVectorStore(
-            config=vector_store_config, milvus_uri=milvus_uri, milvus_token=milvus_token
+            config=vector_store_config,
+            milvus_uri=milvus_uri,
+            milvus_token=milvus_token,
+            milvus_alias=alias,
         )
 
     else:
@@ -1401,6 +1427,8 @@ async def create_knowledge_base_for_retrieval(
     chunk_index = f"kb_{kb_id}_chunks"
     vector_store = _create_vector_store(
         collection_name=chunk_index,
+        kb_id=kb_id,
+        for_retrieval=True,
     )
 
     # 5. 创建三元组提取器（如果使用图索引）
@@ -1598,11 +1626,14 @@ async def _index_documents(
     )
 
     # 5.2 创建索引管理器
-    index_manager = _create_index_manager()
+    index_manager = _create_index_manager(kb_id=kb_id, doc_id=doc_id)
 
     # 5.3 创建向量存储
     vector_store = _create_vector_store(
         collection_name=chunk_index,
+        kb_id=kb_id,
+        doc_id=doc_id,
+        for_retrieval=False,
     )
 
     # 5.4 创建三元组提取器（如果使用图索引）
@@ -1684,11 +1715,11 @@ async def _index_documents(
             "chunk_count": chunk_count,
         }
     finally:
-        # 清理资源
-        try:
-            await knowledge_base.close()
-        except Exception as e:
-            logger.warning(f"[INDEX] Failed to close knowledge base: {str(e)}")
+        if knowledge_base is not None:
+            try:
+                await knowledge_base.close()
+            except Exception as e:
+                logger.warning(f"[INDEX] Failed to close knowledge base: {str(e)}")
 
 
 async def process_single_document(
@@ -2545,7 +2576,7 @@ async def document_delete(req: DocumentDeleteRequest, current_user: dict) -> Res
                 )
 
                 # 创建索引管理器并删除索引数据
-                index_manager = _create_index_manager()
+                index_manager = _create_index_manager(kb_id=req.kb_id)
 
                 # 删除chunk索引中的数据
                 chunk_index = f"kb_{req.kb_id}_chunks"

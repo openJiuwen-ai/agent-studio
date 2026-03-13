@@ -1,0 +1,252 @@
+{
+  "ready": false,
+  "plugin_id": "magento",
+  "name": "Magento",
+  "description": "Manage products, orders, customers, and inventory via the Magento REST API.",
+  "category": "ecommerce",
+  "category_name": "E-Commerce",
+  "category_icon": "🛒",
+  "icon_uri": "🏬",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["ecommerce", "magento", "adobe-commerce", "products", "orders"],
+  "api_prefix": "https://your-magento-store.com/rest/V1",
+  "documentation": "https://developer.adobe.com/commerce/webapi/rest/",
+  "desc_mk": "Interact with the Magento REST API to manage products, orders, customers, categories, and inventory.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "Admin Token",
+        "env_var": "MAGENTO_ACCESS_TOKEN"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "search_products",
+      "description": "Search for products in the Magento catalog using filter groups.",
+      "method": "GET",
+      "path": "/products",
+      "request_params": {
+        "searchCriteria[pageSize]": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[currentPage]": {
+          "type": "integer",
+          "desc": "Current page number.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[filterGroups][0][filters][0][field]": {
+          "type": "string",
+          "desc": "Field to filter on (e.g. name, sku, status).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[filterGroups][0][filters][0][value]": {
+          "type": "string",
+          "desc": "Value to filter by.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[filterGroups][0][filters][0][conditionType]": {
+          "type": "string",
+          "desc": "Condition type: eq, neq, like, nlike, in, nin, gt, lt, etc.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_product",
+      "description": "Retrieve a product by its SKU.",
+      "method": "GET",
+      "path": "/products/{sku}",
+      "request_params": {
+        "sku": {
+          "type": "string",
+          "desc": "The SKU of the product to retrieve.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "create_product",
+      "description": "Create a new product in the Magento catalog.",
+      "method": "POST",
+      "path": "/products",
+      "request_params": {
+        "product": {
+          "type": "object",
+          "desc": "Product object. Required fields: sku, name, price, attribute_set_id, type_id. Optional: weight, status (1=enabled), visibility (4=catalog+search).",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "update_product",
+      "description": "Update an existing product by its SKU.",
+      "method": "PUT",
+      "path": "/products/{sku}",
+      "request_params": {
+        "sku": {
+          "type": "string",
+          "desc": "The SKU of the product to update.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "product": {
+          "type": "object",
+          "desc": "Product object containing fields to update (e.g. name, price, status).",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "search_orders",
+      "description": "Search for orders using filter criteria.",
+      "method": "GET",
+      "path": "/orders",
+      "request_params": {
+        "searchCriteria[pageSize]": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[currentPage]": {
+          "type": "integer",
+          "desc": "Current page number.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[filterGroups][0][filters][0][field]": {
+          "type": "string",
+          "desc": "Field to filter on (e.g. status, customer_email).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[filterGroups][0][filters][0][value]": {
+          "type": "string",
+          "desc": "Value to filter by.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[sortOrders][0][field]": {
+          "type": "string",
+          "desc": "Field to sort by (e.g. created_at).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[sortOrders][0][direction]": {
+          "type": "string",
+          "desc": "Sort direction: ASC or DESC.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_order",
+      "description": "Retrieve a single order by its ID.",
+      "method": "GET",
+      "path": "/orders/{id}",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "desc": "The unique numeric ID of the order.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "search_customers",
+      "description": "Search for customers using filter criteria.",
+      "method": "GET",
+      "path": "/customers/search",
+      "request_params": {
+        "searchCriteria[pageSize]": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[currentPage]": {
+          "type": "integer",
+          "desc": "Current page number.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[filterGroups][0][filters][0][field]": {
+          "type": "string",
+          "desc": "Field to filter on (e.g. email, firstname, lastname).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[filterGroups][0][filters][0][value]": {
+          "type": "string",
+          "desc": "Value to filter by.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_customer",
+      "description": "Retrieve a single customer by their ID.",
+      "method": "GET",
+      "path": "/customers/{customerId}",
+      "request_params": {
+        "customerId": {
+          "type": "integer",
+          "desc": "The unique numeric ID of the customer.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "get_stock_item",
+      "description": "Retrieve stock/inventory information for a product SKU.",
+      "method": "GET",
+      "path": "/stockItems/{productSku}",
+      "request_params": {
+        "productSku": {
+          "type": "string",
+          "desc": "The SKU of the product to get stock info for.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "list_categories",
+      "description": "Retrieve a flat list of all product categories.",
+      "method": "GET",
+      "path": "/categories/list",
+      "request_params": {
+        "searchCriteria[pageSize]": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "searchCriteria[currentPage]": {
+          "type": "integer",
+          "desc": "Current page number.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

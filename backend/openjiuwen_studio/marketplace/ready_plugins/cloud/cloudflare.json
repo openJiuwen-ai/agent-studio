@@ -1,0 +1,334 @@
+{
+  "ready": false,
+  "plugin_id": "cloudflare_api",
+  "name": "Cloudflare API",
+  "description": "Cloudflare API for managing DNS records, zones, SSL certificates, page rules, Workers, Firewall rules, and CDN configuration across your Cloudflare-protected domains.",
+  "category": "cloud",
+  "category_name": "Cloud & Infrastructure",
+  "category_icon": "☁️",
+  "icon_uri": "🟡",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "cloudflare",
+    "dns",
+    "cdn",
+    "security",
+    "workers"
+  ],
+  "api_prefix": "https://api.cloudflare.com/client/v4",
+  "documentation": "https://developers.cloudflare.com/api/",
+  "desc_mk": "Cloudflare provides DNS management, DDoS protection, CDN, SSL/TLS, and edge compute. This plugin provides access to zones, DNS records, page rules, Cloudflare Workers, and security settings.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "API Token",
+        "env_var": "CLOUDFLARE_API_TOKEN",
+        "description": "Cloudflare API Token with appropriate permissions (recommended over API Key)"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "List Zones",
+      "path": "/zones",
+      "method": "GET",
+      "description": "List all zones (domains) in the Cloudflare account",
+      "request_params": {
+        "name": {
+          "type": "string",
+          "description": "Filter by domain name",
+          "required": false,
+          "send_method": "Query"
+        },
+        "status": {
+          "type": "string",
+          "description": "Filter by zone status: active, pending, initializing, moved, deleted, deactivated",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of zones per page (max: 50)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Zone",
+      "path": "/zones/{zone_id}",
+      "method": "GET",
+      "description": "Get details of a specific zone",
+      "request_params": {
+        "zone_id": {
+          "type": "string",
+          "description": "Cloudflare Zone ID",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "List DNS Records",
+      "path": "/zones/{zone_id}/dns_records",
+      "method": "GET",
+      "description": "List DNS records for a zone",
+      "request_params": {
+        "zone_id": {
+          "type": "string",
+          "description": "Cloudflare Zone ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "type": {
+          "type": "string",
+          "description": "Filter by record type: A, AAAA, CNAME, TXT, MX, NS, SRV, CAA, etc.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "name": {
+          "type": "string",
+          "description": "Filter by record name (e.g., 'subdomain.example.com')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of records per page",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create DNS Record",
+      "path": "/zones/{zone_id}/dns_records",
+      "method": "POST",
+      "description": "Create a new DNS record",
+      "request_params": {
+        "zone_id": {
+          "type": "string",
+          "description": "Cloudflare Zone ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "type": {
+          "type": "string",
+          "description": "DNS record type: A, AAAA, CNAME, TXT, MX, NS, SRV, CAA",
+          "required": true,
+          "send_method": "Body"
+        },
+        "name": {
+          "type": "string",
+          "description": "DNS record name (e.g., 'subdomain' or '@' for root)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "content": {
+          "type": "string",
+          "description": "DNS record content (IP address for A/AAAA, hostname for CNAME, text for TXT)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "ttl": {
+          "type": "integer",
+          "description": "Time to live in seconds (1 = automatic, 120-86400 for manual)",
+          "required": false,
+          "default": 1,
+          "send_method": "Body"
+        },
+        "proxied": {
+          "type": "boolean",
+          "description": "Whether the record should be proxied through Cloudflare (orange-cloud)",
+          "required": false,
+          "default": false,
+          "send_method": "Body"
+        },
+        "priority": {
+          "type": "integer",
+          "description": "MX record priority (required for MX records)",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update DNS Record",
+      "path": "/zones/{zone_id}/dns_records/{dns_record_id}",
+      "method": "PATCH",
+      "description": "Update an existing DNS record",
+      "request_params": {
+        "zone_id": {
+          "type": "string",
+          "description": "Cloudflare Zone ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "dns_record_id": {
+          "type": "string",
+          "description": "DNS Record ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "type": {
+          "type": "string",
+          "description": "DNS record type",
+          "required": false,
+          "send_method": "Body"
+        },
+        "name": {
+          "type": "string",
+          "description": "DNS record name",
+          "required": false,
+          "send_method": "Body"
+        },
+        "content": {
+          "type": "string",
+          "description": "DNS record content",
+          "required": false,
+          "send_method": "Body"
+        },
+        "ttl": {
+          "type": "integer",
+          "description": "TTL in seconds",
+          "required": false,
+          "send_method": "Body"
+        },
+        "proxied": {
+          "type": "boolean",
+          "description": "Whether to proxy through Cloudflare",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete DNS Record",
+      "path": "/zones/{zone_id}/dns_records/{dns_record_id}",
+      "method": "DELETE",
+      "description": "Delete a DNS record",
+      "request_params": {
+        "zone_id": {
+          "type": "string",
+          "description": "Cloudflare Zone ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "dns_record_id": {
+          "type": "string",
+          "description": "DNS Record ID to delete",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "Purge Cache",
+      "path": "/zones/{zone_id}/purge_cache",
+      "method": "POST",
+      "description": "Purge files from Cloudflare CDN cache",
+      "request_params": {
+        "zone_id": {
+          "type": "string",
+          "description": "Cloudflare Zone ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "purge_everything": {
+          "type": "boolean",
+          "description": "Purge all cached content for the zone (true to purge everything)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "files": {
+          "type": "array",
+          "description": "Array of specific URLs to purge from cache",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Workers Scripts",
+      "path": "/accounts/{account_id}/workers/scripts",
+      "method": "GET",
+      "description": "List all Cloudflare Workers scripts in an account",
+      "request_params": {
+        "account_id": {
+          "type": "string",
+          "description": "Cloudflare Account ID",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "Get Zone Analytics",
+      "path": "/zones/{zone_id}/analytics/dashboard",
+      "method": "GET",
+      "description": "Get analytics data for a zone",
+      "request_params": {
+        "zone_id": {
+          "type": "string",
+          "description": "Cloudflare Zone ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "since": {
+          "type": "string",
+          "description": "Start date for analytics (ISO 8601 or relative like '-1440' for 24h)",
+          "required": false,
+          "default": "-1440",
+          "send_method": "Query"
+        },
+        "until": {
+          "type": "string",
+          "description": "End date for analytics (ISO 8601 or '0' for now)",
+          "required": false,
+          "default": "0",
+          "send_method": "Query"
+        },
+        "continuous": {
+          "type": "boolean",
+          "description": "Use continuous data instead of sampled data",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Firewall Rules",
+      "path": "/zones/{zone_id}/firewall/rules",
+      "method": "GET",
+      "description": "List firewall rules for a zone",
+      "request_params": {
+        "zone_id": {
+          "type": "string",
+          "description": "Cloudflare Zone ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of rules per page",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

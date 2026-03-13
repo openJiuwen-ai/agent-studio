@@ -702,7 +702,8 @@
       "deepSearchServiceUnavailable": "DeepSearch service is temporarily unavailable, please visit ",
       "deepSearchConfigRetry": ", refer to the documentation for configuration and try again",
       "checkingDeepsearch": "Checking DeepSearch service status...",
-      "deepsearchServiceDown": "DeepSearch service is temporarily unavailable"
+      "deepsearchServiceDown": "DeepSearch service is temporarily unavailable",
+      "stopDeepSearch": "Stop DeepSearch"
     },
     "picker": {
       "selectAgent": "Select Agent",
@@ -825,10 +826,48 @@
         "general": "General",
         "search": "Search",
         "template": "Template",
+        "model": "Model",
         "generalDesc": "Interaction and planning settings",
         "searchDesc": "Online enhancement engine and result settings",
         "templateDesc": "Report template management",
         "needsConfig": "Needs Config"
+      },
+      "model": {
+        "general": {
+          "title": "Basic Configuration",
+          "label": "General Model",
+          "description": "Recommended to use a comprehensive model that adapts to all modules",
+          "notSelected": "No model selected",
+          "required": "General model is required"
+        },
+        "advanced": {
+          "title": "Advanced Configuration",
+          "expand": "Expand",
+          "collapse": "Collapse",
+          "info": "Modules without a specific model selected will use the general model by default"
+        },
+        "outline": {
+          "label": "Outline Generation",
+          "description": "",
+          "recommendation": "Recommended to use reasoning models for better intent understanding and reduced hallucinations"
+        },
+        "infoCollecting": {
+          "label": "Information Collecting",
+          "description": "",
+          "recommendation": "Simple models are sufficient for quick summarization"
+        },
+        "reportWriting": {
+          "label": "Report Writing",
+          "description": "",
+          "recommendation": "Recommended to use models with strong programming and math capabilities"
+        },
+        "useGeneral": "Not Selected",
+        "selectModel": "Select Model",
+        "clear": "Clear",
+        "test": {
+          "success": "Model {{modelName}} test successful",
+          "failed": "Model {{modelName}} test failed, model unavailable"
+        }
       },
       "general": {
         "interactionSettings": "Interaction Settings",
@@ -864,7 +903,8 @@
         "webModeRequires": "Online enhancement mode requires an online enhancement engine",
         "localModeRequires": "Local search mode requires at least one knowledge base",
         "webResultCountRange": "Online enhancement result count must be between 1-10",
-        "localResultCountRange": "Local search result count must be between 1-10"
+        "localResultCountRange": "Local search result count must be between 1-10",
+        "generalModelRequired": "General model is required, please select a model"
       },
       "engine": {
         "select": "Select Online Enhancement Engine",
@@ -1038,6 +1078,8 @@
       "collapse": "Collapse",
       "expand": "Expand {{count}} items",
       "statusUnknown": "Conditionally Complete",
+      "conversationCancelled": "Conversation Cancelled",
+      "conversationCancelledTip": "DeepSearch conversation has been manually interrupted",
       "collapseContent": "Collapse Content",
       "expandContent": "Expand Content",
       "status": {
@@ -2188,6 +2230,10 @@
     "configInfo": "Configuration Info",
     "testCompletion": "Test Completion",
     "testFailed": "Test Failed",
+    "modelName": "Model",
+    "promptText": "Prompt",
+    "averageResponseTime": "Average Response Time",
+    "unknownError": "Unknown Error",
     "modelList": {
       "title": "Model List",
       "noModels": "No models available",
@@ -2630,7 +2676,10 @@
         "downloadCount": "Download Count:",
         "currentStatus": "Current Status:",
         "tags": "Tags",
-        "permissions": "Permissions Required"
+        "permissions": "Permissions Required",
+        "requiredConfiguration": "Required Configuration",
+        "headerName": "Header Name",
+        "defaultValue": "Default Value"
       },
       "publishPlugin": {
         "pluginId": "Plugin ID",
@@ -2889,12 +2938,10 @@
       "update": "Update",
       "delete": "Delete",
       "noneParam": "None",
-
       "addSuccess": "Parameter added successfully",
       "updateSuccess": "Parameter updated successfully",
       "deleteSuccess": "Parameter deleted successfully",
       "pathParam": "Path Parameter",
-
       "nameRequired": "Parameter name cannot be empty",
       "nonRuntimeValueRequired": "Non-runtime parameters must have a default value",
       "name": "Parameter Name",
@@ -4458,11 +4505,15 @@
     },
     "searchPlaceholder": "Search by memory base name or description...",
     "createButton": "Create Memory Base",
+    "searchMemory": "Search Memory",
     "memoryType": {
       "all": "All Type",
       "longterm": "Memory Fragments",
       "variable": "Variable Memory",
-      "summary": "History Summary"
+      "summary": "History Summary",
+      "profile": "User Profile",
+      "episodic": "Episodic Memory",
+      "semantic": "Semantic Memory"
     },
     "search": {
       "searching": "Searching...",

@@ -1,0 +1,319 @@
+{
+  "ready": true,
+  "plugin_id": "ticketmaster_api",
+  "name": "Ticketmaster",
+  "description": "Discover live events, concerts, sports, arts, and theater. Search for events, venues, and attractions worldwide.",
+  "category": "entertainment",
+  "category_name": "Entertainment & Events",
+  "category_icon": "🎭",
+  "icon_uri": "🎫",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "events",
+    "concerts",
+    "sports",
+    "theater",
+    "tickets",
+    "entertainment",
+    "venues"
+  ],
+  "api_prefix": "https://app.ticketmaster.com/discovery/v2",
+  "desc_mk": "Ticketmaster Discovery API provides access to millions of live events worldwide. Search for events by location, date, genre, artist, and more. Get detailed information about venues, attractions, and classifications.",
+  "tools": [
+    {
+      "name": "Search Events",
+      "path": "/events.json",
+      "method": "GET",
+      "description": "Search for events by keyword, location, date, classification, and more",
+      "request_params": {
+        "apikey": {
+          "type": "string",
+          "description": "Your Ticketmaster API key (get from developer.ticketmaster.com)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "keyword": {
+          "type": "string",
+          "description": "Keyword to search for (artist, team, event name, etc.)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "city": {
+          "type": "string",
+          "description": "City name for event search",
+          "required": false,
+          "send_method": "Query"
+        },
+        "countryCode": {
+          "type": "string",
+          "description": "ISO 3166-1 country code (e.g., US, CA, GB)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "stateCode": {
+          "type": "string",
+          "description": "State code (e.g., CA, NY, TX)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "postalCode": {
+          "type": "string",
+          "description": "Postal/ZIP code",
+          "required": false,
+          "send_method": "Query"
+        },
+        "latlong": {
+          "type": "string",
+          "description": "Latitude,longitude coordinates (e.g., '34.0522,-118.2437')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "radius": {
+          "type": "string",
+          "description": "Search radius in miles (default 50)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "classificationName": {
+          "type": "string",
+          "description": "Classification name (music, sports, arts, theater, etc.)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "startDateTime": {
+          "type": "string",
+          "description": "Start date/time in ISO 8601 format",
+          "required": false,
+          "send_method": "Query"
+        },
+        "endDateTime": {
+          "type": "string",
+          "description": "End date/time in ISO 8601 format",
+          "required": false,
+          "send_method": "Query"
+        },
+        "size": {
+          "type": "integer",
+          "description": "Number of results per page (max 200)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number for pagination",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order (date,asc or date,desc or relevance,asc or relevance,desc)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Event Details",
+      "path": "/events/{id}.json",
+      "method": "GET",
+      "description": "Get detailed information about a specific event by ID",
+      "request_params": {
+        "apikey": {
+          "type": "string",
+          "description": "Your Ticketmaster API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "id": {
+          "type": "string",
+          "description": "Event ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Search Attractions",
+      "path": "/attractions.json",
+      "method": "GET",
+      "description": "Search for attractions (artists, teams, performers)",
+      "request_params": {
+        "apikey": {
+          "type": "string",
+          "description": "Your Ticketmaster API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "keyword": {
+          "type": "string",
+          "description": "Keyword to search for attractions",
+          "required": false,
+          "send_method": "Query"
+        },
+        "classificationName": {
+          "type": "string",
+          "description": "Classification name (music, sports, arts, theater)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "size": {
+          "type": "integer",
+          "description": "Number of results per page",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Attraction Details",
+      "path": "/attractions/{id}.json",
+      "method": "GET",
+      "description": "Get detailed information about a specific attraction by ID",
+      "request_params": {
+        "apikey": {
+          "type": "string",
+          "description": "Your Ticketmaster API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "id": {
+          "type": "string",
+          "description": "Attraction ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Search Venues",
+      "path": "/venues.json",
+      "method": "GET",
+      "description": "Search for venues by location, name, or keyword",
+      "request_params": {
+        "apikey": {
+          "type": "string",
+          "description": "Your Ticketmaster API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "keyword": {
+          "type": "string",
+          "description": "Venue name or keyword",
+          "required": false,
+          "send_method": "Query"
+        },
+        "city": {
+          "type": "string",
+          "description": "City name",
+          "required": false,
+          "send_method": "Query"
+        },
+        "countryCode": {
+          "type": "string",
+          "description": "ISO 3166-1 country code",
+          "required": false,
+          "send_method": "Query"
+        },
+        "stateCode": {
+          "type": "string",
+          "description": "State code",
+          "required": false,
+          "send_method": "Query"
+        },
+        "size": {
+          "type": "integer",
+          "description": "Number of results per page",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Venue Details",
+      "path": "/venues/{id}.json",
+      "method": "GET",
+      "description": "Get detailed information about a specific venue by ID",
+      "request_params": {
+        "apikey": {
+          "type": "string",
+          "description": "Your Ticketmaster API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "id": {
+          "type": "string",
+          "description": "Venue ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Classifications",
+      "path": "/classifications.json",
+      "method": "GET",
+      "description": "Get all available event classifications (genres, segments, types)",
+      "request_params": {
+        "apikey": {
+          "type": "string",
+          "description": "Your Ticketmaster API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "size": {
+          "type": "integer",
+          "description": "Number of results per page",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Suggest Events",
+      "path": "/suggest",
+      "method": "GET",
+      "description": "Get event suggestions for autocomplete (fast, lightweight)",
+      "request_params": {
+        "apikey": {
+          "type": "string",
+          "description": "Your Ticketmaster API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "keyword": {
+          "type": "string",
+          "description": "Partial keyword for suggestions",
+          "required": true,
+          "send_method": "Query"
+        },
+        "source": {
+          "type": "string",
+          "description": "Source type (ticketmaster or universe)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

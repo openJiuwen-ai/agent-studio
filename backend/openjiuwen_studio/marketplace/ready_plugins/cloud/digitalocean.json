@@ -1,0 +1,267 @@
+{
+  "ready": false,
+  "plugin_id": "digitalocean",
+  "name": "DigitalOcean",
+  "description": "Manage Droplets, Databases, Kubernetes clusters, and Domains via the DigitalOcean API.",
+  "category": "cloud",
+  "category_name": "Cloud & Infrastructure",
+  "category_icon": "☁️",
+  "icon_uri": "🌊",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["cloud", "digitalocean", "droplets", "kubernetes", "infrastructure"],
+  "api_prefix": "https://api.digitalocean.com/v2",
+  "documentation": "https://docs.digitalocean.com/reference/api/api-reference/",
+  "desc_mk": "Interact with the DigitalOcean API to manage Droplets (VMs), Databases, Kubernetes clusters, Domains, Volumes, and more.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "Personal Access Token",
+        "env_var": "DIGITALOCEAN_TOKEN"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "list_droplets",
+      "description": "Retrieve a list of all Droplets (virtual machines) in the account.",
+      "method": "GET",
+      "path": "/droplets",
+      "request_params": {
+        "per_page": {
+          "type": "integer",
+          "desc": "Number of items to return per page (max 200).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Page number to return.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "tag_name": {
+          "type": "string",
+          "desc": "Filter Droplets by a specific tag.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "name": {
+          "type": "string",
+          "desc": "Filter Droplets by name.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_droplet",
+      "description": "Retrieve details of a specific Droplet by its ID.",
+      "method": "GET",
+      "path": "/droplets/{droplet_id}",
+      "request_params": {
+        "droplet_id": {
+          "type": "integer",
+          "desc": "The unique numeric ID of the Droplet.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "create_droplet",
+      "description": "Create a new Droplet (virtual machine).",
+      "method": "POST",
+      "path": "/droplets",
+      "request_params": {
+        "name": {
+          "type": "string",
+          "desc": "Human-readable hostname for the Droplet.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "region": {
+          "type": "string",
+          "desc": "Region slug to create the Droplet in (e.g. nyc1, sfo3, lon1).",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "size": {
+          "type": "string",
+          "desc": "Size slug for the Droplet (e.g. s-1vcpu-1gb, s-2vcpu-4gb).",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "image": {
+          "type": "string",
+          "desc": "OS image slug or ID (e.g. ubuntu-22-04-x64, debian-11-x64).",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "ssh_keys": {
+          "type": "array",
+          "desc": "Array of SSH key IDs or fingerprints to embed in the Droplet.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "backups": {
+          "type": "boolean",
+          "desc": "Enable automatic backups for the Droplet.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "tags": {
+          "type": "array",
+          "desc": "Array of tag names to apply to the Droplet.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "delete_droplet",
+      "description": "Delete a Droplet by its ID.",
+      "method": "DELETE",
+      "path": "/droplets/{droplet_id}",
+      "request_params": {
+        "droplet_id": {
+          "type": "integer",
+          "desc": "The unique numeric ID of the Droplet to delete.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "list_databases",
+      "description": "Retrieve a list of all managed database clusters.",
+      "method": "GET",
+      "path": "/databases",
+      "request_params": {
+        "tag_name": {
+          "type": "string",
+          "desc": "Filter database clusters by a specific tag.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_database",
+      "description": "Retrieve details of a specific managed database cluster.",
+      "method": "GET",
+      "path": "/databases/{database_cluster_uuid}",
+      "request_params": {
+        "database_cluster_uuid": {
+          "type": "string",
+          "desc": "The UUID of the database cluster.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "list_domains",
+      "description": "Retrieve a list of all domains managed in the account.",
+      "method": "GET",
+      "path": "/domains",
+      "request_params": {
+        "per_page": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Page number to return.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_domain",
+      "description": "Retrieve details of a specific domain.",
+      "method": "GET",
+      "path": "/domains/{domain_name}",
+      "request_params": {
+        "domain_name": {
+          "type": "string",
+          "desc": "The domain name to retrieve (e.g. example.com).",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "list_domain_records",
+      "description": "Retrieve all DNS records for a domain.",
+      "method": "GET",
+      "path": "/domains/{domain_name}/records",
+      "request_params": {
+        "domain_name": {
+          "type": "string",
+          "desc": "The domain name to retrieve DNS records for.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "type": {
+          "type": "string",
+          "desc": "Filter records by type: A, AAAA, CNAME, MX, TXT, NS, SRV, CAA.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "list_kubernetes_clusters",
+      "description": "Retrieve a list of all Kubernetes clusters in the account.",
+      "method": "GET",
+      "path": "/kubernetes/clusters",
+      "request_params": {
+        "per_page": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Page number to return.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "list_volumes",
+      "description": "Retrieve a list of all block storage volumes in the account.",
+      "method": "GET",
+      "path": "/volumes",
+      "request_params": {
+        "region": {
+          "type": "string",
+          "desc": "Filter volumes by region slug (e.g. nyc1).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "name": {
+          "type": "string",
+          "desc": "Filter volumes by name.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_account",
+      "description": "Retrieve information about the authenticated DigitalOcean account.",
+      "method": "GET",
+      "path": "/account",
+      "request_params": {}
+    }
+  ]
+}

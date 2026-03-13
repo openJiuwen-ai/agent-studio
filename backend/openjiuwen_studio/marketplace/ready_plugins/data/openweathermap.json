@@ -1,0 +1,479 @@
+{
+  "ready": false,
+  "plugin_id": "openweathermap_api",
+  "name": "OpenWeatherMap API",
+  "description": "Global weather data API providing current conditions, forecasts, historical data, and weather maps for 200,000+ cities worldwide. Access temperature, precipitation, wind, air quality, and UV index data.",
+  "category": "data",
+  "category_name": "Data & Analytics",
+  "category_icon": "📊",
+  "icon_uri": "🌤️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "weather",
+    "forecast",
+    "climate",
+    "data",
+    "global",
+    "meteorology"
+  ],
+  "api_prefix": "https://api.openweathermap.org/data/2.5",
+  "desc_mk": "OpenWeatherMap provides accurate weather data and forecasts for any location on Earth. Access current weather conditions, minute-by-minute precipitation forecasts, hourly and daily forecasts, historical data, air pollution levels, and geocoding services. Data available in multiple units (metric, imperial, standard) and languages. Free tier includes 60 calls/minute with 1,000,000 calls/month. **Note:** Requires free API key from [OpenWeatherMap](https://openweathermap.org/api). Premium plans available for higher limits and advanced features.",
+  "header_configuration": {
+    "appid": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "OPENWEATHERMAP_API_KEY",
+      "description": "API key for OpenWeatherMap authentication"
+    }
+  },
+  "tools": [
+    {
+      "name": "get_current_weather",
+      "path": "/weather",
+      "method": "GET",
+      "description": "Get current weather data for a specific location by city name, coordinates, or city ID",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "City name, state code, and country code divided by comma (e.g., 'London,UK' or 'New York,NY,US')",
+          "required": false,
+          "send_method": "query"
+        },
+        "lat": {
+          "type": "number",
+          "description": "Latitude coordinate (use with lon parameter)",
+          "required": false,
+          "send_method": "query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude coordinate (use with lat parameter)",
+          "required": false,
+          "send_method": "query"
+        },
+        "units": {
+          "type": "string",
+          "description": "Units of measurement: 'standard' (Kelvin), 'metric' (Celsius), 'imperial' (Fahrenheit)",
+          "required": false,
+          "send_method": "query",
+          "default": "metric"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code for output (e.g., 'en', 'zh_cn', 'es', 'fr')",
+          "required": false,
+          "send_method": "query",
+          "default": "en"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_5day_forecast",
+      "path": "/forecast",
+      "method": "GET",
+      "description": "Get 5-day weather forecast with data every 3 hours (40 timestamps total)",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "City name, state code, and country code divided by comma",
+          "required": false,
+          "send_method": "query"
+        },
+        "lat": {
+          "type": "number",
+          "description": "Latitude coordinate",
+          "required": false,
+          "send_method": "query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude coordinate",
+          "required": false,
+          "send_method": "query"
+        },
+        "cnt": {
+          "type": "integer",
+          "description": "Number of timestamps to return (max 40)",
+          "required": false,
+          "send_method": "query"
+        },
+        "units": {
+          "type": "string",
+          "description": "Units: 'standard', 'metric', 'imperial'",
+          "required": false,
+          "send_method": "query",
+          "default": "metric"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code for output",
+          "required": false,
+          "send_method": "query",
+          "default": "en"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_hourly_forecast",
+      "path": "/forecast/hourly",
+      "method": "GET",
+      "description": "Get hourly weather forecast for 4 days (96 hours) - requires paid subscription",
+      "request_params": {
+        "lat": {
+          "type": "number",
+          "description": "Latitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "cnt": {
+          "type": "integer",
+          "description": "Number of hours to return (max 96)",
+          "required": false,
+          "send_method": "query"
+        },
+        "units": {
+          "type": "string",
+          "description": "Units: 'standard', 'metric', 'imperial'",
+          "required": false,
+          "send_method": "query",
+          "default": "metric"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "send_method": "query",
+          "default": "en"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_daily_forecast_16day",
+      "path": "/forecast/daily",
+      "method": "GET",
+      "description": "Get daily weather forecast for up to 16 days - requires paid subscription",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "City name, state code, and country code",
+          "required": false,
+          "send_method": "query"
+        },
+        "lat": {
+          "type": "number",
+          "description": "Latitude coordinate",
+          "required": false,
+          "send_method": "query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude coordinate",
+          "required": false,
+          "send_method": "query"
+        },
+        "cnt": {
+          "type": "integer",
+          "description": "Number of days to return (max 16)",
+          "required": false,
+          "send_method": "query",
+          "default": 7
+        },
+        "units": {
+          "type": "string",
+          "description": "Units: 'standard', 'metric', 'imperial'",
+          "required": false,
+          "send_method": "query",
+          "default": "metric"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "send_method": "query",
+          "default": "en"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_air_pollution_current",
+      "path": "/air_pollution",
+      "method": "GET",
+      "description": "Get current air pollution data including Air Quality Index (AQI) and pollutant concentrations",
+      "request_params": {
+        "lat": {
+          "type": "number",
+          "description": "Latitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_air_pollution_forecast",
+      "path": "/air_pollution/forecast",
+      "method": "GET",
+      "description": "Get hourly air pollution forecast for 5 days",
+      "request_params": {
+        "lat": {
+          "type": "number",
+          "description": "Latitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_air_pollution_history",
+      "path": "/air_pollution/history",
+      "method": "GET",
+      "description": "Get historical air pollution data from specific time period",
+      "request_params": {
+        "lat": {
+          "type": "number",
+          "description": "Latitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "start": {
+          "type": "integer",
+          "description": "Start date in Unix timestamp (UTC)",
+          "required": true,
+          "send_method": "query"
+        },
+        "end": {
+          "type": "integer",
+          "description": "End date in Unix timestamp (UTC)",
+          "required": true,
+          "send_method": "query"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "geocoding_direct",
+      "path": "/geo/1.0/direct",
+      "method": "GET",
+      "description": "Convert city name to geographic coordinates (latitude and longitude)",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "City name, state code, country code (e.g., 'London,UK')",
+          "required": true,
+          "send_method": "query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of locations in response (max 5)",
+          "required": false,
+          "send_method": "query",
+          "default": 5
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "geocoding_reverse",
+      "path": "/geo/1.0/reverse",
+      "method": "GET",
+      "description": "Convert geographic coordinates to location name (reverse geocoding)",
+      "request_params": {
+        "lat": {
+          "type": "number",
+          "description": "Latitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of locations in response",
+          "required": false,
+          "send_method": "query",
+          "default": 5
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "geocoding_by_zip",
+      "path": "/geo/1.0/zip",
+      "method": "GET",
+      "description": "Get location coordinates by ZIP/postal code",
+      "request_params": {
+        "zip": {
+          "type": "string",
+          "description": "ZIP/postal code and country code (e.g., '10001,US' or 'SW1,GB')",
+          "required": true,
+          "send_method": "query"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_onecall_weather",
+      "path": "/onecall",
+      "method": "GET",
+      "description": "One Call API 3.0 - Current weather, minute forecast for 1 hour, hourly for 48 hours, daily for 8 days, alerts - requires subscription",
+      "request_params": {
+        "lat": {
+          "type": "number",
+          "description": "Latitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "exclude": {
+          "type": "string",
+          "description": "Exclude parts: 'current', 'minutely', 'hourly', 'daily', 'alerts' (comma-separated)",
+          "required": false,
+          "send_method": "query"
+        },
+        "units": {
+          "type": "string",
+          "description": "Units: 'standard', 'metric', 'imperial'",
+          "required": false,
+          "send_method": "query",
+          "default": "metric"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "send_method": "query",
+          "default": "en"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_weather_alerts",
+      "path": "/onecall",
+      "method": "GET",
+      "description": "Get government weather alerts for a location (severe weather warnings, advisories)",
+      "request_params": {
+        "lat": {
+          "type": "number",
+          "description": "Latitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude coordinate",
+          "required": true,
+          "send_method": "query"
+        },
+        "exclude": {
+          "type": "string",
+          "description": "Exclude all except alerts: 'current,minutely,hourly,daily'",
+          "required": false,
+          "send_method": "query",
+          "default": "current,minutely,hourly,daily"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    }
+  ]
+}

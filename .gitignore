@@ -113,3 +113,4 @@ QWEN.md
 CLAUDE.md
 AGENTS.md
 
+/backend/openjiuwen_studio/memory-data/chroma.sqlite3

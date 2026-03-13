@@ -1,0 +1,179 @@
+{
+  "ready": false,
+  "plugin_id": "supabase",
+  "name": "Supabase",
+  "description": "Query tables, invoke functions, and manage data via the Supabase REST API (PostgREST).",
+  "category": "database",
+  "category_name": "Databases",
+  "category_icon": "🗄️",
+  "icon_uri": "⚡",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["database", "supabase", "postgresql", "rest", "backend"],
+  "api_prefix": "https://{project_ref}.supabase.co/rest/v1",
+  "documentation": "https://supabase.com/docs/guides/api",
+  "desc_mk": "Interact with your Supabase project via the auto-generated REST API (PostgREST) to query tables, insert data, update rows, delete records, and call stored functions.",
+  "authentication": {
+    "type": "api_key",
+    "required_credentials": [
+      {
+        "name": "apikey",
+        "env_var": "SUPABASE_ANON_KEY"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "query_table",
+      "description": "Query rows from a Supabase table with optional filters, ordering, and pagination.",
+      "method": "GET",
+      "path": "/{table}",
+      "request_params": {
+        "table": {
+          "type": "string",
+          "desc": "The name of the table to query.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "select": {
+          "type": "string",
+          "desc": "Comma-separated list of columns to return (e.g. id,name,email). Use * for all columns.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "order": {
+          "type": "string",
+          "desc": "Column to sort by with optional direction (e.g. created_at.desc or name.asc).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "desc": "Maximum number of rows to return.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "desc": "Number of rows to skip before returning results.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "insert_row",
+      "description": "Insert one or more rows into a Supabase table.",
+      "method": "POST",
+      "path": "/{table}",
+      "request_params": {
+        "table": {
+          "type": "string",
+          "desc": "The name of the table to insert into.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "data": {
+          "type": "object",
+          "desc": "Row data as a JSON object (for single row) or array of objects (for multiple rows). Keys are column names.",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "update_rows",
+      "description": "Update rows in a Supabase table matching a filter. Specify the filter as a query parameter (e.g. id=eq.5).",
+      "method": "PATCH",
+      "path": "/{table}",
+      "request_params": {
+        "table": {
+          "type": "string",
+          "desc": "The name of the table to update.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "filter_column": {
+          "type": "string",
+          "desc": "Column name to filter rows on (e.g. id). Applied as {column}=eq.{value} query param.",
+          "is_required": true,
+          "send_method": "Query"
+        },
+        "data": {
+          "type": "object",
+          "desc": "Fields to update as a JSON object. Keys are column names.",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "upsert_rows",
+      "description": "Insert or update (upsert) rows in a Supabase table.",
+      "method": "POST",
+      "path": "/{table}",
+      "request_params": {
+        "table": {
+          "type": "string",
+          "desc": "The name of the table to upsert into.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "data": {
+          "type": "object",
+          "desc": "Row data as a JSON object or array of objects to upsert.",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "delete_rows",
+      "description": "Delete rows from a Supabase table matching a filter.",
+      "method": "DELETE",
+      "path": "/{table}",
+      "request_params": {
+        "table": {
+          "type": "string",
+          "desc": "The name of the table to delete from.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "select": {
+          "type": "string",
+          "desc": "Columns to return from deleted rows (useful for confirmation).",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "call_function",
+      "description": "Call a Supabase PostgreSQL stored function (RPC).",
+      "method": "POST",
+      "path": "/rpc/{function_name}",
+      "request_params": {
+        "function_name": {
+          "type": "string",
+          "desc": "The name of the stored function to call.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "params": {
+          "type": "object",
+          "desc": "Function parameters as a JSON object. Keys are parameter names.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "get_schema",
+      "description": "Retrieve the OpenAPI schema for the Supabase project, listing all available tables and their columns.",
+      "method": "GET",
+      "path": "/",
+      "request_params": {}
+    }
+  ]
+}

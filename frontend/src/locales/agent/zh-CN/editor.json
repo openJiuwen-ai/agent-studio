@@ -283,7 +283,16 @@
           },
           "longTermTitle": "长期记忆",
           "longTermToggleLabel": "启用长期记忆",
-          "longTermDescription": "启用后，智能体将能够记住与用户的对话过程中的用户个人信息和偏好数据"
+          "userProfileToggleLabel": "启用用户画像记忆",
+          "episodicMemoryToggleLabel": "启用情景记忆",
+          "semanticMemoryToggleLabel": "启用语义记忆",
+          "summaryMemoryToggleLabel": "启用摘要记忆",
+          "longTermDescription": "启用后，智能体将能够记住与用户的对话过程中的关键信息",
+          "userProfileDescription": "启用后，智能体将能够记住与用户的对话过程中的用户画像信息",
+          "semanticMemoryDescription": "启用后，智能体将能够使用语义分析来理解和记忆用户的对话内容",
+          "episodicMemoryDescription": "启用后，智能体将能够记住用户对话的具体情景和上下文",
+          "summaryMemoryDescription": "启用后，智能体将能够总结用户对话的关键信息",
+          "memoryOptions": "记忆类型开启选项"
         }
       },
       "addWorkflow": {

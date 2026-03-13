@@ -1,0 +1,368 @@
+{
+  "ready": false,
+  "plugin_id": "stripe",
+  "name": "Stripe",
+  "description": "Accept payments, manage customers, and handle subscriptions with Stripe's payment processing API.",
+  "category": "payments",
+  "category_name": "Payments & Finance",
+  "category_icon": "💳",
+  "icon_uri": "💳",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["payments", "stripe", "billing", "subscriptions", "checkout"],
+  "api_prefix": "https://api.stripe.com/v1",
+  "documentation": "https://stripe.com/docs/api",
+  "desc_mk": "Stripe is the world's leading payment processing platform. Use this plugin to manage customers, payment intents, charges, refunds, products, and checkout sessions. Stripe uses form-encoded request bodies for POST requests.\n\n**Authentication:** Requires a Stripe Secret Key passed as a Bearer token.\n\n**Amounts:** All monetary amounts are in the smallest currency unit (e.g. cents for USD).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_STRIPE_SECRET_KEY",
+      "description": "Stripe secret API key (Environment variable: STRIPE_SECRET_KEY)"
+    }
+  },
+  "tools": [
+    {
+      "name": "List Customers",
+      "description": "Returns a list of customers. Customers can be filtered by email address.",
+      "path": "/customers",
+      "method": "GET",
+      "request_params": {
+        "email": {
+          "type": "string",
+          "description": "Filter customers by email address",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results to return (1-100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "starting_after": {
+          "type": "string",
+          "description": "Cursor for pagination - ID of the last object from the previous page",
+          "required": false,
+          "send_method": "Query"
+        },
+        "ending_before": {
+          "type": "string",
+          "description": "Cursor for pagination - ID of the first object from the next page",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Create Customer",
+      "description": "Creates a new customer object in Stripe.",
+      "path": "/customers",
+      "method": "POST",
+      "request_params": {
+        "email": {
+          "type": "string",
+          "description": "Customer's email address",
+          "required": false,
+          "send_method": "Body"
+        },
+        "name": {
+          "type": "string",
+          "description": "Customer's full name or business name",
+          "required": false,
+          "send_method": "Body"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Customer's phone number",
+          "required": false,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "An arbitrary string to describe the customer",
+          "required": false,
+          "send_method": "Body"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Set of key-value pairs for storing additional information",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Get Customer",
+      "description": "Retrieves the details of an existing customer by their ID.",
+      "path": "/customers/{id}",
+      "method": "GET",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The unique identifier of the customer (e.g. cus_xxxx)",
+          "required": true,
+          "send_method": "Path",
+          "is_path_param": true
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Create Payment Intent",
+      "description": "Creates a PaymentIntent object to track a payment through its lifecycle.",
+      "path": "/payment_intents",
+      "method": "POST",
+      "request_params": {
+        "amount": {
+          "type": "integer",
+          "description": "Amount to charge in the smallest currency unit (e.g. 1000 = $10.00 USD)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "currency": {
+          "type": "string",
+          "description": "Three-letter ISO currency code (e.g. usd, eur, gbp)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "customer": {
+          "type": "string",
+          "description": "ID of the customer to attach the PaymentIntent to",
+          "required": false,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "An arbitrary string to describe the payment",
+          "required": false,
+          "send_method": "Body"
+        },
+        "payment_method_types": {
+          "type": "array",
+          "description": "List of payment method types (e.g. [\"card\"])",
+          "required": false,
+          "send_method": "Body"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Set of key-value pairs for storing additional information",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Confirm Payment Intent",
+      "description": "Confirms a PaymentIntent, attempting to collect payment according to its configuration.",
+      "path": "/payment_intents/{id}/confirm",
+      "method": "POST",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID of the PaymentIntent to confirm",
+          "required": true,
+          "send_method": "Path",
+          "is_path_param": true
+        },
+        "payment_method": {
+          "type": "string",
+          "description": "ID of the payment method to attach and confirm with",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "List Payment Intents",
+      "description": "Returns a list of PaymentIntents, optionally filtered by customer.",
+      "path": "/payment_intents",
+      "method": "GET",
+      "request_params": {
+        "customer": {
+          "type": "string",
+          "description": "Filter PaymentIntents by customer ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results to return (1-100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "starting_after": {
+          "type": "string",
+          "description": "Cursor for pagination - ID of the last object from the previous page",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Create Refund",
+      "description": "Creates a refund for an existing charge or payment intent.",
+      "path": "/refunds",
+      "method": "POST",
+      "request_params": {
+        "charge": {
+          "type": "string",
+          "description": "ID of the charge to refund (provide this or payment_intent)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "payment_intent": {
+          "type": "string",
+          "description": "ID of the PaymentIntent to refund (provide this or charge)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "amount": {
+          "type": "integer",
+          "description": "Amount to refund in smallest currency unit. Omit for full refund.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Reason for the refund: duplicate, fraudulent, or requested_by_customer",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "List Products",
+      "description": "Returns a list of products available in your Stripe account.",
+      "path": "/products",
+      "method": "GET",
+      "request_params": {
+        "active": {
+          "type": "boolean",
+          "description": "Filter by active status. true returns only active products.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results to return (1-100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "starting_after": {
+          "type": "string",
+          "description": "Cursor for pagination - ID of the last object from the previous page",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Create Product",
+      "description": "Creates a new product in your Stripe account.",
+      "path": "/products",
+      "method": "POST",
+      "request_params": {
+        "name": {
+          "type": "string",
+          "description": "The product's name, visible to customers",
+          "required": true,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "The product's description, visible to customers",
+          "required": false,
+          "send_method": "Body"
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether the product is available for purchase. Defaults to true.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Set of key-value pairs for storing additional information",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "List Charges",
+      "description": "Returns a list of charges, optionally filtered by customer or date range.",
+      "path": "/charges",
+      "method": "GET",
+      "request_params": {
+        "customer": {
+          "type": "string",
+          "description": "Filter charges by customer ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results to return (1-100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "starting_after": {
+          "type": "string",
+          "description": "Cursor for pagination - ID of the last object from the previous page",
+          "required": false,
+          "send_method": "Query"
+        },
+        "created": {
+          "type": "integer",
+          "description": "Unix timestamp to filter charges created after this time",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Create Checkout Session",
+      "description": "Creates a Stripe Checkout Session for a one-time payment, subscription, or setup.",
+      "path": "/checkout/sessions",
+      "method": "POST",
+      "request_params": {
+        "success_url": {
+          "type": "string",
+          "description": "URL to redirect the customer to after successful payment",
+          "required": true,
+          "send_method": "Body"
+        },
+        "cancel_url": {
+          "type": "string",
+          "description": "URL to redirect the customer to if they cancel",
+          "required": true,
+          "send_method": "Body"
+        },
+        "mode": {
+          "type": "string",
+          "description": "Session mode: payment, subscription, or setup",
+          "required": true,
+          "send_method": "Body"
+        },
+        "line_items": {
+          "type": "array",
+          "description": "Array of line items (required for payment mode). Each item has price and quantity.",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    }
+  ]
+}

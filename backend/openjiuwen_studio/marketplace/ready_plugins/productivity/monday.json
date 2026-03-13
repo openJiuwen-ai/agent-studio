@@ -1,0 +1,190 @@
+{
+  "ready": false,
+  "plugin_id": "monday_com_api",
+  "name": "Monday.com",
+  "description": "Work management platform for teams. Manage boards, items, projects, and workflows with customizable workspaces.",
+  "category": "productivity",
+  "category_name": "Productivity Tools",
+  "category_icon": "📋",
+  "icon_uri": "📅",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "productivity",
+    "project-management",
+    "collaboration",
+    "workflow",
+    "tasks",
+    "boards"
+  ],
+  "api_prefix": "https://api.monday.com/v2",
+  "desc_mk": "Monday.com is a work management platform that helps teams plan, organize, and track work in a customizable workspace. The API uses GraphQL for flexible data queries and mutations.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "YOUR_MONDAY_API_TOKEN",
+      "description": "Monday.com API token for authentication"
+    },
+    "Content-Type": {
+      "value": "application/json",
+      "description": "Content type for GraphQL requests"
+    },
+    "API-Version": {
+      "value": "2026-01",
+      "description": "Monday.com API version"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Boards",
+      "path": "",
+      "method": "POST",
+      "description": "Get all boards in the account with their basic information",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "GraphQL query to retrieve boards",
+          "required": true,
+          "send_method": "Body",
+          "default": "query { boards (limit: 10) { id name description state board_kind } }"
+        }
+      }
+    },
+    {
+      "name": "Get Board Items",
+      "path": "",
+      "method": "POST",
+      "description": "Get items from a specific board",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "GraphQL query to retrieve board items. Use board_id variable to specify board.",
+          "required": true,
+          "send_method": "Body",
+          "default": "query { boards (ids: [BOARD_ID]) { items_page (limit: 50) { cursor items { id name state } } } }"
+        }
+      }
+    },
+    {
+      "name": "Create Item",
+      "path": "",
+      "method": "POST",
+      "description": "Create a new item on a board",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "GraphQL mutation to create an item. Use board_id and item_name variables.",
+          "required": true,
+          "send_method": "Body",
+          "default": "mutation { create_item (board_id: BOARD_ID, item_name: \"New Item\") { id name } }"
+        }
+      }
+    },
+    {
+      "name": "Update Item",
+      "path": "",
+      "method": "POST",
+      "description": "Update an existing item's name or properties",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "GraphQL mutation to update an item. Use item_id and new values.",
+          "required": true,
+          "send_method": "Body",
+          "default": "mutation { change_simple_column_value (item_id: ITEM_ID, board_id: BOARD_ID, column_id: \"COLUMN_ID\", value: \"NEW_VALUE\") { id name } }"
+        }
+      }
+    },
+    {
+      "name": "Create Board",
+      "path": "",
+      "method": "POST",
+      "description": "Create a new board",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "GraphQL mutation to create a board. Specify board_name and board_kind.",
+          "required": true,
+          "send_method": "Body",
+          "default": "mutation { create_board (board_name: \"New Board\", board_kind: public) { id name } }"
+        }
+      }
+    },
+    {
+      "name": "Get Users",
+      "path": "",
+      "method": "POST",
+      "description": "Get all users in the account",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "GraphQL query to retrieve users",
+          "required": true,
+          "send_method": "Body",
+          "default": "query { users { id name email title photo_thumb } }"
+        }
+      }
+    },
+    {
+      "name": "Get Workspaces",
+      "path": "",
+      "method": "POST",
+      "description": "Get all workspaces in the account",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "GraphQL query to retrieve workspaces",
+          "required": true,
+          "send_method": "Body",
+          "default": "query { workspaces { id name kind description } }"
+        }
+      }
+    },
+    {
+      "name": "Search Items by Column Value",
+      "path": "",
+      "method": "POST",
+      "description": "Search for items based on column values",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "GraphQL query to search items by column values. Use board_id, column_id, and column_value.",
+          "required": true,
+          "send_method": "Body",
+          "default": "query { items_page_by_column_values (board_id: BOARD_ID, columns: [{column_id: \"COLUMN_ID\", column_values: [\"VALUE\"]}]) { cursor items { id name } } }"
+        }
+      }
+    },
+    {
+      "name": "Delete Item",
+      "path": "",
+      "method": "POST",
+      "description": "Delete an item from a board",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "GraphQL mutation to delete an item. Use item_id.",
+          "required": true,
+          "send_method": "Body",
+          "default": "mutation { delete_item (item_id: ITEM_ID) { id } }"
+        }
+      }
+    },
+    {
+      "name": "Custom Query",
+      "path": "",
+      "method": "POST",
+      "description": "Execute a custom GraphQL query or mutation",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Custom GraphQL query or mutation to execute",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

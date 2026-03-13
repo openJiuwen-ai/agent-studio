@@ -1,0 +1,393 @@
+{
+  "ready": false,
+  "plugin_id": "gitlab",
+  "name": "GitLab",
+  "description": "Manage GitLab projects, issues, merge requests, pipelines, and branches via the GitLab REST API.",
+  "category": "developer",
+  "category_name": "Developer Tools",
+  "category_icon": "🛠️",
+  "icon_uri": "🦊",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["gitlab", "git", "projects", "issues", "merge requests", "pipelines", "developer"],
+  "api_prefix": "https://gitlab.com/api/v4",
+  "documentation": "https://docs.gitlab.com/ee/api/rest/",
+  "desc_mk": "## GitLab REST API\n\nConnect to GitLab to manage projects, issues, merge requests, pipelines, branches, and commits programmatically.\n\n### Features\n- Browse and search projects\n- Manage issues and merge requests\n- View pipelines and their status\n- List and create branches\n- Track commits and repository history\n\n### Authentication\nRequires a GitLab personal access token with appropriate scopes (api, read_api).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_GITLAB_TOKEN",
+      "description": "GitLab personal access token as Bearer (Environment variable: GITLAB_TOKEN)"
+    },
+    "PRIVATE-TOKEN": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "YOUR_GITLAB_TOKEN",
+      "description": "GitLab personal access token as Private-Token header (Environment variable: GITLAB_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Project",
+      "description": "Get details about a specific GitLab project by its ID or URL-encoded path.",
+      "method": "GET",
+      "path": "/projects/{id}",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID or URL-encoded path of the project (e.g., 'namespace%2Fproject').",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Project details including name, description, visibility, stars, and default branch."
+      }
+    },
+    {
+      "name": "List Projects",
+      "description": "List GitLab projects accessible to the authenticated user.",
+      "method": "GET",
+      "path": "/projects",
+      "request_params": {
+        "search": {
+          "type": "string",
+          "description": "Search term to filter projects by name.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "owned": {
+          "type": "boolean",
+          "description": "If true, return only projects owned by the current user.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "membership": {
+          "type": "boolean",
+          "description": "If true, return only projects the current user is a member of.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "List of projects with name, description, visibility, and statistics."
+      }
+    },
+    {
+      "name": "List Issues",
+      "description": "List issues for a specific GitLab project.",
+      "method": "GET",
+      "path": "/projects/{id}/issues",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID or URL-encoded path of the project.",
+          "required": true,
+          "is_path_param": true
+        },
+        "state": {
+          "type": "string",
+          "description": "Filter issues by state: 'opened', 'closed', or 'all'.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "labels": {
+          "type": "string",
+          "description": "Comma-separated list of label names to filter by.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "List of issues with title, description, state, labels, and assignee details."
+      }
+    },
+    {
+      "name": "Create Issue",
+      "description": "Create a new issue in a GitLab project.",
+      "method": "POST",
+      "path": "/projects/{id}/issues",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID or URL-encoded path of the project.",
+          "required": true,
+          "is_path_param": true
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the issue.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "The description of the issue (markdown supported).",
+          "required": false,
+          "send_method": "Body"
+        },
+        "labels": {
+          "type": "string",
+          "description": "Comma-separated list of label names to assign.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "assignee_ids": {
+          "type": "array",
+          "description": "Array of user IDs to assign the issue to.",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "The created issue with its IID, URL, and full details."
+      }
+    },
+    {
+      "name": "List Merge Requests",
+      "description": "List merge requests for a specific GitLab project.",
+      "method": "GET",
+      "path": "/projects/{id}/merge_requests",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID or URL-encoded path of the project.",
+          "required": true,
+          "is_path_param": true
+        },
+        "state": {
+          "type": "string",
+          "description": "Filter by state: 'opened', 'closed', 'locked', 'merged', or 'all'.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "List of merge requests with title, state, source and target branches."
+      }
+    },
+    {
+      "name": "Create Merge Request",
+      "description": "Create a new merge request in a GitLab project.",
+      "method": "POST",
+      "path": "/projects/{id}/merge_requests",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID or URL-encoded path of the project.",
+          "required": true,
+          "is_path_param": true
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the merge request.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "source_branch": {
+          "type": "string",
+          "description": "The source branch name for the merge request.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "target_branch": {
+          "type": "string",
+          "description": "The target branch name for the merge request.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the merge request (markdown supported).",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "The created merge request with its IID, URL, and full details."
+      }
+    },
+    {
+      "name": "Get User",
+      "description": "Get a GitLab user's profile by their user ID.",
+      "method": "GET",
+      "path": "/users/{id}",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "The numeric ID of the GitLab user.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "User profile with username, name, email, avatar, and account details."
+      }
+    },
+    {
+      "name": "List Commits",
+      "description": "List commits in a GitLab project repository.",
+      "method": "GET",
+      "path": "/projects/{id}/repository/commits",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID or URL-encoded path of the project.",
+          "required": true,
+          "is_path_param": true
+        },
+        "ref_name": {
+          "type": "string",
+          "description": "The name of a branch, tag, or commit to list commits from.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "List of commits with SHA, author, message, and timestamp."
+      }
+    },
+    {
+      "name": "List Branches",
+      "description": "List branches in a GitLab project repository.",
+      "method": "GET",
+      "path": "/projects/{id}/repository/branches",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID or URL-encoded path of the project.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "List of branches with name, commit SHA, and protection status."
+      }
+    },
+    {
+      "name": "Create Branch",
+      "description": "Create a new branch in a GitLab project repository.",
+      "method": "POST",
+      "path": "/projects/{id}/repository/branches",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID or URL-encoded path of the project.",
+          "required": true,
+          "is_path_param": true
+        },
+        "branch": {
+          "type": "string",
+          "description": "The name of the new branch.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "ref": {
+          "type": "string",
+          "description": "The branch name, tag, or commit SHA to create the branch from.",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "The created branch with its name, commit details, and protection status."
+      }
+    },
+    {
+      "name": "List Pipelines",
+      "description": "List CI/CD pipelines for a GitLab project.",
+      "method": "GET",
+      "path": "/projects/{id}/pipelines",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID or URL-encoded path of the project.",
+          "required": true,
+          "is_path_param": true
+        },
+        "status": {
+          "type": "string",
+          "description": "Filter pipelines by status: 'created', 'waiting_for_resource', 'preparing', 'pending', 'running', 'success', 'failed', 'canceled', 'skipped', 'manual', 'scheduled'.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "List of pipelines with ID, status, ref, SHA, and timestamps."
+      }
+    }
+  ]
+}

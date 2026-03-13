@@ -1,0 +1,363 @@
+{
+  "ready": false,
+  "plugin_id": "douyin_api",
+  "name": "Douyin Open API",
+  "description": "Official Douyin (Chinese TikTok) Open Platform API for video content, user profiles, data analysis, and e-commerce integration. Access China's leading short-video platform with 600M+ daily active users.",
+  "category": "social",
+  "category_name": "Social & Communication",
+  "category_icon": "💬",
+  "icon_uri": "🎵",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "video",
+    "douyin",
+    "tiktok",
+    "social",
+    "china",
+    "short-video",
+    "bytedance"
+  ],
+  "api_prefix": "https://open.douyin.com",
+  "desc_mk": "Douyin Open API provides official access to China's largest short-video platform (抖音). Integrate video publishing, user data retrieval, content analysis, live streaming features, and e-commerce capabilities. Supports OAuth 2.0 authentication for secure user authorization. Access video metadata, user profiles, interaction data, and trending content. **Note:** Requires developer account registration at [Douyin Open Platform](https://developer.open-douyin.com/) and application approval. API access may require business verification.",
+  "header_configuration": {
+    "access-token": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "DOUYIN_ACCESS_TOKEN",
+      "description": "OAuth 2.0 access token obtained through Douyin authorization flow"
+    }
+  },
+  "tools": [
+    {
+      "name": "oauth_access_token",
+      "path": "/oauth/access_token",
+      "method": "GET",
+      "description": "Exchange authorization code for access token and refresh token after user authorization",
+      "request_params": {
+        "client_key": {
+          "type": "string",
+          "description": "Application client key from Douyin Open Platform",
+          "required": true,
+          "send_method": "query"
+        },
+        "client_secret": {
+          "type": "string",
+          "description": "Application client secret from Douyin Open Platform",
+          "required": true,
+          "send_method": "query"
+        },
+        "code": {
+          "type": "string",
+          "description": "Authorization code obtained from user authorization callback",
+          "required": true,
+          "send_method": "query"
+        },
+        "grant_type": {
+          "type": "string",
+          "description": "Authorization type, must be 'authorization_code'",
+          "required": true,
+          "send_method": "query",
+          "default": "authorization_code"
+        }
+      }
+    },
+    {
+      "name": "refresh_access_token",
+      "path": "/oauth/refresh_token",
+      "method": "GET",
+      "description": "Refresh expired access token using refresh token",
+      "request_params": {
+        "client_key": {
+          "type": "string",
+          "description": "Application client key",
+          "required": true,
+          "send_method": "query"
+        },
+        "refresh_token": {
+          "type": "string",
+          "description": "Refresh token obtained from initial authorization",
+          "required": true,
+          "send_method": "query"
+        },
+        "grant_type": {
+          "type": "string",
+          "description": "Grant type, must be 'refresh_token'",
+          "required": true,
+          "send_method": "query",
+          "default": "refresh_token"
+        }
+      }
+    },
+    {
+      "name": "get_user_info",
+      "path": "/oauth/userinfo",
+      "method": "GET",
+      "description": "Get authorized user's profile information including nickname, avatar, and open_id",
+      "request_params": {
+        "open_id": {
+          "type": "string",
+          "description": "User's unique identifier in Douyin Open Platform",
+          "required": true,
+          "send_method": "query"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Valid access token for the user",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_video_list",
+      "path": "/video/list",
+      "method": "GET",
+      "description": "Retrieve list of videos published by the authorized user with pagination support",
+      "request_params": {
+        "open_id": {
+          "type": "string",
+          "description": "User's open_id",
+          "required": true,
+          "send_method": "query"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "User's access token",
+          "required": true,
+          "send_method": "query"
+        },
+        "cursor": {
+          "type": "integer",
+          "description": "Pagination cursor, start from 0",
+          "required": false,
+          "send_method": "query",
+          "default": 0
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of videos per page (1-20)",
+          "required": false,
+          "send_method": "query",
+          "default": 10
+        }
+      }
+    },
+    {
+      "name": "get_video_data",
+      "path": "/video/data",
+      "method": "GET",
+      "description": "Get detailed analytics data for a specific video including views, likes, comments, shares",
+      "request_params": {
+        "open_id": {
+          "type": "string",
+          "description": "User's open_id",
+          "required": true,
+          "send_method": "query"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "User's access token",
+          "required": true,
+          "send_method": "query"
+        },
+        "item_id": {
+          "type": "string",
+          "description": "Video item ID",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "create_video",
+      "path": "/video/create",
+      "method": "POST",
+      "description": "Upload and publish a video to Douyin platform",
+      "request_params": {
+        "open_id": {
+          "type": "string",
+          "description": "User's open_id",
+          "required": true,
+          "send_method": "body"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "User's access token",
+          "required": true,
+          "send_method": "body"
+        },
+        "video_id": {
+          "type": "string",
+          "description": "Video ID obtained from upload endpoint",
+          "required": true,
+          "send_method": "body"
+        },
+        "text": {
+          "type": "string",
+          "description": "Video title/description (max 55 characters)",
+          "required": false,
+          "send_method": "body"
+        },
+        "poi_id": {
+          "type": "string",
+          "description": "Location POI ID for geo-tagging",
+          "required": false,
+          "send_method": "body"
+        },
+        "micro_app_id": {
+          "type": "string",
+          "description": "Mini program app ID for linking",
+          "required": false,
+          "send_method": "body"
+        }
+      }
+    },
+    {
+      "name": "get_fans_data",
+      "path": "/fans/data",
+      "method": "GET",
+      "description": "Retrieve fan statistics including total fans, daily growth, and demographic data",
+      "request_params": {
+        "open_id": {
+          "type": "string",
+          "description": "User's open_id",
+          "required": true,
+          "send_method": "query"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "User's access token",
+          "required": true,
+          "send_method": "query"
+        },
+        "date_type": {
+          "type": "integer",
+          "description": "Date range: 7 (last 7 days) or 30 (last 30 days)",
+          "required": true,
+          "send_method": "query",
+          "default": 7
+        }
+      }
+    },
+    {
+      "name": "search_poi",
+      "path": "/poi/search",
+      "method": "GET",
+      "description": "Search for Point of Interest (location) to tag in videos",
+      "request_params": {
+        "access_token": {
+          "type": "string",
+          "description": "Application access token",
+          "required": true,
+          "send_method": "query"
+        },
+        "keyword": {
+          "type": "string",
+          "description": "Location search keyword",
+          "required": true,
+          "send_method": "query"
+        },
+        "city": {
+          "type": "string",
+          "description": "City name to narrow search scope",
+          "required": false,
+          "send_method": "query"
+        },
+        "cursor": {
+          "type": "integer",
+          "description": "Pagination cursor",
+          "required": false,
+          "send_method": "query",
+          "default": 0
+        },
+        "count": {
+          "type": "integer",
+          "description": "Results per page (max 20)",
+          "required": false,
+          "send_method": "query",
+          "default": 10
+        }
+      }
+    },
+    {
+      "name": "get_item_comment",
+      "path": "/item/comment/list",
+      "method": "GET",
+      "description": "Retrieve comments for a specific video with pagination",
+      "request_params": {
+        "open_id": {
+          "type": "string",
+          "description": "User's open_id",
+          "required": true,
+          "send_method": "query"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "User's access token",
+          "required": true,
+          "send_method": "query"
+        },
+        "item_id": {
+          "type": "string",
+          "description": "Video item ID",
+          "required": true,
+          "send_method": "query"
+        },
+        "cursor": {
+          "type": "integer",
+          "description": "Pagination cursor",
+          "required": false,
+          "send_method": "query",
+          "default": 0
+        },
+        "count": {
+          "type": "integer",
+          "description": "Comments per page (max 20)",
+          "required": false,
+          "send_method": "query",
+          "default": 10
+        }
+      }
+    },
+    {
+      "name": "reply_comment",
+      "path": "/item/comment/reply",
+      "method": "POST",
+      "description": "Reply to a comment on user's video",
+      "request_params": {
+        "open_id": {
+          "type": "string",
+          "description": "User's open_id",
+          "required": true,
+          "send_method": "body"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "User's access token",
+          "required": true,
+          "send_method": "body"
+        },
+        "item_id": {
+          "type": "string",
+          "description": "Video item ID",
+          "required": true,
+          "send_method": "body"
+        },
+        "comment_id": {
+          "type": "string",
+          "description": "Comment ID to reply to",
+          "required": true,
+          "send_method": "body"
+        },
+        "content": {
+          "type": "string",
+          "description": "Reply content text",
+          "required": true,
+          "send_method": "body"
+        }
+      }
+    }
+  ]
+}

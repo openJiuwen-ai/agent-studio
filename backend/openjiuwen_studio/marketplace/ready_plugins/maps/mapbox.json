@@ -1,0 +1,317 @@
+{
+  "ready": false,
+  "plugin_id": "mapbox_api",
+  "name": "Mapbox API",
+  "description": "Mapbox location platform for geocoding, reverse geocoding, route optimization, turn-by-turn navigation, isochrones, and map tile services. Popular developer-first mapping API.",
+  "category": "maps",
+  "category_name": "Maps & Location",
+  "category_icon": "🗺️",
+  "icon_uri": "🗺️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "maps",
+    "mapbox",
+    "geocoding",
+    "navigation",
+    "routing",
+    "location"
+  ],
+  "api_prefix": "https://api.mapbox.com",
+  "documentation": "https://docs.mapbox.com/api/",
+  "desc_mk": "Mapbox is a developer-friendly location platform widely used in apps and data visualization. This plugin covers the Geocoding API (forward/reverse), Directions API (driving/walking/cycling), Isochrone API (reachability analysis), and the Matrix API.",
+  "tools": [
+    {
+      "name": "Forward Geocoding",
+      "path": "/geocoding/v5/mapbox.places/{search_text}.json",
+      "method": "GET",
+      "description": "Convert a place name or address to geographic coordinates",
+      "request_params": {
+        "search_text": {
+          "type": "string",
+          "description": "Search text to geocode (place name, address, POI, etc.)",
+          "required": true,
+          "is_path_param": true
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Mapbox public access token (Environment variable: MAPBOX_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results (max: 10, default: 5)",
+          "required": false,
+          "default": 5,
+          "send_method": "Query"
+        },
+        "proximity": {
+          "type": "string",
+          "description": "Bias results near location in format 'longitude,latitude'",
+          "required": false,
+          "send_method": "Query"
+        },
+        "types": {
+          "type": "string",
+          "description": "Filter by feature types (e.g., 'country,region,place,locality,neighborhood,address,poi')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "country": {
+          "type": "string",
+          "description": "ISO 3166 alpha-2 country code to filter results (e.g., 'us,ca,gb')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "IETF language code for response text (e.g., 'en', 'fr', 'de')",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        },
+        "autocomplete": {
+          "type": "boolean",
+          "description": "Enable autocomplete suggestions (default: true)",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Reverse Geocoding",
+      "path": "/geocoding/v5/mapbox.places/{longitude},{latitude}.json",
+      "method": "GET",
+      "description": "Convert coordinates to a place name or address",
+      "request_params": {
+        "longitude": {
+          "type": "number",
+          "description": "Longitude (e.g., -122.4194)",
+          "required": true,
+          "is_path_param": true
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Latitude (e.g., 37.7749)",
+          "required": true,
+          "is_path_param": true
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Mapbox access token (Environment variable: MAPBOX_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "types": {
+          "type": "string",
+          "description": "Filter by feature type (e.g., 'address', 'place', 'poi')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language code for response text",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Directions",
+      "path": "/directions/v5/mapbox/{profile}/{coordinates}",
+      "method": "GET",
+      "description": "Get turn-by-turn directions between two or more points",
+      "request_params": {
+        "profile": {
+          "type": "string",
+          "description": "Routing profile: mapbox/driving, mapbox/driving-traffic, mapbox/walking, mapbox/cycling",
+          "required": true,
+          "is_path_param": true
+        },
+        "coordinates": {
+          "type": "string",
+          "description": "Semicolon-separated waypoints in 'longitude,latitude' format (e.g., '13.388860,52.517037;13.428555,52.523219')",
+          "required": true,
+          "is_path_param": true
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Mapbox access token (Environment variable: MAPBOX_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "steps": {
+          "type": "boolean",
+          "description": "Return turn-by-turn step instructions",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        },
+        "geometries": {
+          "type": "string",
+          "description": "Route geometry format: geojson, polyline, or polyline6",
+          "required": false,
+          "default": "geojson",
+          "send_method": "Query"
+        },
+        "overview": {
+          "type": "string",
+          "description": "Route geometry detail level: full, simplified, or false",
+          "required": false,
+          "default": "simplified",
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language for maneuver instructions (e.g., 'en', 'de', 'fr')",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        },
+        "alternatives": {
+          "type": "boolean",
+          "description": "Return alternative routes",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Isochrone (Reachability)",
+      "path": "/isochrone/v1/mapbox/{profile}/{coordinates}",
+      "method": "GET",
+      "description": "Calculate areas reachable within specified time or distance contours from a location",
+      "request_params": {
+        "profile": {
+          "type": "string",
+          "description": "Routing profile: mapbox/driving, mapbox/walking, mapbox/cycling",
+          "required": true,
+          "is_path_param": true
+        },
+        "coordinates": {
+          "type": "string",
+          "description": "Origin point in format 'longitude,latitude'",
+          "required": true,
+          "is_path_param": true
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Mapbox access token (Environment variable: MAPBOX_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "contours_minutes": {
+          "type": "string",
+          "description": "Comma-separated time contours in minutes (max 4 values, e.g., '5,10,15')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "contours_meters": {
+          "type": "string",
+          "description": "Comma-separated distance contours in meters (alternative to contours_minutes)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "polygons": {
+          "type": "boolean",
+          "description": "Return results as polygons (true) or linestrings (false)",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Matrix (Distance/Duration)",
+      "path": "/directions-matrix/v1/mapbox/{profile}/{coordinates}",
+      "method": "GET",
+      "description": "Calculate travel durations and distances between many origins and destinations",
+      "request_params": {
+        "profile": {
+          "type": "string",
+          "description": "Routing profile: mapbox/driving, mapbox/walking, mapbox/cycling",
+          "required": true,
+          "is_path_param": true
+        },
+        "coordinates": {
+          "type": "string",
+          "description": "Semicolon-separated coordinates in 'longitude,latitude' format",
+          "required": true,
+          "is_path_param": true
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Mapbox access token (Environment variable: MAPBOX_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "sources": {
+          "type": "string",
+          "description": "Semicolon-separated indices of source locations (e.g., '0;1'). Default: all",
+          "required": false,
+          "default": "all",
+          "send_method": "Query"
+        },
+        "destinations": {
+          "type": "string",
+          "description": "Semicolon-separated indices of destination locations. Default: all",
+          "required": false,
+          "default": "all",
+          "send_method": "Query"
+        },
+        "annotations": {
+          "type": "string",
+          "description": "Data to return: duration, distance, or duration,distance",
+          "required": false,
+          "default": "duration,distance",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Map Matching",
+      "path": "/matching/v5/mapbox/{profile}/{coordinates}",
+      "method": "GET",
+      "description": "Snap recorded GPS traces to the road network",
+      "request_params": {
+        "profile": {
+          "type": "string",
+          "description": "Routing profile: mapbox/driving, mapbox/walking, mapbox/cycling",
+          "required": true,
+          "is_path_param": true
+        },
+        "coordinates": {
+          "type": "string",
+          "description": "Semicolon-separated GPS coordinates in 'longitude,latitude' format (max 100)",
+          "required": true,
+          "is_path_param": true
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Mapbox access token (Environment variable: MAPBOX_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "geometries": {
+          "type": "string",
+          "description": "Geometry format: geojson, polyline, polyline6",
+          "required": false,
+          "default": "geojson",
+          "send_method": "Query"
+        },
+        "steps": {
+          "type": "boolean",
+          "description": "Include turn-by-turn instructions",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

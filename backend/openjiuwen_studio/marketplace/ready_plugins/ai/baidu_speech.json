@@ -1,0 +1,200 @@
+{
+  "ready": false,
+  "plugin_id": "baidu_speech",
+  "name": "Baidu Speech API",
+  "description": "Advanced speech recognition (ASR) and text-to-speech (TTS) service. Convert speech to text and synthesize natural-sounding voice from text in multiple languages.",
+  "category": "ai",
+  "category_name": "AI & ML Services",
+  "category_icon": "🤖",
+  "icon_uri": "🎤",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "speech",
+    "voice",
+    "asr",
+    "tts",
+    "audio",
+    "baidu",
+    "ai"
+  ],
+  "api_prefix": "https://vop.baidu.com",
+  "desc_mk": "Baidu Speech (百度语音) provides industry-leading speech recognition and synthesis capabilities. Convert speech to text with high accuracy for Mandarin, Cantonese, English, and other languages. Synthesize natural-sounding speech from text with multiple voice options. **Note:** Requires API credentials from [Baidu AI Cloud](https://ai.baidu.com/).",
+  "header_configuration": {
+    "API Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "BAIDU_SPEECH_API_KEY",
+      "description": "Baidu AI Cloud API Key"
+    },
+    "Secret Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "BAIDU_SPEECH_SECRET_KEY",
+      "description": "Baidu AI Cloud Secret Key"
+    }
+  },
+  "tools": [
+    {
+      "name": "Speech Recognition (Short Audio)",
+      "path": "/server_api",
+      "method": "POST",
+      "description": "Convert short audio (≤60 seconds) to text with high accuracy",
+      "request_params": {
+        "format": {
+          "type": "string",
+          "description": "Audio format: 'pcm', 'wav', 'opus', 'amr', 'm4a'",
+          "required": true,
+          "send_method": "Body"
+        },
+        "rate": {
+          "type": "integer",
+          "description": "Sample rate: 8000 or 16000",
+          "required": true,
+          "send_method": "Body"
+        },
+        "channel": {
+          "type": "integer",
+          "description": "Audio channels: 1 (mono)",
+          "required": true,
+          "default": 1,
+          "send_method": "Body"
+        },
+        "cuid": {
+          "type": "string",
+          "description": "User unique ID (device ID or MAC address)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "token": {
+          "type": "string",
+          "description": "Access token from OAuth 2.0 (Environment variable: BAIDU_SPEECH_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "speech": {
+          "type": "string",
+          "description": "Base64 encoded audio data (or raw audio bytes)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "len": {
+          "type": "integer",
+          "description": "Original audio byte length (before base64 encoding)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "dev_pid": {
+          "type": "integer",
+          "description": "Language model: 1537 (Mandarin), 1737 (English), 1637 (Cantonese), 1837 (Sichuan), 1936 (Far-field)",
+          "required": false,
+          "default": 1537,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Text-to-Speech Synthesis",
+      "path": "/text2audio",
+      "method": "POST",
+      "description": "Convert text to natural-sounding speech audio",
+      "request_params": {
+        "tex": {
+          "type": "string",
+          "description": "Text to synthesize (max 1024 bytes, GBK encoded for Chinese)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "tok": {
+          "type": "string",
+          "description": "Access token from OAuth 2.0 (Environment variable: BAIDU_SPEECH_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "cuid": {
+          "type": "string",
+          "description": "User unique ID",
+          "required": true,
+          "send_method": "Body"
+        },
+        "ctp": {
+          "type": "integer",
+          "description": "Client type: 1 (web)",
+          "required": false,
+          "default": 1,
+          "send_method": "Body"
+        },
+        "lan": {
+          "type": "string",
+          "description": "Language: 'zh' (Chinese), 'en' (English)",
+          "required": false,
+          "default": "zh",
+          "send_method": "Body"
+        },
+        "spd": {
+          "type": "integer",
+          "description": "Speech speed: 0-15 (5 is default, 0=slowest, 15=fastest)",
+          "required": false,
+          "default": 5,
+          "send_method": "Body"
+        },
+        "pit": {
+          "type": "integer",
+          "description": "Pitch: 0-15 (5 is default)",
+          "required": false,
+          "default": 5,
+          "send_method": "Body"
+        },
+        "vol": {
+          "type": "integer",
+          "description": "Volume: 0-15 (5 is default, 0=quiet, 15=loud)",
+          "required": false,
+          "default": 5,
+          "send_method": "Body"
+        },
+        "per": {
+          "type": "integer",
+          "description": "Voice: 0 (female), 1 (male), 3 (emotional male), 4 (emotional female), 5 (Mandarin female), 6 (Mandarin male)",
+          "required": false,
+          "default": 0,
+          "send_method": "Body"
+        },
+        "aue": {
+          "type": "integer",
+          "description": "Audio format: 3 (mp3), 4 (pcm-16k), 5 (pcm-8k), 6 (wav)",
+          "required": false,
+          "default": 3,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Access Token",
+      "path": "https://aip.baidubce.com/oauth/2.0/token",
+      "method": "GET",
+      "description": "Obtain OAuth 2.0 access token for speech API authentication",
+      "request_params": {
+        "grant_type": {
+          "type": "string",
+          "description": "Grant type (fixed value: 'client_credentials')",
+          "required": true,
+          "default": "client_credentials",
+          "send_method": "Query"
+        },
+        "client_id": {
+          "type": "string",
+          "description": "API Key from Baidu AI Cloud (Environment variable: BAIDU_SPEECH_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "client_secret": {
+          "type": "string",
+          "description": "Secret Key from Baidu AI Cloud (Environment variable: BAIDU_SPEECH_SECRET_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

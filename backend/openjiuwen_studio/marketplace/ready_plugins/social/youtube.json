@@ -1,0 +1,297 @@
+{
+  "ready": false,
+  "plugin_id": "youtube_api",
+  "name": "YouTube Data API v3",
+  "description": "Official YouTube API for video search, channel management, playlist operations, and analytics. Access YouTube features including upload, comment, like, and comprehensive metadata.",
+  "category": "social",
+  "category_name": "Social & Communication",
+  "category_icon": "💬",
+  "icon_uri": "📺",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "video",
+    "youtube",
+    "google",
+    "social",
+    "streaming"
+  ],
+  "api_prefix": "https://www.googleapis.com/youtube/v3",
+  "desc_mk": "YouTube Data API v3 provides programmatic access to YouTube features. Search videos, manage channels and playlists, upload content, retrieve analytics, and interact with comments and likes. Access comprehensive video metadata, thumbnails, and statistics. OAuth 2.0 required for user-specific operations. **Note:** Requires API key from [Google Cloud Console](https://console.cloud.google.com/) with YouTube Data API v3 enabled.",
+  "header_configuration": {
+    "API Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "YOUTUBE_API_KEY",
+      "description": "Google API key with YouTube Data API v3 enabled"
+    }
+  },
+  "tools": [
+    {
+      "name": "Search Videos",
+      "path": "/search",
+      "method": "GET",
+      "description": "Search for videos, channels, and playlists on YouTube",
+      "request_params": {
+        "part": {
+          "type": "string",
+          "description": "Resource parts: 'snippet' (title, description, thumbnails)",
+          "required": true,
+          "default": "snippet",
+          "send_method": "Query"
+        },
+        "q": {
+          "type": "string",
+          "description": "Search query",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "YouTube API key (Environment variable: YOUTUBE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Resource type: 'video', 'channel', 'playlist' (comma-separated)",
+          "required": false,
+          "default": "video",
+          "send_method": "Query"
+        },
+        "maxResults": {
+          "type": "integer",
+          "description": "Max results per page (1-50, default: 5)",
+          "required": false,
+          "default": 5,
+          "send_method": "Query"
+        },
+        "order": {
+          "type": "string",
+          "description": "Sort order: 'date', 'rating', 'relevance', 'title', 'videoCount', 'viewCount'",
+          "required": false,
+          "default": "relevance",
+          "send_method": "Query"
+        },
+        "regionCode": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 country code (e.g., 'US', 'CN')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "publishedAfter": {
+          "type": "string",
+          "description": "RFC 3339 timestamp (e.g., '2026-01-01T00:00:00Z')",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Video Details",
+      "path": "/videos",
+      "method": "GET",
+      "description": "Get detailed information about specific videos",
+      "request_params": {
+        "part": {
+          "type": "string",
+          "description": "Parts: 'snippet,contentDetails,statistics,status' (comma-separated)",
+          "required": true,
+          "default": "snippet,statistics",
+          "send_method": "Query"
+        },
+        "id": {
+          "type": "string",
+          "description": "Video ID(s), comma-separated (e.g., 'dQw4w9WgXcQ')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "YouTube API key (Environment variable: YOUTUBE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Channel Details",
+      "path": "/channels",
+      "method": "GET",
+      "description": "Get information about YouTube channels",
+      "request_params": {
+        "part": {
+          "type": "string",
+          "description": "Parts: 'snippet,contentDetails,statistics,brandingSettings'",
+          "required": true,
+          "default": "snippet,statistics",
+          "send_method": "Query"
+        },
+        "id": {
+          "type": "string",
+          "description": "Channel ID(s), comma-separated",
+          "required": false,
+          "send_method": "Query"
+        },
+        "forUsername": {
+          "type": "string",
+          "description": "Channel username (alternative to id)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "YouTube API key (Environment variable: YOUTUBE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Playlist Items",
+      "path": "/playlistItems",
+      "method": "GET",
+      "description": "Get videos from a specific playlist",
+      "request_params": {
+        "part": {
+          "type": "string",
+          "description": "Resource parts",
+          "required": true,
+          "default": "snippet",
+          "send_method": "Query"
+        },
+        "playlistId": {
+          "type": "string",
+          "description": "Playlist ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "YouTube API key (Environment variable: YOUTUBE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "maxResults": {
+          "type": "integer",
+          "description": "Max results (1-50)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Video Comments",
+      "path": "/commentThreads",
+      "method": "GET",
+      "description": "Get top-level comments for a video",
+      "request_params": {
+        "part": {
+          "type": "string",
+          "description": "Resource parts",
+          "required": true,
+          "default": "snippet",
+          "send_method": "Query"
+        },
+        "videoId": {
+          "type": "string",
+          "description": "Video ID to get comments for",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "YouTube API key (Environment variable: YOUTUBE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "maxResults": {
+          "type": "integer",
+          "description": "Max results (1-100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "order": {
+          "type": "string",
+          "description": "Sort order: 'time', 'relevance'",
+          "required": false,
+          "default": "relevance",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Video Categories",
+      "path": "/videoCategories",
+      "method": "GET",
+      "description": "Get list of video categories available in a region",
+      "request_params": {
+        "part": {
+          "type": "string",
+          "description": "Resource parts",
+          "required": true,
+          "default": "snippet",
+          "send_method": "Query"
+        },
+        "regionCode": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 country code",
+          "required": true,
+          "default": "US",
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "YouTube API key (Environment variable: YOUTUBE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Popular Videos",
+      "path": "/videos",
+      "method": "GET",
+      "description": "Get most popular videos in a region",
+      "request_params": {
+        "part": {
+          "type": "string",
+          "description": "Resource parts",
+          "required": true,
+          "default": "snippet,statistics",
+          "send_method": "Query"
+        },
+        "chart": {
+          "type": "string",
+          "description": "Chart type (fixed value: 'mostPopular')",
+          "required": true,
+          "default": "mostPopular",
+          "send_method": "Query"
+        },
+        "regionCode": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 country code",
+          "required": false,
+          "default": "US",
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "YouTube API key (Environment variable: YOUTUBE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "maxResults": {
+          "type": "integer",
+          "description": "Max results (1-50)",
+          "required": false,
+          "default": 10,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

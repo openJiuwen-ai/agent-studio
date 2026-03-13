@@ -304,7 +304,7 @@ export const WorkflowNodeRegistry: FlowNodeRegistry = {
       width: 360,
       height: 211,
     },
-    singleComponentDebug: true,
+    singleComponentDebug: false,
   },
   info: () => ({
     icon: <GitFork size={16} className="text-blue-600" />,

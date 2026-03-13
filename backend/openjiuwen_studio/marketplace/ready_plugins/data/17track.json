@@ -1,0 +1,191 @@
+{
+  "ready": false,
+  "plugin_id": "17track",
+  "name": "17Track - Global Package Tracking API",
+  "description": "Track packages from 3,100+ carriers worldwide with enterprise-grade reliability. Process 400K tracking numbers per hour with unified API and webhook support for real-time updates.",
+  "category": "data",
+  "category_name": "Data & Analytics",
+  "category_icon": "📊",
+  "icon_uri": "🌍",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "tracking",
+    "logistics",
+    "global",
+    "shipping",
+    "courier"
+  ],
+  "api_prefix": "https://api.17track.net",
+  "desc_mk": "17Track provides enterprise-grade package tracking for 3,100+ global carriers including all major Chinese couriers, USPS, UPS, FedEx, DHL, and regional carriers worldwide. Features 400K/hour capacity, webhook push notifications, and unified API structure. Perfect for cross-border e-commerce and international logistics. **Note:** Requires API token from [17Track Developer Portal](https://www.17track.net/en/api).",
+  "header_configuration": {
+    "17token": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "17TRACK_API_TOKEN",
+      "description": "17Track API authentication token"
+    },
+    "Content-Type": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "application/json",
+      "description": "content type"
+    }
+  },
+  "tools": [
+    {
+      "name": "Register Tracking Numbers",
+      "path": "/track/v2.2/register",
+      "method": "POST",
+      "description": "Register tracking numbers for monitoring (up to 40 numbers per request)",
+      "request_params": {
+        "number": {
+          "type": "string",
+          "description": "Tracking number",
+          "required": true,
+          "send_method": "Body"
+        },
+        "carrier": {
+          "type": "integer",
+          "description": "Carrier code (e.g., 1012 for USPS, 2003 for SF Express). Use auto-detect if unknown",
+          "required": false,
+          "send_method": "Body"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Custom tag for categorization",
+          "required": false,
+          "send_method": "Body"
+        },
+        "auto_detection": {
+          "type": "boolean",
+          "description": "Enable auto carrier detection",
+          "required": false,
+          "default": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Tracking Info",
+      "path": "/track/v2.2/gettrackinfo",
+      "method": "POST",
+      "description": "Get tracking information for registered packages",
+      "request_params": {
+        "number": {
+          "type": "string",
+          "description": "Tracking number (comma-separated for multiple, max 40)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "carrier": {
+          "type": "integer",
+          "description": "Carrier code (optional if auto-detected during registration)",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Stop Tracking",
+      "path": "/track/v2.2/stoptrack",
+      "method": "POST",
+      "description": "Stop tracking specific packages to save quota",
+      "request_params": {
+        "number": {
+          "type": "string",
+          "description": "Tracking number (comma-separated for multiple)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "carrier": {
+          "type": "integer",
+          "description": "Carrier code",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Retrack Package",
+      "path": "/track/v2.2/retrack",
+      "method": "POST",
+      "description": "Resume tracking for previously stopped packages",
+      "request_params": {
+        "number": {
+          "type": "string",
+          "description": "Tracking number",
+          "required": true,
+          "send_method": "Body"
+        },
+        "carrier": {
+          "type": "integer",
+          "description": "Carrier code",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Change Carrier",
+      "path": "/track/v2.2/changecarrier",
+      "method": "POST",
+      "description": "Update carrier code for a tracking number",
+      "request_params": {
+        "number": {
+          "type": "string",
+          "description": "Tracking number",
+          "required": true,
+          "send_method": "Body"
+        },
+        "carrier": {
+          "type": "integer",
+          "description": "Old carrier code",
+          "required": true,
+          "send_method": "Body"
+        },
+        "carrier_new": {
+          "type": "integer",
+          "description": "New carrier code",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Tracking",
+      "path": "/track/v2.2/deletetrack",
+      "method": "POST",
+      "description": "Permanently delete tracking records",
+      "request_params": {
+        "number": {
+          "type": "string",
+          "description": "Tracking number (comma-separated for multiple)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "carrier": {
+          "type": "integer",
+          "description": "Carrier code",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get User Info",
+      "path": "/track/v2.2/getuserinfo",
+      "method": "POST",
+      "description": "Get account information including quota and usage statistics",
+      "request_params": {}
+    },
+    {
+      "name": "Get Carrier List",
+      "path": "/track/v2.2/getcarrierlist",
+      "method": "POST",
+      "description": "Get list of all supported carriers with codes and names",
+      "request_params": {}
+    }
+  ]
+}

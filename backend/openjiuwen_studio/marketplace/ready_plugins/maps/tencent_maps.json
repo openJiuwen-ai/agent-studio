@@ -1,0 +1,431 @@
+{
+  "ready": false,
+  "plugin_id": "tencent_maps",
+  "name": "Tencent Maps API",
+  "description": "Tencent's comprehensive map and location service integrated with WeChat ecosystem. Geocoding, POI search, route planning, and coordinate tools for China and global locations.",
+  "category": "maps",
+  "category_name": "Maps & Location",
+  "category_icon": "🗺️",
+  "icon_uri": "🗺️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "maps",
+    "location",
+    "geocoding",
+    "navigation",
+    "tencent",
+    "wechat",
+    "china"
+  ],
+  "api_prefix": "https://apis.map.qq.com",
+  "desc_mk": "Tencent Maps (腾讯地图) is a leading map service provider in China, deeply integrated with the WeChat ecosystem. Offers geocoding, POI search, route planning, and location services optimized for China. **Note:** Requires API key from [Tencent Location Service Platform](https://lbs.qq.com/).",
+  "header_configuration": {
+    "API Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "TENCENT_MAPS_API_KEY",
+      "description": "Tencent Maps API key from Tencent Location Service Platform"
+    }
+  },
+  "tools": [
+    {
+      "name": "Geocoding - Address to Coordinates",
+      "path": "/ws/geocoder/v1/",
+      "method": "GET",
+      "description": "Convert an address to geographic coordinates (latitude, longitude)",
+      "request_params": {
+        "address": {
+          "type": "string",
+          "description": "Address to geocode (e.g., '北京市海淀区彩和坊路海淀西大街74号')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Tencent Maps API key (Environment variable: TENCENT_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "region": {
+          "type": "string",
+          "description": "Region/city to narrow search (recommended for accuracy)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'json' or 'jsonp'",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Reverse Geocoding - Coordinates to Address",
+      "path": "/ws/geocoder/v1/",
+      "method": "GET",
+      "description": "Convert geographic coordinates to a human-readable address",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Coordinates in format 'latitude,longitude' (e.g., '39.984154,116.307490')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Tencent Maps API key (Environment variable: TENCENT_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "get_poi": {
+          "type": "integer",
+          "description": "Get nearby POI: 0 (no) or 1 (yes)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "poi_options": {
+          "type": "string",
+          "description": "POI options: 'address_format=short', 'radius=1000', 'policy=1'",
+          "required": false,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'json' or 'jsonp'",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "POI Search - Keyword Search",
+      "path": "/ws/place/v1/search",
+      "method": "GET",
+      "description": "Search for places (POIs) by keyword within a region",
+      "request_params": {
+        "keyword": {
+          "type": "string",
+          "description": "Search keyword (e.g., '酒店', 'restaurant', 'ATM')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "boundary": {
+          "type": "string",
+          "description": "Search boundary: 'region(city_name,auto_extend)' or 'nearby(lat,lng,radius)' or 'rectangle(lat1,lng1,lat2,lng2)'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Tencent Maps API key (Environment variable: TENCENT_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (max 20)",
+          "required": false,
+          "default": 10,
+          "send_method": "Query"
+        },
+        "page_index": {
+          "type": "integer",
+          "description": "Page number (starts from 1)",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'json' or 'jsonp'",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "POI Search - Suggestion (Autocomplete)",
+      "path": "/ws/place/v1/suggestion",
+      "method": "GET",
+      "description": "Get search suggestions for autocomplete based on partial input",
+      "request_params": {
+        "keyword": {
+          "type": "string",
+          "description": "Partial keyword for autocomplete",
+          "required": true,
+          "send_method": "Query"
+        },
+        "region": {
+          "type": "string",
+          "description": "Region/city name to narrow search",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Tencent Maps API key (Environment variable: TENCENT_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "region_fix": {
+          "type": "integer",
+          "description": "Limit results to region: 0 (no) or 1 (yes)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "location": {
+          "type": "string",
+          "description": "User location in format 'lat,lng' for sorting results by distance",
+          "required": false,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'json' or 'jsonp'",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Driving Route Planning",
+      "path": "/ws/direction/v1/driving/",
+      "method": "GET",
+      "description": "Calculate driving route between origin and destination",
+      "request_params": {
+        "from": {
+          "type": "string",
+          "description": "Starting point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "string",
+          "description": "Destination point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Tencent Maps API key (Environment variable: TENCENT_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "policy": {
+          "type": "string",
+          "description": "Route strategy: 'LEAST_TIME' (fastest), 'LEAST_FEE' (avoid toll), 'LEAST_DISTANCE' (shortest), 'REAL_TRAFFIC' (real-time traffic)",
+          "required": false,
+          "default": "LEAST_TIME",
+          "send_method": "Query"
+        },
+        "waypoints": {
+          "type": "string",
+          "description": "Waypoints in format 'lat1,lng1;lat2,lng2' (max 10)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "from_poi": {
+          "type": "string",
+          "description": "Starting POI ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "to_poi": {
+          "type": "string",
+          "description": "Destination POI ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'json' or 'jsonp'",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Walking Route Planning",
+      "path": "/ws/direction/v1/walking/",
+      "method": "GET",
+      "description": "Calculate walking route between two points",
+      "request_params": {
+        "from": {
+          "type": "string",
+          "description": "Starting point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "string",
+          "description": "Destination point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Tencent Maps API key (Environment variable: TENCENT_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'json' or 'jsonp'",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Transit Route Planning",
+      "path": "/ws/direction/v1/transit/",
+      "method": "GET",
+      "description": "Calculate public transit route between two points",
+      "request_params": {
+        "from": {
+          "type": "string",
+          "description": "Starting point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "string",
+          "description": "Destination point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Tencent Maps API key (Environment variable: TENCENT_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "policy": {
+          "type": "string",
+          "description": "Transit strategy: 'LEAST_TIME', 'LEAST_TRANSFER', 'LEAST_WALKING', 'LEAST_SUBWAY'",
+          "required": false,
+          "default": "LEAST_TIME",
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'json' or 'jsonp'",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Distance Matrix",
+      "path": "/ws/distance/v1/matrix",
+      "method": "GET",
+      "description": "Calculate distances between multiple origins and destinations",
+      "request_params": {
+        "from": {
+          "type": "string",
+          "description": "Origin points in format 'lat1,lng1;lat2,lng2' (max 50)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "string",
+          "description": "Destination points in format 'lat1,lng1;lat2,lng2' (max 50)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Tencent Maps API key (Environment variable: TENCENT_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "mode": {
+          "type": "string",
+          "description": "Travel mode: 'driving' or 'walking'",
+          "required": false,
+          "default": "driving",
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'json' or 'jsonp'",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "IP Location",
+      "path": "/ws/location/v1/ip",
+      "method": "GET",
+      "description": "Get geographic location information from an IP address",
+      "request_params": {
+        "ip": {
+          "type": "string",
+          "description": "IP address to locate. Omit to use request IP",
+          "required": false,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Tencent Maps API key (Environment variable: TENCENT_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'json' or 'jsonp'",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Coordinate Conversion",
+      "path": "/ws/coord/v1/translate",
+      "method": "GET",
+      "description": "Convert coordinates between different coordinate systems",
+      "request_params": {
+        "locations": {
+          "type": "string",
+          "description": "Coordinates in format 'lat1,lng1;lat2,lng2' (max 200 points)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "integer",
+          "description": "Source coordinate type: 1 (GPS/WGS84), 2 (SOSO/Google), 3 (Baidu BD09), 4 (Mapbar), 5 (GCJ02)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Tencent Maps API key (Environment variable: TENCENT_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'json' or 'jsonp'",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

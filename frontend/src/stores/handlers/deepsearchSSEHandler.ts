@@ -30,7 +30,7 @@ export interface SSEData {
 
 interface StoreDependencies {
   getCurrentMessageItems: () => MessageItems | undefined;
-  addSystemMessage: (conversationId: string, type: MessageType, content: any, parentId?: string, title?: string, agentType?: string) => Message;
+  addSystemMessage: (conversationId: string, type: MessageType, content: any, parentId?: string, title?: string, agentType?: string) => Message | null;
   addMessageAsChild: (messageItemsId: string, parentId: string, type: MessageType, content: any, title?: string) => Message;
   updateMessage: (messageItemsId: string, messageId: string, updates: Partial<Message>) => void;
   deleteMessage: (messageItemsId: string, messageId: string) => void;
@@ -86,11 +86,19 @@ export class DeepsearchSSEHandler {
    * 主入口：处理 SSE 消息
    */
   public handleSSEMessage(sseData: SSEData): void {
+    const lastMessageItems = this.store.getCurrentMessageItems();
+
+    // 如果对话已被取消，忽略所有后续 SSE 事件
+    // 这发生在用户点击取消按钮后，但 SSE 事件仍在队列中或继续到达的情况
+    if (lastMessageItems && lastMessageItems.status === TaskStatus.CANCELLED) {
+      console.log('[DeepsearchSSEHandler] MessageItems cancelled, ignoring SSE event:', sseData.event);
+      return;
+    }
+
     // HITL 延续场景：如果当前 MessageItems 状态为 COMPLETED，重新设置为 IN_PROGRESS
     // 这发生在用户回复 interrupt 消息后，SSE 流继续的情况
-    const lastMessageItems = this.store.getCurrentMessageItems();
     if (lastMessageItems && !this.store.getMessageItemsIsUser(lastMessageItems)) {
-      if (lastMessageItems.status === TaskStatus.COMPLETED || lastMessageItems.status === TaskStatus.CANCELLED) {
+      if (lastMessageItems.status === TaskStatus.COMPLETED) {
         // HITL 延续：重新激活 MessageItems 状态
         this.store.updateMessageItems(lastMessageItems.id, { status: TaskStatus.IN_PROGRESS });
       }
@@ -971,10 +979,12 @@ export class DeepsearchSSEHandler {
               MESSAGE_TITLES.FINAL_REPORT,
               'deepsearch'  // agent 类型
             );
-            updateMessage(lastMessageItems.id, finalReportMessage.id, {
-              status: TaskStatus.IN_PROGRESS,
-              isStreaming: false,
-            });
+            if (finalReportMessage) {
+              updateMessage(lastMessageItems.id, finalReportMessage.id, {
+                status: TaskStatus.IN_PROGRESS,
+                isStreaming: false,
+              });
+            }
 
             // 3. 更新 task_1 (outline_task): status = COMPLETED
             // updateMessage(lastMessageItems.id, outlineTask.id, {
@@ -1030,10 +1040,12 @@ export class DeepsearchSSEHandler {
               MESSAGE_TITLES.FINAL_REPORT,
               'deepsearch'  // agent 类型
             );
-            updateMessage(lastMessageItems.id, finalReportMessage.id, {
-              status: TaskStatus.COMPLETED,
-              isStreaming: false,
-            });
+            if (finalReportMessage) {
+              updateMessage(lastMessageItems.id, finalReportMessage.id, {
+                status: TaskStatus.COMPLETED,
+                isStreaming: false,
+              });
+            }
           } else {
             // 非研究请求：将 response_content 作为普通消息显示
             console.warn('[DeepsearchSSEHandler] No outline task found, treating as normal message');
@@ -1058,10 +1070,12 @@ export class DeepsearchSSEHandler {
                   undefined,
                   'deepsearch'
                 );
-                updateMessage(lastMessageItems.id, normalMessage.id, {
-                  status: TaskStatus.COMPLETED,
-                  isStreaming: false,
-                });
+                if (normalMessage) {
+                  updateMessage(lastMessageItems.id, normalMessage.id, {
+                    status: TaskStatus.COMPLETED,
+                    isStreaming: false,
+                  });
+                }
               }
             }
           }
@@ -1131,38 +1145,54 @@ export class DeepsearchSSEHandler {
     addSystemMessage(this.conversationId, this.mapAgentToMessageType(sseData.agent), sseData.content || '', undefined, undefined, 'deepsearch');
   }
 
-  /**
-   * 处理 waiting_user_input 事件
+  /** 处理 waiting_user_input 事件
    */
   private handleWaitingUserInput(sseData: SSEData): void {
-    const { addSystemMessage, updateMessage } = this.store;
+    const { addSystemMessage, updateMessage, getCurrentMessageItems } = this.store;
+
+    // 检查当前 MessageItems 状态，如果已经是 CANCELLED，说明用户已手动取消，不需要再创建 INTERRUPT 消息
+    const lastMessageItems = getCurrentMessageItems();
+    if (lastMessageItems && lastMessageItems.status === TaskStatus.CANCELLED) {
+      console.log('[DeepsearchSSEHandler] MessageItems already cancelled, skipping waiting_user_input event');
+      return;
+    }
 
     // 创建 INTERRUPT 消息
     // 注意：这里使用 'deepsearch' 作为 agent，而不是 sseData.agent（feedback_handler）
     // 因为 HITL 判断需要匹配整体运行的 agent 类型，而不是工作流中的具体节点
-    addSystemMessage(this.conversationId, MessageType.INTERRUPT, sseData.content || '', undefined, undefined, 'deepsearch');
+    const interruptMessage = addSystemMessage(
+      this.conversationId,
+      MessageType.INTERRUPT,
+      sseData.content || '',
+      undefined,
+      undefined,
+      'deepsearch'
+    );
 
-    const lastMessageItems = this.store.getCurrentMessageItems();
-    if (lastMessageItems) {
-      const lastMessageId = lastMessageItems.messagesIds[lastMessageItems.messagesIds.length - 1];
-      const lastMessage = lastMessageId ? this.store.getMessageById(lastMessageId) : undefined;
-      if (lastMessage) {
-        updateMessage(lastMessageItems.id, lastMessage.id, {
-          status: TaskStatus.IN_PROGRESS,
-          isStreaming: false,
-        });
-      }
+    // 如果创建失败（例如对话已被取消），跳过后续处理
+    if (!interruptMessage) {
+      console.log('[DeepsearchSSEHandler] Failed to create INTERRUPT message, skipping');
+      return;
     }
-    /// 给SESSION_CONVERSATION_ID赋值
+
+    // 更新刚刚创建的 INTERRUPT 消息状态
+    updateMessage(lastMessageItems.id, interruptMessage.id, {
+      status: TaskStatus.IN_PROGRESS,
+      isStreaming: false,
+    });
+
+    // 给 SESSION_CONVERSATION_ID 赋值
     if (sseData.conversation_id) {
       this.store.setSessionConversationId(sseData.conversation_id);
     }
   }
 
+
   /**
    * 处理 error 事件
    * error 事件包含 exception_info，需要更新到最终报告
    */
+
   private handleError(sseData: SSEData, sectionIdx?: number, planIdx?: number, stepIdx?: number): void {
     const { updateMessage, addSystemMessage, getMessageItemsIsUser } = this.store;
     const lastMessageItems = this.store.getCurrentMessageItems();

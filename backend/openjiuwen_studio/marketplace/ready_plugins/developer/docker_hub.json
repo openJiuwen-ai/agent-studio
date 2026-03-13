@@ -1,0 +1,309 @@
+{
+  "ready": false,
+  "plugin_id": "docker_hub",
+  "name": "Docker Hub",
+  "description": "Search and browse Docker Hub repositories, tags, and images via the Docker Hub REST API.",
+  "category": "developer",
+  "category_name": "Developer Tools",
+  "category_icon": "🛠️",
+  "icon_uri": "🐳",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["docker", "containers", "images", "registry", "devops", "developer"],
+  "api_prefix": "https://hub.docker.com/v2",
+  "documentation": "https://docs.docker.com/docker-hub/api/latest/",
+  "desc_mk": "## Docker Hub REST API\n\nConnect to Docker Hub to search repositories, browse tags, list builds, and manage Docker images programmatically.\n\n### Features\n- Search public Docker Hub repositories\n- Browse repository tags and image details\n- List repositories by namespace\n- View build history\n- Authenticate to access private repositories\n\n### Authentication\nRequires a Docker Hub personal access token or password. Use the Get Token tool to retrieve a JWT for subsequent requests.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_DOCKER_HUB_TOKEN",
+      "description": "Docker Hub JWT token obtained from login (Environment variable: DOCKER_HUB_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Repository",
+      "description": "Get details about a specific Docker Hub repository.",
+      "method": "GET",
+      "path": "/repositories/{namespace}/{repository}",
+      "request_params": {
+        "namespace": {
+          "type": "string",
+          "description": "The Docker Hub namespace (username or organization name).",
+          "required": true,
+          "is_path_param": true
+        },
+        "repository": {
+          "type": "string",
+          "description": "The repository name.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Repository details including description, star count, pull count, and last updated timestamp."
+      }
+    },
+    {
+      "name": "List Repository Tags",
+      "description": "List tags for a specific Docker Hub repository.",
+      "method": "GET",
+      "path": "/repositories/{namespace}/{repository}/tags",
+      "request_params": {
+        "namespace": {
+          "type": "string",
+          "description": "The Docker Hub namespace (username or organization name).",
+          "required": true,
+          "is_path_param": true
+        },
+        "repository": {
+          "type": "string",
+          "description": "The repository name.",
+          "required": true,
+          "is_path_param": true
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "name": {
+          "type": "string",
+          "description": "Filter tags by name prefix.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of tags with name, digest, size, and last pushed timestamp."
+      }
+    },
+    {
+      "name": "Get Tag",
+      "description": "Get details about a specific tag in a Docker Hub repository.",
+      "method": "GET",
+      "path": "/repositories/{namespace}/{repository}/tags/{tag}",
+      "request_params": {
+        "namespace": {
+          "type": "string",
+          "description": "The Docker Hub namespace (username or organization name).",
+          "required": true,
+          "is_path_param": true
+        },
+        "repository": {
+          "type": "string",
+          "description": "The repository name.",
+          "required": true,
+          "is_path_param": true
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag name (e.g., 'latest', '1.0.0').",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Tag details including name, digest, compressed size, and image architecture."
+      }
+    },
+    {
+      "name": "Search Repositories",
+      "description": "Search Docker Hub for public repositories.",
+      "method": "GET",
+      "path": "/search/repositories",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "The search query string to find repositories.",
+          "required": true,
+          "send_method": "Query"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Search results with count and list of matching repositories including name, description, and pull count."
+      }
+    },
+    {
+      "name": "List User Repositories",
+      "description": "List Docker Hub repositories for a specific namespace (user or organization).",
+      "method": "GET",
+      "path": "/repositories/{namespace}",
+      "request_params": {
+        "namespace": {
+          "type": "string",
+          "description": "The Docker Hub namespace (username or organization name).",
+          "required": true,
+          "is_path_param": true
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of repositories in the namespace with name, description, and pull count."
+      }
+    },
+    {
+      "name": "Get Namespace",
+      "description": "Get details about a Docker Hub namespace (user or organization).",
+      "method": "GET",
+      "path": "/namespaces/{namespace}",
+      "request_params": {
+        "namespace": {
+          "type": "string",
+          "description": "The Docker Hub namespace (username or organization name).",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Namespace details including name, type, and repository count."
+      }
+    },
+    {
+      "name": "List Organizations",
+      "description": "List Docker Hub organizations accessible to the authenticated user.",
+      "method": "GET",
+      "path": "/orgs",
+      "request_params": {
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of organizations the authenticated user belongs to."
+      }
+    },
+    {
+      "name": "Get Repository Dockerfile",
+      "description": "Get the Dockerfile associated with a Docker Hub repository.",
+      "method": "GET",
+      "path": "/repositories/{namespace}/{repository}/dockerfile",
+      "request_params": {
+        "namespace": {
+          "type": "string",
+          "description": "The Docker Hub namespace (username or organization name).",
+          "required": true,
+          "is_path_param": true
+        },
+        "repository": {
+          "type": "string",
+          "description": "The repository name.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "The Dockerfile content for the repository."
+      }
+    },
+    {
+      "name": "List Builds",
+      "description": "List build history for a Docker Hub repository.",
+      "method": "GET",
+      "path": "/repositories/{namespace}/{repository}/buildhistory",
+      "request_params": {
+        "namespace": {
+          "type": "string",
+          "description": "The Docker Hub namespace (username or organization name).",
+          "required": true,
+          "is_path_param": true
+        },
+        "repository": {
+          "type": "string",
+          "description": "The repository name.",
+          "required": true,
+          "is_path_param": true
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of build history entries with status, tags, and timestamps."
+      }
+    },
+    {
+      "name": "Get Token",
+      "description": "Authenticate with Docker Hub and retrieve a JWT access token for subsequent API calls.",
+      "method": "POST",
+      "path": "/users/login",
+      "request_params": {
+        "username": {
+          "type": "string",
+          "description": "Your Docker Hub username.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "password": {
+          "type": "string",
+          "description": "Your Docker Hub password or personal access token.",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Authentication response containing the JWT token to use in Authorization header for subsequent requests."
+      }
+    }
+  ]
+}

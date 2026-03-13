@@ -1,0 +1,416 @@
+{
+  "ready": false,
+  "plugin_id": "qweather",
+  "name": "QWeather API",
+  "description": "Professional weather data service with global coverage. Real-time weather, forecasts, air quality, weather warnings, and minute-level precipitation for 200,000+ cities worldwide.",
+  "category": "data",
+  "category_name": "Data & Analytics",
+  "category_icon": "📊",
+  "icon_uri": "🌤️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "weather",
+    "forecast",
+    "air-quality",
+    "climate",
+    "meteorology"
+  ],
+  "api_prefix": "https://devapi.qweather.com",
+  "desc_mk": "QWeather (和风天气) provides professional weather data services for developers worldwide. Access real-time weather, forecasts up to 30 days, air quality (AQI), severe weather warnings, minute-level precipitation, typhoon tracking, and historical weather data. **Note:** Requires API key from [QWeather Developer Platform](https://dev.qweather.com/). For production, use custom API host format: `https://{your-key}.api.qweather.com`",
+  "header_configuration": {
+    "API Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "QWEATHER_API_KEY",
+      "description": "QWeather API key from QWeather Developer Platform"
+    }
+  },
+  "tools": [
+    {
+      "name": "Real-time Weather",
+      "path": "/v7/weather/now",
+      "method": "GET",
+      "description": "Get current real-time weather conditions for a location",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Location ID, coordinates (lon,lat), or city name (e.g., '101010100' for Beijing, '116.41,39.92')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language: 'zh' (Chinese), 'en' (English), 'ja', 'ko', 'fr', 'de', etc.",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit system: 'm' (metric), 'i' (imperial)",
+          "required": false,
+          "default": "m",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Daily Weather Forecast (3 days)",
+      "path": "/v7/weather/3d",
+      "method": "GET",
+      "description": "Get 3-day daily weather forecast",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Location ID or coordinates",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit system: 'm' or 'i'",
+          "required": false,
+          "default": "m",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Daily Weather Forecast (7 days)",
+      "path": "/v7/weather/7d",
+      "method": "GET",
+      "description": "Get 7-day daily weather forecast",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Location ID or coordinates",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit system: 'm' or 'i'",
+          "required": false,
+          "default": "m",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Daily Weather Forecast (15 days)",
+      "path": "/v7/weather/15d",
+      "method": "GET",
+      "description": "Get 15-day daily weather forecast",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Location ID or coordinates",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit system: 'm' or 'i'",
+          "required": false,
+          "default": "m",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Hourly Weather Forecast (24 hours)",
+      "path": "/v7/weather/24h",
+      "method": "GET",
+      "description": "Get 24-hour hourly weather forecast",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Location ID or coordinates",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit system: 'm' or 'i'",
+          "required": false,
+          "default": "m",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Real-time Air Quality",
+      "path": "/v7/air/now",
+      "method": "GET",
+      "description": "Get current real-time air quality index (AQI) and pollutant levels",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Location ID or coordinates",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Air Quality Forecast (5 days)",
+      "path": "/v7/air/5d",
+      "method": "GET",
+      "description": "Get 5-day air quality forecast",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Location ID or coordinates",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Weather Warnings",
+      "path": "/v7/warning/now",
+      "method": "GET",
+      "description": "Get active severe weather warnings and alerts for a location",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Location ID or coordinates",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Minute Precipitation (China only)",
+      "path": "/v7/minutely/5m",
+      "method": "GET",
+      "description": "Get minute-level precipitation forecast for next 2 hours (China only)",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Coordinates in format 'lon,lat' (China locations only)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Weather Indices Forecast",
+      "path": "/v7/indices/1d",
+      "method": "GET",
+      "description": "Get lifestyle indices like UV index, comfort level, sports suitability, etc.",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Location ID or coordinates",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Index type: '0' (all), '1' (sports), '2' (car wash), '3' (dressing), '5' (UV), '6' (travel), '7' (pollen), '8' (comfort), etc.",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "City Lookup",
+      "path": "/v2/city/lookup",
+      "method": "GET",
+      "description": "Search for city location IDs by name or coordinates",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "City name or coordinates to search",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "adm": {
+          "type": "string",
+          "description": "Administrative region to narrow search",
+          "required": false,
+          "send_method": "Query"
+        },
+        "range": {
+          "type": "string",
+          "description": "Search range: 'world', 'cn' (China), 'us', 'fr', etc.",
+          "required": false,
+          "default": "world",
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Astronomy - Sun and Moon",
+      "path": "/v7/astronomy/sun",
+      "method": "GET",
+      "description": "Get sunrise, sunset, moonrise, moonset times and moon phases",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Location ID or coordinates",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "QWeather API key (Environment variable: QWEATHER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date in format YYYYMMDD (e.g., '20260222'). Defaults to today",
+          "required": false,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

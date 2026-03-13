@@ -30,6 +30,7 @@ interface Plugin {
   status?: 'active' | 'inactive' | 'error' | 'updating'
   config?: Record<string, unknown>
   tags?: string[]
+  ready?: boolean
 }
 
 const PluginMarketPageNew: React.FC = () => {
@@ -55,6 +56,11 @@ const PluginMarketPageNew: React.FC = () => {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [installingPluginId, setInstallingPluginId] = useState<string | null>(null)
+
+  // Under-development toggle and confirmation dialog
+  const [showUnderDevelopment, setShowUnderDevelopment] = useState(false)
+  const [devConfirmDialogOpen, setDevConfirmDialogOpen] = useState(false)
+  const [pendingInstallPlugin, setPendingInstallPlugin] = useState<Plugin | null>(null)
 
   // 编辑状态（ConfigCard 需要但不会在市场页面使用）
   const editingState: EditingState = {
@@ -126,23 +132,67 @@ const PluginMarketPageNew: React.FC = () => {
     }
   }
 
-  // 分类选项
-  const pluginTypeCategories = [t('plugins.types.cloud'), t('plugins.types.ide')]
-  const categories = ['all', ...pluginTypeCategories]
+  // 分类选项 - 从市场插件中提取唯一分类
+  const pluginCategories = useMemo(() => {
+    const categorySet = new Set<string>()
+    ;(marketPlugins || []).forEach(plugin => {
+      if (plugin && (plugin as any).category) {
+        categorySet.add((plugin as any).category)
+      }
+    })
+    return Array.from(categorySet)
+  }, [marketPlugins])
+
+  // 获取分类显示名称
+  const getCategoryDisplayName = (categoryKey: string) => {
+    const plugin = marketPlugins.find(p => (p as any).category === categoryKey)
+    return plugin ? ((plugin as any).category_name || categoryKey) : categoryKey
+  }
+
+  const categories = ['all', ...pluginCategories]
+
+  // Helper: check if plugin is ready (defaults true for legacy plugins without the field)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isPluginReady = (plugin: any): boolean => plugin?.ready !== false
 
   // 过滤市场插件
   const filteredMarketPlugins = (marketPlugins || []).filter(plugin => {
     if (!plugin) return false
+
+    // Filter by ready status (hide under-development unless toggle is on)
+    if (!showUnderDevelopment && !isPluginReady(plugin)) return false
+
     const matchesSearch =
       (plugin.name?.toLowerCase() || '').includes((searchTerm || '').toLowerCase()) ||
       (plugin.desc?.toLowerCase() || '').includes((searchTerm || '').toLowerCase()) ||
       (plugin.tags || []).some(tag => tag?.toLowerCase().includes((searchTerm || '').toLowerCase()))
-    const matchesCategory = categoryFilter === 'all' || getPluginTypeText(plugin.plugin_type) === categoryFilter
+
+    // Category filtering - support both old (plugin_type) and new (category) structure
+    let matchesCategory = categoryFilter === 'all'
+    if (!matchesCategory) {
+      const pluginCategory = (plugin as any).category
+      if (pluginCategory) {
+        // New structure with category field
+        matchesCategory = pluginCategory === categoryFilter
+      } else {
+        // Fallback to old structure with plugin_type
+        matchesCategory = getPluginTypeText(plugin.plugin_type) === categoryFilter
+      }
+    }
+
     return matchesSearch && matchesCategory
   })
 
+  // 排序：ready插件优先，同组内按名称字母排序
+  const sortedMarketPlugins = [...filteredMarketPlugins].sort((a, b) => {
+    const aReady = isPluginReady(a) ? 0 : 1
+    const bReady = isPluginReady(b) ? 0 : 1
+    if (aReady !== bReady) return aReady - bReady
+    return (a.name || '').localeCompare(b.name || '')
+  })
+
   // 分页后的插件
-  const displayPlugins = filteredMarketPlugins.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const displayPlugins = sortedMarketPlugins.slice((currentPage - 1) * pageSize, currentPage * pageSize)
   const displayTotalItems = filteredMarketPlugins.length
 
   useEffect(() => {
@@ -165,17 +215,57 @@ const PluginMarketPageNew: React.FC = () => {
       return
     }
 
+    // Show confirmation dialog for under-development plugins
+    if (!isPluginReady(plugin)) {
+      setPendingInstallPlugin(plugin)
+      setDevConfirmDialogOpen(true)
+      return
+    }
+
     setInstallingPluginId(plugin.plugin_id)
 
     if (plugin.config) {
       try {
-        const request = {
+        // Use plugin's api_prefix as the URL, fallback to plugin.url, then marketConfigUrl
+        const pluginUrl = (plugin.config as any).api_prefix || plugin.url || marketConfigUrl || ENV_CONFIG.PLUGIN_SERVICE_URL || ''
+
+        // Extract plugin config before creating the plugin so we can include header_configuration
+        const pluginConfig = plugin.config as {
+          header_configuration?: Record<string, { value?: string; description?: string }> | Array<{ name: string; value?: string; description?: string }>;
+          tools?: Array<Record<string, unknown>>
+        }
+
+        // Normalize header_configuration: support both array and dict formats
+        const normalizeHeaderConfiguration = (
+          raw: typeof pluginConfig.header_configuration
+        ): Record<string, { value?: string; description?: string }> => {
+          if (!raw) return {}
+          if (Array.isArray(raw)) {
+            return Object.fromEntries(
+              raw.filter(item => item.name).map(item => [item.name, { value: item.value ?? '', description: item.description ?? '' }])
+            )
+          }
+          return raw as Record<string, { value?: string; description?: string }>
+        }
+
+        const request: any = {
           name: plugin.name.trim(),
           desc: plugin.desc.trim(),
           space_id: getDefaultSpaceId(),
           plugin_type: plugin.plugin_type,
-          url: marketConfigUrl || ENV_CONFIG.PLUGIN_SERVICE_URL,
+          url: pluginUrl,
           icon_uri: plugin.icon_uri,
+        }
+
+        // Add markdown description if available
+        if (plugin.desc_mk) {
+          request.desc_mk = plugin.desc_mk
+        }
+
+        // Pass header_configuration to plugin_create so it is stored in plugin.inputs, not tool.input_parameters
+        const normalizedHeaders = normalizeHeaderConfiguration(pluginConfig.header_configuration)
+        if (Object.keys(normalizedHeaders).length > 0) {
+          request.header_configuration = normalizedHeaders
         }
 
         const response = await createPluginMutation.mutateAsync(request)
@@ -184,20 +274,48 @@ const PluginMarketPageNew: React.FC = () => {
           const pluginId = response.data.plugin_id
 
           // 创建 API
-          const tools = (plugin.config as { tools?: Array<Record<string, unknown>> })?.tools || []
+          const tools = pluginConfig?.tools || []
           const apiCreationPromises = tools.map(async (tool: Record<string, unknown>) => {
             try {
               const toolName = String(tool.name || '')
               const toolDesc = String(tool.description || '')
               const toolPath = String(tool.path || '')
-              const toolMethod = String(tool.method || 'GET')
+              const toolMethod = String(tool.method || 'GET').toUpperCase()
+
+              // Map HTTP method to backend enum: GET=1, POST=2, PUT=3, DELETE=4, PATCH=5
+              let methodEnum = 1 // default to GET
+              if (toolMethod === 'GET') methodEnum = 1
+              else if (toolMethod === 'POST') methodEnum = 2
+              else if (toolMethod === 'PUT') methodEnum = 3
+              else if (toolMethod === 'DELETE') methodEnum = 4
+              else if (toolMethod === 'PATCH') methodEnum = 5
+
+              // Process tool-specific headers (if any)
+              const toolHeaders = tool.headers
+                ? (Array.isArray(tool.headers)
+                    ? tool.headers.map((h: any) => ({
+                        name: String(h.name || h.key || ''),
+                        value: String(h.value || ''),
+                        description: String(h.description || ''),
+                      }))
+                    : Object.entries(tool.headers as Record<string, unknown>).map(([key, value]) => ({
+                        name: key,
+                        value: String(value || ''),
+                        description: '',
+                      })))
+                : []
+
+              // Only use tool-specific headers; plugin-level header_configuration is stored at plugin level
+              const mergedHeaders = toolHeaders
+
               const apiRequest = {
                 space_id: getDefaultSpaceId(),
                 plugin_id: pluginId,
                 name: toolName,
                 desc: toolDesc,
                 path: toolPath,
-                method: toolMethod === 'GET' ? 1 : toolMethod === 'POST' ? 2 : 1,
+                method: methodEnum,
+                headers: mergedHeaders,
               }
 
               const apiResponse = await createPluginApiMutation.mutateAsync(apiRequest)
@@ -208,11 +326,77 @@ const PluginMarketPageNew: React.FC = () => {
                 const requestParams = tool.request_params
                   ? Object.entries(tool.request_params as Record<string, unknown>).map(([key, param]) => {
                       const p = param as Record<string, unknown>
+
+                      // Handle method field: check if already processed (integer) or raw (string)
+                      let methodValue = 0 // default to NONE
+                      if (typeof p.method === 'number') {
+                        // Already processed by backend (integer value)
+                        methodValue = p.method
+                      } else if (p.send_method) {
+                        // Raw marketplace format with send_method string
+                        const sendMethod = String(p.send_method).toLowerCase()
+                        if (sendMethod === 'header') methodValue = 1
+                        else if (sendMethod === 'query') methodValue = 2
+                        else if (sendMethod === 'body') methodValue = 3
+                        else if (sendMethod === 'path') methodValue = 4
+                        else if (sendMethod === 'none') methodValue = 0
+                      }
+
+                      // Handle type field: check if already processed (integer) or raw (string)
+                      let typeValue = 1 // default to string
+                      if (typeof p.type === 'number') {
+                        // Already processed by backend (integer value)
+                        typeValue = p.type
+                      } else if (typeof p.type === 'string') {
+                        // Raw marketplace format with type string
+                        const paramType = String(p.type).toLowerCase()
+                        if (paramType === 'string') typeValue = 1
+                        else if (paramType === 'integer' || paramType === 'int') typeValue = 2
+                        else if (paramType === 'number' || paramType === 'float') typeValue = 3
+                        else if (paramType === 'boolean' || paramType === 'bool') typeValue = 4
+                        else if (paramType === 'object') typeValue = 5
+                        else if (paramType === 'array') typeValue = 6
+                      }
+
                       return {
                         name: key,
-                        desc: String(p.description || key),
-                        type: p.type === 'string' ? 1 : p.type === 'integer' ? 2 : p.type === 'boolean' ? 3 : 1,
-                        is_required: Boolean(p.required),
+                        desc: String(p.desc || p.description || key),
+                        type: typeValue,
+                        is_required: Boolean(p.is_required !== undefined ? p.is_required : p.required),
+                        is_runtime: p.is_runtime !== undefined ? Boolean(p.is_runtime) : true, // default to true if not specified
+                        value: p.is_runtime === false ? String(p.default || '') : '', // use default value for non-runtime params
+                        method: methodValue,
+                        priority: 1, // 1 = PRIORITY_PLUGIN
+                      }
+                    })
+                  : []
+
+                // Process response/output parameters
+                const responseParams = tool.response_params
+                  ? Object.entries(tool.response_params as Record<string, unknown>).map(([key, param]) => {
+                      const p = param as Record<string, unknown>
+
+                      // Handle type field: check if already processed (integer) or raw (string)
+                      let typeValue = 1 // default to string
+                      if (typeof p.type === 'number') {
+                        // Already processed by backend (integer value)
+                        typeValue = p.type
+                      } else if (typeof p.type === 'string') {
+                        // Raw marketplace format with type string
+                        const paramType = String(p.type).toLowerCase()
+                        if (paramType === 'string') typeValue = 1
+                        else if (paramType === 'integer' || paramType === 'int') typeValue = 2
+                        else if (paramType === 'number' || paramType === 'float') typeValue = 3
+                        else if (paramType === 'boolean' || paramType === 'bool') typeValue = 4
+                        else if (paramType === 'object') typeValue = 5
+                        else if (paramType === 'array') typeValue = 6
+                      }
+
+                      return {
+                        name: key,
+                        desc: String(p.desc || p.description || key),
+                        type: typeValue,
+                        is_required: false, // output params are not required
                         is_runtime: false,
                         value: '',
                         method: 0,
@@ -221,6 +405,7 @@ const PluginMarketPageNew: React.FC = () => {
                     })
                   : []
 
+                // Reuse the merged headers from above (already processed for create call)
                 const updateApiRequest = {
                   space_id: getDefaultSpaceId(),
                   plugin_id: pluginId,
@@ -228,11 +413,11 @@ const PluginMarketPageNew: React.FC = () => {
                   name: toolName,
                   desc: toolDesc,
                   path: toolPath,
-                  method: toolMethod === 'GET' ? 1 : toolMethod === 'POST' ? 2 : 1,
+                  method: methodEnum, // Use the same method enum from above
                   plugin_version: '',
                   request_params: requestParams,
-                  response_params: [],
-                  headers: [],
+                  response_params: responseParams,
+                  headers: mergedHeaders,
                 }
 
                 return await updatePluginApiMutation.mutateAsync(updateApiRequest)
@@ -273,6 +458,17 @@ const PluginMarketPageNew: React.FC = () => {
       } finally {
         setInstallingPluginId(null)
       }
+    }
+  }
+
+  // Confirm install of an under-development plugin (bypasses ready check)
+  const handleConfirmDevInstall = async () => {
+    setDevConfirmDialogOpen(false)
+    if (pendingInstallPlugin) {
+      const plugin = pendingInstallPlugin
+      setPendingInstallPlugin(null)
+      // Pass a copy with ready:true so the guard in handleInstallPlugin is bypassed
+      await handleInstallPlugin({ ...plugin, ready: true } as any)
     }
   }
 
@@ -331,81 +527,107 @@ const PluginMarketPageNew: React.FC = () => {
             const installed = isPluginInstalled(plugin)
             const isInstalling = installingPluginId === plugin.plugin_id
             const checkingInstall = pluginListLoading
+            const pluginReady = isPluginReady(plugin)
 
             return (
-              <ConfigCard
+              <div
                 key={plugin.plugin_id}
-                id={plugin.plugin_id}
-                icon={renderPluginIcon(plugin.icon_uri)}
-                iconBgColor="bg-gradient-to-r from-blue-100 to-indigo-100"
-                iconTextColor="text-blue-600"
-                title={plugin.name}
-                description={plugin.desc || t('plugins.noDescription')}
-                tags={[{ label: getPluginTypeText(plugin.plugin_type), color: '#3B82F6' }]}
-                editingState={editingState}
-                actions={[]}
-                onClick={() => handleViewPlugin(plugin)}
-                footer={
-                  <div className="flex items-center justify-between w-full">
-                    <button
-                      onClick={e => {
-                        e.stopPropagation()
-                        handleViewPlugin(plugin)
-                      }}
-                      className="text-xs flex items-center gap-1"
-                      style={{ color: '#777777' }}
-                    >
-                      <Eye className="w-3 h-3" />
-                      {t('plugins.actions.view')}
-                    </button>
-                    <button
-                      onClick={e => {
-                        e.stopPropagation()
-                        if (!installed && !isInstalling && !checkingInstall) {
-                          handleInstallPlugin(plugin)
-                        }
-                      }}
-                      disabled={installed || isInstalling || checkingInstall}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1 ${
-                        installed
-                          ? 'bg-green-100 text-green-700 cursor-default'
-                          : isInstalling
-                            ? 'bg-gray-100 text-gray-500 cursor-wait'
-                            : checkingInstall
-                              ? 'bg-gray-100 text-gray-500 cursor-wait'
-                              : 'bg-blue-500 text-white hover:bg-blue-600'
-                      }`}
-                    >
-                      {checkingInstall ? (
-                        <>
-                          <CircularProgress size={12} sx={{ color: 'inherit' }} />
-                          {t('plugins.loading')}
-                        </>
-                      ) : isInstalling ? (
-                        <>
-                          <CircularProgress size={12} sx={{ color: 'inherit' }} />
-                          {t('plugins.messages.installing')}
-                        </>
-                      ) : installed ? (
-                        <>
-                          <Check className="w-3 h-3" />
-                          {t('plugins.actions.installed')}
-                        </>
-                      ) : (
-                        <>
-                          <Download className="w-3 h-3" />
-                          {t('plugins.actions.install')}
-                        </>
-                      )}
-                    </button>
+                className={`relative ${!pluginReady ? 'overflow-hidden rounded-[8px]' : ''}`}
+                style={!pluginReady ? { outline: '2px solid #FBBF24', outlineOffset: '-2px' } : undefined}
+              >
+                {!pluginReady && (
+                  <div
+                    className="absolute top-4 -right-7 z-10 bg-amber-400 text-white text-[10px] font-bold py-0.5 px-8 rotate-45 tracking-wider pointer-events-none shadow-sm"
+                    aria-label="Under Development"
+                  >
+                    IN DEV
                   </div>
-                }
-              />
+                )}
+                <ConfigCard
+                  id={plugin.plugin_id}
+                  icon={renderPluginIcon(plugin.icon_uri)}
+                  iconBgColor={pluginReady ? 'bg-gradient-to-r from-blue-100 to-indigo-100' : 'bg-amber-100'}
+                  iconTextColor={pluginReady ? 'text-blue-600' : 'text-amber-600'}
+                  title={plugin.name}
+                  description={plugin.desc || t('plugins.noDescription')}
+                  className={!pluginReady ? '!bg-gray-50 !shadow-none' : ''}
+                  tags={[
+                    {
+                      label: (plugin as any).category_name || getCategoryDisplayName((plugin as any).category) || getPluginTypeText(plugin.plugin_type),
+                      color: pluginReady ? '#3B82F6' : '#92400E',
+                    },
+                    ...((plugin.tags || []).slice(0, 2).map(tag => ({
+                      label: tag,
+                      color: '#6B7280',
+                    }))),
+                  ]}
+                  editingState={editingState}
+                  actions={[]}
+                  onClick={() => handleViewPlugin(plugin)}
+                  footer={
+                    <div className="flex items-center justify-between w-full">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleViewPlugin(plugin)
+                        }}
+                        className="text-xs flex items-center gap-1"
+                        style={{ color: '#777777' }}
+                      >
+                        <Eye className="w-3 h-3" />
+                        {t('plugins.actions.view')}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (!installed && !isInstalling && !checkingInstall) {
+                            handleInstallPlugin(plugin)
+                          }
+                        }}
+                        disabled={installed || isInstalling || checkingInstall}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1 ${
+                          installed
+                            ? 'bg-green-100 text-green-700 cursor-default'
+                            : isInstalling
+                              ? 'bg-gray-100 text-gray-500 cursor-wait'
+                              : checkingInstall
+                                ? 'bg-gray-100 text-gray-500 cursor-wait'
+                                : pluginReady
+                                  ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                  : 'bg-amber-100 text-amber-800 hover:bg-amber-200 border border-amber-300'
+                        }`}
+                      >
+                        {checkingInstall ? (
+                          <>
+                            <CircularProgress size={12} sx={{ color: 'inherit' }} />
+                            {t('plugins.loading')}
+                          </>
+                        ) : isInstalling ? (
+                          <>
+                            <CircularProgress size={12} sx={{ color: 'inherit' }} />
+                            {t('plugins.messages.installing')}
+                          </>
+                        ) : installed ? (
+                          <>
+                            <Check className="w-3 h-3" />
+                            {t('plugins.actions.installed')}
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-3 h-3" />
+                            {t('plugins.actions.install')}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  }
+                />
+              </div>
             )
           })}
       </div>
     )
-  }, [displayPlugins, editingState, t, searchTerm, installedPlugins, installingPluginId, pluginListLoading])
+  }, [displayPlugins, editingState, t, searchTerm, installedPlugins, installingPluginId, pluginListLoading, showUnderDevelopment])
 
   // 表格列定义
   const tableColumns: TableColumn<Plugin>[] = useMemo(
@@ -415,19 +637,37 @@ const PluginMarketPageNew: React.FC = () => {
         title: t('plugins.tableView.columns.plugin'),
         dataIndex: 'name',
         width: 400,
-        render: ({ row }) => (
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl bg-gradient-to-r from-blue-100 to-indigo-100">
-              {renderPluginIcon(row.icon_uri)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold text-gray-900 cursor-pointer truncate" onClick={() => handleViewPlugin(row)}>
-                {row.name}
+        render: ({ row }) => {
+          const rowReady = isPluginReady(row)
+          return (
+            <div
+              className="flex items-center gap-3"
+              style={!rowReady ? { borderLeft: '3px solid #FBBF24', paddingLeft: '8px', marginLeft: '-11px' } : undefined}
+            >
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl flex-shrink-0 ${rowReady ? 'bg-gradient-to-r from-blue-100 to-indigo-100' : 'bg-amber-100'}`}>
+                {!rowReady ? '🚧' : renderPluginIcon(row.icon_uri)}
               </div>
-              <div className="mt-1 text-xs text-gray-500 truncate">{row.desc || t('plugins.noDescription')}</div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div
+                    className="font-semibold text-gray-900 cursor-pointer truncate"
+                    onClick={() => handleViewPlugin(row)}>
+
+                    {row.name}
+                  </div>
+                  {!rowReady && (
+                    <span className="flex-shrink-0 px-2 py-0.5 text-xs font-bold rounded-full bg-amber-400 text-white tracking-wide">
+                      🚧 Under Development
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 text-xs text-gray-500 truncate">
+                  {row.desc || t('plugins.noDescription')}
+                </div>
+              </div>
             </div>
-          </div>
-        ),
+          )
+        },
       },
       {
         key: 'type',
@@ -493,7 +733,7 @@ const PluginMarketPageNew: React.FC = () => {
         },
       },
     ],
-    [t, installedPlugins, installingPluginId, pluginListLoading],
+    [t, installedPlugins, installingPluginId, pluginListLoading, showUnderDevelopment],
   )
 
   // 列表视图
@@ -513,15 +753,28 @@ const PluginMarketPageNew: React.FC = () => {
           className="h-8 px-3 bg-white dark:bg-gray-800 border border-[#e5e7eb] dark:border-gray-600 text-[#1f2937] dark:text-gray-200 rounded-[4px] text-sm focus:outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-colors"
         >
           <option value="all">{t('plugins.filters.allCategories')}</option>
-          {categories.slice(1).map(category => (
+          {categories.slice(1).map(category => {
+            const displayName = getCategoryDisplayName(category)
+          return (
             <option key={category} value={category}>
-              {category}
+              {displayName}
             </option>
-          ))}
-        </select>
+          )
+        })}
+      </select>
+      {/* Show under-development toggle */}
+      <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-gray-600 whitespace-nowrap">
+        <input
+          type="checkbox"
+          checked={showUnderDevelopment}
+          onChange={e => setShowUnderDevelopment(e.target.checked)}
+          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+        Show plugins under development
+      </label>
       </>
     ),
-    [searchTerm, categoryFilter, categories, t],
+    [searchTerm, categoryFilter, categories, t, getCategoryDisplayName, showUnderDevelopment],
   )
 
   // 工具栏右侧
@@ -605,6 +858,42 @@ const PluginMarketPageNew: React.FC = () => {
                     </div>
                   </div>
                 )}
+                {(() => {
+                  const rawHeaders = (selectedPlugin.config as any)?.header_configuration
+                  if (!rawHeaders) return null
+                  const headers: Record<string, { value?: string; description?: string }> = Array.isArray(rawHeaders)
+                    ? Object.fromEntries(rawHeaders.filter((h: any) => h.name).map((h: any) => [h.name, { value: h.value ?? '', description: h.description ?? '' }]))
+                    : rawHeaders
+                  const entries = Object.entries(headers)
+                  if (entries.length === 0) return null
+                  return (
+                    <div>
+                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                        {t('plugins.dialog.pluginDetails.requiredConfiguration')}
+                      </Typography>
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                              <th className="text-left px-3 py-2 font-medium text-gray-600">{t('plugins.dialog.pluginDetails.headerName')}</th>
+                              <th className="text-left px-3 py-2 font-medium text-gray-600">{t('plugins.dialog.pluginDetails.defaultValue')}</th>
+                              <th className="text-left px-3 py-2 font-medium text-gray-600">{t('plugins.description')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {entries.map(([name, details], idx) => (
+                              <tr key={name} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                <td className="px-3 py-2 font-mono text-xs text-blue-700 font-semibold">{name}</td>
+                                <td className="px-3 py-2 font-mono text-xs text-gray-500">{details.value || '—'}</td>
+                                <td className="px-3 py-2 text-gray-600">{details.description || '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             </DialogContent>
             <DialogActions>
@@ -628,6 +917,27 @@ const PluginMarketPageNew: React.FC = () => {
             </DialogActions>
           </>
         )}
+      </Dialog>
+
+      {/* Under-development install confirmation dialog */}
+      <Dialog open={devConfirmDialogOpen} onClose={() => { setDevConfirmDialogOpen(false); setPendingInstallPlugin(null) }} maxWidth="xs" fullWidth>
+        <DialogTitle>Install Plugin Under Development</DialogTitle>
+        <DialogContent>
+          <div className="flex items-start gap-3 py-2">
+            <span className="text-2xl mt-0.5">⚠️</span>
+            <Typography variant="body2" color="text.secondary">
+              <strong>{pendingInstallPlugin?.name}</strong> is still under development and may not work as expected.
+              <br /><br />
+              Do you want to install it anyway?
+            </Typography>
+          </div>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setDevConfirmDialogOpen(false); setPendingInstallPlugin(null) }}>Cancel</Button>
+          <Button onClick={handleConfirmDevInstall} variant="contained" color="warning">
+            Install Anyway
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Snackbar */}

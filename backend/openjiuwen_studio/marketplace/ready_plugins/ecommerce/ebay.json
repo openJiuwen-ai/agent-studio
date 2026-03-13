@@ -1,0 +1,262 @@
+{
+  "ready": false,
+  "plugin_id": "ebay",
+  "name": "eBay",
+  "description": "Search listings, manage inventory, and handle orders via the eBay REST APIs.",
+  "category": "ecommerce",
+  "category_name": "E-Commerce",
+  "category_icon": "🛒",
+  "icon_uri": "🏷️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["ecommerce", "ebay", "marketplace", "listings", "orders", "inventory"],
+  "api_prefix": "https://api.ebay.com",
+  "documentation": "https://developer.ebay.com/develop/apis/restful-apis",
+  "desc_mk": "Interact with the eBay REST APIs to search items, manage inventory, retrieve orders, and handle fulfillment.",
+  "authentication": {
+    "type": "oauth2",
+    "required_credentials": [
+      {
+        "name": "OAuth Access Token",
+        "env_var": "EBAY_ACCESS_TOKEN"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "search_items",
+      "description": "Search for eBay items using keyword and filter queries.",
+      "method": "GET",
+      "path": "/buy/browse/v1/item_summary/search",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "desc": "Keyword search string for items.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "category_ids": {
+          "type": "string",
+          "desc": "Comma-separated list of category IDs to filter results.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "filter": {
+          "type": "string",
+          "desc": "Refine results using filters (e.g. price:[10..50], conditions:{NEW}).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "desc": "Sort results: price, -price, distance, -distance, newlyListed.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "desc": "Number of items to return per page (max 200).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "desc": "Number of items to skip for pagination.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_item",
+      "description": "Retrieve detailed information about a specific eBay item.",
+      "method": "GET",
+      "path": "/buy/browse/v1/item/{item_id}",
+      "request_params": {
+        "item_id": {
+          "type": "string",
+          "desc": "The eBay item ID (e.g. v1|123456789|0).",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "fieldgroups": {
+          "type": "string",
+          "desc": "Comma-separated list of field groups to include: PRODUCT, COMPACT.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_item_by_legacy_id",
+      "description": "Retrieve a single item using its legacy eBay item ID.",
+      "method": "GET",
+      "path": "/buy/browse/v1/item/get_item_by_legacy_id",
+      "request_params": {
+        "legacy_item_id": {
+          "type": "string",
+          "desc": "The legacy eBay item ID (numeric string).",
+          "is_required": true,
+          "send_method": "Query"
+        },
+        "legacy_variation_id": {
+          "type": "string",
+          "desc": "The legacy variation ID for a specific variation of the item.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_orders",
+      "description": "Retrieve a list of orders for the authenticated seller.",
+      "method": "GET",
+      "path": "/sell/fulfillment/v1/order",
+      "request_params": {
+        "filter": {
+          "type": "string",
+          "desc": "Filter orders (e.g. orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS}, creationdate:[2024-01-01T00:00:00Z..]).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "desc": "Number of orders to return per page (max 200).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "desc": "Number of orders to skip for pagination.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "orderIds": {
+          "type": "string",
+          "desc": "Comma-separated list of specific order IDs to retrieve.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_order",
+      "description": "Retrieve a single order by its order ID.",
+      "method": "GET",
+      "path": "/sell/fulfillment/v1/order/{orderId}",
+      "request_params": {
+        "orderId": {
+          "type": "string",
+          "desc": "The unique identifier of the order.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "create_shipping_fulfillment",
+      "description": "Create a shipping fulfillment for an order to mark it as shipped.",
+      "method": "POST",
+      "path": "/sell/fulfillment/v1/order/{orderId}/shipping_fulfillment",
+      "request_params": {
+        "orderId": {
+          "type": "string",
+          "desc": "The unique identifier of the order to fulfill.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "lineItems": {
+          "type": "array",
+          "desc": "Array of line items being shipped, each with lineItemId and quantity.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "shippedDate": {
+          "type": "string",
+          "desc": "Date and time of shipment in ISO 8601 format.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "shippingCarrierCode": {
+          "type": "string",
+          "desc": "Shipping carrier code (e.g. USPS, UPS, FEDEX).",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "trackingNumber": {
+          "type": "string",
+          "desc": "Shipment tracking number.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "get_inventory_item",
+      "description": "Retrieve an inventory item by its seller-defined SKU.",
+      "method": "GET",
+      "path": "/sell/inventory/v1/inventory_item/{sku}",
+      "request_params": {
+        "sku": {
+          "type": "string",
+          "desc": "The seller-defined SKU of the inventory item.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "list_inventory_items",
+      "description": "Retrieve a paginated list of all inventory items for the authenticated seller.",
+      "method": "GET",
+      "path": "/sell/inventory/v1/inventory_item",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "desc": "Number of inventory items to return per page (max 200).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "desc": "Number of inventory items to skip for pagination.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "create_or_replace_inventory_item",
+      "description": "Create or replace an inventory item using a seller-defined SKU.",
+      "method": "PUT",
+      "path": "/sell/inventory/v1/inventory_item/{sku}",
+      "request_params": {
+        "sku": {
+          "type": "string",
+          "desc": "The seller-defined SKU for the inventory item.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "availability": {
+          "type": "object",
+          "desc": "Availability object containing shipToLocationAvailability with quantity field.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "condition": {
+          "type": "string",
+          "desc": "Item condition: NEW, LIKE_NEW, NEW_OTHER, NEW_WITH_DEFECTS, MANUFACTURER_REFURBISHED, etc.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "product": {
+          "type": "object",
+          "desc": "Product object containing title, description, aspects, imageUrls, and mpn.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

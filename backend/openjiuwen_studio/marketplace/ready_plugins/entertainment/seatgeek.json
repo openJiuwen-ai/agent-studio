@@ -1,0 +1,333 @@
+{
+  "ready": false,
+  "plugin_id": "seatgeek_api",
+  "name": "SeatGeek",
+  "description": "Ticket marketplace and event discovery. Search for concerts, sports, theater, and more. Get ticket prices, venue information, and event recommendations.",
+  "category": "entertainment",
+  "category_name": "Entertainment & Events",
+  "category_icon": "🎭",
+  "icon_uri": "🎟",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "tickets",
+    "events",
+    "concerts",
+    "sports",
+    "theater",
+    "entertainment",
+    "venues"
+  ],
+  "api_prefix": "https://api.seatgeek.com/2",
+  "desc_mk": "SeatGeek API provides access to millions of live events, ticket prices, and venue information. Search for events by location, performer, or date. Get recommendations based on your preferences and location.",
+  "tools": [
+    {
+      "name": "Search Events",
+      "path": "/events",
+      "method": "GET",
+      "description": "Search for events by query, location, date, and other filters",
+      "request_params": {
+        "client_id": {
+          "type": "string",
+          "description": "Your SeatGeek client ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "q": {
+          "type": "string",
+          "description": "Search query (event name, performer, venue)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "geoip": {
+          "type": "string",
+          "description": "Use requester's IP for location (true/false)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "lat": {
+          "type": "string",
+          "description": "Latitude coordinate",
+          "required": false,
+          "send_method": "Query"
+        },
+        "lon": {
+          "type": "string",
+          "description": "Longitude coordinate",
+          "required": false,
+          "send_method": "Query"
+        },
+        "range": {
+          "type": "string",
+          "description": "Search radius in miles (e.g., '10mi')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Event type (concert, sports, theater, etc.)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "datetime_local.gte": {
+          "type": "string",
+          "description": "Events on or after this date (YYYY-MM-DD)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "datetime_local.lte": {
+          "type": "string",
+          "description": "Events on or before this date (YYYY-MM-DD)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Results per page (max 1000)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order (score.desc, datetime_local.asc, etc.)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Event by ID",
+      "path": "/events/{event_id}",
+      "method": "GET",
+      "description": "Get detailed information about a specific event",
+      "request_params": {
+        "event_id": {
+          "type": "string",
+          "description": "Event ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "client_id": {
+          "type": "string",
+          "description": "Your SeatGeek client ID",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Performers",
+      "path": "/performers",
+      "method": "GET",
+      "description": "Search for performers (artists, teams, etc.)",
+      "request_params": {
+        "client_id": {
+          "type": "string",
+          "description": "Your SeatGeek client ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "q": {
+          "type": "string",
+          "description": "Search query for performer name",
+          "required": false,
+          "send_method": "Query"
+        },
+        "slug": {
+          "type": "string",
+          "description": "Performer slug (URL-friendly name)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Results per page",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Performer by ID",
+      "path": "/performers/{performer_id}",
+      "method": "GET",
+      "description": "Get detailed information about a specific performer",
+      "request_params": {
+        "performer_id": {
+          "type": "string",
+          "description": "Performer ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "client_id": {
+          "type": "string",
+          "description": "Your SeatGeek client ID",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Venues",
+      "path": "/venues",
+      "method": "GET",
+      "description": "Search for venues by name, location, or other criteria",
+      "request_params": {
+        "client_id": {
+          "type": "string",
+          "description": "Your SeatGeek client ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "q": {
+          "type": "string",
+          "description": "Search query for venue name",
+          "required": false,
+          "send_method": "Query"
+        },
+        "city": {
+          "type": "string",
+          "description": "City name",
+          "required": false,
+          "send_method": "Query"
+        },
+        "state": {
+          "type": "string",
+          "description": "State code (e.g., NY, CA)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "country": {
+          "type": "string",
+          "description": "Country code (e.g., US, CA, GB)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Results per page",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Venue by ID",
+      "path": "/venues/{venue_id}",
+      "method": "GET",
+      "description": "Get detailed information about a specific venue",
+      "request_params": {
+        "venue_id": {
+          "type": "string",
+          "description": "Venue ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "client_id": {
+          "type": "string",
+          "description": "Your SeatGeek client ID",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Recommendations",
+      "path": "/recommendations",
+      "method": "GET",
+      "description": "Get personalized event recommendations based on location and preferences",
+      "request_params": {
+        "client_id": {
+          "type": "string",
+          "description": "Your SeatGeek client ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "events.id": {
+          "type": "string",
+          "description": "Seed event ID for recommendations",
+          "required": false,
+          "send_method": "Query"
+        },
+        "performers.id": {
+          "type": "string",
+          "description": "Seed performer ID for recommendations",
+          "required": false,
+          "send_method": "Query"
+        },
+        "geoip": {
+          "type": "string",
+          "description": "Use requester's location",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Results per page",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Performer Recommendations",
+      "path": "/recommendations/performers",
+      "method": "GET",
+      "description": "Get recommended performers based on your preferences",
+      "request_params": {
+        "client_id": {
+          "type": "string",
+          "description": "Your SeatGeek client ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "performers.id": {
+          "type": "string",
+          "description": "Seed performer ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Results per page",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Taxonomies",
+      "path": "/taxonomies",
+      "method": "GET",
+      "description": "Get list of event taxonomies (categories, types, genres)",
+      "request_params": {
+        "client_id": {
+          "type": "string",
+          "description": "Your SeatGeek client ID",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,290 @@
+{
+  "ready": false,
+  "plugin_id": "square",
+  "name": "Square",
+  "description": "Process payments, manage orders, customers, and catalog items using the Square REST API.",
+  "category": "payments",
+  "category_name": "Payments & Finance",
+  "category_icon": "💳",
+  "icon_uri": "⬛",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["payments", "square", "pos", "orders", "catalog"],
+  "api_prefix": "https://connect.squareup.com/v2",
+  "documentation": "https://developer.squareup.com/reference/square",
+  "desc_mk": "Square is a comprehensive commerce platform for in-person and online payments. Use this plugin to manage locations, catalog items, payments, orders, refunds, and customers.\n\n**Authentication:** Requires a Square OAuth access token.\n\n**Idempotency:** Square requires an `idempotency_key` (UUID) for all write operations to prevent duplicate requests. Generate a unique UUID for each request.\n\n**Sandbox:** Use `https://connect.squareupsandbox.com/v2` for testing.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "Square Access Token",
+        "env_var": "SQUARE_ACCESS_TOKEN"
+      }
+    ]
+  },
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_SQUARE_ACCESS_TOKEN",
+      "description": "Square OAuth access token (Environment variable: SQUARE_ACCESS_TOKEN)"
+    },
+    "Square-Version": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "2024-01-18",
+      "description": "Square API version header"
+    }
+  },
+  "tools": [
+    {
+      "name": "List Locations",
+      "description": "Retrieves a list of all locations associated with the Square account.",
+      "path": "/locations",
+      "method": "GET",
+      "request_params": {},
+      "response_params": {}
+    },
+    {
+      "name": "Get Location",
+      "description": "Retrieves the details of a specific Square location by its ID.",
+      "path": "/locations/{location_id}",
+      "method": "GET",
+      "request_params": {
+        "location_id": {
+          "type": "string",
+          "description": "The unique ID of the Square location",
+          "required": true,
+          "send_method": "Path",
+          "is_path_param": true
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "List Catalog",
+      "description": "Returns a list of catalog objects, optionally filtered by type.",
+      "path": "/catalog/list",
+      "method": "GET",
+      "request_params": {
+        "types": {
+          "type": "string",
+          "description": "Comma-separated list of object types to return: ITEM, ITEM_VARIATION, CATEGORY, DISCOUNT, TAX, etc.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Pagination cursor returned by a previous call to continue fetching results",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Create Payment",
+      "description": "Creates a new payment using a payment source (card nonce, card on file, etc.).",
+      "path": "/payments",
+      "method": "POST",
+      "request_params": {
+        "source_id": {
+          "type": "string",
+          "description": "Payment source identifier (card nonce, card-on-file ID, or CASH/EXTERNAL)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "description": "A unique UUID string to prevent duplicate payments",
+          "required": true,
+          "send_method": "Body"
+        },
+        "amount_money": {
+          "type": "object",
+          "description": "Amount object with amount (integer in smallest currency unit) and currency (ISO 4217 code)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "location_id": {
+          "type": "string",
+          "description": "The location ID to associate with the payment",
+          "required": false,
+          "send_method": "Body"
+        },
+        "note": {
+          "type": "string",
+          "description": "A note to associate with the payment",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Get Payment",
+      "description": "Retrieves the details of a specific Square payment by its ID.",
+      "path": "/payments/{payment_id}",
+      "method": "GET",
+      "request_params": {
+        "payment_id": {
+          "type": "string",
+          "description": "The unique ID of the Square payment",
+          "required": true,
+          "send_method": "Path",
+          "is_path_param": true
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "List Payments",
+      "description": "Retrieves a list of payments processed by the account, with optional filters.",
+      "path": "/payments",
+      "method": "GET",
+      "request_params": {
+        "location_id": {
+          "type": "string",
+          "description": "Filter payments by location ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "begin_time": {
+          "type": "string",
+          "description": "Start of date range in RFC 3339 format (e.g. 2024-01-01T00:00:00Z)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "end_time": {
+          "type": "string",
+          "description": "End of date range in RFC 3339 format (e.g. 2024-01-31T23:59:59Z)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "cursor": {
+          "type": "string",
+          "description": "Pagination cursor from a previous response",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results to return (1-100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "sort_order": {
+          "type": "string",
+          "description": "Sort order: ASC or DESC (default DESC)",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Create Refund",
+      "description": "Refunds a Square payment in full or partially.",
+      "path": "/refunds",
+      "method": "POST",
+      "request_params": {
+        "idempotency_key": {
+          "type": "string",
+          "description": "A unique UUID string to prevent duplicate refunds",
+          "required": true,
+          "send_method": "Body"
+        },
+        "payment_id": {
+          "type": "string",
+          "description": "The ID of the payment to refund",
+          "required": true,
+          "send_method": "Body"
+        },
+        "amount_money": {
+          "type": "object",
+          "description": "Partial refund amount object with amount (integer) and currency. Omit for full refund.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "reason": {
+          "type": "string",
+          "description": "A description of why the refund is being issued",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Create Order",
+      "description": "Creates a new Square order with line items.",
+      "path": "/orders",
+      "method": "POST",
+      "request_params": {
+        "order": {
+          "type": "object",
+          "description": "Order object containing location_id (string) and line_items (array with name, quantity, base_price_money)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "description": "A unique UUID string to prevent duplicate orders",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "Get Order",
+      "description": "Retrieves the details of a specific Square order by its ID.",
+      "path": "/orders/{order_id}",
+      "method": "GET",
+      "request_params": {
+        "order_id": {
+          "type": "string",
+          "description": "The unique ID of the Square order",
+          "required": true,
+          "send_method": "Path",
+          "is_path_param": true
+        }
+      },
+      "response_params": {}
+    },
+    {
+      "name": "List Customers",
+      "description": "Returns a list of customer profiles in the Square account.",
+      "path": "/customers",
+      "method": "GET",
+      "request_params": {
+        "cursor": {
+          "type": "string",
+          "description": "Pagination cursor from a previous response",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results per page (1-100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "sort_field": {
+          "type": "string",
+          "description": "Field to sort by: DEFAULT or CREATED_AT",
+          "required": false,
+          "send_method": "Query"
+        },
+        "sort_order": {
+          "type": "string",
+          "description": "Sort direction: ASC or DESC",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response_params": {}
+    }
+  ]
+}

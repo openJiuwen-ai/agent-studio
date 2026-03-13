@@ -1,0 +1,201 @@
+{
+  "ready": false,
+  "plugin_id": "zhipu_ai",
+  "name": "Zhipu AI (GLM)",
+  "description": "ChatGLM and GLM-4/GLM-5 models from Tsinghua University's Zhipu AI. Advanced reasoning, function calling, web search, and multimodal capabilities. Free tier available.",
+  "category": "ai",
+  "category_name": "AI & ML Services",
+  "category_icon": "🤖",
+  "icon_uri": "⚡",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "llm",
+    "ai",
+    "chatglm",
+    "glm",
+    "china",
+    "tsinghua"
+  ],
+  "api_prefix": "https://open.bigmodel.cn",
+  "desc_mk": "Zhipu AI (智谱AI) from Tsinghua University provides GLM series models including GLM-4 and GLM-5 (745B parameters). Features function calling, web search integration, retrieval, and multimodal understanding. Offers free tier for developers. Models include GLM-4-Plus (flagship), GLM-4-Flash (fast), GLM-4-Long (1M context). **Note:** Requires API key from [Zhipu AI Platform](https://bigmodel.cn/).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "ZHIPU_API_KEY",
+      "description": "API key for Zhipu AI authentication"
+    }
+  },
+  "tools": [
+    {
+      "name": "Create Chat Completion",
+      "path": "/api/paas/v4/chat/completions",
+      "method": "POST",
+      "description": "Generate conversational responses using GLM models",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model: 'glm-4-plus', 'glm-4-0520', 'glm-4', 'glm-4-air', 'glm-4-airx', 'glm-4-flash', 'glm-4-long', 'glm-3-turbo'",
+          "required": true,
+          "default": "glm-4-flash",
+          "send_method": "Body"
+        },
+        "messages": {
+          "type": "array",
+          "description": "Array of message objects with 'role' and 'content' fields",
+          "required": true,
+          "send_method": "Body"
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Sampling temperature (0-1, default: 0.95)",
+          "required": false,
+          "default": 0.95,
+          "send_method": "Body"
+        },
+        "top_p": {
+          "type": "number",
+          "description": "Nucleus sampling (default: 0.7)",
+          "required": false,
+          "default": 0.7,
+          "send_method": "Body"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "description": "Maximum tokens to generate",
+          "required": false,
+          "send_method": "Body"
+        },
+        "stream": {
+          "type": "boolean",
+          "description": "Stream response",
+          "required": false,
+          "default": false,
+          "send_method": "Body"
+        },
+        "stop": {
+          "type": "array",
+          "description": "Stop sequences",
+          "required": false,
+          "send_method": "Body"
+        },
+        "tools": {
+          "type": "array",
+          "description": "Function calling tools definition",
+          "required": false,
+          "send_method": "Body"
+        },
+        "tool_choice": {
+          "type": "string",
+          "description": "Tool selection: 'auto' or 'none'",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Embeddings",
+      "path": "/api/paas/v4/embeddings",
+      "method": "POST",
+      "description": "Create vector embeddings for text",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Embedding model: 'embedding-2', 'embedding-3'",
+          "required": true,
+          "default": "embedding-2",
+          "send_method": "Body"
+        },
+        "input": {
+          "type": "string",
+          "description": "Text or array of texts to embed",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Image Generation",
+      "path": "/api/paas/v4/images/generations",
+      "method": "POST",
+      "description": "Generate images from text prompts using CogView",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Image model: 'cogview-3', 'cogview-3-plus'",
+          "required": true,
+          "default": "cogview-3",
+          "send_method": "Body"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Text description of the image to generate",
+          "required": true,
+          "send_method": "Body"
+        },
+        "size": {
+          "type": "string",
+          "description": "Image size: '1024x1024', '768x1344', '864x1152', etc.",
+          "required": false,
+          "default": "1024x1024",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Video Generation",
+      "path": "/api/paas/v4/videos/generations",
+      "method": "POST",
+      "description": "Generate videos from text or images using CogVideo",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Video model: 'cogvideox'",
+          "required": true,
+          "default": "cogvideox",
+          "send_method": "Body"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Text description of the video",
+          "required": true,
+          "send_method": "Body"
+        },
+        "image_url": {
+          "type": "string",
+          "description": "Optional starting image URL for image-to-video generation",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Web Search (GLM)",
+      "path": "/api/paas/v4/tools",
+      "method": "POST",
+      "description": "Use GLM with integrated web search capability",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model with web search: 'glm-4', 'glm-4-plus'",
+          "required": true,
+          "send_method": "Body"
+        },
+        "messages": {
+          "type": "array",
+          "description": "Messages with web search queries",
+          "required": true,
+          "send_method": "Body"
+        },
+        "tools": {
+          "type": "array",
+          "description": "Tool definition including web_search",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

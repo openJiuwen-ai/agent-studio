@@ -1,0 +1,351 @@
+{
+  "ready": false,
+  "plugin_id": "clickup",
+  "name": "ClickUp",
+  "description": "All-in-one productivity platform. Manage tasks, lists, spaces, and teams with powerful customization and automation features.",
+  "category": "productivity",
+  "category_name": "Productivity Tools",
+  "category_icon": "📋",
+  "icon_uri": "⬆️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["productivity", "project-management", "tasks", "collaboration", "automation"],
+  "api_prefix": "https://api.clickup.com/api/v2",
+  "documentation": "https://clickup.com/api",
+  "desc_mk": "ClickUp is an all-in-one productivity platform that brings tasks, docs, goals, and chat into one place. Use this plugin to manage workspaces, spaces, lists, and tasks. **Note:** Get your personal API token at [ClickUp Settings](https://app.clickup.com/settings/apps) under the Apps section.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "YOUR_CLICKUP_TOKEN",
+      "description": "ClickUp personal API token (Environment variable: CLICKUP_API_KEY)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Authorized User",
+      "path": "/user",
+      "method": "GET",
+      "description": "Return the details of the authenticated ClickUp user",
+      "request_params": {}
+    },
+    {
+      "name": "Get Teams (Workspaces)",
+      "path": "/team",
+      "method": "GET",
+      "description": "Return all Workspaces (Teams) accessible to the authenticated user",
+      "request_params": {}
+    },
+    {
+      "name": "Get Spaces",
+      "path": "/team/{team_id}/space",
+      "method": "GET",
+      "description": "Return all Spaces in a given Workspace (Team)",
+      "request_params": {
+        "team_id": {
+          "type": "string",
+          "description": "The ID of the Team (Workspace) to get Spaces from",
+          "required": true,
+          "send_method": "Path"
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "Include archived Spaces in the results",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Lists",
+      "path": "/space/{space_id}/list",
+      "method": "GET",
+      "description": "Return all Lists in a given Space",
+      "request_params": {
+        "space_id": {
+          "type": "string",
+          "description": "The ID of the Space to get Lists from",
+          "required": true,
+          "send_method": "Path"
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "Include archived Lists in the results",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Tasks",
+      "path": "/list/{list_id}/task",
+      "method": "GET",
+      "description": "Return all Tasks in a given List with optional filtering",
+      "request_params": {
+        "list_id": {
+          "type": "string",
+          "description": "The ID of the List to get Tasks from",
+          "required": true,
+          "send_method": "Path"
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "Include archived tasks",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number to fetch (starts at 0)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "order_by": {
+          "type": "string",
+          "description": "Field to order results by: id, created, updated, or due_date",
+          "required": false,
+          "send_method": "Query"
+        },
+        "reverse": {
+          "type": "boolean",
+          "description": "Reverse the sort order",
+          "required": false,
+          "send_method": "Query"
+        },
+        "subtasks": {
+          "type": "boolean",
+          "description": "Include subtasks in the results",
+          "required": false,
+          "send_method": "Query"
+        },
+        "statuses": {
+          "type": "string",
+          "description": "Comma-separated list of statuses to filter by",
+          "required": false,
+          "send_method": "Query"
+        },
+        "assignees": {
+          "type": "string",
+          "description": "Comma-separated list of assignee user IDs to filter by",
+          "required": false,
+          "send_method": "Query"
+        },
+        "due_date_gt": {
+          "type": "integer",
+          "description": "Filter tasks with due date greater than this Unix timestamp (milliseconds)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "due_date_lt": {
+          "type": "integer",
+          "description": "Filter tasks with due date less than this Unix timestamp (milliseconds)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Task",
+      "path": "/task/{task_id}",
+      "method": "GET",
+      "description": "Return the details of a single ClickUp task",
+      "request_params": {
+        "task_id": {
+          "type": "string",
+          "description": "The ID of the task to retrieve",
+          "required": true,
+          "send_method": "Path"
+        },
+        "custom_task_ids": {
+          "type": "boolean",
+          "description": "Set to true if using custom task IDs instead of ClickUp IDs",
+          "required": false,
+          "send_method": "Query"
+        },
+        "team_id": {
+          "type": "string",
+          "description": "Workspace ID (required when custom_task_ids is true)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Task",
+      "path": "/list/{list_id}/task",
+      "method": "POST",
+      "description": "Create a new task in a ClickUp list",
+      "request_params": {
+        "list_id": {
+          "type": "string",
+          "description": "The ID of the List to create the task in",
+          "required": true,
+          "send_method": "Path"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the task",
+          "required": true,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "Plain text description of the task",
+          "required": false,
+          "send_method": "Body"
+        },
+        "assignees": {
+          "type": "array",
+          "description": "Array of user IDs to assign to this task",
+          "required": false,
+          "send_method": "Body"
+        },
+        "tags": {
+          "type": "array",
+          "description": "Array of tag names to apply to the task",
+          "required": false,
+          "send_method": "Body"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the task (must match an existing status in the List)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Priority level: 1 (Urgent), 2 (High), 3 (Normal), 4 (Low)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "due_date": {
+          "type": "integer",
+          "description": "Due date as Unix timestamp in milliseconds",
+          "required": false,
+          "send_method": "Body"
+        },
+        "due_date_time": {
+          "type": "boolean",
+          "description": "Set to true if the due_date includes a specific time",
+          "required": false,
+          "send_method": "Body"
+        },
+        "time_estimate": {
+          "type": "integer",
+          "description": "Time estimate in milliseconds",
+          "required": false,
+          "send_method": "Body"
+        },
+        "start_date": {
+          "type": "integer",
+          "description": "Start date as Unix timestamp in milliseconds",
+          "required": false,
+          "send_method": "Body"
+        },
+        "notify_all": {
+          "type": "boolean",
+          "description": "Notify all assignees of the task creation",
+          "required": false,
+          "send_method": "Body"
+        },
+        "parent": {
+          "type": "string",
+          "description": "Task ID of the parent task to create this as a subtask",
+          "required": false,
+          "send_method": "Body"
+        },
+        "links_to": {
+          "type": "string",
+          "description": "Task ID to link this task to",
+          "required": false,
+          "send_method": "Body"
+        },
+        "check_required_custom_fields": {
+          "type": "boolean",
+          "description": "Validate required custom fields before creating the task",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Task",
+      "path": "/task/{task_id}",
+      "method": "PUT",
+      "description": "Update an existing ClickUp task's properties",
+      "request_params": {
+        "task_id": {
+          "type": "string",
+          "description": "The ID of the task to update",
+          "required": true,
+          "send_method": "Path"
+        },
+        "name": {
+          "type": "string",
+          "description": "New name for the task",
+          "required": false,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "New plain text description for the task",
+          "required": false,
+          "send_method": "Body"
+        },
+        "status": {
+          "type": "string",
+          "description": "New status for the task",
+          "required": false,
+          "send_method": "Body"
+        },
+        "priority": {
+          "type": "integer",
+          "description": "New priority: 1 (Urgent), 2 (High), 3 (Normal), 4 (Low)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "due_date": {
+          "type": "integer",
+          "description": "New due date as Unix timestamp in milliseconds",
+          "required": false,
+          "send_method": "Body"
+        },
+        "assignees": {
+          "type": "object",
+          "description": "Object with add/rem arrays of user IDs. Example: {\"add\": [123], \"rem\": [456]}",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Task",
+      "path": "/task/{task_id}",
+      "method": "DELETE",
+      "description": "Permanently delete a ClickUp task",
+      "request_params": {
+        "task_id": {
+          "type": "string",
+          "description": "The ID of the task to delete",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Task Comments",
+      "path": "/task/{task_id}/comment",
+      "method": "GET",
+      "description": "Return all comments on a ClickUp task",
+      "request_params": {
+        "task_id": {
+          "type": "string",
+          "description": "The ID of the task to get comments for",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    }
+  ]
+}

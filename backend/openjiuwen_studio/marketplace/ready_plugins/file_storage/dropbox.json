@@ -1,0 +1,239 @@
+{
+  "ready": false,
+  "plugin_id": "dropbox",
+  "name": "Dropbox",
+  "description": "Manage files and folders, share links, and access file metadata via the Dropbox API.",
+  "category": "file_storage",
+  "category_name": "File Storage",
+  "category_icon": "☁️",
+  "icon_uri": "📦",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["storage", "dropbox", "files", "cloud", "sync"],
+  "api_prefix": "https://api.dropboxapi.com/2",
+  "documentation": "https://www.dropbox.com/developers/documentation/http/documentation",
+  "desc_mk": "Interact with the Dropbox API to list folders, get file metadata, create folders, delete files, copy, move, search, and manage shared links.",
+  "authentication": {
+    "type": "oauth2",
+    "required_credentials": [
+      {
+        "name": "OAuth Access Token",
+        "env_var": "DROPBOX_ACCESS_TOKEN"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "list_folder",
+      "description": "List the contents of a Dropbox folder.",
+      "method": "POST",
+      "path": "/files/list_folder",
+      "request_params": {
+        "path": {
+          "type": "string",
+          "desc": "The path to the folder (e.g. /Documents). Use empty string for root.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "recursive": {
+          "type": "boolean",
+          "desc": "If true, list the contents of all subdirectories.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "include_media_info": {
+          "type": "boolean",
+          "desc": "If true, include media information for photo and video files.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "include_deleted": {
+          "type": "boolean",
+          "desc": "If true, include deleted files and folders.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "limit": {
+          "type": "integer",
+          "desc": "Maximum number of results to return per request.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "get_metadata",
+      "description": "Retrieve metadata for a file or folder at the given path.",
+      "method": "POST",
+      "path": "/files/get_metadata",
+      "request_params": {
+        "path": {
+          "type": "string",
+          "desc": "The path to the file or folder (e.g. /Documents/report.pdf).",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "include_media_info": {
+          "type": "boolean",
+          "desc": "If true, include media information for photos and videos.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "create_folder",
+      "description": "Create a new folder in Dropbox.",
+      "method": "POST",
+      "path": "/files/create_folder_v2",
+      "request_params": {
+        "path": {
+          "type": "string",
+          "desc": "The path of the folder to create (e.g. /Projects/NewFolder).",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "autorename": {
+          "type": "boolean",
+          "desc": "If true, rename the folder if a conflict exists.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "delete",
+      "description": "Delete a file or folder at the given path.",
+      "method": "POST",
+      "path": "/files/delete_v2",
+      "request_params": {
+        "path": {
+          "type": "string",
+          "desc": "The path to the file or folder to delete.",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "copy",
+      "description": "Copy a file or folder from one location to another in Dropbox.",
+      "method": "POST",
+      "path": "/files/copy_v2",
+      "request_params": {
+        "from_path": {
+          "type": "string",
+          "desc": "The source path of the file or folder to copy.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "to_path": {
+          "type": "string",
+          "desc": "The destination path for the copy.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "autorename": {
+          "type": "boolean",
+          "desc": "If true, rename the destination if a conflict exists.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "move",
+      "description": "Move a file or folder from one location to another in Dropbox.",
+      "method": "POST",
+      "path": "/files/move_v2",
+      "request_params": {
+        "from_path": {
+          "type": "string",
+          "desc": "The source path of the file or folder to move.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "to_path": {
+          "type": "string",
+          "desc": "The destination path.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "autorename": {
+          "type": "boolean",
+          "desc": "If true, rename the destination if a conflict exists.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Search for files and folders in Dropbox by name or content.",
+      "method": "POST",
+      "path": "/files/search_v2",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "desc": "The search query string.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "options": {
+          "type": "object",
+          "desc": "Search options object. Can include: path (string), max_results (integer), file_status (active/deleted), filename_only (boolean), file_categories (array).",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "create_shared_link",
+      "description": "Create a shared link for a file or folder in Dropbox.",
+      "method": "POST",
+      "path": "/sharing/create_shared_link_with_settings",
+      "request_params": {
+        "path": {
+          "type": "string",
+          "desc": "The path to the file or folder to share.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "settings": {
+          "type": "object",
+          "desc": "Sharing settings object. Can include: requested_visibility (public/team_only/password), audience, access (viewer/editor).",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "list_shared_links",
+      "description": "List shared links for a file or folder, or all shared links for the account.",
+      "method": "POST",
+      "path": "/sharing/list_shared_links",
+      "request_params": {
+        "path": {
+          "type": "string",
+          "desc": "The path to list shared links for. Omit to list all shared links.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "direct_only": {
+          "type": "boolean",
+          "desc": "If true, only return links that apply directly to the path.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "get_space_usage",
+      "description": "Retrieve storage space usage information for the Dropbox account.",
+      "method": "POST",
+      "path": "/users/get_space_usage",
+      "request_params": {}
+    }
+  ]
+}

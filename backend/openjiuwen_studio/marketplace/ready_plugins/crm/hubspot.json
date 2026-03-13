@@ -1,0 +1,272 @@
+{
+  "ready": false,
+  "plugin_id": "hubspot_api",
+  "name": "HubSpot API",
+  "description": "HubSpot CRM platform for managing contacts, companies, deals, and marketing automation. Full access to CRM objects, pipelines, and engagement tracking.",
+  "category": "crm",
+  "category_name": "CRM",
+  "category_icon": "🤝",
+  "icon_uri": "🟠",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "crm",
+    "hubspot",
+    "contacts",
+    "deals",
+    "marketing"
+  ],
+  "api_prefix": "https://api.hubapi.com",
+  "documentation": "https://developers.hubspot.com/docs/api/overview",
+  "desc_mk": "HubSpot is an all-in-one CRM platform for managing contacts, deals, and marketing campaigns. This plugin provides access to CRM contacts, companies, deals, pipelines, and engagement data.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "Access Token",
+        "env_var": "HUBSPOT_ACCESS_TOKEN",
+        "description": "HubSpot Private App access token or OAuth access token"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "Get Contacts",
+      "path": "/crm/v3/objects/contacts",
+      "method": "GET",
+      "description": "Retrieve a list of contacts from HubSpot CRM",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of contacts to return (default: 10, max: 100)",
+          "required": false,
+          "default": 10,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "description": "Paging cursor for next page of results",
+          "required": false,
+          "send_method": "Query"
+        },
+        "properties": {
+          "type": "string",
+          "description": "Comma-separated list of properties to include (e.g., 'firstname,lastname,email')",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Contact",
+      "path": "/crm/v3/objects/contacts/{contactId}",
+      "method": "GET",
+      "description": "Get a specific contact by ID",
+      "request_params": {
+        "contactId": {
+          "type": "string",
+          "description": "The ID of the contact to retrieve",
+          "required": true,
+          "is_path_param": true
+        },
+        "properties": {
+          "type": "string",
+          "description": "Comma-separated list of properties to return",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Contact",
+      "path": "/crm/v3/objects/contacts",
+      "method": "POST",
+      "description": "Create a new contact in HubSpot CRM",
+      "request_params": {
+        "properties": {
+          "type": "object",
+          "description": "Contact properties object with fields like email, firstname, lastname, phone, company",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Contact",
+      "path": "/crm/v3/objects/contacts/{contactId}",
+      "method": "PATCH",
+      "description": "Update an existing contact",
+      "request_params": {
+        "contactId": {
+          "type": "string",
+          "description": "The ID of the contact to update",
+          "required": true,
+          "is_path_param": true
+        },
+        "properties": {
+          "type": "object",
+          "description": "Contact properties to update",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Contact",
+      "path": "/crm/v3/objects/contacts/{contactId}",
+      "method": "DELETE",
+      "description": "Archive (delete) a contact",
+      "request_params": {
+        "contactId": {
+          "type": "string",
+          "description": "The ID of the contact to delete",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "Search Contacts",
+      "path": "/crm/v3/objects/contacts/search",
+      "method": "POST",
+      "description": "Search contacts using filters",
+      "request_params": {
+        "filterGroups": {
+          "type": "array",
+          "description": "Array of filter groups for search criteria",
+          "required": false,
+          "send_method": "Body"
+        },
+        "query": {
+          "type": "string",
+          "description": "Text search query across default searchable properties",
+          "required": false,
+          "send_method": "Body"
+        },
+        "properties": {
+          "type": "array",
+          "description": "Array of property names to return",
+          "required": false,
+          "send_method": "Body"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Max number of results (default: 10)",
+          "required": false,
+          "default": 10,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Companies",
+      "path": "/crm/v3/objects/companies",
+      "method": "GET",
+      "description": "Retrieve a list of companies from HubSpot CRM",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of companies to return",
+          "required": false,
+          "default": 10,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "description": "Paging cursor",
+          "required": false,
+          "send_method": "Query"
+        },
+        "properties": {
+          "type": "string",
+          "description": "Comma-separated list of properties to include",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Company",
+      "path": "/crm/v3/objects/companies",
+      "method": "POST",
+      "description": "Create a new company in HubSpot CRM",
+      "request_params": {
+        "properties": {
+          "type": "object",
+          "description": "Company properties object with fields like name, domain, industry, city, country",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Deals",
+      "path": "/crm/v3/objects/deals",
+      "method": "GET",
+      "description": "Retrieve a list of deals from HubSpot CRM",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of deals to return",
+          "required": false,
+          "default": 10,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "description": "Paging cursor",
+          "required": false,
+          "send_method": "Query"
+        },
+        "properties": {
+          "type": "string",
+          "description": "Comma-separated list of properties to include",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Deal",
+      "path": "/crm/v3/objects/deals",
+      "method": "POST",
+      "description": "Create a new deal in HubSpot CRM",
+      "request_params": {
+        "properties": {
+          "type": "object",
+          "description": "Deal properties object with fields like dealname, amount, dealstage, closedate, pipeline",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Pipelines",
+      "path": "/crm/v3/pipelines/deals",
+      "method": "GET",
+      "description": "Get all deal pipelines and their stages",
+      "request_params": {}
+    },
+    {
+      "name": "Create Note",
+      "path": "/crm/v3/objects/notes",
+      "method": "POST",
+      "description": "Create a note engagement for a contact or deal",
+      "request_params": {
+        "properties": {
+          "type": "object",
+          "description": "Note properties: hs_note_body (content), hs_timestamp (Unix ms timestamp)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "associations": {
+          "type": "array",
+          "description": "Array of associations to link note to contacts/companies/deals",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,253 @@
+{
+  "ready": true,
+  "plugin_id": "httpbin_api",
+  "name": "HTTPBin",
+  "description": "HTTP request & response testing service. Test HTTP methods, headers, authentication, status codes, and more. Perfect for debugging and learning.",
+  "category": "testing",
+  "category_name": "Developer Testing Tools",
+  "icon_uri": "🔧",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "testing",
+    "http",
+    "debugging",
+    "development",
+    "utilities"
+  ],
+  "api_prefix": "https://httpbin.org",
+  "desc_mk": "HTTPBin is a simple HTTP request & response service. It's useful for testing HTTP libraries, debugging requests, learning HTTP, and demonstrating API capabilities.",
+  "tools": [
+    {
+      "name": "Test GET Request",
+      "path": "/get",
+      "method": "GET",
+      "description": "Returns GET request data including headers, args, and origin IP",
+      "request_params": {
+        "test_param": {
+          "type": "string",
+          "description": "Any query parameter for testing",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Test POST Request",
+      "path": "/post",
+      "method": "POST",
+      "description": "Returns POST request data including body, headers, and form data",
+      "request_params": {
+        "test_data": {
+          "type": "string",
+          "description": "Test data to send in POST body",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Test PUT Request",
+      "path": "/put",
+      "method": "PUT",
+      "description": "Returns PUT request data",
+      "request_params": {
+        "test_data": {
+          "type": "string",
+          "description": "Test data to send in PUT body",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Test DELETE Request",
+      "path": "/delete",
+      "method": "DELETE",
+      "description": "Returns DELETE request data",
+      "request_params": {}
+    },
+    {
+      "name": "Test PATCH Request",
+      "path": "/patch",
+      "method": "PATCH",
+      "description": "Returns PATCH request data",
+      "request_params": {
+        "test_data": {
+          "type": "string",
+          "description": "Test data to send in PATCH body",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Response Headers",
+      "path": "/response-headers",
+      "method": "GET",
+      "description": "Returns a response with custom headers",
+      "request_params": {
+        "custom_header": {
+          "type": "string",
+          "description": "Custom header value to return",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Test Status Code",
+      "path": "/status/{code}",
+      "method": "GET",
+      "description": "Returns a response with specified HTTP status code",
+      "request_params": {
+        "code": {
+          "type": "integer",
+          "description": "HTTP status code to return (e.g., 200, 404, 500)",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Delay Response",
+      "path": "/delay/{seconds}",
+      "method": "GET",
+      "description": "Returns a delayed response (max 10 seconds)",
+      "request_params": {
+        "seconds": {
+          "type": "integer",
+          "description": "Number of seconds to delay (1-10)",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Test Basic Auth",
+      "path": "/basic-auth/{user}/{passwd}",
+      "method": "GET",
+      "description": "Tests HTTP Basic Authentication",
+      "request_params": {
+        "user": {
+          "type": "string",
+          "description": "Username for authentication",
+          "required": true,
+          "send_method": "Path"
+        },
+        "passwd": {
+          "type": "string",
+          "description": "Password for authentication",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Test Bearer Auth",
+      "path": "/bearer",
+      "method": "GET",
+      "description": "Tests HTTP Bearer token authentication",
+      "request_params": {}
+    },
+    {
+      "name": "Get User Agent",
+      "path": "/user-agent",
+      "method": "GET",
+      "description": "Returns the user-agent string from request headers",
+      "request_params": {}
+    },
+    {
+      "name": "Get Request Headers",
+      "path": "/headers",
+      "method": "GET",
+      "description": "Returns all request headers",
+      "request_params": {}
+    },
+    {
+      "name": "Get IP Address",
+      "path": "/ip",
+      "method": "GET",
+      "description": "Returns the origin IP address",
+      "request_params": {}
+    },
+    {
+      "name": "Test JSON Response",
+      "path": "/json",
+      "method": "GET",
+      "description": "Returns a sample JSON object",
+      "request_params": {}
+    },
+    {
+      "name": "Test HTML Response",
+      "path": "/html",
+      "method": "GET",
+      "description": "Returns a simple HTML page",
+      "request_params": {}
+    },
+    {
+      "name": "Test XML Response",
+      "path": "/xml",
+      "method": "GET",
+      "description": "Returns a simple XML document",
+      "request_params": {}
+    },
+    {
+      "name": "Test Redirect",
+      "path": "/redirect/{n}",
+      "method": "GET",
+      "description": "Redirects n times",
+      "request_params": {
+        "n": {
+          "type": "integer",
+          "description": "Number of redirects (1-10)",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Test Cookies",
+      "path": "/cookies",
+      "method": "GET",
+      "description": "Returns cookie data",
+      "request_params": {}
+    },
+    {
+      "name": "Set Cookies",
+      "path": "/cookies/set",
+      "method": "GET",
+      "description": "Sets cookies and redirects",
+      "request_params": {
+        "cookie_name": {
+          "type": "string",
+          "description": "Cookie name to set",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Generate UUID",
+      "path": "/uuid",
+      "method": "GET",
+      "description": "Returns a UUID4 value",
+      "request_params": {}
+    },
+    {
+      "name": "Test Base64 Decode",
+      "path": "/base64/{value}",
+      "method": "GET",
+      "description": "Decodes a base64 encoded value",
+      "request_params": {
+        "value": {
+          "type": "string",
+          "description": "Base64 encoded value to decode",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    }
+  ]
+}

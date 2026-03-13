@@ -1,0 +1,658 @@
+{
+  "ready": false,
+  "plugin_id": "lastfm_api",
+  "name": "Last.fm",
+  "description": "Music tracking and discovery service. Scrobble tracks, get music recommendations, explore artist info, and discover similar music.",
+  "category": "entertainment",
+  "category_name": "Entertainment & Events",
+  "category_icon": "🎭",
+  "icon_uri": "📻",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "music",
+    "scrobbling",
+    "lastfm",
+    "recommendations",
+    "discovery",
+    "entertainment"
+  ],
+  "api_prefix": "https://ws.audioscrobbler.com/2.0",
+  "desc_mk": "Last.fm is a music community and discovery platform that tracks your listening habits, provides personalized recommendations, and connects you with similar music lovers. This plugin provides access to artist info, track scrobbling, user data, and music charts.",
+  "header_configuration": {
+    "Content-Type": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "application/json",
+      "description": "JSON content type header"
+    }
+  },
+  "tools": [
+    {
+      "name": "Search Artist",
+      "path": "/",
+      "method": "GET",
+      "description": "Search for an artist by name",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "artist.search",
+          "send_method": "Query"
+        },
+        "artist": {
+          "type": "string",
+          "description": "Artist name to search for",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results per page",
+          "required": false,
+          "default": 30,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Artist Info",
+      "path": "/",
+      "method": "GET",
+      "description": "Get detailed information about an artist",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "artist.getInfo",
+          "send_method": "Query"
+        },
+        "artist": {
+          "type": "string",
+          "description": "Artist name",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language for biography (ISO 639-1)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Artist Top Tracks",
+      "path": "/",
+      "method": "GET",
+      "description": "Get the top tracks by an artist",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "artist.getTopTracks",
+          "send_method": "Query"
+        },
+        "artist": {
+          "type": "string",
+          "description": "Artist name",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Artist Top Albums",
+      "path": "/",
+      "method": "GET",
+      "description": "Get the top albums by an artist",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "artist.getTopAlbums",
+          "send_method": "Query"
+        },
+        "artist": {
+          "type": "string",
+          "description": "Artist name",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Similar Artists",
+      "path": "/",
+      "method": "GET",
+      "description": "Get artists similar to a given artist",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "artist.getSimilar",
+          "send_method": "Query"
+        },
+        "artist": {
+          "type": "string",
+          "description": "Artist name",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of similar artists",
+          "required": false,
+          "default": 30,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Track",
+      "path": "/",
+      "method": "GET",
+      "description": "Search for a track by name",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "track.search",
+          "send_method": "Query"
+        },
+        "track": {
+          "type": "string",
+          "description": "Track name to search for",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results",
+          "required": false,
+          "default": 30,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Track Info",
+      "path": "/",
+      "method": "GET",
+      "description": "Get detailed information about a track",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "track.getInfo",
+          "send_method": "Query"
+        },
+        "artist": {
+          "type": "string",
+          "description": "Artist name",
+          "required": true,
+          "send_method": "Query"
+        },
+        "track": {
+          "type": "string",
+          "description": "Track name",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Similar Tracks",
+      "path": "/",
+      "method": "GET",
+      "description": "Get tracks similar to a given track",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "track.getSimilar",
+          "send_method": "Query"
+        },
+        "artist": {
+          "type": "string",
+          "description": "Artist name",
+          "required": true,
+          "send_method": "Query"
+        },
+        "track": {
+          "type": "string",
+          "description": "Track name",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of similar tracks",
+          "required": false,
+          "default": 30,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Album Info",
+      "path": "/",
+      "method": "GET",
+      "description": "Get detailed information about an album",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "album.getInfo",
+          "send_method": "Query"
+        },
+        "artist": {
+          "type": "string",
+          "description": "Artist name",
+          "required": true,
+          "send_method": "Query"
+        },
+        "album": {
+          "type": "string",
+          "description": "Album name",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Info",
+      "path": "/",
+      "method": "GET",
+      "description": "Get information about a Last.fm user",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "user.getInfo",
+          "send_method": "Query"
+        },
+        "user": {
+          "type": "string",
+          "description": "Last.fm username",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Top Artists",
+      "path": "/",
+      "method": "GET",
+      "description": "Get a user's top artists",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "user.getTopArtists",
+          "send_method": "Query"
+        },
+        "user": {
+          "type": "string",
+          "description": "Last.fm username",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "period": {
+          "type": "string",
+          "description": "Time period: overall, 7day, 1month, 3month, 6month, 12month",
+          "required": false,
+          "default": "overall",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Top Tracks",
+      "path": "/",
+      "method": "GET",
+      "description": "Get a user's top tracks",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "user.getTopTracks",
+          "send_method": "Query"
+        },
+        "user": {
+          "type": "string",
+          "description": "Last.fm username",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "period": {
+          "type": "string",
+          "description": "Time period: overall, 7day, 1month, 3month, 6month, 12month",
+          "required": false,
+          "default": "overall",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Recent Tracks",
+      "path": "/",
+      "method": "GET",
+      "description": "Get a user's recently played tracks",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "user.getRecentTracks",
+          "send_method": "Query"
+        },
+        "user": {
+          "type": "string",
+          "description": "Last.fm username",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        },
+        "from": {
+          "type": "integer",
+          "description": "Beginning timestamp (Unix)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "integer",
+          "description": "Ending timestamp (Unix)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Chart Top Artists",
+      "path": "/",
+      "method": "GET",
+      "description": "Get the top artists chart globally",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "chart.getTopArtists",
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Chart Top Tracks",
+      "path": "/",
+      "method": "GET",
+      "description": "Get the top tracks chart globally",
+      "request_params": {
+        "method": {
+          "type": "string",
+          "description": "API method name",
+          "required": true,
+          "default": "chart.getTopTracks",
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Last.fm API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "format": {
+          "type": "string",
+          "description": "Response format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

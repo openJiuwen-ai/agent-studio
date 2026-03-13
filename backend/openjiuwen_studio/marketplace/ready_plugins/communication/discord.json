@@ -1,0 +1,294 @@
+{
+  "ready": false,
+  "plugin_id": "discord",
+  "name": "Discord",
+  "description": "Interact with Discord servers, channels, and messages via the Discord Bot API.",
+  "category": "communication",
+  "category_name": "Communication",
+  "category_icon": "📞",
+  "icon_uri": "🎮",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["discord", "chat", "gaming", "community", "bot"],
+  "api_prefix": "https://discord.com/api/v10",
+  "documentation": "https://discord.com/developers/docs/intro",
+  "desc_mk": "Discord Bot API integration. Manage channels, send messages, and interact with guilds and users. Requires a Discord Bot Token with appropriate permissions.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bot YOUR_DISCORD_BOT_TOKEN",
+      "description": "Discord bot token (Environment variable: DISCORD_BOT_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "get_channel",
+      "display_name": "Get Channel",
+      "description": "Get a channel by its ID.",
+      "method": "GET",
+      "path": "/channels/{channel_id}",
+      "request_params": {
+        "channel_id": {
+          "type": "string",
+          "description": "The ID of the channel to retrieve.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Channel object."
+      }
+    },
+    {
+      "name": "send_message",
+      "display_name": "Send Message",
+      "description": "Send a message to a channel.",
+      "method": "POST",
+      "path": "/channels/{channel_id}/messages",
+      "request_params": {
+        "channel_id": {
+          "type": "string",
+          "description": "The ID of the channel to send the message to.",
+          "required": true,
+          "is_path_param": true
+        },
+        "content": {
+          "type": "string",
+          "description": "The text content of the message.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "embeds": {
+          "type": "array",
+          "description": "Array of embed objects to include with the message.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "tts": {
+          "type": "boolean",
+          "description": "Whether this is a text-to-speech message.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "components": {
+          "type": "array",
+          "description": "Array of message component objects (buttons, select menus, etc.).",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Message object."
+      }
+    },
+    {
+      "name": "get_messages",
+      "display_name": "Get Messages",
+      "description": "Retrieve messages from a channel.",
+      "method": "GET",
+      "path": "/channels/{channel_id}/messages",
+      "request_params": {
+        "channel_id": {
+          "type": "string",
+          "description": "The ID of the channel to retrieve messages from.",
+          "required": true,
+          "is_path_param": true
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of messages to return (1-100, default 50).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "before": {
+          "type": "string",
+          "description": "Get messages before this message ID.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "description": "Get messages after this message ID.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "around": {
+          "type": "string",
+          "description": "Get messages around this message ID.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "Array of message objects."
+      }
+    },
+    {
+      "name": "get_guild",
+      "display_name": "Get Guild",
+      "description": "Get a guild (server) by its ID.",
+      "method": "GET",
+      "path": "/guilds/{guild_id}",
+      "request_params": {
+        "guild_id": {
+          "type": "string",
+          "description": "The ID of the guild to retrieve.",
+          "required": true,
+          "is_path_param": true
+        },
+        "with_counts": {
+          "type": "boolean",
+          "description": "When true, includes approximate member and presence counts.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Guild object."
+      }
+    },
+    {
+      "name": "list_guild_channels",
+      "display_name": "List Guild Channels",
+      "description": "Get all channels in a guild.",
+      "method": "GET",
+      "path": "/guilds/{guild_id}/channels",
+      "request_params": {
+        "guild_id": {
+          "type": "string",
+          "description": "The ID of the guild whose channels to list.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "Array of channel objects."
+      }
+    },
+    {
+      "name": "get_guild_members",
+      "display_name": "Get Guild Members",
+      "description": "List members of a guild.",
+      "method": "GET",
+      "path": "/guilds/{guild_id}/members",
+      "request_params": {
+        "guild_id": {
+          "type": "string",
+          "description": "The ID of the guild whose members to list.",
+          "required": true,
+          "is_path_param": true
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Max number of members to return (1-1000, default 1).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "description": "The highest user ID in the previous page.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "Array of guild member objects."
+      }
+    },
+    {
+      "name": "get_current_user",
+      "display_name": "Get Current User",
+      "description": "Get the bot user associated with the current token.",
+      "method": "GET",
+      "path": "/users/@me",
+      "request_params": {},
+      "response": {
+        "type": "object",
+        "description": "User object."
+      }
+    },
+    {
+      "name": "create_dm",
+      "display_name": "Create DM",
+      "description": "Create a new DM channel with a user.",
+      "method": "POST",
+      "path": "/users/@me/channels",
+      "request_params": {
+        "recipient_id": {
+          "type": "string",
+          "description": "The ID of the recipient user to open a DM channel with.",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "DM channel object."
+      }
+    },
+    {
+      "name": "add_reaction",
+      "display_name": "Add Reaction",
+      "description": "Add a reaction to a message.",
+      "method": "PUT",
+      "path": "/channels/{channel_id}/messages/{message_id}/reactions/{emoji}/@me",
+      "request_params": {
+        "channel_id": {
+          "type": "string",
+          "description": "The ID of the channel containing the message.",
+          "required": true,
+          "is_path_param": true
+        },
+        "message_id": {
+          "type": "string",
+          "description": "The ID of the message to react to.",
+          "required": true,
+          "is_path_param": true
+        },
+        "emoji": {
+          "type": "string",
+          "description": "The emoji to react with (URL-encoded, e.g. %F0%9F%94%A5 or name:id for custom).",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Empty 204 response on success."
+      }
+    },
+    {
+      "name": "delete_message",
+      "display_name": "Delete Message",
+      "description": "Delete a message from a channel.",
+      "method": "DELETE",
+      "path": "/channels/{channel_id}/messages/{message_id}",
+      "request_params": {
+        "channel_id": {
+          "type": "string",
+          "description": "The ID of the channel containing the message.",
+          "required": true,
+          "is_path_param": true
+        },
+        "message_id": {
+          "type": "string",
+          "description": "The ID of the message to delete.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Empty 204 response on success."
+      }
+    }
+  ]
+}

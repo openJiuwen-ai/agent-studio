@@ -1,0 +1,214 @@
+{
+  "ready": true,
+  "plugin_id": "fixer_io",
+  "name": "Fixer.io - Currency Exchange API",
+  "description": "Real-time and historical foreign exchange rates for 170+ currencies including Chinese Yuan (CNY/RMB). Professional forex data updated every 60 seconds from financial institutions and banks.",
+  "category": "data",
+  "category_name": "Data & Analytics",
+  "category_icon": "📊",
+  "icon_uri": "💱",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "forex",
+    "currency",
+    "exchange-rate",
+    "rmb",
+    "cny"
+  ],
+  "api_prefix": "https://data.fixer.io/api",
+  "desc_mk": "Fixer.io provides real-time and historical foreign exchange rates for 170+ world currencies including Chinese Yuan (CNY/RMB). Data sourced from financial institutions and the European Central Bank, updated every 60 seconds. Perfect for currency conversion, forex trading, and international commerce. **Note:** Requires API key from [Fixer.io](https://fixer.io/).",
+  "tools": [
+    {
+      "name": "Get Latest Exchange Rates",
+      "path": "/latest",
+      "method": "GET",
+      "description": "Get the most recent exchange rates (updated every 60 seconds)",
+      "request_params": {
+        "access_key": {
+          "type": "string",
+          "description": "Fixer.io API key (Environment variable: FIXER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "base": {
+          "type": "string",
+          "description": "Base currency (3-letter code, e.g., 'USD', 'EUR', 'CNY'; free tier only allows EUR)",
+          "required": false,
+          "default": "EUR",
+          "send_method": "Query"
+        },
+        "symbols": {
+          "type": "string",
+          "description": "Comma-separated list of currency codes to get rates for (e.g., 'USD,CNY,JPY')",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Historical Rates",
+      "path": "/{date}",
+      "method": "GET",
+      "description": "Get exchange rates for a specific historical date",
+      "request_params": {
+        "date": {
+          "type": "string",
+          "description": "Date in format YYYY-MM-DD (e.g., '2026-02-22')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "access_key": {
+          "type": "string",
+          "description": "Fixer.io API key (Environment variable: FIXER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "base": {
+          "type": "string",
+          "description": "Base currency (3-letter code)",
+          "required": false,
+          "default": "EUR",
+          "send_method": "Query"
+        },
+        "symbols": {
+          "type": "string",
+          "description": "Comma-separated currency codes",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Convert Currency",
+      "path": "/convert",
+      "method": "GET",
+      "description": "Convert an amount from one currency to another",
+      "request_params": {
+        "access_key": {
+          "type": "string",
+          "description": "Fixer.io API key (Environment variable: FIXER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "from": {
+          "type": "string",
+          "description": "Source currency code (e.g., 'USD', 'CNY')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "string",
+          "description": "Target currency code (e.g., 'EUR', 'CNY')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Amount to convert",
+          "required": true,
+          "send_method": "Query"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date for conversion (YYYY-MM-DD). Omit for latest rates",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Time-Series Data",
+      "path": "/timeseries",
+      "method": "GET",
+      "description": "Get daily exchange rates between two dates (time series)",
+      "request_params": {
+        "access_key": {
+          "type": "string",
+          "description": "Fixer.io API key (Environment variable: FIXER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "Start date in format YYYY-MM-DD",
+          "required": true,
+          "send_method": "Query"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End date in format YYYY-MM-DD",
+          "required": true,
+          "send_method": "Query"
+        },
+        "base": {
+          "type": "string",
+          "description": "Base currency",
+          "required": false,
+          "default": "EUR",
+          "send_method": "Query"
+        },
+        "symbols": {
+          "type": "string",
+          "description": "Comma-separated currency codes",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Fluctuation Data",
+      "path": "/fluctuation",
+      "method": "GET",
+      "description": "Get currency fluctuation data between two dates (change, change percentage)",
+      "request_params": {
+        "access_key": {
+          "type": "string",
+          "description": "Fixer.io API key (Environment variable: FIXER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "Start date in format YYYY-MM-DD",
+          "required": true,
+          "send_method": "Query"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End date in format YYYY-MM-DD",
+          "required": true,
+          "send_method": "Query"
+        },
+        "base": {
+          "type": "string",
+          "description": "Base currency",
+          "required": false,
+          "default": "EUR",
+          "send_method": "Query"
+        },
+        "symbols": {
+          "type": "string",
+          "description": "Comma-separated currency codes",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Supported Currencies",
+      "path": "/symbols",
+      "method": "GET",
+      "description": "Get list of all supported currency symbols and their names",
+      "request_params": {
+        "access_key": {
+          "type": "string",
+          "description": "Fixer.io API key (Environment variable: FIXER_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

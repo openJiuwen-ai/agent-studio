@@ -1,0 +1,378 @@
+{
+  "ready": false,
+  "plugin_id": "baidu_ocr",
+  "name": "Baidu OCR API",
+  "description": "Powerful Optical Character Recognition service supporting 80+ languages. Extract text from images, PDFs, business cards, receipts, and more with high accuracy.",
+  "category": "ai",
+  "category_name": "AI & ML Services",
+  "category_icon": "🤖",
+  "icon_uri": "📸",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "ocr",
+    "vision",
+    "image",
+    "text-extraction",
+    "baidu",
+    "ai"
+  ],
+  "api_prefix": "https://aip.baidubce.com",
+  "desc_mk": "Baidu OCR (百度文字识别) provides industry-leading optical character recognition capabilities. Extract text from images, documents, business cards, receipts, invoices, ID cards, and more. Supports 80+ languages and specialized recognition for tables, formulas, and handwriting. **Note:** Requires API credentials from [Baidu AI Cloud](https://ai.baidu.com/).",
+  "header_configuration": {
+    "API Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "BAIDU_OCR_API_KEY",
+      "description": "Baidu AI Cloud API Key (client_id)"
+    },
+    "Secret Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "BAIDU_OCR_SECRET_KEY",
+      "description": "Baidu AI Cloud Secret Key (client_secret)"
+    }
+  },
+  "tools": [
+    {
+      "name": "General Text Recognition",
+      "path": "/rest/2.0/ocr/v1/general_basic",
+      "method": "POST",
+      "description": "Recognize general printed text from images with high accuracy",
+      "request_params": {
+        "image": {
+          "type": "string",
+          "description": "Base64 encoded image data (max 4MB, supports JPG/PNG/BMP)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "url": {
+          "type": "string",
+          "description": "Image URL (alternative to base64 image)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "language_type": {
+          "type": "string",
+          "description": "Language: 'CHN_ENG' (Chinese+English), 'ENG' (English), 'JAP' (Japanese), 'KOR' (Korean), 'FRE' (French), 'SPA' (Spanish), 'POR' (Portuguese), 'GER' (German), 'ITA' (Italian), 'RUS' (Russian)",
+          "required": false,
+          "default": "CHN_ENG",
+          "send_method": "Body"
+        },
+        "detect_direction": {
+          "type": "string",
+          "description": "Detect image orientation: 'true' or 'false'",
+          "required": false,
+          "default": "false",
+          "send_method": "Body"
+        },
+        "detect_language": {
+          "type": "string",
+          "description": "Detect language: 'true' or 'false'",
+          "required": false,
+          "default": "false",
+          "send_method": "Body"
+        },
+        "paragraph": {
+          "type": "string",
+          "description": "Return paragraph info: 'true' or 'false'",
+          "required": false,
+          "default": "false",
+          "send_method": "Body"
+        },
+        "probability": {
+          "type": "string",
+          "description": "Return recognition confidence: 'true' or 'false'",
+          "required": false,
+          "default": "false",
+          "send_method": "Body"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Access token from OAuth 2.0 (Environment variable: BAIDU_OCR_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Accurate Text Recognition",
+      "path": "/rest/2.0/ocr/v1/accurate_basic",
+      "method": "POST",
+      "description": "High-precision text recognition for complex images with better accuracy than general OCR",
+      "request_params": {
+        "image": {
+          "type": "string",
+          "description": "Base64 encoded image data",
+          "required": false,
+          "send_method": "Body"
+        },
+        "url": {
+          "type": "string",
+          "description": "Image URL",
+          "required": false,
+          "send_method": "Body"
+        },
+        "detect_direction": {
+          "type": "string",
+          "description": "Detect image orientation: 'true' or 'false'",
+          "required": false,
+          "default": "false",
+          "send_method": "Body"
+        },
+        "probability": {
+          "type": "string",
+          "description": "Return recognition confidence: 'true' or 'false'",
+          "required": false,
+          "default": "false",
+          "send_method": "Body"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Access token from OAuth 2.0 (Environment variable: BAIDU_OCR_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "General Text Recognition with Location",
+      "path": "/rest/2.0/ocr/v1/general",
+      "method": "POST",
+      "description": "Recognize text and return precise location coordinates for each text block",
+      "request_params": {
+        "image": {
+          "type": "string",
+          "description": "Base64 encoded image data",
+          "required": false,
+          "send_method": "Body"
+        },
+        "url": {
+          "type": "string",
+          "description": "Image URL",
+          "required": false,
+          "send_method": "Body"
+        },
+        "language_type": {
+          "type": "string",
+          "description": "Language type",
+          "required": false,
+          "default": "CHN_ENG",
+          "send_method": "Body"
+        },
+        "detect_direction": {
+          "type": "string",
+          "description": "Detect image orientation: 'true' or 'false'",
+          "required": false,
+          "default": "false",
+          "send_method": "Body"
+        },
+        "paragraph": {
+          "type": "string",
+          "description": "Return paragraph info: 'true' or 'false'",
+          "required": false,
+          "default": "false",
+          "send_method": "Body"
+        },
+        "probability": {
+          "type": "string",
+          "description": "Return recognition confidence: 'true' or 'false'",
+          "required": false,
+          "default": "false",
+          "send_method": "Body"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Access token from OAuth 2.0 (Environment variable: BAIDU_OCR_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Handwriting Recognition",
+      "path": "/rest/2.0/ocr/v1/handwriting",
+      "method": "POST",
+      "description": "Recognize handwritten text including Chinese and English",
+      "request_params": {
+        "image": {
+          "type": "string",
+          "description": "Base64 encoded image data",
+          "required": false,
+          "send_method": "Body"
+        },
+        "url": {
+          "type": "string",
+          "description": "Image URL",
+          "required": false,
+          "send_method": "Body"
+        },
+        "recognize_granularity": {
+          "type": "string",
+          "description": "Recognition granularity: 'big' (whole text), 'small' (single character)",
+          "required": false,
+          "default": "big",
+          "send_method": "Body"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Access token from OAuth 2.0 (Environment variable: BAIDU_OCR_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Receipt Recognition",
+      "path": "/rest/2.0/ocr/v1/receipt",
+      "method": "POST",
+      "description": "Extract structured information from receipts including merchant, amount, date, etc.",
+      "request_params": {
+        "image": {
+          "type": "string",
+          "description": "Base64 encoded image data",
+          "required": false,
+          "send_method": "Body"
+        },
+        "url": {
+          "type": "string",
+          "description": "Image URL",
+          "required": false,
+          "send_method": "Body"
+        },
+        "recognize_granularity": {
+          "type": "string",
+          "description": "Recognition granularity: 'big' or 'small'",
+          "required": false,
+          "default": "big",
+          "send_method": "Body"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Access token from OAuth 2.0 (Environment variable: BAIDU_OCR_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Business Card Recognition",
+      "path": "/rest/2.0/ocr/v1/business_card",
+      "method": "POST",
+      "description": "Extract structured information from business cards (name, company, phone, email, etc.)",
+      "request_params": {
+        "image": {
+          "type": "string",
+          "description": "Base64 encoded image data",
+          "required": false,
+          "send_method": "Body"
+        },
+        "url": {
+          "type": "string",
+          "description": "Image URL",
+          "required": false,
+          "send_method": "Body"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Access token from OAuth 2.0 (Environment variable: BAIDU_OCR_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Table Recognition",
+      "path": "/rest/2.0/ocr/v1/table",
+      "method": "POST",
+      "description": "Recognize and extract structured data from tables in images",
+      "request_params": {
+        "image": {
+          "type": "string",
+          "description": "Base64 encoded image data",
+          "required": false,
+          "send_method": "Body"
+        },
+        "url": {
+          "type": "string",
+          "description": "Image URL",
+          "required": false,
+          "send_method": "Body"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Access token from OAuth 2.0 (Environment variable: BAIDU_OCR_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "ID Card Recognition",
+      "path": "/rest/2.0/ocr/v1/idcard",
+      "method": "POST",
+      "description": "Extract information from Chinese ID cards (front/back)",
+      "request_params": {
+        "image": {
+          "type": "string",
+          "description": "Base64 encoded image data",
+          "required": false,
+          "send_method": "Body"
+        },
+        "url": {
+          "type": "string",
+          "description": "Image URL",
+          "required": false,
+          "send_method": "Body"
+        },
+        "id_card_side": {
+          "type": "string",
+          "description": "ID card side: 'front' or 'back'",
+          "required": true,
+          "send_method": "Body"
+        },
+        "detect_risk": {
+          "type": "string",
+          "description": "Detect fake/copy cards: 'true' or 'false'",
+          "required": false,
+          "default": "false",
+          "send_method": "Body"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "Access token from OAuth 2.0 (Environment variable: BAIDU_OCR_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Access Token",
+      "path": "/oauth/2.0/token",
+      "method": "GET",
+      "description": "Obtain OAuth 2.0 access token for API authentication",
+      "request_params": {
+        "grant_type": {
+          "type": "string",
+          "description": "Grant type (fixed value: 'client_credentials')",
+          "required": true,
+          "default": "client_credentials",
+          "send_method": "Query"
+        },
+        "client_id": {
+          "type": "string",
+          "description": "API Key from Baidu AI Cloud (Environment variable: BAIDU_OCR_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "client_secret": {
+          "type": "string",
+          "description": "Secret Key from Baidu AI Cloud (Environment variable: BAIDU_OCR_SECRET_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

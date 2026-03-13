@@ -1,0 +1,211 @@
+{
+  "ready": false,
+  "plugin_id": "juhe_data",
+  "name": "Juhe Data - API Marketplace",
+  "description": "Comprehensive API marketplace providing SMS verification, phone validation, IP location, weather, news, and financial data services. One-stop solution for data integration needs.",
+  "category": "communication",
+  "category_name": "Communication",
+  "category_icon": "📞",
+  "icon_uri": "📡",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "sms",
+    "verification",
+    "data",
+    "api-aggregator",
+    "china"
+  ],
+  "api_prefix": "https://apis.juhe.cn",
+  "desc_mk": "Juhe Data (聚合数据) is a leading API marketplace providing multiple data services including SMS verification, phone number validation, IP location, weather, news, and financial data. Perfect for user authentication, data enrichment, and business intelligence. **Note:** Requires API key from [Juhe Data Platform](https://www.juhe.cn/). Each service may require separate key.",
+  "header_configuration": {
+    "API Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "JUHE_API_KEY",
+      "description": "Juhe Data API key (service-specific)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Send SMS Verification Code",
+      "path": "/sms/send",
+      "method": "POST",
+      "description": "Send SMS verification code to phone number",
+      "request_params": {
+        "mobile": {
+          "type": "string",
+          "description": "Phone number to receive SMS",
+          "required": true,
+          "send_method": "Body"
+        },
+        "tpl_id": {
+          "type": "string",
+          "description": "SMS template ID",
+          "required": true,
+          "send_method": "Body"
+        },
+        "tpl_value": {
+          "type": "string",
+          "description": "Template variables in format: #code#=1234&#company#=YourCompany",
+          "required": true,
+          "send_method": "Body"
+        },
+        "key": {
+          "type": "string",
+          "description": "Juhe SMS API key (Environment variable: JUHE_SMS_KEY)",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Validate Phone Number",
+      "path": "/mobile/get",
+      "method": "GET",
+      "description": "Validate and get information about a phone number (carrier, location)",
+      "request_params": {
+        "phone": {
+          "type": "string",
+          "description": "Phone number to validate (Chinese mobile number)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Juhe API key (Environment variable: JUHE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Query IP Location",
+      "path": "/ip/ip2addr",
+      "method": "GET",
+      "description": "Get geographic location and ISP information from IP address",
+      "request_params": {
+        "ip": {
+          "type": "string",
+          "description": "IP address to query (IPv4)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Juhe API key (Environment variable: JUHE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Verify ID Card (China)",
+      "path": "/idcard/query",
+      "method": "GET",
+      "description": "Validate Chinese ID card number and extract information",
+      "request_params": {
+        "idcard": {
+          "type": "string",
+          "description": "Chinese ID card number (18 digits)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Juhe API key (Environment variable: JUHE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Verify Bank Card",
+      "path": "/bank/query",
+      "method": "GET",
+      "description": "Validate bank card number and get bank information",
+      "request_params": {
+        "bankcard": {
+          "type": "string",
+          "description": "Bank card number",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Juhe API key (Environment variable: JUHE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Weather Forecast",
+      "path": "/simpleWeather/query",
+      "method": "GET",
+      "description": "Get weather forecast by city name",
+      "request_params": {
+        "city": {
+          "type": "string",
+          "description": "City name in Chinese (e.g., '北京', '上海')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Juhe API key (Environment variable: JUHE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Latest News",
+      "path": "/toutiao/index",
+      "method": "GET",
+      "description": "Get latest news headlines by category",
+      "request_params": {
+        "type": {
+          "type": "string",
+          "description": "News category: 'top' (headline), 'guonei' (domestic), 'guoji' (international), 'yule' (entertainment), 'tiyu' (sports), 'junshi' (military), 'keji' (tech), 'caijing' (finance), 'shishang' (fashion)",
+          "required": false,
+          "default": "top",
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Juhe API key (Environment variable: JUHE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Currency Exchange Rate",
+      "path": "/fxrate/query",
+      "method": "GET",
+      "description": "Get real-time currency exchange rates",
+      "request_params": {
+        "from": {
+          "type": "string",
+          "description": "Source currency code (e.g., 'USD', 'CNY')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "string",
+          "description": "Target currency code (e.g., 'CNY', 'EUR')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Juhe API key (Environment variable: JUHE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

@@ -758,13 +758,13 @@ const PluginManagementPageNew: React.FC = () => {
             <Button
               variant="outlined"
               fullWidth
-              startIcon={<Cpu className="w-4 h-4" />}
+              startIcon={<Cpu className="w-4 h-4 text-gray-500 dark:text-gray-400" />}
               onClick={() => { setMcpPluginDialogOpen(true); setInstallDialogOpen(false) }}
-              className="justify-start p-3"
+              className="justify-start p-3 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               <div className="text-left">
-                <Typography variant="subtitle1">{t('plugins.types.mcp')}-{t('plugins.cloudPlugin.createFromMCP')}</Typography>
-                <Typography variant="body2" color="text.secondary">{t('plugins.cloudPlugin.createFromMCPDescription')}</Typography>
+                <Typography variant="subtitle1" className="text-gray-900 dark:text-gray-100">{t('plugins.types.mcp')}-{t('plugins.cloudPlugin.createFromMCP')}</Typography>
+                <Typography variant="body2" color="text.secondary" className="text-gray-500 dark:text-gray-400">{t('plugins.cloudPlugin.createFromMCPDescription')}</Typography>
               </div>
             </Button>
           </div>

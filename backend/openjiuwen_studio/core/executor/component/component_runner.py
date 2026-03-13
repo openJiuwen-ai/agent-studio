@@ -36,7 +36,8 @@ CAN_SINGLE_COMP_RUN = [ComponentType.COMPONENT_TYPE_LLM, ComponentType.COMPONENT
                        ComponentType.COMPONENT_TYPE_PLUGIN, ComponentType.COMPONENT_TYPE_TEXT_EDITOR,
                        ComponentType.COMPONENT_TYPE_CODE, ComponentType.COMPONENT_TYPE_INTENT,
                        ComponentType.COMPONENT_TYPE_QUESTION, ComponentType.COMPONENT_TYPE_SUB_WORKFLOW,
-                       ComponentType.COMPONENT_TYPE_HTTP_REQUEST, ComponentType.COMPONENT_TYPE_REACT_AGENT]
+                       ComponentType.COMPONENT_TYPE_HTTP_REQUEST, ComponentType.COMPONENT_TYPE_REACT_AGENT,
+                       ComponentType.COMPONENT_TYPE_TEXT_EDITOR, ComponentType.COMPONENT_TYPE_CODE]
 
 
 class ComponentExecutor(WorkflowRunner):

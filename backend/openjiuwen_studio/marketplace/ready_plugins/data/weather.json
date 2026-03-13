@@ -1,0 +1,71 @@
+{
+  "ready": false,
+  "plugin_id": "weather_api_plugin",
+  "name": "Weather API",
+  "description": "Get weather information for any location",
+  "category": "data",
+  "icon_uri": "🌤️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "weather",
+    "data",
+    "api"
+  ],
+  "api_prefix": "https://api.openweathermap.org/data/2.5",
+  "tools": [
+    {
+      "name": "Get Current Weather",
+      "path": "/weather",
+      "method": "GET",
+      "description": "Get current weather data for a location",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "City name, state code and country code divided by comma",
+          "required": true,
+          "send_method": "Query"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "Query"
+        },
+        "units": {
+          "type": "string",
+          "description": "Units of measurement (standard, metric, imperial)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get 5 Day Forecast",
+      "path": "/forecast",
+      "method": "GET",
+      "description": "Get 5 day weather forecast with 3-hour step",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "City name, state code and country code divided by comma",
+          "required": true,
+          "send_method": "Query"
+        },
+        "appid": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "Query"
+        },
+        "units": {
+          "type": "string",
+          "description": "Units of measurement (standard, metric, imperial)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

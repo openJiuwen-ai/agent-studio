@@ -283,7 +283,16 @@
           },
           "longTermTitle": "Long-Term Memory",
           "longTermToggleLabel": "Enable Long-Term Memory",
-          "longTermDescription": "When enabled, the agent can remember user personal information and preferences from the conversation history."
+          "userProfileToggleLabel": "Enable User Profile Memory",
+          "episodicMemoryToggleLabel": "Enable Episodic Memory",
+          "semanticMemoryToggleLabel": "Enable Semantic Memory",
+          "summaryMemoryToggleLabel": "Enable Summary Memory",
+          "longTermDescription": "When enabled, the agent can remember key information from the conversation history.",
+          "userProfileDescription": "When enabled, the agent can remember user profile information from the conversation history.",
+          "semanticMemoryDescription": "When enabled, the agent can use semantic analysis to understand and remember user conversation content.",
+          "episodicMemoryDescription": "When enabled, the agent can remember specific scenarios and contexts of user conversations.",
+          "summaryMemoryDescription": "When enabled, the agent can summarize the conversation history.",
+          "memoryOptions": "Memory Type Options"
         }
       },
       "addWorkflow": {

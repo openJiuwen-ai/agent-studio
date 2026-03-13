@@ -20,6 +20,10 @@ interface MemoryBase {
 interface Memory {
   max_tokens: number
   longterm_memory_config: boolean
+  user_profile_config?: boolean
+  semantic_memory_config?: boolean
+  episodic_memory_config?: boolean
+  summary_memory_config?: boolean
   memory_base?: MemoryBase
   variable_config: MemoryVariable[]
 }

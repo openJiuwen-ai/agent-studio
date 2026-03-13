@@ -1,0 +1,211 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openjiuwen.com/schemas/plugin-config.json",
+  "title": "OpenJiuwen Plugin Configuration Schema",
+  "description": "JSON Schema for validating OpenJiuwen plugin configuration files",
+  "type": "object",
+  "required": ["plugin_id", "name", "description", "plugin_type", "tools"],
+  "properties": {
+    "plugin_id": {
+      "type": "string",
+      "description": "Unique identifier for the plugin",
+      "pattern": "^[a-z0-9_]+$",
+      "minLength": 3,
+      "maxLength": 100
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable name of the plugin",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of what the plugin does",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "category": {
+      "type": "string",
+      "description": "Category of the plugin (auto-populated by directory structure)",
+      "enum": ["social", "productivity", "ai", "data", "communication", "testing", "other"]
+    },
+    "icon_uri": {
+      "type": "string",
+      "description": "Icon for the plugin (emoji or URL)",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "plugin_type": {
+      "type": "integer",
+      "description": "Type of plugin: 1=Cloud API, 2=Cloud Code",
+      "enum": [1, 2]
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of the plugin (semantic versioning)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "author": {
+      "type": "string",
+      "description": "Author or organization that created the plugin",
+      "maxLength": 200
+    },
+    "tags": {
+      "type": "array",
+      "description": "Tags for categorizing and searching the plugin",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50
+      },
+      "maxItems": 10
+    },
+    "api_prefix": {
+      "type": "string",
+      "description": "Base URL for the API",
+      "format": "uri",
+      "maxLength": 500
+    },
+    "documentation": {
+      "type": "string",
+      "description": "URL to the plugin documentation",
+      "format": "uri",
+      "maxLength": 500
+    },
+    "tools": {
+      "type": "array",
+      "description": "List of tools/endpoints provided by the plugin",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "method", "description"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the tool/endpoint",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "path": {
+            "type": "string",
+            "description": "API path (can include path parameters like {user_id})",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "method": {
+            "type": "string",
+            "description": "HTTP method",
+            "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"]
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of what the tool does",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "request_params": {
+            "type": "object",
+            "description": "Request parameters for the tool",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["type", "description", "required"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Parameter data type",
+                  "enum": ["string", "integer", "number", "boolean", "array", "object"]
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Description of the parameter",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "required": {
+                  "type": "boolean",
+                  "description": "Whether the parameter is required"
+                },
+                "send_method": {
+                  "type": "string",
+                  "description": "How the parameter is sent: None (unused), Header (HTTP header), Query (query string), Body (request body), or Path (URL path parameter)",
+                  "enum": ["None", "Header", "Query", "Body", "Path"]
+                },
+                "default": {
+                  "description": "Default value for the parameter"
+                },
+                "min": {
+                  "type": "number",
+                  "description": "Minimum value (for numbers)"
+                },
+                "max": {
+                  "type": "number",
+                  "description": "Maximum value (for numbers)"
+                },
+                "min_length": {
+                  "type": "integer",
+                  "description": "Minimum length (for strings/arrays)"
+                },
+                "max_length": {
+                  "type": "integer",
+                  "description": "Maximum length (for strings/arrays)"
+                },
+                "enum": {
+                  "type": "array",
+                  "description": "Allowed values",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "format": {
+                  "type": "string",
+                  "description": "Format hint (e.g., date-time, email, uri)",
+                  "enum": ["date-time", "date", "time", "email", "uri", "uuid"]
+                },
+                "item_type": {
+                  "type": "string",
+                  "description": "Type of items in array (if type is array)",
+                  "enum": ["string", "integer", "number", "boolean", "object"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "header_configuration": {
+      "type": "object",
+      "description": "HTTP headers to be sent with every request. Headers are applied to all tools in the plugin.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "description": "Header value. Can be a placeholder (e.g., 'Bearer YOUR_TOKEN_HERE') that user will replace with actual value.",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "description": "Description of what this header is for",
+            "maxLength": 500
+          }
+        }
+      },
+      "examples": [
+        {
+          "Authorization": {
+            "value": "Bearer YOUR_API_TOKEN",
+            "description": "OAuth 2.0 Bearer token for authentication"
+          }
+        },
+        {
+          "X-API-Key": {
+            "value": "your-api-key-here",
+            "description": "API key for authentication"
+          }
+        }
+      ]
+    }
+  }
+}

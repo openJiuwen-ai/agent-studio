@@ -1,0 +1,253 @@
+{
+  "ready": false,
+  "plugin_id": "tushare_pro",
+  "name": "TuShare Pro - Chinese Stock Market API",
+  "description": "Comprehensive Chinese stock market data API covering Shanghai, Shenzhen, Beijing, and Hong Kong exchanges. Access real-time quotes, historical data, financial statements, and market analytics.",
+  "category": "data",
+  "category_name": "Data & Analytics",
+  "category_icon": "📊",
+  "icon_uri": "📈",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "stock",
+    "finance",
+    "trading",
+    "china",
+    "market-data"
+  ],
+  "api_prefix": "https://api.tushare.pro",
+  "desc_mk": "TuShare Pro provides comprehensive Chinese financial market data including stocks, funds, futures, and bonds from Shanghai (SSE), Shenzhen (SZSE), Beijing (BSE), and Hong Kong (HKEX) exchanges. Access real-time quotes, historical prices, financial fundamentals, trading calendars, and market analytics. **Note:** Requires free API token from [TuShare Pro](https://tushare.pro/register).",
+  "tools": [
+    {
+      "name": "Get Stock Daily Quotes",
+      "path": "/",
+      "method": "POST",
+      "description": "Get daily stock trading data including open, high, low, close, volume",
+      "request_params": {
+        "api_name": {
+          "type": "string",
+          "description": "API name (fixed value: 'daily')",
+          "required": true,
+          "default": "daily",
+          "send_method": "Body"
+        },
+        "token": {
+          "type": "string",
+          "description": "TuShare API token (Environment variable: TUSHARE_API_TOKEN)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "params": {
+          "type": "object",
+          "description": "Query parameters: {ts_code: 'stock code', trade_date: 'YYYYMMDD', start_date: 'YYYYMMDD', end_date: 'YYYYMMDD'}",
+          "required": true,
+          "send_method": "Body"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Fields to return (comma-separated): 'ts_code,trade_date,open,high,low,close,vol,amount'",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Stock Basic Info",
+      "path": "/",
+      "method": "POST",
+      "description": "Get basic information of stocks including name, market, listing date",
+      "request_params": {
+        "api_name": {
+          "type": "string",
+          "description": "API name (fixed value: 'stock_basic')",
+          "required": true,
+          "default": "stock_basic",
+          "send_method": "Body"
+        },
+        "token": {
+          "type": "string",
+          "description": "TuShare API token (Environment variable: TUSHARE_API_TOKEN)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "params": {
+          "type": "object",
+          "description": "Query parameters: {ts_code: 'stock code', name: 'stock name', exchange: 'SSE/SZSE', market: 'main/SME/GEM', list_status: 'L/D/P'}",
+          "required": false,
+          "send_method": "Body"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Fields to return",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Trading Calendar",
+      "path": "/",
+      "method": "POST",
+      "description": "Get trading calendar with trading days and holidays",
+      "request_params": {
+        "api_name": {
+          "type": "string",
+          "description": "API name (fixed value: 'trade_cal')",
+          "required": true,
+          "default": "trade_cal",
+          "send_method": "Body"
+        },
+        "token": {
+          "type": "string",
+          "description": "TuShare API token (Environment variable: TUSHARE_API_TOKEN)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "params": {
+          "type": "object",
+          "description": "Query parameters: {exchange: 'SSE/SZSE/CFFEX/DCE/CZCE/INE/IB', start_date: 'YYYYMMDD', end_date: 'YYYYMMDD', is_open: '0/1'}",
+          "required": true,
+          "send_method": "Body"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Fields to return",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Stock Financial Data",
+      "path": "/",
+      "method": "POST",
+      "description": "Get financial statements including balance sheet, income statement, cash flow",
+      "request_params": {
+        "api_name": {
+          "type": "string",
+          "description": "API name: 'income' (income statement), 'balancesheet' (balance sheet), 'cashflow' (cash flow)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "token": {
+          "type": "string",
+          "description": "TuShare API token (Environment variable: TUSHARE_API_TOKEN)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "params": {
+          "type": "object",
+          "description": "Query parameters: {ts_code: 'stock code', period: 'YYYYMMDD', report_type: '1/2/3/4/5'}",
+          "required": true,
+          "send_method": "Body"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Fields to return",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Market Index Data",
+      "path": "/",
+      "method": "POST",
+      "description": "Get market index data (Shanghai Composite, Shenzhen Component, etc.)",
+      "request_params": {
+        "api_name": {
+          "type": "string",
+          "description": "API name (fixed value: 'index_daily')",
+          "required": true,
+          "default": "index_daily",
+          "send_method": "Body"
+        },
+        "token": {
+          "type": "string",
+          "description": "TuShare API token (Environment variable: TUSHARE_API_TOKEN)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "params": {
+          "type": "object",
+          "description": "Query parameters: {ts_code: 'index code (e.g., 000001.SH)', trade_date: 'YYYYMMDD', start_date: 'YYYYMMDD', end_date: 'YYYYMMDD'}",
+          "required": true,
+          "send_method": "Body"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Fields to return",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Money Flow Data",
+      "path": "/",
+      "method": "POST",
+      "description": "Get institutional money flow statistics (buying/selling by institutions)",
+      "request_params": {
+        "api_name": {
+          "type": "string",
+          "description": "API name (fixed value: 'moneyflow')",
+          "required": true,
+          "default": "moneyflow",
+          "send_method": "Body"
+        },
+        "token": {
+          "type": "string",
+          "description": "TuShare API token (Environment variable: TUSHARE_API_TOKEN)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "params": {
+          "type": "object",
+          "description": "Query parameters: {ts_code: 'stock code', trade_date: 'YYYYMMDD', start_date: 'YYYYMMDD', end_date: 'YYYYMMDD'}",
+          "required": true,
+          "send_method": "Body"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Fields to return",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Real-time Quotes",
+      "path": "/",
+      "method": "POST",
+      "description": "Get real-time or latest stock quotes",
+      "request_params": {
+        "api_name": {
+          "type": "string",
+          "description": "API name (fixed value: 'stk_mins' for minute data or 'daily' for latest daily)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "token": {
+          "type": "string",
+          "description": "TuShare API token (Environment variable: TUSHARE_API_TOKEN)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "params": {
+          "type": "object",
+          "description": "Query parameters: {ts_code: 'stock code', freq: '1min/5min/15min/30min/60min'}",
+          "required": true,
+          "send_method": "Body"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Fields to return",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

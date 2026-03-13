@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { MessageItems, Message, MessageType } from '../../stores/useConversationStore';
+import { MessageItems, Message, MessageType, TaskStatus } from '../../stores/useConversationStore';
 import { useConversationStore } from '../../stores/useConversationStore';
 import { TextMessage } from './messageTypes/TextMessage';
 import { LinkMessage } from './messageTypes/LinkMessage';
@@ -30,7 +30,7 @@ export const SystemMessageItem: React.FC<SystemMessageItemProps> = ({ messageIte
   const { messagesIds, status } = messageItems;
 
   // 判断是否正在进行中
-  const isInProgress = status === 'in_progress';
+  const isInProgress = status === TaskStatus.IN_PROGRESS;
 
   // 判断是否是用户消息（兼容历史数据）
   const isUserMessage = getMessageItemsIsUser(messageItems);

@@ -1,0 +1,178 @@
+{
+  "ready": false,
+  "plugin_id": "baidu_translate",
+  "name": "Baidu Translate API",
+  "description": "Machine translation service supporting 201 languages. Powered by Baidu's neural machine translation technology with high accuracy for Chinese and Asian languages.",
+  "category": "ai",
+  "category_name": "AI & ML Services",
+  "category_icon": "🤖",
+  "icon_uri": "🌐",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "translation",
+    "nlp",
+    "language",
+    "baidu",
+    "multilingual"
+  ],
+  "api_prefix": "https://fanyi-api.baidu.com",
+  "desc_mk": "Baidu Translate (百度翻译) is one of China's leading machine translation services, supporting over 201 languages. This plugin provides access to text translation, language detection, and terminology customization. **Note:** Requires API credentials (APP ID and Secret Key) from [Baidu Translate Open Platform](https://fanyi-api.baidu.com/).",
+  "header_configuration": {
+    "APP ID": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "BAIDU_TRANSLATE_APP_ID",
+      "description": "Baidu Translate APP ID"
+    },
+    "Secret Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "BAIDU_TRANSLATE_SECRET_KEY",
+      "description": "Baidu Translate Secret Key (used for MD5 signature calculation)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Translate Text",
+      "path": "/api/trans/vip/translate",
+      "method": "GET",
+      "description": "Translate text from one language to another",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Text to translate (max 6000 bytes per request)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "from": {
+          "type": "string",
+          "description": "Source language code (e.g., 'en', 'zh', 'ja', 'ko', 'auto' for auto-detect)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "string",
+          "description": "Target language code (e.g., 'en', 'zh', 'ja', 'ko', 'fr', 'de', 'es')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "appid": {
+          "type": "string",
+          "description": "Baidu Translate APP ID (Environment variable: BAIDU_TRANSLATE_APP_ID)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "salt": {
+          "type": "string",
+          "description": "Random salt for signature (random string or timestamp)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "sign": {
+          "type": "string",
+          "description": "Signature: MD5(appid+q+salt+secret_key). Calculated client-side",
+          "required": true,
+          "send_method": "Query"
+        },
+        "tts": {
+          "type": "integer",
+          "description": "Whether to return TTS audio link: 0 (no, default), 1 (yes)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "dict": {
+          "type": "integer",
+          "description": "Whether to return dictionary info: 0 (no, default), 1 (yes)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Language Detection",
+      "path": "/api/trans/vip/language",
+      "method": "GET",
+      "description": "Detect the language of input text",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Text to detect language for",
+          "required": true,
+          "send_method": "Query"
+        },
+        "appid": {
+          "type": "string",
+          "description": "Baidu Translate APP ID (Environment variable: BAIDU_TRANSLATE_APP_ID)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "salt": {
+          "type": "string",
+          "description": "Random salt for signature",
+          "required": true,
+          "send_method": "Query"
+        },
+        "sign": {
+          "type": "string",
+          "description": "Signature: MD5(appid+q+salt+secret_key)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Field Translation",
+      "path": "/api/trans/vip/fieldtranslate",
+      "method": "GET",
+      "description": "Translate text with domain-specific terminology (e.g., medicine, electronics, mechanics)",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Text to translate",
+          "required": true,
+          "send_method": "Query"
+        },
+        "from": {
+          "type": "string",
+          "description": "Source language code",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "string",
+          "description": "Target language code",
+          "required": true,
+          "send_method": "Query"
+        },
+        "domain": {
+          "type": "string",
+          "description": "Domain: 'medicine', 'electronics', 'mechanics', 'novel', etc.",
+          "required": true,
+          "send_method": "Query"
+        },
+        "appid": {
+          "type": "string",
+          "description": "Baidu Translate APP ID (Environment variable: BAIDU_TRANSLATE_APP_ID)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "salt": {
+          "type": "string",
+          "description": "Random salt for signature",
+          "required": true,
+          "send_method": "Query"
+        },
+        "sign": {
+          "type": "string",
+          "description": "Signature: MD5(appid+q+salt+secret_key)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

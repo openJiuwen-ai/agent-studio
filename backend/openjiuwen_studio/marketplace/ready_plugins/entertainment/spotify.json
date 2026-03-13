@@ -1,0 +1,448 @@
+{
+  "ready": false,
+  "plugin_id": "spotify_api",
+  "name": "Spotify",
+  "description": "World's most popular music streaming service. Search tracks, albums, artists, playlists, manage user library, and control playback.",
+  "category": "entertainment",
+  "category_name": "Entertainment & Events",
+  "category_icon": "🎭",
+  "icon_uri": "🎵",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "music",
+    "streaming",
+    "spotify",
+    "audio",
+    "playlist",
+    "entertainment"
+  ],
+  "api_prefix": "https://api.spotify.com/v1",
+  "desc_mk": "Spotify is the world's most popular audio streaming platform with millions of songs, podcasts, and playlists. This plugin provides access to search, playback control, playlist management, and user library features.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_SPOTIFY_ACCESS_TOKEN",
+      "description": "Spotify OAuth 2.0 Bearer token for API authentication"
+    }
+  },
+  "tools": [
+    {
+      "name": "Search",
+      "path": "/search",
+      "method": "GET",
+      "description": "Search for tracks, albums, artists, or playlists",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query keywords",
+          "required": true,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Types to search: track, album, artist, playlist (comma-separated)",
+          "required": true,
+          "default": "track",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results (1-50)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "market": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 country code (e.g., 'US', 'GB')",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Track",
+      "path": "/tracks/{id}",
+      "method": "GET",
+      "description": "Get detailed information about a specific track",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "Spotify track ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "market": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 country code",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Album",
+      "path": "/albums/{id}",
+      "method": "GET",
+      "description": "Get detailed information about a specific album",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "Spotify album ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "market": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 country code",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Artist",
+      "path": "/artists/{id}",
+      "method": "GET",
+      "description": "Get detailed information about a specific artist",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "Spotify artist ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Artist Top Tracks",
+      "path": "/artists/{id}/top-tracks",
+      "method": "GET",
+      "description": "Get an artist's top tracks by market",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "Spotify artist ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "market": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 country code",
+          "required": true,
+          "default": "US",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Playlist",
+      "path": "/playlists/{playlist_id}",
+      "method": "GET",
+      "description": "Get detailed information about a playlist",
+      "request_params": {
+        "playlist_id": {
+          "type": "string",
+          "description": "Spotify playlist ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "market": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 country code",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User's Playlists",
+      "path": "/me/playlists",
+      "method": "GET",
+      "description": "Get current user's playlists",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of playlists to return (1-50)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Index of the first playlist to return",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Playlist",
+      "path": "/users/{user_id}/playlists",
+      "method": "POST",
+      "description": "Create a playlist for a user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "Spotify user ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name for the new playlist",
+          "required": true,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the playlist",
+          "required": false,
+          "send_method": "Body"
+        },
+        "public": {
+          "type": "boolean",
+          "description": "Whether the playlist is public",
+          "required": false,
+          "default": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Add Items to Playlist",
+      "path": "/playlists/{playlist_id}/tracks",
+      "method": "POST",
+      "description": "Add one or more tracks to a playlist",
+      "request_params": {
+        "playlist_id": {
+          "type": "string",
+          "description": "Spotify playlist ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "uris": {
+          "type": "array",
+          "description": "Array of Spotify track URIs (e.g., ['spotify:track:4iV5W9uYEdYUVa79Axb7Rh'])",
+          "required": true,
+          "send_method": "Body"
+        },
+        "position": {
+          "type": "integer",
+          "description": "Position to insert tracks (0-based index)",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Current User's Profile",
+      "path": "/me",
+      "method": "GET",
+      "description": "Get detailed profile information about the current user",
+      "request_params": {}
+    },
+    {
+      "name": "Get User's Top Artists",
+      "path": "/me/top/artists",
+      "method": "GET",
+      "description": "Get the current user's top artists based on listening history",
+      "request_params": {
+        "time_range": {
+          "type": "string",
+          "description": "Time period: long_term, medium_term, short_term",
+          "required": false,
+          "default": "medium_term",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of artists to return (1-50)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User's Top Tracks",
+      "path": "/me/top/tracks",
+      "method": "GET",
+      "description": "Get the current user's top tracks based on listening history",
+      "request_params": {
+        "time_range": {
+          "type": "string",
+          "description": "Time period: long_term, medium_term, short_term",
+          "required": false,
+          "default": "medium_term",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of tracks to return (1-50)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Recently Played",
+      "path": "/me/player/recently-played",
+      "method": "GET",
+      "description": "Get tracks from the current user's recently played history",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of items to return (1-50)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "integer",
+          "description": "Unix timestamp in ms. Returns all items after this cursor position",
+          "required": false,
+          "send_method": "Query"
+        },
+        "before": {
+          "type": "integer",
+          "description": "Unix timestamp in ms. Returns all items before this cursor position",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Current Playback",
+      "path": "/me/player",
+      "method": "GET",
+      "description": "Get information about the user's current playback state",
+      "request_params": {
+        "market": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 country code",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Start/Resume Playback",
+      "path": "/me/player/play",
+      "method": "PUT",
+      "description": "Start or resume playback on the user's active device",
+      "request_params": {
+        "device_id": {
+          "type": "string",
+          "description": "Device ID to play on",
+          "required": false,
+          "send_method": "Query"
+        },
+        "context_uri": {
+          "type": "string",
+          "description": "Spotify URI of the context (album, artist, playlist)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "uris": {
+          "type": "array",
+          "description": "Array of Spotify track URIs to play",
+          "required": false,
+          "send_method": "Body"
+        },
+        "position_ms": {
+          "type": "integer",
+          "description": "Position in milliseconds to seek to",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Pause Playback",
+      "path": "/me/player/pause",
+      "method": "PUT",
+      "description": "Pause playback on the user's active device",
+      "request_params": {
+        "device_id": {
+          "type": "string",
+          "description": "Device ID to pause on",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Skip to Next Track",
+      "path": "/me/player/next",
+      "method": "POST",
+      "description": "Skip to the next track in the user's queue",
+      "request_params": {
+        "device_id": {
+          "type": "string",
+          "description": "Device ID to skip on",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Skip to Previous Track",
+      "path": "/me/player/previous",
+      "method": "POST",
+      "description": "Skip to the previous track in the user's queue",
+      "request_params": {
+        "device_id": {
+          "type": "string",
+          "description": "Device ID to skip on",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Recommendations",
+      "path": "/recommendations",
+      "method": "GET",
+      "description": "Get track recommendations based on seed artists, tracks, or genres",
+      "request_params": {
+        "seed_artists": {
+          "type": "string",
+          "description": "Comma-separated list of Spotify artist IDs (up to 5)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "seed_tracks": {
+          "type": "string",
+          "description": "Comma-separated list of Spotify track IDs (up to 5)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "seed_genres": {
+          "type": "string",
+          "description": "Comma-separated list of genre names (up to 5)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of recommendations to return (1-100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "market": {
+          "type": "string",
+          "description": "ISO 3166-1 alpha-2 country code",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

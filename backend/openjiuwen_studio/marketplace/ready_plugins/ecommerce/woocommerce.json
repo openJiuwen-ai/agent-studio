@@ -1,0 +1,353 @@
+{
+  "ready": false,
+  "plugin_id": "woocommerce",
+  "name": "WooCommerce",
+  "description": "Manage products, orders, customers, and reports via the WooCommerce REST API.",
+  "category": "ecommerce",
+  "category_name": "E-Commerce",
+  "category_icon": "🛒",
+  "icon_uri": "🛒",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["ecommerce", "woocommerce", "wordpress", "products", "orders"],
+  "api_prefix": "https://your-store.com/wp-json/wc/v3",
+  "documentation": "https://woocommerce.github.io/woocommerce-rest-api-docs/",
+  "desc_mk": "Interact with the WooCommerce REST API to manage products, orders, customers, categories, and view sales reports.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Basic YOUR_WOOCOMMERCE_CREDENTIALS",
+      "description": "Base64-encoded consumer_key:consumer_secret (Environment variables: WOOCOMMERCE_KEY and WOOCOMMERCE_SECRET)"
+    }
+  },
+  "tools": [
+    {
+      "name": "list_products",
+      "description": "Retrieve a list of WooCommerce products.",
+      "method": "GET",
+      "path": "/products",
+      "request_params": {
+        "per_page": {
+          "type": "integer",
+          "desc": "Number of items to return per page (default 10, max 100).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Current page of the collection.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "status": {
+          "type": "string",
+          "desc": "Filter by product status: any, draft, pending, private, publish.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "category": {
+          "type": "string",
+          "desc": "Limit results to products assigned to a specific category ID.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "tag": {
+          "type": "string",
+          "desc": "Limit results to products assigned a specific tag ID.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "featured": {
+          "type": "boolean",
+          "desc": "Limit results to featured products.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "search": {
+          "type": "string",
+          "desc": "Limit results to those matching a search string.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_product",
+      "description": "Retrieve a single WooCommerce product by its ID.",
+      "method": "GET",
+      "path": "/products/{id}",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "desc": "Unique identifier for the product.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "create_product",
+      "description": "Create a new WooCommerce product.",
+      "method": "POST",
+      "path": "/products",
+      "request_params": {
+        "name": {
+          "type": "string",
+          "desc": "Product name (required).",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "type": {
+          "type": "string",
+          "desc": "Product type: simple, variable, or grouped.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "status": {
+          "type": "string",
+          "desc": "Product status: draft, pending, private, or publish.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "desc": "Full product description.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "short_description": {
+          "type": "string",
+          "desc": "Short product description.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "regular_price": {
+          "type": "string",
+          "desc": "Product regular price as a string (e.g. \"29.99\").",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "categories": {
+          "type": "array",
+          "desc": "Array of category objects, each with an id field.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "images": {
+          "type": "array",
+          "desc": "Array of image objects, each with a src URL.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "stock_quantity": {
+          "type": "integer",
+          "desc": "Stock quantity for the product.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "list_orders",
+      "description": "Retrieve a list of WooCommerce orders.",
+      "method": "GET",
+      "path": "/orders",
+      "request_params": {
+        "per_page": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Current page of the collection.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "status": {
+          "type": "string",
+          "desc": "Filter by order status: any, pending, processing, on-hold, completed, cancelled, refunded, failed.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "customer": {
+          "type": "integer",
+          "desc": "Limit result set to orders assigned a specific customer ID.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "desc": "Limit response to orders published after a given ISO 8601 compliant date.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "before": {
+          "type": "string",
+          "desc": "Limit response to orders published before a given ISO 8601 compliant date.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_order",
+      "description": "Retrieve a single WooCommerce order by its ID.",
+      "method": "GET",
+      "path": "/orders/{id}",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "desc": "Unique identifier for the order.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "update_order",
+      "description": "Update an existing WooCommerce order.",
+      "method": "PUT",
+      "path": "/orders/{id}",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "desc": "Unique identifier for the order.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "status": {
+          "type": "string",
+          "desc": "Order status (pending, processing, on-hold, completed, cancelled, refunded, failed).",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "billing": {
+          "type": "object",
+          "desc": "Billing address object.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "shipping": {
+          "type": "object",
+          "desc": "Shipping address object.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "line_items": {
+          "type": "array",
+          "desc": "Array of line item objects to update.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "list_customers",
+      "description": "Retrieve a list of WooCommerce customers.",
+      "method": "GET",
+      "path": "/customers",
+      "request_params": {
+        "per_page": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Current page of the collection.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "email": {
+          "type": "string",
+          "desc": "Limit results to customers with a specific email address.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "role": {
+          "type": "string",
+          "desc": "Limit results to customers with a specific role (default: customer).",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_customer",
+      "description": "Retrieve a single WooCommerce customer by their ID.",
+      "method": "GET",
+      "path": "/customers/{id}",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "desc": "Unique identifier for the customer.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "list_categories",
+      "description": "Retrieve a list of WooCommerce product categories.",
+      "method": "GET",
+      "path": "/products/categories",
+      "request_params": {
+        "per_page": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Current page of the collection.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "search": {
+          "type": "string",
+          "desc": "Limit results to those matching a search string.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "hide_empty": {
+          "type": "boolean",
+          "desc": "Whether to hide categories that contain no products.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_sales_report",
+      "description": "Retrieve a WooCommerce sales report for a given period.",
+      "method": "GET",
+      "path": "/reports/sales",
+      "request_params": {
+        "period": {
+          "type": "string",
+          "desc": "Report period: week, month, last_month, or year.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "date_min": {
+          "type": "string",
+          "desc": "Return sales after a given date (YYYY-MM-DD format).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "date_max": {
+          "type": "string",
+          "desc": "Return sales before a given date (YYYY-MM-DD format).",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

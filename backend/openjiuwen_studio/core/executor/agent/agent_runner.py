@@ -642,7 +642,6 @@ class AgentRunner:
                     else:
                         logger.warning(f"[KB_RETRIEVAL] Query is empty, skipping knowledge base retrieval")
 
-                # 清理知识库实例
                 for kb_instance in kb_instances:
                     try:
                         await kb_instance.close()

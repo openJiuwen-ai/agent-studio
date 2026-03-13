@@ -1,0 +1,343 @@
+{
+  "ready": true,
+  "plugin_id": "slack_api",
+  "name": "Slack API",
+  "description": "Team communication and collaboration platform. Send messages, manage channels, upload files, and integrate with Slack workspaces.",
+  "category": "communication",
+  "category_name": "Communication",
+  "category_icon": "📞",
+  "icon_uri": "💬",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "communication",
+    "slack",
+    "messaging",
+    "team",
+    "collaboration"
+  ],
+  "api_prefix": "https://slack.com/api",
+  "desc_mk": "Slack is a business communication platform that brings team communication and collaboration into one place. This plugin provides access to messaging, channels, users, and file management.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer xoxb-YOUR_SLACK_BOT_TOKEN",
+      "description": "Slack Bot User OAuth Token with Bearer prefix"
+    },
+    "Content-type": {
+      "type": "string",
+      "value": "application/json; charset=utf-8",
+      "description": "Content-type header with charset=utf-8"
+    }
+  },
+  "tools": [
+    {
+      "name": "Post Message",
+      "path": "/chat.postMessage",
+      "method": "POST",
+      "description": "Send a message to a Slack channel or direct message",
+      "request_params": {
+        "channel": {
+          "type": "string",
+          "description": "Channel ID or name (e.g., 'C1234567890' or '#general')",
+          "required": true,
+          "send_method": "Body"
+        },
+        "text": {
+          "type": "string",
+          "description": "Message text content",
+          "required": true,
+          "send_method": "Body"
+        },
+        "thread_ts": {
+          "type": "string",
+          "description": "Parent message timestamp to reply in thread",
+          "required": false,
+          "send_method": "Body"
+        },
+        "attachments": {
+          "type": "array",
+          "description": "Array of message attachments",
+          "required": false,
+          "send_method": "Body"
+        },
+        "blocks": {
+          "type": "array",
+          "description": "Array of Block Kit blocks for rich formatting",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Message",
+      "path": "/chat.update",
+      "method": "POST",
+      "description": "Update an existing message",
+      "request_params": {
+        "channel": {
+          "type": "string",
+          "description": "Channel ID containing the message",
+          "required": true,
+          "send_method": "Body"
+        },
+        "ts": {
+          "type": "string",
+          "description": "Timestamp of message to update",
+          "required": true,
+          "send_method": "Body"
+        },
+        "text": {
+          "type": "string",
+          "description": "New message text",
+          "required": true,
+          "send_method": "Body"
+        },
+        "blocks": {
+          "type": "array",
+          "description": "New Block Kit blocks",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Message",
+      "path": "/chat.delete",
+      "method": "POST",
+      "description": "Delete a message from a channel",
+      "request_params": {
+        "channel": {
+          "type": "string",
+          "description": "Channel ID",
+          "required": true,
+          "send_method": "Body"
+        },
+        "ts": {
+          "type": "string",
+          "description": "Timestamp of message to delete",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Channel History",
+      "path": "/conversations.history",
+      "method": "GET",
+      "description": "Fetch conversation history for a channel",
+      "request_params": {
+        "channel": {
+          "type": "string",
+          "description": "Channel ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of messages to return (default: 100, max: 1000)",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        },
+        "oldest": {
+          "type": "string",
+          "description": "Only messages after this Unix timestamp",
+          "required": false,
+          "send_method": "Query"
+        },
+        "latest": {
+          "type": "string",
+          "description": "Only messages before this Unix timestamp",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Channels",
+      "path": "/conversations.list",
+      "method": "GET",
+      "description": "List all channels in a Slack workspace",
+      "request_params": {
+        "exclude_archived": {
+          "type": "boolean",
+          "description": "Exclude archived channels",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        },
+        "types": {
+          "type": "string",
+          "description": "Channel types to include (e.g., 'public_channel,private_channel')",
+          "required": false,
+          "default": "public_channel",
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of channels to return",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Channel",
+      "path": "/conversations.create",
+      "method": "POST",
+      "description": "Create a new channel",
+      "request_params": {
+        "name": {
+          "type": "string",
+          "description": "Channel name (lowercase, no spaces)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "is_private": {
+          "type": "boolean",
+          "description": "Create a private channel",
+          "required": false,
+          "default": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Invite to Channel",
+      "path": "/conversations.invite",
+      "method": "POST",
+      "description": "Invite users to a channel",
+      "request_params": {
+        "channel": {
+          "type": "string",
+          "description": "Channel ID",
+          "required": true,
+          "send_method": "Body"
+        },
+        "users": {
+          "type": "string",
+          "description": "Comma-separated list of user IDs to invite",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get User Info",
+      "path": "/users.info",
+      "method": "GET",
+      "description": "Get information about a user",
+      "request_params": {
+        "user": {
+          "type": "string",
+          "description": "User ID",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Users",
+      "path": "/users.list",
+      "method": "GET",
+      "description": "List all users in the workspace",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of users to return",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Upload File",
+      "path": "/files.upload",
+      "method": "POST",
+      "description": "Upload or create a file",
+      "request_params": {
+        "channels": {
+          "type": "string",
+          "description": "Comma-separated list of channel IDs to share file to",
+          "required": false,
+          "send_method": "Body"
+        },
+        "content": {
+          "type": "string",
+          "description": "File contents (alternative to file upload)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "file": {
+          "type": "string",
+          "description": "File to upload",
+          "required": false,
+          "send_method": "Body"
+        },
+        "filename": {
+          "type": "string",
+          "description": "Filename of file",
+          "required": false,
+          "send_method": "Body"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of file",
+          "required": false,
+          "send_method": "Body"
+        },
+        "initial_comment": {
+          "type": "string",
+          "description": "Message text to add with file",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Add Reaction",
+      "path": "/reactions.add",
+      "method": "POST",
+      "description": "Add a reaction emoji to a message",
+      "request_params": {
+        "channel": {
+          "type": "string",
+          "description": "Channel ID",
+          "required": true,
+          "send_method": "Body"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Message timestamp",
+          "required": true,
+          "send_method": "Body"
+        },
+        "name": {
+          "type": "string",
+          "description": "Reaction emoji name (without colons, e.g., 'thumbsup')",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Set User Status",
+      "path": "/users.profile.set",
+      "method": "POST",
+      "description": "Set the profile information for a user",
+      "request_params": {
+        "profile": {
+          "type": "object",
+          "description": "Profile object with status_text, status_emoji, etc.",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

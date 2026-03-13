@@ -1,0 +1,240 @@
+{
+  "ready": false,
+  "plugin_id": "gmail_api",
+  "name": "Gmail API",
+  "description": "Google Gmail API for reading, sending, and managing email messages, threads, labels, and drafts. Full access to Gmail inbox via Google API with OAuth2 authentication.",
+  "category": "communication",
+  "category_name": "Communication",
+  "category_icon": "📞",
+  "icon_uri": "📬",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "email",
+    "gmail",
+    "google",
+    "inbox",
+    "messaging"
+  ],
+  "api_prefix": "https://gmail.googleapis.com/gmail/v1",
+  "documentation": "https://developers.google.com/gmail/api/reference/rest",
+  "desc_mk": "The Gmail API lets you manage Gmail inbox, send emails, create drafts, manage labels, and search messages. Authentication requires OAuth2 with appropriate Gmail scopes.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "OAuth2 Access Token",
+        "env_var": "GMAIL_ACCESS_TOKEN",
+        "description": "Google OAuth2 access token with Gmail scopes (gmail.send, gmail.readonly, etc.)"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "List Messages",
+      "path": "/users/{userId}/messages",
+      "method": "GET",
+      "description": "List messages in the user's mailbox",
+      "request_params": {
+        "userId": {
+          "type": "string",
+          "description": "User's email address or 'me' for the authenticated user",
+          "required": true,
+          "is_path_param": true
+        },
+        "q": {
+          "type": "string",
+          "description": "Gmail search query (e.g., 'from:sender@example.com is:unread')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "labelIds": {
+          "type": "string",
+          "description": "Label ID filter (e.g., 'INBOX', 'SENT', 'UNREAD')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "maxResults": {
+          "type": "integer",
+          "description": "Maximum number of messages to return (default: 100, max: 500)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "pageToken": {
+          "type": "string",
+          "description": "Page token for pagination",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Message",
+      "path": "/users/{userId}/messages/{id}",
+      "method": "GET",
+      "description": "Get a specific Gmail message by ID",
+      "request_params": {
+        "userId": {
+          "type": "string",
+          "description": "User's email address or 'me'",
+          "required": true,
+          "is_path_param": true
+        },
+        "id": {
+          "type": "string",
+          "description": "The ID of the message",
+          "required": true,
+          "is_path_param": true
+        },
+        "format": {
+          "type": "string",
+          "description": "Format to return the message: full, metadata, minimal, raw",
+          "required": false,
+          "default": "full",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Send Email",
+      "path": "/users/{userId}/messages/send",
+      "method": "POST",
+      "description": "Send an email message. Message must be RFC 2822 formatted and base64url encoded.",
+      "request_params": {
+        "userId": {
+          "type": "string",
+          "description": "User's email address or 'me'",
+          "required": true,
+          "is_path_param": true
+        },
+        "raw": {
+          "type": "string",
+          "description": "The entire email message in RFC 2822 format, base64url encoded",
+          "required": true,
+          "send_method": "Body"
+        },
+        "threadId": {
+          "type": "string",
+          "description": "The thread ID to associate this message with",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Draft",
+      "path": "/users/{userId}/drafts",
+      "method": "POST",
+      "description": "Create a draft email",
+      "request_params": {
+        "userId": {
+          "type": "string",
+          "description": "User's email address or 'me'",
+          "required": true,
+          "is_path_param": true
+        },
+        "message": {
+          "type": "object",
+          "description": "Message object with 'raw' field (RFC 2822 base64url encoded)",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Trash Message",
+      "path": "/users/{userId}/messages/{id}/trash",
+      "method": "POST",
+      "description": "Move a message to the Trash",
+      "request_params": {
+        "userId": {
+          "type": "string",
+          "description": "User's email address or 'me'",
+          "required": true,
+          "is_path_param": true
+        },
+        "id": {
+          "type": "string",
+          "description": "The ID of the message to trash",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "Modify Message Labels",
+      "path": "/users/{userId}/messages/{id}/modify",
+      "method": "POST",
+      "description": "Modify the labels applied to a message (e.g., mark as read/unread, archive)",
+      "request_params": {
+        "userId": {
+          "type": "string",
+          "description": "User's email address or 'me'",
+          "required": true,
+          "is_path_param": true
+        },
+        "id": {
+          "type": "string",
+          "description": "The ID of the message",
+          "required": true,
+          "is_path_param": true
+        },
+        "addLabelIds": {
+          "type": "array",
+          "description": "Array of label IDs to add (e.g., ['UNREAD', 'STARRED'])",
+          "required": false,
+          "send_method": "Body"
+        },
+        "removeLabelIds": {
+          "type": "array",
+          "description": "Array of label IDs to remove (e.g., ['UNREAD', 'INBOX'])",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Labels",
+      "path": "/users/{userId}/labels",
+      "method": "GET",
+      "description": "List all labels in the user's mailbox",
+      "request_params": {
+        "userId": {
+          "type": "string",
+          "description": "User's email address or 'me'",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "List Threads",
+      "path": "/users/{userId}/threads",
+      "method": "GET",
+      "description": "List email threads in the user's mailbox",
+      "request_params": {
+        "userId": {
+          "type": "string",
+          "description": "User's email address or 'me'",
+          "required": true,
+          "is_path_param": true
+        },
+        "q": {
+          "type": "string",
+          "description": "Gmail search query",
+          "required": false,
+          "send_method": "Query"
+        },
+        "maxResults": {
+          "type": "integer",
+          "description": "Maximum number of threads to return",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

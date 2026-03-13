@@ -1,0 +1,336 @@
+{
+  "ready": false,
+  "plugin_id": "bigcommerce",
+  "name": "BigCommerce",
+  "description": "Manage products, orders, customers, and catalog via the BigCommerce REST API.",
+  "category": "ecommerce",
+  "category_name": "E-Commerce",
+  "category_icon": "🛒",
+  "icon_uri": "🏪",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["ecommerce", "bigcommerce", "products", "orders", "catalog"],
+  "api_prefix": "https://api.bigcommerce.com/stores/{store_hash}/v2",
+  "documentation": "https://developer.bigcommerce.com/docs/rest-catalog",
+  "desc_mk": "Interact with the BigCommerce REST API to manage products, orders, customers, categories, and coupons.",
+  "authentication": {
+    "type": "api_key",
+    "required_credentials": [
+      {
+        "name": "X-Auth-Token",
+        "env_var": "BIGCOMMERCE_ACCESS_TOKEN"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "list_products",
+      "description": "Retrieve a list of products from the BigCommerce store.",
+      "method": "GET",
+      "path": "/products",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "desc": "Number of items to return per page (max 250).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Page number to return.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "is_visible": {
+          "type": "boolean",
+          "desc": "Filter by product visibility.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "keyword": {
+          "type": "string",
+          "desc": "Filter products by keyword.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "availability": {
+          "type": "string",
+          "desc": "Filter by availability: available, disabled, or preorder.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_product",
+      "description": "Retrieve a single product by its ID.",
+      "method": "GET",
+      "path": "/products/{product_id}",
+      "request_params": {
+        "product_id": {
+          "type": "integer",
+          "desc": "The unique numeric ID of the product.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "create_product",
+      "description": "Create a new product in the BigCommerce store.",
+      "method": "POST",
+      "path": "/products",
+      "request_params": {
+        "name": {
+          "type": "string",
+          "desc": "Product name (required).",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "type": {
+          "type": "string",
+          "desc": "Product type: physical or digital.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "price": {
+          "type": "number",
+          "desc": "Product price.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "weight": {
+          "type": "number",
+          "desc": "Product weight in store units.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "desc": "HTML product description.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "sku": {
+          "type": "string",
+          "desc": "User-defined product code or SKU.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "availability": {
+          "type": "string",
+          "desc": "Availability of the product: available, disabled, or preorder.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "update_product",
+      "description": "Update an existing product by its ID.",
+      "method": "PUT",
+      "path": "/products/{product_id}",
+      "request_params": {
+        "product_id": {
+          "type": "integer",
+          "desc": "The unique numeric ID of the product to update.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "name": {
+          "type": "string",
+          "desc": "Updated product name.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "price": {
+          "type": "number",
+          "desc": "Updated product price.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "availability": {
+          "type": "string",
+          "desc": "Updated availability: available, disabled, or preorder.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "desc": "Updated HTML product description.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "list_orders",
+      "description": "Retrieve a list of orders from the BigCommerce store.",
+      "method": "GET",
+      "path": "/orders",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "desc": "Number of results to return per page (max 250).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Page number to return.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "status_id": {
+          "type": "integer",
+          "desc": "Filter orders by status ID (e.g. 11 = Awaiting Fulfillment).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "customer_id": {
+          "type": "integer",
+          "desc": "Filter orders by customer ID.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "min_date_created": {
+          "type": "string",
+          "desc": "Show orders created after this date (RFC 2822 format).",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_order",
+      "description": "Retrieve a single order by its ID.",
+      "method": "GET",
+      "path": "/orders/{order_id}",
+      "request_params": {
+        "order_id": {
+          "type": "integer",
+          "desc": "The unique numeric ID of the order.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "list_customers",
+      "description": "Retrieve a list of customers from the BigCommerce store.",
+      "method": "GET",
+      "path": "/customers",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Page number to return.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "email": {
+          "type": "string",
+          "desc": "Filter customers by email address.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "first_name": {
+          "type": "string",
+          "desc": "Filter by customer first name.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "last_name": {
+          "type": "string",
+          "desc": "Filter by customer last name.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_customer",
+      "description": "Retrieve a single customer by their ID.",
+      "method": "GET",
+      "path": "/customers/{customer_id}",
+      "request_params": {
+        "customer_id": {
+          "type": "integer",
+          "desc": "The unique numeric ID of the customer.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "list_categories",
+      "description": "Retrieve a list of product categories from the BigCommerce store.",
+      "method": "GET",
+      "path": "/categories",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Page number to return.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "name": {
+          "type": "string",
+          "desc": "Filter categories by name.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "parent_id": {
+          "type": "integer",
+          "desc": "Filter categories by parent category ID.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "list_coupons",
+      "description": "Retrieve a list of coupons from the BigCommerce store.",
+      "method": "GET",
+      "path": "/coupons",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "desc": "Number of items to return per page.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "desc": "Page number to return.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "code": {
+          "type": "string",
+          "desc": "Filter coupons by coupon code.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "desc": "Filter by coupon type (e.g. per_item_discount, per_total_discount, free_shipping).",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

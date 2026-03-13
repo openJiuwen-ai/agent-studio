@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Message, TaskStatus } from '../../../stores/useConversationStore';
-import { Hand, CheckCircle, XCircle, Ban, AlertCircle } from 'lucide-react';
+import { Hand, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 
 interface InterruptMessageProps {
   message: Message;
@@ -17,10 +17,11 @@ interface InterruptMessageProps {
  * - PENDING/IN_PROGRESS: 黄色主题，等待用户输入
  * - COMPLETED: 绿色主题，用户已回复
  * - FAILED: 红色主题，发生错误
- * - CANCELLED: 灰色主题，已取消
+ * - CANCELLED: 黄色主题，对话已取消（使用感叹号图标）
+ * - UNKNOWN: 橙色主题，未知状态
  */
 export const InterruptMessage: React.FC<InterruptMessageProps> = ({ message }) => {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   // 根据状态获取样式配置
   const getStatusTheme = () => {
@@ -64,14 +65,14 @@ export const InterruptMessage: React.FC<InterruptMessageProps> = ({ message }) =
         };
       case TaskStatus.CANCELLED:
         return {
-          bg: 'bg-gray-50',
-          border: 'border-gray-200',
-          icon: Ban,
-          iconColor: 'text-gray-500',
-          titleColor: 'text-gray-700',
-          tipColor: 'text-gray-500',
-          title: t('apps.interrupt.title'),
-          tip: t('apps.interrupt.cancelledTip'),
+          bg: 'bg-yellow-50',
+          border: 'border-yellow-200',
+          icon: AlertCircle,
+          iconColor: 'text-yellow-600',
+          titleColor: 'text-yellow-800',
+          tipColor: 'text-yellow-700',
+          title: t('apps.deepSearch.conversationCancelled'),
+          tip: t('apps.deepSearch.conversationCancelledTip'),
           padding: 'p-3',
         };
       case TaskStatus.UNKNOWN:
@@ -104,13 +105,14 @@ export const InterruptMessage: React.FC<InterruptMessageProps> = ({ message }) =
   const theme = getStatusTheme();
   const Icon = theme.icon;
 
+  // 所有状态使用统一的简单样式
   return (
     <div className={`interrupt-message ${theme.bg} border ${theme.border} rounded-lg ${theme.padding}`}>
       <div className="flex items-start gap-2">
         <Icon size={18} className={`${theme.iconColor} flex-shrink-0 mt-0.5`} />
         <div className="flex-1">
           <h4 className={`text-sm font-semibold ${theme.titleColor} mb-1`}>{theme.title}</h4>
-          <div className={`mt-2 text-xs ${theme.tipColor}`}>
+          <div className={`mt-2 text-sm ${theme.tipColor}`}>
             {theme.tip}
           </div>
         </div>

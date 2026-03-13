@@ -1,0 +1,210 @@
+{
+  "ready": true,
+  "plugin_id": "deepseek_api",
+  "name": "DeepSeek API",
+  "description": "Open-source Chinese LLM with exceptional reasoning abilities and 1M+ token context. OpenAI-compatible API for chat, coding, and automation. Cost-efficient alternative to GPT models.",
+  "category": "ai",
+  "category_name": "AI & ML Services",
+  "category_icon": "🤖",
+  "icon_uri": "🧠",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "llm",
+    "ai",
+    "chat",
+    "coding",
+    "reasoning",
+    "china"
+  ],
+  "api_prefix": "https://api.deepseek.com",
+  "desc_mk": "DeepSeek is a powerful open-source LLM family developed by DeepSeek AI, known for exceptional reasoning abilities, large context windows (up to 1M tokens), and multilingual proficiency. OpenAI-compatible API makes integration seamless. Models include DeepSeek-Chat (conversational), DeepSeek-Coder (programming), and DeepSeek-R1 (reasoning). **Note:** Requires API key from [DeepSeek Platform](https://platform.deepseek.com/).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer DEEPSEEK_API_KEY",
+      "description": "Bearer token for DeepSeek API authentication"
+    },
+    "Content-Type": {
+      "type": "string",
+      "value": "application/json",
+      "description": ""
+    }
+  },
+  "tools": [
+    {
+      "name": "Create Chat Completion",
+      "path": "/chat/completions",
+      "method": "POST",
+      "description": "Generate conversational responses using DeepSeek chat models",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model to use: 'deepseek-chat', 'deepseek-chat-v2', 'deepseek-reasoner'",
+          "required": true,
+          "default": "deepseek-chat",
+          "send_method": "Body"
+        },
+        "messages": {
+          "type": "array",
+          "description": "Array of message objects with 'role' (system/user/assistant) and 'content' fields. Example: [{ \"content\": \"You are a helpful assistant\", \"role\": \"system\"}, { \"content\": \"Hi\", \"role\": \"user\" }]",
+          "required": true,
+          "send_method": "Body"
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Sampling temperature between 0 and 2. Higher values = more random (default: 1)",
+          "required": false,
+          "default": 1,
+          "send_method": "Body"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "description": "Maximum tokens to generate in completion",
+          "required": false,
+          "send_method": "Body"
+        },
+        "top_p": {
+          "type": "number",
+          "description": "Nucleus sampling: top P probability mass (default: 1)",
+          "required": false,
+          "default": 1,
+          "send_method": "Body"
+        },
+        "stream": {
+          "type": "boolean",
+          "description": "Whether to stream partial message deltas",
+          "required": false,
+          "default": false,
+          "send_method": "Body"
+        },
+        "stop": {
+          "type": "array",
+          "description": "Up to 4 sequences where API will stop generating",
+          "required": false,
+          "send_method": "Body"
+        },
+        "presence_penalty": {
+          "type": "number",
+          "description": "Penalty for new topics (-2.0 to 2.0)",
+          "required": false,
+          "default": 0,
+          "send_method": "Body"
+        },
+        "frequency_penalty": {
+          "type": "number",
+          "description": "Penalty for repeated tokens (-2.0 to 2.0)",
+          "required": false,
+          "default": 0,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Code Completion",
+      "path": "/completions",
+      "method": "POST",
+      "description": "Generate code completions using DeepSeek-Coder models",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model to use: 'deepseek-coder', 'deepseek-coder-instruct'",
+          "required": true,
+          "default": "deepseek-coder",
+          "send_method": "Body"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Code prompt or context to complete",
+          "required": true,
+          "send_method": "Body"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "description": "Maximum tokens to generate",
+          "required": false,
+          "default": 1024,
+          "send_method": "Body"
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Sampling temperature (0-2)",
+          "required": false,
+          "default": 0.3,
+          "send_method": "Body"
+        },
+        "top_p": {
+          "type": "number",
+          "description": "Nucleus sampling parameter",
+          "required": false,
+          "default": 0.95,
+          "send_method": "Body"
+        },
+        "stream": {
+          "type": "boolean",
+          "description": "Stream response",
+          "required": false,
+          "default": false,
+          "send_method": "Body"
+        },
+        "stop": {
+          "type": "array",
+          "description": "Stop sequences",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Available Models",
+      "path": "/models",
+      "method": "GET",
+      "description": "Get list of all available DeepSeek models",
+      "request_params": {}
+    },
+    {
+      "name": "Get Model Details",
+      "path": "/models/{model}",
+      "method": "GET",
+      "description": "Get detailed information about a specific model",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model ID to retrieve (e.g., 'deepseek-chat', 'deepseek-coder')",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Create Embeddings",
+      "path": "/embeddings",
+      "method": "POST",
+      "description": "Create vector embeddings for text (for semantic search and similarity)",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Embedding model to use",
+          "required": true,
+          "default": "deepseek-embedding",
+          "send_method": "Body"
+        },
+        "input": {
+          "type": "string",
+          "description": "Text or array of texts to create embeddings for",
+          "required": true,
+          "send_method": "Body"
+        },
+        "encoding_format": {
+          "type": "string",
+          "description": "Format to return embeddings: 'float' or 'base64'",
+          "required": false,
+          "default": "float",
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

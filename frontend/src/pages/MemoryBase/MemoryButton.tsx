@@ -315,11 +315,11 @@ export default function MemoryButton({ userId, groupId, enableLongTerm = true }:
         case 'summary':
           return globalT('memoryBases.memoryType.summary');
         case 'user_profile':
-          return globalT('memoryBases.memoryType.longterm');
-        case 'scenario':
-          return globalT('memoryBases.memoryType.longterm');
-        case 'semantic':
-          return globalT('memoryBases.memoryType.longterm');
+          return globalT('memoryBases.memoryType.profile');
+        case 'episodic_memory':
+          return globalT('memoryBases.memoryType.episodic');
+        case 'semantic_memory':
+          return globalT('memoryBases.memoryType.semantic');
         default:
           return type;
       }
@@ -436,7 +436,7 @@ export default function MemoryButton({ userId, groupId, enableLongTerm = true }:
         </DialogTitle>
 
         <div className="flex h-[calc(709px-120px)] border-t">
-          <nav className="w-48 border-r bg-gray-50 p-3 space-y-2">
+          <nav className="w-48 flex-shrink-0 border-r bg-gray-50 p-3 space-y-2">
             {menus.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}

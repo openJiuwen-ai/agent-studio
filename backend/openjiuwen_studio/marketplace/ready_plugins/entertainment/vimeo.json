@@ -1,0 +1,490 @@
+{
+  "ready": false,
+  "plugin_id": "vimeo_api",
+  "name": "Vimeo",
+  "description": "Professional video hosting and sharing platform. Access videos, channels, users, albums, and video analytics.",
+  "category": "entertainment",
+  "category_name": "Entertainment & Events",
+  "category_icon": "🎭",
+  "icon_uri": "🎬",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "video",
+    "vimeo",
+    "streaming",
+    "content",
+    "media",
+    "entertainment"
+  ],
+  "api_prefix": "https://api.vimeo.com",
+  "desc_mk": "Vimeo is a video hosting, sharing, and services platform that enables users to upload, share, and view videos. This plugin provides access to videos, users, channels, albums, categories, and analytics.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_VIMEO_ACCESS_TOKEN",
+      "description": "Vimeo OAuth 2.0 Bearer token for API authentication"
+    }
+  },
+  "tools": [
+    {
+      "name": "Search Videos",
+      "path": "/videos",
+      "method": "GET",
+      "description": "Search for videos on Vimeo",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Search query string",
+          "required": true,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order: relevant, date, alphabetical, plays, likes, comments, duration",
+          "required": false,
+          "default": "relevant",
+          "send_method": "Query"
+        },
+        "direction": {
+          "type": "string",
+          "description": "Sort direction: asc or desc",
+          "required": false,
+          "default": "desc",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Video",
+      "path": "/videos/{video_id}",
+      "method": "GET",
+      "description": "Get detailed information about a specific video",
+      "request_params": {
+        "video_id": {
+          "type": "string",
+          "description": "Vimeo video ID (e.g., '123456789')",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get User",
+      "path": "/users/{user_id}",
+      "method": "GET",
+      "description": "Get information about a Vimeo user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "Vimeo user ID or 'me' for authenticated user",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get User Videos",
+      "path": "/users/{user_id}/videos",
+      "method": "GET",
+      "description": "Get all videos uploaded by a user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "Vimeo user ID or 'me' for authenticated user",
+          "required": true,
+          "send_method": "Path"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of videos per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order: date, alphabetical, plays, likes, comments, duration, default",
+          "required": false,
+          "default": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Likes",
+      "path": "/users/{user_id}/likes",
+      "method": "GET",
+      "description": "Get videos that a user has liked",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "Vimeo user ID or 'me' for authenticated user",
+          "required": true,
+          "send_method": "Path"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of videos per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order: date, alphabetical, plays, likes, comments, duration",
+          "required": false,
+          "default": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Albums",
+      "path": "/users/{user_id}/albums",
+      "method": "GET",
+      "description": "Get all albums created by a user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "Vimeo user ID or 'me' for authenticated user",
+          "required": true,
+          "send_method": "Path"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of albums per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Album",
+      "path": "/albums/{album_id}",
+      "method": "GET",
+      "description": "Get information about a specific album",
+      "request_params": {
+        "album_id": {
+          "type": "string",
+          "description": "Vimeo album ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Album Videos",
+      "path": "/albums/{album_id}/videos",
+      "method": "GET",
+      "description": "Get all videos in an album",
+      "request_params": {
+        "album_id": {
+          "type": "string",
+          "description": "Vimeo album ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of videos per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Channel",
+      "path": "/channels/{channel_id}",
+      "method": "GET",
+      "description": "Get information about a specific channel",
+      "request_params": {
+        "channel_id": {
+          "type": "string",
+          "description": "Vimeo channel ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Channel Videos",
+      "path": "/channels/{channel_id}/videos",
+      "method": "GET",
+      "description": "Get all videos in a channel",
+      "request_params": {
+        "channel_id": {
+          "type": "string",
+          "description": "Vimeo channel ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of videos per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order: date, alphabetical, plays, likes, comments, duration, default, added",
+          "required": false,
+          "default": "default",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Categories",
+      "path": "/categories",
+      "method": "GET",
+      "description": "Get all categories on Vimeo",
+      "request_params": {
+        "per_page": {
+          "type": "integer",
+          "description": "Number of categories per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Category",
+      "path": "/categories/{category}",
+      "method": "GET",
+      "description": "Get information about a specific category",
+      "request_params": {
+        "category": {
+          "type": "string",
+          "description": "Category name",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Category Videos",
+      "path": "/categories/{category}/videos",
+      "method": "GET",
+      "description": "Get videos from a specific category",
+      "request_params": {
+        "category": {
+          "type": "string",
+          "description": "Category name",
+          "required": true,
+          "send_method": "Path"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of videos per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order: date, alphabetical, plays, likes, comments, duration, featured",
+          "required": false,
+          "default": "featured",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Video Comments",
+      "path": "/videos/{video_id}/comments",
+      "method": "GET",
+      "description": "Get all comments on a video",
+      "request_params": {
+        "video_id": {
+          "type": "string",
+          "description": "Vimeo video ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of comments per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Followers",
+      "path": "/users/{user_id}/followers",
+      "method": "GET",
+      "description": "Get all users following a specific user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "Vimeo user ID or 'me' for authenticated user",
+          "required": true,
+          "send_method": "Path"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of followers per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Following",
+      "path": "/users/{user_id}/following",
+      "method": "GET",
+      "description": "Get all users that a specific user is following",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "Vimeo user ID or 'me' for authenticated user",
+          "required": true,
+          "send_method": "Path"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of users per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get On Demand Pages",
+      "path": "/ondemand/pages",
+      "method": "GET",
+      "description": "Get all On Demand pages",
+      "request_params": {
+        "per_page": {
+          "type": "integer",
+          "description": "Number of pages per page (1-100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order: added, alphabetical, date, name, publish.time, rating",
+          "required": false,
+          "default": "added",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get On Demand Page",
+      "path": "/ondemand/pages/{ondemand_id}",
+      "method": "GET",
+      "description": "Get information about a specific On Demand page",
+      "request_params": {
+        "ondemand_id": {
+          "type": "string",
+          "description": "Vimeo On Demand page ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    }
+  ]
+}

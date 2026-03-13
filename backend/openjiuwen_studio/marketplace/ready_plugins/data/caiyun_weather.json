@@ -1,0 +1,253 @@
+{
+  "ready": false,
+  "plugin_id": "caiyun_weather",
+  "name": "Caiyun Weather API",
+  "description": "High-precision Chinese weather service with minute-level forecasts. 95% accuracy for real-time data, minute-by-minute precipitation updates, and forecasts up to 15 days.",
+  "category": "data",
+  "category_name": "Data & Analytics",
+  "category_icon": "📊",
+  "icon_uri": "🌈",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "weather",
+    "forecast",
+    "precipitation",
+    "china",
+    "real-time"
+  ],
+  "api_prefix": "https://api.caiyunapp.com",
+  "desc_mk": "Caiyun Weather (彩云天气/ColorfulClouds) provides ultra-precise weather forecasting for China with 1km geographical resolution and minute-level time precision. Features 95% real-time accuracy, 90% forecast accuracy, and minute-by-minute precipitation updates every 30 seconds. **Note:** Requires API token from [Caiyun Weather Platform](https://dashboard.caiyunapp.com/).",
+  "header_configuration": {
+    "API Token": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "CAIYUN_WEATHER_TOKEN",
+      "description": "Caiyun Weather API token from dashboard"
+    }
+  },
+  "tools": [
+    {
+      "name": "Realtime Weather",
+      "path": "/v2.6/{token}/{longitude},{latitude}/realtime",
+      "method": "GET",
+      "description": "Get current real-time weather conditions for a specific location",
+      "request_params": {
+        "token": {
+          "type": "string",
+          "description": "API token (Environment variable: CAIYUN_WEATHER_TOKEN)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "longitude": {
+          "type": "string",
+          "description": "Longitude coordinate (e.g., '116.487899')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "latitude": {
+          "type": "string",
+          "description": "Latitude coordinate (e.g., '39.991957')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language: 'zh_CN', 'zh_TW', 'en_US', 'en_GB', 'ja'",
+          "required": false,
+          "default": "zh_CN",
+          "send_method": "Query"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit system: 'metric', 'imperial', 'SI'",
+          "required": false,
+          "default": "metric",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Minutely Precipitation Forecast",
+      "path": "/v2.6/{token}/{longitude},{latitude}/minutely",
+      "method": "GET",
+      "description": "Get minute-by-minute precipitation forecast for the next 2 hours (China only)",
+      "request_params": {
+        "token": {
+          "type": "string",
+          "description": "API token (Environment variable: CAIYUN_WEATHER_TOKEN)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "longitude": {
+          "type": "string",
+          "description": "Longitude coordinate",
+          "required": true,
+          "send_method": "Path"
+        },
+        "latitude": {
+          "type": "string",
+          "description": "Latitude coordinate",
+          "required": true,
+          "send_method": "Path"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "zh_CN",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Hourly Forecast",
+      "path": "/v2.6/{token}/{longitude},{latitude}/hourly",
+      "method": "GET",
+      "description": "Get hourly weather forecast for the next 48 hours",
+      "request_params": {
+        "token": {
+          "type": "string",
+          "description": "API token (Environment variable: CAIYUN_WEATHER_TOKEN)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "longitude": {
+          "type": "string",
+          "description": "Longitude coordinate",
+          "required": true,
+          "send_method": "Path"
+        },
+        "latitude": {
+          "type": "string",
+          "description": "Latitude coordinate",
+          "required": true,
+          "send_method": "Path"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "zh_CN",
+          "send_method": "Query"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit system: 'metric', 'imperial', 'SI'",
+          "required": false,
+          "default": "metric",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Daily Forecast",
+      "path": "/v2.6/{token}/{longitude},{latitude}/daily",
+      "method": "GET",
+      "description": "Get daily weather forecast for the next 15 days",
+      "request_params": {
+        "token": {
+          "type": "string",
+          "description": "API token (Environment variable: CAIYUN_WEATHER_TOKEN)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "longitude": {
+          "type": "string",
+          "description": "Longitude coordinate",
+          "required": true,
+          "send_method": "Path"
+        },
+        "latitude": {
+          "type": "string",
+          "description": "Latitude coordinate",
+          "required": true,
+          "send_method": "Path"
+        },
+        "dailysteps": {
+          "type": "integer",
+          "description": "Number of days to forecast (max 15)",
+          "required": false,
+          "default": 15,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "zh_CN",
+          "send_method": "Query"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit system: 'metric', 'imperial', 'SI'",
+          "required": false,
+          "default": "metric",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Complete Weather Forecast",
+      "path": "/v2.6/{token}/{longitude},{latitude}/weather",
+      "method": "GET",
+      "description": "Get comprehensive weather data including realtime, minutely, hourly, and daily forecasts in one call",
+      "request_params": {
+        "token": {
+          "type": "string",
+          "description": "API token (Environment variable: CAIYUN_WEATHER_TOKEN)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "longitude": {
+          "type": "string",
+          "description": "Longitude coordinate",
+          "required": true,
+          "send_method": "Path"
+        },
+        "latitude": {
+          "type": "string",
+          "description": "Latitude coordinate",
+          "required": true,
+          "send_method": "Path"
+        },
+        "dailysteps": {
+          "type": "integer",
+          "description": "Number of days for daily forecast (max 15)",
+          "required": false,
+          "default": 5,
+          "send_method": "Query"
+        },
+        "hourlysteps": {
+          "type": "integer",
+          "description": "Number of hours for hourly forecast (max 360)",
+          "required": false,
+          "default": 48,
+          "send_method": "Query"
+        },
+        "alert": {
+          "type": "boolean",
+          "description": "Include weather alerts: true or false",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language: 'zh_CN', 'zh_TW', 'en_US', 'en_GB', 'ja'",
+          "required": false,
+          "default": "zh_CN",
+          "send_method": "Query"
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit system: 'metric', 'imperial', 'SI'",
+          "required": false,
+          "default": "metric",
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

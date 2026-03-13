@@ -1,0 +1,258 @@
+{
+  "ready": false,
+  "plugin_id": "azure_api",
+  "name": "Azure API",
+  "description": "Microsoft Azure cloud platform REST API for managing virtual machines, blob storage, Azure Functions, resource groups, and other Azure cloud services.",
+  "category": "cloud",
+  "category_name": "Cloud & Infrastructure",
+  "category_icon": "☁️",
+  "icon_uri": "🔵",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "azure",
+    "cloud",
+    "microsoft",
+    "vm",
+    "storage",
+    "functions"
+  ],
+  "api_prefix": "https://management.azure.com",
+  "documentation": "https://learn.microsoft.com/en-us/rest/api/azure/",
+  "desc_mk": "Microsoft Azure provides a comprehensive cloud platform. This plugin accesses the Azure Resource Manager REST API for managing subscriptions, resource groups, virtual machines, storage accounts, and Azure Functions. Requires OAuth2 authentication with appropriate Azure AD permissions.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "Access Token",
+        "env_var": "AZURE_ACCESS_TOKEN",
+        "description": "Azure Active Directory OAuth2 access token with appropriate role assignments"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "List Subscriptions",
+      "path": "/subscriptions",
+      "method": "GET",
+      "description": "List all Azure subscriptions for the authenticated account",
+      "request_params": {
+        "api-version": {
+          "type": "string",
+          "description": "Azure API version",
+          "required": true,
+          "default": "2022-12-01",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Resource Groups",
+      "path": "/subscriptions/{subscriptionId}/resourcegroups",
+      "method": "GET",
+      "description": "List all resource groups in a subscription",
+      "request_params": {
+        "subscriptionId": {
+          "type": "string",
+          "description": "Azure Subscription ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "api-version": {
+          "type": "string",
+          "description": "Azure API version",
+          "required": true,
+          "default": "2021-04-01",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Resource Group",
+      "path": "/subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}",
+      "method": "PUT",
+      "description": "Create or update a resource group",
+      "request_params": {
+        "subscriptionId": {
+          "type": "string",
+          "description": "Azure Subscription ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "resourceGroupName": {
+          "type": "string",
+          "description": "Resource group name",
+          "required": true,
+          "is_path_param": true
+        },
+        "api-version": {
+          "type": "string",
+          "description": "Azure API version",
+          "required": true,
+          "default": "2021-04-01",
+          "send_method": "Query"
+        },
+        "location": {
+          "type": "string",
+          "description": "Azure region (e.g., 'eastus', 'westeurope', 'southeastasia')",
+          "required": true,
+          "send_method": "Body"
+        },
+        "tags": {
+          "type": "object",
+          "description": "Resource tags as key-value pairs",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Virtual Machines",
+      "path": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines",
+      "method": "GET",
+      "description": "List all virtual machines in a resource group",
+      "request_params": {
+        "subscriptionId": {
+          "type": "string",
+          "description": "Azure Subscription ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "resourceGroupName": {
+          "type": "string",
+          "description": "Resource group name",
+          "required": true,
+          "is_path_param": true
+        },
+        "api-version": {
+          "type": "string",
+          "description": "Azure Compute API version",
+          "required": true,
+          "default": "2023-03-01",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Start Virtual Machine",
+      "path": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/start",
+      "method": "POST",
+      "description": "Start a stopped Azure Virtual Machine",
+      "request_params": {
+        "subscriptionId": {
+          "type": "string",
+          "description": "Azure Subscription ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "resourceGroupName": {
+          "type": "string",
+          "description": "Resource group name",
+          "required": true,
+          "is_path_param": true
+        },
+        "vmName": {
+          "type": "string",
+          "description": "Virtual machine name",
+          "required": true,
+          "is_path_param": true
+        },
+        "api-version": {
+          "type": "string",
+          "description": "Azure Compute API version",
+          "required": true,
+          "default": "2023-03-01",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Stop Virtual Machine",
+      "path": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/deallocate",
+      "method": "POST",
+      "description": "Stop (deallocate) an Azure Virtual Machine",
+      "request_params": {
+        "subscriptionId": {
+          "type": "string",
+          "description": "Azure Subscription ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "resourceGroupName": {
+          "type": "string",
+          "description": "Resource group name",
+          "required": true,
+          "is_path_param": true
+        },
+        "vmName": {
+          "type": "string",
+          "description": "Virtual machine name",
+          "required": true,
+          "is_path_param": true
+        },
+        "api-version": {
+          "type": "string",
+          "description": "Azure Compute API version",
+          "required": true,
+          "default": "2023-03-01",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Storage Accounts",
+      "path": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts",
+      "method": "GET",
+      "description": "List all storage accounts in a resource group",
+      "request_params": {
+        "subscriptionId": {
+          "type": "string",
+          "description": "Azure Subscription ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "resourceGroupName": {
+          "type": "string",
+          "description": "Resource group name",
+          "required": true,
+          "is_path_param": true
+        },
+        "api-version": {
+          "type": "string",
+          "description": "Azure Storage API version",
+          "required": true,
+          "default": "2023-01-01",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Azure Functions",
+      "path": "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites",
+      "method": "GET",
+      "description": "List Azure Function Apps (Web Apps) in a resource group",
+      "request_params": {
+        "subscriptionId": {
+          "type": "string",
+          "description": "Azure Subscription ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "resourceGroupName": {
+          "type": "string",
+          "description": "Resource group name",
+          "required": true,
+          "is_path_param": true
+        },
+        "api-version": {
+          "type": "string",
+          "description": "Azure Web API version",
+          "required": true,
+          "default": "2022-09-01",
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

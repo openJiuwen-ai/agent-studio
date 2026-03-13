@@ -1,0 +1,215 @@
+{
+  "ready": false,
+  "plugin_id": "salesforce_api",
+  "name": "Salesforce API",
+  "description": "Salesforce CRM platform for managing leads, contacts, opportunities, accounts, and cases. Access the full Salesforce REST API to query and manipulate CRM data.",
+  "category": "crm",
+  "category_name": "CRM",
+  "category_icon": "🤝",
+  "icon_uri": "☁️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "crm",
+    "salesforce",
+    "leads",
+    "opportunities",
+    "accounts"
+  ],
+  "api_prefix": "https://login.salesforce.com",
+  "documentation": "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_rest.htm",
+  "desc_mk": "Salesforce is the world's leading CRM platform. This plugin provides access to Salesforce objects including Leads, Contacts, Accounts, Opportunities, and Cases via the Salesforce REST API. Requires an instance URL and OAuth2 access token.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "Access Token",
+        "env_var": "SALESFORCE_ACCESS_TOKEN",
+        "description": "Salesforce OAuth2 access token"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "SOQL Query",
+      "path": "/services/data/v58.0/query",
+      "method": "GET",
+      "description": "Execute a SOQL query to retrieve Salesforce records",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "SOQL query string (e.g., 'SELECT Id, Name FROM Account LIMIT 10')",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Record",
+      "path": "/services/data/v58.0/sobjects/{sobject}/{id}",
+      "method": "GET",
+      "description": "Retrieve a specific Salesforce record by object type and ID",
+      "request_params": {
+        "sobject": {
+          "type": "string",
+          "description": "Salesforce object type (e.g., Account, Contact, Lead, Opportunity)",
+          "required": true,
+          "is_path_param": true
+        },
+        "id": {
+          "type": "string",
+          "description": "Salesforce record ID (18-character)",
+          "required": true,
+          "is_path_param": true
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Record",
+      "path": "/services/data/v58.0/sobjects/{sobject}",
+      "method": "POST",
+      "description": "Create a new Salesforce record",
+      "request_params": {
+        "sobject": {
+          "type": "string",
+          "description": "Salesforce object type (e.g., Lead, Contact, Account, Opportunity)",
+          "required": true,
+          "is_path_param": true
+        },
+        "LastName": {
+          "type": "string",
+          "description": "Last name (required for Contact/Lead)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "FirstName": {
+          "type": "string",
+          "description": "First name",
+          "required": false,
+          "send_method": "Body"
+        },
+        "Email": {
+          "type": "string",
+          "description": "Email address",
+          "required": false,
+          "send_method": "Body"
+        },
+        "Company": {
+          "type": "string",
+          "description": "Company name (required for Lead)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "Name": {
+          "type": "string",
+          "description": "Name (used for Account, Opportunity)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "Phone": {
+          "type": "string",
+          "description": "Phone number",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Record",
+      "path": "/services/data/v58.0/sobjects/{sobject}/{id}",
+      "method": "PATCH",
+      "description": "Update an existing Salesforce record",
+      "request_params": {
+        "sobject": {
+          "type": "string",
+          "description": "Salesforce object type (e.g., Account, Contact, Lead)",
+          "required": true,
+          "is_path_param": true
+        },
+        "id": {
+          "type": "string",
+          "description": "Salesforce record ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "fields": {
+          "type": "object",
+          "description": "Object containing field name/value pairs to update",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Record",
+      "path": "/services/data/v58.0/sobjects/{sobject}/{id}",
+      "method": "DELETE",
+      "description": "Delete a Salesforce record",
+      "request_params": {
+        "sobject": {
+          "type": "string",
+          "description": "Salesforce object type",
+          "required": true,
+          "is_path_param": true
+        },
+        "id": {
+          "type": "string",
+          "description": "Salesforce record ID",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "Get Leads",
+      "path": "/services/data/v58.0/query",
+      "method": "GET",
+      "description": "Retrieve open leads from Salesforce",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "SOQL query for leads (default: SELECT Id, FirstName, LastName, Email, Company, Status FROM Lead LIMIT 50)",
+          "required": false,
+          "default": "SELECT Id, FirstName, LastName, Email, Company, Status FROM Lead LIMIT 50",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Opportunities",
+      "path": "/services/data/v58.0/query",
+      "method": "GET",
+      "description": "Retrieve opportunities from Salesforce",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "SOQL query for opportunities (default returns open opportunities)",
+          "required": false,
+          "default": "SELECT Id, Name, Amount, StageName, CloseDate, AccountId FROM Opportunity WHERE IsClosed = false LIMIT 50",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Object Fields",
+      "path": "/services/data/v58.0/sobjects/{sobject}/describe",
+      "method": "GET",
+      "description": "Get metadata and field descriptions for a Salesforce object",
+      "request_params": {
+        "sobject": {
+          "type": "string",
+          "description": "Salesforce object type to describe (e.g., Account, Contact, Lead)",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    }
+  ]
+}

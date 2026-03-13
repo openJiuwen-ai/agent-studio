@@ -1,0 +1,256 @@
+{
+  "ready": false,
+  "plugin_id": "jira",
+  "name": "Jira",
+  "description": "Issue and project tracking for software teams. Create and manage issues, run JQL searches, and track sprint progress.",
+  "category": "productivity",
+  "category_name": "Productivity Tools",
+  "category_icon": "📋",
+  "icon_uri": "🎯",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["productivity", "project-management", "issue-tracking", "agile", "devops"],
+  "api_prefix": "https://your-domain.atlassian.net/rest/api/3",
+  "documentation": "https://developer.atlassian.com/cloud/jira/platform/rest/v3",
+  "desc_mk": "Jira is a powerful issue and project tracking tool used by software development teams. Use this plugin to manage issues, run JQL searches, and track projects. **Note:** Replace `your-domain` in the API prefix with your Atlassian domain. Get your API token at [Atlassian Account Settings](https://id.atlassian.com/manage-profile/security/api-tokens). The Authorization header uses Base64-encoded `email:api_token` (Environment variable: JIRA_AUTH_TOKEN).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "value": "Basic YOUR_BASE64_ENCODED_EMAIL_AND_TOKEN",
+      "description": "Base64-encoded email:api_token for Jira authentication (Environment variable: JIRA_AUTH_TOKEN)"
+    },
+    "Content-Type": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "application/json",
+      "description": "Content type for API requests"
+    }
+  },
+  "tools": [
+    {
+      "name": "List Projects",
+      "path": "/project/search",
+      "method": "GET",
+      "description": "Search for projects using pagination and optional query filters",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Filter projects by name or key containing this text",
+          "required": false,
+          "send_method": "Query"
+        },
+        "orderBy": {
+          "type": "string",
+          "description": "Order results by field: category, issueCount, key, lastIssueUpdatedTime, name, or owner",
+          "required": false,
+          "send_method": "Query"
+        },
+        "maxResults": {
+          "type": "integer",
+          "description": "Maximum number of results to return (default 50, max 50)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "startAt": {
+          "type": "integer",
+          "description": "Index of the first result to return (0-based)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Project",
+      "path": "/project/{projectIdOrKey}",
+      "method": "GET",
+      "description": "Return the project details for a given project ID or key",
+      "request_params": {
+        "projectIdOrKey": {
+          "type": "string",
+          "description": "The project ID or project key of the project to retrieve",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Issue",
+      "path": "/issue/{issueIdOrKey}",
+      "method": "GET",
+      "description": "Return the details of a single issue in Jira",
+      "request_params": {
+        "issueIdOrKey": {
+          "type": "string",
+          "description": "The ID or key of the issue to retrieve (e.g. PROJ-123)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return. Use * for all fields or -field to exclude",
+          "required": false,
+          "send_method": "Query"
+        },
+        "expand": {
+          "type": "string",
+          "description": "Comma-separated list of additional fields to expand in the response",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Issue",
+      "path": "/issue",
+      "method": "POST",
+      "description": "Create a new issue or subtask in Jira",
+      "request_params": {
+        "fields": {
+          "type": "object",
+          "description": "Issue fields object. Required: project ({\"key\": \"PROJ\"}), summary, issuetype ({\"name\": \"Bug\"}). Optional: description, assignee ({\"accountId\": \"xxx\"}), priority ({\"name\": \"High\"}), labels (array). Example: {\"project\": {\"key\": \"PROJ\"}, \"summary\": \"Issue title\", \"issuetype\": {\"name\": \"Bug\"}}",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Issue",
+      "path": "/issue/{issueIdOrKey}",
+      "method": "PUT",
+      "description": "Edit an existing Jira issue's fields",
+      "request_params": {
+        "issueIdOrKey": {
+          "type": "string",
+          "description": "The ID or key of the issue to update (e.g. PROJ-123)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "fields": {
+          "type": "object",
+          "description": "Issue fields to update. Example: {\"summary\": \"New title\", \"description\": \"Updated description\", \"priority\": {\"name\": \"Low\"}, \"labels\": [\"bug\", \"backend\"]}",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Issue",
+      "path": "/issue/{issueIdOrKey}",
+      "method": "DELETE",
+      "description": "Delete an issue permanently from Jira",
+      "request_params": {
+        "issueIdOrKey": {
+          "type": "string",
+          "description": "The ID or key of the issue to delete (e.g. PROJ-123)",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Search Issues (JQL)",
+      "path": "/search",
+      "method": "GET",
+      "description": "Search for issues using Jira Query Language (JQL)",
+      "request_params": {
+        "jql": {
+          "type": "string",
+          "description": "JQL query string. Example: project = PROJ AND status = 'In Progress' ORDER BY created DESC",
+          "required": true,
+          "send_method": "Query"
+        },
+        "maxResults": {
+          "type": "integer",
+          "description": "Maximum number of issues to return (default 50, max 100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "startAt": {
+          "type": "integer",
+          "description": "Index of the first issue to return (0-based)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return for each issue",
+          "required": false,
+          "send_method": "Query"
+        },
+        "expand": {
+          "type": "string",
+          "description": "Comma-separated list of additional fields to expand",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Add Comment",
+      "path": "/issue/{issueIdOrKey}/comment",
+      "method": "POST",
+      "description": "Add a comment to an existing Jira issue",
+      "request_params": {
+        "issueIdOrKey": {
+          "type": "string",
+          "description": "The ID or key of the issue to comment on (e.g. PROJ-123)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "body": {
+          "type": "object",
+          "description": "Comment body in Atlassian Document Format (ADF). Example: {\"type\": \"doc\", \"version\": 1, \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"Your comment here\"}]}]}",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Comments",
+      "path": "/issue/{issueIdOrKey}/comment",
+      "method": "GET",
+      "description": "Return all comments for an issue",
+      "request_params": {
+        "issueIdOrKey": {
+          "type": "string",
+          "description": "The ID or key of the issue to get comments for (e.g. PROJ-123)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "maxResults": {
+          "type": "integer",
+          "description": "Maximum number of comments to return",
+          "required": false,
+          "send_method": "Query"
+        },
+        "startAt": {
+          "type": "integer",
+          "description": "Index of the first comment to return (0-based)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Transition Issue",
+      "path": "/issue/{issueIdOrKey}/transitions",
+      "method": "POST",
+      "description": "Transition an issue to a different workflow status (e.g. move to In Progress, Done)",
+      "request_params": {
+        "issueIdOrKey": {
+          "type": "string",
+          "description": "The ID or key of the issue to transition (e.g. PROJ-123)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "transition": {
+          "type": "object",
+          "description": "Transition object with the target status ID. Get available transition IDs via GET /issue/{key}/transitions. Example: {\"id\": \"31\"}",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

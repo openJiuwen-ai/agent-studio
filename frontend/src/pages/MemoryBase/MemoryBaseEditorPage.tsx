@@ -14,7 +14,10 @@ import {
   MessageSquare,
   User,
   Search,
-  Filter
+  Filter,
+  Clock,
+  Brain,
+  Target
 } from 'lucide-react';
 import { 
   MemoryBase, 
@@ -57,9 +60,9 @@ interface MemInfo {
 }
 
 // 记忆类型枚举
-type MemoryType = 'longterm' | 'variable' | 'summary' | 'user_profile' | 'scenario' | 'semantic';
+type MemoryType = 'longterm' | 'variable' | 'summary' | 'user_profile' | 'episodic_memory' | 'semantic_memory';
 
-const MEMORY_TYPES = ['longterm', 'variable', 'summary', 'user_profile', 'scenario', 'semantic'] as const;
+const MEMORY_TYPES = ['longterm', 'variable', 'summary', 'user_profile', 'episodic_memory', 'semantic_memory'] as const;
 
 function isMemoryType(value: string): value is MemoryType {
   return (MEMORY_TYPES as readonly string[]).includes(value);
@@ -614,15 +617,15 @@ const MemoryBaseEditorPage: React.FC = () => {
   const getMemoryTypeIcon = (type: MemoryType) => {
     switch (type) {
       case 'variable':
-        return <Hash className="w-4 h-4 text-purple-600"/>;
+        return <Hash className="w-4 h-4 text-orange-600"/>;
       case 'summary':
-        return <MessageSquare className="w-4 h-4 text-blue-600"/>;
+        return <MessageSquare className="w-4 h-4 text-green-600"/>;
       case 'user_profile':
-        return <User className="w-4 h-4 text-green-600"/>;
-      case 'scenario':
-        return <User className="w-4 h-4 text-green-600"/>;
-      case 'semantic':
-        return <User className="w-4 h-4 text-green-600"/>;
+        return <User className="w-4 h-4 text-blue-600"/>;
+      case 'episodic_memory':
+        return <Target className="w-4 h-4 text-yellow-500"/>;
+      case 'semantic_memory':
+        return <Brain className="w-4 h-4 text-purple-600"/>;
       default:
         return <Hash className="w-4 h-4 text-gray-600"/>;
     }
@@ -636,11 +639,11 @@ const MemoryBaseEditorPage: React.FC = () => {
       case 'summary':
         return t('memoryBases.memoryType.summary');
       case 'user_profile':
-        return t('memoryBases.memoryType.longterm');
-      case 'scenario':
-        return t('memoryBases.memoryType.longterm');
-      case 'semantic':
-        return t('memoryBases.memoryType.longterm');
+        return t('memoryBases.memoryType.profile');
+      case 'episodic_memory':
+        return t('memoryBases.memoryType.episodic');
+      case 'semantic_memory':
+        return t('memoryBases.memoryType.semantic');
       default:
         return type;
     }
@@ -893,7 +896,9 @@ const MemoryBaseEditorPage: React.FC = () => {
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="all">{t('memoryBases.memoryType.all')}</option>
-                      <option value="longterm">{t('memoryBases.memoryType.longterm')}</option>
+                      <option value="user_profile">{t('memoryBases.memoryType.profile')}</option>
+                      <option value="episodic_memory">{t('memoryBases.memoryType.episodic')}</option>
+                      <option value="semantic_memory">{t('memoryBases.memoryType.semantic')}</option>
                       <option value="variable">{t('memoryBases.memoryType.variable')}</option>
                       <option value="summary">{t('memoryBases.memoryType.summary')}</option>
                     </select>

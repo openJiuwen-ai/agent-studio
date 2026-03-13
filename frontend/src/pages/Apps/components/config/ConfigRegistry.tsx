@@ -12,7 +12,7 @@ import React from 'react'
  * 配置标签ID类型
  * 使用字面量类型确保类型安全
  */
-export type ConfigTabId = 'general' | 'search' | 'template'
+export type ConfigTabId = 'general' | 'search' | 'template' | 'model'
 
 /**
  * 配置标签Props
@@ -52,7 +52,7 @@ export interface ConfigTabMeta {
   /** 徽章文本 */
   badgeText?: string
   /** 渲染组件 */
-  component: React.ComponentType<ConfigTabProps>
+  component: React.ComponentType<any>
   /** 是否启用 */
   enabled?: boolean
   /** 优先级（控制排序，数字越小越靠前） */

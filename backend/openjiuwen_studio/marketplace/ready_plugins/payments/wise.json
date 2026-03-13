@@ -1,0 +1,196 @@
+{
+  "ready": false,
+  "plugin_id": "wise_api",
+  "name": "Wise (TransferWise) API",
+  "description": "Wise (formerly TransferWise) international money transfer API. Send money abroad, get exchange rates, manage multi-currency accounts, and track transfers.",
+  "category": "payments",
+  "category_name": "Payments & Finance",
+  "category_icon": "💳",
+  "icon_uri": "🌍",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "payments",
+    "wise",
+    "transferwise",
+    "international",
+    "currency"
+  ],
+  "api_prefix": "https://api.transferwise.com",
+  "documentation": "https://docs.wise.com/api-docs/",
+  "desc_mk": "Wise (formerly TransferWise) is a global money transfer service offering mid-market exchange rates. This plugin provides access to exchange rates, account balances, transfer creation, and transaction history.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "API Token",
+        "env_var": "WISE_API_TOKEN",
+        "description": "Wise API token from your Wise developer account settings"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "Get Exchange Rates",
+      "path": "/v1/rates",
+      "method": "GET",
+      "description": "Get current exchange rates between currencies",
+      "request_params": {
+        "source": {
+          "type": "string",
+          "description": "Source currency code (e.g., 'USD', 'EUR', 'GBP')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "target": {
+          "type": "string",
+          "description": "Target currency code",
+          "required": false,
+          "send_method": "Query"
+        },
+        "time": {
+          "type": "string",
+          "description": "Get historical rate at specific time (ISO 8601 format)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Profiles",
+      "path": "/v1/profiles",
+      "method": "GET",
+      "description": "Get personal and business profiles for the authenticated user",
+      "request_params": {}
+    },
+    {
+      "name": "Get Account Balances",
+      "path": "/v4/profiles/{profileId}/balances",
+      "method": "GET",
+      "description": "Get multi-currency account balances for a profile",
+      "request_params": {
+        "profileId": {
+          "type": "integer",
+          "description": "Profile ID (from Get Profiles)",
+          "required": true,
+          "is_path_param": true
+        },
+        "types": {
+          "type": "string",
+          "description": "Filter by balance types: STANDARD, SAVINGS (comma-separated)",
+          "required": false,
+          "default": "STANDARD",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Quote",
+      "path": "/v3/profiles/{profileId}/quotes",
+      "method": "POST",
+      "description": "Create a transfer quote to get exchange rate and fee estimate",
+      "request_params": {
+        "profileId": {
+          "type": "integer",
+          "description": "Profile ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "sourceCurrency": {
+          "type": "string",
+          "description": "Source currency code (e.g., 'USD')",
+          "required": true,
+          "send_method": "Body"
+        },
+        "targetCurrency": {
+          "type": "string",
+          "description": "Target currency code (e.g., 'EUR')",
+          "required": true,
+          "send_method": "Body"
+        },
+        "sourceAmount": {
+          "type": "number",
+          "description": "Amount to send (use either sourceAmount or targetAmount)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "targetAmount": {
+          "type": "number",
+          "description": "Amount to receive",
+          "required": false,
+          "send_method": "Body"
+        },
+        "payOut": {
+          "type": "string",
+          "description": "Payout method: BANK_TRANSFER, BALANCE, SWIFT, INTERAC",
+          "required": false,
+          "default": "BANK_TRANSFER",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Transfers",
+      "path": "/v1/transfers",
+      "method": "GET",
+      "description": "Get a list of transfers for a profile",
+      "request_params": {
+        "profile": {
+          "type": "integer",
+          "description": "Profile ID to filter transfers",
+          "required": true,
+          "send_method": "Query"
+        },
+        "status": {
+          "type": "string",
+          "description": "Filter by status (incoming_payment_waiting, processing, funds_converted, outgoing_payment_sent, cancelled, etc.)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of transfers to return",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Offset for pagination",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Transfer",
+      "path": "/v1/transfers/{transferId}",
+      "method": "GET",
+      "description": "Get details of a specific transfer",
+      "request_params": {
+        "transferId": {
+          "type": "integer",
+          "description": "Transfer ID",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "Get Transfer Receipt",
+      "path": "/v1/transfers/{transferId}/receipt.pdf",
+      "method": "GET",
+      "description": "Download the PDF receipt for a completed transfer",
+      "request_params": {
+        "transferId": {
+          "type": "integer",
+          "description": "Transfer ID",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    }
+  ]
+}

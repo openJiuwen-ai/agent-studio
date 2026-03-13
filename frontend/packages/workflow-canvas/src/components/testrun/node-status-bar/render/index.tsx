@@ -196,8 +196,8 @@ export const NodeStatusRender: FC<NodeStatusRenderProps> = ({ report }) => {
       <div className={styles.container}>
         {renderSnapshotNavigation()}
         <NodeStatusGroup title={t('workflowCanvas.nodeStatusBar.inputParams')} data={currentSnapshot?.inputs} />
-        <NodeStatusGroup title={t('workflowCanvas.nodeStatusBar.outputResult')} data={currentSnapshot?.outputs || report.outputs} />
-        {isNodeFailed && <NodeStatusGroup title={t('workflowCanvas.nodeStatusBar.errorMessage')} data={currentSnapshot?.error || report.snapshots?.[0]?.error} optional />}
+        <NodeStatusGroup title={t('workflowCanvas.nodeStatusBar.outputResult')} data={currentSnapshot?.outputs} />
+        {isNodeFailed && <NodeStatusGroup title={t('workflowCanvas.nodeStatusBar.errorMessage')} data={currentSnapshot?.error} optional />}
         <NodeStatusGroup title={t('workflowCanvas.nodeStatusBar.branchInfo')} data={currentSnapshot?.branch} optional />
         <NodeStatusGroup title={t('workflowCanvas.nodeStatusBar.otherData')} data={currentSnapshot?.data} optional />
       </div>

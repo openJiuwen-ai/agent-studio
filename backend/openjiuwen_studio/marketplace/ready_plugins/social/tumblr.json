@@ -1,0 +1,313 @@
+{
+  "ready": false,
+  "plugin_id": "tumblr",
+  "name": "Tumblr",
+  "description": "Access Tumblr API to manage blog posts, reblogs, dashboard, and tagged content.",
+  "category": "social",
+  "category_name": "Social & Communication",
+  "category_icon": "💬",
+  "icon_uri": "🌀",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["tumblr", "blogging", "social", "microblogging", "creative"],
+  "api_prefix": "https://api.tumblr.com/v2",
+  "documentation": "https://www.tumblr.com/docs/en/api/v2",
+  "desc_mk": "## Tumblr API\n\nManage Tumblr blogs, create and reblog posts, and access the dashboard and tagged content through the Tumblr API.\n\n**Note:** Get your OAuth credentials at [Tumblr Apps](https://www.tumblr.com/oauth/apps). Some endpoints also require an `api_key` query parameter.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_TUMBLR_ACCESS_TOKEN",
+      "description": "Tumblr OAuth 2.0 access token (Environment variable: TUMBLR_ACCESS_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Blog Info",
+      "path": "/blog/{blog_identifier}/info",
+      "method": "GET",
+      "description": "Get general information about a Tumblr blog.",
+      "request_params": {
+        "blog_identifier": {
+          "type": "string",
+          "description": "The blog identifier - standard or custom blog name (e.g. myblog.tumblr.com or myblog)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Your Tumblr application API key (Consumer Key)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Blog Posts",
+      "path": "/blog/{blog_identifier}/posts",
+      "method": "GET",
+      "description": "Get published posts from a Tumblr blog.",
+      "request_params": {
+        "blog_identifier": {
+          "type": "string",
+          "description": "The blog identifier (e.g. myblog.tumblr.com)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Your Tumblr application API key",
+          "required": false,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Post type filter: text, quote, link, answer, video, audio, photo, chat",
+          "required": false,
+          "send_method": "Query"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Filter posts by tag",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of posts to return (default 20, max 20)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Post number to start at for pagination",
+          "required": false,
+          "send_method": "Query"
+        },
+        "notes_info": {
+          "type": "boolean",
+          "description": "Whether to return notes information with each post",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Specific Post",
+      "path": "/blog/{blog_identifier}/posts",
+      "method": "GET",
+      "description": "Get a specific post from a Tumblr blog by post ID.",
+      "request_params": {
+        "blog_identifier": {
+          "type": "string",
+          "description": "The blog identifier (e.g. myblog.tumblr.com)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "id": {
+          "type": "string",
+          "description": "The ID of the specific post to retrieve",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Your Tumblr application API key",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Post",
+      "path": "/blog/{blog_identifier}/post",
+      "method": "POST",
+      "description": "Create a new post on a Tumblr blog.",
+      "request_params": {
+        "blog_identifier": {
+          "type": "string",
+          "description": "The blog identifier (e.g. myblog.tumblr.com)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "type": {
+          "type": "string",
+          "description": "Post type: text, photo, quote, link, chat, audio, video",
+          "required": true,
+          "send_method": "Body"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the post (for text posts)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "body": {
+          "type": "string",
+          "description": "Body text of the post (HTML allowed for text posts)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "tags": {
+          "type": "string",
+          "description": "Comma-separated list of tags for the post",
+          "required": false,
+          "send_method": "Body"
+        },
+        "state": {
+          "type": "string",
+          "description": "Post state: published, draft, queue, private",
+          "required": false,
+          "send_method": "Body"
+        },
+        "format": {
+          "type": "string",
+          "description": "Format of the body: html, markdown",
+          "required": false,
+          "send_method": "Body"
+        },
+        "source_url": {
+          "type": "string",
+          "description": "Source URL for link or photo posts",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Reblog Post",
+      "path": "/blog/{blog_identifier}/post/reblog",
+      "method": "POST",
+      "description": "Reblog a post from another Tumblr blog to your blog.",
+      "request_params": {
+        "blog_identifier": {
+          "type": "string",
+          "description": "Your blog identifier that will host the reblog",
+          "required": true,
+          "send_method": "Path"
+        },
+        "id": {
+          "type": "string",
+          "description": "The ID of the post to reblog",
+          "required": true,
+          "send_method": "Body"
+        },
+        "reblog_key": {
+          "type": "string",
+          "description": "The reblog key of the post (obtained from post data)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "comment": {
+          "type": "string",
+          "description": "Comment to add to the reblog",
+          "required": false,
+          "send_method": "Body"
+        },
+        "native_inline_images": {
+          "type": "boolean",
+          "description": "If true, inline images are converted to native image blocks",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Dashboard",
+      "path": "/user/dashboard",
+      "method": "GET",
+      "description": "Get posts from the authenticated user's Tumblr dashboard.",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Number of posts to return (default 20, max 20)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Post number to start at for pagination",
+          "required": false,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Filter by post type: text, photo, quote, link, chat, audio, video, answer",
+          "required": false,
+          "send_method": "Query"
+        },
+        "since_id": {
+          "type": "integer",
+          "description": "Return posts with ID greater than this value",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Tagged Posts",
+      "path": "/tagged",
+      "method": "GET",
+      "description": "Get posts tagged with a specific tag across all of Tumblr.",
+      "request_params": {
+        "tag": {
+          "type": "string",
+          "description": "The tag to search for (without the # symbol)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "Your Tumblr application API key",
+          "required": false,
+          "send_method": "Query"
+        },
+        "before": {
+          "type": "integer",
+          "description": "Unix timestamp - return posts published before this time",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of posts to return (default 20, max 20)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "filter": {
+          "type": "string",
+          "description": "Filtering level: text (plain text), raw (no filter)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Followers",
+      "path": "/blog/{blog_identifier}/followers",
+      "method": "GET",
+      "description": "Get a list of followers for a Tumblr blog.",
+      "request_params": {
+        "blog_identifier": {
+          "type": "string",
+          "description": "The blog identifier (e.g. myblog.tumblr.com)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of followers to return (default 20, max 20)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Follower number to start at for pagination",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,278 @@
+{
+  "ready": false,
+  "plugin_id": "box_api",
+  "name": "Box API",
+  "description": "Box enterprise cloud content management platform. Manage files and folders, upload and download content, share with collaborators, and manage permissions across your Box account.",
+  "category": "file_storage",
+  "category_name": "File Storage",
+  "category_icon": "📂",
+  "icon_uri": "📦",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "storage",
+    "box",
+    "enterprise",
+    "files",
+    "collaboration"
+  ],
+  "api_prefix": "https://api.box.com/2.0",
+  "documentation": "https://developer.box.com/reference/",
+  "desc_mk": "Box is an enterprise cloud content platform for file storage, sharing, and collaboration. This plugin provides access to files, folders, uploads, downloads, shared links, and collaborations via the Box API.",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "Access Token",
+        "env_var": "BOX_ACCESS_TOKEN",
+        "description": "Box OAuth2 access token or Developer Token from the Box Developer Console"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "Get Folder Items",
+      "path": "/folders/{folder_id}/items",
+      "method": "GET",
+      "description": "Get a list of files and folders inside a Box folder (use '0' for root)",
+      "request_params": {
+        "folder_id": {
+          "type": "string",
+          "description": "Box folder ID ('0' for the root folder)",
+          "required": true,
+          "is_path_param": true
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of items to return (max: 1000, default: 100)",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Offset for pagination",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated fields to return (e.g., 'id,name,size,modified_at,item_status')",
+          "required": false,
+          "default": "id,name,size,type,modified_at",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get File Info",
+      "path": "/files/{file_id}",
+      "method": "GET",
+      "description": "Get metadata for a specific file",
+      "request_params": {
+        "file_id": {
+          "type": "string",
+          "description": "Box file ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated fields to return",
+          "required": false,
+          "default": "id,name,size,modified_at,created_at,sha1,parent,owned_by,shared_link",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Folder Info",
+      "path": "/folders/{folder_id}",
+      "method": "GET",
+      "description": "Get metadata for a specific folder",
+      "request_params": {
+        "folder_id": {
+          "type": "string",
+          "description": "Box folder ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated fields to return",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Folder",
+      "path": "/folders",
+      "method": "POST",
+      "description": "Create a new folder in Box",
+      "request_params": {
+        "name": {
+          "type": "string",
+          "description": "Folder name",
+          "required": true,
+          "send_method": "Body"
+        },
+        "parent": {
+          "type": "object",
+          "description": "Parent folder object with 'id' field (use {'id': '0'} for root)",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update File",
+      "path": "/files/{file_id}",
+      "method": "PUT",
+      "description": "Update file metadata (rename, move to different folder)",
+      "request_params": {
+        "file_id": {
+          "type": "string",
+          "description": "Box file ID to update",
+          "required": true,
+          "is_path_param": true
+        },
+        "name": {
+          "type": "string",
+          "description": "New file name",
+          "required": false,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "File description",
+          "required": false,
+          "send_method": "Body"
+        },
+        "parent": {
+          "type": "object",
+          "description": "New parent folder object with 'id' field (to move file)",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete File",
+      "path": "/files/{file_id}",
+      "method": "DELETE",
+      "description": "Delete a file (moves to Trash)",
+      "request_params": {
+        "file_id": {
+          "type": "string",
+          "description": "File ID to delete",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "Copy File",
+      "path": "/files/{file_id}/copy",
+      "method": "POST",
+      "description": "Copy a file to a different folder",
+      "request_params": {
+        "file_id": {
+          "type": "string",
+          "description": "File ID to copy",
+          "required": true,
+          "is_path_param": true
+        },
+        "parent": {
+          "type": "object",
+          "description": "Destination folder object with 'id' field",
+          "required": true,
+          "send_method": "Body"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name for the copy (optional, defaults to original name)",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Shared Link for File",
+      "path": "/files/{file_id}",
+      "method": "PUT",
+      "description": "Create or update a shared link for a file",
+      "request_params": {
+        "file_id": {
+          "type": "string",
+          "description": "File ID to create shared link for",
+          "required": true,
+          "is_path_param": true
+        },
+        "shared_link": {
+          "type": "object",
+          "description": "Shared link settings object with access ('open', 'company', 'collaborators'), permissions, and unshared_at",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Search Files",
+      "path": "/search",
+      "method": "GET",
+      "description": "Search for files and folders across Box",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Search query text",
+          "required": true,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Filter by type: file, folder, web_link",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results (max: 200, default: 30)",
+          "required": false,
+          "default": 30,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Offset for pagination",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "ancestor_folder_ids": {
+          "type": "string",
+          "description": "Comma-separated folder IDs to search within",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Current User",
+      "path": "/users/me",
+      "method": "GET",
+      "description": "Get information about the currently authenticated Box user",
+      "request_params": {
+        "fields": {
+          "type": "string",
+          "description": "Fields to return (e.g., 'id,name,login,space_used,space_amount')",
+          "required": false,
+          "default": "id,name,login,space_used,space_amount,max_upload_size",
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

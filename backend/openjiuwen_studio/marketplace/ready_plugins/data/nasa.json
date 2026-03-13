@@ -1,0 +1,744 @@
+{
+  "ready": false,
+  "plugin_id": "nasa_api",
+  "name": "NASA Open APIs",
+  "description": "Access NASA's vast collection of space and astronomy data including Astronomy Picture of the Day (APOD), Mars Rover photos, Near Earth Objects (NEOs), Earth imagery, and more.",
+  "category": "data",
+  "category_name": "Data & APIs",
+  "category_icon": "\ud83d\udcca",
+  "icon_uri": "\ud83d\ude80",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "nasa",
+    "space",
+    "astronomy",
+    "mars",
+    "satellite",
+    "science",
+    "api"
+  ],
+  "api_prefix": "https://api.nasa.gov",
+  "desc_mk": "NASA's API provides access to a wealth of space and astronomy data collected by one of the world's leading space agencies. Explore stunning astronomy images, Mars rover photos, near-Earth asteroids, satellite imagery, and much more. Rate limit: 1,000 requests per hour for registered users.",
+  "documentation": "https://api.nasa.gov/",
+  "header_configuration": {
+    "Accept": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "application/json",
+      "description": "Accept JSON responses"
+    },
+    "api_key": {
+      "type": "string",
+      "send_method": "Query",
+      "value": "DEMO_KEY",
+      "description": "NASA API key for authentication. Get your free key at https://api.nasa.gov/"
+    }
+  },
+  "tools": [
+    {
+      "name": "Astronomy Picture of the Day (APOD)",
+      "path": "/planetary/apod",
+      "method": "GET",
+      "description": "Get the Astronomy Picture of the Day, which features a different stunning image or video of our universe each day along with a brief explanation written by a professional astronomer",
+      "request_params": {
+        "date": {
+          "type": "string",
+          "description": "The date of the APOD image to retrieve (YYYY-MM-DD format). Defaults to today's date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "The start of a date range (YYYY-MM-DD). Used with end_date to retrieve a range of images",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "The end of a date range (YYYY-MM-DD). Used with start_date to retrieve a range of images",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of random images to return (if date parameters are not provided)",
+          "required": false,
+          "min": 1,
+          "max": 100,
+          "send_method": "Query"
+        },
+        "thumbs": {
+          "type": "boolean",
+          "description": "Return the URL of video thumbnail. If an APOD is a video, this will return the thumbnail URL",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Mars Rover Photos - Curiosity",
+      "path": "/mars-photos/api/v1/rovers/curiosity/photos",
+      "method": "GET",
+      "description": "Get photos from NASA's Curiosity Mars rover. Filter by Martian sol (day), Earth date, or camera",
+      "request_params": {
+        "sol": {
+          "type": "integer",
+          "description": "Martian sol (day) number. Sol 0 is the landing date. Mutually exclusive with earth_date",
+          "required": false,
+          "min": 0,
+          "send_method": "Query"
+        },
+        "earth_date": {
+          "type": "string",
+          "description": "Earth date (YYYY-MM-DD). Mutually exclusive with sol",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "camera": {
+          "type": "string",
+          "description": "Filter by camera: FHAZ (Front Hazard), RHAZ (Rear Hazard), MAST (Mast Camera), CHEMCAM (Chemistry Camera), MAHLI (Hand Lens), MARDI (Descent), NAVCAM (Navigation)",
+          "required": false,
+          "enum": [
+            "FHAZ",
+            "RHAZ",
+            "MAST",
+            "CHEMCAM",
+            "MAHLI",
+            "MARDI",
+            "NAVCAM"
+          ],
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number (25 photos per page)",
+          "required": false,
+          "default": 1,
+          "min": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Mars Rover Photos - Opportunity",
+      "path": "/mars-photos/api/v1/rovers/opportunity/photos",
+      "method": "GET",
+      "description": "Get photos from NASA's Opportunity Mars rover (active 2004-2018). Filter by sol, Earth date, or camera",
+      "request_params": {
+        "sol": {
+          "type": "integer",
+          "description": "Martian sol (day) number. Sol 0 is the landing date",
+          "required": false,
+          "min": 0,
+          "send_method": "Query"
+        },
+        "earth_date": {
+          "type": "string",
+          "description": "Earth date (YYYY-MM-DD)",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "camera": {
+          "type": "string",
+          "description": "Filter by camera: FHAZ, RHAZ, NAVCAM, PANCAM, MINITES",
+          "required": false,
+          "enum": [
+            "FHAZ",
+            "RHAZ",
+            "NAVCAM",
+            "PANCAM",
+            "MINITES"
+          ],
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number (25 photos per page)",
+          "required": false,
+          "default": 1,
+          "min": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Mars Rover Photos - Perseverance",
+      "path": "/mars-photos/api/v1/rovers/perseverance/photos",
+      "method": "GET",
+      "description": "Get photos from NASA's Perseverance Mars rover (landed February 2021). Filter by sol, Earth date, or camera",
+      "request_params": {
+        "sol": {
+          "type": "integer",
+          "description": "Martian sol (day) number. Sol 0 is February 18, 2021",
+          "required": false,
+          "min": 0,
+          "send_method": "Query"
+        },
+        "earth_date": {
+          "type": "string",
+          "description": "Earth date (YYYY-MM-DD)",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "camera": {
+          "type": "string",
+          "description": "Filter by camera: EDL_RUCAM, EDL_RDCAM, EDL_DDCAM, EDL_PUCAM1, EDL_PUCAM2, NAVCAM_LEFT, NAVCAM_RIGHT, MCZ_RIGHT, MCZ_LEFT, FRONT_HAZCAM_LEFT_A, FRONT_HAZCAM_RIGHT_A, REAR_HAZCAM_LEFT, REAR_HAZCAM_RIGHT, SKYCAM, SHERLOC_WATSON",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number (25 photos per page)",
+          "required": false,
+          "default": 1,
+          "min": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Mars Rover Manifest",
+      "path": "/mars-photos/api/v1/manifests/{rover_name}",
+      "method": "GET",
+      "description": "Get mission manifest for a Mars rover including mission details, available photos, and statistics",
+      "request_params": {
+        "rover_name": {
+          "type": "string",
+          "description": "Name of the rover: curiosity, opportunity, spirit, or perseverance",
+          "required": true,
+          "enum": [
+            "curiosity",
+            "opportunity",
+            "spirit",
+            "perseverance"
+          ],
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Near Earth Objects (NEO) Feed",
+      "path": "/neo/rest/v1/feed",
+      "method": "GET",
+      "description": "Get a list of Near Earth Objects (asteroids) within a date range. Returns asteroid data including close approach dates, estimated diameter, and potential hazard status",
+      "request_params": {
+        "start_date": {
+          "type": "string",
+          "description": "Start date for asteroid search (YYYY-MM-DD). Maximum 7 days range",
+          "required": true,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End date for asteroid search (YYYY-MM-DD). Maximum 7 days from start_date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Near Earth Objects (NEO) Lookup",
+      "path": "/neo/rest/v1/neo/{asteroid_id}",
+      "method": "GET",
+      "description": "Look up a specific Near Earth Object (asteroid) by its NASA JPL small body ID. Returns detailed information including orbital data, close approach dates, and physical characteristics",
+      "request_params": {
+        "asteroid_id": {
+          "type": "string",
+          "description": "NASA JPL small body ID of the asteroid (e.g., '3542519' for 2010 PK9)",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Near Earth Objects (NEO) Browse",
+      "path": "/neo/rest/v1/neo/browse",
+      "method": "GET",
+      "description": "Browse the overall Near Earth Object data set. Returns paginated list of all asteroids in the database",
+      "request_params": {
+        "page": {
+          "type": "integer",
+          "description": "Page number to retrieve (20 asteroids per page)",
+          "required": false,
+          "default": 0,
+          "min": 0,
+          "send_method": "Query"
+        },
+        "size": {
+          "type": "integer",
+          "description": "Number of asteroids per page",
+          "required": false,
+          "default": 20,
+          "min": 1,
+          "max": 100,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Earth Imagery",
+      "path": "/planetary/earth/imagery",
+      "method": "GET",
+      "description": "Retrieve satellite imagery of Earth for a specific location and date. Returns Landsat 8 imagery",
+      "request_params": {
+        "lat": {
+          "type": "number",
+          "description": "Latitude of the location",
+          "required": true,
+          "min": -90,
+          "max": 90,
+          "send_method": "Query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude of the location",
+          "required": true,
+          "min": -180,
+          "max": 180,
+          "send_method": "Query"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of image (YYYY-MM-DD). Defaults to most recent available",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "dim": {
+          "type": "number",
+          "description": "Width and height of image in degrees. Max 0.025",
+          "required": false,
+          "default": 0.025,
+          "min": 0.001,
+          "max": 0.025,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Earth Assets",
+      "path": "/planetary/earth/assets",
+      "method": "GET",
+      "description": "Get available Earth imagery assets for a specific location and date range. Returns metadata about available Landsat imagery",
+      "request_params": {
+        "lat": {
+          "type": "number",
+          "description": "Latitude of the location",
+          "required": true,
+          "min": -90,
+          "max": 90,
+          "send_method": "Query"
+        },
+        "lon": {
+          "type": "number",
+          "description": "Longitude of the location",
+          "required": true,
+          "min": -180,
+          "max": 180,
+          "send_method": "Query"
+        },
+        "begin": {
+          "type": "string",
+          "description": "Beginning of date range (YYYY-MM-DD)",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "end": {
+          "type": "string",
+          "description": "End of date range (YYYY-MM-DD)",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "EPIC - Earth Polychromatic Imaging Camera",
+      "path": "/EPIC/api/natural",
+      "method": "GET",
+      "description": "Get metadata for the most recent natural color imagery from DSCOVR's EPIC camera. EPIC provides full disc imagery of Earth taken from the L1 Lagrange point",
+      "request_params": {}
+    },
+    {
+      "name": "EPIC - Natural Color by Date",
+      "path": "/EPIC/api/natural/date/{date}",
+      "method": "GET",
+      "description": "Get natural color Earth imagery metadata for a specific date from EPIC camera",
+      "request_params": {
+        "date": {
+          "type": "string",
+          "description": "Date for imagery (YYYY-MM-DD)",
+          "required": true,
+          "format": "date",
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "EPIC - Enhanced Color",
+      "path": "/EPIC/api/enhanced",
+      "method": "GET",
+      "description": "Get metadata for the most recent enhanced color imagery from EPIC camera. Enhanced color uses different wavelengths to highlight vegetation",
+      "request_params": {}
+    },
+    {
+      "name": "EPIC - Enhanced Color by Date",
+      "path": "/EPIC/api/enhanced/date/{date}",
+      "method": "GET",
+      "description": "Get enhanced color Earth imagery metadata for a specific date from EPIC camera",
+      "request_params": {
+        "date": {
+          "type": "string",
+          "description": "Date for imagery (YYYY-MM-DD)",
+          "required": true,
+          "format": "date",
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "DONKI - Solar Flare",
+      "path": "/DONKI/FLR",
+      "method": "GET",
+      "description": "Get Solar Flare data from DONKI (Space Weather Database Of Notifications, Knowledge, Information). Returns solar flare events with peak time, class, and associated data",
+      "request_params": {
+        "startDate": {
+          "type": "string",
+          "description": "Start date for search (YYYY-MM-DD). Defaults to 30 days prior to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "End date for search (YYYY-MM-DD). Defaults to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "DONKI - Coronal Mass Ejection (CME)",
+      "path": "/DONKI/CME",
+      "method": "GET",
+      "description": "Get Coronal Mass Ejection (CME) data - large expulsions of plasma and magnetic field from the Sun's corona. Returns CME events with speed, half angle, and catalog data",
+      "request_params": {
+        "startDate": {
+          "type": "string",
+          "description": "Start date for search (YYYY-MM-DD). Defaults to 30 days prior to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "End date for search (YYYY-MM-DD). Defaults to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "DONKI - CME Analysis",
+      "path": "/DONKI/CMEAnalysis",
+      "method": "GET",
+      "description": "Get Coronal Mass Ejection Analysis data including speed, half angle, and catalog. Provides more detailed analysis than the basic CME endpoint",
+      "request_params": {
+        "startDate": {
+          "type": "string",
+          "description": "Start date for search (YYYY-MM-DD). Defaults to 30 days prior to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "End date for search (YYYY-MM-DD). Defaults to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "mostAccurateOnly": {
+          "type": "boolean",
+          "description": "Return only the most accurate CME analysis entries",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        },
+        "completeEntryOnly": {
+          "type": "boolean",
+          "description": "Return only complete CME entries",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        },
+        "speed": {
+          "type": "integer",
+          "description": "Minimum CME speed filter (km/s)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "halfAngle": {
+          "type": "integer",
+          "description": "Minimum half angle filter (degrees)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "catalog": {
+          "type": "string",
+          "description": "CME catalog to search: ALL, SWRC_CATALOG, or JANG_ET_AL_CATALOG",
+          "required": false,
+          "default": "ALL",
+          "enum": [
+            "ALL",
+            "SWRC_CATALOG",
+            "JANG_ET_AL_CATALOG"
+          ],
+          "send_method": "Query"
+        },
+        "keyword": {
+          "type": "string",
+          "description": "Filter results by keyword",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "DONKI - Geomagnetic Storm (GST)",
+      "path": "/DONKI/GST",
+      "method": "GET",
+      "description": "Get Geomagnetic Storm data - disturbances in Earth's magnetosphere caused by solar wind. Returns storm events with Kp index and linked CME data",
+      "request_params": {
+        "startDate": {
+          "type": "string",
+          "description": "Start date for search (YYYY-MM-DD). Defaults to 30 days prior to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "End date for search (YYYY-MM-DD). Defaults to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "DONKI - Interplanetary Shock (IPS)",
+      "path": "/DONKI/IPS",
+      "method": "GET",
+      "description": "Get Interplanetary Shock data - shock waves traveling through the solar wind. Returns shock events with location, catalog, and linked CME data",
+      "request_params": {
+        "startDate": {
+          "type": "string",
+          "description": "Start date for search (YYYY-MM-DD). Defaults to 30 days prior to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "End date for search (YYYY-MM-DD). Defaults to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "location": {
+          "type": "string",
+          "description": "Filter by observation location: ALL, Earth, MESSENGER, STEREO A, or STEREO B",
+          "required": false,
+          "default": "ALL",
+          "enum": [
+            "ALL",
+            "Earth",
+            "MESSENGER",
+            "STEREO A",
+            "STEREO B"
+          ],
+          "send_method": "Query"
+        },
+        "catalog": {
+          "type": "string",
+          "description": "Catalog to search: ALL, SWRC_CATALOG, or WINSLOW_MESSENGER_ICME_CATALOG",
+          "required": false,
+          "default": "ALL",
+          "enum": [
+            "ALL",
+            "SWRC_CATALOG",
+            "WINSLOW_MESSENGER_ICME_CATALOG"
+          ],
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "DONKI - Solar Energetic Particle (SEP)",
+      "path": "/DONKI/SEP",
+      "method": "GET",
+      "description": "Get Solar Energetic Particle events - high-energy particles ejected from the Sun during flares and CMEs. These events can be hazardous to spacecraft and astronauts",
+      "request_params": {
+        "startDate": {
+          "type": "string",
+          "description": "Start date for search (YYYY-MM-DD). Defaults to 30 days prior to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "End date for search (YYYY-MM-DD). Defaults to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "DONKI - Magnetopause Crossing (MPC)",
+      "path": "/DONKI/MPC",
+      "method": "GET",
+      "description": "Get Magnetopause Crossing data - events where the solar wind pushes Earth's magnetopause boundary significantly inward, potentially impacting satellites in geosynchronous orbit",
+      "request_params": {
+        "startDate": {
+          "type": "string",
+          "description": "Start date for search (YYYY-MM-DD). Defaults to 30 days prior to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "End date for search (YYYY-MM-DD). Defaults to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "DONKI - Radiation Belt Enhancement (RBE)",
+      "path": "/DONKI/RBE",
+      "method": "GET",
+      "description": "Get Radiation Belt Enhancement data - events where energetic electrons in Earth's outer radiation belt are significantly elevated, posing risks to satellites",
+      "request_params": {
+        "startDate": {
+          "type": "string",
+          "description": "Start date for search (YYYY-MM-DD). Defaults to 30 days prior to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "End date for search (YYYY-MM-DD). Defaults to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "DONKI - High Speed Stream (HSS)",
+      "path": "/DONKI/HSS",
+      "method": "GET",
+      "description": "Get High Speed Stream data - fast solar wind streams originating from coronal holes that can trigger geomagnetic activity when they impact Earth",
+      "request_params": {
+        "startDate": {
+          "type": "string",
+          "description": "Start date for search (YYYY-MM-DD). Defaults to 30 days prior to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "End date for search (YYYY-MM-DD). Defaults to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "DONKI - WSA-ENLIL Solar Wind Simulation",
+      "path": "/DONKI/WSAEnlilSimulations",
+      "method": "GET",
+      "description": "Get WSA-ENLIL Solar Wind Cone Model simulation data - a large-scale, physics-based prediction model of the solar wind used to forecast CME arrival times at Earth",
+      "request_params": {
+        "startDate": {
+          "type": "string",
+          "description": "Start date for search (YYYY-MM-DD). Defaults to 30 days prior to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "End date for search (YYYY-MM-DD). Defaults to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "DONKI - Notifications",
+      "path": "/DONKI/notifications",
+      "method": "GET",
+      "description": "Get DONKI space weather notifications - official alerts, watches, and warnings issued by space weather forecasters for geomagnetic storms, solar radiation storms, and radio blackouts",
+      "request_params": {
+        "startDate": {
+          "type": "string",
+          "description": "Start date for search (YYYY-MM-DD). Defaults to 7 days prior to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "End date for search (YYYY-MM-DD). Defaults to current date",
+          "required": false,
+          "format": "date",
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Filter by notification type: all, FLR, SEP, CME, IPS, MPC, GST, RBE, report",
+          "required": false,
+          "default": "all",
+          "enum": [
+            "all",
+            "FLR",
+            "SEP",
+            "CME",
+            "IPS",
+            "MPC",
+            "GST",
+            "RBE",
+            "report"
+          ],
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

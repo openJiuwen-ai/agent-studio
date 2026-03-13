@@ -1,0 +1,552 @@
+{
+  "ready": true,
+  "plugin_id": "fakerestapi",
+  "name": "Fake REST API",
+  "description": "A free RESTful API for testing and prototyping. Provides endpoints for Activities, Authors, Books, CoverPhotos, and Users.",
+  "category": "testing",
+  "category_name": "Developer Testing Tools",
+  "icon_uri": "🧪",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "testing",
+    "api",
+    "mock",
+    "rest",
+    "developer"
+  ],
+  "api_prefix": "https://fakerestapi.azurewebsites.net/api/v1",
+  "documentation": "https://fakerestapi.azurewebsites.net/index.html",
+  "tools": [
+    {
+      "name": "Get All Activities",
+      "path": "/Activities",
+      "method": "GET",
+      "description": "Retrieve a list of all activities",
+      "request_params": {}
+    },
+    {
+      "name": "Get Activity by ID",
+      "path": "/Activities/{id}",
+      "method": "GET",
+      "description": "Retrieve a specific activity by its ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Activity ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Create Activity",
+      "path": "/Activities",
+      "method": "POST",
+      "description": "Create a new activity",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Activity ID",
+          "required": true,
+          "send_method": "Body"
+        },
+        "title": {
+          "type": "string",
+          "description": "Activity title",
+          "required": true,
+          "send_method": "Body"
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "Activity due date (ISO 8601 format)",
+          "required": true,
+          "format": "date-time",
+          "send_method": "Body"
+        },
+        "completed": {
+          "type": "boolean",
+          "description": "Whether the activity is completed",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Activity",
+      "path": "/Activities/{id}",
+      "method": "PUT",
+      "description": "Update an existing activity",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Activity ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "title": {
+          "type": "string",
+          "description": "Activity title",
+          "required": true,
+          "send_method": "Body"
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "Activity due date (ISO 8601 format)",
+          "required": true,
+          "format": "date-time",
+          "send_method": "Body"
+        },
+        "completed": {
+          "type": "boolean",
+          "description": "Whether the activity is completed",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Activity",
+      "path": "/Activities/{id}",
+      "method": "DELETE",
+      "description": "Delete an activity by ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Activity ID to delete",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get All Authors",
+      "path": "/Authors",
+      "method": "GET",
+      "description": "Retrieve a list of all authors",
+      "request_params": {}
+    },
+    {
+      "name": "Get Author by ID",
+      "path": "/Authors/{id}",
+      "method": "GET",
+      "description": "Retrieve a specific author by their ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Author ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Books by Author",
+      "path": "/Authors/{authorId}/Books",
+      "method": "GET",
+      "description": "Retrieve all books written by a specific author",
+      "request_params": {
+        "authorId": {
+          "type": "integer",
+          "description": "Author ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Create Author",
+      "path": "/Authors",
+      "method": "POST",
+      "description": "Create a new author",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Author ID",
+          "required": false,
+          "send_method": "Body"
+        },
+        "idBook": {
+          "type": "integer",
+          "description": "Associated book ID",
+          "required": true,
+          "send_method": "Body"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "Author's first name",
+          "required": true,
+          "send_method": "Body"
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Author's last name",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Author",
+      "path": "/Authors/{id}",
+      "method": "PUT",
+      "description": "Update an existing author",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Author ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "idBook": {
+          "type": "integer",
+          "description": "Associated book ID",
+          "required": true,
+          "send_method": "Body"
+        },
+        "firstName": {
+          "type": "string",
+          "description": "Author's first name",
+          "required": true,
+          "send_method": "Body"
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Author's last name",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Author",
+      "path": "/Authors/{id}",
+      "method": "DELETE",
+      "description": "Delete an author by ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Author ID to delete",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get All Books",
+      "path": "/Books",
+      "method": "GET",
+      "description": "Retrieve a list of all books",
+      "request_params": {}
+    },
+    {
+      "name": "Get Book by ID",
+      "path": "/Books/{id}",
+      "method": "GET",
+      "description": "Retrieve a specific book by its ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Book ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Create Book",
+      "path": "/Books",
+      "method": "POST",
+      "description": "Create a new book",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Book ID",
+          "required": false,
+          "send_method": "Body"
+        },
+        "title": {
+          "type": "string",
+          "description": "Book title",
+          "required": true,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "Book description",
+          "required": true,
+          "send_method": "Body"
+        },
+        "pageCount": {
+          "type": "integer",
+          "description": "Number of pages in the book",
+          "required": true,
+          "send_method": "Body"
+        },
+        "excerpt": {
+          "type": "string",
+          "description": "Book excerpt",
+          "required": false,
+          "send_method": "Body"
+        },
+        "publishDate": {
+          "type": "string",
+          "description": "Book publish date (ISO 8601 format)",
+          "required": true,
+          "format": "date-time",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Book",
+      "path": "/Books/{id}",
+      "method": "PUT",
+      "description": "Update an existing book",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Book ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "title": {
+          "type": "string",
+          "description": "Book title",
+          "required": true,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "Book description",
+          "required": true,
+          "send_method": "Body"
+        },
+        "pageCount": {
+          "type": "integer",
+          "description": "Number of pages in the book",
+          "required": true,
+          "send_method": "Body"
+        },
+        "excerpt": {
+          "type": "string",
+          "description": "Book excerpt",
+          "required": false,
+          "send_method": "Body"
+        },
+        "publishDate": {
+          "type": "string",
+          "description": "Book publish date (ISO 8601 format)",
+          "required": true,
+          "format": "date-time",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Book",
+      "path": "/Books/{id}",
+      "method": "DELETE",
+      "description": "Delete a book by ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Book ID to delete",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get All Cover Photos",
+      "path": "/CoverPhotos",
+      "method": "GET",
+      "description": "Retrieve a list of all cover photos",
+      "request_params": {}
+    },
+    {
+      "name": "Get Cover Photo by ID",
+      "path": "/CoverPhotos/{id}",
+      "method": "GET",
+      "description": "Retrieve a specific cover photo by its ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Cover Photo ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Cover Photos by Book",
+      "path": "/Books/{bookId}/CoverPhotos",
+      "method": "GET",
+      "description": "Retrieve all cover photos for a specific book",
+      "request_params": {
+        "bookId": {
+          "type": "integer",
+          "description": "Book ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Create Cover Photo",
+      "path": "/CoverPhotos",
+      "method": "POST",
+      "description": "Create a new cover photo",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Cover Photo ID",
+          "required": false,
+          "send_method": "Body"
+        },
+        "idBook": {
+          "type": "integer",
+          "description": "Associated book ID",
+          "required": true,
+          "send_method": "Body"
+        },
+        "url": {
+          "type": "string",
+          "description": "Cover photo URL",
+          "required": true,
+          "format": "uri",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Cover Photo",
+      "path": "/CoverPhotos/{id}",
+      "method": "PUT",
+      "description": "Update an existing cover photo",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Cover Photo ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "idBook": {
+          "type": "integer",
+          "description": "Associated book ID",
+          "required": true,
+          "send_method": "Body"
+        },
+        "url": {
+          "type": "string",
+          "description": "Cover photo URL",
+          "required": true,
+          "format": "uri",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Cover Photo",
+      "path": "/CoverPhotos/{id}",
+      "method": "DELETE",
+      "description": "Delete a cover photo by ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "Cover Photo ID to delete",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get All Users",
+      "path": "/Users",
+      "method": "GET",
+      "description": "Retrieve a list of all users",
+      "request_params": {}
+    },
+    {
+      "name": "Get User by ID",
+      "path": "/Users/{id}",
+      "method": "GET",
+      "description": "Retrieve a specific user by their ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "User ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Create User",
+      "path": "/Users",
+      "method": "POST",
+      "description": "Create a new user",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "User ID",
+          "required": false,
+          "send_method": "Body"
+        },
+        "userName": {
+          "type": "string",
+          "description": "Username",
+          "required": true,
+          "send_method": "Body"
+        },
+        "password": {
+          "type": "string",
+          "description": "User password",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update User",
+      "path": "/Users/{id}",
+      "method": "PUT",
+      "description": "Update an existing user",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "User ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "userName": {
+          "type": "string",
+          "description": "Username",
+          "required": true,
+          "send_method": "Body"
+        },
+        "password": {
+          "type": "string",
+          "description": "User password",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete User",
+      "path": "/Users/{id}",
+      "method": "DELETE",
+      "description": "Delete a user by ID",
+      "request_params": {
+        "id": {
+          "type": "integer",
+          "description": "User ID to delete",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    }
+  ]
+}

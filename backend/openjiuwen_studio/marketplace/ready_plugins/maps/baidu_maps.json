@@ -1,0 +1,556 @@
+{
+  "ready": false,
+  "plugin_id": "baidu_maps",
+  "name": "Baidu Maps API",
+  "description": "Access Baidu Maps services for geocoding, place search, route planning, IP location, and coordinate conversion. One of China's leading map and location services.",
+  "category": "maps",
+  "category_name": "Maps & Location",
+  "category_icon": "🗺️",
+  "icon_uri": "📍",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "maps",
+    "location",
+    "geocoding",
+    "navigation",
+    "places",
+    "china"
+  ],
+  "api_prefix": "https://api.map.baidu.com",
+  "desc_mk": "Baidu Maps (百度地图) is one of China's most popular mapping and location services. This plugin provides access to geocoding, reverse geocoding, place search, route planning, IP location, and coordinate conversion services. **Note:** Requires a Baidu Maps API key (AK) from [Baidu Maps Open Platform](https://lbsyun.baidu.com/).",
+  "header_configuration": {
+    "API Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "BAIDU_MAPS_API_KEY",
+      "description": "Baidu Maps API key (AK) from Baidu Maps Open Platform"
+    }
+  },
+  "tools": [
+    {
+      "name": "Geocoding - Address to Coordinates",
+      "path": "/geocoding/v3/",
+      "method": "GET",
+      "description": "Convert an address to geographic coordinates (latitude, longitude)",
+      "request_params": {
+        "address": {
+          "type": "string",
+          "description": "Address to geocode (e.g., '北京市海淀区上地十街10号' or 'Beijing')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "city": {
+          "type": "string",
+          "description": "City name to narrow down search results (optional but recommended)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Reverse Geocoding - Coordinates to Address",
+      "path": "/reverse_geocoding/v3/",
+      "method": "GET",
+      "description": "Convert geographic coordinates to a human-readable address",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Coordinates in format 'latitude,longitude' (e.g., '39.983424,116.322987')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "coordtype": {
+          "type": "string",
+          "description": "Coordinate type: bd09ll (Baidu), gcj02ll (Google/Amap), wgs84ll (GPS)",
+          "required": false,
+          "default": "bd09ll",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Place Search",
+      "path": "/place/v2/search",
+      "method": "GET",
+      "description": "Search for places (POIs) by keyword, region, or location",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Search keyword (e.g., '咖啡馆', 'bank', 'ATM')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "region": {
+          "type": "string",
+          "description": "Search region (city name, e.g., '北京', 'Shanghai'). Required if bounds and location not provided",
+          "required": false,
+          "send_method": "Query"
+        },
+        "location": {
+          "type": "string",
+          "description": "Center point for radius search in format 'latitude,longitude'",
+          "required": false,
+          "send_method": "Query"
+        },
+        "radius": {
+          "type": "integer",
+          "description": "Search radius in meters (used with location, max 50000)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "bounds": {
+          "type": "string",
+          "description": "Rectangle bounds in format 'lat1,lng1,lat2,lng2'",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (max 20)",
+          "required": false,
+          "default": 10,
+          "send_method": "Query"
+        },
+        "page_num": {
+          "type": "integer",
+          "description": "Page number (starts from 0)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "scope": {
+          "type": "integer",
+          "description": "Result detail level: 1 (basic info) or 2 (detailed info)",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Place Details",
+      "path": "/place/v2/detail",
+      "method": "GET",
+      "description": "Get detailed information about a specific place by its UID",
+      "request_params": {
+        "uid": {
+          "type": "string",
+          "description": "Unique ID of the place (from place search results)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "scope": {
+          "type": "integer",
+          "description": "Result detail level: 1 (basic) or 2 (detailed)",
+          "required": false,
+          "default": 2,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Place Suggestion (Autocomplete)",
+      "path": "/place/v2/suggestion",
+      "method": "GET",
+      "description": "Get place suggestions/autocomplete for search queries",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Partial search text to get suggestions for",
+          "required": true,
+          "send_method": "Query"
+        },
+        "region": {
+          "type": "string",
+          "description": "Region to search in (city name)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "location": {
+          "type": "string",
+          "description": "Optional center point in format 'latitude,longitude' for location-based suggestions",
+          "required": false,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Route Planning - Directions",
+      "path": "/direction/v2/driving",
+      "method": "GET",
+      "description": "Calculate driving route between origin and destination",
+      "request_params": {
+        "origin": {
+          "type": "string",
+          "description": "Starting point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "origin_region": {
+          "type": "string",
+          "description": "Origin city name (required for better accuracy)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "destination_region": {
+          "type": "string",
+          "description": "Destination city name (required for better accuracy)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "tactics": {
+          "type": "integer",
+          "description": "Route strategy: 10 (shortest time), 11 (shortest distance), 12 (avoid highways)",
+          "required": false,
+          "default": 10,
+          "send_method": "Query"
+        },
+        "waypoints": {
+          "type": "string",
+          "description": "Optional waypoints in format 'lat1,lng1|lat2,lng2' (max 10)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "coord_type": {
+          "type": "string",
+          "description": "Coordinate type: bd09ll or gcj02",
+          "required": false,
+          "default": "bd09ll",
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Walking Directions",
+      "path": "/direction/v2/walking",
+      "method": "GET",
+      "description": "Calculate walking route between origin and destination",
+      "request_params": {
+        "origin": {
+          "type": "string",
+          "description": "Starting point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "coord_type": {
+          "type": "string",
+          "description": "Coordinate type: bd09ll or gcj02",
+          "required": false,
+          "default": "bd09ll",
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Cycling Directions",
+      "path": "/direction/v2/riding",
+      "method": "GET",
+      "description": "Calculate cycling route between origin and destination",
+      "request_params": {
+        "origin": {
+          "type": "string",
+          "description": "Starting point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "coord_type": {
+          "type": "string",
+          "description": "Coordinate type: bd09ll or gcj02",
+          "required": false,
+          "default": "bd09ll",
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Transit Directions",
+      "path": "/direction/v2/transit",
+      "method": "GET",
+      "description": "Calculate public transit route between origin and destination",
+      "request_params": {
+        "origin": {
+          "type": "string",
+          "description": "Starting point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "city": {
+          "type": "string",
+          "description": "City name for transit search",
+          "required": true,
+          "send_method": "Query"
+        },
+        "tactics_incity": {
+          "type": "integer",
+          "description": "Transit strategy: 0 (recommended), 1 (fewer transfers), 2 (less walking), 3 (avoid subway), 4 (cheaper), 5 (avoid bus)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "coord_type": {
+          "type": "string",
+          "description": "Coordinate type: bd09ll or gcj02",
+          "required": false,
+          "default": "bd09ll",
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Route Matrix (Distance Matrix)",
+      "path": "/routematrix/v2/driving",
+      "method": "GET",
+      "description": "Calculate distances and durations between multiple origins and destinations",
+      "request_params": {
+        "origins": {
+          "type": "string",
+          "description": "Starting points in format 'lat1,lng1|lat2,lng2' (max 200 total pairs)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destinations": {
+          "type": "string",
+          "description": "Destination points in format 'lat1,lng1|lat2,lng2' (max 200 total pairs)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "tactics": {
+          "type": "integer",
+          "description": "Route strategy: 10 (shortest time), 11 (shortest distance), 12 (avoid highways)",
+          "required": false,
+          "default": 10,
+          "send_method": "Query"
+        },
+        "coord_type": {
+          "type": "string",
+          "description": "Coordinate type: bd09ll or gcj02",
+          "required": false,
+          "default": "bd09ll",
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "IP Location",
+      "path": "/location/ip",
+      "method": "GET",
+      "description": "Get geographic location information from an IP address",
+      "request_params": {
+        "ip": {
+          "type": "string",
+          "description": "IP address to locate (IPv4 or IPv6). Omit to use request IP",
+          "required": false,
+          "send_method": "Query"
+        },
+        "coor": {
+          "type": "string",
+          "description": "Coordinate type to return: bd09ll (default) or gcj02",
+          "required": false,
+          "default": "bd09ll",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Coordinate Conversion",
+      "path": "/geoconv/v1/",
+      "method": "GET",
+      "description": "Convert coordinates between different coordinate systems (WGS84, GCJ02, BD09)",
+      "request_params": {
+        "coords": {
+          "type": "string",
+          "description": "Coordinates to convert in format 'lng1,lat1;lng2,lat2' (max 100 points)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "from": {
+          "type": "integer",
+          "description": "Source coordinate type: 1 (WGS84/GPS), 2 (SOSO/Google), 3 (GCJ02/Amap), 4 (Mapbar), 5 (BD09LL), 6 (BD09MC)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "integer",
+          "description": "Target coordinate type: 5 (BD09LL) or 6 (BD09MC)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format",
+          "required": false,
+          "default": "json",
+          "send_method": "Query"
+        },
+        "ak": {
+          "type": "string",
+          "description": "Baidu Maps API key (Environment variable: BAIDU_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

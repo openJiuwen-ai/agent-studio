@@ -1,0 +1,281 @@
+{
+  "ready": false,
+  "plugin_id": "asana",
+  "name": "Asana",
+  "description": "Work management platform for teams. Manage projects, tasks, and team workflows to track progress and hit deadlines.",
+  "category": "productivity",
+  "category_name": "Productivity Tools",
+  "category_icon": "📋",
+  "icon_uri": "✅",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["productivity", "project-management", "tasks", "team", "workflow"],
+  "api_prefix": "https://app.asana.com/api/1.0",
+  "documentation": "https://developers.asana.com/docs",
+  "desc_mk": "Asana is a work management platform that helps teams organize, track, and manage their work. Use this plugin to manage projects, tasks, and team collaboration. **Note:** Get your personal access token at [Asana Developer Console](https://app.asana.com/0/developer-console).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_ASANA_TOKEN",
+      "description": "Asana personal access token (Environment variable: ASANA_ACCESS_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "List Workspaces",
+      "path": "/workspaces",
+      "method": "GET",
+      "description": "Return all workspaces and organizations accessible to the authenticated user",
+      "request_params": {
+        "opt_fields": {
+          "type": "string",
+          "description": "Comma-separated list of optional fields to include in the response",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results to return per page (1-100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "string",
+          "description": "Pagination offset token from a previous response",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Projects",
+      "path": "/projects",
+      "method": "GET",
+      "description": "Return all projects in all workspaces and teams, or optionally filter by workspace or team",
+      "request_params": {
+        "workspace": {
+          "type": "string",
+          "description": "The workspace or organization GID to filter projects by",
+          "required": false,
+          "send_method": "Query"
+        },
+        "team": {
+          "type": "string",
+          "description": "The team GID to filter projects by",
+          "required": false,
+          "send_method": "Query"
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "Only return projects whose archived field matches this value",
+          "required": false,
+          "send_method": "Query"
+        },
+        "opt_fields": {
+          "type": "string",
+          "description": "Comma-separated list of optional fields to include in the response",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results to return per page (1-100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "string",
+          "description": "Pagination offset token from a previous response",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Project",
+      "path": "/projects/{project_gid}",
+      "method": "GET",
+      "description": "Return the complete project record for a single project",
+      "request_params": {
+        "project_gid": {
+          "type": "string",
+          "description": "The globally unique identifier (GID) of the project",
+          "required": true,
+          "send_method": "Path"
+        },
+        "opt_fields": {
+          "type": "string",
+          "description": "Comma-separated list of optional fields to include in the response",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Tasks",
+      "path": "/tasks",
+      "method": "GET",
+      "description": "Return all tasks in a project, optionally filtered by completion status or date",
+      "request_params": {
+        "project": {
+          "type": "string",
+          "description": "The project GID to filter tasks by (required unless assignee is specified)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "completed_since": {
+          "type": "string",
+          "description": "ISO 8601 date-time to filter tasks completed after this date",
+          "required": false,
+          "send_method": "Query"
+        },
+        "opt_fields": {
+          "type": "string",
+          "description": "Comma-separated list of optional fields to include",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results to return per page (1-100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "string",
+          "description": "Pagination offset token from a previous response",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Task",
+      "path": "/tasks/{task_gid}",
+      "method": "GET",
+      "description": "Return the complete task record for a single task",
+      "request_params": {
+        "task_gid": {
+          "type": "string",
+          "description": "The globally unique identifier (GID) of the task",
+          "required": true,
+          "send_method": "Path"
+        },
+        "opt_fields": {
+          "type": "string",
+          "description": "Comma-separated list of optional fields to include in the response",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Task",
+      "path": "/tasks",
+      "method": "POST",
+      "description": "Create a new task in a workspace or project",
+      "request_params": {
+        "data": {
+          "type": "object",
+          "description": "Task data object. Required fields: name. Optional: workspace, projects (array of GIDs), notes, due_on (YYYY-MM-DD), assignee (GID or 'me'). Example: {\"name\": \"My Task\", \"projects\": [\"12345\"], \"notes\": \"Details\", \"due_on\": \"2025-03-01\"}",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Task",
+      "path": "/tasks/{task_gid}",
+      "method": "PUT",
+      "description": "Update an existing task's properties",
+      "request_params": {
+        "task_gid": {
+          "type": "string",
+          "description": "The globally unique identifier (GID) of the task to update",
+          "required": true,
+          "send_method": "Path"
+        },
+        "data": {
+          "type": "object",
+          "description": "Task fields to update. Example: {\"name\": \"Updated Name\", \"notes\": \"Updated notes\", \"completed\": true, \"due_on\": \"2025-04-01\"}",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Task Comments",
+      "path": "/tasks/{task_gid}/stories",
+      "method": "GET",
+      "description": "Return a list of stories (comments and activity) on a task",
+      "request_params": {
+        "task_gid": {
+          "type": "string",
+          "description": "The globally unique identifier (GID) of the task",
+          "required": true,
+          "send_method": "Path"
+        },
+        "opt_fields": {
+          "type": "string",
+          "description": "Comma-separated list of optional fields to include in the response",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results to return per page (1-100)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Add Task Comment",
+      "path": "/tasks/{task_gid}/stories",
+      "method": "POST",
+      "description": "Add a comment to a task",
+      "request_params": {
+        "task_gid": {
+          "type": "string",
+          "description": "The globally unique identifier (GID) of the task to comment on",
+          "required": true,
+          "send_method": "Path"
+        },
+        "data": {
+          "type": "object",
+          "description": "Story data object with the comment text. Example: {\"text\": \"This is my comment\"}",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Teams",
+      "path": "/organizations/{workspace_gid}/teams",
+      "method": "GET",
+      "description": "Return all teams in the specified workspace or organization",
+      "request_params": {
+        "workspace_gid": {
+          "type": "string",
+          "description": "The GID of the workspace or organization to list teams for",
+          "required": true,
+          "send_method": "Path"
+        },
+        "opt_fields": {
+          "type": "string",
+          "description": "Comma-separated list of optional fields to include in the response",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results to return per page (1-100)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

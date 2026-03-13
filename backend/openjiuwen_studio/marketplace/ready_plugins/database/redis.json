@@ -1,0 +1,221 @@
+{
+  "ready": false,
+  "plugin_id": "redis",
+  "name": "Redis Cloud",
+  "description": "Manage Redis Cloud subscriptions and databases via the Redis Cloud REST API.",
+  "category": "database",
+  "category_name": "Databases",
+  "category_icon": "🗄️",
+  "icon_uri": "🔴",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["database", "redis", "cache", "cloud", "in-memory"],
+  "api_prefix": "https://api.redis.io/v1",
+  "documentation": "https://docs.redis.com/latest/rc/api/",
+  "desc_mk": "Manage Redis Cloud resources including subscriptions, databases, and access control via the Redis Cloud REST API.",
+  "authentication": {
+    "type": "api_key",
+    "required_credentials": [
+      {
+        "name": "x-api-key",
+        "env_var": "REDIS_API_KEY"
+      },
+      {
+        "name": "x-api-secret-key",
+        "env_var": "REDIS_SECRET_KEY"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "list_subscriptions",
+      "description": "Retrieve a list of all Redis Cloud subscriptions.",
+      "method": "GET",
+      "path": "/subscriptions",
+      "request_params": {}
+    },
+    {
+      "name": "get_subscription",
+      "description": "Retrieve details of a specific Redis Cloud subscription.",
+      "method": "GET",
+      "path": "/subscriptions/{subscriptionId}",
+      "request_params": {
+        "subscriptionId": {
+          "type": "integer",
+          "desc": "The unique ID of the subscription.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "list_databases",
+      "description": "Retrieve a list of databases within a subscription.",
+      "method": "GET",
+      "path": "/subscriptions/{subscriptionId}/databases",
+      "request_params": {
+        "subscriptionId": {
+          "type": "integer",
+          "desc": "The unique ID of the subscription.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "desc": "Maximum number of databases to return.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "desc": "Number of databases to skip.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_database",
+      "description": "Retrieve details of a specific database within a subscription.",
+      "method": "GET",
+      "path": "/subscriptions/{subscriptionId}/databases/{databaseId}",
+      "request_params": {
+        "subscriptionId": {
+          "type": "integer",
+          "desc": "The unique ID of the subscription.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "databaseId": {
+          "type": "integer",
+          "desc": "The unique ID of the database.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "create_database",
+      "description": "Create a new database in an existing subscription.",
+      "method": "POST",
+      "path": "/subscriptions/{subscriptionId}/databases",
+      "request_params": {
+        "subscriptionId": {
+          "type": "integer",
+          "desc": "The unique ID of the subscription.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "name": {
+          "type": "string",
+          "desc": "Name of the new database.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "memoryLimitInGb": {
+          "type": "number",
+          "desc": "Memory limit for the database in GB.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "protocol": {
+          "type": "string",
+          "desc": "Database protocol: redis or memcached.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "replication": {
+          "type": "boolean",
+          "desc": "Enable database replication for high availability.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "dataPersistence": {
+          "type": "string",
+          "desc": "Data persistence policy: none, aof-every-1-second, aof-every-write, snapshot-every-1-hour, snapshot-every-6-hours, snapshot-every-12-hours.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "update_database",
+      "description": "Update configuration of an existing database.",
+      "method": "PUT",
+      "path": "/subscriptions/{subscriptionId}/databases/{databaseId}",
+      "request_params": {
+        "subscriptionId": {
+          "type": "integer",
+          "desc": "The unique ID of the subscription.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "databaseId": {
+          "type": "integer",
+          "desc": "The unique ID of the database to update.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "name": {
+          "type": "string",
+          "desc": "New name for the database.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "memoryLimitInGb": {
+          "type": "number",
+          "desc": "Updated memory limit in GB.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "replication": {
+          "type": "boolean",
+          "desc": "Updated replication setting.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "delete_database",
+      "description": "Delete a database from a subscription.",
+      "method": "DELETE",
+      "path": "/subscriptions/{subscriptionId}/databases/{databaseId}",
+      "request_params": {
+        "subscriptionId": {
+          "type": "integer",
+          "desc": "The unique ID of the subscription.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "databaseId": {
+          "type": "integer",
+          "desc": "The unique ID of the database to delete.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "get_database_metrics",
+      "description": "Retrieve performance metrics for a specific database.",
+      "method": "GET",
+      "path": "/subscriptions/{subscriptionId}/databases/{databaseId}/metrics/latest",
+      "request_params": {
+        "subscriptionId": {
+          "type": "integer",
+          "desc": "The unique ID of the subscription.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "databaseId": {
+          "type": "integer",
+          "desc": "The unique ID of the database.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    }
+  ]
+}

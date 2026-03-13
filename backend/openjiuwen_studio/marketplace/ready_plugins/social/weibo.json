@@ -1,0 +1,404 @@
+{
+  "ready": false,
+  "plugin_id": "weibo_api",
+  "name": "Weibo API",
+  "description": "China's leading microblogging platform (Chinese Twitter). Post statuses, read timelines, manage followers, search content, and interact with 570M+ users.",
+  "category": "social",
+  "category_name": "Social & Communication",
+  "category_icon": "💬",
+  "icon_uri": "🐦",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "social",
+    "microblog",
+    "china",
+    "weibo",
+    "timeline"
+  ],
+  "api_prefix": "https://api.weibo.com",
+  "desc_mk": "Weibo (微博/Sina Weibo) is China's most popular microblogging platform with over 570 million users. This plugin provides access to posting statuses, reading timelines, searching content, managing followers, and more. **Note:** Requires OAuth 2.0 authentication with App Key and App Secret from [Weibo Open Platform](https://open.weibo.com/).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "OAuth2 YOUR_ACCESS_TOKEN",
+      "description": "OAuth 2.0 access token from Weibo Open Platform"
+    },
+    "Content-Type": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "application/x-www-form-urlencoded",
+      "description": "Content type for form-urlencoded requests"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Public Timeline",
+      "path": "/2/statuses/public_timeline.json",
+      "method": "GET",
+      "description": "Get the latest public Weibo posts from all users",
+      "request_params": {
+        "access_token": {
+          "type": "string",
+          "description": "OAuth 2.0 access token (Environment variable: WEIBO_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of posts to return (max 200)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Friends Timeline",
+      "path": "/2/statuses/friends_timeline.json",
+      "method": "GET",
+      "description": "Get the latest posts from the authenticated user's friends",
+      "request_params": {
+        "access_token": {
+          "type": "string",
+          "description": "OAuth 2.0 access token (Environment variable: WEIBO_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of posts to return (max 100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "since_id": {
+          "type": "string",
+          "description": "Return posts with ID greater than this",
+          "required": false,
+          "send_method": "Query"
+        },
+        "max_id": {
+          "type": "string",
+          "description": "Return posts with ID less than or equal to this",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Timeline",
+      "path": "/2/statuses/user_timeline.json",
+      "method": "GET",
+      "description": "Get the latest posts from a specific user",
+      "request_params": {
+        "access_token": {
+          "type": "string",
+          "description": "OAuth 2.0 access token (Environment variable: WEIBO_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "uid": {
+          "type": "string",
+          "description": "User ID (either uid or screen_name required)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "screen_name": {
+          "type": "string",
+          "description": "User screen name (either uid or screen_name required)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of posts to return (max 100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Share Status",
+      "path": "/2/statuses/share.json",
+      "method": "POST",
+      "description": "Post a new Weibo status update",
+      "request_params": {
+        "access_token": {
+          "type": "string",
+          "description": "OAuth 2.0 access token (Environment variable: WEIBO_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status text content (max 140 characters for Chinese, 280 for English)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "visible": {
+          "type": "integer",
+          "description": "Visibility: 0 (all), 1 (friends only), 2 (specific groups), 3 (private)",
+          "required": false,
+          "default": 0,
+          "send_method": "Body"
+        },
+        "lat": {
+          "type": "number",
+          "description": "Latitude for location",
+          "required": false,
+          "send_method": "Body"
+        },
+        "long": {
+          "type": "number",
+          "description": "Longitude for location",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Status Details",
+      "path": "/2/statuses/show.json",
+      "method": "GET",
+      "description": "Get detailed information about a specific Weibo post",
+      "request_params": {
+        "access_token": {
+          "type": "string",
+          "description": "OAuth 2.0 access token (Environment variable: WEIBO_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "id": {
+          "type": "string",
+          "description": "Weibo post ID",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Repost Status",
+      "path": "/2/statuses/repost.json",
+      "method": "POST",
+      "description": "Repost (retweet) a Weibo status",
+      "request_params": {
+        "access_token": {
+          "type": "string",
+          "description": "OAuth 2.0 access token (Environment variable: WEIBO_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "id": {
+          "type": "string",
+          "description": "ID of the Weibo post to repost",
+          "required": true,
+          "send_method": "Body"
+        },
+        "status": {
+          "type": "string",
+          "description": "Comment to add when reposting",
+          "required": false,
+          "send_method": "Body"
+        },
+        "is_comment": {
+          "type": "integer",
+          "description": "Comment options: 0 (no comment), 1 (comment to original), 2 (comment to both), 3 (comment to current)",
+          "required": false,
+          "default": 0,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Comments on Status",
+      "path": "/2/comments/show.json",
+      "method": "GET",
+      "description": "Get comments for a specific Weibo post",
+      "request_params": {
+        "access_token": {
+          "type": "string",
+          "description": "OAuth 2.0 access token (Environment variable: WEIBO_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "id": {
+          "type": "string",
+          "description": "Weibo post ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of comments to return (max 200)",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Post Comment",
+      "path": "/2/comments/create.json",
+      "method": "POST",
+      "description": "Post a comment on a Weibo status",
+      "request_params": {
+        "access_token": {
+          "type": "string",
+          "description": "OAuth 2.0 access token (Environment variable: WEIBO_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "id": {
+          "type": "string",
+          "description": "Weibo post ID to comment on",
+          "required": true,
+          "send_method": "Body"
+        },
+        "comment": {
+          "type": "string",
+          "description": "Comment text (max 140 characters)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "comment_ori": {
+          "type": "integer",
+          "description": "Also comment on original post if this is a repost: 0 (no), 1 (yes)",
+          "required": false,
+          "default": 0,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get User Info",
+      "path": "/2/users/show.json",
+      "method": "GET",
+      "description": "Get detailed information about a Weibo user",
+      "request_params": {
+        "access_token": {
+          "type": "string",
+          "description": "OAuth 2.0 access token (Environment variable: WEIBO_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "uid": {
+          "type": "string",
+          "description": "User ID (either uid or screen_name required)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "screen_name": {
+          "type": "string",
+          "description": "User screen name (either uid or screen_name required)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Weibo Posts",
+      "path": "/2/search/topics.json",
+      "method": "GET",
+      "description": "Search for Weibo posts by keyword or hashtag",
+      "request_params": {
+        "access_token": {
+          "type": "string",
+          "description": "OAuth 2.0 access token (Environment variable: WEIBO_ACCESS_TOKEN)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "q": {
+          "type": "string",
+          "description": "Search keyword or hashtag",
+          "required": true,
+          "send_method": "Query"
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of results to return (max 50)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get OAuth2 Access Token",
+      "path": "/oauth2/access_token",
+      "method": "POST",
+      "description": "Exchange authorization code for OAuth 2.0 access token",
+      "request_params": {
+        "client_id": {
+          "type": "string",
+          "description": "App Key from Weibo Open Platform (Environment variable: WEIBO_APP_KEY)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "client_secret": {
+          "type": "string",
+          "description": "App Secret from Weibo Open Platform (Environment variable: WEIBO_APP_SECRET)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "grant_type": {
+          "type": "string",
+          "description": "Grant type (fixed value: 'authorization_code')",
+          "required": true,
+          "default": "authorization_code",
+          "send_method": "Body"
+        },
+        "code": {
+          "type": "string",
+          "description": "Authorization code from OAuth flow",
+          "required": true,
+          "send_method": "Body"
+        },
+        "redirect_uri": {
+          "type": "string",
+          "description": "Redirect URI (must match the one used for authorization)",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

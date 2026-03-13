@@ -1,0 +1,293 @@
+{
+  "ready": false,
+  "plugin_id": "tiktok_business",
+  "name": "TikTok Business",
+  "description": "Access TikTok Business API to manage ad campaigns, ad groups, and performance reports.",
+  "category": "social",
+  "category_name": "Social & Communication",
+  "category_icon": "💬",
+  "icon_uri": "🎵",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["tiktok", "advertising", "social", "campaigns", "analytics"],
+  "api_prefix": "https://business-api.tiktok.com/open_api/v1.3",
+  "documentation": "https://business-api.tiktok.com/portal/docs",
+  "desc_mk": "## TikTok Business API\n\nManage TikTok advertising campaigns, ad groups, and access detailed performance reports through the TikTok Business API.\n\n**Note:** Get your access token at [TikTok for Business](https://business-api.tiktok.com/portal/).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_TIKTOK_ACCESS_TOKEN",
+      "description": "TikTok Business API access token (Environment variable: TIKTOK_ACCESS_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Campaigns",
+      "path": "/campaign/get/",
+      "method": "GET",
+      "description": "Get a list of ad campaigns for an advertiser account.",
+      "request_params": {
+        "advertiser_id": {
+          "type": "string",
+          "description": "The ID of the advertiser account",
+          "required": true,
+          "send_method": "Query"
+        },
+        "campaign_ids": {
+          "type": "string",
+          "description": "JSON array of campaign IDs to filter by (e.g. [\"123\",\"456\"])",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number for pagination (default 1)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (default 10, max 1000)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Campaign",
+      "path": "/campaign/create/",
+      "method": "POST",
+      "description": "Create a new ad campaign for an advertiser account.",
+      "request_params": {
+        "advertiser_id": {
+          "type": "string",
+          "description": "The ID of the advertiser account",
+          "required": true,
+          "send_method": "Body"
+        },
+        "campaign_name": {
+          "type": "string",
+          "description": "Name of the campaign (max 512 characters)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "objective_type": {
+          "type": "string",
+          "description": "Campaign objective: REACH, TRAFFIC, VIDEO_VIEWS, LEAD_GENERATION, APP_INSTALL, CONVERSIONS",
+          "required": true,
+          "send_method": "Body"
+        },
+        "budget_mode": {
+          "type": "string",
+          "description": "Budget mode: BUDGET_MODE_INFINITE, BUDGET_MODE_DAY, BUDGET_MODE_TOTAL",
+          "required": true,
+          "send_method": "Body"
+        },
+        "budget": {
+          "type": "number",
+          "description": "Campaign budget amount (required if budget_mode is not INFINITE)",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Ad Groups",
+      "path": "/adgroup/get/",
+      "method": "GET",
+      "description": "Get a list of ad groups for an advertiser account.",
+      "request_params": {
+        "advertiser_id": {
+          "type": "string",
+          "description": "The ID of the advertiser account",
+          "required": true,
+          "send_method": "Query"
+        },
+        "campaign_ids": {
+          "type": "string",
+          "description": "JSON array of campaign IDs to filter ad groups by",
+          "required": false,
+          "send_method": "Query"
+        },
+        "adgroup_ids": {
+          "type": "string",
+          "description": "JSON array of specific ad group IDs to retrieve",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number for pagination",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (max 1000)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Ads",
+      "path": "/ad/get/",
+      "method": "GET",
+      "description": "Get a list of ads for an advertiser account.",
+      "request_params": {
+        "advertiser_id": {
+          "type": "string",
+          "description": "The ID of the advertiser account",
+          "required": true,
+          "send_method": "Query"
+        },
+        "campaign_ids": {
+          "type": "string",
+          "description": "JSON array of campaign IDs to filter by",
+          "required": false,
+          "send_method": "Query"
+        },
+        "adgroup_ids": {
+          "type": "string",
+          "description": "JSON array of ad group IDs to filter by",
+          "required": false,
+          "send_method": "Query"
+        },
+        "ad_ids": {
+          "type": "string",
+          "description": "JSON array of specific ad IDs to retrieve",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number for pagination",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (max 1000)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Integrated Report",
+      "path": "/report/integrated/get/",
+      "method": "GET",
+      "description": "Get integrated performance reports for campaigns, ad groups, or ads.",
+      "request_params": {
+        "advertiser_id": {
+          "type": "string",
+          "description": "The ID of the advertiser account",
+          "required": true,
+          "send_method": "Query"
+        },
+        "report_type": {
+          "type": "string",
+          "description": "Report type: BASIC, AUDIENCE, PLAYABLE_MATERIAL, CATALOG",
+          "required": true,
+          "send_method": "Query"
+        },
+        "data_level": {
+          "type": "string",
+          "description": "Data aggregation level: AUCTION_ADVERTISER, AUCTION_CAMPAIGN, AUCTION_ADGROUP, AUCTION_AD",
+          "required": true,
+          "send_method": "Query"
+        },
+        "dimensions": {
+          "type": "string",
+          "description": "JSON array of dimensions to group results by (e.g. [\"campaign_id\",\"stat_time_day\"])",
+          "required": true,
+          "send_method": "Query"
+        },
+        "metrics": {
+          "type": "string",
+          "description": "JSON array of metrics to retrieve (e.g. [\"spend\",\"impressions\",\"clicks\",\"ctr\"])",
+          "required": true,
+          "send_method": "Query"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "Report start date in YYYY-MM-DD format",
+          "required": true,
+          "send_method": "Query"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "Report end date in YYYY-MM-DD format",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Audience Report",
+      "path": "/report/audience/get/",
+      "method": "GET",
+      "description": "Get audience demographic performance reports for your ads.",
+      "request_params": {
+        "advertiser_id": {
+          "type": "string",
+          "description": "The ID of the advertiser account",
+          "required": true,
+          "send_method": "Query"
+        },
+        "data_level": {
+          "type": "string",
+          "description": "Data aggregation level: AUCTION_CAMPAIGN, AUCTION_ADGROUP, AUCTION_AD",
+          "required": true,
+          "send_method": "Query"
+        },
+        "dimensions": {
+          "type": "string",
+          "description": "JSON array of audience dimensions (e.g. [\"age\",\"gender\",\"country_code\"])",
+          "required": true,
+          "send_method": "Query"
+        },
+        "metrics": {
+          "type": "string",
+          "description": "JSON array of metrics to retrieve",
+          "required": true,
+          "send_method": "Query"
+        },
+        "start_date": {
+          "type": "string",
+          "description": "Report start date in YYYY-MM-DD format",
+          "required": true,
+          "send_method": "Query"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "Report end date in YYYY-MM-DD format",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Account Info",
+      "path": "/advertiser/info/",
+      "method": "GET",
+      "description": "Get detailed information about one or more advertiser accounts.",
+      "request_params": {
+        "advertiser_ids": {
+          "type": "string",
+          "description": "JSON array of advertiser account IDs to retrieve (max 100)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "description": "JSON array of fields to return (e.g. [\"name\",\"currency\",\"timezone\",\"balance\"])",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

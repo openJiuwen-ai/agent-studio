@@ -1,0 +1,400 @@
+{
+  "ready": false,
+  "plugin_id": "trello",
+  "name": "Trello",
+  "description": "Visual project management with boards, lists, and cards. Manage tasks, track progress, and collaborate with your team.",
+  "category": "productivity",
+  "category_name": "Productivity Tools",
+  "category_icon": "📋",
+  "icon_uri": "📋",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["productivity", "project-management", "boards", "kanban", "collaboration"],
+  "api_prefix": "https://api.trello.com/1",
+  "documentation": "https://developer.atlassian.com/cloud/trello/rest",
+  "desc_mk": "Trello is a visual project management tool using boards, lists, and cards to organize tasks and collaborate with teams. **Note:** Get your API key and token at [Trello Power-Ups](https://trello.com/power-ups/admin). Pass both `key` and `token` as query parameters with every request.",
+  "header_configuration": {},
+  "tools": [
+    {
+      "name": "Get Board",
+      "path": "/boards/{id}",
+      "method": "GET",
+      "description": "Retrieve a Trello board by its ID",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID of the Trello board to retrieve",
+          "required": true,
+          "send_method": "Path"
+        },
+        "key": {
+          "type": "string",
+          "description": "Your Trello API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "token": {
+          "type": "string",
+          "description": "Your Trello API token",
+          "required": true,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of board fields to return",
+          "required": false,
+          "send_method": "Query"
+        },
+        "lists": {
+          "type": "string",
+          "description": "Which lists to include: none, open, closed, or all",
+          "required": false,
+          "send_method": "Query"
+        },
+        "cards": {
+          "type": "string",
+          "description": "Which cards to include: none, open, closed, or all",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Board Lists",
+      "path": "/boards/{id}/lists",
+      "method": "GET",
+      "description": "Retrieve all lists on a Trello board",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID of the Trello board",
+          "required": true,
+          "send_method": "Path"
+        },
+        "key": {
+          "type": "string",
+          "description": "Your Trello API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "token": {
+          "type": "string",
+          "description": "Your Trello API token",
+          "required": true,
+          "send_method": "Query"
+        },
+        "filter": {
+          "type": "string",
+          "description": "Filter lists by state: all, closed, none, or open",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Board Cards",
+      "path": "/boards/{id}/cards",
+      "method": "GET",
+      "description": "Retrieve all cards on a Trello board",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID of the Trello board",
+          "required": true,
+          "send_method": "Path"
+        },
+        "key": {
+          "type": "string",
+          "description": "Your Trello API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "token": {
+          "type": "string",
+          "description": "Your Trello API token",
+          "required": true,
+          "send_method": "Query"
+        },
+        "filter": {
+          "type": "string",
+          "description": "Filter cards by state: all, closed, none, open, or visible",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Card",
+      "path": "/cards/{id}",
+      "method": "GET",
+      "description": "Retrieve a specific Trello card by its ID",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID of the Trello card to retrieve",
+          "required": true,
+          "send_method": "Path"
+        },
+        "key": {
+          "type": "string",
+          "description": "Your Trello API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "token": {
+          "type": "string",
+          "description": "Your Trello API token",
+          "required": true,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of card fields to return",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Card",
+      "path": "/cards",
+      "method": "POST",
+      "description": "Create a new card in a Trello list",
+      "request_params": {
+        "key": {
+          "type": "string",
+          "description": "Your Trello API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "token": {
+          "type": "string",
+          "description": "Your Trello API token",
+          "required": true,
+          "send_method": "Query"
+        },
+        "idList": {
+          "type": "string",
+          "description": "The ID of the list to add the card to",
+          "required": true,
+          "send_method": "Query"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the card",
+          "required": true,
+          "send_method": "Query"
+        },
+        "desc": {
+          "type": "string",
+          "description": "Description of the card",
+          "required": false,
+          "send_method": "Query"
+        },
+        "due": {
+          "type": "string",
+          "description": "Due date for the card in ISO 8601 format",
+          "required": false,
+          "send_method": "Query"
+        },
+        "idMembers": {
+          "type": "string",
+          "description": "Comma-separated list of member IDs to add to the card",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Update Card",
+      "path": "/cards/{id}",
+      "method": "PUT",
+      "description": "Update an existing Trello card",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID of the Trello card to update",
+          "required": true,
+          "send_method": "Path"
+        },
+        "key": {
+          "type": "string",
+          "description": "Your Trello API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "token": {
+          "type": "string",
+          "description": "Your Trello API token",
+          "required": true,
+          "send_method": "Query"
+        },
+        "name": {
+          "type": "string",
+          "description": "New name for the card",
+          "required": false,
+          "send_method": "Query"
+        },
+        "desc": {
+          "type": "string",
+          "description": "New description for the card",
+          "required": false,
+          "send_method": "Query"
+        },
+        "closed": {
+          "type": "boolean",
+          "description": "Set to true to archive the card",
+          "required": false,
+          "send_method": "Query"
+        },
+        "dueComplete": {
+          "type": "boolean",
+          "description": "Set to true to mark the due date as complete",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Member Boards",
+      "path": "/members/{id}/boards",
+      "method": "GET",
+      "description": "Retrieve all boards associated with a Trello member",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID or username of the Trello member",
+          "required": true,
+          "send_method": "Path"
+        },
+        "key": {
+          "type": "string",
+          "description": "Your Trello API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "token": {
+          "type": "string",
+          "description": "Your Trello API token",
+          "required": true,
+          "send_method": "Query"
+        },
+        "filter": {
+          "type": "string",
+          "description": "Filter boards: all, closed, members, open, organization, or public",
+          "required": false,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of board fields to return",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create List",
+      "path": "/lists",
+      "method": "POST",
+      "description": "Create a new list on a Trello board",
+      "request_params": {
+        "key": {
+          "type": "string",
+          "description": "Your Trello API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "token": {
+          "type": "string",
+          "description": "Your Trello API token",
+          "required": true,
+          "send_method": "Query"
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the new list",
+          "required": true,
+          "send_method": "Query"
+        },
+        "idBoard": {
+          "type": "string",
+          "description": "The ID of the board to add the list to",
+          "required": true,
+          "send_method": "Query"
+        },
+        "pos": {
+          "type": "string",
+          "description": "Position of the list: top, bottom, or a positive number",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Archive List",
+      "path": "/lists/{id}/closed",
+      "method": "PUT",
+      "description": "Archive or unarchive a Trello list",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID of the Trello list to archive",
+          "required": true,
+          "send_method": "Path"
+        },
+        "key": {
+          "type": "string",
+          "description": "Your Trello API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "token": {
+          "type": "string",
+          "description": "Your Trello API token",
+          "required": true,
+          "send_method": "Query"
+        },
+        "value": {
+          "type": "boolean",
+          "description": "Set to true to archive the list, false to unarchive it",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Add Card Comment",
+      "path": "/cards/{id}/actions/comments",
+      "method": "POST",
+      "description": "Add a comment to a Trello card",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The ID of the Trello card to comment on",
+          "required": true,
+          "send_method": "Path"
+        },
+        "key": {
+          "type": "string",
+          "description": "Your Trello API key",
+          "required": true,
+          "send_method": "Query"
+        },
+        "token": {
+          "type": "string",
+          "description": "Your Trello API token",
+          "required": true,
+          "send_method": "Query"
+        },
+        "text": {
+          "type": "string",
+          "description": "The text content of the comment",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

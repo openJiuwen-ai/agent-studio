@@ -1,0 +1,431 @@
+{
+  "ready": false,
+  "plugin_id": "twitch_api",
+  "name": "Twitch",
+  "description": "Leading live streaming platform for gaming, entertainment, music, and creative content. Access streams, channels, clips, and user data.",
+  "category": "entertainment",
+  "category_name": "Entertainment & Events",
+  "category_icon": "🎭",
+  "icon_uri": "📺",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "streaming",
+    "twitch",
+    "gaming",
+    "live",
+    "video",
+    "entertainment"
+  ],
+  "api_prefix": "https://api.twitch.tv/helix",
+  "desc_mk": "Twitch is the world's leading live streaming platform for gamers, content creators, and communities. This plugin provides access to streams, channels, users, clips, videos, and game information.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_TWITCH_ACCESS_TOKEN",
+      "description": "Twitch OAuth 2.0 Bearer token for API authentication"
+    },
+    "Client-Id": {
+      "type": "string",
+      "value": "YOUR_TWITCH_CLIENT_ID",
+      "description": "Twitch application Client ID"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Streams",
+      "path": "/streams",
+      "method": "GET",
+      "description": "Get information about active streams",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "User ID of the broadcaster (returns streams by specific users)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "user_login": {
+          "type": "string",
+          "description": "User login name (returns streams by specific users)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "game_id": {
+          "type": "string",
+          "description": "Game ID (returns streams playing a specific game)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "first": {
+          "type": "integer",
+          "description": "Maximum number of streams to return (1-100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "Stream language (ISO 639-1 code)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Users",
+      "path": "/users",
+      "method": "GET",
+      "description": "Get information about one or more users",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "User ID (can provide multiple)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "login": {
+          "type": "string",
+          "description": "User login name (can provide multiple)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Follows",
+      "path": "/users/follows",
+      "method": "GET",
+      "description": "Get information about who is following or being followed by a user",
+      "request_params": {
+        "from_id": {
+          "type": "string",
+          "description": "User ID for a list of users this user follows",
+          "required": false,
+          "send_method": "Query"
+        },
+        "to_id": {
+          "type": "string",
+          "description": "User ID for a list of users following this user",
+          "required": false,
+          "send_method": "Query"
+        },
+        "first": {
+          "type": "integer",
+          "description": "Maximum number of results (1-100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Games",
+      "path": "/games",
+      "method": "GET",
+      "description": "Get game information by game ID or name",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "Game ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "name": {
+          "type": "string",
+          "description": "Game name",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Top Games",
+      "path": "/games/top",
+      "method": "GET",
+      "description": "Get games sorted by number of current viewers on Twitch",
+      "request_params": {
+        "first": {
+          "type": "integer",
+          "description": "Maximum number of games to return (1-100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Categories",
+      "path": "/search/categories",
+      "method": "GET",
+      "description": "Search for categories (games/creative content) by name",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Search query",
+          "required": true,
+          "send_method": "Query"
+        },
+        "first": {
+          "type": "integer",
+          "description": "Maximum number of results (1-100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Channels",
+      "path": "/search/channels",
+      "method": "GET",
+      "description": "Search for channels by name",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Search query",
+          "required": true,
+          "send_method": "Query"
+        },
+        "first": {
+          "type": "integer",
+          "description": "Maximum number of results (1-100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "live_only": {
+          "type": "boolean",
+          "description": "Only return channels that are currently live",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Clips",
+      "path": "/clips",
+      "method": "GET",
+      "description": "Get one or more video clips",
+      "request_params": {
+        "broadcaster_id": {
+          "type": "string",
+          "description": "Broadcaster user ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "game_id": {
+          "type": "string",
+          "description": "Game ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "id": {
+          "type": "string",
+          "description": "Clip ID (can provide multiple)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "first": {
+          "type": "integer",
+          "description": "Maximum number of clips (1-100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "started_at": {
+          "type": "string",
+          "description": "Starting date/time for returned clips (RFC3339 format)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "ended_at": {
+          "type": "string",
+          "description": "Ending date/time for returned clips (RFC3339 format)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Videos",
+      "path": "/videos",
+      "method": "GET",
+      "description": "Get video information by video ID, user ID, or game ID",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "Video ID (can provide multiple)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "user_id": {
+          "type": "string",
+          "description": "User ID of the video owner",
+          "required": false,
+          "send_method": "Query"
+        },
+        "game_id": {
+          "type": "string",
+          "description": "Game ID",
+          "required": false,
+          "send_method": "Query"
+        },
+        "first": {
+          "type": "integer",
+          "description": "Maximum number of videos (1-100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Type of video: archive, highlight, upload, all",
+          "required": false,
+          "default": "all",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Channel Information",
+      "path": "/channels",
+      "method": "GET",
+      "description": "Get channel information for users",
+      "request_params": {
+        "broadcaster_id": {
+          "type": "string",
+          "description": "Broadcaster user ID (can provide multiple)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Stream Tags",
+      "path": "/streams/tags",
+      "method": "GET",
+      "description": "Get the list of tags for a specified stream",
+      "request_params": {
+        "broadcaster_id": {
+          "type": "string",
+          "description": "Broadcaster user ID",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get All Stream Tags",
+      "path": "/tags/streams",
+      "method": "GET",
+      "description": "Get the list of all stream tags",
+      "request_params": {
+        "first": {
+          "type": "integer",
+          "description": "Maximum number of tags (1-100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "tag_id": {
+          "type": "string",
+          "description": "Specific tag ID to retrieve",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Channel Teams",
+      "path": "/teams/channel",
+      "method": "GET",
+      "description": "Get teams to which a broadcaster belongs",
+      "request_params": {
+        "broadcaster_id": {
+          "type": "string",
+          "description": "Broadcaster user ID",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Subscriptions",
+      "path": "/subscriptions",
+      "method": "GET",
+      "description": "Get broadcaster's list of subscribers",
+      "request_params": {
+        "broadcaster_id": {
+          "type": "string",
+          "description": "Broadcaster user ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "user_id": {
+          "type": "string",
+          "description": "Filters results to only include potential subscriptions made by user",
+          "required": false,
+          "send_method": "Query"
+        },
+        "first": {
+          "type": "integer",
+          "description": "Maximum number of subscriptions (1-100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Bits Leaderboard",
+      "path": "/bits/leaderboard",
+      "method": "GET",
+      "description": "Get a ranked list of Bits leaderboard for a channel",
+      "request_params": {
+        "count": {
+          "type": "integer",
+          "description": "Number of results to return (1-100)",
+          "required": false,
+          "default": 10,
+          "send_method": "Query"
+        },
+        "period": {
+          "type": "string",
+          "description": "Time period: day, week, month, year, all",
+          "required": false,
+          "default": "all",
+          "send_method": "Query"
+        },
+        "started_at": {
+          "type": "string",
+          "description": "Starting date for leaderboard (RFC3339 format)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "user_id": {
+          "type": "string",
+          "description": "User ID to show leaderboard for specific user",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Cheermotes",
+      "path": "/bits/cheermotes",
+      "method": "GET",
+      "description": "Get the list of available Cheermotes",
+      "request_params": {
+        "broadcaster_id": {
+          "type": "string",
+          "description": "Broadcaster user ID",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

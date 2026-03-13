@@ -1,0 +1,269 @@
+{
+  "ready": false,
+  "plugin_id": "shopify",
+  "name": "Shopify",
+  "description": "Manage products, orders, and customers via the Shopify Admin REST API.",
+  "category": "ecommerce",
+  "category_name": "E-Commerce",
+  "category_icon": "🛒",
+  "icon_uri": "🛍️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["ecommerce", "shopify", "products", "orders"],
+  "api_prefix": "https://your-shop.myshopify.com/admin/api/2024-01",
+  "documentation": "https://shopify.dev/docs/api/admin-rest",
+  "desc_mk": "Interact with the Shopify Admin REST API to manage products, orders, customers, collections, and inventory.",
+  "header_configuration": {
+    "X-Shopify-Access-Token": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "YOUR_SHOPIFY_ACCESS_TOKEN",
+      "description": "Shopify Admin API access token (Environment variable: SHOPIFY_ACCESS_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "list_products",
+      "description": "Retrieve a list of products from the Shopify store.",
+      "method": "GET",
+      "path": "/products.json",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "desc": "Maximum number of results to return (1-250).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "page_info": {
+          "type": "string",
+          "desc": "Cursor for paginating through results.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "status": {
+          "type": "string",
+          "desc": "Filter by product status: active, archived, or draft.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "vendor": {
+          "type": "string",
+          "desc": "Filter products by vendor name.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "product_type": {
+          "type": "string",
+          "desc": "Filter products by product type.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "desc": "Comma-separated list of fields to include in the response.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_product",
+      "description": "Retrieve a single product by its ID.",
+      "method": "GET",
+      "path": "/products/{product_id}.json",
+      "request_params": {
+        "product_id": {
+          "type": "integer",
+          "desc": "The unique ID of the product.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "fields": {
+          "type": "string",
+          "desc": "Comma-separated list of fields to include in the response.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "create_product",
+      "description": "Create a new product in the Shopify store.",
+      "method": "POST",
+      "path": "/products.json",
+      "request_params": {
+        "product": {
+          "type": "object",
+          "desc": "Product object. Required field: title. Optional: body_html, vendor, product_type, variants (array), images (array).",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "update_product",
+      "description": "Update an existing product by its ID.",
+      "method": "PUT",
+      "path": "/products/{product_id}.json",
+      "request_params": {
+        "product_id": {
+          "type": "integer",
+          "desc": "The unique ID of the product to update.",
+          "is_required": true,
+          "send_method": "Path"
+        },
+        "product": {
+          "type": "object",
+          "desc": "Product object containing the fields to update (e.g. title, body_html, status).",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "list_orders",
+      "description": "Retrieve a list of orders from the Shopify store.",
+      "method": "GET",
+      "path": "/orders.json",
+      "request_params": {
+        "status": {
+          "type": "string",
+          "desc": "Filter orders by status: open, closed, cancelled, or any.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "desc": "Maximum number of results to return.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "financial_status": {
+          "type": "string",
+          "desc": "Filter by financial status (paid, pending, refunded, etc.).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "fulfillment_status": {
+          "type": "string",
+          "desc": "Filter by fulfillment status (shipped, unshipped, partial, etc.).",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "desc": "Comma-separated list of fields to include in the response.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_order",
+      "description": "Retrieve a single order by its ID.",
+      "method": "GET",
+      "path": "/orders/{order_id}.json",
+      "request_params": {
+        "order_id": {
+          "type": "integer",
+          "desc": "The unique ID of the order.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "list_customers",
+      "description": "Retrieve a list of customers from the Shopify store.",
+      "method": "GET",
+      "path": "/customers.json",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "desc": "Maximum number of results to return.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "desc": "Comma-separated list of fields to include in the response.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "email": {
+          "type": "string",
+          "desc": "Filter customers by email address.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "created_at_min": {
+          "type": "string",
+          "desc": "Show customers created after this date (ISO 8601 format).",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_customer",
+      "description": "Retrieve a single customer by their ID.",
+      "method": "GET",
+      "path": "/customers/{customer_id}.json",
+      "request_params": {
+        "customer_id": {
+          "type": "integer",
+          "desc": "The unique ID of the customer.",
+          "is_required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "list_collections",
+      "description": "Retrieve a list of custom collections from the Shopify store.",
+      "method": "GET",
+      "path": "/custom_collections.json",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "desc": "Maximum number of results to return.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "desc": "Comma-separated list of fields to include in the response.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "get_inventory_levels",
+      "description": "Retrieve inventory levels for one or more inventory items.",
+      "method": "GET",
+      "path": "/inventory_levels.json",
+      "request_params": {
+        "inventory_item_ids": {
+          "type": "string",
+          "desc": "Comma-separated list of inventory item IDs (required).",
+          "is_required": true,
+          "send_method": "Query"
+        },
+        "location_ids": {
+          "type": "string",
+          "desc": "Comma-separated list of location IDs to filter by.",
+          "is_required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "desc": "Maximum number of results to return.",
+          "is_required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

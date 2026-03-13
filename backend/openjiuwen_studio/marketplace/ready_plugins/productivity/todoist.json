@@ -1,0 +1,58 @@
+{
+  "ready": true,
+  "plugin_id": "todoist_api",
+  "name": "Todoist",
+  "description": "Popular task management and to-do list app. Create tasks, manage projects, set priorities, and track productivity.",
+  "category": "productivity",
+  "category_name": "Productivity Tools",
+  "category_icon": "📋",
+  "icon_uri": "✅",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "productivity",
+    "tasks",
+    "todo",
+    "project-management",
+    "organization"
+  ],
+  "api_prefix": "https://api.todoist.com/api/v1",
+  "desc_mk": "Todoist is a task management application that helps individuals and teams stay organized and productive.",
+  "tools": [
+    {
+      "name": "Get All Tasks",
+      "path": "/tasks",
+      "method": "GET",
+      "description": "Get all active tasks",
+      "request_params": {}
+    },
+    {
+      "name": "Create Task",
+      "path": "/tasks",
+      "method": "POST",
+      "description": "Create a new task",
+      "request_params": {
+        "content": {
+          "type": "string",
+          "description": "Task content/description",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get All Projects",
+      "path": "/projects",
+      "method": "GET",
+      "description": "Get all projects",
+      "request_params": {}
+    }
+  ],
+  "header_configuration": {
+    "Authorization": {
+      "value": "Bearer YOUR_TODOIST_API_TOKEN",
+      "description": "Todoist API token with Bearer prefix for authentication"
+    }
+  }
+}

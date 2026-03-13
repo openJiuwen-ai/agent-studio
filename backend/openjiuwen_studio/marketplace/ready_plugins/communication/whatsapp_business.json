@@ -1,0 +1,310 @@
+{
+  "ready": false,
+  "plugin_id": "whatsapp_business",
+  "name": "WhatsApp Business",
+  "description": "Send messages and manage your business profile via the WhatsApp Business Cloud API.",
+  "category": "communication",
+  "category_name": "Communication",
+  "category_icon": "📞",
+  "icon_uri": "💬",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["whatsapp", "messaging", "business", "meta", "notifications"],
+  "api_prefix": "https://graph.facebook.com/v17.0",
+  "documentation": "https://developers.facebook.com/docs/whatsapp/cloud-api",
+  "desc_mk": "WhatsApp Business Cloud API integration. Send text, template, and media messages to customers. Requires a WhatsApp Business Account and access token from the Meta Developer Portal.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_WHATSAPP_TOKEN",
+      "description": "WhatsApp Cloud API access token (Environment variable: WHATSAPP_ACCESS_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "send_text_message",
+      "display_name": "Send Text Message",
+      "description": "Send a plain text message to a WhatsApp user.",
+      "method": "POST",
+      "path": "/{phone_number_id}/messages",
+      "request_params": {
+        "phone_number_id": {
+          "type": "string",
+          "description": "The ID of the WhatsApp phone number to send from.",
+          "required": true,
+          "is_path_param": true
+        },
+        "messaging_product": {
+          "type": "string",
+          "description": "Messaging service product. Must be \"whatsapp\".",
+          "required": true,
+          "send_method": "Body"
+        },
+        "to": {
+          "type": "string",
+          "description": "Recipient phone number in E.164 format.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "type": {
+          "type": "string",
+          "description": "Message type. Use \"text\" for text messages.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "text": {
+          "type": "object",
+          "description": "Text message object containing \"body\" (string) and optional \"preview_url\" (boolean).",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Message response with message ID and status."
+      }
+    },
+    {
+      "name": "send_template_message",
+      "display_name": "Send Template Message",
+      "description": "Send a pre-approved WhatsApp template message.",
+      "method": "POST",
+      "path": "/{phone_number_id}/messages",
+      "request_params": {
+        "phone_number_id": {
+          "type": "string",
+          "description": "The ID of the WhatsApp phone number to send from.",
+          "required": true,
+          "is_path_param": true
+        },
+        "messaging_product": {
+          "type": "string",
+          "description": "Messaging service product. Must be \"whatsapp\".",
+          "required": true,
+          "send_method": "Body"
+        },
+        "to": {
+          "type": "string",
+          "description": "Recipient phone number in E.164 format.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "type": {
+          "type": "string",
+          "description": "Message type. Use \"template\".",
+          "required": true,
+          "send_method": "Body"
+        },
+        "template": {
+          "type": "object",
+          "description": "Template object with \"name\" (string) and \"language\" (object with \"code\" string).",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Message response with message ID and status."
+      }
+    },
+    {
+      "name": "send_media_message",
+      "display_name": "Send Media Message",
+      "description": "Send an image, video, audio, or document to a WhatsApp user.",
+      "method": "POST",
+      "path": "/{phone_number_id}/messages",
+      "request_params": {
+        "phone_number_id": {
+          "type": "string",
+          "description": "The ID of the WhatsApp phone number to send from.",
+          "required": true,
+          "is_path_param": true
+        },
+        "messaging_product": {
+          "type": "string",
+          "description": "Messaging service product. Must be \"whatsapp\".",
+          "required": true,
+          "send_method": "Body"
+        },
+        "to": {
+          "type": "string",
+          "description": "Recipient phone number in E.164 format.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "type": {
+          "type": "string",
+          "description": "Media type: \"image\", \"video\", \"audio\", or \"document\".",
+          "required": true,
+          "send_method": "Body"
+        },
+        "image": {
+          "type": "object",
+          "description": "Image object with \"link\" (URL) or \"id\" (media ID). Use when type is \"image\".",
+          "required": false,
+          "send_method": "Body"
+        },
+        "video": {
+          "type": "object",
+          "description": "Video object with \"link\" (URL) or \"id\" (media ID). Use when type is \"video\".",
+          "required": false,
+          "send_method": "Body"
+        },
+        "audio": {
+          "type": "object",
+          "description": "Audio object with \"link\" (URL) or \"id\" (media ID). Use when type is \"audio\".",
+          "required": false,
+          "send_method": "Body"
+        },
+        "document": {
+          "type": "object",
+          "description": "Document object with \"link\" (URL) or \"id\" (media ID) and optional \"filename\". Use when type is \"document\".",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Message response with message ID and status."
+      }
+    },
+    {
+      "name": "get_phone_number_info",
+      "display_name": "Get Phone Number Info",
+      "description": "Retrieve information about a WhatsApp phone number.",
+      "method": "GET",
+      "path": "/{phone_number_id}",
+      "request_params": {
+        "phone_number_id": {
+          "type": "string",
+          "description": "The ID of the WhatsApp phone number.",
+          "required": true,
+          "is_path_param": true
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return (e.g. display_phone_number,verified_name).",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Phone number details."
+      }
+    },
+    {
+      "name": "get_business_profile",
+      "display_name": "Get Business Profile",
+      "description": "Retrieve the WhatsApp Business profile information.",
+      "method": "GET",
+      "path": "/{phone_number_id}/whatsapp_business_profile",
+      "request_params": {
+        "phone_number_id": {
+          "type": "string",
+          "description": "The ID of the WhatsApp phone number.",
+          "required": true,
+          "is_path_param": true
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of profile fields to retrieve.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Business profile object."
+      }
+    },
+    {
+      "name": "update_business_profile",
+      "display_name": "Update Business Profile",
+      "description": "Update the WhatsApp Business profile.",
+      "method": "POST",
+      "path": "/{phone_number_id}/whatsapp_business_profile",
+      "request_params": {
+        "phone_number_id": {
+          "type": "string",
+          "description": "The ID of the WhatsApp phone number.",
+          "required": true,
+          "is_path_param": true
+        },
+        "about": {
+          "type": "string",
+          "description": "Business \"about\" text (max 139 characters).",
+          "required": false,
+          "send_method": "Body"
+        },
+        "address": {
+          "type": "string",
+          "description": "Business address.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "Business description.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "email": {
+          "type": "string",
+          "description": "Business email address.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "websites": {
+          "type": "array",
+          "description": "Array of website URLs (max 2).",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Success response."
+      }
+    },
+    {
+      "name": "mark_message_as_read",
+      "display_name": "Mark Message as Read",
+      "description": "Mark an incoming message as read.",
+      "method": "POST",
+      "path": "/{phone_number_id}/messages",
+      "request_params": {
+        "phone_number_id": {
+          "type": "string",
+          "description": "The ID of the WhatsApp phone number.",
+          "required": true,
+          "is_path_param": true
+        },
+        "messaging_product": {
+          "type": "string",
+          "description": "Messaging service product. Must be \"whatsapp\".",
+          "required": true,
+          "send_method": "Body"
+        },
+        "status": {
+          "type": "string",
+          "description": "Message status. Must be \"read\".",
+          "required": true,
+          "send_method": "Body"
+        },
+        "message_id": {
+          "type": "string",
+          "description": "The ID of the message to mark as read.",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Success response."
+      }
+    }
+  ]
+}

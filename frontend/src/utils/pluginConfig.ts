@@ -126,11 +126,18 @@ export async function getAvailablePlugins(): Promise<PluginConfig[]> {
 /**
  * Get all available plugins from market data
  * @param marketData The JSON string data from the plugin market API
- * @returns Promise<PluginConfig[]> Array of plugin configurations
+ * @returns Promise<Record<string, PluginConfig>> Object mapping plugin IDs to plugin configurations
  */
-export async function getAvailablePluginsFromMarket(marketData: string): Promise<PluginConfig[]> {
+export async function getAvailablePluginsFromMarket(marketData: string): Promise<Record<string, PluginConfig>> {
   const configs = await loadPluginConfigsFromMarket(marketData)
-  return Object.values(configs.plugins)
+
+  // Check if using new multi-file structure (has 'plugins' object directly)
+  if (configs.plugins) {
+    return configs.plugins
+  }
+
+  // Legacy fallback
+  return {}
 }
 
 /**
@@ -153,11 +160,12 @@ export function clearPluginConfigCache(): void {
 /**
  * Transform plugin config to market plugin format for display
  * @param pluginConfig The raw plugin configuration
+ * @param pluginKey The plugin identifier/key
  * @returns Transformed plugin object for UI display
  */
 export function transformConfigToMarketPlugin(pluginConfig: PluginConfig, pluginKey: string) {
-  // Determine plugin type based on the plugin key
-  const pluginType = pluginKey.includes('system') ? 2 : 1
+  // Extract plugin_type from config if available, otherwise infer
+  const pluginType = (pluginConfig as any).plugin_type || (pluginKey.includes('system') ? 2 : 1)
 
   // Determine status (could be extended to include health checks)
   const status: 'active' | 'inactive' | 'error' | 'updating' = 'active'
@@ -179,24 +187,49 @@ export function transformConfigToMarketPlugin(pluginConfig: PluginConfig, plugin
     if (key.includes('nlp')) return '🧠'
     if (key.includes('map')) return '🗺️'
     if (key.includes('system')) return '⚙️'
+    if (key.includes('twitter') || key.includes('social')) return '𝕏'
     return '📦'
   }
 
   const generateVersion = (): string => {
+    // Use version from config if available
+    if ((pluginConfig as any).version) {
+      return (pluginConfig as any).version
+    }
     return `v${Math.floor(Math.random() * 5) + 1}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`
   }
 
+  // Extract category info from plugin config (if using new multi-file structure)
+  const category = (pluginConfig as any).category || 'other'
+  const categoryName = (pluginConfig as any).category_name || category
+  const categoryIcon = (pluginConfig as any).category_icon || '📦'
+
+  // Extract tags if available
+  const tags = (pluginConfig as any).tags || []
+
+  // Extract detailed markdown description if available
+  const descMk = (pluginConfig as any).desc_mk || ''
+
+  // Preserve the ready flag; default to true if absent (backward compat with legacy plugins)
+  const ready: boolean = (pluginConfig as any).ready !== false
+
   return {
     space_id: '',
-    plugin_id: pluginKey,
+    plugin_id: (pluginConfig as any).plugin_id || pluginKey,
     plugin_version: generateVersion(),
     name: pluginConfig.name,
     desc: pluginConfig.description,
+    desc_mk: descMk,
     plugin_type: pluginType,
     published: true,
-    url: '',
+    url: (pluginConfig as any).api_prefix || '',
     icon_uri: getIconForPlugin(pluginConfig, pluginKey),
     status,
+    category,
+    category_name: categoryName,
+    category_icon: categoryIcon,
+    tags,
+    ready,
     // Include original config data for installation use
     config: pluginConfig,
   }

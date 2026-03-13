@@ -3,7 +3,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
 from typing import Any, Dict
-from openjiuwen.core.workflow.components.react import ReActAgentWorkflow, ReActAgentWorkflowConfig
+from openjiuwen.core.workflow.components.llm.react import ReActAgentComp, ReActAgentCompConfig
 from openjiuwen.core.foundation.llm import ModelRequestConfig, ModelClientConfig, SystemMessage, UserMessage
 from openjiuwen.core.context_engine import ContextEngineConfig
 
@@ -84,11 +84,11 @@ class ReactAgentCompCompiler(BaseCompCompiler):
         self.config_dict = react_agent_config_dict
         self.config = ReactAgentConfigDL.model_validate(react_agent_config_dict)
 
-    def compile(self) -> ReActAgentWorkflow:
+    def compile(self) -> ReActAgentComp:
         """
-        Compile the React Agent component configuration into a ReActAgentWorkflow instance
+        Compile the React Agent component configuration into a ReActAgentComp instance
         Returns:
-            ReActAgentWorkflow: The compiled React Agent workflow component
+            ReActAgentComp: The compiled React Agent workflow component
         """
         # Parse model configuration
         model_request_config, model_client_config, model_id = parse_model_config(self.config_dict)
@@ -102,8 +102,8 @@ class ReactAgentCompCompiler(BaseCompCompiler):
             default_window_round_num=self.config.default_window_round_num or 10
         )
 
-        # Create ReActAgentWorkflowConfig
-        react_agent_workflow_config = ReActAgentWorkflowConfig(
+        # Create ReActAgentCompConfig
+        react_agent_workflow_config = ReActAgentCompConfig(
             mem_scope_id=self.config.mem_scope_id or "",
             model_name=model_id,
             model_provider=model_client_config.client_provider,
@@ -118,5 +118,5 @@ class ReactAgentCompCompiler(BaseCompCompiler):
             context_engine_config=context_engine_config,
         )
 
-        # Create and return the ReActAgentWorkflow component
-        return ReActAgentWorkflow(react_agent_workflow_config)
+        # Create and return the ReActAgentComp component
+        return ReActAgentComp(react_agent_workflow_config)

@@ -1,0 +1,331 @@
+{
+  "ready": false,
+  "plugin_id": "sendgrid",
+  "name": "SendGrid",
+  "description": "Send transactional emails, manage contacts, and track email statistics with SendGrid.",
+  "category": "communication",
+  "category_name": "Communication",
+  "category_icon": "📞",
+  "icon_uri": "📧",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["sendgrid", "email", "transactional", "marketing", "smtp"],
+  "api_prefix": "https://api.sendgrid.com/v3",
+  "documentation": "https://docs.sendgrid.com/api-reference",
+  "desc_mk": "SendGrid API integration for transactional and marketing email. Send emails, manage contact lists, validate email addresses, and view delivery statistics.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_SENDGRID_API_KEY",
+      "description": "SendGrid API key (Environment variable: SENDGRID_API_KEY)"
+    }
+  },
+  "tools": [
+    {
+      "name": "send_email",
+      "display_name": "Send Email",
+      "description": "Send a transactional email.",
+      "method": "POST",
+      "path": "/mail/send",
+      "request_params": {
+        "personalizations": {
+          "type": "array",
+          "description": "Array of personalization objects, each containing \"to\" (array of {email, name} objects, required), and optionally cc, bcc, subject, headers, substitutions.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "from": {
+          "type": "object",
+          "description": "Sender email object with \"email\" (string, required) and optional \"name\" (string).",
+          "required": true,
+          "send_method": "Body"
+        },
+        "subject": {
+          "type": "string",
+          "description": "The global subject of the email.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "content": {
+          "type": "array",
+          "description": "Array of content objects with \"type\" (e.g. text/plain, text/html) and \"value\" (string).",
+          "required": true,
+          "send_method": "Body"
+        },
+        "reply_to": {
+          "type": "object",
+          "description": "Reply-to email object with \"email\" and optional \"name\".",
+          "required": false,
+          "send_method": "Body"
+        },
+        "attachments": {
+          "type": "array",
+          "description": "Array of attachment objects with \"content\" (base64), \"filename\", and optional \"type\", \"disposition\".",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "202 Accepted on success."
+      }
+    },
+    {
+      "name": "get_email_stats",
+      "display_name": "Get Email Stats",
+      "description": "Retrieve global email statistics for a given date range.",
+      "method": "GET",
+      "path": "/stats",
+      "request_params": {
+        "start_date": {
+          "type": "string",
+          "description": "Start date for stats in YYYY-MM-DD format (required).",
+          "required": true,
+          "send_method": "Query"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "End date for stats in YYYY-MM-DD format.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "aggregated_by": {
+          "type": "string",
+          "description": "Aggregation period: \"day\", \"week\", or \"month\".",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "Array of statistics objects."
+      }
+    },
+    {
+      "name": "list_suppression_bounces",
+      "display_name": "List Suppression Bounces",
+      "description": "Retrieve a list of bounced email addresses.",
+      "method": "GET",
+      "path": "/suppression/bounces",
+      "request_params": {
+        "start_time": {
+          "type": "integer",
+          "description": "Unix timestamp to filter bounces after this time.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "end_time": {
+          "type": "integer",
+          "description": "Unix timestamp to filter bounces before this time.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Number of results to skip.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "Array of bounce objects."
+      }
+    },
+    {
+      "name": "delete_bounce",
+      "display_name": "Delete Bounce",
+      "description": "Remove an email address from the bounce list.",
+      "method": "DELETE",
+      "path": "/suppression/bounces/{email}",
+      "request_params": {
+        "email": {
+          "type": "string",
+          "description": "The email address to remove from the bounce list.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "204 No Content on success."
+      }
+    },
+    {
+      "name": "list_unsubscribes",
+      "display_name": "List Unsubscribes",
+      "description": "Retrieve a list of unsubscribed email addresses.",
+      "method": "GET",
+      "path": "/suppression/unsubscribes",
+      "request_params": {
+        "start_time": {
+          "type": "integer",
+          "description": "Unix timestamp to filter unsubscribes after this time.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "end_time": {
+          "type": "integer",
+          "description": "Unix timestamp to filter unsubscribes before this time.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Number of results to skip.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "Array of unsubscribe objects."
+      }
+    },
+    {
+      "name": "validate_email",
+      "display_name": "Validate Email",
+      "description": "Validate an email address.",
+      "method": "POST",
+      "path": "/validations/email",
+      "request_params": {
+        "email": {
+          "type": "string",
+          "description": "The email address to validate.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "source": {
+          "type": "string",
+          "description": "Free-form identifier noting where the email address was collected.",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Validation result with verdict and checks."
+      }
+    },
+    {
+      "name": "list_contacts",
+      "display_name": "List Contacts",
+      "description": "Get all marketing contacts.",
+      "method": "GET",
+      "path": "/marketing/contacts",
+      "request_params": {
+        "page_size": {
+          "type": "integer",
+          "description": "Number of contacts to return per page (max 1000).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page_token": {
+          "type": "string",
+          "description": "Token for the next page of results.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of contact objects."
+      }
+    },
+    {
+      "name": "add_or_update_contacts",
+      "display_name": "Add or Update Contacts",
+      "description": "Add new contacts or update existing ones.",
+      "method": "PUT",
+      "path": "/marketing/contacts",
+      "request_params": {
+        "list_ids": {
+          "type": "array",
+          "description": "Array of list IDs to add contacts to.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "contacts": {
+          "type": "array",
+          "description": "Array of contact objects. Each must include \"email\" (required) and may include first_name, last_name, phone_number, and custom fields.",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Job ID for the async contact import."
+      }
+    },
+    {
+      "name": "get_lists",
+      "display_name": "Get Lists",
+      "description": "Retrieve all marketing contact lists.",
+      "method": "GET",
+      "path": "/marketing/lists",
+      "request_params": {
+        "page_size": {
+          "type": "integer",
+          "description": "Maximum number of lists to return per page.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of marketing list objects."
+      }
+    },
+    {
+      "name": "send_test_email",
+      "display_name": "Send Test Email",
+      "description": "Send a test email to verify your email template and configuration.",
+      "method": "POST",
+      "path": "/mail/send",
+      "request_params": {
+        "personalizations": {
+          "type": "array",
+          "description": "Array of personalization objects with \"to\" array of email objects.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "from": {
+          "type": "object",
+          "description": "Sender email object with \"email\" and optional \"name\".",
+          "required": true,
+          "send_method": "Body"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Subject line for the test email.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "content": {
+          "type": "array",
+          "description": "Array of content objects with \"type\" and \"value\".",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "202 Accepted on success."
+      }
+    }
+  ]
+}

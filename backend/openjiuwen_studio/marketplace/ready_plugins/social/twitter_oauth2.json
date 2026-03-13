@@ -1,0 +1,252 @@
+{
+  "ready": false,
+  "plugin_id": "twitter_api_v2_oauth2",
+  "name": "Twitter API v2 (OAuth 2.0)",
+  "description": "Read public Twitter data using OAuth 2.0 Bearer Token - search tweets, get user info, view timelines",
+  "category": "social",
+  "icon_uri": "𝕏",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "twitter",
+    "social",
+    "api",
+    "oauth2",
+    "read-only"
+  ],
+  "api_prefix": "https://api.twitter.com",
+  "documentation": "https://developer.twitter.com/en/docs/authentication/oauth-2-0",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_TWITTER_BEARER_TOKEN",
+      "description": "OAuth 2.0 Bearer token for Twitter API authentication"
+    },
+    "Content-Type": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "application/json",
+      "description": ""
+    }
+  },
+  "tools": [
+    {
+      "name": "Post A Tweet",
+      "path": "/2/tweets",
+      "method": "POST",
+      "description": "Post A Tweet",
+      "request_params": {
+        "text": {
+          "type": "string",
+          "description": "Text content of the tweet",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "Get User Timeline",
+      "path": "/2/users/{user_id}/tweets",
+      "method": "GET",
+      "description": "Get tweets posted by a specific user. Returns the most recent tweets from their timeline.",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The user ID whose tweets you want to retrieve",
+          "required": true,
+          "send_method": "path"
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "Maximum number of tweets to return (5-100)",
+          "required": false,
+          "min": 5,
+          "max": 100,
+          "default": 10
+        },
+        "pagination_token": {
+          "type": "string",
+          "description": "Token for pagination to get next page of results",
+          "required": false
+        },
+        "start_time": {
+          "type": "string",
+          "description": "Start time for tweets (ISO 8601 format)",
+          "required": false,
+          "format": "date-time"
+        },
+        "end_time": {
+          "type": "string",
+          "description": "End time for tweets (ISO 8601 format)",
+          "required": false,
+          "format": "date-time"
+        },
+        "exclude": {
+          "type": "string",
+          "description": "Comma-separated list of tweet types to exclude (retweets,replies)",
+          "required": false,
+          "enum": [
+            "retweets",
+            "replies"
+          ]
+        },
+        "tweet.fields": {
+          "type": "string",
+          "description": "Comma-separated list of tweet fields to return",
+          "required": false,
+          "default": "created_at,author_id,text"
+        },
+        "expansions": {
+          "type": "string",
+          "description": "Comma-separated list of expansions",
+          "required": false
+        },
+        "media.fields": {
+          "type": "string",
+          "description": "Comma-separated list of media fields to return",
+          "required": false
+        },
+        "user.fields": {
+          "type": "string",
+          "description": "Comma-separated list of user fields to return",
+          "required": false
+        }
+      }
+    },
+    {
+      "name": "Get Tweet",
+      "path": "/2/tweets/{tweet_id}",
+      "method": "GET",
+      "description": "Get details of a specific tweet by its ID",
+      "request_params": {
+        "tweet_id": {
+          "type": "string",
+          "description": "The ID of the tweet to retrieve",
+          "required": true,
+          "send_method": "path"
+        },
+        "tweet.fields": {
+          "type": "string",
+          "description": "Comma-separated list of tweet fields to return",
+          "required": false,
+          "default": "created_at,author_id,text,public_metrics"
+        },
+        "expansions": {
+          "type": "string",
+          "description": "Comma-separated list of expansions",
+          "required": false
+        },
+        "media.fields": {
+          "type": "string",
+          "description": "Comma-separated list of media fields to return",
+          "required": false
+        },
+        "user.fields": {
+          "type": "string",
+          "description": "Comma-separated list of user fields to return",
+          "required": false
+        }
+      }
+    },
+    {
+      "name": "Search Recent Tweets",
+      "path": "/2/tweets/search/recent",
+      "method": "GET",
+      "description": "Search for tweets from the last 7 days that match your query",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Search query string (up to 512 characters)",
+          "required": true,
+          "max_length": 512
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "Maximum number of tweets to return (10-100)",
+          "required": false,
+          "min": 10,
+          "max": 100,
+          "default": 10
+        },
+        "next_token": {
+          "type": "string",
+          "description": "Token for pagination",
+          "required": false
+        },
+        "start_time": {
+          "type": "string",
+          "description": "Start time for search (ISO 8601 format)",
+          "required": false,
+          "format": "date-time"
+        },
+        "end_time": {
+          "type": "string",
+          "description": "End time for search (ISO 8601 format)",
+          "required": false,
+          "format": "date-time"
+        },
+        "since_id": {
+          "type": "string",
+          "description": "Returns tweets with ID greater than this value",
+          "required": false
+        },
+        "until_id": {
+          "type": "string",
+          "description": "Returns tweets with ID less than this value",
+          "required": false
+        },
+        "tweet.fields": {
+          "type": "string",
+          "description": "Comma-separated list of tweet fields to return",
+          "required": false
+        },
+        "expansions": {
+          "type": "string",
+          "description": "Comma-separated list of expansions",
+          "required": false
+        }
+      }
+    },
+    {
+      "name": "Get User by Username",
+      "path": "/2/users/by/username/{username}",
+      "method": "GET",
+      "description": "Get user information by their Twitter username",
+      "request_params": {
+        "username": {
+          "type": "string",
+          "description": "Twitter username (without @)",
+          "required": true,
+          "send_method": "path"
+        },
+        "user.fields": {
+          "type": "string",
+          "description": "Comma-separated list of user fields to return",
+          "required": false,
+          "default": "created_at,description,public_metrics"
+        }
+      }
+    },
+    {
+      "name": "Get User by ID",
+      "path": "/2/users/{user_id}",
+      "method": "GET",
+      "description": "Get user information by their Twitter user ID",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The user ID",
+          "required": true,
+          "send_method": "path"
+        },
+        "user.fields": {
+          "type": "string",
+          "description": "Comma-separated list of user fields to return",
+          "required": false,
+          "default": "created_at,description,public_metrics"
+        }
+      }
+    }
+  ]
+}

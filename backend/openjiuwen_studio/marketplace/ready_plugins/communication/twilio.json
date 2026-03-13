@@ -1,0 +1,292 @@
+{
+  "ready": false,
+  "plugin_id": "twilio",
+  "name": "Twilio",
+  "description": "Send SMS, make voice calls, and manage phone numbers with the Twilio REST API.",
+  "category": "communication",
+  "category_name": "Communication",
+  "category_icon": "📞",
+  "icon_uri": "📱",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["twilio", "sms", "voice", "phone", "messaging"],
+  "api_prefix": "https://api.twilio.com/2010-04-01",
+  "documentation": "https://www.twilio.com/docs/usage/api",
+  "desc_mk": "Twilio REST API integration for SMS, voice calls, and phone number management. Authentication uses HTTP Basic Auth with your Account SID and Auth Token (base64 encoded). Set environment variables TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN, then set the Authorization header to Basic base64(AccountSid:AuthToken).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Basic YOUR_TWILIO_CREDENTIALS",
+      "description": "Base64-encoded credentials (AccountSid:AuthToken). Set env vars TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN."
+    }
+  },
+  "tools": [
+    {
+      "name": "send_sms",
+      "display_name": "Send SMS",
+      "description": "Send an SMS message.",
+      "method": "POST",
+      "path": "/Accounts/{AccountSid}/Messages.json",
+      "request_params": {
+        "AccountSid": {
+          "type": "string",
+          "description": "Your Twilio Account SID.",
+          "required": true,
+          "is_path_param": true
+        },
+        "From": {
+          "type": "string",
+          "description": "The Twilio phone number or messaging service SID to send the message from.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "To": {
+          "type": "string",
+          "description": "The destination phone number in E.164 format.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "Body": {
+          "type": "string",
+          "description": "The text content of the message.",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Message resource object."
+      }
+    },
+    {
+      "name": "list_messages",
+      "display_name": "List Messages",
+      "description": "Retrieve a list of messages sent from your account.",
+      "method": "GET",
+      "path": "/Accounts/{AccountSid}/Messages.json",
+      "request_params": {
+        "AccountSid": {
+          "type": "string",
+          "description": "Your Twilio Account SID.",
+          "required": true,
+          "is_path_param": true
+        },
+        "To": {
+          "type": "string",
+          "description": "Filter by destination phone number.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "From": {
+          "type": "string",
+          "description": "Filter by sender phone number.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "DateSent": {
+          "type": "string",
+          "description": "Filter messages sent on a specific date (YYYY-MM-DD).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "PageSize": {
+          "type": "integer",
+          "description": "Number of records to return per page (default 50, max 1000).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "Page": {
+          "type": "integer",
+          "description": "Page number (zero-indexed).",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of message resources."
+      }
+    },
+    {
+      "name": "get_message",
+      "display_name": "Get Message",
+      "description": "Fetch a single message resource by its SID.",
+      "method": "GET",
+      "path": "/Accounts/{AccountSid}/Messages/{MessageSid}.json",
+      "request_params": {
+        "AccountSid": {
+          "type": "string",
+          "description": "Your Twilio Account SID.",
+          "required": true,
+          "is_path_param": true
+        },
+        "MessageSid": {
+          "type": "string",
+          "description": "The unique SID of the message to retrieve.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Message resource object."
+      }
+    },
+    {
+      "name": "make_voice_call",
+      "display_name": "Make Voice Call",
+      "description": "Initiate an outbound voice call.",
+      "method": "POST",
+      "path": "/Accounts/{AccountSid}/Calls.json",
+      "request_params": {
+        "AccountSid": {
+          "type": "string",
+          "description": "Your Twilio Account SID.",
+          "required": true,
+          "is_path_param": true
+        },
+        "From": {
+          "type": "string",
+          "description": "The Twilio phone number to use as the caller ID.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "To": {
+          "type": "string",
+          "description": "The phone number to call in E.164 format.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "Url": {
+          "type": "string",
+          "description": "The URL that returns TwiML instructions for the call.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "StatusCallback": {
+          "type": "string",
+          "description": "URL to send call status events to.",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Call resource object."
+      }
+    },
+    {
+      "name": "list_calls",
+      "display_name": "List Calls",
+      "description": "Retrieve a list of calls made from your account.",
+      "method": "GET",
+      "path": "/Accounts/{AccountSid}/Calls.json",
+      "request_params": {
+        "AccountSid": {
+          "type": "string",
+          "description": "Your Twilio Account SID.",
+          "required": true,
+          "is_path_param": true
+        },
+        "To": {
+          "type": "string",
+          "description": "Filter by destination phone number.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "From": {
+          "type": "string",
+          "description": "Filter by originating phone number.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "Status": {
+          "type": "string",
+          "description": "Filter by call status (queued, ringing, in-progress, completed, failed, busy, no-answer).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "StartTime": {
+          "type": "string",
+          "description": "Filter calls starting on or after this date (YYYY-MM-DD).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "PageSize": {
+          "type": "integer",
+          "description": "Number of records to return per page.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "Page": {
+          "type": "integer",
+          "description": "Page number (zero-indexed).",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of call resources."
+      }
+    },
+    {
+      "name": "get_account",
+      "display_name": "Get Account",
+      "description": "Fetch account details.",
+      "method": "GET",
+      "path": "/Accounts/{AccountSid}.json",
+      "request_params": {
+        "AccountSid": {
+          "type": "string",
+          "description": "Your Twilio Account SID.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Account resource object."
+      }
+    },
+    {
+      "name": "list_phone_numbers",
+      "display_name": "List Phone Numbers",
+      "description": "Retrieve a list of incoming phone numbers associated with your account.",
+      "method": "GET",
+      "path": "/Accounts/{AccountSid}/IncomingPhoneNumbers.json",
+      "request_params": {
+        "AccountSid": {
+          "type": "string",
+          "description": "Your Twilio Account SID.",
+          "required": true,
+          "is_path_param": true
+        },
+        "PhoneNumber": {
+          "type": "string",
+          "description": "Filter by specific phone number.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "FriendlyName": {
+          "type": "string",
+          "description": "Filter by friendly name of the phone number.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "PageSize": {
+          "type": "integer",
+          "description": "Number of records per page.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of incoming phone number resources."
+      }
+    }
+  ]
+}

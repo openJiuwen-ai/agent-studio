@@ -1,0 +1,140 @@
+{
+  "ready": false,
+  "plugin_id": "moonshot_ai",
+  "name": "Moonshot AI (Kimi)",
+  "description": "Kimi Chat API with 256K context window and trillion-parameter K2 model. OpenAI-compatible API for long-context conversations, code generation, and intelligent dialogue.",
+  "category": "ai",
+  "category_name": "AI & ML Services",
+  "category_icon": "🤖",
+  "icon_uri": "🌙",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "llm",
+    "ai",
+    "chat",
+    "long-context",
+    "kimi",
+    "china"
+  ],
+  "api_prefix": "https://api.moonshot.cn",
+  "desc_mk": "Moonshot AI's Kimi (月之暗面) provides a trillion-parameter K2 large language model with industry-leading 256K context window. Features instant and thinking modes, multimodal capabilities (vision), and professional code generation. OpenAI-compatible API makes integration seamless. **Note:** Requires API key from [Moonshot AI Platform](https://platform.moonshot.cn/).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer MOONSHOT_API_KEY",
+      "description": "Bearer token for Moonshot AI API authentication"
+    }
+  },
+  "tools": [
+    {
+      "name": "Create Chat Completion",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "description": "Generate conversational responses using Kimi models",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model to use: 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k', 'kimi-k2-8k', 'kimi-k2-128k'",
+          "required": true,
+          "default": "moonshot-v1-32k",
+          "send_method": "Body"
+        },
+        "messages": {
+          "type": "array",
+          "description": "Array of message objects with 'role' (system/user/assistant) and 'content' fields",
+          "required": true,
+          "send_method": "Body"
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Sampling temperature between 0 and 1 (default: 0.3)",
+          "required": false,
+          "default": 0.3,
+          "send_method": "Body"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "description": "Maximum tokens to generate",
+          "required": false,
+          "send_method": "Body"
+        },
+        "top_p": {
+          "type": "number",
+          "description": "Nucleus sampling parameter (default: 1)",
+          "required": false,
+          "default": 1,
+          "send_method": "Body"
+        },
+        "stream": {
+          "type": "boolean",
+          "description": "Whether to stream partial message deltas",
+          "required": false,
+          "default": false,
+          "send_method": "Body"
+        },
+        "stop": {
+          "type": "array",
+          "description": "Up to 4 sequences where API will stop generating",
+          "required": false,
+          "send_method": "Body"
+        },
+        "tools": {
+          "type": "array",
+          "description": "Tool calling/function calling definitions",
+          "required": false,
+          "send_method": "Body"
+        },
+        "tool_choice": {
+          "type": "string",
+          "description": "Control tool calling: 'none', 'auto', or specific tool",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Available Models",
+      "path": "/v1/models",
+      "method": "GET",
+      "description": "Get list of all available Kimi models",
+      "request_params": {}
+    },
+    {
+      "name": "Get Model Details",
+      "path": "/v1/models/{model}",
+      "method": "GET",
+      "description": "Get detailed information about a specific model",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model ID to retrieve (e.g., 'moonshot-v1-32k', 'kimi-k2-128k')",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Token Count",
+      "path": "/v1/tokenizers/estimate-token-count",
+      "method": "POST",
+      "description": "Estimate token count for given messages",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model to use for tokenization",
+          "required": true,
+          "send_method": "Body"
+        },
+        "messages": {
+          "type": "array",
+          "description": "Messages to count tokens for",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

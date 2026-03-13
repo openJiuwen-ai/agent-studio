@@ -1,0 +1,310 @@
+{
+  "ready": false,
+  "plugin_id": "here_maps_api",
+  "name": "HERE Maps API",
+  "description": "HERE Location Services for geocoding, reverse geocoding, routing, places search, weather, and traffic. Enterprise-grade mapping and location API from HERE Technologies.",
+  "category": "maps",
+  "category_name": "Maps & Location",
+  "category_icon": "🗺️",
+  "icon_uri": "🔴",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "maps",
+    "here",
+    "geocoding",
+    "routing",
+    "traffic",
+    "location"
+  ],
+  "api_prefix": "https://geocode.search.hereapi.com",
+  "documentation": "https://developer.here.com/documentation",
+  "desc_mk": "HERE Technologies provides enterprise-grade location services including geocoding, routing, places search, traffic, and weather APIs. Used by automotive, logistics, and enterprise applications worldwide. Requires an API key from the HERE Developer Portal.",
+  "tools": [
+    {
+      "name": "Geocoding - Address to Coordinates",
+      "path": "/v1/geocode",
+      "method": "GET",
+      "description": "Convert an address or place name to geographic coordinates",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Free-text address or place query (e.g., '200 S Mathilda Ave, Sunnyvale, CA')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "apikey": {
+          "type": "string",
+          "description": "HERE API key (Environment variable: HERE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results (default: 20, max: 100)",
+          "required": false,
+          "default": 10,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "BCP 47 language code for results (e.g., 'en-US', 'fr-FR', 'de-DE')",
+          "required": false,
+          "default": "en-US",
+          "send_method": "Query"
+        },
+        "at": {
+          "type": "string",
+          "description": "Coordinates to focus search in format 'latitude,longitude' (e.g., '37.36,-122.02')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "in": {
+          "type": "string",
+          "description": "Bounding box or country filter (e.g., 'countryCode:USA,DEU')",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Reverse Geocoding - Coordinates to Address",
+      "path": "/v1/revgeocode",
+      "method": "GET",
+      "description": "Convert geographic coordinates to a human-readable address",
+      "request_params": {
+        "at": {
+          "type": "string",
+          "description": "Coordinates in format 'latitude,longitude' (e.g., '37.3861,-122.0839')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "apikey": {
+          "type": "string",
+          "description": "HERE API key (Environment variable: HERE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "BCP 47 language code for results",
+          "required": false,
+          "default": "en-US",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Autocomplete",
+      "path": "/v1/autocomplete",
+      "method": "GET",
+      "description": "Get address suggestions as user types (autocomplete for search boxes)",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Partial address text for autocomplete suggestions",
+          "required": true,
+          "send_method": "Query"
+        },
+        "apikey": {
+          "type": "string",
+          "description": "HERE API key (Environment variable: HERE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of suggestions (default: 5, max: 20)",
+          "required": false,
+          "default": 5,
+          "send_method": "Query"
+        },
+        "at": {
+          "type": "string",
+          "description": "Origin coordinates for bias in format 'latitude,longitude'",
+          "required": false,
+          "send_method": "Query"
+        },
+        "in": {
+          "type": "string",
+          "description": "Country filter (e.g., 'countryCode:USA')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code for results",
+          "required": false,
+          "default": "en-US",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Routing - Calculate Route",
+      "path": "/v8/routes",
+      "method": "GET",
+      "description": "Calculate a route between origin and destination with full turn-by-turn instructions",
+      "request_params": {
+        "transportMode": {
+          "type": "string",
+          "description": "Transport mode: car, truck, pedestrian, bicycle, scooter, taxi, bus",
+          "required": true,
+          "default": "car",
+          "send_method": "Query"
+        },
+        "origin": {
+          "type": "string",
+          "description": "Origin coordinates in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination coordinates in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "apikey": {
+          "type": "string",
+          "description": "HERE API key (Environment variable: HERE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "return": {
+          "type": "string",
+          "description": "Comma-separated response sections: polyline, actions, instructions, summary, travelSummary",
+          "required": false,
+          "default": "polyline,summary,instructions",
+          "send_method": "Query"
+        },
+        "alternatives": {
+          "type": "integer",
+          "description": "Number of alternative routes (0-6)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "spans": {
+          "type": "string",
+          "description": "Route span attributes to include (e.g., 'trafficSpeed,baseSpeed')",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Places Search",
+      "path": "/v1/discover",
+      "method": "GET",
+      "description": "Search for places (POIs) near a location by text query",
+      "request_params": {
+        "at": {
+          "type": "string",
+          "description": "Location in format 'latitude,longitude' (required if 'in' not provided)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "q": {
+          "type": "string",
+          "description": "Text search query (e.g., 'coffee', 'ATM', 'Italian restaurant')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "apikey": {
+          "type": "string",
+          "description": "HERE API key (Environment variable: HERE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results (default: 20, max: 100)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "in": {
+          "type": "string",
+          "description": "Search area as circle (e.g., 'circle:37.36,-122.02;r=5000') or bounding box",
+          "required": false,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code for results",
+          "required": false,
+          "default": "en-US",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Browse Places by Category",
+      "path": "/v1/browse",
+      "method": "GET",
+      "description": "Browse places by category near a location (no text query needed)",
+      "request_params": {
+        "at": {
+          "type": "string",
+          "description": "Location in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "apikey": {
+          "type": "string",
+          "description": "HERE API key (Environment variable: HERE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "categories": {
+          "type": "string",
+          "description": "Comma-separated HERE category IDs (e.g., '100-1000-0000' for restaurant, '600-6000-0061' for bank)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "in": {
+          "type": "string",
+          "description": "Bounding area (e.g., 'circle:37.36,-122.02;r=1000')",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Look Up Place by ID",
+      "path": "/v1/lookup",
+      "method": "GET",
+      "description": "Get detailed information about a specific place using its HERE Place ID",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "HERE Place ID (from Places Search results)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "apikey": {
+          "type": "string",
+          "description": "HERE API key (Environment variable: HERE_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "lang": {
+          "type": "string",
+          "description": "Language code for results",
+          "required": false,
+          "default": "en-US",
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

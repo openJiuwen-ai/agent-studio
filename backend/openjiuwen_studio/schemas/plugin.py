@@ -58,6 +58,7 @@ class PluginCreate(BaseModel):
     url: Optional[str] = Field("", alias="url")
     icon_uri: Optional[str] = Field("", alias="icon_uri")
     request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
+    header_configuration: Optional[Any] = Field(None, alias="header_configuration")
     mcp_transport: Optional[int] = Field(None, alias="mcp_transport")
     # stdio transport fields
     command: Optional[str] = Field("", alias="command")
@@ -84,6 +85,12 @@ class PluginList(BaseModel):
 class PluginPublish(PluginId):
     version_desc: Optional[str] = Field("", alias="version_desc")
     force: Optional[bool] = Field(False, alias="force")
+
+
+class PluginApiHeader(BaseModel):
+    name: str = Field(..., alias="name")
+    value: str = Field("", alias="value")
+    description: Optional[str] = Field("", alias="description")
 
 
 class PluginInfo(PluginBase):
@@ -175,11 +182,6 @@ class PluginListTool(PluginId):
     size: Optional[int] = Field(0, alias="size")
 
 
-class PluginApiHeader(BaseModel):
-    name: str = Field(..., alias="name")
-    value: str = Field(..., alias="value")
-
-
 class PluginApiInfo(PluginApiBase):
     tool_id: str = Field(..., alias="tool_id")
     request_params: Optional[List[PluginToolParam]] = Field([], alias="request_params")
@@ -268,6 +270,7 @@ class PluginPublishResponse(BaseModel):
 class PluginPublishInfo(PluginInfo):
     version_desc: Optional[str] = Field("", alias="version_desc")
     tools: List[Dict] = Field(..., alias="tools")
+    headers: Optional[List[PluginApiHeader]] = Field([], alias="headers")
 
     @classmethod
     def from_db_with_mapping(cls, data: Dict[str, Any]) -> "PluginPublishInfo":

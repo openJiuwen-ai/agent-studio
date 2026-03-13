@@ -1,0 +1,269 @@
+{
+  "ready": false,
+  "plugin_id": "reddit",
+  "name": "Reddit",
+  "description": "Access Reddit API to read posts, comments, and submit content to subreddits.",
+  "category": "social",
+  "category_name": "Social & Communication",
+  "category_icon": "💬",
+  "icon_uri": "🤖",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["reddit", "social", "posts", "comments", "communities"],
+  "api_prefix": "https://oauth.reddit.com",
+  "documentation": "https://www.reddit.com/dev/api/",
+  "desc_mk": "## Reddit API\n\nRead Reddit posts and comments, submit content, and search across subreddits using the Reddit OAuth API.\n\n**Note:** Get your access token at [Reddit App Preferences](https://www.reddit.com/prefs/apps).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_REDDIT_ACCESS_TOKEN",
+      "description": "Reddit OAuth 2.0 access token (Environment variable: REDDIT_ACCESS_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Hot Posts",
+      "path": "/r/{subreddit}/hot",
+      "method": "GET",
+      "description": "Get the hot posts from a subreddit.",
+      "request_params": {
+        "subreddit": {
+          "type": "string",
+          "description": "The name of the subreddit (without the r/ prefix)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of posts to return (default 25, max 100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "description": "Fullname of a thing for pagination (t3_xxxxx format)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "before": {
+          "type": "string",
+          "description": "Fullname of a thing for reverse pagination",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get New Posts",
+      "path": "/r/{subreddit}/new",
+      "method": "GET",
+      "description": "Get the newest posts from a subreddit.",
+      "request_params": {
+        "subreddit": {
+          "type": "string",
+          "description": "The name of the subreddit (without the r/ prefix)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of posts to return (default 25, max 100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "description": "Fullname of a thing for pagination",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Top Posts",
+      "path": "/r/{subreddit}/top",
+      "method": "GET",
+      "description": "Get the top posts from a subreddit for a given time period.",
+      "request_params": {
+        "subreddit": {
+          "type": "string",
+          "description": "The name of the subreddit (without the r/ prefix)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "t": {
+          "type": "string",
+          "description": "Time filter: hour, day, week, month, year, all",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of posts to return (default 25, max 100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "description": "Fullname of a thing for pagination",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Post Comments",
+      "path": "/r/{subreddit}/comments/{post_id}",
+      "method": "GET",
+      "description": "Get the comments for a specific Reddit post.",
+      "request_params": {
+        "subreddit": {
+          "type": "string",
+          "description": "The name of the subreddit containing the post",
+          "required": true,
+          "send_method": "Path"
+        },
+        "post_id": {
+          "type": "string",
+          "description": "The ID of the post (without the t3_ prefix)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Comment sort order: confidence, top, new, controversial, old, random, qa, live",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of comments to return",
+          "required": false,
+          "send_method": "Query"
+        },
+        "depth": {
+          "type": "integer",
+          "description": "Maximum depth of comment thread to return",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Submit Post",
+      "path": "/api/submit",
+      "method": "POST",
+      "description": "Submit a new post (link or text) to a subreddit.",
+      "request_params": {
+        "sr": {
+          "type": "string",
+          "description": "Name of the subreddit to submit to",
+          "required": true,
+          "send_method": "Body"
+        },
+        "kind": {
+          "type": "string",
+          "description": "Type of submission: link, self (text post), image, video, videogif",
+          "required": true,
+          "send_method": "Body"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the submission (max 300 characters)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "text": {
+          "type": "string",
+          "description": "Text content for self posts (markdown supported)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "url": {
+          "type": "string",
+          "description": "URL for link posts",
+          "required": false,
+          "send_method": "Body"
+        },
+        "nsfw": {
+          "type": "boolean",
+          "description": "Mark the post as NSFW",
+          "required": false,
+          "send_method": "Body"
+        },
+        "spoiler": {
+          "type": "boolean",
+          "description": "Mark the post as a spoiler",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Subreddit Info",
+      "path": "/r/{subreddit}/about",
+      "method": "GET",
+      "description": "Get information and metadata about a subreddit.",
+      "request_params": {
+        "subreddit": {
+          "type": "string",
+          "description": "The name of the subreddit (without the r/ prefix)",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Search Posts",
+      "path": "/search",
+      "method": "GET",
+      "description": "Search for posts across Reddit or within a specific subreddit.",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query string",
+          "required": true,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort order for results: relevance, hot, top, new, comments",
+          "required": false,
+          "send_method": "Query"
+        },
+        "t": {
+          "type": "string",
+          "description": "Time filter: hour, day, week, month, year, all",
+          "required": false,
+          "send_method": "Query"
+        },
+        "subreddit": {
+          "type": "string",
+          "description": "Limit search to a specific subreddit",
+          "required": false,
+          "send_method": "Query"
+        },
+        "restrict_sr": {
+          "type": "boolean",
+          "description": "If true, restrict results to the specified subreddit only",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results to return (default 25, max 100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "description": "Pagination cursor for next page of results",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,277 @@
+{
+  "ready": false,
+  "plugin_id": "soundcloud_api",
+  "name": "SoundCloud",
+  "description": "Music and audio sharing platform. Discover tracks, artists, playlists, and user content from independent creators worldwide.",
+  "category": "entertainment",
+  "category_name": "Entertainment & Events",
+  "category_icon": "🎭",
+  "icon_uri": "🎧",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "music",
+    "audio",
+    "soundcloud",
+    "streaming",
+    "indie",
+    "entertainment"
+  ],
+  "api_prefix": "https://api.soundcloud.com",
+  "desc_mk": "SoundCloud is a music and audio sharing platform that lets users upload, promote, and share their music. This plugin provides access to search, track discovery, user profiles, and playlist management.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "OAuth YOUR_SOUNDCLOUD_ACCESS_TOKEN",
+      "description": "SoundCloud OAuth token for API authentication"
+    }
+  },
+  "tools": [
+    {
+      "name": "Search Tracks",
+      "path": "/tracks",
+      "method": "GET",
+      "description": "Search for tracks on SoundCloud",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results to return (max 200)",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Offset for pagination",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "filter": {
+          "type": "string",
+          "description": "Filter: public, private, all, streamable, downloadable",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Track",
+      "path": "/tracks/{track_id}",
+      "method": "GET",
+      "description": "Get detailed information about a specific track",
+      "request_params": {
+        "track_id": {
+          "type": "string",
+          "description": "SoundCloud track ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Search Users",
+      "path": "/users",
+      "method": "GET",
+      "description": "Search for users on SoundCloud",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results to return",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User",
+      "path": "/users/{user_id}",
+      "method": "GET",
+      "description": "Get detailed information about a user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "SoundCloud user ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get User Tracks",
+      "path": "/users/{user_id}/tracks",
+      "method": "GET",
+      "description": "Get all tracks uploaded by a user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "SoundCloud user ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of tracks to return",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Playlists",
+      "path": "/users/{user_id}/playlists",
+      "method": "GET",
+      "description": "Get all playlists created by a user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "SoundCloud user ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of playlists to return",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Favorites",
+      "path": "/users/{user_id}/favorites",
+      "method": "GET",
+      "description": "Get tracks favorited by a user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "SoundCloud user ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of favorites to return",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Playlist",
+      "path": "/playlists/{playlist_id}",
+      "method": "GET",
+      "description": "Get detailed information about a playlist",
+      "request_params": {
+        "playlist_id": {
+          "type": "string",
+          "description": "SoundCloud playlist ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Search Playlists",
+      "path": "/playlists",
+      "method": "GET",
+      "description": "Search for playlists on SoundCloud",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query",
+          "required": true,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of results to return",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Track Comments",
+      "path": "/tracks/{track_id}/comments",
+      "method": "GET",
+      "description": "Get all comments on a track",
+      "request_params": {
+        "track_id": {
+          "type": "string",
+          "description": "SoundCloud track ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of comments to return",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Followings",
+      "path": "/users/{user_id}/followings",
+      "method": "GET",
+      "description": "Get users that a user is following",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "SoundCloud user ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of followings to return",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Followers",
+      "path": "/users/{user_id}/followers",
+      "method": "GET",
+      "description": "Get users following a specific user",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "SoundCloud user ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of followers to return",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

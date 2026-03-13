@@ -5,7 +5,7 @@
 
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Send, Loader2, Plus } from 'lucide-react'
+import { Send, Loader2, Plus, Square } from 'lucide-react'
 import MessageInput, { MessageInputRef } from './MessageInput'
 import { MentionItem } from './MentionPicker'
 import AgentSelectionPill from './AgentSelectionPill'
@@ -17,6 +17,7 @@ export interface ChatInputAreaProps {
   inputValue: string
   onInputChange: (value: string) => void
   onPressEnter: () => void
+  onStopClick?: () => void  // 停止按钮点击事件（DeepSearch 运行中）
   inputRef: React.RefObject<MessageInputRef | null>
   isStreaming?: boolean
 
@@ -56,6 +57,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   inputValue,
   onInputChange,
   onPressEnter,
+  onStopClick,
   inputRef,
   isStreaming = false,
   selectedAgent,
@@ -78,6 +80,13 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   inputStyle,
 }) => {
   const { t } = useTranslation()
+
+  // 判断是否可以发送消息
+  const canSendMessage = selectedAgent && selectedModel && inputValue.trim() && !deepsearchUnavailable && !checkingDeepsearch
+
+  // 判断是否显示停止按钮（streaming 状态且有 onStopClick 回调）
+  const isStopMode = isStreaming && !!onStopClick
+
   return (
     <div className={className}>
       {/* 智能体选择悬浮框 */}
@@ -105,7 +114,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           onPressEnter={onPressEnter}
           className="w-full"
           style={inputStyle}
-          isDisabled={!selectedAgent || !selectedModel || !inputValue.trim() || isStreaming || deepsearchUnavailable || checkingDeepsearch}
+          isDisabled={isStreaming || !canSendMessage}
         />
 
         {/* 左侧 @ 和 # 按钮 */}
@@ -142,19 +151,19 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
             </button>
           )}
 
-          {/* 发送按钮 - 根据 DeepSearch 服务状态显示不同状态 */}
+          {/* 发送/停止按钮 - 根据 streaming 状态切换 */}
           <button
-            onClick={onPressEnter}
-            disabled={!selectedAgent || !selectedModel || !inputValue.trim() || isStreaming || deepsearchUnavailable || checkingDeepsearch}
+            onClick={() => isStopMode ? onStopClick() : onPressEnter()}
+            disabled={isStopMode ? false : !canSendMessage}
             className={`
               w-10 h-10 ${RADIUS_BUTTON} flex items-center justify-center
               transition-all duration-200 shrink-0
               ${
-                isStreaming || checkingDeepsearch
-                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                  : deepsearchUnavailable
-              ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                    : selectedAgent && selectedModel && inputValue.trim()
+                isStopMode
+                  ? 'bg-red-500 hover:bg-red-600 text-white cursor-pointer'  // 停止状态：红色
+                  : checkingDeepsearch || deepsearchUnavailable
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : canSendMessage
                       ? 'bg-blue-500 hover:bg-blue-600 active:scale-95 text-white shadow-sm hover:shadow'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
               }
@@ -163,7 +172,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
               checkingDeepsearch
                 ? t('apps.chat.checkingDeepsearch')
                 : isStreaming
-                  ? t('apps.chat.conversationInProgress')
+                  ? t('apps.chat.stopDeepSearch')
                   : deepsearchUnavailable
                     ? t('apps.chat.deepsearchServiceDown')
                     : !selectedModel
@@ -173,8 +182,10 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
                         : t('apps.chat.sendMessage')
             }
           >
-            {isStreaming || checkingDeepsearch ? (
+            {checkingDeepsearch ? (
               <Loader2 className="w-5 h-5 animate-spin" />
+            ) : isStreaming ? (
+              <Square className="w-5 h-5" />
             ) : (
               <Send className="w-5 h-5" />
             )}

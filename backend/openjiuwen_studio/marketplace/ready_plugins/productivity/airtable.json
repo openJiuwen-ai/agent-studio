@@ -1,0 +1,265 @@
+{
+  "ready": false,
+  "plugin_id": "airtable",
+  "name": "Airtable",
+  "description": "Flexible cloud database with spreadsheet-like UI. Create and query records, manage bases, and build relational databases.",
+  "category": "productivity",
+  "category_name": "Productivity Tools",
+  "category_icon": "📋",
+  "icon_uri": "🗂️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["productivity", "database", "spreadsheet", "data-management", "no-code"],
+  "api_prefix": "https://api.airtable.com/v0",
+  "documentation": "https://airtable.com/developers/web/api/introduction",
+  "desc_mk": "Airtable is a flexible cloud database that combines the simplicity of a spreadsheet with the power of a relational database. Use this plugin to create, read, update, and delete records across your bases. **Note:** Get your API token at [Airtable Account](https://airtable.com/create/tokens). You will need your base ID (starts with `app`) and table name or ID for most operations.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_AIRTABLE_TOKEN",
+      "description": "Airtable personal access token (Environment variable: AIRTABLE_API_KEY)"
+    }
+  },
+  "tools": [
+    {
+      "name": "List Records",
+      "path": "/{base_id}/{table_id_or_name}",
+      "method": "GET",
+      "description": "List all records in a table with optional filtering, sorting, and pagination",
+      "request_params": {
+        "base_id": {
+          "type": "string",
+          "description": "The ID of the Airtable base (starts with 'app', e.g. appXXXXXXXXXXXXXX)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "table_id_or_name": {
+          "type": "string",
+          "description": "The ID or name of the table to list records from",
+          "required": true,
+          "send_method": "Path"
+        },
+        "filterByFormula": {
+          "type": "string",
+          "description": "Airtable formula to filter records. Example: NOT({Name} = '')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "maxRecords": {
+          "type": "integer",
+          "description": "Maximum total number of records to return",
+          "required": false,
+          "send_method": "Query"
+        },
+        "pageSize": {
+          "type": "integer",
+          "description": "Number of records per page (max 100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "array",
+          "description": "Array of sort objects. Example: [{\"field\": \"Name\", \"direction\": \"asc\"}]",
+          "required": false,
+          "send_method": "Query"
+        },
+        "view": {
+          "type": "string",
+          "description": "The name or ID of a view to use for filtering and sorting",
+          "required": false,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "array",
+          "description": "Array of field names to include in the response. If empty, all fields are returned",
+          "required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "string",
+          "description": "Pagination offset from a previous response to fetch the next page",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Record",
+      "path": "/{base_id}/{table_id_or_name}/{record_id}",
+      "method": "GET",
+      "description": "Retrieve a single record from an Airtable table by its record ID",
+      "request_params": {
+        "base_id": {
+          "type": "string",
+          "description": "The ID of the Airtable base (starts with 'app')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "table_id_or_name": {
+          "type": "string",
+          "description": "The ID or name of the table containing the record",
+          "required": true,
+          "send_method": "Path"
+        },
+        "record_id": {
+          "type": "string",
+          "description": "The ID of the record to retrieve (starts with 'rec')",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Create Records",
+      "path": "/{base_id}/{table_id_or_name}",
+      "method": "POST",
+      "description": "Create one or more new records in an Airtable table (up to 10 records per request)",
+      "request_params": {
+        "base_id": {
+          "type": "string",
+          "description": "The ID of the Airtable base (starts with 'app')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "table_id_or_name": {
+          "type": "string",
+          "description": "The ID or name of the table to create records in",
+          "required": true,
+          "send_method": "Path"
+        },
+        "records": {
+          "type": "array",
+          "description": "Array of record objects to create. Each object must have a 'fields' property. Example: [{\"fields\": {\"Name\": \"Alice\", \"Status\": \"Active\"}}]",
+          "required": true,
+          "send_method": "Body"
+        },
+        "typecast": {
+          "type": "boolean",
+          "description": "Automatically convert string values to the appropriate field type",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Record (PATCH)",
+      "path": "/{base_id}/{table_id_or_name}/{record_id}",
+      "method": "PATCH",
+      "description": "Update specific fields of an existing record, leaving other fields unchanged",
+      "request_params": {
+        "base_id": {
+          "type": "string",
+          "description": "The ID of the Airtable base (starts with 'app')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "table_id_or_name": {
+          "type": "string",
+          "description": "The ID or name of the table containing the record",
+          "required": true,
+          "send_method": "Path"
+        },
+        "record_id": {
+          "type": "string",
+          "description": "The ID of the record to update (starts with 'rec')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "fields": {
+          "type": "object",
+          "description": "Object containing the fields to update and their new values. Example: {\"Name\": \"Updated Name\", \"Status\": \"Done\"}",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Record (PUT)",
+      "path": "/{base_id}/{table_id_or_name}/{record_id}",
+      "method": "PUT",
+      "description": "Replace all fields of an existing record, clearing any fields not included in the request",
+      "request_params": {
+        "base_id": {
+          "type": "string",
+          "description": "The ID of the Airtable base (starts with 'app')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "table_id_or_name": {
+          "type": "string",
+          "description": "The ID or name of the table containing the record",
+          "required": true,
+          "send_method": "Path"
+        },
+        "record_id": {
+          "type": "string",
+          "description": "The ID of the record to replace (starts with 'rec')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "fields": {
+          "type": "object",
+          "description": "Object containing all fields for the record. Unspecified fields will be cleared. Example: {\"Name\": \"Full Name\", \"Email\": \"email@example.com\"}",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Delete Record",
+      "path": "/{base_id}/{table_id_or_name}/{record_id}",
+      "method": "DELETE",
+      "description": "Permanently delete a single record from an Airtable table",
+      "request_params": {
+        "base_id": {
+          "type": "string",
+          "description": "The ID of the Airtable base (starts with 'app')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "table_id_or_name": {
+          "type": "string",
+          "description": "The ID or name of the table containing the record",
+          "required": true,
+          "send_method": "Path"
+        },
+        "record_id": {
+          "type": "string",
+          "description": "The ID of the record to delete (starts with 'rec')",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "List Bases",
+      "path": "/meta/bases",
+      "method": "GET",
+      "description": "Return a list of all Airtable bases accessible to the authenticated user",
+      "request_params": {
+        "offset": {
+          "type": "string",
+          "description": "Pagination offset from a previous response to fetch the next page of bases",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Base Schema",
+      "path": "/meta/bases/{base_id}/tables",
+      "method": "GET",
+      "description": "Return the schema of all tables in a base, including field definitions and views",
+      "request_params": {
+        "base_id": {
+          "type": "string",
+          "description": "The ID of the Airtable base to get the schema for (starts with 'app')",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,208 @@
+{
+  "ready": false,
+  "plugin_id": "medium",
+  "name": "Medium",
+  "description": "Access Medium API to publish posts and manage publications.",
+  "category": "social",
+  "category_name": "Social & Communication",
+  "category_icon": "💬",
+  "icon_uri": "✍️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "medium",
+    "blogging",
+    "writing",
+    "publishing",
+    "content"
+  ],
+  "api_prefix": "https://api.medium.com/v1",
+  "documentation": "https://github.com/Medium/medium-api-docs",
+  "desc_mk": "## Medium API\n\nPublish posts and manage publications on Medium through the Medium REST API.\n\n**Note:** Get your access token at [Medium Settings](https://medium.com/me/settings) under Integration tokens.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_MEDIUM_ACCESS_TOKEN",
+      "description": "Medium OAuth 2.0 or integration token (Environment variable: MEDIUM_ACCESS_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Current User",
+      "path": "/me",
+      "method": "GET",
+      "description": "Get information about the authenticated Medium user.",
+      "request_params": {}
+    },
+    {
+      "name": "Create Post",
+      "path": "/users/{authorId}/posts",
+      "method": "POST",
+      "description": "Create a new post on Medium under the authenticated user's profile.",
+      "request_params": {
+        "authorId": {
+          "type": "string",
+          "description": "The ID of the authenticated user (author of the post)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the post",
+          "required": true,
+          "send_method": "Body"
+        },
+        "contentFormat": {
+          "type": "string",
+          "description": "Format of the content: html, markdown",
+          "required": true,
+          "send_method": "Body"
+        },
+        "content": {
+          "type": "string",
+          "description": "Body content of the post in the specified format",
+          "required": true,
+          "send_method": "Body"
+        },
+        "tags": {
+          "type": "array",
+          "description": "Array of tags for the post (max 5 tags)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "canonicalUrl": {
+          "type": "string",
+          "description": "Original URL of the content if cross-posting from another site",
+          "required": false,
+          "send_method": "Body"
+        },
+        "publishStatus": {
+          "type": "string",
+          "description": "Publication status: public, draft, unlisted",
+          "required": false,
+          "send_method": "Body"
+        },
+        "license": {
+          "type": "string",
+          "description": "License for the post: all-rights-reserved, cc-40-by, cc-40-by-sa, cc-40-by-nd, cc-40-by-nc, cc-40-by-nc-nd, cc-40-by-nc-sa, cc-40-zero, public-domain",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Publications",
+      "path": "/users/{userId}/publications",
+      "method": "GET",
+      "description": "Get a list of publications that the user is a contributor to.",
+      "request_params": {
+        "userId": {
+          "type": "string",
+          "description": "The ID of the Medium user",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Create Publication Post",
+      "path": "/publications/{publicationId}/posts",
+      "method": "POST",
+      "description": "Create a new post under a specific Medium publication.",
+      "request_params": {
+        "publicationId": {
+          "type": "string",
+          "description": "The ID of the publication to post under",
+          "required": true,
+          "send_method": "Path"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the post",
+          "required": true,
+          "send_method": "Body"
+        },
+        "contentFormat": {
+          "type": "string",
+          "description": "Format of the content: html, markdown",
+          "required": true,
+          "send_method": "Body"
+        },
+        "content": {
+          "type": "string",
+          "description": "Body content of the post in the specified format",
+          "required": true,
+          "send_method": "Body"
+        },
+        "tags": {
+          "type": "array",
+          "description": "Array of tags for the post (max 5 tags)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "canonicalUrl": {
+          "type": "string",
+          "description": "Original URL of the content if cross-posting from another site",
+          "required": false,
+          "send_method": "Body"
+        },
+        "publishStatus": {
+          "type": "string",
+          "description": "Publication status: public, draft, unlisted",
+          "required": false,
+          "send_method": "Body"
+        },
+        "license": {
+          "type": "string",
+          "description": "License for the post content",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Publication Contributors",
+      "path": "/publications/{publicationId}/contributors",
+      "method": "GET",
+      "description": "Get a list of contributors (editors and writers) for a specific publication.",
+      "request_params": {
+        "publicationId": {
+          "type": "string",
+          "description": "The ID of the publication",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get User Posts",
+      "path": "/users/{userId}/posts",
+      "method": "GET",
+      "description": "Get a list of posts published by a specific Medium user.",
+      "request_params": {
+        "userId": {
+          "type": "string",
+          "description": "The ID of the Medium user whose posts to retrieve",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Publication",
+      "path": "/publications/{publicationId}",
+      "method": "GET",
+      "description": "Get information about a specific Medium publication.",
+      "request_params": {
+        "publicationId": {
+          "type": "string",
+          "description": "The ID of the Medium publication",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    }
+  ]
+}

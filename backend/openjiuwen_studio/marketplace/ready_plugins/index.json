@@ -1,0 +1,218 @@
+{
+  "version": "1.0.0",
+  "description": "Plugin marketplace index - defines categories and available plugins",
+  "categories": {
+    "ai": {
+      "name": "AI & ML Services",
+      "description": "Plugins for AI and machine learning services",
+      "icon": "🤖",
+      "plugins": [
+        "ai/openai.json",
+        "ai/deepseek.json",
+        "ai/qwen.json",
+        "ai/moonshot.json",
+        "ai/zhipu.json",
+        "ai/baichuan.json",
+        "ai/baidu_translate.json",
+        "ai/baidu_ocr.json",
+        "ai/baidu_speech.json"
+      ]
+    },
+    "cloud": {
+      "name": "Cloud & Infrastructure",
+      "description": "Cloud infrastructure, DevOps, and hosting platform integrations",
+      "icon": "☁️",
+      "plugins": [
+        "cloud/aws.json",
+        "cloud/azure.json",
+        "cloud/digitalocean.json",
+        "cloud/cloudflare.json"
+      ]
+    },
+    "communication": {
+      "name": "Communication",
+      "description": "Communication tools and services",
+      "icon": "📞",
+      "plugins": [
+        "communication/slack.json",
+        "communication/discord.json",
+        "communication/telegram.json",
+        "communication/twilio.json",
+        "communication/whatsapp_business.json",
+        "communication/sendgrid.json",
+        "communication/mailgun.json",
+        "communication/postmark.json",
+        "communication/gmail.json",
+        "communication/outlook365.json",
+        "communication/juhe_data.json"
+      ]
+    },
+    "crm": {
+      "name": "CRM",
+      "description": "Customer relationship management platforms and sales automation tools",
+      "icon": "🤝",
+      "plugins": [
+        "crm/hubspot.json",
+        "crm/salesforce.json"
+      ]
+    },
+    "data": {
+      "name": "Data & Analytics",
+      "description": "Plugins for data sources and analytics",
+      "icon": "📊",
+      "plugins": [
+        "data/coingecko.json",
+        "data/finnhub.json",
+        "data/qweather.json",
+        "data/caiyun_weather.json",
+        "data/openweathermap.json",
+        "data/weatherapi_com.json",
+        "data/tushare.json",
+        "data/fixer_io.json",
+        "data/kuaidi100.json",
+        "data/17track.json",
+        "data/nasa.json"
+      ]
+    },
+    "database": {
+      "name": "Databases",
+      "description": "Database-as-a-service and backend data store integrations",
+      "icon": "🗄️",
+      "plugins": [
+        "database/mongodb_atlas.json",
+        "database/redis.json",
+        "database/supabase.json"
+      ]
+    },
+    "developer": {
+      "name": "Developer Tools",
+      "description": "Source control, CI/CD, and developer infrastructure services",
+      "icon": "⚙️",
+      "plugins": [
+        "developer/github.json",
+        "developer/gitlab.json",
+        "developer/bitbucket.json",
+        "developer/docker_hub.json"
+      ]
+    },
+    "ecommerce": {
+      "name": "E-Commerce",
+      "description": "Online store and e-commerce platform integrations",
+      "icon": "🛒",
+      "plugins": [
+        "ecommerce/shopify.json",
+        "ecommerce/woocommerce.json",
+        "ecommerce/bigcommerce.json",
+        "ecommerce/magento.json",
+        "ecommerce/etsy.json",
+        "ecommerce/ebay.json"
+      ]
+    },
+    "entertainment": {
+      "name": "Entertainment & Events",
+      "description": "Music streaming, video platforms, live streaming, event discovery, and ticketing services",
+      "icon": "🎭",
+      "plugins": [
+        "entertainment/spotify.json",
+        "entertainment/soundcloud.json",
+        "entertainment/lastfm.json",
+        "entertainment/deezer.json",
+        "entertainment/twitch.json",
+        "entertainment/vimeo.json",
+        "entertainment/ticketmaster.json",
+        "entertainment/eventbrite.json",
+        "entertainment/bandsintown.json",
+        "entertainment/seatgeek.json"
+      ]
+    },
+    "file_storage": {
+      "name": "File Storage",
+      "description": "Cloud file storage and synchronization services",
+      "icon": "📂",
+      "plugins": [
+        "file_storage/google_drive.json",
+        "file_storage/onedrive.json",
+        "file_storage/dropbox.json",
+        "file_storage/box.json"
+      ]
+    },
+    "maps": {
+      "name": "Maps & Location",
+      "description": "Plugins for maps, geocoding, and location services",
+      "icon": "🗺️",
+      "plugins": [
+        "maps/google_maps.json",
+        "maps/mapbox.json",
+        "maps/here_maps.json",
+        "maps/baidu_maps.json",
+        "maps/amap.json",
+        "maps/tencent_maps.json"
+      ]
+    },
+    "payments": {
+      "name": "Payments & Finance",
+      "description": "Payment processing and financial services",
+      "icon": "💳",
+      "plugins": [
+        "payments/stripe.json",
+        "payments/paypal.json",
+        "payments/square.json",
+        "payments/wise.json",
+        "payments/quickbooks.json"
+      ]
+    },
+    "productivity": {
+      "name": "Productivity Tools",
+      "description": "Plugins for email, calendar, and task management",
+      "icon": "📋",
+      "plugins": [
+        "productivity/notion.json",
+        "productivity/trello.json",
+        "productivity/asana.json",
+        "productivity/jira.json",
+        "productivity/clickup.json",
+        "productivity/airtable.json",
+        "productivity/todoist.json",
+        "productivity/monday.json"
+      ]
+    },
+    "social": {
+      "name": "Social & Communication",
+      "description": "Plugins for social media and communication platforms",
+      "icon": "💬",
+      "plugins": [
+        "social/twitter_oauth2.json",
+        "social/twitter_oauth1.json",
+        "social/facebook.json",
+        "social/instagram.json",
+        "social/linkedin.json",
+        "social/tiktok_business.json",
+        "social/reddit.json",
+        "social/pinterest.json",
+        "social/medium.json",
+        "social/tumblr.json",
+        "social/weibo.json",
+        "social/youtube.json",
+        "social/douyin.json"
+      ]
+    },
+    "testing": {
+      "name": "Testing & Legacy",
+      "description": "Testing tools and legacy API examples",
+      "icon": "🛠️",
+      "plugins": [
+        "testing/httpbin.json",
+        "testing/petstore.json",
+        "testing/fakerestapi.json",
+        "testing/jsonplaceholder.json"
+      ]
+    },
+    "other": {
+      "name": "Other",
+      "description": "Other miscellaneous plugins",
+      "icon": "📦",
+      "plugins": [
+      ]
+    }
+  }
+}

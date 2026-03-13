@@ -1,0 +1,217 @@
+{
+  "ready": false,
+  "plugin_id": "instagram",
+  "name": "Instagram",
+  "description": "Access Instagram Graph API to manage media, insights, and user profiles.",
+  "category": "social",
+  "category_name": "Social & Communication",
+  "category_icon": "💬",
+  "icon_uri": "📸",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["instagram", "social", "media", "photos", "insights"],
+  "api_prefix": "https://graph.instagram.com/v17.0",
+  "documentation": "https://developers.facebook.com/docs/instagram-api",
+  "desc_mk": "## Instagram Graph API\n\nAccess Instagram user profiles, media, and insights through the Instagram Graph API.\n\n**Note:** Get your access token at [Meta for Developers](https://developers.facebook.com/apps/).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_INSTAGRAM_ACCESS_TOKEN",
+      "description": "Instagram access token for authentication (Environment variable: INSTAGRAM_ACCESS_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get User Profile",
+      "path": "/me",
+      "method": "GET",
+      "description": "Get the authenticated user's Instagram profile information.",
+      "request_params": {
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return (e.g. id,username,name,biography,followers_count,media_count)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Media",
+      "path": "/me/media",
+      "method": "GET",
+      "description": "Get a collection of image, video, and album objects for the authenticated user.",
+      "request_params": {
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return (e.g. id,caption,media_type,media_url,timestamp)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of media objects to return (default 12, max 100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "description": "Cursor for pagination - fetch results after this cursor",
+          "required": false,
+          "send_method": "Query"
+        },
+        "before": {
+          "type": "string",
+          "description": "Cursor for pagination - fetch results before this cursor",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Media Details",
+      "path": "/{media_id}",
+      "method": "GET",
+      "description": "Get details about a specific media object.",
+      "request_params": {
+        "media_id": {
+          "type": "string",
+          "description": "The ID of the media object",
+          "required": true,
+          "send_method": "Path"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return (e.g. id,caption,media_type,media_url,like_count,comments_count)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Media Insights",
+      "path": "/{media_id}/insights",
+      "method": "GET",
+      "description": "Get insights (metrics) for a specific media object.",
+      "request_params": {
+        "media_id": {
+          "type": "string",
+          "description": "The ID of the media object",
+          "required": true,
+          "send_method": "Path"
+        },
+        "metric": {
+          "type": "string",
+          "description": "Comma-separated list of metrics to retrieve (e.g. impressions,reach,likes,comments,shares,saved)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Insights",
+      "path": "/{user_id}/insights",
+      "method": "GET",
+      "description": "Get insights (metrics) for an Instagram Business or Creator account.",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The ID of the Instagram user account",
+          "required": true,
+          "send_method": "Path"
+        },
+        "metric": {
+          "type": "string",
+          "description": "Comma-separated list of metrics (e.g. impressions,reach,follower_count,profile_views)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "period": {
+          "type": "string",
+          "description": "Period for the metric: day, week, days_28, month, lifetime",
+          "required": true,
+          "send_method": "Query"
+        },
+        "since": {
+          "type": "string",
+          "description": "Unix timestamp for start of date range",
+          "required": false,
+          "send_method": "Query"
+        },
+        "until": {
+          "type": "string",
+          "description": "Unix timestamp for end of date range",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Refresh Access Token",
+      "path": "/refresh_access_token",
+      "method": "GET",
+      "description": "Refresh a long-lived Instagram access token before it expires.",
+      "request_params": {
+        "grant_type": {
+          "type": "string",
+          "description": "Must be set to 'ig_refresh_token'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "access_token": {
+          "type": "string",
+          "description": "The long-lived access token to refresh",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Tags",
+      "path": "/{user_id}/tags",
+      "method": "GET",
+      "description": "Get a collection of image and video objects in which a user has been tagged by another user.",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The ID of the Instagram user",
+          "required": true,
+          "send_method": "Path"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results to return",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Media Children",
+      "path": "/{media_id}/children",
+      "method": "GET",
+      "description": "Get a collection of image and video objects on an album (carousel) media object.",
+      "request_params": {
+        "media_id": {
+          "type": "string",
+          "description": "The ID of the album (carousel) media object",
+          "required": true,
+          "send_method": "Path"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return (e.g. id,media_type,media_url)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

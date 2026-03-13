@@ -1,0 +1,319 @@
+{
+  "ready": false,
+  "plugin_id": "openai_api",
+  "name": "OpenAI API",
+  "description": "Access OpenAI's powerful AI models including GPT-4, GPT-3.5, DALL-E, and Whisper for text generation, image creation, and speech recognition.",
+  "category": "ai",
+  "category_name": "AI & ML Services",
+  "category_icon": "🤖",
+  "icon_uri": "🧠",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "ai",
+    "gpt",
+    "ml",
+    "openai",
+    "llm"
+  ],
+  "api_prefix": "https://api.openai.com/v1",
+  "desc_mk": "OpenAI provides cutting-edge AI models through their API. This plugin enables integration with GPT models for chat and completion, DALL-E for image generation, and Whisper for audio transcription.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_OPENAI_API_KEY",
+      "description": "OAuth Bearer token for OpenAI API authentication"
+    }
+  },
+  "tools": [
+    {
+      "name": "Create Chat Completion",
+      "path": "/chat/completions",
+      "method": "POST",
+      "description": "Generate text responses using GPT models in a conversational format",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model to use (e.g., 'gpt-4', 'gpt-3.5-turbo')",
+          "required": true,
+          "default": "gpt-3.5-turbo",
+          "send_method": "Body"
+        },
+        "messages": {
+          "type": "array",
+          "description": "Array of message objects with 'role' and 'content' fields",
+          "required": true,
+          "send_method": "Body"
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Sampling temperature between 0 and 2. Higher values make output more random",
+          "required": false,
+          "default": 1,
+          "send_method": "Body"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "description": "Maximum number of tokens to generate",
+          "required": false,
+          "send_method": "Body"
+        },
+        "top_p": {
+          "type": "number",
+          "description": "Nucleus sampling parameter. Alternative to temperature",
+          "required": false,
+          "default": 1,
+          "send_method": "Body"
+        },
+        "stream": {
+          "type": "boolean",
+          "description": "Whether to stream partial message deltas",
+          "required": false,
+          "default": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Completion",
+      "path": "/completions",
+      "method": "POST",
+      "description": "Generate text completions for a given prompt",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model to use (e.g., 'gpt-3.5-turbo-instruct')",
+          "required": true,
+          "send_method": "Body"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "The prompt to generate completions for",
+          "required": true,
+          "send_method": "Body"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "description": "Maximum number of tokens to generate",
+          "required": false,
+          "default": 16,
+          "send_method": "Body"
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Sampling temperature (0-2)",
+          "required": false,
+          "default": 1,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Image (DALL-E)",
+      "path": "/images/generations",
+      "method": "POST",
+      "description": "Generate images from text descriptions using DALL-E",
+      "request_params": {
+        "prompt": {
+          "type": "string",
+          "description": "Text description of the desired image",
+          "required": true,
+          "send_method": "Body"
+        },
+        "model": {
+          "type": "string",
+          "description": "Model to use (dall-e-2 or dall-e-3)",
+          "required": false,
+          "default": "dall-e-3",
+          "send_method": "Body"
+        },
+        "n": {
+          "type": "integer",
+          "description": "Number of images to generate (1-10 for dall-e-2, only 1 for dall-e-3)",
+          "required": false,
+          "default": 1,
+          "send_method": "Body"
+        },
+        "size": {
+          "type": "string",
+          "description": "Image size: '256x256', '512x512', '1024x1024', '1024x1792', '1792x1024'",
+          "required": false,
+          "default": "1024x1024",
+          "send_method": "Body"
+        },
+        "quality": {
+          "type": "string",
+          "description": "Image quality: 'standard' or 'hd' (dall-e-3 only)",
+          "required": false,
+          "default": "standard",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Image Edit",
+      "path": "/images/edits",
+      "method": "POST",
+      "description": "Edit or extend an existing image based on a prompt",
+      "request_params": {
+        "image": {
+          "type": "string",
+          "description": "The image to edit (PNG, < 4MB, square)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Text description of the desired edit",
+          "required": true,
+          "send_method": "Body"
+        },
+        "mask": {
+          "type": "string",
+          "description": "Optional mask image indicating where to edit",
+          "required": false,
+          "send_method": "Body"
+        },
+        "n": {
+          "type": "integer",
+          "description": "Number of images to generate",
+          "required": false,
+          "default": 1,
+          "send_method": "Body"
+        },
+        "size": {
+          "type": "string",
+          "description": "Size of generated images",
+          "required": false,
+          "default": "1024x1024",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Transcription (Whisper)",
+      "path": "/audio/transcriptions",
+      "method": "POST",
+      "description": "Transcribe audio to text using Whisper model",
+      "request_params": {
+        "file": {
+          "type": "string",
+          "description": "Audio file to transcribe (mp3, mp4, wav, etc.)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "model": {
+          "type": "string",
+          "description": "Model to use",
+          "required": true,
+          "default": "whisper-1",
+          "send_method": "Body"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language of the audio (ISO-639-1 format)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Optional text to guide the model's style",
+          "required": false,
+          "send_method": "Body"
+        },
+        "response_format": {
+          "type": "string",
+          "description": "Format of transcript output: 'json', 'text', 'srt', 'vtt'",
+          "required": false,
+          "default": "json",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Translation (Whisper)",
+      "path": "/audio/translations",
+      "method": "POST",
+      "description": "Translate audio to English using Whisper model",
+      "request_params": {
+        "file": {
+          "type": "string",
+          "description": "Audio file to translate",
+          "required": true,
+          "send_method": "Body"
+        },
+        "model": {
+          "type": "string",
+          "description": "Model to use",
+          "required": true,
+          "default": "whisper-1",
+          "send_method": "Body"
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Optional text to guide the model's style",
+          "required": false,
+          "send_method": "Body"
+        },
+        "response_format": {
+          "type": "string",
+          "description": "Format of output",
+          "required": false,
+          "default": "json",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Models",
+      "path": "/models",
+      "method": "GET",
+      "description": "List all available models and their capabilities",
+      "request_params": {}
+    },
+    {
+      "name": "Get Model Details",
+      "path": "/models/{model}",
+      "method": "GET",
+      "description": "Get detailed information about a specific model",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model ID to retrieve",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Create Embedding",
+      "path": "/embeddings",
+      "method": "POST",
+      "description": "Create vector embeddings for text (useful for semantic search and similarity)",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Embedding model to use",
+          "required": true,
+          "default": "text-embedding-ada-002",
+          "send_method": "Body"
+        },
+        "input": {
+          "type": "string",
+          "description": "Text or array of texts to create embeddings for",
+          "required": true,
+          "send_method": "Body"
+        },
+        "encoding_format": {
+          "type": "string",
+          "description": "Format to return embeddings: 'float' or 'base64'",
+          "required": false,
+          "default": "float",
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

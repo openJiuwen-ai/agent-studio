@@ -1,0 +1,221 @@
+{
+  "ready": false,
+  "plugin_id": "facebook",
+  "name": "Facebook",
+  "description": "Access Facebook Graph API to manage pages, posts, and insights.",
+  "category": "social",
+  "category_name": "Social & Communication",
+  "category_icon": "💬",
+  "icon_uri": "👤",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["facebook", "social", "pages", "posts", "insights"],
+  "api_prefix": "https://graph.facebook.com/v17.0",
+  "documentation": "https://developers.facebook.com/docs/graph-api",
+  "desc_mk": "## Facebook Graph API\n\nManage Facebook pages, posts, and access analytics through the Facebook Graph API.\n\n**Note:** Get your access token at [Meta for Developers](https://developers.facebook.com/apps/).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_FACEBOOK_ACCESS_TOKEN",
+      "description": "Facebook access token for authentication (Environment variable: FACEBOOK_ACCESS_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get User Profile",
+      "path": "/me",
+      "method": "GET",
+      "description": "Get the current user's Facebook profile information.",
+      "request_params": {
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return (e.g. id,name,email,picture)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Page Info",
+      "path": "/{page_id}",
+      "method": "GET",
+      "description": "Get information about a specific Facebook page.",
+      "request_params": {
+        "page_id": {
+          "type": "string",
+          "description": "The ID or username of the Facebook page",
+          "required": true,
+          "send_method": "Path"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return (e.g. id,name,about,fan_count,category)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Page Posts",
+      "path": "/{page_id}/feed",
+      "method": "GET",
+      "description": "Get the posts on a Facebook page's feed.",
+      "request_params": {
+        "page_id": {
+          "type": "string",
+          "description": "The ID or username of the Facebook page",
+          "required": true,
+          "send_method": "Path"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return (e.g. id,message,story,created_time,likes,comments)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of posts to return",
+          "required": false,
+          "send_method": "Query"
+        },
+        "after": {
+          "type": "string",
+          "description": "Cursor for pagination",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Page Post",
+      "path": "/{page_id}/feed",
+      "method": "POST",
+      "description": "Create a new post on a Facebook page.",
+      "request_params": {
+        "page_id": {
+          "type": "string",
+          "description": "The ID of the Facebook page to post to",
+          "required": true,
+          "send_method": "Path"
+        },
+        "message": {
+          "type": "string",
+          "description": "The text content of the post",
+          "required": false,
+          "send_method": "Body"
+        },
+        "link": {
+          "type": "string",
+          "description": "URL to attach to the post",
+          "required": false,
+          "send_method": "Body"
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Whether to publish immediately (true) or save as draft (false)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "scheduled_publish_time": {
+          "type": "integer",
+          "description": "Unix timestamp for scheduled publish time (requires published=false)",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Post Insights",
+      "path": "/{post_id}/insights",
+      "method": "GET",
+      "description": "Get insights and metrics for a specific Facebook post.",
+      "request_params": {
+        "post_id": {
+          "type": "string",
+          "description": "The ID of the Facebook post",
+          "required": true,
+          "send_method": "Path"
+        },
+        "metric": {
+          "type": "string",
+          "description": "Comma-separated list of metrics (e.g. post_impressions,post_reach,post_engaged_users,post_clicks)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Page Insights",
+      "path": "/{page_id}/insights",
+      "method": "GET",
+      "description": "Get insights and analytics for a Facebook page.",
+      "request_params": {
+        "page_id": {
+          "type": "string",
+          "description": "The ID of the Facebook page",
+          "required": true,
+          "send_method": "Path"
+        },
+        "metric": {
+          "type": "string",
+          "description": "Comma-separated list of page metrics (e.g. page_fans,page_impressions,page_views_total)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "period": {
+          "type": "string",
+          "description": "Time period: day, week, days_28, month, lifetime",
+          "required": false,
+          "send_method": "Query"
+        },
+        "since": {
+          "type": "string",
+          "description": "Start of date range as Unix timestamp or date string",
+          "required": false,
+          "send_method": "Query"
+        },
+        "until": {
+          "type": "string",
+          "description": "End of date range as Unix timestamp or date string",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Pages",
+      "path": "/search",
+      "method": "GET",
+      "description": "Search for Facebook pages by name or keyword.",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "The search query string",
+          "required": true,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "The type of object to search for (e.g. page, place, event)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated list of fields to return",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results to return",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,463 @@
+{
+  "ready": false,
+  "plugin_id": "amap_gaode",
+  "name": "Amap (Gaode Maps) API",
+  "description": "Alibaba's leading map and location service in China. Geocoding, POI search, route planning, and location-based services with high accuracy for Chinese addresses.",
+  "category": "maps",
+  "category_name": "Maps & Location",
+  "category_icon": "🗺️",
+  "icon_uri": "🧭",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "maps",
+    "location",
+    "geocoding",
+    "navigation",
+    "alibaba",
+    "china"
+  ],
+  "api_prefix": "https://restapi.amap.com",
+  "desc_mk": "Amap (高德地图/Gaode Maps) is China's leading map service provider, owned by Alibaba Group. Offers highly accurate geocoding, POI search, route planning, and location services optimized for Chinese addresses and places. **Note:** Requires API key from [Amap Developer Platform](https://lbs.amap.com/).",
+  "header_configuration": {
+    "API Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "AMAP_API_KEY",
+      "description": "Amap API key from Amap Developer Platform"
+    }
+  },
+  "tools": [
+    {
+      "name": "Geocoding - Address to Coordinates",
+      "path": "/v3/geocode/geo",
+      "method": "GET",
+      "description": "Convert an address to geographic coordinates (longitude, latitude)",
+      "request_params": {
+        "address": {
+          "type": "string",
+          "description": "Address to geocode (e.g., '北京市朝阳区阜通东大街6号' or 'Beijing')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "city": {
+          "type": "string",
+          "description": "City name to narrow search (optional but recommended for accuracy)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Amap API key (Environment variable: AMAP_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'JSON' or 'XML'",
+          "required": false,
+          "default": "JSON",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Reverse Geocoding - Coordinates to Address",
+      "path": "/v3/geocode/regeo",
+      "method": "GET",
+      "description": "Convert geographic coordinates to a human-readable address",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Coordinates in format 'longitude,latitude' (e.g., '116.481488,39.990464')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Amap API key (Environment variable: AMAP_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "radius": {
+          "type": "integer",
+          "description": "Search radius in meters (default 1000, max 3000)",
+          "required": false,
+          "default": 1000,
+          "send_method": "Query"
+        },
+        "extensions": {
+          "type": "string",
+          "description": "Return type: 'base' (basic) or 'all' (detailed)",
+          "required": false,
+          "default": "base",
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'JSON' or 'XML'",
+          "required": false,
+          "default": "JSON",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "POI Search - Text Search",
+      "path": "/v3/place/text",
+      "method": "GET",
+      "description": "Search for places (POIs) by keyword within a city or area",
+      "request_params": {
+        "keywords": {
+          "type": "string",
+          "description": "Search keywords (e.g., '星巴克', 'hotel', 'restaurant')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Amap API key (Environment variable: AMAP_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "city": {
+          "type": "string",
+          "description": "City name or city code (e.g., '北京' or '010')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "types": {
+          "type": "string",
+          "description": "POI category codes (e.g., '050000' for restaurant)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Number of results per page (max 25)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number (starts from 1)",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "extensions": {
+          "type": "string",
+          "description": "Return type: 'base' or 'all'",
+          "required": false,
+          "default": "base",
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'JSON' or 'XML'",
+          "required": false,
+          "default": "JSON",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "POI Search - Nearby Search",
+      "path": "/v5/place/around",
+      "method": "GET",
+      "description": "Search for places near a specific location",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Center point in format 'longitude,latitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Amap API key (Environment variable: AMAP_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "keywords": {
+          "type": "string",
+          "description": "Search keywords (optional)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "types": {
+          "type": "string",
+          "description": "POI category codes",
+          "required": false,
+          "send_method": "Query"
+        },
+        "radius": {
+          "type": "integer",
+          "description": "Search radius in meters (max 50000)",
+          "required": false,
+          "default": 1000,
+          "send_method": "Query"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Number of results per page (max 25)",
+          "required": false,
+          "default": 20,
+          "send_method": "Query"
+        },
+        "page_num": {
+          "type": "integer",
+          "description": "Page number (starts from 1)",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Driving Route Planning",
+      "path": "/v5/direction/driving",
+      "method": "GET",
+      "description": "Calculate optimal driving route between origin and destination",
+      "request_params": {
+        "origin": {
+          "type": "string",
+          "description": "Starting point in format 'longitude,latitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination point in format 'longitude,latitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Amap API key (Environment variable: AMAP_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "strategy": {
+          "type": "integer",
+          "description": "Route strategy: 0 (fastest), 1 (avoid toll), 2 (shortest), 3 (avoid highway), 4 (avoid congestion)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "waypoints": {
+          "type": "string",
+          "description": "Waypoints in format 'lon1,lat1;lon2,lat2' (max 16)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "avoidpolygons": {
+          "type": "string",
+          "description": "Avoid areas defined by polygon coordinates",
+          "required": false,
+          "send_method": "Query"
+        },
+        "extensions": {
+          "type": "string",
+          "description": "Return type: 'base' or 'all'",
+          "required": false,
+          "default": "base",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Walking Route Planning",
+      "path": "/v5/direction/walking",
+      "method": "GET",
+      "description": "Calculate walking route between two points",
+      "request_params": {
+        "origin": {
+          "type": "string",
+          "description": "Starting point in format 'longitude,latitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination point in format 'longitude,latitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Amap API key (Environment variable: AMAP_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Bicycling Route Planning",
+      "path": "/v5/direction/bicycling",
+      "method": "GET",
+      "description": "Calculate bicycling route between two points",
+      "request_params": {
+        "origin": {
+          "type": "string",
+          "description": "Starting point in format 'longitude,latitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination point in format 'longitude,latitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Amap API key (Environment variable: AMAP_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Transit Route Planning",
+      "path": "/v5/direction/transit/integrated",
+      "method": "GET",
+      "description": "Calculate public transit route between two points",
+      "request_params": {
+        "origin": {
+          "type": "string",
+          "description": "Starting point in format 'longitude,latitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination point in format 'longitude,latitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "city": {
+          "type": "string",
+          "description": "City name or city code (required for transit)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Amap API key (Environment variable: AMAP_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "strategy": {
+          "type": "integer",
+          "description": "Transit strategy: 0 (fastest), 1 (least transfer), 2 (least walking), 3 (most comfortable), 4 (avoid subway)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Distance Matrix",
+      "path": "/v3/distance",
+      "method": "GET",
+      "description": "Calculate distances and travel times between multiple origins and destinations",
+      "request_params": {
+        "origins": {
+          "type": "string",
+          "description": "Origin points in format 'lon1,lat1|lon2,lat2' (max 10)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination point in format 'longitude,latitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Amap API key (Environment variable: AMAP_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "integer",
+          "description": "Distance type: 0 (straight line), 1 (driving)",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'JSON' or 'XML'",
+          "required": false,
+          "default": "JSON",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "IP Location",
+      "path": "/v3/ip",
+      "method": "GET",
+      "description": "Get geographic location information from an IP address",
+      "request_params": {
+        "ip": {
+          "type": "string",
+          "description": "IP address to locate (IPv4). Omit to use request IP",
+          "required": false,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Amap API key (Environment variable: AMAP_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'JSON' or 'XML'",
+          "required": false,
+          "default": "JSON",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Coordinate Conversion",
+      "path": "/v3/assistant/coordinate/convert",
+      "method": "GET",
+      "description": "Convert coordinates between different coordinate systems (GPS, GCJ02, BD09)",
+      "request_params": {
+        "locations": {
+          "type": "string",
+          "description": "Coordinates in format 'lon1,lat1;lon2,lat2' (max 40 points)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "coordsys": {
+          "type": "string",
+          "description": "Source coordinate system: 'gps' (WGS84), 'mapbar', 'baidu', 'autonavi' (GCJ02)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Amap API key (Environment variable: AMAP_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "output": {
+          "type": "string",
+          "description": "Output format: 'JSON' or 'XML'",
+          "required": false,
+          "default": "JSON",
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

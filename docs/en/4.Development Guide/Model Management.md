@@ -28,8 +28,8 @@ openJiuwen Studio Model Management supports the following actions: adding models
    | Model Name   | Common          | A custom, user-friendly alias for the model used for display on the platform, helping users identify it quickly.<br>Example: `General LLM v3` / `Embedding Model v3` |
    | Model ID| Common          | The specific identifier required by the API request. This must match the ID defined on the server side.<br>Example: `gpt-3.5-turbo` / `text-embedding-v3` |
    | API Schema | Common          | The API format standard, which determines the request structure, authentication method, and response parsing rules.<br>This must match the model service provider. For example, selecting "OpenAI" implies the standard Chat Completion API schema. |
-   | API Key  | Common          | The authentication credential for the model service. It is usually obtained from the provider's console and will be encrypted and stored securely upon entry.<br>Example: `sk-xxxx` |
-   | Base URL   | Common          | The root endpoint address for API calls.<br>Example: `https://api.openai.com/v1`|
+   | API Key  | Common          | The authentication credential for the model service. It is usually obtained from the provider's console and will be encrypted and stored securely upon entry.<br>Example: `sk-xxxx`<br>Note: when no API key required, like in local Ollama, put wildcard `*`|
+   | Base URL   | Common          | The root endpoint address for API calls.<br>Example: `https://api.openai.com/v1` (Note: Providers like Ollama require `/v1/` suffix)|
    | Tags | Common          | Keywords used to categorize the model, facilitating quick filtering and identification. Separate multiple tags with commas.<br>Example: `"Chinese", "Chat", "LLM"` |
    | Description | LLM Model       | A brief summary of the model to help users understand its capabilities, applicable scenarios, and performance characteristics.<br>Example: `High-performance LLM optimized for Chinese dialogue`|
    | Timeout  | LLM Model       | The maximum duration allowed for a model request. This controls latency and prevents indefinite hanging.<br>Unit: seconds. Range: 0-300  |

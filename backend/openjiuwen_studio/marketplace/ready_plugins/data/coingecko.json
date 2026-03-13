@@ -1,0 +1,400 @@
+{
+  "ready": true,
+  "plugin_id": "coingecko",
+  "name": "CoinGecko",
+  "description": "Real-time and historical cryptocurrency market data including prices, market cap, volume, and trending coins for 10,000+ cryptocurrencies.",
+  "category": "data",
+  "category_name": "Data & Analytics",
+  "category_icon": "📊",
+  "icon_uri": "🦎",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "crypto",
+    "cryptocurrency",
+    "bitcoin",
+    "ethereum",
+    "market-data",
+    "defi",
+    "blockchain"
+  ],
+  "api_prefix": "https://api.coingecko.com/api/v3",
+  "documentation": "https://www.coingecko.com/en/api/documentation",
+  "desc_mk": "CoinGecko provides comprehensive real-time and historical cryptocurrency market data for 10,000+ coins across 600+ exchanges. Access prices, market cap, trading volume, OHLCV data, trending coins, and global market statistics. **Free tier** is available with rate limits. Get an API key at [CoinGecko API](https://www.coingecko.com/en/api).",
+  "header_configuration": {
+    "x-cg-demo-api-key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "YOUR_COINGECKO_API_KEY",
+      "description": "CoinGecko Demo API key for authentication (leave empty for unauthenticated access with lower rate limits)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Coin Prices",
+      "path": "/simple/price",
+      "method": "GET",
+      "description": "Get the current price of one or more cryptocurrencies in any supported fiat or crypto currency",
+      "request_params": {
+        "ids": {
+          "type": "string",
+          "description": "Comma-separated list of coin IDs (e.g., 'bitcoin,ethereum,solana'). Use Get Coin List to find IDs.",
+          "required": true,
+          "send_method": "Query"
+        },
+        "vs_currencies": {
+          "type": "string",
+          "description": "Comma-separated list of target currencies (e.g., 'usd,eur,btc'). Use Get Supported Currencies to list options.",
+          "required": true,
+          "default": "usd",
+          "send_method": "Query"
+        },
+        "include_market_cap": {
+          "type": "boolean",
+          "description": "Include market capitalization in the response",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        },
+        "include_24hr_vol": {
+          "type": "boolean",
+          "description": "Include 24-hour trading volume in the response",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        },
+        "include_24hr_change": {
+          "type": "boolean",
+          "description": "Include 24-hour price change percentage in the response",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        },
+        "include_last_updated_at": {
+          "type": "boolean",
+          "description": "Include last updated timestamp in the response",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        },
+        "precision": {
+          "type": "string",
+          "description": "Decimal precision for price values (e.g., 'full' or a number 0-18)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Coins Markets",
+      "path": "/coins/markets",
+      "method": "GET",
+      "description": "List all supported coins with price, market cap, volume, and market-related data sorted by market cap",
+      "request_params": {
+        "vs_currency": {
+          "type": "string",
+          "description": "Target currency for market data (e.g., 'usd', 'eur', 'cny')",
+          "required": true,
+          "default": "usd",
+          "send_method": "Query"
+        },
+        "ids": {
+          "type": "string",
+          "description": "Comma-separated list of coin IDs to filter results (e.g., 'bitcoin,ethereum'). Omit for all coins.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "order": {
+          "type": "string",
+          "description": "Sort order: 'market_cap_desc', 'market_cap_asc', 'volume_asc', 'volume_desc', 'id_asc', 'id_desc'",
+          "required": false,
+          "default": "market_cap_desc",
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (1-250)",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number for pagination (starts at 1)",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        },
+        "sparkline": {
+          "type": "boolean",
+          "description": "Include 7-day sparkline price data",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        },
+        "price_change_percentage": {
+          "type": "string",
+          "description": "Comma-separated intervals for price change % (e.g., '1h,24h,7d,14d,30d,200d,1y')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "category": {
+          "type": "string",
+          "description": "Filter by coin category (e.g., 'defi', 'layer-1', 'nft')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "precision": {
+          "type": "string",
+          "description": "Decimal precision for price values (e.g., 'full' or a number 0-18)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Coin Details",
+      "path": "/coins/{id}",
+      "method": "GET",
+      "description": "Get comprehensive current data for a specific coin: name, price, market data, community stats, developer data, and more",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "CoinGecko coin ID (e.g., 'bitcoin', 'ethereum', 'solana'). Use Get Coin List to find IDs.",
+          "required": true,
+          "send_method": "Path"
+        },
+        "localization": {
+          "type": "boolean",
+          "description": "Include localized language data in the response",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        },
+        "tickers": {
+          "type": "boolean",
+          "description": "Include exchange ticker data",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        },
+        "market_data": {
+          "type": "boolean",
+          "description": "Include market data (price, volume, market cap)",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        },
+        "community_data": {
+          "type": "boolean",
+          "description": "Include community stats (Twitter followers, Reddit subscribers)",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        },
+        "developer_data": {
+          "type": "boolean",
+          "description": "Include developer stats (GitHub forks, stars, commits)",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        },
+        "sparkline": {
+          "type": "boolean",
+          "description": "Include 7-day sparkline price data",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Coin Market Chart",
+      "path": "/coins/{id}/market_chart",
+      "method": "GET",
+      "description": "Get historical market data (prices, market cap, volume) for a coin over a specified time range",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "CoinGecko coin ID (e.g., 'bitcoin', 'ethereum')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "vs_currency": {
+          "type": "string",
+          "description": "Target currency for market data (e.g., 'usd', 'eur')",
+          "required": true,
+          "default": "usd",
+          "send_method": "Query"
+        },
+        "days": {
+          "type": "string",
+          "description": "Number of days to look back (e.g., '1', '7', '14', '30', '90', '180', '365', 'max')",
+          "required": true,
+          "default": "7",
+          "send_method": "Query"
+        },
+        "interval": {
+          "type": "string",
+          "description": "Data interval: 'daily' for daily data. Leave empty for auto-granularity (hourly for <=90 days, daily for >90 days).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "precision": {
+          "type": "string",
+          "description": "Decimal precision for price values (e.g., 'full' or a number 0-18)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Coin Historical Data",
+      "path": "/coins/{id}/history",
+      "method": "GET",
+      "description": "Get historical data (price, market cap, volume) for a coin on a specific date",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "CoinGecko coin ID (e.g., 'bitcoin', 'ethereum')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "date": {
+          "type": "string",
+          "description": "Historical date in DD-MM-YYYY format (e.g., '01-01-2021')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "localization": {
+          "type": "boolean",
+          "description": "Include localized language data",
+          "required": false,
+          "default": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Coin OHLCV",
+      "path": "/coins/{id}/ohlc",
+      "method": "GET",
+      "description": "Get Open, High, Low, Close (OHLCV) candlestick data for a coin",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "CoinGecko coin ID (e.g., 'bitcoin', 'ethereum')",
+          "required": true,
+          "send_method": "Path"
+        },
+        "vs_currency": {
+          "type": "string",
+          "description": "Target currency (e.g., 'usd', 'eur')",
+          "required": true,
+          "default": "usd",
+          "send_method": "Query"
+        },
+        "days": {
+          "type": "integer",
+          "description": "Number of days: 1, 7, 14, 30, 90, 180, 365. Candle interval: 30min (1d), 4hr (7-30d), 4 days (>30d).",
+          "required": true,
+          "default": 7,
+          "send_method": "Query"
+        },
+        "precision": {
+          "type": "string",
+          "description": "Decimal precision for price values (e.g., 'full' or a number 0-18)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Trending Coins",
+      "path": "/search/trending",
+      "method": "GET",
+      "description": "Get the top 7 trending coins on CoinGecko in the last 24 hours, based on search volume",
+      "request_params": {}
+    },
+    {
+      "name": "Get Global Crypto Market Data",
+      "path": "/global",
+      "method": "GET",
+      "description": "Get global cryptocurrency market data including total market cap, volume, BTC dominance, and active cryptocurrencies count",
+      "request_params": {}
+    },
+    {
+      "name": "Get Coin List",
+      "path": "/coins/list",
+      "method": "GET",
+      "description": "Get a list of all supported coins with their IDs, names, and symbols. Use this to find the correct coin ID for other endpoints.",
+      "request_params": {
+        "include_platform": {
+          "type": "boolean",
+          "description": "Include platform contract addresses (e.g., Ethereum ERC-20 addresses)",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Supported Currencies",
+      "path": "/simple/supported_vs_currencies",
+      "method": "GET",
+      "description": "Get a list of all supported fiat and crypto currencies that can be used as target currencies (vs_currency)",
+      "request_params": {}
+    },
+    {
+      "name": "Search Coins",
+      "path": "/search",
+      "method": "GET",
+      "description": "Search for coins, categories, and markets by keyword",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Search keyword (e.g., 'bitcoin', 'eth', 'doge')",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Exchanges List",
+      "path": "/exchanges",
+      "method": "GET",
+      "description": "List all supported exchanges with volume, trust scores, and trading pairs",
+      "request_params": {
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (1-250)",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number for pagination",
+          "required": false,
+          "default": 1,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Exchange Details",
+      "path": "/exchanges/{id}",
+      "method": "GET",
+      "description": "Get detailed information about a specific exchange including volume, trust score, and supported trading pairs",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "Exchange ID (e.g., 'binance', 'coinbase', 'kraken'). Use Get Exchanges List to find IDs.",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    }
+  ]
+}

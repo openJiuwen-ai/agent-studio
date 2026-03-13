@@ -1,0 +1,355 @@
+{
+  "ready": true,
+  "plugin_id": "finnhub",
+  "name": "Finnhub",
+  "description": "Real-time stock prices, company fundamentals, financial news, earnings data, forex, and crypto market data for global markets.",
+  "category": "data",
+  "category_name": "Data & Analytics",
+  "category_icon": "📊",
+  "icon_uri": "📈",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "stocks",
+    "finance",
+    "market-data",
+    "earnings",
+    "forex",
+    "crypto",
+    "fundamentals",
+    "news"
+  ],
+  "api_prefix": "https://finnhub.io/api/v1",
+  "documentation": "https://finnhub.io/docs/api",
+  "desc_mk": "Finnhub provides real-time and historical financial data for stocks, forex, and cryptocurrencies. Access company fundamentals, earnings calendars, financial news, economic indicators, and institutional-grade market data. **Free tier** includes real-time US stock data and many endpoints. Get an API key at [Finnhub.io](https://finnhub.io/).",
+  "header_configuration": {
+    "X-Finnhub-Token": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "YOUR_FINNHUB_API_KEY",
+      "description": "Finnhub API key for authentication (Environment variable: FINNHUB_API_KEY)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Stock Quote",
+      "path": "/quote",
+      "method": "GET",
+      "description": "Get real-time quote data for a stock: current price, open, high, low, previous close, and percent change",
+      "request_params": {
+        "symbol": {
+          "type": "string",
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'MSFT', 'TSLA', 'GOOGL')",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Candles (OHLCV)",
+      "path": "/stock/candle",
+      "method": "GET",
+      "description": "Get OHLCV candlestick data for a stock over a specified time range and resolution",
+      "request_params": {
+        "symbol": {
+          "type": "string",
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'MSFT')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "resolution": {
+          "type": "string",
+          "description": "Candle resolution: '1', '5', '15', '30', '60' (minutes), 'D' (daily), 'W' (weekly), 'M' (monthly)",
+          "required": true,
+          "default": "D",
+          "send_method": "Query"
+        },
+        "from": {
+          "type": "integer",
+          "description": "Start time as UNIX timestamp (e.g., 1609459200 for 2021-01-01)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "integer",
+          "description": "End time as UNIX timestamp (e.g., 1640995200 for 2022-01-01)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Company Profile",
+      "path": "/stock/profile2",
+      "method": "GET",
+      "description": "Get general company information including name, industry, country, exchange, market cap, logo, and website",
+      "request_params": {
+        "symbol": {
+          "type": "string",
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'TSLA')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "isin": {
+          "type": "string",
+          "description": "ISIN identifier (alternative to symbol)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "cusip": {
+          "type": "string",
+          "description": "CUSIP identifier (alternative to symbol)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Company News",
+      "path": "/company-news",
+      "method": "GET",
+      "description": "Get recent news articles for a specific company filtered by date range",
+      "request_params": {
+        "symbol": {
+          "type": "string",
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'TSLA')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "from": {
+          "type": "string",
+          "description": "Start date in YYYY-MM-DD format (e.g., '2024-01-01')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "string",
+          "description": "End date in YYYY-MM-DD format (e.g., '2024-01-31')",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Market News",
+      "path": "/news",
+      "method": "GET",
+      "description": "Get the latest general market news or news by category",
+      "request_params": {
+        "category": {
+          "type": "string",
+          "description": "News category: 'general', 'forex', 'crypto', 'merger'",
+          "required": true,
+          "default": "general",
+          "send_method": "Query"
+        },
+        "minId": {
+          "type": "integer",
+          "description": "Minimum news ID to retrieve (for pagination, use the last retrieved ID)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Basic Financials",
+      "path": "/stock/metric",
+      "method": "GET",
+      "description": "Get key financial metrics including P/E ratio, EPS, 52-week high/low, revenue, profit margins, and more",
+      "request_params": {
+        "symbol": {
+          "type": "string",
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'MSFT')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "metric": {
+          "type": "string",
+          "description": "Metric type to retrieve: 'all' for all metrics, or specific group like 'price', 'valuation', 'growth'",
+          "required": true,
+          "default": "all",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Earnings Calendar",
+      "path": "/calendar/earnings",
+      "method": "GET",
+      "description": "Get upcoming and historical earnings release dates, EPS estimates, and actual EPS results",
+      "request_params": {
+        "from": {
+          "type": "string",
+          "description": "Start date in YYYY-MM-DD format",
+          "required": false,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "string",
+          "description": "End date in YYYY-MM-DD format",
+          "required": false,
+          "send_method": "Query"
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Filter by stock ticker symbol (e.g., 'AAPL'). Omit for all companies.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "international": {
+          "type": "boolean",
+          "description": "Include international companies",
+          "required": false,
+          "default": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get IPO Calendar",
+      "path": "/calendar/ipo",
+      "method": "GET",
+      "description": "Get upcoming and recent IPO dates, offering prices, and share counts",
+      "request_params": {
+        "from": {
+          "type": "string",
+          "description": "Start date in YYYY-MM-DD format (e.g., '2024-01-01')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "string",
+          "description": "End date in YYYY-MM-DD format (e.g., '2024-03-31')",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Recommendation Trends",
+      "path": "/stock/recommendation",
+      "method": "GET",
+      "description": "Get analyst buy/sell/hold recommendation trends for a stock over recent months",
+      "request_params": {
+        "symbol": {
+          "type": "string",
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'TSLA')",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Price Target",
+      "path": "/stock/price-target",
+      "method": "GET",
+      "description": "Get analyst consensus price targets (high, low, mean, median) for a stock",
+      "request_params": {
+        "symbol": {
+          "type": "string",
+          "description": "Stock ticker symbol (e.g., 'AAPL', 'MSFT')",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Stock Peers",
+      "path": "/stock/peers",
+      "method": "GET",
+      "description": "Get a list of peer companies in the same country and GICS sub-industry",
+      "request_params": {
+        "symbol": {
+          "type": "string",
+          "description": "Stock ticker symbol (e.g., 'AAPL')",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Symbols",
+      "path": "/search",
+      "method": "GET",
+      "description": "Search for stock symbols and company names by keyword",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query (company name or ticker symbol, e.g., 'Apple', 'AAPL')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "exchange": {
+          "type": "string",
+          "description": "Filter by exchange (e.g., 'US', 'NYSE', 'NASDAQ')",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Forex Rates",
+      "path": "/forex/rates",
+      "method": "GET",
+      "description": "Get current exchange rates for all currencies relative to a base currency",
+      "request_params": {
+        "base": {
+          "type": "string",
+          "description": "Base currency code (e.g., 'USD', 'EUR', 'GBP')",
+          "required": false,
+          "default": "USD",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Crypto Candles",
+      "path": "/crypto/candle",
+      "method": "GET",
+      "description": "Get OHLCV candlestick data for a cryptocurrency trading pair",
+      "request_params": {
+        "symbol": {
+          "type": "string",
+          "description": "Crypto symbol in Finnhub format (e.g., 'BINANCE:BTCUSDT', 'COINBASE:BTC-USD')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "resolution": {
+          "type": "string",
+          "description": "Candle resolution: '1', '5', '15', '30', '60' (minutes), 'D' (daily), 'W' (weekly), 'M' (monthly)",
+          "required": true,
+          "default": "D",
+          "send_method": "Query"
+        },
+        "from": {
+          "type": "integer",
+          "description": "Start time as UNIX timestamp",
+          "required": true,
+          "send_method": "Query"
+        },
+        "to": {
+          "type": "integer",
+          "description": "End time as UNIX timestamp",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Market Status",
+      "path": "/stock/market-status",
+      "method": "GET",
+      "description": "Check if a stock exchange is currently open or closed",
+      "request_params": {
+        "exchange": {
+          "type": "string",
+          "description": "Exchange name (e.g., 'US', 'NYSE', 'NASDAQ', 'LSE', 'TSX', 'XETRA')",
+          "required": true,
+          "default": "US",
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

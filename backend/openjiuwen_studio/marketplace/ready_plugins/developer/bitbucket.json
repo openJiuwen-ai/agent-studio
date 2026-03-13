@@ -1,0 +1,381 @@
+{
+  "ready": false,
+  "plugin_id": "bitbucket",
+  "name": "Bitbucket",
+  "description": "Manage Bitbucket repositories, issues, pull requests, commits, and branches via the Bitbucket REST API.",
+  "category": "developer",
+  "category_name": "Developer Tools",
+  "category_icon": "🛠️",
+  "icon_uri": "🪣",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["bitbucket", "git", "repositories", "issues", "pull requests", "atlassian", "developer"],
+  "api_prefix": "https://api.bitbucket.org/2.0",
+  "documentation": "https://developer.atlassian.com/cloud/bitbucket/rest/",
+  "desc_mk": "## Bitbucket REST API\n\nConnect to Bitbucket to manage repositories, issues, pull requests, commits, and branches programmatically.\n\n### Features\n- Browse and search repositories by workspace\n- Manage issues and track their status\n- View and create pull requests\n- List commits and branch history\n- Access workspace information\n\n### Authentication\nRequires a Bitbucket access token (OAuth 2.0) or app password with appropriate permissions.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_BITBUCKET_TOKEN",
+      "description": "Bitbucket OAuth 2.0 access token (Environment variable: BITBUCKET_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Repository",
+      "description": "Get details about a specific Bitbucket repository.",
+      "method": "GET",
+      "path": "/repositories/{workspace}/{repo_slug}",
+      "request_params": {
+        "workspace": {
+          "type": "string",
+          "description": "The workspace ID or slug that owns the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo_slug": {
+          "type": "string",
+          "description": "The repository slug (URL-friendly name).",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Repository details including name, description, SCM type, size, and owner."
+      }
+    },
+    {
+      "name": "List Repositories",
+      "description": "List repositories in a Bitbucket workspace.",
+      "method": "GET",
+      "path": "/repositories/{workspace}",
+      "request_params": {
+        "workspace": {
+          "type": "string",
+          "description": "The workspace ID or slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "q": {
+          "type": "string",
+          "description": "Filter repositories using a query string (e.g., 'name ~ \"project\"').",
+          "required": false,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Field to sort results by (e.g., 'created_on', '-updated_on').",
+          "required": false,
+          "send_method": "Query"
+        },
+        "pagelen": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of repositories with their details."
+      }
+    },
+    {
+      "name": "List Issues",
+      "description": "List issues in a Bitbucket repository.",
+      "method": "GET",
+      "path": "/repositories/{workspace}/{repo_slug}/issues",
+      "request_params": {
+        "workspace": {
+          "type": "string",
+          "description": "The workspace ID or slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo_slug": {
+          "type": "string",
+          "description": "The repository slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "q": {
+          "type": "string",
+          "description": "Filter issues using a query string (e.g., 'status=\"open\"').",
+          "required": false,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Field to sort results by.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "pagelen": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of issues with title, status, kind, priority, and reporter."
+      }
+    },
+    {
+      "name": "Create Issue",
+      "description": "Create a new issue in a Bitbucket repository.",
+      "method": "POST",
+      "path": "/repositories/{workspace}/{repo_slug}/issues",
+      "request_params": {
+        "workspace": {
+          "type": "string",
+          "description": "The workspace ID or slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo_slug": {
+          "type": "string",
+          "description": "The repository slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the issue.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "content": {
+          "type": "object",
+          "description": "Issue body content object with 'raw' field for the description text.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "kind": {
+          "type": "string",
+          "description": "The type of issue: 'bug', 'enhancement', 'proposal', or 'task'.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "priority": {
+          "type": "string",
+          "description": "The priority of the issue: 'trivial', 'minor', 'major', 'critical', or 'blocker'.",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "The created issue with its ID, title, and full details."
+      }
+    },
+    {
+      "name": "List Pull Requests",
+      "description": "List pull requests in a Bitbucket repository.",
+      "method": "GET",
+      "path": "/repositories/{workspace}/{repo_slug}/pullrequests",
+      "request_params": {
+        "workspace": {
+          "type": "string",
+          "description": "The workspace ID or slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo_slug": {
+          "type": "string",
+          "description": "The repository slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "state": {
+          "type": "string",
+          "description": "Filter by state: 'OPEN', 'MERGED', 'DECLINED', or 'SUPERSEDED'.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "pagelen": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of pull requests with title, state, author, and branch details."
+      }
+    },
+    {
+      "name": "Create Pull Request",
+      "description": "Create a new pull request in a Bitbucket repository.",
+      "method": "POST",
+      "path": "/repositories/{workspace}/{repo_slug}/pullrequests",
+      "request_params": {
+        "workspace": {
+          "type": "string",
+          "description": "The workspace ID or slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo_slug": {
+          "type": "string",
+          "description": "The repository slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the pull request.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "source": {
+          "type": "object",
+          "description": "Source branch object with 'branch' key containing 'name' field.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "destination": {
+          "type": "object",
+          "description": "Destination branch object with 'branch' key containing 'name' field.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the pull request.",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "The created pull request with its ID, URL, and full details."
+      }
+    },
+    {
+      "name": "Get User",
+      "description": "Get a Bitbucket user's public profile by their username.",
+      "method": "GET",
+      "path": "/users/{username}",
+      "request_params": {
+        "username": {
+          "type": "string",
+          "description": "The Bitbucket username or account ID.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "User profile with display name, username, avatar, and account details."
+      }
+    },
+    {
+      "name": "List Commits",
+      "description": "List commits for a Bitbucket repository.",
+      "method": "GET",
+      "path": "/repositories/{workspace}/{repo_slug}/commits",
+      "request_params": {
+        "workspace": {
+          "type": "string",
+          "description": "The workspace ID or slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo_slug": {
+          "type": "string",
+          "description": "The repository slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "branch": {
+          "type": "string",
+          "description": "Branch name to list commits from.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "pagelen": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of commits with hash, author, message, and date."
+      }
+    },
+    {
+      "name": "List Branches",
+      "description": "List branches in a Bitbucket repository.",
+      "method": "GET",
+      "path": "/repositories/{workspace}/{repo_slug}/refs/branches",
+      "request_params": {
+        "workspace": {
+          "type": "string",
+          "description": "The workspace ID or slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo_slug": {
+          "type": "string",
+          "description": "The repository slug.",
+          "required": true,
+          "is_path_param": true
+        },
+        "pagelen": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Paginated list of branches with name and latest commit details."
+      }
+    },
+    {
+      "name": "Get Workspace",
+      "description": "Get details about a Bitbucket workspace.",
+      "method": "GET",
+      "path": "/workspaces/{workspace}",
+      "request_params": {
+        "workspace": {
+          "type": "string",
+          "description": "The workspace ID or slug.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Workspace details including slug, name, type, and links."
+      }
+    }
+  ]
+}

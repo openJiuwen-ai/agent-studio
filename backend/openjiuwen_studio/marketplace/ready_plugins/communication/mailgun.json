@@ -1,0 +1,231 @@
+{
+  "ready": false,
+  "plugin_id": "mailgun_api",
+  "name": "Mailgun API",
+  "description": "Mailgun transactional email service for sending, receiving, and tracking emails via API. Supports email sending, domain management, mailing lists, and event tracking.",
+  "category": "communication",
+  "category_name": "Communication",
+  "category_icon": "📞",
+  "icon_uri": "📧",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "email",
+    "mailgun",
+    "transactional",
+    "smtp",
+    "messaging"
+  ],
+  "api_prefix": "https://api.mailgun.net/v3",
+  "documentation": "https://documentation.mailgun.com/docs/mailgun/api-reference/",
+  "desc_mk": "Mailgun is a powerful email API service for developers. Send, receive, and track emails using a simple REST API. Ideal for transactional emails, newsletters, and automated messaging.",
+  "authentication": {
+    "type": "basic",
+    "required_credentials": [
+      {
+        "name": "API Key",
+        "env_var": "MAILGUN_API_KEY",
+        "description": "Mailgun private API key (use 'api' as username with key as password in Basic Auth)"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "Send Email",
+      "path": "/{domain}/messages",
+      "method": "POST",
+      "description": "Send an email message via Mailgun",
+      "request_params": {
+        "domain": {
+          "type": "string",
+          "description": "Your Mailgun sending domain (e.g., 'mg.yourdomain.com')",
+          "required": true,
+          "is_path_param": true
+        },
+        "from": {
+          "type": "string",
+          "description": "Sender email address (e.g., 'Name <sender@yourdomain.com>')",
+          "required": true,
+          "send_method": "Body"
+        },
+        "to": {
+          "type": "string",
+          "description": "Recipient email address(es), comma-separated",
+          "required": true,
+          "send_method": "Body"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Email subject line",
+          "required": true,
+          "send_method": "Body"
+        },
+        "text": {
+          "type": "string",
+          "description": "Plain text body of the email",
+          "required": false,
+          "send_method": "Body"
+        },
+        "html": {
+          "type": "string",
+          "description": "HTML body of the email",
+          "required": false,
+          "send_method": "Body"
+        },
+        "cc": {
+          "type": "string",
+          "description": "CC recipient(s), comma-separated",
+          "required": false,
+          "send_method": "Body"
+        },
+        "bcc": {
+          "type": "string",
+          "description": "BCC recipient(s), comma-separated",
+          "required": false,
+          "send_method": "Body"
+        },
+        "o:tag": {
+          "type": "string",
+          "description": "Tag to categorize this email for tracking",
+          "required": false,
+          "send_method": "Body"
+        },
+        "o:tracking": {
+          "type": "boolean",
+          "description": "Enable/disable tracking for this message",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Events",
+      "path": "/{domain}/events",
+      "method": "GET",
+      "description": "Retrieve email events (delivered, failed, opened, clicked, etc.)",
+      "request_params": {
+        "domain": {
+          "type": "string",
+          "description": "Your Mailgun sending domain",
+          "required": true,
+          "is_path_param": true
+        },
+        "event": {
+          "type": "string",
+          "description": "Filter by event type (accepted, delivered, failed, opened, clicked, unsubscribed, complained, stored)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Number of entries to return (default: 100, max: 300)",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        },
+        "begin": {
+          "type": "string",
+          "description": "Filter events after this date/time (RFC 2822 or Unix epoch)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Stored Message",
+      "path": "/{domain}/messages/{storage_key}",
+      "method": "GET",
+      "description": "Retrieve a stored incoming message by storage key",
+      "request_params": {
+        "domain": {
+          "type": "string",
+          "description": "Your Mailgun domain",
+          "required": true,
+          "is_path_param": true
+        },
+        "storage_key": {
+          "type": "string",
+          "description": "Storage key of the message",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "Get Domain Stats",
+      "path": "/{domain}/stats/total",
+      "method": "GET",
+      "description": "Get email statistics for a domain",
+      "request_params": {
+        "domain": {
+          "type": "string",
+          "description": "Your Mailgun sending domain",
+          "required": true,
+          "is_path_param": true
+        },
+        "event": {
+          "type": "string",
+          "description": "Comma-separated list of event types to include (e.g., 'accepted,delivered,failed')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "duration": {
+          "type": "string",
+          "description": "Time duration for stats (e.g., '1m' for 1 month, '7d' for 7 days)",
+          "required": false,
+          "default": "1m",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Mailing Lists",
+      "path": "/lists/pages",
+      "method": "GET",
+      "description": "Get all mailing lists",
+      "request_params": {
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of lists to return",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Add List Member",
+      "path": "/lists/{address}/members",
+      "method": "POST",
+      "description": "Add a member to a mailing list",
+      "request_params": {
+        "address": {
+          "type": "string",
+          "description": "Mailing list email address",
+          "required": true,
+          "is_path_param": true
+        },
+        "address_member": {
+          "type": "string",
+          "description": "Member email address to add",
+          "required": true,
+          "send_method": "Body"
+        },
+        "name": {
+          "type": "string",
+          "description": "Member display name",
+          "required": false,
+          "send_method": "Body"
+        },
+        "subscribed": {
+          "type": "boolean",
+          "description": "Whether the member is subscribed (default: true)",
+          "required": false,
+          "default": true,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

@@ -294,62 +294,58 @@ class PluginMcpTool(Tool):
         auth_headers = self._build_auth_headers(inputs)
 
         try:
-            # ── 1. Build the appropriate transport client ─────────────────────
+            # ── 1. Build McpServerConfig and the appropriate transport client ──
+            from openjiuwen.core.foundation.tool.mcp.base import McpServerConfig
+
+            _transport_to_client_type = {
+                McpTransport.STDIO: "stdio",
+                McpTransport.SSE: "sse",
+                McpTransport.STREAMABLE_HTTP: "streamable-http",
+                McpTransport.OPENAPI: "openapi",
+                McpTransport.PLAYWRIGHT: "playwright",
+            }
+            client_type = _transport_to_client_type.get(conf.transport)
+            if client_type is None:
+                raise JiuWenExecuteException(
+                    StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
+                    message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
+                        msg=f"Unsupported MCP transport: '{conf.transport}'"),
+                    node_id=conf.tool_id
+                )
+
+            mcp_params = dict(conf.params or {})
             if conf.transport == McpTransport.STDIO:
-                client = StdioClient(
-                    server_path="",  # Not used for Stdio; command/args come from params
-                    name=server_name,
-                    params={
-                        "command": sys.executable,  # Current Python interpreter
-                        "args": [conf.url],  # The server script to run
-                        "env": None,  # Inherit environment (or pass a dict)
-                        "cwd": os.getcwd(),  # Working directory
-                        "encoding_error_handler": "strict",  # 'strict' | 'ignore' | 'replace'
-                    }, )
-            elif conf.transport == McpTransport.PLAYWRIGHT:
-                if not conf.url and not conf.command:
-                    raise JiuWenExecuteException(
-                        StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
-                        message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
-                            msg="MCP playwright transport requires 'url' or 'command'"),
-                        node_id=conf.tool_id
-                    )
-                client = PlaywrightClient(server_path=conf.url or conf.command, name=server_name)
+                mcp_params.setdefault("command", sys.executable)
+                mcp_params.setdefault("args", [conf.url])
+                mcp_params.setdefault("env", None)
+                mcp_params.setdefault("cwd", os.getcwd())
+                mcp_params.setdefault("encoding_error_handler", "strict")
+            elif not conf.url:
+                raise JiuWenExecuteException(
+                    StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
+                    message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
+                        msg=f"MCP {conf.transport} transport requires 'url'"),
+                    node_id=conf.tool_id
+                )
+
+            server_config = McpServerConfig(
+                server_name=server_name,
+                server_path=conf.url or "",
+                client_type=client_type,
+                params=mcp_params,
+                auth_headers=auth_headers or {},
+            )
+
+            if conf.transport == McpTransport.STDIO:
+                client = StdioClient(server_config)
             elif conf.transport == McpTransport.SSE:
-                if not conf.url:
-                    raise JiuWenExecuteException(
-                        StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
-                        message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
-                            msg="MCP SSE transport requires 'url'"),
-                        node_id=conf.tool_id
-                    )
-                client = SseClient(
-                    server_path=conf.url,
-                    name=server_name,
-                    auth_headers=auth_headers or None,
-                )
+                client = SseClient(server_config)
             elif conf.transport == McpTransport.OPENAPI:
-                if not conf.url and not conf.command:
-                    raise JiuWenExecuteException(
-                        StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
-                        message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
-                            msg="MCP OpenAPI transport requires 'url' (spec URL or file path)"),
-                        node_id=conf.tool_id
-                    )
-                client = OpenApiClient(server_path=conf.url or conf.command, name=server_name)
+                client = OpenApiClient(server_config)
+            elif conf.transport == McpTransport.PLAYWRIGHT:
+                client = PlaywrightClient(server_config)
             else:  # STREAMABLE_HTTP
-                if not conf.url:
-                    raise JiuWenExecuteException(
-                        StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
-                        message=StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.errmsg.format(
-                            msg="MCP streamable HTTP transport requires 'url'"),
-                        node_id=conf.tool_id
-                    )
-                client = StreamableHttpClient(
-                    server_path=conf.url,
-                    name=server_name,
-                    auth_headers=auth_headers or None,
-                )
+                client = StreamableHttpClient(server_config)
 
             # ── 2. Connect ────────────────────────────────────────────────────
             connected = await client.connect()

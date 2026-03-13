@@ -1,0 +1,274 @@
+{
+  "ready": false,
+  "plugin_id": "postmark_api",
+  "name": "Postmark API",
+  "description": "Postmark transactional email service with best-in-class deliverability. Send emails, manage templates, handle bounce/spam events, and track delivery statistics.",
+  "category": "communication",
+  "category_name": "Communication",
+  "category_icon": "📞",
+  "icon_uri": "✉️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "email",
+    "postmark",
+    "transactional",
+    "deliverability",
+    "templates"
+  ],
+  "api_prefix": "https://api.postmarkapp.com",
+  "documentation": "https://postmarkapp.com/developer/api/overview",
+  "desc_mk": "Postmark is a transactional email service known for exceptional deliverability. It provides reliable email sending, template management, bounce handling, and detailed delivery analytics for developers.",
+  "authentication": {
+    "type": "api_key",
+    "required_credentials": [
+      {
+        "name": "Server API Token",
+        "env_var": "POSTMARK_SERVER_TOKEN",
+        "description": "Postmark server API token from your server settings"
+      }
+    ]
+  },
+  "header_configuration": {
+    "X-Postmark-Server-Token": {
+      "value": "YOUR_POSTMARK_SERVER_TOKEN",
+      "description": "Postmark server API token"
+    },
+    "Content-Type": {
+      "value": "application/json",
+      "description": "Content type header"
+    },
+    "Accept": {
+      "value": "application/json",
+      "description": "Accept header"
+    }
+  },
+  "tools": [
+    {
+      "name": "Send Email",
+      "path": "/email",
+      "method": "POST",
+      "description": "Send a single transactional email",
+      "request_params": {
+        "From": {
+          "type": "string",
+          "description": "Sender email address (must be a valid Postmark sender signature)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "To": {
+          "type": "string",
+          "description": "Recipient email address(es), comma-separated (max 50)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "Subject": {
+          "type": "string",
+          "description": "Email subject",
+          "required": true,
+          "send_method": "Body"
+        },
+        "TextBody": {
+          "type": "string",
+          "description": "Plain text email body",
+          "required": false,
+          "send_method": "Body"
+        },
+        "HtmlBody": {
+          "type": "string",
+          "description": "HTML email body",
+          "required": false,
+          "send_method": "Body"
+        },
+        "Cc": {
+          "type": "string",
+          "description": "CC recipient(s), comma-separated",
+          "required": false,
+          "send_method": "Body"
+        },
+        "Bcc": {
+          "type": "string",
+          "description": "BCC recipient(s), comma-separated",
+          "required": false,
+          "send_method": "Body"
+        },
+        "ReplyTo": {
+          "type": "string",
+          "description": "Reply-to email address",
+          "required": false,
+          "send_method": "Body"
+        },
+        "Tag": {
+          "type": "string",
+          "description": "Tag for tracking this email (max 1 tag)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "TrackOpens": {
+          "type": "boolean",
+          "description": "Enable open tracking",
+          "required": false,
+          "default": true,
+          "send_method": "Body"
+        },
+        "TrackLinks": {
+          "type": "string",
+          "description": "Link tracking mode: None, HtmlAndText, HtmlOnly, TextOnly",
+          "required": false,
+          "default": "None",
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Send Email with Template",
+      "path": "/email/withTemplate",
+      "method": "POST",
+      "description": "Send an email using a Postmark template",
+      "request_params": {
+        "TemplateId": {
+          "type": "integer",
+          "description": "Template ID to use (use either TemplateId or TemplateAlias)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "TemplateAlias": {
+          "type": "string",
+          "description": "Template alias to use",
+          "required": false,
+          "send_method": "Body"
+        },
+        "TemplateModel": {
+          "type": "object",
+          "description": "Variables to pass to the template",
+          "required": true,
+          "send_method": "Body"
+        },
+        "From": {
+          "type": "string",
+          "description": "Sender email address",
+          "required": true,
+          "send_method": "Body"
+        },
+        "To": {
+          "type": "string",
+          "description": "Recipient email address(es)",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Send Batch Emails",
+      "path": "/email/batch",
+      "method": "POST",
+      "description": "Send up to 500 emails in a single API call",
+      "request_params": {
+        "Messages": {
+          "type": "array",
+          "description": "Array of email message objects (each with From, To, Subject, HtmlBody/TextBody)",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Delivery Stats",
+      "path": "/deliverystats",
+      "method": "GET",
+      "description": "Get bounce summary statistics for all servers",
+      "request_params": {}
+    },
+    {
+      "name": "Get Bounces",
+      "path": "/bounces",
+      "method": "GET",
+      "description": "Retrieve a list of bounced emails",
+      "request_params": {
+        "count": {
+          "type": "integer",
+          "description": "Number of bounces to return (max 500)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Number of bounces to skip",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Filter by bounce type (e.g., HardBounce, SoftBounce, SpamComplaint)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "emailFilter": {
+          "type": "string",
+          "description": "Filter by email address",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "List Templates",
+      "path": "/templates",
+      "method": "GET",
+      "description": "Get all email templates for the server",
+      "request_params": {
+        "Count": {
+          "type": "integer",
+          "description": "Number of templates to return",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        },
+        "Offset": {
+          "type": "integer",
+          "description": "Number of templates to skip",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Outbound Message Activity",
+      "path": "/messages/outbound",
+      "method": "GET",
+      "description": "Get a list of outbound messages",
+      "request_params": {
+        "count": {
+          "type": "integer",
+          "description": "Number of messages to return (max 500)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Number of messages to skip",
+          "required": false,
+          "default": 0,
+          "send_method": "Query"
+        },
+        "recipient": {
+          "type": "string",
+          "description": "Filter by recipient email",
+          "required": false,
+          "send_method": "Query"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Filter by message tag",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

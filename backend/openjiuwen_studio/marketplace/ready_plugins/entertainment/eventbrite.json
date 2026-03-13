@@ -1,0 +1,208 @@
+{
+  "ready": true,
+  "plugin_id": "eventbrite_api",
+  "name": "Eventbrite",
+  "description": "Event management and ticketing platform. Create, manage, and discover events. Access event details, venues, and organizer information.",
+  "category": "entertainment",
+  "category_name": "Entertainment & Events",
+  "category_icon": "🎭",
+  "icon_uri": "🎟️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "events",
+    "ticketing",
+    "event-management",
+    "conferences",
+    "entertainment",
+    "organizers"
+  ],
+  "api_prefix": "https://www.eventbriteapi.com/v3",
+  "desc_mk": "Eventbrite API provides access to event information, venues, organizers, and ticketing data. Create and manage events, retrieve attendee information, and integrate event functionality into your applications.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_EVENTBRITE_TOKEN",
+      "description": "Eventbrite OAuth token for authentication (get from eventbrite.com/platform)"
+    },
+    "Content-type": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "application/json; charset=utf-8",
+      "description": "Content-type header with charset=utf-8"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Event by ID",
+      "path": "/events/{event_id}/",
+      "method": "GET",
+      "description": "Retrieve detailed information about a specific event",
+      "request_params": {
+        "event_id": {
+          "type": "string",
+          "description": "The event ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "expand": {
+          "type": "string",
+          "description": "Optional expansions (venue, organizer, ticket_classes, etc.)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User Events",
+      "path": "/users/me/events/",
+      "method": "GET",
+      "description": "Get events owned by the authenticated user",
+      "request_params": {
+        "status": {
+          "type": "string",
+          "description": "Event status (live, draft, canceled, started, ended, completed, all)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "order_by": {
+          "type": "string",
+          "description": "Sort order (start_asc, start_desc, created_asc, created_desc)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number for pagination",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Organization Events",
+      "path": "/organizations/{organization_id}/events/",
+      "method": "GET",
+      "description": "List all events for a specific organization",
+      "request_params": {
+        "organization_id": {
+          "type": "string",
+          "description": "Organization ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "status": {
+          "type": "string",
+          "description": "Event status filter",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Venue by ID",
+      "path": "/venues/{venue_id}/",
+      "method": "GET",
+      "description": "Get detailed information about a venue",
+      "request_params": {
+        "venue_id": {
+          "type": "string",
+          "description": "Venue ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Venue Events",
+      "path": "/venues/{venue_id}/events/",
+      "method": "GET",
+      "description": "List all events at a specific venue",
+      "request_params": {
+        "venue_id": {
+          "type": "string",
+          "description": "Venue ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get User Info",
+      "path": "/users/me/",
+      "method": "GET",
+      "description": "Get information about the authenticated user",
+      "request_params": {}
+    },
+    {
+      "name": "Get Organization",
+      "path": "/organizations/{organization_id}/",
+      "method": "GET",
+      "description": "Get details about a specific organization",
+      "request_params": {
+        "organization_id": {
+          "type": "string",
+          "description": "Organization ID",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Get Event Attendees",
+      "path": "/events/{event_id}/attendees/",
+      "method": "GET",
+      "description": "Get list of attendees for an event",
+      "request_params": {
+        "event_id": {
+          "type": "string",
+          "description": "Event ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "status": {
+          "type": "string",
+          "description": "Attendee status (attending, not_attending, waitlist)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Event Orders",
+      "path": "/events/{event_id}/orders/",
+      "method": "GET",
+      "description": "Get orders for a specific event",
+      "request_params": {
+        "event_id": {
+          "type": "string",
+          "description": "Event ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "status": {
+          "type": "string",
+          "description": "Order status filter",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Categories",
+      "path": "/categories/",
+      "method": "GET",
+      "description": "Get list of event categories",
+      "request_params": {}
+    },
+    {
+      "name": "Get Subcategories",
+      "path": "/subcategories/",
+      "method": "GET",
+      "description": "Get list of event subcategories",
+      "request_params": {}
+    }
+  ]
+}

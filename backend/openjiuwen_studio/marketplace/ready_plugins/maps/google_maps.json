@@ -1,0 +1,368 @@
+{
+  "ready": false,
+  "plugin_id": "google_maps_api",
+  "name": "Google Maps API",
+  "description": "Google Maps Platform APIs for geocoding, reverse geocoding, place search, directions, distance matrix, elevation, and time zone. The world's most comprehensive mapping service.",
+  "category": "maps",
+  "category_name": "Maps & Location",
+  "category_icon": "🗺️",
+  "icon_uri": "📍",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "maps",
+    "google",
+    "geocoding",
+    "directions",
+    "places",
+    "location"
+  ],
+  "api_prefix": "https://maps.googleapis.com/maps/api",
+  "documentation": "https://developers.google.com/maps/documentation",
+  "desc_mk": "Google Maps Platform provides world-class location APIs. This plugin covers Geocoding, Places Search, Directions, Distance Matrix, Elevation, and Time Zone APIs. All requests require a Google Maps API key.",
+  "tools": [
+    {
+      "name": "Geocoding - Address to Coordinates",
+      "path": "/geocode/json",
+      "method": "GET",
+      "description": "Convert an address to geographic coordinates (latitude, longitude)",
+      "request_params": {
+        "address": {
+          "type": "string",
+          "description": "Address to geocode (e.g., '1600 Amphitheatre Parkway, Mountain View, CA')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Google Maps API key (Environment variable: GOOGLE_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language code for results (e.g., 'en', 'fr', 'de')",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        },
+        "region": {
+          "type": "string",
+          "description": "Region bias as a ccTLD (e.g., 'us', 'gb', 'de')",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Reverse Geocoding - Coordinates to Address",
+      "path": "/geocode/json",
+      "method": "GET",
+      "description": "Convert geographic coordinates to a human-readable address",
+      "request_params": {
+        "latlng": {
+          "type": "string",
+          "description": "Coordinates in format 'latitude,longitude' (e.g., '37.4224764,-122.0842499')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Google Maps API key (Environment variable: GOOGLE_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language code for results",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        },
+        "result_type": {
+          "type": "string",
+          "description": "Filter result types (e.g., 'street_address', 'locality', 'country')",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Places Text Search",
+      "path": "/place/textsearch/json",
+      "method": "GET",
+      "description": "Search for places using a text query (e.g., 'coffee shops in Seattle')",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Text search query (e.g., 'restaurants in Sydney', 'Eiffel Tower')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Google Maps API key (Environment variable: GOOGLE_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "location": {
+          "type": "string",
+          "description": "Location bias in format 'latitude,longitude'",
+          "required": false,
+          "send_method": "Query"
+        },
+        "radius": {
+          "type": "integer",
+          "description": "Search radius in meters (requires location, max: 50000)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Filter by place type (e.g., 'restaurant', 'hospital', 'hotel')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language code for results",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Places Nearby Search",
+      "path": "/place/nearbysearch/json",
+      "method": "GET",
+      "description": "Search for places near a specific location",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Center point in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "radius": {
+          "type": "integer",
+          "description": "Search radius in meters (max: 50000)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Google Maps API key (Environment variable: GOOGLE_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "keyword": {
+          "type": "string",
+          "description": "Keyword to match against all content (e.g., 'cafe', 'pizza')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "type": {
+          "type": "string",
+          "description": "Filter by place type (e.g., 'restaurant', 'pharmacy', 'gym')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language code for results",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Place Details",
+      "path": "/place/details/json",
+      "method": "GET",
+      "description": "Get detailed information about a specific place (hours, phone, reviews, website)",
+      "request_params": {
+        "place_id": {
+          "type": "string",
+          "description": "Google Place ID (from Places Search results)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Google Maps API key (Environment variable: GOOGLE_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "fields": {
+          "type": "string",
+          "description": "Comma-separated fields to return (e.g., 'name,formatted_address,formatted_phone_number,opening_hours,rating,website')",
+          "required": false,
+          "default": "name,formatted_address,formatted_phone_number,opening_hours,rating,website,geometry",
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language code for results",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Directions",
+      "path": "/directions/json",
+      "method": "GET",
+      "description": "Get route directions between an origin and destination",
+      "request_params": {
+        "origin": {
+          "type": "string",
+          "description": "Starting point (address or 'latitude,longitude')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destination": {
+          "type": "string",
+          "description": "Ending point (address or 'latitude,longitude')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Google Maps API key (Environment variable: GOOGLE_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "mode": {
+          "type": "string",
+          "description": "Travel mode: driving, walking, bicycling, transit",
+          "required": false,
+          "default": "driving",
+          "send_method": "Query"
+        },
+        "waypoints": {
+          "type": "string",
+          "description": "Intermediate waypoints (pipe-separated addresses or coordinates)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "avoid": {
+          "type": "string",
+          "description": "Features to avoid: tolls, highways, ferries, indoor",
+          "required": false,
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language code for results",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Distance Matrix",
+      "path": "/distancematrix/json",
+      "method": "GET",
+      "description": "Calculate travel distance and time between multiple origins and destinations",
+      "request_params": {
+        "origins": {
+          "type": "string",
+          "description": "Pipe-separated list of origins (addresses or coordinates)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "destinations": {
+          "type": "string",
+          "description": "Pipe-separated list of destinations (addresses or coordinates)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Google Maps API key (Environment variable: GOOGLE_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "mode": {
+          "type": "string",
+          "description": "Travel mode: driving, walking, bicycling, transit",
+          "required": false,
+          "default": "driving",
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language code",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        },
+        "units": {
+          "type": "string",
+          "description": "Unit system: metric or imperial",
+          "required": false,
+          "default": "metric",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Elevation",
+      "path": "/elevation/json",
+      "method": "GET",
+      "description": "Get elevation data for one or more locations",
+      "request_params": {
+        "locations": {
+          "type": "string",
+          "description": "Pipe-separated coordinates in 'latitude,longitude' format (e.g., '39.7391536,-104.9847034|36.455556,-116.866667')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Google Maps API key (Environment variable: GOOGLE_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Time Zone",
+      "path": "/timezone/json",
+      "method": "GET",
+      "description": "Get the time zone for a given location and timestamp",
+      "request_params": {
+        "location": {
+          "type": "string",
+          "description": "Coordinates in format 'latitude,longitude'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "timestamp": {
+          "type": "integer",
+          "description": "Unix timestamp (seconds since epoch) for DST calculation",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "Google Maps API key (Environment variable: GOOGLE_MAPS_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "language": {
+          "type": "string",
+          "description": "Language code for time zone name",
+          "required": false,
+          "default": "en",
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

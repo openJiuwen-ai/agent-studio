@@ -1,0 +1,471 @@
+{
+  "ready": false,
+  "plugin_id": "github",
+  "name": "GitHub",
+  "description": "Interact with GitHub repositories, issues, pull requests, commits, and users via the GitHub REST API.",
+  "category": "developer",
+  "category_name": "Developer Tools",
+  "category_icon": "🛠️",
+  "icon_uri": "🐙",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["github", "git", "repositories", "issues", "pull requests", "developer"],
+  "api_prefix": "https://api.github.com",
+  "documentation": "https://docs.github.com/en/rest",
+  "desc_mk": "## GitHub REST API\n\nConnect to GitHub to manage repositories, issues, pull requests, commits, and users programmatically.\n\n### Features\n- Browse and search repositories\n- Manage issues and comments\n- View pull requests and commits\n- Look up user profiles\n- List releases and repository contents\n\n### Authentication\nRequires a GitHub personal access token with appropriate scopes.",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_GITHUB_TOKEN",
+      "description": "GitHub personal access token (Environment variable: GITHUB_TOKEN)"
+    },
+    "Accept": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "application/vnd.github.v3+json",
+      "description": "GitHub API version header"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Repository",
+      "description": "Get details about a specific GitHub repository.",
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}",
+      "request_params": {
+        "owner": {
+          "type": "string",
+          "description": "The account owner of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo": {
+          "type": "string",
+          "description": "The name of the repository.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Repository details including name, description, stars, forks, and more."
+      }
+    },
+    {
+      "name": "List Repository Issues",
+      "description": "List issues in a GitHub repository with optional filters.",
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/issues",
+      "request_params": {
+        "owner": {
+          "type": "string",
+          "description": "The account owner of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo": {
+          "type": "string",
+          "description": "The name of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "state": {
+          "type": "string",
+          "description": "Filter issues by state. Can be 'open', 'closed', or 'all'.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "labels": {
+          "type": "string",
+          "description": "Comma-separated list of label names to filter by.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "List of issues with title, body, state, labels, and author details."
+      }
+    },
+    {
+      "name": "Create Issue",
+      "description": "Create a new issue in a GitHub repository.",
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues",
+      "request_params": {
+        "owner": {
+          "type": "string",
+          "description": "The account owner of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo": {
+          "type": "string",
+          "description": "The name of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the issue.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "body": {
+          "type": "string",
+          "description": "The body content of the issue (markdown supported).",
+          "required": false,
+          "send_method": "Body"
+        },
+        "labels": {
+          "type": "array",
+          "description": "List of label names to assign to the issue.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "assignees": {
+          "type": "array",
+          "description": "List of GitHub usernames to assign to the issue.",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "The created issue with its number, URL, and full details."
+      }
+    },
+    {
+      "name": "List Pull Requests",
+      "description": "List pull requests in a GitHub repository.",
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls",
+      "request_params": {
+        "owner": {
+          "type": "string",
+          "description": "The account owner of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo": {
+          "type": "string",
+          "description": "The name of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "state": {
+          "type": "string",
+          "description": "Filter pull requests by state: 'open', 'closed', or 'all'.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "List of pull requests with title, state, author, and branch details."
+      }
+    },
+    {
+      "name": "Get Pull Request",
+      "description": "Get details about a specific pull request in a GitHub repository.",
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/pulls/{pull_number}",
+      "request_params": {
+        "owner": {
+          "type": "string",
+          "description": "The account owner of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo": {
+          "type": "string",
+          "description": "The name of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "pull_number": {
+          "type": "integer",
+          "description": "The number of the pull request.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Pull request details including title, body, state, diff stats, and review information."
+      }
+    },
+    {
+      "name": "List Repository Commits",
+      "description": "List commits for a GitHub repository.",
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/commits",
+      "request_params": {
+        "owner": {
+          "type": "string",
+          "description": "The account owner of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo": {
+          "type": "string",
+          "description": "The name of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "sha": {
+          "type": "string",
+          "description": "SHA or branch name to start listing commits from.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "author": {
+          "type": "string",
+          "description": "GitHub login or email to filter commits by author.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "List of commits with SHA, author, message, and timestamp."
+      }
+    },
+    {
+      "name": "Get User",
+      "description": "Get a GitHub user's public profile information.",
+      "method": "GET",
+      "path": "/users/{username}",
+      "request_params": {
+        "username": {
+          "type": "string",
+          "description": "The GitHub username to look up.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "User profile with login, name, bio, followers, public repos, and more."
+      }
+    },
+    {
+      "name": "Search Repositories",
+      "description": "Search GitHub repositories using the GitHub search syntax.",
+      "method": "GET",
+      "path": "/search/repositories",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "The search query. Supports GitHub search qualifiers like 'language:python stars:>100'.",
+          "required": true,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort field: 'stars', 'forks', 'help-wanted-issues', or 'updated'.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "order": {
+          "type": "string",
+          "description": "Sort order: 'asc' or 'desc'.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Search results with total count and list of matching repositories."
+      }
+    },
+    {
+      "name": "List User Repositories",
+      "description": "List public repositories for a GitHub user.",
+      "method": "GET",
+      "path": "/users/{username}/repos",
+      "request_params": {
+        "username": {
+          "type": "string",
+          "description": "The GitHub username.",
+          "required": true,
+          "is_path_param": true
+        },
+        "type": {
+          "type": "string",
+          "description": "Type of repositories: 'all', 'owner', 'member'.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "sort": {
+          "type": "string",
+          "description": "Sort field: 'created', 'updated', 'pushed', 'full_name'.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "List of repositories owned by the user."
+      }
+    },
+    {
+      "name": "Create Issue Comment",
+      "description": "Add a comment to an existing issue in a GitHub repository.",
+      "method": "POST",
+      "path": "/repos/{owner}/{repo}/issues/{issue_number}/comments",
+      "request_params": {
+        "owner": {
+          "type": "string",
+          "description": "The account owner of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo": {
+          "type": "string",
+          "description": "The name of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "issue_number": {
+          "type": "integer",
+          "description": "The number of the issue to comment on.",
+          "required": true,
+          "is_path_param": true
+        },
+        "body": {
+          "type": "string",
+          "description": "The body text of the comment (markdown supported).",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "The created comment with its ID, URL, and author details."
+      }
+    },
+    {
+      "name": "List Repository Releases",
+      "description": "List releases for a GitHub repository.",
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/releases",
+      "request_params": {
+        "owner": {
+          "type": "string",
+          "description": "The account owner of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo": {
+          "type": "string",
+          "description": "The name of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Number of results per page (max 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number of results to return.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "List of releases with tag name, name, body, and asset details."
+      }
+    },
+    {
+      "name": "Get Repository Contents",
+      "description": "Get the contents of a file or directory in a GitHub repository.",
+      "method": "GET",
+      "path": "/repos/{owner}/{repo}/contents/{path}",
+      "request_params": {
+        "owner": {
+          "type": "string",
+          "description": "The account owner of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "repo": {
+          "type": "string",
+          "description": "The name of the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "path": {
+          "type": "string",
+          "description": "The file path within the repository.",
+          "required": true,
+          "is_path_param": true
+        },
+        "ref": {
+          "type": "string",
+          "description": "The name of the commit, branch, or tag to retrieve contents from.",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "File or directory contents, with base64-encoded content for files."
+      }
+    }
+  ]
+}

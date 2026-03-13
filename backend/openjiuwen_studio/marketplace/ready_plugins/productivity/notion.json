@@ -1,0 +1,257 @@
+{
+  "ready": false,
+  "plugin_id": "notion",
+  "name": "Notion",
+  "description": "All-in-one workspace for notes, databases, wikis, and project management. Query databases, manage pages, and search content.",
+  "category": "productivity",
+  "category_name": "Productivity Tools",
+  "category_icon": "📋",
+  "icon_uri": "📝",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["productivity", "notes", "database", "wiki", "project-management"],
+  "api_prefix": "https://api.notion.com/v1",
+  "documentation": "https://developers.notion.com",
+  "desc_mk": "Notion is an all-in-one workspace that combines notes, databases, wikis, and project management. Use this plugin to query databases, manage pages, and search your Notion workspace. **Note:** Get your integration token at [Notion Integrations](https://www.notion.so/my-integrations).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_NOTION_TOKEN",
+      "description": "Notion integration token (Environment variable: NOTION_API_KEY)"
+    },
+    "Notion-Version": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "2022-06-28",
+      "description": "Notion API version"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Database",
+      "path": "/databases/{database_id}",
+      "method": "GET",
+      "description": "Retrieve a database object by its ID",
+      "request_params": {
+        "database_id": {
+          "type": "string",
+          "description": "The ID of the Notion database to retrieve",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Query Database",
+      "path": "/databases/{database_id}/query",
+      "method": "POST",
+      "description": "Query a database to get a list of pages that match the specified filters and sorts",
+      "request_params": {
+        "database_id": {
+          "type": "string",
+          "description": "The ID of the Notion database to query",
+          "required": true,
+          "send_method": "Path"
+        },
+        "filter": {
+          "type": "object",
+          "description": "Filter conditions to apply to the database query",
+          "required": false,
+          "send_method": "Body"
+        },
+        "sorts": {
+          "type": "array",
+          "description": "Sort criteria for the query results",
+          "required": false,
+          "send_method": "Body"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Maximum number of results to return (default 100, max 100)",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Page",
+      "path": "/pages/{page_id}",
+      "method": "GET",
+      "description": "Retrieve a Notion page object by its ID",
+      "request_params": {
+        "page_id": {
+          "type": "string",
+          "description": "The ID of the Notion page to retrieve",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    },
+    {
+      "name": "Create Page",
+      "path": "/pages",
+      "method": "POST",
+      "description": "Create a new page in a Notion database or as a child of an existing page",
+      "request_params": {
+        "parent": {
+          "type": "object",
+          "description": "The parent database or page. Example: {\"database_id\": \"xxx\"} or {\"page_id\": \"xxx\"}",
+          "required": true,
+          "send_method": "Body"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Page properties as defined by the parent database schema",
+          "required": true,
+          "send_method": "Body"
+        },
+        "children": {
+          "type": "array",
+          "description": "Array of block objects to append as children of the new page",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Update Page",
+      "path": "/pages/{page_id}",
+      "method": "PATCH",
+      "description": "Update properties or archive a Notion page",
+      "request_params": {
+        "page_id": {
+          "type": "string",
+          "description": "The ID of the Notion page to update",
+          "required": true,
+          "send_method": "Path"
+        },
+        "properties": {
+          "type": "object",
+          "description": "Page properties to update",
+          "required": false,
+          "send_method": "Body"
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "Set to true to archive (delete) the page, false to restore it",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Block Children",
+      "path": "/blocks/{block_id}/children",
+      "method": "GET",
+      "description": "Return a paginated list of child block objects for a given block",
+      "request_params": {
+        "block_id": {
+          "type": "string",
+          "description": "The ID of the block to get children for",
+          "required": true,
+          "send_method": "Path"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Maximum number of results to return (max 100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "start_cursor": {
+          "type": "string",
+          "description": "Cursor for pagination, from a previous response's next_cursor",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Append Block Children",
+      "path": "/blocks/{block_id}/children",
+      "method": "PATCH",
+      "description": "Append new children blocks to a parent block",
+      "request_params": {
+        "block_id": {
+          "type": "string",
+          "description": "The ID of the parent block to append children to",
+          "required": true,
+          "send_method": "Path"
+        },
+        "children": {
+          "type": "array",
+          "description": "Array of block objects to append as children",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Search",
+      "path": "/search",
+      "method": "POST",
+      "description": "Search all pages and databases shared with the integration that match the query",
+      "request_params": {
+        "query": {
+          "type": "string",
+          "description": "Text to search for across page and database titles",
+          "required": false,
+          "send_method": "Body"
+        },
+        "filter": {
+          "type": "object",
+          "description": "Filter results by object type. Example: {\"value\": \"page\", \"property\": \"object\"}",
+          "required": false,
+          "send_method": "Body"
+        },
+        "sort": {
+          "type": "object",
+          "description": "Sort criteria. Example: {\"direction\": \"descending\", \"timestamp\": \"last_edited_time\"}",
+          "required": false,
+          "send_method": "Body"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "Maximum number of results to return (max 100)",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Users",
+      "path": "/users",
+      "method": "GET",
+      "description": "Return a paginated list of users for the workspace associated with the integration",
+      "request_params": {
+        "page_size": {
+          "type": "integer",
+          "description": "Maximum number of users to return (max 100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "start_cursor": {
+          "type": "string",
+          "description": "Cursor for pagination, from a previous response's next_cursor",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get User",
+      "path": "/users/{user_id}",
+      "method": "GET",
+      "description": "Retrieve a user object using the user's ID",
+      "request_params": {
+        "user_id": {
+          "type": "string",
+          "description": "The ID of the Notion user to retrieve",
+          "required": true,
+          "send_method": "Path"
+        }
+      }
+    }
+  ]
+}

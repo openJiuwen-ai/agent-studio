@@ -1,0 +1,292 @@
+{
+  "ready": false,
+  "plugin_id": "quickbooks_api",
+  "name": "QuickBooks Online API",
+  "description": "Intuit QuickBooks Online accounting API for managing invoices, customers, payments, expenses, and financial reports. Full access to QuickBooks Online company data.",
+  "category": "payments",
+  "category_name": "Payments & Finance",
+  "category_icon": "💳",
+  "icon_uri": "📊",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "accounting",
+    "quickbooks",
+    "invoices",
+    "finance",
+    "intuit"
+  ],
+  "api_prefix": "https://quickbooks.api.intuit.com/v3",
+  "documentation": "https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/account",
+  "desc_mk": "QuickBooks Online API by Intuit provides access to accounting data including customers, invoices, payments, expenses, accounts, and financial reports. Authentication requires OAuth2 and a Company ID (realmId).",
+  "authentication": {
+    "type": "bearer",
+    "required_credentials": [
+      {
+        "name": "Access Token",
+        "env_var": "QUICKBOOKS_ACCESS_TOKEN",
+        "description": "QuickBooks Online OAuth2 access token"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "Query",
+      "path": "/company/{realmId}/query",
+      "method": "GET",
+      "description": "Execute a SQL-like query against QuickBooks Online entities",
+      "request_params": {
+        "realmId": {
+          "type": "string",
+          "description": "QuickBooks Company ID (realmId)",
+          "required": true,
+          "is_path_param": true
+        },
+        "query": {
+          "type": "string",
+          "description": "SQL-like query (e.g., 'SELECT * FROM Invoice WHERE TotalAmt > 100.00')",
+          "required": true,
+          "send_method": "Query"
+        },
+        "minorversion": {
+          "type": "integer",
+          "description": "Minor API version (default: 65)",
+          "required": false,
+          "default": 65,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Customer",
+      "path": "/company/{realmId}/customer/{customerId}",
+      "method": "GET",
+      "description": "Get a specific customer by ID",
+      "request_params": {
+        "realmId": {
+          "type": "string",
+          "description": "QuickBooks Company ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "customerId": {
+          "type": "string",
+          "description": "Customer ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "minorversion": {
+          "type": "integer",
+          "description": "API minor version",
+          "required": false,
+          "default": 65,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Customer",
+      "path": "/company/{realmId}/customer",
+      "method": "POST",
+      "description": "Create a new customer in QuickBooks Online",
+      "request_params": {
+        "realmId": {
+          "type": "string",
+          "description": "QuickBooks Company ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "DisplayName": {
+          "type": "string",
+          "description": "Customer display name (must be unique)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "GivenName": {
+          "type": "string",
+          "description": "First name",
+          "required": false,
+          "send_method": "Body"
+        },
+        "FamilyName": {
+          "type": "string",
+          "description": "Last name",
+          "required": false,
+          "send_method": "Body"
+        },
+        "PrimaryEmailAddr": {
+          "type": "object",
+          "description": "Primary email object with Address field",
+          "required": false,
+          "send_method": "Body"
+        },
+        "PrimaryPhone": {
+          "type": "object",
+          "description": "Primary phone object with FreeFormNumber field",
+          "required": false,
+          "send_method": "Body"
+        },
+        "minorversion": {
+          "type": "integer",
+          "description": "API minor version",
+          "required": false,
+          "default": 65,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Invoice",
+      "path": "/company/{realmId}/invoice/{invoiceId}",
+      "method": "GET",
+      "description": "Get a specific invoice by ID",
+      "request_params": {
+        "realmId": {
+          "type": "string",
+          "description": "QuickBooks Company ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "invoiceId": {
+          "type": "string",
+          "description": "Invoice ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "minorversion": {
+          "type": "integer",
+          "description": "API minor version",
+          "required": false,
+          "default": 65,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create Invoice",
+      "path": "/company/{realmId}/invoice",
+      "method": "POST",
+      "description": "Create a new invoice in QuickBooks Online",
+      "request_params": {
+        "realmId": {
+          "type": "string",
+          "description": "QuickBooks Company ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "CustomerRef": {
+          "type": "object",
+          "description": "Customer reference object with value (customer ID) and name",
+          "required": true,
+          "send_method": "Body"
+        },
+        "Line": {
+          "type": "array",
+          "description": "Array of line items with Amount, DetailType, and SalesItemLineDetail",
+          "required": true,
+          "send_method": "Body"
+        },
+        "DueDate": {
+          "type": "string",
+          "description": "Invoice due date (YYYY-MM-DD format)",
+          "required": false,
+          "send_method": "Body"
+        },
+        "minorversion": {
+          "type": "integer",
+          "description": "API minor version",
+          "required": false,
+          "default": 65,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Send Invoice",
+      "path": "/company/{realmId}/invoice/{invoiceId}/send",
+      "method": "POST",
+      "description": "Send an invoice by email to the customer",
+      "request_params": {
+        "realmId": {
+          "type": "string",
+          "description": "QuickBooks Company ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "invoiceId": {
+          "type": "string",
+          "description": "Invoice ID to send",
+          "required": true,
+          "is_path_param": true
+        },
+        "sendTo": {
+          "type": "string",
+          "description": "Email address to send the invoice to (overrides customer email)",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Profit and Loss Report",
+      "path": "/company/{realmId}/reports/ProfitAndLoss",
+      "method": "GET",
+      "description": "Generate a Profit and Loss financial report",
+      "request_params": {
+        "realmId": {
+          "type": "string",
+          "description": "QuickBooks Company ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "start_date": {
+          "type": "string",
+          "description": "Report start date (YYYY-MM-DD)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "end_date": {
+          "type": "string",
+          "description": "Report end date (YYYY-MM-DD)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "accounting_method": {
+          "type": "string",
+          "description": "Accounting method: Cash or Accrual",
+          "required": false,
+          "default": "Accrual",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Balance Sheet Report",
+      "path": "/company/{realmId}/reports/BalanceSheet",
+      "method": "GET",
+      "description": "Generate a Balance Sheet financial report",
+      "request_params": {
+        "realmId": {
+          "type": "string",
+          "description": "QuickBooks Company ID",
+          "required": true,
+          "is_path_param": true
+        },
+        "as_of_date": {
+          "type": "string",
+          "description": "Balance sheet date (YYYY-MM-DD)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "accounting_method": {
+          "type": "string",
+          "description": "Accounting method: Cash or Accrual",
+          "required": false,
+          "default": "Accrual",
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

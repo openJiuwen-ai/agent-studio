@@ -1,0 +1,247 @@
+{
+  "ready": false,
+  "plugin_id": "aws_api",
+  "name": "AWS API",
+  "description": "Amazon Web Services REST API integration for managing S3, EC2, Lambda, DynamoDB, and other AWS cloud resources. Note: Most AWS API calls require AWS Signature V4 authentication.",
+  "category": "cloud",
+  "category_name": "Cloud & Infrastructure",
+  "category_icon": "☁️",
+  "icon_uri": "🟠",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "aws",
+    "cloud",
+    "amazon",
+    "s3",
+    "lambda",
+    "ec2"
+  ],
+  "api_prefix": "https://s3.amazonaws.com",
+  "documentation": "https://docs.aws.amazon.com/index.html",
+  "desc_mk": "Amazon Web Services (AWS) is the world's most comprehensive cloud platform. This plugin covers S3 object storage, EC2 compute, Lambda serverless functions, and DynamoDB NoSQL database via the AWS REST APIs. AWS requires Signature V4 request signing for authentication.",
+  "authentication": {
+    "type": "custom",
+    "required_credentials": [
+      {
+        "name": "AWS Access Key ID",
+        "env_var": "AWS_ACCESS_KEY_ID",
+        "description": "AWS IAM Access Key ID"
+      },
+      {
+        "name": "AWS Secret Access Key",
+        "env_var": "AWS_SECRET_ACCESS_KEY",
+        "description": "AWS IAM Secret Access Key"
+      },
+      {
+        "name": "AWS Region",
+        "env_var": "AWS_REGION",
+        "description": "AWS region (e.g., us-east-1, eu-west-1)"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "S3 List Buckets",
+      "path": "/",
+      "method": "GET",
+      "description": "List all S3 buckets owned by the authenticated AWS account",
+      "request_params": {}
+    },
+    {
+      "name": "S3 List Objects",
+      "path": "/{bucket}",
+      "method": "GET",
+      "description": "List objects in an S3 bucket",
+      "request_params": {
+        "bucket": {
+          "type": "string",
+          "description": "S3 bucket name",
+          "required": true,
+          "is_path_param": true
+        },
+        "prefix": {
+          "type": "string",
+          "description": "Filter objects by prefix (folder path)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "max-keys": {
+          "type": "integer",
+          "description": "Maximum number of keys to return (default: 1000)",
+          "required": false,
+          "default": 100,
+          "send_method": "Query"
+        },
+        "delimiter": {
+          "type": "string",
+          "description": "Delimiter for grouping keys (use '/' for folder-like listing)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "list-type": {
+          "type": "integer",
+          "description": "List API version (2 for v2)",
+          "required": false,
+          "default": 2,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "S3 Get Object",
+      "path": "/{bucket}/{key}",
+      "method": "GET",
+      "description": "Download an object from S3",
+      "request_params": {
+        "bucket": {
+          "type": "string",
+          "description": "S3 bucket name",
+          "required": true,
+          "is_path_param": true
+        },
+        "key": {
+          "type": "string",
+          "description": "Object key (path within bucket)",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "S3 Put Object",
+      "path": "/{bucket}/{key}",
+      "method": "PUT",
+      "description": "Upload an object to S3",
+      "request_params": {
+        "bucket": {
+          "type": "string",
+          "description": "S3 bucket name",
+          "required": true,
+          "is_path_param": true
+        },
+        "key": {
+          "type": "string",
+          "description": "Object key (path within bucket)",
+          "required": true,
+          "is_path_param": true
+        },
+        "body": {
+          "type": "string",
+          "description": "Object content to upload",
+          "required": true,
+          "send_method": "Body"
+        },
+        "Content-Type": {
+          "type": "string",
+          "description": "MIME type of the object (e.g., 'text/plain', 'application/json')",
+          "required": false,
+          "send_method": "Header"
+        }
+      }
+    },
+    {
+      "name": "S3 Delete Object",
+      "path": "/{bucket}/{key}",
+      "method": "DELETE",
+      "description": "Delete an object from S3",
+      "request_params": {
+        "bucket": {
+          "type": "string",
+          "description": "S3 bucket name",
+          "required": true,
+          "is_path_param": true
+        },
+        "key": {
+          "type": "string",
+          "description": "Object key to delete",
+          "required": true,
+          "is_path_param": true
+        }
+      }
+    },
+    {
+      "name": "EC2 Describe Instances",
+      "path": "/",
+      "method": "GET",
+      "description": "Describe EC2 instances (requires ec2.amazonaws.com endpoint). Use Action=DescribeInstances",
+      "request_params": {
+        "Action": {
+          "type": "string",
+          "description": "AWS API action name",
+          "required": true,
+          "default": "DescribeInstances",
+          "send_method": "Query"
+        },
+        "Version": {
+          "type": "string",
+          "description": "EC2 API version",
+          "required": false,
+          "default": "2016-11-15",
+          "send_method": "Query"
+        },
+        "Filter.1.Name": {
+          "type": "string",
+          "description": "Filter name (e.g., 'instance-state-name')",
+          "required": false,
+          "send_method": "Query"
+        },
+        "Filter.1.Value.1": {
+          "type": "string",
+          "description": "Filter value (e.g., 'running')",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Lambda Invoke Function",
+      "path": "/2015-03-31/functions/{FunctionName}/invocations",
+      "method": "POST",
+      "description": "Invoke an AWS Lambda function (requires lambda.region.amazonaws.com endpoint)",
+      "request_params": {
+        "FunctionName": {
+          "type": "string",
+          "description": "Lambda function name or ARN",
+          "required": true,
+          "is_path_param": true
+        },
+        "Payload": {
+          "type": "object",
+          "description": "JSON payload to pass to the Lambda function",
+          "required": false,
+          "send_method": "Body"
+        },
+        "InvocationType": {
+          "type": "string",
+          "description": "Invocation type: RequestResponse (sync), Event (async), DryRun",
+          "required": false,
+          "default": "RequestResponse",
+          "send_method": "Header"
+        }
+      }
+    },
+    {
+      "name": "Lambda List Functions",
+      "path": "/2015-03-31/functions",
+      "method": "GET",
+      "description": "List AWS Lambda functions in the account/region",
+      "request_params": {
+        "MaxItems": {
+          "type": "integer",
+          "description": "Maximum number of functions to return",
+          "required": false,
+          "default": 50,
+          "send_method": "Query"
+        },
+        "Marker": {
+          "type": "string",
+          "description": "Pagination marker for next page",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

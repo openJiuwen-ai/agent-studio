@@ -1,0 +1,294 @@
+{
+  "ready": false,
+  "plugin_id": "mongodb_atlas",
+  "name": "MongoDB Atlas",
+  "description": "Query and manage MongoDB Atlas data via the Atlas Data API.",
+  "category": "database",
+  "category_name": "Databases",
+  "category_icon": "🗄️",
+  "icon_uri": "🍃",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["database", "mongodb", "atlas", "nosql", "documents"],
+  "api_prefix": "https://data.mongodb-api.com/app/{appId}/endpoint/data/v1",
+  "documentation": "https://www.mongodb.com/docs/atlas/app-services/data-api/",
+  "desc_mk": "Interact with MongoDB Atlas via the Data API to find, insert, update, delete, and aggregate documents.",
+  "authentication": {
+    "type": "api_key",
+    "required_credentials": [
+      {
+        "name": "api-key",
+        "env_var": "MONGODB_ATLAS_API_KEY"
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "find_one",
+      "description": "Find a single document matching a filter in a MongoDB collection.",
+      "method": "POST",
+      "path": "/action/findOne",
+      "request_params": {
+        "dataSource": {
+          "type": "string",
+          "desc": "The name of the Atlas cluster (e.g. Cluster0).",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "database": {
+          "type": "string",
+          "desc": "The name of the database.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "collection": {
+          "type": "string",
+          "desc": "The name of the collection.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "filter": {
+          "type": "object",
+          "desc": "A MongoDB query filter document to match the document (e.g. {\"name\": \"Alice\"}).",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "projection": {
+          "type": "object",
+          "desc": "Fields to include or exclude in the result (e.g. {\"name\": 1, \"_id\": 0}).",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "find",
+      "description": "Find multiple documents matching a filter in a MongoDB collection.",
+      "method": "POST",
+      "path": "/action/find",
+      "request_params": {
+        "dataSource": {
+          "type": "string",
+          "desc": "The name of the Atlas cluster.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "database": {
+          "type": "string",
+          "desc": "The name of the database.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "collection": {
+          "type": "string",
+          "desc": "The name of the collection.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "filter": {
+          "type": "object",
+          "desc": "A MongoDB query filter document.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "projection": {
+          "type": "object",
+          "desc": "Fields to include or exclude in results.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "sort": {
+          "type": "object",
+          "desc": "Sort order for results (e.g. {\"createdAt\": -1}).",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "limit": {
+          "type": "integer",
+          "desc": "Maximum number of documents to return.",
+          "is_required": false,
+          "send_method": "Body"
+        },
+        "skip": {
+          "type": "integer",
+          "desc": "Number of documents to skip before returning results.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "insert_one",
+      "description": "Insert a single document into a MongoDB collection.",
+      "method": "POST",
+      "path": "/action/insertOne",
+      "request_params": {
+        "dataSource": {
+          "type": "string",
+          "desc": "The name of the Atlas cluster.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "database": {
+          "type": "string",
+          "desc": "The name of the database.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "collection": {
+          "type": "string",
+          "desc": "The name of the collection.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "document": {
+          "type": "object",
+          "desc": "The document to insert.",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "insert_many",
+      "description": "Insert multiple documents into a MongoDB collection.",
+      "method": "POST",
+      "path": "/action/insertMany",
+      "request_params": {
+        "dataSource": {
+          "type": "string",
+          "desc": "The name of the Atlas cluster.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "database": {
+          "type": "string",
+          "desc": "The name of the database.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "collection": {
+          "type": "string",
+          "desc": "The name of the collection.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "documents": {
+          "type": "array",
+          "desc": "Array of documents to insert.",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "update_one",
+      "description": "Update a single document matching a filter in a MongoDB collection.",
+      "method": "POST",
+      "path": "/action/updateOne",
+      "request_params": {
+        "dataSource": {
+          "type": "string",
+          "desc": "The name of the Atlas cluster.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "database": {
+          "type": "string",
+          "desc": "The name of the database.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "collection": {
+          "type": "string",
+          "desc": "The name of the collection.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "filter": {
+          "type": "object",
+          "desc": "A MongoDB query filter to match the document to update.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "update": {
+          "type": "object",
+          "desc": "Update operators document (e.g. {\"$set\": {\"status\": \"active\"}}).",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "upsert": {
+          "type": "boolean",
+          "desc": "If true, insert a document if no match is found.",
+          "is_required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "delete_one",
+      "description": "Delete a single document matching a filter from a MongoDB collection.",
+      "method": "POST",
+      "path": "/action/deleteOne",
+      "request_params": {
+        "dataSource": {
+          "type": "string",
+          "desc": "The name of the Atlas cluster.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "database": {
+          "type": "string",
+          "desc": "The name of the database.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "collection": {
+          "type": "string",
+          "desc": "The name of the collection.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "filter": {
+          "type": "object",
+          "desc": "A MongoDB query filter to match the document to delete.",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "aggregate",
+      "description": "Run an aggregation pipeline on a MongoDB collection.",
+      "method": "POST",
+      "path": "/action/aggregate",
+      "request_params": {
+        "dataSource": {
+          "type": "string",
+          "desc": "The name of the Atlas cluster.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "database": {
+          "type": "string",
+          "desc": "The name of the database.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "collection": {
+          "type": "string",
+          "desc": "The name of the collection.",
+          "is_required": true,
+          "send_method": "Body"
+        },
+        "pipeline": {
+          "type": "array",
+          "desc": "An array of aggregation pipeline stage objects (e.g. [{\"$match\": {...}}, {\"$group\": {...}}]).",
+          "is_required": true,
+          "send_method": "Body"
+        }
+      }
+    }
+  ]
+}

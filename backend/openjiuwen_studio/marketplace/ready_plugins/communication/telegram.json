@@ -1,0 +1,292 @@
+{
+  "ready": false,
+  "plugin_id": "telegram",
+  "name": "Telegram Bot",
+  "description": "Send messages, photos, and documents via the Telegram Bot API.",
+  "category": "communication",
+  "category_name": "Communication",
+  "category_icon": "📞",
+  "icon_uri": "✈️",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["telegram", "messaging", "bot", "notifications"],
+  "api_prefix": "https://api.telegram.org",
+  "documentation": "https://core.telegram.org/bots/api",
+  "desc_mk": "Telegram Bot API integration. The bot token is passed directly in the URL path (e.g. /bot{YOUR_TOKEN}/sendMessage). No Authorization header is required. Obtain your token from @BotFather on Telegram.",
+  "header_configuration": {},
+  "tools": [
+    {
+      "name": "send_message",
+      "display_name": "Send Message",
+      "description": "Send a text message to a chat.",
+      "method": "POST",
+      "path": "/bot{bot_token}/sendMessage",
+      "request_params": {
+        "bot_token": {
+          "type": "string",
+          "description": "Your Telegram bot token obtained from @BotFather.",
+          "required": true,
+          "is_path_param": true
+        },
+        "chat_id": {
+          "type": "string",
+          "description": "Unique identifier for the target chat or username of the target channel.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "text": {
+          "type": "string",
+          "description": "Text of the message to be sent.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "parse_mode": {
+          "type": "string",
+          "description": "Mode for parsing entities: HTML or Markdown.",
+          "required": false,
+          "send_method": "Body"
+        },
+        "reply_markup": {
+          "type": "object",
+          "description": "Additional interface options (inline keyboard, custom reply keyboard, etc.).",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Message object on success."
+      }
+    },
+    {
+      "name": "send_photo",
+      "display_name": "Send Photo",
+      "description": "Send a photo to a chat.",
+      "method": "POST",
+      "path": "/bot{bot_token}/sendPhoto",
+      "request_params": {
+        "bot_token": {
+          "type": "string",
+          "description": "Your Telegram bot token obtained from @BotFather.",
+          "required": true,
+          "is_path_param": true
+        },
+        "chat_id": {
+          "type": "string",
+          "description": "Unique identifier for the target chat.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "photo": {
+          "type": "string",
+          "description": "Photo to send — pass a file_id to resend a photo or an HTTP URL.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "caption": {
+          "type": "string",
+          "description": "Photo caption, 0-1024 characters.",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Message object on success."
+      }
+    },
+    {
+      "name": "send_document",
+      "display_name": "Send Document",
+      "description": "Send a document (file) to a chat.",
+      "method": "POST",
+      "path": "/bot{bot_token}/sendDocument",
+      "request_params": {
+        "bot_token": {
+          "type": "string",
+          "description": "Your Telegram bot token obtained from @BotFather.",
+          "required": true,
+          "is_path_param": true
+        },
+        "chat_id": {
+          "type": "string",
+          "description": "Unique identifier for the target chat.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "document": {
+          "type": "string",
+          "description": "File to send — pass a file_id to resend or an HTTP URL.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "caption": {
+          "type": "string",
+          "description": "Document caption, 0-1024 characters.",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Message object on success."
+      }
+    },
+    {
+      "name": "get_updates",
+      "display_name": "Get Updates",
+      "description": "Receive incoming updates using long polling.",
+      "method": "GET",
+      "path": "/bot{bot_token}/getUpdates",
+      "request_params": {
+        "bot_token": {
+          "type": "string",
+          "description": "Your Telegram bot token obtained from @BotFather.",
+          "required": true,
+          "is_path_param": true
+        },
+        "offset": {
+          "type": "integer",
+          "description": "Identifier of the first update to be returned.",
+          "required": false,
+          "send_method": "Query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Limits the number of updates to be retrieved (1-100, default 100).",
+          "required": false,
+          "send_method": "Query"
+        },
+        "timeout": {
+          "type": "integer",
+          "description": "Timeout in seconds for long polling (0 for short polling).",
+          "required": false,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "array",
+        "description": "Array of Update objects."
+      }
+    },
+    {
+      "name": "get_bot_info",
+      "display_name": "Get Bot Info",
+      "description": "Get basic information about the bot.",
+      "method": "GET",
+      "path": "/bot{bot_token}/getMe",
+      "request_params": {
+        "bot_token": {
+          "type": "string",
+          "description": "Your Telegram bot token obtained from @BotFather.",
+          "required": true,
+          "is_path_param": true
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "User object with basic bot info."
+      }
+    },
+    {
+      "name": "forward_message",
+      "display_name": "Forward Message",
+      "description": "Forward a message from one chat to another.",
+      "method": "POST",
+      "path": "/bot{bot_token}/forwardMessage",
+      "request_params": {
+        "bot_token": {
+          "type": "string",
+          "description": "Your Telegram bot token obtained from @BotFather.",
+          "required": true,
+          "is_path_param": true
+        },
+        "chat_id": {
+          "type": "string",
+          "description": "Unique identifier for the target chat.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "from_chat_id": {
+          "type": "string",
+          "description": "Unique identifier for the chat where the original message was sent.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "message_id": {
+          "type": "integer",
+          "description": "Message identifier in the chat specified in from_chat_id.",
+          "required": true,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Message object on success."
+      }
+    },
+    {
+      "name": "get_chat",
+      "display_name": "Get Chat",
+      "description": "Get up-to-date information about a chat.",
+      "method": "GET",
+      "path": "/bot{bot_token}/getChat",
+      "request_params": {
+        "bot_token": {
+          "type": "string",
+          "description": "Your Telegram bot token obtained from @BotFather.",
+          "required": true,
+          "is_path_param": true
+        },
+        "chat_id": {
+          "type": "string",
+          "description": "Unique identifier for the target chat or username.",
+          "required": true,
+          "send_method": "Query"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "Chat object on success."
+      }
+    },
+    {
+      "name": "set_webhook",
+      "display_name": "Set Webhook",
+      "description": "Specify a URL to receive incoming updates via an outgoing webhook.",
+      "method": "POST",
+      "path": "/bot{bot_token}/setWebhook",
+      "request_params": {
+        "bot_token": {
+          "type": "string",
+          "description": "Your Telegram bot token obtained from @BotFather.",
+          "required": true,
+          "is_path_param": true
+        },
+        "url": {
+          "type": "string",
+          "description": "HTTPS URL to send updates to. Use an empty string to remove webhook integration.",
+          "required": true,
+          "send_method": "Body"
+        },
+        "max_connections": {
+          "type": "integer",
+          "description": "Maximum allowed number of simultaneous HTTPS connections to the webhook (1-100, default 40).",
+          "required": false,
+          "send_method": "Body"
+        },
+        "allowed_updates": {
+          "type": "array",
+          "description": "List of the update types you want your bot to receive.",
+          "required": false,
+          "send_method": "Body"
+        }
+      },
+      "response": {
+        "type": "object",
+        "description": "True on success."
+      }
+    }
+  ]
+}

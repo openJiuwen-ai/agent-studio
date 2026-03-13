@@ -29,13 +29,17 @@ class DeepSearchRequest(BaseModel):
                                                                                      "web: 联网搜索"
                                                                                      "local: 本地搜索工具搜索"
                                                                                      "all : 联网+本地融合搜索")
-    model_config_id: int = Field(..., description="模型配置ID")
+    general_model_config_id: int = Field(..., description="通用模型配置ID")
     web_search_config: WebSearchConfig = Field(default=None, description="Web搜索引擎配置，和本地知识库配置至少选择一个")
     local_search_config: Optional[LocalSearchConfig] = Field(default=None,
                                                    description="本地知识库配置，和Web搜索引擎配置至少选择一个")
     template_id: int = Field(default=-1, description="报告模板ID（可选）")
-    interrupt_feedback: Literal["", "accepted"] = Field(default="", description="中断反馈标识（可选）")
+    interrupt_feedback: Literal["", "accepted", "cancel"] = Field(default="", description="中断反馈标识（可选）")
     search_mode: Literal["research", "search"] = Field(default="research", description="生成研究报告还是生成答案")
+    # 高级配置模型 ID（可选）
+    plan_understanding_model_id: Optional[int] = Field(default=None, description="计划理解模型ID（可选）")
+    info_collecting_model_id: Optional[int] = Field(default=None, description="信息收集模型ID（可选）")
+    writing_checking_model_id: Optional[int] = Field(default=None, description="写作检查模型ID（可选）")
 
 
 class TemplateImportRequest(BaseModel):

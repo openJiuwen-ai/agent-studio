@@ -1,0 +1,91 @@
+{
+  "ready": false,
+  "plugin_id": "kuaidi100",
+  "name": "Kuaidi100 - Express Tracking API",
+  "description": "China's largest logistics tracking platform with 300M+ daily queries. Track packages from 1,000+ Chinese couriers and 200+ countries. Essential for e-commerce order tracking.",
+  "category": "data",
+  "category_name": "Data & Analytics",
+  "category_icon": "📊",
+  "icon_uri": "📦",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "logistics",
+    "tracking",
+    "courier",
+    "delivery",
+    "china"
+  ],
+  "api_prefix": "https://poll.kuaidi100.com",
+  "desc_mk": "Kuaidi100 (快递100) is China's #1 logistics tracking platform processing over 300 million queries daily. Track packages from 1,000+ Chinese couriers (SF Express, YTO, ZTO, STO, etc.) and 200+ international carriers. Real-time status updates for e-commerce, logistics management, and order tracking. **Note:** Requires API key from [Kuaidi100 Developer Platform](https://api.kuaidi100.com/).",
+  "header_configuration": {
+    "API Key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "KUAIDI100_API_KEY",
+      "description": "Kuaidi100 API authorization key"
+    },
+    "Customer": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "KUAIDI100_CUSTOMER",
+      "description": "Kuaidi100 customer number"
+    }
+  },
+  "tools": [
+    {
+      "name": "Real-time Package Tracking",
+      "path": "/poll/query.do",
+      "method": "POST",
+      "description": "Track package in real-time by tracking number and courier code",
+      "request_params": {
+        "customer": {
+          "type": "string",
+          "description": "Customer number (Environment variable: KUAIDI100_CUSTOMER)",
+          "required": true,
+          "send_method": "Body"
+        },
+        "sign": {
+          "type": "string",
+          "description": "MD5 signature: MD5(param + key + customer). Generated from tracking parameters",
+          "required": true,
+          "send_method": "Body"
+        },
+        "param": {
+          "type": "string",
+          "description": "JSON string with tracking info: {com:'courier_code', num:'tracking_number', phone:'last_4_digits', from:'sender_city', to:'receiver_city', resultv2:'1'}",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Auto-detect Courier",
+      "path": "/autonumber/auto",
+      "method": "GET",
+      "description": "Automatically detect courier company from tracking number",
+      "request_params": {
+        "num": {
+          "type": "string",
+          "description": "Tracking number",
+          "required": true,
+          "send_method": "Query"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key (Environment variable: KUAIDI100_API_KEY)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Supported Couriers",
+      "path": "/com",
+      "method": "GET",
+      "description": "Get list of all supported courier companies and their codes",
+      "request_params": {}
+    }
+  ]
+}

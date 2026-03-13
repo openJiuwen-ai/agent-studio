@@ -1,0 +1,360 @@
+{
+  "ready": true,
+  "plugin_id": "weatherapi_com",
+  "name": "WeatherAPI.com",
+  "description": "Comprehensive weather API with real-time conditions, forecasts up to 14 days, historical data, marine weather, astronomy, air quality, and sports data. Access weather for 4 million+ locations worldwide.",
+  "category": "data",
+  "category_name": "Data & Analytics",
+  "category_icon": "📊",
+  "icon_uri": "⛅",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "weather",
+    "forecast",
+    "climate",
+    "data",
+    "astronomy",
+    "marine",
+    "air-quality"
+  ],
+  "api_prefix": "https://api.weatherapi.com/v1",
+  "desc_mk": "WeatherAPI.com provides accurate weather data for 4 million+ locations worldwide. Access current conditions, hourly and daily forecasts up to 14 days, historical weather, marine forecasts, astronomy data (sunrise/sunset/moonrise/moonset), air quality index, time zone information, and sports data. Free tier includes 1 million calls/month. Supports JSON and XML formats. **Note:** Requires free API key from [WeatherAPI.com](https://www.weatherapi.com/signup.aspx). Premium plans available for historical data and higher limits.",
+  "header_configuration": {
+    "key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "WEATHERAPI_KEY",
+      "description": "API key for WeatherAPI.com authentication"
+    }
+  },
+  "tools": [
+    {
+      "name": "get_current_weather",
+      "path": "/current.json",
+      "method": "GET",
+      "description": "Get real-time weather data for any location including temperature, conditions, wind, pressure, humidity, and more",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Location query: city name, coordinates (lat,lon), US ZIP, UK postcode, Canada postal code, IP address, or IATA code (e.g., 'London', '48.8567,2.3508', 'auto:ip')",
+          "required": true,
+          "send_method": "query"
+        },
+        "aqi": {
+          "type": "string",
+          "description": "Include air quality data: 'yes' or 'no'",
+          "required": false,
+          "send_method": "query",
+          "default": "no"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_forecast",
+      "path": "/forecast.json",
+      "method": "GET",
+      "description": "Get weather forecast up to 14 days with hourly data, astronomy, and air quality information",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Location query: city name, coordinates, ZIP, postcode, IP, or IATA code",
+          "required": true,
+          "send_method": "query"
+        },
+        "days": {
+          "type": "integer",
+          "description": "Number of days for forecast (1-14). Free tier allows up to 3 days.",
+          "required": true,
+          "send_method": "query",
+          "default": 3
+        },
+        "aqi": {
+          "type": "string",
+          "description": "Include air quality data: 'yes' or 'no'",
+          "required": false,
+          "send_method": "query",
+          "default": "no"
+        },
+        "alerts": {
+          "type": "string",
+          "description": "Include weather alerts: 'yes' or 'no'",
+          "required": false,
+          "send_method": "query",
+          "default": "no"
+        },
+        "hour": {
+          "type": "integer",
+          "description": "Restrict hourly data to specific hour (0-23)",
+          "required": false,
+          "send_method": "query"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_future_weather",
+      "path": "/future.json",
+      "method": "GET",
+      "description": "Get future weather forecast between 14 days and 300 days ahead - requires paid plan",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Location query",
+          "required": true,
+          "send_method": "query"
+        },
+        "dt": {
+          "type": "string",
+          "description": "Date in format 'yyyy-MM-dd' (must be between 14 and 300 days from today)",
+          "required": true,
+          "send_method": "query"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_historical_weather",
+      "path": "/history.json",
+      "method": "GET",
+      "description": "Get historical weather data for a specific date - requires paid plan",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Location query",
+          "required": true,
+          "send_method": "query"
+        },
+        "dt": {
+          "type": "string",
+          "description": "Date in format 'yyyy-MM-dd' (on or after 1st Jan, 2010)",
+          "required": true,
+          "send_method": "query"
+        },
+        "hour": {
+          "type": "integer",
+          "description": "Restrict hourly data to specific hour (0-23)",
+          "required": false,
+          "send_method": "query"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_marine_weather",
+      "path": "/marine.json",
+      "method": "GET",
+      "description": "Get marine and sailing weather forecast including tide data, swell, and water temperature",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Location query (coordinates work best for marine data: 'lat,lon')",
+          "required": true,
+          "send_method": "query"
+        },
+        "days": {
+          "type": "integer",
+          "description": "Number of days for marine forecast (1-7)",
+          "required": false,
+          "send_method": "query",
+          "default": 3
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_astronomy",
+      "path": "/astronomy.json",
+      "method": "GET",
+      "description": "Get astronomy data including sunrise, sunset, moonrise, moonset, moon phase, and illumination",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Location query",
+          "required": true,
+          "send_method": "query"
+        },
+        "dt": {
+          "type": "string",
+          "description": "Date in format 'yyyy-MM-dd' (optional, defaults to today)",
+          "required": false,
+          "send_method": "query"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_timezone",
+      "path": "/timezone.json",
+      "method": "GET",
+      "description": "Get timezone information for a location including current local time",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Location query",
+          "required": true,
+          "send_method": "query"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_sports",
+      "path": "/sports.json",
+      "method": "GET",
+      "description": "Get sports data including football, cricket, and golf event schedules and information",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Location query",
+          "required": true,
+          "send_method": "query"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "search_location",
+      "path": "/search.json",
+      "method": "GET",
+      "description": "Search for locations to get city names, coordinates, and region information",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Search query (city or location name, minimum 3 characters)",
+          "required": true,
+          "send_method": "query"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_ip_lookup",
+      "path": "/ip.json",
+      "method": "GET",
+      "description": "Get location information from IP address including city, region, country, coordinates, and timezone",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "IP address (IPv4 or IPv6), or 'auto:ip' to detect automatically",
+          "required": true,
+          "send_method": "query"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_air_quality",
+      "path": "/current.json",
+      "method": "GET",
+      "description": "Get detailed air quality data including AQI, pollutants (CO, NO2, O3, SO2, PM2.5, PM10), and EPA index",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Location query",
+          "required": true,
+          "send_method": "query"
+        },
+        "aqi": {
+          "type": "string",
+          "description": "Must be 'yes' to get air quality data",
+          "required": true,
+          "send_method": "query",
+          "default": "yes"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    },
+    {
+      "name": "get_weather_alerts",
+      "path": "/forecast.json",
+      "method": "GET",
+      "description": "Get government weather alerts and warnings for a location (available for US, Europe, and Canada)",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Location query",
+          "required": true,
+          "send_method": "query"
+        },
+        "days": {
+          "type": "integer",
+          "description": "Number of days",
+          "required": false,
+          "send_method": "query",
+          "default": 1
+        },
+        "alerts": {
+          "type": "string",
+          "description": "Must be 'yes' to get weather alerts",
+          "required": true,
+          "send_method": "query",
+          "default": "yes"
+        },
+        "key": {
+          "type": "string",
+          "description": "API key for authentication",
+          "required": true,
+          "send_method": "query"
+        }
+      }
+    }
+  ]
+}

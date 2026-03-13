@@ -1,0 +1,203 @@
+{
+  "ready": false,
+  "plugin_id": "qwen_api",
+  "name": "Qwen API (Alibaba Tongyi)",
+  "description": "Alibaba Cloud's powerful LLM series via DashScope. Advanced text generation, multimodal understanding, and reasoning capabilities. OpenAI-compatible API with regional endpoints.",
+  "category": "ai",
+  "category_name": "AI & ML Services",
+  "category_icon": "🤖",
+  "icon_uri": "🔮",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "llm",
+    "ai",
+    "alibaba",
+    "chat",
+    "multimodal",
+    "china"
+  ],
+  "api_prefix": "https://dashscope.aliyuncs.com",
+  "desc_mk": "Qwen (通义千问/Tongyi Qianwen) is Alibaba Cloud's advanced LLM series accessible via DashScope API. Supports text generation, multimodal understanding (vision), and deep reasoning. Models include Qwen-Plus (balanced), Qwen-Turbo (fast), Qwen-Max (powerful), and Qwen-VL (vision). OpenAI-compatible interface available. **Note:** Requires API key from [Alibaba Cloud Model Studio](https://www.alibabacloud.com/help/en/model-studio/).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer QWEN_API_KEY",
+      "description": "Bearer token for Qwen DashScope API authentication"
+    }
+  },
+  "tools": [
+    {
+      "name": "Text Generation (OpenAI-compatible)",
+      "path": "/compatible-mode/v1/chat/completions",
+      "method": "POST",
+      "description": "Generate text using Qwen models with OpenAI-compatible interface",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model: 'qwen-plus', 'qwen-turbo', 'qwen-max', 'qwen-max-longcontext', 'qwen3.5-72b', 'qwen3.5-32b', 'qwen3.5-14b'",
+          "required": true,
+          "default": "qwen-plus",
+          "send_method": "Body"
+        },
+        "messages": {
+          "type": "array",
+          "description": "Array of message objects with 'role' and 'content' fields",
+          "required": true,
+          "send_method": "Body"
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Sampling temperature (0-2, default: 0.85)",
+          "required": false,
+          "default": 0.85,
+          "send_method": "Body"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "description": "Maximum tokens to generate (default: 2000)",
+          "required": false,
+          "default": 2000,
+          "send_method": "Body"
+        },
+        "top_p": {
+          "type": "number",
+          "description": "Nucleus sampling (default: 0.8)",
+          "required": false,
+          "default": 0.8,
+          "send_method": "Body"
+        },
+        "stream": {
+          "type": "boolean",
+          "description": "Stream response",
+          "required": false,
+          "default": false,
+          "send_method": "Body"
+        },
+        "stop": {
+          "type": "array",
+          "description": "Stop sequences",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Text Generation (DashScope Native)",
+      "path": "/api/v1/services/aigc/text-generation/generation",
+      "method": "POST",
+      "description": "Generate text using native DashScope API format",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Model name",
+          "required": true,
+          "default": "qwen-plus",
+          "send_method": "Body"
+        },
+        "input": {
+          "type": "object",
+          "description": "Input object with 'messages' array",
+          "required": true,
+          "send_method": "Body"
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Generation parameters: {result_format: 'message', max_tokens: 2000, temperature: 0.85, top_p: 0.8}",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Multimodal Generation (Vision)",
+      "path": "/api/v1/services/aigc/multimodal-generation/generation",
+      "method": "POST",
+      "description": "Generate text from text+image inputs using Qwen-VL models",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Multimodal model: 'qwen-vl-plus', 'qwen-vl-max', 'qwen3.5-vl'",
+          "required": true,
+          "default": "qwen-vl-plus",
+          "send_method": "Body"
+        },
+        "input": {
+          "type": "object",
+          "description": "Input with messages containing text and image URLs",
+          "required": true,
+          "send_method": "Body"
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Generation parameters",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Deep Thinking (Reasoning)",
+      "path": "/api/v1/services/aigc/text-generation/generation",
+      "method": "POST",
+      "description": "Use Qwen reasoning models for complex problem-solving",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Reasoning model: 'qwen-plus-deep-thinking', 'qwen-max-deep-thinking'",
+          "required": true,
+          "default": "qwen-plus-deep-thinking",
+          "send_method": "Body"
+        },
+        "input": {
+          "type": "object",
+          "description": "Input with messages for reasoning task",
+          "required": true,
+          "send_method": "Body"
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Parameters including enable_thinking: true",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Create Embeddings",
+      "path": "/api/v1/services/embeddings/text-embedding/text-embedding",
+      "method": "POST",
+      "description": "Create vector embeddings for text using Qwen embedding models",
+      "request_params": {
+        "model": {
+          "type": "string",
+          "description": "Embedding model: 'text-embedding-v1', 'text-embedding-v2'",
+          "required": true,
+          "default": "text-embedding-v2",
+          "send_method": "Body"
+        },
+        "input": {
+          "type": "object",
+          "description": "Input with texts array",
+          "required": true,
+          "send_method": "Body"
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Optional parameters",
+          "required": false,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "List Models",
+      "path": "/compatible-mode/v1/models",
+      "method": "GET",
+      "description": "Get list of available Qwen models (OpenAI-compatible endpoint)",
+      "request_params": {}
+    }
+  ]
+}

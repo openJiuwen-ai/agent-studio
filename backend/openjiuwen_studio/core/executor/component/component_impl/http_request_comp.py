@@ -12,7 +12,7 @@ from openjiuwen.core.context_engine import ModelContext
 from openjiuwen.core.session.node import Session
 
 # Import agent-core's HTTPRequestComponent
-from openjiuwen.core.workflow.components.http.http_request_component import (
+from openjiuwen.core.workflow import (
     HTTPRequestComponent as CoreHTTPRequestComponent,
     HttpComponentConfig as CoreHttpComponentConfig,
     HttpRequestParamConfig as CoreHttpRequestParamConfig,

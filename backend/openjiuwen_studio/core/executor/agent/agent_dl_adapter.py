@@ -131,7 +131,11 @@ class AgentDlAdapter:
                 Param.string(var["name"], description=var["description"], required=False)
                 for var in variable_list if var.get("enabled", False)
             ],
-            enable_long_term_mem=react_agent_dl.configs.get("longterm_memory_config", False)
+            enable_long_term_mem=react_agent_dl.configs.get("longterm_memory_config", False),
+            enable_user_profile=react_agent_dl.configs.get("user_profile_config", False),
+            enable_semantic_memory=react_agent_dl.configs.get("semantic_memory_config", False),
+            enable_episodic_memory=react_agent_dl.configs.get("episodic_memory_config", False),
+            enable_summary_memory=react_agent_dl.configs.get("summary_memory_config", False),
         )
 
         # 2.获取记忆库的id和对应的配置

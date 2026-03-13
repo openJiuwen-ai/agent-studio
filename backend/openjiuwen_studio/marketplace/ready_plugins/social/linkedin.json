@@ -1,0 +1,211 @@
+{
+  "ready": false,
+  "plugin_id": "linkedin",
+  "name": "LinkedIn",
+  "description": "Access LinkedIn API to manage profiles, posts, and company pages.",
+  "category": "social",
+  "category_name": "Social & Communication",
+  "category_icon": "💬",
+  "icon_uri": "💼",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": ["linkedin", "professional", "social", "networking", "b2b"],
+  "api_prefix": "https://api.linkedin.com/v2",
+  "documentation": "https://learn.microsoft.com/en-us/linkedin/",
+  "desc_mk": "## LinkedIn API\n\nManage LinkedIn profiles, share posts, and access company page data through the LinkedIn REST API.\n\n**Note:** Get your access token at [LinkedIn Developer Portal](https://www.linkedin.com/developers/).",
+  "header_configuration": {
+    "Authorization": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "Bearer YOUR_LINKEDIN_ACCESS_TOKEN",
+      "description": "LinkedIn OAuth 2.0 access token (Environment variable: LINKEDIN_ACCESS_TOKEN)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Profile",
+      "path": "/me",
+      "method": "GET",
+      "description": "Get the authenticated user's LinkedIn profile information.",
+      "request_params": {
+        "projection": {
+          "type": "string",
+          "description": "Field projection to specify which fields to return (e.g. (id,firstName,lastName,headline))",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Profile Picture",
+      "path": "/me",
+      "method": "GET",
+      "description": "Get the authenticated user's LinkedIn profile including profile picture.",
+      "request_params": {
+        "projection": {
+          "type": "string",
+          "description": "Field projection to include profile picture (e.g. (id,profilePicture(displayImage~:playableStreams)))",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Create UGC Post",
+      "path": "/ugcPosts",
+      "method": "POST",
+      "description": "Create a new User Generated Content post on LinkedIn.",
+      "request_params": {
+        "author": {
+          "type": "string",
+          "description": "URN of the author (e.g. urn:li:person:{id} or urn:li:organization:{id})",
+          "required": true,
+          "send_method": "Body"
+        },
+        "lifecycleState": {
+          "type": "string",
+          "description": "Publication state of the post: PUBLISHED or DRAFT",
+          "required": true,
+          "send_method": "Body"
+        },
+        "specificContent": {
+          "type": "object",
+          "description": "JSON object containing the post content with com.linkedin.ugc.ShareContent",
+          "required": true,
+          "send_method": "Body"
+        },
+        "visibility": {
+          "type": "object",
+          "description": "Visibility settings for the post (e.g. {com.linkedin.ugc.MemberNetworkVisibility: PUBLIC})",
+          "required": true,
+          "send_method": "Body"
+        }
+      }
+    },
+    {
+      "name": "Get Company",
+      "path": "/organizations/{id}",
+      "method": "GET",
+      "description": "Get information about a LinkedIn company or organization.",
+      "request_params": {
+        "id": {
+          "type": "string",
+          "description": "The LinkedIn organization ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "projection": {
+          "type": "string",
+          "description": "Field projection to specify which fields to return",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Company Posts",
+      "path": "/ugcPosts",
+      "method": "GET",
+      "description": "Get posts authored by a LinkedIn company or organization.",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Query type, must be 'authors' to filter by author",
+          "required": true,
+          "send_method": "Query"
+        },
+        "authors": {
+          "type": "string",
+          "description": "List of author URNs to filter by (e.g. List(urn:li:organization:12345))",
+          "required": true,
+          "send_method": "Query"
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of results to return per page (max 100)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "start": {
+          "type": "integer",
+          "description": "Index of the first result to return for pagination",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Connections",
+      "path": "/connections",
+      "method": "GET",
+      "description": "Get the authenticated user's first-degree connections on LinkedIn.",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Query type for connections (e.g. viewer)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "count": {
+          "type": "integer",
+          "description": "Number of connections to return per page",
+          "required": false,
+          "send_method": "Query"
+        },
+        "start": {
+          "type": "integer",
+          "description": "Index of the first result to return for pagination",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Organization Followers",
+      "path": "/organizationFollowerStatistics",
+      "method": "GET",
+      "description": "Get follower statistics for a LinkedIn organization.",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Query type, must be 'organizationalEntity'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "organizationalEntity": {
+          "type": "string",
+          "description": "URN of the organization (e.g. urn:li:organization:12345)",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Share Statistics",
+      "path": "/organizationalEntityShareStatistics",
+      "method": "GET",
+      "description": "Get share statistics (impressions, clicks, engagement) for an organization's posts.",
+      "request_params": {
+        "q": {
+          "type": "string",
+          "description": "Query type, must be 'organizationalEntity'",
+          "required": true,
+          "send_method": "Query"
+        },
+        "organizationalEntity": {
+          "type": "string",
+          "description": "URN of the organization (e.g. urn:li:organization:12345)",
+          "required": true,
+          "send_method": "Query"
+        },
+        "timeIntervals.timeGranularityType": {
+          "type": "string",
+          "description": "Time granularity: DAY, MONTH",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}

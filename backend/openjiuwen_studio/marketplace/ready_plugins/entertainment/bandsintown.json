@@ -1,0 +1,218 @@
+{
+  "ready": false,
+  "plugin_id": "bandsintown_api",
+  "name": "Bandsintown",
+  "description": "Concert and live music discovery. Find upcoming concerts, artist tour dates, and venue information. Track your favorite artists and get notified about new shows.",
+  "category": "entertainment",
+  "category_name": "Entertainment & Events",
+  "category_icon": "🎭",
+  "icon_uri": "🎸",
+  "plugin_type": 1,
+  "version": "1.0.0",
+  "author": "OpenJiuwen",
+  "tags": [
+    "concerts",
+    "music",
+    "artists",
+    "live-events",
+    "tours",
+    "venues",
+    "entertainment"
+  ],
+  "api_prefix": "https://rest.bandsintown.com",
+  "desc_mk": "Bandsintown API provides access to millions of live music events and artist information worldwide. Search for concerts by artist, location, or date. Get detailed event information including venue details, ticket links, and lineup information.",
+  "header_configuration": {
+    "x-api-key": {
+      "type": "string",
+      "send_method": "Header",
+      "value": "YOUR_BANDSINTOWN_APP_ID",
+      "description": "Bandsintown app_id for authentication (get from artists.bandsintown.com)"
+    }
+  },
+  "tools": [
+    {
+      "name": "Get Artist Info",
+      "path": "/artists/{artist_name}",
+      "method": "GET",
+      "description": "Get information about a specific artist",
+      "request_params": {
+        "artist_name": {
+          "type": "string",
+          "description": "Artist name (URL encoded)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "app_id": {
+          "type": "string",
+          "description": "Your application ID",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Artist Events",
+      "path": "/artists/{artist_name}/events",
+      "method": "GET",
+      "description": "Get upcoming events for a specific artist",
+      "request_params": {
+        "artist_name": {
+          "type": "string",
+          "description": "Artist name (URL encoded)",
+          "required": true,
+          "send_method": "Path"
+        },
+        "app_id": {
+          "type": "string",
+          "description": "Your application ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date range (upcoming, past, all, or specific date YYYY-MM-DD)",
+          "required": false,
+          "default": "upcoming",
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Search Events",
+      "path": "/events/search",
+      "method": "GET",
+      "description": "Search for events by location, date, and other criteria",
+      "request_params": {
+        "app_id": {
+          "type": "string",
+          "description": "Your application ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "location": {
+          "type": "string",
+          "description": "Location (city, coordinates, or IP address)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date range (YYYY-MM-DD,YYYY-MM-DD or upcoming)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "radius": {
+          "type": "string",
+          "description": "Search radius in miles (default 25)",
+          "required": false,
+          "send_method": "Query"
+        },
+        "page": {
+          "type": "integer",
+          "description": "Page number for pagination",
+          "required": false,
+          "send_method": "Query"
+        },
+        "per_page": {
+          "type": "integer",
+          "description": "Results per page (max 100)",
+          "required": false,
+          "default": 25,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Event by ID",
+      "path": "/events/{event_id}",
+      "method": "GET",
+      "description": "Get detailed information about a specific event",
+      "request_params": {
+        "event_id": {
+          "type": "string",
+          "description": "Event ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "app_id": {
+          "type": "string",
+          "description": "Your application ID",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Venue Info",
+      "path": "/venues/{venue_id}",
+      "method": "GET",
+      "description": "Get information about a specific venue",
+      "request_params": {
+        "venue_id": {
+          "type": "string",
+          "description": "Venue ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "app_id": {
+          "type": "string",
+          "description": "Your application ID",
+          "required": true,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Venue Events",
+      "path": "/venues/{venue_id}/events",
+      "method": "GET",
+      "description": "Get events at a specific venue",
+      "request_params": {
+        "venue_id": {
+          "type": "string",
+          "description": "Venue ID",
+          "required": true,
+          "send_method": "Path"
+        },
+        "app_id": {
+          "type": "string",
+          "description": "Your application ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "date": {
+          "type": "string",
+          "description": "Date range filter",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    },
+    {
+      "name": "Get Recommended Events",
+      "path": "/events/recommended",
+      "method": "GET",
+      "description": "Get recommended events based on location and preferences",
+      "request_params": {
+        "app_id": {
+          "type": "string",
+          "description": "Your application ID",
+          "required": true,
+          "send_method": "Query"
+        },
+        "location": {
+          "type": "string",
+          "description": "Location for recommendations",
+          "required": true,
+          "send_method": "Query"
+        },
+        "radius": {
+          "type": "string",
+          "description": "Search radius in miles",
+          "required": false,
+          "send_method": "Query"
+        }
+      }
+    }
+  ]
+}
