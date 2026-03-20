@@ -7,12 +7,13 @@
 
 主要接口：
 - AgentCompiler: Runtime SDK调用的主要入口
-  - compile(): 编译配置并返回可执行的Agent实例
+  - compile(): 编译配置并返回可执行的Agent实例（依赖数据库）
   - compile_config(): 仅编译配置，不创建实例
   - compile_from_file(): 从文件编译并返回Agent实例
   - compile_from_file_config(): 从文件编译配置
-  - compile_with_overrides(): 使用模型覆盖编译并返回Agent实例
+  - compile_with_overrides(): 使用模型覆盖编译并返回Agent实例（依赖数据库）
   - compile_with_overrides_config(): 使用模型覆盖编译配置
+  - compile_for_runtime(): 编译配置用于 Runtime 环境（不依赖数据库，推荐）
   - validate(): 验证配置
 """
 

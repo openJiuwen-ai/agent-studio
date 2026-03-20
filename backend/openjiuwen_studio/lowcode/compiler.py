@@ -417,3 +417,74 @@ class AgentCompiler:
                     }
                 ]
             }
+
+    async def compile_for_runtime(
+        self,
+        config: Dict[str, Any],
+        model_overrides: Optional[Dict[str, ModelOverride]] = None,
+        current_user: Optional[Dict] = None
+    ) -> Dict[str, Any]:
+        """
+        编译配置用于 Runtime 环境（不依赖数据库）
+
+        此方法专为 Runtime 环境设计，返回可直接用于创建 Agent 实例的配置。
+        不依赖 AgentRunner，因此不需要数据库配置。
+
+        Args:
+            config: Agent配置（AgentExportData格式）
+            model_overrides: 模型覆盖配置（如API Key）
+            current_user: 当前用户信息
+
+        Returns:
+            Dict 包含:
+            {
+                "agent_card": AgentCard,
+                "runtime_config": ReActAgentConfig,
+                "agent_config": Dict
+            }
+
+        使用示例:
+            from openjiuwen.core.single_agent.agents.react_agent import ReActAgent
+            from openjiuwen_studio.lowcode import AgentCompiler
+
+            compiler = AgentCompiler()
+            result = await compiler.compile_for_runtime(
+                config=export_data,
+                model_overrides={"147": ModelOverride(...)}
+            )
+
+            agent = ReActAgent(card=result["agent_card"])
+            agent.configure(result["runtime_config"])
+        """
+        try:
+            from openjiuwen.core.single_agent.schema.agent_card import AgentCard
+            logger.info("Starting agent compilation for runtime environment")
+
+            compiled_result = await self.compile_with_overrides_config(
+                config=config,
+                model_overrides=model_overrides or {},
+                current_user=current_user
+            )
+
+            agent_config = compiled_result['agent_config']
+
+            agent_card = AgentCard(
+                id=agent_config.get("agent_id", ""),
+                name=agent_config.get("agent_name", "Agent"),
+                description=agent_config.get("description", ""),
+                version=agent_config.get("agent_version", "draft"),
+            )
+
+            runtime_config = ConfigAdapter.adapt_to_runtime_config(agent_config)
+
+            logger.info("Agent compilation for runtime completed successfully")
+
+            return {
+                "agent_card": agent_card,
+                "runtime_config": runtime_config,
+                "agent_config": agent_config,
+            }
+
+        except Exception as e:
+            logger.error(f"Runtime compilation failed: {e}")
+            raise RuntimeError(f"Failed to compile agent for runtime: {e}") from e

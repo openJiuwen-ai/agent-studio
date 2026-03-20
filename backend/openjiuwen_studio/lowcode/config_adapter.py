@@ -375,3 +375,38 @@ class ConfigAdapter:
         )
         
         return dl_config
+    
+    @staticmethod
+    def adapt_to_runtime_config(
+        config: Dict[str, Any]
+    ) -> "ReActAgentConfig":
+        """
+        适配为 Runtime 环境使用的 ReActAgentConfig
+        
+        用于 openjiuwen.core.single_agent.agents.react_agent.ReActAgent.configure()
+        
+        Args:
+            config: 导出的 agent 配置
+            
+        Returns:
+            ReActAgentConfig (来自 openjiuwen.core.single_agent.agents.react_agent)
+        """
+        from openjiuwen.core.single_agent.agents.react_agent import ReActAgentConfig as RuntimeReActAgentConfig
+        
+        model_data = config.get("model", {})
+        model_info_data = model_data.get("model_info", {})
+        
+        prompt_template = config.get("prompt_template", [])
+        if isinstance(prompt_template, str):
+            prompt_template = [{"role": "system", "content": prompt_template}]
+        
+        return RuntimeReActAgentConfig(
+            mem_scope_id="",
+            model_name=model_data.get("model_name", ""),
+            model_provider=model_data.get("model_provider", "openai"),
+            api_key=model_info_data.get("api_key", ""),
+            api_base=model_info_data.get("base_url", ""),
+            prompt_template_name=config.get("prompt_template_name", ""),
+            prompt_template=prompt_template,
+            max_iterations=config.get("constraint", {}).get("max_iteration", 5),
+        )
