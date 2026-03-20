@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     deepsearch_agent_host: str = ""
     deepsearch_agent_port: int = 6000
 
+    # runtime 配置
+    runtime_host: str = ""
+    runtime_port: int = 8001
+
     # Security
     secret_key: str = "your-secret-key-change-in-production"
     algorithm: str = "HS256"

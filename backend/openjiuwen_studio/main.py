@@ -30,7 +30,7 @@ from openjiuwen_studio.models import ModelConfig, ModelUsageLog, EmbeddingModelC
     PluginPublishDB, ToolBaseDB, \
     WorkflowExecutionDB, WorkflowExecutionDetailsDB, AgentExecutionDB, AgentExecutionDetailsDB, \
     AgentWorkflowRelationDB, KnowledgeBaseDB, KnowledgeBaseDocumentDB, ReferenceDB, SystemEmbeddingModelDB, \
-    SystemLLMModelDB, MemoryBaseDB
+    SystemLLMModelDB, MemoryBaseDB, RuntimeInfoDB
 # Import alembic version check
 from openjiuwen.core.common.logging import logger, interface_logger
 from openjiuwen_studio.core.common.logging.events import CustomLogEventType
@@ -89,6 +89,7 @@ async def lifespan_func(app: FastAPI):
         SystemEmbeddingModelDB.__table__,
         # Memory Base tables
         MemoryBaseDB.__table__,
+        RuntimeInfoDB.__table__,
     ]
 
     if engine.url.drivername == "sqlite":

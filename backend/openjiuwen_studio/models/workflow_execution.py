@@ -15,7 +15,7 @@ class WorkflowExecutionDB(Base, DBFunBase):
     __table_args__ = (
         Index("idx_workflow", "space_id", "workflow_id", "workflow_version"),
         Index("workflow_id_version", "workflow_id", "workflow_version"),
-        {"comment": "某次workflow执行的总结信息"}      
+        {"comment": "某次workflow执行的总结信息"}
     )
 
     if settings.DB_TYPE.lower() == "sqlite":

@@ -396,7 +396,7 @@ async def agent_list(
     """
     try:
         req = validate_request(request, AgentList)
-        res = mgr.agent_get_list(req, current_user)
+        res = await mgr.agent_get_list(req, current_user)
         return handle_response(res)
     except ValidationError as e:
         user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")
@@ -449,7 +449,7 @@ async def agent_version_list(
     """
     try:
         req = validate_request(request, AgentVersionListRequest)
-        res = mgr.agent_version_list(req, current_user)
+        res = await mgr.agent_version_list(req, current_user)
         return handle_response(res)
     except ValidationError as e:
         user_id = (current_user.get("data") or {}).get("user_id_str", "unknown")

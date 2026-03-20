@@ -194,6 +194,8 @@ class StatusCode(Enum):
     # 任务空间模块 5001~5999
     TASK_SPACE_THIRDPARTY_CLIENT_ERROR = (BASE_CODE + 5001, "与DeepSearch服务端连接失败: {msg}",
                                     "Failed to initialize DeepSearch HTTP client: {msg}")
+    RUNTIME_THIRDPARTY_CLIENT_ERROR = (BASE_CODE + 5002, "与RunTime服务端连接失败: {msg}",
+                                    "Failed to initialize RunTime HTTP client: {msg}")
 
     @property
     def code(self):

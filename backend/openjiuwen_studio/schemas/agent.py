@@ -208,6 +208,7 @@ class AgentVersionInfo(BaseModel):
     agent_version: str = Field(..., description="版本号")
     version_description: str = Field(..., description="版本描述")
     create_time: int = Field(..., description="创建时间")
+    published_flag: str = Field(..., description="是否发布")
 
 
 class AgentVersionListResponse(BaseModel):

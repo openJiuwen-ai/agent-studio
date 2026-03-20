@@ -73,6 +73,7 @@ class AgentItem(BaseModel):
     create_time: int
     update_time: int
     api_endpoint: str = Field(..., min_length=1, max_length=100)
+    published_flag: str = Field(..., min_length=1, max_length=100, description="agent发布状态")
 
     class Config:
         populate_by_name = True

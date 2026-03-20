@@ -17,11 +17,12 @@ from .user import SpaceDB, SpaceUserDB, UserDB
 from .workflow import WorkflowBaseDB, WorkflowPublishDB
 from .workflow_execution import WorkflowExecutionDB, WorkflowExecutionDetailsDB
 from .memory_base import MemoryBaseDB
+from .runtime_info import RuntimeInfoDB
 
 __all__ = ["ModelConfig", "ModelUsageLog", "EmbeddingModelConfig", "Base", "WorkflowBaseDB", "WorkflowPublishDB",
            "AgentBaseDB", "AgentPublishDB", "PromptRelationDB", "TagDB", "UserDB", "SpaceDB", "SpaceUserDB",
            "PluginBaseDB", "PluginPublishDB", "ToolBaseDB", "WorkflowExecutionDB", "WorkflowExecutionDetailsDB",
            "AgentExecutionDB", "AgentExecutionDetailsDB", "AgentWorkflowRelationDB", "ReferenceDB",
            "TraceDetailDB", "KnowledgeBaseDB", "KnowledgeBaseDocumentDB", "SystemEmbeddingModelDB", "SystemLLMModelDB",
-           "MemoryBaseDB"
+           "MemoryBaseDB", "RuntimeInfoDB"
            ]

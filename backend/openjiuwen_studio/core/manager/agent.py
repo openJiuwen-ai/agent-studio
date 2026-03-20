@@ -11,9 +11,10 @@ import shutil
 import time
 import uuid
 import zipfile
+import asyncio
 from pathlib import Path
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Callable, Type, Set, Any, Dict, Optional, Union, Tuple
+from typing import TYPE_CHECKING, Callable, Type, Set, Any, Dict, List, Optional, Union, Tuple
 
 from fastapi import status
 from openjiuwen.core.common.logging import logger
@@ -122,6 +123,9 @@ from openjiuwen_studio.schemas.knowledge_base import (
 )
 from openjiuwen_studio.core.manager.convertor.components.plugin import (
     param_type_mapping,
+)
+from openjiuwen_studio.core.manager.runtime import (
+    get_deploy_info, get_agent_deploy_detail
 )
 
 if TYPE_CHECKING:
@@ -815,8 +819,53 @@ def agent_meta_update(
     )
 
 
+async def get_agent_publish_status(agent_id: str, user_id: str, space_id: str) -> List[Dict[str, Any]]:
+    """从runtime中获取当前agent_id发布情况"""
+    try:
+        res = []
+        # 获取agent id对应deployment id和版本
+        deploy_infos = await get_deploy_info(agent_id, space_id)
+        for deploy_info in deploy_infos:
+            version = deploy_info.get("version")
+
+            # 从runtime获取最新发布状态, 正常情况下，同一个agentid+version能且只能发布一次
+            # 同一个agentid+version发布多次且同时存在，res里会有多条数据，判断状态会用到最早那条
+            deploy_detail = await get_agent_deploy_detail(deploy_info.get("deployment_id"), user_id, space_id)
+            published_flag = deploy_detail.get("status")
+
+            res.append({
+                'agent_id': agent_id,
+                'version': version,
+                'published_flag': published_flag
+            })
+        return res
+    except Exception as e:
+        logger.warning(f"Failed to get runtime publish status for agent {agent_id}: {e}")
+        # 出现异常时返回未发布状态
+        return [{
+            'agent_id': agent_id,
+            'version': None,
+            'published_flag': "false"
+        }]
+
+
+def map_agent_publish_status(agent_id: str, agent_version: str, agent_publish_status_list: List[Dict[str, Any]]) -> str:
+    """判断当前agent和version是否发布"""
+    # 如果和agent_publish_status里能对上，则填入返回的发布状态，对不上都返回false
+    for agent_publish_status in agent_publish_status_list:
+        if agent_id == agent_publish_status.get("agent_id"):
+            if agent_version == agent_publish_status.get("version"):
+                return agent_publish_status.get("published_flag")
+    return "false"
+
+
+async def get_agent_version_publish_status(agent_id: str, version: str, user_id: str, space_id: str) -> str:
+    runtime_result = await get_agent_publish_status(agent_id, user_id, space_id)
+    return map_agent_publish_status(agent_id, version, runtime_result)
+
+
 @with_exception_handling
-def agent_get_list(
+async def agent_get_list(
         req: AgentList,
         current_user: dict
 ) -> ResponseModel:
@@ -891,6 +940,8 @@ def agent_get_list(
             create_time=item_data.get("create_time"),
             update_time=item_data.get("update_time"),
             api_endpoint=item_data.get("api_endpoint", "test"),
+            published_flag=await get_agent_version_publish_status(
+                item_data.get("agent_id"), item_data.get("agent_version"), user_id, req.space_id),
         )
 
         items.append(item)
@@ -1326,12 +1377,17 @@ def agent_search(
 
 
 @with_exception_handling
-def agent_version_list(
+async def agent_version_list(
         req: AgentVersionListRequest,
         current_user: dict
 ) -> ResponseModel:
     """获取智能体的发布版本列表"""
     _ = check_user_space(req.space_id, current_user)
+
+    # 从runtime中获取发布情况
+    data = current_user.get("data", {})
+    user_id = data.get("user_id_str", "")
+    runtime_result = await get_agent_publish_status(req.agent_id, user_id, req.space_id)
 
     # 调用repository获取版本列表
     version_result = agent_repository.get_agent_publish_list(req.model_dump())
@@ -1365,6 +1421,8 @@ def agent_version_list(
                 agent_version=version_info.get("agent_version", ""),
                 version_description=version_info.get("version_description", ""),
                 create_time=version_info.get("create_time", 0),
+                published_flag=map_agent_publish_status(
+                    req.agent_id, version_info.get("agent_version", ""), runtime_result)
             )
         )
 
