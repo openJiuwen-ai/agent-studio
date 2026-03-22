@@ -32,6 +32,7 @@ dependencies = [
     "redis==7.1.0",
     "greenlet>=3.3.1",
     "protobuf==6.33.5",
+    "pymilvus<2.6.10",
 ]
 
 [tool.uv]

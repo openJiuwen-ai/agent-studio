@@ -130,7 +130,7 @@ class CodeComponent(WorkflowComponent):
             if response:
                 for param in output_params:
                     raw_value = response.get(param.name)
-                    if not raw_value and param.type != "bool":
+                    if raw_value is None and param.type != "bool":
                         response_result[param.name] = None
                         continue
                     # 按 ParamConfig.type 做类型校验和强制转换

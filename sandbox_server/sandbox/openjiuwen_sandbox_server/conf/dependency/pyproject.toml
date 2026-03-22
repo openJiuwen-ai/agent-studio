@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py-sandbox"
+version = "0.1.0"
+requires-python = ">=3.11.4"
+dependencies = [
+    "fastapi>=0.124.0",
+    "uvicorn>=0.38.0",
+    "python-dotenv==1.1.1",
+    "numpy",
+    "requests"
+]
+
+[tool.uv]
+default-groups = ['dev']
+python-install-mirror = "https://ghfast.top/https://github.com/astral-sh/python-build-standalone/releases/download"
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+
+[dependency-groups]
+dev = [
+]

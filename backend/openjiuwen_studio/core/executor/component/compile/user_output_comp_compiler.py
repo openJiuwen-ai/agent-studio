@@ -33,7 +33,7 @@ def find_llm_to_stream_out(target_comp_id, inputs, stream_output_dict):
 
 
 def change_stream_input(inputs):
-    pattern = r'(?:llm|questioner)_\w+'
+    pattern = r'llm_\w+'
     stream_inputs = {}
     new_inputs = {}
     for key, value in inputs.items():

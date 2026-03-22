@@ -6,9 +6,7 @@ services:
     ports:
       - "<<SANDBOX_GATEWAY_HOST_PORT>>:<<SANDBOX_GATEWAY_PORT>>"
     environment:
-      - PYTHON_SANDBOX_URL=http://<<PYTHON_SERVER_SERVICE>>:<<PYTHON_SERVER_PORT>>/run
-      - JS_SANDBOX_URL=http://<<JS_SERVER_SERVICE>>:<<JS_SERVER_PORT>>/run
-      - ENABLE_LINUX_SANDBOX=<<ENABLE_LINUX_SANDBOX>>
+      - SANDBOX_SERVER_URL=http://<<SANDBOX_SERVER_SERVICE>>:<<SANDBOX_SERVER_PORT>>/run
     networks:
       - <<JIUWEN_NETWORK_NAME>>
     restart: unless-stopped
@@ -24,44 +22,31 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
-    cap_add:
-      - SYS_ADMIN
-    security_opt:
-      - seccomp=unconfined
-      - apparmor=unconfined
 
-  <<PYTHON_SERVER_SERVICE>>:
-    image: <<PYTHON_SERVER_IMAGE>>
+  <<SANDBOX_SERVER_SERVICE>>:
+    image: <<SANDBOX_SERVER_IMAGE>>
     pull_policy: if_not_present
-    container_name: <<PYTHON_SERVER_DOCKER>>
+    container_name: <<SANDBOX_SERVER_DOCKER>>
     ports:
-      - "<<PYTHON_SERVER_HOST_PORT>>:<<PYTHON_SERVER_PORT>>"
+      - "<<SANDBOX_SERVER_HOST_PORT>>:<<SANDBOX_SERVER_PORT>>"
+    environment:
+      - ENABLE_LINUX_SANDBOX=<<ENABLE_LINUX_SANDBOX>>
     networks:
       - <<JIUWEN_NETWORK_NAME>>
     restart: unless-stopped
     healthcheck:
       test:
-        ["CMD", "curl", "-f", "http://localhost:<<PYTHON_SERVER_PORT>>/health"]
+        ["CMD", "curl", "-f", "http://localhost:<<SANDBOX_SERVER_PORT>>/health"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
-
-  <<JS_SERVER_SERVICE>>:
-    image: <<JS_SERVER_IMAGE>>
-    pull_policy: if_not_present
-    container_name: <<JS_SERVER_DOCKER>>
-    ports:
-      - "<<JS_SERVER_HOST_PORT>>:<<JS_SERVER_PORT>>"
-    networks:
-      - <<JIUWEN_NETWORK_NAME>>
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:<<JS_SERVER_PORT>>/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+      - systempaths=unconfined
 
 networks:
   <<JIUWEN_NETWORK_NAME>>:

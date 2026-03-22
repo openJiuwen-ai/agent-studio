@@ -790,6 +790,27 @@
       "cancelledTip": "Cancelled",
       "unknownTip": "Unknown status"
     },
+    "outlineInteraction": {
+      "researchOutline": "Research Outline",
+      "waitingForConfirm": "Waiting for confirmation",
+      "confirmed": "Confirmed",
+      "cancelled": "Cancelled",
+      "modifyTip": "Based on the above analysis, I have generated a research outline. You can manually edit the outline or directly input your modifications in the dialog box below. Once the outline is confirmed, click \"Start Research\".",
+      "startResearch": "Start Research",
+      "edit": "Edit",
+      "editOutline": "Edit Outline",
+      "addSection": "Add Section",
+      "chapter": "Chapter",
+      "chapterLabel": "Chapter {{index}}",
+      "sectionTitle": "Title",
+      "sectionDescription": "Description",
+      "titlePlaceholder": "Enter section title",
+      "descriptionPlaceholder": "Enter section description",
+      "cancelEdit": "Cancel",
+      "saveOutline": "Save",
+      "editAndRevisePrompt": "Revise the outline based on my edits",
+      "remainingRoundsWarning": "Current remaining edit times: {{count}} times"
+    },
     "chart": {
       "mermaidError": "Mermaid chart error",
       "syntaxError": "Mermaid syntax error",
@@ -829,15 +850,55 @@
         "general": "General",
         "search": "Search",
         "template": "Template",
+        "model": "Model",
         "generalDesc": "Interaction and planning settings",
         "searchDesc": "Online enhancement engine and result settings",
         "templateDesc": "Report template management",
         "needsConfig": "Needs Config"
       },
+      "model": {
+        "general": {
+          "title": "Basic Configuration",
+          "label": "General Model",
+          "description": "Recommended to use a comprehensive model that adapts to all modules",
+          "notSelected": "No model selected",
+          "required": "General model is required"
+        },
+        "advanced": {
+          "title": "Advanced Configuration",
+          "expand": "Expand",
+          "collapse": "Collapse",
+          "info": "Modules without a specific model selected will use the general model by default"
+        },
+        "outline": {
+          "label": "Outline Generation",
+          "description": "",
+          "recommendation": "Recommended to use reasoning models for better intent understanding and reduced hallucinations"
+        },
+        "infoCollecting": {
+          "label": "Information Collecting",
+          "description": "",
+          "recommendation": "Simple models are sufficient for quick summarization"
+        },
+        "reportWriting": {
+          "label": "Report Writing",
+          "description": "",
+          "recommendation": "Recommended to use models with strong programming and math capabilities"
+        },
+        "useGeneral": "Not Selected",
+        "selectModel": "Select Model",
+        "clear": "Clear",
+        "test": {
+          "success": "Model {{modelName}} test successful",
+          "failed": "Model {{modelName}} test failed, model unavailable"
+        }
+      },
       "general": {
         "interactionSettings": "Interaction Settings",
         "enableHumanInteraction": "Enable Human-in-the-Loop",
-        "enableHumanInteractionDesc": "Ask for confirmation during execution",
+        "enableHumanInteractionDesc": "Interact with users for confirmation during Q&A",
+        "outlineInteractionEnabled": "Enable Outline Interaction",
+        "outlineInteractionEnabledDesc": "Allow users to modify during outline phase",
         "enableTraceability": "Enable Traceability",
         "enableTraceabilityDesc": "Show information sources",
         "enableSourceTracerInfer": "Enable Traceability Inference",
@@ -868,7 +929,8 @@
         "webModeRequires": "Online enhancement mode requires an online enhancement engine",
         "localModeRequires": "Local search mode requires at least one knowledge base",
         "webResultCountRange": "Online enhancement result count must be between 1-10",
-        "localResultCountRange": "Local search result count must be between 1-10"
+        "localResultCountRange": "Local search result count must be between 1-10",
+        "generalModelRequired": "General model is required, please select a model"
       },
       "engine": {
         "select": "Select Online Enhancement Engine",
@@ -891,6 +953,17 @@
         "saving": "Saving...",
         "cancel": "Cancel",
         "confirm": "Confirm",
+        "status": {
+          "enabled": "Enabled",
+          "disabled": "Disabled"
+        },
+        "action": {
+          "test": "Test",
+          "edit": "Edit",
+          "delete": "Delete",
+          "enable": "Enable",
+          "disable": "Disable"
+        },
         "error": {
           "selectType": "Please select an online enhancement engine type",
           "invalidName": "Engine name must be one of the preset values",
@@ -898,7 +971,7 @@
         },
         "presets": {
           "xunfei": "Xunfei Search",
-          "petal": "Petal Search",
+          "petal": "Network-assisted AI Q&A enhancement",
           "tavily": "Tavily",
           "google": "Google",
           "custom": "Custom"
@@ -2175,6 +2248,10 @@
     "configInfo": "Configuration Info",
     "testCompletion": "Test Completion",
     "testFailed": "Test Failed",
+    "modelName": "Model",
+    "promptText": "Prompt",
+    "averageResponseTime": "Average Response Time",
+    "unknownError": "Unknown Error",
     "modelList": {
       "title": "Model List",
       "noModels": "No models available",
@@ -4032,7 +4109,8 @@
         "noModels": "No available models",
         "providedBy": "Provided by {{vendor}}",
         "systemBuiltIn": "System Built-in",
-        "protocol": "Protocol"
+        "protocol": "Protocol",
+        "validating": "Validating model connectivity..."
       },
       "quickOptimizeDialog": {
         "title": "Quick Optimize",

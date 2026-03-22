@@ -54,10 +54,8 @@ declare -A NAMES=(
     ["PLUGIN_SERVER_DOCKER"]="jiuwen-plugin-server"
     ["SANDBOX_GATEWAY_SERVICE"]="sandbox-gateway"
     ["SANDBOX_GATEWAY_DOCKER"]="jiuwen-sandbox-gateway"
-    ["PYTHON_SERVER_SERVICE"]="python-server"
-    ["PYTHON_SERVER_DOCKER"]="jiuwen-python-server"
-    ["JS_SERVER_SERVICE"]="js-server"
-    ["JS_SERVER_DOCKER"]="jiuwen-js-server"
+    ["SANDBOX_SERVER_SERVICE"]="sandbox-server"
+    ["SANDBOX_SERVER_DOCKER"]="jiuwen-sandbox-server"
 )
 
 # ===== Host port variables to allocate for services (dynamic assignment) =====
@@ -72,8 +70,7 @@ declare -ga PORTS=(
     BACKEND_HOST_PORT
     PLUGIN_SERVER_HOST_PORT
     SANDBOX_GATEWAY_HOST_PORT
-    PYTHON_SERVER_HOST_PORT
-    JS_SERVER_HOST_PORT
+    SANDBOX_SERVER_HOST_PORT
     DEEPSEARCH_HOST_PORT
 )
 
@@ -95,10 +92,8 @@ declare -ga CONTAINERS_ADDRS=(
     PLUGIN_SERVER_DOCKER
     SANDBOX_GATEWAY_SERVICE
     SANDBOX_GATEWAY_DOCKER
-    PYTHON_SERVER_SERVICE
-    PYTHON_SERVER_DOCKER
-    JS_SERVER_SERVICE
-    JS_SERVER_DOCKER
+    SANDBOX_SERVER_SERVICE
+    SANDBOX_SERVER_DOCKER
     DEEPSEARCH_SERVICE
     DEEPSEARCH_DOCKER
 )
@@ -117,8 +112,7 @@ declare -A DEPLOY_VARS=(
     ["IS_UP_MINIO"]="false"
     ["IS_UP_MILVUS"]="false"
     ["IS_UP_PLUGIN_SERVER"]="false"
-    ["IS_UP_PYTHON_SERVER"]="false"
-    ["IS_UP_JS_SERVER"]="false"
+    ["IS_UP_SANDBOX_SERVER"]="false"
     ["IS_UP_SANDBOX_GATEWAY"]="false"
     ["IS_UP_DEEPSEARCH"]="false"
     ["IS_UP_BACKEND"]="false"
@@ -144,6 +138,11 @@ declare -A ALL_VARS=(
 declare -A PRE_UPGRADE_VARS=(
 )
 
+# ==== Global runtime associative array  ====
+# ==== (key=variable name, value=variable value) ====
+declare -A RUNTIME_VARS=(
+)
+
 #  ==== List of available ports for service allocation (dynamic generated) ====
 declare -ga AVAILABLE_PORTS=()
 
@@ -159,7 +158,7 @@ declare -A COMPONENTS=(
     ["MYSQL"]="MYSQL"
     ["MILVUS"]="ETCD MINIO MILVUS"
     ["PLUGIN"]="PLUGIN_SERVER"
-    ["SANDBOX"]="PYTHON_SERVER JS_SERVER SANDBOX_GATEWAY"
+    ["SANDBOX"]="SANDBOX_SERVER SANDBOX_GATEWAY"
     ["DEEPSEARCH"]="DEEPSEARCH"
     ["JIUWEN"]="BACKEND FRONTEND"
 )

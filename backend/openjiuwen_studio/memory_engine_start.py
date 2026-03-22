@@ -52,7 +52,8 @@ class MemoryEngineManager:
             vector_store = create_vector_store(
                 store_type=vector_db_type,
                 milvus_uri=f"http://{milvus_host}:{milvus_port}",
-                milvus_token=milvus_token
+                milvus_token=milvus_token,
+                alias="memory_milvus_connection"
             )
             logger.info("✅ milvus vector store created")
         elif vector_db_type == "chroma":

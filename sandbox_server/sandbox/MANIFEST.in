@@ -1,0 +1,3 @@
+include openjiuwen_sandbox_server/conf/sandbox_config.yaml
+include openjiuwen_sandbox_server/conf/dependency/package.json
+include openjiuwen_sandbox_server/conf/dependency/pyproject.toml

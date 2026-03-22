@@ -454,49 +454,51 @@ The memory and knowledge base features rely on an embedding model. The following
 
 ### <a id="linux-sandbox"></a> Question 2: How to Enable the Sandbox Feature
 
-If you need to enable code node or code plugin tool, the sandbox service is required, do the following:
+To use code plugins or run code nodes in workflows, you must enable the sandbox service. Follow these steps:
 
-1. Refer to `sandbox_server/python_server/.env.example` to create a `.env` file in `sandbox_server/python_server`. For example:
+1. **Configure the sandbox dependency environment**
+
+   The sandbox service uses a single configuration to specify the Python and JavaScript interpreters and dependencies used when executing code. If you skip this step, the system default Python and JavaScript environments are used.
+
+   Dependency configuration files:
+
+   - Python: `sandbox_server/sandbox/openjiuwen_sandbox_server/conf/dependency/pyproject.toml`
+   - JavaScript: `sandbox_server/sandbox/openjiuwen_sandbox_server/conf/dependency/package.json`
+
+   After setting the interpreter versions and dependency lists in these files, run the following command from the `sandbox_server/sandbox` directory to build and install the dependency environment:
+
+   ```bash
+   python -m openjiuwen_sandbox_server.app.build_dependency
+   ```
+
+   The default install directory is `/sandbox/dependencies`. To use a different directory, set the `DEPENDENCY_DIR` environment variable before running the command above.
+
+2. **Start the sandbox service**
+
+   The sandbox service supports two modes:
+
+   - **local mode**: Code runs directly on the host.
+   - **sandbox mode**: Code runs inside a bwrap sandbox with isolation and security restrictions.
+
+   Using `sandbox_server/sandbox/.env.example` as a reference, create a `.env` file under `sandbox_server/sandbox`. Example:
 
    ```env
    HOST=0.0.0.0
    PORT=5001
+   ENABLE_LINUX_SANDBOX=false
    ```
 
-   Then, start the Python sandbox service by running the script `sandbox_server/python_server/openjiuwen_sandbox_pyserver/kernel.py`. `HOST` and `PORT` are the IP and port the Python sandbox will use.
+   `HOST` and `PORT` are the bind address and port for the sandbox service; set `ENABLE_LINUX_SANDBOX` to `true` to enable sandbox mode. When sandbox mode is enabled, edit the sandbox config file `sandbox_server/sandbox/openjiuwen_sandbox_server/conf/sandbox_config.yaml`. Example configuration:
 
-2. Start the JS sandbox service by running the script `sandbox_server/js_server/kernel.js`. Its IP and port follow the code below:
-
-   ```javascript
-   const PORT = process.env.PORT || 5002;
-   server.listen(PORT, "0.0.0.0", () => {
-     console.log(`✅ JS sandbox listening on http://0.0.0.0:${PORT}`);
-   });
-   ```
-
-3. Refer to `sandbox_server/gateway/.env.example` to create a `.env` file in `sandbox_server/gateway`. For example:
-
-   ```env
-   ENABLE_LINUX_SANDBOX=0
-   HOST=0.0.0.0
-   PORT=8188
-   PYTHON_SANDBOX_URL=http://localhost:5001/run
-   JS_SANDBOX_URL=http://localhost:5002/run
-   ```
-
-   `ENABLE_LINUX_SANDBOX` controls whether to enable the bwrap sandbox. `PYTHON_SANDBOX_URL` and `JS_SANDBOX_URL` are the URLs of the Python and JS services started in the previous steps.
-
-   To enable the bwrap sandbox, set `ENABLE_LINUX_SANDBOX` to 1 and edit `sandbox_server/gateway/openjiuwen_sandbox_gateway/conf/sandbox_config.yaml` as needed. Currently supported configuration parameters include `seccomp`, `namespace`, `mount` filesystem, etc. Please ensure the Python and Node interpreters and their dependencies are listed under `mount`, and that `PATH` includes the interpreter paths. Example:
-
-   ```
+   ```yaml
    seccomp: # whitelist mode
      allow:
-       x86_64: ["epoll_wait", "getcwd", "wait4", "pread64", "set_tid_address", "prlimit64", "capget", "pipe2", "eventfd2", "pkey_alloc", "madvise", "sysinfo", "readlink", "geteuid", "getegid", "statx", "access", "clone", "arch_prctl", "clone3", "execve", "open", "lstat", "stat", "newfstatat", "lseek", "getdents64", "write", "close", "openat", "read", "futex", "mmap", "brk", "mprotect", "munmap", "rt_sigreturn", "mremap", "getgid", "getuid", "getpid", "getppid", "gettid", "exit", "exit_group", "rt_sigaction", "sched_yield", "set_robust_list", "get_robust_list", "rseq", "clock_gettime", "gettimeofday", "nanosleep", "epoll_create1", "epoll_ctl", "clock_nanosleep", "pselect6", "time", "rt_sigprocmask", "sigaltstack", "getrandom", "mkdirat", "mkdir", "socket", "connect", "bind", "listen", "accept", "sendto", "recvfrom", "getsockname", "recvmsg", "getpeername", "ppoll", "uname", "sendmsg", "sendmmsg", "fstat", "fcntl", "fstatfs", "poll", "epoll_pwait", 'ioctl']
+       x86_64: ["setsockopt", "mbind", "sched_getaffinity", "epoll_wait", "getcwd", "wait4", "pread64", "set_tid_address", "prlimit64", "capget", "pipe2", "eventfd2", "pkey_alloc", "madvise", "sysinfo", "readlink", "geteuid", "getegid", "statx", "access", "clone", "arch_prctl", "clone3", "execve", "open", "lstat", "stat", "newfstatat", "lseek", "getdents64", "write", "close", "openat", "read", "futex", "mmap", "brk", "mprotect", "munmap", "rt_sigreturn", "mremap", "getgid", "getuid", "getpid", "getppid", "gettid", "exit", "exit_group", "rt_sigaction", "sched_yield", "set_robust_list", "get_robust_list", "rseq", "clock_gettime", "gettimeofday", "nanosleep", "epoll_create1", "epoll_ctl", "clock_nanosleep", "pselect6", "time", "rt_sigprocmask", "sigaltstack", "getrandom", "mkdirat", "mkdir", "socket", "connect", "bind", "listen", "accept", "sendto", "recvfrom", "getsockname", "recvmsg", "getpeername", "ppoll", "uname", "sendmsg", "sendmmsg", "fstat", "fcntl", "fstatfs", "poll", "epoll_pwait", 'ioctl']
        aarch64: ["statx", "getcwd", "readlinkat", "madvise", "sysinfo", "clone", "eventfd2", "pipe2", "fcntl", "prlimit64", "set_tid_address", "faccessat", "execve", "write", "close", "openat", "read", "lseek", "getdents64", "futex", "mmap", "brk", "mprotect", "munmap", "rt_sigreturn", "rt_sigprocmask", "sigaltstack", "mremap", "getuid", "getgid", "geteuid", "getegid", "getpid", "getppid", "gettid", "exit", "exit_group", "rt_sigaction", "sched_yield", "get_robust_list", "set_robust_list", "rseq", "epoll_create1", "clock_gettime", "gettimeofday", "nanosleep", "epoll_ctl", "clock_nanosleep", "pselect6", "timerfd_create", "timerfd_settime", "timerfd_gettime", "getrandom", "mkdirat", "socket", "connect", "bind", "listen", "accept", "sendto", "recvfrom", "recvmsg", "getsockname", "getpeername", "ppoll", "uname", "sendmmsg", "newfstatat", "fstat", "fstatfs", "epoll_pwait", "ioctl"]
 
    namespace:
-     user: False
-     net: True
+     user: True
+     net: False
      pid: True
      ipc: True
      uts: True
@@ -509,27 +511,44 @@ If you need to enable code node or code plugin tool, the sandbox service is requ
        {src: '/usr/bin', dst: '/usr/bin', mode: 'read'},
        {src: '/usr/lib', dst: '/usr/lib', mode: 'read'},
        {src: '/usr/lib64', dst: '/usr/lib64', mode: 'read'},
+       {src: '/etc/resolv.conf', dst: '/etc/resolv.conf', mode: 'read'},
        {src: '/usr/share/nodejs', dst: '/usr/share/nodejs', mode: 'read'},
+       {src: '/dev/urandom', dst: '/dev/urandom', mode: 'dev'},
      ]
 
    sandbox:
      type: bubblewrap
      path: bwrap
 
-   # Please ensure that both the Python and JavaScript interpreters
-   # are already in the mount directory, and either provide their full
-   # paths or add those paths to the PATH environment variable.
-   interpreter:
-     python_path: python3
-     javascript_path: node
-
    environment:
      PATH: /bin:/usr/bin
+
+   timeout: 10
+
+   options: ['--proc', '/proc']
    ```
 
-   Then start the sandbox gateway by running `sandbox_server/gateway/openjiuwen_sandbox_gateway/server.py`.
+   **Config reference**: `seccomp` is the allowlist of system calls for processes inside the sandbox; `namespace` specifies which namespaces to isolate; `mount` defines host-to-sandbox directory mappings, with modes `read`, `write`, and `dev` for read-only, read-write, and device mappings; `sandbox` sets the sandbox type and executable path (currently only `bubblewrap` is supported); `environment` is the environment for processes in the sandbox; `timeout` is the maximum execution time in seconds per task (tasks are killed when exceeded); `options` are extra command-line arguments passed to `bwrap`.
 
-4. After running the sandbox service, please configure sandbox's url in `.env`, such as: `CODE_SANDBOX_URL=http://localhost:8188/run`.
+   After saving the config, start the sandbox service by running `sandbox_server/sandbox/openjiuwen_sandbox_server/server.py`.
+
+3. **Start the sandbox gateway**
+
+   Using `sandbox_server/gateway/.env.example` as a reference, create a `.env` file under `sandbox_server/gateway`. Example:
+
+   ```env
+   HOST=0.0.0.0
+   PORT=8188
+   SANDBOX_SERVER_URL=http://localhost:5001/run
+   ```
+
+   `HOST` and `PORT` are the gateway bind address and port; `SANDBOX_SERVER_URL` is the URL of the sandbox service started in step 2 (the `/run` path is the execution endpoint).
+
+   Then run `sandbox_server/gateway/openjiuwen_sandbox_gateway/server.py` to start the sandbox gateway.
+
+4. **Configure the application-side gateway URL**
+
+   In your project’s `.env`, set the sandbox gateway URL, for example: `CODE_SANDBOX_URL=http://localhost:8188/run`.
 
 ### <a id="linux-plugin"></a> Question 3: How to Enable the Plugin Server
 

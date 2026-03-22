@@ -26,7 +26,9 @@ def create_user_response(user_db: UserDBPd, include_session_key: bool) -> UserRe
 
 
 def create_user_db(email: str, password: str, role_type: RoleType, locale: str = "zh-CN") -> UserDBPd:
-    user_id = ''.join(secrets.choice(string.digits) for _ in range(8))
+    first_digit = secrets.choice(string.digits[1:9])  # 1-9
+    remaining_digits = ''.join(secrets.choice(string.digits) for _ in range(7))
+    user_id = first_digit + remaining_digits
     name = email.split('@')[0]
     user_unique_name = email
     user_create_time = milliseconds()
@@ -50,7 +52,9 @@ def create_user_db(email: str, password: str, role_type: RoleType, locale: str =
 
 def create_space_db(user_db: UserDBPd) -> SpaceDBPd:
     """创建空间数据对象"""
-    space_id = ''.join(random.sample(string.digits, 8))
+    first_digit = random.choice(string.digits[1:9])  # 1-9
+    remaining_digits = ''.join(random.sample(string.digits, 7))
+    space_id = first_digit + remaining_digits
     user_id_str = user_db.user_id_str
     creator_id_str = user_id_str
     spacename = "Personal Space"

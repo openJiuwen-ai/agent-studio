@@ -145,12 +145,7 @@ configure_module_env() {
                 DEPLOY_VARS["HAS_SANDBOX"]="true"
                 DEPLOY_VARS["IS_UP_SANDBOX_GATEWAY"]="true"
                 RUNTIME_VARS["CODE_SANDBOX_URL"]="http://${gateway_service}:${gateway_port}/run"
-
-                local els="${DEPLOY_VARS["ENABLE_LINUX_SANDBOX"],,}"
-                if [ "${els}" == "false" ]; then
-                    DEPLOY_VARS["IS_UP_PYTHON_SERVER"]="true"
-                    DEPLOY_VARS["IS_UP_JS_SERVER"]="true"
-                fi
+                DEPLOY_VARS["IS_UP_SANDBOX_SERVER"]="true"
                 ;;
             JIUWEN)
                 if [ -n "${RUNTIME_VARS["VITE_API_PROXY_TARGET"]:-}" ]; then

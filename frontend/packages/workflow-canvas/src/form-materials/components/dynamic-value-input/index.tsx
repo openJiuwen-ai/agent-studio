@@ -77,10 +77,11 @@ export function DynamicValueInput({ value, onChange, readonly, style, schema: sc
   }
 
   const handleRefChange = (_v?: string[]) => {
-    const constantSchema = schemaFromProps || selectSchema || { type: 'string' }
     if (_v) {
       onChange({ type: 'ref', content: _v })
     } else {
+      const refSchema = refVariable?.type ? JsonSchemaUtils.astToSchema(refVariable?.type) : undefined
+      const constantSchema = schemaFromProps || refSchema || selectSchema || { type: 'string' }
       onChange(buildDefaultConstant(constantSchema))
     }
   }

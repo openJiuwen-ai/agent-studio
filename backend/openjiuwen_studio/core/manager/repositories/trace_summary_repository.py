@@ -126,6 +126,39 @@ def with_exception_handling(func):
     return wrapper
 
 
+def _propagate_status_to_parents(execute_info_list: List[InvokeExecuteInfo]) -> None:
+    """
+    递归向上传播 interrupted/error 状态到父节点
+    如果子节点是 interrupted/error，父节点也应该是 interrupted（如果当前是 finish）
+    """
+
+    def update_node_status(node: InvokeExecuteInfo) -> str:
+        """返回节点的真实状态（考虑子节点）"""
+        if not node.child_invokes_execute_info:
+            return node.status
+
+        # 先递归处理所有子节点
+        child_statuses = []
+        for child in node.child_invokes_execute_info:
+            child_status = update_node_status(child)
+            child_statuses.append(child_status)
+
+        # 如果有任何子节点是 interrupted 或 error，且当前节点是 finish，更新为 interrupted
+        has_failed_child = any(s in ('interrupted', 'error') for s in child_statuses)
+        if has_failed_child and node.status == 'finish':
+            logger.debug(
+                f"[STATUS_PROPAGATE] Node '{node.invoke_name}' (invoke_id: {node.invoke_id}) "
+                f"status changed from 'finish' to 'interrupted' due to child node failure"
+            )
+            node.status = 'interrupted'
+
+        return node.status
+
+    # 对顶层节点应用
+    for node in execute_info_list:
+        update_node_status(node)
+
+
 def _extract_summary_execution_info_from_trace_detail(
     trace_details: List[Dict[str, Any]],
     base_start_time_micros: Optional[str] = None,
@@ -304,7 +337,8 @@ def _extract_summary_execution_info_from_trace_detail(
         
     # Sort all components recursively using module-level function
     execute_info_list = _sort_components_by_start_time(execute_info_list)
-    
+    # 应用状态传播：根据子节点状态更新父节点状态
+    _propagate_status_to_parents(execute_info_list)
     return execute_info_list
 
 
@@ -549,7 +583,7 @@ def _extract_agent_execution_info_from_trace_detail(
     
     # Sort all components recursively using module-level function
     execute_info_list = _sort_components_by_start_time(execute_info_list)
-    
+    _propagate_status_to_parents(execute_info_list)
     return execute_info_list
 
 

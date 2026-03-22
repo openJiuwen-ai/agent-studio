@@ -16,7 +16,6 @@ RUN uv build --out-dir /sandbox/dist
 # Stage 2: Final image - Only copy necessary files from builder stage
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE} AS runtime
-RUN apt-get install -y --no-install-recommends bubblewrap nodejs
 
 ARG INDEX_URL
 ARG TRUSTED_HOST

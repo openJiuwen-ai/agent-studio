@@ -133,11 +133,11 @@ async def get_deploy_info(
         }
 
         # 查询部署信息
-        deploy_info = runtime_db.get_dl_in_sql(find_id=find_id)
+        deploy_info = runtime_db.get_dl_in_sql(find_id=find_id, order_cols_asc=["create_at"])
 
         if deploy_info.code != status.HTTP_200_OK or not deploy_info.data:
             logger.warning(f"Deployment not found for agent_id={agent_id}")
-            return ""
+            return []
 
         # 处理 datetime 对象的序列化问题
         result = []
@@ -231,7 +231,7 @@ async def get_deploy_details(
         user_id: Optional[str] = None,
         space_id: Optional[str] = None,
         client: RuntimeAgentClient = None,
-) -> list:
+) -> dict:
     # 接前端入参，取出deployment_id
     if client is None:
         client = get_agent_client()
@@ -250,9 +250,7 @@ async def get_deploy_details(
             elif deploy_detail.status_code == 202:
                 _ = await unregister_deploy_info(deployment_id, space_id)
                 logger.info(f"Delete deploy detail for runtime server not found: deployment_id={deployment_id}")
-        return {"deploy_details": deploy_details}
-    else:
-        return []
+    return {"deploy_details": deploy_details}
 
 
 async def get_agent_deploy_detail(

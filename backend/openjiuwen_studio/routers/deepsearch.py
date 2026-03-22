@@ -44,7 +44,8 @@ def get_agent_client():
     return DeepSearchAgentClient()  # 或全局单例
 
 
-def get_model_configs(model_id, space_id):
+def build_single_model_config(model_id, space_id):
+    """构建单个模型配置"""
     model_config = get_model_config(model_id, space_id)
     return {
         "model_name": model_config.model_type,
@@ -58,6 +59,29 @@ def get_model_configs(model_id, space_id):
             "temperature": model_config.parameters.get("temperature"),
         }
     }
+
+
+def get_model_configs(
+    general_model_id,
+    space_id,
+    plan_understanding_model_id=None,
+    info_collecting_model_id=None,
+    writing_checking_model_id=None
+):
+    """构建 llm_config 结构，高级配置仅在有值时添加"""
+    # llm_config = build_single_model_config(general_model_id, space_id)
+    llm_config = {}
+    llm_config["general"] = build_single_model_config(general_model_id, space_id)
+
+    # 高级配置：仅在有值时添加
+    if plan_understanding_model_id:
+        llm_config["plan_understanding"] = build_single_model_config(plan_understanding_model_id, space_id)
+    if info_collecting_model_id:
+        llm_config["info_collecting"] = build_single_model_config(info_collecting_model_id, space_id)
+    if writing_checking_model_id:
+        llm_config["writing_checking"] = build_single_model_config(writing_checking_model_id, space_id)
+
+    return llm_config
 
 
 def handle_deepsearch_errors(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -91,18 +115,34 @@ async def run(
         client: DeepSearchAgentClient = Depends(get_agent_client),
         current_user: dict = Depends(get_current_user)
 ) -> StreamingResponse:
-    payload = request.model_dump(exclude_none=True)
-    _ = check_user_space(payload["space_id"], current_user)
-
+    # 使用 request.model_dump() 保留前端传递的所有字段（除了 *_model_config_id）
+    payload = request.model_dump(
+        exclude_none=True,
+        exclude={
+            'general_model_config_id',
+            'plan_understanding_model_id',
+            'info_collecting_model_id',
+            'writing_checking_model_id',
+        }
+    )
     # 取消请求不需要获取模型配置，直接转发到 deepsearch 服务
     if request.interrupt_feedback == "cancel":
         logger.info(f"[DeepSearch Cancel] Received cancel request for conversation_id={payload.get('conversation_id')}")
         # 取消请求：不需要 llm_config，直接转发
         pass
     else:
-        # 正常请求：需要获取模型配置
-        model_config = get_model_configs(payload["model_config_id"], payload["space_id"])
+        # 构建完整的 llm_config（包含 general, plan_understanding 等）
+        model_config = get_model_configs(
+            request.general_model_config_id,
+            request.space_id,
+            request.plan_understanding_model_id,
+            request.info_collecting_model_id,
+            request.writing_checking_model_id
+        )
+        # 用构建好的 model_config 覆盖 llm_config
         payload["llm_config"] = model_config
+
+    _ = check_user_space(payload["space_id"], current_user)
 
     async def stream():
         try:
@@ -134,11 +174,15 @@ async def import_template(
         current_user: dict = Depends(get_current_user)
 ):
     """导入模板"""
-    payload = request.model_dump()
-    _ = check_user_space(payload["space_id"], current_user)
+    # 构建 llm_config（模板导入只需要 general 模型配置）
+    model_config = get_model_configs(request.model_config_id, request.space_id)
 
-    model_config = get_model_configs(payload["model_config_id"], payload["space_id"])
+    # 使用 request.model_dump() 保留前端传递的所有字段（除了 model_config_id）
+    payload = request.model_dump(exclude={'model_config_id'})
+    # 用构建好的 model_config 覆盖 llm_config
     payload["llm_config"] = model_config
+
+    _ = check_user_space(payload["space_id"], current_user)
     result = await client.import_templates(payload)
     # 直接返回，FastAPI 会自动校验并序列化为 TemplateImportResponse
     return result

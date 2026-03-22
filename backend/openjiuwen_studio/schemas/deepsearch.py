@@ -24,18 +24,33 @@ class DeepSearchRequest(BaseModel):
     outliner_max_section_num: int = Field(default=5, ge=1, le=10, description="最大规划章节数量，取值范围:[1,10]")
     source_tracer_research_trace_source_switch: bool = Field(default=True, description="溯源功能开关")
     source_tracer_source_tracer_infer_switch: bool = Field(default=True, description="溯源推理功能开关")
-    info_collector_search_method: Literal["web", "local", "all"] = Field(default="web",
-                                                                         description="搜索方式："
-                                                                                     "web: 联网搜索"
-                                                                                     "local: 本地搜索工具搜索"
-                                                                                     "all : 联网+本地融合搜索")
-    model_config_id: Optional[int] = Field(default=None, description="模型配置ID")
-    web_search_config: WebSearchConfig = Field(default=None, description="Web搜索引擎配置，和本地知识库配置至少选择一个")
-    local_search_config: Optional[LocalSearchConfig] = Field(default=None,
-                                                   description="本地知识库配置，和Web搜索引擎配置至少选择一个")
+    info_collector_search_method: Literal["web", "local", "all"] = Field(
+        default="web",
+        description=(
+            "搜索方式："
+            "web: 联网搜索；"
+            "local: 本地搜索工具搜索；"
+            "all: 联网+本地融合搜索"
+        ),
+    )
+    general_model_config_id: int = Field(..., description="通用模型配置ID")
+    web_search_config: WebSearchConfig = Field(
+        default=None, description="Web搜索引擎配置，和本地知识库配置至少选择一个"
+    )
+    local_search_config: Optional[LocalSearchConfig] = Field(
+        default=None, description="本地知识库配置，和Web搜索引擎配置至少选择一个"
+    )
     template_id: int = Field(default=-1, description="报告模板ID（可选）")
-    interrupt_feedback: Literal["", "accepted", "cancel"] = Field(default="", description="中断反馈标识（可选）")
+    interrupt_feedback: Literal["", "accepted", "cancel", "revise_comment", "revise_outline"] = Field(
+        default="", description="中断反馈标识（可选）"
+    )
     search_mode: Literal["research", "search"] = Field(default="research", description="生成研究报告还是生成答案")
+    outline_interaction_enabled: bool = Field(default=False, description="大纲交互开关")
+    outline_interaction_max_rounds: Optional[int] = Field(default=None, ge=1, description="大纲交互最大轮数")
+    # 高级配置模型 ID（可选）
+    plan_understanding_model_id: Optional[int] = Field(default=None, description="计划理解模型ID（可选）")
+    info_collecting_model_id: Optional[int] = Field(default=None, description="信息收集模型ID（可选）")
+    writing_checking_model_id: Optional[int] = Field(default=None, description="写作检查模型ID（可选）")
 
 
 class TemplateImportRequest(BaseModel):

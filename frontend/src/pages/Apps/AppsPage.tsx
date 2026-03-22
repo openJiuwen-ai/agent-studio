@@ -7,7 +7,7 @@ import ChatInputArea from './components/ChatInputArea'
 import ModelPicker from './components/ModelPicker'
 import { useModels, getToken, deepsearchHeartbeatService } from '@test-agentstudio/api-client'
 import { useAuthStore } from '../../stores/useAuthStore'
-import { useConversationStore, MessageType, TaskStatus, AgentType, type MessageItems } from '../../stores/useConversationStore'
+import { useConversationStore, MessageType, TaskStatus, AgentType, type MessageItems, OUTLINE_INTERACTION_MAX_ROUNDS } from '../../stores/useConversationStore'
 import { getDefaultSpaceId } from '../../utils/spaceUtils'
 import SSERecorder from '../../utils/sseRecorder'
 import PlaybackPanel from '../../components/Conversation/PlaybackPanel'
@@ -226,6 +226,28 @@ const AppsPage: React.FC = () => {
     return map
   }, [modelsData])
 
+  // 转换模型数据为 ModelSelector 需要的格式
+  const availableModels = React.useMemo(() => {
+    if (!modelsData?.items) return []
+    return modelsData.items.map(model => ({
+      tags: model.tags || [],
+      icon: '',
+      openModel: {
+        model_id: String(model.id),
+        name: model.name,
+        desc: model.description || '',
+        workspace_id: '',
+        param_config: { param_schemas: [] },
+      },
+      series: {
+        icon: '',
+        name: model.model_type || '',
+        vendor: model.provider || '',
+      },
+      model_from: model.is_system_model ? 'config' : 'db',
+    }))
+  }, [modelsData])
+
   // 从 localStorage 恢复对话状态和智能体配置
   useEffect(() => {
     const savedData = storage.get<{ messages: Message[], inputValue: string, hasConversation: boolean, selectedAgent: MentionItem | null }>(STORAGE_KEYS.APPS_PAGE_STATE)
@@ -257,6 +279,23 @@ const AppsPage: React.FC = () => {
       setAgentConfigs({})
     }
   }, [user?.spaceId])
+
+  // 当 agentConfigs.deepsearch.generalModelId 变化时，同步到 selectedModelId（反向同步）
+  useEffect(() => {
+    const deepsearchConfig = agentConfigs['deepsearch']
+    if (deepsearchConfig?.generalModelId) {
+      const modelId = Number(deepsearchConfig.generalModelId)
+      if (modelId !== selectedModelId && modelId !== -1) {
+        setSelectedModelId(modelId)
+        // 同时需要更新 selectedModel 字符串
+        const modelName = Array.from(modelIdMap.entries())
+          .find(([_, id]) => id === modelId)?.[0]
+        if (modelName) {
+          setSelectedModel(modelName)
+        }
+      }
+    }
+  }, [agentConfigs['deepsearch']?.generalModelId, modelIdMap, selectedModelId])
 
   // 从 IndexDB 初始化对话数据
   useEffect(() => {
@@ -438,6 +477,25 @@ const AppsPage: React.FC = () => {
       return () => clearTimeout(timer)
     }
   }, [isDeepSearchMode, hasConversation, isUserScrolled, messageItemsList.length])
+
+  // ===== 大纲交互接受事件监听 =====
+  const pendingOutlineInteraction = useConversationStore(state => state.pendingOutlineInteraction)
+  const clearPendingOutlineInteraction = useConversationStore(state => state.clearPendingOutlineInteraction)
+  
+  useEffect(() => {
+    if (!pendingOutlineInteraction) return
+
+    const { userMessage, backendMessage, interruptFeedback } = pendingOutlineInteraction
+
+    console.log('[AppsPage] Received outline-interaction-accept:', pendingOutlineInteraction)
+
+    clearPendingOutlineInteraction()
+
+    handleDeepSearchSend(userMessage, {
+      interrupt_feedback: interruptFeedback || 'accepted',
+      backend_message: backendMessage,
+    })
+  }, [pendingOutlineInteraction])
 
   // ===== SSE 回放事件监听 =====
   useEffect(() => {
@@ -756,8 +814,20 @@ const AppsPage: React.FC = () => {
   // 处理模型选择
   const handleModelSelect = (model: string) => {
     setSelectedModel(model)
-    setSelectedModelId(modelIdMap.get(model) || -1)
+    const modelId = modelIdMap.get(model) || -1
+    setSelectedModelId(modelId)
     setShowModelPicker(false)
+
+    // 同步到智能体配置的通用模型（仅对 deepsearch 智能体）
+    if (selectedAgent?.id === 'deepsearch' && modelId !== -1) {
+      setAgentConfigs(prev => ({
+        ...prev,
+        deepsearch: {
+          ...prev['deepsearch'],
+          generalModelId: String(modelId),
+        }
+      }))
+    }
   }
 
   // 发起新对话
@@ -805,10 +875,14 @@ const AppsPage: React.FC = () => {
   }
 
   // ===== DeepSearch 插件：消息发送处理 =====
-  const handleDeepSearchSend = async (content: string) => {
+  const handleDeepSearchSend = async (
+    content: string,
+    options?: { interrupt_feedback?: string; backend_message?: string }
+  ) => {
     // 标记SSE是否正常完成（收到正常结束信号）
     // 需要在 try 块外定义，这样 finally 块也能访问
     let sseCompletedNormally = false
+    let recordingId: string | undefined
 
     // 如果没有 conversation，先创建一个
     let conversationId = currentConversationId
@@ -893,15 +967,15 @@ const AppsPage: React.FC = () => {
         : undefined
 
       // ===== HITL 判断逻辑：判断是否是回复 HITL interrupt 消息 =====
-      let interrupt_feedback = ''  // 默认为空
+      let interrupt_feedback = options?.interrupt_feedback ?? ''  // 默认为空
 
       const messageItemsList = useConversationStore.getState().getCurrentMessageItems()
 
       // ===== 判断是否是新的 deepsearch 运行 =====
       // 用于确定是否需要使用新的 session ID
-      let isNewDeepSearchRun = true  // 默认认为是新的运行
+      let isNewDeepSearchRun = !options?.interrupt_feedback  // 默认认为是新的运行
 
-      if (messageItemsList && messageItemsList.length > 0) {
+      if (!options?.interrupt_feedback && messageItemsList && messageItemsList.length > 0) {
         // 从后往前找最后一个系统消息（非用户消息）
         // 因为最后一个是刚添加的用户消息，所以要往前找
         let lastSystemMessageItems: MessageItems | undefined
@@ -918,9 +992,9 @@ const AppsPage: React.FC = () => {
           const lastMessageId = lastSystemMessageItems.messagesIds[lastSystemMessageItems.messagesIds.length - 1]
           const lastMessage = lastMessageId ? useConversationStore.getState().getMessageById(lastMessageId) : undefined
 
-          // 判断是否是 HITL interrupt 消息
+          // 判断是否是 HITL interrupt 消息（包括 INTERRUPT 和 OUTLINE_INTERACTION 类型）
           if (lastMessage &&
-              lastMessage.type === MessageType.INTERRUPT &&
+              (lastMessage.type === MessageType.INTERRUPT || lastMessage.type === MessageType.OUTLINE_INTERACTION) &&
               (lastMessage.status === TaskStatus.IN_PROGRESS || lastMessage.status === TaskStatus.PENDING || lastMessage.status === TaskStatus.UNKNOWN)) {
             // 这是 HITL 的第一次回复，判断 agent 是否匹配
             const hitlAgent = lastSystemMessageItems.agentType  // 从 MessageItems 获取 agentType
@@ -940,7 +1014,15 @@ const AppsPage: React.FC = () => {
                 lastSystemMessageItems.id,
                 { status: TaskStatus.COMPLETED }
               )
-              interrupt_feedback = 'accepted'
+
+              // 根据消息类型设置不同的 interrupt_feedback
+              if (lastMessage.type === MessageType.OUTLINE_INTERACTION) {
+                // 大纲交互：用户在输入框输入的是修改意见
+                interrupt_feedback = 'revise_comment'
+              } else {
+                // 普通 INTERRUPT：用户反馈
+                interrupt_feedback = 'accepted'
+              }
             } else {
               // Agent 不匹配：更新 interrupt 消息状态为 CANCELLED
               useConversationStore.getState().updateMessage(
@@ -973,12 +1055,16 @@ const AppsPage: React.FC = () => {
       // ===== 生成后端使用的 conversation_id =====
       // 如果是新的 deepsearch 运行，或者没有 SESSION_CONVERSATION_ID，则生成新的后端 conversation_id
       // 否则使用现有的 SESSION_CONVERSATION_ID
-      const backendConversationId = (isNewDeepSearchRun || !SESSION_CONVERSATION_ID)
+      // 注意：需要在函数内部获取最新的 SESSION_CONVERSATION_ID，而不是使用组件渲染时的值
+      const currentSessionConversationId = useConversationStore.getState().SESSION_CONVERSATION_ID
+      const backendConversationId = (isNewDeepSearchRun || !currentSessionConversationId)
         ? `${conversationId}_${Math.random().toString(36).substring(2, 6)}_${String(userMessageCount).padStart(3, '0')}`
-        : SESSION_CONVERSATION_ID
+        : currentSessionConversationId
+
+      // 立即保存到 Store 中，以便取消请求时使用
+      useConversationStore.getState().setSessionConversationId(backendConversationId)
 
       // ===== SSE 录制：开始录制（仅开发模式） =====
-      let recordingId: string | undefined
       if (ENABLE_SSE_DEBUG) {
         try {
           // 从 localStorage 读取压缩配置
@@ -1004,6 +1090,8 @@ const AppsPage: React.FC = () => {
         throw new Error('无法获取认证信息，请重新登录')
       }
 
+      const messageToBackend = options?.backend_message ?? content
+
       const response = await fetch('/api/v1/agent/deepsearch/run', {
         method: 'POST',
         headers: {
@@ -1012,12 +1100,14 @@ const AppsPage: React.FC = () => {
         },
         body: JSON.stringify({
           space_id: user?.spaceId || getDefaultSpaceId(),
-          model_config_id: selectedModelId,
-          message: content,
+          general_model_config_id: config.generalModelId ? parseInt(config.generalModelId) : selectedModelId,
+          message: messageToBackend,
           conversation_id: backendConversationId, // 使用带 session 的 conversation_id
           search_mode: 'research', // DeepSearch 模式固定为 research
           outliner_max_section_num: config.planChapterCount,
           workflow_human_in_the_loop: config.enableHumanInteraction,
+          outline_interaction_enabled: config.outlineInteractionEnabled,
+          outline_interaction_max_rounds: config.outlineInteractionEnabled ? OUTLINE_INTERACTION_MAX_ROUNDS : undefined,
           info_collector_search_method: config.searchMode,
           source_tracer_research_trace_source_switch: config.enableTraceability,
           source_tracer_source_tracer_infer_switch: config.enableSourceTracerInfer,
@@ -1025,6 +1115,10 @@ const AppsPage: React.FC = () => {
           local_search_config,  // 新增：可能是undefined
           template_id: config.selectedTemplateId ?? -1,
           interrupt_feedback: interrupt_feedback,   // 中断反馈标识, 可填值: ['accepted', ''], 默认''
+          // 高级配置模型 ID（可选，仅在有值时传递）
+          ...(config.planUnderstandingModelId && { plan_understanding_model_id: parseInt(config.planUnderstandingModelId) }),
+          ...(config.infoCollectingModelId && { info_collecting_model_id: parseInt(config.infoCollectingModelId) }),
+          ...(config.writingCheckingModelId && { writing_checking_model_id: parseInt(config.writingCheckingModelId) }),
         }),
         signal: controller.signal,
       })
@@ -1156,8 +1250,9 @@ const AppsPage: React.FC = () => {
 
   // ===== DeepSearch 停止请求处理 =====
   const handleStopDeepSearch = async () => {
-    // 使用 currentConversationId 作为 conversation_id（优先），如果为空则使用 SESSION_CONVERSATION_ID
-    const conversation_id = currentConversationId || useConversationStore.getState().SESSION_CONVERSATION_ID
+    // 使用 SESSION_CONVERSATION_ID (带随机后缀的 ID)，如果为空则回退到 currentConversationId
+    // 必须与 handleDeepSearchSend 中生成的 backendConversationId 保持一致
+    const conversation_id = useConversationStore.getState().SESSION_CONVERSATION_ID || currentConversationId
 
     if (!conversation_id) {
       console.error('[DeepSearch Cancel] No conversationId found')
@@ -1199,6 +1294,7 @@ const AppsPage: React.FC = () => {
         conversation_id: conversation_id,
         message: '',  // 必填字段，取消请求时为空字符串
         interrupt_feedback: 'cancel',  // DeepSearch 服务根据这个字段识别取消请求
+        general_model_config_id: -1, // 必填字段，但在取消请求中不使用
       }),
       signal: cancelAbortController.signal,
     }).then(async (response) => {
@@ -1426,6 +1522,8 @@ const AppsPage: React.FC = () => {
         spaceId={user?.spaceId || getDefaultSpaceId()}
         modelConfigId={selectedModelId}
         isFirstConfig={isFirstConfigMode}
+        availableModels={availableModels}
+        modelsLoading={modelsLoading}
       />
 
       {/* 模型选择弹窗 */}

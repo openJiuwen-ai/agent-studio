@@ -18,7 +18,7 @@ import { MemoryBaseTableView } from './components/MemoryBaseTableView';
 
 type ViewType = 'grid' | 'table';
 
-const PAGE_SIZE_OPTIONS = [20, 60, 100, 200];
+const PAGE_SIZE_OPTIONS = [20, 60, 100];
 const MAX_MEMORY_BASES = 100;
 
 const MemoryBasePageNew: React.FC = () => {

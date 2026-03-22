@@ -1,0 +1,49 @@
+# Stage 1: Builder environment
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE} AS builder
+
+ARG INDEX_URL
+RUN echo "INDEX_URL: ${INDEX_URL}"
+WORKDIR /sandbox
+COPY sandbox_server/sandbox .
+RUN pip install uv -i ${INDEX_URL}
+RUN sed -i "s#url = \"https://mirrors.aliyun.com/pypi/simple/\"#url = \"${INDEX_URL}\"#g" pyproject.toml
+
+RUN uv sync --group dev
+RUN uv build --out-dir /sandbox/dist
+
+
+# Stage 2: Final image - Only copy necessary files from builder stage
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE} AS runtime
+RUN apt-get install -y --no-install-recommends bubblewrap nodejs
+
+ARG INDEX_URL
+ARG TRUSTED_HOST
+RUN echo "INDEX_URL: ${INDEX_URL}"
+RUN echo "TRUSTED_HOST: ${TRUSTED_HOST}"
+RUN useradd --create-home --shell /bin/bash app
+RUN mkdir -p /sandbox/dist
+RUN chown -R app:app /sandbox
+RUN pip install uv -i ${INDEX_URL}
+
+USER app
+WORKDIR /sandbox
+COPY --from=builder /sandbox/dist/openjiuwen_sandbox_server-0.1.0-py3-none-any.whl /sandbox/dist
+RUN pip3 install /sandbox/dist/openjiuwen_sandbox_server-0.1.0-py3-none-any.whl --trusted-host ${TRUSTED_HOST} --index-url ${INDEX_URL} --target=/sandbox/site-packages --retries=5 --timeout=120
+
+
+ENV PYTHONPATH=/sandbox/site-packages/openjiuwen_sandbox_server:/sandbox/site-packages
+
+RUN curl -fsSL -o /tmp/install_nvm.sh https://gitee.com/mirrors/nvm/raw/v0.40.1/install.sh \
+    && NVM_SOURCE=https://gitee.com/mirrors/nvm.git bash /tmp/install_nvm.sh \
+    && rm /tmp/install_nvm.sh
+
+RUN python -m openjiuwen_sandbox_server.app.build_dependency
+
+EXPOSE 5001
+# Health check with configurable port
+HEALTHCHECK --interval=30s --timeout=30s --start-period=30s --retries=5 \
+    CMD curl -f http://localhost:5001/health || exit 1
+
+CMD ["python", "-m", "openjiuwen_sandbox_server.server", "--port", "5001"]

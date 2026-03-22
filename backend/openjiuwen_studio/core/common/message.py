@@ -19,6 +19,7 @@ class ExecuteResponseType(str, Enum):
 class ExecuteStatus(str, Enum):
     Start = "start"
     Finish = "finish"
+    Interrupted = "interrupted"
     Agent = "agent"
 
 

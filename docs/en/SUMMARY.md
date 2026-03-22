@@ -13,6 +13,11 @@
     - [Windows Installation](2.Installation%20Guide/Local%20Installation/Windows_Installation.md)
     - [Linux Installation](2.Installation%20Guide/Local%20Installation/Linux_Installation.md)
     - [MacOS Installation](2.Installation%20Guide/Local%20Installation/MacOS_Installation.md)
+  - [Distributed Installation]
+    - [Installation Guide](2.Installation%20Guide\Distributed%20Installation\Installation%20Guide.md)
+    - [Distributed Deployment Guide](2.Installation%20Guide\Distributed%20Installation\Distributed%20Deployment%20Guide.md)
+    - [Encryption and Authentication Guide](2.Installation%20Guide\Distributed%20Installation\Encryption%20and%20Authentication%20Guide.md)
+    - [Configure HTTPS](2.Installation%20Guide\Distributed%20Installation\Configure%20HTTPS.md)
 - [3. Quick Start](3.%20Quick%20Start.md)
 - [4. Development Guide](4.Development%20Guide)
   - [Model Management](4.Development%20Guide/Model%20Management.md)

@@ -503,38 +503,54 @@ Windows 上运行 Docker Desktop 推荐使用 WSL 2（Windows Subsystem for Linu
 <a id="windows-sandbox"></a>
 ### 问题二：如何启用沙箱功能
 
-若要配置代码插件或在工作流中使用代码节点，需开启沙箱服务，需要进行如下操作：
+若要使用代码插件或在工作流中运行代码节点，需要先启用沙箱服务，按以下步骤操作：
 
-1. 参考 `sandbox_server/python_server/.env.example` 文件，在 `sandbox_server/python_server` 目录下创建 `.env` 文件，示例如下：
+1. **配置沙箱依赖环境**
+
+   沙箱服务通过统一配置指定执行代码时使用的 Python、JavaScript 解释器及依赖包。若不配置，将使用系统默认的 Python 与 JavaScript 环境。
+
+   依赖配置文件路径：
+
+   - Python：`sandbox_server\sandbox\openjiuwen_sandbox_server\conf\dependency\pyproject.toml`
+   - JavaScript：`sandbox_server\sandbox\openjiuwen_sandbox_server\conf\dependency\package.json`
+
+   在以上文件中配置好解释器版本与依赖列表后，在 `sandbox_server\sandbox` 目录执行以下命令构建并安装依赖环境：
+
+   ```bash
+   python -m openjiuwen_sandbox_server.app.build_dependency
+   ```
+
+   默认安装目录为 `%LOCALAPPDATA%\sandbox\dependencies`。若需指定其它目录，请在执行上述命令前设置环境变量 `DEPENDENCY_DIR`。
+
+2. **启动沙箱服务**
+
+   目前在 MacOS 平台上仅支持 local 执行模式，即代码在宿主机上直接执行。参考 `sandbox_server\sandbox\.env.example`，在 `sandbox_server\sandbox` 目录下创建 `.env` 文件，示例：
 
    ```env
    HOST=0.0.0.0
    PORT=5001
+   ENABLE_LINUX_SANDBOX=false
    ```
 
-   然后启动沙箱 Python 服务，即运行 `sandbox_server/python_server/openjiuwen_sandbox_pyserver/kernel.py` 脚本，其中 `HOST` 和 `PORT` 是沙箱 Python 服务运行的 IP 和端口。
+   配置完成后，执行 `sandbox_server\sandbox\openjiuwen_sandbox_server\server.py` 启动沙箱服务。
 
-2. 启动沙箱 JS 服务，运行 `sandbox_server/js_server/kernel.js` 脚本，JS 服务的 IP 和端口参考如下代码：
+3. **启动沙箱网关服务**
 
-   ```javascript
-   const PORT = process.env.PORT || 5002;
-   server.listen(PORT, "0.0.0.0", () => {
-     console.log(`✅ JS sandbox listening on http://0.0.0.0:${PORT}`);
-   });
-   ```
-
-3. 参考 `sandbox_server/gateway/.env.example` 文件，在 `sandbox_server/gateway` 目录下创建 `.env` 文件，示例如下：
+   参考 `sandbox_server\gateway\.env.example`，在 `sandbox_server\gateway` 目录下创建 `.env` 文件，示例：
 
    ```env
    HOST=0.0.0.0
    PORT=8188
-   PYTHON_SANDBOX_URL=http://localhost:5001/run
-   JS_SANDBOX_URL=http://localhost:5002/run
+   SANDBOX_SERVER_URL=http://localhost:5001/run
    ```
 
-   其中 `PYTHON_SANDBOX_URL` 和 `JS_SANDBOX_URL` 为前面两步启动的 Python 和 JS 服务 URL，然后启动沙箱网关服务，即运行 `sandbox_server/gateway/openjiuwen_sandbox_gateway/server.py` 脚本。
+   `HOST` 与 `PORT` 为网关服务监听地址与端口；`SANDBOX_SERVER_URL` 为第 2 步中已启动的沙箱服务运行地址。
 
-4. 启动沙箱服务后请在`.env`文件中配置沙箱服务的路径，例如：`CODE_SANDBOX_URL=http://localhost:8188/run`
+   然后执行 `sandbox_server\gateway\openjiuwen_sandbox_gateway\server.py` 启动沙箱网关服务。
+
+4. **配置应用侧网关地址**
+
+   在项目的 `.env` 中配置沙箱网关调用地址，例如：`CODE_SANDBOX_URL=http://localhost:8188/run`。
 
 <a id="windows-plugin"></a>
 ### 问题三：如何启用插件服务

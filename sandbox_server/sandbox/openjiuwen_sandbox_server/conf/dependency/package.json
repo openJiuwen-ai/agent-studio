@@ -1,0 +1,11 @@
+{
+    "name": "js_sandbox",
+    "dependencies": {
+        "lodash": "4.17.23",
+        "dayjs": "^1.11.13",
+        "corepack": "0.34.6"
+    },
+    "engines": {
+        "node": ">=20.0.0"
+    }
+}

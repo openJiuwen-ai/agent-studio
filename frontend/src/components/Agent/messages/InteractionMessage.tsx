@@ -1,6 +1,6 @@
 import { TextField, InputAdornment, IconButton, Tooltip, Button, Divider } from '@mui/material'
 import type { ChatMessage } from './chatTypes'
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { Type, Hash, List, Braces, ToggleLeft, Calendar, X, HelpCircle } from 'lucide-react'
 import { useScopedTranslation } from '@/i18n'
 import { MessageContent } from './NormalMessage'
@@ -106,20 +106,20 @@ export function InteractionMessage({
     return undefined
   }, [submitted])
 
+  const lastTimestampRef = useRef<number | null>(null)
   useEffect(() => {
-    if (parsedSubmitted) return
-    const hasAnyFormValue = Object.keys(formValues).length > 0
-    if (hasAnyFormValue) return
+    if (lastTimestampRef.current !== message.timestamp) {
+      lastTimestampRef.current = message.timestamp
 
-    const defaults: Record<string, string> = {}
-    fields.forEach(f => {
-      if (f.defaultValue !== undefined) defaults[f.input_name] = f.defaultValue as string
-    })
+      if (parsedSubmitted) return
 
-    if (Object.keys(defaults).length > 0) {
-      setFormValues(prev => ({ ...defaults, ...prev }))
+      const defaults: Record<string, string> = {}
+      fields.forEach(f => {
+        if (f.defaultValue !== undefined) defaults[f.input_name] = f.defaultValue as string
+      })
+      setFormValues(defaults)
     }
-  }, [fields, parsedSubmitted])
+  }, [message.timestamp, fields, parsedSubmitted])
 
   const handleChange = (key: string, v: string) => {
     setFormValues(prev => ({ ...prev, [key]: v }))

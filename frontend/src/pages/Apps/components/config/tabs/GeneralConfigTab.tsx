@@ -9,8 +9,6 @@ import { useTranslation } from 'react-i18next'
 import { ConfigTabProps } from '../ConfigRegistry'
 import { ConfigSection } from '../ConfigSection'
 
-// 临时定义控件类型，实际应从 AgentConfigDialog 导出
-// 为了避免循环依赖，这里重新定义
 interface ToggleSwitchProps {
   checked: boolean
   onChange: (checked: boolean) => void
@@ -24,19 +22,14 @@ interface RangeSliderProps {
   min: number
   max: number
   onChange: (value: number) => void
+  step?: number
 }
 
-// 从父组件传入的控件组件
 export interface GeneralConfigTabProps extends ConfigTabProps {
-  /** 开关组件 */
   ToggleSwitch: React.FC<ToggleSwitchProps>
-  /** 滑块组件 */
   RangeSlider: React.FC<RangeSliderProps>
 }
 
-/**
- * 通用配置标签组件
- */
 export const GeneralConfigTab: React.FC<GeneralConfigTabProps> = ({
   config,
   updateConfig,
@@ -46,10 +39,8 @@ export const GeneralConfigTab: React.FC<GeneralConfigTabProps> = ({
   const { t } = useTranslation()
   return (
     <div className="space-y-8">
-      {/* 交互设置 */}
       <ConfigSection title={t('apps.config.general.interactionSettings')}>
         <div className="space-y-4">
-          {/* 启用人机交互 */}
           <div className="flex items-center justify-between py-1">
             <div>
               <span className="text-sm text-gray-900 font-medium">{t('apps.config.general.enableHumanInteraction')}</span>
@@ -61,7 +52,17 @@ export const GeneralConfigTab: React.FC<GeneralConfigTabProps> = ({
             />
           </div>
 
-          {/* 启用溯源 */}
+          <div className="flex items-center justify-between py-1">
+            <div>
+              <span className="text-sm text-gray-900 font-medium">{t('apps.config.general.outlineInteractionEnabled')}</span>
+              <p className="text-xs text-gray-500 mt-0.5">{t('apps.config.general.outlineInteractionEnabledDesc')}</p>
+            </div>
+            <ToggleSwitch
+              checked={config.outlineInteractionEnabled}
+              onChange={checked => updateConfig('outlineInteractionEnabled', checked)}
+            />
+          </div>
+
           <div className="flex items-center justify-between py-1">
             <div>
               <span className="text-sm text-gray-900 font-medium">{t('apps.config.general.enableTraceability')}</span>
@@ -75,7 +76,6 @@ export const GeneralConfigTab: React.FC<GeneralConfigTabProps> = ({
         </div>
       </ConfigSection>
 
-      {/* 规划章节数量 */}
       <ConfigSection title={t('apps.config.general.chapterCount')}>
         <RangeSlider
           label={t('apps.config.general.chapterCount')}

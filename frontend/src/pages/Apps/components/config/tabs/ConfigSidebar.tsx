@@ -17,7 +17,8 @@ function getTabLabelKey(tabId: ConfigTabId): string {
   const keyMap: Record<ConfigTabId, string> = {
     general: 'apps.config.tabs.general',
     search: 'apps.config.tabs.search',
-    template: 'apps.config.tabs.template'
+    template: 'apps.config.tabs.template',
+    model: 'apps.config.tabs.model'
   }
   return keyMap[tabId] || tabId
 }

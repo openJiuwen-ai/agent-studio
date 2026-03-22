@@ -128,38 +128,52 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
                   </span>
                 </Tooltip>
                 {model.tags && model.tags.length > 0 && (
-                  <div className="flex items-center flex-shrink-0" style={{ gap: 'clamp(0.125rem, 0.25vw, 0.25rem)' }}>
+                  <div className="flex items-center flex-shrink-0 min-w-0" style={{ gap: 'clamp(0.125rem, 0.25vw, 0.25rem)' }}>
                     {model.tags.slice(0, 3).map((tag, index) => (
-                      <Chip 
-                        key={index} 
-                        label={tag} 
-                        size="small" 
-                        className="bg-blue-100 text-blue-800"
-                        sx={{ 
-                          fontSize: 'clamp(0.625rem, 1.25vw, 0.75rem)',
-                          height: 'clamp(1rem, 2vw, 1.5rem)',
-                          '& .MuiChip-label': {
-                            padding: 'clamp(0.125rem, 0.25vw, 0.25rem) clamp(0.25rem, 0.5vw, 0.5rem)',
-                          },
-                        }}
-                      />
+                      <Tooltip key={index} title={tag} placement="top" arrow>
+                        <Chip 
+                          label={tag} 
+                          size="small" 
+                          className="bg-blue-100 text-blue-800"
+                          sx={{ 
+                            fontSize: 'clamp(0.625rem, 1.25vw, 0.75rem)',
+                            height: 'clamp(1rem, 2vw, 1.5rem)',
+                            maxWidth: '8rem',
+                            '& .MuiChip-label': {
+                              padding: 'clamp(0.125rem, 0.25vw, 0.25rem) clamp(0.25rem, 0.5vw, 0.5rem)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            },
+                          }}
+                        />
+                      </Tooltip>
                     ))}
                     {model.tags.length > 3 && (
                       <Tooltip
                         title={
                           <div className="bg-white border border-white rounded shadow-sm" style={{ padding: 'clamp(0.25rem, 0.5vw, 0.5rem)', gap: 'clamp(0.125rem, 0.25vw, 0.25rem)' }}>
                             {model.tags.slice(3).map((tag, index) => (
-                              <Chip 
-                                key={index} 
-                                label={tag} 
-                                size="small" 
-                                className="bg-blue-100 text-blue-800"
-                                sx={{ 
-                                  fontSize: 'clamp(0.625rem, 1.25vw, 0.75rem)',
-                                  height: 'clamp(1rem, 2vw, 1.5rem)',
-                                  margin: 'clamp(0.125rem, 0.25vw, 0.25rem)',
-                                }}
-                              />
+                              <Tooltip key={index} title={tag} placement="top" arrow slotProps={{ popper: { sx: { zIndex: 9999 } } }}>
+                                <span style={{ display: 'inline-block', maxWidth: '10rem' }}>
+                                  <Chip 
+                                    label={tag} 
+                                    size="small" 
+                                    className="bg-blue-100 text-blue-800"
+                                    sx={{ 
+                                      fontSize: 'clamp(0.625rem, 1.25vw, 0.75rem)',
+                                      height: 'clamp(1rem, 2vw, 1.5rem)',
+                                      margin: 'clamp(0.125rem, 0.25vw, 0.25rem)',
+                                      maxWidth: '100%',
+                                      '& .MuiChip-label': {
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                      },
+                                    }}
+                                  />
+                                </span>
+                              </Tooltip>
                             ))}
                           </div>
                         }
@@ -269,38 +283,52 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
                               </span>
                             </Tooltip>
                             {model.tags && model.tags.length > 0 && (
-                              <div className="flex items-center flex-shrink-0" style={{ gap: 'clamp(0.125rem, 0.25vw, 0.25rem)' }}>
+                              <div className="flex items-center flex-shrink-0 min-w-0" style={{ gap: 'clamp(0.125rem, 0.25vw, 0.25rem)' }}>
                                 {model.tags.slice(0, 3).map((tag, index) => (
-                                  <Chip 
-                                    key={index} 
-                                    label={tag} 
-                                    size="small" 
-                                    className="bg-blue-100 text-blue-800"
-                                    sx={{ 
-                                      fontSize: 'clamp(0.625rem, 1.25vw, 0.75rem)',
-                                      height: 'clamp(1rem, 2vw, 1.5rem)',
-                                      '& .MuiChip-label': {
-                                        padding: 'clamp(0.125rem, 0.25vw, 0.25rem) clamp(0.25rem, 0.5vw, 0.5rem)',
-                                      },
-                                    }}
-                                  />
+                                  <Tooltip key={index} title={tag} placement="top" arrow>
+                                    <Chip 
+                                      label={tag} 
+                                      size="small" 
+                                      className="bg-blue-100 text-blue-800"
+                                      sx={{ 
+                                        fontSize: 'clamp(0.625rem, 1.25vw, 0.75rem)',
+                                        height: 'clamp(1rem, 2vw, 1.5rem)',
+                                        maxWidth: '8rem',
+                                        '& .MuiChip-label': {
+                                          padding: 'clamp(0.125rem, 0.25vw, 0.25rem) clamp(0.25rem, 0.5vw, 0.5rem)',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap',
+                                        },
+                                      }}
+                                    />
+                                  </Tooltip>
                                 ))}
                                 {model.tags.length > 3 && (
                                   <Tooltip
                                     title={
                                       <div className="bg-white border border-white rounded shadow-sm" style={{ padding: 'clamp(0.25rem, 0.5vw, 0.5rem)', gap: 'clamp(0.125rem, 0.25vw, 0.25rem)' }}>
                                         {model.tags.slice(3).map((tag, index) => (
-                                          <Chip 
-                                            key={index} 
-                                            label={tag} 
-                                            size="small" 
-                                            className="bg-blue-100 text-blue-800"
-                                            sx={{ 
-                                              fontSize: 'clamp(0.625rem, 1.25vw, 0.75rem)',
-                                              height: 'clamp(1rem, 2vw, 1.5rem)',
-                                              margin: 'clamp(0.125rem, 0.25vw, 0.25rem)',
-                                            }}
-                                          />
+                                          <Tooltip key={index} title={tag} placement="top" arrow slotProps={{ popper: { sx: { zIndex: 9999 } } }}>
+                                            <span style={{ display: 'inline-block', maxWidth: '10rem' }}>
+                                              <Chip 
+                                                label={tag} 
+                                                size="small" 
+                                                className="bg-blue-100 text-blue-800"
+                                                sx={{ 
+                                                  fontSize: 'clamp(0.625rem, 1.25vw, 0.75rem)',
+                                                  height: 'clamp(1rem, 2vw, 1.5rem)',
+                                                  margin: 'clamp(0.125rem, 0.25vw, 0.25rem)',
+                                                  maxWidth: '100%',
+                                                  '& .MuiChip-label': {
+                                                    overflow: 'hidden',
+                                                    textOverflow: 'ellipsis',
+                                                    whiteSpace: 'nowrap',
+                                                  },
+                                                }}
+                                              />
+                                            </span>
+                                          </Tooltip>
                                         ))}
                                       </div>
                                     }

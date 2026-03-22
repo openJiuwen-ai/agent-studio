@@ -6,6 +6,8 @@ import {
   JSONObject,
   MESSAGE_TITLES,
   isFinalReportMessage,
+  OUTLINE_INTERACTION_MAX_ROUNDS,
+  OUTLINE_INTERACTION_WARNING_THRESHOLD,
 } from '../useConversationStore';
 import i18n from '@/i18n';
 
@@ -19,7 +21,7 @@ import i18n from '@/i18n';
 
 // DeepSearch SSE 事件数据类型
 export interface SSEData {
-  event: 'start' | 'message' | 'done' | 'summary_response' | 'waiting_user_input' | 'error';
+  event: 'start' | 'message' | 'done' | 'summary_response' | 'waiting_user_input' | 'user_input_ended' | 'error';
   agent: string;
   content?: string | JSONObject;
   section_idx?: string | number;
@@ -55,13 +57,13 @@ export class DeepsearchSSEHandler {
   private store: StoreDependencies;
   private streamCache: StreamCache;
   private conversationId: string;
-  private messageFindCache: Map<string, Message | null>; // 新增：消息查找缓存
+  private messageFindCache: Map<string, Message | null>;
 
   constructor(store: StoreDependencies, streamCache: StreamCache, conversationId: string) {
     this.store = store;
     this.streamCache = streamCache;
     this.conversationId = conversationId;
-    this.messageFindCache = new Map(); // 初始化缓存
+    this.messageFindCache = new Map();
   }
 
   /**
@@ -73,6 +75,7 @@ export class DeepsearchSSEHandler {
       'generate_questions': MessageType.TEXT,
       'feedback_handler': MessageType.INTERRUPT,
       'outline': MessageType.TASK,
+      'outline_interaction': MessageType.OUTLINE_INTERACTION,
       'plan_reasoning': MessageType.TASK,
       'sub_reporter': MessageType.REPORT,
       'collector_info_retrieval': MessageType.LINK,
@@ -104,9 +107,9 @@ export class DeepsearchSSEHandler {
       }
     }
 
-    const sectionIdx = sseData.section_idx ? parseInt(String(sseData.section_idx), 10) : undefined;
-    const planIdx = sseData.plan_idx ? parseInt(String(sseData.plan_idx), 10) : undefined;
-    const stepIdx = sseData.step_idx ? parseInt(String(sseData.step_idx), 10) : undefined;
+    const sectionIdx = this.parseOptionalIndex(sseData.section_idx);
+    const planIdx = this.parseOptionalIndex(sseData.plan_idx);
+    const stepIdx = this.parseOptionalIndex(sseData.step_idx);
 
     switch (sseData.event) {
       case 'start':
@@ -124,6 +127,9 @@ export class DeepsearchSSEHandler {
       case 'waiting_user_input':
         this.handleWaitingUserInput(sseData);
         break;
+      case 'user_input_ended':
+        this.handleUserInputEnded(sseData);
+        break;
       case 'error':
         this.handleError(sseData, sectionIdx, planIdx, stepIdx);
         break;
@@ -139,24 +145,10 @@ export class DeepsearchSSEHandler {
     // 生成流缓存 key
     const streamKey = this.generateStreamKey(sseData.agent, sectionIdx, planIdx, stepIdx);
 
-    // outline: 初始化缓存，创建占位消息
+    // outline: 只初始化缓存，不创建消息卡片
     if (sseData.agent === 'outline') {
       const content = typeof sseData.content === 'string' ? sseData.content : '';
       this.streamCache.set(streamKey, [content]);
-
-      addSystemMessage(this.conversationId, MessageType.TASK, '', undefined, i18n.t('deepResearch.handler.generatingOutline'), 'deepsearch');
-      const lastMessageItems = this.store.getCurrentMessageItems();
-      if (lastMessageItems) {
-        const lastMessageId = lastMessageItems.messagesIds[lastMessageItems.messagesIds.length - 1];
-        const lastMessage = lastMessageId ? this.store.getMessageById(lastMessageId) : undefined;
-        if (lastMessage) {
-          updateMessage(lastMessageItems.id, lastMessage.id, {
-            status: TaskStatus.IN_PROGRESS,
-            isStreaming: true,
-            sectionIdx: 0,
-          });
-        }
-      }
       return;
     }
 
@@ -167,6 +159,22 @@ export class DeepsearchSSEHandler {
 
       const lastMessageItems = this.store.getCurrentMessageItems();
       if (lastMessageItems && sectionIdx !== undefined && planIdx !== undefined) {
+
+        // 检查是否存在根 TASK 消息（sectionIdx=0），如果不存在则从缓存创建
+        let rootTask = this.findTaskInMessages(
+          lastMessageItems.messagesIds,
+          msg => msg.type === MessageType.TASK && msg.sectionIdx === 0,
+          'section_0'
+        );
+
+        if (!rootTask) {
+          const outlineContent = this.getOutlineContentFromCache();
+          if (outlineContent) {
+            rootTask = this.createRootTaskFromOutline(lastMessageItems.id, outlineContent);
+          } else {
+            console.warn('[DeepsearchSSEHandler] No cached outline found for creating root TASK');
+          }
+        }
 
         const sectionTask = this.findTaskInMessages(
           lastMessageItems.messagesIds,
@@ -298,33 +306,16 @@ export class DeepsearchSSEHandler {
    * 处理 message 事件
    */
   private handleMessage(sseData: SSEData, sectionIdx?: number, planIdx?: number, stepIdx?: number): void {
-    const { addSystemMessage, updateMessage } = this.store;
     const streamKey = this.generateStreamKey(sseData.agent, sectionIdx, planIdx, stepIdx);
 
-    // outline: 追加内容到缓存
+    // outline: 追加内容到缓存，不创建消息
     if (sseData.agent === 'outline') {
-      // ===== 修复：如果缓存不存在，说明没有 start 事件，先初始化 =====
+      const content = typeof sseData.content === 'string' ? sseData.content : '';
       if (!this.streamCache.get(streamKey)) {
-        console.warn('[DeepsearchSSEHandler] Outline message without start! Initializing cache...');
-        const content = typeof sseData.content === 'string' ? sseData.content : '';
+        // 缓存不存在，初始化缓存
         this.streamCache.set(streamKey, [content]);
-
-        // 创建占位 TASK 消息
-        addSystemMessage(this.conversationId, MessageType.TASK, '', undefined, i18n.t('deepResearch.handler.generatingOutline'), 'deepsearch');
-        const lastMessageItems = this.store.getCurrentMessageItems();
-        if (lastMessageItems) {
-          const lastMessageId = lastMessageItems.messagesIds[lastMessageItems.messagesIds.length - 1];
-      const lastMessage = lastMessageId ? this.store.getMessageById(lastMessageId) : undefined;
-          if (lastMessage) {
-            updateMessage(lastMessageItems.id, lastMessage.id, {
-              status: TaskStatus.IN_PROGRESS,
-              isStreaming: true,
-              sectionIdx: 0,
-            });
-          }
-        }
       } else {
-        const content = typeof sseData.content === 'string' ? sseData.content : '';
+        // 追加到缓存
         this.addToCache(streamKey, content);
       }
       return;
@@ -383,86 +374,26 @@ export class DeepsearchSSEHandler {
     const streamKey = this.generateStreamKey(sseData.agent, sectionIdx, planIdx, stepIdx);
     const lastMessageItems = this.store.getCurrentMessageItems();
 
-    if (!lastMessageItems || getMessageItemsIsUser(lastMessageItems)) {
-      // 清除缓存
-      this.messageFindCache.clear();
+
+    if (sseData.agent === 'outline') {
+      const cachedOutline = this.getCacheContent(streamKey);
+      if (cachedOutline) {
+        try {
+          const outlineContent = JSON.parse(cachedOutline);
+          // 存储解析后的大纲内容
+          this.streamCache.set('__outline_content__', [JSON.stringify(outlineContent)]);
+        } catch (e) {
+          console.warn('[DeepsearchSSEHandler] Failed to parse outline content:', e);
+        }
+      } else {
+        console.warn('[DeepsearchSSEHandler] No cached outline found for key:', streamKey);
+      }
       return;
     }
 
-    // outline 完成
-    if (sseData.agent === 'outline') {
-      const lastMessageId = lastMessageItems.messagesIds[lastMessageItems.messagesIds.length - 1];
-      const lastMessage = lastMessageId ? this.store.getMessageById(lastMessageId) : undefined;
-      if (!lastMessage || lastMessage.type !== MessageType.TASK) return;
-
-      try {
-        const cachedContent = this.getCacheContent(streamKey);
-
-        // ===== 修复：处理空内容的情况 =====
-        if (!cachedContent || cachedContent.trim() === '') {
-          console.warn('[DeepsearchSSEHandler] Outline content is empty, using default structure');
-
-          // 标记大纲任务为已完成，子任务将动态创建
-          updateMessage(lastMessageItems.id, lastMessage.id, {
-            title: i18n.t('deepResearch.handler.researchOutline'),
-            content: i18n.t('deepResearch.handler.analyzingResearchContent'),
-            status: TaskStatus.IN_PROGRESS,
-            isStreaming: false,
-            sectionIdx: 0,
-          });
-
-          this.streamCache.delete(streamKey);
-          return;
-        }
-
-        const parsedContent = JSON.parse(cachedContent);
-        const title = parsedContent.title || i18n.t('deepResearch.handler.researchOutline');
-
-        // 更新 outline 任务
-        updateMessage(lastMessageItems.id, lastMessage.id, {
-          content: parsedContent.thought || '',
-          title: title,
-          status: TaskStatus.IN_PROGRESS,
-          isStreaming: false,
-          sectionIdx: 0,
-        });
-
-        // 为每个 section 创建子任务
-        if (parsedContent.sections && Array.isArray(parsedContent.sections)) {
-          parsedContent.sections.forEach((section: any, index: number) => {
-            const sectionTitle = section.title || i18n.t('deepResearch.handler.chapter', { index: index + 1 });
-            const sectionDescription = section.description || '';
-
-            const sectionTask = this.store.addMessageAsChild(
-              lastMessageItems.id,
-              lastMessage.id,
-              MessageType.TASK,
-              sectionDescription,
-              sectionTitle
-            );
-
-            updateMessage(lastMessageItems.id, sectionTask.id, {
-              sectionIdx: index + 1,
-              status: TaskStatus.PENDING,
-              isStreaming: false,
-            });
-
-          });
-        }
-
-        this.streamCache.delete(streamKey);
-      } catch (e) {
-        console.error('[DeepsearchSSEHandler] Outline JSON解析失败:', e);
-        // ===== 修复：即使解析失败，也要更新任务状态 =====
-        updateMessage(lastMessageItems.id, lastMessage.id, {
-          title: i18n.t('deepResearch.handler.researchOutline'),
-          content: i18n.t('deepResearch.handler.analyzingResearchContent'),
-          status: TaskStatus.IN_PROGRESS,
-          isStreaming: false,
-          sectionIdx: 0,
-        });
-        this.streamCache.delete(streamKey);
-      }
+    if (!lastMessageItems || getMessageItemsIsUser(lastMessageItems)) {
+      // 清除缓存
+      this.messageFindCache.clear();
       return;
     }
 
@@ -522,6 +453,7 @@ export class DeepsearchSSEHandler {
         const parsedContent = JSON.parse(cachedContent);
 
         const planTask = this.findOrCreatePlanTask(sectionTask, planIdx, lastMessageItems.id);
+        
         if (!planTask) {
           console.error('[DeepsearchSSEHandler] Failed to find or create plan task');
           this.streamCache.delete(streamKey);
@@ -1150,33 +1082,51 @@ export class DeepsearchSSEHandler {
   private handleWaitingUserInput(sseData: SSEData): void {
     const { addSystemMessage, updateMessage, getCurrentMessageItems } = this.store;
 
-    // 检查当前 MessageItems 状态，如果已经是 CANCELLED，说明用户已手动取消，不需要再创建 INTERRUPT 消息
+    // 检查当前 MessageItems 状态，如果已经是 CANCELLED，说明用户已手动取消，不需要再创建消息
     const lastMessageItems = getCurrentMessageItems();
     if (lastMessageItems && lastMessageItems.status === TaskStatus.CANCELLED) {
       console.log('[DeepsearchSSEHandler] MessageItems already cancelled, skipping waiting_user_input event');
       return;
     }
 
-    // 创建 INTERRUPT 消息
-    // 注意：这里使用 'deepsearch' 作为 agent，而不是 sseData.agent（feedback_handler）
-    // 因为 HITL 判断需要匹配整体运行的 agent 类型，而不是工作流中的具体节点
-    const interruptMessage = addSystemMessage(
+    // 根据 agent 类型创建不同类型的消息
+    const isOutlineInteraction = sseData.agent === 'outline_interaction';
+    const messageType = isOutlineInteraction ? MessageType.OUTLINE_INTERACTION : MessageType.INTERRUPT;
+    const currentRound = isOutlineInteraction ? this.parseOutlineInteractionRound(sseData.content) : undefined;
+    const remainingRoundsInfo = this.buildOutlineInteractionRemainingInfo(currentRound);
+
+    // 获取大纲内容（如果是 outline_interaction，需要从缓存中获取 outline 的内容）
+    let outlineContent: any = sseData.content || '';
+    if (isOutlineInteraction) {
+      const cachedOutline = this.getOutlineContentFromCache();
+      if (cachedOutline) {
+        outlineContent = remainingRoundsInfo ? {
+          ...cachedOutline,
+          outlineInteractionCurrentRound: remainingRoundsInfo.currentRound,
+          outlineInteractionRemainingRounds: remainingRoundsInfo.remainingRounds,
+          outlineInteractionRemainingTip: remainingRoundsInfo.tip,
+        } : cachedOutline;
+        this.streamCache.set('__outline_content__', [JSON.stringify(outlineContent)]);
+      }
+    }
+
+    // 创建消息
+    const message = addSystemMessage(
       this.conversationId,
-      MessageType.INTERRUPT,
-      sseData.content || '',
+      messageType,
+      outlineContent,
       undefined,
       undefined,
       'deepsearch'
     );
 
     // 如果创建失败（例如对话已被取消），跳过后续处理
-    if (!interruptMessage) {
-      console.log('[DeepsearchSSEHandler] Failed to create INTERRUPT message, skipping');
+    if (!message || !lastMessageItems) {
       return;
     }
 
-    // 更新刚刚创建的 INTERRUPT 消息状态
-    updateMessage(lastMessageItems.id, interruptMessage.id, {
+    // 更新消息状态
+    updateMessage(lastMessageItems.id, message.id, {
       status: TaskStatus.IN_PROGRESS,
       isStreaming: false,
     });
@@ -1184,6 +1134,46 @@ export class DeepsearchSSEHandler {
     // 给 SESSION_CONVERSATION_ID 赋值
     if (sseData.conversation_id) {
       this.store.setSessionConversationId(sseData.conversation_id);
+    }
+  }
+
+  /**
+   * 处理 user_input_ended 事件
+   * 当大纲交互达到最大修改次数时触发，创建 TASK 消息显示大纲并继续流程
+   */
+  private handleUserInputEnded(sseData: SSEData): void {
+    const { getCurrentMessageItems } = this.store;
+    const lastMessageItems = getCurrentMessageItems();
+
+    // 检查当前 MessageItems 状态
+    if (lastMessageItems && lastMessageItems.status === TaskStatus.CANCELLED) {
+      return;
+    }
+
+    // 从缓存中获取大纲内容
+    const outlineContent = this.getOutlineContentFromCache();
+    if (!outlineContent) {
+      console.warn('[DeepsearchSSEHandler] No outline content stored in cache');
+      return;
+    }
+
+    if (!lastMessageItems) {
+      console.warn('[DeepsearchSSEHandler] No lastMessageItems found');
+      return;
+    }
+
+    try {
+      const taskMessage = this.createRootTaskFromOutline(lastMessageItems.id, outlineContent);
+      if (!taskMessage) {
+        return;
+      }
+
+      // 给 SESSION_CONVERSATION_ID 赋值
+      if (sseData.conversation_id) {
+        this.store.setSessionConversationId(sseData.conversation_id);
+      }
+    } catch (e) {
+      console.error('[DeepsearchSSEHandler] Failed to process outline content:', e);
     }
   }
 
@@ -1238,10 +1228,12 @@ export class DeepsearchSSEHandler {
             MESSAGE_TITLES.FINAL_REPORT,
             'deepsearch'  // agent 类型
           );
-          updateMessage(lastMessageItems.id, newReport.id, {
-            status: TaskStatus.FAILED,
-            isStreaming: false,
-          });
+          if (newReport) {
+            updateMessage(lastMessageItems.id, newReport.id, {
+              status: TaskStatus.FAILED,
+              isStreaming: false,
+            });
+          }
         }
       }
     }
@@ -1446,12 +1438,122 @@ export class DeepsearchSSEHandler {
     this.streamCache.set(key, [...chunks, content]);
   }
 
+  private parseOptionalIndex(value?: string | number): number | undefined {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+
+    const parsed = Number.parseInt(String(value), 10);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+
+  private parseOutlineInteractionRound(content?: string | JSONObject): number | undefined {
+    if (typeof content !== 'string') {
+      return undefined;
+    }
+    const match = content.match(/Round\s+(\d+)\s*:/i);
+    if (!match?.[1]) {
+      return undefined;
+    }
+    const round = Number.parseInt(match[1], 10);
+    return Number.isNaN(round) ? undefined : round;
+  }
+
+  private buildOutlineInteractionRemainingInfo(currentRound?: number): {
+    currentRound: number;
+    remainingRounds: number;
+    tip: string;
+  } | null {
+    if (!currentRound || currentRound <= 0) {
+      return null;
+    }
+    const remainingRounds = Math.max(0, OUTLINE_INTERACTION_MAX_ROUNDS - currentRound + 1);
+    if (remainingRounds > OUTLINE_INTERACTION_WARNING_THRESHOLD) {
+      return null;
+    }
+    return {
+      currentRound,
+      remainingRounds,
+      tip: i18n.t('apps.outlineInteraction.remainingRoundsWarning', { count: remainingRounds }),
+    };
+  }
+
   /**
    * 获取缓存内容
    */
   private getCacheContent(key: string): string {
     const chunks = this.streamCache.get(key);
     return chunks ? chunks.join('') : '';
+  }
+
+  private getOutlineContentFromCache(): any | null {
+    const cacheKeys = [
+      '__outline_content__',
+      this.generateStreamKey('outline', 0, 0, 0),
+      this.generateStreamKey('outline'),
+    ];
+
+    for (const key of cacheKeys) {
+      const cachedContent = this.getCacheContent(key);
+      if (!cachedContent) {
+        continue;
+      }
+
+      try {
+        return JSON.parse(cachedContent);
+      } catch (e) {
+        console.warn('[DeepsearchSSEHandler] Failed to parse outline content from cache:', e);
+      }
+    }
+
+    return null;
+  }
+
+  private createRootTaskFromOutline(messageItemsId: string, outlineContent: any): Message | null {
+    const { addSystemMessage, updateMessage } = this.store;
+    const title = outlineContent.title || i18n.t('deepResearch.handler.researchOutline');
+
+    const rootTask = addSystemMessage(
+      this.conversationId,
+      MessageType.TASK,
+      outlineContent.thought || '',
+      undefined,
+      title,
+      'deepsearch'
+    );
+
+    if (!rootTask) {
+      return null;
+    }
+
+    updateMessage(messageItemsId, rootTask.id, {
+      status: TaskStatus.IN_PROGRESS,
+      isStreaming: false,
+      sectionIdx: 0,
+    });
+
+    if (outlineContent.sections && Array.isArray(outlineContent.sections)) {
+      outlineContent.sections.forEach((section: any, index: number) => {
+        const sectionTitle = section.title || i18n.t('deepResearch.handler.chapter', { index: index + 1 });
+        const sectionDescription = section.description || '';
+
+        const sectionTask = this.store.addMessageAsChild(
+          messageItemsId,
+          rootTask.id,
+          MessageType.TASK,
+          sectionDescription,
+          sectionTitle
+        );
+
+        updateMessage(messageItemsId, sectionTask.id, {
+          sectionIdx: index + 1,
+          status: TaskStatus.PENDING,
+          isStreaming: false,
+        });
+      });
+    }
+
+    return rootTask;
   }
 
   /**
@@ -1553,4 +1655,3 @@ export class DeepsearchSSEHandler {
     });
   }
 }
-

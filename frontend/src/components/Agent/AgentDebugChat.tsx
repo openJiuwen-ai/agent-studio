@@ -593,7 +593,7 @@ const AgentDebugChat = ({ agentId, mdbId, onDebugInfoChange, enableLongTerm, hid
     let hasNewInteraction = false
     setChatHistory(prev =>
       prev.map(m =>
-        m.kind === 'interaction'
+        m.kind === 'interaction' && (m.detailInfo as any)?.interaction_node === nodeId
           ? {
               ...m,
               detailInfo: { ...(m.detailInfo || {}), isHistorical: true },

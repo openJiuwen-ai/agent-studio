@@ -9,6 +9,7 @@ import { TaskMessage } from './messageTypes/TaskMessage';
 import ReportMessage from './messageTypes/ReportMessage';
 import { ErrorMessage } from './messageTypes/ErrorMessage';
 import { InterruptMessage } from './messageTypes/InterruptMessage';
+import OutlineInteractionMessage from './messageTypes/OutlineInteractionMessage';
 
 interface SystemMessageItemProps {
   messageItems: MessageItems;
@@ -77,14 +78,17 @@ export const SystemMessageItem: React.FC<SystemMessageItemProps> = ({ messageIte
       }
       return true;
     });
+    const hasOnlyOutlineInteraction = topLevelMessages.length === 1 && topLevelMessages[0].type === MessageType.OUTLINE_INTERACTION;
 
     return (
       <div className="flex justify-start mb-4">
-        <div className="max-w-[90%] bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-200 overflow-x-hidden">
-          {/* 消息列表 */}
-          {topLevelMessages.map((message, index) => {
-            
-            // 判断是否是最后一个进行中的消息
+        <div
+          className={`overflow-x-hidden ${hasOnlyOutlineInteraction ? 'w-[90%]' : 'max-w-[90%] bg-white rounded-lg px-4 py-3 shadow-sm border border-gray-200'}`}
+        >
+            {/* 消息列表 */}
+            {topLevelMessages.map((message, index) => {
+              
+              // 判断是否是最后一个进行中的消息
             const isLastStreaming = isInProgress && index === topLevelMessages.length - 1 && message.isStreaming;
 
             return (
@@ -162,6 +166,9 @@ const MessageRenderer: React.FC<MessageRendererProps> = ({ message, isStreaming 
 
     case MessageType.INTERRUPT:
       return <InterruptMessage message={message} />;
+
+    case MessageType.OUTLINE_INTERACTION:
+      return <OutlineInteractionMessage message={message} />;
 
     default:
       // 默认渲染为文本消息

@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback } from 'react'
-import { X, Check, Settings, Search, FileText, Loader2, AlertCircle, Plus, Edit, Trash2, XCircle, CheckCircle, Play } from 'lucide-react'
+import { X, Check, Settings, Search, FileText, Loader2, AlertCircle, Plus, Edit, Trash2, XCircle, CheckCircle, Play, Cpu } from 'lucide-react'
 import { IconButton, Tooltip } from '@mui/material'
 import { useTranslation } from 'react-i18next'
 import { MentionItem } from './MentionPicker'
@@ -15,7 +15,7 @@ import { TemplateUploadDialog } from './config/template/TemplateUploadDialog'
 import { TemplateViewDialog } from './config/template/TemplateViewDialog'
 import { useTemplateApi } from './hooks/useTemplateApi'
 import { useWebSearchEngineApi } from './hooks/useWebSearchEngineApi'
-import { deepsearchTemplateService } from '@test-agentstudio/api-client'
+import { deepsearchTemplateService, PromptModel } from '@test-agentstudio/api-client'
 import DeleteConfirmationDialog from '../../../components/Common/DeleteConfirmationDialog'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '../../../Common/UnifiedSnackbar'
 import { DEFAULT_DEEPSEARCH_CONFIG } from '../utils/deepsearchConstants'
@@ -27,6 +27,7 @@ import { ConfigTabPanel } from './config/tabs/ConfigTabPanel'
 import { GeneralConfigTab } from './config/tabs/GeneralConfigTab'
 import { SearchConfigTab } from './config/tabs/SearchConfigTab'
 import { TemplateConfigTab } from './config/tabs/TemplateConfigTab'
+import { ModelConfigTab } from './config/tabs/ModelConfigTab'
 import { KnowledgeBaseConfigDialog } from './config/dialogs/KnowledgeBaseConfigDialog'
 
 // ==================== 类型定义 ====================
@@ -42,6 +43,7 @@ export interface ReportTemplate {
 export interface DeepSearchConfig {
   // 通用配置
   enableHumanInteraction: boolean
+  outlineInteractionEnabled: boolean // 大纲交互开关
   planChapterCount: number // 范围: [1, 10]
   enableTraceability: boolean
   enableSourceTracerInfer: boolean // 溯源推理功能开关
@@ -59,6 +61,12 @@ export interface DeepSearchConfig {
   // 模板配置
   enableTemplate: boolean // 是否启用模板
   selectedTemplateId?: number // 选中的模板ID
+
+  // 模型配置（可选，undefined 表示未配置）
+  generalModelId?: string // 通用模型ID（与对话框双向同步）
+  planUnderstandingModelId?: string // 计划理解模型ID
+  infoCollectingModelId?: string // 信息收集模型ID
+  writingCheckingModelId?: string // 写作检查模型ID
 }
 
 export interface AgentConfigDialogProps {
@@ -74,6 +82,9 @@ export interface AgentConfigDialogProps {
   modelConfigId?: number
   // 是否是首次配置模式（配置完成后才选中智能体）
   isFirstConfig?: boolean
+  // 模型配置相关
+  availableModels?: PromptModel[]
+  modelsLoading?: boolean
 }
 
 // ==================== 辅助组件 ====================
@@ -117,7 +128,7 @@ const RangeSlider: React.FC<{
   max: number
   onChange: (value: number) => void
   step?: number
-}> = ({ label, description, value, min, max, onChange, step = 1 }) => {
+}> = ({ description, value, min, max, onChange, step = 1 }) => {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -147,10 +158,12 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
   savedConfigs = {},
   spaceId = '',
   modelConfigId = -1,
-  isFirstConfig = false
+  isFirstConfig = false,
+  availableModels = [],
+  modelsLoading = false,
 }) => {
   const { t } = useTranslation()
-  const { snackbar, closeSnackbar } = useUnifiedSnackbar()
+  const { snackbar, closeSnackbar, showError } = useUnifiedSnackbar()
   const [showSaved, setShowSaved] = useState(false)
   const [showUploadDialog, setShowUploadDialog] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -275,6 +288,14 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
         component: TemplateConfigTab,
         order: 3,
       },
+      {
+        id: 'model',
+        label: '模型配置',
+        icon: <Cpu className="w-5 h-5" />,
+        description: '模型配置管理',
+        component: ModelConfigTab,
+        order: 4,
+      },
     ])
     return manager
   })
@@ -321,6 +342,11 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
     // 规划章节数量验证
     if (config.planChapterCount < 1 || config.planChapterCount > 10) {
       errors.push(t('apps.config.validation.chapterCountRange'))
+    }
+
+    // 通用模型验证（必选项）
+    if (!config.generalModelId) {
+      errors.push(t('apps.config.model.general.required'))
     }
 
     // 综合搜索模式：需要同时配置搜索引擎和知识库
@@ -376,6 +402,7 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
     }
 
     onSave(agent.id, config)
+
     setShowSaved(true)
     setTimeout(() => {
       setShowSaved(false)
@@ -692,10 +719,7 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
 
       const errorMessage = err instanceof Error ? err.message : t('apps.config.engine.test.networkError')
 
-      snackbar({
-        message: errorMessage,
-        severity: 'error',
-      })
+      showError(errorMessage)
     } finally {
       setIsTesting(false)
     }
@@ -820,7 +844,7 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
                     onShowKnowledgeBaseSelector: handleShowKnowledgeBaseSelector,
                     onRemoveKnowledgeBase: handleRemoveKnowledgeBase,
                     embeddingModelError,
-                  } : {
+                  } : activeTab === 'template' ? {
                     config,
                     updateConfig,
                     errors,
@@ -833,6 +857,15 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
                     onDeleteTemplate: handleDeleteTemplate,
                     onShowUploadDialog: () => setShowUploadDialog(true),
                     onViewTemplate: handleViewTemplate,
+                  } : {
+                    // model tab
+                    config,
+                    updateConfig,
+                    errors,
+                    disabled: false,
+                    availableModels,
+                    modelsLoading,
+                    spaceId: spaceId || '',
                   }
                 }
               />
@@ -986,7 +1019,6 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
       <TemplateViewDialog
         open={viewDialog.isOpen}
         onClose={() => setViewDialog(prev => ({ ...prev, isOpen: false }))}
-        templateId={viewDialog.templateId}
         templateName={viewDialog.templateName}
         templateDesc={viewDialog.templateDesc}
         templateContent={viewDialog.templateContent}
@@ -1320,13 +1352,13 @@ const WebSearchEngineSelectorDialog: React.FC<WebSearchEngineSelectorDialogProps
                                 ? 'bg-green-100 text-green-800'
                                 : 'bg-gray-200 text-gray-600'
                             }`}>
-                              {engine.isActive ? '启用' : '禁用'}
+                              {engine.isActive ? t('apps.config.engine.status.enabled') : t('apps.config.engine.status.disabled')}
                             </span>
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
                           {onTestEngine && (
-                            <Tooltip title="测试">
+                            <Tooltip title={t('apps.config.engine.action.test')}>
                               <IconButton
                                 size="small"
                                 onClick={(e) => {
@@ -1339,20 +1371,20 @@ const WebSearchEngineSelectorDialog: React.FC<WebSearchEngineSelectorDialogProps
                               </IconButton>
                             </Tooltip>
                           )}
-                          <Tooltip title="编辑">
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onEditEngine(engine.id)
-                              }}
-                              className={`text-gray-700 hover:text-blue-600 hover:bg-blue-50 ${isDisabled ? 'opacity-60' : ''}`}
-                            >
-                              <Edit className="w-4 h-4" />
-                            </IconButton>
+                          <Tooltip title={t('apps.config.engine.action.edit')}>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onEditEngine(engine.id)
+                                }}
+                                className={`text-gray-700 hover:text-blue-600 hover:bg-blue-50 ${isDisabled ? 'opacity-60' : ''}`}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </IconButton>
                           </Tooltip>
                           {onToggleEngineStatus && (
-                            <Tooltip title={engine.isActive ? '禁用' : '启用'}>
+                            <Tooltip title={engine.isActive ? t('apps.config.engine.action.disable') : t('apps.config.engine.action.enable')}>
                               <IconButton
                                 size="small"
                                 onClick={(e) => {
@@ -1369,7 +1401,7 @@ const WebSearchEngineSelectorDialog: React.FC<WebSearchEngineSelectorDialogProps
                             </Tooltip>
                           )}
                           {selectedId !== engine.id && (
-                            <Tooltip title="删除">
+                            <Tooltip title={t('apps.config.engine.action.delete')}>
                               <IconButton
                                 size="small"
                                 onClick={(e) => {
@@ -1623,7 +1655,7 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
                       type="button"
                       onClick={() => handlePresetSelect(preset)}
                       className={`
-                        px-3 py-2 ${RADIUS_BUTTON} text-xs font-medium transition-all duration-200 border
+                        px-3 py-2 ${RADIUS_BUTTON} text-xs font-medium whitespace-pre-line leading-tight transition-all duration-200 border
                         ${engineName === preset.name
                           ? 'bg-blue-50 border-blue-200 text-blue-700'
                           : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'

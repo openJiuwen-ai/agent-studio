@@ -24,7 +24,7 @@ def _truncate_data(data: Any, max_length: int = MAX_OUTPUT_LENGTH) -> str:
     """
     if data is None:
         return ""
-    
+
     try:
         if isinstance(data, str):
             text = data
@@ -32,11 +32,11 @@ def _truncate_data(data: Any, max_length: int = MAX_OUTPUT_LENGTH) -> str:
             text = json.dumps(data, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
         text = str(data)
-    
+
     if len(text) > max_length:
         truncation_warning = f"\n...[Content truncated: exceeded {max_length} characters]"
         text = text[:max_length - len(truncation_warning)] + truncation_warning
-    
+
     return text
 from openjiuwen.core.session.stream import TraceSchema, OutputSchema
 from openjiuwen.core.session.tracer.span import TraceAgentSpan, TraceWorkflowSpan
@@ -62,7 +62,7 @@ def _workflowspan_2_tracedetail(business_type: str, workflowspan: TraceWorkflowS
     span_name = workflowspan.component_name
     if mapping and workflowspan.invoke_id in mapping:
         span_name = mapping[workflowspan.invoke_id]
-    
+
     return TraceDetail(
         space_id="",
         business_id="",  # 填入agent/workflow名字
@@ -93,7 +93,7 @@ def _agentspan_2_tracedetail(business_type: str, agentspan: TraceAgentSpan, mapp
     span_name = agentspan.name
     if mapping and agentspan.invoke_type in mapping:
         span_name = mapping[agentspan.invoke_type]
-    
+
     return TraceDetail(
         space_id="",
         business_id="",  # 填入agent/workflow名字
@@ -193,6 +193,17 @@ def get_trace_workflow_input(data, output_value=None):
     return inputs_value
 
 
+def map_trace_execute_status(status: Optional[str]) -> ExecuteStatus:
+    """将底层 trace status 映射为前端可识别执行状态。"""
+    if status == "start":
+        return ExecuteStatus.Start
+    if status in "interrupted":
+        return ExecuteStatus.Interrupted
+    if status == "agent":
+        return ExecuteStatus.Agent
+    return ExecuteStatus.Finish
+
+
 def result_convert(chunk: Any, business_type: str, mapping: Optional[Dict[str, str]] = None) -> tuple[None, None] | tuple[Any, TraceWorkflowSpan, TraceDetail] | \
                                                       tuple[Any, TraceAgentSpan, TraceDetail] | tuple[Any, None, None] | \
                                                       tuple[Any, None]:
@@ -216,7 +227,7 @@ def result_convert(chunk: Any, business_type: str, mapping: Optional[Dict[str, s
         component_name = data.component_name
         if mapping and data.invoke_id in mapping:
             component_name = mapping[data.invoke_id]
-        
+
         # 将映射后的组件名称设置回data中，确保trace log使用正确的名称
         data.component_name = component_name
 
@@ -228,7 +239,7 @@ def result_convert(chunk: Any, business_type: str, mapping: Optional[Dict[str, s
                 version="",
                 description="",
 
-                status=ExecuteStatus.Start if data.status == "start" else ExecuteStatus.Finish,
+                status=map_trace_execute_status(data.status),
 
                 inputs=input_value,
                 outputs=output_value,
@@ -445,7 +456,7 @@ async def save_trace_details(index: WorkflowId | AgentId, tracedetails: List[Tra
     """
     if not tracedetails:
         return
-    
+
     # 设置space_id和business_id
     for tracedetail in tracedetails:
         tracedetail.space_id = index.space_id
@@ -453,7 +464,7 @@ async def save_trace_details(index: WorkflowId | AgentId, tracedetails: List[Tra
             tracedetail.business_id = index.workflow_id
         else:
             tracedetail.business_id = index.agent_id
-    
+
     # 使用批量保存
     trace_detail_repository.create_trace_details(tracedetails)
 

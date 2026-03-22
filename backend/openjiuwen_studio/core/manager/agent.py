@@ -819,34 +819,34 @@ def agent_meta_update(
     )
 
 
-async def get_agent_publish_status(agent_id: str, user_id: str, space_id: str) -> List[Dict[str, Any]]:
+async def get_agent_publish_status(agent_id: str, user_id: str, space_id: str) -> Dict[str, Any]:
     """从runtime中获取当前agent_id发布情况"""
     try:
-        res = []
+        res = {}
         # 获取agent id对应deployment id和版本
         deploy_infos = await get_deploy_info(agent_id, space_id)
         for deploy_info in deploy_infos:
             version = deploy_info.get("version")
 
-            # 从runtime获取最新发布状态, 正常情况下，同一个agentid+version能且只能发布一次
-            # 同一个agentid+version发布多次且同时存在，res里会有多条数据，判断状态会用到最早那条
+            # 从runtime获取最新发布状态, 正常情况下，同一个agentid能且只能发布一次
+            # 同一个agentid发布多次且同时存在，res里会有多条数据，取create_at最晚那条数据
             deploy_detail = await get_agent_deploy_detail(deploy_info.get("deployment_id"), user_id, space_id)
             published_flag = deploy_detail.get("status")
 
-            res.append({
-                'agent_id': agent_id,
+            res[agent_id] = {
                 'version': version,
                 'published_flag': published_flag
-            })
+            }
         return res
     except Exception as e:
         logger.warning(f"Failed to get runtime publish status for agent {agent_id}: {e}")
         # 出现异常时返回未发布状态
-        return [{
-            'agent_id': agent_id,
-            'version': None,
-            'published_flag': "false"
-        }]
+        return {
+            agent_id: {
+                'version': None,
+                'published_flag': "false"
+            }
+        }
 
 
 def map_agent_publish_status(agent_id: str, agent_version: str, agent_publish_status_list: List[Dict[str, Any]]) -> str:

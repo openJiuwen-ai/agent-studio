@@ -801,6 +801,27 @@
       "cancelledTip": "已取消",
       "unknownTip": "状态未知"
     },
+    "outlineInteraction": {
+      "researchOutline": "研究大纲",
+      "waitingForConfirm": "等待确认",
+      "confirmed": "已确认",
+      "cancelled": "已取消",
+      "modifyTip": "基于以上分析，我为您生成了一份研究大纲，您可以对大纲进行手动编辑或直接在下方对话框中输入修改意见。大纲确认无误后点击“开始研究”。",
+      "startResearch": "开始研究",
+      "edit": "编辑",
+      "editOutline": "大纲编辑",
+      "addSection": "新增章节",
+      "chapter": "第",
+      "chapterLabel": "第{{index}}章",
+      "sectionTitle": "标题",
+      "sectionDescription": "摘要",
+      "titlePlaceholder": "请输入章节标题",
+      "descriptionPlaceholder": "请输入章节摘要",
+      "cancelEdit": "取消",
+      "saveOutline": "保存",
+      "editAndRevisePrompt": "根据我编辑的内容，修改大纲",
+      "remainingRoundsWarning": "当前剩余修改次数：{{count}}次"
+    },
     "chart": {
       "mermaidError": "Mermaid 图表错误",
       "syntaxError": "Mermaid 语法错误",
@@ -840,15 +861,55 @@
         "general": "通用配置",
         "search": "搜索配置",
         "template": "模板配置",
+        "model": "模型配置",
         "generalDesc": "交互、规划等基础设置",
         "searchDesc": "联网增强引擎与结果设置",
         "templateDesc": "报告模板管理",
         "needsConfig": "需配置"
       },
+      "model": {
+        "general": {
+          "title": "基础配置",
+          "label": "通用模型",
+          "description": "建议使用综合能力较强的模型，适配全部模块",
+          "notSelected": "未选择模型",
+          "required": "通用模型为必选项"
+        },
+        "advanced": {
+          "title": "高级配置",
+          "expand": "展开配置",
+          "collapse": "收起配置",
+          "info": "未选择特定模型的模块，默认使用通用模型进行研究"
+        },
+        "outline": {
+          "label": "生成大纲",
+          "description": "",
+          "recommendation": "建议使用推理模型，理解用户意图，减少幻觉"
+        },
+        "infoCollecting": {
+          "label": "信息收集",
+          "description": "",
+          "recommendation": "简单模型即可，快速总结收集的信息"
+        },
+        "reportWriting": {
+          "label": "报告撰写",
+          "description": "",
+          "recommendation": "建议使用编程、数学能力较强的模型"
+        },
+        "useGeneral": "未选择",
+        "selectModel": "选择模型",
+        "clear": "清除选择",
+        "test": {
+          "success": "模型 {{modelName}} 测试成功",
+          "failed": "模型 {{modelName}} 测试失败，模型不可用"
+        }
+      },
       "general": {
         "interactionSettings": "交互设置",
-        "enableHumanInteraction": "启用人机交互",
-        "enableHumanInteractionDesc": "执行时询问确认",
+        "enableHumanInteraction": "启用问答交互",
+        "enableHumanInteractionDesc": "在问答过程中与用户交互确认",
+        "outlineInteractionEnabled": "启用大纲交互",
+        "outlineInteractionEnabledDesc": "允许用户在大纲阶段进行修改",
         "enableTraceability": "启用溯源",
         "enableTraceabilityDesc": "显示信息来源",
         "enableSourceTracerInfer": "启用溯源推理",
@@ -879,7 +940,8 @@
         "webModeRequires": "联网增强模式下必须选择一个联网增强引擎",
         "localModeRequires": "本地搜索模式下必须选择至少一个知识库",
         "webResultCountRange": "联网增强结果数量必须在 1-10 之间",
-        "localResultCountRange": "本地搜索结果数量必须在 1-10 之间"
+        "localResultCountRange": "本地搜索结果数量必须在 1-10 之间",
+        "generalModelRequired": "通用模型为必选项，请先选择模型"
       },
       "engine": {
         "select": "选择联网增强引擎",
@@ -902,6 +964,17 @@
         "saving": "保存中...",
         "cancel": "取消",
         "confirm": "确认",
+        "status": {
+          "enabled": "启用",
+          "disabled": "禁用"
+        },
+        "action": {
+          "test": "测试",
+          "edit": "编辑",
+          "delete": "删除",
+          "enable": "启用",
+          "disable": "禁用"
+        },
         "error": {
           "selectType": "请选择一个联网增强引擎类型",
           "invalidName": "引擎名称必须是预设值之一",
@@ -909,7 +982,7 @@
         },
         "presets": {
           "xunfei": "讯飞搜索",
-          "petal": "花瓣搜索",
+          "petal": "小艺AI问答\n联网增强",
           "tavily": "Tavily",
           "google": "Google",
           "custom": "自定义"
@@ -2161,6 +2234,10 @@
     "configInfo": "配置信息",
     "testCompletion": "测试完成",
     "testFailed": "测试失败",
+    "modelName": "模型",
+    "promptText": "提示词",
+    "averageResponseTime": "平均响应时间",
+    "unknownError": "未知错误",
     "modelList": {
       "title": "模型列表",
       "noModels": "暂无模型",
@@ -4019,8 +4096,9 @@
         "loading": "加载模型中...",
         "noModels": "暂无可用模型",
         "providedBy": "由{{vendor}}提供",
-        "systemBuiltIn": "系统内置",	 
-         "protocol": "协议"
+        "systemBuiltIn": "系统内置",
+        "protocol": "协议",
+        "validating": "模型连通性验证中..."
       },
       "quickOptimizeDialog": {
         "title": "快捷优化",

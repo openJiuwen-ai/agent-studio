@@ -23,6 +23,7 @@ export enum MessageType {
   // 特殊类型
   ERROR = 'error',            // 错误信息
   INTERRUPT = 'interrupt',    // 中断等待用户输入
+  OUTLINE_INTERACTION = 'outline_interaction', // 大纲交互等待用户确认
 }
 
 export enum TaskStatus {
@@ -63,6 +64,12 @@ const LEGACY_FINAL_REPORT_TITLES = ['最终报告', 'Final Report'] as const;
 // ===== SSE超时监控配置 =====
 // SSE超时时间（分钟）- 超过这个时间没有收到SSE事件，将标记未完成消息为FAILED
 export const SSE_TIMEOUT_MINUTES = 30;
+
+// ===== 大纲交互常量 =====
+// 大纲最大修改次数限制
+export const OUTLINE_INTERACTION_MAX_ROUNDS = 100;
+// 大纲交互提醒阈值（剩余次数小于等于该值时提醒）
+export const OUTLINE_INTERACTION_WARNING_THRESHOLD = 3;
 
 /**
  * 判断消息是否为最终报告
@@ -206,6 +213,14 @@ export interface ConversationStore {
 
   // ========== 连续对话系列状态 ==========
   SESSION_CONVERSATION_ID: string | null;  // 连续对话系列的conversationId（null表示非连续对话）
+
+  // ========== 大纲交互状态 ==========
+  pendingOutlineInteraction: {
+    messageId: string;
+    userMessage: string;
+    backendMessage?: string;
+    interruptFeedback: string;
+  } | null;  // 待处理的大纲交互接受请求
 
   // ========== Conversation 层级：查询函数 ==========
 
@@ -513,6 +528,21 @@ export interface ConversationStore {
    * @param conversationId 连续对话系列的conversationId
    */
   setSessionConversationId: (conversationId: string | null) => void;
+
+  /**
+   * 触发大纲交互接受
+   * @param messageId 消息ID
+   * @param userMessage 用户消息
+   * @param backendMessage 发送给后端 message 字段的数据
+   * @param interruptFeedback 中断反馈标识
+   */
+  triggerOutlineInteractionAccept: (messageId: string, userMessage: string, backendMessage?: string, interruptFeedback?: string) => void;
+
+  /**
+   * 清除待处理的大纲交互
+   */
+  clearPendingOutlineInteraction: () => void;
+
   /**
    * 更新当前 MessageItems 状态为 CANCELLED（用于 DeepSearch 取消功能）
    * 同时更新所有子消息的状态，确保 UI 正确显示取消状态
@@ -558,6 +588,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   lastSSEEventTime: null,
   sseTimeoutCheckInterval: null,
   SESSION_CONVERSATION_ID: null,
+  pendingOutlineInteraction: null,
 
   // ========== Conversation 层级：查询函数 ==========
 
@@ -1050,13 +1081,6 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
     // 如果最后一个MessageItems是用户消息，或者不存在，创建新的系统MessageItems
     if (!lastMessageItems || get().getMessageItemsIsUser(lastMessageItems)) {
-      // 在创建新的 MessageItems 之前，检查是否存在已取消的非用户 MessageItems
-      // 如果存在，说明用户已取消对话，不应该继续添加消息
-      const prevMessageItems = currentMessageItemsList[currentMessageItemsList.length - 2];
-      if (prevMessageItems && !get().getMessageItemsIsUser(prevMessageItems) && prevMessageItems.status === TaskStatus.CANCELLED) {
-        console.log('[addSystemMessage] Previous MessageItems is cancelled, skipping adding new message');
-        return null;
-      }
       messageItemsId = get().generateMessageItemsId();
       lastMessageItems = {
         id: messageItemsId,
@@ -2226,6 +2250,14 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
    */
   setSessionConversationId: (conversationId: string | null) => {
     set({ SESSION_CONVERSATION_ID: conversationId });
+  },
+
+  triggerOutlineInteractionAccept: (messageId: string, userMessage: string, backendMessage?: string, interruptFeedback: string = 'accepted') => {
+    set({ pendingOutlineInteraction: { messageId, userMessage, backendMessage, interruptFeedback } });
+  },
+
+  clearPendingOutlineInteraction: () => {
+    set({ pendingOutlineInteraction: null });
   },
 
   /**

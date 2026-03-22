@@ -489,40 +489,56 @@ The memory and knowledge base features require an embedding model. The steps bel
 
 * Click “API Key Management” and follow the instructions to obtain an API.
 
-### <a id="windows-sandbox"></a> Question 2: How to enable the sandbox feature
+### <a id="windows-sandbox"></a> Question 2: How to Enable the Sandbox Feature
 
-If you need to enable code node or code plugin tool, the sandbox service is required, do the following:
+To use code plugins or run code nodes in workflows, you must enable the sandbox service. Follow these steps:
 
-1. Refer to `sandbox_server/python_server/.env.example`, and create a `.env` file under `sandbox_server/python_server`, for example:
+1. **Configure the sandbox dependency environment**
+
+   The sandbox service uses a single configuration to specify the Python and JavaScript interpreters and dependencies used when executing code. If you skip this step, the system default Python and JavaScript environments are used.
+
+   Dependency configuration files:
+
+   - Python: `sandbox_server/sandbox/openjiuwen_sandbox_server/conf/dependency/pyproject.toml`
+   - JavaScript: `sandbox_server/sandbox/openjiuwen_sandbox_server/conf/dependency/package.json`
+
+   After setting the interpreter versions and dependency lists in these files, run the following command from the `sandbox_server/sandbox` directory to build and install the dependency environment:
+
+   ```bash
+   python -m openjiuwen_sandbox_server.app.build_dependency
+   ```
+
+   The default install directory is `%LOCALAPPDATA%\sandbox\dependencies`. To use a different directory, set the `DEPENDENCY_DIR` environment variable before running the command above.
+
+2. **Start the sandbox service**
+
+   On Windows, only **local** execution mode is supported: code runs directly on the host. Using `sandbox_server/sandbox/.env.example` as a reference, create a `.env` file under `sandbox_server/sandbox`. Example:
 
    ```env
    HOST=0.0.0.0
    PORT=5001
+   ENABLE_LINUX_SANDBOX=false
    ```
 
-   Then start the Python sandbox service by running the `sandbox_server/python_server/openjiuwen_sandbox_pyserver/kernel.py` script. `HOST` and `PORT` are the IP and port for the Python sandbox service.
+   After saving the config, start the sandbox service by running `sandbox_server/sandbox/openjiuwen_sandbox_server/server.py`.
 
-2. Start the JS sandbox service by running the `sandbox_server/js_server/kernel.js` script. The IP and port can be set as follows:
+3. **Start the sandbox gateway**
 
-   ```javascript
-   const PORT = process.env.PORT || 5002;
-   server.listen(PORT, "0.0.0.0", () => {
-     console.log(`✅ JS sandbox listening on http://0.0.0.0:${PORT}`);
-   });
-   ```
-
-3. Refer to `sandbox_server/gateway/.env.example`, and create a `.env` file under `sandbox_server/gateway`, for example:
+   Using `sandbox_server/gateway/.env.example` as a reference, create a `.env` file under `sandbox_server/gateway`. Example:
 
    ```env
    HOST=0.0.0.0
    PORT=8188
-   PYTHON_SANDBOX_URL=http://localhost:5001/run
-   JS_SANDBOX_URL=http://localhost:5002/run
+   SANDBOX_SERVER_URL=http://localhost:5001/run
    ```
 
-   `PYTHON_SANDBOX_URL` and `JS_SANDBOX_URL` should point to the Python and JS sandbox services you started earlier. Then start the sandbox gateway service by running the `sandbox_server/gateway/openjiuwen_sandbox_gateway/server.py` script.
+   `HOST` and `PORT` are the gateway bind address and port; `SANDBOX_SERVER_URL` is the URL of the sandbox service started in step 2.
 
-4. After running the sandbox service, please configure sandbox's url in `.env`, such as: `CODE_SANDBOX_URL=http://localhost:8188/run`.
+   Then run `sandbox_server/gateway/openjiuwen_sandbox_gateway/server.py` to start the sandbox gateway.
+
+4. **Configure the application-side gateway URL**
+
+   In your project’s `.env`, set the sandbox gateway URL, for example: `CODE_SANDBOX_URL=http://localhost:8188/run`.
 
 ### <a id="windows-plugin"></a> Question 3: How to Enable the Plugin Server
 

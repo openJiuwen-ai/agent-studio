@@ -493,7 +493,7 @@ const WorkflowsPage: React.FC = () => {
           total: totalItems,
           currentPage: pagerState.page,
           pageSize: pagerState.pageSize,
-          pageSizeOptions: [20, 60, 100, 200],
+          pageSizeOptions: [20, 60, 100],
         }}
         onPagerChange={(page, pageSize) => {
           setPagerState({ page, pageSize })
