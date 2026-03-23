@@ -392,6 +392,7 @@ class ConfigAdapter:
             ReActAgentConfig (来自 openjiuwen.core.single_agent.agents.react_agent)
         """
         from openjiuwen.core.single_agent.agents.react_agent import ReActAgentConfig as RuntimeReActAgentConfig
+        from openjiuwen.core.foundation.llm.schema.config import ModelClientConfig, ModelRequestConfig
         
         model_data = config.get("model", {})
         model_info_data = model_data.get("model_info", {})
@@ -400,13 +401,34 @@ class ConfigAdapter:
         if isinstance(prompt_template, str):
             prompt_template = [{"role": "system", "content": prompt_template}]
         
+        model_name = model_data.get("model_name", "")
+        model_provider = model_data.get("model_provider", "openai")
+        api_key = model_info_data.get("api_key", "")
+        api_base = model_info_data.get("base_url", "")
+        
+        model_client_config = ModelClientConfig(
+            client_provider=model_provider,
+            api_key=api_key,
+            api_base=api_base,
+            verify_ssl=False
+        )
+        
+        model_config_obj = ModelRequestConfig(
+            model_name=model_name,
+            temperature=model_info_data.get("temperature", 0.7),
+            top_p=model_info_data.get("top_p", 0.9),
+            max_tokens=model_info_data.get("max_tokens", 2000)
+        )
+        
         return RuntimeReActAgentConfig(
             mem_scope_id="",
-            model_name=model_data.get("model_name", ""),
-            model_provider=model_data.get("model_provider", "openai"),
-            api_key=model_info_data.get("api_key", ""),
-            api_base=model_info_data.get("base_url", ""),
+            model_name=model_name,
+            model_provider=model_provider,
+            api_key=api_key,
+            api_base=api_base,
             prompt_template_name=config.get("prompt_template_name", ""),
             prompt_template=prompt_template,
             max_iterations=config.get("constraint", {}).get("max_iteration", 5),
+            model_client_config=model_client_config,
+            model_config_obj=model_config_obj,
         )
