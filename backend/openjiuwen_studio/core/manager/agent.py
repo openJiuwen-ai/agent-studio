@@ -859,14 +859,9 @@ def map_agent_publish_status(
     """
     if isinstance(agent_publish_status_payload, dict):
         entry = agent_publish_status_payload.get(agent_id)
-        if isinstance(entry, dict) and agent_version == entry.get("version"):
+        if isinstance(entry, dict):
             return entry.get("published_flag") or "false"
         return "false"
-    for row in agent_publish_status_payload:
-        if not isinstance(row, dict):
-            continue
-        if agent_id == row.get("agent_id") and agent_version == row.get("version"):
-            return row.get("published_flag") or "false"
     return "false"
 
 

@@ -4,7 +4,7 @@
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from openjiuwen.core.common.logging import logger
 
@@ -17,9 +17,27 @@ from openjiuwen_studio.schemas.runtime import ResponseModel, DeployRequest
 runtime_router = APIRouter()
 
 
+async def _background_deploy_and_save(
+    agent_id: str,
+    agent_version: str,
+    payload: dict,
+    space_id: str,
+    user_id: str,
+):
+    """后台执行完整的部署流程（包括 runtime 调用和数据库保存）"""
+    try:
+        deploy_result_str = await rtm.deploy_to_runtime(payload, user_id, space_id)
+        logger.info(f"Agent deployed successfully: agent_id={agent_id}")
+        await rtm.save_deploy_info(deploy_result_str, agent_version, agent_id, space_id)
+        logger.info(f"Deployment completed in background: agent_id={agent_id}")
+    except Exception as e:
+        logger.error(f"Background deployment failed: agent_id={agent_id}, error={e}")
+
+
 @runtime_router.post("/deploy", response_model=ResponseModel[dict])
 async def deploy(
     request: DeployRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
 ):
     try:
@@ -38,19 +56,26 @@ async def deploy(
         data = current_user.get("data", {})
         user_id = data.get("user_id_str", "")
         payload = {"file": agent_ir, "name": agent_name, "deployer_type": deployer_type, "port": port}
-        deploy_result_str = await rtm.deploy_to_runtime(payload, user_id, space_id)
-        logger.info(f"Agent deployed successfully: agent_id={agent_id}")
-
-        # 解析 deploy_result 字符串为字典
-        deploy_result = json.loads(deploy_result_str)
-
-        # 更新deployment表里
-        _ = await rtm.save_deploy_info(deploy_result_str, agent_version, agent_id, space_id)
+        # 将整个部署流程放到后台执行
+        background_tasks.add_task(
+            _background_deploy_and_save,
+            agent_id,
+            agent_version,
+            payload,
+            space_id,
+            user_id
+        )
 
         res = ResponseModel(
             code=status.HTTP_200_OK,
             message="Deployment successful",
-            data=deploy_result,
+            data={
+                "status": "starting",
+                "message": "Deployment initiated in background",
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "note": "Poll /api/v1/agents/list to check status"
+            },
         )
         return handle_response(res)
     except Exception as e:
@@ -83,7 +108,7 @@ async def remove(
 
         res = ResponseModel(
             code=status.HTTP_200_OK,
-            message="Deployment successful"
+            message="Delete deployment successful"
         )
         return handle_response(res)
     except Exception as e:
@@ -109,7 +134,7 @@ async def get_deploy_list(
 
         res = ResponseModel(
             code=status.HTTP_200_OK,
-            message="Deployment successful",
+            message="Get deployment list successful",
             data=deploy_list
         )
         return handle_response(res)
@@ -137,7 +162,7 @@ async def get_deploy_detail(
 
         res = ResponseModel(
             code=status.HTTP_200_OK,
-            message="Deployment successful",
+            message="Get deployment detail successful",
             data=deploy_detail
         )
         return handle_response(res)
