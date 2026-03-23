@@ -16,6 +16,7 @@ interface AgentGridViewProps {
   onCopy: (agent: Agent) => void
   onDelete: (agent: Agent) => void
   onExport?: (agent: Agent) => void
+  onPublish?: (agent: Agent) => void
   availableModelNames: Set<string>
   modelsLoading?: boolean
 }
@@ -32,6 +33,7 @@ export const AgentGridView: React.FC<AgentGridViewProps> = ({
   onCopy,
   onDelete,
   onExport,
+  onPublish,
   availableModelNames,
   modelsLoading = false,
 }) => {
@@ -63,6 +65,7 @@ export const AgentGridView: React.FC<AgentGridViewProps> = ({
             onCopy={() => onCopy(agent)}
             onDelete={() => onDelete(agent)}
             onExport={onExport ? () => onExport(agent) : undefined}
+            onPublish={onPublish ? () => onPublish(agent) : undefined}
             isUpdating={isUpdatingThis}
             isModelAvailable={isModelAvailable(agent)}
             modelsLoading={modelsLoading}

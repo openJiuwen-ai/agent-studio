@@ -1,0 +1,61 @@
+{
+    "publish": {
+        "noDescription": "No description",
+        "types": {
+            "chat": "Chat Experience",
+            "api": "API Call"
+        },
+        "actions": {
+            "offline": "Offline"
+        },
+        "messages": {
+            "agentNotFound": "Agent not found",
+            "offlineSuccess": "Offline successfully"
+        },
+        "offlineConfirm": {
+            "title": "Confirm Offline",
+            "description": "After offline, this agent will no longer be accessible via the current deployment endpoint. Continue?",
+            "cancel": "Cancel",
+            "confirm": "Confirm Offline"
+        },
+        "chat": {
+            "title": "Chat Experience",
+            "description": "Chat experience page, to be completed",
+            "emptyStateText": "No messages yet",
+            "emptyStateSubtext": "Send a message to start the conversation",
+            "inputPlaceholder": "Enter your message...",
+            "newChat": "New chat",
+            "newChatDivider": "New chat below",
+            "clear": "Clear",
+            "send": "Send"
+        },
+        "api": {
+            "title": "API Call",
+            "description": "API call page, to be completed",
+            "callExample": "Call Example",
+            "shell": "Shell",
+            "python": "Python",
+            "inputParams": "Input Parameters",
+            "returnParams": "Return Parameters",
+            "requestConfig": "Request Config",
+            "returnParamsDesc": "Return Parameters",
+            "header": "Header",
+            "queryParams": "Query Params",
+            "bodyParams": "Body Params",
+            "sampleCode": "Sample Code",
+            "name": "Name",
+            "type": "Type",
+            "required": "Required",
+            "desc": "Description",
+            "expandAll": "Expand All",
+            "collapseAll": "Collapse",
+            "authorize": "Authorize",
+            "exampleLabel": "Example",
+            "enterPlaceholder": "Please enter {{name}}",
+            "itemsSchema": "Item schema",
+            "switchExample": "Select example",
+            "copy": "Copy",
+            "copied": "Copied"
+        }
+    }
+}

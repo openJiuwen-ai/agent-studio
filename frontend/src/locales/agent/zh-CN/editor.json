@@ -52,13 +52,18 @@
       },
       "labels": {
         "historyVersionPrefix": "历史版本",
-        "lastSavedAt": "最近保存时间："
+        "lastSavedAt": "最近保存时间：",
+        "deploymentId": "部署id：",
+        "publishTime": "发布时间：",
+        "copyDeploymentIdAria": "复制部署id"
       },
       "buttons": {
         "save": "保存",
         "saving": "保存中...",
         "versionHistory": "版本历史",
-        "submitNewVersion": "提交新版本"
+        "publishManagement": "发布管理",
+        "submitNewVersion": "提交新版本",
+        "publish": "发布"
       },
       "messages": {
         "saveSuccess": "保存成功",
@@ -71,7 +76,8 @@
         "switchedToLatestContent": "已切换到当前最新内容",
         "switchedToVersion": "已切换到版本 {{version}}",
         "switchVersionFailed": "切换版本失败",
-        "publishSuccess": "提交成功"
+        "publishSuccess": "发布成功",
+        "submitVersionSuccess": "提交成功"
       }
     },
     "systemPrompt": {

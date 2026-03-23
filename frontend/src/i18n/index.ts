@@ -17,6 +17,9 @@ import workflowNodesZh from '../locales/workflow/zh-CN/nodes.json'
 import workflowCommonEn from '../locales/workflow/en-US/common.json'
 import workflowNodesEn from '../locales/workflow/en-US/nodes.json'
 
+import runtimeZh from '../locales/runtime/zh-CN.json'
+import runtimeEn from '../locales/runtime/en-US.json'
+
 const resources = {
   'zh-CN': {
     translation: {
@@ -28,6 +31,9 @@ const resources = {
       workflowCanvas: {
         ...workflowCommonZh,
         ...workflowNodesZh,
+      },
+      runtime: {
+        ...runtimeZh,
       },
     },
   },
@@ -41,6 +47,9 @@ const resources = {
       workflowCanvas: {
         ...workflowCommonEn,
         ...workflowNodesEn,
+      },
+      runtime: {
+        ...runtimeEn,
       },
     },
   },

@@ -1,0 +1,61 @@
+{
+    "publish": {
+        "noDescription": "暂无描述",
+        "types": {
+            "chat": "对话体验",
+            "api": "API调用"
+        },
+        "actions": {
+            "offline": "下架"
+        },
+        "messages": {
+            "agentNotFound": "智能体未找到",
+            "offlineSuccess": "下架成功"
+        },
+        "offlineConfirm": {
+            "title": "确认下架",
+            "description": "下架后该智能体将无法继续通过当前部署地址访问，是否继续下架？",
+            "cancel": "取消",
+            "confirm": "确认下架"
+        },
+        "chat": {
+            "title": "对话体验",
+            "description": "对话体验页面，待完善",
+            "emptyStateText": "暂无消息",
+            "emptyStateSubtext": "发送一条消息开始对话",
+            "inputPlaceholder": "输入消息...",
+            "newChat": "新对话",
+            "newChatDivider": "以下为新对话",
+            "clear": "清除",
+            "send": "发送"
+        },
+        "api": {
+            "title": "API调用",
+            "description": "API调用页面，待完善",
+            "callExample": "调用示例",
+            "shell": "Shell",
+            "python": "Python",
+            "inputParams": "入参说明",
+            "returnParams": "返回参数说明",
+            "requestConfig": "请求配置",
+            "returnParamsDesc": "返回参数说明",
+            "header": "Header",
+            "queryParams": "Query Params",
+            "bodyParams": "Body Params",
+            "sampleCode": "调用示例代码",
+            "name": "参数名",
+            "type": "类型",
+            "required": "必填",
+            "desc": "说明",
+            "expandAll": "展开全部",
+            "collapseAll": "收起",
+            "authorize": "授权",
+            "exampleLabel": "示例",
+            "enterPlaceholder": "请输入 {{name}}",
+            "itemsSchema": "项说明",
+            "switchExample": "选择示例",
+            "copy": "复制",
+            "copied": "已复制"
+        }
+    }
+}

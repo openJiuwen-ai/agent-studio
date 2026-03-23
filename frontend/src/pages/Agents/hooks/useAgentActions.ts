@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useUpdateAgent, useCopyAgent, AgentService } from '@test-agentstudio/api-client'
 import { useQueryClient } from 'react-query'
 import { useTranslation } from 'react-i18next'
@@ -22,6 +23,7 @@ interface ImportConflict {
 
 export function useAgentActions(refetchAgents?: () => void, snackbarHelpers?: SnackbarHelpers) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showSuccess, showError, showWarning } = snackbarHelpers || { showSuccess: () => {}, showError: () => {}, showWarning: () => {} }
   const { user } = useAuthStore()
@@ -173,6 +175,11 @@ export function useAgentActions(refetchAgents?: () => void, snackbarHelpers?: Sn
       console.error('Agent export exception:', error)
       showError(`${t('common.messages.agentExportException')}: ${error instanceof Error ? error.message : t('common.messages.unknownError')}`)
     }
+  }
+
+  // 发布管理函数
+  const handlePublish = (agent: Agent) => {
+    navigate(`/dashboard/agents/${agent.agent_id}/publish`)
   }
 
   const executeImport = async (importData: any, overwrite: boolean) => {
@@ -398,6 +405,9 @@ export function useAgentActions(refetchAgents?: () => void, snackbarHelpers?: Sn
 
     // Export
     handleExport,
+
+    // Publish
+    handlePublish,
 
     // Import
     isImporting,

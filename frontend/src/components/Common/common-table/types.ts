@@ -22,6 +22,7 @@ export interface TableOperation<T> {
   icon?: React.ReactNode | ((row: T, rowIndex: number) => React.ReactNode)
   tooltip?: React.ReactNode | ((row: T, rowIndex: number) => React.ReactNode)
   onClick?: (row: T, rowIndex: number) => void
+  visible?: boolean | ((row: T, rowIndex: number) => boolean)
   disabled?: boolean | ((row: T, rowIndex: number) => boolean)
   danger?: boolean
 }

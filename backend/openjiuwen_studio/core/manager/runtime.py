@@ -4,7 +4,9 @@
 
 import json
 import datetime
-from typing import Optional
+from typing import AsyncIterator, Optional
+from urllib.parse import urlparse
+import httpx
 from fastapi import HTTPException, status
 
 from openjiuwen.core.common.logging import logger
@@ -12,13 +14,43 @@ from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.schemas.agent import AgentGetVersion
 from openjiuwen_studio.core.thirdparty_client import RuntimeAgentClient
 from openjiuwen_studio.core.manager.repositories.jiuwen_base_repository import get_db_jw, JiuwenBaseRepository
-import openjiuwen_studio.core.manager.agent as mgr
 from openjiuwen_studio.models.runtime_info import RuntimeInfoDB
 
 
 # 依赖注入（或直接使用单例）
 def get_agent_client():
     return RuntimeAgentClient()  # 或全局单例
+
+
+def _normalize_runtime_port(port: object, url: object = None) -> int | None:
+    """
+    runtime_info.port 为整型列；Runtime 可能返回 '' 或 null，需转为 int 或 None。
+    若 port 无效，尝试从 url（如 http://localhost:8073/）解析端口。
+    """
+    p: int | None
+    if port is None:
+        p = None
+    elif isinstance(port, int):
+        p = port
+    elif isinstance(port, str):
+        s = port.strip()
+        if s == "":
+            p = None
+        else:
+            try:
+                p = int(s)
+            except ValueError:
+                p = None
+    else:
+        try:
+            p = int(port)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            p = None
+    if p is None and isinstance(url, str) and url.strip():
+        parsed = urlparse(url.strip())
+        if parsed.port is not None:
+            return parsed.port
+    return p
 
 
 async def get_agent_ir(
@@ -39,6 +71,9 @@ async def get_agent_ir(
     Returns:
         ResponseModel: 包含 agent_ir 数据的响应
     """
+    # 延迟导入，避免与 agent 模块循环依赖（agent 会引用本模块的 get_deploy_info 等）
+    import openjiuwen_studio.core.manager.agent as mgr
+
     # 构建请求参数
     req = {"agent_id": agent_id, "space_id": space_id, "agent_version": agent_version}
     res = mgr.agent_convert(AgentGetVersion(**req), current_user)
@@ -80,6 +115,7 @@ async def save_deploy_info(
         space_id,
 ) -> str:
     deploy_result = json.loads(deploy_result_str)
+    deploy_url = deploy_result.get("url") or ""
     runtime_info_data = {
         "deployment_id": deploy_result.get("deployment_id", ""),
         "space_id": space_id,
@@ -88,8 +124,8 @@ async def save_deploy_info(
         "type": deploy_result.get("type", ""),
         "name": deploy_result.get("name", ""),
         "status": deploy_result.get("status", ""),
-        "url": deploy_result.get("url", ""),
-        "port": deploy_result.get("port", ""),
+        "url": deploy_url,
+        "port": _normalize_runtime_port(deploy_result.get("port"), deploy_url),
         "is_delete": False,
     }
     # 存到新deployment表里
@@ -250,7 +286,93 @@ async def get_deploy_details(
             elif deploy_detail.status_code == 202:
                 _ = await unregister_deploy_info(deployment_id, space_id)
                 logger.info(f"Delete deploy detail for runtime server not found: deployment_id={deployment_id}")
-    return {"deploy_details": deploy_details}
+        return {"deploy_details": deploy_details}
+    else:
+        return {"deploy_details": []}
+
+
+def _runtime_query_url_from_base(base_url: str) -> str:
+    """将部署返回的 base（如 http://localhost:8100/）规范为 POST /query 地址。"""
+    t = (base_url or "").strip().rstrip("/")
+    if not t:
+        return ""
+    if t.endswith("/query"):
+        return t
+    return f"{t}/query"
+
+
+async def stream_deployed_agent_query(
+        agent_id: str,
+        space_id: str,
+        studio_user_id: str,
+        body: dict,
+) -> AsyncIterator[bytes]:
+    """
+    服务端转发聊天请求到已部署的 Runtime /query，避免浏览器直连 Runtime 触发 CORS。
+    """
+    client = get_agent_client()
+    res = await get_deploy_details(agent_id, None, studio_user_id, space_id, client)
+    details = (res or {}).get("deploy_details") or []
+    running = [
+        d for d in details
+        if str(d.get("status", "")).lower() == "running" and (d.get("url") or "").strip()
+    ]
+    chosen = running[0] if running else None
+    if not chosen and details:
+        for d in details:
+            if (d.get("url") or "").strip():
+                chosen = d
+                break
+    if not chosen:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No deployment with URL found for this agent",
+        )
+    target = _runtime_query_url_from_base(str(chosen.get("url", "")))
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deployment URL is empty",
+        )
+
+    forward = {k: v for k, v in body.items() if k != "agent_id"}
+    forward.setdefault("space_id", space_id)
+
+    timeout = httpx.Timeout(600.0, connect=30.0)
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as http:
+            async with http.stream(
+                "POST",
+                target,
+                json=forward,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "text/event-stream",
+                },
+            ) as resp:
+                if resp.status_code >= 400:
+                    err = await resp.aread()
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail=(
+                            f"Runtime returned {resp.status_code}: "
+                            f"{err.decode('utf-8', errors='replace')[:2000]}"
+                        ),
+                    )
+                async for chunk in resp.aiter_bytes():
+                    yield chunk
+    except httpx.HTTPStatusError as e:
+        err = await e.response.aread() if e.response else b""
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=err.decode("utf-8", errors="replace")[:2000],
+        ) from e
+    except httpx.RequestError as e:
+        logger.error(f"stream_deployed_agent_query: failed to reach {target}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to reach runtime: {e}",
+        ) from e
 
 
 async def get_agent_deploy_detail(

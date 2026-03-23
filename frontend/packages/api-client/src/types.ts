@@ -2290,6 +2290,74 @@ export interface AgentPublishResponse {
   }
 }
 
+// Runtime 部署请求类型
+export interface RuntimeDeployRequest {
+  agent_id: string
+  agent_name: string
+  agent_version: string
+  space_id: string
+  port?: string
+}
+
+// Runtime 部署结果类型
+export interface RuntimeDeployData {
+  deployment_id: string
+  type: string
+  name: string
+  status: string
+  url: string
+  port: number
+}
+
+// Runtime 部署响应类型
+export interface RuntimeDeployResponse {
+  code: number
+  message: string
+  data: RuntimeDeployData
+}
+
+// Runtime 部署详情请求类型
+export interface RuntimeDetailRequest {
+  agent_id: string
+  space_id: string
+}
+
+// Runtime 部署详情项
+export interface RuntimeDetailItem {
+  deployment_id: string
+  name: string
+  status: string
+  url: string
+  port: number
+  type: string
+  created_at: string
+  updated_at: string
+}
+
+// Runtime 部署详情响应类型
+export interface RuntimeDetailResponse {
+  code: number
+  message?: string
+  msg?: string
+  data: {
+    deploy_details: RuntimeDetailItem[]
+  }
+}
+
+// Runtime 下架请求类型
+export interface RuntimeRemoveRequest {
+  agent_id: string
+  space_id: string
+}
+
+// Runtime 下架响应类型
+export interface RuntimeRemoveResponse {
+  code: number
+  message?: string
+  msg?: string
+  data: Record<string, never>
+}
+
 // Agent版本列表请求类型
 export interface AgentVersionListRequest {
   agent_id: string
@@ -2301,6 +2369,7 @@ export interface AgentVersionInfo {
   agent_version: string
   version_description: string
   create_time: number
+  published_flag?: 'false' | 'pending' | 'running' | 'stopped' | 'failed'
 }
 
 // Agent版本列表响应类型

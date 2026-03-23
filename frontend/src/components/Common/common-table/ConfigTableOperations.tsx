@@ -24,8 +24,11 @@ export function ActionMenu<T extends object>({
   rowIndex,
   onClose,
 }: ActionMenuProps<T>) {
+  const visibleOperations = operations.filter(op =>
+    typeof op.visible === 'function' ? op.visible(row, rowIndex) : (op.visible ?? true),
+  )
   // Only show overflow operations (4th onwards), first 3 are shown as buttons
-  const overflowOperations = operations.slice(3)
+  const overflowOperations = visibleOperations.slice(3)
 
   const handleOperationClick = (op: TableOperation<T>) => {
     onClose()
@@ -107,8 +110,11 @@ export function ActionButtons<T extends object>({
   onOpenMenu,
   isMenuOpen,
 }: ActionButtonsRenderProps<T>) {
-  const primary = operations.slice(0, 3)
-  const overflow = operations.slice(3)
+  const visibleOperations = operations.filter(op =>
+    typeof op.visible === 'function' ? op.visible(row, rowIndex) : (op.visible ?? true),
+  )
+  const primary = visibleOperations.slice(0, 3)
+  const overflow = visibleOperations.slice(3)
 
   return (
     <Box

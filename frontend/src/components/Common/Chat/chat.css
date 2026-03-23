@@ -1,0 +1,451 @@
+@import '@assistant-ui/react-ui/styles/index.css';
+
+.agentstudio-chat {
+  --aui-background: 220 14% 96%;
+  --aui-foreground: 222 18% 16%;
+  --aui-border: 220 14% 86%;
+  --aui-muted-foreground: 220 6% 46%;
+  --agentstudio-chat-max-width: 930px;
+  /* 让 assistant-ui 真正使用我们的会话最大宽度 */
+  --aui-thread-max-width: var(--agentstudio-chat-max-width);
+
+  /* screenshot 风格：更轻、更“空” */
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  align-items: center;
+  height: 100%;
+  min-height: clamp(200px, 40vh, 360px);
+  display: flex;
+  flex-direction: column;
+  /* 使用 public/images/chat-bg.png 作为整页背景，并叠一层淡渐变保证可读性 */
+  background: linear-gradient(180deg, rgba(246, 247, 255, 0.72) 0%, rgba(243, 245, 255, 0.72) 60%, rgba(242, 243, 255, 0.78) 100%), url('/images/chat-bg.png');
+  /* 只让图片层 cover，渐变层保持默认（避免不同屏幕比例下渐变被缩放） */
+  background-size: auto, cover;
+  background-position:
+    0 0,
+    center;
+  background-repeat: no-repeat, no-repeat;
+}
+
+.agentstudio-chat .agentstudio-icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.65);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(15, 23, 42, 0.62);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    transform 120ms ease,
+    border-color 120ms ease;
+}
+.agentstudio-chat .agentstudio-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+}
+
+.agentstudio-chat .agentstudio-user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background:
+    radial-gradient(16px 16px at 30% 25%, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0) 60%), linear-gradient(135deg, #2dd4bf 0%, #38bdf8 45%, #a78bfa 100%);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Thread 区域：整体居中，顶部留白更大 */
+.agentstudio-chat .agentstudio-chat-thread {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  align-self: stretch;
+}
+
+.agentstudio-chat .aui-thread-root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  background: transparent !important; /* 去掉消息区域的灰底 */
+}
+
+/* 组件内滚动条（Thread viewport） */
+.agentstudio-chat .aui-thread-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+.agentstudio-chat .aui-thread-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+.agentstudio-chat .aui-thread-viewport::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.16);
+  border-radius: 4px;
+}
+.agentstudio-chat .aui-thread-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.22);
+}
+
+.agentstudio-chat .aui-thread-viewport {
+  padding: 20px 18px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* 整体对话列居中 */
+  gap: 16px;
+  background: transparent !important; /* 去掉消息区域的灰底 */
+}
+
+/* 有些版本会在 thread body / welcome 容器上设置底色，这里一并清掉 */
+.agentstudio-chat :is(.aui-thread-body, .aui-thread-welcome, .aui-thread-welcome-root) {
+  background: transparent !important;
+}
+
+/* 空状态容器避免按内容收缩，否则会导致 composer 跟着变窄 */
+.agentstudio-chat :is(.aui-thread-welcome, .aui-thread-welcome-root) {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* 限制消息宽度：居中的一列（像截图） */
+.agentstudio-chat :is(.aui-user-message-root, .aui-assistant-message-root) {
+  width: min(var(--agentstudio-chat-max-width), calc(100% - 8px));
+}
+
+/* 不要覆盖 assistant-ui 默认的 grid 布局
+ * 否则 ActionBar 和 avatar/name 的 grid-column 定位会错乱
+ */
+.agentstudio-chat .aui-user-message-root,
+.agentstudio-chat .aui-assistant-message-root {
+  display: grid !important;
+}
+
+/* 头像：更像截图左侧小圆点 */
+.agentstudio-chat .aui-avatar-root {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  background: #e1ebff;
+  box-shadow: none;
+  border: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* assistant-ui 的背景通常由 fallback 提供，这里强制统一背景色 */
+.agentstudio-chat .aui-assistant-message-root .aui-avatar-fallback {
+  background-color: #e1ebff !important;
+}
+
+/* 用户消息默认不渲染 avatar（只有 assistant 有 .aui-avatar-root），这里用伪元素补一个用户头像 */
+.agentstudio-chat .aui-user-message-root::before {
+  content: '';
+  grid-column-start: 2;
+  grid-row-start: 2;
+  justify-self: end;
+  align-self: start;
+  margin-top: 0.25rem;
+  margin-left: 1rem;
+  transform: translateY(-2px);
+
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #64748b 0%, #94a3b8 100%);
+  box-shadow: 0 8px 20px rgba(100, 116, 139, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+
+  background-image:
+    radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.95) 0 3px, transparent 3.5px),
+    radial-gradient(circle at 50% 78%, rgba(255, 255, 255, 0.95) 0 5px, transparent 5.5px), linear-gradient(135deg, #64748b 0%, #94a3b8 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+/* 消息气泡：更“白”、更轻 */
+.agentstudio-chat .aui-assistant-message-content {
+  width: 100%;
+  background: transparent !important;
+  border: none !important;
+  max-width: 100% !important;
+  border-radius: 14px !important;
+  /* 让文字起始位置与 ActionBar 更接近 */
+  padding: 25px 0px !important;
+  color: rgba(15, 23, 42, 0.88) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+/* AI 消息名称（来自 data-assistant-name） */
+.agentstudio-chat .aui-assistant-message-content[data-assistant-name]:not([data-assistant-name=''])::before {
+  /* 现在改由 .aui-assistant-message-root::after 统一定位 */
+  display: none !important;
+}
+
+/* AI 消息名称：与用户名称采用同一 top 值，保证相对头像高度一致 */
+.agentstudio-chat .aui-assistant-message-root {
+  position: relative;
+}
+
+/* AI名称*/
+.agentstudio-chat .aui-assistant-message-root:not([data-assistant-name=''])::after {
+  content: attr(data-assistant-name);
+  position: absolute;
+  top: 1rem;
+  /* avatar(26px) + 右侧间距(1rem) + 气泡内左 padding(1rem) */
+  left: calc(28px + 1rem);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 16px;
+  color: rgba(15, 23, 42, 0.75);
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* 用户名称：显示在用户气泡顶部，用于与用户头像对齐 */
+.agentstudio-chat .aui-user-message-root {
+  position: relative;
+}
+
+/* 用户名称：显示在气泡上方，与右侧头像对齐（不进入气泡内容区域） */
+.agentstudio-chat .aui-user-message-root::after {
+  content: var(--agentstudio-user-name);
+  position: absolute;
+  top: 1.5rem;
+  /* 把用户名挪到头像左侧 */
+  right: calc(1rem + 28px);
+  z-index: 3;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 16px;
+  color: rgba(15, 23, 42, 0.75);
+  pointer-events: none;
+}
+
+.agentstudio-chat .aui-user-message-content {
+  max-width: 88%;
+  background: #0a59f714 !important;
+  color: rgba(15, 23, 42, 0.92) !important;
+  border: none !important;
+  border-radius: 24px 0px 24px 24px !important;
+  padding: 10px 14px !important;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+  transform: translateY(25px);
+}
+
+.agentstudio-chat .aui-assistant-message-content :is(p, li) {
+  line-height: 1.65;
+}
+
+/* 统一 AI ActionBar：浮动状态与最后一条常驻状态视觉一致 */
+.agentstudio-chat .agentstudio-ai-actionbar {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  gap: 4px;
+}
+
+.agentstudio-chat .agentstudio-ai-actionbar :is(.aui-button, .aui-button-ghost, .aui-button-icon) {
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  background: rgba(255, 255, 255, 0.65) !important;
+  color: rgba(15, 23, 42, 0.62) !important;
+  box-shadow: none !important;
+}
+
+.agentstudio-chat .agentstudio-ai-actionbar :is(.aui-button, .aui-button-ghost, .aui-button-icon):hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.88) !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  transform: translateY(-1px);
+}
+
+/* 底部输入框：居中的胶囊 */
+.agentstudio-chat .aui-composer-root {
+  width: min(var(--agentstudio-chat-max-width), calc(100% - 36px));
+  max-width: var(--agentstudio-chat-max-width);
+  margin: 14px auto 20px;
+  background: rgba(255, 255, 255, 0.86) !important;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 38px !important;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.1);
+  padding: 5px 10px 5px 12px !important;
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.agentstudio-chat .aui-composer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 0 10px !important;
+  margin: 0 !important;
+  align-self: center;
+}
+
+/* 空状态时兼容默认 fit-content/inline-flex 导致的收缩 */
+.agentstudio-chat :is(.aui-thread-welcome, .aui-thread-welcome-root) .aui-composer-root {
+  display: flex !important;
+  min-width: 0;
+}
+
+.agentstudio-chat .aui-composer-send {
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #93c5fd 0%, #a78bfa 55%, #60a5fa 100%);
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(99, 102, 241, 0.22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.agentstudio-chat .aui-composer-cancel {
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #93c5fd 0%, #a78bfa 55%, #60a5fa 100%);
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(99, 102, 241, 0.22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.agentstudio-chat .aui-composer-send:hover:not(:disabled) {
+  filter: brightness(0.98);
+  transform: translateY(-1px);
+}
+.agentstudio-chat .aui-composer-cancel:hover:not(:disabled) {
+  filter: brightness(0.98);
+  transform: translateY(-1px);
+}
+.agentstudio-chat .aui-composer-send:disabled {
+  opacity: 0.55;
+  box-shadow: none;
+}
+.agentstudio-chat .aui-composer-cancel:disabled {
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+.agentstudio-chat .agentstudio-composer-newchat {
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.75);
+  color: rgba(15, 23, 42, 0.7);
+  position: absolute;
+  left: -46px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition:
+    background 120ms ease,
+    transform 120ms ease,
+    border-color 120ms ease;
+}
+.agentstudio-chat .agentstudio-composer-newchat:hover {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(15, 23, 42, 0.14);
+  transform: translateY(calc(-50% - 1px));
+}
+.agentstudio-chat .agentstudio-composer-newchat:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: none;
+}
+.agentstudio-chat .agentstudio-composer-newchat:disabled:hover {
+  transform: translateY(-50%);
+}
+.agentstudio-chat .agentstudio-composer-newchat:active {
+  transform: translateY(-50%);
+}
+.agentstudio-chat :is(.agentstudio-composer-newchat, .aui-composer-send, .aui-composer-cancel) svg {
+  width: 18px;
+  height: 18px;
+}
+
+.agentstudio-chat .agentstudio-chat-divider {
+  width: min(var(--agentstudio-chat-max-width), calc(100% - 8px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 18px 0 14px;
+  color: rgba(15, 23, 42, 0.28);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  user-select: none;
+}
+.agentstudio-chat .agentstudio-chat-divider::before,
+.agentstudio-chat .agentstudio-chat-divider::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: rgba(15, 23, 42, 0.14);
+}
+.agentstudio-chat .agentstudio-chat-divider > span {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  background: transparent;
+  white-space: nowrap;
+}
+
+/* 欢迎区（空状态） */
+.agentstudio-chat .aui-thread-welcome-message {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(15, 23, 42, 0.86);
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.agentstudio-chat .aui-thread-welcome-suggestion {
+  width: min(var(--agentstudio-chat-max-width), calc(100% - 8px));
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.82);
+  transition:
+    box-shadow 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+.agentstudio-chat .aui-thread-welcome-suggestion:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.1);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+/* 滚动到底部按钮 */
+.agentstudio-chat .aui-thread-scroll-to-bottom {
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.1);
+  border-radius: 9999px;
+}

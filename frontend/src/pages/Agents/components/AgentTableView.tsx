@@ -2,7 +2,7 @@ import React, { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Tooltip } from '@mui/material'
-import { Copy, Download, Trash2, Info, Edit } from 'lucide-react'
+import { Copy, Download, Trash2, Info, Edit, Tag } from 'lucide-react'
 import { ConfigTable } from '@/components/Common/common-table'
 import { type SortState, type TableColumn, type RemoteQueryParams } from '@/components/Common/common-table'
 import { Empty } from '@/components/Common/Empty'
@@ -20,6 +20,7 @@ interface AgentTableViewProps {
   onCopy: (agent: Agent) => void
   onExport: (agent: Agent) => void
   onDelete: (agent: Agent) => void
+  onPublish?: (agent: Agent) => void
   onFetchData?: (params: RemoteQueryParams) => void
   onSortChange?: (sort: SortState) => void
   defaultSort?: SortState
@@ -35,12 +36,19 @@ export const AgentTableView: React.FC<AgentTableViewProps> = ({
   onCopy,
   onExport,
   onDelete,
+  onPublish,
   onFetchData,
   onSortChange,
   defaultSort,
 }) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const publishStatusMap: Record<'pending' | 'running' | 'stopped' | 'failed', { label: string; className: string }> = {
+    pending: { label: t('agents.tableView.publishStatus.pending'), className: 'bg-amber-100 text-amber-700' },
+    running: { label: t('agents.tableView.publishStatus.running'), className: 'bg-green-100 text-green-700' },
+    stopped: { label: t('agents.tableView.publishStatus.stopped'), className: 'bg-gray-100 text-gray-700' },
+    failed: { label: t('agents.tableView.publishStatus.failed'), className: 'bg-red-100 text-red-700' },
+  }
 
   // Date formatting utility
   const formatDateValue = (value: unknown): string => {
@@ -69,11 +77,13 @@ export const AgentTableView: React.FC<AgentTableViewProps> = ({
                 {row.icon}
               </div>
               <div className="min-w-0 flex-1">
-                <div
-                  className="font-semibold text-gray-900 cursor-pointer truncate"
-                  onClick={() => navigate(`/dashboard/agents/${row.agent_id}`, { state: { botId: row.agent_id } })}
-                >
-                  {row.agent_name}
+                <div className="flex items-center gap-2">
+                  <div
+                    className="font-semibold text-gray-900 cursor-pointer truncate"
+                    onClick={() => navigate(`/dashboard/agents/${row.agent_id}`, { state: { botId: row.agent_id } })}
+                  >
+                    {row.agent_name}
+                  </div>
                 </div>
                 <div className="mt-1 text-xs text-gray-500 truncate">
                   {typeLabel && description ? `${typeLabel}｜${description}` : description || typeLabel || '-'}
@@ -108,6 +118,36 @@ export const AgentTableView: React.FC<AgentTableViewProps> = ({
             )
           }
           return <span className="truncate block">{modelName}</span>
+        },
+      },
+      {
+        key: 'published_flag',
+        title: t('agents.tableView.columns.publishStatus'),
+        dataIndex: 'published_flag',
+        width: 130,
+        render: ({ row }) => {
+          if (!row.published_flag || row.published_flag === 'false') {
+            return (
+              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700">
+                {t('agents.tableView.publishStatus.unpublished')}
+              </span>
+            )
+          }
+          const status = publishStatusMap[row.published_flag as 'pending' | 'running' | 'stopped' | 'failed']
+          if (!status) {
+            return (
+              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700">
+                {t('agents.tableView.publishStatus.unpublished')}
+              </span>
+            )
+          }
+          return (
+            <Tooltip title={status.label} disableInteractive placement="top">
+              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
+                {status.label}
+              </span>
+            </Tooltip>
+          )
         },
       },
       // {
@@ -205,6 +245,18 @@ export const AgentTableView: React.FC<AgentTableViewProps> = ({
             tooltip: t('agents.tableView.exportAgent'),
             onClick: row => onExport(row),
           },
+          ...(onPublish
+            ? [
+                {
+                  key: 'publish',
+                  icon: <Tag className="w-4 h-4" />,
+                  label: t('agents.agentCard.actions.publish'),
+                  tooltip: t('agents.agentCard.actions.publish'),
+                  visible: row => Boolean(row.published_flag && row.published_flag !== 'false'),
+                  onClick: row => onPublish(row),
+                },
+              ]
+            : []),
           {
             key: 'delete',
             icon: <Trash2 className="w-4 h-4" />,
@@ -215,7 +267,7 @@ export const AgentTableView: React.FC<AgentTableViewProps> = ({
         ],
       },
     ],
-    [availableModelNames, modelsData, modelsLoading, onCopy, onExport, onDelete, navigate, t],
+    [availableModelNames, modelsData, modelsLoading, onCopy, onExport, onDelete, onPublish, navigate, t],
   )
 
   const tableData = useMemo(() => ({ columns, rows: agents }), [columns, agents])

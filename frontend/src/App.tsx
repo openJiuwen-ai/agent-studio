@@ -37,6 +37,7 @@ const PluginMarketPageNew = React.lazy(() => import('./pages/Plugins/PluginMarke
 const PluginConfigurationPage = React.lazy(() => import('./pages/Plugins/PluginConfigurationPage'))
 const PluginVersionPage = React.lazy(() => import('./pages/Plugins/PluginVersionPage'))
 const ToolConfigurationPage = React.lazy(() => import('./pages/Plugins/ToolConfigurationPage'))
+const AgentPublishPage = React.lazy(() => import('./pages/Runtime/AgentPublishPage'))
 
 // 懒加载workflow-canvas组件
 const WorkflowCanvas = React.lazy(() => import('@test-agentstudio/workflow-canvas').then(module => ({ default: module.WorkflowCanvas })))
@@ -120,6 +121,14 @@ const App: React.FC = () => {
               element={
                 <Suspense fallback={<LoadingFallback />}>
                   <AgentEditorEditPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="agents/:id/publish"
+              element={
+                <Suspense fallback={<LoadingFallback />}>
+                  <AgentPublishPage />
                 </Suspense>
               }
             />

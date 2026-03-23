@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # runtime 配置
     runtime_host: str = ""
     runtime_port: int = 8001
+    # Runtime部署超时时间
+    runtime_deploy_timeout_seconds: float = 600.0
+    runtime_deploy_connect_timeout_seconds: float = 30.0
 
     # Security
     secret_key: str = "your-secret-key-change-in-production"

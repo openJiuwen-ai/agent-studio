@@ -1,13 +1,24 @@
 import { getDefaultSpaceId } from '@/utils/spaceUtils'
-import { Button, IconButton, Paper, CircularProgress, Divider, Select, MenuItem, SelectChangeEvent } from '@mui/material'
+import { Button, IconButton, Paper, CircularProgress, Divider, Select, MenuItem, SelectChangeEvent, Tooltip } from '@mui/material'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AgentDetailResponse, AgentService, ExecutionService, SaveAgentRequest, useModels, RelatedMemberService, MemberType, type RelatedMemberInfo } from '@test-agentstudio/api-client'
+import {
+  AgentDetailResponse,
+  AgentService,
+  ExecutionService,
+  SaveAgentRequest,
+  useModels,
+  RelatedMemberService,
+  MemberType,
+  useRuntimeDetail,
+  type RelatedMemberInfo,
+} from '@test-agentstudio/api-client'
 import i18n, { useScopedTranslation } from '@/i18n'
-import { ChevronLeft, Save, History, Brain, Settings, Eye, Clock, Tag } from 'lucide-react'
+import { ChevronLeft, Save, History, Brain, Settings, Eye, Clock, Tag, Send, Copy as CopyIcon } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import AgentModelSelector from '@/components/Agent/AgentModelSelector'
 import MultiWorkflowSelector from '@/components/Agent/MultiWorkflowSelector'
 import AgentDebugChat from '@/components/Agent/AgentDebugChat'
+import AgentSubmitVersionDialog from '@/components/Agent/AgentSubmitVersionDialog'
 import AgentPublishDialog from '@/components/Agent/AgentPublishDialog'
 import { useAgentStore } from '@/stores/useAgentStore'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -17,6 +28,7 @@ import { ActionSlotTarget } from '@/components/Common/ActionSlot'
 import AgentVersionListPanel from '@/components/Agent/AgentVersionListPanel'
 import AgentSettingsDialog from '@/components/Agent/AgentSettingsDialog'
 import type { ModelDetail } from '@/types/agentTypes'
+import { copyToClipboard } from '@/utils/prompts/utils'
 
 const MIN_LEFT = 15
 const MIN_MIDDLE = 20
@@ -44,9 +56,34 @@ const AgentEditorEditPage = () => {
   const [loading, setLoading] = useState(true)
   const { saveAgentRequest, setSaveAgentRequest, updateSaveAgentRequest, saveAgent, isSaving, saveError, setReadonly } = useAgentStore()
   const lastAutoSaveTime = useAgentStore(s => s.lastAutoSaveTime)
-  const { snackbar, showSuccess, showError, closeSnackbar } = useUnifiedSnackbar()
+  const { snackbar, showSuccess, showError, closeSnackbar, setSnackbar } = useUnifiedSnackbar()
   const { user } = useAuthStore()
   const [historyAgentDetailResponse, setHistoryAgentDetailResponse] = useState<AgentDetailResponse | null>(null)
+  const spaceId = user?.spaceId || getDefaultSpaceId()
+
+  const runtimeDetailQuery = useRuntimeDetail(
+    {
+      agent_id: agentId || '',
+      space_id: spaceId,
+    },
+    { enabled: !!agentId }
+  )
+
+  const hasRuntimeDeployment = useMemo(() => {
+    const deployDetails = runtimeDetailQuery.data?.data?.deploy_details
+    return Array.isArray(deployDetails) && deployDetails.length > 0
+  }, [runtimeDetailQuery.data])
+
+  const runtimeDeployDetail = runtimeDetailQuery.data?.data?.deploy_details?.[0]
+  const runtimeDeploymentId = runtimeDeployDetail?.deployment_id
+  const runtimeCreatedAt = runtimeDeployDetail?.created_at
+
+  const formatDateTime = (value?: string): string => {
+    if (!value) return '-'
+    const d = new Date(value)
+    if (isNaN(d.getTime())) return value
+    return d.toLocaleString()
+  }
 
   // 获取模型管理API的完整模型列表（最新数据，包含is_active状态）
   const { data: modelsData, isLoading: modelsLoading } = useModels({
@@ -56,6 +93,8 @@ const AgentEditorEditPage = () => {
     sort_order: 'desc',
   })
 
+  // Submit version dialog state
+  const [submitVersionDialogOpen, setSubmitVersionDialogOpen] = useState(false)
   // Publish dialog state
   const [publishDialogOpen, setPublishDialogOpen] = useState(false)
 
@@ -210,9 +249,9 @@ const AgentEditorEditPage = () => {
     }
   }
 
-  // Open publish dialog
-  const handleOpenPublishDialog = () => {
-    setPublishDialogOpen(true)
+  // Open submit version dialog
+  const handleOpenSubmitVersionDialog = () => {
+    setSubmitVersionDialogOpen(true)
   }
 
   // Debug info panel toggle: compress other panels moderately
@@ -250,10 +289,14 @@ const AgentEditorEditPage = () => {
     }
   }, [])
 
-  // Close publish dialog
-  const handleClosePublishDialog = () => {
-    setPublishDialogOpen(false)
+  // Close submit version dialog
+  const handleCloseSubmitVersionDialog = () => {
+    setSubmitVersionDialogOpen(false)
   }
+
+  // Publish dialog
+  const handleOpenPublishDialog = () => setPublishDialogOpen(true)
+  const handleClosePublishDialog = () => setPublishDialogOpen(false)
 
   // Open settings dialog (draft mode only)
   const handleOpenSettings = () => {
@@ -329,6 +372,12 @@ const AgentEditorEditPage = () => {
   // Open history version dialog
   const handleOpenVersionHistoryDialog = () => {
     setVersionListPanelOpen(true)
+  }
+
+  // Go to publish management page
+  const handleGoPublishManagement = () => {
+    if (!agentId) return
+    navigate(`/dashboard/agents/${agentId}/publish`)
   }
 
   // Close history version dialog
@@ -557,7 +606,7 @@ const AgentEditorEditPage = () => {
           <div className="header flex items-center justify-between p-4">
             <div className="flex items-center">
               <IconButton onClick={() => navigate('/dashboard/agents')}>
-                <ChevronLeft className="w-6 h-6" />
+                <ChevronLeft className="w-5 h-5" />
               </IconButton>
               <div className="ml-2 flex items-center">
                 <div className="mr-3 text-3xl">{displayedAgentDetailResponse?.data?.agent_info?.icon}</div>
@@ -605,34 +654,113 @@ const AgentEditorEditPage = () => {
                 </>
               )}
 
-              <Button
-                variant="outlined"
-                color="secondary"
-                startIcon={<Save className="w-4 h-4" />}
-                className="hover:bg-gray-50"
-                onClick={onAgentSave}
-                disabled={isSaving || isReadOnly}
-              >
-                {isSaving ? t('buttons.saving') : t('buttons.save')}
-              </Button>
-              <Button
-                variant="outlined"
-                color="secondary"
-                startIcon={<History className="w-4 h-4" />}
-                className="hover:bg-gray-50"
-                onClick={handleOpenVersionHistoryDialog}
-              >
-                {t('buttons.versionHistory')}
-              </Button>
+              <Tooltip title={isSaving ? t('buttons.saving') : t('buttons.save')} placement="top">
+                <span>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    className="hover:bg-gray-50"
+                    sx={{ minWidth: 30, minHeight: 30, height: 30, width: 30, p: 0 }}
+                    onClick={onAgentSave}
+                    disabled={isSaving || isReadOnly}
+                    aria-label={isSaving ? t('buttons.saving') : t('buttons.save')}
+                  >
+                    <Save className="w-4 h-4" />
+                  </Button>
+                </span>
+              </Tooltip>
+              <Tooltip title={t('buttons.versionHistory')} placement="top">
+                <Button
+                  variant="outlined"
+                  color="secondary"
+                  className="btn-secondary"
+                  sx={{ minWidth: 30, minHeight: 30, height: 30, width: 30, p: 0 }}
+                  onClick={handleOpenVersionHistoryDialog}
+                  aria-label={t('buttons.versionHistory')}
+                >
+                  <History className="w-4 h-4" />
+                </Button>
+              </Tooltip>
+              {hasRuntimeDeployment && (
+                <Tooltip title={t('buttons.publishManagement')} placement="top">
+                  <span>
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      className="btn-secondary"
+                      sx={{ minWidth:30, minHeight: 30, height: 30, width: 30, p: 0 }}
+                      onClick={handleGoPublishManagement}
+                      disabled={!agentId}
+                      aria-label={t('buttons.publishManagement')}
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </span>
+                </Tooltip>
+              )}
               <Button
                 variant="contained"
                 className="btn-primary"
                 startIcon={<Tag className="w-4 h-4" />}
-                onClick={handleOpenPublishDialog}
+                onClick={handleOpenSubmitVersionDialog}
                 disabled={isReadOnly}
               >
                 {t('buttons.submitNewVersion')}
               </Button>
+              <Tooltip
+                placement="top"
+                slotProps={{
+                  tooltip: {
+                    sx: {
+                      bgcolor: 'transparent',
+                      p: 0,
+                      boxShadow: 'none',
+                      maxWidth: 'none',
+                    },
+                  },
+                }}
+                title={
+                  hasRuntimeDeployment ? (
+                    <div className="bg-white shadow-lg rounded-lg p-2 text-xs text-gray-800 min-w-[260px]">
+                      <div className="leading-5 flex items-center whitespace-nowrap">
+                        <span className="text-gray-500 whitespace-nowrap">{t('labels.deploymentId')}</span>
+                        <span className="flex items-center gap-1 ml-1 min-w-0">
+                          <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{runtimeDeploymentId}</span>
+                    <IconButton
+                      size="small"
+                      sx={{ p: 0.25 }}
+                      aria-label={t('labels.copyDeploymentIdAria')}
+                      onClick={async e => {
+                        e.stopPropagation()
+                        await copyToClipboard(String(runtimeDeploymentId || ''), setSnackbar)
+                      }}
+                    >
+                      <CopyIcon className="w-3 h-3" />
+                    </IconButton>
+                        </span>
+                      </div>
+                      <div className="leading-5 mt-1">
+                        <span className="text-gray-500">{t('labels.publishTime')}</span>
+                        <span className="font-medium">{formatDateTime(runtimeCreatedAt)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    t('buttons.publish')
+                  )
+                }
+              >
+                <span>
+                  <Button
+                    variant="contained"
+                    className="btn-primary"
+                    startIcon={<Send className="w-4 h-4" />}
+                    onClick={handleOpenPublishDialog}
+                    disabled={isReadOnly}
+                  >
+                    {t('buttons.publish')}
+                  </Button>
+                </span>
+              </Tooltip>
             </div>
           </div>
           <div className="content flex-1 flex overflow-x-hidden overflow-y-hidden min-w-0 relative">
@@ -748,15 +876,27 @@ const AgentEditorEditPage = () => {
         onConfirm={(name, description, icon) => handleSaveSettings(name, description, icon)}
       />
 
-      {/* 发布对话框 - 抽成独立组件 */}
-      <AgentPublishDialog
-        open={publishDialogOpen}
+      {/* 提交版本对话框 */}
+      <AgentSubmitVersionDialog
+        open={submitVersionDialogOpen}
         agentId={agentId}
-        onClose={handleClosePublishDialog}
-        onPublished={() => {
+        onClose={handleCloseSubmitVersionDialog}
+        onVersionSubmitted={() => {
           if (agentId) {
             fetchAgentDetail(agentId)
           }
+          showSuccess(t('messages.submitVersionSuccess'))
+        }}
+      />
+      {/* 发布对话框 */}
+      <AgentPublishDialog
+        open={publishDialogOpen}
+        agentId={agentId ?? undefined}
+        agentName={displayedAgentDetailResponse?.data?.agent_info?.agent_name}
+        hasRuntimeDeployment={hasRuntimeDeployment}
+        onClose={handleClosePublishDialog}
+        onPublished={() => {
+          if (agentId) fetchAgentDetail(agentId)
           showSuccess(t('messages.publishSuccess'))
         }}
       />

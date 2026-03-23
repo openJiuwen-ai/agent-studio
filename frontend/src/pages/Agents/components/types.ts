@@ -13,6 +13,7 @@ export interface Agent {
   api_endpoint: string
   agent_version: string
   agent_type: string
+  published_flag?: 'false' | 'pending' | 'running' | 'stopped' | 'failed'
   model?: {
     model_info: {
       model_name: string

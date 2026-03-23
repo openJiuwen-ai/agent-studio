@@ -52,13 +52,18 @@
       },
       "labels": {
         "historyVersionPrefix": "History Version",
-        "lastSavedAt": "Last saved at:"
+        "lastSavedAt": "Last saved at:",
+        "deploymentId": "Deployment ID:",
+        "publishTime": "Published at:",
+        "copyDeploymentIdAria": "Copy deployment ID"
       },
       "buttons": {
         "save": "Save",
         "saving": "Saving...",
         "versionHistory": "Version History",
-        "submitNewVersion": "Submit New Version"
+        "publishManagement": "Publish Management",
+        "submitNewVersion": "Submit New Version",
+        "publish": "Publish"
       },
       "messages": {
         "saveSuccess": "Saved successfully",
@@ -71,7 +76,8 @@
         "switchedToLatestContent": "Switched to latest content",
         "switchedToVersion": "Switched to version {{version}}",
         "switchVersionFailed": "Failed to switch version",
-        "publishSuccess": "Submitted successfully"
+        "publishSuccess": "Published successfully",
+        "submitVersionSuccess": "Submitted successfully"
       }
     },
     "systemPrompt": {

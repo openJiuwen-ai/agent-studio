@@ -2,7 +2,7 @@
 import json
 import logging
 import asyncio
-from typing import AsyncGenerator, Optional, Dict, Any
+from typing import AsyncGenerator, Optional, Dict, Any, Union
 import httpx
 from httpx._models import Response
 from openjiuwen_studio.core.config import settings
@@ -243,6 +243,7 @@ class LazyRuntimeHttpClient:
         files: Any = None,
         user_id: Optional[str] = None,
         space_id: Optional[str] = None,
+        timeout: Optional[Union[float, httpx.Timeout]] = None,
     ):
         """通用 HTTP 请求方法，支持动态注入租户上下文"""
         if not self._initialized or self._client is None:
@@ -255,15 +256,19 @@ class LazyRuntimeHttpClient:
         if space_id is not None:
             req_headers["x-space-id"] = space_id
 
+        req_kw: Dict[str, Any] = dict(
+            method=method,
+            url=url,
+            json=jsons,
+            params=params,
+            headers=req_headers,
+            files=files,
+        )
+        if timeout is not None:
+            req_kw["timeout"] = timeout
+
         try:
-            resp = await self._client.request(
-                method,
-                url,
-                json=jsons,
-                params=params,
-                headers=req_headers,
-                files=files
-            )
+            resp = await self._client.request(**req_kw)
             resp.raise_for_status()
             return resp
         except httpx.HTTPStatusError:
@@ -325,8 +330,18 @@ class RuntimeAgentClient:
         if payload.get("port") is not None:
             params["port"] = str(payload.get("port"))
         try:
-            resp = await self._http.request("POST", "/api/v1/agents/deploy",
-                                            files=files, params=params, user_id=user_id, space_id=space_id)
+            resp = await self._http.request(
+                "POST",
+                "/api/v1/agents/deploy",
+                files=files,
+                params=params,
+                user_id=user_id,
+                space_id=space_id,
+                timeout=httpx.Timeout(
+                    settings.runtime_deploy_timeout_seconds,
+                    connect=settings.runtime_deploy_connect_timeout_seconds,
+                ),
+            )
             return resp.json()
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 500:

@@ -52,6 +52,7 @@ const AgentsPage: React.FC = () => {
     confirmDelete,
     handleCopy,
     handleExport,
+    handlePublish,
     isImporting,
     importConflict,
     fileInputRef,
@@ -90,6 +91,7 @@ const AgentsPage: React.FC = () => {
         onCopy={handleCopy}
         onDelete={handleDelete}
         onExport={handleExport}
+        onPublish={handlePublish}
         availableModelNames={availableModelNames}
         modelsLoading={modelsLoading}
       />
@@ -106,6 +108,7 @@ const AgentsPage: React.FC = () => {
       handleCopy,
       handleDelete,
       handleExport,
+      handlePublish,
       availableModelNames,
       modelsLoading,
     ],
@@ -124,6 +127,7 @@ const AgentsPage: React.FC = () => {
         onCopy={handleCopy}
         onExport={handleExport}
         onDelete={handleDelete}
+        onPublish={handlePublish}
         onFetchData={handleFetchTableData}
         onSortChange={handleFetchTableData}
         defaultSort={{ field: sortBy, order: sortOrder || 'desc' }}
@@ -139,6 +143,7 @@ const AgentsPage: React.FC = () => {
       handleCopy,
       handleExport,
       handleDelete,
+      handlePublish,
       handleFetchTableData,
       sortBy,
       sortOrder,

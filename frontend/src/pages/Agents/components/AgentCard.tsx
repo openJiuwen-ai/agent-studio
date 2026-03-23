@@ -1,5 +1,5 @@
 import React from 'react'
-import { Clock, Copy, Download, Trash2, Edit } from 'lucide-react'
+import { Clock, Copy, Download, Trash2, Edit, Tag } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ConfigCard, ConfigCardAction, EditingState } from '../../../components/Common/common-grid'
 import { CardFooterRow } from '../../../components/Common/common-grid'
@@ -13,6 +13,7 @@ interface AgentCardProps {
   onCopy: (agent: Agent) => void
   onDelete: (agent: Agent) => void
   onExport?: (agent: Agent) => void
+  onPublish?: (agent: Agent) => void
   editingState: EditingState
   onUpdateValue: (value: string) => void
   onSaveEdit: () => void
@@ -28,6 +29,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
   onCopy,
   onDelete,
   onExport,
+  onPublish,
   editingState,
   onUpdateValue,
   onSaveEdit,
@@ -37,6 +39,8 @@ export const AgentCard: React.FC<AgentCardProps> = ({
   modelsLoading = false,
 }) => {
   const { t } = useTranslation()
+  const publishFlag = agent.published_flag
+  const isPublished = Boolean(publishFlag && publishFlag !== 'false')
 
   const formatRelativeTime = (timestamp: number): string => {
     const date = new Date(timestamp)
@@ -79,6 +83,16 @@ export const AgentCard: React.FC<AgentCardProps> = ({
           } as ConfigCardAction,
         ]
       : []),
+    ...(onPublish && isPublished
+      ? [
+          {
+            key: 'publish',
+            label: t('agents.agentCard.actions.publish'),
+            icon: <Tag className="w-4 h-4" />,
+            onClick: () => onPublish(agent),
+          } as ConfigCardAction,
+        ]
+      : []),
     {
       key: 'delete',
       label: t('agents.agentCard.actions.delete'),
@@ -100,9 +114,24 @@ export const AgentCard: React.FC<AgentCardProps> = ({
     return t('agents.agentCard.types.default')
   }
 
-  const tags: Array<{ label: string; color?: string; variant?: 'default' | 'error' | 'loading'; tooltip?: React.ReactNode }> = [
-    { label: getAgentTypeLabel(), color: '#3B82F6' },
-  ]
+  const tags: Array<{ label: string; color?: string; variant?: 'default' | 'error' | 'loading'; tooltip?: React.ReactNode }> = []
+
+  const publishStatusMap: Record<'pending' | 'running' | 'stopped' | 'failed', { label: string; color: string }> = {
+    pending: { label: t('agents.tableView.publishStatus.pending'), color: '#F59E0B' },
+    running: { label: t('agents.tableView.publishStatus.running'), color: '#22C55E' },
+    stopped: { label: t('agents.tableView.publishStatus.stopped'), color: '#6B7280' },
+    failed: { label: t('agents.tableView.publishStatus.failed'), color: '#EF4444' },
+  }
+  const publishStatus =
+    isPublished
+      ? publishStatusMap[publishFlag as 'pending' | 'running' | 'stopped' | 'failed']
+      : undefined
+
+  if (publishStatus) {
+    tags.push({ label: publishStatus.label, color: publishStatus.color })
+  }
+
+  tags.push({ label: getAgentTypeLabel(), color: '#3B82F6' })
 
   if (modelName && modelName !== 'no model') {
     if (modelsLoading) {

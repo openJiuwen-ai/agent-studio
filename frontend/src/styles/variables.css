@@ -33,4 +33,40 @@
   /* 卡片阴影 */
   --shadow-card: 0 1px 4px 0 rgb(0 0 0 / 4%);
   --shadow-card-hover: 0 4px 12px -2px rgb(0 0 0 / 8%), 0 2px 4px -1px rgb(0 0 0 / 4%);
+
+  /* 普通按钮（供 components.css 使用） */
+  --btn-secondary-bg: #ffffff;
+  --btn-secondary-border: #c9c9c9;
+  --btn-secondary-hover: #f9fafb;
+  --btn-secondary-color: #191919;
+}
+
+/* 暗色主题：覆盖上述变量 */
+[data-theme="dark"] {
+  --global-bg-page: #0f172a;
+  --global-bg-white: #1e293b;
+
+  --primary-color: #60a5fa;
+  --primary-gradient: linear-gradient(93.91deg, #60a5fa 0%, #a78bfa 100%);
+
+  --text-black: #f1f5f9;
+  --text-gray: #94a3b8;
+  --text-blue: #60a5fa;
+
+  --menu-hover-bg: #334155;
+  --menu-hover-text: #e2e8f0;
+  --menu-section-text: #64748b;
+
+  --table-bg-container: #0f172a;
+  --table-bg-cell: #1e293b;
+  --table-bg-cell-hover: #334155;
+  --table-text-head: #94a3b8;
+
+  --shadow-card: 0 1px 4px 0 rgb(0 0 0 / 20%);
+  --shadow-card-hover: 0 4px 12px -2px rgb(0 0 0 / 30%), 0 2px 4px -1px rgb(0 0 0 / 20%);
+
+  --btn-secondary-bg: #1e293b;
+  --btn-secondary-border: #475569;
+  --btn-secondary-hover: #334155;
+  --btn-secondary-color: #e2e8f0;
 }

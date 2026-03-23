@@ -67,7 +67,14 @@
       "multiWorkflow": "Single Agent (Multi-Workflow Mode)",
       "autonomousPlanning": "Single Agent (Autonomous Planning Mode)"
     },
-    "published": "Published",
+    "publishStatus": {
+      "published": "Published",
+      "unpublished": "Unpublished",
+      "pending": "Publishing",
+      "running": "Published",
+      "stopped": "Offline",
+      "failed": "Publish Failed"
+    },
     "draft": "Draft",
     "exportAgent": "Export agent",
     "loading": "Loading...",
@@ -95,6 +102,7 @@
       "edit": "Edit",
       "copy": "Copy",
       "export": "Export",
+      "publish": "Publish Manage",
       "delete": "Delete"
     },
     "types": {
@@ -134,6 +142,27 @@
       "saveFailed": "Save failed, cannot continue publishing",
       "publishFailed": "Publish failed",
       "publishFailedRetry": "Publish failed, please try again"
+    }
+  },
+  "publishDialog": {
+    "title": "Publish Version",
+    "subtitle": "Select a version to publish and confirm",
+    "fields": {
+      "version": "Select version"
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "confirm": "Publish"
+    },
+    "status": {
+      "loading": "Loading versions...",
+      "publishing": "Publishing...",
+      "noVersions": "No submitted versions yet. Please submit a new version first."
+    },
+    "errors": {
+      "loadFailed": "Failed to load version list",
+      "selectVersion": "Please select a version to publish",
+      "publishFailed": "Publish failed"
     }
   },
   "settingDialog": {
@@ -191,6 +220,13 @@
       "label": "Description:",
       "empty": "No version description",
       "draft": "Current draft version"
+    },
+    "published": "Published",
+    "publishStatus": {
+      "pending": "Publishing",
+      "running": "Published",
+      "stopped": "Offline",
+      "failed": "Publish Failed"
     },
     "time": {
       "invalid": "Invalid time",

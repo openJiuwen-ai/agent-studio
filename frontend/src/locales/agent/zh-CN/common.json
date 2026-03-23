@@ -67,7 +67,14 @@
       "multiWorkflow": "单Agent（多工作流模式）",
       "autonomousPlanning": "单Agent（自主规划模式）"
     },
-    "published": "已发布",
+    "publishStatus": {
+      "published": "已发布",
+      "unpublished": "未发布",
+      "pending": "发布中",
+      "running": "已发布",
+      "stopped": "已下架",
+      "failed": "发布失败"
+    },
     "draft": "草稿",
     "exportAgent": "导出智能体",
     "loading": "加载中...",
@@ -87,6 +94,7 @@
       "edit": "编辑",
       "copy": "复制",
       "export": "导出",
+      "publish": "发布管理",
       "delete": "删除"
     },
     "types": {
@@ -126,6 +134,27 @@
       "saveFailed": "保存失败，无法继续发布",
       "publishFailed": "发布失败",
       "publishFailedRetry": "发布失败，请重试"
+    }
+  },
+  "publishDialog": {
+    "title": "发布版本",
+    "subtitle": "选择要发布的版本并确认",
+    "fields": {
+      "version": "选择版本"
+    },
+    "buttons": {
+      "cancel": "取消",
+      "confirm": "确认发布"
+    },
+    "status": {
+      "loading": "加载版本列表...",
+      "publishing": "发布中...",
+      "noVersions": "暂无已提交的版本，请先提交新版本"
+    },
+    "errors": {
+      "loadFailed": "加载版本列表失败",
+      "selectVersion": "请选择要发布的版本",
+      "publishFailed": "发布失败"
     }
   },
   "settingDialog": {
@@ -183,6 +212,13 @@
       "label": "版本描述：",
       "empty": "无版本描述",
       "draft": "当前草稿版本"
+    },
+    "published": "已发布",
+    "publishStatus": {
+      "pending": "发布中",
+      "running": "已发布",
+      "stopped": "已下架",
+      "failed": "发布失败"
     },
     "time": {
       "invalid": "无效时间",

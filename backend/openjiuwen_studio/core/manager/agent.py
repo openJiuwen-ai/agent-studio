@@ -849,13 +849,24 @@ async def get_agent_publish_status(agent_id: str, user_id: str, space_id: str) -
         }
 
 
-def map_agent_publish_status(agent_id: str, agent_version: str, agent_publish_status_list: List[Dict[str, Any]]) -> str:
-    """判断当前agent和version是否发布"""
-    # 如果和agent_publish_status里能对上，则填入返回的发布状态，对不上都返回false
-    for agent_publish_status in agent_publish_status_list:
-        if agent_id == agent_publish_status.get("agent_id"):
-            if agent_version == agent_publish_status.get("version"):
-                return agent_publish_status.get("published_flag")
+def map_agent_publish_status(
+    agent_id: str, agent_version: str, agent_publish_status_payload: Union[Dict[str, Any], List[Dict[str, Any]]],
+) -> str:
+    """判断当前 agent 与 version 是否发布。
+
+    支持 get_agent_publish_status 的返回格式：{agent_id: {version, published_flag}}；
+    亦兼容列表 [{agent_id, version, published_flag}, ...]。
+    """
+    if isinstance(agent_publish_status_payload, dict):
+        entry = agent_publish_status_payload.get(agent_id)
+        if isinstance(entry, dict) and agent_version == entry.get("version"):
+            return entry.get("published_flag") or "false"
+        return "false"
+    for row in agent_publish_status_payload:
+        if not isinstance(row, dict):
+            continue
+        if agent_id == row.get("agent_id") and agent_version == row.get("version"):
+            return row.get("published_flag") or "false"
     return "false"
 
 

@@ -64,6 +64,35 @@
     cursor: not-allowed;
   }
 
+  /* ========== 普通按钮（与 MUI outlined secondary 视觉一致，供原生 button 与 MUI Button 共用） ========== */
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: fit-content;
+    min-width: 0;
+    min-height: 36px;
+    padding: 6px 16px;
+    border-radius: 4px;
+    background: var(--btn-secondary-bg);
+    border: 1px solid var(--btn-secondary-border);
+    color: var(--btn-secondary-color);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 22px;
+    letter-spacing: 0;
+    text-align: center;
+    cursor: pointer;
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background-color: var(--btn-secondary-hover);
+  }
+  .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   /* ========== 登录页 ========== */
   .btn-login {
     width: 100%;

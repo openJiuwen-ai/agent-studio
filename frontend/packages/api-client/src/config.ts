@@ -129,6 +129,15 @@ export const API_ENDPOINTS = {
     GET_TRACE_SUMMARY_BY_TRACE_ID: '/execution/get_trace_summary_by_trace_id',
   },
 
+  // 运行时部署
+  RUNTIME: {
+    DEPLOY: '/runtime/deploy',
+    DETAIL: '/runtime/detail',
+    REMOVE: '/runtime/remove',
+    /** 经中台转发至已部署 Runtime /query（SSE），避免浏览器 CORS */
+    QUERY: '/runtime/query',
+  },
+
   // 代理管理
   AGENTS: {
     LIST: '/agents/list',
