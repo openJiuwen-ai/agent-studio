@@ -2358,6 +2358,24 @@ export interface RuntimeRemoveResponse {
   data: Record<string, never>
 }
 
+// Runtime 重置会话请求类型
+export interface RuntimeResetConversationRequest {
+  target_url: string
+  space_id: string
+  conversation_id: string
+}
+
+// Runtime 重置会话响应类型
+export interface RuntimeResetConversationResponse {
+  code: number
+  message?: string
+  msg?: string
+  data?: {
+    status?: string
+    message?: string
+  }
+}
+
 // Agent版本列表请求类型
 export interface AgentVersionListRequest {
   agent_id: string

@@ -6,11 +6,17 @@
             "api": "API调用"
         },
         "actions": {
-            "offline": "下架"
+            "offline": "下架",
+            "goPublish": "去发布"
         },
         "messages": {
             "agentNotFound": "智能体未找到",
-            "offlineSuccess": "下架成功"
+            "offlineSuccess": "下架成功",
+            "resetConversationFailed": "重置会话失败，请稍后重试",
+            "pending": "智能体发布中，请稍等",
+            "stopped": "智能体已停止",
+            "failed": "智能体发布失败，请重新发布",
+            "notPublished": "该智能体尚未发布，"
         },
         "offlineConfirm": {
             "title": "确认下架",
@@ -18,20 +24,36 @@
             "cancel": "取消",
             "confirm": "确认下架"
         },
+        "successCard": {
+            "title": "启动发布成功",
+            "subtitle": "您还可以进行以下操作",
+            "buttons": {
+                "close": "关闭",
+                "goTest": "发布管理"
+            }
+        },
         "chat": {
             "title": "对话体验",
+            "debugTitle": "提示词调试",
             "description": "对话体验页面，待完善",
+            "assistantDefaultName": "智能助手",
             "emptyStateText": "暂无消息",
             "emptyStateSubtext": "发送一条消息开始对话",
             "inputPlaceholder": "输入消息...",
             "newChat": "新对话",
             "newChatDivider": "以下为新对话",
             "clear": "清除",
-            "send": "发送"
+            "send": "发送",
+            "followUpWithReference": "基于上面这条回答，我想继续追问：\n- （问题）\n\n参考内容：\n{{reference}}\n",
+            "followUp": "我想继续追问：\n- （问题）\n",
+            "disclaimer": "内容由AI生成，无法确保真实准确，仅供参考",
+            "defaultGreeting": "您好！我是你的智能助手，很高兴为你服务，请问有什么可以帮助您的吗？",
+            "defaultUserName": "用户"
         },
         "api": {
             "title": "API调用",
             "description": "API调用页面，待完善",
+            "streamResponseSectionTitle": "流式响应（SSE）",
             "callExample": "调用示例",
             "shell": "Shell",
             "python": "Python",
@@ -39,7 +61,7 @@
             "returnParams": "返回参数说明",
             "requestConfig": "请求配置",
             "returnParamsDesc": "返回参数说明",
-            "header": "Header",
+            "header": "Headers",
             "queryParams": "Query Params",
             "bodyParams": "Body Params",
             "sampleCode": "调用示例代码",
@@ -55,7 +77,274 @@
             "itemsSchema": "项说明",
             "switchExample": "选择示例",
             "copy": "复制",
-            "copied": "已复制"
+            "copied": "已复制",
+            "addObject": "添加对象"
+        },
+        "demo": {
+            "apiName": "发起对话",
+            "apiDesc": "使用指定的会话ID和消息列表对智能体发起对话。",
+            "body": {
+                "conversationId": {
+                    "description": "会话 ID。"
+                },
+                "messages": {
+                    "description": "消息列表。",
+                    "items": {
+                        "id": {
+                            "description": "消息ID。"
+                        },
+                        "role": {
+                            "description": "消息角色。"
+                        },
+                        "content": {
+                            "description": "消息内容。",
+                            "example": "你好，帮我推荐北京的美食"
+                        }
+                    }
+                },
+                "spaceId": {
+                    "description": "工作空间ID。"
+                }
+            },
+            "returnOverallDesc": "返回流式响应数据，消息格式定义如下：",
+            "return": {
+                "runStarted": {
+                    "description": "本轮运行开始。",
+                    "type": {
+                        "description": "固定为 RUN_STARTED。"
+                    },
+                    "threadId": {
+                        "description": "会话线程 ID。"
+                    },
+                    "runId": {
+                        "description": "本轮运行 ID。"
+                    },
+                    "parentRunId": {
+                        "description": "父 run ID（可选）。"
+                    },
+                    "input": {
+                        "description": "本轮发给 agent 的输入载荷（可选）。"
+                    }
+                },
+                "stepStarted": {
+                    "description": "步骤开始（可选）。",
+                    "type": {
+                        "description": "固定为 STEP_STARTED。"
+                    },
+                    "stepName": {
+                        "description": "步骤名称。"
+                    }
+                },
+                "stepFinished": {
+                    "description": "步骤结束（可选）。",
+                    "type": {
+                        "description": "固定为 STEP_FINISHED。"
+                    },
+                    "stepName": {
+                        "description": "步骤名称。"
+                    }
+                },
+                "reasoningMessageStart": {
+                    "description": "思考消息开始。",
+                    "type": {
+                        "description": "固定为 REASONING_MESSAGE_START。"
+                    },
+                    "messageId": {
+                        "description": "思考消息 ID。"
+                    },
+                    "role": {
+                        "description": "固定 assistant。"
+                    }
+                },
+                "reasoningMessageContent": {
+                    "description": "思考内容增量。",
+                    "type": {
+                        "description": "固定为 REASONING_MESSAGE_CONTENT。"
+                    },
+                    "messageId": {
+                        "description": "思考消息 ID。"
+                    },
+                    "delta": {
+                        "description": "思考内容增量。",
+                        "example": "用户想了解武汉大学，需要结合知识库给出介绍。"
+                    }
+                },
+                "reasoningMessageEnd": {
+                    "description": "思考消息结束。",
+                    "type": {
+                        "description": "固定为 REASONING_MESSAGE_END。"
+                    },
+                    "messageId": {
+                        "description": "思考消息 ID。"
+                    }
+                },
+                "textMessageStart": {
+                    "description": "正文消息开始。",
+                    "type": {
+                        "description": "固定为 TEXT_MESSAGE_START。"
+                    },
+                    "messageId": {
+                        "description": "正文消息 ID。"
+                    },
+                    "role": {
+                        "description": "消息角色。"
+                    }
+                },
+                "textMessageContent": {
+                    "description": "正文内容增量。",
+                    "type": {
+                        "description": "固定为 TEXT_MESSAGE_CONTENT。"
+                    },
+                    "messageId": {
+                        "description": "正文消息 ID。"
+                    },
+                    "delta": {
+                        "description": "正文增量内容。",
+                        "example": "您好，"
+                    }
+                },
+                "textMessageEnd": {
+                    "description": "正文消息结束。",
+                    "type": {
+                        "description": "固定为 TEXT_MESSAGE_END。"
+                    },
+                    "messageId": {
+                        "description": "正文消息 ID。"
+                    },
+                    "content": {
+                        "description": "完整正文（可选）。",
+                        "example": "您好！很高兴为您推荐北京的美食..."
+                    }
+                },
+                "toolCallStart": {
+                    "description": "工具调用开始。",
+                    "type": {
+                        "description": "固定为 TOOL_CALL_START。"
+                    },
+                    "toolCallId": {
+                        "description": "工具调用 ID。"
+                    },
+                    "toolCallName": {
+                        "description": "工具名称。"
+                    },
+                    "parentMessageId": {
+                        "description": "父消息 ID（可选）。"
+                    }
+                },
+                "toolCallArgs": {
+                    "description": "工具参数增量。",
+                    "type": {
+                        "description": "固定为 TOOL_CALL_ARGS。"
+                    },
+                    "toolCallId": {
+                        "description": "工具调用 ID。"
+                    },
+                    "delta": {
+                        "description": "参数 JSON 片段。",
+                        "example": "{\"location\":\"北京\"}"
+                    }
+                },
+                "toolCallEnd": {
+                    "description": "工具调用结束。",
+                    "type": {
+                        "description": "固定为 TOOL_CALL_END。"
+                    },
+                    "toolCallId": {
+                        "description": "工具调用 ID。"
+                    }
+                },
+                "toolCallResult": {
+                    "description": "工具执行结果。",
+                    "type": {
+                        "description": "固定为 TOOL_CALL_RESULT。"
+                    },
+                    "messageId": {
+                        "description": "工具消息 ID。"
+                    },
+                    "toolCallId": {
+                        "description": "对应工具调用 ID。"
+                    },
+                    "content": {
+                        "description": "工具返回内容。",
+                        "example": "{\"temperature\":22,\"condition\":\"晴\"}"
+                    },
+                    "role": {
+                        "description": "通常为 tool（可选）。"
+                    }
+                },
+                "activitySnapshot": {
+                    "description": "活动快照（推荐追问/知识召回/UI_RESOURCE/RUN_METADATA 等）。",
+                    "type": {
+                        "description": "固定为 ACTIVITY_SNAPSHOT。"
+                    },
+                    "messageId": {
+                        "description": "活动消息 ID。"
+                    },
+                    "activityType": {
+                        "description": "活动类型。"
+                    },
+                    "content": {
+                        "description": "活动内容快照。"
+                    },
+                    "replace": {
+                        "description": "是否替换已有快照（可选）。"
+                    }
+                },
+                "activityDelta": {
+                    "description": "活动增量（RFC 6902 patch）。",
+                    "type": {
+                        "description": "固定为 ACTIVITY_DELTA。"
+                    },
+                    "messageId": {
+                        "description": "活动消息 ID。"
+                    },
+                    "activityType": {
+                        "description": "活动类型。"
+                    },
+                    "patch": {
+                        "description": "RFC 6902 Patch 数组。"
+                    }
+                },
+                "custom": {
+                    "description": "特殊事件（如 PING、REQUIRES_ACTION）。",
+                    "type": {
+                        "description": "固定为 CUSTOM。"
+                    },
+                    "name": {
+                        "description": "自定义事件名。"
+                    },
+                    "value": {
+                        "description": "自定义事件载荷。"
+                    }
+                },
+                "runFinished": {
+                    "description": "本轮运行正常结束。",
+                    "type": {
+                        "description": "固定为 RUN_FINISHED。"
+                    },
+                    "threadId": {
+                        "description": "会话线程 ID。"
+                    },
+                    "runId": {
+                        "description": "本轮运行 ID。"
+                    },
+                    "result": {
+                        "description": "运行结果（可为空）。"
+                    }
+                },
+                "runError": {
+                    "description": "本轮运行异常终止。",
+                    "type": {
+                        "description": "固定为 RUN_ERROR。"
+                    },
+                    "message": {
+                        "description": "错误信息。"
+                    },
+                    "code": {
+                        "description": "错误码（可选）。"
+                    }
+                }
+            }
         }
     }
 }

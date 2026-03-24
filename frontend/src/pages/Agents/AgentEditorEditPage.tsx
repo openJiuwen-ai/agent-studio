@@ -1,6 +1,6 @@
 import { getDefaultSpaceId } from '@/utils/spaceUtils'
 import { Button, IconButton, Paper, CircularProgress, Divider, Select, MenuItem, SelectChangeEvent, Tooltip } from '@mui/material'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   AgentDetailResponse,
   AgentService,
@@ -13,7 +13,8 @@ import {
   type RelatedMemberInfo,
 } from '@test-agentstudio/api-client'
 import i18n, { useScopedTranslation } from '@/i18n'
-import { ChevronLeft, Save, History, Brain, Settings, Eye, Clock, Tag, Send, Copy as CopyIcon } from 'lucide-react'
+import { ChevronLeft, Save, History, Brain, Settings, Eye, Clock, Send, Copy as CopyIcon } from 'lucide-react'
+import agentSubmitVersionIcon from '@/assets/icons/agent-submit-version.svg'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import AgentModelSelector from '@/components/Agent/AgentModelSelector'
 import MultiWorkflowSelector from '@/components/Agent/MultiWorkflowSelector'
@@ -27,6 +28,7 @@ import SystemPromptTab from '@/components/Agent/SystemPromptTab'
 import { ActionSlotTarget } from '@/components/Common/ActionSlot'
 import AgentVersionListPanel from '@/components/Agent/AgentVersionListPanel'
 import AgentSettingsDialog from '@/components/Agent/AgentSettingsDialog'
+import RuntimePublishSuccessCard from '@/components/Runtime/RuntimePublishSuccessCard'
 import type { ModelDetail } from '@/types/agentTypes'
 import { copyToClipboard } from '@/utils/prompts/utils'
 
@@ -51,6 +53,7 @@ const AgentEditorEditPage = () => {
   const containerRef = useRef<HTMLDivElement>(null)
   // Page data processing
   const navigate = useNavigate()
+  const location = useLocation()
   const { id: agentId } = useParams<{ id: string }>()
   const [agentDetailResponse, setAgentDetailResponse] = useState<AgentDetailResponse>()
   const [loading, setLoading] = useState(true)
@@ -97,6 +100,7 @@ const AgentEditorEditPage = () => {
   const [submitVersionDialogOpen, setSubmitVersionDialogOpen] = useState(false)
   // Publish dialog state
   const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+  const [publishSuccessCardOpen, setPublishSuccessCardOpen] = useState(false)
 
   // History version related state (panel control only, data fetched within component)
   const [versionListPanelOpen, setVersionListPanelOpen] = useState(false)
@@ -297,6 +301,19 @@ const AgentEditorEditPage = () => {
   // Publish dialog
   const handleOpenPublishDialog = () => setPublishDialogOpen(true)
   const handleClosePublishDialog = () => setPublishDialogOpen(false)
+  const handleClosePublishSuccessCard = () => setPublishSuccessCardOpen(false)
+  const handleGoPublishTest = () => {
+    if (!agentId) return
+    setPublishSuccessCardOpen(false)
+    navigate(`/dashboard/agents/${agentId}/publish`)
+  }
+
+  useEffect(() => {
+    const state = location.state as { openPublishDialog?: boolean } | null
+    if (!state?.openPublishDialog) return
+    setPublishDialogOpen(true)
+    navigate(location.pathname, { replace: true, state: {} })
+  }, [location.pathname, location.state, navigate])
 
   // Open settings dialog (draft mode only)
   const handleOpenSettings = () => {
@@ -699,9 +716,11 @@ const AgentEditorEditPage = () => {
                 </Tooltip>
               )}
               <Button
-                variant="contained"
-                className="btn-primary"
-                startIcon={<Tag className="w-4 h-4" />}
+                variant="outlined"
+                className="btn-outline-primary"
+                startIcon={
+                  <img src={agentSubmitVersionIcon} alt="" className="w-4 h-4 shrink-0" aria-hidden="true" />
+                }
                 onClick={handleOpenSubmitVersionDialog}
                 disabled={isReadOnly}
               >
@@ -897,8 +916,14 @@ const AgentEditorEditPage = () => {
         onClose={handleClosePublishDialog}
         onPublished={() => {
           if (agentId) fetchAgentDetail(agentId)
-          showSuccess(t('messages.publishSuccess'))
+          setPublishSuccessCardOpen(true)
         }}
+      />
+      <RuntimePublishSuccessCard
+        open={publishSuccessCardOpen}
+        onClose={handleClosePublishSuccessCard}
+        onGoTest={handleGoPublishTest}
+        goTestDisabled={!agentId}
       />
       <UnifiedSnackbar snackbar={snackbar} onClose={closeSnackbar} />
     </div>

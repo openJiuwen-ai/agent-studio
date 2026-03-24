@@ -137,10 +137,14 @@
     }
   },
   "publishDialog": {
-    "title": "发布版本",
+    "title": "发布智能体",
     "subtitle": "选择要发布的版本并确认",
     "fields": {
       "version": "选择版本"
+    },
+    "labels": {
+      "draft": "草稿",
+      "versionSubmitTime": "版本提交时间"
     },
     "buttons": {
       "cancel": "取消",

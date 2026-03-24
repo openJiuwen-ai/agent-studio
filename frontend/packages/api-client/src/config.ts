@@ -136,6 +136,8 @@ export const API_ENDPOINTS = {
     REMOVE: '/runtime/remove',
     /** 经中台转发至已部署 Runtime /query（SSE），避免浏览器 CORS */
     QUERY: '/runtime/query',
+    /** 经中台转发至已部署 Runtime /reset_conversation，避免浏览器 CORS */
+    RESET_CONVERSATION: '/runtime/reset_conversation',
   },
 
   // 代理管理

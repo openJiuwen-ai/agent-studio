@@ -1,0 +1,107 @@
+<svg viewBox="0 0 1756 1032" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1756.000000" height="1032.000000" fill="none" customFrame="#000000">
+	<mask id="mask_49" width="568.960205" height="568.960266" x="394.576172" y="734.654297" maskUnits="userSpaceOnUse">
+		<g filter="url(#pixso_custom_mask_type_outline)">
+			<rect id="蒙版" width="568.960205" height="568.960266" x="394.576172" y="734.654297" rx="284.480103" fill="rgb(255,255,255)" />
+		</g>
+	</mask>
+	<mask id="mask_48" width="568.960266" height="568.960266" x="631.586914" y="717.100586" maskUnits="userSpaceOnUse">
+		<g filter="url(#pixso_custom_mask_type_outline)">
+			<rect id="蒙版" width="568.960266" height="568.960266" x="631.586914" y="717.100586" rx="284.480133" fill="rgb(255,255,255)" />
+		</g>
+	</mask>
+	<mask id="mask_47" width="568.960205" height="568.960266" x="925.000000" y="797.000000" maskUnits="userSpaceOnUse">
+		<g filter="url(#pixso_custom_mask_type_outline)">
+			<rect id="蒙版" width="568.960205" height="568.960266" x="925.000000" y="797.000000" rx="284.480103" fill="rgb(255,255,255)" />
+		</g>
+	</mask>
+	<mask id="mask_46" width="2247.933350" height="918.066711" x="-245.966797" y="630.933594" maskUnits="userSpaceOnUse">
+		<g filter="url(#pixso_custom_mask_type_alpha)">
+			<ellipse id="椭圆形" rx="1123.966675" ry="459.033356" cx="877.999878" cy="1089.96692" fill="url(#paint_radial_6)" />
+			<ellipse id="椭圆形" rx="1123.183350" ry="458.250031" cx="877.999878" cy="1089.96692" stroke="rgb(151,151,151)" stroke-opacity="0" stroke-width="1.56666672" />
+		</g>
+	</mask>
+	<mask id="mask_45" width="1756.000000" height="1032.000000" x="0.000000" y="0.000000" maskUnits="userSpaceOnUse">
+		<g filter="url(#pixso_custom_mask_type_outline)">
+			<g filter="url(#filter_3)">
+				<rect id="蒙版" width="1756.000000" height="1032.000000" x="0.000000" y="0.000000" fill="url(#paint_linear_24)" fill-opacity="0" />
+			</g>
+		</g>
+	</mask>
+	<defs>
+		<linearGradient id="paint_linear_23" x1="877.999878" x2="877.999878" y1="0" y2="675.432129" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(0,0,0)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(0,0,0)" offset="1" stop-opacity="0" />
+		</linearGradient>
+		<clipPath id="clipPath_18">
+			<rect width="1756.000000" height="1032.000000" x="0.000000" y="0.000000" rx="8.000000" fill="rgb(255,255,255)" />
+		</clipPath>
+		<g id="pixso_custom_effect_3">
+			<effect visibility="visible" effectType="gaussianBlur" stdDeviation="0" />
+		</g>
+		<filter id="filter_3" width="1756.000000" height="1032.000000" x="0.000000" y="0.000000" filterUnits="userSpaceOnUse" customEffect="url(#pixso_custom_effect_3)" color-interpolation-filters="sRGB">
+			<feFlood flood-opacity="0" result="BackgroundImageFix" />
+			<feBlend result="shape" in="SourceGraphic" in2="BackgroundImageFix" mode="normal" />
+			<feGaussianBlur stdDeviation="0" result="effect_layerBlur_1" />
+		</filter>
+		<linearGradient id="paint_linear_24" x1="878" x2="878" y1="0" y2="1032" gradientUnits="userSpaceOnUse">
+			<stop stop-color="rgb(102,159,255)" offset="0" stop-opacity="0.913793087" />
+			<stop stop-color="rgb(240,240,240)" offset="0.997165203" stop-opacity="1" />
+		</linearGradient>
+		<filter id="pixso_custom_mask_type_outline">
+			<feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0 " />
+		</filter>
+		<radialGradient id="paint_radial_6" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1446.59,0,0,344.266,878,1089.97)">
+			<stop stop-color="rgb(255,255,255)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(118,118,118)" offset="0.305132866" stop-opacity="1" />
+			<stop stop-color="rgb(0,0,0)" offset="1" stop-opacity="0" />
+		</radialGradient>
+		<filter id="pixso_custom_mask_type_alpha">
+			<feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0 " />
+		</filter>
+		<clipPath id="clipPath_19">
+			<rect width="568.960205" height="568.960266" x="925.000000" y="797.000000" fill="rgb(255,255,255)" />
+		</clipPath>
+		<radialGradient id="paint_radial_7" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(-195.717,163.673,-166,-198.5,1209,1046.5)">
+			<stop stop-color="rgb(10,224,246)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(102,156,255)" offset="1" stop-opacity="0" />
+		</radialGradient>
+		<clipPath id="clipPath_20">
+			<rect width="568.960266" height="568.960266" x="631.586914" y="717.100586" fill="rgb(255,255,255)" />
+		</clipPath>
+		<radialGradient id="paint_radial_8" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(284.48,0,0,284.48,916.067,1001.58)">
+			<stop stop-color="rgb(31,47,255)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(126,32,255)" offset="1" stop-opacity="0" />
+		</radialGradient>
+		<clipPath id="clipPath_21">
+			<rect width="568.960205" height="568.960266" x="394.576172" y="734.655273" fill="rgb(255,255,255)" />
+		</clipPath>
+		<radialGradient id="paint_radial_9" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(284.48,0,0,284.48,679.056,1019.13)">
+			<stop stop-color="rgb(150,40,255)" offset="0" stop-opacity="1" />
+			<stop stop-color="rgb(122,102,255)" offset="1" stop-opacity="0" />
+		</radialGradient>
+	</defs>
+	<rect id="背景渐变" width="1756.000000" height="1032.000000" x="0.000000" y="0.000000" fill="rgb(255,255,255)" fill-opacity="0" />
+	<g id="颜色=Blue" clip-path="url(#clipPath_18)" customFrame="url(#clipPath_18)">
+		<rect id="颜色=Blue" width="1756.000000" height="1032.000000" x="0.000000" y="0.000000" rx="8.000000" fill="rgb(10,89,247)" fill-opacity="0.0399999991" />
+		<rect id="颜色=Blue" width="1756.000000" height="1032.000000" x="0.000000" y="0.000000" rx="8.000000" fill="url(#paint_linear_23)" fill-opacity="0" />
+		<g showMaskRef="url(#show_mask_18)" mask="url(#mask_45)">
+			<g id="show_mask_18" filter="url(#filter_3)">
+				<rect id="蒙版" width="1756.000000" height="1032.000000" x="0.000000" y="0.000000" fill="url(#paint_linear_24)" fill-opacity="0" />
+			</g>
+			<g mask="url(#mask_46)">
+				<g id="BLUE备份 4" opacity="0.100000001" showMaskRef="url(#show_mask_19)" customFrame="url(#clipPath_19)" mask="url(#mask_47)">
+					<rect id="BLUE备份 4" width="568.960205" height="568.960266" x="925.000000" y="797.000000" />
+					<rect id="show_mask_19" width="568.960205" height="568.960266" x="925.000000" y="797.000000" rx="284.480103" fill="url(#paint_radial_7)" />
+				</g>
+				<g id="BLUE备份 2" opacity="0.100000001" showMaskRef="url(#show_mask_20)" customFrame="url(#clipPath_20)" mask="url(#mask_48)">
+					<rect id="BLUE备份 2" width="568.960266" height="568.960266" x="631.586914" y="717.100586" />
+					<rect id="show_mask_20" width="568.960266" height="568.960266" x="631.586914" y="717.100586" rx="284.480133" fill="url(#paint_radial_8)" />
+				</g>
+				<g id="BLUE备份 3" opacity="0.100000001" showMaskRef="url(#show_mask_21)" customFrame="url(#clipPath_21)" mask="url(#mask_49)">
+					<rect id="BLUE备份 3" width="568.960205" height="568.960266" x="394.576172" y="734.655273" />
+					<rect id="show_mask_21" width="568.960205" height="568.960266" x="394.576172" y="734.654297" rx="284.480103" fill="url(#paint_radial_9)" />
+				</g>
+			</g>
+		</g>
+	</g>
+</svg>

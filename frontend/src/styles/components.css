@@ -93,6 +93,39 @@
     cursor: not-allowed;
   }
 
+  /* ========== 主色描边按钮（提交版本等，与主按钮色系一致） ========== */
+  .btn-outline-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: fit-content;
+    min-width: 0;
+    min-height: 36px;
+    padding: 6px 16px;
+    border-radius: 4px;
+    background: var(--global-bg-white);
+    border: 1px solid #0a59f7 !important;
+    color: #0a59f7 !important;
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 22px;
+    letter-spacing: 0;
+    text-transform: none;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: none !important;
+  }
+  .btn-outline-primary:hover:not(:disabled) {
+    background-color: color-mix(in srgb, #0a59f7 10%, transparent);
+    border-color: #0a59f7 !important;
+    color: #0a59f7 !important;
+  }
+  .btn-outline-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   /* ========== 登录页 ========== */
   .btn-login {
     width: 100%;

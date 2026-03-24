@@ -18,14 +18,11 @@
   min-height: clamp(200px, 40vh, 360px);
   display: flex;
   flex-direction: column;
-  /* 使用 public/images/chat-bg.png 作为整页背景，并叠一层淡渐变保证可读性 */
-  background: linear-gradient(180deg, rgba(246, 247, 255, 0.72) 0%, rgba(243, 245, 255, 0.72) 60%, rgba(242, 243, 255, 0.78) 100%), url('/images/chat-bg.png');
-  /* 只让图片层 cover，渐变层保持默认（避免不同屏幕比例下渐变被缩放） */
-  background-size: auto, cover;
-  background-position:
-    0 0,
-    center;
-  background-repeat: no-repeat, no-repeat;
+  /* 使用 public/images/chat-bg.png 作为整页背景（单层） */
+  background-image: url('/images/chat-bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .agentstudio-chat .agentstudio-icon-btn {
@@ -84,6 +81,7 @@
   width: 100%;
   padding: 0;
   background: transparent !important; /* 去掉消息区域的灰底 */
+  position: relative;
 }
 
 /* 组件内滚动条（Thread viewport） */
@@ -239,6 +237,7 @@
 
 .agentstudio-chat .aui-user-message-content {
   max-width: 88%;
+  margin-right: 40px;
   background: #0a59f714 !important;
   color: rgba(15, 23, 42, 0.92) !important;
   border: none !important;
@@ -283,7 +282,8 @@
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 38px !important;
   box-shadow: 0 18px 42px rgba(15, 23, 42, 0.1);
-  padding: 5px 10px 5px 12px !important;
+  min-height: 40px;
+  padding: 3px 10px 3px 12px !important;
   backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
@@ -345,36 +345,40 @@
   box-shadow: none;
 }
 
+/* 新对话按钮 */
 .agentstudio-chat .agentstudio-composer-newchat {
-  width: 34px;
-  height: 34px;
+  width: 50px;
+  height: 50px;
   border-radius: 9999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.75);
-  color: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.95);
+  color: rgba(15, 23, 42, 0.56);
   position: absolute;
-  left: -46px;
+  left: -65px;
   top: 50%;
   transform: translateY(-50%);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
   transition:
     background 120ms ease,
     transform 120ms ease,
-    border-color 120ms ease;
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 .agentstudio-chat .agentstudio-composer-newchat:hover {
-  background: rgba(255, 255, 255, 0.92);
-  border-color: rgba(15, 23, 42, 0.14);
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(255, 255, 255, 1);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.16);
   transform: translateY(calc(-50% - 1px));
 }
 .agentstudio-chat .agentstudio-composer-newchat:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: translateY(-50%);
-  background: rgba(255, 255, 255, 0.6);
-  border-color: rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.9);
   box-shadow: none;
 }
 .agentstudio-chat .agentstudio-composer-newchat:disabled:hover {
@@ -386,6 +390,12 @@
 .agentstudio-chat :is(.agentstudio-composer-newchat, .aui-composer-send, .aui-composer-cancel) svg {
   width: 18px;
   height: 18px;
+}
+
+.agentstudio-chat .agentstudio-composer-newchat-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 .agentstudio-chat .agentstudio-chat-divider {
@@ -423,6 +433,56 @@
   color: rgba(15, 23, 42, 0.86);
   letter-spacing: -0.02em;
   text-align: center;
+  display: none;
+}
+
+.agentstudio-chat .agentstudio-empty-hero {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  z-index: 1;
+}
+
+.agentstudio-chat .agentstudio-empty-hero-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: #dfeaff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: rgba(15, 23, 42, 0.9);
+  font-size: 26px;
+}
+
+.agentstudio-chat .agentstudio-empty-hero-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.agentstudio-chat .agentstudio-empty-hero-name {
+  font-size: 32px;
+  line-height: 1.1;
+  font-weight: 700;
+  color: rgba(15, 23, 42, 0.9);
+}
+
+.agentstudio-chat .agentstudio-empty-hero-text {
+  max-width: 880px;
+  margin-top: 15px;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 500;
+  color: rgba(15, 23, 42, 0.9);
 }
 
 .agentstudio-chat .aui-thread-welcome-suggestion {
@@ -448,4 +508,13 @@
   border: 1px solid rgba(15, 23, 42, 0.08);
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.1);
   border-radius: 9999px;
+}
+
+.agentstudio-chat .agentstudio-chat-disclaimer {
+  margin: 2px auto 4px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 16px;
+  color: rgba(15, 23, 42, 0.36);
+  transform: translateY(-25px);
 }

@@ -6,6 +6,7 @@ import { CardFooterRow } from '../../../components/Common/common-grid'
 import AgentIcon from '@/assets/icons/agent.svg?react'
 import { getAgentIconColor, getAgentIconTextColor } from './utils'
 import { Agent } from './types'
+import { getPublishStatusConfig } from '@/components/Runtime/PublishStatusTag'
 
 interface AgentCardProps {
   agent: Agent
@@ -116,16 +117,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
 
   const tags: Array<{ label: string; color?: string; variant?: 'default' | 'error' | 'loading'; tooltip?: React.ReactNode }> = []
 
-  const publishStatusMap: Record<'pending' | 'running' | 'stopped' | 'failed', { label: string; color: string }> = {
-    pending: { label: t('agents.tableView.publishStatus.pending'), color: '#F59E0B' },
-    running: { label: t('agents.tableView.publishStatus.running'), color: '#22C55E' },
-    stopped: { label: t('agents.tableView.publishStatus.stopped'), color: '#6B7280' },
-    failed: { label: t('agents.tableView.publishStatus.failed'), color: '#EF4444' },
-  }
-  const publishStatus =
-    isPublished
-      ? publishStatusMap[publishFlag as 'pending' | 'running' | 'stopped' | 'failed']
-      : undefined
+  const publishStatus = isPublished ? getPublishStatusConfig(t, publishFlag) : undefined
 
   if (publishStatus) {
     tags.push({ label: publishStatus.label, color: publishStatus.color })

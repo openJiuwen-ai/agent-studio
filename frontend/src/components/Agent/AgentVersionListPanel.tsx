@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
-import { History, X, FileText, Tag, Loader2, Trash2 } from 'lucide-react'
+import { History, X, FileText, Loader2, Trash2 } from 'lucide-react'
 import DeleteConfirmationDialog from '@/components/Common/DeleteConfirmationDialog'
 import { getDefaultSpaceId } from '@/utils/spaceUtils'
 import { AgentService, AgentVersionListRequest, AgentVersionListResponse } from '@test-agentstudio/api-client'
 import dayjs from 'dayjs'
 import { useScopedTranslation } from '@/i18n'
+import PublishStatusTag from '@/components/Runtime/PublishStatusTag'
 
 export interface VersionListItem {
   id: string
@@ -313,16 +314,6 @@ const VersionCard: React.FC<{
   deletingVersion?: string | null
 }> = ({ item, isActive, onSelectVersion, switchingVersion, handleCreateCopy, handleRestoreVersion, handleDeleteVersion, deletingVersion }) => {
   const { t } = useScopedTranslation('agents.historyPanel')
-  const publishStatusMap: Record<'pending' | 'running' | 'stopped' | 'failed', { label: string; className: string }> = {
-    pending: { label: t('publishStatus.pending'), className: 'bg-amber-100 text-amber-700' },
-    running: { label: t('publishStatus.running'), className: 'bg-green-100 text-green-700' },
-    stopped: { label: t('publishStatus.stopped'), className: 'bg-gray-100 text-gray-700' },
-    failed: { label: t('publishStatus.failed'), className: 'bg-red-100 text-red-700' },
-  }
-  const publishStatus =
-    item.published_flag && item.published_flag !== 'false'
-      ? publishStatusMap[item.published_flag as 'pending' | 'running' | 'stopped' | 'failed']
-      : undefined
 
   return (
     <div
@@ -340,21 +331,22 @@ const VersionCard: React.FC<{
           <span className="font-semibold text-gray-900 tracking-tight truncate max-w-[180px]" title={item.version}>
             {item.version}
           </span>
-          {publishStatus && (
-            <span
-              className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium ${publishStatus.className}`}
-              title={publishStatus.label}
-            >
-              {publishStatus.label}
-            </span>
+          {item.published_flag && item.published_flag !== 'false' && (
+            <PublishStatusTag status={item.published_flag} className="shrink-0" withTooltip />
           )}
         </div>
         {item.createdAt && (
           <span
             className={`inline-flex items-center gap-1 px-3 py-1 text-xs rounded-md border leading-4 ${isActive ? 'border-green-200 bg-green-50/70 text-green-700' : 'border-gray-200 bg-gray-50/70 text-gray-700'}`}
           >
-            {switchingVersion === item.version ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Tag className="w-3.5 h-3.5" />}
-            {switchingVersion === item.version ? t('actions.switching') : item.createdAt}
+            {switchingVersion === item.version ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                {t('actions.switching')}
+              </>
+            ) : (
+              item.createdAt
+            )}
           </span>
         )}
       </div>

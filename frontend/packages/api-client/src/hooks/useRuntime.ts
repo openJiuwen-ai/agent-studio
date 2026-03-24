@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from 'react-query'
 import RuntimeService from '../services/runtime'
-import { RuntimeDeployRequest, RuntimeDetailRequest, RuntimeRemoveRequest } from '../types'
+import { RuntimeDeployRequest, RuntimeDetailRequest, RuntimeRemoveRequest, RuntimeResetConversationRequest } from '../types'
 
 // Runtime 相关的 React Query hooks
 const isSuccessCode = (code: unknown) => Number(code) === 200
@@ -47,7 +47,7 @@ export const useDeployRuntime = () => {
     }
     return response
   }, {
-    onSuccess: (response, variables) => {
+    onSuccess: (_response, variables) => {
       queryClient.invalidateQueries(['runtime', 'detail', variables.agent_id, variables.space_id])
     },
     onError: error => {
@@ -67,7 +67,7 @@ export const useRemoveRuntime = () => {
     }
     return response
   }, {
-    onSuccess: (response, variables) => {
+    onSuccess: (_response, variables) => {
       queryClient.removeQueries(['runtime', 'detail', variables.agent_id, variables.space_id], { exact: true })
     },
     onError: error => {
@@ -76,8 +76,24 @@ export const useRemoveRuntime = () => {
   })
 }
 
+// 重置运行时会话
+export const useResetConversation = () => {
+  return useMutation(async (request: RuntimeResetConversationRequest) => {
+    const response = await RuntimeService.resetConversation(request)
+    if (!isSuccessCode(response.code)) {
+      throw new Error(getResponseMessage(response))
+    }
+    return response
+  }, {
+    onError: error => {
+      console.error('重置会话失败:', error)
+    },
+  })
+}
+
 export default {
   useRuntimeDetail,
   useDeployRuntime,
   useRemoveRuntime,
+  useResetConversation,
 }

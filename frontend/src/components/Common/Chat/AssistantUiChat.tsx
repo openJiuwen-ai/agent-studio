@@ -4,7 +4,7 @@
  * 父页面只需要提供 endpoint、鉴权 header 和请求体映射。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ActionBarPrimitive,
@@ -22,10 +22,13 @@ import { ExportedMessageRepository } from '@assistant-ui/core'
 import { useAgUiRuntime } from '@assistant-ui/react-ag-ui'
 import { AssistantActionBar, AssistantMessage, BranchPicker, Thread, UserMessage, useThreadConfig } from '@assistant-ui/react-ui'
 import { HttpAgent } from '@ag-ui/client'
-import { Copy as CopyIcon, Plus, Send, Square, Trash2 } from 'lucide-react'
+import { Copy as CopyIcon, Send, Square, Trash2 } from 'lucide-react'
 import type { SnackbarMessage } from '@/Common/UnifiedSnackbar'
 import { copyToClipboard } from '@/utils/prompts/utils'
+import newDialogIcon from '@/assets/icons/runtime-gen-new-dialog.svg'
 import './chat.css'
+
+const NewChatActionContext = createContext<undefined | (() => Promise<boolean | void>)>(undefined)
 
 function reseedThreadMessagesForReset(messages: readonly any[]): readonly any[] {
   // `thread.reset()` 会把传入的消息“当作新会话初始消息”重新建图。
@@ -144,8 +147,8 @@ const ExtendedAssistantActionBar = () => {
   const handleFollowUp = () => {
     const base = (messageRuntime.unstable_getCopyText?.() || '').trim()
     const nextText = base
-      ? `基于上面这条回答，我想继续追问：\n- （问题）\n\n参考内容：\n${base}\n`
-      : '我想继续追问：\n- （问题）\n'
+      ? t('runtime.publish.chat.followUpWithReference', { reference: base })
+      : t('runtime.publish.chat.followUp')
     setComposerTextSafe(composer, nextText)
   }
 
@@ -235,10 +238,37 @@ const CustomUserMessage = () => {
   )
 }
 
+const EmptyStateHero = ({
+  assistantIcon,
+  assistantName,
+  message,
+}: {
+  assistantIcon?: string
+  assistantName?: string
+  message: string
+}) => {
+  const hasMessages = useThread((t) => (t.messages?.length ?? 0) > 0)
+  if (hasMessages) return null
+
+  const iconText = (assistantIcon || '').trim() || '🤖'
+  const isImageSrc = /^(https?:\/\/|data:image\/|\/)/.test(iconText)
+
+  return (
+    <div className="agentstudio-empty-hero" aria-hidden="true">
+      <div className="agentstudio-empty-hero-avatar" aria-hidden="true">
+        {isImageSrc ? <img src={iconText} alt="" className="agentstudio-empty-hero-avatar-img" /> : <span>{iconText}</span>}
+      </div>
+      <div className="agentstudio-empty-hero-name">{assistantName || t('runtime.publish.chat.assistantDefaultName')}</div>
+      <div className="agentstudio-empty-hero-text">{message}</div>
+    </div>
+  )
+}
+
 const CustomComposer = () => {
   const { t } = useTranslation()
   const thread = useThreadRuntime()
   const allowCancel = useThread((t) => t.capabilities.cancel)
+  const onNewChat = useContext(NewChatActionContext)
 
   const [hasMessages, setHasMessages] = useState(() => (thread.getState()?.messages?.length ?? 0) > 0)
 
@@ -259,7 +289,12 @@ const CustomComposer = () => {
     return () => window.clearInterval(timer)
   }, [thread])
 
-  const handleNewThread = () => {
+  const handleNewThread = async () => {
+    if (onNewChat) {
+      const ok = await onNewChat()
+      if (ok === false) return
+    }
+
     const state = thread.getState()
     const msgs = state?.messages ?? []
     if (!msgs.length) return
@@ -305,7 +340,7 @@ const CustomComposer = () => {
         title={t('runtime.publish.chat.newChat')}
         aria-label={t('runtime.publish.chat.newChat')}
       >
-        <Plus />
+        <img src={newDialogIcon} alt="" className="agentstudio-composer-newchat-icon" aria-hidden="true" />
       </button>
       <ComposerPrimitive.Input className="aui-composer-input" />
       {allowCancel ? (
@@ -355,6 +390,7 @@ export interface AssistantUiChatProps {
   assistantName?: string
   userName?: string
   className?: string
+  onNewChat?: () => Promise<boolean | void>
 }
 
 /**
@@ -370,6 +406,7 @@ export function AssistantUiChat({
   assistantName,
   userName,
   className = '',
+  onNewChat,
 }: AssistantUiChatProps) {
   const { t } = useTranslation()
   const agUiConfigRef = useRef(agUi)
@@ -440,32 +477,40 @@ export function AssistantUiChat({
 
   return (
     <AssistantRuntimeProvider runtime={agUiRuntime}>
-      <div
-        className={`agentstudio-chat ${className}`}
-        // content: var(--agentstudio-user-name) 需要带引号的字符串形态（如："Tom"）
-        style={{ ['--agentstudio-user-name' as any]: JSON.stringify(userName ?? '') } as CSSProperties}
-      >
-        <div className="agentstudio-chat-thread">
-          <div className="agentstudio-chat-title sr-only">{title ?? '提示词调试'}</div>
-          <Thread
-            welcome={{
-              message: emptyStateText ?? t('runtime.publish.chat.emptyStateText'),
-            }}
-            assistantAvatar={{
-              fallback: assistantIcon ?? '🤖',
-              alt: assistantName ?? '',
-            }}
-            components={threadComponents}
-            strings={{
-              composer: { input: { placeholder: placeholder ?? t('runtime.publish.chat.inputPlaceholder') } },
-              assistantMessage: {
-                reload: { tooltip: t('common.actions.retry') },
-                copy: { tooltip: t('common.buttons.copy') },
-              },
-            }}
+      <NewChatActionContext.Provider value={onNewChat}>
+        <div
+          className={`agentstudio-chat ${className}`}
+          // content: var(--agentstudio-user-name) 需要带引号的字符串形态（如："Tom"）
+          style={{ ['--agentstudio-user-name' as any]: JSON.stringify(userName ?? '') } as CSSProperties}
+        >
+          <div className="agentstudio-chat-thread">
+            <div className="agentstudio-chat-title sr-only">{title ?? t('runtime.publish.chat.debugTitle')}</div>
+          <EmptyStateHero
+            assistantIcon={assistantIcon}
+            assistantName={assistantName}
+            message={emptyStateText ?? t('runtime.publish.chat.emptyStateText')}
           />
+            <Thread
+              welcome={{
+              message: '',
+              }}
+              assistantAvatar={{
+                fallback: assistantIcon ?? '🤖',
+                alt: assistantName ?? '',
+              }}
+              components={threadComponents}
+              strings={{
+                composer: { input: { placeholder: placeholder ?? t('runtime.publish.chat.inputPlaceholder') } },
+                assistantMessage: {
+                  reload: { tooltip: t('common.actions.retry') },
+                  copy: { tooltip: t('common.buttons.copy') },
+                },
+              }}
+            />
+            <div className="agentstudio-chat-disclaimer">{t('runtime.publish.chat.disclaimer')}</div>
+          </div>
         </div>
-      </div>
+      </NewChatActionContext.Provider>
     </AssistantRuntimeProvider>
   )
 }

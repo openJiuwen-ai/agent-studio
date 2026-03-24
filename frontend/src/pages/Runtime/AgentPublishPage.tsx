@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ChevronLeft, ArrowDown } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import {
   AgentService,
   AgentDetailResponse,
   useRuntimeDetail,
   useRemoveRuntime,
+  useResetConversation,
   getToken,
   API_CONFIG,
   API_ENDPOINTS,
@@ -16,229 +17,22 @@ import { getDefaultSpaceId } from '@/utils/spaceUtils'
 import { Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton } from '@mui/material'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '@/Common/UnifiedSnackbar'
 import { AssistantUiChat } from '@/components/Common/Chat/AssistantUiChat'
+import PublishStatusTag from '@/components/Runtime/PublishStatusTag'
 import TabSwitch from '@/components/Common/TabSwitch'
-import PublishApiPanel, { type CodeExampleItem } from './components/PublishApiPanel'
-import type { JsonSchema } from '@/types/jsonSchema'
+import PublishApiPanel from './components/PublishApiPanel'
+import offShelfIcon from '@/assets/icons/runtime-dp-off-shelf-lined.svg'
+import runtimePublishStatusIcon from '@/assets/icons/runtime-publish-success.svg'
+import {
+  DEMO_API_PUBLISH,
+  DEMO_HEADER_PARAMS,
+  DEMO_QUERY_PARAMS,
+  DEMO_BODY_PARAMS,
+  DEMO_RETURN_PARAMS,
+  DEMO_RETURN_OVERALL_DESC,
+} from './runtimeDemoData'
 
 type PublishType = 'chat' | 'api'
-
-/** API 发布 demo（与接口返回结构一致，后续由接口返回替换） */
-const DEMO_API_PUBLISH = {
-  api_name: '发送查询请求',
-  api_desc: '发送查询请求',
-  method: 'POST',
-  url: 'http://localhost:8090/query',
-  code_example: [
-  {
-    example_name: ['Example'],
-    examples: [
-      `curl -X POST '{{#if data.url}}{{data.url}}{{else}}https://localhost:8090/query{{/if}}{{#if data.query.conversation_id}}?conversation_id={{data.query.conversation_id}}{{/if}}' \\
--H "Authorization: Bearer {{#if data.token}}{{data.token}}{{else}}{token}{{/if}}" \\
--H "Content-Type: application/json"{{#if data.raw_body}} \\
--d '{{{data.raw_body}}}'{{else}}{{/if}}`,
-    ],
-    language: 'Shell',
-    title: 'Curl Request',
-  },
-  {
-    example_name: ['例1 流式响应', '例2 非流式响应', '例3 结合端插件聊天'],
-    examples: [
-      `"""
-This example is about how to use the streaming interface to start a chat request
-and handle chat events
-"""
-import os
-from cozepy import COZE_CN_BASE_URL
-coze_api_token = '{{#if data.token}}{{data.token}}{{else}}{token}{{/if}}'
-coze_api_base = COZE_CN_BASE_URL
-from cozepy import Coze, TokenAuth, Message, ChatStatus, MessageContentType, ChatEventType
-coze = Coze(auth=TokenAuth(token=coze_api_token), base_url=coze_api_base)
-bot_id = '{{#if data.body.bot_id}}{{data.body.bot_id}}{{else}}{bot_id}{{/if}}'
-user_id = '{{#if data.body.user_id}}{{data.body.user_id}}{{else}}{user_id}{{/if}}'
-for event in coze.chat.stream(
-    bot_id=bot_id,
-    user_id=user_id,
-    additional_messages=[Message.build_user_question_text("Tell a 500-word story.")],
-):
-    if event.event == ChatEventType.CONVERSATION_MESSAGE_DELTA:
-        print(event.message.content, end="", flush=True)
-    if event.event == ChatEventType.CONVERSATION_CHAT_COMPLETED:
-        print()
-        print("token usage:", event.chat.usage.token_count)`,
-      `"""
-This example describes how to use the chat interface to initiate conversations,
-poll the status of the conversation, and obtain the messages after the conversation is completed.
-"""
-import os
-import time
-from cozepy import COZE_CN_BASE_URL
-coze_api_token = '{{#if data.token}}{{data.token}}{{else}}{token}{{/if}}'
-coze_api_base = COZE_CN_BASE_URL
-from cozepy import Coze, TokenAuth, Message, ChatStatus, MessageContentType
-coze = Coze(auth=TokenAuth(token=coze_api_token), base_url=coze_api_base)
-bot_id = '{{#if data.body.bot_id}}{{data.body.bot_id}}{{else}}{bot_id}{{/if}}'
-user_id = '{{#if data.body.user_id}}{{data.body.user_id}}{{else}}{user_id}{{/if}}'
-chat_poll = coze.chat.create_and_poll(
-    bot_id=bot_id,
-    user_id=user_id,
-    additional_messages=[
-        Message.build_user_question_text("Who are you?"),
-        Message.build_assistant_answer("I am Bot by Coze."),
-        Message.build_user_question_text("What about you?"),
-    ],
-)
-for message in chat_poll.messages:
-    print(message.content, end="", flush=True)
-if chat_poll.chat.status == ChatStatus.COMPLETED:
-    print()
-    print("token usage:", chat_poll.chat.usage.token_count)`,
-      `"""
-This use case teaches you how to use local plugin.
-"""
-import json
-from typing import List
-from cozepy import COZE_CN_BASE_URL, ChatEvent, Stream, ToolOutput
-from cozepy import Coze, TokenAuth, Message, ChatStatus, MessageContentType, ChatEventType
-coze_api_token = '{{#if data.token}}{{data.token}}{{else}}{token}{{/if}}'
-coze_api_base = COZE_CN_BASE_URL
-coze = Coze(auth=TokenAuth(token=coze_api_token), base_url=coze_api_base)
-bot_id = '{{#if data.body.bot_id}}{{data.body.bot_id}}{{else}}{bot_id}{{/if}}'
-user_id = '{{#if data.body.user_id}}{{data.body.user_id}}{{else}}{user_id}{{/if}}'
-def handle_stream(stream: Stream[ChatEvent]):
-    for event in stream:
-        if event.event == ChatEventType.CONVERSATION_MESSAGE_DELTA:
-            print(event.message.content, end="", flush=True)
-        if event.event == ChatEventType.CONVERSATION_CHAT_REQUIRES_ACTION:
-            # ... submit_tool_outputs and continue
-            pass
-        if event.event == ChatEventType.CONVERSATION_CHAT_COMPLETED:
-            print()
-            print("token usage:", event.chat.usage.token_count)
-handle_stream(coze.chat.stream(bot_id=bot_id, user_id=user_id, additional_messages=[
-    Message.build_user_question_text("What do I have to do in the afternoon?"),
-]))`,
-    ],
-    language: 'Python',
-    title: 'Request',
-  },
-  {
-    example_name: ['例1 流式响应', '例2 非流式响应'],
-    examples: [
-      `// Our official coze sdk for JavaScript [coze-js]
-import { CozeAPI } from '@coze/api';
-const apiClient = new CozeAPI({
-  token: {{#if data.token}}'{{data.token}}'{{else}}{token}{{/if}},
-  baseURL: '{{data.baseUrl}}'
-});
-const res = await apiClient.chat.stream({
-  bot_id: {{#if data.body.bot_id}}'{{data.body.bot_id}}'{{else}}{bot_id}{{/if}},
-  user_id: {{#if data.body.user_id}}'{{data.body.user_id}}'{{else}}{user_id}{{/if}},
-});`,
-      `// Our official coze sdk for JavaScript [coze-js]
-import { CozeAPI } from '@coze/api';
-const apiClient = new CozeAPI({
-  token: {{#if data.token}}'{{data.token}}'{{else}}{token}{{/if}},
-  baseURL: '{{data.baseUrl}}'
-});
-const res = await apiClient.chat.create({
-  bot_id: {{#if data.body.bot_id}}'{{data.body.bot_id}}'{{else}}{bot_id}{{/if}},
-  user_id: {{#if data.body.user_id}}'{{data.body.user_id}}'{{else}}{user_id}{{/if}},
-});`,
-    ],
-    language: 'JavaScript',
-    title: 'Fetch Request',
-  },
-] as CodeExampleItem[],
-}
-
-/** 请求配置 demo：Header / Query / Body（JSON Schema，与接口返回结构一致时可替换） */
-const DEMO_HEADER_PARAMS: JsonSchema = {
-  type: 'object',
-  properties: {
-    token: {
-      type: 'string',
-      description: 'API 通过访问令牌进行 API 请求的鉴权。生成方式可以参考鉴权方式',
-    },
-  },
-  required: ['token'],
-}
-
-const DEMO_QUERY_PARAMS: JsonSchema = {
-  type: 'object',
-  properties: {
-    conversation_id: {
-      type: 'string',
-      description:
-        '标识对话发生在哪一次会话中。会话是 Bot 和用户之间的一段问答交互。一个会话包含一条或多条消息。对话是会话中对 Bot 的一次调用，Bot 会将对话中产生的消息添加到会话中。',
-    },
-  },
-}
-
-const DEMO_BODY_PARAMS: JsonSchema = {
-  type: 'object',
-  properties: {
-    bot_id: {
-      type: 'string',
-      description: '要进行会话聊天的智能体 ID。进入智能体的开发页面，开发页面 URL 中 bot 参数后的数字就是智能体 ID。',
-      example: '73428668*****',
-    },
-    user_id: {
-      type: 'string',
-      description:
-        '标识当前与智能体对话的用户，由使用方自行定义、生成与维护。user_id 用于标识对话中的不同用户，不同的 user_id，其对话的上下文消息、数据库等对话记忆数据互相隔离。',
-      example: '123',
-    },
-  },
-  required: ['bot_id', 'user_id'],
-}
-
-/** 返回参数说明 demo（JSON Schema object，支持嵌套，与接口返回结构一致时可替换） */
-const DEMO_RETURN_PARAMS: JsonSchema = {
-  type: 'object',
-  properties: {
-    code: {
-      type: 'integer',
-      description: '调用状态码。0 表示调用成功，其他值表示调用失败，你可以通过 msg 字段判断详细的错误原因。',
-      example: 0,
-    },
-    data: {
-      type: 'object',
-      description: '对话详情。',
-      properties: {
-        bot_id: { type: 'string', description: '该会话所属的智能体的 ID。', example: '737946218936519****' },
-        completed_at: {
-          type: 'integer',
-          description: '对话结束的时间。格式为 10 位的 Unixtime 时间戳，单位为秒。',
-          example: 1.718609575e9,
-        },
-        conversation_id: { type: 'string', description: '会话 ID，即会话的唯一标识。', example: '738136585609548****' },
-        created_at: {
-          type: 'integer',
-          description: '对话创建的时间。格式为 10 位的 Unixtime 时间戳，单位为秒。',
-          example: 1.718609571e9,
-        },
-        failed_at: {
-          type: 'integer',
-          description: '对话失败的时间。格式为 10 位的 Unixtime 时间戳，单位为秒。',
-          example: 1.718609571e9,
-        },
-        id: { type: 'string', description: '对话 ID，即对话的唯一标识。', example: '738137187639794****' },
-        last_error: {
-          type: 'object',
-          description: '最近一次错误信息。',
-          properties: {
-            code: { type: 'integer', description: '状态码。0 代表调用成功。', example: 0 },
-            msg: {
-              type: 'string',
-              description: '状态信息。API 调用失败时可通过此字段查看详细错误信息。',
-              example: '详见响应示例',
-            },
-          },
-        },
-      },
-    },
-  },
-}
+type RuntimeDeployStatus = 'running' | 'pending' | 'stopped' | 'failed' | 'unknown'
 
 /** 模拟 AI 回复（固定文案，用于对话体验演示） */
 // Mock 已切换为真实执行接口（8001）
@@ -274,17 +68,73 @@ const AgentPublishPage: React.FC = () => {
     { enabled: !!agentId && isRuntimeDetailEnabled }
   )
   const removeRuntimeMutation = useRemoveRuntime()
+  const resetConversationMutation = useResetConversation()
+  const deployDetails = runtimeDetailQuery.data?.data?.deploy_details
+  const primaryDeployDetail = Array.isArray(deployDetails) ? deployDetails[0] : (deployDetails as any)
+
+  const normalizedDeployStatus = String(primaryDeployDetail?.status || '')
+    .toLowerCase()
+    .trim()
+  const deployStatus: RuntimeDeployStatus =
+    normalizedDeployStatus === 'running'
+      ? 'running'
+      : normalizedDeployStatus === 'pending'
+        ? 'pending'
+        : normalizedDeployStatus === 'stopped'
+          ? 'stopped'
+          : normalizedDeployStatus === 'failed'
+            ? 'failed'
+            : 'unknown'
+
+  const hasDeploymentDetail = Array.isArray(deployDetails)
+    ? deployDetails.length > 0
+    : !!primaryDeployDetail
+  const isRuntimeReady = hasDeploymentDetail && deployStatus === 'running'
+  const shouldDisableRuntimeActions = !isRuntimeReady
+  const isNotPublishedState = !hasDeploymentDetail || deployStatus === 'unknown'
+
+  const runtimeStatusMessage = !hasDeploymentDetail
+    ? t('runtime.publish.messages.notPublished')
+    : deployStatus === 'pending'
+      ? t('runtime.publish.messages.pending')
+      : deployStatus === 'stopped'
+        ? t('runtime.publish.messages.stopped')
+        : deployStatus === 'failed'
+          ? t('runtime.publish.messages.failed')
+          : deployStatus === 'running'
+            ? ''
+            : t('runtime.publish.messages.notPublished')
+
+  const publishStatusKey: 'false' | 'pending' | 'running' | 'stopped' | 'failed' =
+    !hasDeploymentDetail
+      ? 'false'
+      : deployStatus === 'pending' || deployStatus === 'running' || deployStatus === 'stopped' || deployStatus === 'failed'
+        ? deployStatus
+        : 'false'
+
+  const handleGoPublish = () => {
+    if (!agentId) return
+    navigate(`/dashboard/agents/${agentId}`, {
+      state: { openPublishDialog: true },
+    })
+  }
 
   useEffect(() => {
     fetchAgentDetail()
   }, [agentId])
 
   useEffect(() => {
-    const deployUrl = runtimeDetailQuery.data?.data?.deploy_details?.[0]?.url
+    const deployUrl = primaryDeployDetail?.url
     if (deployUrl) {
       setRuntimeApiUrl(appendQueryPath(String(deployUrl)))
     }
-  }, [runtimeDetailQuery.data])
+  }, [primaryDeployDetail?.url])
+
+  useEffect(() => {
+    if (!isRuntimeReady && publishType !== 'chat') {
+      setPublishType('chat')
+    }
+  }, [isRuntimeReady, publishType])
 
   const fetchAgentDetail = async () => {
     if (!agentId) return
@@ -302,7 +152,7 @@ const AgentPublishPage: React.FC = () => {
         showError(`${t('common.messages.error')}: ${response.message || t('common.messages.unknownError')}`)
       }
     } catch (error) {
-      console.error('获取智能体详情失败:', error)
+      console.error('Failed to fetch agent detail:', error)
       showError(
         `${t('common.messages.error')}: ${
           error instanceof Error ? error.message : t('common.messages.unknownError')
@@ -321,6 +171,15 @@ const AgentPublishPage: React.FC = () => {
     return `${normalized}/query`
   }
 
+  const appendResetConversationPath = (url: string): string => {
+    const trimmed = (url || '').trim()
+    if (!trimmed) return ''
+    const normalized = trimmed.replace(/\/+$/, '')
+    if (normalized.endsWith('/reset_conversation')) return normalized
+    if (normalized.endsWith('/query')) return normalized.replace(/\/query$/, '/reset_conversation')
+    return `${normalized}/reset_conversation`
+  }
+
   const handleBack = () => {
     navigate('/dashboard/agents')
   }
@@ -330,7 +189,7 @@ const AgentPublishPage: React.FC = () => {
   }
 
   const handleCloseOfflineConfirm = () => {
-    if (removeRuntimeMutation.isPending) return
+    if (removeRuntimeMutation.isLoading) return
     setOfflineConfirmOpen(false)
   }
 
@@ -354,7 +213,36 @@ const AgentPublishPage: React.FC = () => {
     } catch (error) {
       // 下架失败时恢复查询能力
       setIsRuntimeDetailEnabled(true)
-      console.error('下架智能体失败:', error)
+      console.error('Failed to offline agent:', error)
+    }
+  }
+
+  const handleResetConversation = async (): Promise<boolean> => {
+    try {
+      const data = await resetConversationMutation.mutateAsync({
+        target_url: appendResetConversationPath(runtimeApiUrl),
+        space_id: String(spaceId),
+        conversation_id: conversationId,
+      })
+
+      if (data && typeof data === 'object') {
+        const wrapped = data as any
+        if (typeof wrapped.code === 'number' && wrapped.code !== 200) {
+          throw new Error(wrapped.message || 'reset conversation failed')
+        }
+        if (wrapped.data && typeof wrapped.data === 'object' && 'status' in wrapped.data && wrapped.data.status !== 'ok') {
+          throw new Error(wrapped.data.message || 'reset conversation failed')
+        }
+        if ('status' in wrapped && wrapped.status !== 'ok') {
+          throw new Error(wrapped.message || 'reset conversation failed')
+        }
+      }
+
+      return true
+    } catch (error) {
+      console.error('Failed to reset conversation:', error)
+      showError(t('runtime.publish.messages.resetConversationFailed'))
+      return false
     }
   }
 
@@ -397,7 +285,10 @@ const AgentPublishPage: React.FC = () => {
                 {agent.icon || '🤖'}
               </div>
               <div className="min-w-0">
-                <h1 className="text-lg font-semibold text-gray-900 truncate">{agent.agent_name}</h1>
+                <div className="flex items-center gap-2 min-w-0">
+                  <h1 className="text-lg font-semibold text-gray-900 truncate">{agent.agent_name}</h1>
+                  <PublishStatusTag status={publishStatusKey} />
+                </div>
                 <p className="text-sm text-gray-500 truncate">
                   {agent.description || t('runtime.publish.noDescription')}
                 </p>
@@ -412,17 +303,20 @@ const AgentPublishPage: React.FC = () => {
               { value: 'api', label: t('runtime.publish.types.api') },
             ]}
             value={publishType}
-            onChange={v => setPublishType(v as PublishType)}
+            onChange={v => {
+              if (shouldDisableRuntimeActions) return
+              setPublishType(v as PublishType)
+            }}
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
           />
 
           <div className="flex flex-1 items-center justify-end space-x-2 min-w-0">
             <Button
-              variant="outlined"
-              color="secondary"
-              startIcon={<ArrowDown className="w-4 h-4" />}
-              className="btn-secondary"
+              variant="contained"
+              startIcon={<img src={offShelfIcon} alt="" className="w-3.5 h-3.5" aria-hidden="true" />}
+              className="btn-primary"
               onClick={handleOpenOfflineConfirm}
+              disabled={shouldDisableRuntimeActions}
             >
               {t('runtime.publish.actions.offline')}
             </Button>
@@ -434,14 +328,14 @@ const AgentPublishPage: React.FC = () => {
         <DialogTitle>{t('runtime.publish.offlineConfirm.title')}</DialogTitle>
         <DialogContent>{t('runtime.publish.offlineConfirm.description')}</DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseOfflineConfirm} disabled={removeRuntimeMutation.isPending}>
+          <Button onClick={handleCloseOfflineConfirm} disabled={removeRuntimeMutation.isLoading}>
             {t('runtime.publish.offlineConfirm.cancel')}
           </Button>
           <Button
-            color="error"
             variant="contained"
+            className="btn-primary"
             onClick={handleOffline}
-            disabled={removeRuntimeMutation.isPending}
+            disabled={removeRuntimeMutation.isLoading}
           >
             {t('runtime.publish.offlineConfirm.confirm')}
           </Button>
@@ -449,7 +343,34 @@ const AgentPublishPage: React.FC = () => {
       </Dialog>
 
       <div className="flex-1 overflow-auto">
-        {publishType === 'chat' ? (
+        {!isRuntimeReady ? (
+          <div className="h-full min-h-0 flex items-center justify-center px-6 py-8">
+            <div className="w-full max-w-[460px] px-8 py-9 text-center">
+              <img
+                src={runtimePublishStatusIcon}
+                alt=""
+                className="mx-auto w-[132px] h-[72px] select-none pointer-events-none"
+                aria-hidden="true"
+              />
+              <div className="mt-4 text-[22px] leading-8 font-semibold text-[#1F2A44]">
+                {isNotPublishedState ? (
+                  <>
+                    {t('runtime.publish.messages.notPublished')}
+                    <button
+                      type="button"
+                      onClick={handleGoPublish}
+                      className="ml-1 text-[22px] leading-8 font-semibold text-[#1A56F8] cursor-pointer"
+                    >
+                      {t('runtime.publish.actions.goPublish')}
+                    </button>
+                  </>
+                ) : (
+                  runtimeStatusMessage
+                )}
+              </div>
+            </div>
+          </div>
+        ) : publishType === 'chat' ? (
           <div className="h-full min-h-0 flex flex-col w-full max-w-full overflow-hidden">
             <AssistantUiChat
               agUi={{
@@ -462,6 +383,7 @@ const AgentPublishPage: React.FC = () => {
                   const messages = Array.isArray(input?.messages) ? input.messages : []
                   return {
                     agent_id: String(agent.agent_id || agentId),
+                    target_url: runtimeApiUrl,
                     space_id: String(spaceId),
                     messages,
                     conversation_id: conversationId,
@@ -472,8 +394,10 @@ const AgentPublishPage: React.FC = () => {
               }}
               assistantIcon={agent.icon}
               assistantName={agent.agent_name}
-              userName={user?.username || user?.email || '用户'}
+              emptyStateText={t('runtime.publish.chat.defaultGreeting')}
+              userName={user?.username || user?.email || t('runtime.publish.chat.defaultUserName')}
               className="flex-1 min-h-0"
+              onNewChat={handleResetConversation}
             />
           </div>
         ) : (
@@ -486,8 +410,9 @@ const AgentPublishPage: React.FC = () => {
                 header_params: DEMO_HEADER_PARAMS,
                 query_params: DEMO_QUERY_PARAMS,
                 body_params: DEMO_BODY_PARAMS,
-                return_section_title: '非流式响应',
+                return_section_title: t('runtime.publish.api.streamResponseSectionTitle'),
                 return_params: DEMO_RETURN_PARAMS,
+                return_overall_desc: DEMO_RETURN_OVERALL_DESC,
               }}
             />
           </div>

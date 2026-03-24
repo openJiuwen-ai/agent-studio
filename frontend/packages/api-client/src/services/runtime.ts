@@ -7,6 +7,8 @@ import {
   RuntimeDetailResponse,
   RuntimeRemoveRequest,
   RuntimeRemoveResponse,
+  RuntimeResetConversationRequest,
+  RuntimeResetConversationResponse,
 } from '../types'
 
 // 运行时部署服务
@@ -50,6 +52,22 @@ export class RuntimeService {
       return response.data
     } catch (error) {
       console.error('下架运行时部署API调用失败:', error)
+      throw error
+    }
+  }
+
+  // 重置会话
+  static async resetConversation(request: RuntimeResetConversationRequest): Promise<RuntimeResetConversationResponse> {
+    try {
+      const apiClient = getApiClient()
+      const response = await apiClient.post<RuntimeResetConversationResponse>(API_ENDPOINTS.RUNTIME.RESET_CONVERSATION, {
+        target_url: request.target_url,
+        space_id: request.space_id,
+        conversation_id: request.conversation_id,
+      })
+      return response.data
+    } catch (error) {
+      console.error('重置会话API调用失败:', error)
       throw error
     }
   }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { Dialog, Button, Select, MenuItem, FormControl, InputLabel } from '@mui/material'
-import { Send } from 'lucide-react'
+import { Dialog, Button, IconButton } from '@mui/material'
+import { X } from 'lucide-react'
+import dayjs from 'dayjs'
 import { getDefaultSpaceId } from '@/utils/spaceUtils'
 import {
   AgentService,
@@ -13,6 +14,8 @@ import {
 } from '@test-agentstudio/api-client'
 import { useScopedTranslation } from '@/i18n'
 import AgentSubmitVersionDialog from './AgentSubmitVersionDialog'
+import publishDialogDraftIcon from '@/assets/icons/runtime-publish-dialog-draft.svg.svg'
+import publishDialogVersionIcon from '@/assets/icons/runtime-publish-dialog-version.svg'
 
 export interface AgentPublishDialogProps {
   open: boolean
@@ -30,6 +33,12 @@ const toMs = (ts: number | string): number => {
   }
   const n = Date.parse(String(ts || ''))
   return isNaN(n) ? 0 : n
+}
+
+const formatVersionTime = (ts?: number | string): string => {
+  if (ts === undefined || ts === null || ts === '') return '-'
+  const d = dayjs(toMs(ts))
+  return d.isValid() ? d.format('YYYY-MM-DD HH:mm:ss') : String(ts)
 }
 
 const AgentPublishDialog: React.FC<AgentPublishDialogProps> = ({
@@ -173,65 +182,85 @@ const AgentPublishDialog: React.FC<AgentPublishDialogProps> = ({
     await deployWithVersion(version)
   }
 
+  const disablePublish = loading || publishing || versions.length === 0 || !selectedVersion
+
   return (
     <>
       <Dialog
         open={open}
-        onClose={onClose}
+        onClose={publishing ? undefined : onClose}
         maxWidth="sm"
         fullWidth
         PaperProps={{
-          className: 'overflow-hidden shadow-2xl',
+          className: 'overflow-hidden shadow-xl',
           style: {
-            backgroundColor: '#fafafa',
-            borderRadius: '16px',
+            backgroundColor: '#FFFFFF',
+            borderRadius: '8px',
             maxHeight: '90vh',
             margin: '5vh auto',
           },
         }}
       >
-        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-4 sm:p-6">
-          <div className="flex items-center">
-            <div className="bg-white/20 backdrop-blur-sm p-2 sm:p-3 rounded-xl">
-              <Send className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-            </div>
-            <div className="ml-3 sm:ml-4">
-              <h2 className="text-lg sm:text-xl font-bold">{t('title')}</h2>
-              <p className="text-indigo-100 text-xs sm:text-sm mt-1">{t('subtitle')}</p>
-            </div>
-          </div>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB]">
+          <h2 className="text-[18px] leading-6 font-semibold text-[#111827]">{t('title')}</h2>
+          <IconButton size="small" onClick={onClose} disabled={publishing}>
+            <X className="w-4 h-4 text-[#6B7280]" />
+          </IconButton>
         </div>
 
-        <div className="p-4 sm:p-6">
+        <div className="px-5 py-4">
+          <div className="text-[14px] text-[#374151] mb-3">{t('fields.version')}</div>
           {loading ? (
-            <div className="flex items-center justify-center py-8 text-gray-500">{t('status.loading')}</div>
+            <div className="flex items-center justify-center h-[240px] text-[#6B7280]">{t('status.loading')}</div>
           ) : versions.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">{t('status.noVersions')}</div>
+            <div className="flex items-center justify-center h-[240px] text-[#6B7280]">{t('status.noVersions')}</div>
           ) : (
             <>
-              <FormControl fullWidth size="small" className="mb-4">
-                <InputLabel id="publish-dialog-version-label">{t('fields.version')}</InputLabel>
-                <Select
-                  labelId="publish-dialog-version-label"
-                  value={selectedVersion}
-                  label={t('fields.version')}
-                  onChange={e => setSelectedVersion(e.target.value)}
-                  disabled={publishing}
-                >
+              <div className="h-[240px] overflow-y-auto pr-1">
+                <div className="space-y-3">
                   {versions.map((v, i) => {
                     const rawVer = String(v.agent_version || '')
                     const ver = rawVer.toLowerCase() === 'draft' ? 'draft' : rawVer.startsWith('v') ? rawVer : `v${rawVer}`
+                    const selected = selectedVersion === ver
+                    const isDraft = rawVer.toLowerCase() === 'draft'
+                    const desc = String(v.version_description ?? '').trim()
+                    const versionLabel = isDraft ? t('labels.draft') : desc ? `${ver}-${desc}` : ver
+                    const timeText = isDraft ? '' : formatVersionTime(v.create_time)
                     return (
-                      <MenuItem key={i} value={ver}>
-                        {ver}
-                        {v.version_description ? ` - ${v.version_description}` : ''}
-                      </MenuItem>
+                      <button
+                        key={`${ver}-${i}`}
+                        type="button"
+                        onClick={() => setSelectedVersion(ver)}
+                        disabled={publishing}
+                        className={`w-full text-left rounded-[8px] border px-3 py-3 transition-colors ${
+                          selected ? 'border-[#4F6EF7] bg-[#F8FAFF]' : 'border-[#EEF2F7] bg-[#FAFBFD] hover:border-[#D4DCE8]'
+                        }`}
+                      >
+                        <div className="flex items-start">
+                          <div className="w-6 h-6 rounded bg-white border border-[#E5E7EB] flex items-center justify-center mt-0.5">
+                            <img
+                              src={isDraft ? publishDialogDraftIcon : publishDialogVersionIcon}
+                              alt=""
+                              className="w-3.5 h-3.5"
+                              aria-hidden="true"
+                            />
+                          </div>
+                          <div className="ml-2.5 min-w-0">
+                            <div className="text-[14px] leading-5 font-medium text-[#111827]">{versionLabel}</div>
+                            {!isDraft && (
+                              <div className="mt-1 text-[12px] leading-4 text-[#9CA3AF]">
+                                {t('labels.versionSubmitTime')}&nbsp;&nbsp;{timeText}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
                     )
                   })}
-                </Select>
-              </FormControl>
+                </div>
+              </div>
               {error && (
-                <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
                   {error}
                 </div>
               )}
@@ -239,16 +268,32 @@ const AgentPublishDialog: React.FC<AgentPublishDialogProps> = ({
           )}
         </div>
 
-        <div className="bg-gray-50 px-4 sm:px-6 py-3 sm:py-4 rounded-b-2xl border-t border-gray-200">
+        <div className="px-5 py-3 border-t border-[#E5E7EB] bg-white">
           <div className="flex justify-end gap-3">
-            <Button onClick={onClose} disabled={publishing} variant="outlined" className="border-gray-300 text-gray-700">
+            <Button
+              onClick={onClose}
+              disabled={publishing}
+              variant="outlined"
+              sx={{
+                minWidth: 84,
+                height: 32,
+                borderColor: '#D1D5DB',
+                color: '#4B5563',
+                backgroundColor: '#FFFFFF',
+                '&:hover': {
+                  borderColor: '#9CA3AF',
+                  backgroundColor: '#F9FAFB',
+                },
+              }}
+            >
               {t('buttons.cancel')}
             </Button>
             <Button
               onClick={handlePublish}
-              disabled={loading || publishing || versions.length === 0 || !selectedVersion}
+              disabled={disablePublish}
               variant="contained"
               className="btn-primary"
+              sx={{ minWidth: 96, height: 32 }}
             >
               {publishing ? t('status.publishing') : t('buttons.confirm')}
             </Button>

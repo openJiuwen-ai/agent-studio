@@ -9,6 +9,7 @@ import { Empty } from '@/components/Common/Empty'
 import dayjs from 'dayjs'
 import { Agent } from './types'
 import { getAgentIconColor, getAgentIconTextColor } from './utils'
+import PublishStatusTag from '@/components/Runtime/PublishStatusTag'
 
 interface AgentTableViewProps {
   agents: Agent[]
@@ -43,12 +44,6 @@ export const AgentTableView: React.FC<AgentTableViewProps> = ({
 }) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const publishStatusMap: Record<'pending' | 'running' | 'stopped' | 'failed', { label: string; className: string }> = {
-    pending: { label: t('agents.tableView.publishStatus.pending'), className: 'bg-amber-100 text-amber-700' },
-    running: { label: t('agents.tableView.publishStatus.running'), className: 'bg-green-100 text-green-700' },
-    stopped: { label: t('agents.tableView.publishStatus.stopped'), className: 'bg-gray-100 text-gray-700' },
-    failed: { label: t('agents.tableView.publishStatus.failed'), className: 'bg-red-100 text-red-700' },
-  }
 
   // Date formatting utility
   const formatDateValue = (value: unknown): string => {
@@ -126,28 +121,7 @@ export const AgentTableView: React.FC<AgentTableViewProps> = ({
         dataIndex: 'published_flag',
         width: 130,
         render: ({ row }) => {
-          if (!row.published_flag || row.published_flag === 'false') {
-            return (
-              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700">
-                {t('agents.tableView.publishStatus.unpublished')}
-              </span>
-            )
-          }
-          const status = publishStatusMap[row.published_flag as 'pending' | 'running' | 'stopped' | 'failed']
-          if (!status) {
-            return (
-              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700">
-                {t('agents.tableView.publishStatus.unpublished')}
-              </span>
-            )
-          }
-          return (
-            <Tooltip title={status.label} disableInteractive placement="top">
-              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${status.className}`}>
-                {status.label}
-              </span>
-            </Tooltip>
-          )
+          return <PublishStatusTag status={row.published_flag} withTooltip />
         },
       },
       // {
@@ -252,8 +226,8 @@ export const AgentTableView: React.FC<AgentTableViewProps> = ({
                   icon: <Tag className="w-4 h-4" />,
                   label: t('agents.agentCard.actions.publish'),
                   tooltip: t('agents.agentCard.actions.publish'),
-                  visible: row => Boolean(row.published_flag && row.published_flag !== 'false'),
-                  onClick: row => onPublish(row),
+                  visible: (row: Agent) => Boolean(row.published_flag && row.published_flag !== 'false'),
+                  onClick: (row: Agent) => onPublish(row),
                 },
               ]
             : []),

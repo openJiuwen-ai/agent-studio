@@ -145,10 +145,14 @@
     }
   },
   "publishDialog": {
-    "title": "Publish Version",
+    "title": "Publish Agent",
     "subtitle": "Select a version to publish and confirm",
     "fields": {
       "version": "Select version"
+    },
+    "labels": {
+      "draft": "Draft",
+      "versionSubmitTime": "Version submitted at"
     },
     "buttons": {
       "cancel": "Cancel",
