@@ -850,7 +850,10 @@ async def get_agent_publish_status(agent_id: str, user_id: str, space_id: str) -
 
 
 def map_agent_publish_status(
-    agent_id: str, agent_version: str, agent_publish_status_payload: Union[Dict[str, Any], List[Dict[str, Any]]],
+        agent_id: str,
+        agent_version: str,
+        is_version_detail: str,
+        agent_publish_status_payload: Dict[str, Any],
 ) -> str:
     """判断当前 agent 与 version 是否发布。
 
@@ -860,14 +863,17 @@ def map_agent_publish_status(
     if isinstance(agent_publish_status_payload, dict):
         entry = agent_publish_status_payload.get(agent_id)
         if isinstance(entry, dict):
-            return entry.get("published_flag") or "false"
-        return "false"
+            if is_version_detail == "1":
+                if agent_version == entry.get("version"):
+                    return entry.get("published_flag") or "false"
+            else:
+                return entry.get("published_flag") or "false"
     return "false"
 
 
 async def get_agent_version_publish_status(agent_id: str, version: str, user_id: str, space_id: str) -> str:
     runtime_result = await get_agent_publish_status(agent_id, user_id, space_id)
-    return map_agent_publish_status(agent_id, version, runtime_result)
+    return map_agent_publish_status(agent_id, version, "0", runtime_result)
 
 
 @with_exception_handling
@@ -1428,7 +1434,7 @@ async def agent_version_list(
                 version_description=version_info.get("version_description", ""),
                 create_time=version_info.get("create_time", 0),
                 published_flag=map_agent_publish_status(
-                    req.agent_id, version_info.get("agent_version", ""), runtime_result)
+                    req.agent_id, version_info.get("agent_version", ""), "1", runtime_result)
             )
         )
 
