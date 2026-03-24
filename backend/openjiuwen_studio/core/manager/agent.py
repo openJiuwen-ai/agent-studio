@@ -830,9 +830,11 @@ async def get_agent_publish_status(agent_id: str, user_id: str, space_id: str) -
 
             # 从runtime获取最新发布状态, 正常情况下，同一个agentid能且只能发布一次
             # 同一个agentid发布多次且同时存在，res里会有多条数据，取create_at最晚那条数据
-            deploy_detail = await get_agent_deploy_detail(deploy_info.get("deployment_id"), user_id, space_id)
-            published_flag = deploy_detail.get("status")
-
+            if deploy_info.get("deployment_id"):
+                deploy_detail = await get_agent_deploy_detail(deploy_info.get("deployment_id"), user_id, space_id)
+                published_flag = deploy_detail.get("status")
+            else:
+                published_flag = deploy_info.get("status")
             res[agent_id] = {
                 'version': version,
                 'published_flag': published_flag

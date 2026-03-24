@@ -20,17 +20,17 @@ class RuntimeInfoDB(Base, DBFunBase):
     else:
         id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, name="id")
 
-    deployment_id: Mapped[str] = mapped_column(
-        String(100), nullable=False, index=True, unique=True,
+    deployment_id: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, index=True, unique=True,
         comment='部署 ID，唯一标识一个运行时实例')
-    space_id: Mapped[str] = mapped_column(String(100), nullable=False, comment='空间 ID')
+    space_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True, comment='空间 ID')
     source_id: Mapped[str] = mapped_column(
         String(100), nullable=False, index=True,
         comment='原 agent/插件/workflow 的 ID')
     version: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment='version')
-    type: Mapped[str] = mapped_column(
-        String(50), nullable=False, comment='类型：agent/plugin/workflow')
+        String(255), nullable=True, index=True, comment='version')
+    type: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, comment='类型：agent/plugin/workflow')
     name: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment='运行时名称')
     status: Mapped[str | None] = mapped_column(
@@ -40,11 +40,11 @@ class RuntimeInfoDB(Base, DBFunBase):
         String(512), nullable=True, comment='访问 URL')
     port: Mapped[int | None] = mapped_column(
         Integer, nullable=True, comment='端口号')
-    is_delete: Mapped[bool | None] = mapped_column(
+    is_delete: Mapped[bool] = mapped_column(
         Boolean, nullable=False, comment='是否被删除')
-    create_at: Mapped[datetime | None] = mapped_column(
+    create_at: Mapped[datetime] = mapped_column(
         DateTime, default=func.now(), comment="创建时间")
-    update_at: Mapped[datetime | None] = mapped_column(
+    update_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), comment="更新时间")
 
     def __repr__(self) -> str:

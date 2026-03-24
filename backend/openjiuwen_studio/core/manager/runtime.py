@@ -154,6 +154,95 @@ async def save_deploy_info(
     return json.dumps(deploy_result)
 
 
+async def save_part_deploy_info(
+        agent_version: str,
+        agent_id,
+        space_id,
+):
+    runtime_info_data = {
+        "space_id": space_id,
+        "source_id": agent_id,
+        "version": agent_version,
+        "status": "pending",
+        "is_delete": False,
+    }
+    # 存到新deployment表里
+    with get_db_jw() as db:
+        runtime_db = JiuwenBaseRepository(db, RuntimeInfoDB)
+
+        # 构建查询条件（使用 deployment_id 作为唯一标识）
+        find_id = {
+            "space_id": space_id,
+            "source_id": agent_id,
+            "version": agent_version,
+            "is_delete": False,
+        }
+
+        # 设置默认时间
+        now_beijing = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8)))
+        if "create_at" not in runtime_info_data or runtime_info_data["create_at"] is None:
+            runtime_info_data["create_at"] = now_beijing
+        if "update_at" not in runtime_info_data or runtime_info_data["update_at"] is None:
+            runtime_info_data["update_at"] = now_beijing
+
+        # 注册到数据库
+        save_result = runtime_db.register_dl_in_sql(
+            find_id=find_id,
+            dl=runtime_info_data
+        )
+    if save_result.code != status.HTTP_200_OK:
+        logger.error(f"Failed to create deploy runtime info: {save_result.message}")
+
+
+async def update_deploy_info(
+        deploy_result_str: str,
+        agent_version: str,
+        agent_id,
+        space_id,
+) -> str:
+    deploy_result = json.loads(deploy_result_str)
+    deploy_url = deploy_result.get("url") or ""
+
+    # 存到新deployment表里
+    with get_db_jw() as db:
+        runtime_db = JiuwenBaseRepository(db, RuntimeInfoDB)
+
+        # 构建查询条件（使用 deployment_id 作为唯一标识）
+        find_id = {
+            "space_id": space_id,
+            "source_id": agent_id,
+            "version": agent_version,
+            "is_delete": False,
+        }
+
+        # 先查询是否存在
+        deploy_info = runtime_db.get_dl_in_sql(find_id=find_id, return_first_item=True)
+
+        if deploy_info.code != status.HTTP_200_OK or not deploy_info.data:
+            logger.warning(f"Deployment info not found for source_id={agent_id}")
+            return status.HTTP_404_NOT_FOUND
+
+        now_beijing = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8)))
+        update_data = {
+            "deployment_id": deploy_result.get("deployment_id", ""),
+            "type": deploy_result.get("type", ""),
+            "name": deploy_result.get("name", ""),
+            "status": deploy_result.get("status", ""),
+            "url": deploy_url,
+            "port": _normalize_runtime_port(deploy_result.get("port"), deploy_url),
+            "update_at": now_beijing
+        }
+
+        # 注册到数据库
+        save_result = runtime_db.update_dl_in_sql(
+            find_id=find_id,
+            update_dl=update_data
+        )
+    if save_result.code != status.HTTP_200_OK:
+        logger.error(f"Failed to update deploy runtime info: {save_result.message}")
+    return json.dumps(deploy_result)
+
+
 async def get_deploy_info(
         agent_id,
         space_id,
