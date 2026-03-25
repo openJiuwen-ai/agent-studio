@@ -58,7 +58,7 @@ async def get_agent_ir(
         agent_version: str,
         space_id: str,
         current_user: dict
-) -> str:
+) -> dict:
     """
     导出 Agent 的 IR(Intermediate Representation) 中间表示
 
@@ -73,11 +73,36 @@ async def get_agent_ir(
     """
     # 延迟导入，避免与 agent 模块循环依赖（agent 会引用本模块的 get_deploy_info 等）
     import openjiuwen_studio.core.manager.agent as mgr
+    from openjiuwen_studio.schemas.agent import AgentExportRequest
 
     # 构建请求参数
-    req = {"agent_id": agent_id, "space_id": space_id, "agent_version": agent_version}
-    res = mgr.agent_convert(AgentGetVersion(**req), current_user)
-    return json.dumps(res.data)
+    req = AgentExportRequest(
+        agent_id=agent_id,
+        space_id=space_id,
+        agent_version=agent_version if agent_version else None
+    )
+
+    res = await mgr.agent_export(req, current_user)
+    # 处理返回值：可能是 ResponseModel 或 (BytesIO, filename) 元组
+    if isinstance(res, tuple) and len(res) == 2:
+        # ZIP 文件情况：需要解压并解析 JSON
+        import zipfile
+        import io
+
+        zip_buffer, _ = res
+        with zipfile.ZipFile(zip_buffer, 'r') as zf:
+            json_files = [f for f in zf.namelist() if f.endswith('.json')]
+            if not json_files:
+                raise ValueError("No JSON file found in export data")
+
+            main_config_file = json_files[0]
+            with zf.open(main_config_file) as f:
+                export_data = json.loads(f.read().decode('utf-8'))
+
+        return export_data
+    else:
+        # ResponseModel 情况：直接提取 data 字段
+        return res.data
 
 
 async def deploy_to_runtime(

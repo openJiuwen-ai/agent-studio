@@ -2640,10 +2640,7 @@ async def agent_export(
         space_id=req.space_id, agent_id=req.agent_id, agent_version=req.agent_version
     )
     # 优先获取发布版本，如果没有指定版本，获取draft
-    if req.agent_version:
-        get_result = agent_repository.get_agent_publish_db(agent_query)
-    else:
-        get_result = agent_repository.get_agent_db(agent_query)
+    get_result = agent_repository.get_agent_db(agent_query)
 
     if get_result.code != status.HTTP_200_OK:
         return ResponseModel(code=get_result.code, message=get_result.message)
