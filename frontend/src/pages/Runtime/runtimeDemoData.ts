@@ -11,7 +11,7 @@ export const DEMO_API_PUBLISH = {
   {
     example_name: ['Shell'],
     examples: [
-      `curl -X POST "{{data.url}}" -H "Content-Type: application/json" -d "{\\"space_id\\": \\"{{data.body.space_id}}\\", \\"conversation_id\\": \\"{{data.body.conversation_id}}\\", \\"messages\\": [{\\"id\\": \\"{{data.body.messages.0.id}}\\", \\"role\\": \\"{{data.body.messages.0.role}}\\", \\"content\\": \\"{{data.body.messages.0.content}}\\"}]}"`,
+      `curl -X POST "{{data.url}}" -H "Content-Type: application/json" -d "{\\"user_id\\": \\"{{data.body.user_id}}\\", \\"conversation_id\\": \\"{{data.body.conversation_id}}\\", \\"messages\\": [{\\"id\\": \\"{{data.body.messages.0.id}}\\", \\"role\\": \\"{{data.body.messages.0.role}}\\", \\"content\\": \\"{{data.body.messages.0.content}}\\"}]}"`,
     ],
     language: 'Shell',
     title: 'Curl Request',
@@ -28,7 +28,7 @@ headers = {
     "Content-Type": "application/json"
 }
 payload = {
-    "space_id": "{{data.body.space_id}}",
+    "user_id": "{{data.body.user_id}}",
     "conversation_id": "{{data.body.conversation_id}}",
     "messages": [
         {
@@ -71,7 +71,7 @@ print()`,
       `const url = "{{data.url}}";
 
 const payload = {
-  space_id: "{{data.body.space_id}}",
+  user_id: "{{data.body.user_id}}",
   conversation_id: "{{data.body.conversation_id}}",
   messages: [
     {
@@ -166,10 +166,10 @@ export const DEMO_BODY_PARAMS: JsonSchema = {
         },
       },
     },
-    space_id: {
+    user_id: {
       type: 'string',
-      description: 'runtime.publish.demo.body.spaceId.description',
-      example: '95732486',
+      description: 'runtime.publish.demo.body.userId.description',
+      example: 'u_8f3a2b1c4d5e',
     },
   },
   required: ['conversation_id', 'messages'],
