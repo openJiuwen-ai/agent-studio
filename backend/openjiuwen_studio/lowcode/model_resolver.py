@@ -9,6 +9,10 @@ import copy
 import logging
 
 from openjiuwen_studio.lowcode.schemas import ModelReference, ModelOverride
+from openjiuwen_studio.lowcode.env_config import (
+    get_model_config_from_env,
+    inject_env_config_to_model_ref
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +28,8 @@ class ModelResolver:
     def resolve(
         agent_config: Dict[str, Any],
         model_references: Optional[Dict[str, Any]] = None,
-        model_overrides: Optional[Dict[str, ModelOverride]] = None
+        model_overrides: Optional[Dict[str, ModelOverride]] = None,
+        use_env_config: bool = True
     ) -> Dict[str, Any]:
         """
         解析模型配置
@@ -33,6 +38,7 @@ class ModelResolver:
             agent_config: Agent 配置
             model_references: 模型引用定义
             model_overrides: 运行时覆盖配置
+            use_env_config: 是否使用环境变量配置（默认True）
             
         Returns:
             处理后的配置
@@ -45,6 +51,11 @@ class ModelResolver:
             model_ref = ModelResolver._find_model_reference(model_references, model_id, config)
             if model_ref:
                 logger.debug("Applying model reference for %s", model_id)
+                
+                if use_env_config:
+                    model_name = model_ref.get("model_type") or model_ref.get("name")
+                    model_ref = inject_env_config_to_model_ref(model_ref, model_name)
+                
                 config = ModelResolver._apply_model_reference(config, model_ref)
         
         if model_overrides and model_id:
@@ -52,6 +63,13 @@ class ModelResolver:
             if override:
                 logger.debug("Applying model override for %s", model_id)
                 config = ModelResolver._apply_overrides(config, override)
+        
+        if use_env_config and not model_references:
+            model_name = ModelResolver._get_model_name(config)
+            env_config = get_model_config_from_env(model_name)
+            if env_config:
+                logger.debug("Applying environment config for model")
+                config = ModelResolver._apply_env_config(config, env_config)
         
         return config
     
@@ -141,7 +159,7 @@ class ModelResolver:
         model_config = config["model"]
         
         provider = model_ref.get("provider", model_ref.get("model_provider", ""))
-        name = model_ref.get("name", model_ref.get("model_name", model_ref.get("model_type", "")))
+        name = model_ref.get("model_type", model_ref.get("name", model_ref.get("model_name", "")))
         
         model_config["model_provider"] = provider
         model_config["model_name"] = name
@@ -224,6 +242,64 @@ class ModelResolver:
         if override.parameters:
             for key, value in override.parameters.items():
                 model_info[key] = value
+        
+        return config
+    
+    @staticmethod
+    def _get_model_name(config: Dict[str, Any]) -> Optional[str]:
+        """
+        获取模型名称
+        
+        Args:
+            config: agent 配置
+            
+        Returns:
+            模型名称或 None
+        """
+        model = config.get("model", {})
+        if model:
+            return model.get("model_type") or model.get("model_name") or model.get("name")
+        return None
+    
+    @staticmethod
+    def _apply_env_config(
+        config: Dict[str, Any],
+        env_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        应用环境变量配置
+        
+        Args:
+            config: agent 配置
+            env_config: 环境变量配置
+            
+        Returns:
+            处理后的配置
+        """
+        config = copy.deepcopy(config)
+        
+        if "model" not in config:
+            config["model"] = {}
+        
+        model_config = config["model"]
+        
+        if "model_info" not in model_config:
+            model_config["model_info"] = {}
+        
+        model_info = model_config["model_info"]
+        
+        if env_config.get("api_key") and not model_info.get("api_key"):
+            model_info["api_key"] = env_config["api_key"]
+            logger.info("API key injected from environment")
+        
+        if env_config.get("api_base") and not model_info.get("base_url"):
+            model_info["base_url"] = env_config["api_base"]
+        
+        if env_config.get("provider") and not model_config.get("model_provider"):
+            model_config["model_provider"] = env_config["provider"]
+        
+        if env_config.get("timeout") and not model_info.get("timeout"):
+            model_info["timeout"] = env_config["timeout"]
         
         return config
     

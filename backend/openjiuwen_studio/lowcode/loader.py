@@ -48,7 +48,8 @@ class LowCodeAgentLoader:
         self,
         export_data: Dict[str, Any],
         model_overrides: Optional[Dict[str, ModelOverride]] = None,
-        current_user: Optional[Dict] = None
+        current_user: Optional[Dict] = None,
+        use_env_config: bool = True
     ) -> Any:
         """
         从导出数据加载Agent
@@ -57,25 +58,24 @@ class LowCodeAgentLoader:
             export_data: 导出的Agent数据
             model_overrides: 模型覆盖配置
             current_user: 当前用户信息
+            use_env_config: 是否使用环境变量配置（默认True）
             
         Returns:
             可执行的Agent实例
         """
         logger.info("Starting to load agent from export data")
         
-        # 1. 验证配置格式
         LowCodeAgentLoader._validate_export_data(export_data)
         
-        # 2. 提取agent配置
         agent_config = export_data.get("agent", {})
         model_references = export_data.get("model_references", {})
         dependencies = export_data.get("dependencies", {})
         
-        # 3. 处理模型配置（注入API Key等）
         agent_config = self.model_resolver.resolve(
             agent_config,
             model_references,
-            model_overrides
+            model_overrides,
+            use_env_config=use_env_config
         )
         
         # 4. 验证模型配置
@@ -112,7 +112,8 @@ class LowCodeAgentLoader:
         self,
         config_path: Union[str, Path, io.BytesIO],
         model_overrides: Optional[Dict[str, ModelOverride]] = None,
-        current_user: Optional[Dict] = None
+        current_user: Optional[Dict] = None,
+        use_env_config: bool = True
     ) -> Any:
         """
         从配置文件加载（支持JSON和ZIP）
@@ -121,26 +122,26 @@ class LowCodeAgentLoader:
             config_path: 配置文件路径或BytesIO对象
             model_overrides: 模型覆盖配置
             current_user: 当前用户信息
+            use_env_config: 是否使用环境变量配置（默认True）
             
         Returns:
             可执行的Agent实例
         """
         logger.info(f"Loading agent from config file: {config_path}")
         
-        # 处理 BytesIO（ZIP 文件）
         if isinstance(config_path, io.BytesIO):
             export_data = LowCodeAgentLoader._load_from_zip_bytes(config_path)
         elif isinstance(config_path, (str, Path)) and zipfile.is_zipfile(config_path):
             export_data = LowCodeAgentLoader._load_from_zip(config_path)
         else:
-            # JSON文件
             with open(config_path, 'r', encoding='utf-8') as f:
                 export_data = json.load(f)
         
         return await self.load_from_export_data(
             export_data=export_data,
             model_overrides=model_overrides,
-            current_user=current_user
+            current_user=current_user,
+            use_env_config=use_env_config
         )
     
     @staticmethod
