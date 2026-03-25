@@ -102,8 +102,8 @@
                         }
                     }
                 },
-                "spaceId": {
-                    "description": "工作空间ID。"
+                "userId": {
+                    "description": "用户唯一标识，用于区分不同调用方。"
                 }
             },
             "returnOverallDesc": "返回流式响应数据，消息格式定义如下：",

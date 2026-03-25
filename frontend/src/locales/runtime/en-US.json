@@ -102,8 +102,8 @@
                         }
                     }
                 },
-                "spaceId": {
-                    "description": "Workspace ID."
+                "userId": {
+                    "description": "Unique user identifier for the caller."
                 }
             },
             "returnOverallDesc": "Returns streaming response data, with message formats defined as follows:",

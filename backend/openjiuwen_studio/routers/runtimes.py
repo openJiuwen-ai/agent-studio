@@ -181,7 +181,7 @@ async def proxy_deployed_agent_query(
 ):
     """
     将发布页聊天请求转发到已部署 Runtime 的 /query（SSE），避免浏览器直连 Runtime 触发 CORS。
-    请求体须包含 agent_id、space_id，以及 Runtime 所需的 messages、conversation_id、user_id、stream 等字段。
+    请求体须包含 target_url、space_id，以及 Runtime 所需的 messages、conversation_id、user_id、stream 等字段。
     """
     try:
         body = await http_request.json()
@@ -190,19 +190,17 @@ async def proxy_deployed_agent_query(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid JSON body",
         ) from e
-    agent_id = body.get("agent_id")
+    target_url = body.get("target_url")
     space_id = body.get("space_id")
-    if not agent_id or not space_id:
+    if not target_url or not space_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="agent_id and space_id are required",
+            detail="target_url and space_id are required",
         )
     _ = check_user_space(space_id, current_user)
-    data = current_user.get("data", {})
-    user_id = data.get("user_id_str", "")
 
     async def byte_stream():
-        async for chunk in rtm.stream_deployed_agent_query(agent_id, space_id, user_id, body):
+        async for chunk in rtm.stream_deployed_agent_query(str(target_url), space_id, body):
             yield chunk
 
     return StreamingResponse(
@@ -214,4 +212,40 @@ async def proxy_deployed_agent_query(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@runtime_router.post("/reset_conversation", response_model=ResponseModel[dict])
+async def proxy_deployed_agent_reset_conversation(
+    http_request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    将发布页新对话请求转发到已部署 Runtime 的 /reset_conversation，避免浏览器直连 Runtime 触发 CORS。
+    请求体须包含 target_url、space_id、conversation_id。
+    """
+    try:
+        body = await http_request.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid JSON body",
+        ) from e
+
+    target_url = body.get("target_url")
+    space_id = body.get("space_id")
+    conversation_id = body.get("conversation_id")
+    if not target_url or not space_id or not conversation_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="target_url, space_id and conversation_id are required",
+        )
+
+    _ = check_user_space(space_id, current_user)
+    result = await rtm.reset_deployed_agent_conversation(str(target_url), space_id, body)
+    res = ResponseModel(
+        code=status.HTTP_200_OK,
+        message="Reset conversation successful",
+        data=result,
+    )
+    return handle_response(res)
 

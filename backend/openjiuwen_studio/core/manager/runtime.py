@@ -380,51 +380,22 @@ async def get_deploy_details(
         return {"deploy_details": []}
 
 
-def _runtime_query_url_from_base(base_url: str) -> str:
-    """将部署返回的 base（如 http://localhost:8100/）规范为 POST /query 地址。"""
-    t = (base_url or "").strip().rstrip("/")
-    if not t:
-        return ""
-    if t.endswith("/query"):
-        return t
-    return f"{t}/query"
-
-
 async def stream_deployed_agent_query(
-        agent_id: str,
+        target_url: str,
         space_id: str,
-        studio_user_id: str,
         body: dict,
 ) -> AsyncIterator[bytes]:
     """
     服务端转发聊天请求到已部署的 Runtime /query，避免浏览器直连 Runtime 触发 CORS。
     """
-    client = get_agent_client()
-    res = await get_deploy_details(agent_id, None, studio_user_id, space_id, client)
-    details = (res or {}).get("deploy_details") or []
-    running = [
-        d for d in details
-        if str(d.get("status", "")).lower() == "running" and (d.get("url") or "").strip()
-    ]
-    chosen = running[0] if running else None
-    if not chosen and details:
-        for d in details:
-            if (d.get("url") or "").strip():
-                chosen = d
-                break
-    if not chosen:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No deployment with URL found for this agent",
-        )
-    target = _runtime_query_url_from_base(str(chosen.get("url", "")))
+    target = (target_url or "").strip()
     if not target:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Deployment URL is empty",
         )
 
-    forward = {k: v for k, v in body.items() if k != "agent_id"}
+    forward = {k: v for k, v in body.items() if k not in {"agent_id", "target_url"}}
     forward.setdefault("space_id", space_id)
 
     timeout = httpx.Timeout(600.0, connect=30.0)
@@ -458,6 +429,60 @@ async def stream_deployed_agent_query(
         ) from e
     except httpx.RequestError as e:
         logger.error(f"stream_deployed_agent_query: failed to reach {target}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to reach runtime: {e}",
+        ) from e
+
+
+async def reset_deployed_agent_conversation(
+        target_url: str,
+        space_id: str,
+        body: dict,
+) -> dict:
+    """
+    服务端转发重置会话请求到已部署 Runtime /reset_conversation，避免浏览器直连 Runtime 触发 CORS。
+    """
+    target = (target_url or "").strip()
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deployment URL is empty",
+        )
+
+    forward = {k: v for k, v in body.items() if k not in {"agent_id", "target_url"}}
+    forward.setdefault("space_id", space_id)
+    if not forward.get("conversation_id"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="conversation_id is required",
+        )
+
+    timeout = httpx.Timeout(120.0, connect=30.0)
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as http:
+            resp = await http.post(
+                target,
+                json=forward,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+            if resp.status_code >= 400:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=(
+                        f"Runtime returned {resp.status_code}: "
+                        f"{resp.text[:2000]}"
+                    ),
+                )
+            try:
+                return resp.json()
+            except ValueError:
+                return {"status": "ok", "message": resp.text}
+    except httpx.RequestError as e:
+        logger.error(f"reset_deployed_agent_conversation: failed to reach {target}: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to reach runtime: {e}",
