@@ -38,12 +38,14 @@ class AgentDLConfig:
         agent_base,
         workflows: Optional[List[Any]] = None,
         plugins: Optional[List[Any]] = None,
-        knowledge_bases: Optional[List[Any]] = None
+        knowledge_bases: Optional[List[Any]] = None,
+        opening_remarks: Optional[str] = None
     ):
         self.agent_base = agent_base
         self.workflows = workflows or []
         self.plugins = plugins or []
         self.knowledge_bases = knowledge_bases or []
+        self.opening_remarks = opening_remarks
 
 
 class ConfigAdapter:
@@ -361,25 +363,26 @@ class ConfigAdapter:
     ) -> AgentDLConfig:
         """
         转换为 AgentDLConfig
-        
+
         Args:
             agent_config: agent 配置
             workflows: 工作流列表
             plugins: 插件列表
             knowledge_bases: 知识库列表
-            
+
         Returns:
             AgentDLConfig
         """
         base_config = ConfigAdapter.adapt(agent_config)
-        
+
         dl_config = AgentDLConfig(
             agent_base=base_config,
             workflows=workflows or [],
             plugins=plugins or [],
-            knowledge_bases=knowledge_bases or []
+            knowledge_bases=knowledge_bases or [],
+            opening_remarks=agent_config.get("opening_remarks")
         )
-        
+
         return dl_config
     
     @staticmethod

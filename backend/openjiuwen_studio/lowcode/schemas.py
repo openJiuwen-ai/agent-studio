@@ -73,6 +73,7 @@ class CompileResponse(BaseModel):
     compile_time: str
     model_info: Dict[str, Any]
     dependencies_count: Dict[str, int]
+    opening_remarks: Optional[str] = None
 
 
 class RunRequest(BaseModel):

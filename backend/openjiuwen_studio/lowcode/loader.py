@@ -106,7 +106,8 @@ class LowCodeAgentLoader:
             "plugins": plugins,
             "knowledge_bases": knowledge_bases,
             "agent_config": agent_config,
-            "export_data": export_data
+            "export_data": export_data,
+            "opening_remarks": agent_config.get("opening_remarks")
         }
     
     async def load_from_config_file(
