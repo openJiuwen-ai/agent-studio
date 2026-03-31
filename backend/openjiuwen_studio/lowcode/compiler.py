@@ -4,8 +4,9 @@
 Agent编译器 - Runtime SDK的主要入口
 """
 
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
+import json
 import logging
 
 from openjiuwen_studio.lowcode.loader import LowCodeAgentLoader
@@ -16,10 +17,301 @@ logger = logging.getLogger(__name__)
 
 try:
     from openjiuwen.core.single_agent.base import BaseAgent as InvokableAgent
+    from openjiuwen.core.single_agent.agents.react_agent import ReActAgent
+    from openjiuwen.core.single_agent.schema.agent_card import AgentCard
+    from openjiuwen.core.workflow.workflow import Workflow as InvokableWorkflow
+    from openjiuwen_studio.core.executor.workflow.workflow import Workflow, IWorkflowLoader
+    from openjiuwen_studio.core.executor.workflow.context import Context
+    from openjiuwen_studio.core.executor.agent.agent_runner import AgentRunner
+    from openjiuwen_studio.core.executor.plugin.plugin_mgr import PluginManager
+    from openjiuwen_studio.core.common.dsl import Workflow as DlWorkflow
+    from openjiuwen_studio.core.common.dsl import Component, Connection, ComponentType
     HAS_INVOKABLE_AGENT = True
 except ImportError:
     InvokableAgent = None
+    ReActAgent = None
+    AgentCard = None
+    InvokableWorkflow = None
+    Workflow = None
+    IWorkflowLoader = None
+    Context = None
+    AgentRunner = None
+    PluginManager = None
+    DlWorkflow = None
+    Component = None
+    Connection = None
+    ComponentType = None
     HAS_INVOKABLE_AGENT = False
+
+
+class ExportConfigWorkflowLoader(IWorkflowLoader):
+    """
+    从导出配置加载工作流的加载器
+    
+    用于 lowcode 模式，支持从导出的 JSON 配置中加载工作流，
+    而不需要从数据库获取。
+    """
+    
+    def __init__(
+        self,
+        workflows_data: List[Dict[str, Any]],
+        model_resolver: Optional[Any] = None
+    ):
+        """
+        初始化加载器
+        
+        Args:
+            workflows_data: 导出配置中的工作流数据列表
+            model_resolver: 模型解析器，用于解析工作流中的模型配置
+        """
+        self._workflows: Dict[str, Dict[str, Any]] = {}
+        self._model_resolver = model_resolver
+        
+        for wf in workflows_data:
+            wf_id = wf.get("workflow_id") or wf.get("id")
+            wf_version = wf.get("workflow_version") or wf.get("version", "draft")
+            key = f"{wf_id}_{wf_version}"
+            self._workflows[key] = wf
+        
+        logger.info(f"ExportConfigWorkflowLoader initialized with {len(self._workflows)} workflows")
+    
+    def _convert_workflow_to_dl(self, workflow_data: Dict[str, Any]) -> "DlWorkflow":
+        """
+        将导出配置中的工作流数据转换为 DlWorkflow 格式
+        
+        Args:
+            workflow_data: 导出配置中的工作流数据
+            
+        Returns:
+            DlWorkflow 对象
+        """
+        schema_str = workflow_data.get("schema", "{}")
+        if isinstance(schema_str, str):
+            schema = json.loads(schema_str)
+        else:
+            schema = schema_str
+        
+        nodes = schema.get("nodes", [])
+        edges = schema.get("edges", [])
+        
+        components = []
+        start_id = []
+        end_id = []
+        
+        for node in nodes:
+            node_type = str(node.get("type", "0"))
+            node_id = node.get("id", "")
+            node_data = node.get("data", {})
+            
+            comp_type = self._map_node_type_to_component_type(node_type)
+            
+            if comp_type == ComponentType.COMPONENT_TYPE_START:
+                start_id.append(node_id)
+            elif comp_type == ComponentType.COMPONENT_TYPE_END:
+                end_id.append(node_id)
+            
+            inputs = self._extract_node_inputs(node)
+            configs = self._extract_node_configs(node, node_data)
+            
+            component = Component(
+                id=node_id,
+                type=comp_type,
+                name=node_data.get("title", ""),
+                inputs=inputs,
+                configs=configs,
+            )
+            components.append(component)
+        
+        connections = []
+        for edge in edges:
+            source = edge.get("sourceNodeID", "")
+            target = edge.get("targetNodeID", "")
+            if source and target:
+                connections.append(Connection(source=source, target=target))
+        
+        input_params = workflow_data.get("input_parameters", [])
+        input_properties = {}
+        input_requires = []
+        for param in input_params:
+            param_name = param.get("name", "")
+            if param_name:
+                input_properties[param_name] = {
+                    "type": param.get("type", "string"),
+                    "description": param.get("description", ""),
+                    "default": param.get("default"),
+                }
+                if param.get("required"):
+                    input_requires.append(param_name)
+        
+        inputs = {
+            "type": "object",
+            "properties": input_properties,
+            "required": input_requires,
+        }
+        
+        output_params = workflow_data.get("output_parameters", [])
+        output_properties = {}
+        for param in output_params:
+            param_name = param.get("name", "")
+            if param_name:
+                output_properties[param_name] = {
+                    "type": param.get("type", "string"),
+                    "description": param.get("description", ""),
+                }
+        
+        workflow_id = workflow_data.get("workflow_id") or workflow_data.get("id", "")
+        workflow_version = workflow_data.get("workflow_version") or workflow_data.get("version", "draft")
+        workflow_name = workflow_data.get("workflow_name") or workflow_data.get("name", "Unnamed Workflow")
+        
+        dl_workflow = DlWorkflow(
+            id=workflow_id,
+            version=workflow_version,
+            name=workflow_name,
+            description=workflow_data.get("desc", "") or workflow_data.get("description", ""),
+            inputs=inputs,
+            outputs=output_properties,
+            start_id=start_id,
+            end_id=end_id,
+            components=components,
+            connections=connections,
+        )
+        
+        return dl_workflow
+    
+    def _map_node_type_to_component_type(self, node_type: str) -> "ComponentType":
+        """
+        将节点类型映射为组件类型
+        
+        Args:
+            node_type: 节点类型字符串
+            
+        Returns:
+            ComponentType 枚举值
+        """
+        type_mapping = {
+            "1": ComponentType.COMPONENT_TYPE_START,
+            "2": ComponentType.COMPONENT_TYPE_END,
+            "3": ComponentType.COMPONENT_TYPE_LLM,
+            "4": ComponentType.COMPONENT_TYPE_PLUGIN,
+            "5": ComponentType.COMPONENT_TYPE_IF,
+            "6": ComponentType.COMPONENT_TYPE_INTENT,
+            "7": ComponentType.COMPONENT_TYPE_QUESTION,
+            "8": ComponentType.COMPONENT_TYPE_LOOP,
+            "9": ComponentType.COMPONENT_TYPE_CODE,
+            "10": ComponentType.COMPONENT_TYPE_SUB_WORKFLOW,
+            "11": ComponentType.COMPONENT_TYPE_VARIABLE_MERGE,
+            "12": ComponentType.COMPONENT_TYPE_TEXT_EDITOR,
+            "13": ComponentType.COMPONENT_TYPE_INPUT,
+            "14": ComponentType.COMPONENT_TYPE_OUTPUT,
+        }
+        return type_mapping.get(node_type, ComponentType.COMPONENT_TYPE_EMPTY)
+    
+    def _extract_node_inputs(self, node: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        提取节点的输入配置
+        
+        Args:
+            node: 节点数据
+            
+        Returns:
+            输入配置字典
+        """
+        node_data = node.get("data", {})
+        inputs = node_data.get("inputs", {})
+        node_type = str(node.get("type", "0"))
+        
+        if node_type == "1":
+            outputs = node_data.get("outputs", {})
+            if outputs:
+                properties = outputs.get("properties", {})
+                return {"properties": properties}
+        
+        return inputs if isinstance(inputs, dict) else {}
+    
+    def _extract_node_configs(self, node: Dict[str, Any], node_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        提取节点的配置
+        
+        Args:
+            node: 节点数据
+            node_data: 节点的 data 字段
+            
+        Returns:
+            配置字典
+        """
+        configs = {}
+        node_type = str(node.get("type", "0"))
+        
+        if node_type == "3":
+            inputs = node_data.get("inputs", {})
+            llm_param = inputs.get("llmParam", {})
+            if llm_param:
+                configs["llmParam"] = llm_param
+        
+        return configs
+    
+    async def get_flow(
+        self,
+        workflow_id: str,
+        version: str,
+        space_id: str,
+        current_user: Dict[str, Any]
+    ) -> "Workflow":
+        """
+        获取工作流实例
+        
+        Args:
+            workflow_id: 工作流 ID
+            version: 工作流版本
+            space_id: 工作空间 ID
+            current_user: 当前用户信息
+            
+        Returns:
+            Workflow 实例
+        """
+        key = f"{workflow_id}_{version}"
+        workflow_data = self._workflows.get(key)
+        
+        if not workflow_data:
+            for wf_key, wf_data in self._workflows.items():
+                if wf_key.startswith(f"{id}_"):
+                    workflow_data = wf_data
+                    break
+        
+        if not workflow_data:
+            raise ValueError(f"Workflow not found: id={id}, version={version}")
+        
+        dl_workflow = self._convert_workflow_to_dl(workflow_data)
+        
+        workflow = Workflow(dl_workflow, space_id, current_user)
+        
+        logger.info(f"Loaded workflow from export config: {id}_{version}")
+        return workflow
+    
+    async def get_compiled_workflow(
+        self,
+        context: "Context",
+        workflow_id: str,
+        version: str,
+        space_id: str,
+        current_user: Dict[str, Any]
+    ) -> "InvokableWorkflow":
+        """
+        获取已编译的工作流实例
+        
+        Args:
+            context: 执行上下文
+            workflow_id: 工作流 ID
+            version: 工作流版本
+            space_id: 工作空间 ID
+            current_user: 当前用户信息
+            
+        Returns:
+            已编译的 InvokableWorkflow 实例
+        """
+        workflow = await self.get_flow(workflow_id, version, space_id, current_user)
+        compiled = await workflow.compile(context, self)
+        return compiled
 
 
 class AgentCompiler:
@@ -99,12 +391,23 @@ class AgentCompiler:
                 current_user=current_user
             )
 
-            from openjiuwen_studio.core.executor.agent.agent_runner import AgentRunner
+            dependencies = config.get("dependencies", {})
+            workflows_data = dependencies.get("workflows", [])
 
-            agent_runner = AgentRunner(
-                flow_mgr=self.loader.dep_processor.workflow_runner,
-                plugin_mgr=self.loader.dep_processor.plugin_manager
-            )
+            if workflows_data:
+                workflow_loader = ExportConfigWorkflowLoader(workflows_data)
+                
+                plugin_mgr = self.loader.dep_processor.plugin_manager or PluginManager()
+                
+                agent_runner = AgentRunner(
+                    flow_mgr=workflow_loader,
+                    plugin_mgr=plugin_mgr
+                )
+            else:
+                agent_runner = AgentRunner(
+                    flow_mgr=self.loader.dep_processor.workflow_runner,
+                    plugin_mgr=self.loader.dep_processor.plugin_manager
+                )
 
             agent_config = compiled_result['agent_config']
             adapted_config = ConfigAdapter.adapt(agent_config)
@@ -208,12 +511,24 @@ class AgentCompiler:
                 current_user=current_user
             )
 
-            from openjiuwen_studio.core.executor.agent.agent_runner import AgentRunner
+            export_data = compiled_result.get('export_data', {})
+            dependencies = export_data.get("dependencies", {})
+            workflows_data = dependencies.get("workflows", [])
 
-            agent_runner = AgentRunner(
-                flow_mgr=self.loader.dep_processor.workflow_runner,
-                plugin_mgr=self.loader.dep_processor.plugin_manager
-            )
+            if workflows_data:
+                workflow_loader = ExportConfigWorkflowLoader(workflows_data)
+                
+                plugin_mgr = self.loader.dep_processor.plugin_manager or PluginManager()
+                
+                agent_runner = AgentRunner(
+                    flow_mgr=workflow_loader,
+                    plugin_mgr=plugin_mgr
+                )
+            else:
+                agent_runner = AgentRunner(
+                    flow_mgr=self.loader.dep_processor.workflow_runner,
+                    plugin_mgr=self.loader.dep_processor.plugin_manager
+                )
 
             agent_config = compiled_result['agent_config']
             adapted_config = ConfigAdapter.adapt(agent_config)
@@ -309,12 +624,23 @@ class AgentCompiler:
                 current_user=current_user
             )
 
-            from openjiuwen_studio.core.executor.agent.agent_runner import AgentRunner
+            dependencies = config.get("dependencies", {})
+            workflows_data = dependencies.get("workflows", [])
 
-            agent_runner = AgentRunner(
-                flow_mgr=self.loader.dep_processor.workflow_runner,
-                plugin_mgr=self.loader.dep_processor.plugin_manager
-            )
+            if workflows_data:
+                workflow_loader = ExportConfigWorkflowLoader(workflows_data)
+                
+                plugin_mgr = self.loader.dep_processor.plugin_manager or PluginManager()
+                
+                agent_runner = AgentRunner(
+                    flow_mgr=workflow_loader,
+                    plugin_mgr=plugin_mgr
+                )
+            else:
+                agent_runner = AgentRunner(
+                    flow_mgr=self.loader.dep_processor.workflow_runner,
+                    plugin_mgr=self.loader.dep_processor.plugin_manager
+                )
 
             agent_config = compiled_result['agent_config']
             adapted_config = ConfigAdapter.adapt(agent_config)
@@ -457,7 +783,6 @@ class AgentCompiler:
             agent.configure(result["runtime_config"])
         """
         try:
-            from openjiuwen.core.single_agent.schema.agent_card import AgentCard
             logger.info("Starting agent compilation for runtime environment")
 
             compiled_result = await self.compile_with_overrides_config(

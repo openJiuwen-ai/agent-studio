@@ -234,13 +234,19 @@ class ConfigAdapter:
         plugin_schemas = []
         for plugin in plugins:
             if isinstance(plugin, dict):
+                tool_id = plugin.get("tool_id", "")
+                plugin_id = plugin.get("plugin_id", plugin.get("id", ""))
+                tool_name = plugin.get("tool_name", plugin.get("plugin_name", plugin.get("name", "")))
+                
                 plugin_schema = PluginSchema(
-                    id=plugin.get("plugin_id", plugin.get("id", "")),
+                    id=tool_id or plugin_id,
                     version=plugin.get("plugin_version", plugin.get("version", "draft")),
-                    name=plugin.get("plugin_name", plugin.get("name", "")),
+                    name=tool_name,
                     description=plugin.get("description", ""),
-                    inputs=plugin.get("inputs", {}),
-                    plugin_id=plugin.get("plugin_id", plugin.get("id", "")),
+                    inputs=plugin.get("inputs", plugin.get("request_params", {})),
+                    outputs=plugin.get("outputs", plugin.get("response_params", {})),
+                    configs=plugin.get("config", {}),
+                    plugin_id=plugin_id,
                 )
                 plugin_schemas.append(plugin_schema)
         return plugin_schemas

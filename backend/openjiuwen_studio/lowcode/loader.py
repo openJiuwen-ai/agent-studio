@@ -105,7 +105,8 @@ class LowCodeAgentLoader:
             "workflows": workflows,
             "plugins": plugins,
             "knowledge_bases": knowledge_bases,
-            "agent_config": agent_config
+            "agent_config": agent_config,
+            "export_data": export_data
         }
     
     async def load_from_config_file(
