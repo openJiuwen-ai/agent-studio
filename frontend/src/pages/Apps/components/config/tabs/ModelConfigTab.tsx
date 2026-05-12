@@ -1,7 +1,8 @@
 /**
  * Model Config Tab Component
  * 模型配置标签页组件
- * 包含基础配置（通用模型）和高级配置（生成大纲、信息选择、报告撰写）
+ * Research mode: 基础配置（通用模型）和高级配置（生成大纲、信息选择、报告撰写）
+ * Search mode: 通过平台模型选择器选择 Planning Model + Search Model
  */
 
 import React, { useState, useCallback } from 'react'
@@ -14,7 +15,6 @@ import type { Model } from '@/types/promptType'
 import { useTestModel } from '@test-agentstudio/api-client'
 import { useUnifiedSnackbar } from '@/Common/UnifiedSnackbar'
 
-// 从父组件传入的控件组件
 export interface ModelConfigTabProps extends ConfigTabProps {
   /** 可用模型列表 */
   availableModels: Model[]
@@ -24,10 +24,12 @@ export interface ModelConfigTabProps extends ConfigTabProps {
   spaceId?: string
   availableVLMModels?: Model[]
   vlmModelsLoading?: boolean
+  /** 配置模式 */
+  mode?: 'research' | 'search'
 }
 
 // 模型配置项类型
-interface ModelConfigItem {
+interface ModelConfigItemDef {
   id: string
   labelKey: string
   descKey: string
@@ -36,7 +38,7 @@ interface ModelConfigItem {
 }
 
 /**
- * 模型配置项组件
+ * 模型配置项组件（用于 Research mode 的 platform model picker）
  */
 const ModelConfigItem: React.FC<{
   label: string
@@ -48,9 +50,7 @@ const ModelConfigItem: React.FC<{
   onModelChange: (model: Model | null) => void
   placeholder?: string
   required?: boolean
-  // 测试中状态 - 当前选项是否正在测试
   isCurrentTesting?: boolean
-  // 其他选项是否正在测试（用于锁定）
   isOtherTesting?: boolean
 }> = ({
   label,
@@ -66,16 +66,9 @@ const ModelConfigItem: React.FC<{
   isOtherTesting,
 }) => {
   const { t } = useTranslation()
-
-  // 当前选项正在测试：显示验证中 placeholder 和灰色，清除选中状态
-  // 其他选项正在测试：显示灰色锁定，但保留选中状态和 placeholder
   const isLocked = isOtherTesting
   const isTesting = isCurrentTesting
-
-  // 测试期间显示验证中的 placeholder（仅当前测试的选项）
   const displayPlaceholder = isTesting ? t('components.prompts.modelSelector.validating') : placeholder
-
-  // 仅当前测试的选项清除选中状态，其他选项保持原有选中状态
   const displaySelectedModel = isTesting ? null : selectedModel
 
   return (
@@ -114,24 +107,60 @@ export const ModelConfigTab: React.FC<ModelConfigTabProps> = ({
   spaceId,
   availableVLMModels = [],
   vlmModelsLoading = false,
+  mode = 'research',
 }) => {
   const { t } = useTranslation()
-
-  // 模型测试状态
   const [testingModelId, setTestingModelId] = useState<string | null>(null)
-  // 正在测试的配置项 key
   const [testingConfigKey, setTestingConfigKey] = useState<
     'generalModelId' | 'planUnderstandingModelId' | 'infoCollectingModelId' | 'writingCheckingModelId' | null
   >(null)
-
-  // 模型测试 hook
   const testModelMutation = useTestModel()
-
-  // Snackbar hook
   const { showSuccess, showError } = useUnifiedSnackbar()
 
-  // 高级模型配置项
-  const advancedModelConfigs: ModelConfigItem[] = [
+  // ==================== Search mode: platform model picker for Planning + Search models ====================
+  if (mode === 'search') {
+    const getModelById = (modelId: string | undefined): Model | null => {
+      if (!modelId) return null
+      return availableModels.find(m => m.openModel.model_id === modelId) || null
+    }
+
+    const handlePlanningModelChange = (model: Model | null) => {
+      updateConfig('planningModelId', model?.openModel.model_id ?? undefined)
+    }
+
+    const handleSearchModelChange = (model: Model | null) => {
+      updateConfig('searchModelId', model?.openModel.model_id ?? undefined)
+    }
+
+    return (
+      <div className="space-y-6">
+        <ModelConfigItem
+          label={t('apps.config.model.planningModel.label')}
+          description={t('apps.config.model.planningModel.description')}
+          availableModels={availableModels}
+          selectedModel={getModelById(config.planningModelId)}
+          modelsLoading={modelsLoading}
+          onModelChange={handlePlanningModelChange}
+          placeholder={t('apps.config.model.selectModel')}
+          required
+        />
+
+        <ModelConfigItem
+          label={t('apps.config.model.searchModel.label')}
+          description={t('apps.config.model.searchModel.description')}
+          availableModels={availableModels}
+          selectedModel={getModelById(config.searchModelId)}
+          modelsLoading={modelsLoading}
+          onModelChange={handleSearchModelChange}
+          placeholder={t('apps.config.model.selectModel')}
+          required
+        />
+      </div>
+    )
+  }
+
+  // ==================== Research mode (original platform model picker) ====================
+  const advancedModelConfigs: ModelConfigItemDef[] = [
     {
       id: 'outline',
       labelKey: 'apps.config.model.outline.label',
@@ -155,7 +184,6 @@ export const ModelConfigTab: React.FC<ModelConfigTabProps> = ({
     },
   ]
 
-  // 根据模型 ID 获取模型对象
   const getModelById = (modelId: string | undefined): Model | null => {
     if (!modelId) return null
     return availableModels.find(m => m.openModel.model_id === modelId) || null
@@ -169,59 +197,39 @@ export const ModelConfigTab: React.FC<ModelConfigTabProps> = ({
   // 带验证的模型选择处理函数
   const handleModelSelectWithTest = useCallback(
     async (model: Model | null, configKey: 'generalModelId' | 'planUnderstandingModelId' | 'infoCollectingModelId' | 'writingCheckingModelId') => {
-      // 用户选择空值，直接清除
       if (!model) {
         updateConfig(configKey, undefined)
         return
       }
-
-      // 检查是否已经有 spaceId
       if (!spaceId) {
         showError('缺少 spaceId，无法测试模型')
         return
       }
-
-      // 如果已经是当前选中的模型，不做任何操作
       const currentModelId = config[configKey]
-      if (model.openModel.model_id === currentModelId) {
-        return
-      }
+      if (model.openModel.model_id === currentModelId) return
+      if (testingModelId === model.openModel.model_id) return
 
-      // 如果已经在测试这个模型，忽略此次请求
-      if (testingModelId === model.openModel.model_id) {
-        return
-      }
-
-      // 先清除当前选中的模型（在 UI 上立即反映）
       updateConfig(configKey, undefined)
-
-      // 记录待测试的模型和配置项，进入"pending"状态
       setTestingModelId(model.openModel.model_id)
       setTestingConfigKey(configKey)
 
       try {
-        // 调用测试接口，发送"你好"作为测试 prompt
         const result = await testModelMutation.mutateAsync({
           id: model.openModel.model_id,
           prompt: '你好',
           spaceId: spaceId,
           parameters: { temperature: 0.7, max_tokens: 100 },
         })
-
         if (result.success) {
-          // 测试通过，正式选中模型
           updateConfig(configKey, model.openModel.model_id)
           showSuccess('模型可用性验证通过')
         } else {
-          // 测试失败，显示错误提示
           showError(`模型不可用：${result.error || '未知错误'}`)
         }
       } catch (error: any) {
-        // 测试异常，显示错误提示
         const errorMessage = error?.response?.data?.message || error?.message || '模型测试失败'
         showError(`模型不可用：${errorMessage}`)
       } finally {
-        // 清除测试状态
         setTestingModelId(null)
         setTestingConfigKey(null)
       }
@@ -229,12 +237,10 @@ export const ModelConfigTab: React.FC<ModelConfigTabProps> = ({
     [testModelMutation, spaceId, config, updateConfig, testingModelId, showSuccess, showError],
   )
 
-  // 处理通用模型选择变更（带验证）
   const handleGeneralModelChange = (model: Model | null) => {
     handleModelSelectWithTest(model, 'generalModelId')
   }
 
-  // 处理高级模型选择变更（带验证）
   const handleModelChange = (configKey: 'planUnderstandingModelId' | 'infoCollectingModelId' | 'writingCheckingModelId', model: Model | null) => {
     handleModelSelectWithTest(model, configKey)
   }
@@ -262,13 +268,11 @@ export const ModelConfigTab: React.FC<ModelConfigTabProps> = ({
 
         {/* 高级配置 */}
         <ConfigSection title={t('apps.config.model.advanced.title')}>
-          {/* 提示信息横幅 */}
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-2">
             <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-blue-700">{t('apps.config.model.advanced.info')}</p>
           </div>
 
-          {/* 高级配置项 */}
           <div className="space-y-4">
             {advancedModelConfigs.map(modelConfig => (
               <ModelConfigItem

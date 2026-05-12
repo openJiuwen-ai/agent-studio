@@ -536,6 +536,7 @@
       "agents": "Agent Development",
       "workflows": "Workflows",
       "executions": "Executions",
+      "deepSearch": "Deep Search",
       "promptManagement": "Prompt Management",
       "promptTemplates": "Prompt Templates",
       "promptOptimization": "Prompt Optimization",
@@ -721,7 +722,9 @@
       "noKnowledgeBaseConnected": "No knowledge base connected",
       "uploadLocalFiles": "Upload Local Files",
       "uploadFileDescription": "Select PDF, Word, TXT, and other documents",
-      "deepSearchAgent": "Deep Search Agent"
+      "deepSearchAgent": "Deep Search Agent",
+      "deepResearchAgent": "Deep Research Agent",
+      "deepSearchExplorerAgent": "Deep Search Explorer Agent"
     },
     "model": {
       "selectModel": "Select Model",
@@ -822,6 +825,111 @@
       "syntaxError": "Mermaid syntax error",
       "renderFailed": "Chart rendering failed",
       "viewCode": "View code"
+    },
+    "deepSearchExplorer": {
+      "title": "Deep Search Explorer",
+      "tabs": {
+        "summary": "Summary",
+        "explorer": "Explorer"
+      },
+      "kill": "Kill",
+      "close": "Close Deep Search panel",
+      "fullscreen": "Fullscreen",
+      "exitFullscreen": "Exit fullscreen",
+      "summaryPlaceholder": "Summary",
+      "summaryComingSoon": "Summary view is coming soon.",
+      "openExplorer": "DeepSearch Explorer",
+      "routeSimpleAgent": "Simple agent",
+      "routeDeepSearchAgent": "DeepSearch agent",
+      "routeDetecting": "Detecting...",
+      "view": {
+        "emptyState": "Select an action to view details",
+        "hideActionQueue": "Hide Action Queue",
+        "showActionQueue": "Show Action Queue",
+        "statusLabel": "Status:",
+        "activeActions": "Active Actions:",
+        "pendingActions": "Pending Actions:",
+        "completedActions": "Completed Actions:",
+        "elapsedTimeLabel": "Elapsed Time:",
+        "statusValues": {
+          "pending": "Pending",
+          "running": "Running",
+          "paused": "Paused",
+          "completed": "Completed",
+          "failed": "Failed",
+          "killed": "Killed",
+          "cancelled": "Cancelled",
+          "aborted": "Aborted"
+        }
+      },
+      "actionQueue": {
+        "title": "Action Queue",
+        "generating": "Generating",
+        "sections": {
+          "running": "Running",
+          "paused": "Paused",
+          "pending": "Pending",
+          "completed": "Completed",
+          "failed": "Failed"
+        },
+        "type": {
+          "query": "Query",
+          "expand": "Expand",
+          "validate": "Validate",
+          "filter": "Filter"
+        },
+        "answerBadge": "Answer",
+        "descriptionPlaceholder": "Action description...",
+        "save": "Save",
+        "cancel": "Cancel",
+        "targetLabel": "Target:",
+        "depthLabel": "Depth {{depth}}",
+        "estimate": "Est. {{seconds}}s",
+        "editActionProposal": "Edit action proposal",
+        "edit": "Edit",
+        "currentCost": "Current cost: ${{cost}} USD",
+        "costSoFar": "Cost so far: ${{cost}} USD",
+        "paused": "Paused",
+        "cost": "Cost: ${{cost}} USD"
+      },
+      "entityPanel": {
+        "currentQuestion": "Current Question",
+        "actionProposal": "Action Proposal",
+        "selectActionForProposal": "Select an action from the Action Queue to view its proposal",
+        "actionExecution": "Action Execution",
+        "toolCallsCount": "{{count}} tool call(s)",
+        "toolCalls": "Tool Calls",
+        "selectActionForToolCalls": "Select an action to view tool calls.",
+        "noToolCalls": "No tool calls for this action.",
+        "candidateEntities": "Candidate Entities",
+        "noCandidateValues": "No candidate values for this state.",
+        "unknownEntities": "Unknown Entities",
+        "noUnknownEntities": "No unknown entities",
+        "targetAnswer": "Target Answer",
+        "hypothesis": "Hypothesis",
+        "unknown": "Unknown",
+        "evidenceForHypothesis": "Evidence for hypothesis",
+        "discoveredClues": "Discovered clues",
+        "knownEntities": "Known Entities",
+        "knownEntitiesHint": "Assumed true in current search state",
+        "noKnownEntities": "No known entities yet"
+      },
+      "runSummary": {
+        "title": "Deep Search",
+        "statusRunning": "Searching...",
+        "statusCompleted": "Search completed",
+        "statusFailed": "Search failed",
+        "actionsCompleted": "{{count}} actions completed",
+        "answer": "Answer",
+        "noActionsYet": "Starting search...",
+        "elapsedTime": "Elapsed: {{time}}",
+        "routeLabel": "Route: {{route}}",
+        "entities": "Entities",
+        "entityFallback": "Entity {{id}}",
+        "known": "Known",
+        "unknown": "Unknown",
+        "runningCount": "{{count}} running"
+      }
     },
     "report": {
       "toolbar": "Report actions toolbar",
@@ -925,6 +1033,18 @@
         "test": {
           "success": "Model {{modelName}} test successful",
           "failed": "Model {{modelName}} test failed, model unavailable"
+        },
+        "planningModel": {
+          "title": "Planning Model",
+          "label": "Planning Model",
+          "description": "Used for initial state planning. Recommended to use a comprehensive model — called only once at the start.",
+          "info": "This model is used once at the start for initial state planning. A comprehensive, high-capability model is recommended."
+        },
+        "searchModel": {
+          "title": "Search Model",
+          "label": "Search Model",
+          "description": "Used for all search steps. Recommended to use a balanced model capable of tool use.",
+          "info": "This model performs all the search steps during execution. A balanced model with tool-use capability is recommended."
         }
       },
       "general": {
@@ -951,7 +1071,18 @@
           "maxIterationsDesc": "0 disables iteration;",
           "model": "VLM model",
           "modelDesc": "Synced with the VLM model in model settings"
-        }
+        },
+        "searchProcessSettings": "Search Process Settings",
+        "enableQuestionRouter": "Enable Question Router",
+        "enableQuestionRouterDesc": "Route simple questions to a Simple agent to save DeepSearch resources",
+        "actionProposalsLimit": "Action Proposals Limit",
+        "actionProposalsLimitDesc": "Maximum number of iterative action proposals per run (1-10)",
+        "actionsExploredLimit": "Actions Explored Limit",
+        "actionsExploredLimitDesc": "Maximum number of actions to explore per question (1-200)",
+        "maxLlmCallsPerRun": "Max LLM Calls Per Run",
+        "maxLlmCallsPerRunDesc": "Maximum LLM calls per state creation run (1-20)",
+        "timeLimit": "Time Limit (Seconds)",
+        "timeLimitDesc": "Maximum runtime for a single Deep Search run (1-3600)"
       },
       "search": {
         "mode": "Search Mode",
@@ -976,18 +1107,38 @@
         "clickToAddKB": "Click \"Configure\" above to add knowledge",
         "deepSearchKnowledgeBase": "Configure DeepSearch Knowledge Base",
         "refresh": "Refresh",
-        "noDeepSearchKB": "No DeepSearch knowledge base. Sync a knowledge base to DeepSearch first."
+        "noDeepSearchKB": "No DeepSearch knowledge base. Sync a knowledge base to DeepSearch first.",
+        "milvusConfig": "Milvus Configuration",
+        "milvusHost": "Milvus Host",
+        "milvusPort": "Milvus Port",
+        "milvusDatabase": "Database Name",
+        "milvusCollection": "Collection Name",
+        "embedderConfig": "Embedder Configuration",
+        "embedderModelName": "Embedder Model Name",
+        "embedderBaseUrl": "Embedder Base URL",
+        "embedderApiKey": "Embedder API Key",
+        "apiKeyPlaceholder": "Enter API Key",
+        "onlineProvider": "Online Search Provider",
+        "jinaApiKey": "Jina API Key",
+        "serperApiKey": "Serper API Key"
       },
       "validation": {
         "chapterCountRange": "Chapter count must be between 1-10",
         "allModeRequires": "Comprehensive search mode requires: {{items}}",
         "webModeRequires": "Online enhancement mode requires an online enhancement engine",
+        "webModeRequiresApiKey": "Online enhancement mode requires both API keys (Serper and Jina)",
         "localModeRequires": "Local search mode requires at least one knowledge base",
         "webResultCountRange": "Online enhancement result count must be between 1-10",
         "localResultCountRange": "Local search result count must be between 1-10",
         "generalModelRequired": "General model is required, please select a model",
         "vlmChartIterationsRange": "VLM chart max iterations must be between 0 and 3",
-        "vlmChartModelRequired": "Select a VLM model when VLM chart generation is enabled with iterations greater than 0"
+        "vlmChartModelRequired": "Select a VLM model when VLM chart generation is enabled with iterations greater than 0",
+        "actionProposalsLimitRange": "Action proposals limit must be between 1-10",
+        "timeLimitRange": "Time limit must be between 1-3600 seconds",
+        "actionsExploredLimitRange": "Actions explored limit must be between 1-200",
+        "maxLlmCallsPerRunRange": "Max LLM calls per run must be between 1-20",
+        "planningModelRequired": "Planning model is required",
+        "searchModelRequired": "Search model is required"
       },
       "engine": {
         "select": "Select Online Enhancement Engine",

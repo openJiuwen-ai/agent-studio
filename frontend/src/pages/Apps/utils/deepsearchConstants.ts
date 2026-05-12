@@ -1,10 +1,15 @@
 import { DeepSearchConfig } from '../components/AgentConfigDialog'
 
 /**
- * DeepSearch Agent 默认配置
+ * DeepSearch 配置模式
+ */
+export type DeepSearchConfigMode = 'research' | 'search'
+
+/**
+ * DeepResearch Agent 默认配置
  * 当用户没有在 localStorage 中保存配置时使用
  */
-export const DEFAULT_DEEPSEARCH_CONFIG: DeepSearchConfig = {
+export const DEFAULT_DEEPRESEARCH_CONFIG: DeepSearchConfig = {
   enableHumanInteraction: true,
   outlineInteractionEnabled: true, // 大纲交互开关，默认开启
   planChapterCount: 5,
@@ -31,3 +36,69 @@ export const DEFAULT_DEEPSEARCH_CONFIG: DeepSearchConfig = {
   writingCheckingModelId: undefined,
   vlmChartModelId: undefined,
 }
+
+/**
+ * DeepSearch Explorer Agent 默认配置
+ */
+export const DEFAULT_DEEPSEARCH_EXPLORER_CONFIG: DeepSearchConfig = {
+  enableHumanInteraction: false,
+  outlineInteractionEnabled: false,
+  planChapterCount: 1,
+  enableTraceability: false,
+  enableSourceTracerInfer: false,
+  userFeedbackProcessorEnable: false,
+  userFeedbackProcessorMaxInteractions: 0,
+  searchMode: 'web',
+  selectedWebSearchEngineId: undefined,
+  webSearchResultCount: 5,
+  localSearchResultCount: 5,
+  webSearchMaxQps: 0,
+  selectedKnowledgeBaseIds: [],
+  recallThreshold: 0.5,
+  enableTemplate: false,
+  selectedTemplateId: undefined,
+  execution_method: 'parallel',
+  generalModelId: undefined,
+  planUnderstandingModelId: undefined,
+  infoCollectingModelId: undefined,
+  writingCheckingModelId: undefined,
+  actionProposalsLimit: 5,
+  timeLimit: 3600,
+  actionsExploredLimit: 200,
+  maxLlmCallsPerRun: 10,
+  enableQuestionRouter: false,
+  // Model config (platform model picker IDs)
+  planningModelId: undefined,
+  searchModelId: undefined,
+  // Milvus / local KB
+  milvusHost: '169.254.171.63',
+  milvusPort: 19530,
+  milvusDatabaseName: 'deepsearch_benchmarks',
+  milvusCollectionName: 'browsecompplus_with_bm25_test_2',
+  embedderModelName: 'qwen/qwen3-embedding-8b',
+  embedderApiKey: '',
+  embedderBaseUrl: 'https://openrouter.ai/api/v1/embeddings',
+  // Online search provider
+  onlineSearchProvider: 'jina',
+  jinaApiKey: '',
+  serperApiKey: '',
+}
+
+/**
+ * 兼容旧引用：DEFAULT_DEEPSEARCH_CONFIG 指向 DeepResearch 默认配置
+ */
+export const DEFAULT_DEEPSEARCH_CONFIG = DEFAULT_DEEPRESEARCH_CONFIG
+
+export const getConfigModeFromAgentId = (agentId?: string | null): DeepSearchConfigMode => (
+  agentId === 'deepsearch-explorer' ? 'search' : 'research'
+)
+
+export const getDefaultDeepSearchConfigByMode = (mode: DeepSearchConfigMode): DeepSearchConfig => (
+  mode === 'search'
+    ? { ...DEFAULT_DEEPSEARCH_EXPLORER_CONFIG }
+    : { ...DEFAULT_DEEPRESEARCH_CONFIG }
+)
+
+export const getDefaultDeepSearchConfigByAgentId = (agentId?: string | null): DeepSearchConfig => (
+  getDefaultDeepSearchConfigByMode(getConfigModeFromAgentId(agentId))
+)

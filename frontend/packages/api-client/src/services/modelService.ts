@@ -238,6 +238,34 @@ export class ModelService {
     }
   }
 
+  // 获取 Deep Search 模型运行时配置（含解密后的 API Key）
+  async getDeepSearchModelRuntime(
+    modelId: string,
+    spaceId: string,
+  ): Promise<{ model_id: number; model_name: string; model_type: string; base_url: string; api_key: string | null }> {
+    try {
+      const apiClient = getApiClient()
+      const response = await apiClient.get<{
+        code: number
+        message: string
+        data: { model_id: number; model_name: string; model_type: string; base_url: string; api_key: string | null }
+      }>(`${this.basePath}runtime/deepsearch-config`, {
+        params: { model_id: modelId, space_id: spaceId },
+      })
+      return response.data.data
+    } catch (error) {
+      throw this.handleError(error)
+    }
+  }
+
+  // 向后兼容：旧方法名
+  async getDeepSearchModelConfig(
+    modelId: string,
+    spaceId: string,
+  ): Promise<{ model_id: number; model_name: string; model_type: string; base_url: string; api_key: string | null }> {
+    return this.getDeepSearchModelRuntime(modelId, spaceId)
+  }
+
   // 错误处理
   private handleError(error: any): ModelApiError {
     if (error.response?.data) {

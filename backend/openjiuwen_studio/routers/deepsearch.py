@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from functools import wraps
-from typing import Dict, Any, Callable
+from typing import Any, Callable
 import httpx
 from httpx import HTTPStatusError
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, status, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -16,11 +16,20 @@ from openjiuwen_studio.core.manager.login_manager.user import get_current_user
 from openjiuwen_studio.core.manager.login_manager.space import check_user_space
 from openjiuwen_studio.core.manager.model_manager.managers.vlm_model_config_manager import VLMModelConfigManager
 from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
+from openjiuwen_studio.core.utils.deepsearch_payload import (
+    apply_interaction_defaults,
+    get_local_search_kb_ids,
+    classify_local_search_kbs,
+)
+from openjiuwen_studio.core.utils.deepsearch_stream import normalize_relay_stream_line
 from openjiuwen_studio.core.common.exceptions import DeepSearchClientError
 from openjiuwen_studio.core.config import settings
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.schemas.deepsearch import (
     DeepSearchRequest,
+    DeepSearchSearchRunRequest,
+    DeepSearchSearchRunResponse,
+    DeepSearchTelemetryResponse,
     TemplateImportRequest,
     TemplateImportResponse,
     TemplateListResponse,
@@ -58,6 +67,14 @@ class DeepSearchModelConfigQuery:
     info_collecting_model_id: int | None = None
     writing_checking_model_id: int | None = None
     vlm_model_config_id: int | None = None
+
+
+@dataclass
+class DeepSearchTelemetryRangeQuery:
+    run_id: str
+    start_seq: int = Query(..., ge=0)
+    end_seq: int = Query(..., ge=0)
+    space_id: str | None = Query(default=None)
 
 
 # 依赖注入（或直接使用单例）
@@ -169,6 +186,28 @@ def handle_deepsearch_errors(func: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
+def validate_search_run_tool_credentials(request: DeepSearchSearchRunRequest) -> None:
+    if request.tool_map == "search_fetch":
+        if not request.jina_api_key or not request.serper_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="tool_map=search_fetch requires jina_api_key and serper_api_key",
+            )
+        return
+
+    if request.tool_map == "retrieve":
+        if not request.milvus:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="tool_map=retrieve requires milvus config",
+            )
+        if not request.milvus.embedder_api_key or not request.milvus.embedder_base_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="tool_map=retrieve requires milvus.embedder_api_key and milvus.embedder_base_url",
+            )
+
+
 @deepsearch_router.post("/run", response_model=ResponseModel[dict])
 async def run(
         request: DeepSearchRequest,
@@ -191,12 +230,53 @@ async def run(
     # 先检查用户权限
     _ = check_user_space(payload["space_id"], current_user)
     
+    apply_interaction_defaults(
+        payload,
+        fields_set=request.model_fields_set,
+        interrupt_feedback=request.interrupt_feedback,
+    )
+
     # 取消请求不需要获取模型配置，直接转发到 deepsearch 服务
     if request.interrupt_feedback == "cancel":
         logger.info(f"[DeepSearch Cancel] Received cancel request for conversation_id={payload.get('conversation_id')}")
         # 取消请求：不需要 llm_config，直接转发
         pass
     else:
+        if payload.get("info_collector_search_method") == "local":
+            local_kb_ids = get_local_search_kb_ids(payload)
+            if not local_kb_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "At least one local knowledge base is required when "
+                        "info_collector_search_method is 'local'."
+                    ),
+                )
+
+            with_docs_kb_ids, empty_kb_ids, unavailable_kb_ids = await classify_local_search_kbs(
+                space_id=request.space_id,
+                kb_ids=local_kb_ids,
+                list_documents=client.list_documents,
+            )
+            if not with_docs_kb_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "Selected local knowledge bases contain no available indexed documents. "
+                        f"empty_kb_ids={empty_kb_ids}, unavailable_kb_ids={unavailable_kb_ids}"
+                    ),
+                )
+            if empty_kb_ids or unavailable_kb_ids:
+                local_cfg = payload.get("local_search_config")
+                if isinstance(local_cfg, dict):
+                    local_cfg["local_search_config_ids"] = with_docs_kb_ids
+                logger.warning(
+                    "[DeepSearch Run] Filtered local knowledge bases without indexed documents. "
+                    f"conversation_id={payload.get('conversation_id')}, "
+                    f"kept_kb_ids={with_docs_kb_ids}, empty_kb_ids={empty_kb_ids}, "
+                    f"unavailable_kb_ids={unavailable_kb_ids}"
+                )
+
         if (
             request.vlm_chart_generator_enable
             and request.vlm_chart_generator_max_iterations > 0
@@ -240,14 +320,17 @@ async def run(
     async def stream():
         try:
             async for line in client.run_deepsearch_stream(payload):
-                if line:
+                relay_line = normalize_relay_stream_line(line, payload.get("search_mode"))
+                if relay_line:
                     # 记录 SSE 数据到日志
                     try:
-                        await log_deepsearch_sse(conversation_id, line, DeepSearchLogger.DEFAULT_LOG_EXPIRE_DAYS)
+                        await log_deepsearch_sse(
+                            conversation_id, relay_line, DeepSearchLogger.DEFAULT_LOG_EXPIRE_DAYS
+                        )
                     except Exception as e:
                         logger.warning(f"Failed to log SSE data: {e}")
 
-                    yield line + "\n\n"
+                    yield relay_line + "\n\n"
         except Exception as e:
             # 记录原始错误详情到服务器日志
             logger.error("DeepSearch client init error: %s", str(e))
@@ -262,6 +345,67 @@ async def run(
                 yield event_str
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@deepsearch_router.post("/runs", response_model=DeepSearchSearchRunResponse)
+@handle_deepsearch_errors
+async def create_search_run(
+        request: DeepSearchSearchRunRequest,
+        client: DeepSearchAgentClient = Depends(get_agent_client),
+        current_user: dict = Depends(get_current_user),
+):
+    _ = check_user_space(request.space_id, current_user)
+    validate_search_run_tool_credentials(request)
+    payload = request.model_dump(exclude={"space_id"}, exclude_none=True)
+    return await client.create_deepsearch_run(payload)
+
+
+@deepsearch_router.post("/runs/{run_id}/cancel")
+@handle_deepsearch_errors
+async def cancel_search_run(
+        run_id: str,
+        space_id: str | None = Query(default=None),
+        client: DeepSearchAgentClient = Depends(get_agent_client),
+        current_user: dict = Depends(get_current_user),
+):
+    if space_id:
+        _ = check_user_space(space_id, current_user)
+    return await client.cancel_deepsearch_run(run_id)
+
+
+@deepsearch_router.get("/telemetry/recent", response_model=DeepSearchTelemetryResponse)
+@handle_deepsearch_errors
+async def get_recent_telemetry(
+        n: int = Query(default=1, ge=1, le=1000),
+        run_id: str | None = Query(default=None),
+        space_id: str | None = Query(default=None),
+        client: DeepSearchAgentClient = Depends(get_agent_client),
+        current_user: dict = Depends(get_current_user),
+):
+    if space_id:
+        _ = check_user_space(space_id, current_user)
+    return await client.get_deepsearch_telemetry_recent(n=n, run_id=run_id)
+
+
+@deepsearch_router.get("/telemetry/range", response_model=DeepSearchTelemetryResponse)
+@handle_deepsearch_errors
+async def get_telemetry_range(
+        query: DeepSearchTelemetryRangeQuery = Depends(),
+        client: DeepSearchAgentClient = Depends(get_agent_client),
+        current_user: dict = Depends(get_current_user),
+):
+    if query.end_seq < query.start_seq:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="end_seq must be greater than or equal to start_seq",
+        )
+    if query.space_id:
+        _ = check_user_space(query.space_id, current_user)
+    return await client.get_deepsearch_telemetry_range(
+        run_id=query.run_id,
+        start_seq=query.start_seq,
+        end_seq=query.end_seq,
+    )
 
 
 @deepsearch_router.post("/template", response_model=TemplateImportResponse)
@@ -453,12 +597,27 @@ async def deepsearch_heartbeat(
         # 直接向 DeepSearch 服务发送健康检查请求
         base_url = f"http://{settings.deepsearch_agent_host}:{settings.deepsearch_agent_port}"
         async with httpx.AsyncClient(timeout=3.0) as client:
-            response = await client.get(f"{base_url}/api/health")
-            response.raise_for_status()
+            response = None
+            for health_path in ("/health", "/api/health"):
+                try:
+                    candidate = await client.get(f"{base_url}{health_path}")
+                    candidate.raise_for_status()
+                    response = candidate
+                    break
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code == 404:
+                        continue
+                    raise
 
         # 检查响应内容
+        if response is None:
+            return {
+                "status": "unavailable",
+                "message": "DeepSearch health endpoint not found"
+            }
+
         data = response.json()
-        if data.get("status") == "healthy":
+        if data.get("status") in {"healthy", "ok", "available"}:
             return {
                 "status": "available",
                 "message": "DeepSearch service is available"

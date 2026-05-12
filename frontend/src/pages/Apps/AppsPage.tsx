@@ -5,7 +5,7 @@ import { MentionItem, DEFAULT_AGENTS, DEFAULT_RESOURCES } from './components/Men
 import AgentConfigDialog, { DeepSearchConfig } from './components/AgentConfigDialog'
 import ChatInputArea from './components/ChatInputArea'
 import ModelPicker from './components/ModelPicker'
-import { useModels, useVLMModels, getToken, deepsearchHeartbeatService } from '@test-agentstudio/api-client'
+import { useModels, useVLMModels, getToken, deepsearchHeartbeatService, modelService } from '@test-agentstudio/api-client'
 import { useAuthStore } from '../../stores/useAuthStore'
 import { useConversationStore, MessageType, TaskStatus, AgentType, DeepsearchExecutionMethod, isTaskOngoing,
   type MessageItems, OUTLINE_INTERACTION_MAX_ROUNDS, MESSAGE_TITLES } from '../../stores/useConversationStore'
@@ -23,7 +23,12 @@ import ConversationLimitDialog from '../../components/Common/ConversationLimitDi
 import { conversationEventEmitter, conversationDB } from '../../utils/conversationDB'
 import type { MessageInputRef } from './components/MessageInput'
 import { copyToClipboard, STORAGE_KEYS, storage, getAgentConfigKeys } from './utils/utils'
-import { DEFAULT_DEEPSEARCH_CONFIG } from './utils/deepsearchConstants'
+import {
+  DEFAULT_DEEPRESEARCH_CONFIG,
+  DEFAULT_DEEPSEARCH_EXPLORER_CONFIG,
+  getConfigModeFromAgentId,
+  getDefaultDeepSearchConfigByAgentId,
+} from './utils/deepsearchConstants'
 import { getSuggestionsByAgent } from './constants/suggestions'
 import { TEXT_BASE, TEXT_SMALL, FONT_FAMILY } from './constants/styles'
 import type { Message, ReportRewriteParams } from './types'
@@ -32,6 +37,9 @@ import ResultPanel from '../../components/Conversation/ResultPanel'
 import ConversationHistorySidebar from './components/ConversationHistorySidebar'
 import { MindMapPanel } from '../../components/Conversation/MindMap'
 import { TopToolbar, ViewType } from '../../components/Conversation'
+import DeepSearchExplorerPanel from './components/DeepSearchExplorer/DeepSearchExplorerPanel'
+import DeepSearchRunSummary from './components/DeepSearchExplorer/DeepSearchRunSummary'
+import * as deepSearchApi from './components/DeepSearchExplorer/api'
 
 // ==================== 开发调试配置 ====================
 // 从环境变量读取，默认为 false（生产环境）
@@ -52,7 +60,8 @@ const SUPPLEMENTARY_SEARCH_SCOPE_LABELS: Record<string, string> = {
 }
 
 /**
- * 构建改写请求的用户消息内容
+ * Build DeepSearch payload fields for search-mode runs.
+ * The returned object is sent to Studio backend /api/v1/agent/deepsearch/runs.
  */
 const buildRewriteUserMessage = (action: string, selectedText: string, userInstruction?: string, scope?: string): string => {
   let actionLabel = REWRITE_ACTION_LABELS[action] || action
@@ -65,6 +74,73 @@ const buildRewriteUserMessage = (action: string, selectedText: string, userInstr
   return userInstruction
     ? `请帮我${actionLabel}这段文字：\n\n"${displayText}"\n\n${userInstruction}`
     : `请帮我${actionLabel}这段文字：\n\n"${displayText}"`
+}
+
+async function buildDeepSearchBackendConfig(
+  dsConfig: DeepSearchConfig,
+  spaceId: string,
+  fallbackModelId: number,
+): Promise<Record<string, unknown>> {
+  const parseModelConfigId = (rawId?: string): string | null => {
+    if (!rawId) return null
+    const parsed = Number.parseInt(rawId, 10)
+    if (!Number.isFinite(parsed) || parsed < 0) return null
+    return String(parsed)
+  }
+
+  const searchMode = dsConfig.searchMode ?? DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.searchMode
+
+  const selectedModelConfigId =
+    parseModelConfigId(dsConfig.searchModelId)
+    ?? parseModelConfigId(dsConfig.generalModelId)
+    ?? parseModelConfigId(dsConfig.planningModelId)
+    ?? (fallbackModelId >= 0 ? String(fallbackModelId) : null)
+
+  if (!selectedModelConfigId) {
+    throw new Error('A model is required for DeepSearch search-mode runs')
+  }
+
+  const runtime = await modelService.getDeepSearchModelRuntime(selectedModelConfigId, spaceId)
+  if (!runtime.api_key) {
+    throw new Error('Selected model does not have an API key configured')
+  }
+
+  const toolMap = searchMode === 'local' ? 'retrieve' : 'search_fetch'
+  const payload: Record<string, unknown> = {
+    space_id: spaceId,
+    search_mode: 'search',
+    enable_question_router: dsConfig.enableQuestionRouter ?? false,
+    llm: {
+      model_name: runtime.model_name,
+      model_type: runtime.model_type,
+      base_url: runtime.base_url,
+      api_key: runtime.api_key,
+    },
+    tool_map: toolMap,
+  }
+
+  if (toolMap === 'search_fetch') {
+    if (!dsConfig.jinaApiKey || !dsConfig.serperApiKey) {
+      throw new Error('Search mode requires both Jina and Serper API keys')
+    }
+    payload.jina_api_key = dsConfig.jinaApiKey
+    payload.serper_api_key = dsConfig.serperApiKey
+    return payload
+  }
+
+  if (!dsConfig.embedderApiKey || !dsConfig.embedderBaseUrl) {
+    throw new Error('Local mode requires embedder API key and embedder base URL')
+  }
+
+  payload.milvus = {
+    embedder_api_key: dsConfig.embedderApiKey,
+    embedder_base_url: dsConfig.embedderBaseUrl,
+    embedder_model_name: dsConfig.embedderModelName,
+    host: dsConfig.milvusHost,
+    port: dsConfig.milvusPort,
+    collection_name: dsConfig.milvusCollectionName,
+  }
+  return payload
 }
 
 // ==================== 主页面组件 ====================
@@ -113,6 +189,34 @@ const AppsPage: React.FC = () => {
   const [showPlaybackPanel, setShowPlaybackPanel] = useState(false)
   const [deepsearchServiceAvailable, setDeepsearchServiceAvailable] = useState<boolean | null>(null)
   const [checkingDeepsearch, setCheckingDeepsearch] = useState(false)
+
+  // ===== Deep Search Explorer 模式状态 =====
+  const [isDeepSearchExplorerMode, setIsDeepSearchExplorerMode] = useState(false)
+  const [showDeepSearchExplorer, setShowDeepSearchExplorer] = useState(false)
+  const [deepSearchExplorerFullscreen, setDeepSearchExplorerFullscreen] = useState(false)
+  // Map of messageItemsId → runId for multiple summaries
+  const [deepSearchRunIds, setDeepSearchRunIds] = useState<Map<string, string>>(new Map())
+  // The currently active runId being viewed in the explorer panel
+  const [activeDeepSearchRunId, setActiveDeepSearchRunId] = useState<string | null>(null)
+  // Runs killed from the explorer (used to force terminal state in summary cards)
+  const [killedDeepSearchRunIds, setKilledDeepSearchRunIds] = useState<Set<string>>(new Set())
+
+  // Responsive: detect narrow screens (laptops) to auto-fullscreen explorer
+  const [isNarrowScreen, setIsNarrowScreen] = useState(false)
+  useEffect(() => {
+    const WIDE_BREAKPOINT = 1440
+    const check = () => setIsNarrowScreen(window.innerWidth < WIDE_BREAKPOINT)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  // On laptop screens, auto-fullscreen the explorer when opened
+  useEffect(() => {
+    if (isNarrowScreen && showDeepSearchExplorer) {
+      setDeepSearchExplorerFullscreen(true)
+    }
+  }, [isNarrowScreen, showDeepSearchExplorer])
 
   // ===== MindMap 思维链面板状态 =====
   const [showMindMap, setShowMindMap] = useState(false)
@@ -201,6 +305,8 @@ const AppsPage: React.FC = () => {
   const addSystemMessage = useConversationStore(state => state.addSystemMessage)
   const setConversationConfig = useConversationStore(state => state.setConversationConfig)
   const clearConversationConfig = useConversationStore(state => state.clearConversationConfig)
+  const updateConversation = useConversationStore(state => state.updateConversation)
+  const saveConversationToDB = useConversationStore(state => state.saveConversationToDB)
   const setLoading = useConversationStore(state => state.setLoading)
   const setSelectedResultMessageId = useConversationStore(state => state.setSelectedResultMessageId)
   const clearAll = useConversationStore(state => state.clearAll)
@@ -410,8 +516,9 @@ const AppsPage: React.FC = () => {
     if (savedConfigs) {
       // 合并默认值：用户保存的字段覆盖默认值，未保存的字段使用默认值
       const mergedConfigs = Object.keys(savedConfigs).reduce((acc, agentId) => {
+        const defaultConfig = getDefaultDeepSearchConfigByAgentId(agentId)
         acc[agentId] = {
-          ...DEFAULT_DEEPSEARCH_CONFIG,  // 先用默认值打底
+          ...defaultConfig,  // 先用默认值打底
           ...savedConfigs[agentId],       // 再用保存的值覆盖
         }
         return acc
@@ -466,7 +573,7 @@ const AppsPage: React.FC = () => {
     // 过滤：只保留与默认值不同的字段
     const filteredConfigs = Object.keys(agentConfigs).reduce((acc, agentId) => {
       const config = agentConfigs[agentId]
-      const defaultConfig = DEFAULT_DEEPSEARCH_CONFIG
+      const defaultConfig = getDefaultDeepSearchConfigByAgentId(agentId)
       const diffConfig = Object.keys(config).reduce((configAcc, key) => {
         const k = key as keyof DeepSearchConfig
         if (config[k] !== defaultConfig[k]) {
@@ -491,10 +598,18 @@ const AppsPage: React.FC = () => {
     }
   }, [models, selectedModel, modelIdMap])
 
-  // ===== DeepSearch 模式检测 =====
+  // ===== DeepSearch / DeepSearch Explorer 模式检测 =====
   useEffect(() => {
     const isDeepSearch = selectedAgent?.id === 'deepsearch'
+    const isExplorer = selectedAgent?.id === 'deepsearch-explorer'
     setIsDeepSearchMode(isDeepSearch)
+    setIsDeepSearchExplorerMode(isExplorer)
+
+    // Reset Deep Search Explorer state when switching away from explorer agent
+    if (!isExplorer) {
+      setShowDeepSearchExplorer(false)
+      setDeepSearchExplorerFullscreen(false)
+    }
 
     // 不在这里自动创建 conversation
     // 改为只在发送消息时才创建，避免产生空对话
@@ -509,6 +624,8 @@ const AppsPage: React.FC = () => {
     if (!hasActiveConversation) {
       // 如果清空了对话，也清空 selectedAgent
       setSelectedAgent(null)
+      setDeepSearchRunIds(new Map())
+      setActiveDeepSearchRunId(null)
     } else {
       // 如果有对话，根据对话的 agentType 自动设置智能体
       const conversation = getConversationById(currentConversationId)
@@ -518,6 +635,13 @@ const AppsPage: React.FC = () => {
           setSelectedAgent(matchedAgent)
         }
 
+        // Restore Deep Search Explorer runIds from conversation config
+        if (conversation.config.agentType === 'deepsearch-explorer' && conversation.config.deepSearchRunIds) {
+          const restoredMap = new Map<string, string>(
+            Object.entries(conversation.config.deepSearchRunIds as Record<string, string>)
+          )
+          setDeepSearchRunIds(restoredMap)
+        }
       }
     }
   }, [currentConversationId])
@@ -783,6 +907,68 @@ const AppsPage: React.FC = () => {
         return
       }
 
+      // ===== Deep Search Explorer 模式 =====
+      if (isDeepSearchExplorerMode) {
+        // Create conversation (like Deep Research)
+        let conversationId = currentConversationId
+        if (!conversationId) {
+          const title = messageToSend.length > 50 ? messageToSend.slice(0, 50) + '...' : messageToSend
+          conversationId = await handleCreateConversation(title, {
+            agentType: 'deepsearch-explorer',
+          })
+          if (!conversationId) {
+            console.log('[DeepSearchExplorer] User cancelled conversation creation')
+            setInputValue(messageToSend)
+            return
+          }
+        }
+
+        // Add user message to store — returns the MessageItems
+        const userMsgItems = addUserMessage(conversationId, messageToSend)
+        setHasConversation(true)
+
+        // Create the DS run via API and store it per message
+        try {
+          // Build backend payload from user's saved Deep Search config
+          const dsConfig = agentConfigs['deepsearch-explorer'] || DEFAULT_DEEPSEARCH_EXPLORER_CONFIG
+          const spaceId = user?.spaceId || getDefaultSpaceId()
+          const backendConversationId = `${conversationId}_${userMsgItems.id}`
+          const backendConfig = await buildDeepSearchBackendConfig(dsConfig, spaceId, selectedModelId)
+
+          const result = await deepSearchApi.createRun(messageToSend, {
+            ...backendConfig,
+            run_id: backendConversationId,
+          })
+          const newRunIds = new Map(deepSearchRunIds)
+          newRunIds.set(userMsgItems.id, result.run_id)
+          setDeepSearchRunIds(newRunIds)
+          setActiveDeepSearchRunId(result.run_id)
+          setKilledDeepSearchRunIds((prev) => {
+            const next = new Set(prev)
+            next.delete(result.run_id)
+            return next
+          })
+
+          // Persist runIds in conversation.config for IndexDB recovery on refresh
+          const configUpdate = {
+            agentType: 'deepsearch-explorer',
+            deepSearchRunIds: Object.fromEntries(newRunIds),
+          }
+          setConversationConfig(conversationId, configUpdate)
+          updateConversation(conversationId, { config: configUpdate })
+          await saveConversationToDB(conversationId)
+        } catch (e) {
+          console.error('[DeepSearchExplorer] Failed to create run:', e)
+          const errorMessage = e instanceof Error ? e.message : t('apps.chat.configError')
+          window.dispatchEvent(
+            new CustomEvent('global-snackbar', {
+              detail: { message: errorMessage, severity: 'error' as const },
+            }),
+          )
+        }
+        return
+      }
+
       // ===== 普通模式：显示用户消息 + mock 回复 =====
       setHasConversation(true)
 
@@ -820,9 +1006,10 @@ const AppsPage: React.FC = () => {
   const handleReportRewrite = async (params: ReportRewriteParams) => {
     const { action, rewrite_scope, selectedText, startOffset, endOffset, userInstruction, conversationId, onStatusChange, onDelta, onSnapshot, onEnd, onError, silent } = params
 
-    const config = agentConfigs['deepsearch'] || DEFAULT_DEEPSEARCH_CONFIG
+    const config = agentConfigs['deepsearch'] || DEFAULT_DEEPRESEARCH_CONFIG
     const rewriteSessionUnavailableMessage = '报告对应的改写会话已超时，请重新提问后再尝试改写。'
     const isSyncAction = action === 'sync'
+    
 
     if (config.userFeedbackProcessorEnable === false) {
       onStatusChange?.('error')
@@ -1403,7 +1590,20 @@ const AppsPage: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify(buildLiveRewriteRequestBody()),
+        body: JSON.stringify({
+          space_id: user?.spaceId || getDefaultSpaceId(),
+          general_model_config_id: config.generalModelId ? parseInt(config.generalModelId) : selectedModelId,
+          message: JSON.stringify(messagePayload),
+          conversation_id: backendConversationId,
+          // 保留搜索配置（续写时后端会根据 conversation_id 恢复 workflow 状态）
+          search_mode: 'research',
+          web_search_config,
+          local_search_config,
+          // 报告局部改写配置
+          user_feedback_processor_enable: config.userFeedbackProcessorEnable ?? true,
+          user_feedback_processor_max_interactions: config.userFeedbackProcessorMaxInteractions ?? 3,
+          execution_method: config.execution_method ?? DEFAULT_DEEPRESEARCH_CONFIG.execution_method,
+        }),
       })
 
       if (!response.ok) {
@@ -1623,12 +1823,14 @@ const AppsPage: React.FC = () => {
     setSelectedModelId(modelId)
     setShowModelPicker(false)
 
-    // 同步到智能体配置的通用模型（仅对 deepsearch 智能体）
-    if (selectedAgent?.id === 'deepsearch' && modelId !== -1) {
+    // 同步到智能体配置的通用模型（deepsearch / deepsearch-explorer）
+    if ((selectedAgent?.id === 'deepsearch' || selectedAgent?.id === 'deepsearch-explorer') && modelId !== -1) {
+      const agentId = selectedAgent.id
       setAgentConfigs(prev => ({
         ...prev,
-        deepsearch: {
-          ...prev['deepsearch'],
+        [agentId]: {
+          ...getDefaultDeepSearchConfigByAgentId(agentId),
+          ...prev[agentId],
           generalModelId: String(modelId),
         }
       }))
@@ -1833,6 +2035,12 @@ const AppsPage: React.FC = () => {
     setLastSelectedReportId(null)
     setCurrentGraphType('sectionGraph')
 
+    // Reset Deep Search Explorer state on conversation switch
+    setShowDeepSearchExplorer(false)
+    setDeepSearchExplorerFullscreen(false)
+    setActiveDeepSearchRunId(null)
+    setKilledDeepSearchRunIds(new Set())
+
     // 重置思维链大小追踪 ref，防止切换会话后自动打开错误的思维链
     prevMindMapSizeRef.current = mindMapManagersMap.size
 
@@ -1849,6 +2057,16 @@ const AppsPage: React.FC = () => {
           console.log('[AppsPage] Marked incomplete messages as FAILED on conversation switch')
         }
       })
+    }
+
+    // ===== Restore Deep Search Explorer runIds from conversation config =====
+    if (conversation?.config?.agentType === 'deepsearch-explorer' && conversation.config.deepSearchRunIds) {
+      const restoredMap = new Map<string, string>(
+        Object.entries(conversation.config.deepSearchRunIds as Record<string, string>)
+      )
+      setDeepSearchRunIds(restoredMap)
+    } else {
+      setDeepSearchRunIds(new Map())
     }
   }
 
@@ -1896,7 +2114,7 @@ const AppsPage: React.FC = () => {
 
     try {
       // 4. 获取并验证配置
-      let config = agentConfigs['deepsearch'] || DEFAULT_DEEPSEARCH_CONFIG
+      let config = agentConfigs['deepsearch'] || DEFAULT_DEEPRESEARCH_CONFIG
 
       // ===== 配置验证 =====
       // 本地搜索模式：必须配置知识库
@@ -2120,7 +2338,7 @@ const AppsPage: React.FC = () => {
         local_search_config,  // 新增：可能是undefined
         template_id: config.selectedTemplateId ?? -1,
         interrupt_feedback: interrupt_feedback,   // 中断反馈标识, 可填值: ['accepted', ''], 默认''
-        execution_method: config.execution_method ?? DEFAULT_DEEPSEARCH_CONFIG.execution_method,
+        execution_method: config.execution_method ?? DEFAULT_DEEPRESEARCH_CONFIG.execution_method,
         // 高级配置模型 ID（可选，仅在有值时传递）
         ...(config.planUnderstandingModelId && { plan_understanding_model_id: parseInt(config.planUnderstandingModelId) }),
         ...(config.infoCollectingModelId && { info_collecting_model_id: parseInt(config.infoCollectingModelId) }),
@@ -2171,6 +2389,19 @@ const AppsPage: React.FC = () => {
         const { done, value } = await reader.read()
 
         if (done) {
+          if (!sseCompletedNormally) {
+            const state = useConversationStore.getState()
+            const lastMessageItems = state.getLastMessageItems()
+            if (
+              lastMessageItems &&
+              !state.getMessageItemsIsUser(lastMessageItems) &&
+              !isTaskOngoing(lastMessageItems.status)
+            ) {
+              // 流已经结束且消息状态已终结（完成/失败/取消），可视为终态，停止超时监控。
+              sseCompletedNormally = true
+            }
+          }
+
           // SSE 流读取结束时，需要等待SSE事件队列处理完成
           // 因为 reader.read() 返回 done: true 不代表所有事件都被处理了
 
@@ -2227,7 +2458,10 @@ const AppsPage: React.FC = () => {
               const data = JSON.parse(jsonStr)
 
               // 检测是否收到正常结束信号
-              if (data.agent === DeepsearchAgentType.END && data.content === 'ALL END') {
+              if (
+                data.agent === DeepsearchAgentType.END &&
+                (data.content === 'ALL END' || data.event === 'error')
+              ) {
                 sseCompletedNormally = true
               }
 
@@ -2380,7 +2614,7 @@ const AppsPage: React.FC = () => {
 
         {/* 右侧主内容区 */}
         <div
-          className={`flex-1 flex min-h-0 overflow-hidden ${(selectedResultMessageId || showMindMap) ? 'flex-row' : 'flex-col'}`}
+          className={`flex-1 flex min-h-0 overflow-hidden ${(selectedResultMessageId || showMindMap || showDeepSearchExplorer) ? 'flex-row' : 'flex-col'}`}
         >
           {/* 无对话状态 - 居中的输入框 */}
           {!hasConversation && !selectedResultMessageId && (
@@ -2474,16 +2708,48 @@ const AppsPage: React.FC = () => {
           {/* 有对话状态 */}
           {hasConversation && (
             <>
-              {/* 对话区域 */}
-              <div className={`flex flex-col min-h-0 ${(selectedResultMessageId || showMindMap) ? 'w-2/5' : 'flex-1'}`}>
+              {/* 对话区域 - hidden when explorer is fullscreen */}
+              <div className={`flex flex-col min-h-0 ${
+                deepSearchExplorerFullscreen && showDeepSearchExplorer
+                  ? 'hidden'
+                  : (selectedResultMessageId || showMindMap || showDeepSearchExplorer) ? 'w-2/5' : 'flex-1'
+              }`}>
                 <div ref={messagesContainerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-6">
                 <div className="max-w-4xl mx-auto space-y-4">
                   {messageItemsList.map((messageItems) => (
-                    <SystemMessageItem 
-                      key={messageItems.id} 
-                      messageItems={messageItems}
-                      onOpenMindMap={isDeepSearchMode ? handleOpenMindMap : undefined}
-                    />
+                    <React.Fragment key={messageItems.id}>
+                      <SystemMessageItem 
+                        messageItems={messageItems}
+                        onOpenMindMap={isDeepSearchMode ? handleOpenMindMap : undefined}
+                      />
+                      {/* Show a DeepSearchRunSummary after user messages that have an associated runId */}
+                      {isDeepSearchExplorerMode && messageItems.isUser && deepSearchRunIds.has(messageItems.id) && (
+                        <DeepSearchRunSummary
+                          runId={deepSearchRunIds.get(messageItems.id)!}
+                          forceFailed={killedDeepSearchRunIds.has(deepSearchRunIds.get(messageItems.id)!)}
+                          onToggleExplorer={async () => {
+                            const runId = deepSearchRunIds.get(messageItems.id)!
+                            if (showDeepSearchExplorer && activeDeepSearchRunId === runId) {
+                              setShowDeepSearchExplorer(false)
+                              setDeepSearchExplorerFullscreen(false)
+                              setActiveDeepSearchRunId(null)
+                            } else {
+                              try {
+                                const status = await deepSearchApi.getRunStatus(runId)
+                                if (status.route === 'simple') {
+                                  return
+                                }
+                              } catch (error) {
+                                console.error('[DeepSearchExplorer] Failed to resolve run route:', error)
+                              }
+                              setActiveDeepSearchRunId(runId)
+                              setShowDeepSearchExplorer(true)
+                            }
+                          }}
+                          isExplorerOpen={showDeepSearchExplorer && activeDeepSearchRunId === deepSearchRunIds.get(messageItems.id)}
+                        />
+                      )}
+                    </React.Fragment>
                   ))}
 
                   {/* AI 正在输入指示器 */}
@@ -2554,10 +2820,29 @@ const AppsPage: React.FC = () => {
                   />
                 ) : (
                   <ResultPanel
-                    feedbackOptimizationEnabled={agentConfigs['deepsearch']?.userFeedbackProcessorEnable ?? DEFAULT_DEEPSEARCH_CONFIG.userFeedbackProcessorEnable}
+                    feedbackOptimizationEnabled={agentConfigs['deepsearch']?.userFeedbackProcessorEnable ?? DEFAULT_DEEPRESEARCH_CONFIG.userFeedbackProcessorEnable}
                     onReportRewrite={handleReportRewrite}
                   />
                 )}
+              </div>
+            )}
+
+            {/* 右侧：Deep Search Explorer 面板 (or fullscreen) */}
+            {showDeepSearchExplorer && activeDeepSearchRunId && (
+              <div className={`${deepSearchExplorerFullscreen ? 'flex-1' : 'w-3/5'} h-full bg-white border border-gray-200 rounded-lg ml-4 overflow-hidden flex flex-col`}>
+                <DeepSearchExplorerPanel
+                  runId={activeDeepSearchRunId}
+                  onKilled={(runId) => {
+                    setKilledDeepSearchRunIds((prev) => new Set(prev).add(runId))
+                  }}
+                  onClose={() => {
+                    setShowDeepSearchExplorer(false)
+                    setDeepSearchExplorerFullscreen(false)
+                    setActiveDeepSearchRunId(null)
+                  }}
+                  isFullscreen={deepSearchExplorerFullscreen}
+                  onToggleFullscreen={() => setDeepSearchExplorerFullscreen((prev) => !prev)}
+                />
               </div>
             )}
           </>
@@ -2584,6 +2869,7 @@ const AppsPage: React.FC = () => {
         modelsLoading={modelsLoading}
         availableVLMModels={availableVLMModels}
         vlmModelsLoading={vlmModelsLoading}
+        mode={getConfigModeFromAgentId((pendingAgent || selectedAgent)?.id)}
       />
 
       {/* 模型选择弹窗 */}

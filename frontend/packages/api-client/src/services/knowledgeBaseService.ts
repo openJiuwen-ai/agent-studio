@@ -44,6 +44,8 @@ import {
   DeepSearchKnowledgeBaseListResponse,
   DeepSearchEmbeddingConfigListRequest,
   DeepSearchEmbeddingConfigListResponse,
+  DeepSearchRuntimeConfigRequest,
+  DeepSearchRuntimeConfigResponse,
 } from '../types/knowledgeBase'
 
 // 知识库服务
@@ -367,8 +369,24 @@ export class KnowledgeBaseService {
       throw new Error(`获取嵌入模型列表失败: ${error instanceof Error ? error.message : '未知错误'}`)
     }
   }
+
+  /** 获取 Deep Search 运行时 retrieve_config（由后端根据选中的 DS KB 解析） */
+  static async getDeepSearchRuntimeConfig(
+    request: DeepSearchRuntimeConfigRequest
+  ): Promise<DeepSearchRuntimeConfigResponse> {
+    try {
+      const apiClient = getApiClient()
+      const response = await apiClient.post<DeepSearchRuntimeConfigResponse>(
+        API_ENDPOINTS.DEEPSEARCH_KNOWLEDGE_BASES.RUNTIME_CONFIG,
+        request
+      )
+      return response.data
+    } catch (error) {
+      console.error('获取 Deep Search 运行时配置失败:', error)
+      throw new Error(`获取运行时配置失败: ${error instanceof Error ? error.message : '未知错误'}`)
+    }
+  }
 }
 
 // 导出知识库服务实例
 export default KnowledgeBaseService
-

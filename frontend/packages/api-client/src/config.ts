@@ -359,6 +359,7 @@ export const API_ENDPOINTS = {
   DEEPSEARCH_KNOWLEDGE_BASES: {
     LIST: '/deepsearch-knowledge-base/knowledge-base/list',
     EMBEDDING_CONFIGS_LIST: '/deepsearch-knowledge-base/embedding-configs/list',
+    RUNTIME_CONFIG: '/deepsearch-knowledge-base/knowledge-base/runtime-config',
   },
   // 触发器管理
   TRIGGERS: {

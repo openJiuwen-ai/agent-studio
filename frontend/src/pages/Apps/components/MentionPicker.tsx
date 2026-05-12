@@ -253,9 +253,15 @@ export const MentionPicker: React.FC<MentionPickerProps> = ({
 export const DEFAULT_AGENTS: MentionItem[] = [
   {
     id: 'deepsearch',
+    name: 'DeepResearch',
+    type: 'agent',
+    description: 'apps.picker.deepResearchAgent',
+  },
+  {
+    id: 'deepsearch-explorer',
     name: 'DeepSearch',
     type: 'agent',
-    description: 'apps.picker.deepSearchAgent',
+    description: 'apps.picker.deepSearchExplorerAgent',
   },
 ]
 

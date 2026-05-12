@@ -91,6 +91,55 @@ def model_to_response(model: ModelConfig) -> ModelConfigResponse:
     )
 
 
+@models_router.get("/runtime/deepsearch-config", response_model=ResponseModel[dict])
+async def get_model_deepsearch_config(
+    model_id: int = Query(..., description="Model ID"),
+    space_id: str = Query(..., description="Space ID"),
+    manager: ModelConfigManager = Depends(get_model_config_manager),
+    current_user: dict = Depends(get_current_user),
+):
+    """Get model config with decrypted API key for Deep Search backend integration.
+
+    Returns model_name (model_type), base_url, and the **decrypted** api_key so
+    that the frontend can build the config dict expected by the Deep Search
+    backend without ever storing raw keys on the client.
+    """
+    try:
+        model = manager.get_config_by_id(model_id, space_id)
+        security_utils = get_security_utils()
+        decrypted_api_key = None
+        if model.api_key:
+            try:
+                decrypted_api_key = security_utils.decrypt_api_key(model.api_key)
+            except Exception:
+                decrypted_api_key = None
+
+        provider = (model.provider or "openai").strip().lower()
+        ds_model_type = "siliconflow" if provider == "siliconflow" else "openai"
+
+        return ResponseModel(
+            code=200,
+            message="Model config retrieved for Deep Search",
+            data={
+                "model_id": model.id,
+                "model_name": model.model_type,
+                "model_type": ds_model_type,
+                "base_url": model.base_url,
+                "api_key": decrypted_api_key,
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Model configuration not found",
+            ) from e
+        logger.error(f"Failed to retrieve model deepsearch config: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
+
+
 @models_router.get("/{space_id}", response_model=ResponseModel[ModelConfigList])
 async def get_model_configs(
     space_id: str,

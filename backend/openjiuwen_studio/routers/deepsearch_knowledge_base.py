@@ -2,13 +2,21 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
-from fastapi import APIRouter, Depends
+import os
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 from openjiuwen_studio.core.manager.login_manager.user import get_current_user
+from openjiuwen_studio.core.manager.login_manager.space import check_user_space
 from openjiuwen_studio.routers.common import handle_response, validate_request
 import openjiuwen_studio.core.manager.knowledge_base as kb_mgr
 from openjiuwen_studio.schemas.knowledge_base import KnowledgeBaseListRequest
 from openjiuwen_studio.schemas.common import ResponseModel
+from openjiuwen_studio.core.database import get_db
+from openjiuwen_studio.models.knowledge_base import KnowledgeBaseDB
+from openjiuwen_studio.core.manager.repositories.embedding_model_config_repository import EmbeddingModelConfigRepository
+from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
 from pydantic import ValidationError
 
 deepsearch_knowledge_base_router = APIRouter()
@@ -39,3 +47,83 @@ async def deepsearch_knowledge_base_list(
     return handle_response(res)
 
 
+@deepsearch_knowledge_base_router.post("/knowledge-base/runtime-config", response_model=ResponseModel[dict])
+async def deepsearch_knowledge_base_runtime_config(
+    request: dict,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Resolve Deep Search local-KB runtime retrieve_config from a selected DeepSearch KB ID.
+    This keeps Milvus / embedder details on backend side and avoids exposing them in config UI.
+    """
+    space_id = request.get("space_id") if isinstance(request, dict) else None
+    kb_id = request.get("kb_id") if isinstance(request, dict) else None
+    if not space_id or not kb_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="space_id and kb_id are required",
+        )
+
+    _ = check_user_space(space_id, current_user)
+
+    # Defaults from backend environment
+    retrieve_config = {
+        "milvus_host": os.getenv("MILVUS_HOST", "localhost"),
+        "milvus_port": int(os.getenv("MILVUS_PORT", "19530")),
+        "database_name": os.getenv("MILVUS_DATABASE_NAME", "default"),
+        # Fallback to KB-derived collection naming if DS list does not provide one.
+        "collection_name": f"kb_{kb_id}_chunks",
+    }
+
+    # Try to enrich from DS KB list payload first (if config/collection is present there)
+    try:
+        ds_list = await kb_mgr.knowledge_base_ds_list(
+            space_id=space_id,
+            page=1,
+            size=200,
+            current_user=current_user,
+        )
+        items = (((ds_list.data or {}) if hasattr(ds_list, "data") else {}) or {}).get("items", [])
+        selected = next((item for item in items if str(item.get("id")) == str(kb_id)), None)
+        if selected:
+            # Common field candidates from DS payload
+            cfg = selected.get("retrieve_config") or (selected.get("config") or {}).get("retrieve_config") or {}
+            retrieve_config["collection_name"] = (
+                cfg.get("collection_name")
+                or selected.get("collection_name")
+                or selected.get("chunk_index")
+                or retrieve_config["collection_name"]
+            )
+            retrieve_config["database_name"] = cfg.get("database_name") or retrieve_config["database_name"]
+    except Exception:
+        # Keep default/fallback config if DS list lookup fails
+        pass
+
+    # Use Studio KB mapping + embedding model to fill embedder config where possible
+    kb_row = db.query(KnowledgeBaseDB).filter(
+        KnowledgeBaseDB.space_id == space_id,
+        KnowledgeBaseDB.ds_kb_id == kb_id,
+    ).first()
+
+    if kb_row and kb_row.embedding_model_config_id:
+        embed_repo = EmbeddingModelConfigRepository(db)
+        embed_model = embed_repo.get_by_id(kb_row.embedding_model_config_id)
+        if embed_model:
+            security_utils = SecurityUtils()
+            embed_api_key = None
+            if embed_model.api_key:
+                try:
+                    embed_api_key = security_utils.decrypt_api_key(embed_model.api_key)
+                except Exception:
+                    embed_api_key = None
+
+            retrieve_config["embedder_model_name"] = embed_model.model_id
+            retrieve_config["embedder_base_url"] = embed_model.api_base
+            retrieve_config["embedder_api_key"] = embed_api_key
+
+    return ResponseModel(
+        code=200,
+        message="DeepSearch runtime retrieve_config resolved successfully",
+        data={"retrieve_config": retrieve_config},
+    )

@@ -18,21 +18,31 @@ class LazyDeepSearchHttpClient:
     支持任意 GET/POST，流式/非流式，由调用方指定。
     """
     _instance: Optional["LazyDeepSearchHttpClient"] = None
-    _client: Optional[httpx.AsyncClient] = None
-    _initialized: bool = False
+    _clients: Dict[str, httpx.AsyncClient]
+    _initialized: Dict[str, bool]
+    _base_urls: Dict[str, str]
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance._clients = {}
+            cls._instance._initialized = {"search": False, "research": False}
+            cls._instance._base_urls = {}
         return cls._instance
 
-    async def _initialize(self) -> bool:
-        try:
-            if not settings.deepsearch_agent_host or not settings.deepsearch_agent_port:
-                raise ValueError("DeepSearch agent host/port not configured")
+    @staticmethod
+    def _resolve_target(url: str) -> Tuple[str, str, int]:
+        if url.startswith("/runs") or url.startswith("/telemetry/"):
+            return "search", settings.deepsearch_telemetry_host, settings.deepsearch_telemetry_port
+        return "research", settings.deepsearch_agent_host, settings.deepsearch_agent_port
 
-            base_url = f"http://{settings.deepsearch_agent_host}:{settings.deepsearch_agent_port}"
-            self._client = httpx.AsyncClient(
+    async def _initialize(self, mode: str, host: str, port: int) -> bool:
+        try:
+            if not host or not port:
+                raise ValueError(f"DeepSearch {mode} host/port not configured")
+
+            base_url = f"http://{host}:{port}"
+            client = httpx.AsyncClient(
                 base_url=base_url,
                 timeout=httpx.Timeout(
                     timeout=3600.0,
@@ -44,18 +54,28 @@ class LazyDeepSearchHttpClient:
             )
 
             try:
-                resp = await self._client.get("/", timeout=5.0)
+                resp = await client.get("/", timeout=5.0)
                 resp.raise_for_status()
             except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as ex:
+                await client.aclose()
                 raise RuntimeError(f"DeepSearch service unreachable: {ex}") from ex
 
-            self._initialized = True
-            logger.info(f"DeepSearch HTTP client ready. Base URL: {base_url}")
+            previous_client = self._clients.get(mode)
+            if previous_client:
+                await previous_client.aclose()
+
+            self._clients[mode] = client
+            self._base_urls[mode] = base_url
+            self._initialized[mode] = True
+            logger.info(f"DeepSearch HTTP client ready. mode={mode}, base_url={base_url}")
             return True
         except Exception as e:
-            self._client = None
-            self._initialized = False
-            logger.error(f"Failed to initialize DeepSearch HTTP client: {e}")
+            stale_client = self._clients.pop(mode, None)
+            if stale_client:
+                await stale_client.aclose()
+            self._base_urls.pop(mode, None)
+            self._initialized[mode] = False
+            logger.error(f"Failed to initialize DeepSearch HTTP client for mode={mode}: {e}")
             raise DeepSearchClientError(
                 error_code=StatusCode.TASK_SPACE_THIRDPARTY_CLIENT_ERROR.code,
                 message=StatusCode.TASK_SPACE_THIRDPARTY_CLIENT_ERROR.errmsg.format(msg=str(e))
@@ -71,10 +91,20 @@ class LazyDeepSearchHttpClient:
         headers: Dict[str, str] = None
     ):
         """通用 HTTP 请求方法"""
-        if not self._initialized or self._client is None:
-            await self._initialize()
+        mode, host, port = self._resolve_target(url)
+        target_base_url = f"http://{host}:{port}"
+        client = self._clients.get(mode)
+        if (
+            not self._initialized.get(mode, False)
+            or client is None
+            or self._base_urls.get(mode) != target_base_url
+        ):
+            await self._initialize(mode, host, port)
+            client = self._clients.get(mode)
+        if client is None:
+            raise RuntimeError(f"DeepSearch client initialization failed for mode={mode}")
         try:
-            resp = await self._client.request(method, url, json=jsons, params=params, headers=headers)
+            resp = await client.request(method, url, json=jsons, params=params, headers=headers)
             resp.raise_for_status()
             return resp
         except httpx.HTTPStatusError:
@@ -82,8 +112,11 @@ class LazyDeepSearchHttpClient:
             raise
         except Exception as e:
             # 可选：重置状态，允许下次重试
-            self._client = None
-            self._initialized = False
+            failed_client = self._clients.pop(mode, None)
+            if failed_client:
+                await failed_client.aclose()
+            self._base_urls.pop(mode, None)
+            self._initialized[mode] = False
             raise RuntimeError(f"DeepSearch service call failed: {e}") from e
 
     async def request_multipart(
@@ -95,30 +128,54 @@ class LazyDeepSearchHttpClient:
         files: Optional[List[Tuple[str, Tuple[str, bytes, str]]]] = None,
     ):
         """发送 multipart/form-data 请求（用于文件上传）"""
-        if not self._initialized or self._client is None:
-            await self._initialize()
+        mode, host, port = self._resolve_target(url)
+        target_base_url = f"http://{host}:{port}"
+        client = self._clients.get(mode)
+        if (
+            not self._initialized.get(mode, False)
+            or client is None
+            or self._base_urls.get(mode) != target_base_url
+        ):
+            await self._initialize(mode, host, port)
+            client = self._clients.get(mode)
+        if client is None:
+            raise RuntimeError(f"DeepSearch client initialization failed for mode={mode}")
         try:
-            resp = await self._client.request(method, url, data=data, files=files)
+            resp = await client.request(method, url, data=data, files=files)
             resp.raise_for_status()
             return resp
         except httpx.HTTPStatusError:
             raise
         except Exception as e:
-            self._client = None
-            self._initialized = False
+            failed_client = self._clients.pop(mode, None)
+            if failed_client:
+                await failed_client.aclose()
+            self._base_urls.pop(mode, None)
+            self._initialized[mode] = False
             raise RuntimeError(f"DeepSearch service call failed: {e}") from e
 
     async def close(self):
-        if self._client:
-            await self._client.aclose()
-            self._client = None
-            self._initialized = False
+        for mode, client in list(self._clients.items()):
+            await client.aclose()
+            self._initialized[mode] = False
+        self._clients.clear()
+        self._base_urls.clear()
 
     async def stream(self, method: str, url: str, **kwargs):
         """用于流式请求，返回异步上下文管理器"""
-        if not self._initialized or self._client is None:
-            await self._initialize()
-        return self._client.stream(method, url, **kwargs)
+        mode, host, port = self._resolve_target(url)
+        target_base_url = f"http://{host}:{port}"
+        client = self._clients.get(mode)
+        if (
+            not self._initialized.get(mode, False)
+            or client is None
+            or self._base_urls.get(mode) != target_base_url
+        ):
+            await self._initialize(mode, host, port)
+            client = self._clients.get(mode)
+        if client is None:
+            raise RuntimeError(f"DeepSearch client initialization failed for mode={mode}")
+        return client.stream(method, url, **kwargs)
 
 
 class DeepSearchAgentClient:
@@ -136,6 +193,38 @@ class DeepSearchAgentClient:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
                 yield line
+
+    async def create_deepsearch_run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """创建 Search-mode run。"""
+        resp = await self._http.request("POST", "/runs", jsons=payload)
+        return resp.json()
+
+    async def cancel_deepsearch_run(self, run_id: str) -> Dict[str, Any]:
+        """取消 Search-mode run。"""
+        resp = await self._http.request("POST", f"/runs/{run_id}/cancel")
+        return resp.json()
+
+    async def get_deepsearch_telemetry_recent(self, n: int = 1, run_id: Optional[str] = None) -> Dict[str, Any]:
+        """读取最近的 telemetry 事件。"""
+        params: Dict[str, Any] = {"n": n}
+        if run_id:
+            params["run_id"] = run_id
+        resp = await self._http.request("GET", "/telemetry/recent", params=params)
+        return resp.json()
+
+    async def get_deepsearch_telemetry_range(
+        self,
+        run_id: str,
+        start_seq: int,
+        end_seq: int,
+    ) -> Dict[str, Any]:
+        """按 seq 范围读取 telemetry 事件。"""
+        resp = await self._http.request(
+            "GET",
+            "/telemetry/range",
+            params={"run_id": run_id, "start_seq": start_seq, "end_seq": end_seq},
+        )
+        return resp.json()
 
     async def import_templates(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """导入模板"""

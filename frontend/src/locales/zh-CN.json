@@ -545,6 +545,7 @@
       "agents": "智能体开发",
       "workflows": "工作流编排",
       "executions": "执行记录",
+      "deepSearch": "深度搜索",
       "promptManagement": "提示词管理",
       "promptTemplates": "提示词模板管理",
       "promptOptimization": "提示词自优化",
@@ -730,7 +731,9 @@
       "noKnowledgeBaseConnected": "当前未接入知识库",
       "uploadLocalFiles": "上传本地文件",
       "uploadFileDescription": "选择 PDF、Word、TXT 等文档",
-      "deepSearchAgent": "深度搜索智能体"
+      "deepSearchAgent": "深度搜索智能体",
+      "deepResearchAgent": "深度研究智能体",
+      "deepSearchExplorerAgent": "深度搜索探索智能体"
     },
     "model": {
       "selectModel": "选择模型",
@@ -831,6 +834,111 @@
       "syntaxError": "Mermaid 语法错误",
       "renderFailed": "图表渲染失败",
       "viewCode": "查看代码"
+    },
+    "deepSearchExplorer": {
+      "title": "深度搜索探索器",
+      "tabs": {
+        "summary": "摘要",
+        "explorer": "探索器"
+      },
+      "kill": "停止",
+      "close": "关闭深度搜索面板",
+      "fullscreen": "全屏",
+      "exitFullscreen": "退出全屏",
+      "summaryPlaceholder": "摘要",
+      "summaryComingSoon": "摘要视图即将推出。",
+      "openExplorer": "深度搜索探索器",
+      "routeSimpleAgent": "简单智能体",
+      "routeDeepSearchAgent": "深度搜索智能体",
+      "routeDetecting": "识别中...",
+      "view": {
+        "emptyState": "请选择一个动作查看详情",
+        "hideActionQueue": "隐藏动作队列",
+        "showActionQueue": "显示动作队列",
+        "statusLabel": "状态：",
+        "activeActions": "进行中动作：",
+        "pendingActions": "待执行动作：",
+        "completedActions": "已完成动作：",
+        "elapsedTimeLabel": "耗时：",
+        "statusValues": {
+          "pending": "待执行",
+          "running": "运行中",
+          "paused": "已暂停",
+          "completed": "已完成",
+          "failed": "失败",
+          "killed": "已终止",
+          "cancelled": "已取消",
+          "aborted": "已中止"
+        }
+      },
+      "actionQueue": {
+        "title": "动作队列",
+        "generating": "生成中",
+        "sections": {
+          "running": "运行中",
+          "paused": "已暂停",
+          "pending": "待执行",
+          "completed": "已完成",
+          "failed": "失败"
+        },
+        "type": {
+          "query": "查询",
+          "expand": "扩展",
+          "validate": "校验",
+          "filter": "筛选"
+        },
+        "answerBadge": "答案",
+        "descriptionPlaceholder": "动作描述...",
+        "save": "保存",
+        "cancel": "取消",
+        "targetLabel": "目标：",
+        "depthLabel": "深度 {{depth}}",
+        "estimate": "预计 {{seconds}} 秒",
+        "editActionProposal": "编辑动作提案",
+        "edit": "编辑",
+        "currentCost": "当前成本：${{cost}} USD",
+        "costSoFar": "当前累计成本：${{cost}} USD",
+        "paused": "已暂停",
+        "cost": "成本：${{cost}} USD"
+      },
+      "entityPanel": {
+        "currentQuestion": "当前问题",
+        "actionProposal": "动作提案",
+        "selectActionForProposal": "请从动作队列选择一个动作以查看提案",
+        "actionExecution": "动作执行",
+        "toolCallsCount": "{{count}} 次工具调用",
+        "toolCalls": "工具调用",
+        "selectActionForToolCalls": "请选择一个动作以查看工具调用。",
+        "noToolCalls": "该动作暂无工具调用。",
+        "candidateEntities": "候选实体",
+        "noCandidateValues": "当前状态暂无候选值。",
+        "unknownEntities": "未知实体",
+        "noUnknownEntities": "暂无未知实体",
+        "targetAnswer": "目标答案",
+        "hypothesis": "假设",
+        "unknown": "未知",
+        "evidenceForHypothesis": "假设依据",
+        "discoveredClues": "已发现线索",
+        "knownEntities": "已知实体",
+        "knownEntitiesHint": "在当前搜索状态下被视为成立",
+        "noKnownEntities": "暂无已知实体"
+      },
+      "runSummary": {
+        "title": "深度搜索",
+        "statusRunning": "搜索中...",
+        "statusCompleted": "搜索完成",
+        "statusFailed": "搜索失败",
+        "actionsCompleted": "已完成 {{count}} 个动作",
+        "answer": "答案",
+        "noActionsYet": "正在启动搜索...",
+        "elapsedTime": "用时: {{time}}",
+        "routeLabel": "路由: {{route}}",
+        "entities": "实体",
+        "entityFallback": "实体 {{id}}",
+        "known": "已知",
+        "unknown": "未知",
+        "runningCount": "{{count}} 个运行中"
+      }
     },
     "report": {
       "toolbar": "报告操作工具栏",
@@ -934,6 +1042,18 @@
         "test": {
           "success": "模型 {{modelName}} 测试成功",
           "failed": "模型 {{modelName}} 测试失败，模型不可用"
+        },
+        "planningModel": {
+          "title": "规划模型",
+          "label": "规划模型",
+          "description": "用于初始状态规划，建议使用综合能力强的模型——仅在开始时调用一次。",
+          "info": "该模型仅在初始阶段调用一次，用于规划状态。建议选择综合能力强的大模型。"
+        },
+        "searchModel": {
+          "title": "搜索模型",
+          "label": "搜索模型",
+          "description": "用于执行所有搜索步骤，建议使用均衡且支持工具调用的模型。",
+          "info": "该模型用于执行运行期间的所有搜索步骤。建议选择均衡且支持工具调用的模型。"
         }
       },
       "general": {
@@ -960,7 +1080,18 @@
           "maxIterationsDesc": "0 表示不进行迭代",
           "model": "VLM 模型",
           "modelDesc": "与模型配置中的VLM模型保持同步"
-        }
+        },
+        "searchProcessSettings": "搜索流程设置",
+        "enableQuestionRouter": "启用问题路由",
+        "enableQuestionRouterDesc": "将简单问题路由到 Simple agent，以节省 DeepSearch 资源",
+        "actionProposalsLimit": "行动提案次数上限",
+        "actionProposalsLimitDesc": "单次运行中迭代行动提案的最大次数",
+        "timeLimit": "时间限制（秒）",
+        "timeLimitDesc": "单次 Deep Search 运行的最长执行时间",
+        "actionsExploredLimit": "动作探索上限",
+        "actionsExploredLimitDesc": "单个问题最大探索动作数量（1-200）",
+        "maxLlmCallsPerRun": "单次运行最大 LLM 调用数",
+        "maxLlmCallsPerRunDesc": "单次状态创建运行中的最大 LLM 调用次数（1-20）"
       },
       "search": {
         "mode": "搜索方式",
@@ -985,18 +1116,38 @@
         "clickToAddKB": "点击上方\"配置\"按钮添加知识库",
         "deepSearchKnowledgeBase": "配置 DeepSearch 知识库",
         "refresh": "刷新",
-        "noDeepSearchKB": "暂无 DeepSearch 知识库，请先在知识库中同步至 Deep Search"
+        "noDeepSearchKB": "暂无 DeepSearch 知识库，请先在知识库中同步至 Deep Search",
+        "milvusConfig": "Milvus 配置",
+        "milvusHost": "Milvus 主机地址",
+        "milvusPort": "Milvus 端口",
+        "milvusDatabase": "数据库名称",
+        "milvusCollection": "集合名称",
+        "embedderConfig": "向量化模型配置",
+        "embedderModelName": "向量化模型名称",
+        "embedderBaseUrl": "向量化模型 Base URL",
+        "embedderApiKey": "向量化模型 API Key",
+        "apiKeyPlaceholder": "输入 API Key",
+        "onlineProvider": "在线搜索引擎",
+        "jinaApiKey": "Jina API Key",
+        "serperApiKey": "Serper API Key"
       },
       "validation": {
         "chapterCountRange": "规划章节数量必须在 1-10 之间",
         "allModeRequires": "综合搜索模式下必须配置：{{items}}",
         "webModeRequires": "联网增强模式下必须选择一个联网增强引擎",
+        "webModeRequiresApiKey": "联网增强模式下必须同时提供 Serper 与 Jina 的 API Key",
         "localModeRequires": "本地搜索模式下必须选择至少一个知识库",
         "webResultCountRange": "联网增强结果数量必须在 1-10 之间",
         "localResultCountRange": "本地搜索结果数量必须在 1-10 之间",
         "generalModelRequired": "通用模型为必选项，请先选择模型",
         "vlmChartIterationsRange": "VLM 图表生成最大迭代次数必须在 0 到 3 之间",
-        "vlmChartModelRequired": "启用 VLM 图表生成且迭代次数大于 0 时，需要选择 VLM 模型"
+        "vlmChartModelRequired": "启用 VLM 图表生成且迭代次数大于 0 时，需要选择 VLM 模型",
+        "actionProposalsLimitRange": "行动提案次数上限必须在 1-10 之间",
+        "timeLimitRange": "时间限制必须在 1-3600 秒之间",
+        "actionsExploredLimitRange": "动作探索上限必须在 1-200 之间",
+        "maxLlmCallsPerRunRange": "单次运行最大 LLM 调用数必须在 1-20 之间",
+        "planningModelRequired": "规划模型为必选项",
+        "searchModelRequired": "搜索模型为必选项"
       },
       "engine": {
         "select": "选择联网增强引擎",

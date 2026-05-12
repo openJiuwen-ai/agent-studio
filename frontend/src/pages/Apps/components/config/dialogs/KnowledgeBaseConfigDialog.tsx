@@ -24,6 +24,7 @@ export interface KnowledgeBaseConfigDialogProps {
   spaceId: string
   initialSelected?: string[]
   onConfirm: (selectedIds: string[]) => void
+  selectionMode?: 'single' | 'multiple'
 }
 
 /**
@@ -35,6 +36,7 @@ export const KnowledgeBaseConfigDialog: React.FC<KnowledgeBaseConfigDialogProps>
   spaceId,
   initialSelected = [],
   onConfirm,
+  selectionMode = 'multiple',
 }) => {
   const { t } = useTranslation()
 
@@ -139,6 +141,9 @@ export const KnowledgeBaseConfigDialog: React.FC<KnowledgeBaseConfigDialogProps>
   // 处理选择/取消选择
   const handleToggle = (kbId: string) => {
     setSelectedIds(prev => {
+      if (selectionMode === 'single') {
+        return prev.includes(kbId) ? [] : [kbId]
+      }
       if (prev.includes(kbId)) {
         return prev.filter(id => id !== kbId)
       } else {
@@ -194,6 +199,12 @@ export const KnowledgeBaseConfigDialog: React.FC<KnowledgeBaseConfigDialogProps>
 
         {/* 内容 */}
         <div className="px-6 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+          {selectionMode === 'single' && (
+            <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg">
+              <p className="text-xs text-blue-700">{t('apps.config.knowledge.singleSelectTip', 'Select one knowledge base')}</p>
+            </div>
+          )}
+
           {/* 错误提示 */}
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2">

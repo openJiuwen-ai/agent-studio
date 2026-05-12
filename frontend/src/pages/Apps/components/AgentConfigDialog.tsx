@@ -18,8 +18,11 @@ import { useWebSearchEngineApi } from './hooks/useWebSearchEngineApi'
 import { deepsearchTemplateService, PromptModel } from '@test-agentstudio/api-client'
 import DeleteConfirmationDialog from '../../../components/Common/DeleteConfirmationDialog'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '../../../Common/UnifiedSnackbar'
-import { DEFAULT_DEEPSEARCH_CONFIG } from '../utils/deepsearchConstants'
-import type { Model } from '@/types/promptType'
+import {
+  getConfigModeFromAgentId,
+  getDefaultDeepSearchConfigByAgentId,
+  type DeepSearchConfigMode,
+} from '../utils/deepsearchConstants'
 
 // 导入新的配置标签系统
 import { ConfigRegistryManager, ConfigTabId } from './config/ConfigRegistry'
@@ -68,13 +71,38 @@ export interface DeepSearchConfig {
   enableTemplate: boolean // 是否启用模板
   selectedTemplateId?: number // 选中的模板ID
 
-  // 模型配置（可选，undefined 表示未配置）
+  // 模型配置 — Deep Research（可选，undefined 表示未配置）
   generalModelId?: string // 通用模型ID（与对话框双向同步）
   planUnderstandingModelId?: string // 计划理解模型ID
   infoCollectingModelId?: string // 信息收集模型ID
   writingCheckingModelId?: string // 写作检查模型ID
   vlmChartModelId?: string // VLM图表生成模型ID
   execution_method?: string,   // DeepSearch执行模式："parallel", "dependency_driving"
+  actionProposalsLimit?: number // DeepSearch action proposal 限制，范围: [1, 10]
+  timeLimit?: number // DeepSearch 最大运行时长（秒），范围: [1, 3600]
+
+  // Deep Search Explorer — General tab
+  actionsExploredLimit?: number // 搜索动作探索上限，范围: [1, 200]
+  maxLlmCallsPerRun?: number // 单次运行最大 LLM 调用次数，范围: [1, 20]
+  enableQuestionRouter?: boolean // 启用问题路由，简单问题转 Simple agent
+
+  // Deep Search Explorer — Model tab (platform model picker IDs)
+  planningModelId?: string // Planning model ID (init_state_agent.llm_config)
+  searchModelId?: string // Search model ID (llm_config)
+
+  // Deep Search Explorer — Search tab (Milvus / local KB)
+  milvusHost?: string
+  milvusPort?: number
+  milvusDatabaseName?: string
+  milvusCollectionName?: string
+  embedderModelName?: string
+  embedderApiKey?: string
+  embedderBaseUrl?: string
+
+  // Deep Search Explorer — Search tab (online search provider)
+  onlineSearchProvider?: 'jina' | 'serper'
+  jinaApiKey?: string
+  serperApiKey?: string
 }
 
 export interface AgentConfigDialogProps {
@@ -95,6 +123,7 @@ export interface AgentConfigDialogProps {
   modelsLoading?: boolean
   availableVLMModels?: Model[]
   vlmModelsLoading?: boolean
+  mode?: DeepSearchConfigMode
 }
 
 // ==================== 辅助组件 ====================
@@ -173,8 +202,10 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
   modelsLoading = false,
   availableVLMModels = [],
   vlmModelsLoading = false,
+  mode,
 }) => {
   const { t } = useTranslation()
+  const effectiveMode: DeepSearchConfigMode = mode ?? getConfigModeFromAgentId(agent?.id)
   const { snackbar, closeSnackbar, showError } = useUnifiedSnackbar()
   const [showSaved, setShowSaved] = useState(false)
   const [showUploadDialog, setShowUploadDialog] = useState(false)
@@ -328,14 +359,15 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
 
   // 获取当前智能体的配置
   const getCurrentConfig = useCallback((): DeepSearchConfig => {
+    const defaultConfig = getDefaultDeepSearchConfigByAgentId(agent?.id)
     if (agent && savedConfigs[agent.id]) {
       // 合并保存的配置和默认配置，处理旧配置没有新增字段的情况
       return {
-        ...DEFAULT_DEEPSEARCH_CONFIG,
+        ...defaultConfig,
         ...savedConfigs[agent.id],
       }
     }
-    return DEFAULT_DEEPSEARCH_CONFIG
+    return defaultConfig
   }, [agent, savedConfigs])
 
   const [config, setConfig] = useState<DeepSearchConfig>(getCurrentConfig())
@@ -354,7 +386,7 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
     const errors: string[] = []
 
     // 规划章节数量验证
-    if (config.planChapterCount < 1 || config.planChapterCount > 10) {
+    if (effectiveMode === 'research' && (config.planChapterCount < 1 || config.planChapterCount > 10)) {
       errors.push(t('apps.config.validation.chapterCountRange'))
     }
 
@@ -366,31 +398,84 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
       errors.push(t('apps.config.validation.vlmChartModelRequired', { defaultValue: '启用 VLM 图表生成且迭代次数大于 0 时，需要选择 VLM 模型' }))
     }
 
-    // 通用模型验证（必选项）
-    if (!config.generalModelId) {
+    if (
+      effectiveMode === 'search' &&
+      ((config.actionProposalsLimit ?? 5) < 1 || (config.actionProposalsLimit ?? 5) > 10)
+    ) {
+      errors.push(t('apps.config.validation.actionProposalsLimitRange'))
+    }
+
+    if (
+      effectiveMode === 'search' &&
+      ((config.timeLimit ?? 3600) < 1 || (config.timeLimit ?? 3600) > 3600)
+    ) {
+      errors.push(t('apps.config.validation.timeLimitRange'))
+    }
+
+    if (
+      effectiveMode === 'search' &&
+      ((config.actionsExploredLimit ?? 200) < 1 || (config.actionsExploredLimit ?? 200) > 200)
+    ) {
+      errors.push(t('apps.config.validation.actionsExploredLimitRange'))
+    }
+
+    if (
+      effectiveMode === 'search' &&
+      ((config.maxLlmCallsPerRun ?? 10) < 1 || (config.maxLlmCallsPerRun ?? 10) > 20)
+    ) {
+      errors.push(t('apps.config.validation.maxLlmCallsPerRunRange'))
+    }
+
+    // 通用模型验证（仅 research 模式需要平台模型）
+    if (effectiveMode === 'research' && !config.generalModelId) {
       errors.push(t('apps.config.model.general.required'))
     }
 
-    // 综合搜索模式：需要同时配置搜索引擎和知识库
-    if (config.searchMode === 'all') {
-      const missingConfigs: string[] = []
-      if (!config.selectedWebSearchEngineId) {
-        missingConfigs.push(t('apps.config.engine.title'))
+    // search 模式：两个模型 ID 均必填
+    if (effectiveMode === 'search') {
+      if (!config.planningModelId) {
+        errors.push(t('apps.config.validation.planningModelRequired'))
       }
-      if (config.selectedKnowledgeBaseIds.length === 0) {
-        missingConfigs.push(t('apps.config.search.localKB'))
+      if (!config.searchModelId) {
+        errors.push(t('apps.config.validation.searchModelRequired'))
       }
-      if (missingConfigs.length > 0) {
-        errors.push(t('apps.config.validation.allModeRequires', { items: missingConfigs.join('、') }))
+    }
+
+    if (effectiveMode === 'search') {
+      const hasJinaApiKey = !!config.jinaApiKey?.trim()
+      const hasSerperApiKey = !!config.serperApiKey?.trim()
+      const hasAllOnlineApiKeys = hasJinaApiKey && hasSerperApiKey
+
+      // Online enhancement mode (Deep Search): require both provider keys.
+      if ((config.searchMode === 'web' || config.searchMode === 'all') && !hasAllOnlineApiKeys) {
+        errors.push(t('apps.config.validation.webModeRequiresApiKey'))
+      }
+      // Local mode: still requires KB selection.
+      if ((config.searchMode === 'local' || config.searchMode === 'all') && config.selectedKnowledgeBaseIds.length === 0) {
+        errors.push(t('apps.config.validation.localModeRequires'))
       }
     } else {
-      // 网络搜索模式：需要配置搜索引擎
-      if (config.searchMode === 'web' && !config.selectedWebSearchEngineId) {
-        errors.push(t('apps.config.validation.webModeRequires'))
-      }
-      // 本地搜索模式：需要配置知识库
-      if (config.searchMode === 'local' && config.selectedKnowledgeBaseIds.length === 0) {
-        errors.push(t('apps.config.validation.localModeRequires'))
+      // 综合搜索模式：需要同时配置搜索引擎和知识库
+      if (config.searchMode === 'all') {
+        const missingConfigs: string[] = []
+        if (!config.selectedWebSearchEngineId) {
+          missingConfigs.push(t('apps.config.engine.title'))
+        }
+        if (config.selectedKnowledgeBaseIds.length === 0) {
+          missingConfigs.push(t('apps.config.search.localKB'))
+        }
+        if (missingConfigs.length > 0) {
+          errors.push(t('apps.config.validation.allModeRequires', { items: missingConfigs.join('、') }))
+        }
+      } else {
+        // 网络搜索模式：需要配置搜索引擎
+        if (config.searchMode === 'web' && !config.selectedWebSearchEngineId) {
+          errors.push(t('apps.config.validation.webModeRequires'))
+        }
+        // 本地搜索模式：需要配置知识库
+        if (config.searchMode === 'local' && config.selectedKnowledgeBaseIds.length === 0) {
+          errors.push(t('apps.config.validation.localModeRequires'))
+        }
       }
     }
 
@@ -406,7 +491,7 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
       valid: errors.length === 0,
       errors
     }
-  }, [config, t])
+  }, [config, effectiveMode, t])
 
   const { valid, errors } = validateConfig()
 
@@ -529,9 +614,10 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
 
   // 确认选择知识库
   const handleConfirmKnowledgeBases = useCallback((kbIds: string[]) => {
-      updateConfig('selectedKnowledgeBaseIds', kbIds)
+      const selectedIds = effectiveMode === 'search' ? kbIds.slice(0, 1) : kbIds
+      updateConfig('selectedKnowledgeBaseIds', selectedIds)
       setShowKnowledgeBaseSelector(false)
-  }, [updateConfig])
+  }, [effectiveMode, updateConfig])
 
   // 删除知识库
   const handleRemoveKnowledgeBase = useCallback(
@@ -737,19 +823,49 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
     }
   }
 
-  // 只有deepsearch显示完整配置
+  // 根据模式过滤可见标签
+  const visibleTabIds: ConfigTabId[] = effectiveMode === 'search'
+    ? ['general', 'search', 'model']
+    : ['general', 'search', 'template', 'model']
 
-  // 获取排序后的标签列表
-  const tabs = registry.getAllTabs()
+  const tabs = registry.getAllTabs().filter(tab => visibleTabIds.includes(tab.id))
+  const activeTabMeta = tabs.find(tab => tab.id === activeTab) || tabs[0] || registry.getTab('general')!
+  const resolvedActiveTabId = activeTabMeta.id
+
+  React.useEffect(() => {
+    if (!tabs.some(tab => tab.id === activeTab) && tabs.length > 0) {
+      setActiveTab(tabs[0].id)
+    }
+  }, [tabs, activeTab])
 
   // 更新徽章状态（搜索配置需要配置时）
   React.useEffect(() => {
+    if (effectiveMode === 'search') {
+      const hasAllOnlineApiKeys = !!config.jinaApiKey?.trim() && !!config.serperApiKey?.trim()
+      const needsWebConfig = (config.searchMode === 'web' || config.searchMode === 'all') && !hasAllOnlineApiKeys
+      const needsLocalConfig = (config.searchMode === 'local' || config.searchMode === 'all') && config.selectedKnowledgeBaseIds.length === 0
+      registry.updateTab('search', {
+        badge: needsWebConfig || needsLocalConfig,
+        badgeText: (needsWebConfig || needsLocalConfig) ? t('apps.config.tabs.needsConfig') : undefined,
+      })
+      return
+    }
+
     if ((config.searchMode === 'web' || config.searchMode === 'all') && !config.selectedWebSearchEngineId) {
       registry.updateTab('search', { badge: true, badgeText: t('apps.config.tabs.needsConfig') })
     } else {
       registry.updateTab('search', { badge: false })
     }
-  }, [config.searchMode, config.selectedWebSearchEngineId, registry, t])
+  }, [
+    effectiveMode,
+    config.searchMode,
+    config.selectedWebSearchEngineId,
+    config.jinaApiKey,
+    config.serperApiKey,
+    config.selectedKnowledgeBaseIds,
+    registry,
+    t,
+  ])
 
   // 更新徽章状态（模型配置需要配置时）
   React.useEffect(() => {
@@ -790,28 +906,27 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
             {/* 左侧菜单 */}
               <ConfigSidebar
                 tabs={tabs}
-                activeTab={activeTab}
+                activeTab={resolvedActiveTabId}
                 onTabChange={setActiveTab}
               />
 
             {/* 右侧内容 */}
-            <ConfigTabPanel
-              activeTab={registry.getTab(activeTab)!}
-              tabProps={
-                  activeTab === 'general' ? {
-                      config,
-                      updateConfig,
-                      errors,
-                      disabled: false,
-                      ToggleSwitch,
-                      RangeSlider,
-                      availableVLMModels,
-                      vlmModelsLoading,
-                  } : activeTab === 'search' ? {
+              <ConfigTabPanel
+                activeTab={activeTabMeta}
+                tabProps={
+                    resolvedActiveTabId === 'general' ? {
                         config,
                         updateConfig,
                         errors,
                         disabled: false,
+                        ToggleSwitch,
+                        RangeSlider,
+                        mode: effectiveMode,
+                   } : resolvedActiveTabId === 'search' ? {
+                         config,
+                         updateConfig,
+                         errors,
+                         disabled: false,
                         RangeSlider,
                         engines,
                         enginesLoading,
@@ -822,8 +937,9 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
                         knowledgeBases: selectedKnowledgeBasesDetail,
                         onShowKnowledgeBaseSelector: handleShowKnowledgeBaseSelector,
                         onRemoveKnowledgeBase: handleRemoveKnowledgeBase,
-                      }
-                    : activeTab === 'template'
+                        mode: effectiveMode,
+                        }
+                    : resolvedActiveTabId === 'template'
                       ? {
                           config,
                           updateConfig,
@@ -837,20 +953,19 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
                           onDeleteTemplate: handleDeleteTemplate,
                           onShowUploadDialog: () => setShowUploadDialog(true),
                           onViewTemplate: handleViewTemplate,
-                  } : {
-                          // model tab
-                          config,
-                          updateConfig,
-                          errors,
-                          disabled: false,
-                          availableModels,
-                          modelsLoading,
-                          availableVLMModels,
-                          vlmModelsLoading,
-                          spaceId: spaceId || '',
-                        }
-              }
-            />
+                   } : {
+                           // model tab
+                           config,
+                           updateConfig,
+                           errors,
+                           disabled: false,
+                           availableModels,
+                           modelsLoading,
+                           spaceId: spaceId || '',
+                           mode: effectiveMode,
+                         }
+                }
+              />
           </div>
 
           {/* 底部按钮 */}
@@ -1007,6 +1122,7 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
         spaceId={spaceId || ''}
         initialSelected={config.selectedKnowledgeBaseIds}
         onConfirm={handleConfirmKnowledgeBases}
+        selectionMode={effectiveMode === 'search' ? 'single' : 'multiple'}
       />
 
       {/* 搜索引擎测试对话框 */}

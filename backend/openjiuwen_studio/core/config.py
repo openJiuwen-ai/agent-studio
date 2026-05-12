@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     # deepsearch配置
     deepsearch_agent_host: str = ""
     deepsearch_agent_port: int = 6000
+    deepsearch_agent_telemetry_host: str = ""
+    deepsearch_agent_telemetry_port: int = 8089
 
     # runtime 配置
     runtime_host: str = ""
@@ -86,6 +88,16 @@ class Settings(BaseSettings):
         if self.redis_password:
             return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+    @property
+    def deepsearch_telemetry_host(self) -> str:
+        return self.deepsearch_agent_telemetry_host or self.deepsearch_agent_host
+
+    @property
+    def deepsearch_telemetry_port(self) -> int:
+        if self.deepsearch_agent_telemetry_port is not None:
+            return self.deepsearch_agent_telemetry_port
+        return self.deepsearch_agent_port
     
     # 云邮件推送
     smtp_host: str = ""

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
-from typing import Literal, List, Optional, Any
+from typing import Literal, List, Optional, Any, Dict
 from pydantic import BaseModel, Field
 
 MAX_TEMPLATE_CONTENT_LENGTH = 5 * 1000 * 1000
@@ -70,6 +70,48 @@ class DeepSearchRequest(BaseModel):
     # 报告局部改写配置
     user_feedback_processor_enable: Optional[bool] = Field(default=None, description="是否启用报告后局部优化")
     user_feedback_processor_max_interactions: Optional[int] = Field(default=None, description="最大交互轮次")
+
+
+class DeepSearchSearchRunLLMConfig(BaseModel):
+    model_name: str = Field(..., min_length=1, description="Search mode LLM model name")
+    model_type: str = Field(default="openai", min_length=1, description="Search mode LLM provider type")
+    base_url: str = Field(..., min_length=1, description="Search mode LLM base URL")
+    api_key: str = Field(..., min_length=1, description="Search mode LLM API key")
+
+
+class DeepSearchSearchRunMilvusConfig(BaseModel):
+    embedder_api_key: str = Field(..., min_length=1, description="Milvus embedder API key")
+    embedder_base_url: str = Field(..., min_length=1, description="Milvus embedder base URL")
+    embedder_model_name: Optional[str] = Field(default=None, description="Milvus embedder model name")
+    host: Optional[str] = Field(default=None, description="Milvus host")
+    port: Optional[int] = Field(default=None, description="Milvus port")
+    collection_name: Optional[str] = Field(default=None, description="Milvus collection name")
+
+
+class DeepSearchSearchRunRequest(BaseModel):
+    space_id: str = Field(..., min_length=1, max_length=255, description="用户空间id")
+    search_mode: Literal["search"] = Field(default="search", description="必须为 search")
+    enable_question_router: bool = Field(default=True, description="是否启用问题路由到 ReAct")
+    run_id: Optional[str] = Field(default=None, description="可选的外部 run 标识")
+    query: str = Field(..., min_length=1, description="Search-mode query")
+    llm: DeepSearchSearchRunLLMConfig = Field(..., description="Search-mode LLM config")
+    tool_map: Literal["search_fetch", "retrieve"] = Field(..., description="Search tool strategy")
+    jina_api_key: Optional[str] = Field(default=None, description="Jina API key（search_fetch 必填）")
+    serper_api_key: Optional[str] = Field(default=None, description="Serper API key（search_fetch 必填）")
+    milvus: Optional[DeepSearchSearchRunMilvusConfig] = Field(
+        default=None,
+        description="Milvus config（retrieve 必填）",
+    )
+
+
+class DeepSearchSearchRunResponse(BaseModel):
+    run_id: str = Field(..., description="Run ID")
+    status: str = Field(..., description="Run status")
+    conversation_id: Optional[str] = Field(default=None, description="Conversation ID")
+
+
+class DeepSearchTelemetryResponse(BaseModel):
+    items: List[Dict[str, Any]] = Field(default_factory=list, description="Telemetry envelopes")
 
 
 class TemplateImportRequest(BaseModel):

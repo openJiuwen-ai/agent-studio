@@ -471,3 +471,24 @@ export interface DeepSearchEmbeddingConfigListResponse {
     size?: number
   }
 }
+
+export interface DeepSearchRuntimeConfigRequest {
+  space_id: string
+  kb_id: string
+}
+
+export interface DeepSearchRuntimeConfigResponse {
+  code: number
+  message: string
+  data?: {
+    retrieve_config?: {
+      milvus_host?: string
+      milvus_port?: number
+      database_name?: string
+      collection_name?: string
+      embedder_model_name?: string
+      embedder_api_key?: string | null
+      embedder_base_url?: string
+    }
+  }
+}
