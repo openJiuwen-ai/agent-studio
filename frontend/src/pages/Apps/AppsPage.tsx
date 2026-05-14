@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react'
 import { Copy, Trash2, RefreshCw, History, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { MentionItem, DEFAULT_AGENTS, DEFAULT_RESOURCES } from './components/MentionPicker'
@@ -37,9 +37,10 @@ import ResultPanel from '../../components/Conversation/ResultPanel'
 import ConversationHistorySidebar from './components/ConversationHistorySidebar'
 import { MindMapPanel } from '../../components/Conversation/MindMap'
 import { TopToolbar, ViewType } from '../../components/Conversation'
-import DeepSearchExplorerPanel from './components/DeepSearchExplorer/DeepSearchExplorerPanel'
-import DeepSearchRunSummary from './components/DeepSearchExplorer/DeepSearchRunSummary'
 import * as deepSearchApi from './components/DeepSearchExplorer/api'
+
+const DeepSearchExplorerPanel = lazy(() => import('./components/DeepSearchExplorer/DeepSearchExplorerPanel'))
+const DeepSearchRunSummary = lazy(() => import('./components/DeepSearchExplorer/DeepSearchRunSummary'))
 
 // ==================== 开发调试配置 ====================
 // 从环境变量读取，默认为 false（生产环境）
@@ -2724,30 +2725,32 @@ const AppsPage: React.FC = () => {
                       />
                       {/* Show a DeepSearchRunSummary after user messages that have an associated runId */}
                       {isDeepSearchExplorerMode && messageItems.isUser && deepSearchRunIds.has(messageItems.id) && (
-                        <DeepSearchRunSummary
-                          runId={deepSearchRunIds.get(messageItems.id)!}
-                          forceFailed={killedDeepSearchRunIds.has(deepSearchRunIds.get(messageItems.id)!)}
-                          onToggleExplorer={async () => {
-                            const runId = deepSearchRunIds.get(messageItems.id)!
-                            if (showDeepSearchExplorer && activeDeepSearchRunId === runId) {
-                              setShowDeepSearchExplorer(false)
-                              setDeepSearchExplorerFullscreen(false)
-                              setActiveDeepSearchRunId(null)
-                            } else {
-                              try {
-                                const status = await deepSearchApi.getRunStatus(runId)
-                                if (status.route === 'simple') {
-                                  return
+                        <Suspense fallback={null}>
+                          <DeepSearchRunSummary
+                            runId={deepSearchRunIds.get(messageItems.id)!}
+                            forceFailed={killedDeepSearchRunIds.has(deepSearchRunIds.get(messageItems.id)!)}
+                            onToggleExplorer={async () => {
+                              const runId = deepSearchRunIds.get(messageItems.id)!
+                              if (showDeepSearchExplorer && activeDeepSearchRunId === runId) {
+                                setShowDeepSearchExplorer(false)
+                                setDeepSearchExplorerFullscreen(false)
+                                setActiveDeepSearchRunId(null)
+                              } else {
+                                try {
+                                  const status = await deepSearchApi.getRunStatus(runId)
+                                  if (status.route === 'simple') {
+                                    return
+                                  }
+                                } catch (error) {
+                                  console.error('[DeepSearchExplorer] Failed to resolve run route:', error)
                                 }
-                              } catch (error) {
-                                console.error('[DeepSearchExplorer] Failed to resolve run route:', error)
+                                setActiveDeepSearchRunId(runId)
+                                setShowDeepSearchExplorer(true)
                               }
-                              setActiveDeepSearchRunId(runId)
-                              setShowDeepSearchExplorer(true)
-                            }
-                          }}
-                          isExplorerOpen={showDeepSearchExplorer && activeDeepSearchRunId === deepSearchRunIds.get(messageItems.id)}
-                        />
+                            }}
+                            isExplorerOpen={showDeepSearchExplorer && activeDeepSearchRunId === deepSearchRunIds.get(messageItems.id)}
+                          />
+                        </Suspense>
                       )}
                     </React.Fragment>
                   ))}
@@ -2830,19 +2833,21 @@ const AppsPage: React.FC = () => {
             {/* 右侧：Deep Search Explorer 面板 (or fullscreen) */}
             {showDeepSearchExplorer && activeDeepSearchRunId && (
               <div className={`${deepSearchExplorerFullscreen ? 'flex-1' : 'w-3/5'} h-full bg-white border border-gray-200 rounded-lg ml-4 overflow-hidden flex flex-col`}>
-                <DeepSearchExplorerPanel
-                  runId={activeDeepSearchRunId}
-                  onKilled={(runId) => {
-                    setKilledDeepSearchRunIds((prev) => new Set(prev).add(runId))
-                  }}
-                  onClose={() => {
-                    setShowDeepSearchExplorer(false)
-                    setDeepSearchExplorerFullscreen(false)
-                    setActiveDeepSearchRunId(null)
-                  }}
-                  isFullscreen={deepSearchExplorerFullscreen}
-                  onToggleFullscreen={() => setDeepSearchExplorerFullscreen((prev) => !prev)}
-                />
+                <Suspense fallback={<div className="flex-1 flex items-center justify-center text-sm text-gray-500">Loading explorer...</div>}>
+                  <DeepSearchExplorerPanel
+                    runId={activeDeepSearchRunId}
+                    onKilled={(runId) => {
+                      setKilledDeepSearchRunIds((prev) => new Set(prev).add(runId))
+                    }}
+                    onClose={() => {
+                      setShowDeepSearchExplorer(false)
+                      setDeepSearchExplorerFullscreen(false)
+                      setActiveDeepSearchRunId(null)
+                    }}
+                    isFullscreen={deepSearchExplorerFullscreen}
+                    onToggleFullscreen={() => setDeepSearchExplorerFullscreen((prev) => !prev)}
+                  />
+                </Suspense>
               </div>
             )}
           </>
