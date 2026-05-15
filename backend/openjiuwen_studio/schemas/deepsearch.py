@@ -2,7 +2,7 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 from typing import Literal, List, Optional, Any, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 MAX_TEMPLATE_CONTENT_LENGTH = 5 * 1000 * 1000
 MAX_TEMPLATE_DESC_LENGTH = 2000
@@ -83,9 +83,28 @@ class DeepSearchSearchRunMilvusConfig(BaseModel):
     embedder_api_key: str = Field(..., min_length=1, description="Milvus embedder API key")
     embedder_base_url: str = Field(..., min_length=1, description="Milvus embedder base URL")
     embedder_model_name: Optional[str] = Field(default=None, description="Milvus embedder model name")
-    host: Optional[str] = Field(default=None, description="Milvus host")
-    port: Optional[int] = Field(default=None, description="Milvus port")
+    milvus_host: Optional[str] = Field(default=None, description="Milvus host")
+    milvus_port: Optional[int] = Field(default=None, description="Milvus port")
+    database_name: Optional[str] = Field(default=None, description="Milvus database name")
     collection_name: Optional[str] = Field(default=None, description="Milvus collection name")
+    embedder_timeout: Optional[int] = Field(default=None, description="Embedder timeout in seconds")
+    host: Optional[str] = Field(default=None, description="Legacy Milvus host")
+    port: Optional[int] = Field(default=None, description="Legacy Milvus port")
+
+    @model_validator(mode="after")
+    def normalize_legacy_host_fields(self):
+        if self.milvus_host is None and self.host is not None:
+            self.milvus_host = self.host
+        if self.milvus_port is None and self.port is not None:
+            self.milvus_port = self.port
+        self.host = None
+        self.port = None
+        return self
+
+
+class DeepSearchSearchWorkflowPerQuestionParams(BaseModel):
+    time_limit: Optional[int] = Field(default=None, description="Workflow time limit in seconds")
+    actions_explored_limit: Optional[int] = Field(default=None, description="Maximum actions explored per question")
 
 
 class DeepSearchSearchRunRequest(BaseModel):
@@ -101,6 +120,10 @@ class DeepSearchSearchRunRequest(BaseModel):
     milvus: Optional[DeepSearchSearchRunMilvusConfig] = Field(
         default=None,
         description="Milvus config（retrieve 必填）",
+    )
+    search_workflow_per_question_params: Optional[DeepSearchSearchWorkflowPerQuestionParams] = Field(
+        default=None,
+        description="Workflow runtime limits for search-mode runs",
     )
 
 

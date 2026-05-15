@@ -6,6 +6,7 @@ import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from openjiuwen.core.common.logging import logger
 
 from openjiuwen_studio.core.manager.login_manager.user import get_current_user
 from openjiuwen_studio.core.manager.login_manager.space import check_user_space
@@ -20,6 +21,13 @@ from openjiuwen_studio.core.manager.model_manager.utils import SecurityUtils
 from pydantic import ValidationError
 
 deepsearch_knowledge_base_router = APIRouter()
+
+
+def _default_ds_collection_name(kb_id: str) -> str:
+    normalized_kb_id = str(kb_id).strip()
+    if normalized_kb_id.startswith("ds_kb_"):
+        return f"{normalized_kb_id}_chunks"
+    return f"ds_kb_{normalized_kb_id}_chunks"
 
 
 @deepsearch_knowledge_base_router.post("/knowledge-base/list", response_model=ResponseModel[dict])
@@ -72,8 +80,9 @@ async def deepsearch_knowledge_base_runtime_config(
         "milvus_host": os.getenv("MILVUS_HOST", "localhost"),
         "milvus_port": int(os.getenv("MILVUS_PORT", "19530")),
         "database_name": os.getenv("MILVUS_DATABASE_NAME", "default"),
-        # Fallback to KB-derived collection naming if DS list does not provide one.
-        "collection_name": f"kb_{kb_id}_chunks",
+        # Fallback to DS KB-derived naming if DS list does not provide an explicit collection.
+        "collection_name": _default_ds_collection_name(str(kb_id)),
+        "embedder_timeout": int(os.getenv("DEEPSEARCH_EMBEDDER_TIMEOUT", "100")),
     }
 
     # Try to enrich from DS KB list payload first (if config/collection is present there)
@@ -89,16 +98,30 @@ async def deepsearch_knowledge_base_runtime_config(
         if selected:
             # Common field candidates from DS payload
             cfg = selected.get("retrieve_config") or (selected.get("config") or {}).get("retrieve_config") or {}
+            selected_name = selected.get("name")
+            selected_name_as_collection = (
+                selected_name.strip()
+                if isinstance(selected_name, str) and selected_name.strip().endswith("_chunks")
+                else None
+            )
             retrieve_config["collection_name"] = (
                 cfg.get("collection_name")
                 or selected.get("collection_name")
                 or selected.get("chunk_index")
+                or selected.get("index_name")
+                or selected_name_as_collection
                 or retrieve_config["collection_name"]
             )
-            retrieve_config["database_name"] = cfg.get("database_name") or retrieve_config["database_name"]
-    except Exception:
-        # Keep default/fallback config if DS list lookup fails
-        pass
+            retrieve_config["database_name"] = (
+                cfg.get("database_name")
+                or selected.get("database_name")
+                or retrieve_config["database_name"]
+            )
+    except Exception as exc:
+        logger.warning(
+            "[DeepSearch KB Runtime] DS list lookup failed, using fallback retrieve_config. "
+            f"space_id={space_id}, kb_id={kb_id}, error={exc}",
+        )
 
     # Use Studio KB mapping + embedding model to fill embedder config where possible
     kb_row = db.query(KnowledgeBaseDB).filter(

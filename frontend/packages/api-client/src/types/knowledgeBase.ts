@@ -489,6 +489,7 @@ export interface DeepSearchRuntimeConfigResponse {
       embedder_model_name?: string
       embedder_api_key?: string | null
       embedder_base_url?: string
+      embedder_timeout?: number
     }
   }
 }

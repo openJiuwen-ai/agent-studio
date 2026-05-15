@@ -5,7 +5,7 @@ import { MentionItem, DEFAULT_AGENTS, DEFAULT_RESOURCES } from './components/Men
 import AgentConfigDialog, { DeepSearchConfig } from './components/AgentConfigDialog'
 import ChatInputArea from './components/ChatInputArea'
 import ModelPicker from './components/ModelPicker'
-import { useModels, useVLMModels, getToken, deepsearchHeartbeatService, modelService } from '@test-agentstudio/api-client'
+import { useModels, useVLMModels, getToken, deepsearchHeartbeatService } from '@test-agentstudio/api-client'
 import { useAuthStore } from '../../stores/useAuthStore'
 import { useConversationStore, MessageType, TaskStatus, AgentType, DeepsearchExecutionMethod, isTaskOngoing,
   type MessageItems, OUTLINE_INTERACTION_MAX_ROUNDS, MESSAGE_TITLES } from '../../stores/useConversationStore'
@@ -24,10 +24,13 @@ import { conversationEventEmitter, conversationDB } from '../../utils/conversati
 import type { MessageInputRef } from './components/MessageInput'
 import { copyToClipboard, STORAGE_KEYS, storage, getAgentConfigKeys } from './utils/utils'
 import {
+  type AppAgentConfig,
   DEFAULT_DEEPRESEARCH_CONFIG,
   DEFAULT_DEEPSEARCH_EXPLORER_CONFIG,
-  getConfigModeFromAgentId,
+  type DeepSearchExplorerConfig,
   getDefaultDeepSearchConfigByAgentId,
+  toDeepResearchConfig,
+  toDeepSearchExplorerConfig,
 } from './utils/deepsearchConstants'
 import { getSuggestionsByAgent } from './constants/suggestions'
 import { TEXT_BASE, TEXT_SMALL, FONT_FAMILY } from './constants/styles'
@@ -38,6 +41,11 @@ import ConversationHistorySidebar from './components/ConversationHistorySidebar'
 import { MindMapPanel } from '../../components/Conversation/MindMap'
 import { TopToolbar, ViewType } from '../../components/Conversation'
 import * as deepSearchApi from './components/DeepSearchExplorer/api'
+import DeepSearchExplorerConfigDialog from './components/DeepSearchExplorer/DeepSearchExplorerConfigDialog'
+import {
+  getDeepSearchKnowledgeBaseRuntimeConfig,
+  getDeepSearchModelRuntimeConfig,
+} from './components/DeepSearchExplorer/runtimeConfigService'
 
 const DeepSearchExplorerPanel = lazy(() => import('./components/DeepSearchExplorer/DeepSearchExplorerPanel'))
 const DeepSearchRunSummary = lazy(() => import('./components/DeepSearchExplorer/DeepSearchRunSummary'))
@@ -78,7 +86,7 @@ const buildRewriteUserMessage = (action: string, selectedText: string, userInstr
 }
 
 async function buildDeepSearchBackendConfig(
-  dsConfig: DeepSearchConfig,
+  dsConfig: DeepSearchExplorerConfig,
   spaceId: string,
   fallbackModelId: number,
 ): Promise<Record<string, unknown>> {
@@ -101,7 +109,7 @@ async function buildDeepSearchBackendConfig(
     throw new Error('A model is required for DeepSearch search-mode runs')
   }
 
-  const runtime = await modelService.getDeepSearchModelRuntime(selectedModelConfigId, spaceId)
+  const runtime = await getDeepSearchModelRuntimeConfig(selectedModelConfigId, spaceId)
   if (!runtime.api_key) {
     throw new Error('Selected model does not have an API key configured')
   }
@@ -118,6 +126,10 @@ async function buildDeepSearchBackendConfig(
       api_key: runtime.api_key,
     },
     tool_map: toolMap,
+    search_workflow_per_question_params: {
+      time_limit: dsConfig.timeLimit,
+      actions_explored_limit: dsConfig.actionsExploredLimit,
+    },
   }
 
   if (toolMap === 'search_fetch') {
@@ -129,17 +141,37 @@ async function buildDeepSearchBackendConfig(
     return payload
   }
 
-  if (!dsConfig.embedderApiKey || !dsConfig.embedderBaseUrl) {
-    throw new Error('Local mode requires embedder API key and embedder base URL')
+  const selectedKnowledgeBaseId = dsConfig.selectedKnowledgeBaseIds.find(kbId => kbId.trim().length > 0)
+  if (!selectedKnowledgeBaseId) {
+    throw new Error('Local mode requires selecting a knowledge base')
+  }
+
+  const runtimeConfig = await getDeepSearchKnowledgeBaseRuntimeConfig(selectedKnowledgeBaseId, spaceId)
+  const embedderApiKey = runtimeConfig.embedder_api_key
+  const embedderBaseUrl = runtimeConfig.embedder_base_url
+  const embedderModelName = runtimeConfig.embedder_model_name
+  if (!embedderApiKey || !embedderBaseUrl || !embedderModelName) {
+    throw new Error('Selected knowledge base is missing embedder runtime config')
+  }
+
+  if (
+    !runtimeConfig.milvus_host
+    || !runtimeConfig.milvus_port
+    || !runtimeConfig.database_name
+    || !runtimeConfig.collection_name
+  ) {
+    throw new Error('Selected knowledge base is missing Milvus runtime config')
   }
 
   payload.milvus = {
-    embedder_api_key: dsConfig.embedderApiKey,
-    embedder_base_url: dsConfig.embedderBaseUrl,
-    embedder_model_name: dsConfig.embedderModelName,
-    host: dsConfig.milvusHost,
-    port: dsConfig.milvusPort,
-    collection_name: dsConfig.milvusCollectionName,
+    milvus_host: runtimeConfig.milvus_host,
+    milvus_port: runtimeConfig.milvus_port,
+    database_name: runtimeConfig.database_name,
+    collection_name: runtimeConfig.collection_name,
+    embedder_model_name: embedderModelName,
+    embedder_api_key: embedderApiKey,
+    embedder_base_url: embedderBaseUrl,
+    embedder_timeout: runtimeConfig.embedder_timeout ?? 100,
   }
   return payload
 }
@@ -403,7 +435,7 @@ const AppsPage: React.FC = () => {
 
   // 智能体配置弹窗状态
   const [configDialogOpen, setConfigDialogOpen] = useState(false)
-  const [agentConfigs, setAgentConfigs] = useState<Record<string, DeepSearchConfig>>({})
+  const [agentConfigs, setAgentConfigs] = useState<Record<string, AppAgentConfig>>({})
   // 待选择的智能体（需要先配置才能选中）
   const [pendingAgent, setPendingAgent] = useState<MentionItem | null>(null)
   // 是否是首次配置模式（配置完成后才选中智能体）
@@ -513,17 +545,18 @@ const AppsPage: React.FC = () => {
     if (!spaceId) return
 
     const configKey = STORAGE_KEYS.AGENT_CONFIGS(spaceId)
-    const savedConfigs = storage.get<Record<string, DeepSearchConfig>>(configKey)
+    const savedConfigs = storage.get<Record<string, AppAgentConfig>>(configKey)
     if (savedConfigs) {
       // 合并默认值：用户保存的字段覆盖默认值，未保存的字段使用默认值
       const mergedConfigs = Object.keys(savedConfigs).reduce((acc, agentId) => {
-        const defaultConfig = getDefaultDeepSearchConfigByAgentId(agentId)
+        const defaultConfig = getDefaultDeepSearchConfigByAgentId(agentId) as unknown as Record<string, unknown>
+        const savedConfig = (savedConfigs[agentId] || {}) as unknown as Record<string, unknown>
         acc[agentId] = {
-          ...defaultConfig,  // 先用默认值打底
-          ...savedConfigs[agentId],       // 再用保存的值覆盖
-        }
+          ...defaultConfig,
+          ...savedConfig,
+        } as unknown as AppAgentConfig
         return acc
-      }, {} as Record<string, DeepSearchConfig>)
+      }, {} as Record<string, AppAgentConfig>)
       setAgentConfigs(mergedConfigs)
     } else {
       // 如果没有保存的配置，使用空配置
@@ -533,7 +566,7 @@ const AppsPage: React.FC = () => {
 
   // 当 agentConfigs.deepsearch.generalModelId 变化时，同步到 selectedModelId（反向同步）
   useEffect(() => {
-    const deepsearchConfig = agentConfigs['deepsearch']
+    const deepsearchConfig = toDeepResearchConfig(agentConfigs['deepsearch'])
     if (deepsearchConfig?.generalModelId) {
       const modelId = Number(deepsearchConfig.generalModelId)
       if (modelId !== selectedModelId && modelId !== -1) {
@@ -547,7 +580,7 @@ const AppsPage: React.FC = () => {
 
       }
     }
-  }, [agentConfigs['deepsearch']?.generalModelId, modelIdMap, selectedModelId])
+  }, [agentConfigs, modelIdMap, selectedModelId])
 
   // 从 IndexDB 初始化对话数据
   useEffect(() => {
@@ -573,20 +606,19 @@ const AppsPage: React.FC = () => {
     const configKey = STORAGE_KEYS.AGENT_CONFIGS(spaceId)
     // 过滤：只保留与默认值不同的字段
     const filteredConfigs = Object.keys(agentConfigs).reduce((acc, agentId) => {
-      const config = agentConfigs[agentId]
-      const defaultConfig = getDefaultDeepSearchConfigByAgentId(agentId)
+      const config = (agentConfigs[agentId] || {}) as unknown as Record<string, unknown>
+      const defaultConfig = getDefaultDeepSearchConfigByAgentId(agentId) as unknown as Record<string, unknown>
       const diffConfig = Object.keys(config).reduce((configAcc, key) => {
-        const k = key as keyof DeepSearchConfig
-        if (config[k] !== defaultConfig[k]) {
-          configAcc[k] = config[k]
+        if (config[key] !== defaultConfig[key]) {
+          configAcc[key] = config[key]
         }
         return configAcc
-      }, {} as Partial<DeepSearchConfig>)
+      }, {} as Record<string, unknown>)
       if (Object.keys(diffConfig).length > 0) {
         acc[agentId] = diffConfig
       }
       return acc
-    }, {} as Record<string, Partial<DeepSearchConfig>>)
+    }, {} as Record<string, Record<string, unknown>>)
     storage.set(configKey, filteredConfigs)
   }, [agentConfigs, user?.spaceId])
 
@@ -931,7 +963,7 @@ const AppsPage: React.FC = () => {
         // Create the DS run via API and store it per message
         try {
           // Build backend payload from user's saved Deep Search config
-          const dsConfig = agentConfigs['deepsearch-explorer'] || DEFAULT_DEEPSEARCH_EXPLORER_CONFIG
+          const dsConfig = toDeepSearchExplorerConfig(agentConfigs['deepsearch-explorer'])
           const spaceId = user?.spaceId || getDefaultSpaceId()
           const backendConversationId = `${conversationId}_${userMsgItems.id}`
           const backendConfig = await buildDeepSearchBackendConfig(dsConfig, spaceId, selectedModelId)
@@ -1007,7 +1039,7 @@ const AppsPage: React.FC = () => {
   const handleReportRewrite = async (params: ReportRewriteParams) => {
     const { action, rewrite_scope, selectedText, startOffset, endOffset, userInstruction, conversationId, onStatusChange, onDelta, onSnapshot, onEnd, onError, silent } = params
 
-    const config = agentConfigs['deepsearch'] || DEFAULT_DEEPRESEARCH_CONFIG
+    const config = toDeepResearchConfig(agentConfigs['deepsearch'])
     const rewriteSessionUnavailableMessage = '报告对应的改写会话已超时，请重新提问后再尝试改写。'
     const isSyncAction = action === 'sync'
     
@@ -1582,7 +1614,7 @@ const AppsPage: React.FC = () => {
       local_search_config,
       user_feedback_processor_enable: config.userFeedbackProcessorEnable ?? true,
       user_feedback_processor_max_interactions: normalizeMaxRewriteInteractions(config.userFeedbackProcessorMaxInteractions),
-      execution_method: config.execution_method ?? DEFAULT_DEEPSEARCH_CONFIG.execution_method,
+      execution_method: config.execution_method ?? DEFAULT_DEEPRESEARCH_CONFIG.execution_method,
     })
     const requestLiveRewriteStream = async () => {
       const response = await fetch('/api/v1/agent/deepsearch/run', {
@@ -1713,7 +1745,7 @@ const AppsPage: React.FC = () => {
   }
 
   // 保存智能体配置
-  const handleSaveAgentConfig = (agentId: string, config: DeepSearchConfig) => {
+  const handleSaveAgentConfig = (agentId: string, config: DeepSearchConfig | DeepSearchExplorerConfig) => {
     setAgentConfigs(prev => ({
       ...prev,
       [agentId]: config,
@@ -1786,6 +1818,14 @@ const AppsPage: React.FC = () => {
       }
     }
   }, [pendingAgent, deepsearchServiceAvailable, checkingDeepsearch])
+
+  const deepResearchSavedConfigs = React.useMemo(() => ({
+    deepsearch: toDeepResearchConfig(agentConfigs['deepsearch']),
+  }), [agentConfigs])
+
+  const deepSearchExplorerSavedConfigs = React.useMemo(() => ({
+    'deepsearch-explorer': toDeepSearchExplorerConfig(agentConfigs['deepsearch-explorer']),
+  }), [agentConfigs])
 
   // 处理文件上传
   const handleFileUpload = (files: FileList) => {
@@ -2115,7 +2155,7 @@ const AppsPage: React.FC = () => {
 
     try {
       // 4. 获取并验证配置
-      let config = agentConfigs['deepsearch'] || DEFAULT_DEEPRESEARCH_CONFIG
+      let config = toDeepResearchConfig(agentConfigs['deepsearch'])
 
       // ===== 配置验证 =====
       // 本地搜索模式：必须配置知识库
@@ -2301,8 +2341,8 @@ const AppsPage: React.FC = () => {
       }
 
       const messageToBackend = options?.backend_message ?? content
-      const vlmChartGeneratorEnable = config.vlmChartGeneratorEnable ?? DEFAULT_DEEPSEARCH_CONFIG.vlmChartGeneratorEnable
-      const vlmChartGeneratorMaxIterations = config.vlmChartGeneratorMaxIterations ?? DEFAULT_DEEPSEARCH_CONFIG.vlmChartGeneratorMaxIterations
+      const vlmChartGeneratorEnable = config.vlmChartGeneratorEnable ?? DEFAULT_DEEPRESEARCH_CONFIG.vlmChartGeneratorEnable
+      const vlmChartGeneratorMaxIterations = config.vlmChartGeneratorMaxIterations ?? DEFAULT_DEEPRESEARCH_CONFIG.vlmChartGeneratorMaxIterations
 
       if (!continuationInteraction && !isNewDeepSearchRun) {
         continuationInteraction = {
@@ -2823,7 +2863,7 @@ const AppsPage: React.FC = () => {
                   />
                 ) : (
                   <ResultPanel
-                    feedbackOptimizationEnabled={agentConfigs['deepsearch']?.userFeedbackProcessorEnable ?? DEFAULT_DEEPRESEARCH_CONFIG.userFeedbackProcessorEnable}
+                    feedbackOptimizationEnabled={toDeepResearchConfig(agentConfigs['deepsearch']).userFeedbackProcessorEnable ?? DEFAULT_DEEPRESEARCH_CONFIG.userFeedbackProcessorEnable}
                     onReportRewrite={handleReportRewrite}
                   />
                 )}
@@ -2856,26 +2896,42 @@ const AppsPage: React.FC = () => {
       </div>
 
       {/* 智能体配置弹窗 */}
-      <AgentConfigDialog
-        agent={pendingAgent || selectedAgent}
-        open={configDialogOpen}
-        onClose={() => {
-          setConfigDialogOpen(false)
-          // 无论是否是首次配置模式，都清除待选择的智能体
-          setPendingAgent(null)
-          setIsFirstConfigMode(false)
-        }}
-        onSave={handleSaveAgentConfig}
-        savedConfigs={agentConfigs}
-        spaceId={user?.spaceId || getDefaultSpaceId()}
-        modelConfigId={selectedModelId}
-        isFirstConfig={isFirstConfigMode}
-        availableModels={availableModels}
-        modelsLoading={modelsLoading}
-        availableVLMModels={availableVLMModels}
-        vlmModelsLoading={vlmModelsLoading}
-        mode={getConfigModeFromAgentId((pendingAgent || selectedAgent)?.id)}
-      />
+      {(pendingAgent || selectedAgent)?.id === 'deepsearch-explorer' ? (
+        <DeepSearchExplorerConfigDialog
+          agent={pendingAgent || selectedAgent}
+          open={configDialogOpen}
+          onClose={() => {
+            setConfigDialogOpen(false)
+            setPendingAgent(null)
+            setIsFirstConfigMode(false)
+          }}
+          onSave={handleSaveAgentConfig}
+          savedConfigs={deepSearchExplorerSavedConfigs}
+          spaceId={user?.spaceId || getDefaultSpaceId()}
+          isFirstConfig={isFirstConfigMode}
+          availableModels={availableModels}
+          modelsLoading={modelsLoading}
+        />
+      ) : (
+        <AgentConfigDialog
+          agent={pendingAgent || selectedAgent}
+          open={configDialogOpen}
+          onClose={() => {
+            setConfigDialogOpen(false)
+            setPendingAgent(null)
+            setIsFirstConfigMode(false)
+          }}
+          onSave={handleSaveAgentConfig}
+          savedConfigs={deepResearchSavedConfigs}
+          spaceId={user?.spaceId || getDefaultSpaceId()}
+          modelConfigId={selectedModelId}
+          isFirstConfig={isFirstConfigMode}
+          availableModels={availableModels}
+          modelsLoading={modelsLoading}
+          availableVLMModels={availableVLMModels}
+          vlmModelsLoading={vlmModelsLoading}
+        />
+      )}
 
       {/* 模型选择弹窗 */}
       {showModelPicker && modelPickerPosition && (
