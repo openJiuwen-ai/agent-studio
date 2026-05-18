@@ -10,7 +10,7 @@ import React from 'react'
 import { Copy, Check, Download, Loader2, Edit, ShieldAlert, RefreshCw, CloudOff, Undo2, Redo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Root, Trigger } from '@radix-ui/react-dropdown-menu'
-import type { Report } from '@/pages/Apps/types'
+import type { DeepSearchResult, Report } from '@/pages/Apps/types'
 import type {
   RecoveryState,
   ReportEditorMode,
@@ -98,10 +98,21 @@ export const ReportContentToolbar: React.FC<ReportContentToolbarProps> = ({
     [report.chartMessages, report.content, report.rawContent]
   )
 
+  const finalResult = React.useMemo<DeepSearchResult>(
+    () => ({
+      response_content: report.rawContent || report.content || '',
+      citation_messages: report.citations || null,
+      infer_messages: report.inferMessages || [],
+      chart_messages: report.chartMessages || [],
+    }),
+    [report.rawContent, report.content, report.citations, report.inferMessages, report.chartMessages]
+  )
+
   const download = useDownload(exportContent, report.title || 'report', {
     rawContent: report.rawContent,
     chartMessages: report.chartMessages,
     inferMessages: report.inferMessages,
+    finalResult,
   })
 
   const handleCopy = () => {

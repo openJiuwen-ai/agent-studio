@@ -2377,7 +2377,7 @@ const AppsPage: React.FC = () => {
         source_tracer_source_tracer_infer_switch: config.enableSourceTracerInfer,
         web_search_config,  // 可能是undefined
         local_search_config,  // 新增：可能是undefined
-        template_id: config.selectedTemplateId ?? -1,
+        template_id: config.enableTemplate ? (config.selectedTemplateId ?? -1) : -1,
         interrupt_feedback: interrupt_feedback,   // 中断反馈标识, 可填值: ['accepted', ''], 默认''
         execution_method: config.execution_method ?? DEFAULT_DEEPRESEARCH_CONFIG.execution_method,
         // 高级配置模型 ID（可选，仅在有值时传递）
@@ -2577,6 +2577,9 @@ const AppsPage: React.FC = () => {
 
     // 【关键 1】立即更新 UI 状态，不等待后端响应
     useConversationStore.getState().updateMessageItemsStatusToCancelled()
+
+    // 停止 SSE 超时监控，用户主动取消后不再需要超时检测
+    useConversationStore.getState().stopSSETimeoutMonitor()
 
     // 【关键 2】发送取消请求到后端
     // 根据 DeepSearch 服务代码，取消请求只需要 space_id 和 conversation_id

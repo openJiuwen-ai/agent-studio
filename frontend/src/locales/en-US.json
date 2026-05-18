@@ -1214,7 +1214,20 @@
           "testResult": "Test Result",
           "noResults": "Test successful, but no search results found",
           "networkError": "Network connection failed, please check network settings and try again"
-        }
+        },
+        "includeDomains": "Include Domains",
+        "excludeDomains": "Exclude Domains",
+        "includeDomainsPlaceholder": "Search results will only include pages from specified domains",
+        "excludeDomainsPlaceholder": "Filter out pages from specified domains, excluding them from search results",
+        "editIncludeDomains": "Edit Include Domains",
+        "editExcludeDomains": "Edit Exclude Domains",
+        "domainInputPlaceholder": "api.example.com",
+        "addDomain": "Add",
+        "domainInvalidProtocol": "Domain cannot contain protocol prefix (http:// or https://), please enter format like example.com",
+        "domainInvalidPath": "Domain cannot contain path, please enter format like example.com",
+        "domainInvalidPort": "Domain cannot contain port number, please enter format like example.com",
+        "domainInvalidFormat": "Please enter a valid domain format, e.g. docs.example.com",
+        "domainDuplicate": "This domain already exists"
       },
       "knowledge": {
         "select": "Configure Knowledge Base",

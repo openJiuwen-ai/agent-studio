@@ -847,7 +847,7 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
                           modelsLoading,
                           availableVLMModels,
                           vlmModelsLoading,
-                          spaceId: spaceId || '',
+                          spaceId: spaceId || ''
                         }
               }
             />
@@ -1431,6 +1431,378 @@ const WebSearchEngineSelectorDialog: React.FC<WebSearchEngineSelectorDialogProps
   )
 }
 
+// ==================== 域名校验工具函数 ====================
+
+const validateDomain = (domain: string, existingDomains: string[], t: (key: string) => string): string | null => {
+  const trimmed = domain.trim()
+  if (!trimmed) return null
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return t('apps.config.engine.domainInvalidProtocol')
+  }
+  if (trimmed.includes('/')) {
+    return t('apps.config.engine.domainInvalidPath')
+  }
+  if (trimmed.includes(':')) {
+    return t('apps.config.engine.domainInvalidPort')
+  }
+  const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/
+  if (!domainRegex.test(trimmed)) {
+    return t('apps.config.engine.domainInvalidFormat')
+  }
+  if (trimmed.length > 253) {
+    return t('apps.config.engine.domainInvalidFormat')
+  }
+  if (existingDomains.some(d => d.toLowerCase() === trimmed.toLowerCase())) {
+    return t('apps.config.engine.domainDuplicate')
+  }
+
+  return null
+}
+
+// ==================== 域名编辑悬浮框子组件 ====================
+
+interface DomainEditPopoverProps {
+  title: string
+  domains: string[]
+  onConfirm: (domains: string[]) => void
+  onCancel: () => void
+}
+
+const DomainEditPopover: React.FC<DomainEditPopoverProps> = ({
+  title,
+  domains: initialDomains,
+  onConfirm,
+  onCancel,
+}) => {
+  const { t } = useTranslation()
+  const [localDomains, setLocalDomains] = useState<string[]>([...initialDomains])
+  const [addingNew, setAddingNew] = useState(false)
+  const [newDomain, setNewDomain] = useState('')
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editingValue, setEditingValue] = useState('')
+
+  const focusNewInput = () => {
+    setTimeout(() => {
+      const input = document.getElementById('domain-new-input')
+      input?.focus()
+    }, 50)
+  }
+
+  const focusEditInput = () => {
+    setTimeout(() => {
+      const input = document.getElementById('domain-edit-input')
+      input?.focus()
+    }, 50)
+  }
+
+  const handleAddClick = () => {
+    if (editingIndex !== null) {
+      const trimmed = editingValue.trim()
+      if (trimmed) {
+        const others = localDomains.filter((_, i) => i !== editingIndex)
+        const error = validateDomain(trimmed, others, t)
+        if (error) {
+          setValidationError(error)
+          return
+        }
+        setLocalDomains(prev => prev.map((d, i) => i === editingIndex ? trimmed : d))
+      }
+      setEditingIndex(null)
+      setEditingValue('')
+      setValidationError(null)
+    }
+    setAddingNew(true)
+    setNewDomain('')
+    setValidationError(null)
+    focusNewInput()
+  }
+
+  const handleConfirmAdd = () => {
+    const parts = newDomain.split(';').map(s => s.trim()).filter(Boolean)
+    if (parts.length === 0) {
+      setAddingNew(false)
+      setNewDomain('')
+      setValidationError(null)
+      return
+    }
+
+    const combined = [...localDomains]
+    for (const part of parts) {
+      const error = validateDomain(part, combined, t)
+      if (error) {
+        setValidationError(`"${part}": ${error}`)
+        return
+      }
+      combined.push(part)
+    }
+
+    setLocalDomains(combined)
+    setAddingNew(false)
+    setNewDomain('')
+    setValidationError(null)
+  }
+
+  const handleNewDomainKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleConfirmAdd()
+    } else if (e.key === 'Escape') {
+      setAddingNew(false)
+      setNewDomain('')
+      setValidationError(null)
+    }
+  }
+
+  const handleStartEdit = (index: number) => {
+    setEditingIndex(index)
+    setEditingValue(localDomains[index])
+    setValidationError(null)
+    focusEditInput()
+  }
+
+  const handleConfirmEdit = () => {
+    if (editingIndex === null) return
+    const trimmed = editingValue.trim()
+    if (!trimmed) {
+      handleDeleteDomain(editingIndex)
+      setEditingIndex(null)
+      setEditingValue('')
+      setValidationError(null)
+      return
+    }
+
+    const others = localDomains.filter((_, i) => i !== editingIndex)
+    const error = validateDomain(trimmed, others, t)
+    if (error) {
+      setValidationError(error)
+      return
+    }
+
+    setLocalDomains(prev => prev.map((d, i) => i === editingIndex ? trimmed : d))
+    setEditingIndex(null)
+    setEditingValue('')
+    setValidationError(null)
+  }
+
+  const handleEditKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleConfirmEdit()
+    } else if (e.key === 'Escape') {
+      setEditingIndex(null)
+      setEditingValue('')
+      setValidationError(null)
+    }
+  }
+
+  const handleDeleteDomain = (index: number) => {
+    setLocalDomains(prev => prev.filter((_, i) => i !== index))
+    if (editingIndex === index) {
+      setEditingIndex(null)
+      setEditingValue('')
+      setValidationError(null)
+    }
+  }
+
+  const handleSave = () => {
+    let finalDomains = [...localDomains]
+
+    if (editingIndex !== null) {
+      const trimmed = editingValue.trim()
+      if (trimmed) {
+        const others = finalDomains.filter((_, i) => i !== editingIndex)
+        const error = validateDomain(trimmed, others, t)
+        if (error) {
+          setValidationError(error)
+          return
+        }
+        finalDomains = finalDomains.map((d, i) => i === editingIndex ? trimmed : d)
+      }
+    }
+
+    if (addingNew) {
+      const parts = newDomain.split(';').map(s => s.trim()).filter(Boolean)
+      if (parts.length > 0) {
+        for (const part of parts) {
+          const error = validateDomain(part, finalDomains, t)
+          if (error) {
+            setValidationError(`"${part}": ${error}`)
+            return
+          }
+          finalDomains.push(part)
+        }
+      }
+    }
+
+    onConfirm(finalDomains)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30"
+      style={{ zIndex: 9999 }}
+    >
+      <div
+        className={`bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden w-full max-w-sm mx-4`}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+          <button
+            onClick={onCancel}
+            className={`p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 ${RADIUS_BUTTON} transition-colors`}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-4 py-3">
+          <div className="max-h-[320px] overflow-y-auto">
+            {localDomains.length > 0 && (
+              <div className="space-y-1 mb-2">
+                {localDomains.map((domain, index) => (
+                  <div key={index} className="py-1.5 px-2 rounded hover:bg-gray-50">
+                    {editingIndex === index ? (
+                      <div>
+                        <div className="flex items-center">
+                          <input
+                            id="domain-edit-input"
+                            type="text"
+                            value={editingValue}
+                            onChange={e => {
+                              setEditingValue(e.target.value)
+                              setValidationError(null)
+                            }}
+                            onKeyDown={handleEditKeyDown}
+                            placeholder={t('apps.config.engine.domainInputPlaceholder')}
+                            className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 placeholder-gray-400 mr-2"
+                          />
+                          <button
+                            onClick={() => { setEditingIndex(null); setEditingValue(''); setValidationError(null) }}
+                            className="p-1 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0 mr-1"
+                            title={t('apps.config.engine.cancel')}
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={handleConfirmEdit}
+                            className="p-1 text-green-600 hover:text-green-700 transition-colors flex-shrink-0"
+                            title={t('apps.config.engine.confirm')}
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {validationError && (
+                          <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                            <span>{validationError}</span>
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center">
+                        <span
+                          className={`text-sm truncate flex-1 mr-2 ${addingNew ? 'text-gray-400 cursor-not-allowed' : 'text-gray-800 cursor-pointer hover:text-blue-600'}`}
+                          onClick={addingNew ? undefined : () => handleStartEdit(index)}
+                          title={addingNew ? undefined : t('apps.config.engine.action.edit')}
+                        >
+                          {domain}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteDomain(index)}
+                          className={`p-1 transition-colors flex-shrink-0 ${addingNew ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-500'}`}
+                          disabled={addingNew}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {addingNew && (
+              <div className="py-1.5 px-2 rounded bg-gray-50">
+                <div>
+                  <div className="flex items-center">
+                    <input
+                      id="domain-new-input"
+                      type="text"
+                      value={newDomain}
+                      onChange={e => {
+                        setNewDomain(e.target.value)
+                        setValidationError(null)
+                      }}
+                      onKeyDown={handleNewDomainKeyDown}
+                      placeholder={t('apps.config.engine.domainInputMultiplePlaceholder', { defaultValue: 'example.com; google.com' })}
+                      className={`
+                        flex-1 px-2 py-1 text-sm border rounded mr-2
+                        ${validationError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'}
+                        focus:outline-none focus:ring-1
+                        text-gray-900 placeholder-gray-400
+                      `}
+                    />
+                    <button
+                      onClick={() => { setAddingNew(false); setNewDomain(''); setValidationError(null) }}
+                      className="p-1 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0 mr-1"
+                      title={t('apps.config.engine.cancel')}
+                    >
+                      <XCircle className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleConfirmAdd}
+                      className="p-1 text-green-600 hover:text-green-700 transition-colors flex-shrink-0"
+                      title={t('apps.config.engine.confirm')}
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {t('apps.config.engine.domainMultipleHint', { defaultValue: '支持同时输入多个域名，使用 ; 分隔' })}
+                  </p>
+                  {validationError && (
+                    <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                      <span>{validationError}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {!addingNew && (
+              <button
+                onClick={handleAddClick}
+                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {t('apps.config.engine.addDomain')}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={onCancel}
+            className={`px-3 py-1.5 text-xs font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-200 ${RADIUS_BUTTON} transition-all duration-200`}
+          >
+            {t('apps.config.engine.cancel')}
+          </button>
+          <button
+            onClick={handleSave}
+            className={`px-4 py-1.5 text-xs font-medium ${RADIUS_BUTTON} bg-blue-600 text-white hover:bg-blue-700 transition-all duration-200`}
+          >
+            {t('apps.config.engine.confirm')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ==================== 搜索引擎表单对话框（创建/编辑）====================
 
 interface WebSearchEngineConfigDialogProps {
@@ -1452,10 +1824,15 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
   const [engineName, setEngineName] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [searchUrl, setSearchUrl] = useState('')
+  const [includeDomains, setIncludeDomains] = useState<string[]>([])
+  const [excludeDomains, setExcludeDomains] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editingDomainType, setEditingDomainType] = useState<'include' | 'exclude' | null>(null)
   const prevOpenRef = React.useRef(open)
+
+  const isTavily = engineName === 'tavily'
 
   // 加载引擎数据（用于编辑模式）
   React.useEffect(() => {
@@ -1471,6 +1848,8 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
           setEngineName(engineData.search_engine_name || '')
           setApiKey('')
           setSearchUrl(engineData.search_url || '')
+          setIncludeDomains(engineData.extension?.include_domains || [])
+          setExcludeDomains(engineData.extension?.exclude_domains || [])
           console.log('[WebSearchEngineConfigDialog] Form state set successfully')
         } catch (err) {
           console.error('[WebSearchEngineConfigDialog] Load failed:', err)
@@ -1490,7 +1869,10 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
       setEngineName('')
       setApiKey('')
       setSearchUrl('')
+      setIncludeDomains([])
+      setExcludeDomains([])
       setError(null)
+      setEditingDomainType(null)
     }
     prevOpenRef.current = open
   }, [open])
@@ -1531,6 +1913,23 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
     }
   }
 
+  const handleEditDomainClick = (type: 'include' | 'exclude') => {
+    setEditingDomainType(type)
+  }
+
+  const handleDomainEditConfirm = (type: 'include' | 'exclude', domains: string[]) => {
+    if (type === 'include') {
+      setIncludeDomains(domains)
+    } else {
+      setExcludeDomains(domains)
+    }
+    setEditingDomainType(null)
+  }
+
+  const handleDomainEditCancel = () => {
+    setEditingDomainType(null)
+  }
+
   const handleSave = async () => {
     // 验证是否选择了预设引擎
     if (!engineName.trim()) {
@@ -1553,6 +1952,11 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
     try {
       const { webSearchEngineService } = await import('@test-agentstudio/api-client')
 
+      const extension = isTavily ? {
+        include_domains: includeDomains,
+        exclude_domains: excludeDomains
+      } : undefined
+
       if (editingEngineId) {
         // 编辑模式：更新现有引擎
         await webSearchEngineService.updateEngine(
@@ -1560,7 +1964,8 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
           editingEngineId,
           engineName.trim(),
           apiKey.trim(),
-          searchUrl.trim()
+          searchUrl.trim(),
+          extension
         )
         // 编辑完成也需要刷新列表
         onConfigCreated(editingEngineId)
@@ -1570,7 +1975,8 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
           spaceId,
           engineName.trim(),
           apiKey.trim(),
-          searchUrl.trim()
+          searchUrl.trim(),
+          extension
         )
         onConfigCreated(engineId)
       }
@@ -1580,6 +1986,8 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
         setEngineName('')
         setApiKey('')
         setSearchUrl('')
+        setIncludeDomains([])
+        setExcludeDomains([])
       }
 
       onClose()
@@ -1610,7 +2018,7 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
         </div>
 
         {/* 内容 */}
-        <div className="px-6 py-4 space-y-4">
+        <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
@@ -1701,6 +2109,53 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
                 />
               </div>
 
+              {/* Tavily 专属：限定搜索来源 / 排除搜索来源 */}
+              {isTavily && (
+                <>
+                  <div className="domain-section">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-sm font-medium text-gray-700">
+                        {t('apps.config.engine.includeDomains')}
+                      </label>
+                      <button
+                        onClick={() => handleEditDomainClick('include')}
+                        className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className={`w-full px-3 py-2 ${RADIUS_BUTTON} border border-gray-300 bg-gray-50 text-sm min-h-[36px]`}>
+                      {includeDomains.length > 0 ? (
+                        <span className="text-gray-900">{includeDomains.join('; ')}</span>
+                      ) : (
+                        <span className="text-gray-400">{t('apps.config.engine.includeDomainsPlaceholder')}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="domain-section">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-sm font-medium text-gray-700">
+                        {t('apps.config.engine.excludeDomains')}
+                      </label>
+                      <button
+                        onClick={() => handleEditDomainClick('exclude')}
+                        className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className={`w-full px-3 py-2 ${RADIUS_BUTTON} border border-gray-300 bg-gray-50 text-sm min-h-[36px]`}>
+                      {excludeDomains.length > 0 ? (
+                        <span className="text-gray-900">{excludeDomains.join('; ')}</span>
+                      ) : (
+                        <span className="text-gray-400">{t('apps.config.engine.excludeDomainsPlaceholder')}</span>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
               {/* 底部按钮 */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
                 <button
@@ -1734,6 +2189,19 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
           )}
         </div>
       </div>
+
+      {/* 域名编辑悬浮框 */}
+      {editingDomainType && (
+        <DomainEditPopover
+          title={editingDomainType === 'include'
+            ? t('apps.config.engine.editIncludeDomains')
+            : t('apps.config.engine.editExcludeDomains')
+          }
+          domains={editingDomainType === 'include' ? includeDomains : excludeDomains}
+          onConfirm={(domains) => handleDomainEditConfirm(editingDomainType, domains)}
+          onCancel={handleDomainEditCancel}
+        />
+      )}
     </div>
   )
 }

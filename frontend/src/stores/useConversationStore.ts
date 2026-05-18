@@ -2350,6 +2350,13 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
     const lastMessageItems = messageItemsList[messageItemsList.length - 1];
 
+    // 如果最后一个 messageItems 不是进行中状态，说明已经完成或取消，不需要再标记
+    // 防止 SSE 超时监控定时器在 messageItems 已完成后仍追加超时取消消息
+    if (!isTaskOngoing(lastMessageItems.status)) {
+      get().stopSSETimeoutMonitor();
+      return;
+    }
+
     // 【新增】发送取消请求到后端（不阻塞 UI 更新）
     // 立即调用 API，异步处理，不等待响应
     const cancelAbortController = new AbortController();

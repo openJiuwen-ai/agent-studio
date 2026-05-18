@@ -7,14 +7,15 @@ export interface FormatOption {
   value: 'markdown' | 'html' | 'docx'
   labelKey: string
   extension: string
+  downloadExtension: string
   mimeType: string
 }
 
 /** 格式选项原始配置（不含翻译） */
 export const FORMAT_OPTIONS_BASE: readonly FormatOption[] = [
-  { value: 'markdown', labelKey: 'markdown', extension: '.md', mimeType: 'text/markdown' },
-  { value: 'html', labelKey: 'html', extension: '.html', mimeType: 'text/html' },
-  { value: 'docx', labelKey: 'wordDocument', extension: '.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+  { value: 'markdown', labelKey: 'markdown', extension: '.md', downloadExtension: '.md', mimeType: 'text/markdown' },
+  { value: 'html', labelKey: 'html', extension: '.html', downloadExtension: '.zip', mimeType: 'application/zip' },
+  { value: 'docx', labelKey: 'wordDocument', extension: '.docx', downloadExtension: '.zip', mimeType: 'application/zip' },
 ] as const
 
 /**
@@ -26,12 +27,14 @@ export const getFormatOptions = (t: (key: string) => string): readonly {
   value: 'markdown' | 'html' | 'docx'
   label: string
   extension: string
+  downloadExtension: string
   mimeType: string
 }[] => {
   return FORMAT_OPTIONS_BASE.map(option => ({
     value: option.value,
     label: t(`apps.download.${option.labelKey}`),
     extension: option.extension,
+    downloadExtension: option.downloadExtension,
     mimeType: option.mimeType,
   }))
 }

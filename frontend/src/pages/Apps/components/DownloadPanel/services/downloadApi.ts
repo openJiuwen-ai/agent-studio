@@ -4,7 +4,7 @@
  */
 
 import axios from 'axios'
-import { encodeToBase64 } from '@/pages/Apps/utils/downloadHelper'
+import type { DeepSearchResult } from '@/pages/Apps/types'
 import { getDefaultSpaceId } from '@/utils/spaceUtils'
 import { getAuthToken } from '@/utils/authUtils'
 import { showNotification } from '@/utils/notifications'
@@ -35,7 +35,7 @@ export class DownloadApiService {
    * @returns 转换后的内容（Base64 编码），失败返回 null
    */
   static async convertFormat(
-    markdownContent: string,
+    finalResult: DeepSearchResult,
     format: 'html' | 'docx',
     t: (key: string, params?: Record<string, unknown>) => string
   ): Promise<string | null> {
@@ -56,15 +56,11 @@ export class DownloadApiService {
         return null
       }
 
-      // 将 markdown 内容编码为 base64
-      const base64Markdown = encodeToBase64(markdownContent)
-
-      // 调用后端 API
       const response = await axios.post<ConvertReportResponse>(
         '/api/v1/agent/deepsearch/reports/convert',
         {
           space_id: spaceId,
-          report_content: base64Markdown,
+          final_result: finalResult,
           convert_type: format,
         },
         {

@@ -139,7 +139,8 @@ export const webSearchEngineService = {
     spaceId: string,
     engineName: string,
     apiKey: string,
-    url: string
+    url: string,
+    extension?: Record<string, any>
   ): Promise<number> {
     const client = getApiClient()
 
@@ -147,7 +148,8 @@ export const webSearchEngineService = {
       space_id: spaceId,
       search_engine_name: engineName,
       search_api_key: apiKey,
-      search_url: url
+      search_url: url,
+      extension
     }
 
     const response = await client.post<WebSearchEngineCreateResponse>(
@@ -202,7 +204,8 @@ export const webSearchEngineService = {
     engineId: number,
     engineName: string,
     apiKey: string,
-    url: string
+    url: string,
+    extension?: Record<string, any>
   ): Promise<void> {
     const client = getApiClient()
 
@@ -211,7 +214,8 @@ export const webSearchEngineService = {
       web_search_engine_id: engineId,
       search_engine_name: engineName,
       search_api_key: apiKey,
-      search_url: url
+      search_url: url,
+      extension
     }
 
     await client.put<WebSearchEngineUpdateResponse>(

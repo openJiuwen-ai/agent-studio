@@ -28,7 +28,8 @@ export interface UseWebSearchEngineApiReturn {
   createEngine: (
     engineName: string,
     apiKey: string,
-    url: string
+    url: string,
+    extension?: Record<string, any>
   ) => Promise<number>
   /** 删除搜索引擎 */
   deleteEngine: (engineId: number) => Promise<void>
@@ -72,7 +73,8 @@ export const useWebSearchEngineApi = (
   const createEngine = useCallback(async (
     engineName: string,
     apiKey: string,
-    url: string
+    url: string,
+    extension?: Record<string, any>
   ): Promise<number> => {
     if (!spaceId) {
       throw new Error('Space ID not found')
@@ -86,7 +88,8 @@ export const useWebSearchEngineApi = (
         spaceId,
         engineName,
         apiKey,
-        url
+        url,
+        extension
       )
 
       // 重新获取列表
