@@ -106,8 +106,13 @@ const MCPPluginFormDialog: React.FC<MCPPluginFormDialogProps> = ({
   // Determine if transport uses a file path instead of a URL
   const isFilePath = transportNum === 1 /* STDIO */ || transportNum === 4 /* OpenAPI */
 
-  // URL validation function
+  // URL validation function (only for actual URLs, not file paths)
   const isValidUrl = (url: string): boolean => {
+    // Don't validate if it looks like a file path
+    if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../') ||
+        url.startsWith('~/') || (url.length > 2 && url[1] === ':')) {
+      return true // File paths are handled separately
+    }
     try {
       const urlObj = new URL(url)
       return urlObj.protocol === 'http:' || urlObj.protocol === 'https:'
@@ -122,6 +127,8 @@ const MCPPluginFormDialog: React.FC<MCPPluginFormDialogProps> = ({
     return new Blob([url]).size
   }
   const isUrlLengthValid = form.url ? getUrlByteLength(form.url) <= MAX_URL_BYTES : true
+
+  // Validate based on whether it's a file path or URL
   const isUrlValid = form.url ? isValidUrl(form.url) : true
 
   // Determine validity of the url/path field based on transport
@@ -129,8 +136,9 @@ const MCPPluginFormDialog: React.FC<MCPPluginFormDialogProps> = ({
   const envLines = (form.envText || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   const hasInvalidEnvLine = envLines.some(line => !line.includes('=') || line.startsWith('='))
 
+  // For OpenAPI transport, allow both URLs and file paths
   const isUrlFieldValid = isFilePath
-    ? (form.url ? isFilePathValid(form.url) : true)
+    ? (form.url ? (isFilePathValid(form.url) || isValidUrl(form.url)) : true)
     : isUrlValid && isUrlLengthValid
   const normalizedAuthMethod = (form.authMethod || 'none').toLowerCase()
   const requiresApiKeyFields = normalizedAuthMethod === 'api_key'
@@ -156,25 +164,28 @@ const MCPPluginFormDialog: React.FC<MCPPluginFormDialogProps> = ({
 
   const urlFieldPlaceholder = isFilePath
     ? transportNum === 4
-      ? t('plugins.dialog.mcpPluginForm.openApiFilePlaceholder')
+      ? t('plugins.dialog.mcpPluginForm.openApiFilePlaceholder') || '/Users/name/openapi.yaml or https://api.example.com/openapi.json'
       : t('plugins.dialog.mcpPluginForm.stdioPathPlaceholder')
-    : t('plugins.dialog.mcpPluginForm.urlPlaceholder')
+    : t('plugins.dialog.mcpPluginForm.urlPlaceholder') || 'https://api.example.com'
+
+  // Check if the URL field has an error
+  const hasUrlError = isFilePath
+    ? Boolean(form.url && !isFilePathValid(form.url) && !isValidUrl(form.url))
+    : Boolean(form.url && (!isUrlValid || !isUrlLengthValid))
 
   const urlFieldHelperText = isFilePath
-    ? form.url && !isFilePathValid(form.url)
-      ? t('plugins.dialog.mcpPluginForm.filePathInvalid')
+    ? hasUrlError
+      ? t('plugins.dialog.mcpPluginForm.filePathInvalid') + ' (例如: /path/to/file, ./file, https://api.com/openapi.json)'
       : transportNum === 4
-        ? t('plugins.dialog.mcpPluginForm.openApiFileHelper')
+        ? t('plugins.dialog.mcpPluginForm.openApiFileHelper') || 'Local file path or URL (e.g., /Users/name/openapi.yaml or https://api.com/openapi.json)'
         : t('plugins.dialog.mcpPluginForm.stdioPathHelper')
     : form.url && !isUrlValid
-      ? t('plugins.dialog.cloudPluginForm.urlInvalid')
+      ? t('plugins.dialog.cloudPluginForm.urlInvalid') + ' (Must start with http:// or https://)'
       : form.url && !isUrlLengthValid
         ? t('plugins.dialog.cloudPluginForm.urlLengthError', { max: MAX_URL_BYTES, current: getUrlByteLength(form.url) })
         : t('plugins.dialog.mcpPluginForm.urlHelper', { current: form.url ? getUrlByteLength(form.url) : 0, max: MAX_URL_BYTES })
 
-  const urlFieldError = isFilePath
-    ? Boolean(form.url && !isFilePathValid(form.url))
-    : Boolean(form.url && (!isUrlValid || !isUrlLengthValid))
+  const urlFieldError = hasUrlError
 
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="md" fullWidth>

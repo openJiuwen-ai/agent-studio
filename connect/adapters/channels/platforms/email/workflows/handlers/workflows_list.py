@@ -9,7 +9,9 @@ async def handle_list(user_id: str, say, user_data: dict) -> None:
         await say(err)
         return
     try:
-        result = list_workflows(client)
+        page = user_data.get("page", 1)
+        page_size = user_data.get("page_size", 20)
+        result = list_workflows(client, page=page, page_size=page_size)
         workflows = result.get("data", {}).get("workflow_list", [])
         total = result.get("data", {}).get("total", len(workflows))
         if not workflows:

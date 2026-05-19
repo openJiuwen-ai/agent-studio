@@ -1,15 +1,21 @@
 """
 Pure agent response parsing — no platform dependencies.
-Extracts the agent's text reply and conversation ID from SSE events.
+Extracts the agent's text reply from SSE events.
 """
 from typing import Dict, Any, List, Optional, Tuple
 
 
 def parse_agent_response(
     events: List[Dict[str, Any]],
+    conversation_id: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Parse SSE events from an agent execution.
+
+    Args:
+        events: SSE events collected by execute_agent.
+        conversation_id: The conversation ID returned by execute_agent — pass it
+            through here so callers always receive it back unchanged.
 
     Returns:
         (text, conversation_id, error)
@@ -20,16 +26,6 @@ def parse_agent_response(
     error_event = next((ev for ev in events if ev.get('code', 200) != 200), None)
     if error_event:
         return None, None, error_event.get('message', 'Unknown error')
-
-    # Extract conversation_id so callers can continue the thread
-    conversation_id: Optional[str] = next(
-        (
-            ev.get('conversation_id') or ev.get('data', {}).get('conversation_id')
-            for ev in reversed(events)
-            if ev.get('conversation_id') or ev.get('data', {}).get('conversation_id')
-        ),
-        None,
-    )
 
     def _payload_text(payload: dict) -> str:
         return payload.get('content', payload.get('output', ''))

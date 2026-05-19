@@ -177,7 +177,7 @@ export const ModelConfigTab: React.FC<ModelConfigTabProps> = ({
 
       // 检查是否已经有 spaceId
       if (!spaceId) {
-        showError('缺少 spaceId，无法测试模型')
+        showError(t('apps.config.model.test.missingSpaceId'))
         return
       }
 
@@ -203,7 +203,7 @@ export const ModelConfigTab: React.FC<ModelConfigTabProps> = ({
         // 调用测试接口，发送"你好"作为测试 prompt
         const result = await testModelMutation.mutateAsync({
           id: model.openModel.model_id,
-          prompt: '你好',
+          prompt: t('apps.config.model.test.prompt'),
           spaceId: spaceId,
           parameters: { temperature: 0.7, max_tokens: 100 },
         })
@@ -211,15 +211,13 @@ export const ModelConfigTab: React.FC<ModelConfigTabProps> = ({
         if (result.success) {
           // 测试通过，正式选中模型
           updateConfig(configKey, model.openModel.model_id)
-          showSuccess('模型可用性验证通过')
+          showSuccess(t('apps.config.model.test.validationPassed'))
         } else {
-          // 测试失败，显示错误提示
-          showError(`模型不可用：${result.error || '未知错误'}`)
+          showError(t('apps.config.model.test.unavailable', { error: result.error || t('apps.errors.unknownError') }))
         }
       } catch (error: any) {
-        // 测试异常，显示错误提示
-        const errorMessage = error?.response?.data?.message || error?.message || '模型测试失败'
-        showError(`模型不可用：${errorMessage}`)
+        const errorMessage = error?.response?.data?.message || error?.message || t('apps.config.model.test.testFailed')
+        showError(t('apps.config.model.test.unavailable', { error: errorMessage }))
       } finally {
         // 清除测试状态
         setTestingModelId(null)

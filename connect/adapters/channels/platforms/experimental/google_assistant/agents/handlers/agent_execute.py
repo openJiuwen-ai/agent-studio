@@ -15,7 +15,7 @@ async def handle_run(user_id, say, user_data, agent_id="", message=""):
         await say(err)
         return
     try:
-        events = execute_agent(client, agent_id, message)
+        events, _ = execute_agent(client, agent_id, message)
         text_out, _, error = parse_agent_response(events)
         if error:
             await say(f"Agent error: {error}")

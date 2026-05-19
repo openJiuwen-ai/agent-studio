@@ -15,8 +15,8 @@ def agent_run(
     The call blocks until the agent replies.
     """
     try:
-        events = execute_agent(client, body.agent_id, body.message, body.conversation_id)
-        text, conversation_id, error = parse_agent_response(events)
+        events, conversation_id = execute_agent(client, body.agent_id, body.message, body.conversation_id)
+        text, conversation_id, error = parse_agent_response(events, conversation_id)
         if error:
             return {"success": False, "text": None, "conversation_id": None, "error": error}
         return {"success": True, "text": text, "conversation_id": conversation_id, "error": None}

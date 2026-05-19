@@ -17,11 +17,9 @@ def on_agent_message(user_id: str, text: str, say, user_data: dict) -> None:
         return
     try:
         say("🤖 Processing...")
-        events = execute_agent(client, agent_id, text, chat_data.get('conversation_id', ''))
-        text_out, new_conv_id, error = parse_agent_response(events)
-
-        if new_conv_id:
-            user_data['agent_chat']['conversation_id'] = new_conv_id
+        events, conversation_id = execute_agent(client, agent_id, text, chat_data.get('conversation_id', ''))
+        user_data['agent_chat']['conversation_id'] = conversation_id
+        text_out, _, error = parse_agent_response(events, conversation_id)
 
         if error:
             say(f"❌ Agent error: {error}")

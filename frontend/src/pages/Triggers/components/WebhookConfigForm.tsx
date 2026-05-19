@@ -28,12 +28,37 @@ const WebhookConfigForm: React.FC<WebhookConfigFormProps> = ({
 
   const handleCopy = async () => {
     if (!webhookToken) return
+
+    // navigator.clipboard is only available in secure contexts (https / localhost).
+    // Fall back to the legacy execCommand approach for plain-http environments.
+    const legacyCopy = (text: string): boolean => {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      return ok
+    }
+
+    let success = false
     try {
-      await navigator.clipboard.writeText(webhookUrl)
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(webhookUrl)
+        success = true
+      } else {
+        success = legacyCopy(webhookUrl)
+      }
+    } catch {
+      success = legacyCopy(webhookUrl)
+    }
+
+    if (success) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // fallback
     }
   }
 

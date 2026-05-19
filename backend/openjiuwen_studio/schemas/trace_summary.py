@@ -79,6 +79,8 @@ class TraceSummaryBriefWithStatus(BaseModel):
     business_id: str = Field(alias="businessId", validation_alias=AliasChoices("businessId", "business_id"))
     business_name: Optional[str] = Field(default=None, alias="businessName",
                                          validation_alias=AliasChoices("businessName", "business_name"))
+    business_version: Optional[str] = Field(default=None, alias="businessVersion",
+                                            validation_alias=AliasChoices("businessVersion", "business_version"))
     business_type: str = Field(alias="businessType", validation_alias=AliasChoices("businessType", "business_type"))
     create_time: Optional[datetime] = Field(default=None, alias="createTime",
                                             validation_alias=AliasChoices("createTime", "create_time"))

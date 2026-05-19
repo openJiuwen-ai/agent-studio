@@ -720,7 +720,7 @@ async def weblink_add_route(
     """添加链接到知识库"""
     try:
         req = validate_request(request, WeblinkAddRequest)
-        res = kb_mgr.weblink_add(req, current_user)
+        res = await kb_mgr.weblink_add(req, current_user)
         return handle_response(res)
     except ValidationError as e:
         logger.error(f"[WEBLINK_ADD] Validation failed - Errors: {e.errors()}")
@@ -735,7 +735,7 @@ async def weblink_list_route(
     """获取链接列表"""
     try:
         req = validate_request(request, WeblinkListRequest)
-        res = kb_mgr.weblink_list(req, current_user)
+        res = await kb_mgr.weblink_list(req, current_user)
         return handle_response(res)
     except ValidationError as e:
         logger.error(f"[WEBLINK_LIST] Validation failed - Errors: {e.errors()}")

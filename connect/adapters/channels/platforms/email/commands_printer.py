@@ -11,6 +11,6 @@ def print_bot_commands() -> None:
   Workflows: workflows | workflows search <q> | workflow execute <id>
              workflow skip | workflow cancel
   Agents:    agents | agents search <q> | agent execute <id> <msg>
-             agent start <id> | agent end
+             agent chat <id>
   General:   help | health
     """.strip())

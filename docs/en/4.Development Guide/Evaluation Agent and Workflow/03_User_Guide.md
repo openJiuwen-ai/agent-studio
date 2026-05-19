@@ -532,9 +532,9 @@ Custom aggregate metrics let you define your own scoring logic in Python that ru
 
 **Accessing the custom metrics editor:**
 
-1. Select a suite in the left panel
-2. Click the **Σ** (sigma) icon in the suite header — a badge shows the number of custom metrics already defined
-3. The Custom Metrics dialog opens, listing existing metrics with name, description, and code
+1. In the **Runs** tab, click **View Results** on any run for the suite
+2. The **Results & Traces** view opens — click the **Custom Metrics** tab
+3. The tab lists existing metrics with name, description, and code
 
 **Adding a new metric:**
 
@@ -1346,7 +1346,7 @@ Custom aggregate metrics are Python functions you write that compute a single nu
 - A "consistency per category" metric grouped by task tag
 - A domain-specific score combining latency and pass rate
 
-They're defined at the suite level via the **Σ** button in the suite header and persist across runs. They're recomputed every time you view results, so you can add them without re-running evaluations.
+They're defined at the suite level via the **Custom Metrics** tab in the Results & Traces view and persist across runs. They're recomputed every time you view results, so you can add them without re-running evaluations.
 
 ---
 

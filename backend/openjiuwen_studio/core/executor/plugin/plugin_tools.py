@@ -12,6 +12,7 @@ from openjiuwen.core.foundation.tool import RestfulApiCard, RestfulApi
 from openjiuwen_studio.core.common.dsl import PluginCodeConfig as DlPluginCodeConfig
 from openjiuwen_studio.core.common.dsl import RestfulApiSchema as DlRestfulApiSchema, Param
 from openjiuwen_studio.core.common.dsl import McpConfig as DlMcpConfig, McpTransport
+from openjiuwen_studio.core.common.mcp_transport_utils import merge_mcp_server_url_query_params
 
 from openjiuwen_studio.core.executor.component.component_impl.code_comp import CodeComponent
 from openjiuwen_studio.core.common.exceptions import JiuWenExecuteException
@@ -298,6 +299,8 @@ class PluginMcpTool(Tool):
                 mcp_params.setdefault("env", None)
                 mcp_params.setdefault("cwd", os.getcwd())
                 mcp_params.setdefault("encoding_error_handler", "strict")
+                server_url = conf.url or ""
+                url_auth_query: Dict[str, str] = {}
             elif not conf.url:
                 raise JiuWenExecuteException(
                     StatusCode.PLUGIN_CODE_TOOL_INVOKE_ERROR.code,
@@ -305,13 +308,16 @@ class PluginMcpTool(Tool):
                         msg=f"MCP {conf.transport} transport requires 'url'"),
                     node_id=conf.tool_id
                 )
+            else:
+                server_url, url_auth_query = merge_mcp_server_url_query_params(conf.url, None)
 
             server_config = McpServerConfig(
                 server_name=server_name,
-                server_path=conf.url or "",
+                server_path=(conf.url or "") if conf.transport == McpTransport.STDIO else server_url,
                 client_type=client_type,
                 params=mcp_params,
                 auth_headers=auth_headers or {},
+                auth_query_params=url_auth_query if conf.transport != McpTransport.STDIO else {},
             )
 
             if conf.transport == McpTransport.STDIO:

@@ -118,11 +118,36 @@ export class DeepsearchSSEHandler {
   private conversationId: string;
   private messageFindCache: Map<string, Message | null>;
 
+  // 按 conversationId 分组，跨 handler 实例持久化，仅在此模块内使用
+  private static readonly deferredStatuses = new Map<
+    string,
+    Map<number, { messageItemsId: string; childMessageId: string; status: TaskStatus }>
+  >();
+
   constructor(store: StoreDependencies, streamCache: StreamCache, conversationId: string) {
     this.store = store;
     this.streamCache = streamCache;
     this.conversationId = conversationId;
     this.messageFindCache = new Map();
+  }
+
+  private setDeferredSubReporterStatus(sectionIdx: number, messageItemsId: string, childMessageId: string, status: TaskStatus): void {
+    if (!DeepsearchSSEHandler.deferredStatuses.has(this.conversationId)) {
+      DeepsearchSSEHandler.deferredStatuses.set(this.conversationId, new Map());
+    }
+    DeepsearchSSEHandler.deferredStatuses.get(this.conversationId)!.set(sectionIdx, { messageItemsId, childMessageId, status });
+  }
+
+  private getDeferredSubReporterStatus(sectionIdx: number): { messageItemsId: string; childMessageId: string; status: TaskStatus } | null {
+    return DeepsearchSSEHandler.deferredStatuses.get(this.conversationId)?.get(sectionIdx) ?? null;
+  }
+
+  private deleteDeferredSubReporterStatus(sectionIdx: number): void {
+    DeepsearchSSEHandler.deferredStatuses.get(this.conversationId)?.delete(sectionIdx);
+  }
+
+  private clearDeferredSubReporterStatuses(): void {
+    DeepsearchSSEHandler.deferredStatuses.delete(this.conversationId);
   }
 
   /**
@@ -670,11 +695,12 @@ export class DeepsearchSSEHandler {
         if (childMessages.length > 0) {
           const lastChild = childMessages[childMessages.length - 1];
           if (lastChild) {
+            // 先更新内容并停止流式动画，status 延迟到 SECTION_END 时统一更新
             updateMessage(lastMessageItems.id, lastChild.id, {
               content: cachedContent,
-              status: TaskStatus.COMPLETED,
               isStreaming: false,
             });
+            this.setDeferredSubReporterStatus(sectionIdx, lastMessageItems.id, lastChild.id, TaskStatus.COMPLETED);
           }
         }
       }
@@ -952,14 +978,14 @@ export class DeepsearchSSEHandler {
 
       // 4. 判断是创建还是更新：检查最后一个 child 是否是 REPORT 类型
       if (lastChild && lastChild.type === MessageType.REPORT) {
-        // 情况A: 最后一个 child 是 REPORT - 更新现有消息
+        // 情况A: 最后一个 child 是 REPORT - 更新现有消息，status更新 延迟到 SECTION_END
         updateMessage(lastMessageItems.id, lastChild.id, {
           content: sseData.content,
           isStreaming: false,
-          status: TaskStatus.FAILED,
         });
+        this.setDeferredSubReporterStatus(sectionIdx, lastMessageItems.id, lastChild.id, TaskStatus.FAILED);
       } else {
-        // 情况B: 最后一个 child 不是 REPORT 或不存在 - 创建新消息
+        // 情况B: 最后一个 child 不是 REPORT 或不存在 - 创建新消息，status 延迟到 SECTION_END
         // const subTitle = `${i18n.t('deepResearch.handler.chapterReport')}: ${sectionTask.title}`;
         const subTitle = `${sectionTask.title}`;
         const newReport = this.store.addMessageAsChild(
@@ -973,8 +999,8 @@ export class DeepsearchSSEHandler {
 
         updateMessage(lastMessageItems.id, newReport.id, {
           isStreaming: false,
-          status: TaskStatus.FAILED,
         });
+        this.setDeferredSubReporterStatus(sectionIdx, lastMessageItems.id, newReport.id, TaskStatus.FAILED);
       }
 
       // 5. 递归更新倒数第二个 child message（task_x_(N-1)_0_0）
@@ -1010,6 +1036,15 @@ export class DeepsearchSSEHandler {
         );
 
         if (sectionTask) {
+          // 先将延迟的子报告状态落地，确保后续读取 lastChildMessage.status 时已是最终态
+          const deferred = this.getDeferredSubReporterStatus(sectionIdx);
+          if (deferred) {
+            updateMessage(deferred.messageItemsId, deferred.childMessageId, {
+              status: deferred.status,
+            });
+            this.deleteDeferredSubReporterStatus(sectionIdx);
+          }
+
           // 1. 根据 sectionTask 的最后一个子 Message 的状态来更新 sectionTask
           const sectionChildren = this.store.getChildMessages(sectionTask.id);
           const lastChildMessage = sectionChildren.length > 0 ? sectionChildren[sectionChildren.length - 1] : null;
@@ -1272,7 +1307,10 @@ export class DeepsearchSSEHandler {
           }
         }
 
-        // 4. 更新整个 MessageItems 的状态为 COMPLETED
+        // 4. 清理所有尚未 flush 的 deferred sub-reporter 状态
+        this.clearDeferredSubReporterStatuses();
+
+        // 5. 更新整个 MessageItems 的状态为 COMPLETED
         updateMessageItems(lastMessageItems.id, {
           status: TaskStatus.COMPLETED,
         });

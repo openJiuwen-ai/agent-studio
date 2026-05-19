@@ -420,7 +420,12 @@ async def import_template(
     _ = check_user_space(request.space_id, current_user)
     
     # 构建 llm_config（模板导入只需要 general 模型配置）
-    model_config = get_model_configs(request.model_config_id, request.space_id)
+    model_config = get_model_configs(
+        DeepSearchModelConfigQuery(
+            general_model_id=request.model_config_id,
+            space_id=request.space_id,
+        )
+    )
 
     # 使用 request.model_dump() 保留前端传递的所有字段（除了 model_config_id）
     payload = request.model_dump(exclude={'model_config_id'})

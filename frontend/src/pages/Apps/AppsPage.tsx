@@ -55,34 +55,29 @@ const DeepSearchRunSummary = lazy(() => import('./components/DeepSearchExplorer/
 // 在 .env 中设置 VITE_ENABLE_SSE_DEBUG=true 来启用
 const ENABLE_SSE_DEBUG = import.meta.env.VITE_ENABLE_SSE_DEBUG === 'true'
 
-// AI 改写操作标签映射
-const REWRITE_ACTION_LABELS: Record<string, string> = {
-  polish: '润色',
-  expand: '扩写',
-  shorten: '缩写',
-  supplementary_search: '补充搜索',
+const REWRITE_ACTION_LABEL_KEYS: Record<string, string> = {
+  polish: 'apps.report.aiPolish',
+  expand: 'apps.report.aiExpand',
+  shorten: 'apps.report.aiShrink',
+  supplementary_search: 'apps.report.aiSupplementarySearch',
 }
 
-const SUPPLEMENTARY_SEARCH_SCOPE_LABELS: Record<string, string> = {
-  selected_only: '仅改选中',
-  selected_and_related: '智能联改',
+const SUPPLEMENTARY_SEARCH_SCOPE_LABEL_KEYS: Record<string, string> = {
+  selected_only: 'apps.report.supplementarySearch.selectedOnly',
+  selected_and_related: 'apps.report.supplementarySearch.selectedAndRelated',
 }
 
-/**
- * Build DeepSearch payload fields for search-mode runs.
- * The returned object is sent to Studio backend /api/v1/agent/deepsearch/runs.
- */
-const buildRewriteUserMessage = (action: string, selectedText: string, userInstruction?: string, scope?: string): string => {
-  let actionLabel = REWRITE_ACTION_LABELS[action] || action
-  if (action === 'supplementary_search' && scope && SUPPLEMENTARY_SEARCH_SCOPE_LABELS[scope]) {
-    actionLabel = `${actionLabel}（${SUPPLEMENTARY_SEARCH_SCOPE_LABELS[scope]}）`
+const buildRewriteUserMessage = (t: (key: string, options?: Record<string, unknown>) => string, action: string, selectedText: string, userInstruction?: string, scope?: string): string => {
+  let actionLabel = REWRITE_ACTION_LABEL_KEYS[action] ? t(REWRITE_ACTION_LABEL_KEYS[action]) : action
+  if (action === 'supplementary_search' && scope && SUPPLEMENTARY_SEARCH_SCOPE_LABEL_KEYS[scope]) {
+    actionLabel = `${actionLabel}（${t(SUPPLEMENTARY_SEARCH_SCOPE_LABEL_KEYS[scope])}）`
   }
   const displayText = selectedText.length > 100
     ? `${selectedText.slice(0, 100)}...`
     : selectedText
   return userInstruction
-    ? `请帮我${actionLabel}这段文字：\n\n"${displayText}"\n\n${userInstruction}`
-    : `请帮我${actionLabel}这段文字：\n\n"${displayText}"`
+    ? t('apps.report.rewriteHelpText', { actionLabel, displayText, userInstruction })
+    : t('apps.report.rewriteHelpTextShort', { actionLabel, displayText })
 }
 
 async function buildDeepSearchBackendConfig(
@@ -1040,13 +1035,13 @@ const AppsPage: React.FC = () => {
     const { action, rewrite_scope, selectedText, startOffset, endOffset, userInstruction, conversationId, onStatusChange, onDelta, onSnapshot, onEnd, onError, silent } = params
 
     const config = toDeepResearchConfig(agentConfigs['deepsearch'])
-    const rewriteSessionUnavailableMessage = '报告对应的改写会话已超时，请重新提问后再尝试改写。'
+    const rewriteSessionUnavailableMessage = t('apps.report.rewriteSessionUnavailable')
     const isSyncAction = action === 'sync'
     
 
     if (config.userFeedbackProcessorEnable === false) {
       onStatusChange?.('error')
-      onError?.('用户反馈优化已关闭，当前报告不可编辑')
+      onError?.(t('apps.report.feedbackProcessorDisabled'))
       return
     }
 
@@ -1084,7 +1079,7 @@ const AppsPage: React.FC = () => {
     }
 
     if (!token) {
-      onError?.('无法获取认证信息，请重新登录')
+      onError?.(t('apps.errors.unableToGetAuthToken'))
       return
     }
 
@@ -1122,7 +1117,7 @@ const AppsPage: React.FC = () => {
     const { originalRemainingRewriteRounds, originalMaxRewriteRounds } = getOriginalRewriteRoundContext()
 
     if (!silent) {
-      const userMessageContent = buildRewriteUserMessage(action, selectedText, userInstruction, rewrite_scope)
+      const userMessageContent = buildRewriteUserMessage(t, action, selectedText, userInstruction, rewrite_scope)
       addUserMessage(conversationId, userMessageContent)
     }
 
@@ -1399,7 +1394,7 @@ const AppsPage: React.FC = () => {
               state.collectorTaskMessageId,
               MessageType.LINK,
               linkContent,
-              `collector_info_retrieval: ${linkContent.title || '搜索结果'}`
+              `collector_info_retrieval: ${linkContent.title || t('apps.deepSearch.searchResults')}`
             )
             if (childMessage) {
               conversationStore.updateMessage(
@@ -1469,7 +1464,7 @@ const AppsPage: React.FC = () => {
       error: string | undefined,
       options?: RewriteHandleOptions
     ) => {
-      const errorMessage = error || '请求失败'
+      const errorMessage = error || t('apps.errors.requestFailed')
       if (options?.logError) {
         console.error('[handleReportRewrite] Backend error:', errorMessage)
       }
@@ -2337,7 +2332,7 @@ const AppsPage: React.FC = () => {
       // 获取认证 token
       const token = getToken()
       if (!token) {
-        throw new Error('无法获取认证信息，请重新登录')
+        throw new Error(t('apps.errors.unableToGetAuthToken'))
       }
 
       const messageToBackend = options?.backend_message ?? content

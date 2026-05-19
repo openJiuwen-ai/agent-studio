@@ -11,14 +11,6 @@ import { getDefaultSpaceId } from '@/utils/spaceUtils'
 import ExecutionList from '@/components/Executions/ExecutionList'
 import ExecutionWaterfall, { type WaterfallDetail } from '@/components/Executions/ExecutionWaterfall'
 
-const getWorkflowIdForActive = (traceId: string, activeExecutions: ActiveExecution[]): string | null => {
-  if (traceId.startsWith('active-')) {
-    const convId = traceId.replace('active-', '')
-    const exec = activeExecutions.find(e => e.conversation_id === convId)
-    return exec?.workflow_id || null
-  }
-  return null
-}
 
 const ExecutionsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'WORKFLOW' | 'AGENT'>('WORKFLOW')
@@ -34,16 +26,22 @@ const ExecutionsPage: React.FC = () => {
 
   const spaceId = getDefaultSpaceId()
 
-  const loadTraces = useCallback(async () => {
-    setListLoading(true)
+  const loadTraces = useCallback(async (isPolling = false) => {
+    if (!isPolling) setListLoading(true)
     try {
       const res = await ExecutionPanelService.getTraceSummariesBySpace(spaceId, activeTab, 100)
-      setTraces(res?.data || [])
+      const newTraces = res?.data || []
+      setTraces(prev => {
+        if (isPolling && isEqual(prev, newTraces)) {
+          return prev
+        }
+        return newTraces
+      })
     } catch (e) {
       console.error('Failed to load traces:', e)
-      setTraces([])
+      if (!isPolling) setTraces([])
     } finally {
-      setListLoading(false)
+      if (!isPolling) setListLoading(false)
     }
   }, [spaceId, activeTab])
 
@@ -84,12 +82,26 @@ const ExecutionsPage: React.FC = () => {
     if (!isPolling) setDetailLoading(true)
     try {
       if (traceId.startsWith('active-')) {
-        // For in-memory active executions, use the workflow debug endpoint
-        const workflowId = getWorkflowIdForActive(traceId, activeExecutions)
+        const convId = traceId.replace('active-', '')
+        const activeExec = activeExecutions.find(e => e.conversation_id === convId)
+        const workflowId = activeExec?.workflow_id
         if (workflowId) {
-          const res = await ExecutionPanelService.getWorkflowExecutionDebug(spaceId, workflowId)
-          const summary = res?.data?.logSummary || res?.data?.log_summary
-          setSelectedDetail(summary || null)
+          // Prefer the live TraceDetail-backed summary (new system) over the old debug endpoint
+          const matchingTrace = runningTraces.find(rt => rt.business_id === workflowId)
+          if (matchingTrace) {
+            const res = await ExecutionPanelService.getTraceSummaryByTraceId(spaceId, matchingTrace.trace_id)
+            setSelectedDetail(res?.data || null)
+          } else {
+            // Workflow uses old WorkflowExecutionDB system
+            const res = await ExecutionPanelService.getWorkflowExecutionDebug(spaceId, workflowId)
+            const summary = res?.data?.logSummary || res?.data?.log_summary
+            const s = (summary as any)?.status
+            const isTerminal = s === 'finish' || s === 'success' || s === 0 ||
+              s === 'error' || s === 'fail' || s === 'failed' ||
+              s === 'interrupted' || s === 'cancelled'
+            // If the most recent log is a completed execution, the current run hasn't written yet
+            setSelectedDetail(isTerminal ? null : (summary || null))
+          }
         } else {
           setSelectedDetail(null)
         }
@@ -134,6 +146,7 @@ const ExecutionsPage: React.FC = () => {
   useEffect(() => {
     setSelectedTraceId(null)
     setSelectedDetail(null)
+    setTraces([])
     setRunningTraces([])
     loadTraces()
     loadRunningTraces()
@@ -157,9 +170,11 @@ const ExecutionsPage: React.FC = () => {
       if (pollRef.current) clearInterval(pollRef.current)
       loadActiveExecutions()
       loadRunningTraces()
+      loadTraces(true)
       pollRef.current = setInterval(() => {
         loadActiveExecutions()
         loadRunningTraces()
+        loadTraces(true)
       }, 5000)
     }
 
@@ -178,7 +193,7 @@ const ExecutionsPage: React.FC = () => {
       stopPolling()
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [loadActiveExecutions, loadRunningTraces])
+  }, [loadActiveExecutions, loadRunningTraces, loadTraces])
 
   // Load detail when selection changes
   useEffect(() => {
@@ -272,7 +287,7 @@ const ExecutionsPage: React.FC = () => {
         <div className="w-[320px] min-w-[280px] max-w-[400px] border-r border-gray-200 overflow-y-auto bg-white">
           <ExecutionList
             traces={mergedTraces}
-            activeExecutions={activeExecutions}
+            activeExecutions={activeTab === 'WORKFLOW' ? activeExecutions : []}
             selectedTraceId={selectedTraceId}
             onSelect={setSelectedTraceId}
             isLoading={listLoading}

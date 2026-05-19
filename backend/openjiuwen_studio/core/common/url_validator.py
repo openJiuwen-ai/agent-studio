@@ -49,6 +49,12 @@ def validate_plugin_url(url: Optional[str]) -> Optional[str]:
     """
     if not url:
         return url
+
+    # Strip whitespace
+    url = url.strip()
+    if not url:
+        return url
+
     try:
         parsed = urlparse(url)
     except Exception as e:
@@ -56,11 +62,19 @@ def validate_plugin_url(url: Optional[str]) -> Optional[str]:
 
     # 1. 协议校验
     if not parsed.scheme:
-        raise ValueError(f"URL must include a scheme (e.g. https://); got: {url}")
+        raise ValueError(
+            f"URL must include a scheme. "
+            f"Did you mean 'https://{url}'? "
+            f"Received: {url}"
+        )
 
     scheme_lower = parsed.scheme.lower()
     if scheme_lower not in ALLOWED_SCHEMES:
-        raise ValueError(f"Scheme '{scheme_lower}' not allowed. Permitted: {ALLOWED_SCHEMES}")
+        raise ValueError(
+            f"URL scheme '{scheme_lower}' is not allowed. "
+            f"Only HTTP and HTTPS are permitted. "
+            f"Received: {url}"
+        )
 
     # 2. 获取主机名
     hostname = parsed.hostname

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -13,7 +13,7 @@ import {
   useTriggerDetail, useCreateTrigger, useUpdateTrigger, useActivateTrigger,
   useAgents, useWorkflows,
 } from '@test-agentstudio/api-client'
-import { TriggerService } from '@test-agentstudio/api-client'
+import { TriggerService, AgentService, WorkflowService } from '@test-agentstudio/api-client'
 import CronConfigForm from './components/CronConfigForm'
 import WebhookConfigForm from './components/WebhookConfigForm'
 import PollingConfigForm from './components/PollingConfigForm'
@@ -45,11 +45,18 @@ const TriggerFormPage: React.FC = () => {
   const [pollUrl, setPollUrl] = useState('')
   const [pollIntervalSeconds, setPollIntervalSeconds] = useState(300)
 
+  const [availableVersions, setAvailableVersions] = useState<string[]>(['draft'])
+  const [isLoadingVersions, setIsLoadingVersions] = useState(false)
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Tracks whether the form has been initialised from server data (edit mode).
+  // Prevents a background refetch from resetting user edits.
+  const formInitialised = useRef(false)
+
   // ── Data fetching ──────────────────────────────────────────────────────────
-  const { data: detailData, isLoading: isLoadingDetail, isFetching: isFetchingDetail } = useTriggerDetail(spaceId, id || '')
+  const { data: detailData, isLoading: isLoadingDetail } = useTriggerDetail(spaceId, id || '')
 
   const { data: agentsData } = useAgents({ space_id: spaceId, page: 1, page_size: 100 })
   const { data: workflowsData } = useWorkflows({ space_id: spaceId, page: 1, page_size: 100 })
@@ -67,8 +74,13 @@ const TriggerFormPage: React.FC = () => {
   // ── Populate form for edit mode ─────────────────────────────────────────────
   const trigger = (detailData?.data as any)
 
+  // Populate form once when detail data arrives for edit mode.
+  // Using a ref guard so that subsequent background refetches do NOT overwrite
+  // changes the user has already made in the form.
   useEffect(() => {
-    if (!trigger) return
+    if (!trigger || formInitialised.current) return
+    formInitialised.current = true
+
     setName(trigger.name || '')
     setDescription(trigger.description || '')
     setTriggerType(trigger.trigger_type || 'cron')
@@ -90,6 +102,49 @@ const TriggerFormPage: React.FC = () => {
     }
   }, [trigger])
 
+  // Fetch available versions whenever the selected target changes.
+  // 'draft' is always the first option; published versions follow.
+  useEffect(() => {
+    if (!targetId || !spaceId) {
+      setAvailableVersions(['draft'])
+      return
+    }
+
+    let cancelled = false
+    setIsLoadingVersions(true)
+
+    const fetchVersions = async () => {
+      try {
+        let versions: string[] = ['draft']
+        if (targetType === 'agent') {
+          const res = await AgentService.getAgentVersionList({ agent_id: targetId, space_id: spaceId })
+          if (!cancelled && res.code === 200) {
+            const agentVersions = (res.data as any)?.versions || []
+            const published = agentVersions
+              .filter((v: any) => v.published_flag && v.published_flag !== 'false')
+              .map((v: any) => v.agent_version as string)
+            versions = ['draft', ...published]
+          }
+        } else {
+          const res = await WorkflowService.getWorkflowVersionList({ workflow_id: targetId, space_id: spaceId })
+          if (!cancelled && res.code === 200) {
+            const wfVersions = (res.data as any)?.versions || []
+            const published = wfVersions.map((v: any) => v.workflow_version as string)
+            versions = ['draft', ...published]
+          }
+        }
+        if (!cancelled) setAvailableVersions(versions)
+      } catch {
+        if (!cancelled) setAvailableVersions(['draft'])
+      } finally {
+        if (!cancelled) setIsLoadingVersions(false)
+      }
+    }
+
+    fetchVersions()
+    return () => { cancelled = true }
+  }, [targetId, targetType, spaceId])
+
   // ── Save logic ─────────────────────────────────────────────────────────────
   const buildRequest = (): CreateTriggerRequest => {
     const input_payload = inputPayloadRows.reduce(
@@ -108,7 +163,10 @@ const TriggerFormPage: React.FC = () => {
       target_type: targetType,
       target_id: targetId,
       target_version: targetVersion || 'draft',
-      input_payload: Object.keys(input_payload).length > 0 ? input_payload : undefined,
+        // In edit mode always send the dict (even if empty {}) so the backend
+      // "is not None" guard fires and clears the stored payload.
+      // In create mode undefined is fine — the backend defaults to null.
+      input_payload: Object.keys(input_payload).length > 0 ? input_payload : (isEditMode ? {} : undefined),
     }
 
     if (triggerType === 'cron') {
@@ -158,7 +216,7 @@ const TriggerFormPage: React.FC = () => {
   const updatePayloadRow = (idx: number, field: 'key' | 'value', value: string) =>
     setInputPayloadRows(prev => prev.map((row, i) => (i === idx ? { ...row, [field]: value } : row)))
 
-  if (isEditMode && (isLoadingDetail || isFetchingDetail)) {
+  if (isEditMode && isLoadingDetail) {
     return (
       <div className="flex justify-center py-16">
         <CircularProgress />
@@ -209,7 +267,7 @@ const TriggerFormPage: React.FC = () => {
           <RadioGroup
             row
             value={targetType}
-            onChange={e => { setTargetType(e.target.value as TargetType); setTargetId('') }}
+            onChange={e => { setTargetType(e.target.value as TargetType); setTargetId(''); setTargetVersion('draft') }}
           >
             <FormControlLabel value="agent" control={<Radio />} label="Agent" />
             <FormControlLabel value="workflow" control={<Radio />} label="Workflow" />
@@ -221,7 +279,7 @@ const TriggerFormPage: React.FC = () => {
           <InputLabel>{t('triggers.form.target', 'Target')}</InputLabel>
           <Select
             value={targetId}
-            onChange={e => setTargetId(e.target.value)}
+            onChange={e => { setTargetId(e.target.value); setTargetVersion('draft') }}
             label={t('triggers.form.target', 'Target')}
           >
             {targetList.map((item: any) => (
@@ -232,14 +290,22 @@ const TriggerFormPage: React.FC = () => {
           </Select>
         </FormControl>
 
-        <TextField
-          fullWidth
-          label={t('triggers.form.targetVersion', 'Version')}
-          value={targetVersion}
-          onChange={e => setTargetVersion(e.target.value)}
-          helperText={t('triggers.form.targetVersionHint', "Use 'draft' for the latest unpublished version")}
-          size="small"
-        />
+        <FormControl fullWidth size="small" disabled={!targetId || isLoadingVersions}>
+          <InputLabel>{t('triggers.form.targetVersion', 'Version')}</InputLabel>
+          <Select
+            value={availableVersions.includes(targetVersion) ? targetVersion : (targetVersion || 'draft')}
+            onChange={e => setTargetVersion(e.target.value)}
+            label={t('triggers.form.targetVersion', 'Version')}
+          >
+            {/* Ensure the currently-saved version always appears even if not in the fetched list */}
+            {targetVersion && !availableVersions.includes(targetVersion) && (
+              <MenuItem value={targetVersion}>{targetVersion}</MenuItem>
+            )}
+            {availableVersions.map(v => (
+              <MenuItem key={v} value={v}>{v}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
         {/* Input Payload */}
         <div>

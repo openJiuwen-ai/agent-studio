@@ -18,15 +18,14 @@ async def handle_agent_chat_message(user_id: str, text: str, say) -> None:
     if err:
         return
     try:
-        events = await asyncio.get_event_loop().run_in_executor(
+        events, conversation_id = await asyncio.get_event_loop().run_in_executor(
             None, lambda: execute_agent(client, agent_id, text, conv_id)
         )
-        reply, new_conv_id, error = parse_agent_response(events)
+        ud["agent_chat"]["conversation_id"] = conversation_id
+        reply, _, error = parse_agent_response(events, conversation_id)
     except Exception as exc:
         await say(f"Error: {exc}")
         return
-    if new_conv_id:
-        ud["agent_chat"]["conversation_id"] = new_conv_id
     if error:
         await say(f"Error: {error}")
     else:

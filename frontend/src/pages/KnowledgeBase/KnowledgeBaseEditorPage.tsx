@@ -1072,7 +1072,7 @@ const KnowledgeBaseEditorPage: React.FC = () => {
                 <Upload className="w-4 h-4 mr-2" />
                 {isWeblink ? t('knowledgeBases.addWeblink.addButton') || '添加链接' : t('knowledgeBases.settings.addDocument')}
               </button>
-              {!isWeblink && !(knowledgeBase.ds_kb_id && knowledgeBase.id === knowledgeBase.ds_kb_id) && (
+              {!(knowledgeBase.ds_kb_id && knowledgeBase.id === knowledgeBase.ds_kb_id) && (
                 <button
                   onClick={() => setShowSyncDialog(true)}
                   className="px-4 py-2 border border-blue-500 text-blue-600 rounded-lg hover:bg-blue-50 flex items-center"
@@ -1177,7 +1177,7 @@ const KnowledgeBaseEditorPage: React.FC = () => {
                       <Upload className="w-4 h-4 mr-2" />
                       {isWeblink ? t('knowledgeBases.editor.addWeblink') : t('knowledgeBases.editor.addDocument')}
                     </button>
-                    {!isWeblink && !(knowledgeBase.ds_kb_id && knowledgeBase.id === knowledgeBase.ds_kb_id) && (
+                    {!(knowledgeBase.ds_kb_id && knowledgeBase.id === knowledgeBase.ds_kb_id) && (
                       <button
                         onClick={() => setShowSyncDialog(true)}
                         className="px-4 py-2 border border-blue-500 text-blue-600 rounded-lg hover:bg-blue-50 flex items-center"

@@ -17,7 +17,7 @@ async def agent_execute_handler(interaction: discord.Interaction, agent_id: str,
         return
     try:
         await interaction.followup.send("🤖 Sending message to agent...")
-        events = execute_agent(client, agent_id, message)
+        events, _ = execute_agent(client, agent_id, message)
         text_out, _, error = parse_agent_response(events)
         if error:
             await interaction.followup.send(f"❌ Agent error: {error}")

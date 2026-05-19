@@ -17,7 +17,7 @@ def handle_run(ack, respond, command):
         return
     try:
         respond("🤖 Sending message to agent...")
-        events = execute_agent(client, agent_id, message)
+        events, _ = execute_agent(client, agent_id, message)
         text_out, _, error = parse_agent_response(events)
         if error:
             respond(f"❌ Agent error: {error}")

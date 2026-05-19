@@ -835,6 +835,15 @@
       "renderFailed": "图表渲染失败",
       "viewCode": "查看代码"
     },
+    "conversation": {
+      "linkMessage": {
+        "unknownLink": "未知链接",
+        "searchQuery": "搜索词",
+        "search": "搜索",
+        "web": "网页",
+        "knowledgeBase": "知识库"
+      }
+    },
     "deepSearchExplorer": {
       "title": "深度搜索探索器",
       "tabs": {
@@ -972,7 +981,20 @@
         "thinking": "正在思考...",
         "writing": "正在撰写...",
         "rewriteFailed": "改写失败",
-        "recoveryNeeded": "需要恢复"
+        "recoveryNeeded": "需要恢复",
+        "rewriteHelpText": "请帮我{{actionLabel}}这段文字：\n\n\"{{displayText}}\"\n\n{{userInstruction}}",
+        "rewriteHelpTextShort": "请帮我{{actionLabel}}这段文字：\n\n\"{{displayText}}\"",
+        "rewriteSessionUnavailable": "报告对应的改写会话已超时，请重新提问后再尝试改写。",
+        "feedbackProcessorDisabled": "用户反馈优化已关闭，当前报告不可编辑",
+        "syncSynced": "已同步",
+        "syncPending": "待同步",
+        "syncing": "同步中",
+        "syncFailed": "同步失败",
+        "undo": "撤销",
+        "redo": "重做",
+        "manualSync": "手动同步报告",
+        "sync": "同步",
+        "rewriteRoundsExhausted": "改写次数已用完，无法继续改写"
       },
     "user": {
       "defaultUsername": "用户"
@@ -1000,6 +1022,7 @@
         "generalDesc": "交互、规划等基础设置",
         "searchDesc": "联网增强引擎与结果设置",
         "templateDesc": "报告模板管理",
+        "modelDesc": "模型配置管理",
         "needsConfig": "需配置"
       },
       "model": {
@@ -1041,7 +1064,12 @@
         "clear": "清除选择",
         "test": {
           "success": "模型 {{modelName}} 测试成功",
-          "failed": "模型 {{modelName}} 测试失败，模型不可用"
+          "failed": "模型 {{modelName}} 测试失败，模型不可用",
+          "missingSpaceId": "缺少 spaceId，无法测试模型",
+          "prompt": "你好",
+          "validationPassed": "模型可用性验证通过",
+          "unavailable": "模型不可用：{{error}}",
+          "testFailed": "模型测试失败"
         },
         "planningModel": {
           "title": "规划模型",
@@ -1222,8 +1250,10 @@
           "testFailed": "测试失败",
           "testResult": "测试结果",
           "noResults": "测试成功，但未找到搜索结果",
-          "networkError": "网络连接失败，请检查网络设置后重试"
+          "networkError": "网络连接失败，请检查网络设置后重试",
+          "resultCountUnit": "条"
         },
+        "toggleStatusFailed": "切换状态失败",
         "includeDomains": "限定搜索来源",
         "excludeDomains": "排除搜索来源",
         "includeDomainsPlaceholder": "返回的搜索结果只包含来自指定域名的页面",
@@ -1277,6 +1307,7 @@
         "uploading": "上传中...",
         "uploadError": "缺少必要的配置信息",
         "uploadFailed": "上传模板失败",
+        "uploadFailedRetry": "上传模板失败，请重试",
         "delete": "删除模板",
         "deleteConfirm": "确定要删除模板\"{{name}}\"吗？此操作无法撤销。",
         "confirmDelete": "删除模板",
@@ -1333,7 +1364,8 @@
       "uploadTemplateFailed": "上传模板失败",
       "deleteTemplateFailed": "删除模板失败",
       "requestTimeout": "请求超时，请稍后重试",
-      "networkError": "网络连接失败，请检查网络"
+      "networkError": "网络连接失败，请检查网络",
+      "requestFailed": "请求失败"
     },
     "deepSearch": {
       "informationCollection": "任务{{sectionId}}.{{planIndex}}",
@@ -1392,6 +1424,7 @@
         "viewMindMap": "思维链",
         "noData": "暂无思维链数据",
         "relayout": "重新布局",
+        "nodeStats": "节点: {{nodes}} | 边: {{edges}}",
         "researchTopic": "研究主题",
         "researchCompleted": "研究完成",
         "finalReport": {
@@ -1493,7 +1526,31 @@
         "noDebugReports": "暂无调试报告",
         "noDebugReportsDesc": "导入 markdown 报告文件进行查看",
         "finalReport": "最终报告",
-        "tip": "💡 提示：回放时会创建新的对话。启用 Mock 模式后，改写操作将用录制数据响应。"
+        "tip": "💡 提示：回放时会创建新的对话。启用 Mock 模式后，改写操作将用录制数据响应。",
+        "playbackConversation": "回放对话",
+        "showPanel": "显示回放面板",
+        "hidePanel": "隐藏回放面板",
+        "interactionCount": "{{count}} 次交互",
+        "interaction": "交互",
+        "interactionTrack": "交互轨迹",
+        "hitlOutlineCount": "{{count}} 次 HITL / 大纲交互",
+        "noInteractionDesc": "这条录制里没有可回放的 HITL / 大纲交互。可能是旧版本录制数据，或者该会话本身没有发生交互。",
+        "afterMainFlowEvent": "在第 {{count}} 个主流程事件后",
+        "outlineInteraction": "大纲交互",
+        "acceptedContinue": "接受继续",
+        "reviseComment": "修改意见",
+        "mismatchAction": "操作类型",
+        "mismatchSelectedText": "选中文本",
+        "mismatchOffset": "文本位置",
+        "mismatchUserInstruction": "补充要求",
+        "mismatchInconsistent": "不一致",
+        "mismatchReason": "未命中原因",
+        "sequenceHintDesc": "需要先回放更早的一次改写。当前等待第 {{expectedOrder}} 次改写，你这次触发的更像第 {{attemptedOrder}} 次。",
+        "closestAction": "最接近的操作",
+        "closestOffset": "最接近的位置",
+        "closestSelectedText": "最接近的选中文本",
+        "closestUserInstruction": "最接近的补充要求",
+        "empty": "空"
       }
     }
   },
@@ -3030,8 +3087,8 @@
         "urlPlaceholder": "输入MCP服务器地址（例如：http://localhost:3000/sse）",
         "urlHelper": "请提供完整的MCP服务器地址，包含协议(http) ({{current}}/{{max}}字节)",
         "openApiFileLabel": "OpenAPI规范文件",
-        "openApiFilePlaceholder": "输入OpenAPI规范文件路径（例如：/path/to/openapi.yaml）",
-        "openApiFileHelper": "提供OpenAPI规范文件（YAML或JSON）的文件系统路径",
+        "openApiFilePlaceholder": "文件路径或URL（例如：/path/to/openapi.yaml 或 https://api.com/openapi.json）",
+        "openApiFileHelper": "提供本地文件路径（/path/to/openapi.yaml, ./openapi.yaml）或远程URL（https://api.com/openapi.json）",
         "stdioPathLabel": "STDIO服务器可执行路径",
         "stdioPathPlaceholder": "输入STDIO服务器可执行文件路径（例如：/usr/local/bin/mcp-server）",
         "stdioPathHelper": "提供STDIO服务器可执行文件或脚本的文件系统路径",

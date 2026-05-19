@@ -37,6 +37,7 @@ from openjiuwen_studio.models import (
     EvaluationTaskResultDB,
     KnowledgeBaseDB,
     KnowledgeBaseDocumentDB,
+    KnowledgeBaseWeblinkDB,
     MemoryBaseDB,
     ModelConfig,
     ModelUsageLog,
@@ -114,6 +115,7 @@ async def lifespan_func(app: FastAPI):
         # Knowledge Base tables
         KnowledgeBaseDB.__table__,
         KnowledgeBaseDocumentDB.__table__,
+        KnowledgeBaseWeblinkDB.__table__,
         # System model tables
         SystemLLMModelDB.__table__,
         SystemEmbeddingModelDB.__table__,

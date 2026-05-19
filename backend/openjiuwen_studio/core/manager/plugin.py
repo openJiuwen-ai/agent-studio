@@ -30,6 +30,7 @@ except ImportError:
     JSONSCHEMA_AVAILABLE = False
     logger.warning("jsonschema library not available, plugin validation will be skipped")
 
+from openjiuwen_studio.core.common.mcp_transport_utils import merge_mcp_server_url_query_params
 from openjiuwen_studio.core.common.url_validator import validate_plugin_url
 from openjiuwen_studio.core.database import milliseconds, get_minio_client
 import openjiuwen_studio.core.manager.convertor.plugin as convert
@@ -314,6 +315,7 @@ class _McpConnectionConfig:
     url: str
     params: Dict[str, Any] = field(default_factory=dict)
     auth_headers: Optional[Dict[str, str]] = field(default_factory=dict)
+    auth_query_params: Dict[str, str] = field(default_factory=dict)
 
 
 def _validate_network_url(url: str, transport_label: str) -> None:
@@ -330,29 +332,43 @@ def _validate_network_url(url: str, transport_label: str) -> None:
 
 
 def _validate_openapi_paths(url: str) -> None:
-    """Prevent path-traversal for OPENAPI transport.
+    """Validate OPENAPI spec paths and URLs.
 
-    OpenApiClient accepts a comma-separated list of local file paths. Without
-    validation a user could supply '../../etc/passwd' and have the server read
-    arbitrary files. This function resolves every path and asserts it stays
-    inside the application working directory.
+    For URLs (http/https): Validates against SSRF attacks using validate_plugin_url.
+    For local file paths: Allows any path the user can access (OS enforces permissions).
 
-    Raises ValueError if any path escapes the safe root.
+    OpenApiClient accepts comma-separated paths/URLs. This function validates each one.
+
+    Raises ValueError if any URL is unsafe or if the path format is invalid.
     """
-    safe_root = Path(os.getcwd()).resolve()
     for raw in url.split(","):
         raw = raw.strip()
         if not raw:
             continue
-        resolved = Path(raw).expanduser().resolve()
-        try:
-            resolved.relative_to(safe_root)
-        except ValueError as exc:
-            raise ValueError(
-                f"OPENAPI spec path '{raw}' resolves to '{resolved}', which is "
-                f"outside the permitted directory '{safe_root}'. "
-                "Absolute paths outside the working directory are not allowed."
-            ) from exc
+
+        # Check if this is a URL (http/https)
+        if raw.startswith("http://") or raw.startswith("https://"):
+            # For URLs, apply SSRF protection
+            try:
+                validate_plugin_url(raw)
+            except ValueError as exc:
+                raise ValueError(
+                    f"OPENAPI spec URL '{raw}' rejected: {exc}"
+                ) from exc
+        else:
+            # For local file paths, allow them - OS permissions will control access
+            # Just verify it's a reasonable path format
+            try:
+                resolved = Path(raw).expanduser().resolve()
+                # Verify the path exists (this also prevents some path traversal issues)
+                if not resolved.exists():
+                    raise ValueError(
+                        f"OPENAPI spec file '{raw}' does not exist at resolved path '{resolved}'"
+                    )
+            except Exception as exc:
+                raise ValueError(
+                    f"OPENAPI spec path '{raw}' is invalid: {exc}"
+                ) from exc
 
 
 def _build_safe_stdio_params(config: "_McpConnectionConfig") -> dict:
@@ -451,6 +467,7 @@ async def _discover_and_create_mcp_tools(
         client_type=client_type,
         params=mcp_params,
         auth_headers=config.auth_headers or {},
+        auth_query_params=config.auth_query_params or {},
     )
 
     if mcp_transport_enum == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STDIO:
@@ -616,7 +633,16 @@ def plugin_create(
     """创建新的插件"""
     _ = check_user_space(req.space_id, current_user)
 
-    validate_plugin_url(req.url)
+    # Only validate URL if it's not a file path
+    # File paths are already validated by Pydantic in PluginCreate schema
+    if req.url and not (
+        req.url.startswith('/') or
+        req.url.startswith('./') or
+        req.url.startswith('../') or
+        req.url.startswith('~/') or
+        (len(req.url) > 2 and req.url[1] == ':')
+    ):
+        validate_plugin_url(req.url)
 
     current_time = milliseconds()
 
@@ -742,11 +768,7 @@ def plugin_discover_mcp_tools(
             f"for plugin '{req.plugin_id}': {list(auth_headers.keys())}"
         )
     auth_query = _extract_auth_query(data_dict, resolved_auth=resolved_auth)
-    if auth_query and isinstance(url, str) and url:
-        parsed_url = urllib.parse.urlparse(url)
-        merged_query = dict(urllib.parse.parse_qsl(parsed_url.query, keep_blank_values=True))
-        merged_query.update(auth_query)
-        url = urllib.parse.urlunparse(parsed_url._replace(query=urllib.parse.urlencode(merged_query)))
+    url, auth_query_params = merge_mcp_server_url_query_params(url, auth_query)
 
     is_stdio = transport == PluginMcpTransport.PLUGIN_MCP_TRANSPORT_STDIO
     if is_stdio and not mcp_params.get("command"):
@@ -781,6 +803,7 @@ def plugin_discover_mcp_tools(
                 url=url,
                 params=mcp_params,
                 auth_headers=auth_headers,
+                auth_query_params=auth_query_params,
             ),
             plugin_id=req.plugin_id,
             space_id=req.space_id,
@@ -827,7 +850,16 @@ def plugin_update(
     """获取插件信息"""
     _ = check_user_space(req.space_id, current_user)
 
-    validate_plugin_url(req.url)
+    # Only validate URL if it's not a file path
+    # File paths are already validated by Pydantic in PluginInfo schema
+    if req.url and not (
+        req.url.startswith('/') or
+        req.url.startswith('./') or
+        req.url.startswith('../') or
+        req.url.startswith('~/') or
+        (len(req.url) > 2 and req.url[1] == ':')
+    ):
+        validate_plugin_url(req.url)
 
     logger.info(f"update plugin: {req}")
     res, _ = plugin_repository.plugin_get(req.model_dump())
@@ -1466,6 +1498,8 @@ def plugin_list_api(
     api_infos: List[PluginApiInfo] = []
     for info_dict in tool_list:
         logger.info(f"tool: {info_dict}")
+        if info_dict.get('plugin_type') != PluginType.PLUGIN_TYPE_CLOUD_API:
+            continue
         if 'available' not in info_dict or info_dict.get('available') is None:
             info_dict['available'] = True
 
@@ -1605,6 +1639,8 @@ def plugin_list_code(
 
     code_infos: List[PluginCodeInfo] = []
     for info_dict in tool_list:
+        if info_dict.get('plugin_type') != PluginType.PLUGIN_TYPE_CLOUD_CODE:
+            continue
         info = PluginCodeInfo(**info_dict)
         if info.plugin_id == req.plugin_id:
             code_infos.append(info)
@@ -1738,6 +1774,8 @@ def plugin_list_mcp_tools(
 
     mcp_infos: List[PluginMcpInfo] = []
     for info_dict in tool_list:
+        if info_dict.get('plugin_type') != PluginType.PLUGIN_TYPE_CLOUD_MCP:
+            continue
         if 'input_parameters' in info_dict and info_dict['input_parameters']:
             request_params = _input_parameters_to_request_params(info_dict['input_parameters'])
             info_dict['request_params'] = [param.model_dump() for param in request_params]

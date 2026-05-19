@@ -82,12 +82,14 @@ const SidebarNew: React.FC<SidebarProps> = ({
           { name: t('layout.navigation.memoryBase'), href: `${basePath}/memory-bases`, icon: Brain },
         ],
       },
-      {
-        title: 'layout.navigation.section.evaluation',
-        items: [
-          { name: t('layout.navigation.evaluation', 'Evaluation'), href: `${basePath}/evaluation`, icon: FlaskConical },
-        ],
-      },
+      ...(ENV_CONFIG.VITE_ENABLE_EVALUATION
+        ? [{
+            title: 'layout.navigation.section.evaluation',
+            items: [
+              { name: t('layout.navigation.evaluation', 'Evaluation'), href: `${basePath}/evaluation`, icon: FlaskConical },
+            ],
+          }]
+        : []),
     ],
     [t]
   )

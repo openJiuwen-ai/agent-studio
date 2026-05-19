@@ -73,10 +73,58 @@ class PluginCreate(BaseModel):
     args: Optional[List[str]] = Field(default_factory=list, alias="args")
     env: Optional[Dict[str, str]] = Field(None, alias="env")
 
-    @field_validator("url")
+    @staticmethod
+    def _is_local_file_path(value: str) -> bool:
+        """Return True if *value* looks like a local filesystem path rather than a URL."""
+        if value.startswith("/") or value.startswith("./") or value.startswith("../"):
+            return True
+        if value.startswith("~/"):
+            return True
+        return len(value) > 2 and value[1] == ":"  # Windows drive letter, e.g. C:\
+
+    @field_validator("url", mode="after")
     @classmethod
     def check_url_ssrf(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return v
+        # Allow file paths (absolute or relative) for local files
+        # Examples: /Users/..., ./file.yaml, ~/file.yaml, C:\path\file.yaml
+        if isinstance(v, str) and cls._is_local_file_path(v):
+            return v
         return validate_plugin_url(v)
+
+    def model_post_init(self, __context) -> None:
+        """Validate MCP plugin requirements after model initialization"""
+        # Constants matching PluginMcpTransport enum (defined later in this file)
+        openapi = 4
+        sse = 2
+        streamable_http = 3
+
+        # For MCP plugins with OPENAPI transport, URL/path is required
+        if self.plugin_type == PluginType.PLUGIN_TYPE_CLOUD_MCP and self.mcp_transport == openapi:
+            if not self.url:
+                raise ValueError(
+                    "For MCP plugins with OPENAPI transport (external_plugin_type='openai'), "
+                    "a URL or file path is required. Provide either:\n"
+                    "  - URL: 'https://api.openai.com/v1'\n"
+                    "  - Local file: '/path/to/openapi.yaml' or './openapi.yaml'"
+                )
+
+        # For MCP plugins with SSE/HTTP transports, URL is required (not local file)
+        if (self.plugin_type == PluginType.PLUGIN_TYPE_CLOUD_MCP and
+            self.mcp_transport in [sse, streamable_http]):
+            if not self.url:
+                raise ValueError(
+                    f"For MCP plugins with transport type {self.mcp_transport}, "
+                    "a valid URL is required."
+                )
+            # SSE/HTTP transports require URL (not local file path)
+            if isinstance(self.url, str) and not self.url.startswith("http"):
+                raise ValueError(
+                    f"For MCP plugins with transport type {self.mcp_transport}, "
+                    "a URL with http/https scheme is required (local file paths are not supported). "
+                    f"Received: {self.url}"
+                )
 
 
 class PluginId(BaseModel):

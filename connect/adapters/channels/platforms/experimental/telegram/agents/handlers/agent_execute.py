@@ -25,7 +25,7 @@ async def agent_execute_handler(update: Update, context: ContextTypes.DEFAULT_TY
         message = ' '.join(context.args[1:])
 
         await update.message.reply_text("🤖 Sending message to agent...")
-        events = execute_agent(backend_client, agent_id, message)
+        events, _ = execute_agent(backend_client, agent_id, message)
         text, _, error = parse_agent_response(events)
 
         if error:

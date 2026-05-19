@@ -826,6 +826,15 @@
       "renderFailed": "Chart rendering failed",
       "viewCode": "View code"
     },
+    "conversation": {
+      "linkMessage": {
+        "unknownLink": "Unknown Link",
+        "searchQuery": "Search Query",
+        "search": "Search",
+        "web": "Web",
+        "knowledgeBase": "Knowledge Base"
+      }
+    },
     "deepSearchExplorer": {
       "title": "Deep Search Explorer",
       "tabs": {
@@ -963,7 +972,20 @@
         "thinking": "Thinking...",
         "writing": "Writing...",
         "rewriteFailed": "Rewrite failed",
-        "recoveryNeeded": "Recovery needed"
+        "recoveryNeeded": "Recovery needed",
+        "rewriteHelpText": "Please {{actionLabel}} this text:\n\n\"{{displayText}}\"\n\n{{userInstruction}}",
+        "rewriteHelpTextShort": "Please {{actionLabel}} this text:\n\n\"{{displayText}}\"",
+        "rewriteSessionUnavailable": "The rewrite session for this report has expired. Please ask again before attempting to rewrite.",
+        "feedbackProcessorDisabled": "User feedback optimization is disabled. The current report cannot be edited.",
+        "syncSynced": "Synced",
+        "syncPending": "Pending sync",
+        "syncing": "Syncing",
+        "syncFailed": "Sync failed",
+        "undo": "Undo",
+        "redo": "Redo",
+        "manualSync": "Manual sync report",
+        "sync": "Sync",
+        "rewriteRoundsExhausted": "Rewrite rounds exhausted, cannot continue rewriting"
       },
     "user": {
       "defaultUsername": "User"
@@ -991,6 +1013,7 @@
         "generalDesc": "Interaction and planning settings",
         "searchDesc": "Online enhancement engine and result settings",
         "templateDesc": "Report template management",
+        "modelDesc": "Model configuration management",
         "needsConfig": "Needs Config"
       },
       "model": {
@@ -1032,7 +1055,12 @@
         "clear": "Clear",
         "test": {
           "success": "Model {{modelName}} test successful",
-          "failed": "Model {{modelName}} test failed, model unavailable"
+          "failed": "Model {{modelName}} test failed, model unavailable",
+          "missingSpaceId": "Missing spaceId, unable to test model",
+          "prompt": "Hello",
+          "validationPassed": "Model availability validation passed",
+          "unavailable": "Model unavailable: {{error}}",
+          "testFailed": "Model test failed"
         },
         "planningModel": {
           "title": "Planning Model",
@@ -1213,8 +1241,10 @@
           "testFailed": "Test Failed",
           "testResult": "Test Result",
           "noResults": "Test successful, but no search results found",
-          "networkError": "Network connection failed, please check network settings and try again"
+          "networkError": "Network connection failed, please check network settings and try again",
+          "resultCountUnit": " results"
         },
+        "toggleStatusFailed": "Failed to toggle status",
         "includeDomains": "Include Domains",
         "excludeDomains": "Exclude Domains",
         "includeDomainsPlaceholder": "Search results will only include pages from specified domains",
@@ -1268,6 +1298,7 @@
         "uploading": "Uploading...",
         "uploadError": "Missing required configuration information",
         "uploadFailed": "Failed to upload template",
+        "uploadFailedRetry": "Failed to upload template, please try again",
         "delete": "Delete Template",
         "deleteConfirm": "Are you sure you want to delete template \"{{name}}\"? This action cannot be undone.",
         "confirmDelete": "Delete Template",
@@ -1325,7 +1356,8 @@
       "uploadTemplateFailed": "Failed to upload template",
       "deleteTemplateFailed": "Failed to delete template",
       "requestTimeout": "Request timeout, please try again later",
-      "networkError": "Network connection failed, please check your network"
+      "networkError": "Network connection failed, please check your network",
+      "requestFailed": "Request failed"
     },
     "deepSearch": {
       "informationCollection": "Task {{sectionId}}.{{planIndex}}",
@@ -1351,6 +1383,9 @@
       "conversationCancelledTip": "DeepSearch conversation has been manually interrupted",
       "collapseContent": "Collapse Content",
       "expandContent": "Expand Content",
+      "remainingRewriteRounds": "Rewrites remaining",
+      "times": "times",
+      "noRewriteRoundsLeft": "No rewrite rounds left",
       "status": {
         "pending": "Pending",
         "inProgress": "In Progress",
@@ -1381,6 +1416,7 @@
         "viewMindMap": "Mind Map",
         "noData": "No thought chain data",
         "relayout": "Re-layout",
+        "nodeStats": "Nodes: {{nodes}} | Edges: {{edges}}",
         "researchTopic": "Research Topic",
         "researchCompleted": "Research Completed",
         "finalReport": {
@@ -1485,7 +1521,31 @@
         "noDebugReports": "No debug reports available",
         "noDebugReportsDesc": "Import markdown report files to view",
         "finalReport": "Final Report",
-        "tip": "💡 Tip: Playback creates a new conversation. With Mock mode enabled, rewrite operations will be responded with recorded data."
+        "tip": "💡 Tip: Playback creates a new conversation. With Mock mode enabled, rewrite operations will be responded with recorded data.",
+        "playbackConversation": "Playback Conversation",
+        "showPanel": "Show Playback Panel",
+        "hidePanel": "Hide Playback Panel",
+        "interactionCount": "{{count}} interactions",
+        "interaction": "Interaction",
+        "interactionTrack": "Interaction Track",
+        "hitlOutlineCount": "{{count}} HITL / Outline interactions",
+        "noInteractionDesc": "No replayable HITL / Outline interactions in this recording. It may be from an older version or the session had no interactions.",
+        "afterMainFlowEvent": "After the {{count}}th main flow event",
+        "outlineInteraction": "Outline Interaction",
+        "acceptedContinue": "Accepted & Continue",
+        "reviseComment": "Revise Comment",
+        "mismatchAction": "Action Type",
+        "mismatchSelectedText": "Selected Text",
+        "mismatchOffset": "Text Position",
+        "mismatchUserInstruction": "Additional Instruction",
+        "mismatchInconsistent": " Mismatch",
+        "mismatchReason": "Mismatch Reason",
+        "sequenceHintDesc": "An earlier rewrite needs to be replayed first. Currently waiting for rewrite #{{expectedOrder}}, but this trigger resembles rewrite #{{attemptedOrder}}.",
+        "closestAction": "Closest Action",
+        "closestOffset": "Closest Position",
+        "closestSelectedText": "Closest Selected Text",
+        "closestUserInstruction": "Closest Additional Instruction",
+        "empty": "Empty"
       }
     }
   },
@@ -3049,8 +3109,8 @@
         "urlPlaceholder": "Enter the MCP server URL (e.g.: http://localhost:3000/sse)",
         "urlHelper": "Provide the MCP server address including protocol (http) ({{current}}/{{max}} bytes)",
         "openApiFileLabel": "OpenAPI specification file",
-        "openApiFilePlaceholder": "Enter path to OpenAPI spec file (e.g.: /path/to/openapi.yaml)",
-        "openApiFileHelper": "Provide the file system path to your OpenAPI specification file (YAML or JSON)",
+        "openApiFilePlaceholder": "File path or URL (e.g.: /path/to/openapi.yaml or https://api.com/openapi.json)",
+        "openApiFileHelper": "Provide a local file path (/path/to/openapi.yaml, ./openapi.yaml) or remote URL (https://api.com/openapi.json)",
         "stdioPathLabel": "STDIO Server Runnable Path",
         "stdioPathPlaceholder": "Enter path to STDIO server executable (e.g.: /usr/local/bin/mcp-server)",
         "stdioPathHelper": "Provide the file system path to your STDIO server executable or script",

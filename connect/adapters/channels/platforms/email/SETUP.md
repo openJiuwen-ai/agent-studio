@@ -8,6 +8,26 @@ who emails the bot gets their own session and token.
 
 ---
 
+## Quick Start — How Does This Work?
+
+**Simple explanation:**
+
+1. **You create a dedicated email account** (e.g., `mybot@gmail.com`)
+2. **You start the email bot**, giving it the email credentials
+3. **Anyone can email commands to `mybot@gmail.com`**
+4. **The bot reads those emails, processes commands, and replies**
+
+**Example flow:**
+- User creates `aibot@gmail.com` and gets an App Password
+- They start the bot: `python -m connect.adapters.channels.run email imap.gmail.com smtp.gmail.com aibot@gmail.com APP_PASSWORD`
+- **You** send an email to `aibot@gmail.com` with the body: `help`
+- The bot reads your email, processes the `help` command, and sends you a reply
+- You reply to that email with another command (e.g., `agents`), and the bot responds again
+
+**Key point:** You send emails **TO** the bot's email address (`aibot@gmail.com`), and the bot replies **FROM** that same address.
+
+---
+
 ## Prerequisites
 
 - Python 3.9+
@@ -60,7 +80,7 @@ Consult your provider's documentation for IMAP/SMTP hostnames and ports.
 ### Gmail
 
 ```bash
-python -m channels.run email \
+python -m connect.adapters.channels.run email \
   imap.gmail.com smtp.gmail.com \
   bot@gmail.com APP_PASSWORD
 ```
@@ -68,7 +88,7 @@ python -m channels.run email \
 ### Outlook
 
 ```bash
-python -m channels.run email \
+python -m connect.adapters.channels.run email \
   outlook.office365.com smtp-mail.outlook.com \
   bot@outlook.com YOUR_PASSWORD \
   --smtp-port 587
@@ -77,7 +97,7 @@ python -m channels.run email \
 ### With custom backend URL
 
 ```bash
-python -m channels.run email \
+python -m connect.adapters.channels.run email \
   imap.gmail.com smtp.gmail.com \
   bot@gmail.com APP_PASSWORD \
   --backend-url http://my-server:8000
@@ -86,7 +106,7 @@ python -m channels.run email \
 ### With slower polling (reduces IMAP load)
 
 ```bash
-python -m channels.run email \
+python -m connect.adapters.channels.run email \
   imap.gmail.com smtp.gmail.com \
   bot@gmail.com APP_PASSWORD \
   --poll-interval 30
@@ -97,7 +117,7 @@ python -m channels.run email \
 ```bash
 export BACKEND_URL=http://my-server:8000
 export EMAIL_POLL_INTERVAL=30
-python -m channels.run email imap.gmail.com smtp.gmail.com bot@gmail.com APP_PASSWORD
+python -m connect.adapters.channels.run email imap.gmail.com smtp.gmail.com bot@gmail.com APP_PASSWORD
 ```
 
 ---
@@ -120,10 +140,18 @@ python -m channels.run email imap.gmail.com smtp.gmail.com bot@gmail.com APP_PAS
 
 ## How It Works
 
-1. Every `--poll-interval` seconds the bot connects to IMAP and fetches all `UNSEEN` messages from `INBOX`.
-2. The first non-quoted, non-empty line of each email body is treated as the command.
-3. Quoted reply text (lines starting with `>` or reply separators) is ignored — so replying to a bot email with your command works naturally.
-4. The bot replies in the same thread using SMTP with `In-Reply-To` and `References` headers.
+**Email Flow:**
+1. **Users send emails TO the bot's address** (e.g., `aibot@gmail.com`)
+2. **The bot polls its IMAP inbox** every `--poll-interval` seconds for `UNSEEN` messages
+3. **The bot extracts the command** from the first non-quoted, non-empty line of the email body
+4. **The bot processes the command** (login, workflow, agent chat, etc.)
+5. **The bot replies FROM the same address** using SMTP, maintaining the email thread
+
+**Technical Details:**
+- The first non-quoted, non-empty line of each email body is treated as the command
+- Quoted reply text (lines starting with `>` or reply separators) is ignored — so you can reply to a bot email with your next command
+- The bot replies in the same thread using SMTP with `In-Reply-To` and `References` headers
+- Each sender's email address becomes their unique user ID for persistent sessions
 
 ---
 
@@ -147,8 +175,7 @@ Send these as the first line of an email body to the bot's address:
 | `agents` | List all agents |
 | `agents search <query>` | Search agents by keyword |
 | `agent execute <id> <message>` | Send a single message to an agent |
-| `agent start <id>` | Start an interactive chat session |
-| `agent end` | End the current chat session |
+| `agent chat <id>` | Start an interactive chat session |
 
 **Multi-turn flows** (login, workflow parameter collection, agent chat) work by replying to the bot's email. Each reply you send is read as the next input.
 
@@ -179,7 +206,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=/opt/openjiuwen
-ExecStart=python -m channels.run email \
+ExecStart=python -m connect.adapters.channels.run email \
           imap.gmail.com smtp.gmail.com \
           bot@gmail.com APP_PASSWORD \
           --backend-url http://localhost:8000 \

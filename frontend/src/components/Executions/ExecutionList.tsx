@@ -42,6 +42,7 @@ const ExecutionList: React.FC<ExecutionListProps> = React.memo(({
         trace_id: `active-${exec.conversation_id}`,
         business_id: exec.workflow_id,
         business_name: exec.workflow_name,
+        business_version: exec.workflow_version,
         business_type: 'WORKFLOW' as const,
         create_time: exec.start_time
           ? new Date(exec.start_time * 1000).toISOString()
@@ -108,7 +109,7 @@ const ExecutionList: React.FC<ExecutionListProps> = React.memo(({
             `}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-medium text-gray-800 truncate max-w-[180px]" title={trace.business_name || trace.business_id}>
+              <span className="text-sm font-medium text-gray-800 truncate" title={trace.business_name || trace.business_id}>
                 {trace.business_name || trace.business_id.slice(0, 8) + '...'}
               </span>
               <ExecutionStatusBadge status={trace.status} />
@@ -121,8 +122,14 @@ const ExecutionList: React.FC<ExecutionListProps> = React.memo(({
                 ) : formatDuration(trace.duration)}
               </span>
             </div>
-            <div className="text-xs text-gray-400 mt-0.5">
-              {trace.business_type === 'WORKFLOW' ? 'Workflow' : 'Agent'}
+            <div className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+              <span>{trace.business_type === 'WORKFLOW' ? 'Workflow' : 'Agent'}</span>
+              {trace.business_version && trace.business_version !== 'draft' && (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
+                  <span>{trace.business_version}</span>
+                </>
+              )}
             </div>
           </div>
         )

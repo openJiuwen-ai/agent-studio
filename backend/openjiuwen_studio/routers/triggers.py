@@ -58,8 +58,9 @@ async def trigger_deactivate_api(request: TriggerActivate, current_user: dict = 
 
 
 @triggers_router.post("/run")
-async def trigger_run_api(request: TriggerGet, current_user: dict = Depends(get_current_user)):
-    return mgr.trigger_run_manual(request, current_user)
+async def trigger_run_api(request: TriggerGet, background_tasks: BackgroundTasks,
+                          current_user: dict = Depends(get_current_user)):
+    return mgr.trigger_run_manual(request, current_user, background_tasks)
 
 
 @triggers_router.post("/execution_logs")

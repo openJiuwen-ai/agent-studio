@@ -110,6 +110,8 @@ scripts/
 - Docker Compose：v2.19.1 及以上版本
 - Bash: 5.0及以上版本
 
+> 注意：不支持 Snap 方式安装的 Docker。Snap 版 Docker 运行在系统只读沙箱环境中，会限制 Docker 守护进程操作宿主机文件系统，造成容器挂载目录时无法自动创建文件夹，触发 read-only file system 只读报错。
+
 ✔️ **参数说明**
 
 ```

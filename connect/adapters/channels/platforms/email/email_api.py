@@ -157,6 +157,7 @@ def send_reply(
         with smtplib.SMTP(config.host, config.port) as smtp:
             smtp.ehlo()
             smtp.starttls()
+            smtp.ehlo()  # re-identify after TLS upgrade (required by RFC 3207)
             smtp.login(config.username, config.password)
             smtp.sendmail(config.from_address, [to_address], msg.as_string())
         logger.info("Reply sent to %s", to_address)

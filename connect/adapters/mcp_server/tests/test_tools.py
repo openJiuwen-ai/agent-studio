@@ -154,6 +154,28 @@ class TestFormatWorkflowDetail:
         result = format_workflow_detail(data)
         assert "Direct" in result
 
+    @staticmethod
+    def test_nested_workflow_object():
+        # Actual backend /workflows/canvas returns data nested in 'workflow' field
+        data = {
+            'data': {
+                'workflow': {
+                    'workflow_id': 'wf-123',
+                    'name': 'Test Workflow',
+                    'desc': 'A test workflow',
+                    'input_parameters': [
+                        {'name': 'param1', 'type': 'string', 'required': True, 'description': 'First param'}
+                    ]
+                }
+            }
+        }
+        result = format_workflow_detail(data)
+        assert "Test Workflow" in result
+        assert "wf-123" in result
+        assert "A test workflow" in result
+        assert "param1" in result
+        assert "required" in result
+
 
 class TestFormatAgentDetail:
     @staticmethod

@@ -1,5 +1,3 @@
-import uuid as _uuid
-
 from mcp.server.fastmcp import FastMCP
 
 from connect.client.client import OpenJiuwenClient
@@ -18,17 +16,13 @@ def run_agent_tool(
 
     Pass the returned conversation_id back on subsequent calls to continue the thread.
     """
-    # Ensure there is always a stable conversation_id to return even when the
-    # backend does not echo it back in the SSE stream.
-    actual_conv_id = conversation_id or str(_uuid.uuid4())
     try:
-        events = _execute_agent(client, agent_id, message, actual_conv_id)
-        text, conv_id_from_events, error = parse_agent_response(events)
+        events, conversation_id = _execute_agent(client, agent_id, message, conversation_id)
+        text, _, error = parse_agent_response(events, conversation_id)
         if error:
             return f"ERROR from agent: {error}"
         reply = text or "(no reply)"
-        conv_id = conv_id_from_events or actual_conv_id
-        return f"Reply: {reply}\nConversation ID: {conv_id}"
+        return f"Reply: {reply}\nConversation ID: {conversation_id}"
     except Exception as exc:
         return f"ERROR running agent: {exc}"
 

@@ -9,6 +9,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import type { Block, BlockNoteEditor } from '@blocknote/core'
 import { AIRewriteInput } from './AIRewriteInput'
 import { AIRewriteOptions } from './AIRewriteOptions'
@@ -46,6 +47,7 @@ export const AIRewritePanel: React.FC<AIRewritePanelProps> = ({
   selectedScope,
   onScopeSelect,
 }) => {
+  const { t } = useTranslation()
   const [input, setInput] = useState('')
   const [selectedAction, setSelectedAction] = useState<ReportRewriteAction | null>(null)
   const [inputPosition, setInputPosition] = useState({ top: 0, left: 0, width: 320 })
@@ -142,7 +144,7 @@ export const AIRewritePanel: React.FC<AIRewritePanelProps> = ({
             onInputChange={setInput}
             onSend={handleSend}
             canSend={(!!selectedAction || !!input.trim()) && (remainingRewriteRounds === undefined || remainingRewriteRounds > 0)}
-            disabledHint={isDisabledByRounds ? '改写次数已用完，无法继续改写' : undefined}
+            disabledHint={isDisabledByRounds ? t('apps.report.rewriteRoundsExhausted') : undefined}
           />
         </div>,
         document.body

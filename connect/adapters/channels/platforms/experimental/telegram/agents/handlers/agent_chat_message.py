@@ -31,11 +31,9 @@ async def agent_chat_message_handler(update: Update, context: ContextTypes.DEFAU
             return ConversationHandler.END
 
         await update.message.reply_text("🤖 Processing...")
-        events = execute_agent(backend_client, agent_id, user_message, conversation_id)
-        text, new_conversation_id, error = parse_agent_response(events)
-
-        if new_conversation_id:
-            context.user_data['agent_chat']['conversation_id'] = new_conversation_id
+        events, conversation_id = execute_agent(backend_client, agent_id, user_message, conversation_id)
+        context.user_data['agent_chat']['conversation_id'] = conversation_id
+        text, _, error = parse_agent_response(events, conversation_id)
 
         if error:
             await update.message.reply_text(f"❌ Agent error: {error}")

@@ -8,7 +8,9 @@ Called by:
 from __future__ import annotations
 
 import asyncio
+import datetime
 import hashlib
+import json
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
@@ -258,13 +260,24 @@ def _write_log(
     return log
 
 
+def _json_default(obj: Any) -> Any:
+    """Fallback serializer for types not handled by the standard encoder."""
+    if isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.isoformat()
+    return str(obj)
+
+
 def _extract_outputs(chunk: Any) -> Optional[Dict[str, Any]]:
-    """Best-effort extraction of a serializable dict from a stream chunk."""
+    """Best-effort extraction of a JSON-serializable dict from a stream chunk."""
     try:
         if hasattr(chunk, "model_dump"):
-            return chunk.model_dump()
-        if isinstance(chunk, dict):
-            return chunk
-        return {"raw": str(chunk)}
+            raw = chunk.model_dump()
+        elif isinstance(chunk, dict):
+            raw = chunk
+        else:
+            return {"raw": str(chunk)}
+        # Round-trip through JSON to ensure every value is serializable.
+        # This converts datetime objects, custom classes, etc. to plain strings.
+        return json.loads(json.dumps(raw, default=_json_default))
     except Exception:
         return None

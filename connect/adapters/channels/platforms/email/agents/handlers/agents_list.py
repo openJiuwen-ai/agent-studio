@@ -9,7 +9,9 @@ async def handle_list(user_id: str, say, user_data: dict) -> None:
         await say(err)
         return
     try:
-        result = list_agents(client)
+        page = user_data.get("page", 1)
+        page_size = user_data.get("page_size", 20)
+        result = list_agents(client, page=page, page_size=page_size)
         data = result.get("data", {})
         agents = data.get("agent_items", [])
         total = data.get("pagination", {}).get("total", len(agents))

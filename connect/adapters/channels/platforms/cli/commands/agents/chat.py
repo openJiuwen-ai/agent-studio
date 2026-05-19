@@ -30,10 +30,8 @@ def cmd_agent_chat(backend_url: str, agent_id: str) -> None:
             continue
 
         try:
-            events = execute_agent(client, agent_id, user_input, conversation_id)
-            text, new_conv_id, error = parse_agent_response(events)
-            if new_conv_id:
-                conversation_id = new_conv_id
+            events, conversation_id = execute_agent(client, agent_id, user_input, conversation_id)
+            text, _, error = parse_agent_response(events, conversation_id)
             if error:
                 logger.error(f"❌ {error}")
             else:

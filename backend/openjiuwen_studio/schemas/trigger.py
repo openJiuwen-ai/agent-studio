@@ -61,6 +61,8 @@ class TriggerUpdate(BaseModel):
     trigger_id: str
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=2000)
+    target_type: Optional[Literal["agent", "workflow"]] = None
+    target_id: Optional[str] = Field(None, min_length=1, max_length=100)
     target_version: Optional[str] = Field(None, max_length=100)
     input_payload: Optional[Dict[str, Any]] = None
     cron_config: Optional[CronConfig] = None

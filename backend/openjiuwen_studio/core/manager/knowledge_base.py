@@ -1024,6 +1024,146 @@ def knowledge_base_update(req: KnowledgeBaseUpdateRequest, current_user: dict) -
     )
 
 
+def _safe_synthetic_filename(name: str, suffix: str) -> str:
+    """构造同步到 DeepSearch 的 weblink 合成文件名。
+
+    weblink 在 Studio 侧没有落盘文件，同步时会按 URL 重新解析并以一份 Markdown
+    上传到 DeepSearch，因此需要一个安全的合成文件名（去除路径分隔与控制字符、
+    限长，并强制带后缀）。
+    """
+    safe = re.sub(r"[\\/\x00-\x1f]+", "_", name or "").strip()
+    if not safe:
+        safe = "weblink"
+    if len(safe) > 150:
+        safe = safe[:150]
+    if not safe.lower().endswith(suffix.lower()):
+        safe = f"{safe}{suffix}"
+    return safe
+
+
+async def _collect_weblink_files_for_sync(
+    space_id: str, kb_id: str
+) -> Tuple[List[Tuple[str, bytes, str]], List[str], int, Optional[ResponseModel]]:
+    """收集 weblink 知识库要同步到 DeepSearch 的「合成文件」列表。
+
+    复用 `_parse_url` 重新解析每个链接，把解析出的 Document 拼成一份 Markdown
+    文件（保留标题、源 URL、正文），以与文档库相同的 multipart 上传路径上传。
+    解析失败的链接被跳过并记录 warning，不阻断整体同步。
+
+    Returns:
+        (files_for_ds, doc_id_list, source_total, error_resp)：
+          - files_for_ds: 形如 [(filename, content_bytes, content_type), ...]
+          - doc_id_list:  与 files_for_ds 一一对应的 Studio 侧合成 doc_id，
+                          供后续 sync_process 透传给 DeepSearch /api/kb/process。
+          - source_total: 该知识库下的链接总数（用于空集时区分日志）
+          - error_resp:   非 None 表示列出链接阶段失败，调用方应直接返回该响应
+    """
+    list_result = knowledge_base_repository.weblink_list(
+        KBWeblink(
+            kb=KBDetails(
+                space_id=space_id,
+                kb_id=kb_id,
+                index_manager_type=_CURR_INDEX_TYPE,
+            )
+        ),
+        page=1,
+        size=WEBLINK_KB_MAX_LINKS,
+    )
+    if list_result.code != status.HTTP_200_OK:
+        logger.warning(
+            f"[KB_SYNC_UPLOAD] Failed to list weblinks - kb_id={kb_id}, "
+            f"error={list_result.message}"
+        )
+        return [], [], 0, ResponseModel(
+            code=list_result.code,
+            message=list_result.message or "Failed to list weblinks",
+        )
+
+    weblinks = (list_result.data or {}).get("items", []) or []
+    files_for_ds: List[Tuple[str, bytes, str]] = []
+    doc_id_list: List[str] = []
+
+    for w in weblinks:
+        weblink_id = w.get("weblink_id")
+        url = (w.get("url") or "").strip()
+        name = (w.get("name") or url or weblink_id or "weblink").strip()
+        if not url:
+            logger.warning(
+                f"[KB_SYNC_UPLOAD] Weblink missing url, skip - kb_id={kb_id}, "
+                f"weblink_id={weblink_id}"
+            )
+            continue
+        try:
+            documents = await _parse_url(url, weblink_id or str(uuid.uuid4()))
+        except Exception as e:
+            logger.warning(
+                f"[KB_SYNC_UPLOAD] Failed to parse weblink, skip - kb_id={kb_id}, "
+                f"weblink_id={weblink_id}, url={url}, error={e}"
+            )
+            continue
+
+        # 提取标题：与 weblink_get_status_batch(refresh_names=True) 同源逻辑
+        # 当源 KB 的 name 还是 URL（尚未触发过 refresh_names 流程）时用解析得到的 title 替代，
+        # 避免镜像里看到 URL.md，同时回写 weblink 表让源 KB 列表也立即显示标题
+        parsed_title: Optional[str] = None
+        for d in documents:
+            md = getattr(d, "metadata", None)
+            if isinstance(md, dict):
+                t = md.get("title")
+                if t and isinstance(t, str) and t.strip():
+                    parsed_title = t.strip()
+                    break
+        name_is_url_like = (
+            (not name)
+            or name.strip() == url
+            or name.strip().lower().startswith(("http://", "https://"))
+        )
+        if parsed_title and name_is_url_like:
+            name = parsed_title
+            if weblink_id:
+                try:
+                    knowledge_base_repository.weblink_update(
+                        KBWeblink(
+                            kb=KBDetails(
+                                space_id=space_id,
+                                kb_id=kb_id,
+                                index_manager_type=_CURR_INDEX_TYPE,
+                            ),
+                            weblink_id=weblink_id,
+                        ),
+                        name=parsed_title,
+                    )
+                except Exception as e:
+                    logger.debug(
+                        f"[KB_SYNC_UPLOAD] Failed to backfill weblink name - "
+                        f"kb_id={kb_id}, weblink_id={weblink_id}, error={e}"
+                    )
+
+        body_parts: List[str] = []
+        for d in documents:
+            text = getattr(d, "text", None)
+            if text and isinstance(text, str) and text.strip():
+                body_parts.append(text.strip())
+        body = "\n\n".join(body_parts).strip()
+        if not body:
+            logger.warning(
+                f"[KB_SYNC_UPLOAD] Weblink parsed to empty content, skip - "
+                f"kb_id={kb_id}, weblink_id={weblink_id}, url={url}"
+            )
+            continue
+
+        markdown = f"# {name}\n\n源链接：{url}\n\n{body}\n"
+        filename = _safe_synthetic_filename(name, ".md")
+        files_for_ds.append((filename, markdown.encode("utf-8"), "text/markdown"))
+        doc_id_list.append(str(uuid.uuid4()))
+
+    logger.info(
+        f"[KB_SYNC_UPLOAD] Weblink files prepared - kb_id={kb_id}, "
+        f"weblink_count={len(weblinks)}, prepared_count={len(files_for_ds)}"
+    )
+    return files_for_ds, doc_id_list, len(weblinks), None
+
+
 @with_exception_handling
 async def knowledge_base_sync_upload(
     space_id: str,
@@ -1032,6 +1172,11 @@ async def knowledge_base_sync_upload(
     deepsearch_embedding_model_config_id: Optional[int] = None,
 ) -> ResponseModel:
     """同步上传：在 DeepSearch 创建/复用知识库，并上传 Studio 当前知识库下全部文档。
+
+    支持两类 Studio 知识库：
+      - 文档知识库（document）：直接读取每个文档的本地文件并上传。
+      - 网页链接知识库（weblink）：按 URL 重新解析后，以合成 Markdown 上传。
+
     deepsearch_embedding_model_config_id: 可选，DeepSearch 侧嵌入模型配置 ID。
     """
     # 1. 验证用户空间权限
@@ -1218,6 +1363,63 @@ async def knowledge_base_sync_upload(
                 f"ds_kb_id={ds_kb_id}, error={e}",
                 exc_info=True,
             )
+
+    # 5a. weblink 知识库走独立分支：按 URL re-parse 后以合成 .md 上传到 DeepSearch
+    # （文档库分支保持原逻辑不变）
+    kb_type = (kb_data.get("config") or {}).get("type") or "document"
+    if kb_type == "weblink":
+        wl_files, wl_doc_id_list, wl_total, wl_error_resp = (
+            await _collect_weblink_files_for_sync(space_id=space_id, kb_id=kb_id)
+        )
+        if wl_error_resp is not None:
+            return wl_error_resp
+        logger.info(
+            f"[KB_SYNC_UPLOAD] Weblink files prepared - kb_id={kb_id}, "
+            f"ds_kb_id={ds_kb_id}, weblink_count={wl_total}, uploaded_count={len(wl_files)}"
+        )
+        if not wl_files:
+            if wl_total:
+                logger.warning(
+                    f"[KB_SYNC_UPLOAD] All {wl_total} weblink(s) skipped - kb_id={kb_id}"
+                )
+            return ResponseModel(
+                code=status.HTTP_200_OK,
+                message="sync upload success",
+                data={"ds_kb_id": ds_kb_id, "uploaded_count": 0, "doc_id_list": []},
+            )
+        try:
+            ds_upload_resp = await ds_client.upload_knowledge_base_files(
+                space_id=space_id,
+                ds_kb_id=ds_kb_id,
+                files=wl_files,
+                metadata={"doc_list": wl_doc_id_list},
+            )
+            # 把 DS 端返回的原始响应落日志：DS 即便返回 2xx 也可能在响应体里
+            # 表达「文件被丢弃 / 解析失败」，没这行的话「上传 OK 但 DS KB 仍空」会无从定位
+            logger.info(
+                f"[KB_SYNC_UPLOAD] DeepSearch upload response (weblink) - "
+                f"ds_kb_id={ds_kb_id}, file_count={len(wl_files)}, "
+                f"doc_id_list={wl_doc_id_list}, response={ds_upload_resp}"
+            )
+        except Exception as e:
+            logger.error(
+                f"[KB_SYNC_UPLOAD] DeepSearch upload failed (weblink) - "
+                f"ds_kb_id={ds_kb_id}, error={e}",
+                exc_info=True,
+            )
+            return ResponseModel(
+                code=status.HTTP_502_BAD_GATEWAY,
+                message=f"DeepSearch upload failed: {str(e)}",
+            )
+        return ResponseModel(
+            code=status.HTTP_200_OK,
+            message="sync upload success",
+            data={
+                "ds_kb_id": ds_kb_id,
+                "uploaded_count": len(wl_files),
+                "doc_id_list": wl_doc_id_list,
+            },
+        )
 
     # 5. 获取待同步文档列表（空知识库也允许完成第一步：已创建/更新 DS，上传数为 0）
     kbdoc = KBDocument(
@@ -4195,8 +4397,13 @@ def task_progress(req: TaskProgressRequest, current_user: dict) -> ResponseModel
 
 
 @with_exception_handling
-def weblink_add(req: WeblinkAddRequest, current_user: dict) -> ResponseModel:
-    """添加链接到知识库"""
+async def weblink_add(req: WeblinkAddRequest, current_user: dict) -> ResponseModel:
+    """添加链接到知识库。
+
+    - Studio 知识库：URL 落 weblink 表，等待用户在 step2 触发 weblink_process 解析+索引。
+    - DS 镜像知识库：直接解析每条 URL → 合成 .md → 上传到 DS（与同步语义一致），
+      返回 DS 文档 id 列表，供前端在 step2 调 weblink_process 触发 DS 建索引。
+    """
     start_time = time.time()
     user_id = current_user.get("user_id", "unknown")
     logger.info(
@@ -4209,6 +4416,127 @@ def weblink_add(req: WeblinkAddRequest, current_user: dict) -> ResponseModel:
     kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
     if kb_result.code != status.HTTP_200_OK or not kb_result.data:
         return ResponseModel(code=status.HTTP_404_NOT_FOUND, message="Knowledge base not found")
+
+    kb_data_for_mirror = kb_result.data
+    is_ds_kb = bool(
+        kb_data_for_mirror.get("kb_id")
+        and kb_data_for_mirror.get("kb_id") == kb_data_for_mirror.get("ds_kb_id")
+    )
+    if is_ds_kb:
+        # 镜像 KB：解析 URL → .md → DS upload，返回 DS 文档 id（前端继续走 weblink_process 触发 DS 建索引）
+        valid_urls_mirror: list[str] = []
+        invalid_count = 0
+        for url in req.urls:
+            u = (url or "").strip()
+            if not u or not u.lower().startswith(("http://", "https://")):
+                invalid_count += 1
+                continue
+            valid_urls_mirror.append(u)
+        if not valid_urls_mirror:
+            return ResponseModel(
+                code=status.HTTP_400_BAD_REQUEST,
+                message="No valid URLs to add",
+            )
+        files_for_ds: List[Tuple[str, bytes, str]] = []
+        new_doc_ids: List[str] = []
+        url_for_id: List[str] = []
+        for u in valid_urls_mirror:
+            try:
+                docs = await _parse_url(u, str(uuid.uuid4()))
+            except Exception as e:
+                logger.warning(
+                    f"[WEBLINK_ADD] Failed to parse weblink (mirror), skip - "
+                    f"kb_id={req.kb_id}, url={u}, error={e}"
+                )
+                continue
+            title: Optional[str] = None
+            for d in docs:
+                md = getattr(d, "metadata", None)
+                if isinstance(md, dict):
+                    t = md.get("title")
+                    if t and isinstance(t, str) and t.strip():
+                        title = t.strip()
+                        break
+            body_parts: List[str] = []
+            for d in docs:
+                txt = getattr(d, "text", None)
+                if txt and isinstance(txt, str) and txt.strip():
+                    body_parts.append(txt.strip())
+            body = "\n\n".join(body_parts).strip()
+            if not body:
+                logger.warning(
+                    f"[WEBLINK_ADD] Weblink parsed to empty content (mirror), skip - "
+                    f"kb_id={req.kb_id}, url={u}"
+                )
+                continue
+            display_name = title or u
+            markdown = f"# {display_name}\n\n源链接：{u}\n\n{body}\n"
+            filename = _safe_synthetic_filename(display_name, ".md")
+            files_for_ds.append((filename, markdown.encode("utf-8"), "text/markdown"))
+            new_doc_ids.append(str(uuid.uuid4()))
+            url_for_id.append(u)
+        if not files_for_ds:
+            return ResponseModel(
+                code=status.HTTP_400_BAD_REQUEST,
+                message="All URLs failed to parse",
+            )
+        try:
+            ds_client = DeepSearchAgentClient()
+            # 注意: DS 的 /api/kb/upload 当传 metadata.doc_list 时,
+            # 会把"不在 doc_list 里的现有文档"全部删掉(覆盖同步语义,
+            # sync_upload 走的就是这条路径).
+            # 镜像 KB 上的"add"是纯追加,绝不能传 doc_list,否则会把
+            # 上一次同步过来的链接全部清掉.
+            ds_resp = await ds_client.upload_knowledge_base_files(
+                space_id=req.space_id,
+                ds_kb_id=req.kb_id,
+                files=files_for_ds,
+                metadata=None,
+            )
+        except Exception as e:
+            logger.warning(
+                f"[WEBLINK_ADD] DeepSearch upload failed (mirror) - "
+                f"kb_id={req.kb_id}, error={e}",
+                exc_info=True,
+            )
+            return ResponseModel(
+                code=status.HTTP_502_BAD_GATEWAY,
+                message=f"DeepSearch upload failed: {str(e)}",
+            )
+        # 优先用 DS 返回的 id（更准确）；否则退回我们生成的占位 id
+        returned_ids: List[str] = []
+        if isinstance(ds_resp, dict):
+            data_ds = ds_resp.get("data") or {}
+            for d in data_ds.get("documents") or []:
+                rid = d.get("id") or d.get("doc_id")
+                if rid:
+                    returned_ids.append(rid)
+        if len(returned_ids) != len(new_doc_ids):
+            returned_ids = new_doc_ids
+        links = [
+            WeblinkAddItem(
+                id=returned_ids[i],
+                url=url_for_id[i],
+                name=files_for_ds[i][0],
+                status=DocumentStatus.UPLOADED.value,
+            )
+            for i in range(len(returned_ids))
+        ]
+        logger.info(
+            f"[WEBLINK_ADD] Add (DeepSearch mirror) - KB ID: {req.kb_id}, "
+            f"Success: {len(links)}, Skipped: {len(req.urls) - len(links)}, "
+            f"User: {user_id}, Duration: {time.time() - start_time:.3f}s"
+        )
+        return ResponseModel(
+            code=status.HTTP_200_OK,
+            message="add weblinks success",
+            data=WeblinkAddBatchResponse(
+                success_count=len(links),
+                failed_count=invalid_count + (len(valid_urls_mirror) - len(links)),
+                links=links,
+            ).model_dump(by_alias=False),
+        )
+
     config = kb_result.data.get("config") or {}
     if config.get("type") != "weblink":
         return ResponseModel(
@@ -4298,8 +4626,10 @@ def weblink_add(req: WeblinkAddRequest, current_user: dict) -> ResponseModel:
 
 
 @with_exception_handling
-def weblink_list(req: WeblinkListRequest, current_user: dict) -> ResponseModel:
-    """获取链接列表"""
+async def weblink_list(req: WeblinkListRequest, current_user: dict) -> ResponseModel:
+    """获取链接列表。Studio 知识库从 Studio 表取；DeepSearch 镜像知识库从 DS 接口取
+    （weblink 同步时把每条链接合成成一个 .md 文件上传到 DS，所以镜像里看到的是这些合成文件）。
+    """
     _ = check_user_space(req.space_id, current_user)
     kb_get = KnowledgeBaseGet(
         space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
@@ -4307,6 +4637,69 @@ def weblink_list(req: WeblinkListRequest, current_user: dict) -> ResponseModel:
     kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
     if kb_result.code != status.HTTP_200_OK or not kb_result.data:
         return ResponseModel(code=status.HTTP_404_NOT_FOUND, message="Knowledge base not found")
+
+    kb_data = kb_result.data
+    is_ds_kb = bool(
+        kb_data.get("kb_id")
+        and kb_data.get("kb_id") == kb_data.get("ds_kb_id")
+    )
+
+    # DS 镜像 KB：转发到 DS 文档列表，否则用户在镜像 KB 里永远看不到同步过去的内容
+    if is_ds_kb:
+        try:
+            ds_client = DeepSearchAgentClient()
+            ds_resp = await ds_client.list_documents(
+                space_id=req.space_id,
+                kb_id=req.kb_id,
+                page=req.page,
+                size=req.size,
+            )
+        except Exception as e:
+            logger.warning(
+                f"[WEBLINK_LIST] DeepSearch document list failed (mirror weblink KB) - "
+                f"space_id={req.space_id}, kb_id={req.kb_id}, error={e}"
+            )
+            return ResponseModel(
+                code=status.HTTP_200_OK,
+                message="get weblink list success",
+                data=WeblinkListResponse(
+                    items=[], total=0, page=req.page, size=req.size
+                ).model_dump(by_alias=False),
+            )
+        data = ds_resp.get("data") if isinstance(ds_resp, dict) else None
+        if not isinstance(data, dict):
+            data = {}
+        ds_items = data.get("items") or []
+        items = []
+        for doc in ds_items:
+            doc_id = doc.get("id") or doc.get("doc_id") or ""
+            created_at = doc.get("created_at") or ""
+            updated_at = doc.get("updated_at") or ""
+            if not created_at and doc.get("create_time") is not None:
+                created_at = _timestamp_to_date_str(doc.get("create_time"))
+            if not updated_at and doc.get("update_time") is not None:
+                updated_at = _timestamp_to_date_str(doc.get("update_time"))
+            items.append(
+                WeblinkListItem(
+                    name=doc.get("name", ""),
+                    id=doc_id,
+                    # DS 不保存原始 URL；展示一个空串，前端据此判断"镜像项不可访问 URL"即可
+                    url="",
+                    created_at=created_at,
+                    updated_at=updated_at,
+                )
+            )
+        return ResponseModel(
+            code=status.HTTP_200_OK,
+            message="get weblink list success",
+            data=WeblinkListResponse(
+                items=items,
+                total=data.get("total", len(items)),
+                page=req.page,
+                size=req.size,
+            ).model_dump(by_alias=False),
+        )
+
     list_result = knowledge_base_repository.weblink_list(
         KBWeblink(kb=KBDetails(space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE)),
         page=req.page,
@@ -4343,7 +4736,7 @@ def weblink_list(req: WeblinkListRequest, current_user: dict) -> ResponseModel:
 
 @with_exception_handling
 async def weblink_process(req: WeblinkProcessRequest, current_user: dict) -> ResponseModel:
-    """处理链接（解析并索引）"""
+    """处理链接（解析并索引）。Studio 知识库走本地解析+索引；DS 镜像知识库转发 DS 建索引。"""
     start_time = time.time()
     user_id = current_user.get("user_id", "unknown")
     logger.info(
@@ -4357,6 +4750,73 @@ async def weblink_process(req: WeblinkProcessRequest, current_user: dict) -> Res
     kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
     if kb_result.code != status.HTTP_200_OK or not kb_result.data:
         return ResponseModel(code=status.HTTP_404_NOT_FOUND, message="Knowledge base not found")
+    kb_data_for_mirror = kb_result.data
+    is_ds_kb = bool(
+        kb_data_for_mirror.get("kb_id")
+        and kb_data_for_mirror.get("kb_id") == kb_data_for_mirror.get("ds_kb_id")
+    )
+    if is_ds_kb:
+        # 镜像 KB：转发 DS 建索引；req.weblink_id_list 在镜像里实际是 DS 的 doc_id
+        try:
+            process_payload: Dict[str, Any] = {
+                "space_id": req.space_id,
+                "kb_id": req.kb_id,
+                "doc_id_list": req.weblink_id_list,
+                "parsing_strategy": req.parsing_strategy.model_dump()
+                if hasattr(req.parsing_strategy, "model_dump")
+                else (req.parsing_strategy or {}),
+                "segmentation_strategy": req.segmentation_strategy.model_dump()
+                if hasattr(req.segmentation_strategy, "model_dump")
+                else (req.segmentation_strategy or {}),
+                "indexing_strategy": req.indexing_strategy.model_dump()
+                if hasattr(req.indexing_strategy, "model_dump")
+                else (req.indexing_strategy or {}),
+            }
+            try:
+                _apply_ds_process_llm_config(process_payload, req.space_id)
+            except ValueError as e:
+                return ResponseModel(
+                    code=status.HTTP_400_BAD_REQUEST,
+                    message=str(e),
+                )
+            ds_client = DeepSearchAgentClient()
+            result = await ds_client.process_knowledge_base_documents(process_payload)
+            if not isinstance(result, dict):
+                return ResponseModel(
+                    code=status.HTTP_502_BAD_GATEWAY,
+                    message="DeepSearch process returned invalid response",
+                )
+            if result.get("code") not in (None, status.HTTP_200_OK):
+                return ResponseModel(
+                    code=result.get("code", status.HTTP_502_BAD_GATEWAY),
+                    message=result.get("message", "DeepSearch process failed"),
+                )
+            data = result.get("data") or {}
+            logger.info(
+                f"[WEBLINK_PROCESS] DeepSearch process submitted (mirror) - "
+                f"KB ID: {req.kb_id}, task_id: {data.get('task_id')}, "
+                f"User: {user_id}, Duration: {time.time() - start_time:.3f}s"
+            )
+            return ResponseModel(
+                code=status.HTTP_200_OK,
+                message="weblink process submitted",
+                data={
+                    "task_id": data.get("task_id"),
+                    "processed_count": len(req.weblink_id_list),
+                    "failed_count": 0,
+                    "failed_links": [],
+                },
+            )
+        except Exception as e:
+            logger.warning(
+                f"[WEBLINK_PROCESS] DeepSearch process failed (mirror) - "
+                f"KB ID: {req.kb_id}, error={e}",
+                exc_info=True,
+            )
+            return ResponseModel(
+                code=status.HTTP_502_BAD_GATEWAY,
+                message=f"DeepSearch process failed: {str(e)}",
+            )
     config = kb_result.data.get("config") or {}
     if config.get("type") != "weblink":
         return ResponseModel(
@@ -4454,7 +4914,7 @@ def _name_needs_refresh(name: str, url: str) -> bool:
 
 @with_exception_handling
 async def weblink_get_status_batch(req: WeblinkStatusRequest, current_user: dict) -> ResponseModel:
-    """批量查询链接状态"""
+    """批量查询链接状态。Studio 知识库查 Studio 表；DS 镜像知识库调 DS 文档状态接口。"""
     start_time = time.time()
     user_id = current_user.get("user_id", "unknown")
     logger.info(
@@ -4463,6 +4923,73 @@ async def weblink_get_status_batch(req: WeblinkStatusRequest, current_user: dict
     )
     _ = check_user_space(req.space_id, current_user)
     kb_details = KBDetails(space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE)
+
+    # DS 镜像 KB:状态从 DS 拉取（id 是 DS doc_id，不在 Studio weblink 表里）
+    kb_get = KnowledgeBaseGet(
+        space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE
+    )
+    kb_result_for_mirror = knowledge_base_repository.knowledge_base_get(kb_get)
+    kb_data_for_mirror = (
+        kb_result_for_mirror.data
+        if (kb_result_for_mirror.code == status.HTTP_200_OK and kb_result_for_mirror.data)
+        else None
+    )
+    is_ds_kb = bool(
+        kb_data_for_mirror
+        and kb_data_for_mirror.get("kb_id")
+        and kb_data_for_mirror.get("kb_id") == kb_data_for_mirror.get("ds_kb_id")
+    )
+    if is_ds_kb:
+        try:
+            ds_client = DeepSearchAgentClient()
+            ds_resp = await ds_client.get_document_status(
+                space_id=req.space_id,
+                kb_id=req.kb_id,
+                doc_id_list=req.weblink_id_list,
+            )
+        except Exception as e:
+            logger.warning(
+                f"[WEBLINK_STATUS] DeepSearch document status failed (mirror weblink KB) - "
+                f"space_id={req.space_id}, kb_id={req.kb_id}, error={e}"
+            )
+            return ResponseModel(
+                code=status.HTTP_200_OK,
+                message="get weblink status success",
+                data=DocumentStatusListResponse(items=[]).model_dump(by_alias=False),
+            )
+        if not isinstance(ds_resp, dict) or ds_resp.get("code") not in (None, status.HTTP_200_OK):
+            return ResponseModel(
+                code=status.HTTP_200_OK,
+                message="get weblink status success",
+                data=DocumentStatusListResponse(items=[]).model_dump(by_alias=False),
+            )
+        data = ds_resp.get("data") if isinstance(ds_resp, dict) else None
+        if not isinstance(data, dict):
+            data = {}
+        ds_items = data.get("items") or []
+        status_items = []
+        for item in ds_items:
+            doc_id = item.get("id") or item.get("doc_id") or ""
+            status_items.append(
+                DocumentStatusResponse(
+                    id=doc_id,
+                    status=item.get("status", DocumentStatus.UPLOADING.value),
+                    name=item.get("name"),
+                    error_msg=item.get("error_msg"),
+                    enable_graph_enhancement=item.get("enable_graph_enhancement"),
+                )
+            )
+        logger.info(
+            f"[WEBLINK_STATUS] Weblink status (mirror DS KB) - Space ID: {req.space_id}, "
+            f"KB ID: {req.kb_id}, Requested: {len(req.weblink_id_list)}, Found: {len(status_items)}, "
+            f"User: {user_id}, Duration: {time.time() - start_time:.3f}s"
+        )
+        return ResponseModel(
+            code=status.HTTP_200_OK,
+            message="get weblink status success",
+            data=DocumentStatusListResponse(items=status_items).model_dump(by_alias=False),
+        )
+
     items = []
     for weblink_id in req.weblink_id_list:
         get_result = knowledge_base_repository.weblink_get(
@@ -4562,7 +5089,7 @@ def weblink_update(req: WeblinkUpdateRequest, current_user: dict) -> ResponseMod
 
 @with_exception_handling
 async def weblink_delete(req: WeblinkDeleteRequest, current_user: dict) -> ResponseModel:
-    """批量删除链接"""
+    """批量删除链接。Studio 知识库走 Studio 表 + 索引删除；DS 镜像知识库转发 DS 文档删除。"""
     start_time = time.time()
     user_id = current_user.get("user_id", "unknown")
     logger.info(
@@ -4577,6 +5104,47 @@ async def weblink_delete(req: WeblinkDeleteRequest, current_user: dict) -> Respo
     kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
     if kb_result.code != status.HTTP_200_OK or not kb_result.data:
         return ResponseModel(code=status.HTTP_404_NOT_FOUND, message="Knowledge base not found")
+
+    kb_data_for_mirror = kb_result.data
+    is_ds_kb = bool(
+        kb_data_for_mirror.get("kb_id")
+        and kb_data_for_mirror.get("kb_id") == kb_data_for_mirror.get("ds_kb_id")
+    )
+    if is_ds_kb:
+        try:
+            ds_client = DeepSearchAgentClient()
+            ds_resp = await ds_client.delete_documents(
+                space_id=req.space_id,
+                kb_id=req.kb_id,
+                document_ids=req.weblink_ids,
+            )
+            if not isinstance(ds_resp, dict):
+                return ResponseModel(
+                    code=status.HTTP_502_BAD_GATEWAY,
+                    message="DeepSearch delete returned invalid response",
+                )
+            if ds_resp.get("code") not in (None, status.HTTP_200_OK):
+                return ResponseModel(
+                    code=ds_resp.get("code", status.HTTP_502_BAD_GATEWAY),
+                    message=ds_resp.get("message", "DeepSearch delete failed"),
+                )
+            logger.info(
+                f"[WEBLINK_DELETE] Delete (DeepSearch mirror) - KB ID: {req.kb_id}, "
+                f"Doc IDs: {len(req.weblink_ids)}, User: {user_id}, "
+                f"Duration: {time.time() - start_time:.3f}s"
+            )
+            return ResponseModel(code=status.HTTP_200_OK, message="delete weblinks success")
+        except Exception as e:
+            logger.warning(
+                f"[WEBLINK_DELETE] DeepSearch delete failed (mirror) - "
+                f"KB ID: {req.kb_id}, error={e}",
+                exc_info=True,
+            )
+            return ResponseModel(
+                code=status.HTTP_502_BAD_GATEWAY,
+                message=f"DeepSearch delete failed: {str(e)}",
+            )
+
     kb_details = KBDetails(space_id=req.space_id, kb_id=req.kb_id, index_manager_type=_CURR_INDEX_TYPE)
     success_count = 0
     failed_count = 0

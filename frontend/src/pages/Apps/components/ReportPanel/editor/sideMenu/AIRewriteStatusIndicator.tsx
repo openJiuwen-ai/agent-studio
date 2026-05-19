@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Brain, PenLine, AlertCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { RewriteStatus } from '@/pages/Apps/types'
 import {
   getStatusIndicatorDismissPlan,
@@ -14,7 +15,7 @@ import {
 const STATUS_CONFIG = {
   thinking: {
     icon: Brain,
-    text: '思考中',
+    textKey: 'apps.report.thinking',
     bg: 'bg-blue-50',
     border: 'border-blue-200',
     textColor: 'text-blue-700',
@@ -24,7 +25,7 @@ const STATUS_CONFIG = {
   },
   writing: {
     icon: PenLine,
-    text: '撰写中',
+    textKey: 'apps.report.writing',
     bg: 'bg-emerald-50',
     border: 'border-emerald-200',
     textColor: 'text-emerald-700',
@@ -34,7 +35,7 @@ const STATUS_CONFIG = {
   },
   error: {
     icon: AlertCircle,
-    text: '',
+    textKey: '',
     bg: 'bg-red-50',
     border: 'border-red-200',
     textColor: 'text-red-700',
@@ -57,6 +58,7 @@ export const AIRewriteStatusIndicator: React.FC<AIRewriteStatusIndicatorProps> =
   errorMessage,
   onAutoHide,
 }) => {
+  const { t } = useTranslation()
   const [isExiting, setIsExiting] = useState(false)
   const [shouldRender, setShouldRender] = useState(false)
   const [displayStatus, setDisplayStatus] = useState<RewriteStatus>('idle')
@@ -107,7 +109,7 @@ export const AIRewriteStatusIndicator: React.FC<AIRewriteStatusIndicatorProps> =
 
   const Icon = config.icon
   const displayText =
-    displayStatus === 'error' ? (displayErrorMessage || '改写失败') : config.text
+    displayStatus === 'error' ? (displayErrorMessage || t('apps.report.rewriteFailed')) : t(config.textKey)
 
   return createPortal(
     <div

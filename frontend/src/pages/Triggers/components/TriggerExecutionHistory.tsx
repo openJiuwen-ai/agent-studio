@@ -1,13 +1,12 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Paper, Chip, IconButton, Tooltip, CircularProgress, Typography,
-  Pagination, Box,
+  Pagination, Box, Collapse, Alert,
 } from '@mui/material'
-import { RefreshCw, ExternalLink } from 'lucide-react'
+import { RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import { useTriggerExecutionLogs } from '@test-agentstudio/api-client'
-import { useNavigate } from 'react-router-dom'
 import dayjs from 'dayjs'
 import type { TriggerExecutionLog, ExecutionStatus } from '@/types/triggerTypes'
 
@@ -25,14 +24,24 @@ const STATUS_COLORS: Record<ExecutionStatus, 'success' | 'error' | 'default' | '
 
 const TriggerExecutionHistory: React.FC<TriggerExecutionHistoryProps> = ({ spaceId, triggerId }) => {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const [page, setPage] = useState(1)
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
   const PAGE_SIZE = 10
 
   const { data, isLoading, refetch } = useTriggerExecutionLogs(spaceId, triggerId, page, PAGE_SIZE)
 
   const logs: TriggerExecutionLog[] = (data?.data as any)?.items || []
   const total: number = (data?.data as any)?.total || 0
+
+  // Auto-expand rows that have an error message so failures are immediately visible
+  useEffect(() => {
+    const errorIds = logs
+      .filter(l => l.error_message)
+      .map(l => l.id)
+    if (errorIds.length > 0) {
+      setExpandedRows(prev => new Set([...prev, ...errorIds]))
+    }
+  }, [data])
 
   const formatDuration = (ms?: number | null) => {
     if (ms == null) return '—'
@@ -44,6 +53,16 @@ const TriggerExecutionHistory: React.FC<TriggerExecutionHistoryProps> = ({ space
     if (!ts) return '—'
     return dayjs(ts).format('MM-DD HH:mm:ss')
   }
+
+  const hasDetails = (log: TriggerExecutionLog) =>
+    !!(log.error_message || (log.outputs && Object.keys(log.outputs).length > 0))
+
+  const toggleRow = (id: number) =>
+    setExpandedRows(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
 
   return (
     <div className="space-y-3">
@@ -76,54 +95,104 @@ const TriggerExecutionHistory: React.FC<TriggerExecutionHistoryProps> = ({ space
                   <TableCell>{t('triggers.executionHistory.duration', 'Duration')}</TableCell>
                   <TableCell>{t('triggers.executionHistory.status', 'Status')}</TableCell>
                   <TableCell>{t('triggers.executionHistory.firedBy', 'Fired By')}</TableCell>
-                  <TableCell align="center">{t('triggers.executionHistory.viewTrace', 'Trace')}</TableCell>
+                  <TableCell align="center" sx={{ width: 48 }} />
                 </TableRow>
               </TableHead>
               <TableBody>
-                {logs.map(log => (
-                  <TableRow key={log.id} hover>
-                    <TableCell>
-                      <Typography variant="caption">{formatTime(log.started_at)}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="caption">{formatDuration(log.duration_ms)}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={t(`triggers.executionStatus.${log.status}`, log.status)}
-                        color={STATUS_COLORS[log.status] || 'default'}
-                        size="small"
-                        sx={log.status === 'running' ? { animation: 'pulse 2s infinite' } : {}}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="caption">
-                        {log.fired_by ? t(`triggers.firedBy.${log.fired_by}`, log.fired_by) : '—'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center">
-                      {log.trace_id ? (
-                        <Tooltip title={t('triggers.executionHistory.viewTrace', 'View Trace')}>
-                          <IconButton
+                {logs.map(log => {
+                  const expanded = expandedRows.has(log.id)
+                  const showDetails = hasDetails(log)
+                  return (
+                    <React.Fragment key={log.id}>
+                      <TableRow
+                        hover
+                        sx={showDetails ? { cursor: 'pointer' } : undefined}
+                        onClick={showDetails ? () => toggleRow(log.id) : undefined}
+                      >
+                        <TableCell>
+                          <Typography variant="caption">{formatTime(log.started_at)}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption">{formatDuration(log.duration_ms)}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={t(`triggers.executionStatus.${log.status}`, log.status)}
+                            color={STATUS_COLORS[log.status] || 'default'}
                             size="small"
-                            onClick={() => {
-                              if (log.trace_id) {
-                                const path = log.trigger_type === 'agent'
-                                  ? `/dashboard/agents?trace_id=${log.trace_id}`
-                                  : `/dashboard/workflows?trace_id=${log.trace_id}`
-                                window.open(path, '_blank')
-                              }
+                            sx={log.status === 'running' ? { animation: 'pulse 2s infinite' } : {}}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption">
+                            {log.fired_by ? t(`triggers.firedBy.${log.fired_by}`, log.fired_by) : '—'}
+                          </Typography>
+                        </TableCell>
+                        {/* Expand/collapse toggle — spans the unlabelled last column */}
+                        <TableCell align="center" sx={{ width: 48, p: 0 }}>
+                          {showDetails ? (
+                            <IconButton
+                              size="small"
+                              onClick={e => { e.stopPropagation(); toggleRow(log.id) }}
+                              color={log.error_message ? 'error' : 'default'}
+                            >
+                              {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </IconButton>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+
+                      {/* Expandable detail row */}
+                      {showDetails && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={5}
+                            sx={{
+                              py: 0,
+                              borderBottom: expanded ? undefined : 'none',
+                              // Subtle red tint behind error details
+                              bgcolor: log.error_message ? 'error.50' : 'transparent',
                             }}
                           >
-                            <ExternalLink size={14} />
-                          </IconButton>
-                        </Tooltip>
-                      ) : (
-                        <Typography variant="caption" color="text.disabled">—</Typography>
+                            <Collapse in={expanded} unmountOnExit>
+                              <Box sx={{ py: 1.5, px: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                {log.error_message && (
+                                  <Alert
+                                    severity="error"
+                                    sx={{ fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                                  >
+                                    {log.error_message}
+                                  </Alert>
+                                )}
+                                {log.outputs && Object.keys(log.outputs).length > 0 && (
+                                  <Box>
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                      {t('triggers.executionHistory.outputs', 'Outputs')}
+                                    </Typography>
+                                    <Box
+                                      component="pre"
+                                      sx={{
+                                        mt: 0.5, p: 1, borderRadius: 1,
+                                        bgcolor: 'action.hover',
+                                        fontSize: '0.7rem',
+                                        overflowX: 'auto',
+                                        whiteSpace: 'pre-wrap',
+                                        wordBreak: 'break-word',
+                                        m: 0,
+                                      }}
+                                    >
+                                      {JSON.stringify(log.outputs, null, 2)}
+                                    </Box>
+                                  </Box>
+                                )}
+                              </Box>
+                            </Collapse>
+                          </TableCell>
+                        </TableRow>
                       )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                    </React.Fragment>
+                  )
+                })}
               </TableBody>
             </Table>
           </TableContainer>

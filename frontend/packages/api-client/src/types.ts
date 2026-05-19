@@ -974,6 +974,7 @@ export interface TraceSummaryBriefWithStatus {
   trace_id: string
   business_id: string
   business_name?: string
+  business_version?: string
   business_type: 'WORKFLOW' | 'AGENT'
   create_time: string
   duration?: number

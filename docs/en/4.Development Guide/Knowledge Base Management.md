@@ -127,3 +127,45 @@ Weblink knowledge bases allow you to build a knowledge base by adding web URLs. 
 - Ensure target URLs are publicly accessible; otherwise content may not be fetched.
 - WeChat public account articles and similar pages must be viewable in a browser; the system parses them as web pages.
 - Link processing runs asynchronously; processing time depends on page size and complexity.
+
+# Sync to Deep Search
+
+After syncing an openJiuwen knowledge base to Deep Search, the same knowledge content can be reused inside the Deep Search service and benefit from Deep Search's advanced retrieval capabilities. Both **Document** and **Weblink** knowledge bases support syncing.
+
+Once a sync completes, an additional independent **mirror knowledge base** appears in the knowledge base list. The mirror behaves like a regular knowledge base — it can be browsed, edited, and re-indexed independently.
+
+## Prerequisites
+
+- The Deep Search service must be deployed and reachable from the openJiuwen backend.
+- At least one embedding model has already been configured under **Model Management → Embedding Model** in the openJiuwen platform.
+
+## Operation Steps
+
+1. Open the **Edit** page of the knowledge base you want to sync (Document or Weblink).
+
+2. Click the **Sync to Deep Search** button at the top right of the page to open the sync dialog.
+
+3. In **Step 1: Create Knowledge Base and Upload Documents**:
+   - Pick a **Deep Search Embedding Model**.
+   - Click **Next**. The system will:
+     - **First-time sync**: create a new knowledge base in Deep Search named `deepsearch_<source kb name>` and upload everything from the current knowledge base.
+     - **Re-sync**: this step does **not** upload immediately. The overwrite-style re-upload is deferred to Step 2 so that cancelling here will not wipe out content already in Deep Search.
+   - What gets uploaded depends on the source knowledge base type:
+
+     | Source KB Type | Uploaded Content                                                                            |
+     |----------------|---------------------------------------------------------------------------------------------|
+     | Document       | The original local file of every document is uploaded directly                              |
+     | Weblink        | Each URL is re-fetched and parsed into a synthetic Markdown file (named after the page title) and uploaded |
+
+4. In **Step 2: Build Index**:
+   - Configure Deep Search-side parsing, segmentation, and graph-enhancement parameters (the same fields as a local KB).
+   - Click **Finish** to submit the indexing task. Deep Search processes the uploaded files asynchronously.
+
+5. After a successful sync, the corresponding **mirror knowledge base** shows up in the knowledge base list.
+
+## Behavior of the Mirror Knowledge Base
+
+- **Independent entity**: the mirror knowledge base appears as its own card in the list, with its own document/link list and indexing state.
+- **Independently editable**: from the mirror's edit page you can add, delete, rename, refresh status of documents/links, and toggle graph enhancement, just like any other KB.
+- **Weblink mirror**: adding new links inside the mirror is **append-only** — existing links in the mirror are not removed. Each new link is re-fetched and stored as a synthetic Markdown file in Deep Search.
+- **Re-sync**: clicking **Sync to Deep Search** again on the **source** KB performs an **overwrite** of the mirror's document list with the full current contents of the source KB.

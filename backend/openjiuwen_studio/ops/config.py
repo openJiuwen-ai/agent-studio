@@ -23,7 +23,7 @@ def find_env_file():
 
 class Settings(BaseSettings):
     # 数据库类型配置 (mysql/sqlite)
-    DB_TYPE: str = Field(default="mysql", env="DB_TYPE")
+    DB_TYPE: Optional[str] = Field(default=None, env="DB_TYPE")
 
     # mysql配置
     DB_HOST: Optional[str] = Field(default=None, env="DB_HOST")

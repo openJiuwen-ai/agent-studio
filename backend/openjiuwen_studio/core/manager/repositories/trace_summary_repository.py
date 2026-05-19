@@ -252,7 +252,8 @@ def _extract_summary_execution_info_from_trace_detail(
             if parent_component.child_invokes_execute_info is None:
                 parent_component.child_invokes_execute_info = []
             # 检查是否已存在该子组件
-            exists = any(child.invoke_id == component_execute_info.invoke_id for child in parent_component.child_invokes_execute_info)
+            exists = any(child.invoke_id == component_execute_info.invoke_id
+                         for child in parent_component.child_invokes_execute_info)
             if not exists:
                 parent_component.child_invokes_execute_info.append(component_execute_info)
         else:
@@ -780,15 +781,21 @@ class TraceSummaryRepository:
                 execute_info_list = [
                     ag_wrapper.model_dump(exclude_unset=True, exclude_none=True)
                 ]
+                business_version = ag_version
             else:
                 execute_info_models = _extract_summary_execution_info_from_trace_detail(
                     trace_details
                 )
+                wf_version = None
+                for d in trace_details:
+                    if d.get("workflow_version") or d.get("version"):
+                        wf_version = d.get("workflow_version") or d.get("version")
+                        break
                 wf_wrapper = InvokeExecuteInfo(
                     invoke_id=business_id,
                     invoke_type="workflow",
                     invoke_name=None,
-                    invoke_version=None,
+                    invoke_version=wf_version,
                     status=overall_status,
                     inputs=inputs,
                     outputs=outputs,
@@ -799,12 +806,14 @@ class TraceSummaryRepository:
                 execute_info_list = [
                     wf_wrapper.model_dump(exclude_unset=True, exclude_none=True)
                 ]
+                business_version = wf_version
 
             # Create TraceSummary data
             trace_summary_data = TraceSummary(
                 space_id=space_id,
                 business_id=business_id,
                 business_type=business_type,
+                business_version=business_version,
                 trace_id=trace_id,
                 mode=mode,  # Use the passed mode parameter
                 duration=duration,
@@ -826,7 +835,8 @@ class TraceSummaryRepository:
 
             return ResponseModel(
                 code=result.code,
-                message=f"Successfully created TraceSummary from {len(trace_details)} TraceDetail records: {result.message}",
+                message=f"Successfully created TraceSummary from {len(trace_details)}"
+                    f"TraceDetail records: {result.message}",
                 data={
                     "trace_id": trace_id,
                     "detail_count": len(trace_details),
@@ -852,6 +862,7 @@ class TraceSummaryRepository:
                 space_id=wf_exec.space_id,
                 business_id=wf_exec.workflow_id,
                 business_type="WORKFLOW",
+                business_version=wf_exec.workflow_version,
                 trace_id=trace_id,
                 mode=wf_exec.mode or 0,
                 duration=wf_exec.duration,
@@ -918,7 +929,7 @@ class TraceSummaryRepository:
 
     @staticmethod
     def _enrich_with_business_names(data_list: list, db) -> list:
-        """Look up workflow/agent names for a list of trace dicts and add business_name field."""
+        """Look up workflow/agent names and versions for a list of trace dicts."""
         if not data_list:
             return data_list
 
@@ -926,27 +937,41 @@ class TraceSummaryRepository:
         agent_ids = list({d["business_id"] for d in data_list if d.get("business_type") == "AGENT"})
 
         name_map = {}
+        wf_version_map = {}
+        ag_version_map = {}
         try:
             if workflow_ids:
                 from sqlalchemy import select
-                stmt = select(WorkflowBaseDB.workflow_id, WorkflowBaseDB.name).where(
+                stmt = select(WorkflowBaseDB.workflow_id, WorkflowBaseDB.name, WorkflowBaseDB.workflow_version).where(
                     WorkflowBaseDB.workflow_id.in_(workflow_ids)
                 )
                 for row in db.execute(stmt).all():
                     name_map[row.workflow_id] = row.name
+                    # Prefer non-draft version
+                    if row.workflow_id not in wf_version_map or (
+                        row.workflow_version and row.workflow_version != "draft"
+                    ):
+                        wf_version_map[row.workflow_id] = row.workflow_version
 
             if agent_ids:
                 from sqlalchemy import select
-                stmt = select(agent_models.AgentBaseDB.agent_id, agent_models.AgentBaseDB.agent_name).where(
+                stmt = select(agent_models.AgentBaseDB.agent_id, 
+                              agent_models.AgentBaseDB.agent_name, agent_models.AgentBaseDB.agent_version).where(
                     agent_models.AgentBaseDB.agent_id.in_(agent_ids)
                 )
                 for row in db.execute(stmt).all():
                     name_map[row.agent_id] = row.agent_name
+                    if row.agent_id not in ag_version_map or (row.agent_version and row.agent_version != "draft"):
+                        ag_version_map[row.agent_id] = row.agent_version
         except Exception as e:
             logger.warning(f"Failed to look up business names: {e}")
 
         for d in data_list:
             d["business_name"] = name_map.get(d["business_id"])
+            if d.get("business_type") == "WORKFLOW" and not d.get("business_version"):
+                d["business_version"] = wf_version_map.get(d["business_id"])
+            elif d.get("business_type") == "AGENT" and not d.get("business_version"):
+                d["business_version"] = ag_version_map.get(d["business_id"])
 
         return data_list
 
@@ -973,7 +998,8 @@ class TraceSummaryRepository:
 
             result = base_repo.get_dl_in_sql_with_cols(
                 find_id=find_id,
-                cols_find=["trace_id", "business_id", "business_type", "create_time", "duration", "status"],
+                cols_find=["trace_id", "business_id", "business_type", 
+                           "business_version", "create_time", "duration", "status"],
                 order_cols_desc=["create_time"],
                 return_range=[limit],
             )
@@ -986,6 +1012,7 @@ class TraceSummaryRepository:
                     "trace_id": d.get("trace_id"),
                     "business_id": d.get("business_id"),
                     "business_type": d.get("business_type"),
+                    "business_version": d.get("business_version"),
                     "create_time": d.get("create_time"),
                     "duration": d.get("duration"),
                     "status": d.get("status"),
@@ -1070,6 +1097,129 @@ class TraceSummaryRepository:
                 data=data_list,
             )
 
+    @staticmethod
+    def _build_live_summary_from_trace_detail(trace_id: str, db) -> ResponseModel:
+        """Build an ExecutionLogSummary from TraceDetailDB for a running (incomplete) trace.
+
+        Read-only — does not write to TraceSummaryDB.
+        """
+        detail_base_repo = JiuwenBaseRepository(db, TraceDetailDB)
+        detail_result = detail_base_repo.get_dl_in_sql_with_cols(
+            find_id={"trace_id": trace_id}, order_cols_asc=["start_time_micros"]
+        )
+        if detail_result.code != status.HTTP_200_OK or not detail_result.data:
+            return ResponseModel(
+                code=status.HTTP_404_NOT_FOUND,
+                message="Trace summary record not found",
+                data=None,
+            )
+
+        trace_details = detail_result.data
+        first_detail = trace_details[0]
+        business_id = first_detail.get("business_id")
+        business_type = first_detail.get("business_type")
+
+        start_time = None
+        end_time = None
+        for d in trace_details:
+            if start_time is None and d.get("start_time_micros"):
+                start_time = d.get("start_time_micros")
+            if d.get("end_time_micros"):
+                try:
+                    de_int = int(d["end_time_micros"])
+                    et_int = int(end_time) if end_time else None
+                    if et_int is None or de_int > et_int:
+                        end_time = d["end_time_micros"]
+                except (ValueError, TypeError):
+                    pass
+        duration = _calc_duration_ms(start_time, end_time)
+
+        span_status_map: Dict[str, set] = {}
+        for d in trace_details:
+            sid = d.get("span_id")
+            sc = d.get("status_code")
+            if sc is None or sc == "":
+                sc = "start"
+            elif sc == "0":
+                sc = "finish"
+            s = span_status_map.setdefault(sid, set())
+            s.add(sc)
+
+        has_error = any(
+            any(x not in ("start", "finish", "interrupted") for x in v)
+            for v in span_status_map.values()
+        )
+        has_interrupted = any("interrupted" in v for v in span_status_map.values())
+        if has_error:
+            overall_status = "error"
+        elif has_interrupted:
+            overall_status = "interrupted"
+        else:
+            all_finished = all("finish" in v for v in span_status_map.values()) if span_status_map else False
+            if all_finished:
+                overall_status = "finish"
+            else:
+                has_any_finish = any("finish" in v for v in span_status_map.values())
+                overall_status = "running" if has_any_finish else "start"
+
+        if business_type == "AGENT":
+            execute_info_models = _extract_agent_execution_info_from_trace_detail(trace_details)
+            inputs = None
+            outputs = None
+            for d in trace_details:
+                if d.get("platform_type") == "studio_agent":
+                    if inputs is None:
+                        inputs = _normalize_dict_field(d.get("input"))
+                    break
+            for d in reversed(trace_details):
+                if d.get("platform_type") == "studio_agent" and d.get("output") is not None:
+                    outputs = _normalize_dict_field(d.get("output"))
+                    break
+            ag_version = None
+            for d in trace_details:
+                if d.get("platform_type") == "studio_agent":
+                    ag_version = d.get("agent_version") or d.get("version")
+                    break
+            wrapper = InvokeExecuteInfo(
+                invoke_id=business_id, invoke_type="agent", invoke_name="agent",
+                invoke_version=ag_version, status=overall_status,
+                inputs=inputs, outputs=outputs, duration=duration, start_timestamp=0,
+            )
+            wrapper.child_invokes_execute_info = execute_info_models
+            execute_info_list_raw = [wrapper]
+        else:
+            execute_info_models = _extract_summary_execution_info_from_trace_detail(trace_details)
+            inputs = _normalize_dict_field(first_detail.get("input"))
+            outputs = _normalize_dict_field(trace_details[-1].get("output"))
+            wf_version = None
+            for d in trace_details:
+                if d.get("workflow_version") or d.get("version"):
+                    wf_version = d.get("workflow_version") or d.get("version")
+                    break
+            wrapper = InvokeExecuteInfo(
+                invoke_id=business_id, invoke_type="workflow", invoke_name=None,
+                invoke_version=wf_version, status=overall_status,
+                inputs=inputs, outputs=outputs, duration=duration, start_timestamp=0,
+            )
+            wrapper.child_invokes_execute_info = execute_info_models
+            execute_info_list_raw = [wrapper]
+
+        summary = ExecutionLogSummary(
+            trace_id=trace_id,
+            create_time=_to_datetime(start_time),
+            duration=duration,
+            status=overall_status,
+            inputs=inputs,
+            outputs=outputs,
+            execute_info_list=execute_info_list_raw or None,
+        )
+        _normalize_start_timestamp(summary.execute_info_list)
+        return ResponseModel(
+            code=status.HTTP_200_OK,
+            message="Live trace summary built from TraceDetail",
+            data=summary.model_dump(),
+        )
+
     @with_exception_handling
     def get_trace_summary_by_trace_id(self, trace_id: str) -> ResponseModel:
         """Query record by trace_id
@@ -1090,11 +1240,9 @@ class TraceSummaryRepository:
                 return result
 
             if not result.data:
-                return ResponseModel(
-                    code=status.HTTP_404_NOT_FOUND,
-                    message="Trace summary record not found",
-                    data=None,
-                )
+                # No completed TraceSummary — fall back to live data from TraceDetail
+                # (handles running/in-progress traces)
+                return self._build_live_summary_from_trace_detail(trace_id, db)
             row = result.data[0]
             exec_infos = []
             for item in row.get("execute_info_list") or []:

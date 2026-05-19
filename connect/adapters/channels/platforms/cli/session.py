@@ -32,10 +32,8 @@ def get_client(backend_url: str) -> Optional[OpenJiuwenClient]:
 
 
 def require_client(backend_url: str) -> OpenJiuwenClient:
-    """Like get_client but exits with an error message if not authenticated."""
+    """Like get_client but raises RuntimeError if not authenticated."""
     client = get_client(backend_url)
     if client is None:
-        error = "❌ Not logged in. Run:  connect.adapters.channels.run cli login"
-        logger.error(error)
-        raise RuntimeError(error)
+        raise RuntimeError("Not logged in. Run:  connect.adapters.channels.run cli login")
     return client

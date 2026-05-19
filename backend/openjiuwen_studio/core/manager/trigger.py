@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 import secrets
 import uuid
 from typing import Optional
 
-from fastapi import status
+from fastapi import BackgroundTasks, status
 from sqlalchemy import func
 
 from openjiuwen.core.common.logging import logger
@@ -172,6 +171,10 @@ def trigger_update(req: TriggerUpdate, current_user: dict) -> ResponseModel:
                 trigger.name = req.name
             if req.description is not None:
                 trigger.description = req.description
+            if req.target_type is not None:
+                trigger.target_type = req.target_type
+            if req.target_id is not None:
+                trigger.target_id = req.target_id
             if req.target_version is not None:
                 trigger.target_version = req.target_version
             if req.input_payload is not None:
@@ -277,7 +280,7 @@ def trigger_deactivate(req: TriggerActivate, current_user: dict) -> ResponseMode
         return ResponseModel(code=status.HTTP_500_INTERNAL_SERVER_ERROR, message=str(e))
 
 
-def trigger_run_manual(req: TriggerGet, current_user: dict) -> ResponseModel:
+def trigger_run_manual(req: TriggerGet, current_user: dict, background_tasks: BackgroundTasks) -> ResponseModel:
     """Queue a one-shot manual execution. Returns immediately."""
     try:
         check_user_space(req.space_id, current_user)
@@ -294,7 +297,7 @@ def trigger_run_manual(req: TriggerGet, current_user: dict) -> ResponseModel:
             db.close()
 
         from openjiuwen_studio.core.scheduler.runner import execute_trigger_job
-        asyncio.create_task(execute_trigger_job(trigger_id, fired_by="manual"))
+        background_tasks.add_task(execute_trigger_job, trigger_id, "manual")
 
         return ResponseModel(
             code=status.HTTP_200_OK,

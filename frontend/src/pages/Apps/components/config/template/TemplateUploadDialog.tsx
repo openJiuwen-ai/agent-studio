@@ -131,7 +131,7 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
     } catch (error) {
       console.error('上传模板失败:', error)
       // 提取错误消息
-      const errorMessage = error instanceof Error ? error.message : '上传模板失败，请重试'
+      const errorMessage = error instanceof Error ? error.message : t('apps.config.template.uploadFailedRetry')
       setLocalError(errorMessage)
     }
   }

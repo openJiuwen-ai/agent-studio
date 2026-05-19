@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import cronstrue from 'cronstrue';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +9,7 @@ import {
   IconButton,
   MenuItem,
   Select,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -25,8 +26,10 @@ import {
   DialogActions,
   FormControl,
   InputLabel,
+  Snackbar,
+  Alert,
 } from '@mui/material';
-import { Plus, Pencil, Trash2, Play, Clock, Webhook, Radio } from 'lucide-react';
+import { Plus, Pencil, Trash2, Play, Clock, Webhook, Radio, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores/useAuthStore';
 import {
   useTriggers,
@@ -36,15 +39,29 @@ import {
   useRunTrigger,
   useAgents,
   useWorkflows,
+  TriggerService,
 } from '@test-agentstudio/api-client';
 import { useTranslation as useT } from 'react-i18next';
-import type { Trigger, TriggerType } from '@/types/triggerTypes';
+import type { Trigger, TriggerType, TriggerExecutionLog, ExecutionStatus } from '@/types/triggerTypes';
 import dayjs from 'dayjs';
 
 function formatInterval(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
   return `${Math.round(seconds / 3600)}h`;
+}
+
+const EXEC_STATUS_COLORS: Record<ExecutionStatus, 'success' | 'error' | 'default' | 'warning'> = {
+  success: 'success',
+  error: 'error',
+  skipped: 'default',
+  running: 'warning',
+};
+
+function formatDuration(ms?: number | null): string {
+  if (ms == null) return '';
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 const TYPE_COLORS: Record<TriggerType, 'primary' | 'secondary' | 'warning'> = {
@@ -113,6 +130,53 @@ const workflowMap = useMemo(() => {
   return m;
 }, [workflowsData]);
 
+  // ── Last execution per trigger ──────────────────────────────────────────────
+  // undefined  = not yet fetched  |  null = trigger has no executions yet
+  const [lastExecutions, setLastExecutions] = useState<Record<string, TriggerExecutionLog | null | undefined>>({});
+
+  useEffect(() => {
+    if (!spaceId || triggers.length === 0) return;
+    let cancelled = false;
+
+    Promise.all(
+      triggers.map(trigger =>
+        TriggerService.getExecutionLogs({
+          space_id: spaceId,
+          trigger_id: trigger.trigger_id,
+          page: 1,
+          page_size: 1,
+        })
+          .then(res => ({
+            id: trigger.trigger_id,
+            log: ((res?.data as any)?.items?.[0] as TriggerExecutionLog) ?? null,
+          }))
+          .catch(() => ({ id: trigger.trigger_id, log: null })),
+      ),
+    ).then(results => {
+      if (cancelled) return;
+      const map: Record<string, TriggerExecutionLog | null> = {};
+      for (const r of results) map[r.id] = r.log;
+      setLastExecutions(map);
+    });
+
+    return () => { cancelled = true; };
+  }, [data, spaceId]); // re-fetch whenever the trigger list refreshes
+
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false, message: '', severity: 'success',
+  });
+  const closeSnackbar = () => setSnackbar(s => ({ ...s, open: false }));
+
+  // Refresh the last execution entry for a single trigger (used after a manual run)
+  const refreshOneExecution = (triggerId: string) => {
+    TriggerService.getExecutionLogs({ space_id: spaceId, trigger_id: triggerId, page: 1, page_size: 1 })
+      .then(res => {
+        const log = ((res?.data as any)?.items?.[0] as TriggerExecutionLog) ?? null;
+        setLastExecutions(prev => ({ ...prev, [triggerId]: log }));
+      })
+      .catch(() => {});
+  };
+
   const { mutate: activate, isLoading: isActivating } = useActivateTrigger();
   const { mutate: deactivate, isLoading: isDeactivating } = useDeactivateTrigger();
   const { mutate: deleteTrigger, isLoading: isDeleting } = useDeleteTrigger();
@@ -140,7 +204,25 @@ const workflowMap = useMemo(() => {
   };
 
   const handleRun = (trigger: Trigger) => {
-    run({ space_id: spaceId, trigger_id: trigger.trigger_id });
+    run(
+      { space_id: spaceId, trigger_id: trigger.trigger_id },
+      {
+        onSuccess: () => {
+          setSnackbar({ open: true, message: t('triggers.runStarted', 'Run started'), severity: 'success' });
+          // First refresh after ~1 s to pick up the "running" status
+          setTimeout(() => refreshOneExecution(trigger.trigger_id), 1000);
+          // Second refresh after ~5 s to pick up the final result for quick executions
+          setTimeout(() => refreshOneExecution(trigger.trigger_id), 5000);
+        },
+        onError: (err: any) => {
+          setSnackbar({
+            open: true,
+            message: err?.message || t('triggers.runFailed', 'Failed to start run'),
+            severity: 'error',
+          });
+        },
+      },
+    );
   };
 
   return (
@@ -174,18 +256,18 @@ const workflowMap = useMemo(() => {
           </Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel>{t('triggers.form.status', 'Status')}</InputLabel>
+          <InputLabel>{t('triggers.filter.enabled', 'Enabled')}</InputLabel>
           <Select
             value={activeFilter}
             onChange={e => {
               setActiveFilter(e.target.value);
               setPage(1);
             }}
-            label={t('triggers.form.status', 'Status')}
+            label={t('triggers.filter.enabled', 'Enabled')}
           >
             <MenuItem value="">All</MenuItem>
-            <MenuItem value="true">{t('triggers.status.active', 'Active')}</MenuItem>
-            <MenuItem value="false">{t('triggers.status.inactive', 'Inactive')}</MenuItem>
+            <MenuItem value="true">{t('triggers.status.active', 'Enabled')}</MenuItem>
+            <MenuItem value="false">{t('triggers.status.inactive', 'Disabled')}</MenuItem>
           </Select>
         </FormControl>
       </div>
@@ -209,16 +291,32 @@ const workflowMap = useMemo(() => {
           <Table>
             <TableHead>
               <TableRow>
+                <TableCell sx={{ width: 56, pr: 0 }}>{t('triggers.filter.enabled', 'Enabled')}</TableCell>
                 <TableCell>{t('triggers.form.name', 'Name')}</TableCell>
                 <TableCell>{t('triggers.form.triggerType', 'Type')}</TableCell>
                 <TableCell>{t('triggers.form.targetType', 'Target')}</TableCell>
-                <TableCell>{t('triggers.form.status', 'Status')}</TableCell>
+                <TableCell>{t('triggers.executionHistory.lastExecution', 'Last Execution')}</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {triggers.map(trigger => (
                 <TableRow key={trigger.trigger_id} hover>
+                  {/* Enabled/disabled toggle — Switch makes interactivity obvious */}
+                  <TableCell sx={{ width: 56, pr: 0 }}>
+                    <Tooltip
+                      title={trigger.is_active
+                        ? t('triggers.status.deactivate', 'Click to disable')
+                        : t('triggers.status.activate', 'Click to enable')}
+                    >
+                      <Switch
+                        size="small"
+                        checked={trigger.is_active}
+                        onChange={() => handleToggleActive(trigger)}
+                        color="success"
+                      />
+                    </Tooltip>
+                  </TableCell>
                   <TableCell>
                     <div>
                       <Typography variant="body2" fontWeight="medium">
@@ -270,25 +368,47 @@ const workflowMap = useMemo(() => {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Tooltip
-                      title={
-                        trigger.is_active
-                          ? t('triggers.status.active', 'Active — click to deactivate')
-                          : t('triggers.status.inactive', 'Inactive — click to activate')
+                    {(() => {
+                      const log = lastExecutions[trigger.trigger_id];
+                      // undefined → still loading; show nothing yet
+                      if (log === undefined) return null;
+                      // null → no executions yet
+                      if (log === null) {
+                        return (
+                          <Typography variant="caption" color="text.disabled">—</Typography>
+                        );
                       }
-                    >
-                      <Chip
-                        label={
-                          trigger.is_active
-                            ? t('triggers.status.active', 'Active')
-                            : t('triggers.status.inactive', 'Inactive')
-                        }
-                        color={trigger.is_active ? 'success' : 'default'}
-                        size="small"
-                        onClick={() => handleToggleActive(trigger)}
-                        sx={{ cursor: 'pointer' }}
-                      />
-                    </Tooltip>
+                      const chip = (
+                        <Chip
+                          label={t(`triggers.executionStatus.${log.status}`, log.status)}
+                          color={EXEC_STATUS_COLORS[log.status] || 'default'}
+                          size="small"
+                        />
+                      );
+                      return (
+                        <div>
+                          {log.error_message ? (
+                            <Tooltip
+                              title={
+                                <Typography variant="caption" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                  {log.error_message}
+                                </Typography>
+                              }
+                              arrow
+                            >
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'help' }}>
+                                {chip}
+                                <AlertCircle size={13} color="var(--mui-palette-error-main, #d32f2f)" />
+                              </span>
+                            </Tooltip>
+                          ) : chip}
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.25 }}>
+                            {log.started_at ? dayjs(log.started_at).format('MM-DD HH:mm') : '—'}
+                            {log.duration_ms != null ? ` · ${formatDuration(log.duration_ms)}` : ''}
+                          </Typography>
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell align="right">
                     <div className="flex items-center justify-end gap-1">
@@ -334,6 +454,18 @@ const workflowMap = useMemo(() => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Run feedback */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={closeSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={snackbar.severity} onClose={closeSnackbar} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </div>
   );
 };

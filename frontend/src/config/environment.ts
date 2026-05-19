@@ -32,4 +32,7 @@ export const ENV_CONFIG = {
 
   // Login Page Configuration
   VITE_ENABLE_NEW_AUTH: import.meta.env.VITE_ENABLE_NEW_AUTH === 'True',
+
+  // Feature Flags
+  VITE_ENABLE_EVALUATION: import.meta.env.VITE_ENABLE_EVALUATION === 'True',
 }

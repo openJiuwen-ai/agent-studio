@@ -60,7 +60,11 @@ async def plugin_create(
     """
     try:
         logger.info(f"🔧 Plugin create start")
-        logger.info(f"   Request data: {request.model_dump()}")
+        logger.info(f"   Plugin type: {request.plugin_type}")
+        if request.plugin_type == 3:  # MCP plugin
+            logger.info(f"   MCP transport: {request.mcp_transport}")
+            logger.info(f"   External type: {request.external_plugin_type}")
+            logger.info(f"   URL provided: {'Yes' if request.url else 'No'}")
         logger.info(f"   User: {current_user.get('email', 'unknown')}")
         res = mgr.plugin_create(request, current_user)
         logger.info(f"✅ Plugin create successful")
@@ -69,9 +73,28 @@ async def plugin_create(
         logger.error(f"❌ Plugin create validation failed")
         logger.error(f"   Errors: {e.errors()}")
         logger.error(f"   Request data: {request.model_dump() if hasattr(request, 'model_dump') else 'N/A'}")
+        # Extract user-friendly error messages
+        error_details = []
+        for err in e.errors():
+            field = ".".join(str(loc) for loc in err["loc"])
+            msg = err["msg"]
+            error_details.append(f"{field}: {msg}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Request validation failed: {e.errors()}"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "Request validation failed",
+                "errors": error_details,
+                "details": e.errors()
+            }
+        ) from e
+    except ValueError as e:
+        # Catch ValueError from model_post_init validation
+        logger.error(f"❌ Plugin create validation error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": str(e)
+            }
         ) from e
     except Exception as e:
         logger.error(f"❌ Plugin create failed with unexpected error: {str(e)}")

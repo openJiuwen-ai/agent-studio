@@ -16,7 +16,7 @@ async def handle_agent_execute(user_id: str, arg: str, say) -> None:
         return
     await say("Running agent...")
     try:
-        events = await asyncio.get_event_loop().run_in_executor(
+        events, _ = await asyncio.get_event_loop().run_in_executor(
             None, lambda: execute_agent(client, agent_id, message)
         )
         text, _, error = parse_agent_response(events)

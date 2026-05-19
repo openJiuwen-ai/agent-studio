@@ -28,7 +28,7 @@ The CLI itself uses only stdlib, but the shared `client/` client requires `reque
 From the project root:
 
 ```bash
-python -m channels.run cli login
+python -m connect.adapters.channels.run cli login
 ```
 
 You will be prompted for your username and password.
@@ -37,14 +37,14 @@ The session token is saved to `channels/platforms/cli/.cli_tokens.json` and reus
 ### Custom backend URL
 
 ```bash
-python -m channels.run cli --backend-url http://my-server:8000 login
+python -m connect.adapters.channels.run cli --backend-url http://my-server:8000 login
 ```
 
 You can also set the env var instead of typing the flag every time:
 
 ```bash
 export BACKEND_URL=http://my-server:8000
-python -m channels.run cli login
+python -m connect.adapters.channels.run cli login
 ```
 
 ---
@@ -52,13 +52,13 @@ python -m channels.run cli login
 ## Step 3 — Check Status
 
 ```bash
-python -m channels.run cli status
+python -m connect.adapters.channels.run cli status
 ```
 
 Shows whether you are logged in and which user the token belongs to.
 
 ```bash
-python -m channels.run cli health
+python -m connect.adapters.channels.run cli health
 ```
 
 Checks that the backend is reachable and healthy.
@@ -70,19 +70,19 @@ Checks that the backend is reachable and healthy.
 ### List all workflows
 
 ```bash
-python -m channels.run cli workflow list
+python -m connect.adapters.channels.run cli workflow list
 ```
 
 ### Search workflows
 
 ```bash
-python -m channels.run cli workflow search "weather"
+python -m connect.adapters.channels.run cli workflow search "weather"
 ```
 
 ### Run a workflow
 
 ```bash
-python -m channels.run cli workflow run <workflow-id>
+python -m connect.adapters.channels.run cli workflow execute <workflow-id>
 ```
 
 If the workflow requires input parameters, the CLI will prompt you for each one interactively.
@@ -90,7 +90,7 @@ If the workflow requires input parameters, the CLI will prompt you for each one 
 You can also supply parameters directly with `-i`:
 
 ```bash
-python -m channels.run cli workflow run <workflow-id> -i city=London -i days=3
+python -m connect.adapters.channels.run cli workflow execute <workflow-id> -i city=London -i days=3
 ```
 
 `-i` can be repeated for multiple parameters. Any parameter not supplied via `-i` will be prompted interactively.
@@ -102,28 +102,28 @@ python -m channels.run cli workflow run <workflow-id> -i city=London -i days=3
 ### List all agents
 
 ```bash
-python -m channels.run cli agent list
+python -m connect.adapters.channels.run cli agent list
 ```
 
 ### Search agents
 
 ```bash
-python -m channels.run cli agent search "support"
+python -m connect.adapters.channels.run cli agent search "support"
 ```
 
 ### Send a single message
 
 ```bash
-python -m channels.run cli agent run <agent-id> "Hello, how can you help me?"
+python -m connect.adapters.channels.run cli agent execute <agent-id> "Hello, how can you help me?"
 ```
 
 ### Interactive chat session
 
 ```bash
-python -m channels.run cli agent chat <agent-id>
+python -m connect.adapters.channels.run cli agent chat <agent-id>
 ```
 
-Starts a back-and-forth chat. Type `exit`, `quit`, or `q` to end the session, or press `Ctrl+C`.
+Starts an interactive chat session. Simply type your messages at the `You:` prompt and press Enter. Type `exit`, `quit`, or `q` to end the session, or press `Ctrl+C`.
 
 Example session:
 
@@ -146,7 +146,7 @@ You: exit
 ## Step 6 — Log Out
 
 ```bash
-python -m channels.run cli logout
+python -m connect.adapters.channels.run cli logout
 ```
 
 Removes the saved token for your OS user.
@@ -177,14 +177,14 @@ This file is listed in `.gitignore` and will not be committed.
 | `cli health` | Check backend health |
 | `cli workflow list` | List all workflows |
 | `cli workflow search <keyword>` | Search workflows |
-| `cli workflow run <id> [-i KEY=VALUE ...]` | Run a workflow |
+| `cli workflow execute <id> [-i KEY=VALUE ...]` | Execute a workflow |
 | `cli agent list` | List all agents |
 | `cli agent search <keyword>` | Search agents |
-| `cli agent run <id> <message>` | Send one message to an agent |
-| `cli agent chat <id>` | Interactive chat session |
+| `cli agent execute <id> <message>` | Send one message to an agent |
+| `cli agent chat <id>` | Start interactive chat session |
 
 Global option available for all commands:
 
 ```bash
-python -m channels.run cli --backend-url http://my-server:8000 <command>
+python -m connect.adapters.channels.run cli --backend-url http://my-server:8000 <command>
 ```

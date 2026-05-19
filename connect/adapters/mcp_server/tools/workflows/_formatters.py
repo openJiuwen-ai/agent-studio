@@ -26,7 +26,8 @@ def format_workflows(data: Dict[str, Any]) -> str:
 
 def format_workflow_detail(data: Dict[str, Any]) -> str:
     """Format a single workflow's full definition (name, description, input params)."""
-    wf = data.get('data', data)
+    # Extract workflow from nested structure: data.data.workflow
+    wf = data.get('data', {}).get('workflow', data.get('data', data))
     name = wf.get('name', '(unnamed)')
     desc = wf.get('description', wf.get('desc', '')).strip()
     wf_id = wf.get('id', wf.get('workflow_id', 'unknown'))

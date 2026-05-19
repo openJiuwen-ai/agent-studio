@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Message, LinkContent } from '../../../stores/useConversationStore';
 import { ExternalLink, FileText, Globe } from 'lucide-react';
 
@@ -17,6 +18,7 @@ interface LinkMessageProps {
  * 2. card - 小卡片样式链接
  */
 export const LinkMessage: React.FC<LinkMessageProps> = ({ message }) => {
+  const { t } = useTranslation();
   const linkContent = message.content as LinkContent;
 
   if (!linkContent) {
@@ -29,7 +31,7 @@ export const LinkMessage: React.FC<LinkMessageProps> = ({ message }) => {
   if (!url) {
     return (
       <div className="text-sm text-gray-700">
-        {title || query || '未知链接'}
+        {title || query || t('apps.conversation.linkMessage.unknownLink')}
       </div>
     );
   }
@@ -52,7 +54,7 @@ export const LinkMessage: React.FC<LinkMessageProps> = ({ message }) => {
           {isWeb && <ExternalLink size={14} />}
         </a>
         {query && (
-          <div className="text-xs text-gray-500 mt-1">搜索词: {query}</div>
+          <div className="text-xs text-gray-500 mt-1">{t('apps.conversation.linkMessage.searchQuery')}: {query}</div>
         )}
         {description && (
           <div className="text-xs text-gray-500 mt-1">{description}</div>
@@ -90,7 +92,7 @@ export const LinkMessage: React.FC<LinkMessageProps> = ({ message }) => {
         {/* 搜索词 */}
         {query && (
           <p className="text-xs text-blue-600 mt-2 line-clamp-1">
-            搜索: {query}
+            {t('apps.conversation.linkMessage.search')}: {query}
           </p>
         )}
 
@@ -102,7 +104,7 @@ export const LinkMessage: React.FC<LinkMessageProps> = ({ message }) => {
         {/* 元数据 */}
         <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
           <span className="capitalize">
-            {displaySource === 'web' ? '网页' : '知识库'}
+            {displaySource === 'web' ? t('apps.conversation.linkMessage.web') : t('apps.conversation.linkMessage.knowledgeBase')}
           </span>
           {publishTime && (
             <span>{new Date(publishTime).toLocaleDateString()}</span>

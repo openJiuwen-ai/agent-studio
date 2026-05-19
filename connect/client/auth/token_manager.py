@@ -61,7 +61,8 @@ def verify_and_refresh(
         result = api_refresh_token(client, current_refresh_token)
         new_token: Optional[str] = (
             result.get('access_token') or
-            result.get('data', {}).get('access_token')
+            result.get('data', {}).get('access_token') or
+            result.get('data', {}).get('token')
         )
         logger.info('[TOKEN] user=%s — refresh result keys=%s new_token_present=%s', user_id, list(result.keys())
         if isinstance(result, dict) else type(result).__name__, bool(new_token))

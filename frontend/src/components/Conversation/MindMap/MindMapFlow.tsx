@@ -521,7 +521,7 @@ const MindMapFlow: React.FC<MindMapFlowComponentProps> = ({
   if (!graph) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400">
-        <p>暂无思维链数据</p>
+        <p>{t('apps.deepSearch.mindMap.noData')}</p>
       </div>
     );
   }
@@ -566,7 +566,7 @@ const MindMapFlow: React.FC<MindMapFlowComponentProps> = ({
         />
         <Panel position="top-left" className="bg-white/80 px-3 py-1.5 rounded-lg shadow-sm">
           <span className="text-sm text-gray-600">
-            节点: {stats.nodeCount} | 边: {stats.edgeCount}
+            {t('apps.deepSearch.mindMap.nodeStats', { nodes: stats.nodeCount, edges: stats.edgeCount })}
           </span>
         </Panel>
         <Panel position="top-right" className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-gray-200">
@@ -576,21 +576,21 @@ const MindMapFlow: React.FC<MindMapFlowComponentProps> = ({
               className={`flex items-center gap-1.5 px-3 py-1.5 text-sm transition-colors ${graphType === 'sectionGraph' ? 'bg-gray-800 text-white font-bold' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
               <ListTree size={16} />
-              <span>章节图</span>
+              <span>{t('apps.deepSearch.mindMap.sectionGraph')}</span>
             </button>
             <button
               onClick={() => setGraphType('taskGraph')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-sm transition-colors ${graphType === 'taskGraph' ? 'bg-gray-800 text-white font-bold' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
             >
               <Network size={16} />
-              <span>任务图</span>
+              <span>{t('apps.deepSearch.mindMap.taskGraph')}</span>
             </button>
           </div>
           <button
             onClick={handleLayout}
             className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors shadow-sm"
           >
-            重新布局
+            {t('apps.deepSearch.mindMap.relayout')}
           </button>
         </Panel>
         <Controls position="top-right" style={{ top: '60px' }} />

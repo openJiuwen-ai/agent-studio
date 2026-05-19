@@ -16,11 +16,6 @@ import type {
 /** 与后端 WEBLINK_KB_MAX_LINKS 一致：每个 weblink 知识库链接总数上限 */
 const WEBLINK_KB_MAX_LINKS = 50
 
-function urlsMatchLastAdded(valid: string[], lastAddedUrls: string[], addedWeblinkIds: string[]): boolean {
-  if (addedWeblinkIds.length === 0 || valid.length !== lastAddedUrls.length) return false
-  return valid.every((u, i) => u === lastAddedUrls[i])
-}
-
 interface AddWeblinkDialogProps {
   open: boolean
   knowledgeBase: KnowledgeBase
@@ -56,8 +51,10 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
   const [isLoading, setIsLoading] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [urlText, setUrlText] = useState('')
+  /** step1 校验通过、计划在 step2「完成」时一次性提交的 URL 列表（仅本地缓存，不落库） */
+  const [pendingUrls, setPendingUrls] = useState<string[]>([])
+  /** step2「完成」时 add 成功的 weblink_id：用作 add 失败重试的幂等守卫，避免重复 add */
   const [addedWeblinkIds, setAddedWeblinkIds] = useState<string[]>([])
-  const [addedUrls, setAddedUrls] = useState<string[]>([])
   /** 第一步校验错误：对话框内展示，避免全屏层挡住 Toast 时「点了没反应」 */
   const [step1Error, setStep1Error] = useState('')
   const prevOpenRef = useRef(false)
@@ -158,8 +155,8 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
   const resetForm = useCallback(() => {
     setCurrentStep(1)
     setUrlText('')
+    setPendingUrls([])
     setAddedWeblinkIds([])
-    setAddedUrls([])
     setStep1Error('')
     setModelTestPassed(false)
     setTestedModelId(null)
@@ -185,14 +182,15 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
     onClose()
   }
 
-  const handleAddUrls = async () => {
+  /** 仅做本地校验，不调任何接口；通过则返回有效 URL 列表，否则展示错误 */
+  const validateStep1 = (): string[] | null => {
     const existingCount = Number(existingWeblinkCount) || 0
     const urls = parseUrls(urlText)
     if (urls.length === 0) {
       const msg = t('knowledgeBases.addWeblink.noUrls') || '请输入至少一个URL'
       setStep1Error(msg)
       showError(msg)
-      return false
+      return null
     }
     const { valid, invalid } = validateUrls(urls)
     if (invalid.length > 0) {
@@ -201,7 +199,7 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
         `以下URL无效（需以 http:// 或 https:// 开头）: ${invalid.slice(0, 3).join(', ')}${invalid.length > 3 ? '...' : ''}`
       setStep1Error(msg)
       showError(msg)
-      return false
+      return null
     }
     if (existingCount + valid.length > WEBLINK_KB_MAX_LINKS) {
       const msg =
@@ -213,47 +211,15 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
         `超过上限：最多 ${WEBLINK_KB_MAX_LINKS} 条，当前知识库已有 ${existingCount} 条，本次 ${valid.length} 条。`
       setStep1Error(msg)
       showError(msg)
-      return false
+      return null
     }
-
-    setIsLoading(true)
-    setStep1Error('')
-    try {
-      const response = await KnowledgeBaseService.addWeblinks({
-        space_id: spaceId,
-        kb_id: knowledgeBase.id,
-        urls: valid,
-      })
-      if (response.code === 200 && response.data) {
-        const ids = response.data.links?.map((l: { id: string }) => l.id) || []
-        setAddedWeblinkIds(ids)
-        setAddedUrls(valid)
-        showSuccess(
-          t('knowledgeBases.addWeblink.addSuccess') ||
-            `成功添加 ${response.data.success_count} 个链接`
-        )
-        if (onWeblinksAdded) onWeblinksAdded()
-        return ids
-      } else {
-        const msg = response.message || t('knowledgeBases.addWeblink.addFailed') || '添加失败'
-        setStep1Error(msg)
-        showError(msg)
-        return []
-      }
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error)
-      const msg =
-        (t('knowledgeBases.addWeblink.addFailed') || '添加失败') + (errMsg ? `: ${errMsg}` : '')
-      setStep1Error(msg)
-      showError(msg)
-      return []
-    } finally {
-      setIsLoading(false)
-    }
+    return valid
   }
 
+  /** step2「完成」：先 add（带幂等守卫），再 process。两步任一失败都不关闭对话框，便于用户重试 */
   const handleProcessWeblinks = async () => {
-    if (addedWeblinkIds.length === 0) {
+    const urls = pendingUrls.length > 0 ? pendingUrls : validateStep1()
+    if (!urls || urls.length === 0) {
       showError(t('knowledgeBases.addWeblink.noLinksToProcess') || '没有可处理的链接')
       return
     }
@@ -264,6 +230,32 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
 
     setIsLoading(true)
     try {
+      // 1) add（仅当还未 add 过时；URL 与上次一致即视为已 add，避免重试时重复落库）
+      let weblinkIds = addedWeblinkIds
+      const sameAsAdded =
+        weblinkIds.length > 0 &&
+        urls.length === pendingUrls.length &&
+        urls.every((u, i) => u === pendingUrls[i])
+      if (weblinkIds.length === 0 || !sameAsAdded) {
+        const addRes = await KnowledgeBaseService.addWeblinks({
+          space_id: spaceId,
+          kb_id: knowledgeBase.id,
+          urls,
+        })
+        if (addRes.code !== 200 || !addRes.data) {
+          showError(addRes.message || t('knowledgeBases.addWeblink.addFailed') || '添加失败')
+          return
+        }
+        weblinkIds = addRes.data.links?.map((l: { id: string }) => l.id) || []
+        if (weblinkIds.length === 0) {
+          showError(t('knowledgeBases.addWeblink.addFailed') || '添加失败')
+          return
+        }
+        setAddedWeblinkIds(weblinkIds)
+        if (onWeblinksAdded) onWeblinksAdded()
+      }
+
+      // 2) process
       const parsing_strategy: ParsingStrategy = {
         strategy_type: formData.parsingStrategy,
         strategy_config: {},
@@ -288,7 +280,7 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
       const response = await KnowledgeBaseService.processWeblinks({
         space_id: spaceId,
         kb_id: knowledgeBase.id,
-        weblink_id_list: addedWeblinkIds,
+        weblink_id_list: weblinkIds,
         parsing_strategy,
         segmentation_strategy,
         indexing_strategy,
@@ -297,7 +289,7 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
         showSuccess(
           t('knowledgeBases.addWeblink.settingsSuccess') || t('knowledgeBases.addWeblink.processSuccess') || '链接参数设置成功'
         )
-        onSuccess(addedWeblinkIds)
+        onSuccess(weblinkIds)
         handleClose()
       } else {
         showError(response.message || t('knowledgeBases.addWeblink.processFailed') || '处理启动失败')
@@ -326,50 +318,20 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
     if (isLoading || isTransitioning) return
     try {
       if (currentStep === 1) {
-        const existingCount = Number(existingWeblinkCount) || 0
-        const urls = parseUrls(urlText)
-        if (urls.length === 0) {
-          if (addedWeblinkIds.length > 0) {
-            setStep1Error('')
-            goToStep2()
-            return
-          }
-          const msg = t('knowledgeBases.addWeblink.noUrls') || '请输入至少一个URL'
-          setStep1Error(msg)
-          showError(msg)
-          return
+        // step1：仅本地校验并缓存 URL，绝不调任何后端接口；未点「完成」前不会落库
+        const valid = validateStep1()
+        if (!valid) return
+        // URL 与已 add 不一致时，清掉幂等守卫，确保 step2 完成时会重新 add
+        const sameAsAdded =
+          addedWeblinkIds.length > 0 &&
+          valid.length === pendingUrls.length &&
+          valid.every((u, i) => u === pendingUrls[i])
+        if (!sameAsAdded) {
+          setAddedWeblinkIds([])
         }
-        const { valid, invalid } = validateUrls(urls)
-        if (invalid.length > 0) {
-          const msg =
-            t('knowledgeBases.addWeblink.invalidUrls') || '请确保所有URL以 http:// 或 https:// 开头'
-          setStep1Error(msg)
-          showError(msg)
-          return
-        }
-        if (existingCount + valid.length > WEBLINK_KB_MAX_LINKS) {
-          const msg =
-            t('knowledgeBases.addWeblink.exceedsKbLimit', {
-              max: WEBLINK_KB_MAX_LINKS,
-              existing: existingCount,
-              adding: valid.length,
-            }) ||
-            `超过上限：最多 ${WEBLINK_KB_MAX_LINKS} 条，当前知识库已有 ${existingCount} 条，本次 ${valid.length} 条。`
-          setStep1Error(msg)
-          showError(msg)
-          return
-        }
-        const alreadyAddedSame = urlsMatchLastAdded(valid, addedUrls, addedWeblinkIds)
-        if (alreadyAddedSame) {
-          setStep1Error('')
-          goToStep2()
-        } else {
-          const ids = await handleAddUrls()
-          if (Array.isArray(ids) && ids.length > 0) {
-            setStep1Error('')
-            goToStep2()
-          }
-        }
+        setPendingUrls(valid)
+        setStep1Error('')
+        goToStep2()
       } else if (currentStep === 2) {
         await handleProcessWeblinks()
       }
@@ -613,6 +575,8 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
                   onChange={e => {
                     setStep1Error('')
                     setUrlText(e.target.value)
+                    if (pendingUrls.length > 0) setPendingUrls([])
+                    if (addedWeblinkIds.length > 0) setAddedWeblinkIds([])
                   }}
                   placeholder={t('knowledgeBases.addWeblink.urlPlaceholder') || 'https://example.com/page\nhttps://mp.weixin.qq.com/...'}
                   rows={8}
@@ -621,13 +585,13 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
                 <p className="text-xs text-gray-500 mt-2">
                   {t('knowledgeBases.addWeblink.urlHint', { max: WEBLINK_KB_MAX_LINKS })}
                 </p>
-                {addedUrls.length > 0 && (
+                {pendingUrls.length > 0 && (
                   <div className="mt-4">
                     <h3 className="text-sm font-medium text-gray-700 mb-2">
-                      {t('knowledgeBases.addWeblink.selectedUrls') || '已添加的URL'}
+                      {t('knowledgeBases.addWeblink.selectedUrls') || '已校验的URL（点击「完成」后才会保存到知识库）'}
                     </h3>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {addedUrls.map((url, index) => (
+                      {pendingUrls.map((url, index) => (
                         <div key={index} className="flex items-center justify-between bg-gray-50 p-3 rounded">
                           <div className="flex items-center space-x-3 min-w-0 flex-1">
                             <Link2 className="w-5 h-5 text-gray-400 flex-shrink-0" />
@@ -637,15 +601,9 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
                             >
                               {url}
                             </span>
-                            <span className="text-xs text-green-600 flex-shrink-0 ml-2">
-                              ✓ {t('knowledgeBases.addWeblink.addedLabel')}
-                            </span>
                           </div>
                         </div>
                       ))}
-                    </div>
-                    <div className="mt-2 text-xs text-green-600">
-                      {t('knowledgeBases.addWeblink.allUrlsAdded') || 'URL已添加，可直接进入下一步'}
                     </div>
                   </div>
                 )}
@@ -696,8 +654,8 @@ const AddWeblinkDialog: React.FC<AddWeblinkDialogProps> = ({
                   <span key="loading-text">{t('common.saving')}</span>
                 ) : (
                   <span key="next-text" className="flex items-center">
-                    {currentStep === 1 && addedWeblinkIds.length === 0
-                      ? (t('knowledgeBases.addWeblink.addAndNext') || '添加并下一步')
+                    {currentStep === 2
+                      ? (t('common.buttons.complete') || t('common.complete') || '完成')
                       : t('common.buttons.next')}
                     <ArrowRight className="w-4 h-4 ml-1" />
                   </span>

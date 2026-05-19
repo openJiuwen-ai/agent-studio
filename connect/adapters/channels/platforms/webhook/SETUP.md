@@ -18,7 +18,7 @@ custom scripts — can trigger them without a bot account.
 From the project root:
 
 ```bash
-python -m channels.run webhook
+python -m connect.adapters.channels.run webhook
 ```
 
 The server starts on `http://0.0.0.0:8080` by default. You should see:
@@ -33,19 +33,19 @@ The server starts on `http://0.0.0.0:8080` by default. You should see:
 
 ```bash
 # Custom port
-python -m channels.run webhook --port 9000
+python -m connect.adapters.channels.run webhook --port 9000
 
 # Custom backend URL
-python -m channels.run webhook --backend-url http://my-server:8000
+python -m connect.adapters.channels.run webhook --backend-url http://my-server:8000
 
 # Static backend token (requests don't need to supply their own)
-python -m channels.run webhook --token eyJhbGci...
+python -m connect.adapters.channels.run webhook --token eyJhbGci...
 
 # Protect the server with an API key
-python -m channels.run webhook --api-key mysecret
+python -m connect.adapters.channels.run webhook --api-key mysecret
 
 # All together
-python -m channels.run webhook --port 9000 --backend-url http://my-server:8000 --token eyJhbGci... --api-key mysecret
+python -m connect.adapters.channels.run webhook --port 9000 --backend-url http://my-server:8000 --token eyJhbGci... --api-key mysecret
 ```
 
 All options can also be set via environment variables:
@@ -69,7 +69,47 @@ You can read the request/response schemas and try every endpoint directly from t
 
 ---
 
-## Step 3 — Make Your First Request
+## Step 3 — Authenticate
+
+The server resolves the backend token from (highest priority first):
+
+1. **`X-Token` header**
+   ```bash
+   curl -H "X-Token: eyJhbGci..."
+   ```
+
+2. **`Authorization: Bearer` header**
+   ```bash
+   curl -H "Authorization: Bearer eyJhbGci..."
+   ```
+
+3. **Static token** configured at startup via `--token` / `ACCESS_TOKEN`
+
+### Login via API
+
+If you don't have a token, call `/auth/login` once to get one:
+
+```bash
+curl -X POST http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "you@example.com", "password": "yourpassword"}'
+```
+
+```json
+{
+  "success": true,
+  "token": "eyJhbGci...",
+  "space_id": "your-space-id",
+  "refresh_token": "...",
+  "error": null
+}
+```
+
+After a successful login the Swagger UI (`/docs`) stores the token automatically — all subsequent requests in that session are authenticated without any extra steps.
+
+---
+
+## Step 4 — Make Requests
 
 ### Health check
 
@@ -81,19 +121,37 @@ curl http://localhost:8080/health
 {"webhook": "ok", "backend": {"status": "healthy"}}
 ```
 
-### List workflows
+---
+
+### Workflows
+
+#### List all workflows
 
 ```bash
-curl -X POST http://localhost:8080/workflow/list \
-  -H "Content-Type: application/json" \
-  -d '{}'
+curl http://localhost:8080/workflows/list \
+  -H "X-Token: eyJhbGci..."
 ```
 
-### Run a workflow
+#### Search workflows
 
 ```bash
-curl -X POST http://localhost:8080/workflow/run \
+curl "http://localhost:8080/workflows/search?keyword=weather" \
+  -H "X-Token: eyJhbGci..."
+```
+
+#### Get workflow details
+
+```bash
+curl "http://localhost:8080/workflows/get?workflow_id=your-workflow-id" \
+  -H "X-Token: eyJhbGci..."
+```
+
+#### Execute a workflow
+
+```bash
+curl -X POST http://localhost:8080/workflows/execute \
   -H "Content-Type: application/json" \
+  -H "X-Token: eyJhbGci..." \
   -d '{
     "workflow_id": "your-workflow-id",
     "inputs": {
@@ -113,11 +171,30 @@ Response:
 }
 ```
 
-### Run an agent
+---
+
+### Agents
+
+#### List all agents
 
 ```bash
-curl -X POST http://localhost:8080/agent/run \
+curl http://localhost:8080/agents/list \
+  -H "X-Token: eyJhbGci..."
+```
+
+#### Search agents
+
+```bash
+curl "http://localhost:8080/agents/search?keyword=support" \
+  -H "X-Token: eyJhbGci..."
+```
+
+#### Send a single message to an agent
+
+```bash
+curl -X POST http://localhost:8080/agents/execute \
   -H "Content-Type: application/json" \
+  -H "X-Token: eyJhbGci..." \
   -d '{
     "agent_id": "your-agent-id",
     "message": "Hello, how can you help me?"
@@ -129,55 +206,55 @@ Response:
 {
   "success": true,
   "text": "I can help you with...",
-  "conversation_id": "abc123",
+  "conversation_id": "3f2a1b4c-...",
   "error": null
 }
 ```
 
-### Continue a conversation
+#### Continue a conversation
 
 Pass `conversation_id` from the previous response to maintain context:
 
 ```bash
-curl -X POST http://localhost:8080/agent/run \
+curl -X POST http://localhost:8080/agents/execute \
   -H "Content-Type: application/json" \
+  -H "X-Token: eyJhbGci..." \
   -d '{
     "agent_id": "your-agent-id",
     "message": "Tell me more",
-    "conversation_id": "abc123"
+    "conversation_id": "3f2a1b4c-..."
   }'
 ```
 
 ---
 
-## Authentication
+## All Endpoints
 
-### Protecting the server with an API key
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Webhook server and backend health |
+| `POST` | `/auth/login` | Exchange credentials for a token |
+| `GET` | `/workflows/list` | List all workflows |
+| `GET` | `/workflows/search?keyword=...` | Search workflows by name |
+| `GET` | `/workflows/get?workflow_id=...` | Get workflow details |
+| `POST` | `/workflows/execute` | Execute a workflow and return outputs |
+| `GET` | `/agents/list` | List all agents |
+| `GET` | `/agents/search?keyword=...` | Search agents by name |
+| `POST` | `/agents/execute` | Send a message to an agent and get a reply |
+
+---
+
+## Protecting the Server with an API Key
 
 If started with `--api-key`, every request must include the header:
 
 ```bash
-curl -X POST http://localhost:8080/workflow/run \
+curl -X POST http://localhost:8080/workflows/execute \
   -H "X-API-Key: mysecret" \
+  -H "X-Token: eyJhbGci..." \
   -H "Content-Type: application/json" \
   -d '{"workflow_id": "xyz", "inputs": {}}'
 ```
-
-### Providing the backend token
-
-The server resolves the backend token from (highest priority first):
-
-1. **`token` field in the request body**
-   ```json
-   {"workflow_id": "xyz", "inputs": {}, "token": "eyJhbGci..."}
-   ```
-
-2. **`Authorization: Bearer` header**
-   ```bash
-   curl -H "Authorization: Bearer eyJhbGci..."
-   ```
-
-3. **Static token** configured at startup via `--token` / `ACCESS_TOKEN`
 
 ---
 
@@ -187,7 +264,7 @@ The server resolves the backend token from (highest priority first):
 
 1. Add an **HTTP Request** node
 2. Method: `POST`
-3. URL: `http://your-server:8080/workflow/run`
+3. URL: `http://your-server:8080/workflows/execute`
 4. Body (JSON):
    ```json
    {
@@ -196,13 +273,15 @@ The server resolves the backend token from (highest priority first):
    }
    ```
 5. Add header `X-API-Key: <your-key>` if using API key protection
+6. Add header `X-Token: <your-token>`
 
 ### curl / scripts
 
 ```bash
 #!/bin/bash
-RESULT=$(curl -s -X POST http://localhost:8080/workflow/run \
+RESULT=$(curl -s -X POST http://localhost:8080/workflows/execute \
   -H "Content-Type: application/json" \
+  -H "X-Token: $BACKEND_TOKEN" \
   -d "{\"workflow_id\": \"$WORKFLOW_ID\", \"inputs\": {}}")
 echo $RESULT | python3 -m json.tool
 ```
@@ -212,8 +291,9 @@ echo $RESULT | python3 -m json.tool
 ```yaml
 - name: Run OpenJiuwen workflow
   run: |
-    curl -X POST ${{ secrets.WEBHOOK_URL }}/workflow/run \
+    curl -X POST ${{ secrets.WEBHOOK_URL }}/workflows/execute \
       -H "X-API-Key: ${{ secrets.WEBHOOK_API_KEY }}" \
+      -H "X-Token: ${{ secrets.BACKEND_TOKEN }}" \
       -H "Content-Type: application/json" \
       -d '{"workflow_id": "${{ vars.WORKFLOW_ID }}", "inputs": {}}'
 ```

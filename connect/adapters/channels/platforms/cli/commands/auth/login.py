@@ -25,9 +25,7 @@ def cmd_login(backend_url: str) -> None:
 
     username = input("Username (email): ").strip()
     if not username:
-        error = "❌ Username cannot be empty."
-        logger.error(error)
-        raise RuntimeError(error)
+        raise RuntimeError("Username cannot be empty.")
 
     if ENABLE_PASSWORD_LOGIN:
         password = getpass.getpass("Password: ")
@@ -41,6 +39,4 @@ def cmd_login(backend_url: str) -> None:
         set_user_data(CLI_USER_ID, result['token'], result['space_id'], result['refresh_token'])
         logger.info(f"✅ Logged in as {username}")
     except Exception as e:
-        error = f"❌ Login failed: {e}"
-        logger.error(error)
-        raise RuntimeError(error) from e
+        raise RuntimeError(f"Login failed: {e}") from e

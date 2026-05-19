@@ -8,6 +8,7 @@ from openjiuwen_studio.core.manager.repositories.user_repository import user_rep
 from openjiuwen_studio.core.manager.dfx.status import get_space_status_by_id
 from openjiuwen_studio.core.manager.login_manager.user import get_user_id
 from openjiuwen_studio.schemas.space import SpaceInfo, SpaceDBPd, SpaceBase
+from openjiuwen_studio.schemas.user import RoleType
 
 
 def create_space_info(space_db: SpaceDBPd) -> SpaceInfo:
@@ -85,7 +86,12 @@ def check_user_space(space_id: str, current_user: dict) -> SpaceInfo:
         user_data = current_user.get("data") or {}
         if user_data.get("user_id_str") == "system_trigger":
             # Return a minimal SpaceInfo for system trigger - no validation needed
-            return SpaceInfo(space_id=space_id, space_name="System Trigger", is_default=False)
+            return SpaceInfo(
+                space_id=space_id,
+                spacename="System Trigger",
+                description="",
+                role_type=RoleType.SUPER_USER,
+            )
 
         space_info_list = get_space_list(current_user)
         space_info = None

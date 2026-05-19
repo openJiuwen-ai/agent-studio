@@ -200,7 +200,10 @@ def _merge_plugin_params(request_params: List[PluginToolParam], plugin_params: L
 
     for param in plugin_params:
         if param.name in merged_params:
-            if param.priority == Priority.PRIORITY_PLUGIN:
+            existing = merged_params[param.name]
+            existing_priority = getattr(existing, 'priority', Priority.PRIORITY_TOOL)
+            incoming_priority = getattr(param, 'priority', Priority.PRIORITY_PLUGIN)
+            if incoming_priority < existing_priority:
                 merged_params[param.name] = param
         else:
             merged_params[param.name] = param

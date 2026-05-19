@@ -102,30 +102,30 @@ const findNotMatchedStatusIndex = (
     : -1
 }
 
-const getInteractionKindLabel = (kind: InteractionEvent['kind']) =>
-  kind === 'outline' ? '大纲交互' : 'HITL'
+const getInteractionKindLabel = (t: (key: string) => string, kind: InteractionEvent['kind']) =>
+  kind === 'outline' ? t('apps.deepSearch.playback.outlineInteraction') : 'HITL'
 
-const getInteractionFeedbackLabel = (feedback: string) => {
+const getInteractionFeedbackLabel = (t: (key: string) => string, feedback: string) => {
   switch (feedback) {
     case 'accepted':
-      return '接受继续'
+      return t('apps.deepSearch.playback.acceptedContinue')
     case 'revise_comment':
-      return '修改意见'
+      return t('apps.deepSearch.playback.reviseComment')
     default:
       return feedback
   }
 }
 
-const getRewriteMismatchLabel = (reason: NonNullable<RewriteMockDiagnostic['mismatchReasons']>[number]) => {
+const getRewriteMismatchLabel = (t: (key: string) => string, reason: NonNullable<RewriteMockDiagnostic['mismatchReasons']>[number]) => {
   switch (reason) {
     case 'action':
-      return '操作类型'
+      return t('apps.deepSearch.playback.mismatchAction')
     case 'selectedText':
-      return '选中文本'
+      return t('apps.deepSearch.playback.mismatchSelectedText')
     case 'offset':
-      return '文本位置'
+      return t('apps.deepSearch.playback.mismatchOffset')
     case 'userInstruction':
-      return '补充要求'
+      return t('apps.deepSearch.playback.mismatchUserInstruction')
     default:
       return reason
   }
@@ -332,7 +332,7 @@ export default function RecordingPanel({ onClose, onPlaybackStart }: RecordingPa
       store.setSelectedResultMessageId(null)
 
       const existingPlaybackConversationId = Array.from(store.conversationsMap.entries()).find(
-        ([, conversation]) => conversation.title === '回放对话'
+        ([, conversation]) => conversation.title === t('apps.deepSearch.playback.playbackConversation')
       )?.[0]
 
       if (existingPlaybackConversationId) {
@@ -477,7 +477,7 @@ export default function RecordingPanel({ onClose, onPlaybackStart }: RecordingPa
         <button
           onClick={handleShow}
           className="flex w-full min-w-0 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 px-2.5 py-2 text-xs font-medium text-white shadow-sm transition-all duration-200 hover:from-blue-700 hover:to-purple-700"
-          title="显示回放面板"
+          title={t('apps.deepSearch.playback.showPanel')}
         >
           <Eye className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{t('apps.chat.replayHistory')}</span>
@@ -534,7 +534,7 @@ export default function RecordingPanel({ onClose, onPlaybackStart }: RecordingPa
             <button
               onClick={handleHide}
               className="rounded-xl px-3 py-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-              title="隐藏回放面板"
+              title={t('apps.deepSearch.playback.hidePanel')}
             >
               <EyeOff className="h-4 w-4" />
             </button>
@@ -661,13 +661,13 @@ export default function RecordingPanel({ onClose, onPlaybackStart }: RecordingPa
                     {selectedInteractionCount > 0 && (
                       <span className="inline-flex items-center gap-1.5 text-indigo-700">
                         <MessageSquareText className="h-3.5 w-3.5" />
-                        {selectedInteractionCount} 次交互
+                        {t('apps.deepSearch.playback.interactionCount', { count: selectedInteractionCount })}
                       </span>
                     )}
                     {selectedInteractionCount === 0 && (
                       <span className="inline-flex items-center gap-1.5 text-slate-500">
                         <MessageSquareText className="h-3.5 w-3.5" />
-                        0 次交互
+                        {t('apps.deepSearch.playback.interactionCount', { count: 0 })}
                       </span>
                     )}
                     {selectedRewriteCount > 0 && (
@@ -762,13 +762,13 @@ export default function RecordingPanel({ onClose, onPlaybackStart }: RecordingPa
                         </div>
                         {selectedInteractionCount > 0 && (
                           <div className="w-[112px] rounded-xl bg-white px-3 py-2.5 ring-1 ring-slate-200/80">
-                            <div className="text-[11px] font-medium text-slate-400">交互</div>
+                            <div className="text-[11px] font-medium text-slate-400">{t('apps.deepSearch.playback.interaction')}</div>
                             <div className="mt-1 text-lg font-semibold text-slate-950">{selectedInteractionCount}</div>
                           </div>
                         )}
                         {selectedInteractionCount === 0 && (
                           <div className="w-[112px] rounded-xl bg-white px-3 py-2.5 ring-1 ring-slate-200/80">
-                            <div className="text-[11px] font-medium text-slate-400">交互</div>
+                            <div className="text-[11px] font-medium text-slate-400">{t('apps.deepSearch.playback.interaction')}</div>
                             <div className="mt-1 text-lg font-semibold text-slate-950">0</div>
                           </div>
                         )}
@@ -839,17 +839,15 @@ export default function RecordingPanel({ onClose, onPlaybackStart }: RecordingPa
                         <div className="rounded-[20px] border border-slate-200 bg-white/90 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                              <h4 className="text-sm font-semibold text-slate-900">交互轨迹</h4>
-                              <p className="mt-1 text-sm text-slate-500">0 次 HITL / 大纲交互</p>
+                              <h4 className="text-sm font-semibold text-slate-900">{t('apps.deepSearch.playback.interactionTrack')}</h4>
+                              <p className="mt-1 text-sm text-slate-500">{t('apps.deepSearch.playback.hitlOutlineCount', { count: 0 })}</p>
                             </div>
                             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
                               No interaction
                             </span>
                           </div>
                           <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-sm leading-6 text-slate-500">
-                            这条录制里没有可回放的 HITL / 大纲交互。
-                            <br />
-                            可能是旧版本录制数据，或者该会话本身没有发生交互。
+                            {t('apps.deepSearch.playback.noInteractionDesc')}
                           </div>
                         </div>
                       )}
@@ -857,8 +855,8 @@ export default function RecordingPanel({ onClose, onPlaybackStart }: RecordingPa
                         <div className="rounded-[20px] border border-slate-200 bg-white/90 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                              <h4 className="text-sm font-semibold text-slate-900">交互轨迹</h4>
-                              <p className="mt-1 text-sm text-slate-500">{selectedInteractionCount} 次 HITL / 大纲交互</p>
+                              <h4 className="text-sm font-semibold text-slate-900">{t('apps.deepSearch.playback.interactionTrack')}</h4>
+                              <p className="mt-1 text-sm text-slate-500">{t('apps.deepSearch.playback.hitlOutlineCount', { count: selectedInteractionCount })}</p>
                             </div>
                             <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
                               Continuation
@@ -877,10 +875,10 @@ export default function RecordingPanel({ onClose, onPlaybackStart }: RecordingPa
                                         {index + 1}
                                       </span>
                                       <span className="text-sm font-semibold text-slate-900">
-                                        {getInteractionKindLabel(interactionEvent.kind)}
+                                        {getInteractionKindLabel(t, interactionEvent.kind)}
                                       </span>
                                       <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200/80">
-                                        {getInteractionFeedbackLabel(interactionEvent.feedback)}
+                                        {getInteractionFeedbackLabel(t, interactionEvent.feedback)}
                                       </span>
                                       <span className="text-xs text-slate-400">
                                         {formatTime(interactionEvent.timestamp)}
@@ -891,7 +889,7 @@ export default function RecordingPanel({ onClose, onPlaybackStart }: RecordingPa
                                     </div>
                                   </div>
                                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                                    在第 {interactionEvent.afterEventCount} 个主流程事件后
+                                    {t('apps.deepSearch.playback.afterMainFlowEvent', { count: interactionEvent.afterEventCount })}
                                   </span>
                                 </div>
                               </div>
@@ -944,12 +942,13 @@ export default function RecordingPanel({ onClose, onPlaybackStart }: RecordingPa
                                   </div>
                                   {mockModeEnabled && status === 'not-matched' && diagnostic && (
                                     <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50/80 px-3.5 py-3 text-xs text-rose-700">
-                                      <div className="font-medium text-rose-800">未命中原因</div>
+                                      <div className="font-medium text-rose-800">{t('apps.deepSearch.playback.mismatchReason')}</div>
                                       {diagnostic.sequenceHint && (
                                         <div className="mt-2 rounded-xl bg-white/80 px-3 py-2 text-[11px] text-rose-800 ring-1 ring-rose-100">
-                                          需要先回放更早的一次改写。
-                                          当前等待第 {diagnostic.sequenceHint.expectedOrder} 次改写，
-                                          你这次触发的更像第 {diagnostic.sequenceHint.attemptedOrder ?? '?'} 次。
+                                          {t('apps.deepSearch.playback.sequenceHintDesc', {
+                                            expectedOrder: diagnostic.sequenceHint.expectedOrder,
+                                            attemptedOrder: diagnostic.sequenceHint.attemptedOrder ?? '?'
+                                          })}
                                         </div>
                                       )}
                                       <div className="mt-1 flex flex-wrap gap-2">
@@ -958,23 +957,23 @@ export default function RecordingPanel({ onClose, onPlaybackStart }: RecordingPa
                                             key={reason}
                                             className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium text-rose-700 ring-1 ring-rose-200"
                                           >
-                                            {getRewriteMismatchLabel(reason)}不一致
+                                            {getRewriteMismatchLabel(t, reason)}{t('apps.deepSearch.playback.mismatchInconsistent')}
                                           </span>
                                         ))}
                                       </div>
                                       {diagnostic.closestRequest && (
                                         <div className="mt-3 grid gap-2 text-[11px] text-rose-700/90 sm:grid-cols-2">
                                           <div className="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-rose-100">
-                                            <span className="font-medium text-rose-800">最接近的操作</span>: {diagnostic.closestRequest.action}
+                                            <span className="font-medium text-rose-800">{t('apps.deepSearch.playback.closestAction')}</span>: {diagnostic.closestRequest.action}
                                           </div>
                                           <div className="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-rose-100">
-                                            <span className="font-medium text-rose-800">最接近的位置</span>: {diagnostic.closestRequest.startOffset}-{diagnostic.closestRequest.endOffset}
+                                            <span className="font-medium text-rose-800">{t('apps.deepSearch.playback.closestOffset')}</span>: {diagnostic.closestRequest.startOffset}-{diagnostic.closestRequest.endOffset}
                                           </div>
                                           <div className="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-rose-100 sm:col-span-2">
-                                            <span className="font-medium text-rose-800">最接近的选中文本</span>: {diagnostic.closestRequest.selectedText || '空'}
+                                            <span className="font-medium text-rose-800">{t('apps.deepSearch.playback.closestSelectedText')}</span>: {diagnostic.closestRequest.selectedText || t('apps.deepSearch.playback.empty')}
                                           </div>
                                           <div className="rounded-xl bg-white/80 px-3 py-2 ring-1 ring-rose-100 sm:col-span-2">
-                                            <span className="font-medium text-rose-800">最接近的补充要求</span>: {diagnostic.closestRequest.userInstruction || '空'}
+                                            <span className="font-medium text-rose-800">{t('apps.deepSearch.playback.closestUserInstruction')}</span>: {diagnostic.closestRequest.userInstruction || t('apps.deepSearch.playback.empty')}
                                           </div>
                                         </div>
                                       )}

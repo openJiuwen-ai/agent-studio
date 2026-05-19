@@ -11,6 +11,7 @@ Commands:
     health                        Check backend health
 
     workflow list                 List all workflows
+      [--page N] [--page-size N]  Optional pagination parameters
     workflow search <keyword>     Search workflows
     workflow execute <id>         Execute a workflow
       [--input KEY=VALUE ...]     Provide input parameters
@@ -20,10 +21,10 @@ Commands:
     workflow demo2                Demo 2 Runner
 
     agent list                    List all agents
+      [--page N] [--page-size N]  Optional pagination parameters
     agent search <keyword>        Search agents
     agent execute <id> <message>  Send a single message to an agent
-    agent start <id>              Start an interactive chat session
-    agent end                     End current agent chat session
+    agent chat <id>               Start an interactive chat session
 """
 import argparse
 import os
@@ -70,7 +71,9 @@ def _build_parser() -> argparse.ArgumentParser:
     wf_sub = wf.add_subparsers(dest="workflow_cmd", metavar="<subcommand>")
     wf_sub.required = True
 
-    wf_sub.add_parser("list", help="List all workflows")
+    wf_list = wf_sub.add_parser("list", help="List all workflows")
+    wf_list.add_argument("--page", type=int, default=1, help="Page number (default: 1)")
+    wf_list.add_argument("--page-size", type=int, default=20, help="Number of items per page (default: 20)")
 
     wf_search = wf_sub.add_parser("search", help="Search workflows")
     wf_search.add_argument("keyword", help="Search keyword")
@@ -95,7 +98,9 @@ def _build_parser() -> argparse.ArgumentParser:
     ag_sub = ag.add_subparsers(dest="agent_cmd", metavar="<subcommand>")
     ag_sub.required = True
 
-    ag_sub.add_parser("list", help="List all agents")
+    ag_list = ag_sub.add_parser("list", help="List all agents")
+    ag_list.add_argument("--page", type=int, default=1, help="Page number (default: 1)")
+    ag_list.add_argument("--page-size", type=int, default=20, help="Number of items per page (default: 20)")
 
     ag_search = ag_sub.add_parser("search", help="Search agents")
     ag_search.add_argument("keyword", help="Search keyword")
@@ -104,10 +109,8 @@ def _build_parser() -> argparse.ArgumentParser:
     ag_run.add_argument("agent_id", help="Agent ID")
     ag_run.add_argument("message", nargs="+", help="Message to send")
 
-    ag_start = ag_sub.add_parser("start", help="Start interactive chat session with an agent")
-    ag_start.add_argument("agent_id", help="Agent ID")
-
-    ag_sub.add_parser("end", help="End current agent chat session")
+    ag_chat = ag_sub.add_parser("chat", help="Start interactive chat session with an agent")
+    ag_chat.add_argument("agent_id", help="Agent ID")
 
     return parser
 
@@ -119,6 +122,13 @@ def main() -> None:
     args = parser.parse_args()
     url = args.backend_url
 
+    try:
+        _dispatch(args, url)
+    except Exception as e:
+        logger.error(f"❌ {e}")
+
+
+def _dispatch(args, url: str) -> None:
     if args.command == "login":
         cmd_login(url)
     elif args.command == "logout":
@@ -130,7 +140,7 @@ def main() -> None:
 
     elif args.command == "workflow":
         if args.workflow_cmd == "list":
-            cmd_workflow_list(url)
+            cmd_workflow_list(url, args.page, args.page_size)
         elif args.workflow_cmd == "search":
             cmd_workflow_search(url, args.keyword)
         elif args.workflow_cmd == "execute":
@@ -146,12 +156,10 @@ def main() -> None:
 
     elif args.command == "agent":
         if args.agent_cmd == "list":
-            cmd_agent_list(url)
+            cmd_agent_list(url, args.page, args.page_size)
         elif args.agent_cmd == "search":
             cmd_agent_search(url, args.keyword)
         elif args.agent_cmd == "execute":
             cmd_agent_run(url, args.agent_id, ' '.join(args.message))
-        elif args.agent_cmd == "start":
+        elif args.agent_cmd == "chat":
             cmd_agent_chat(url, args.agent_id)
-        elif args.agent_cmd == "end":
-            logger.info("Agent end chat is handled interactively. Type 'exit' or press Ctrl+C to end the chat session.")
