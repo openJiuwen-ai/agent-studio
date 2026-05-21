@@ -466,6 +466,28 @@ export class MindMapManager implements MindMapOperations {
     return this.graph.nodes.filter(node => childNodeIds.includes(node.messageId));
   }
 
+  /**
+   * 获取目标节点的前序兄节点（共享至少一个父节点，且 createdAt 早于目标节点）
+   */
+  private getPrecedingSiblingNodes(messageId: string): ThoughtNode[] {
+    const node = this.getNode(messageId);
+    if (!node) return [];
+
+    const parentNodes = this.getParentNodes(messageId);
+    if (parentNodes.length === 0) return [];
+
+    const siblingIds = new Set<string>();
+    parentNodes.forEach(parent => {
+      this.getChildNodes(parent.messageId).forEach(sibling => {
+        if (sibling.messageId !== messageId && sibling.createdAt < node.createdAt) {
+          siblingIds.add(sibling.messageId);
+        }
+      });
+    });
+
+    return this.graph.nodes.filter(n => siblingIds.has(n.messageId));
+  }
+
   clearGraph(): void {
     this.graph.nodes = [];
     this.graph.edges = [];
@@ -693,12 +715,25 @@ export class MindMapManager implements MindMapOperations {
         return;
       }
 
-      node.depth = newDepth;
+      // 兄节点约束：前序兄节点（与目标节点无依赖边）的深度不能大于本节点深度
+      const precedingSiblings = this.getPrecedingSiblingNodes(messageId);
+      let finalDepth = newDepth;
+      for (const sibling of precedingSiblings) {
+        const hasDependency =
+          hasEdgeBetweenNodes(this.graph, messageId, sibling.messageId) ||
+          hasEdgeBetweenNodes(this.graph, sibling.messageId, messageId);
+        if (!hasDependency && sibling.depth !== undefined) {
+          finalDepth = Math.max(finalDepth, sibling.depth);
+        }
+      }
+
+      node.depth = finalDepth;
     }
 
-    // 步骤4：获取所有子节点，递归处理（递归调用时不再重置深度）
+    // 步骤4：按 createdAt 升序排序后递归处理子节点（保证前序兄节点先于后序兄节点处理）
     const childNodes = this.getChildNodes(messageId);
-    childNodes.forEach(childNode => {
+    const sortedChildNodes = [...childNodes].sort((a, b) => a.createdAt - b.createdAt);
+    sortedChildNodes.forEach(childNode => {
       this.depthGenerate(childNode.messageId, false, maxDepth);
     });
   }

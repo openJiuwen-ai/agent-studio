@@ -14,8 +14,8 @@ export interface FormatOption {
 /** 格式选项原始配置（不含翻译） */
 export const FORMAT_OPTIONS_BASE: readonly FormatOption[] = [
   { value: 'markdown', labelKey: 'markdown', extension: '.md', downloadExtension: '.md', mimeType: 'text/markdown' },
-  { value: 'html', labelKey: 'html', extension: '.html', downloadExtension: '.zip', mimeType: 'application/zip' },
-  { value: 'docx', labelKey: 'wordDocument', extension: '.docx', downloadExtension: '.zip', mimeType: 'application/zip' },
+  { value: 'html', labelKey: 'html', extension: '.html', downloadExtension: '_html.zip', mimeType: 'application/zip' },
+  { value: 'docx', labelKey: 'wordDocument', extension: '.docx', downloadExtension: '_docx.zip', mimeType: 'application/zip' },
 ] as const
 
 /**

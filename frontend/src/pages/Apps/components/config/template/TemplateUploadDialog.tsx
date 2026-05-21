@@ -39,7 +39,24 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
   const [dragActive, setDragActive] = useState(false)
   const [importMode, setImportMode] = useState<ImportMode>('extract')
   const [localError, setLocalError] = useState<string | null>(null)
+  const [nameError, setNameError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const NAME_PATTERN = /^[一-龥a-zA-Z0-9_\-.]+$/
+  const NAME_MAX_LENGTH = 199
+
+  const sanitizeTemplateName = (name: string): string => {
+    const cleaned = name.replace(/[^一-龥a-zA-Z0-9_\-.]/g, '')
+    return cleaned.slice(0, NAME_MAX_LENGTH)
+  }
+
+  const validateTemplateName = (name: string): string | null => {
+    const trimmed = name.trim()
+    if (!trimmed) return null
+    if (trimmed.length > NAME_MAX_LENGTH) return t('apps.config.template.nameInvalidChars')
+    if (!NAME_PATTERN.test(trimmed)) return t('apps.config.template.nameInvalidChars')
+    return null
+  }
 
   const getAllowedExtensions = (mode: ImportMode): string[] => {
     return mode === 'extract' ? ['.md', '.html', '.doc', '.docx', '.pdf'] : ['.md']
@@ -58,6 +75,7 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
     setDragActive(false)
     setImportMode('extract')
     setLocalError(null)
+    setNameError(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -84,7 +102,8 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
     setLocalError(null)
     setFile(selectedFile)
     const nameWithoutExt = selectedFile.name.replace(/\.[^/.]+$/, '')
-    setTemplateName(nameWithoutExt)
+    setTemplateName(sanitizeTemplateName(nameWithoutExt))
+    setNameError(null)
   }
 
   // 拖拽相关处理
@@ -117,7 +136,9 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
 
   // 确认上传
   const handleConfirm = async () => {
-    if (!file || !templateName.trim()) {
+    const nameErr = validateTemplateName(templateName)
+    if (!file || !templateName.trim() || nameErr) {
+      if (nameErr) setNameError(nameErr)
       return
     }
 
@@ -137,7 +158,7 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
   }
 
   // 是否可以上传
-  const canUpload = file && templateName.trim() && !uploading
+  const canUpload = file && templateName.trim() && !uploading && !validateTemplateName(templateName)
 
   if (!open) return null
 
@@ -278,16 +299,23 @@ export const TemplateUploadDialog: React.FC<TemplateUploadDialogProps> = ({
             <input
               type="text"
               value={templateName}
-              onChange={(e) => setTemplateName(e.target.value)}
+              onChange={(e) => {
+                setTemplateName(e.target.value)
+                setNameError(validateTemplateName(e.target.value))
+              }}
               placeholder={t('apps.config.template.namePlaceholder')}
               disabled={uploading}
               className={`
-                w-full px-3 py-2 ${RADIUS_BUTTON} border border-gray-300
+                w-full px-3 py-2 ${RADIUS_BUTTON} border
+                ${nameError ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'}
                 text-sm text-gray-900 placeholder-gray-400
-                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                focus:outline-none focus:ring-2 focus:border-transparent
                 disabled:bg-gray-100 disabled:cursor-not-allowed
               `}
             />
+            {nameError && (
+              <p className="mt-1 text-xs text-red-600">{nameError}</p>
+            )}
           </div>
 
           {/* 模板描述 */}

@@ -134,7 +134,6 @@ async def _handle_polling(db, trigger: TriggerDB, fired_by: str) -> None:
     await _fire_execution(
         db, trigger,
         fired_by="poll",
-        extra_inputs={"_poll_hash": current_hash},
         poll_hash_seen=current_hash,
     )
 
@@ -212,10 +211,13 @@ def _get_runner(
     """Return the async generator for the target agent or workflow."""
     if trigger.target_type == "agent":
         from openjiuwen_studio.core.executor.agent.agent_runner import agent_mgr
+        # Agent runner requires conversation_id in inputs dict
+        agent_inputs = dict(inputs)
+        agent_inputs["conversation_id"] = conversation_id
         return agent_mgr.run(
             id=trigger.target_id,
             version=trigger.target_version,
-            inputs=inputs,
+            inputs=agent_inputs,
             conversation_id=conversation_id,
             space_id=trigger.space_id,
             current_user=current_user,

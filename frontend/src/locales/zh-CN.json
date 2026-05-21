@@ -1333,7 +1333,8 @@
         "emptyDescription": "上传模板后即可使用",
         "uploadButton": "上传模板",
         "invalidFileType": "不支持的文件类型，请上传 {{formats}} 格式的文件",
-        "fileTypeChanged": "已切换模式，原文件类型不再支持，请重新选择文件"
+        "fileTypeChanged": "已切换模式，原文件类型不再支持，请重新选择文件",
+        "nameInvalidChars": "模板名称只能包含中/英文字符、数字、下划线（_）、中划线（-）和点号（.）"
       }
     },
     "time": {

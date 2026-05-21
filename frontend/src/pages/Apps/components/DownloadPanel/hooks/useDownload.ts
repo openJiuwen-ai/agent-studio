@@ -50,7 +50,7 @@ export function useDownload(
         await downloadMarkdownBundle({
           content,
           markdownFilename: `${baseFilename}.md`,
-          archiveFilename: `${baseFilename}.zip`,
+          archiveFilename: `${baseFilename}_md.zip`,
           rawContent: options?.rawContent,
           chartMessages: options?.chartMessages,
           inferMessages: options?.inferMessages,

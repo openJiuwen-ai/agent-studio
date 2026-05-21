@@ -68,6 +68,8 @@ class IDGenerator:
 
 
 @dataclass
+
+
 class UnsupportedNode:
     """Track unsupported node details."""
     node_name: str
@@ -77,6 +79,8 @@ class UnsupportedNode:
 
 
 @dataclass
+
+
 class TransformationReport:
     """Report of transformation results."""
     total_nodes: int = 0
@@ -626,6 +630,51 @@ class N8nWorkflowConverter(WorkflowConverter):
             "properties": properties,
             "required": required
         }
+    
+    def _topological_sort_nodes(self, n8n_nodes: List[Dict]) -> List[Dict]:
+        """
+        Sort n8n nodes in execution order using the connections graph so that
+        every predecessor is converted before the nodes that depend on it.
+        Nodes with no declared order (cycles, disconnected) are appended last.
+        """
+        from collections import deque
+
+        name_to_node = {n.get("name", ""): n for n in n8n_nodes}
+        in_degree: Dict[str, int] = {n.get("name", ""): 0 for n in n8n_nodes}
+
+        for source, conn_types in self.n8n_connections.items():
+            for targets in conn_types.get("main", []):
+                for t in targets:
+                    target_name = t.get("node", "")
+                    if target_name in in_degree:
+                        in_degree[target_name] += 1
+
+        queue = deque(
+            [n for n in n8n_nodes if in_degree.get(n.get("name", ""), 0) == 0]
+        )
+        sorted_nodes: List[Dict] = []
+
+        while queue:
+            node = queue.popleft()
+            sorted_nodes.append(node)
+            name = node.get("name", "")
+            for targets in self.n8n_connections.get(name, {}).get("main", []):
+                for t in targets:
+                    target_name = t.get("node", "")
+                    if target_name in in_degree:
+                        in_degree[target_name] -= 1
+                        if in_degree[target_name] == 0:
+                            target_node = name_to_node.get(target_name)
+                            if target_node:
+                                queue.append(target_node)
+
+        # Append any remaining nodes (cycles or fully disconnected)
+        processed = {n.get("name", "") for n in sorted_nodes}
+        for n in n8n_nodes:
+            if n.get("name", "") not in processed:
+                sorted_nodes.append(n)
+
+        return sorted_nodes
 
     # =========================================================================
     # MAIN NODE CONVERSION
@@ -633,6 +682,7 @@ class N8nWorkflowConverter(WorkflowConverter):
 
     def _convert_main_nodes(self, n8n_nodes: List[Dict]):
         """Convert all main (non-trigger, non-subnode) nodes."""
+        n8n_nodes = self._topological_sort_nodes(n8n_nodes)
         x_pos = 640
         
         for node in n8n_nodes:
@@ -2396,10 +2446,9 @@ class N8nWorkflowConverter(WorkflowConverter):
                 "  })();\n"
                 "// Convert n8n [{json:{...}}, ...] array format to OpenJiuwen {items:[...], result:[...]}\n"
                 "  let _items;\n"
-                "  if (Array.isArray(_n8nResult) && _n8nResult.length > 0\n"
-                "      && _n8nResult[0] !== null && typeof _n8nResult[0] === 'object'\n"
-                "      && 'json' in _n8nResult[0]) {\n"
-                "    // Standard n8n multi-item format: [{json:{...}}, ...]\n"
+                "  if (Array.isArray(_n8nResult) && _n8nResult.length > 0"
+                " && _n8nResult[0] !== null && typeof _n8nResult[0] === 'object'"
+                " && 'json' in _n8nResult[0]) {\n"
                 "    _items = _n8nResult.map(function(i) { return i.json || i; });\n"
                 "  } else if (Array.isArray(_n8nResult)) {\n"
                 "    _items = _n8nResult;\n"
@@ -2409,7 +2458,6 @@ class N8nWorkflowConverter(WorkflowConverter):
                 "    _items = [];\n"
                 "  }\n"
                 "  const _out = { items: _items, result: _items };\n"
-                "  // Also expose individual fields from first item so downstream ref lookups work\n"
                 "  if (_items.length > 0 && _items[0] && typeof _items[0] === 'object') {\n"
                 "    Object.assign(_out, _items[0]);\n"
                 "  }\n"
@@ -2462,11 +2510,10 @@ class N8nWorkflowConverter(WorkflowConverter):
             # For aggregate the named fields are arrays; everything else is string.
             if node_type == "n8n-nodes-base.aggregate":
                 params = n8n_node.get("parameters", {})
-                agg_fields = [
-                    fa.get("fieldToAggregate", "")
-                    for fa in params.get("fieldsToAggregate", {}).get("fieldToAggregate", [])
-                    if fa.get("fieldToAggregate")
-                ]
+                agg_fields = []
+                for fa in params.get("fieldsToAggregate", {}).get("fieldToAggregate", []):
+                    if fa.get("fieldToAggregate"):
+                        agg_fields.append(fa.get("fieldToAggregate", ""))
                 agg_types = {f: "array" for f in agg_fields}
                 agg_types.update(field_types)
                 outputs = self._build_code_outputs(
@@ -3538,22 +3585,18 @@ class N8nWorkflowConverter(WorkflowConverter):
         compare_fields = [f.get("fieldName", "") for f in raw_cmp if f.get("fieldName")]
         sort_ui = params.get("sortFieldsUi", {})
         raw_sort = sort_ui.get("sortField") or sort_ui.get("values") or []
-        sort_fields = [
-            {
+        sort_fields = []
+        for f in raw_sort:
+            sort_fields.append({
                 "field": f.get("fieldName", ""),
-                "order": (
-                    "desc" if f.get("order", "asc").lower() in ("desc", "descending")
-                    else "asc"
-                )
-            }
-            for f in raw_sort
-        ]
+                "order": "desc" if f.get("order", "asc").lower() in ("desc", "descending") else "asc",
+            })
         max_items = params.get("maxItems", 1)
         raw_sum = params.get("fieldsToSummarize", {}).get("values", [])
-        summarize_fields = [
-            {"field": f.get("field", f.get("fieldToSummarize", "")), "aggregation": f.get("aggregation", "count")}
-            for f in raw_sum
-        ]
+        summarize_fields = []
+        for f in raw_sum:
+            summarize_fields.append({"field": f.get("field", f.get("fieldToSummarize", "")), 
+                                     "aggregation": f.get("aggregation", "count")})
         core = (
             self._extract_items_lines()
             + f'    operation = "{operation}"\n'
@@ -3622,19 +3665,18 @@ class N8nWorkflowConverter(WorkflowConverter):
 
     # ── Side-effect / control nodes ───────────────────────────────────────────
 
-    @staticmethod
-    def _convert_no_op_to_code(n8n_node: Dict) -> str:
-        """Convert n8n No-Op node: pure pass-through."""
+    def _convert_no_op_to_code(self, n8n_node: Dict) -> str:
+        """Convert n8n No-Op node: pure pass-through, normalised to a list."""
         node_name = n8n_node.get("name", "No Operation")
-        return (
-            'def main(args):\n'
-            f'    """Converted from n8n No Op node: {node_name} — passes data through unchanged"""\n'
-            '    input_data = args.params.get("input", {}) if hasattr(args, "params") else {}\n'
-            '    result = input_data\n'
-            '    _output = dict(result) if isinstance(result, dict) else {"data": result}\n'
-            '    _output["result"] = result\n'
-            '    return _output\n'
+        core = (
+            '    items = (\n'
+            '        input_data if isinstance(input_data, list)\n'
+            '        else input_data.get("items", [input_data]) if isinstance(input_data, dict) and input_data\n'
+            '        else []\n'
+            '    )\n'
+            '    result = list(items)\n'
         )
+        return self._wrap_transform_code(node_name, "No Op", core, output_style="list")
 
     @staticmethod
     def _convert_wait_to_code(n8n_node: Dict) -> str:
@@ -4267,31 +4309,56 @@ class N8nWorkflowConverter(WorkflowConverter):
     # =========================================================================
     # HTTP REQUEST NODE CONVERSION
     # =========================================================================
-
     def _convert_http_request_node(self, n8n_node: Dict, node_id: str, x_pos: int) -> Dict:
         """Convert n8n HTTP Request node to OpenJiuwen HTTP Request component."""
         params = n8n_node.get("parameters", {})
         node_name = n8n_node.get("name", "")
         position = n8n_node.get("position", [x_pos, 34])
 
-        # Extract HTTP request parameters from n8n format
         method = params.get("method", "GET")
-        url = params.get("url", "")
-        
+        raw_url = params.get("url", "")
+
+        # Resolve n8n expressions to a proper ref pointing to the predecessor node
+        # that supplies the URL value, falling back to the start node if none is found.
+        if raw_url.startswith("="):
+            converted_url = self._convert_expression_with_mapping(raw_url)
+            field_match = re.match(r'^\{\{(\w+)\}\}$', converted_url.strip())
+            if field_match:
+                field_name = field_match.group(1)
+                pred_id = self._find_data_predecessor_id(node_name)
+                source_id = pred_id if pred_id else self.start_node_id
+                url_value = {
+                    "type": "ref",
+                    "content": [source_id, field_name],
+                    "extra": {"index": 0}
+                }
+            else:
+                url_value = BaseValue(
+                    type='constant', content=converted_url,
+                    schema=BaseType(type='string')
+                ).model_dump()
+            url = converted_url
+        else:
+            url = raw_url
+            url_value = BaseValue(
+                type='constant', content=url,
+                schema=BaseType(type='string')
+            ).model_dump()
+
         # Convert headers from n8n format (list of {name, value} dicts)
         headers_list = params.get("headerParameters", [])
         headers = {}
         for header in headers_list:
             if isinstance(header, dict) and "name" in header:
                 headers[header["name"]] = header.get("value", "")
-        
+
         # Convert query parameters from n8n format
         query_params_list = params.get("queryParameters", [])
         query_params = {}
         for qp in query_params_list:
             if isinstance(qp, dict) and "name" in qp:
                 query_params[qp["name"]] = qp.get("value", "")
-        
+
         # Convert body - n8n uses different formats based on content type
         body = None
         body_content_type = params.get("options", {}).get("bodyContentType")
@@ -4314,33 +4381,26 @@ class N8nWorkflowConverter(WorkflowConverter):
                     for param in form_data["parameters"]:
                         if isinstance(param, dict) and "name" in param:
                             body[param["name"]] = param.get("value", "")
-        
+
         # Build input parameters with BaseValue references
         input_params = self._build_predecessor_input_ref(node_name)
-        
-        # Add HTTP-specific parameters
-        # url check not empty and input_params["url"] is None to avoid overwriting an explicit predecessor reference
+
         if input_params.get("url") is None:
-            input_params["url"] = \
-                BaseValue(type='constant', content=url, schema=BaseType(type='string')).model_dump()
-        # method
+            input_params["url"] = url_value
         if input_params.get("method") is None:
             input_params["method"] = \
                 BaseValue(type='constant', content=method, schema=BaseType(type='string')).model_dump()
-        # headers 
         if input_params.get("headers") is None:
             input_params["headers"] = \
                 BaseValue(type='constant', content=headers, schema=BaseType(type='object')).model_dump()
-        # query 
         if input_params.get("query") is None:
             input_params["query"] = \
                 BaseValue(type='constant', content=query_params, schema=BaseType(type='object')).model_dump()
-        # body 
         if input_params.get("body") is None:
             input_params["body"] = \
                 BaseValue(type='constant', content=body, schema=BaseType(type='object')).model_dump()
-        
-        # Auth configuration (n8n typically handles auth via credentials)
+
+        # Auth configuration
         auth_config = {
             "type": "none",
             "username": "",
@@ -4350,10 +4410,7 @@ class N8nWorkflowConverter(WorkflowConverter):
             "api_key_location": "header",
             "api_key_param_name": "X-API-Key"
         }
-        
-        # Check if n8n node has authentication configured
-        # n8n uses credentials which are resolved at runtime
-        # We'll set up a basic auth structure that can be configured later
+
         if params.get("options", {}).get("authentication"):
             auth_type = params["options"]["authentication"]
             if auth_type == "basicAuth":
@@ -4364,23 +4421,19 @@ class N8nWorkflowConverter(WorkflowConverter):
             elif auth_type == "queryAuth":
                 auth_config["type"] = "api_key"
                 auth_config["api_key_location"] = "query"
-        
+
         input_params["auth"] = \
             BaseValue(type='constant', content=auth_config, schema=BaseType(type='object')).model_dump()
 
         # Build httpRequestParam structure
         http_request_params = {
-            "url": {
-                "type": "constant",
-                "content": url,
-                "schema": {"type": "string"}
-            },
+            "url": url_value,
             "method": method,
             "headers": headers,
             "queryParams": query_params,
             "body": {
                 "contentType": "application/json" if body_content_type == "json" else "text/plain",
-                "content": body
+                "content": body if body is not None else ""
             },
             "auth": {
                 "authType": auth_config["type"],
@@ -4396,12 +4449,12 @@ class N8nWorkflowConverter(WorkflowConverter):
                 "successStatusCodes": [200, 201, 202, 204],
                 "failureStatusCodes": [],
                 "responseMode": "full",
-                "dataProperty": None
+                "dataProperty": ""
             },
             "advanced": {
                 "followRedirects": True,
                 "ignoreSslIssues": False,
-                "proxyUrl": None,
+                "proxyUrl": "",
                 "timeout": 60,
                 "retry": {
                     "enabled": False,
@@ -4455,6 +4508,7 @@ class N8nWorkflowConverter(WorkflowConverter):
                         "data": {
                             "type": "object",
                             "description": "Response data (JSON object for 200 OK)",
+                            "properties": {},        # ← add this
                             "extra": {"index": 3}
                         }
                     },
@@ -5280,11 +5334,11 @@ class N8nWorkflowConverter(WorkflowConverter):
                     # Wire every branch that has no outgoing edge to End so that
                     # empty-set guards (compareDatasets ports 2/3 when unused) and
                     # regular else branches all get a clean skip path.
-                    branch_edge_exists = any(
-                        e.get("sourceNodeID") == node_id
-                        and e.get("sourcePortID") == branch_id
-                        for e in self.openjiuwen_edges
-                    )
+                    branch_edge_exists = False
+                    for e in self.openjiuwen_edges:
+                        if e.get("sourceNodeID") == node_id and e.get("sourcePortID") == branch_id:
+                            branch_edge_exists = True
+                            break
                     if not branch_edge_exists:
                         self.openjiuwen_edges.append({
                             "id": f"edge_{uuid.uuid4().hex[:8]}",

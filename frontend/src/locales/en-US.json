@@ -1325,7 +1325,8 @@
         "emptyDescription": "Upload templates to use",
         "uploadButton": "Upload Template",
         "invalidFileType": "Unsupported file type. Please upload files in {{formats}} format",
-        "fileTypeChanged": "Mode switched. The previous file type is no longer supported. Please select a new file"
+        "fileTypeChanged": "Mode switched. The previous file type is no longer supported. Please select a new file",
+        "nameInvalidChars": "Template name can only contain Chinese/English letters, numbers, underscore (_), hyphen (-), and dots (.)"
       }
     },
     "time": {
