@@ -35,10 +35,12 @@ export const REWRITE_ACTIONS: {
   defaultLabel: string
   hasSubMenu?: boolean
 }[] = [
-  { action: 'polish', icon: 'Sparkles', labelKey: 'apps.report.aiPolish', defaultLabel: '润色' },
-  { action: 'expand', icon: 'Expand', labelKey: 'apps.report.aiExpand', defaultLabel: '扩写' },
-  { action: 'shorten', icon: 'Shrink', labelKey: 'apps.report.aiShrink', defaultLabel: '缩写' },
+  { action: 'polish', icon: 'Sparkles', labelKey: 'apps.report.aiPolish', defaultLabel: '润色', hasSubMenu: false },
+  { action: 'expand', icon: 'Expand', labelKey: 'apps.report.aiExpand', defaultLabel: '扩写', hasSubMenu: false },
+  { action: 'shorten', icon: 'Shrink', labelKey: 'apps.report.aiShrink', defaultLabel: '缩写', hasSubMenu: false },
   { action: 'supplementary_search', icon: 'Search', labelKey: 'apps.report.aiSupplementarySearch', defaultLabel: '补充搜索', hasSubMenu: true },
+  // new_task 不需要子菜单：范围由用户在输入框中自由描述，无需 selected_only / selected_and_related 预设
+  { action: 'new_task', icon: 'ListPlus', labelKey: 'apps.report.aiNewTask', defaultLabel: '新增任务', hasSubMenu: false },
 ]
 
 /** 补充搜索子菜单配置 */

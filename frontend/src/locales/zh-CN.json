@@ -972,6 +972,7 @@
         "aiExpand": "扩写",
         "aiShrink": "缩写",
         "aiSupplementarySearch": "补充搜索",
+        "aiNewTask": "新增任务",
         "supplementarySearch": {
           "selectedOnly": "仅改选中",
           "selectedAndRelated": "智能联改"
@@ -984,6 +985,8 @@
         "recoveryNeeded": "需要恢复",
         "rewriteHelpText": "请帮我{{actionLabel}}这段文字：\n\n\"{{displayText}}\"\n\n{{userInstruction}}",
         "rewriteHelpTextShort": "请帮我{{actionLabel}}这段文字：\n\n\"{{displayText}}\"",
+        "newTaskHelpText": "请帮我给这段文字所在的章节新增任务：\n\n\"{{displayText}}\"\n\n{{userInstruction}}",
+        "newTaskHelpTextShort": "请帮我给这段文字所在的章节新增任务：\n\n\"{{displayText}}\"",
         "rewriteSessionUnavailable": "报告对应的改写会话已超时，请重新提问后再尝试改写。",
         "feedbackProcessorDisabled": "用户反馈优化已关闭，当前报告不可编辑",
         "syncSynced": "已同步",

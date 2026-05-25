@@ -88,7 +88,7 @@ export interface Report {
 }
 
 /** 报告改写/同步操作类型 */
-export type ReportRewriteAction = 'expand' | 'polish' | 'shorten' | 'supplementary_search' | 'sync'
+export type ReportRewriteAction = 'expand' | 'polish' | 'shorten' | 'supplementary_search' | 'sync' | 'new_task'
 
 /** 报告改写范围类型 */
 export type RewriteScope = 'selected_only' | 'selected_and_related'

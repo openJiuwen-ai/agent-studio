@@ -8,7 +8,7 @@
 
 import React, { useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, Expand, Shrink, Search, ChevronRight } from 'lucide-react'
+import { Sparkles, Expand, Shrink, Search, ListPlus, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { OPTIONS_HEIGHT, OPTIONS_OFFSET, REWRITE_ACTIONS, SUPPLEMENTARY_SEARCH_OPTIONS } from '../../constants'
 import type { ReportRewriteAction, RewriteScope } from '@/pages/Apps/types'
@@ -32,6 +32,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Expand: <Expand className="w-4 h-4" />,
   Shrink: <Shrink className="w-4 h-4" />,
   Search: <Search className="w-4 h-4" />,
+  ListPlus: <ListPlus className="w-4 h-4" />,
 }
 
 export const AIRewriteOptions: React.FC<AIRewriteOptionsProps> = ({

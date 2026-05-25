@@ -963,6 +963,7 @@
         "aiExpand": "Expand",
         "aiShrink": "Shrink",
         "aiSupplementarySearch": "Supplementary Search",
+        "aiNewTask": "Add Task",
         "supplementarySearch": {
           "selectedOnly": "Selected Only",
           "selectedAndRelated": "Smart Related Rewrite"
@@ -975,6 +976,8 @@
         "recoveryNeeded": "Recovery needed",
         "rewriteHelpText": "Please {{actionLabel}} this text:\n\n\"{{displayText}}\"\n\n{{userInstruction}}",
         "rewriteHelpTextShort": "Please {{actionLabel}} this text:\n\n\"{{displayText}}\"",
+        "newTaskHelpText": "Please add a new task for the section containing this text:\n\n\"{{displayText}}\"\n\n{{userInstruction}}",
+        "newTaskHelpTextShort": "Please add a new task for the section containing this text:\n\n\"{{displayText}}\"",
         "rewriteSessionUnavailable": "The rewrite session for this report has expired. Please ask again before attempting to rewrite.",
         "feedbackProcessorDisabled": "User feedback optimization is disabled. The current report cannot be edited.",
         "syncSynced": "Synced",

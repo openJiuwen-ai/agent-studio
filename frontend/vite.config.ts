@@ -45,30 +45,6 @@ export default defineConfig(({ command, mode }) => {
           manualChunks(id) {
             const normalizedId = id.replace(/\\/g, '/')
 
-            // Split DeepSearch Explorer feature into its own chunk group so it does not
-            // bloat the primary app chunk and terser peak memory.
-            if (normalizedId.includes('/src/pages/Apps/components/DeepSearchExplorer/')) {
-              return 'deepsearch-explorer'
-            }
-
-            // Keep drag-and-drop runtime in a dedicated chunk used by DeepSearch Explorer.
-            if (
-              normalizedId.includes('/node_modules/react-dnd/') ||
-              normalizedId.includes('/node_modules/react-dnd-html5-backend/') ||
-              normalizedId.includes('/node_modules/dnd-core/') ||
-              normalizedId.includes('/node_modules/@react-dnd/')
-            ) {
-              return 'deepsearch-dnd'
-            }
-
-            // DeepSearch Explorer UI primitives can be isolated from the main app chunk.
-            if (
-              normalizedId.includes('/node_modules/@radix-ui/react-collapsible/') ||
-              normalizedId.includes('/node_modules/@radix-ui/react-hover-card/')
-            ) {
-              return 'deepsearch-ui'
-            }
-
             // Group all workflow-canvas form-materials modules into the same chunk
             // to avoid circular dependency warnings from re-exports
             if (normalizedId.includes('/packages/workflow-canvas/src/form-materials/')) {

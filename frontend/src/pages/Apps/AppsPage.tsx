@@ -60,6 +60,7 @@ const REWRITE_ACTION_LABEL_KEYS: Record<string, string> = {
   expand: 'apps.report.aiExpand',
   shorten: 'apps.report.aiShrink',
   supplementary_search: 'apps.report.aiSupplementarySearch',
+  new_task: 'apps.report.aiNewTask',
 }
 
 const SUPPLEMENTARY_SEARCH_SCOPE_LABEL_KEYS: Record<string, string> = {
@@ -75,6 +76,11 @@ const buildRewriteUserMessage = (t: (key: string, options?: Record<string, unkno
   const displayText = selectedText.length > 100
     ? `${selectedText.slice(0, 100)}...`
     : selectedText
+  if (action === 'new_task') {
+    return userInstruction
+      ? t('apps.report.newTaskHelpText', { displayText, userInstruction })
+      : t('apps.report.newTaskHelpTextShort', { displayText })
+  }
   return userInstruction
     ? t('apps.report.rewriteHelpText', { actionLabel, displayText, userInstruction })
     : t('apps.report.rewriteHelpTextShort', { actionLabel, displayText })
@@ -1030,9 +1036,11 @@ const AppsPage: React.FC = () => {
    * 复用 DeepSearch 配置，通过 SSE 流处理改写结果
    * 将改写请求和结果集成到对话流中
   */
-  const supplementarySearchTitle = t('apps.report.aiSupplementarySearch')
   const handleReportRewrite = async (params: ReportRewriteParams) => {
     const { action, rewrite_scope, selectedText, startOffset, endOffset, userInstruction, conversationId, onStatusChange, onDelta, onSnapshot, onEnd, onError, silent } = params
+    const actionTitle = action === 'new_task'
+      ? t('apps.report.aiNewTask')
+      : t('apps.report.aiSupplementarySearch')
 
     const config = toDeepResearchConfig(agentConfigs['deepsearch'])
     const rewriteSessionUnavailableMessage = t('apps.report.rewriteSessionUnavailable')
@@ -1371,7 +1379,7 @@ const AppsPage: React.FC = () => {
             MessageType.TASK,
             '',
             undefined,
-            supplementarySearchTitle,
+            actionTitle,
             'deepsearch'
           )
           if (taskMessage) {
