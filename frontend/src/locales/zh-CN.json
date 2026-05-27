@@ -1108,7 +1108,7 @@
           "enable": "启用 VLM 图表生成",
           "enableDesc": "使用视觉模型对 DeepSearch 生成的图表进行迭代优化",
           "maxIterations": "最大迭代次数",
-          "maxIterationsDesc": "0 表示不进行迭代",
+          "maxIterationsDesc": "建议 1-3 次",
           "model": "VLM 模型",
           "modelDesc": "与模型配置中的VLM模型保持同步"
         },

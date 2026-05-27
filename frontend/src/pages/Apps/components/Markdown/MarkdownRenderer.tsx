@@ -19,6 +19,7 @@ import { CitationLink } from '../CitationPanel/CitationLink'
 import { InferenceLink } from '../InferenceGraph'
 import { SmartImage } from './SmartImage'
 import { MermaidChart } from './MermaidChart/index'
+import { InteractiveChartIframe } from './InteractiveChartIframe'
 import {
   createVLMChartReference,
   getChartDataUrl,
@@ -42,6 +43,13 @@ export const MarkdownRenderer: React.FC<{
       })
       .filter((entry): entry is readonly [string, string] => entry !== null)
 
+    return new Map(entries)
+  }, [chartMessages])
+
+  const chartHtmlMap = useMemo(() => {
+    const entries = (chartMessages || [])
+      .filter(chart => chart.html_base64?.trim())
+      .map(chart => [chart.chart_id, chart.html_base64!] as const)
     return new Map(entries)
   }, [chartMessages])
 
@@ -96,8 +104,26 @@ export const MarkdownRenderer: React.FC<{
       img: ({ src, alt, ...rest }) => {
         if (src && isVLMChartReference(src)) {
           const chartId = getChartIdFromReference(src)
-          const resolvedSrc = chartDataUrlMap.get(chartId)
 
+          const htmlBase64 = chartHtmlMap.get(chartId)
+          if (htmlBase64) {
+            let htmlContent = ''
+            try {
+              htmlContent = atob(htmlBase64)
+            } catch {
+              htmlContent = ''
+            }
+            if (htmlContent) {
+              return (
+                <InteractiveChartIframe
+                  htmlContent={htmlContent}
+                  title={alt || 'Interactive Chart'}
+                />
+              )
+            }
+          }
+
+          const resolvedSrc = chartDataUrlMap.get(chartId)
           if (!resolvedSrc) {
             return null
           }
@@ -131,7 +157,7 @@ export const MarkdownRenderer: React.FC<{
     }
 
     return markdownComponents
-  }, [chartDataUrlMap, citations, instanceId])
+  }, [chartDataUrlMap, chartHtmlMap, citations, instanceId])
 
   const sanitizeSchema = useMemo(
     () => ({

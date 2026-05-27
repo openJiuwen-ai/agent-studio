@@ -152,7 +152,7 @@ export const GeneralConfigTab: React.FC<GeneralConfigTabProps> = ({
                     {t('apps.config.general.vlmChart.maxIterations', { defaultValue: '最大迭代次数' })}
                   </span>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    {t('apps.config.general.vlmChart.maxIterationsDesc', { defaultValue: '0 表示不进行 VLM 迭代，建议 1-3 次' })}
+                    {t('apps.config.general.vlmChart.maxIterationsDesc', { defaultValue: '建议 1-3 次' })}
                   </p>
                 </div>
                 <div className="w-full max-w-[360px]">
@@ -161,7 +161,7 @@ export const GeneralConfigTab: React.FC<GeneralConfigTabProps> = ({
                   </div>
                   <input
                     type="range"
-                    min={0}
+                    min={1}
                     max={3}
                     step={1}
                     value={config.vlmChartGeneratorMaxIterations}

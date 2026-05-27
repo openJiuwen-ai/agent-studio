@@ -358,8 +358,8 @@ const AgentConfigDialog: React.FC<AgentConfigDialogProps> = ({
       errors.push(t('apps.config.validation.chapterCountRange'))
     }
 
-    if (config.vlmChartGeneratorMaxIterations < 0 || config.vlmChartGeneratorMaxIterations > 3) {
-      errors.push(t('apps.config.validation.vlmChartIterationsRange', { defaultValue: 'VLM 图表生成最大迭代次数必须在 0 到 3 之间' }))
+    if (config.vlmChartGeneratorMaxIterations < 1 || config.vlmChartGeneratorMaxIterations > 3) {
+      errors.push(t('apps.config.validation.vlmChartIterationsRange', { defaultValue: 'VLM 图表生成最大迭代次数必须在 1 到 3 之间' }))
     }
 
     if (config.vlmChartGeneratorEnable && config.vlmChartGeneratorMaxIterations > 0 && !config.vlmChartModelId) {

@@ -50,6 +50,7 @@ export interface ChartMessage {
   chart_title?: string
   description?: string
   base64?: string
+  html_base64?: string
 }
 
 /**
