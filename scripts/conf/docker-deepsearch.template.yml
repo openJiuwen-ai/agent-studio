@@ -5,6 +5,7 @@ services:
     container_name: <<DEEPSEARCH_DOCKER>>
     ports:
       - "<<DEEPSEARCH_HOST_PORT>>:8000"
+      - "<<DEEPSEARCH_TELEMETRY_HOST_PORT>>:8089"
     environment:
       - LLM_SSL_VERIFY=False
       - TOOL_SSL_VERIFY=False
