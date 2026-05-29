@@ -201,7 +201,7 @@ export const KnowledgeBaseConfigDialog: React.FC<KnowledgeBaseConfigDialogProps>
         <div className="px-6 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
           {selectionMode === 'single' && (
             <div className="p-2 bg-blue-50 border border-blue-100 rounded-lg">
-              <p className="text-xs text-blue-700">{t('apps.config.knowledge.singleSelectTip', 'Select one knowledge base')}</p>
+              <p className="text-xs text-blue-700">{t('apps.config.knowledge.singleSelectTip')}</p>
             </div>
           )}
 

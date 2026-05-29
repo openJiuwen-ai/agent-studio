@@ -1301,6 +1301,7 @@
         "gotoCreate": "前往创建知识库",
         "loadMore": "加载更多...",
         "loading": "加载中...",
+        "singleSelectTip": "请选择一个知识库",
         "confirm": "确认 ({{count}})",
         "cancel": "取消",
         "refresh": "刷新",

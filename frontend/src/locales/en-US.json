@@ -1292,6 +1292,7 @@
         "gotoCreate": "Go to Create Knowledge Base",
         "loadMore": "Load More...",
         "loading": "Loading...",
+        "singleSelectTip": "Select one knowledge base",
         "confirm": "Confirm ({{count}})",
         "cancel": "Cancel",
         "refresh": "Refresh",
