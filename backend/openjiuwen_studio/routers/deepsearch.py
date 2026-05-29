@@ -46,6 +46,7 @@ from openjiuwen_studio.schemas.deepsearch import (
     WebSearchEngineDeleteRes,
     WebSearchEngineAccessRequestDTO,
     WebSearchEngineAccessRes,
+    TaskSpaceWebSearchProviderAccessRequestDTO,
     ReportConvertReq,
     ReportConvertRes,
 )
@@ -57,6 +58,11 @@ from openjiuwen_studio.routers.deepsearch_logger import (
 )
 
 deepsearch_router = APIRouter()
+TASK_SPACE_PROVIDER_TEST_PRESETS: dict[str, dict[str, str]] = {
+    "jina": {"engine_name": "jina", "endpoint": "https://s.jina.ai/"},
+    "serper": {"engine_name": "google", "endpoint": "https://google.serper.dev/search"},
+}
+PROVIDER_TEST_TIMEOUT_SECONDS = 15.0
 
 
 @dataclass
@@ -188,10 +194,12 @@ def handle_deepsearch_errors(func: Callable[..., Any]) -> Callable[..., Any]:
 
 def validate_search_run_tool_credentials(request: DeepSearchSearchRunRequest) -> None:
     if request.tool_map == "search_fetch":
-        if not request.jina_api_key or not request.serper_api_key:
+        has_jina_key = bool((request.jina_api_key or "").strip())
+        has_serper_key = bool((request.serper_api_key or "").strip())
+        if not has_jina_key or not has_serper_key:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="tool_map=search_fetch requires jina_api_key and serper_api_key",
+                detail="tool_map=search_fetch requires both jina_api_key and serper_api_key",
             )
         return
 
@@ -206,6 +214,107 @@ def validate_search_run_tool_credentials(request: DeepSearchSearchRunRequest) ->
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="tool_map=retrieve requires milvus.embedder_api_key and milvus.embedder_base_url",
             )
+
+
+def extract_http_status_error_detail(exc: HTTPStatusError) -> str | None:
+    response = exc.response
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        for key in ("detail", "msg", "message", "error"):
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        if payload:
+            return str(payload)
+    if isinstance(payload, list):
+        return "; ".join(str(item) for item in payload if item)
+
+    text = (response.text or "").strip()
+    return text if text else None
+
+
+def raise_provider_test_http_error(exc: HTTPStatusError, fallback_detail: str) -> None:
+    downstream_detail = extract_http_status_error_detail(exc)
+    detail = fallback_detail
+    if downstream_detail:
+        detail = f"{fallback_detail}: {downstream_detail}"
+    raise HTTPException(
+        status_code=(
+            exc.response.status_code
+            if 400 <= exc.response.status_code < 500
+            else status.HTTP_502_BAD_GATEWAY
+        ),
+        detail=detail,
+    ) from exc
+
+
+def normalize_provider_test_results(response_payload: Any, provider: str) -> list[dict[str, Any]]:
+    if isinstance(response_payload, list):
+        return [item for item in response_payload if isinstance(item, dict)]
+
+    if not isinstance(response_payload, dict):
+        return []
+
+    if provider == "serper":
+        organic_results = response_payload.get("organic")
+        if isinstance(organic_results, list):
+            return [item for item in organic_results if isinstance(item, dict)]
+
+    for key in ("data", "results", "items"):
+        value = response_payload.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+
+    return [response_payload]
+
+
+async def perform_provider_test(provider: str, api_key: str, query: str) -> list[dict[str, Any]]:
+    provider_preset = TASK_SPACE_PROVIDER_TEST_PRESETS[provider]
+
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    request_body: dict[str, Any] = {"q": query}
+
+    if provider == "jina":
+        headers["Authorization"] = f"Bearer {api_key}"
+    elif provider == "serper":
+        headers["X-API-KEY"] = api_key
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported provider '{provider}' for credential test",
+        )
+
+    async with httpx.AsyncClient(
+        timeout=PROVIDER_TEST_TIMEOUT_SECONDS,
+        follow_redirects=True,
+    ) as http_client:
+        response = await http_client.post(
+            provider_preset["endpoint"],
+            headers=headers,
+            json=request_body,
+        )
+
+    try:
+        response.raise_for_status()
+    except HTTPStatusError as exc:
+        raise_provider_test_http_error(exc, "Provider credential test failed")
+
+    try:
+        response_payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Provider credential test returned a non-JSON response",
+        ) from exc
+
+    return normalize_provider_test_results(response_payload, provider)
 
 
 @deepsearch_router.post("/run", response_model=ResponseModel[dict])
@@ -570,6 +679,43 @@ async def access_web_search_engine(
     _ = check_user_space(space_id, current_user)
     res = await client.access_web_search_engines(space_id, web_search_engine_id, payload)
     return res
+
+
+@deepsearch_router.post(
+    "/task_space/web_search/provider_test",
+    response_model=WebSearchEngineAccessRes,
+    status_code=status.HTTP_200_OK,
+)
+@handle_deepsearch_errors
+async def access_task_space_web_search_provider(
+        request: TaskSpaceWebSearchProviderAccessRequestDTO,
+        current_user: dict = Depends(get_current_user)
+):
+    payload = request.model_dump()
+    space_id = payload["space_id"]
+    _ = check_user_space(space_id, current_user)
+
+    provider = payload["provider"]
+    api_key = payload["api_key"].strip()
+    query = payload["query"].strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provider credential test requires a non-empty api_key",
+        )
+    if not query:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provider credential test requires a non-empty query",
+        )
+
+    datas = await perform_provider_test(provider=provider, api_key=api_key, query=query)
+    return {
+        "code": status.HTTP_200_OK,
+        "msg": "success",
+        "search_engine_name": TASK_SPACE_PROVIDER_TEST_PRESETS[provider]["engine_name"],
+        "datas": datas,
+    }
 
 
 @deepsearch_router.post("/reports/convert", response_model=ReportConvertRes)

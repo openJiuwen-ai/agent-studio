@@ -321,6 +321,14 @@ class WebSearchEngineAccessRes(BasicResponseDTO):
     datas: List[dict[str, Any]] = Field(default=[], description="搜索引擎返回结果，key不固定")
 
 
+class TaskSpaceWebSearchProviderAccessRequestDTO(BaseModel):
+    '''task-space 搜索模式下的供应商凭据测试请求'''
+    space_id: str = Field(..., min_length=1, max_length=255, description="用户空间id")
+    provider: Literal["jina", "serper"] = Field(..., description="待测试的供应商")
+    api_key: str = Field(..., min_length=1, max_length=255, description="供应商 API Key")
+    query: str = Field(default="Latest AI developments", min_length=1, max_length=500, description="测试查询")
+
+
 class ReportConvertFinalResult(BaseModel):
     response_content: str = Field(..., description='报告内容（Markdown格式）')
     citation_messages: Optional[Any] = Field(default=None, description='引用数据')

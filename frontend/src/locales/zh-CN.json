@@ -1271,6 +1271,25 @@
         "domainInvalidFormat": "请输入有效的域名格式，如 docs.example.com",
         "domainDuplicate": "该域名已存在"
       },
+      "explorerEngine": {
+        "action": {
+          "test": "测试"
+        },
+        "test": {
+          "testing": "测试中...",
+          "providerSuccess": "{{provider}} 测试成功",
+          "testFailed": "测试失败",
+          "networkError": "网络连接失败，请检查设置后重试",
+          "providerFailed": "{{provider}} 连接测试失败，请检查 API Key 后重试。",
+          "invalidApiKey": "{{provider}} 验证失败，请确认 API Key 是否正确且具备调用权限。",
+          "showApiKey": "显示 API Key",
+          "hideApiKey": "隐藏 API Key",
+          "providers": {
+            "jina": "Jina",
+            "serper": "Serper"
+          }
+        }
+      },
       "knowledge": {
         "select": "配置知识库",
         "title": "配置知识库",

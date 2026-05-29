@@ -134,11 +134,13 @@ async function buildDeepSearchBackendConfig(
   }
 
   if (toolMap === 'search_fetch') {
-    if (!dsConfig.jinaApiKey || !dsConfig.serperApiKey) {
+    const jinaApiKey = (dsConfig.jinaApiKey ?? '').trim()
+    const serperApiKey = (dsConfig.serperApiKey ?? '').trim()
+    if (!jinaApiKey || !serperApiKey) {
       throw new Error('Search mode requires both Jina and Serper API keys')
     }
-    payload.jina_api_key = dsConfig.jinaApiKey
-    payload.serper_api_key = dsConfig.serperApiKey
+    payload.jina_api_key = jinaApiKey
+    payload.serper_api_key = serperApiKey
     return payload
   }
 

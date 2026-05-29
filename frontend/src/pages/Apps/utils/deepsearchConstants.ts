@@ -14,7 +14,6 @@ export interface DeepSearchExplorerConfig {
   planningModelId?: string
   searchModelId?: string
   generalModelId?: string
-  onlineSearchProvider?: 'jina' | 'serper'
   jinaApiKey?: string
   serperApiKey?: string
 }
@@ -64,7 +63,6 @@ export const DEFAULT_DEEPSEARCH_EXPLORER_CONFIG: DeepSearchExplorerConfig = {
   planningModelId: undefined,
   searchModelId: undefined,
   generalModelId: undefined,
-  onlineSearchProvider: 'jina',
   jinaApiKey: '',
   serperApiKey: '',
 }
@@ -111,18 +109,28 @@ const normalizeExplorerSearchMode = (value: unknown): DeepSearchExplorerConfig['
     : DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.searchMode
 )
 
-const normalizeExplorerOnlineProvider = (
-  value: unknown
-): DeepSearchExplorerConfig['onlineSearchProvider'] => (
-  value === 'jina' || value === 'serper'
-    ? value
-    : DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.onlineSearchProvider
-)
-
 const normalizeExecutionMethod = (value: unknown): DeepResearchConfig['execution_method'] => (
   value === 'parallel' || value === 'dependency_driving'
     ? value
     : DEFAULT_DEEPRESEARCH_CONFIG.execution_method
+)
+
+const toOptionalString = (value: unknown): string | undefined => (
+  typeof value === 'string'
+    ? value
+    : undefined
+)
+
+const toOptionalFiniteNumber = (value: unknown): number | undefined => (
+  typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined
+)
+
+const toApiKeyString = (value: unknown, fallback: string): string => (
+  typeof value === 'string'
+    ? value
+    : fallback
 )
 
 export const toDeepResearchConfig = (config?: AppAgentConfig): DeepResearchConfig => {
@@ -142,15 +150,22 @@ export const toDeepResearchConfig = (config?: AppAgentConfig): DeepResearchConfi
 export const toDeepSearchExplorerConfig = (
   config?: AppAgentConfig
 ): DeepSearchExplorerConfig => {
+  const rawConfig = (config as Partial<Record<string, unknown>> | undefined) ?? {}
   const merged = {
     ...DEFAULT_DEEPSEARCH_EXPLORER_CONFIG,
-    ...(config as Partial<DeepSearchExplorerConfig> | undefined),
+    ...(rawConfig as Partial<DeepSearchExplorerConfig>),
   }
 
   return {
-    ...merged,
+    enableQuestionRouter: Boolean(merged.enableQuestionRouter),
+    actionsExploredLimit: toOptionalFiniteNumber(merged.actionsExploredLimit) ?? DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.actionsExploredLimit,
+    timeLimit: toOptionalFiniteNumber(merged.timeLimit) ?? DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.timeLimit,
     searchMode: normalizeExplorerSearchMode(merged.searchMode),
     selectedKnowledgeBaseIds: asStringArray(merged.selectedKnowledgeBaseIds),
-    onlineSearchProvider: normalizeExplorerOnlineProvider(merged.onlineSearchProvider),
+    planningModelId: toOptionalString(merged.planningModelId),
+    searchModelId: toOptionalString(merged.searchModelId),
+    generalModelId: toOptionalString(merged.generalModelId),
+    jinaApiKey: toApiKeyString(merged.jinaApiKey, DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.jinaApiKey ?? ''),
+    serperApiKey: toApiKeyString(merged.serperApiKey, DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.serperApiKey ?? ''),
   }
 }
