@@ -1259,7 +1259,7 @@
         "toggleStatusFailed": "切换状态失败",
         "includeDomains": "限定搜索来源",
         "excludeDomains": "排除搜索来源",
-        "includeDomainsPlaceholder": "返回的搜索结果只包含来自指定域名的页面",
+        "includeDomainsPlaceholder": "返回的搜索结果优先使用指定域名的页面，信息不足时也会使用限定外的域名",
         "excludeDomainsPlaceholder": "过滤掉来自指定域名的页面，不包含在搜索结果中",
         "editIncludeDomains": "编辑限定搜索来源",
         "editExcludeDomains": "编辑排除搜索来源",

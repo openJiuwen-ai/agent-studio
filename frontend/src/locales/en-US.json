@@ -1250,7 +1250,7 @@
         "toggleStatusFailed": "Failed to toggle status",
         "includeDomains": "Include Domains",
         "excludeDomains": "Exclude Domains",
-        "includeDomainsPlaceholder": "Search results will only include pages from specified domains",
+        "includeDomainsPlaceholder": "The search results returned prioritize pages from the specified domain, and will also include pages from other domains when information is insufficient",
         "excludeDomainsPlaceholder": "Filter out pages from specified domains, excluding them from search results",
         "editIncludeDomains": "Edit Include Domains",
         "editExcludeDomains": "Edit Exclude Domains",
