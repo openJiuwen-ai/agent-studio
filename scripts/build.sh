@@ -12,6 +12,7 @@ sed -i '/^VITE_API_PROXY_TARGET=/d' .env.runtime.default
 sed -i '/^VITE_PLUGIN_SERVICE_URL=/d' .env.runtime.default
 sed -i '/^MINIO_HOST=/d' .env.runtime.default
 sed -i '/^DEEPSEARCH_AGENT_HOST=/d' .env.runtime.default
+sed -i '/^DEEPSEARCH_AGENT_TELEMETRY_HOST=/d' .env.runtime.default
 sed -i '/^RUNTIME_HOST=/d' .env.runtime.default
 
 sed -i 's/^DB_TYPE=.*/DB_TYPE=mysql/' .env.runtime.default

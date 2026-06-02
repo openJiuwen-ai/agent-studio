@@ -48,6 +48,7 @@ show_deploy_prompt() {
                 ;;
             DEEPSEARCH)
                 echo "DEEPSEARCH_AGENT_HOST=localhost"
+                echo "DEEPSEARCH_AGENT_TELEMETRY_HOST=localhost"
                 echo "DEEPSEARCH_AGENT_PORT=${DEPLOY_VARS["DEEPSEARCH_HOST_PORT"]}"
                 echo "DEEPSEARCH_AGENT_TELEMETRY_PORT=${DEPLOY_VARS["DEEPSEARCH_TELEMETRY_HOST_PORT"]}"
                 ;;

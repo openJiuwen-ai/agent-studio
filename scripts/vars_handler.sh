@@ -167,7 +167,9 @@ configure_module_env() {
                 DEPLOY_VARS["HAS_DEEPSEARCH"]="true"
                 DEPLOY_VARS["IS_UP_DEEPSEARCH"]="true"
                 RUNTIME_VARS["DEEPSEARCH_AGENT_HOST"]=${DEPLOY_VARS["DEEPSEARCH_SERVICE"]}
+                RUNTIME_VARS["DEEPSEARCH_AGENT_TELEMETRY_HOST"]=${DEPLOY_VARS["DEEPSEARCH_SERVICE"]}
                 RUNTIME_VARS["DEEPSEARCH_AGENT_PORT"]="8000"
+                RUNTIME_VARS["DEEPSEARCH_AGENT_TELEMETRY_PORT"]="8089"
                 ;;
             RUNTIME)
                 if [ -n "${RUNTIME_VARS["RUNTIME_HOST"]:-}" ]; then
