@@ -74,6 +74,10 @@
         "timeoutError": {
           "title": "超时取消",
           "content": "由于长时间未操作或未接收到数据，对话已超时取消。请检查网络连接后重新提问。"
+        },
+        "interruptError": {
+          "title": "任务未完成",
+          "content": "上次任务因页面刷新或切换会话而中断，未能正常结束。如需继续，请重新提问。"
         }
       }
     },
@@ -722,7 +726,10 @@
       "deepSearchConfigRetry": "，参考文档进行配置后重试",
       "checkingDeepsearch": "正在检查 DeepSearch 服务状态...",
       "deepsearchServiceDown": "DeepSearch 服务暂时不可用",
-      "stopDeepSearch": "停止 DeepSearch"
+      "stopDeepSearch": "停止 DeepSearch",
+      "taskRunning": {
+        "statusText": "内容生成中，请勿刷新/关闭网页，否则导致研究取消。"
+      }
     },
     "picker": {
       "selectAgent": "选择智能体",

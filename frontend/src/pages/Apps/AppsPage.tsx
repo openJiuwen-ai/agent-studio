@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react'
-import { Copy, Trash2, RefreshCw, History, X } from 'lucide-react'
+import { Copy, Trash2, RefreshCw, History, X, AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { MentionItem, DEFAULT_AGENTS, DEFAULT_RESOURCES } from './components/MentionPicker'
 import AgentConfigDialog, { DeepSearchConfig } from './components/AgentConfigDialog'
@@ -205,6 +205,30 @@ const getRewriteRoundState = (
   }
 }
 
+// 模块级变量：持久化 AbortController，在组件卸载/重挂载时不丢失
+// 使得切换到其他页面再切回时，仍可正确 abort 仍在进行的 SSE
+let _activeDeepSearchController: AbortController | null = null
+
+// SSE 进行中切换模块时需要跨生命周期保存的 UI 状态类型
+interface AppsUISnapshot {
+  currentMessageItemsId: string | null
+  lastSelectedReportId: string | null
+  showMindMap: boolean
+  mindMapMessageItemsId: string | null
+  currentGraphType: 'sectionGraph' | 'taskGraph'
+  showDeepSearchExplorer: boolean
+  deepSearchExplorerFullscreen: boolean
+  activeDeepSearchRunId: string | null
+  killedDeepSearchRunIds: Set<string>
+}
+
+// 模块级快照：SSE 进行中卸载时保存，重挂载时恢复
+let _appsUISnapshot: { conversationId: string; state: AppsUISnapshot } | null = null
+
+// 组件卸载标志：区分"切换模块（导航）"与"刷新/关闭页面"
+// 导航时 JS 运行时存活，此标志保持 true；刷新/关闭后 JS 重置，标志恢复初始值 false
+let _didNavigateBack = false
+
 const AppsPage: React.FC = () => {
   const { user } = useAuthStore()
   const { t } = useTranslation()
@@ -221,7 +245,7 @@ const AppsPage: React.FC = () => {
 
   // ===== DeepSearch 插件状态（最小化侵入） =====
   const [isDeepSearchMode, setIsDeepSearchMode] = useState(false)
-  const [abortController, setAbortController] = useState<AbortController | null>(null)
+  // abortController 已迁移至模块级变量 _activeDeepSearchController，见组件外声明
   const [showPlaybackPanel, setShowPlaybackPanel] = useState(false)
   const [deepsearchServiceAvailable, setDeepsearchServiceAvailable] = useState<boolean | null>(null)
   const [checkingDeepsearch, setCheckingDeepsearch] = useState(false)
@@ -453,6 +477,22 @@ const AppsPage: React.FC = () => {
   const chatInputRef = useRef<MessageInputRef>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
 
+  // 记录已执行过 checkAndMarkIncompleteAsAbort 的 conversationId，防止同次挂载中重复触发
+  const abortCheckedConvIdRef = useRef<string | null>(null)
+
+  // 每帧同步当前 UI 状态，供卸载时写入模块级快照
+  const uiSnapshotRef = useRef<AppsUISnapshot>({
+    currentMessageItemsId: null,
+    lastSelectedReportId: null,
+    showMindMap: false,
+    mindMapMessageItemsId: null,
+    currentGraphType: 'sectionGraph',
+    showDeepSearchExplorer: false,
+    deepSearchExplorerFullscreen: false,
+    activeDeepSearchRunId: null,
+    killedDeepSearchRunIds: new Set(),
+  })
+
   // 用户滚动状态：true = 用户向上滚动了（不在底部），false = 用户在底部
   const [isUserScrolled, setIsUserScrolled] = useState(false)
 
@@ -588,6 +628,43 @@ const AppsPage: React.FC = () => {
   // 从 IndexDB 初始化对话数据
   useEffect(() => {
     initializeFromDB()
+  }, [])
+
+  // ===== UI 状态快照：SSE 期间切换模块后恢复 =====
+  // 无 deps：每次渲染都更新 ref，保证卸载时 cleanup 能拿到最新值
+  useEffect(() => {
+    uiSnapshotRef.current = {
+      currentMessageItemsId,
+      lastSelectedReportId,
+      showMindMap,
+      mindMapMessageItemsId,
+      currentGraphType,
+      showDeepSearchExplorer,
+      deepSearchExplorerFullscreen,
+      activeDeepSearchRunId,
+      killedDeepSearchRunIds,
+    }
+  })
+
+  // 挂载时：若有同一对话的快照，则恢复 UI 状态（不限于 isLoading，涵盖 SSE 后台完成的边缘情况）
+  useEffect(() => {
+    const store = useConversationStore.getState()
+    if (
+      _appsUISnapshot &&
+      _appsUISnapshot.conversationId === store.currentConversationId
+    ) {
+      const s = _appsUISnapshot.state
+      setCurrentMessageItemsId(s.currentMessageItemsId)
+      setLastSelectedReportId(s.lastSelectedReportId)
+      setShowMindMap(s.showMindMap)
+      setMindMapMessageItemsId(s.mindMapMessageItemsId)
+      setCurrentGraphType(s.currentGraphType)
+      setShowDeepSearchExplorer(s.showDeepSearchExplorer)
+      setDeepSearchExplorerFullscreen(s.deepSearchExplorerFullscreen)
+      setActiveDeepSearchRunId(s.activeDeepSearchRunId)
+      setKilledDeepSearchRunIds(s.killedDeepSearchRunIds)
+      _appsUISnapshot = null
+    }
   }, [])
 
   // 保存对话状态到 localStorage
@@ -875,6 +952,23 @@ const AppsPage: React.FC = () => {
   // ===== SSE超时检测: 页面加载时检查未完成消息 =====
   useEffect(() => {
     if (currentConversationId && isDeepSearchMode) {
+      // SSE 正在进行中时跳过检查，避免把后台运行中的任务误标为取消
+      if (useConversationStore.getState().isLoading) {
+        return
+      }
+      // 从其他模块导航回来时跳过检查，维持切换前的状态
+      // 只有刷新/关闭页面后重新加载，才执行取消逻辑
+      if (_didNavigateBack) {
+        _didNavigateBack = false
+        return
+      }
+      // 幂等守卫：同一次挂载中同一对话只检查一次
+      // isDeepSearchMode / selectedAgent 可能来自 localStorage 和 initializeFromDB 两条独立路径，
+      // 导致此 effect 对同一 conversationId 触发两次，从而产生重复的"任务未完成"消息。
+      if (abortCheckedConvIdRef.current === currentConversationId) {
+        return
+      }
+      abortCheckedConvIdRef.current = currentConversationId
       const hasIncomplete = useConversationStore.getState().checkAndMarkIncompleteAsAbort()
       if (hasIncomplete) {
         console.log('[AppsPage] Marked incomplete messages as FAILED on page load')
@@ -882,10 +976,20 @@ const AppsPage: React.FC = () => {
     }
   }, [currentConversationId, isDeepSearchMode])
 
-  // ===== 组件卸载时清理SSE超时监控 =====
+  // ===== 组件卸载时：保存 UI 快照，标记为导航离开 =====
   useEffect(() => {
     return () => {
-      useConversationStore.getState().stopSSETimeoutMonitor()
+      // 标记为"导航离开"：JS 运行时存活时此标志保持，刷新/关闭后重置为 false
+      _didNavigateBack = true
+      const store = useConversationStore.getState()
+      if (store.isLoading && store.currentConversationId) {
+        // SSE 进行中：保持超时监控，保存 UI 快照以便切回时恢复
+        _appsUISnapshot = {
+          conversationId: store.currentConversationId,
+          state: uiSnapshotRef.current,
+        }
+      }
+      // 超时监控不在此停止：监控自身会在对话切换或触发超时时自行清理
     }
   }, [])
 
@@ -1886,9 +1990,9 @@ const AppsPage: React.FC = () => {
   // 发起新对话
   const handleNewConversation = () => {
     // 如果有正在进行的 SSE，先中断
-    if (abortController) {
-      abortController.abort()
-      setAbortController(null)
+    if (_activeDeepSearchController) {
+      _activeDeepSearchController.abort()
+      _activeDeepSearchController = null
     }
 
     // 清除选择的结果面板
@@ -2068,9 +2172,9 @@ const AppsPage: React.FC = () => {
   // 切换历史对话
   const handleConversationSelect = async (conversationId: string) => {
     // 如果有正在进行的 SSE，先中断
-    if (abortController) {
-      abortController.abort()
-      setAbortController(null)
+    if (_activeDeepSearchController) {
+      _activeDeepSearchController.abort()
+      _activeDeepSearchController = null
     }
 
     // 清除选择的结果面板和思维链面板（修复bug：切换对话时需要清除，否则会导致页面空白）
@@ -2154,9 +2258,9 @@ const AppsPage: React.FC = () => {
     setIsSending(true)
     setLoading(true)
 
-    // 3. 创建 AbortController 用于中断请求
+    // 3. 创建 AbortController 用于中断请求（同步写入模块级变量，跨组件生命周期可访问）
     const controller = new AbortController()
-    setAbortController(controller)
+    _activeDeepSearchController = controller
 
     try {
       // 4. 获取并验证配置
@@ -2554,7 +2658,8 @@ const AppsPage: React.FC = () => {
 
       setIsSending(false)
       setLoading(false)
-      setAbortController(null)
+      _activeDeepSearchController = null
+      _appsUISnapshot = null  // SSE 结束，快照不再有效
     }
   }
 
@@ -2567,9 +2672,9 @@ const AppsPage: React.FC = () => {
     if (!conversation_id) {
       console.error('[DeepSearch Cancel] No conversationId found')
       // 仍然尝试 abort 前端 SSE 流
-      if (abortController) {
-        abortController.abort()
-        setAbortController(null)
+      if (_activeDeepSearchController) {
+        _activeDeepSearchController.abort()
+        _activeDeepSearchController = null
       }
       return
     }
@@ -2585,6 +2690,8 @@ const AppsPage: React.FC = () => {
 
     // 停止 SSE 超时监控，用户主动取消后不再需要超时检测
     useConversationStore.getState().stopSSETimeoutMonitor()
+    // 清除待处理的大纲交互，防止取消后 useEffect 重新触发 handleDeepSearchSend
+    clearPendingOutlineInteraction()
 
     // 【关键 2】发送取消请求到后端
     // 根据 DeepSearch 服务代码，取消请求只需要 space_id 和 conversation_id
@@ -2628,9 +2735,9 @@ const AppsPage: React.FC = () => {
     })
 
     // 【关键 3】立即 abort 前端的 SSE 流，不需要等待 cancel 请求完成
-    if (abortController) {
-      abortController.abort()
-      setAbortController(null)
+    if (_activeDeepSearchController) {
+      _activeDeepSearchController.abort()
+      _activeDeepSearchController = null
     }
   }
 
@@ -2803,8 +2910,8 @@ const AppsPage: React.FC = () => {
                     </React.Fragment>
                   ))}
 
-                  {/* AI 正在输入指示器 */}
-                  {isSending && (
+                  {/* AI 正在输入指示器（isSending 本地状态 + isLoading Zustand 状态，切换模块返回后用 isLoading 托底） */}
+                  {(isSending || isLoading) && (
                     <div className="flex justify-start">
                       <div className="max-w-[70%] rounded-2xl px-5 py-3 text-gray-900">
                         <div className="flex items-center gap-1">
@@ -2821,6 +2928,13 @@ const AppsPage: React.FC = () => {
 
               {/* 底部输入框 */}
               <div className="shrink-0 px-6 py-6">
+                {/* 任务进行中状态提示 */}
+                {isStreaming && isDeepSearchMode && (
+                  <div className="flex items-center justify-center gap-2 mb-3 text-amber-600 text-sm">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{t('apps.chat.taskRunning.statusText')}</span>
+                  </div>
+                )}
                 <div className="max-w-4xl mx-auto">
                   <ChatInputArea
                     inputValue={inputValue}
@@ -2862,19 +2976,21 @@ const AppsPage: React.FC = () => {
                 )}
 
                 {/* 共用面板内容 */}
-                {showMindMap && mindMapMessageItemsId ? (
-                  <MindMapPanel
-                    messageItemsId={mindMapMessageItemsId}
-                    onClose={handleCloseMindMap}
-                    graphType={currentGraphType}
-                    onGraphTypeChange={setCurrentGraphType}
-                  />
-                ) : (
-                  <ResultPanel
-                    feedbackOptimizationEnabled={toDeepResearchConfig(agentConfigs['deepsearch']).userFeedbackProcessorEnable ?? DEFAULT_DEEPRESEARCH_CONFIG.userFeedbackProcessorEnable}
-                    onReportRewrite={handleReportRewrite}
-                  />
-                )}
+                <div className="flex-1 min-h-0">
+                  {showMindMap && mindMapMessageItemsId ? (
+                    <MindMapPanel
+                      messageItemsId={mindMapMessageItemsId}
+                      onClose={handleCloseMindMap}
+                      graphType={currentGraphType}
+                      onGraphTypeChange={setCurrentGraphType}
+                    />
+                  ) : (
+                    <ResultPanel
+                      feedbackOptimizationEnabled={toDeepResearchConfig(agentConfigs['deepsearch']).userFeedbackProcessorEnable ?? DEFAULT_DEEPRESEARCH_CONFIG.userFeedbackProcessorEnable}
+                      onReportRewrite={handleReportRewrite}
+                    />
+                  )}
+                </div>
               </div>
             )}
 
@@ -2988,6 +3104,7 @@ const AppsPage: React.FC = () => {
         onConfirm={handleLimitDialogConfirm}
         onCancel={handleLimitDialogCancel}
       />
+
     </div>
   );
 }

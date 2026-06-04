@@ -74,6 +74,10 @@
         "timeoutError": {
           "title": "Conversation Timeout",
           "content": "The conversation has been cancelled due to inactivity or no data received for an extended period. Please check your network connection and ask your question again."
+        },
+        "interruptError": {
+          "title": "Task Incomplete",
+          "content": "The previous task was interrupted due to a page refresh or conversation switch and did not finish normally. Please ask your question again to continue."
         }
       }
     },
@@ -713,7 +717,10 @@
       "deepSearchConfigRetry": ", refer to the documentation for configuration and try again",
       "checkingDeepsearch": "Checking DeepSearch service status...",
       "deepsearchServiceDown": "DeepSearch service is temporarily unavailable",
-      "stopDeepSearch": "Stop DeepSearch"
+      "stopDeepSearch": "Stop DeepSearch",
+      "taskRunning": {
+        "statusText": "Content is being generated. Do not refresh or close the page, or the research will be cancelled."
+      }
     },
     "picker": {
       "selectAgent": "Select Agent",

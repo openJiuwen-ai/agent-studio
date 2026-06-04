@@ -2323,9 +2323,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
 
       console.warn('[SSE Timeout] 检测到超时的未完成消息，标记为CANCELLED');
       get().markCurrentConversationIncompleteAsAbort({
-        title: i18n.t('common.messages.sse.timeoutError.title'),
-        content: i18n.t('common.messages.sse.timeoutError.content'),
-        abortType: TaskStatus.CANCELLED,  // 页面刷新/切换会话导致的超时取消
+        title: i18n.t('common.messages.sse.interruptError.title'),
+        content: i18n.t('common.messages.sse.interruptError.content'),
+        abortType: TaskStatus.CANCELLED,  // 页面刷新/切换会话导致的中断取消
       });
       return true;
     }
@@ -2377,6 +2377,14 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     const addAbortMessage = () => {
       if (!abortMessage) return;
 
+      // 兜底检查：防止 items 已经是非进行状态时被重复标记。
+      // 此函数须在 markAllIncompleteMessages / markRecursively 之前调用，
+      // 避免读到它们刚改写的 CANCELLED 状态而误判为"已处理"。
+      const currentStatus = get().messageItemsMap.get(lastMessageItems.id)?.status;
+      if (!currentStatus || !isTaskOngoing(currentStatus)) {
+        return;
+      }
+
       // 如果是取消状态，尝试复用已有的 INTERRUPT 消息
       if (abortMessage.abortType === TaskStatus.CANCELLED) {
         const lastMessageId = lastMessageItems.messagesIds[lastMessageItems.messagesIds.length - 1];
@@ -2415,46 +2423,28 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
       get().saveConversationToDB(lastMessageItems.conversationId);
     };
 
-    // ========== 动态导入 handler ==========
-    import('./handlers/deepsearchSSEHandler').then(({ DeepsearchSSEHandler }) => {
-      const handler = new DeepsearchSSEHandler(
-        // 传入空的 dependencies，我们只使用 markAllIncompleteMessages 方法
-        {} as any,
-        {} as any,
-        lastMessageItems.conversationId
-      );
-      // 调用公共方法标记为中止状态
-      handler.markAllIncompleteMessages(lastMessageItems, targetStatus);
+    // ========== 同步标记所有未完成消息 ==========
+    // 先写入 abort 消息（此时 MessageItems 仍为 ongoing，守卫能正常通过）
+    addAbortMessage();
 
-      // 添加中止消息
-      addAbortMessage();
-    }).catch((error) => {
-      console.error('[markCurrentConversationIncompleteAsAbort] Failed to load handler:', error);
+    // 遍历所有消息并标记（INTERRUPT 已由 addAbortMessage 更新，其状态已是终态，此处为 no-op）
+    const markRecursively = (messageId: string) => {
+      const msg = get().getMessageById(messageId);
+      if (!msg) return;
 
-      // 降级处理: 直接遍历所有消息并标记
-      const markRecursively = (messageId: string) => {
-        const msg = get().getMessageById(messageId);
-        if (!msg) return;
+      if (msg.childMessageIds) {
+        msg.childMessageIds.forEach(childId => markRecursively(childId));
+      }
 
-        // 递归处理子消息
-        if (msg.childMessageIds) {
-          msg.childMessageIds.forEach(childId => markRecursively(childId));
-        }
+      if (isTaskOngoing(msg.status)) {
+        get().updateMessage(lastMessageItems.id, msg.id, { status: targetStatus });
+      }
+    };
 
-        // 标记未完成的消息
-        if (isTaskOngoing(msg.status)) {
-          get().updateMessage(lastMessageItems.id, msg.id, { status: targetStatus });
-        }
-      };
+    lastMessageItems.messagesIds.forEach(msgId => markRecursively(msgId));
 
-      lastMessageItems.messagesIds.forEach(msgId => markRecursively(msgId));
-
-      // 更新 MessageItems 状态
-      get().updateMessageItems(lastMessageItems.id, { status: targetStatus });
-
-      // 添加中止消息
-      addAbortMessage();
-    });
+    // 更新 MessageItems 状态
+    get().updateMessageItems(lastMessageItems.id, { status: targetStatus });
   },
 
   /**
