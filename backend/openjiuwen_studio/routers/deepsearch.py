@@ -176,6 +176,12 @@ def handle_deepsearch_errors(func: Callable[..., Any]) -> Callable[..., Any]:
     async def wrapper(*args, **kwargs):
         try:
             return await func(*args, **kwargs)
+        except DeepSearchClientError as exc:
+            logger.error("DeepSearch client error: %s", exc.message, exc_info=True)
+            return JSONResponse(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                content={"detail": exc.message},
+            )
         except HTTPStatusError as exc:
             # 记录原始错误详情到服务器日志，便于排查问题
             logger.error(

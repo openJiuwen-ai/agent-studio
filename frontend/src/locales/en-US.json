@@ -1158,6 +1158,7 @@
         "allModeRequires": "Comprehensive search mode requires: {{items}}",
         "webModeRequires": "Online enhancement mode requires an online enhancement engine",
         "webModeRequiresApiKey": "Online enhancement mode requires both API keys (Serper and Jina)",
+        "webModeRequiresProviderVerified": "Run connection tests for both Jina and Serper and pass them before saving",
         "localModeRequires": "Local search mode requires at least one knowledge base",
         "webResultCountRange": "Online enhancement result count must be between 1-10",
         "localResultCountRange": "Local search result count must be between 1-10",

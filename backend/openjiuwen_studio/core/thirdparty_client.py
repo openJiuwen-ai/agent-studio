@@ -12,6 +12,14 @@ from openjiuwen_studio.core.common.exceptions import DeepSearchClientError, Runt
 logger = logging.getLogger(__name__)
 
 
+def _format_deepsearch_call_error(exc: Exception) -> str:
+    """httpx 部分连接类异常的 str() 为空，需带上类型便于排查。"""
+    msg = str(exc).strip()
+    if msg:
+        return msg
+    return f"{type(exc).__name__}"
+
+
 class LazyDeepSearchHttpClient:
     """
     通用的、懒加载的 DeepSearch Agent HTTP 客户端。
@@ -21,6 +29,7 @@ class LazyDeepSearchHttpClient:
     _clients: Dict[str, httpx.AsyncClient]
     _initialized: Dict[str, bool]
     _base_urls: Dict[str, str]
+    _mode_locks: Dict[str, asyncio.Lock]
 
     def __new__(cls):
         if cls._instance is None:
@@ -28,7 +37,17 @@ class LazyDeepSearchHttpClient:
             cls._instance._clients = {}
             cls._instance._initialized = {"search": False, "research": False}
             cls._instance._base_urls = {}
+            cls._instance._mode_locks = {}
+        elif not hasattr(cls._instance, "_mode_locks"):
+            cls._instance._mode_locks = {}
         return cls._instance
+
+    def _mode_lock(self, mode: str) -> asyncio.Lock:
+        lock = self._mode_locks.get(mode)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._mode_locks[mode] = lock
+        return lock
 
     @staticmethod
     def _resolve_target(url: str) -> Tuple[str, str, int]:
@@ -81,6 +100,33 @@ class LazyDeepSearchHttpClient:
                 message=StatusCode.TASK_SPACE_THIRDPARTY_CLIENT_ERROR.errmsg.format(msg=str(e))
             ) from e
 
+    async def _ensure_client(self, mode: str, host: str, port: int) -> httpx.AsyncClient:
+        """在 per-mode 锁下懒加载客户端，避免并发 init/close 互相踩踏。"""
+        target_base_url = f"http://{host}:{port}"
+        async with self._mode_lock(mode):
+            client = self._clients.get(mode)
+            if (
+                self._initialized.get(mode, False)
+                and client is not None
+                and self._base_urls.get(mode) == target_base_url
+            ):
+                return client
+            await self._initialize(mode, host, port)
+            client = self._clients.get(mode)
+            if client is None:
+                raise RuntimeError(f"DeepSearch client initialization failed for mode={mode}")
+            return client
+
+    async def _invalidate_client(self, mode: str, client: httpx.AsyncClient) -> None:
+        """仅当仍是当前活跃客户端时关闭并清除，避免误关其他并发请求使用的连接。"""
+        async with self._mode_lock(mode):
+            if self._clients.get(mode) is not client:
+                return
+            self._clients.pop(mode, None)
+            self._base_urls.pop(mode, None)
+            self._initialized[mode] = False
+        await client.aclose()
+
     async def request(
         self,
         method: str,
@@ -92,17 +138,7 @@ class LazyDeepSearchHttpClient:
     ):
         """通用 HTTP 请求方法"""
         mode, host, port = self._resolve_target(url)
-        target_base_url = f"http://{host}:{port}"
-        client = self._clients.get(mode)
-        if (
-            not self._initialized.get(mode, False)
-            or client is None
-            or self._base_urls.get(mode) != target_base_url
-        ):
-            await self._initialize(mode, host, port)
-            client = self._clients.get(mode)
-        if client is None:
-            raise RuntimeError(f"DeepSearch client initialization failed for mode={mode}")
+        client = await self._ensure_client(mode, host, port)
         try:
             resp = await client.request(method, url, json=jsons, params=params, headers=headers)
             resp.raise_for_status()
@@ -111,13 +147,10 @@ class LazyDeepSearchHttpClient:
             # Let HTTP errors bubble up so caller can handle them meaningfully
             raise
         except Exception as e:
-            # 可选：重置状态，允许下次重试
-            failed_client = self._clients.pop(mode, None)
-            if failed_client:
-                await failed_client.aclose()
-            self._base_urls.pop(mode, None)
-            self._initialized[mode] = False
-            raise RuntimeError(f"DeepSearch service call failed: {e}") from e
+            await self._invalidate_client(mode, client)
+            raise RuntimeError(
+                f"DeepSearch service call failed: {_format_deepsearch_call_error(e)}"
+            ) from e
 
     async def request_multipart(
         self,
@@ -129,17 +162,7 @@ class LazyDeepSearchHttpClient:
     ):
         """发送 multipart/form-data 请求（用于文件上传）"""
         mode, host, port = self._resolve_target(url)
-        target_base_url = f"http://{host}:{port}"
-        client = self._clients.get(mode)
-        if (
-            not self._initialized.get(mode, False)
-            or client is None
-            or self._base_urls.get(mode) != target_base_url
-        ):
-            await self._initialize(mode, host, port)
-            client = self._clients.get(mode)
-        if client is None:
-            raise RuntimeError(f"DeepSearch client initialization failed for mode={mode}")
+        client = await self._ensure_client(mode, host, port)
         try:
             resp = await client.request(method, url, data=data, files=files)
             resp.raise_for_status()
@@ -147,34 +170,24 @@ class LazyDeepSearchHttpClient:
         except httpx.HTTPStatusError:
             raise
         except Exception as e:
-            failed_client = self._clients.pop(mode, None)
-            if failed_client:
-                await failed_client.aclose()
-            self._base_urls.pop(mode, None)
-            self._initialized[mode] = False
-            raise RuntimeError(f"DeepSearch service call failed: {e}") from e
+            await self._invalidate_client(mode, client)
+            raise RuntimeError(
+                f"DeepSearch service call failed: {_format_deepsearch_call_error(e)}"
+            ) from e
 
     async def close(self):
-        for mode, client in list(self._clients.items()):
-            await client.aclose()
-            self._initialized[mode] = False
-        self._clients.clear()
-        self._base_urls.clear()
+        for mode in list(self._clients.keys()):
+            async with self._mode_lock(mode):
+                client = self._clients.pop(mode, None)
+                self._base_urls.pop(mode, None)
+                self._initialized[mode] = False
+                if client is not None:
+                    await client.aclose()
 
     async def stream(self, method: str, url: str, **kwargs):
         """用于流式请求，返回异步上下文管理器"""
         mode, host, port = self._resolve_target(url)
-        target_base_url = f"http://{host}:{port}"
-        client = self._clients.get(mode)
-        if (
-            not self._initialized.get(mode, False)
-            or client is None
-            or self._base_urls.get(mode) != target_base_url
-        ):
-            await self._initialize(mode, host, port)
-            client = self._clients.get(mode)
-        if client is None:
-            raise RuntimeError(f"DeepSearch client initialization failed for mode={mode}")
+        client = await self._ensure_client(mode, host, port)
         return client.stream(method, url, **kwargs)
 
 

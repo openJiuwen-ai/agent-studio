@@ -225,8 +225,12 @@ const DeepSearchExplorerConfigDialog: React.FC<DeepSearchExplorerConfigDialogPro
     if (!config.searchModelId) errors.push(t('apps.config.validation.searchModelRequired'))
 
     if (config.searchMode === 'web') {
-      if (!(config.jinaApiKey ?? '').trim() || !(config.serperApiKey ?? '').trim()) {
+      const hasJinaKey = Boolean((config.jinaApiKey ?? '').trim())
+      const hasSerperKey = Boolean((config.serperApiKey ?? '').trim())
+      if (!hasJinaKey || !hasSerperKey) {
         errors.push(t('apps.config.validation.webModeRequiresApiKey'))
+      } else if (providerTests.jina.status !== 'success' || providerTests.serper.status !== 'success') {
+        errors.push(t('apps.config.validation.webModeRequiresProviderVerified'))
       }
     }
 
@@ -242,7 +246,7 @@ const DeepSearchExplorerConfigDialog: React.FC<DeepSearchExplorerConfigDialogPro
     }
 
     return { valid: errors.length === 0, errors }
-  }, [config, t])
+  }, [config, providerTests, t])
 
   const { valid, errors } = validateConfig()
 

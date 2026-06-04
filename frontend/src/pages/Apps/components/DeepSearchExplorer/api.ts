@@ -902,7 +902,21 @@ export async function createRun(question: string, config?: Record<string, unknow
   });
 
   if (!response.ok) {
-    throw new Error(`createRun failed: ${response.status}`);
+    let detail = '';
+    try {
+      const errBody = await response.json();
+      if (errBody && typeof errBody === 'object' && 'detail' in errBody) {
+        const raw = (errBody as { detail?: unknown }).detail;
+        detail = typeof raw === 'string' ? raw : JSON.stringify(raw);
+      }
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(
+      detail
+        ? `createRun failed: ${response.status} — ${detail}`
+        : `createRun failed: ${response.status}`,
+    );
   }
 
   const payload = await response.json();
