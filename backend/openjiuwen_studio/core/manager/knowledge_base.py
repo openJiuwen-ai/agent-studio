@@ -1164,6 +1164,253 @@ async def _collect_weblink_files_for_sync(
     return files_for_ds, doc_id_list, len(weblinks), None
 
 
+def _deepsearch_http_error_message(exc: Exception) -> str:
+    """从 DeepSearch HTTP 错误响应中提取可读信息。"""
+    try:
+        import httpx
+
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+            body = exc.response.json()
+            if isinstance(body, dict):
+                detail = body.get("detail") or body.get("message")
+                if detail:
+                    return str(detail)
+    except Exception:
+        pass
+    return str(exc)
+
+
+async def _get_ds_kb_name_and_desc(
+    ds_client: DeepSearchAgentClient,
+    space_id: str,
+    ds_kb_id: str,
+) -> Optional[Tuple[str, str]]:
+    """从 DeepSearch 列表接口读取知识库当前名称与描述（避免刷新 embed 时误改名导致 400）。"""
+    page, size = 1, 100
+    while True:
+        result = await ds_client.list_knowledge_bases(
+            {"space_id": space_id, "page": page, "size": size}
+        )
+        data = result.get("data") if isinstance(result, dict) else result or {}
+        for item in data.get("items") or []:
+            kid = item.get("id") or item.get("kb_id")
+            if kid == ds_kb_id:
+                name = (item.get("name") or "").strip()
+                if not name:
+                    return None
+                desc = item.get("desc")
+                if desc is None:
+                    desc = item.get("description")
+                return name, str(desc) if desc is not None else ""
+        total = int(data.get("total") or 0)
+        if page * size >= total or len(data.get("items") or []) < size:
+            break
+        page += 1
+    return None
+
+
+async def _find_ds_kb_id_by_name(
+    ds_client: DeepSearchAgentClient,
+    space_id: str,
+    ds_name: str,
+) -> Optional[str]:
+    """按 DeepSearch 知识库名称查找已存在的 ds_kb_id（用于 Studio 未记录 ds_kb_id 时的复用）。"""
+    page, size = 1, 100
+    while True:
+        result = await ds_client.list_knowledge_bases(
+            {"space_id": space_id, "page": page, "size": size}
+        )
+        data = result.get("data") if isinstance(result, dict) else result or {}
+        for item in data.get("items") or []:
+            if (item.get("name") or "") == ds_name:
+                return item.get("id") or item.get("kb_id")
+        total = int(data.get("total") or 0)
+        if page * size >= total or len(data.get("items") or []) < size:
+            break
+        page += 1
+    return None
+
+
+def _persist_sync_embedding_model_config_id(
+    *,
+    space_id: str,
+    embed_id: int,
+    studio_kb_id: Optional[str] = None,
+    ds_kb_id: Optional[str] = None,
+) -> None:
+    """同步所选 embedding 写回 Studio 源库与 DeepSearch 镜像库，避免后续建索引仍用旧模型。"""
+    for kb_id in (studio_kb_id, ds_kb_id):
+        if not kb_id or not embed_id:
+            continue
+        result = knowledge_base_repository.knowledge_base_update_embedding_model_config_id(
+            kb=KBDetails(
+                space_id=space_id, kb_id=kb_id, index_manager_type=_CURR_INDEX_TYPE
+            ),
+            embedding_model_config_id=embed_id,
+        )
+        if result.code != status.HTTP_200_OK:
+            logger.warning(
+                f"[KB_SYNC] Failed to persist embedding_model_config_id - "
+                f"kb_id={kb_id}, embed_id={embed_id}, error={result.message}"
+            )
+
+
+async def _link_studio_kb_to_ds(
+    *,
+    space_id: str,
+    studio_kb_id: str,
+    ds_kb_id: str,
+    ds_name: str,
+    kb_data: dict,
+    embed_id: int,
+) -> Optional[ResponseModel]:
+    """将 Studio 知识库与已有 DeepSearch 知识库关联，并确保存在镜像行。"""
+    update_result = knowledge_base_repository.knowledge_base_update_ds_kb_id(
+        kb=KBDetails(
+            space_id=space_id, kb_id=studio_kb_id, index_manager_type=_CURR_INDEX_TYPE
+        ),
+        ds_kb_id=ds_kb_id,
+    )
+    if update_result.code != status.HTTP_200_OK:
+        return ResponseModel(
+            code=update_result.code,
+            message=update_result.message or "Failed to save ds_kb_id",
+        )
+
+    mirror_get = KnowledgeBaseGet(
+        space_id=space_id, kb_id=ds_kb_id, index_manager_type=_CURR_INDEX_TYPE
+    )
+    mirror_result = knowledge_base_repository.knowledge_base_get(mirror_get)
+    if mirror_result.code != status.HTTP_200_OK or not mirror_result.data:
+        synced_kb_data = {
+            "space_id": space_id,
+            "kb_id": ds_kb_id,
+            "ds_kb_id": ds_kb_id,
+            "name": ds_name,
+            "description": kb_data.get("description") or "",
+            "index_manager_type": kb_data.get("index_manager_type") or _CURR_INDEX_TYPE,
+            "embedding_model_config_id": embed_id,
+            "config": kb_data.get("config") or {},
+            "create_time": milliseconds(),
+            "update_time": milliseconds(),
+        }
+        create_synced_result = knowledge_base_repository.knowledge_base_create(
+            synced_kb_data
+        )
+        if create_synced_result.code != status.HTTP_200_OK:
+            logger.warning(
+                f"[KB_SYNC_UPLOAD] Failed to create synced KB mirror row - "
+                f"ds_kb_id={ds_kb_id}, error={create_synced_result.message}"
+            )
+    _persist_sync_embedding_model_config_id(
+        space_id=space_id,
+        embed_id=embed_id,
+        studio_kb_id=studio_kb_id,
+        ds_kb_id=ds_kb_id,
+    )
+    return None
+
+
+async def _clear_ds_kb_documents(
+    space_id: str, ds_kb_id: str, ds_client: DeepSearchAgentClient
+) -> None:
+    """覆盖同步前清空 DeepSearch 侧文档（须在 embedding 校验通过且已准备好待上传内容后调用）。"""
+    ds_doc_ids: list[str] = []
+    page, size = 1, 100
+    while True:
+        ds_resp = await ds_client.list_documents(
+            space_id=space_id, kb_id=ds_kb_id, page=page, size=size
+        )
+        ds_data = ds_resp.get("data") if isinstance(ds_resp, dict) else ds_resp or {}
+        items = ds_data.get("items") or []
+        total = ds_data.get("total") or 0
+        for doc in items:
+            doc_id = doc.get("id") or doc.get("doc_id")
+            if doc_id:
+                ds_doc_ids.append(doc_id)
+        if len(ds_doc_ids) >= total or len(items) < size:
+            break
+        page += 1
+    if ds_doc_ids:
+        await ds_client.delete_documents(
+            space_id=space_id, kb_id=ds_kb_id, document_ids=ds_doc_ids
+        )
+        logger.info(
+            f"[KB_SYNC_UPLOAD] Cleared {len(ds_doc_ids)} documents from DS KB - ds_kb_id={ds_kb_id}"
+        )
+
+
+async def _validate_embedding_for_ds_sync(
+    embed_id: int,
+    space_id: str,
+    current_user: dict,
+) -> Tuple[Optional[Any], Optional[ResponseModel]]:
+    """同步至 DeepSearch 前校验嵌入模型：存在、归属空间、已启用，并探测 API 可用性。"""
+    from openjiuwen_studio.core.manager.model_manager.managers.embedding_model_test_manager import (
+        EmbeddingModelTester,
+    )
+    from openjiuwen_studio.core.exceptions import (
+        ModelConfigNotFoundError,
+        ModelTestError,
+        ValidationError,
+    )
+    from openjiuwen_studio.schemas.embedding_model_config import EmbeddingModelTestRequest
+
+    if not embed_id:
+        return None, ResponseModel(
+            code=status.HTTP_400_BAD_REQUEST,
+            message="Embedding model config id is required for DeepSearch sync",
+        )
+
+    db = SessionLocal()
+    try:
+        embed_repo = EmbeddingModelConfigRepository(db)
+        embed_model = embed_repo.get_by_id(embed_id)
+        if not embed_model:
+            return None, ResponseModel(
+                code=status.HTTP_404_NOT_FOUND,
+                message=f"Embedding model config not found: {embed_id}",
+            )
+        if embed_model.space_id != space_id:
+            return None, ResponseModel(
+                code=status.HTTP_403_FORBIDDEN,
+                message="Embedding model config does not belong to this space",
+            )
+        if not embed_model.is_active:
+            return None, ResponseModel(
+                code=status.HTTP_400_BAD_REQUEST,
+                message=(
+                    f"Embedding model config is not active (id={embed_id}). "
+                    "Please enable or replace the embedding model before syncing."
+                ),
+            )
+
+        tester = EmbeddingModelTester(db)
+        user_id = int(current_user.get("user_id") or 0)
+        await tester.test_embedding_model(
+            model_id=embed_id,
+            test_request=EmbeddingModelTestRequest(text="DeepSearch sync probe"),
+            user_id=user_id,
+        )
+        return embed_model, None
+    except (ModelConfigNotFoundError, ModelTestError, ValidationError) as e:
+        return None, ResponseModel(
+            code=status.HTTP_400_BAD_REQUEST,
+            message=str(e),
+        )
+    except Exception as e:
+        logger.error(
+            f"[KB_SYNC_UPLOAD] Embedding validation failed - embed_id={embed_id}, error={e}",
+            exc_info=True,
+        )
+        return None, ResponseModel(
+            code=status.HTTP_400_BAD_REQUEST,
+            message=f"Embedding model validation failed: {str(e)}",
+        )
+    finally:
+        db.close()
+
+
 @with_exception_handling
 async def knowledge_base_sync_upload(
     space_id: str,
@@ -1206,162 +1453,112 @@ async def knowledge_base_sync_upload(
         if deepsearch_embedding_model_config_id is not None
         else (kb_data.get("embedding_model_config_id") or 0)
     )
+    embed_model, embed_err = await _validate_embedding_for_ds_sync(
+        embed_id, space_id, current_user
+    )
+    if embed_err:
+        return embed_err
+    _persist_sync_embedding_model_config_id(
+        space_id=space_id, embed_id=embed_id, studio_kb_id=kb_id
+    )
+    embed_model_config, llm_config = _build_ds_stored_kb_model_configs(embed_model)
+
     ds_name = f"deepsearch_{kb_data.get('name', '') or 'kb'}"
     ds_client = DeepSearchAgentClient()
+    is_overwrite_resync = bool(ds_kb_id)
 
     if not ds_kb_id:
-        # 4a. 首次同步：验证 embedding、创建 DS 知识库、更新 Studio、创建同步记录
-        db = SessionLocal()
-        try:
-            embed_repo = EmbeddingModelConfigRepository(db)
-            embed_model = embed_repo.get_by_id(embed_id)
-            if not embed_model:
-                return ResponseModel(
-                    code=status.HTTP_404_NOT_FOUND,
-                    message=f"Embedding model config not found: {embed_id}",
+        # 4a. 首次同步：优先复用 DeepSearch 上已存在的同名库，避免「名称已存在」导致 400
+        existing_ds_id = await _find_ds_kb_id_by_name(ds_client, space_id, ds_name)
+        if existing_ds_id:
+            logger.info(
+                f"[KB_SYNC_UPLOAD] Reusing existing DeepSearch KB by name - "
+                f"ds_kb_id={existing_ds_id}, name={ds_name}, studio_kb_id={kb_id}"
+            )
+            ds_kb_id = existing_ds_id
+            is_overwrite_resync = True
+            link_err = await _link_studio_kb_to_ds(
+                space_id=space_id,
+                studio_kb_id=kb_id,
+                ds_kb_id=ds_kb_id,
+                ds_name=ds_name,
+                kb_data=kb_data,
+                embed_id=embed_id,
+            )
+            if link_err:
+                return link_err
+        else:
+            create_payload = {
+                "space_id": space_id,
+                "name": ds_name,
+                "description": kb_data.get("description") or "",
+                "embed_model_config": embed_model_config,
+                "llm_config": llm_config,
+                "config": kb_data.get("config") or {},
+            }
+            try:
+                create_resp = await ds_client.create_knowledge_base(create_payload)
+            except Exception as e:
+                err_msg = _deepsearch_http_error_message(e)
+                logger.error(
+                    f"[KB_SYNC_UPLOAD] DeepSearch create KB failed - kb_id={kb_id}, "
+                    f"error={err_msg}",
+                    exc_info=True,
                 )
-            if embed_model.space_id != space_id:
                 return ResponseModel(
-                    code=status.HTTP_403_FORBIDDEN,
-                    message="Embedding model config does not belong to this space",
+                    code=status.HTTP_502_BAD_GATEWAY,
+                    message=f"DeepSearch create knowledge base failed: {err_msg}",
                 )
-            if not embed_model.is_active:
+            data = create_resp.get("data") or create_resp
+            ds_kb_id = data.get("id")
+            if not ds_kb_id:
                 return ResponseModel(
-                    code=status.HTTP_400_BAD_REQUEST,
-                    message=f"Embedding model config is not active: {embed_id}",
+                    code=status.HTTP_502_BAD_GATEWAY,
+                    message="DeepSearch did not return knowledge base id",
                 )
-            embed_model_config, llm_config = _build_ds_stored_kb_model_configs(embed_model)
-        finally:
-            db.close()
 
-        create_payload = {
+            link_err = await _link_studio_kb_to_ds(
+                space_id=space_id,
+                studio_kb_id=kb_id,
+                ds_kb_id=ds_kb_id,
+                ds_name=ds_name,
+                kb_data=kb_data,
+                embed_id=embed_id,
+            )
+            if link_err:
+                return link_err
+
+    if is_overwrite_resync:
+        # 4b. 更新同步：更新 DS 知识库 embed 配置，再清空 DS 侧文档
+        update_name = ds_name
+        update_desc = kb_data.get("description") or ""
+        meta = await _get_ds_kb_name_and_desc(ds_client, space_id, ds_kb_id)
+        if meta:
+            update_name, update_desc = meta
+        update_payload = {
             "space_id": space_id,
-            "name": ds_name,
-            "description": kb_data.get("description") or "",
+            "kb_id": ds_kb_id,
+            "name": update_name,
+            "desc": update_desc or "",
             "embed_model_config": embed_model_config,
             "llm_config": llm_config,
             "config": kb_data.get("config") or {},
-            "index_manager_type": kb_data.get("index_manager_type") or _CURR_INDEX_TYPE,
         }
         try:
-            create_resp = await ds_client.create_knowledge_base(create_payload)
+            await ds_client.update_knowledge_base(update_payload)
+            logger.info(
+                f"[KB_SYNC_UPLOAD] Updated DS KB config for overwrite - ds_kb_id={ds_kb_id}"
+            )
         except Exception as e:
+            err_msg = _deepsearch_http_error_message(e)
             logger.error(
-                f"[KB_SYNC_UPLOAD] DeepSearch create KB failed - kb_id={kb_id}, error={e}",
+                f"[KB_SYNC_UPLOAD] Failed to update DS KB config - "
+                f"ds_kb_id={ds_kb_id}, error={err_msg}",
                 exc_info=True,
             )
             return ResponseModel(
                 code=status.HTTP_502_BAD_GATEWAY,
-                message=f"DeepSearch create knowledge base failed: {str(e)}",
-            )
-        data = create_resp.get("data") or create_resp
-        ds_kb_id = data.get("id")
-        if not ds_kb_id:
-            return ResponseModel(
-                code=status.HTTP_502_BAD_GATEWAY,
-                message="DeepSearch did not return knowledge base id",
-            )
-
-        update_result = knowledge_base_repository.knowledge_base_update_ds_kb_id(
-            kb=KBDetails(
-                space_id=space_id, kb_id=kb_id, index_manager_type=_CURR_INDEX_TYPE
-            ),
-            ds_kb_id=ds_kb_id,
-        )
-        if update_result.code != status.HTTP_200_OK:
-            return ResponseModel(
-                code=update_result.code,
-                message=update_result.message or "Failed to save ds_kb_id",
-            )
-
-        synced_kb_data = {
-            "space_id": space_id,
-            "kb_id": ds_kb_id,
-            "ds_kb_id": ds_kb_id,
-            "name": ds_name,
-            "description": kb_data.get("description") or "",
-            "index_manager_type": kb_data.get("index_manager_type") or _CURR_INDEX_TYPE,
-            "embedding_model_config_id": embed_id,
-            "config": kb_data.get("config") or {},
-            "create_time": milliseconds(),
-            "update_time": milliseconds(),
-        }
-        create_synced_result = knowledge_base_repository.knowledge_base_create(
-            synced_kb_data
-        )
-        if create_synced_result.code != status.HTTP_200_OK:
-            logger.warning(
-                f"[KB_SYNC_UPLOAD] Failed to create synced KB row - ds_kb_id={ds_kb_id}, "
-                f"error={create_synced_result.message}"
-            )
-    else:
-        # 4b. 更新同步：更新 DS 知识库 config、清空 DS 侧文档
-        db = SessionLocal()
-        try:
-            embed_repo = EmbeddingModelConfigRepository(db)
-            embed_model = embed_repo.get_by_id(embed_id)
-            if embed_model and embed_model.space_id == space_id and embed_model.is_active:
-                embed_model_config, llm_config = _build_ds_stored_kb_model_configs(
-                    embed_model
-                )
-                update_payload = {
-                    "space_id": space_id,
-                    "kb_id": ds_kb_id,
-                    "name": ds_name,
-                    "desc": kb_data.get("description") or "",
-                    "embed_model_config": embed_model_config,
-                    "llm_config": llm_config,
-                    "config": kb_data.get("config") or {},
-                }
-                try:
-                    await ds_client.update_knowledge_base(update_payload)
-                    logger.info(
-                        f"[KB_SYNC_UPLOAD] Updated DS KB config for overwrite - ds_kb_id={ds_kb_id}"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"[KB_SYNC_UPLOAD] Failed to update DS KB config (continuing) - "
-                        f"ds_kb_id={ds_kb_id}, error={e}",
-                        exc_info=True,
-                    )
-            else:
-                logger.warning(
-                    f"[KB_SYNC_UPLOAD] Embedding not found/inactive (embed_id={embed_id}), "
-                    f"skip config update - ds_kb_id={ds_kb_id}"
-                )
-        finally:
-            db.close()
-
-        # 4b.2 清空 DS 侧文档（覆盖同步前需先清空）
-        try:
-            ds_doc_ids = []
-            page, size = 1, 100
-            while True:
-                ds_resp = await ds_client.list_documents(
-                    space_id=space_id, kb_id=ds_kb_id, page=page, size=size
-                )
-                ds_data = ds_resp.get("data") if isinstance(ds_resp, dict) else ds_resp or {}
-                items = ds_data.get("items") or []
-                total = ds_data.get("total") or 0
-                for doc in items:
-                    doc_id = doc.get("id") or doc.get("doc_id")
-                    if doc_id:
-                        ds_doc_ids.append(doc_id)
-                if len(ds_doc_ids) >= total or len(items) < size:
-                    break
-                page += 1
-            if ds_doc_ids:
-                await ds_client.delete_documents(
-                    space_id=space_id, kb_id=ds_kb_id, document_ids=ds_doc_ids
-                )
-                logger.info(
-                    f"[KB_SYNC_UPLOAD] Cleared {len(ds_doc_ids)} documents from DS KB - ds_kb_id={ds_kb_id}"
-                )
-        except Exception as e:
-            logger.warning(
-                f"[KB_SYNC_UPLOAD] Failed to clear DS KB documents (continuing) - "
-                f"ds_kb_id={ds_kb_id}, error={e}",
-                exc_info=True,
+                message=f"Failed to update DeepSearch knowledge base config: {err_msg}",
             )
 
     # 5a. weblink 知识库走独立分支：按 URL re-parse 后以合成 .md 上传到 DeepSearch
@@ -1387,6 +1584,19 @@ async def knowledge_base_sync_upload(
                 message="sync upload success",
                 data={"ds_kb_id": ds_kb_id, "uploaded_count": 0, "doc_id_list": []},
             )
+        if is_overwrite_resync:
+            try:
+                await _clear_ds_kb_documents(space_id, ds_kb_id, ds_client)
+            except Exception as e:
+                logger.error(
+                    f"[KB_SYNC_UPLOAD] Failed to clear DS KB documents (weblink) - "
+                    f"ds_kb_id={ds_kb_id}, error={e}",
+                    exc_info=True,
+                )
+                return ResponseModel(
+                    code=status.HTTP_502_BAD_GATEWAY,
+                    message=f"Failed to clear DeepSearch documents before upload: {str(e)}",
+                )
         try:
             ds_upload_resp = await ds_client.upload_knowledge_base_files(
                 space_id=space_id,
@@ -1487,6 +1697,20 @@ async def knowledge_base_sync_upload(
             data={"ds_kb_id": ds_kb_id, "uploaded_count": 0, "doc_id_list": []},
         )
 
+    if is_overwrite_resync:
+        try:
+            await _clear_ds_kb_documents(space_id, ds_kb_id, ds_client)
+        except Exception as e:
+            logger.error(
+                f"[KB_SYNC_UPLOAD] Failed to clear DS KB documents - "
+                f"ds_kb_id={ds_kb_id}, error={e}",
+                exc_info=True,
+            )
+            return ResponseModel(
+                code=status.HTTP_502_BAD_GATEWAY,
+                message=f"Failed to clear DeepSearch documents before upload: {str(e)}",
+            )
+
     try:
         await ds_client.upload_knowledge_base_files(
             space_id=space_id,
@@ -1516,6 +1740,67 @@ async def knowledge_base_sync_upload(
     )
 
 
+async def _refresh_ds_kb_embed_config_after_validation(
+    *,
+    space_id: str,
+    ds_kb_id: str,
+    studio_kb_id: Optional[str],
+    embed_model: Any,
+    ds_client: DeepSearchAgentClient,
+) -> Optional[ResponseModel]:
+    """建索引前用 Studio 最新密钥刷新 DeepSearch 知识库 embed 配置。"""
+    embed_model_config, llm_config = _build_ds_stored_kb_model_configs(embed_model)
+    extra_config: Dict[str, Any] = {}
+    ds_name: Optional[str] = None
+    ds_desc = ""
+
+    meta = await _get_ds_kb_name_and_desc(ds_client, space_id, ds_kb_id)
+    if meta:
+        ds_name, ds_desc = meta
+
+    if studio_kb_id:
+        kb_get = KnowledgeBaseGet(
+            space_id=space_id, kb_id=studio_kb_id, index_manager_type=_CURR_INDEX_TYPE
+        )
+        kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
+        if kb_result.code == status.HTTP_200_OK and kb_result.data:
+            if not ds_name:
+                ds_name = f"deepsearch_{kb_result.data.get('name', '') or 'kb'}"
+            if not ds_desc:
+                ds_desc = kb_result.data.get("description") or ""
+            extra_config = kb_result.data.get("config") or {}
+
+    if not ds_name:
+        ds_name = "deepsearch_kb"
+
+    update_payload = {
+        "space_id": space_id,
+        "kb_id": ds_kb_id,
+        "name": ds_name,
+        "desc": ds_desc or "",
+        "embed_model_config": embed_model_config,
+        "llm_config": llm_config,
+        "config": extra_config,
+    }
+    try:
+        await ds_client.update_knowledge_base(update_payload)
+        logger.info(
+            f"[KB_SYNC_PROCESS] Refreshed DS KB embed config before process - ds_kb_id={ds_kb_id}"
+        )
+    except Exception as e:
+        err_msg = _deepsearch_http_error_message(e)
+        logger.error(
+            f"[KB_SYNC_PROCESS] Failed to refresh DS KB embed config - "
+            f"ds_kb_id={ds_kb_id}, error={err_msg}",
+            exc_info=True,
+        )
+        return ResponseModel(
+            code=status.HTTP_502_BAD_GATEWAY,
+            message=f"Failed to refresh DeepSearch embedding config: {err_msg}",
+        )
+    return None
+
+
 @with_exception_handling
 async def knowledge_base_sync_process(
     payload: Dict[str, Any], current_user: dict
@@ -1524,9 +1809,13 @@ async def knowledge_base_sync_process(
     space_id = payload.get("space_id")
     if space_id:
         check_user_space(space_id, current_user)
-    # DeepSearch 接口要求 kb_id，前端传的是 ds_kb_id
-    process_payload = {k: v for k, v in payload.items() if k != "ds_kb_id"}
-    process_payload["kb_id"] = payload.get("ds_kb_id") or payload.get("kb_id", "")
+    studio_kb_id = payload.get("studio_kb_id")
+    embed_id = payload.get("deepsearch_embedding_model_config_id")
+    ds_kb_id = payload.get("ds_kb_id") or payload.get("kb_id", "")
+    # DeepSearch 接口要求 kb_id；不透传 Studio 专用字段
+    studio_only_keys = ("ds_kb_id", "studio_kb_id", "deepsearch_embedding_model_config_id")
+    process_payload = {k: v for k, v in payload.items() if k not in studio_only_keys}
+    process_payload["kb_id"] = ds_kb_id
     doc_ids = process_payload.get("doc_id_list") or []
     if not doc_ids:
         logger.info(
@@ -1538,6 +1827,37 @@ async def knowledge_base_sync_process(
             message="sync process skipped (no documents)",
             data={"skipped": True, "processed_count": 0},
         )
+
+    if not embed_id and studio_kb_id:
+        kb_get = KnowledgeBaseGet(
+            space_id=space_id, kb_id=studio_kb_id, index_manager_type=_CURR_INDEX_TYPE
+        )
+        kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
+        if kb_result.code == status.HTTP_200_OK and kb_result.data:
+            embed_id = kb_result.data.get("embedding_model_config_id") or embed_id
+    if not embed_id:
+        return ResponseModel(
+            code=status.HTTP_400_BAD_REQUEST,
+            message="deepsearch_embedding_model_config_id is required before indexing",
+        )
+
+    embed_model, embed_err = await _validate_embedding_for_ds_sync(
+        embed_id, space_id, current_user
+    )
+    if embed_err:
+        return embed_err
+
+    ds_client = DeepSearchAgentClient()
+    refresh_err = await _refresh_ds_kb_embed_config_after_validation(
+        space_id=space_id,
+        ds_kb_id=ds_kb_id,
+        studio_kb_id=studio_kb_id,
+        embed_model=embed_model,
+        ds_client=ds_client,
+    )
+    if refresh_err:
+        return refresh_err
+
     try:
         _apply_ds_process_llm_config(process_payload, space_id)
     except ValueError as e:
@@ -1545,13 +1865,23 @@ async def knowledge_base_sync_process(
             code=status.HTTP_400_BAD_REQUEST,
             message=str(e),
         )
-    ds_client = DeepSearchAgentClient()
     try:
         result = await ds_client.process_knowledge_base_documents(process_payload)
+        if not isinstance(result, dict):
+            return ResponseModel(
+                code=status.HTTP_502_BAD_GATEWAY,
+                message="DeepSearch process returned invalid response",
+            )
+        if result.get("code") not in (None, status.HTTP_200_OK):
+            return ResponseModel(
+                code=result.get("code", status.HTTP_502_BAD_GATEWAY),
+                message=result.get("message", "DeepSearch process failed"),
+            )
+        data = result.get("data") or {}
         return ResponseModel(
             code=status.HTTP_200_OK,
-            message="sync process success",
-            data=result.get("data") if isinstance(result, dict) else result,
+            message=result.get("message") or "sync process success",
+            data=data,
         )
     except Exception as e:
         logger.error(
@@ -1617,6 +1947,8 @@ def _build_ds_stored_embed_config_dict(embed_model) -> dict:
         "api_key": api_key,
         "base_url": embed_model.api_base or "",
         "max_batch_size": getattr(embed_model, "max_batch_size") or 8,
+        "timeout": 60,
+        "max_retries": 3,
     }
 
 
@@ -3990,6 +4322,23 @@ async def document_process(req: DocumentProcessRequest, current_user: dict) -> R
     if not kb_data or is_ds_kb:
         # DeepSearch 知识库：转发到 DeepSearch 建索引接口
         try:
+            embed_id = (kb_data or {}).get("embedding_model_config_id")
+            if embed_id:
+                embed_model, embed_err = await _validate_embedding_for_ds_sync(
+                    embed_id, req.space_id, current_user
+                )
+                if embed_err:
+                    return embed_err
+                ds_client = DeepSearchAgentClient()
+                refresh_err = await _refresh_ds_kb_embed_config_after_validation(
+                    space_id=req.space_id,
+                    ds_kb_id=req.kb_id,
+                    studio_kb_id=None,
+                    embed_model=embed_model,
+                    ds_client=ds_client,
+                )
+                if refresh_err:
+                    return refresh_err
             process_payload = {
                 "space_id": req.space_id,
                 "kb_id": req.kb_id,

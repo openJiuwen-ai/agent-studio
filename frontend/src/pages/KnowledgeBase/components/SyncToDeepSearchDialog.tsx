@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { ENV_CONFIG } from '@/config/environment'
 import { useUnifiedSnackbar } from '@/Common/UnifiedSnackbar'
 import { KnowledgeBaseService, embeddingModelService } from '@test-agentstudio/api-client'
-import { useModels, useTestModel } from '@test-agentstudio/api-client'
+import { useModels, useTestModel, useTestEmbeddingModel } from '@test-agentstudio/api-client'
 
 function getAxiosErrorMessage(e: unknown, fallback: string): string {
   if (e && typeof e === 'object' && 'response' in e) {
@@ -23,7 +23,7 @@ interface SyncToDeepSearchDialogProps {
   knowledgeBase: KnowledgeBase
   onClose: () => void
   /** 同步成功（第二步已提交创建索引） */
-  onSuccess: () => void
+  onSuccess: (result: { dsKbId: string; taskId?: string }) => void
   /** 仅首次同步未完成即关闭且已删除 DS 镜像后，刷新 Studio 知识库状态 */
   onAbort?: () => void
 }
@@ -84,6 +84,7 @@ const SyncToDeepSearchDialog: React.FC<SyncToDeepSearchDialogProps> = ({
       .map(m => ({ id: parseInt(String(m.id), 10), name: String(m.name || '') }))
       .filter(m => !Number.isNaN(m.id))
   const testModelMutation = useTestModel()
+  const testEmbeddingModelMutation = useTestEmbeddingModel()
   const [isTestingModel, setIsTestingModel] = useState(false)
   const [modelTestPassed, setModelTestPassed] = useState(false)
   const [testedModelId, setTestedModelId] = useState<number | null>(null)
@@ -225,11 +226,48 @@ const SyncToDeepSearchDialog: React.FC<SyncToDeepSearchDialogProps> = ({
     onClose()
   }
 
+  const validateSelectedEmbedding = async (): Promise<boolean> => {
+    if (selectedDeepSearchEmbeddingConfigId == null) {
+      showError(t('knowledgeBases.syncToDeepSearch.selectEmbedder') || '请选择 Deep Search 嵌入模型')
+      return false
+    }
+    try {
+      await testEmbeddingModelMutation.mutateAsync({
+        id: String(selectedDeepSearchEmbeddingConfigId),
+        testRequest: {
+          text: t('knowledgeBases.form.testText') || 'DeepSearch sync probe',
+        },
+      })
+      return true
+    } catch (error: unknown) {
+      const err = error as {
+        detail?: string
+        message?: string
+        response?: { data?: { detail?: string; message?: string } }
+      }
+      const msg =
+        err?.detail ||
+        err?.message ||
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        t('knowledgeBases.form.testFailed') ||
+        '嵌入模型测试失败'
+      showError(
+        t('knowledgeBases.syncToDeepSearch.embeddingTestFailed', { detail: msg }) ||
+          `嵌入模型不可用，无法同步：${msg}`,
+      )
+      return false
+    }
+  }
+
   const handleStep1Next = async () => {
     setIsLoading(true)
     try {
       if (selectedDeepSearchEmbeddingConfigId == null) {
         showError(t('knowledgeBases.syncToDeepSearch.selectEmbedder') || '请选择 Deep Search 嵌入模型')
+        return
+      }
+      if (!(await validateSelectedEmbedding())) {
         return
       }
       // 二次同步：不在此步调用 sync_upload（避免清空 DeepSearch），上传推迟到第二步「完成」时
@@ -282,6 +320,10 @@ const SyncToDeepSearchDialog: React.FC<SyncToDeepSearchDialogProps> = ({
       let dsId = deepSearchKbId
       let docIdsFromUpload = uploadDocIdList
 
+      if (!(await validateSelectedEmbedding())) {
+        return
+      }
+
       if (deferUploadToStep2) {
         if (selectedDeepSearchEmbeddingConfigId == null) {
           showError(t('knowledgeBases.syncToDeepSearch.selectEmbedder') || '请选择 Deep Search 嵌入模型')
@@ -307,6 +349,8 @@ const SyncToDeepSearchDialog: React.FC<SyncToDeepSearchDialogProps> = ({
       const res = await KnowledgeBaseService.syncProcess({
         space_id: spaceId,
         ds_kb_id: dsId,
+        studio_kb_id: knowledgeBase.id,
+        deepsearch_embedding_model_config_id: selectedDeepSearchEmbeddingConfigId ?? undefined,
         doc_id_list: docIdList.length > 0 ? docIdList : [],
         parsing_strategy: { strategy_type: formData.parsingStrategy, strategy_config: {} },
         segmentation_strategy: {
@@ -326,13 +370,31 @@ const SyncToDeepSearchDialog: React.FC<SyncToDeepSearchDialogProps> = ({
         showError(res.message || (t('knowledgeBases.syncToDeepSearch.processFailed') || '创建索引提交失败'))
         return
       }
+      const processedCount = res.data?.processed_count ?? 0
+      const failedCount = res.data?.failed_count ?? 0
+      const taskId = res.data?.task_id
+      if (!res.data?.skipped && processedCount === 0) {
+        showError(
+          t('knowledgeBases.syncToDeepSearch.processNoDocsStarted') ||
+            '未能启动任何文档的索引。请确认文件已上传到 Deep Search，且嵌入模型可用。',
+        )
+        return
+      }
       setSyncFullyFinished(true)
-      showSuccess(
-        res.data?.skipped
-          ? t('knowledgeBases.syncToDeepSearch.processSuccessNoDocs') || '同步流程已完成（当前无可索引文档）'
-          : t('knowledgeBases.syncToDeepSearch.processSuccess') || '已提交创建索引任务',
-      )
-      onSuccess()
+      if (failedCount > 0) {
+        showError(
+          t('knowledgeBases.syncToDeepSearch.processPartialFailed', { count: failedCount }) ||
+            `${failedCount} 个文档未能进入索引流程，请在 Deep Search 镜像知识库中查看失败原因。`,
+        )
+      } else {
+        showSuccess(
+          res.data?.skipped
+            ? t('knowledgeBases.syncToDeepSearch.processSuccessNoDocs') || '同步流程已完成（当前无可索引文档）'
+            : t('knowledgeBases.syncToDeepSearch.processSuccess') ||
+                '已提交创建索引任务，正在 Deep Search 侧建索引，请在镜像知识库中查看进度。',
+        )
+      }
+      onSuccess({ dsKbId: dsId, taskId })
       onClose()
     } catch (e) {
       showError(getAxiosErrorMessage(e, t('knowledgeBases.syncToDeepSearch.processFailed') || '创建索引提交失败'))

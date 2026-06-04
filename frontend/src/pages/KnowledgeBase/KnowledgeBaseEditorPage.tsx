@@ -1442,11 +1442,10 @@ const KnowledgeBaseEditorPage: React.FC = () => {
           open={showSyncDialog}
           knowledgeBase={knowledgeBase}
           onClose={() => setShowSyncDialog(false)}
-          onSuccess={() => {
+          onSuccess={({ dsKbId }) => {
             setShowSyncDialog(false)
-            showSuccess(t('knowledgeBases.syncToDeepSearch.success'))
-            setCurrentPage(1)
-            fetchDocuments(1).catch(console.error)
+            showSuccess(t('knowledgeBases.syncToDeepSearch.successWithMirror'))
+            navigate(`/dashboard/knowledge-bases/${dsKbId}/edit`)
           }}
           onAbort={() => {
             const spaceId = user?.spaceId || ENV_CONFIG.DEFAULT_SPACE_ID

@@ -196,6 +196,14 @@ class SyncProcessRequest(BaseModel):
 
     space_id: str = Field(..., min_length=1, max_length=100, description="空间ID")
     ds_kb_id: str = Field(..., min_length=1, max_length=100, description="DeepSearch 知识库 ID")
+    studio_kb_id: Optional[str] = Field(
+        None,
+        description="Studio 源知识库 ID，用于解析 embedding 配置与展示名称",
+    )
+    deepsearch_embedding_model_config_id: Optional[int] = Field(
+        None,
+        description="建索引前再次探测 Embedding API，并刷新 DeepSearch 知识库中的 embed 配置",
+    )
     doc_id_list: list[str] = Field(
         default_factory=list,
         description="文档ID列表；为空时表示无可索引文档，服务端跳过调用 DeepSearch process",

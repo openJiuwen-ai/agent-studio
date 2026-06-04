@@ -249,6 +249,25 @@ class KnowledgeBaseRepository:
             update_data = {"ds_kb_id": ds_kb_id, "update_time": milliseconds()}
             return kb_db.update_dl_in_sql(find_id=find_id, update_dl=update_data)
 
+    @with_exception_handling
+    def knowledge_base_update_embedding_model_config_id(
+        self,
+        kb: KBDetails,
+        embedding_model_config_id: int,
+        db_session: Session | None = None,
+    ) -> ResponseModel[None]:
+        """更新知识库关联的 Studio embedding 模型配置 ID。"""
+        with get_db_jw(db_session) as db:
+            kb_db = JiuwenBaseRepository(db, kb_models.KnowledgeBaseDB)
+            find_id = {"space_id": kb.space_id, "kb_id": kb.kb_id}
+            if kb.index_manager_type:
+                find_id["index_manager_type"] = kb.index_manager_type
+            update_data = {
+                "embedding_model_config_id": embedding_model_config_id,
+                "update_time": milliseconds(),
+            }
+            return kb_db.update_dl_in_sql(find_id=find_id, update_dl=update_data)
+
     """
     description: 根据 space_id 与 kb_id 查询该知识库对应的 ds_kb_id
     """
