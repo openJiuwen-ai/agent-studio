@@ -403,6 +403,10 @@ export interface SyncUploadResponse {
 export interface SyncProcessRequest {
   space_id: string
   ds_kb_id: string
+  /** Studio 源知识库 ID */
+  studio_kb_id?: string
+  /** 建索引前服务端会再次探测 Embedding API 并刷新 DS 配置 */
+  deepsearch_embedding_model_config_id?: number
   /** 可为空：无可索引文档时服务端跳过 DeepSearch process */
   doc_id_list: string[]
   parsing_strategy?: { strategy_type: string; strategy_config?: Record<string, unknown> }
