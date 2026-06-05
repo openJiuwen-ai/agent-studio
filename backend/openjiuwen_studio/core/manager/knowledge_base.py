@@ -1231,28 +1231,38 @@ async def _find_ds_kb_id_by_name(
     return None
 
 
-def _persist_sync_embedding_model_config_id(
+def _resolve_sync_embedding_id(
+    requested_embed_id: Optional[int],
+) -> Tuple[int, Optional[ResponseModel]]:
+    """解析同步对话框选择的 embedding（可与 Studio 源库绑定不同）。"""
+    if not requested_embed_id:
+        return 0, ResponseModel(
+            code=status.HTTP_400_BAD_REQUEST,
+            message="请选择 Deep Search 同步使用的嵌入模型",
+        )
+    return int(requested_embed_id), None
+
+
+def _persist_synced_kb_embedding_model_config_id(
     *,
     space_id: str,
+    ds_kb_id: str,
     embed_id: int,
-    studio_kb_id: Optional[str] = None,
-    ds_kb_id: Optional[str] = None,
 ) -> None:
-    """同步所选 embedding 写回 Studio 源库与 DeepSearch 镜像库，避免后续建索引仍用旧模型。"""
-    for kb_id in (studio_kb_id, ds_kb_id):
-        if not kb_id or not embed_id:
-            continue
-        result = knowledge_base_repository.knowledge_base_update_embedding_model_config_id(
-            kb=KBDetails(
-                space_id=space_id, kb_id=kb_id, index_manager_type=_CURR_INDEX_TYPE
-            ),
-            embedding_model_config_id=embed_id,
+    """仅更新 DeepSearch 镜像知识库行的 embedding；绝不修改 Studio 源库。"""
+    if not ds_kb_id or not embed_id:
+        return
+    result = knowledge_base_repository.knowledge_base_update_embedding_model_config_id(
+        kb=KBDetails(
+            space_id=space_id, kb_id=ds_kb_id, index_manager_type=_CURR_INDEX_TYPE
+        ),
+        embedding_model_config_id=embed_id,
+    )
+    if result.code != status.HTTP_200_OK:
+        logger.warning(
+            f"[KB_SYNC] Failed to persist synced KB embedding_model_config_id - "
+            f"ds_kb_id={ds_kb_id}, embed_id={embed_id}, error={result.message}"
         )
-        if result.code != status.HTTP_200_OK:
-            logger.warning(
-                f"[KB_SYNC] Failed to persist embedding_model_config_id - "
-                f"kb_id={kb_id}, embed_id={embed_id}, error={result.message}"
-            )
 
 
 async def _link_studio_kb_to_ds(
@@ -1262,7 +1272,7 @@ async def _link_studio_kb_to_ds(
     ds_kb_id: str,
     ds_name: str,
     kb_data: dict,
-    embed_id: int,
+    sync_embed_id: int,
 ) -> Optional[ResponseModel]:
     """将 Studio 知识库与已有 DeepSearch 知识库关联，并确保存在镜像行。"""
     update_result = knowledge_base_repository.knowledge_base_update_ds_kb_id(
@@ -1289,7 +1299,7 @@ async def _link_studio_kb_to_ds(
             "name": ds_name,
             "description": kb_data.get("description") or "",
             "index_manager_type": kb_data.get("index_manager_type") or _CURR_INDEX_TYPE,
-            "embedding_model_config_id": embed_id,
+            "embedding_model_config_id": sync_embed_id,
             "config": kb_data.get("config") or {},
             "create_time": milliseconds(),
             "update_time": milliseconds(),
@@ -1302,11 +1312,8 @@ async def _link_studio_kb_to_ds(
                 f"[KB_SYNC_UPLOAD] Failed to create synced KB mirror row - "
                 f"ds_kb_id={ds_kb_id}, error={create_synced_result.message}"
             )
-    _persist_sync_embedding_model_config_id(
-        space_id=space_id,
-        embed_id=embed_id,
-        studio_kb_id=studio_kb_id,
-        ds_kb_id=ds_kb_id,
+    _persist_synced_kb_embedding_model_config_id(
+        space_id=space_id, ds_kb_id=ds_kb_id, embed_id=sync_embed_id
     )
     return None
 
@@ -1380,8 +1387,9 @@ async def _validate_embedding_for_ds_sync(
             return None, ResponseModel(
                 code=status.HTTP_400_BAD_REQUEST,
                 message=(
-                    f"Embedding model config is not active (id={embed_id}). "
-                    "Please enable or replace the embedding model before syncing."
+                    f"同步所选嵌入模型已停用（配置 ID={embed_id}）。"
+                    "请在模型配置中重新启用或修复后重试。"
+                    "校验未通过时不会创建或修改已同步的知识库。"
                 ),
             )
 
@@ -1424,7 +1432,7 @@ async def knowledge_base_sync_upload(
       - 文档知识库（document）：直接读取每个文档的本地文件并上传。
       - 网页链接知识库（weblink）：按 URL 重新解析后，以合成 Markdown 上传。
 
-    deepsearch_embedding_model_config_id: 可选，DeepSearch 侧嵌入模型配置 ID。
+    deepsearch_embedding_model_config_id: 同步对话框所选 embedding，仅作用于 DeepSearch 镜像库。
     """
     # 1. 验证用户空间权限
     _ = check_user_space(space_id, current_user)
@@ -1448,19 +1456,16 @@ async def knowledge_base_sync_upload(
     if ds_kb_id_resp.code == status.HTTP_200_OK and ds_kb_id_resp.data is not None:
         ds_kb_id = ds_kb_id_resp.data
 
-    embed_id = (
+    embed_id, embed_resolve_err = _resolve_sync_embedding_id(
         deepsearch_embedding_model_config_id
-        if deepsearch_embedding_model_config_id is not None
-        else (kb_data.get("embedding_model_config_id") or 0)
     )
+    if embed_resolve_err:
+        return embed_resolve_err
     embed_model, embed_err = await _validate_embedding_for_ds_sync(
         embed_id, space_id, current_user
     )
     if embed_err:
         return embed_err
-    _persist_sync_embedding_model_config_id(
-        space_id=space_id, embed_id=embed_id, studio_kb_id=kb_id
-    )
     embed_model_config, llm_config = _build_ds_stored_kb_model_configs(embed_model)
 
     ds_name = f"deepsearch_{kb_data.get('name', '') or 'kb'}"
@@ -1483,7 +1488,7 @@ async def knowledge_base_sync_upload(
                 ds_kb_id=ds_kb_id,
                 ds_name=ds_name,
                 kb_data=kb_data,
-                embed_id=embed_id,
+                sync_embed_id=embed_id,
             )
             if link_err:
                 return link_err
@@ -1523,13 +1528,16 @@ async def knowledge_base_sync_upload(
                 ds_kb_id=ds_kb_id,
                 ds_name=ds_name,
                 kb_data=kb_data,
-                embed_id=embed_id,
+                sync_embed_id=embed_id,
             )
             if link_err:
                 return link_err
 
     if is_overwrite_resync:
-        # 4b. 更新同步：更新 DS 知识库 embed 配置，再清空 DS 侧文档
+        # 4b. 更新同步：校验通过后更新镜像库 binding 与 DS embed 配置，再清空 DS 侧文档
+        _persist_synced_kb_embedding_model_config_id(
+            space_id=space_id, ds_kb_id=ds_kb_id, embed_id=embed_id
+        )
         update_name = ds_name
         update_desc = kb_data.get("description") or ""
         meta = await _get_ds_kb_name_and_desc(ds_client, space_id, ds_kb_id)
@@ -1828,24 +1836,25 @@ async def knowledge_base_sync_process(
             data={"skipped": True, "processed_count": 0},
         )
 
-    if not embed_id and studio_kb_id:
-        kb_get = KnowledgeBaseGet(
-            space_id=space_id, kb_id=studio_kb_id, index_manager_type=_CURR_INDEX_TYPE
-        )
-        kb_result = knowledge_base_repository.knowledge_base_get(kb_get)
-        if kb_result.code == status.HTTP_200_OK and kb_result.data:
-            embed_id = kb_result.data.get("embedding_model_config_id") or embed_id
-    if not embed_id:
+    if not studio_kb_id:
         return ResponseModel(
             code=status.HTTP_400_BAD_REQUEST,
-            message="deepsearch_embedding_model_config_id is required before indexing",
+            message="studio_kb_id is required for sync process",
         )
+
+    embed_id, embed_resolve_err = _resolve_sync_embedding_id(embed_id)
+    if embed_resolve_err:
+        return embed_resolve_err
 
     embed_model, embed_err = await _validate_embedding_for_ds_sync(
         embed_id, space_id, current_user
     )
     if embed_err:
         return embed_err
+
+    _persist_synced_kb_embedding_model_config_id(
+        space_id=space_id, ds_kb_id=ds_kb_id, embed_id=embed_id
+    )
 
     ds_client = DeepSearchAgentClient()
     refresh_err = await _refresh_ds_kb_embed_config_after_validation(
