@@ -20,6 +20,8 @@ def test_provider_test_route_uses_direct_http_provider_calls():
     source = _deepsearch_source()
 
     assert '"jina": {"engine_name": "jina", "endpoint": "https://s.jina.ai/"}' in source
+    assert "JINA_SEARCH_PROVIDER_ENDPOINTS" in source
+    assert "https://s.jinaai.cn/" in source
     assert '"serper": {"engine_name": "google", "endpoint": "https://google.serper.dev/search"}' in source
     assert "async def perform_provider_test(provider: str, api_key: str, query: str)" in source
     assert "async with httpx.AsyncClient(" in source
@@ -50,3 +52,7 @@ def test_provider_test_sets_provider_specific_auth_headers():
     assert 'headers["Authorization"] = f"Bearer {api_key}"' in source
     assert 'headers["X-API-KEY"] = api_key' in source
     assert 'request_body: dict[str, Any] = {"q": query}' in source
+    assert "PROVIDER_TEST_TIMEOUT_SECONDS = 30.0" in source
+    assert "PROVIDER_TEST_HTTPX_TIMEOUT" in source
+    assert "async def _perform_jina_provider_test(" in source
+    assert "asyncio.as_completed" in source

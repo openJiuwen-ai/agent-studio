@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable
+import asyncio
 import httpx
 from httpx import HTTPStatusError
 from fastapi import APIRouter, Depends, status, HTTPException, Query
@@ -62,7 +63,14 @@ TASK_SPACE_PROVIDER_TEST_PRESETS: dict[str, dict[str, str]] = {
     "jina": {"engine_name": "jina", "endpoint": "https://s.jina.ai/"},
     "serper": {"engine_name": "google", "endpoint": "https://google.serper.dev/search"},
 }
-PROVIDER_TEST_TIMEOUT_SECONDS = 15.0
+# Jina / Serper API key credential test timeout (seconds).
+PROVIDER_TEST_TIMEOUT_SECONDS = 30.0
+PROVIDER_TEST_HTTPX_TIMEOUT = httpx.Timeout(PROVIDER_TEST_TIMEOUT_SECONDS, connect=10.0)
+# Jina Search: try China first, then global mirror (same API key & payload).
+JINA_SEARCH_PROVIDER_ENDPOINTS: tuple[str, ...] = (
+    "https://s.jinaai.cn/",
+    "https://s.jina.ai/",
+)
 
 
 @dataclass
@@ -278,6 +286,96 @@ def normalize_provider_test_results(response_payload: Any, provider: str) -> lis
     return [response_payload]
 
 
+async def _post_provider_test(
+    endpoint: str,
+    headers: dict[str, str],
+    request_body: dict[str, Any],
+    timeout: httpx.Timeout | float,
+    client: httpx.AsyncClient | None = None,
+) -> httpx.Response:
+    if client is not None:
+        return await client.post(endpoint, headers=headers, json=request_body)
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as http_client:
+        return await http_client.post(endpoint, headers=headers, json=request_body)
+
+
+def _jina_provider_auth_failure(response: httpx.Response) -> bool:
+    if response.status_code in (401, 403):
+        return True
+    if response.status_code < 500:
+        return False
+    body = (response.text or "").lower()
+    return "authenticate" in body or "authenticationrequired" in body
+
+
+async def _perform_jina_provider_test(
+    headers: dict[str, str],
+    request_body: dict[str, Any],
+) -> httpx.Response:
+    """Race Jina CN/global endpoints; return as soon as one succeeds or auth fails."""
+    async with httpx.AsyncClient(timeout=PROVIDER_TEST_HTTPX_TIMEOUT, follow_redirects=True) as client:
+
+        async def probe(endpoint: str) -> tuple[str, httpx.Response | None, BaseException | None]:
+            try:
+                response = await _post_provider_test(
+                    endpoint,
+                    headers,
+                    request_body,
+                    PROVIDER_TEST_HTTPX_TIMEOUT,
+                    client=client,
+                )
+                return endpoint, response, None
+            except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout) as exc:
+                logger.warning(
+                    "Provider credential test connect failed provider=jina endpoint=%s: %s",
+                    endpoint,
+                    exc,
+                )
+                return endpoint, None, exc
+
+        tasks = [asyncio.create_task(probe(endpoint)) for endpoint in JINA_SEARCH_PROVIDER_ENDPOINTS]
+        connect_errors: list[BaseException] = []
+        server_error_response: httpx.Response | None = None
+
+        try:
+            for finished in asyncio.as_completed(tasks):
+                _endpoint, response, error = await finished
+                if error is not None:
+                    connect_errors.append(error)
+                    continue
+                if response.status_code == 200:
+                    return response
+                if _jina_provider_auth_failure(response):
+                    try:
+                        response.raise_for_status()
+                    except HTTPStatusError as exc:
+                        raise_provider_test_http_error(exc, "Provider credential test failed")
+                if response.status_code >= 500 and server_error_response is None:
+                    logger.warning(
+                        "Provider credential test server error provider=jina endpoint=%s status=%s",
+                        _endpoint,
+                        response.status_code,
+                    )
+                    server_error_response = response
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    if server_error_response is not None:
+        return server_error_response
+    if connect_errors:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Provider credential test failed: unable to reach Jina endpoints",
+        ) from connect_errors[0]
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Provider credential test failed",
+    )
+
+
 async def perform_provider_test(provider: str, api_key: str, query: str) -> list[dict[str, Any]]:
     provider_preset = TASK_SPACE_PROVIDER_TEST_PRESETS[provider]
 
@@ -297,15 +395,28 @@ async def perform_provider_test(provider: str, api_key: str, query: str) -> list
             detail=f"Unsupported provider '{provider}' for credential test",
         )
 
-    async with httpx.AsyncClient(
-        timeout=PROVIDER_TEST_TIMEOUT_SECONDS,
-        follow_redirects=True,
-    ) as http_client:
-        response = await http_client.post(
-            provider_preset["endpoint"],
-            headers=headers,
-            json=request_body,
-        )
+    if provider == "jina":
+        response = await _perform_jina_provider_test(headers, request_body)
+    else:
+        endpoint = provider_preset["endpoint"]
+        try:
+            response = await _post_provider_test(
+                endpoint,
+                headers,
+                request_body,
+                PROVIDER_TEST_HTTPX_TIMEOUT,
+            )
+        except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout) as exc:
+            logger.warning(
+                "Provider credential test connect failed provider=%s endpoint=%s: %s",
+                provider,
+                endpoint,
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Provider credential test failed: unable to reach provider endpoint",
+            ) from exc
 
     try:
         response.raise_for_status()
