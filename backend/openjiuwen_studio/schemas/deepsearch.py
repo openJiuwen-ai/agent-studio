@@ -256,9 +256,16 @@ class WebSearchEngineAccessRes(BasicResponseDTO):
     datas: List[dict[str, Any]] = Field(default=[], description="搜索引擎返回结果，key不固定")
 
 
+class ReportConvertFinalResult(BaseModel):
+    response_content: str = Field(..., description='报告内容（Markdown格式）')
+    citation_messages: Optional[Any] = Field(default=None, description='引用数据')
+    infer_messages: Optional[List[Any]] = Field(default_factory=list, description='推理图谱列表')
+    chart_messages: Optional[List[Any]] = Field(default_factory=list, description='VLM图表结果')
+
+
 class ReportConvertReq(BaseModel):
     space_id: str = Field(..., min_length=1, max_length=255, description="用户空间id")
-    report_content: str = Field(..., min_length=1, max_length=1000 * 1000, description='base64编码过的原markdown报告内容')
+    final_result: ReportConvertFinalResult = Field(..., description='报告最终结果')
     convert_type: str = Field(..., description='转换类型，可选docx或html')
 
 

@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next'
 import { IconButton } from '@test-agentstudio/base-ui'
 import { useDownload } from '../hooks'
 import { FormatMenu } from './FormatMenu'
-import type { ChartMessage, InferMessage } from '@/pages/Apps/types'
+import type { ChartMessage, DeepSearchResult, InferMessage } from '@/pages/Apps/types'
 
 /**
  * 下载按钮组件属性
@@ -32,6 +32,7 @@ export interface DownloadButtonProps {
   chartMessages?: ChartMessage[] | null
   /** 推理图数据 */
   inferMessages?: InferMessage[] | null
+  finalResult?: DeepSearchResult
   /** 自定义样式类名 */
   className?: string
 }
@@ -53,6 +54,7 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
   rawContent,
   chartMessages,
   inferMessages,
+  finalResult,
   className = '',
 }) => {
   const { t } = useTranslation()
@@ -60,6 +62,7 @@ export const DownloadButton: React.FC<DownloadButtonProps> = ({
     rawContent,
     chartMessages,
     inferMessages,
+    finalResult,
   })
 
   return (

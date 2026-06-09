@@ -10,7 +10,7 @@ import React from 'react'
 import { Copy, Check, Download, Loader2, Edit, ShieldAlert, RefreshCw, CloudOff, Undo2, Redo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Root, Trigger } from '@radix-ui/react-dropdown-menu'
-import type { Report } from '@/pages/Apps/types'
+import type { DeepSearchResult, Report } from '@/pages/Apps/types'
 import type {
   RecoveryState,
   ReportEditorMode,
@@ -98,10 +98,21 @@ export const ReportContentToolbar: React.FC<ReportContentToolbarProps> = ({
     [report.chartMessages, report.content, report.rawContent]
   )
 
+  const finalResult = React.useMemo<DeepSearchResult>(
+    () => ({
+      response_content: report.rawContent || report.content || '',
+      citation_messages: report.citations || null,
+      infer_messages: report.inferMessages || [],
+      chart_messages: report.chartMessages || [],
+    }),
+    [report.rawContent, report.content, report.citations, report.inferMessages, report.chartMessages]
+  )
+
   const download = useDownload(exportContent, report.title || 'report', {
     rawContent: report.rawContent,
     chartMessages: report.chartMessages,
     inferMessages: report.inferMessages,
+    finalResult,
   })
 
   const handleCopy = () => {
@@ -179,6 +190,7 @@ export const ReportContentToolbar: React.FC<ReportContentToolbarProps> = ({
         {!isEditing ? (
           <>
             <button
+              type="button"
               onClick={handleCopy}
               className="w-[21px] h-[21px] flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors"
               title={clipboard.copied ? t('apps.clipboard.copied') : t('apps.clipboard.copy')}
@@ -194,6 +206,7 @@ export const ReportContentToolbar: React.FC<ReportContentToolbarProps> = ({
             <Root modal={false}>
               <Trigger asChild>
                 <button
+                  type="button"
                   className="w-[21px] h-[21px] flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   title={download.isDownloading ? t('apps.download.downloading') : t('apps.download.downloadReport')}
                   aria-label={download.isDownloading ? t('apps.download.downloadingReport') : t('apps.download.downloadReport')}
@@ -218,6 +231,7 @@ export const ReportContentToolbar: React.FC<ReportContentToolbarProps> = ({
         {isEditing && onUndo && onRedo ? (
           <>
             <button
+              type="button"
               onClick={onUndo}
               disabled={!canUndo}
               className="h-8 w-8 flex items-center justify-center rounded border border-gray-200 bg-white text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -227,6 +241,7 @@ export const ReportContentToolbar: React.FC<ReportContentToolbarProps> = ({
               <Undo2 className="h-4 w-4" />
             </button>
             <button
+              type="button"
               onClick={onRedo}
               disabled={!canRedo}
               className="h-8 w-8 flex items-center justify-center rounded border border-gray-200 bg-white text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -240,6 +255,7 @@ export const ReportContentToolbar: React.FC<ReportContentToolbarProps> = ({
 
         {isEditing && onManualSync && (
           <button
+            type="button"
             onClick={onManualSync}
             disabled={syncStatus === 'syncing'}
             className="h-8 px-2.5 flex items-center justify-center gap-1.5 rounded border border-gray-200 bg-white text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -257,6 +273,7 @@ export const ReportContentToolbar: React.FC<ReportContentToolbarProps> = ({
 
         {editingEnabled && onEnterEdit && onExitEdit && isFinalReport && showEditButton && (
           <button
+            type="button"
             onClick={handleEditClick}
             disabled={editButtonDisabled}
             className="w-[88px] h-8 flex items-center justify-center gap-1.5 rounded-[4px] text-white text-sm font-medium transition-all duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"

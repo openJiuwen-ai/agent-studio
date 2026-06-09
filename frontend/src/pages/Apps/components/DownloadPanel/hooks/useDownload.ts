@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import type { DownloadFormat, UseDownloadReturn } from '../types'
 import { FORMAT_OPTIONS_BASE } from '../constants'
 import { DownloadApiService } from '../services/downloadApi'
-import type { ChartMessage, InferMessage } from '@/pages/Apps/types'
+import type { ChartMessage, DeepSearchResult, InferMessage } from '@/pages/Apps/types'
 import {
   downloadBase64File,
   downloadMarkdownBundle,
@@ -19,6 +19,7 @@ interface UseDownloadOptions {
   rawContent?: string
   chartMessages?: ChartMessage[] | null
   inferMessages?: InferMessage[] | null
+  finalResult?: DeepSearchResult
 }
 
 export function useDownload(
@@ -43,7 +44,7 @@ export function useDownload(
       }
 
       const baseFilename = generateTimestampedFilename(title, '')
-      const filename = `${baseFilename}${formatOption.extension}`
+      const filename = `${baseFilename}${formatOption.downloadExtension}`
 
       if (format === 'markdown') {
         await downloadMarkdownBundle({
@@ -58,7 +59,12 @@ export function useDownload(
         return
       }
 
-      const convertedContent = await DownloadApiService.convertFormat(content, format, t)
+      if (!options?.finalResult) {
+        showNotification(t('apps.errors.reportConvertFailed'), 'error')
+        return
+      }
+
+      const convertedContent = await DownloadApiService.convertFormat(options.finalResult, format, t)
       if (convertedContent) {
         downloadBase64File(convertedContent, filename, formatOption.mimeType)
         const formatLabel = t(`apps.download.${formatOption.labelKey}`)
@@ -70,7 +76,7 @@ export function useDownload(
     } finally {
       setIsDownloading(false)
     }
-  }, [content, isDownloading, options?.chartMessages, options?.inferMessages, options?.rawContent, t, title])
+  }, [content, isDownloading, options?.chartMessages, options?.finalResult, options?.inferMessages, options?.rawContent, t, title])
 
   return {
     downloadFormat,
