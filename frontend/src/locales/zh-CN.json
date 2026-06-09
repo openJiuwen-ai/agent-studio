@@ -1223,13 +1223,19 @@
         "error": {
           "selectType": "请选择一个联网增强引擎类型",
           "invalidName": "引擎名称必须是预设值之一",
-          "fillRequired": "请填写 API Key 和搜索URL"
+          "fillRequired": "请填写 API Key 和搜索URL",
+          "extensionInvalidJson": "扩展参数不是合法的 JSON 格式",
+          "extensionNotObject": "扩展参数必须是字典（对象）类型，不能是数组或其他类型"
         },
         "presets": {
           "xunfei": "讯飞搜索",
           "petal": "小艺AI问答\n联网增强",
           "tavily": "Tavily",
           "google": "Google",
+          "jina": "Jina",
+          "serper": "Serper",
+          "bocha": "博查",
+          "perplexity": "Perplexity",
           "custom": "自定义"
         },
         "parseError": {
@@ -1277,7 +1283,10 @@
         "domainInvalidPath": "域名不能包含路径，请输入如 example.com 的格式",
         "domainInvalidPort": "域名不能包含端口号，请输入如 example.com 的格式",
         "domainInvalidFormat": "请输入有效的域名格式，如 docs.example.com",
-        "domainDuplicate": "该域名已存在"
+        "domainDuplicate": "该域名已存在",
+        "extension": "扩展参数 (JSON)",
+        "extensionOptional": "可选",
+        "extensionPlaceholder": "{\"max_results\": 5}"
       },
       "explorerEngine": {
         "action": {

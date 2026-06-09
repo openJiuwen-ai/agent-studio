@@ -1830,6 +1830,8 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingDomainType, setEditingDomainType] = useState<'include' | 'exclude' | null>(null)
+  const [extensionJson, setExtensionJson] = useState('')
+  const [extensionJsonError, setExtensionJsonError] = useState<string | null>(null)
   const prevOpenRef = React.useRef(open)
 
   const isTavily = engineName === 'tavily'
@@ -1848,8 +1850,12 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
           setEngineName(engineData.search_engine_name || '')
           setApiKey('')
           setSearchUrl(engineData.search_url || '')
-          setIncludeDomains(engineData.extension?.include_domains || [])
-          setExcludeDomains(engineData.extension?.exclude_domains || [])
+          const ext: Record<string, unknown> = engineData.extension || {}
+          setIncludeDomains((ext.include_domains as string[]) || [])
+          setExcludeDomains((ext.exclude_domains as string[]) || [])
+          const { include_domains: _inc, exclude_domains: _exc, ...restExt } = ext
+          const jsonSrc = engineData.search_engine_name === 'tavily' ? restExt : ext
+          setExtensionJson(Object.keys(jsonSrc).length > 0 ? JSON.stringify(jsonSrc, null, 2) : '')
           console.log('[WebSearchEngineConfigDialog] Form state set successfully')
         } catch (err) {
           console.error('[WebSearchEngineConfigDialog] Load failed:', err)
@@ -1871,6 +1877,8 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
       setSearchUrl('')
       setIncludeDomains([])
       setExcludeDomains([])
+      setExtensionJson('')
+      setExtensionJsonError(null)
       setError(null)
       setEditingDomainType(null)
     }
@@ -1883,6 +1891,10 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
     { name: 'petal', labelKey: 'presets.petal', url: 'https://api.petal.dev' },
     { name: 'tavily', labelKey: 'presets.tavily', url: 'https://api.tavily.com' },
     { name: 'google', labelKey: 'presets.google', url: 'https://google.serper.dev' },
+    { name: 'jina', labelKey: 'presets.jina', url: 'https://s.jina.ai' },
+    { name: 'serper', labelKey: 'presets.serper', url: 'https://google.serper.dev' },
+    { name: 'bocha', labelKey: 'presets.bocha', url: 'https://api.bocha.cn/v1/web-search' },
+    { name: 'perplexity', labelKey: 'presets.perplexity', url: 'https://api.perplexity.ai/chat/completions' },
     { name: 'custom', labelKey: 'presets.custom', url: '' },
   ]
 
@@ -1946,16 +1958,38 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
       return
     }
 
+    let userExtension: Record<string, unknown> = {}
+    if (extensionJson.trim()) {
+      try {
+        const parsed: unknown = JSON.parse(extensionJson.trim())
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          setExtensionJsonError(t('apps.config.engine.error.extensionNotObject'))
+          return
+        }
+        userExtension = parsed as Record<string, unknown>
+        setExtensionJsonError(null)
+      } catch {
+        setExtensionJsonError(t('apps.config.engine.error.extensionInvalidJson'))
+        return
+      }
+    }
+
     setSaving(true)
     setError(null)
 
     try {
       const { webSearchEngineService } = await import('@test-agentstudio/api-client')
 
-      const extension = isTavily ? {
-        include_domains: includeDomains,
-        exclude_domains: excludeDomains
-      } : undefined
+      let extension: Record<string, unknown> | undefined
+      if (isTavily) {
+        extension = {
+          ...userExtension,
+          include_domains: includeDomains,
+          exclude_domains: excludeDomains,
+        }
+      } else if (Object.keys(userExtension).length > 0) {
+        extension = userExtension
+      }
 
       if (editingEngineId) {
         // 编辑模式：更新现有引擎
@@ -1988,6 +2022,8 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
         setSearchUrl('')
         setIncludeDomains([])
         setExcludeDomains([])
+        setExtensionJson('')
+        setExtensionJsonError(null)
       }
 
       onClose()
@@ -2155,6 +2191,33 @@ const WebSearchEngineConfigDialog: React.FC<WebSearchEngineConfigDialogProps> = 
                   </div>
                 </>
               )}
+
+              {/* 扩展参数 (JSON) */}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <label className="block text-sm font-medium text-gray-700">
+                    {t('apps.config.engine.extension')}
+                  </label>
+                  <span className="text-xs text-gray-400">{t('apps.config.engine.extensionOptional')}</span>
+                </div>
+                <textarea
+                  rows={3}
+                  value={extensionJson}
+                  onChange={e => { setExtensionJson(e.target.value); setExtensionJsonError(null) }}
+                  placeholder={t('apps.config.engine.extensionPlaceholder')}
+                  className={`
+                    w-full px-3 py-2 ${RADIUS_BUTTON} border border-gray-300
+                    text-sm text-gray-900 placeholder-gray-400 font-mono resize-none
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                  `}
+                />
+                {extensionJsonError && (
+                  <p className="text-xs text-red-600 mt-1.5 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>{extensionJsonError}</span>
+                  </p>
+                )}
+              </div>
 
               {/* 底部按钮 */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">

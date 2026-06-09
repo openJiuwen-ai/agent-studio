@@ -1214,13 +1214,19 @@
         "error": {
           "selectType": "Please select an online enhancement engine type",
           "invalidName": "Engine name must be one of the preset values",
-          "fillRequired": "Please enter API Key and Search URL"
+          "fillRequired": "Please enter API Key and Search URL",
+          "extensionInvalidJson": "Extension parameters are not valid JSON",
+          "extensionNotObject": "Extension parameters must be a dictionary (object), not an array or other type"
         },
         "presets": {
           "xunfei": "Xunfei Search",
           "petal": "Network-assisted AI Q&A enhancement",
           "tavily": "Tavily",
           "google": "Google",
+          "jina": "Jina",
+          "serper": "Serper",
+          "bocha": "Bocha",
+          "perplexity": "Perplexity",
           "custom": "Custom"
         },
         "parseError": {
@@ -1268,7 +1274,10 @@
         "domainInvalidPath": "Domain cannot contain path, please enter format like example.com",
         "domainInvalidPort": "Domain cannot contain port number, please enter format like example.com",
         "domainInvalidFormat": "Please enter a valid domain format, e.g. docs.example.com",
-        "domainDuplicate": "This domain already exists"
+        "domainDuplicate": "This domain already exists",
+        "extension": "Extension Parameters (JSON)",
+        "extensionOptional": "Optional",
+        "extensionPlaceholder": "{\"max_results\": 5}"
       },
       "explorerEngine": {
         "action": {
