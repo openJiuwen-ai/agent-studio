@@ -45,6 +45,9 @@ export interface ChatInputAreaProps {
   checkingDeepsearch?: boolean
   disableEnterKey?: boolean
 
+  // 会话锁定：会话已开始后禁止切换 Agent
+  isAgentLocked?: boolean
+
   // 新对话
   onNewConversation?: () => void
 
@@ -76,6 +79,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   onNewConversation,
   deepsearchUnavailable = false,
   checkingDeepsearch = false,
+  isAgentLocked = false,
   className = '',
   inputStyle,
 }) => {
@@ -96,6 +100,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
             agent={selectedAgent}
             onConfig={onAgentConfig}
             onDeselect={onAgentDeselect}
+            isLocked={isAgentLocked}
           />
         </div>
       )}
@@ -106,7 +111,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           value={inputValue}
           onChange={onInputChange}
           placeholder={selectedAgent ? t('apps.chat.sendToAgent', { name: selectedAgent.name }) : t('apps.chat.typeAtSelectAgent')}
-          agents={agents}
+          agents={isAgentLocked ? [] : agents}
           resources={resources}
           onAgentSelect={onAgentSelect}
           onResourceSelect={onResourceSelect}
@@ -122,6 +127,7 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           <TriggerButtons
             onAtClick={() => inputRef.current?.triggerPicker('@')}
             onHashClick={() => inputRef.current?.triggerPicker('#')}
+            disableAt={isAgentLocked}
           />
         </div>
 

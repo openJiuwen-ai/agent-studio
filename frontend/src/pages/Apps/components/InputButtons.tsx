@@ -66,11 +66,13 @@ export const ModelSelectButton: React.FC<ModelSelectButtonProps> = ({
 export interface TriggerButtonsProps {
   onAtClick: () => void
   onHashClick: () => void
+  disableAt?: boolean
 }
 
 export const TriggerButtons: React.FC<TriggerButtonsProps> = ({
   onAtClick,
   onHashClick,
+  disableAt = false,
 }) => {
   const { t } = useTranslation()
 
@@ -85,13 +87,15 @@ export const TriggerButtons: React.FC<TriggerButtonsProps> = ({
 
   return (
     <div className="flex items-center gap-2">
-      <button
-        onClick={onAtClick}
-        className={buttonClass}
-        title={t('apps.picker.selectAgent')}
-      >
-        @
-      </button>
+      {!disableAt && (
+        <button
+          onClick={onAtClick}
+          className={buttonClass}
+          title={t('apps.picker.selectAgent')}
+        >
+          @
+        </button>
+      )}
       {/* 暂时隐藏 # 资源选择按钮 */}
       {/* <button
         onClick={onHashClick}

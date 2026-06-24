@@ -728,7 +728,7 @@
       "deepsearchServiceDown": "DeepSearch 服务暂时不可用",
       "stopDeepSearch": "停止 DeepSearch",
       "taskRunning": {
-        "statusText": "内容生成中，请勿刷新/关闭网页，否则导致研究取消。"
+        "statusText": "内容生成中，请勿刷新/关闭网页，否则导致研究取消。\n若生成用时过长，请设置本网页保持活跃，避免研究取消。"
       }
     },
     "picker": {
@@ -750,7 +750,8 @@
     },
     "agent": {
       "configAgent": "配置智能体",
-      "deselectAgent": "取消选择"
+      "deselectAgent": "取消选择",
+      "switchLockedHint": "当前会话已绑定「{{agentName}}」，请点击 + 新建会话后使用其他 Agent"
     },
     "clipboard": {
       "copy": "复制内容",

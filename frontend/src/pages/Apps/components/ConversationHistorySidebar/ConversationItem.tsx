@@ -4,6 +4,11 @@ import { Trash2 } from 'lucide-react'
 import { RADIUS_MEDIUM, BUTTON_HOVER_EFFECTS, BUTTON_TRANSITION } from '../../constants/styles'
 import type { ConversationItemProps } from './types'
 
+const AGENT_TYPE_BADGE: Record<string, { label: string; cls: string }> = {
+  'deepsearch': { label: 'DeepResearch', cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400' },
+  'deepsearch-explorer': { label: 'DeepSearch', cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400' },
+}
+
 /**
  * Format timestamp to human-readable string
  * - Today: "14:30"
@@ -81,9 +86,16 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
         <div className={`text-sm font-medium truncate ${isActive ? 'text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>
           {truncateTitle(conversation.title)}
         </div>
-        {/* Timestamp */}
-        <div className={`text-xs mt-0.5 ${isActive ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-500'}`}>
-          {formatTimestamp(conversation.updatedAt, t, i18n.language)}
+        {/* Timestamp + Agent type badge */}
+        <div className="flex items-center justify-between mt-0.5">
+          {AGENT_TYPE_BADGE[conversation.config?.agentType] && (
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium leading-none ${AGENT_TYPE_BADGE[conversation.config.agentType].cls}`}>
+              {AGENT_TYPE_BADGE[conversation.config.agentType].label}
+            </span>
+          )}
+          <span className={`text-xs ${isActive ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-500'}`}>
+            {formatTimestamp(conversation.updatedAt, t, i18n.language)}
+          </span>
         </div>
       </div>
 
