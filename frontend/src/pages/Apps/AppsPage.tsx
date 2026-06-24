@@ -209,6 +209,7 @@ const getRewriteRoundState = (
 // 模块级变量：持久化 AbortController，在组件卸载/重挂载时不丢失
 // 使得切换到其他页面再切回时，仍可正确 abort 仍在进行的 SSE
 let _activeDeepSearchController: AbortController | null = null
+let _activeRewriteController: AbortController | null = null
 
 // SSE 进行中切换模块时需要跨生命周期保存的 UI 状态类型
 interface AppsUISnapshot {
@@ -370,8 +371,8 @@ const AppsPage: React.FC = () => {
   const saveConversationToDB = useConversationStore(state => state.saveConversationToDB)
   const setLoading = useConversationStore(state => state.setLoading)
   const setSelectedResultMessageId = useConversationStore(state => state.setSelectedResultMessageId)
+  const resetActiveSessionRuntime = useConversationStore(state => state.resetActiveSessionRuntime)
   const clearAll = useConversationStore(state => state.clearAll)
-  const clearCurrentConversation = useConversationStore(state => state.clearCurrentConversation)
   const initializeFromDB = useConversationStore(state => state.initializeFromDB)
 
   // 计算当前选中消息的messageItemsId（用于兼容旧逻辑）
@@ -394,6 +395,71 @@ const AppsPage: React.FC = () => {
     }
     return null
   }, [selectedResultMessageId, currentConversationId, getMessageItemsByConversationId, getMessageById])
+
+  const getConversationAgentType = (conversationId: string | null | undefined) => {
+    if (!conversationId) return null
+    return useConversationStore.getState().getConversationById(conversationId)?.config?.agentType ?? null
+  }
+
+  const getReusableConversationId = (agentId: string) => {
+    const activeConversationId = useConversationStore.getState().currentConversationId
+    return getConversationAgentType(activeConversationId) === agentId ? activeConversationId : null
+  }
+
+  const resetModuleSessionState = (options?: { preserveSelectedAgent?: boolean }) => {
+    resetActiveSessionRuntime()
+    setHasConversation(false)
+    setMessages([])
+    setInputValue('')
+    setPendingConversationCreate(null)
+    setLimitDialogOpen(false)
+    setShowMindMap(false)
+    setMindMapMessageItemsId(null)
+    setCurrentMessageItemsId(null)
+    setLastSelectedReportId(null)
+    setCurrentGraphType('sectionGraph')
+    setShowDeepSearchExplorer(false)
+    setDeepSearchExplorerFullscreen(false)
+    setDeepSearchRunIds(new Map())
+    setActiveDeepSearchRunId(null)
+    setKilledDeepSearchRunIds(new Set())
+    setPendingAgent(null)
+    setConfigDialogOpen(false)
+    setIsFirstConfigMode(false)
+    _appsUISnapshot = null
+    if (!options?.preserveSelectedAgent) {
+      setSelectedAgent(null)
+    }
+    clearPendingOutlineInteraction()
+  }
+
+  const interruptModuleTasks = async (agentId: string | null) => {
+    if (agentId === 'deepsearch') {
+      await handleStopDeepSearch()
+    }
+
+    if (agentId === 'deepsearch-explorer') {
+      const runIdsToKill = Array.from(new Set([
+        ...deepSearchRunIds.values(),
+        ...(activeDeepSearchRunId ? [activeDeepSearchRunId] : []),
+      ]))
+        .filter(runId => !killedDeepSearchRunIds.has(runId))
+
+      if (runIdsToKill.length > 0) {
+        await Promise.allSettled(runIdsToKill.map(runId => deepSearchApi.killRun(runId)))
+      }
+    }
+
+    if (_activeRewriteController) {
+      _activeRewriteController.abort()
+      _activeRewriteController = null
+    }
+
+    if (_activeDeepSearchController) {
+      _activeDeepSearchController.abort()
+      _activeDeepSearchController = null
+    }
+  }
 
   // ===== 处理创建对话前警告 =====
   const handleCreateConversation = async (title: string, config: any) => {
@@ -736,8 +802,6 @@ const AppsPage: React.FC = () => {
     setHasConversation(hasActiveConversation)
 
     if (!hasActiveConversation) {
-      // 如果清空了对话，也清空 selectedAgent
-      setSelectedAgent(null)
       setDeepSearchRunIds(new Map())
       setActiveDeepSearchRunId(null)
     } else {
@@ -1051,7 +1115,7 @@ const AppsPage: React.FC = () => {
       // ===== Deep Search Explorer 模式 =====
       if (isDeepSearchExplorerMode) {
         // Create conversation (like Deep Research)
-        let conversationId = currentConversationId
+        let conversationId = getReusableConversationId('deepsearch-explorer')
         if (!conversationId) {
           const title = messageToSend.length > 50 ? messageToSend.slice(0, 50) + '...' : messageToSend
           conversationId = await handleCreateConversation(title, {
@@ -1561,6 +1625,7 @@ const AppsPage: React.FC = () => {
       remainingBuffer: string
     }
     type LiveRewriteRuntime = {
+      controller: AbortController
       stop: () => Promise<void>
       consumeEvents: RewriteEventConsumer
     }
@@ -1940,15 +2005,22 @@ const AppsPage: React.FC = () => {
     }
 
     const createLiveRewriteRuntime = (): LiveRewriteRuntime => {
+      const controller = new AbortController()
+      _activeRewriteController = controller
       const rewriteRecording = createRewriteRecording({
         enabled: ENABLE_SSE_DEBUG,
         request: rewriteRequest,
       })
       const stop = async () => {
+        if (_activeRewriteController === controller) {
+          _activeRewriteController = null
+        }
+        controller.abort()
         await rewriteRecording?.stop()
       }
 
       return {
+        controller,
         stop,
         consumeEvents: createRewriteEventConsumer(
           createRewriteState(),
@@ -1957,19 +2029,7 @@ const AppsPage: React.FC = () => {
         ),
       }
     }
-    const buildLiveRewriteRequestBody = () => ({
-      space_id: user?.spaceId || getDefaultSpaceId(),
-      general_model_config_id: config.generalModelId ? parseInt(config.generalModelId) : selectedModelId,
-      message: JSON.stringify(messagePayload),
-      conversation_id: backendConversationId,
-      search_mode: 'research',
-      web_search_config,
-      local_search_config,
-      user_feedback_processor_enable: config.userFeedbackProcessorEnable ?? true,
-      user_feedback_processor_max_interactions: normalizeMaxRewriteInteractions(config.userFeedbackProcessorMaxInteractions),
-      execution_method: config.execution_method ?? DEFAULT_DEEPRESEARCH_CONFIG.execution_method,
-    })
-    const requestLiveRewriteStream = async () => {
+    const requestLiveRewriteStream = async (signal: AbortSignal) => {
       const response = await fetch('/api/v1/agent/deepsearch/run', {
         method: 'POST',
         headers: {
@@ -1990,6 +2050,7 @@ const AppsPage: React.FC = () => {
           user_feedback_processor_max_interactions: config.userFeedbackProcessorMaxInteractions ?? 3,
           execution_method: config.execution_method ?? DEFAULT_DEEPRESEARCH_CONFIG.execution_method,
         }),
+        signal,
       })
 
       if (!response.ok) {
@@ -2046,20 +2107,33 @@ const AppsPage: React.FC = () => {
     }
     const liveRewriteRuntime = createLiveRewriteRuntime()
     const runLiveRewrite = async () => {
-      const reader = await requestLiveRewriteStream()
+      const reader = await requestLiveRewriteStream(liveRewriteRuntime.controller.signal)
       await consumeLiveRewriteStream(reader, liveRewriteRuntime)
     }
 
     try {
       await runLiveRewrite()
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        await liveRewriteRuntime.stop()
+        onStatusChange?.('idle')
+        return
+      }
       await failRewrite(err instanceof Error ? err.message : undefined, {
         stop: liveRewriteRuntime.stop,
       })
     }
   }
   // 处理智能体选择（首次配置弹出配置弹窗，非首次配置直接选中）
-  const handleAgentSelect = (agent: MentionItem) => {
+  const handleAgentSelect = async (agent: MentionItem) => {
+    const activeModuleAgentId = getConversationAgentType(currentConversationId) ?? selectedAgent?.id ?? null
+    const isCrossModuleSwitch = !!activeModuleAgentId && activeModuleAgentId !== agent.id
+
+    if (isCrossModuleSwitch) {
+      await interruptModuleTasks(activeModuleAgentId)
+      resetModuleSessionState()
+    }
+
     // 如果是 DeepSearch 智能体，总是检查服务状态
     if (agent.id === 'deepsearch') {
       // 如果正在检查心跳，避免重复检查
@@ -2113,8 +2187,10 @@ const AppsPage: React.FC = () => {
   }
 
   // 取消选择智能体
-  const handleAgentDeselect = () => {
-    setSelectedAgent(null)
+  const handleAgentDeselect = async () => {
+    const activeModuleAgentId = getConversationAgentType(currentConversationId) ?? selectedAgent?.id ?? null
+    await interruptModuleTasks(activeModuleAgentId)
+    resetModuleSessionState()
   }
 
   // 检查 DeepSearch 服务心跳
@@ -2232,20 +2308,10 @@ const AppsPage: React.FC = () => {
   }
 
   // 发起新对话
-  const handleNewConversation = () => {
-    // 如果有正在进行的 SSE，先中断
-    if (_activeDeepSearchController) {
-      _activeDeepSearchController.abort()
-      _activeDeepSearchController = null
-    }
-
-    // 清除选择的结果面板
-    setSelectedResultMessageId(null)
-    // 清空当前 conversationId（useEffect 会自动同步其他状态）
-    clearCurrentConversation()
-    // 清空本地 UI 状态
-    setMessages([])
-    setInputValue('')
+  const handleNewConversation = async () => {
+    const activeModuleAgentId = getConversationAgentType(currentConversationId) ?? selectedAgent?.id ?? null
+    await interruptModuleTasks(activeModuleAgentId)
+    resetModuleSessionState({ preserveSelectedAgent: true })
   }
 
   // 当selectedResultMessageId变化时，自动关闭思维链面板并更新currentMessageItemsId
@@ -2415,11 +2481,7 @@ const AppsPage: React.FC = () => {
 
   // 切换历史对话
   const handleConversationSelect = async (conversationId: string) => {
-    // 如果有正在进行的 SSE，先中断
-    if (_activeDeepSearchController) {
-      _activeDeepSearchController.abort()
-      _activeDeepSearchController = null
-    }
+    await interruptModuleTasks(getConversationAgentType(currentConversationId) ?? selectedAgent?.id ?? null)
 
     // 清除选择的结果面板和思维链面板（修复bug：切换对话时需要清除，否则会导致页面空白）
     setSelectedResultMessageId(null)
@@ -2475,7 +2537,7 @@ const AppsPage: React.FC = () => {
     let mainFlowRecording: DeepSearchRecordingHandle | null = null
 
     // 如果没有 conversation，先创建一个
-    let conversationId = currentConversationId
+    let conversationId = getReusableConversationId('deepsearch')
     if (!conversationId) {
       // 使用消息内容作为标题（截断到50个字符）
       const title = content.length > 50 ? content.slice(0, 50) + '...' : content
@@ -2926,6 +2988,12 @@ const AppsPage: React.FC = () => {
     const token = getToken()
     if (!token) {
       console.error('[DeepSearch Cancel] No auth token')
+      useConversationStore.getState().stopSSETimeoutMonitor()
+      clearPendingOutlineInteraction()
+      if (_activeDeepSearchController) {
+        _activeDeepSearchController.abort()
+        _activeDeepSearchController = null
+      }
       return
     }
 

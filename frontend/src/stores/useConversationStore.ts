@@ -411,6 +411,7 @@ export interface ConversationStore {
 
   // ========== 状态管理 ==========
   setLoading: (loading: boolean) => void;
+  resetActiveSessionRuntime: () => void;
   clearCurrentConversation: () => void;
   clearAll: () => void; // 清空所有对话数据
   setSelectedResultMessageId: (messageId: string | null) => void;
@@ -1680,10 +1681,23 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     set({ isLoading: loading });
   },
 
-  clearCurrentConversation: () => {
+  resetActiveSessionRuntime: () => {
+    get().stopSSETimeoutMonitor();
     set({
       currentConversationId: null,
+      isLoading: false,
+      selectedResultMessageId: null,
+      sseStreamCache: new Map<string, string[]>(),
+      sseEventQueue: [],
+      sseProcessingQueue: false,
+      lastSSEEventTime: null,
+      SESSION_CONVERSATION_ID: null,
+      pendingOutlineInteraction: null,
     });
+  },
+
+  clearCurrentConversation: () => {
+    get().resetActiveSessionRuntime();
   },
 
   clearAll: async () => {
@@ -2161,7 +2175,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
         }
         // 使用 setTimeout 避免在 reducer 中直接调用 set
         setTimeout(() => {
-          get().setSessionConversationId(sessionConversationId);
+          if (get().currentConversationId === conversationId) {
+            get().setSessionConversationId(sessionConversationId);
+          }
         }, 0);
 
         return {

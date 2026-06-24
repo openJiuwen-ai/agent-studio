@@ -98,21 +98,44 @@ const DeepSearchExplorerConfigDialog: React.FC<DeepSearchExplorerConfigDialogPro
 
   const [config, setConfig] = useState<DeepSearchExplorerConfig>(defaultConfig)
 
+  const buildInitialProviderTests = useCallback((nextConfig: DeepSearchExplorerConfig) => {
+    const getState = (provider: ProviderTestName, apiKey?: string): ProviderTestState => {
+      if (!apiKey?.trim()) {
+        return { status: 'idle', message: '' }
+      }
+
+      return {
+        status: 'success',
+        message: t('apps.config.explorerEngine.test.providerSuccess', {
+          provider: t(`apps.config.explorerEngine.test.providers.${provider}`),
+        }),
+      }
+    }
+
+    return {
+      jina: getState('jina', nextConfig.jinaApiKey),
+      serper: getState('serper', nextConfig.serperApiKey),
+    }
+  }, [t])
+
   React.useEffect(() => {
     if (open) {
-      setConfig(toDeepSearchExplorerConfig(savedConfigs[agent?.id || 'deepsearch-explorer']))
+      const nextConfig = toDeepSearchExplorerConfig(savedConfigs[agent?.id || 'deepsearch-explorer'])
+      setConfig(nextConfig)
       setActiveTab('general')
+      setProviderTests(buildInitialProviderTests(nextConfig))
+    } else {
+      setProviderTests({
+        jina: { status: 'idle', message: '' },
+        serper: { status: 'idle', message: '' },
+      })
     }
     setShowKnowledgeBaseSelector(false)
-    setProviderTests({
-      jina: { status: 'idle', message: '' },
-      serper: { status: 'idle', message: '' },
-    })
     setApiKeyVisibility({
       jina: false,
       serper: false,
     })
-  }, [open, savedConfigs, agent?.id])
+  }, [open, savedConfigs, agent?.id, buildInitialProviderTests])
 
   const getProviderErrorMessage = useCallback((
     provider: ProviderTestName,

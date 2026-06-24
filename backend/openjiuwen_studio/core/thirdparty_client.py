@@ -215,6 +215,8 @@ class DeepSearchAgentClient:
     async def cancel_deepsearch_run(self, run_id: str) -> Dict[str, Any]:
         """取消 Search-mode run。"""
         resp = await self._http.request("POST", f"/runs/{run_id}/cancel")
+        if resp.status_code == 204 or not resp.content:
+            return {}
         return resp.json()
 
     async def get_deepsearch_telemetry_recent(self, n: int = 1, run_id: Optional[str] = None) -> Dict[str, Any]:
