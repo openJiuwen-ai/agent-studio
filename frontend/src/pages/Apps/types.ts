@@ -88,8 +88,23 @@ export interface Report {
   canonicalDocument?: CanonicalDocument
 }
 
+/** 单条真实性核验记录 */
+export interface TruthVerificationEntry {
+  selected_text: string
+  start_offset: number
+  end_offset: number
+  user_instruction: string
+  /** 核验结论（markdown 文本） */
+  content: string
+  /**
+   * 检索证据说明（markdown 文本），来自 collector_summary。
+   * 证据不足时结论往往很简短，详细的检索/未命中说明在这里。
+   */
+  evidence?: string
+}
+
 /** 报告改写/同步操作类型 */
-export type ReportRewriteAction = 'expand' | 'polish' | 'shorten' | 'supplementary_search' | 'sync' | 'new_task'
+export type ReportRewriteAction = 'expand' | 'polish' | 'shorten' | 'supplementary_search' | 'sync' | 'new_task' | 'truth_verification'
 
 /** 报告改写范围类型 */
 export type RewriteScope = 'selected_only' | 'selected_and_related'
@@ -105,8 +120,14 @@ export interface ReportRewriteParams {
   action: ReportRewriteAction
   /** 改写范围 */
   rewrite_scope?: RewriteScope
-  /** 选中的文本 */
+  /** 选中的文本（与 offset 同域：raw markdown 切片，发给后端做校验） */
   selectedText: string
+  /**
+   * 选中文本的可见渲染形态（剥除 Markdown 语法）。
+   * 仅 truth_verification 使用：发给后端的是 selectedText（raw 切片），
+   * 但存入批注 entry / 供 DOM 高亮搜索的是 displayText。
+   */
+  displayText?: string
   /** 起始偏移量（code point） */
   startOffset: number
   /** 结束偏移量（code point） */

@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import type { Report, ReportRewriteParams } from '@/pages/Apps/types'
+import type { Report, ReportRewriteParams, TruthVerificationEntry } from '@/pages/Apps/types'
 import { parseMarkdownToCanonical } from '@/pages/Apps/components/ReportPanel/editor/canonical'
 import {
   buildReportSyncRequest,
@@ -28,6 +28,7 @@ import { ReportView } from './ReportView'
 import { ReportEditView, type ReportEditViewHandle } from './ReportEditView'
 import { useConversationStore, isFinalReportMessage } from '@/stores/useConversationStore'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { REPORT_EDIT_EXPIRY_MS } from './constants'
 
 interface ReportPanelProps {
   /** 报告数据 */
@@ -63,6 +64,7 @@ const ReportPanel: React.FC<ReportPanelProps> = ({
   onReportRewrite,
 }) => {
   const [isEditing, setIsEditing] = useState(false)
+  const [isEditExpired, setIsEditExpired] = useState(false)
   const [syncStatus, setSyncStatus] = useState<ReportSyncStatus>('synced')
   const [historyControls, setHistoryControls] = useState<ReportHistoryControls>({
     canUndo: false,
@@ -77,6 +79,19 @@ const ReportPanel: React.FC<ReportPanelProps> = ({
   const messagesMap = useConversationStore(state => state.messagesMap)
   const messageItemsMap = useConversationStore(state => state.messageItemsMap)
   const getLastMessageItems = useConversationStore(state => state.getLastMessageItems)
+
+  const truthVerificationEntries = useMemo((): TruthVerificationEntry[] => {
+    if (!reportMessageId) return []
+    const message = messagesMap.get(reportMessageId)
+    if (!message?.content) return []
+    try {
+      const raw = typeof message.content === 'string' ? message.content : JSON.stringify(message.content)
+      const parsed = JSON.parse(raw || '{}')
+      return Array.isArray(parsed.truth_verification) ? parsed.truth_verification : []
+    } catch {
+      return []
+    }
+  }, [reportMessageId, messagesMap])
 
   // 判断是否为最终报告（子报告不能编辑）
   const isFinalReport = useMemo(() => {
@@ -93,7 +108,7 @@ const ReportPanel: React.FC<ReportPanelProps> = ({
   }, [reportMessageId, messagesMap, messageItemsMap])
 
   // 计算是否显示"编辑"按钮
-  // 条件：最终报告 && 配置开启可编辑 && 该报告所在的items是最后1个items && 还有可编辑的次数
+  // 条件：最终报告 && 配置开启可编辑 && 该报告所在的items是最后1个items && 未超过编辑有效期
   const showEditButton = useMemo(() => {
     // 1. 必须是最终报告
     if (!isFinalReport) return false
@@ -108,12 +123,17 @@ const ReportPanel: React.FC<ReportPanelProps> = ({
     const lastMessageItems = getLastMessageItems()
     if (!lastMessageItems || currentMessageItems.id !== lastMessageItems.id) return false
 
-    // 5. 还有可编辑的次数（undefined 表示未编辑过，默认允许）
-    const remainingRounds = currentMessageItems.remainingRewriteRounds ?? currentMessageItems.agentConfig?.remainingRewriteRounds
-    if (remainingRounds === 0) return false
+    // 5. 报告生成时间未超过编辑有效期（打开面板时随 deps 变化顺带评估）
+    if (reportMessageId) {
+      const message = messagesMap.get(reportMessageId)
+      if (message?.createdAt && Date.now() - message.createdAt > REPORT_EDIT_EXPIRY_MS) return false
+    }
+
+    // 6. 点击时检测到已过期（isEditExpired 作为信号桥触发重渲染）
+    if (isEditExpired) return false
 
     return true
-  }, [isFinalReport, feedbackOptimizationEnabled, currentMessageItems, getLastMessageItems])
+  }, [isFinalReport, feedbackOptimizationEnabled, currentMessageItems, getLastMessageItems, reportMessageId, messagesMap, isEditExpired])
 
   const canEditReport = isFinalReport && feedbackOptimizationEnabled
   const initialCanonicalDocument = useMemo(() => {
@@ -151,8 +171,17 @@ const ReportPanel: React.FC<ReportPanelProps> = ({
 
   const handleEnterEdit = useCallback(() => {
     if (!sessionState.canEnterEditMode) return
+
+    if (reportMessageId) {
+      const message = messagesMap.get(reportMessageId)
+      if (message?.createdAt && Date.now() - message.createdAt > REPORT_EDIT_EXPIRY_MS) {
+        setIsEditExpired(true)
+        return
+      }
+    }
+
     setIsEditing(true)
-  }, [sessionState.canEnterEditMode])
+  }, [sessionState.canEnterEditMode, reportMessageId, messagesMap])
 
   const syncReportMarkdown = useCallback(
     (markdown: string) =>
@@ -286,9 +315,10 @@ const ReportPanel: React.FC<ReportPanelProps> = ({
             onDraftChange={handleDraftChange}
             onHistoryStateChange={setHistoryControls}
             onSessionStateChange={handleSessionStateChange}
+            truthVerificationEntries={truthVerificationEntries}
           />
         ) : (
-          <ReportView report={report} />
+          <ReportView report={report} truthVerificationEntries={truthVerificationEntries} />
         )}
       </div>
     </div>

@@ -15,6 +15,7 @@ import { AIRewriteInput } from './AIRewriteInput'
 import { AIRewriteOptions } from './AIRewriteOptions'
 import { useClickOutsideSelectors } from '@/hooks/prompts'
 import type { ReportRewriteAction, RewriteScope } from '@/pages/Apps/types'
+import { REWRITE_ACTIONS } from '../../constants'
 
 // 使用泛型 Block 类型以兼容 BlockNote 的扩展状态
 type AnyBlock = Block<any, any, any>
@@ -123,8 +124,17 @@ export const AIRewritePanel: React.FC<AIRewritePanelProps> = ({
 
   useClickOutsideSelectors(clickOutsideSelectors, onClose, !!block?.id)
 
-  // 是否因为次数用完而禁用
-  const isDisabledByRounds = remainingRewriteRounds === 0
+  // 当前选中的 action 是否消耗改写次数
+  const selectedActionConsumesRound = REWRITE_ACTIONS.find(a => a.action === selectedAction)?.consumesRound ?? true
+
+  // 发送按钮可用条件：有选中动作或有输入，且（当前动作不消耗次数 或 还有剩余次数）
+  const canSend = (!!selectedAction || !!input.trim()) &&
+    (!selectedActionConsumesRound || remainingRewriteRounds === undefined || remainingRewriteRounds > 0)
+
+  // 提示仅在选中了受限动作且次数耗尽时出现（未选中任何动作时不提示）
+  const disabledHint = selectedAction !== null && selectedActionConsumesRound && remainingRewriteRounds === 0
+    ? t('apps.report.rewriteRoundsExhausted')
+    : undefined
 
   return (
     <>
@@ -143,8 +153,8 @@ export const AIRewritePanel: React.FC<AIRewritePanelProps> = ({
             input={input}
             onInputChange={setInput}
             onSend={handleSend}
-            canSend={(!!selectedAction || !!input.trim()) && (remainingRewriteRounds === undefined || remainingRewriteRounds > 0)}
-            disabledHint={isDisabledByRounds ? t('apps.report.rewriteRoundsExhausted') : undefined}
+            canSend={canSend}
+            disabledHint={disabledHint}
           />
         </div>,
         document.body
@@ -157,6 +167,7 @@ export const AIRewritePanel: React.FC<AIRewritePanelProps> = ({
         onSelect={handleSelectAction}
         onScopeSelect={handleScopeSelect}
         targetElement={inputRef.current}
+        remainingRewriteRounds={remainingRewriteRounds}
       />
     </>
   )

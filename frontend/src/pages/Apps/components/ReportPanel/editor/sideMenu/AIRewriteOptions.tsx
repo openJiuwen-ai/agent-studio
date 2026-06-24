@@ -8,7 +8,7 @@
 
 import React, { useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, Expand, Shrink, Search, ListPlus, ChevronRight } from 'lucide-react'
+import { Sparkles, Expand, Shrink, Search, ListPlus, ShieldCheck, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { OPTIONS_HEIGHT, OPTIONS_OFFSET, REWRITE_ACTIONS, SUPPLEMENTARY_SEARCH_OPTIONS } from '../../constants'
 import type { ReportRewriteAction, RewriteScope } from '@/pages/Apps/types'
@@ -24,6 +24,8 @@ interface AIRewriteOptionsProps {
   onScopeSelect?: (scope: RewriteScope) => void
   /** 目标元素，选项将显示在其下方 */
   targetElement: HTMLElement | null
+  /** 剩余改写次数；0 表示次数耗尽，受限操作将被隐藏 */
+  remainingRewriteRounds?: number
 }
 
 // 图标映射
@@ -33,6 +35,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Shrink: <Shrink className="w-4 h-4" />,
   Search: <Search className="w-4 h-4" />,
   ListPlus: <ListPlus className="w-4 h-4" />,
+  ShieldCheck: <ShieldCheck className="w-4 h-4" />,
 }
 
 export const AIRewriteOptions: React.FC<AIRewriteOptionsProps> = ({
@@ -41,6 +44,7 @@ export const AIRewriteOptions: React.FC<AIRewriteOptionsProps> = ({
   onSelect,
   onScopeSelect,
   targetElement,
+  remainingRewriteRounds,
 }) => {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -114,6 +118,12 @@ export const AIRewriteOptions: React.FC<AIRewriteOptionsProps> = ({
     // 保持子菜单打开，不关闭
   }
 
+  const roundsExhausted = remainingRewriteRounds === 0
+  const roundLimitedActions = REWRITE_ACTIONS.filter(btn => btn.consumesRound)
+  const freeActions = REWRITE_ACTIONS.filter(btn => !btn.consumesRound)
+  const visibleRoundLimitedActions = roundsExhausted ? [] : roundLimitedActions
+  const showDivider = visibleRoundLimitedActions.length > 0 && freeActions.length > 0
+
   if (!targetElement) return null
 
   return createPortal(
@@ -128,7 +138,8 @@ export const AIRewriteOptions: React.FC<AIRewriteOptionsProps> = ({
           width: 200,
         }}
       >
-        {REWRITE_ACTIONS.map((btn) => (
+        {/* 受次数限制的动作（次数耗尽时隐藏） */}
+        {visibleRoundLimitedActions.map((btn) => (
           <button
             key={btn.action}
             data-action={btn.action}
@@ -155,6 +166,36 @@ export const AIRewriteOptions: React.FC<AIRewriteOptionsProps> = ({
             {btn.hasSubMenu && (
               <ChevronRight className="w-3 h-3 text-gray-400" />
             )}
+          </button>
+        ))}
+
+        {/* 分隔线（两组都有可见条目时才渲染） */}
+        {showDivider && <div className="border-t border-gray-100 my-1" />}
+
+        {/* 不受次数限制的动作（始终显示） */}
+        {freeActions.map((btn) => (
+          <button
+            key={btn.action}
+            data-action={btn.action}
+            onClick={() => onSelect(btn.action)}
+            onMouseEnter={() => handleActionMouseEnter(btn.action)}
+            onMouseLeave={handleActionMouseLeave}
+            className={`
+              flex items-center justify-between px-3 py-2 rounded-lg text-left
+              transition-all duration-150 cursor-pointer
+              border border-transparent
+              ${selectedAction === btn.action
+                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                : 'hover:bg-blue-50 hover:text-blue-600 text-gray-600 hover:border-blue-200'
+              }
+            `}
+          >
+            <div className="flex items-center gap-2">
+              <span className={selectedAction === btn.action ? 'text-blue-500' : 'text-gray-400'}>
+                {ICON_MAP[btn.icon]}
+              </span>
+              <span className="text-sm font-medium">{t(btn.labelKey) || btn.defaultLabel}</span>
+            </div>
           </button>
         ))}
       </div>

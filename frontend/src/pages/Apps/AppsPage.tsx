@@ -34,7 +34,8 @@ import {
 } from './utils/deepsearchConstants'
 import { getSuggestionsByAgent } from './constants/suggestions'
 import { TEXT_BASE, TEXT_SMALL, FONT_FAMILY } from './constants/styles'
-import type { Message, ReportRewriteParams } from './types'
+import type { Message, ReportRewriteParams, TruthVerificationEntry } from './types'
+import { truthVerificationEntryExistsInContent } from '../../utils/reportUtils'
 import { SystemMessageItem } from '../../components/Conversation'
 import ResultPanel from '../../components/Conversation/ResultPanel'
 import ConversationHistorySidebar from './components/ConversationHistorySidebar'
@@ -1143,7 +1144,7 @@ const AppsPage: React.FC = () => {
    * 将改写请求和结果集成到对话流中
   */
   const handleReportRewrite = async (params: ReportRewriteParams) => {
-    const { action, rewrite_scope, selectedText, startOffset, endOffset, userInstruction, conversationId, onStatusChange, onDelta, onSnapshot, onEnd, onError, silent } = params
+    const { action, rewrite_scope, selectedText, displayText, startOffset, endOffset, userInstruction, conversationId, onStatusChange, onDelta, onSnapshot, onEnd, onError, silent } = params
     const actionTitle = action === 'new_task'
       ? t('apps.report.aiNewTask')
       : t('apps.report.aiSupplementarySearch')
@@ -1151,7 +1152,215 @@ const AppsPage: React.FC = () => {
     const config = toDeepResearchConfig(agentConfigs['deepsearch'])
     const rewriteSessionUnavailableMessage = t('apps.report.rewriteSessionUnavailable')
     const isSyncAction = action === 'sync'
-    
+
+    // 真实性核验：调用后端并将核验结果追加保存到 final_report message
+    if (action === 'truth_verification') {
+      if (config.userFeedbackProcessorEnable === false) {
+        onStatusChange?.('error')
+        onError?.(t('apps.report.feedbackProcessorDisabled'))
+        return
+      }
+
+      const tvToken = getToken()
+      if (!tvToken) {
+        onError?.(t('apps.errors.unableToGetAuthToken'))
+        return
+      }
+
+      const tvStore = useConversationStore.getState()
+      const tvBackendConversationId = tvStore.SESSION_CONVERSATION_ID
+      if (!tvBackendConversationId) {
+        onStatusChange?.('error')
+        onError?.(t('apps.report.rewriteSessionUnavailable'))
+        return
+      }
+
+      const tvFinish = () => {
+        useConversationStore.getState().stopSSETimeoutMonitor()
+        onStatusChange?.('idle')
+        onEnd?.()
+      }
+      const tvFail = (errorMsg?: string) => {
+        useConversationStore.getState().stopSSETimeoutMonitor()
+        onStatusChange?.('error')
+        onError?.(errorMsg || t('apps.errors.requestFailed'))
+      }
+
+      // 剥除 collector_summary 里的内部检索标记（source_id），避免泄漏到前端展示
+      const stripEvidenceInternalRefs = (text: string): string =>
+        text
+          .replace(/[（(]\s*source_id\s*[:：][^）)]*[）)]/g, '')
+          .replace(/[ \t]{2,}/g, ' ')
+          .trim()
+
+      // 将核验结论追加到当前 final_report message 的 truth_verification 列表
+      const tvSave = (accumulatedContent: string, accumulatedEvidence: string) => {
+        const syncMsgId = tvStore.selectedResultMessageId
+        if (!syncMsgId) return
+        const syncMsg = tvStore.messagesMap.get(syncMsgId)
+        if (!syncMsg?.messageItemsId) return
+        try {
+          const rawContent = typeof syncMsg.content === 'string'
+            ? syncMsg.content
+            : JSON.stringify(syncMsg.content)
+          const existingContent = JSON.parse(rawContent || '{}')
+          const existingList = Array.isArray(existingContent.truth_verification)
+            ? existingContent.truth_verification
+            : []
+          const evidence = stripEvidenceInternalRefs(accumulatedEvidence)
+          tvStore.updateMessage(syncMsg.messageItemsId, syncMsgId, {
+            content: JSON.stringify({
+              ...existingContent,
+              truth_verification: [
+                ...existingList,
+                {
+                  // 批注层用可见文本做 DOM 搜索/高亮；displayText 缺省时回退到 selectedText
+                  selected_text: displayText ?? selectedText,
+                  start_offset: startOffset,
+                  end_offset: endOffset,
+                  user_instruction: userInstruction || '',
+                  content: accumulatedContent,
+                  ...(evidence ? { evidence } : {}),
+                },
+              ],
+            }),
+          })
+          void tvStore.saveConversationToDB(conversationId)
+        } catch (err) {
+          console.error('[handleReportRewrite] truth_verification save failed:', err)
+        }
+      }
+
+      const tvWebConfig = (config.searchMode === 'web' || config.searchMode === 'all') && config.selectedWebSearchEngineId
+        ? {
+            web_search_config_id: config.selectedWebSearchEngineId,
+            max_web_search_results: config.webSearchResultCount,
+          }
+        : undefined
+      const tvLocalConfig = (config.searchMode === 'local' || config.searchMode === 'all')
+        ? {
+            local_search_config_ids: config.selectedKnowledgeBaseIds || [],
+            max_local_search_results: config.localSearchResultCount,
+            recall_threshold: config.recallThreshold,
+          }
+        : undefined
+
+      try {
+        const tvResponse = await fetch('/api/v1/agent/deepsearch/run', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${tvToken}`,
+          },
+          body: JSON.stringify({
+            space_id: user?.spaceId || getDefaultSpaceId(),
+            general_model_config_id: config.generalModelId
+              ? parseInt(config.generalModelId)
+              : selectedModelId,
+            message: JSON.stringify({
+              action: 'truth_verification',
+              selected_text: selectedText,
+              start_offset: startOffset,
+              end_offset: endOffset,
+              user_instruction: userInstruction || '',
+            }),
+            conversation_id: tvBackendConversationId,
+            search_mode: 'research',
+            web_search_config: tvWebConfig,
+            local_search_config: tvLocalConfig,
+            user_feedback_processor_enable: config.userFeedbackProcessorEnable ?? true,
+            user_feedback_processor_max_interactions: normalizeMaxRewriteInteractions(
+              config.userFeedbackProcessorMaxInteractions
+            ),
+            execution_method: config.execution_method ?? DEFAULT_DEEPRESEARCH_CONFIG.execution_method,
+          }),
+        })
+        if (!tvResponse.ok) {
+          tvFail(`HTTP error! status: ${tvResponse.status}`)
+          return
+        }
+
+        const tvReader = tvResponse.body?.getReader()
+        if (!tvReader) {
+          tvFail('No response body')
+          return
+        }
+
+        const tvDecoder = new TextDecoder()
+        let tvBuffer = ''
+        let tvContent = ''
+        let tvEvidence = ''
+
+        outer: while (true) {
+          const { done, value } = await tvReader.read()
+          if (done) {
+            tvSave(tvContent, tvEvidence)
+            tvFinish()
+            break
+          }
+
+          useConversationStore.getState().updateLastSSEEventTime()
+
+          const tvRaw = tvBuffer + tvDecoder.decode(value, { stream: true })
+          const tvLines = tvRaw.split('\n')
+          tvBuffer = tvLines.pop() || ''
+
+          for (const line of tvLines) {
+            if (!line.startsWith('data: ')) continue
+            try {
+              const tvData = JSON.parse(line.slice(6)) as {
+                agent?: string
+                content?: unknown
+                event?: string
+              }
+
+              // 收集核验结论（summary_response 为单条，直接赋值）
+              // 必须限定 event === 'summary_response'：流末尾的 waiting_user_input
+              // 同样是 user_feedback_processor + 字符串 content（"\nProvide your feedback: "），
+              // 不过滤会把真正的结论覆盖掉。对齐 AI 改写忽略该事件的处理方式。
+              if (
+                tvData.agent === 'user_feedback_processor' &&
+                tvData.event === 'summary_response' &&
+                typeof tvData.content === 'string'
+              ) {
+                tvContent = tvData.content
+              }
+
+              // 收集检索证据说明（collector_summary，单条）。
+              // 证据不足时结论很简短，详细的检索/未命中说明在这条里。
+              if (
+                tvData.agent === 'collector_summary' &&
+                tvData.event === 'summary_response' &&
+                typeof tvData.content === 'string'
+              ) {
+                tvEvidence = tvData.content
+              }
+
+              // 正常终止
+              if (tvData.agent === 'end' && tvData.content === 'ALL END') {
+                tvSave(tvContent, tvEvidence)
+                void tvReader.cancel()
+                tvFinish()
+                break outer
+              }
+
+              // 后端错误事件
+              if (tvData.event === 'error') {
+                void tvReader.cancel()
+                tvFail(typeof tvData.content === 'string' ? tvData.content : undefined)
+                break outer
+              }
+            } catch {
+              // JSON 解析失败，跳过当前行
+            }
+          }
+        }
+      } catch (err) {
+        tvFail(err instanceof Error ? err.message : undefined)
+      }
+
+      return
+    }
 
     if (config.userFeedbackProcessorEnable === false) {
       onStatusChange?.('error')
@@ -1205,6 +1414,18 @@ const AppsPage: React.FC = () => {
     }
     const backendConversationId = sessionConversationId
     const currentSelectedResultMessageId = conversationStore.selectedResultMessageId
+
+    // 读取当前（改写前）最终报告的 truth_verification 数据，供非 sync 改写继承使用
+    const getPreviousTruthVerification = (): TruthVerificationEntry[] => {
+      if (!currentSelectedResultMessageId) return []
+      const prevMsg = conversationStore.messagesMap.get(currentSelectedResultMessageId)
+      if (!prevMsg?.content) return []
+      try {
+        const raw = typeof prevMsg.content === 'string' ? prevMsg.content : JSON.stringify(prevMsg.content)
+        const parsed = JSON.parse(raw || '{}')
+        return Array.isArray(parsed.truth_verification) ? parsed.truth_verification as TruthVerificationEntry[] : []
+      } catch { return [] }
+    }
 
     type RewriteRoundContext = {
       originalRemainingRewriteRounds: number | undefined
@@ -1286,9 +1507,9 @@ const AppsPage: React.FC = () => {
             recall_threshold: config.recallThreshold,
           }
         : undefined,
-      web_search_config: (config.searchMode === 'web' || config.searchMode === 'all')
+      web_search_config: (config.searchMode === 'web' || config.searchMode === 'all') && config.selectedWebSearchEngineId
         ? {
-            web_search_config_id: config.selectedWebSearchEngineId!,
+            web_search_config_id: config.selectedWebSearchEngineId,
             max_web_search_results: config.webSearchResultCount,
           }
         : undefined,
@@ -1413,11 +1634,26 @@ const AppsPage: React.FC = () => {
         return false
       }
 
+      // 合并现有 truth_verification，防止被覆盖丢失
+      let existingTruthVerification: unknown[] = []
+      try {
+        const raw = typeof currentMessage.content === 'string'
+          ? currentMessage.content
+          : JSON.stringify(currentMessage.content)
+        const existing = JSON.parse(raw || '{}')
+        if (Array.isArray(existing.truth_verification)) {
+          existingTruthVerification = existing.truth_verification
+        }
+      } catch { /* ignore */ }
+
       conversationStore.updateMessage(
         currentMessage.messageItemsId,
         currentSelectedResultMessageId,
         {
-          content: JSON.stringify(reportContent),
+          content: JSON.stringify({
+            ...reportContent,
+            ...(existingTruthVerification.length > 0 ? { truth_verification: existingTruthVerification } : {}),
+          }),
           status: TaskStatus.COMPLETED,
           isStreaming: false,
         }
@@ -1433,7 +1669,15 @@ const AppsPage: React.FC = () => {
       }
 
       if (!state.finalResultMessageId) {
-        const newMessage = createRewriteReportMessage(reportContent)
+        // AI 改写产生新报告时，从旧报告继承 truth_verification 并按新内容筛选
+        const prevEntries = getPreviousTruthVerification()
+        const inheritedEntries = prevEntries.filter(e =>
+          truthVerificationEntryExistsInContent(e.selected_text, finalResult.response_content)
+        )
+        const contentToSave = inheritedEntries.length > 0
+          ? { ...reportContent, truth_verification: inheritedEntries }
+          : reportContent
+        const newMessage = createRewriteReportMessage(contentToSave as Parameters<typeof createRewriteReportMessage>[0])
         if (newMessage) {
           state.finalResultMessageId = newMessage.id
           finalizeRewriteReportMessage(newMessage)
@@ -2305,9 +2549,9 @@ const AppsPage: React.FC = () => {
         : undefined
 
       // 构建网络搜索配置
-      const web_search_config = (config.searchMode === 'web' || config.searchMode === 'all')
+      const web_search_config = (config.searchMode === 'web' || config.searchMode === 'all') && config.selectedWebSearchEngineId
         ? {
-            web_search_config_id: config.selectedWebSearchEngineId!,
+            web_search_config_id: config.selectedWebSearchEngineId,
             max_web_search_results: config.webSearchResultCount,
           }
         : undefined

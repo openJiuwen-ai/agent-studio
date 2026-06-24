@@ -971,6 +971,8 @@
         "aiShrink": "Shrink",
         "aiSupplementarySearch": "Supplementary Search",
         "aiNewTask": "Add Task",
+        "aiTruthVerification": "Truth Verification",
+        "truthVerificationEvidence": "Verification Details",
         "supplementarySearch": {
           "selectedOnly": "Selected Only",
           "selectedAndRelated": "Smart Related Rewrite"

@@ -980,6 +980,8 @@
         "aiShrink": "缩写",
         "aiSupplementarySearch": "补充搜索",
         "aiNewTask": "新增任务",
+        "aiTruthVerification": "真实性核验",
+        "truthVerificationEvidence": "核验详情",
         "supplementarySearch": {
           "selectedOnly": "仅改选中",
           "selectedAndRelated": "智能联改"

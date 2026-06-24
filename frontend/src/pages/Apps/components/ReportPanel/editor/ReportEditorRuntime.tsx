@@ -913,6 +913,7 @@ export const ReportEditorRuntime = forwardRef<ReportEditorRuntimeHandle, ReportE
     setSelectedBlock(null)
     setSelectedScope(null) // 重置选择范围
     rewriteSelectionRef.current = null
+    window.getSelection()?.removeAllRanges()
   }, [])
 
   const handleReloadLatestVersion = useCallback(() => {
@@ -1062,6 +1063,16 @@ export const ReportEditorRuntime = forwardRef<ReportEditorRuntimeHandle, ReportE
         },
         onEnd: async () => {
           if (needsRecoveryRef.current) {
+            return
+          }
+
+          // truth_verification saves annotations only — no document rewrite result expected
+          if (request.action === 'truth_verification') {
+            setRewriteStatus('idle')
+            setIsRewriting(false)
+            setMotionSession(null)
+            setSnapshotOverlay(null)
+            setActiveTransition(null)
             return
           }
 
@@ -1377,6 +1388,15 @@ export const ReportEditorRuntime = forwardRef<ReportEditorRuntimeHandle, ReportE
         userInstruction: prompt,
         rewrite_scope: rewriteScope,
       })
+
+      // 后端对 selected_text 的校验是 content[start:end] === selected_text，
+      // 因此发给后端的 selectedText 必须与 offset 同域（raw markdown 切片），
+      // 这与 AI 改写完全一致，复用同一套校验。
+      // truth_verification 额外需要可见文本供批注层 findTextRange 做 DOM 搜索，
+      // 故单独挂在 displayText 上（不进入后端 payload）。
+      if (action === 'truth_verification') {
+        request.displayText = currentSelection.text.trim()
+      }
 
       await runRewrite({
         ...request,

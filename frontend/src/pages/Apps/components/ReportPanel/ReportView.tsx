@@ -11,7 +11,8 @@ import { ReportMarkdown } from '../Markdown'
 import { InferenceGraph } from '../InferenceGraph'
 import { FileText, AlertCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { Report } from '@/pages/Apps/types'
+import type { Report, TruthVerificationEntry } from '@/pages/Apps/types'
+import { TruthVerificationLayer } from './TruthVerificationLayer'
 
 /**
  * 加载状态类型
@@ -23,6 +24,8 @@ export interface ReportViewProps {
   report: Report
   /** 自定义类名 */
   className?: string
+  /** 真实性核验批注列表 */
+  truthVerificationEntries?: TruthVerificationEntry[]
 }
 
 /**
@@ -35,7 +38,10 @@ export interface ReportViewProps {
 export const ReportView: React.FC<ReportViewProps> = ({
   report,
   className = '',
+  truthVerificationEntries = [],
 }) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const articleRef = useRef<HTMLElement>(null)
   const { t } = useTranslation()
   // 检测用户是否偏好减少动画
   const prefersReducedMotion = useMemo(() => {
@@ -93,7 +99,8 @@ export const ReportView: React.FC<ReportViewProps> = ({
 
       {/* 内容区域 - 可滚动 */}
       <div
-        className={`flex-1 overflow-auto ${prefersReducedMotion ? '' : 'scroll-smooth'} group`}
+        ref={scrollContainerRef}
+        className={`relative flex-1 overflow-auto ${prefersReducedMotion ? '' : 'scroll-smooth'} group`}
         style={{
           scrollbarWidth: 'thin',
           scrollbarColor: 'transparent transparent',
@@ -106,6 +113,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
         }}
       >
         <article
+          ref={articleRef as React.RefObject<HTMLElement>}
           className="max-w-10xl mx-auto bg-gray-50 px-6 pb-6 md:px-8 md:pb-8 min-h-[200px]"
           aria-label={`${t('apps.report.reportLabel')}: ${report.title || t('apps.report.unnamedReport')}`}
           aria-busy={loadingState === 'loading'}
@@ -145,6 +153,14 @@ export const ReportView: React.FC<ReportViewProps> = ({
             />
           )}
         </article>
+        {loadingState === 'loaded' && truthVerificationEntries.length > 0 && (
+          <TruthVerificationLayer
+            annotations={truthVerificationEntries}
+            contentRef={articleRef}
+            scrollContainerRef={scrollContainerRef}
+            mode="view"
+          />
+        )}
       </div>
     </div>
   )

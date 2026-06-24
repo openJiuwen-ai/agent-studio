@@ -5,10 +5,11 @@
  * 使用 BlockNote 提供 Notion 风格的块级编辑体验
  */
 
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { FileText, AlertCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { Report, ReportRewriteParams } from '@/pages/Apps/types'
+import type { Report, ReportRewriteParams, TruthVerificationEntry } from '@/pages/Apps/types'
+import { TruthVerificationLayer } from './TruthVerificationLayer'
 import {
   ReportEditorRuntime,
   type ReportEditorRuntimeHandle,
@@ -40,6 +41,8 @@ export interface ReportEditViewProps {
     rewriteOverlayState: RewriteOverlayState
     recoveryState: RecoveryState
   }) => void
+  /** 真实性核验批注列表 */
+  truthVerificationEntries?: TruthVerificationEntry[]
 }
 
 export type ReportEditViewHandle = {
@@ -54,9 +57,11 @@ export const ReportEditView = forwardRef<ReportEditViewHandle, ReportEditViewPro
   onDraftChange,
   onHistoryStateChange,
   onSessionStateChange,
+  truthVerificationEntries = [],
 }, ref) => {
   const { t } = useTranslation()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const articleRef = useRef<HTMLElement>(null)
   const editorRuntimeRef = useRef<ReportEditorRuntimeHandle | null>(null)
   const prefersReducedMotion = useReducedMotion()
 
@@ -115,7 +120,7 @@ export const ReportEditView = forwardRef<ReportEditViewHandle, ReportEditViewPro
     <div className={`relative h-full flex flex-col ${className}`}>
       <div
         ref={scrollContainerRef}
-        className={`flex-1 overflow-auto ${prefersReducedMotion ? '' : 'scroll-smooth'} group`}
+        className={`relative flex-1 overflow-auto ${prefersReducedMotion ? '' : 'scroll-smooth'} group`}
         style={{
           scrollbarWidth: 'thin',
           scrollbarColor: 'transparent transparent',
@@ -128,6 +133,7 @@ export const ReportEditView = forwardRef<ReportEditViewHandle, ReportEditViewPro
         }}
       >
         <article
+          ref={articleRef as React.RefObject<HTMLElement>}
           className="max-w-10xl mx-auto min-h-[200px] select-text cursor-text p-4"
           aria-label={`${t('apps.report.reportLabel')}: ${report.title || t('apps.report.unnamedReport')}`}
           aria-busy={loadingState === 'loading'}
@@ -168,6 +174,14 @@ export const ReportEditView = forwardRef<ReportEditViewHandle, ReportEditViewPro
             />
           )}
         </article>
+        {truthVerificationEntries.length > 0 && (
+          <TruthVerificationLayer
+            annotations={truthVerificationEntries}
+            contentRef={articleRef}
+            scrollContainerRef={scrollContainerRef}
+            mode="edit"
+          />
+        )}
       </div>
     </div>
   )

@@ -30,17 +30,21 @@ export const HIGHLIGHT_CSS = `
 /** 改写动作配置 */
 export const REWRITE_ACTIONS: {
   action: ReportRewriteAction
+  /** 是否消耗 AI 改写次数；false 表示不受次数限制，始终可用 */
+  consumesRound: boolean
   icon: string
   labelKey: string
   defaultLabel: string
   hasSubMenu?: boolean
 }[] = [
-  { action: 'polish', icon: 'Sparkles', labelKey: 'apps.report.aiPolish', defaultLabel: '润色', hasSubMenu: false },
-  { action: 'expand', icon: 'Expand', labelKey: 'apps.report.aiExpand', defaultLabel: '扩写', hasSubMenu: false },
-  { action: 'shorten', icon: 'Shrink', labelKey: 'apps.report.aiShrink', defaultLabel: '缩写', hasSubMenu: false },
-  { action: 'supplementary_search', icon: 'Search', labelKey: 'apps.report.aiSupplementarySearch', defaultLabel: '补充搜索', hasSubMenu: true },
+  { action: 'polish',               consumesRound: true,  icon: 'Sparkles',    labelKey: 'apps.report.aiPolish',              defaultLabel: '润色',     hasSubMenu: false },
+  { action: 'expand',               consumesRound: true,  icon: 'Expand',      labelKey: 'apps.report.aiExpand',              defaultLabel: '扩写',     hasSubMenu: false },
+  { action: 'shorten',              consumesRound: true,  icon: 'Shrink',      labelKey: 'apps.report.aiShrink',              defaultLabel: '缩写',     hasSubMenu: false },
+  { action: 'supplementary_search', consumesRound: true,  icon: 'Search',      labelKey: 'apps.report.aiSupplementarySearch', defaultLabel: '补充搜索', hasSubMenu: true  },
   // new_task 不需要子菜单：范围由用户在输入框中自由描述，无需 selected_only / selected_and_related 预设
-  { action: 'new_task', icon: 'ListPlus', labelKey: 'apps.report.aiNewTask', defaultLabel: '新增任务', hasSubMenu: false },
+  { action: 'new_task',             consumesRound: true,  icon: 'ListPlus',    labelKey: 'apps.report.aiNewTask',             defaultLabel: '新增任务', hasSubMenu: false },
+  // truth_verification 不消耗改写次数，始终可见
+  { action: 'truth_verification',   consumesRound: false, icon: 'ShieldCheck', labelKey: 'apps.report.aiTruthVerification',   defaultLabel: '真实性核验', hasSubMenu: false },
 ]
 
 /** 补充搜索子菜单配置 */
@@ -80,3 +84,10 @@ export const LOADING_DELAY = 200
 
 /** 加载超时时间 (ms) */
 export const LOADING_TIMEOUT = 3000
+
+// ============================================================================
+// 编辑有效期
+// ============================================================================
+
+/** 报告生成后允许编辑的时长 (ms)，超过此时长则不再显示编辑按钮 */
+export const REPORT_EDIT_EXPIRY_MS = 1.5 * 60 * 60 * 1000
