@@ -13,9 +13,10 @@ export interface AgentSelectionPillProps {
   agent: MentionItem
   onConfig: () => void
   onDeselect: () => void
+  isLocked?: boolean
 }
 
-const AgentSelectionPill: React.FC<AgentSelectionPillProps> = ({ agent, onConfig, onDeselect }) => {
+const AgentSelectionPill: React.FC<AgentSelectionPillProps> = ({ agent, onConfig, onDeselect, isLocked = false }) => {
   const { t } = useTranslation()
   return (
     <div className={`inline-flex items-center gap-2 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 ${RADIUS_BUTTON} shadow-sm`}>
@@ -39,14 +40,19 @@ const AgentSelectionPill: React.FC<AgentSelectionPillProps> = ({ agent, onConfig
         <Settings className="w-3.5 h-3.5" />
       </button>
 
-      {/* 取消选择按钮 */}
-      <button
-        onClick={onDeselect}
-        className={`flex-shrink-0 p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-red-400 ${RADIUS_SMALL} transition-all duration-200`}
-        title={t('apps.agent.deselectAgent')}
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
+      {/* 取消选择按钮：会话已锁定时隐藏 */}
+      {!isLocked && (
+        <>
+          <div className="w-px h-4 bg-gray-200 dark:bg-gray-700" />
+          <button
+            onClick={onDeselect}
+            className={`flex-shrink-0 p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-red-400 ${RADIUS_SMALL} transition-all duration-200`}
+            title={t('apps.agent.deselectAgent')}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </>
+      )}
     </div>
   )
 }

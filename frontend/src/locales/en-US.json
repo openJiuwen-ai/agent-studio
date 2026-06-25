@@ -719,7 +719,7 @@
       "deepsearchServiceDown": "DeepSearch service is temporarily unavailable",
       "stopDeepSearch": "Stop DeepSearch",
       "taskRunning": {
-        "statusText": "Content is being generated. Do not refresh or close the page, or the research will be cancelled."
+        "statusText": "Content is being generated. Do not refresh or close the page, or the research will be cancelled.\nIf generation takes too long, keep this page active to avoid cancellation."
       }
     },
     "picker": {
@@ -741,7 +741,8 @@
     },
     "agent": {
       "configAgent": "Configure Agent",
-      "deselectAgent": "Deselect"
+      "deselectAgent": "Deselect",
+      "switchLockedHint": "This session is bound to {{agentName}}. Start a new conversation to use a different Agent."
     },
     "clipboard": {
       "copy": "Copy",

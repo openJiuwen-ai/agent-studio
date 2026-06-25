@@ -242,6 +242,10 @@ const AppsPage: React.FC = () => {
   const [selectedModelId, setSelectedModelId] = useState<number>(-1)
   const [selectedAgent, setSelectedAgent] = useState<MentionItem | null>(null)
   const [hasConversation, setHasConversation] = useState(false)
+  // 会话已开始（发出第一条消息后）则锁定 Agent，禁止切换
+  // 使用 hasConversation 而非 currentConversationId：点击 + 新建对话时
+  // resetModuleSessionState 立即将其设为 false，但 currentConversationId 仍保留旧值
+  const isAgentLocked = hasConversation
   const [messages, setMessages] = useState<Message[]>([])
   const [isSending, setIsSending] = useState(false)
 
@@ -2126,6 +2130,16 @@ const AppsPage: React.FC = () => {
   }
   // 处理智能体选择（首次配置弹出配置弹窗，非首次配置直接选中）
   const handleAgentSelect = async (agent: MentionItem) => {
+    // 会话已开始：禁止切换 Agent，给出提示
+    if (isAgentLocked) {
+      window.dispatchEvent(new CustomEvent('global-snackbar', {
+        detail: {
+          message: t('apps.agent.switchLockedHint', { agentName: selectedAgent?.name ?? '' }),
+          severity: 'warning',
+        },
+      }))
+      return
+    }
     const activeModuleAgentId = getConversationAgentType(currentConversationId) ?? selectedAgent?.id ?? null
     const isCrossModuleSwitch = !!activeModuleAgentId && activeModuleAgentId !== agent.id
 
@@ -2188,6 +2202,16 @@ const AppsPage: React.FC = () => {
 
   // 取消选择智能体
   const handleAgentDeselect = async () => {
+    // 会话已开始：禁止取消 Agent，给出提示
+    if (isAgentLocked) {
+      window.dispatchEvent(new CustomEvent('global-snackbar', {
+        detail: {
+          message: t('apps.agent.switchLockedHint', { agentName: selectedAgent?.name ?? '' }),
+          severity: 'warning',
+        },
+      }))
+      return
+    }
     const activeModuleAgentId = getConversationAgentType(currentConversationId) ?? selectedAgent?.id ?? null
     await interruptModuleTasks(activeModuleAgentId)
     resetModuleSessionState()
@@ -2311,7 +2335,7 @@ const AppsPage: React.FC = () => {
   const handleNewConversation = async () => {
     const activeModuleAgentId = getConversationAgentType(currentConversationId) ?? selectedAgent?.id ?? null
     await interruptModuleTasks(activeModuleAgentId)
-    resetModuleSessionState({ preserveSelectedAgent: true })
+    resetModuleSessionState()
   }
 
   // 当selectedResultMessageId变化时，自动关闭思维链面板并更新currentMessageItemsId
@@ -3142,6 +3166,7 @@ const AppsPage: React.FC = () => {
                   onNewConversation={handleNewConversation}
                   deepsearchUnavailable={selectedAgent?.id === 'deepsearch' && deepsearchServiceAvailable === false}
                   checkingDeepsearch={checkingDeepsearch}
+                  isAgentLocked={isAgentLocked}
                   className="mb-6"
                   inputStyle={{ minHeight: '80px' }}
                 />
@@ -3244,7 +3269,7 @@ const AppsPage: React.FC = () => {
                 {isStreaming && isDeepSearchMode && (
                   <div className="flex items-center justify-center gap-2 mb-3 text-amber-600 text-sm">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
-                    <span>{t('apps.chat.taskRunning.statusText')}</span>
+                    <span className="whitespace-pre-line">{t('apps.chat.taskRunning.statusText')}</span>
                   </div>
                 )}
                 <div className="max-w-4xl mx-auto">
@@ -3269,6 +3294,7 @@ const AppsPage: React.FC = () => {
                     onModelClick={handleModelButtonClick}
                     modelButtonRef={modelButtonRef}
                     onNewConversation={handleNewConversation}
+                    isAgentLocked={isAgentLocked}
                   />
                 </div>
               </div>
