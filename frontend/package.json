@@ -143,6 +143,9 @@
       "prettier --write"
     ]
   },
+  "overrides": {
+    "@assistant-ui/store": "0.2.10"
+  },
   "workspaces": [
     "packages/**/*"
   ]
