@@ -31,7 +31,7 @@ export const DEFAULT_DEEPRESEARCH_CONFIG: DeepResearchConfig = {
   enableTraceability: true,
   enableSourceTracerInfer: true,
   userFeedbackProcessorEnable: true,
-  userFeedbackProcessorMaxInteractions: 3,
+  userFeedbackProcessorMaxInteractions: 10,
   vlmChartGeneratorEnable: false,
   vlmChartGeneratorMaxIterations: 1,
   searchMode: 'web',

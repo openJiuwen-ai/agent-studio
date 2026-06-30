@@ -1007,7 +1007,7 @@
         "redo": "重做",
         "manualSync": "手动同步报告",
         "sync": "同步",
-        "rewriteRoundsExhausted": "改写次数已用完，无法继续改写"
+        "rewriteRoundsExhausted": "AI改写次数已用完，无法继续改写"
       },
     "user": {
       "defaultUsername": "用户"
@@ -1435,9 +1435,9 @@
       "conversationCancelledTip": "DeepSearch 对话已被手动中断",
       "collapseContent": "折叠内容",
       "expandContent": "展开内容",
-      "remainingRewriteRounds": "还可改写",
+      "remainingRewriteRounds": "还可AI改写",
       "times": "次",
-      "noRewriteRoundsLeft": "改写次数已用完",
+      "noRewriteRoundsLeft": "AI改写次数已用完",
       "status": {
         "pending": "待开始",
         "inProgress": "进行中",

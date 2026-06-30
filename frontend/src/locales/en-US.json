@@ -998,7 +998,7 @@
         "redo": "Redo",
         "manualSync": "Manual sync report",
         "sync": "Sync",
-        "rewriteRoundsExhausted": "Rewrite rounds exhausted, cannot continue rewriting"
+        "rewriteRoundsExhausted": "AI rewrite rounds exhausted, cannot continue rewriting"
       },
     "user": {
       "defaultUsername": "User"
@@ -1427,9 +1427,9 @@
       "conversationCancelledTip": "DeepSearch conversation has been manually interrupted",
       "collapseContent": "Collapse Content",
       "expandContent": "Expand Content",
-      "remainingRewriteRounds": "Rewrites remaining",
+      "remainingRewriteRounds": "AI rewrites remaining",
       "times": "times",
-      "noRewriteRoundsLeft": "No rewrite rounds left",
+      "noRewriteRoundsLeft": "No AI rewrite rounds left",
       "status": {
         "pending": "Pending",
         "inProgress": "In Progress",

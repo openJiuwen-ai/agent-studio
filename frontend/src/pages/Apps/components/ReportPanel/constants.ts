@@ -43,8 +43,7 @@ export const REWRITE_ACTIONS: {
   { action: 'supplementary_search', consumesRound: true,  icon: 'Search',      labelKey: 'apps.report.aiSupplementarySearch', defaultLabel: '补充搜索', hasSubMenu: true  },
   // new_task 不需要子菜单：范围由用户在输入框中自由描述，无需 selected_only / selected_and_related 预设
   { action: 'new_task',             consumesRound: true,  icon: 'ListPlus',    labelKey: 'apps.report.aiNewTask',             defaultLabel: '新增任务', hasSubMenu: false },
-  // truth_verification 不消耗改写次数，始终可见
-  { action: 'truth_verification',   consumesRound: false, icon: 'ShieldCheck', labelKey: 'apps.report.aiTruthVerification',   defaultLabel: '真实性核验', hasSubMenu: false },
+  { action: 'truth_verification',   consumesRound: true,  icon: 'ShieldCheck', labelKey: 'apps.report.aiTruthVerification',   defaultLabel: '真实性核验', hasSubMenu: false },
 ]
 
 /** 补充搜索子菜单配置 */

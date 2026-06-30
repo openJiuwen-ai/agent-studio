@@ -1253,6 +1253,30 @@ const AppsPage: React.FC = () => {
         onStatusChange?.('error')
         onError?.(errorMsg || t('apps.errors.requestFailed'))
       }
+      const tvFinalizeRounds = () => {
+        const maxInteractions = normalizeMaxRewriteInteractions(
+          config.userFeedbackProcessorMaxInteractions
+        )
+
+        const syncMsgId = tvStore.selectedResultMessageId
+        if (!syncMsgId) return
+        const syncMsg = tvStore.messagesMap.get(syncMsgId)
+        if (!syncMsg?.messageItemsId) return
+
+        // 直接从 store 读取当前剩余次数，避免引用外层 const（TDZ）
+        const currentItems = tvStore.messageItemsMap.get(syncMsg.messageItemsId)
+        const currentRemaining = currentItems?.remainingRewriteRounds
+        const currentMaxRounds = currentItems?.maxRewriteRounds
+
+        const newRemaining = typeof tvFeedbackInteractionCount === 'number'
+          ? Math.max(0, maxInteractions - tvFeedbackInteractionCount)
+          : Math.max(0, (currentRemaining ?? maxInteractions) - 1)
+
+        tvStore.updateMessageItems(syncMsg.messageItemsId, {
+          remainingRewriteRounds: newRemaining,
+          maxRewriteRounds: currentMaxRounds ?? maxInteractions,
+        })
+      }
 
       // 剥除 collector_summary 里的内部检索标记（source_id），避免泄漏到前端展示
       const stripEvidenceInternalRefs = (text: string): string =>
@@ -1313,6 +1337,8 @@ const AppsPage: React.FC = () => {
           }
         : undefined
 
+      let tvFeedbackInteractionCount: number | undefined = undefined
+
       try {
         const tvResponse = await fetch('/api/v1/agent/deepsearch/run', {
           method: 'POST',
@@ -1363,6 +1389,7 @@ const AppsPage: React.FC = () => {
           const { done, value } = await tvReader.read()
           if (done) {
             tvSave(tvContent, tvEvidence)
+            tvFinalizeRounds()
             tvFinish()
             break
           }
@@ -1382,16 +1409,34 @@ const AppsPage: React.FC = () => {
                 event?: string
               }
 
-              // 收集核验结论（summary_response 为单条，直接赋值）
+              // 收集核验结论和已用交互次数（summary_response 为单条）
               // 必须限定 event === 'summary_response'：流末尾的 waiting_user_input
               // 同样是 user_feedback_processor + 字符串 content（"\nProvide your feedback: "），
               // 不过滤会把真正的结论覆盖掉。对齐 AI 改写忽略该事件的处理方式。
               if (
                 tvData.agent === 'user_feedback_processor' &&
-                tvData.event === 'summary_response' &&
-                typeof tvData.content === 'string'
+                tvData.event === 'summary_response'
               ) {
-                tvContent = tvData.content
+                if (typeof tvData.content === 'string') {
+                  // 旧格式：content 直接是核验结论文本
+                  tvContent = tvData.content
+                  // 兜底：content 也可能是含 feedback_interaction_count 的 JSON 字符串
+                  try {
+                    const parsed = JSON.parse(tvData.content) as { feedback_interaction_count?: number }
+                    if (typeof parsed.feedback_interaction_count === 'number') {
+                      tvFeedbackInteractionCount = parsed.feedback_interaction_count
+                    }
+                  } catch { /* 纯文本核验结论，跳过 */ }
+                } else if (typeof tvData.content === 'object' && tvData.content !== null) {
+                  // 新格式：content = { display_text, feedback_interaction_count }
+                  const obj = tvData.content as { display_text?: string; feedback_interaction_count?: number }
+                  if (typeof obj.display_text === 'string') {
+                    tvContent = obj.display_text
+                  }
+                  if (typeof obj.feedback_interaction_count === 'number') {
+                    tvFeedbackInteractionCount = obj.feedback_interaction_count
+                  }
+                }
               }
 
               // 收集检索证据说明（collector_summary，单条）。
@@ -1407,6 +1452,7 @@ const AppsPage: React.FC = () => {
               // 正常终止
               if (tvData.agent === 'end' && tvData.content === 'ALL END') {
                 tvSave(tvContent, tvEvidence)
+                tvFinalizeRounds()
                 void tvReader.cancel()
                 tvFinish()
                 break outer
