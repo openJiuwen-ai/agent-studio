@@ -270,8 +270,8 @@ const AppsPage: React.FC = () => {
   const [activeDeepSearchRunId, setActiveDeepSearchRunId] = useState<string | null>(null)
   // Runs killed from the explorer (used to force terminal state in summary cards)
   const [killedDeepSearchRunIds, setKilledDeepSearchRunIds] = useState<Set<string>>(new Set())
-  const [pendingDeepSearchExplorerRunConversationIds, setPendingDeepSearchExplorerRunConversationIds] = useState<Set<string>>(new Set())
-  const hasPendingDeepSearchExplorerRunCreation = pendingDeepSearchExplorerRunConversationIds.size > 0
+  const [pendingDeepSearchExplorerRunCounts, setPendingDeepSearchExplorerRunCounts] = useState<Map<string, number>>(new Map())
+  const hasPendingDeepSearchExplorerRunCreation = pendingDeepSearchExplorerRunCounts.size > 0
 
   // Responsive: detect narrow screens (laptops) to auto-fullscreen explorer
   const [isNarrowScreen, setIsNarrowScreen] = useState(false)
@@ -455,6 +455,27 @@ const AppsPage: React.FC = () => {
     if (options?.clearKilledRunIds) {
       setKilledDeepSearchRunIds(new Set())
     }
+  }
+
+  const incrementPendingDeepSearchExplorerRunCount = (conversationId: string) => {
+    setPendingDeepSearchExplorerRunCounts((prev) => {
+      const next = new Map(prev)
+      next.set(conversationId, (next.get(conversationId) ?? 0) + 1)
+      return next
+    })
+  }
+
+  const decrementPendingDeepSearchExplorerRunCount = (conversationId: string) => {
+    setPendingDeepSearchExplorerRunCounts((prev) => {
+      const next = new Map(prev)
+      const currentCount = next.get(conversationId) ?? 0
+      if (currentCount <= 1) {
+        next.delete(conversationId)
+      } else {
+        next.set(conversationId, currentCount - 1)
+      }
+      return next
+    })
   }
 
   const interruptModuleTasks = async (agentId: string | null) => {
@@ -1155,11 +1176,7 @@ const AppsPage: React.FC = () => {
         // Add user message to store — returns the MessageItems
         const userMsgItems = addUserMessage(conversationId, messageToSend)
         setHasConversation(true)
-        setPendingDeepSearchExplorerRunConversationIds((prev) => {
-          const next = new Set(prev)
-          next.add(conversationId)
-          return next
-        })
+        incrementPendingDeepSearchExplorerRunCount(conversationId)
 
         // Create the DS run via API and store it per message
         try {
@@ -1224,11 +1241,7 @@ const AppsPage: React.FC = () => {
             }),
           )
         } finally {
-          setPendingDeepSearchExplorerRunConversationIds((prev) => {
-            const next = new Set(prev)
-            next.delete(conversationId)
-            return next
-          })
+          decrementPendingDeepSearchExplorerRunCount(conversationId)
         }
         return
       }
