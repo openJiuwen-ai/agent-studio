@@ -47,6 +47,10 @@ import {
   getDeepSearchKnowledgeBaseRuntimeConfig,
   getDeepSearchModelRuntimeConfig,
 } from './components/DeepSearchExplorer/runtimeConfigService'
+import {
+  cancelDeepSearchConversationRuns,
+  handleDeepSearchExplorerLeave,
+} from './utils/deepSearchExplorerRunManagement'
 
 const DeepSearchExplorerPanel = lazy(() => import('./components/DeepSearchExplorer/DeepSearchExplorerPanel'))
 const DeepSearchRunSummary = lazy(() => import('./components/DeepSearchExplorer/DeepSearchRunSummary'))
@@ -266,6 +270,8 @@ const AppsPage: React.FC = () => {
   const [activeDeepSearchRunId, setActiveDeepSearchRunId] = useState<string | null>(null)
   // Runs killed from the explorer (used to force terminal state in summary cards)
   const [killedDeepSearchRunIds, setKilledDeepSearchRunIds] = useState<Set<string>>(new Set())
+  const [pendingDeepSearchExplorerRunConversationIds, setPendingDeepSearchExplorerRunConversationIds] = useState<Set<string>>(new Set())
+  const hasPendingDeepSearchExplorerRunCreation = pendingDeepSearchExplorerRunConversationIds.size > 0
 
   // Responsive: detect narrow screens (laptops) to auto-fullscreen explorer
   const [isNarrowScreen, setIsNarrowScreen] = useState(false)
@@ -347,6 +353,7 @@ const AppsPage: React.FC = () => {
   // sseProcessingQueue: SSE 事件队列是否正在处理
   const isPlaybackReplaying = playbackStatus === 'playing' || playbackStatus === 'paused'
   const isStreaming = isSending || isLoading || (!isPlaybackReplaying && sseProcessingQueue)
+  const isConversationHistoryBusy = isStreaming || hasPendingDeepSearchExplorerRunCreation
 
   // 订阅 messageItemsMap 来触发 messageItemsList 重新计算
   const messageItemsMap = useConversationStore(state => state.messageItemsMap)
@@ -373,6 +380,7 @@ const AppsPage: React.FC = () => {
   const clearConversationConfig = useConversationStore(state => state.clearConversationConfig)
   const updateConversation = useConversationStore(state => state.updateConversation)
   const saveConversationToDB = useConversationStore(state => state.saveConversationToDB)
+  const deleteConversation = useConversationStore(state => state.deleteConversation)
   const setLoading = useConversationStore(state => state.setLoading)
   const setSelectedResultMessageId = useConversationStore(state => state.setSelectedResultMessageId)
   const resetActiveSessionRuntime = useConversationStore(state => state.resetActiveSessionRuntime)
@@ -437,21 +445,21 @@ const AppsPage: React.FC = () => {
     clearPendingOutlineInteraction()
   }
 
+  const clearDeepSearchExplorerUiState = (options?: { clearRunIds?: boolean; clearKilledRunIds?: boolean }) => {
+    setShowDeepSearchExplorer(false)
+    setDeepSearchExplorerFullscreen(false)
+    setActiveDeepSearchRunId(null)
+    if (options?.clearRunIds) {
+      setDeepSearchRunIds(new Map())
+    }
+    if (options?.clearKilledRunIds) {
+      setKilledDeepSearchRunIds(new Set())
+    }
+  }
+
   const interruptModuleTasks = async (agentId: string | null) => {
     if (agentId === 'deepsearch') {
       await handleStopDeepSearch()
-    }
-
-    if (agentId === 'deepsearch-explorer') {
-      const runIdsToKill = Array.from(new Set([
-        ...deepSearchRunIds.values(),
-        ...(activeDeepSearchRunId ? [activeDeepSearchRunId] : []),
-      ]))
-        .filter(runId => !killedDeepSearchRunIds.has(runId))
-
-      if (runIdsToKill.length > 0) {
-        await Promise.allSettled(runIdsToKill.map(runId => deepSearchApi.killRun(runId)))
-      }
     }
 
     if (_activeRewriteController) {
@@ -502,6 +510,8 @@ const AppsPage: React.FC = () => {
       if (limitDialogType === 'count-warning' && limitDialogData.oldestConversation) {
         try {
           // 从 store 和 IndexDB 中删除最旧的对话
+          const oldestConversation = useConversationStore.getState().getConversationById(limitDialogData.oldestConversation.id)
+          await cancelDeepSearchConversationRuns(oldestConversation?.config, deepSearchApi.killRun)
           await useConversationStore.getState().deleteConversation(limitDialogData.oldestConversation.id)
           console.log('[AppsPage] Deleted oldest conversation before creating new one:', limitDialogData.oldestConversation.id)
         } catch (error) {
@@ -791,8 +801,7 @@ const AppsPage: React.FC = () => {
 
     // Reset Deep Search Explorer state when switching away from explorer agent
     if (!isExplorer) {
-      setShowDeepSearchExplorer(false)
-      setDeepSearchExplorerFullscreen(false)
+      clearDeepSearchExplorerUiState()
     }
 
     // 不在这里自动创建 conversation
@@ -808,6 +817,7 @@ const AppsPage: React.FC = () => {
     if (!hasActiveConversation) {
       setDeepSearchRunIds(new Map())
       setActiveDeepSearchRunId(null)
+      setKilledDeepSearchRunIds(new Set())
     } else {
       // 如果有对话，根据对话的 agentType 自动设置智能体
       const conversation = getConversationById(currentConversationId)
@@ -823,10 +833,20 @@ const AppsPage: React.FC = () => {
             Object.entries(conversation.config.deepSearchRunIds as Record<string, string>)
           )
           setDeepSearchRunIds(restoredMap)
+          setKilledDeepSearchRunIds(new Set())
+          restoredMap.forEach((runId) => {
+            deepSearchApi.primeRunContext(runId, { spaceId: user?.spaceId || getDefaultSpaceId() })
+          })
+        } else {
+          setDeepSearchRunIds(new Map())
+          setKilledDeepSearchRunIds(new Set())
         }
+      } else {
+        setDeepSearchRunIds(new Map())
+        setKilledDeepSearchRunIds(new Set())
       }
     }
-  }, [currentConversationId])
+  }, [currentConversationId, getConversationById, user?.spaceId])
 
   // ===== 用户空间切换监听 =====
   // 使用 ref 跟踪上次的 spaceId，避免初始加载时误清空
@@ -1135,6 +1155,11 @@ const AppsPage: React.FC = () => {
         // Add user message to store — returns the MessageItems
         const userMsgItems = addUserMessage(conversationId, messageToSend)
         setHasConversation(true)
+        setPendingDeepSearchExplorerRunConversationIds((prev) => {
+          const next = new Set(prev)
+          next.add(conversationId)
+          return next
+        })
 
         // Create the DS run via API and store it per message
         try {
@@ -1148,9 +1173,22 @@ const AppsPage: React.FC = () => {
             ...backendConfig,
             run_id: backendConversationId,
           })
-          const newRunIds = new Map(deepSearchRunIds)
-          newRunIds.set(userMsgItems.id, result.run_id)
-          setDeepSearchRunIds(newRunIds)
+
+          const latestConversation = useConversationStore.getState().getConversationById(conversationId)
+          if (!latestConversation) {
+            try {
+              await deepSearchApi.killRun(result.run_id)
+            } catch (killError) {
+              console.error('[DeepSearchExplorer] Failed to cancel orphaned run after conversation deletion:', killError)
+            }
+            return
+          }
+
+          setDeepSearchRunIds((prev) => {
+            const next = new Map(prev)
+            next.set(userMsgItems.id, result.run_id)
+            return next
+          })
           setActiveDeepSearchRunId(result.run_id)
           setKilledDeepSearchRunIds((prev) => {
             const next = new Set(prev)
@@ -1159,9 +1197,20 @@ const AppsPage: React.FC = () => {
           })
 
           // Persist runIds in conversation.config for IndexDB recovery on refresh
+          const latestDeepSearchRunIds = (
+            latestConversation.config?.agentType === 'deepsearch-explorer'
+            && latestConversation.config.deepSearchRunIds
+            && typeof latestConversation.config.deepSearchRunIds === 'object'
+            && !Array.isArray(latestConversation.config.deepSearchRunIds)
+          )
+            ? latestConversation.config.deepSearchRunIds as Record<string, string>
+            : {}
           const configUpdate = {
             agentType: 'deepsearch-explorer',
-            deepSearchRunIds: Object.fromEntries(newRunIds),
+            deepSearchRunIds: {
+              ...latestDeepSearchRunIds,
+              [userMsgItems.id]: result.run_id,
+            },
           }
           setConversationConfig(conversationId, configUpdate)
           updateConversation(conversationId, { config: configUpdate })
@@ -1174,6 +1223,12 @@ const AppsPage: React.FC = () => {
               detail: { message: errorMessage, severity: 'error' as const },
             }),
           )
+        } finally {
+          setPendingDeepSearchExplorerRunConversationIds((prev) => {
+            const next = new Set(prev)
+            next.delete(conversationId)
+            return next
+          })
         }
         return
       }
@@ -2145,6 +2200,11 @@ const AppsPage: React.FC = () => {
 
     if (isCrossModuleSwitch) {
       await interruptModuleTasks(activeModuleAgentId)
+      await handleDeepSearchExplorerLeave(
+        'agent-switch',
+        { deepSearchRunIds, activeDeepSearchRunId, killedDeepSearchRunIds },
+        deepSearchApi.killRun,
+      )
       resetModuleSessionState()
     }
 
@@ -2214,6 +2274,11 @@ const AppsPage: React.FC = () => {
     }
     const activeModuleAgentId = getConversationAgentType(currentConversationId) ?? selectedAgent?.id ?? null
     await interruptModuleTasks(activeModuleAgentId)
+    await handleDeepSearchExplorerLeave(
+      'agent-deselect',
+      { deepSearchRunIds, activeDeepSearchRunId, killedDeepSearchRunIds },
+      deepSearchApi.killRun,
+    )
     resetModuleSessionState()
   }
 
@@ -2335,6 +2400,11 @@ const AppsPage: React.FC = () => {
   const handleNewConversation = async () => {
     const activeModuleAgentId = getConversationAgentType(currentConversationId) ?? selectedAgent?.id ?? null
     await interruptModuleTasks(activeModuleAgentId)
+    await handleDeepSearchExplorerLeave(
+      'new-conversation',
+      { deepSearchRunIds, activeDeepSearchRunId, killedDeepSearchRunIds },
+      deepSearchApi.killRun,
+    )
     resetModuleSessionState()
   }
 
@@ -2506,6 +2576,11 @@ const AppsPage: React.FC = () => {
   // 切换历史对话
   const handleConversationSelect = async (conversationId: string) => {
     await interruptModuleTasks(getConversationAgentType(currentConversationId) ?? selectedAgent?.id ?? null)
+    await handleDeepSearchExplorerLeave(
+      'conversation-switch',
+      { deepSearchRunIds, activeDeepSearchRunId, killedDeepSearchRunIds },
+      deepSearchApi.killRun,
+    )
 
     // 清除选择的结果面板和思维链面板（修复bug：切换对话时需要清除，否则会导致页面空白）
     setSelectedResultMessageId(null)
@@ -2516,10 +2591,7 @@ const AppsPage: React.FC = () => {
     setCurrentGraphType('sectionGraph')
 
     // Reset Deep Search Explorer state on conversation switch
-    setShowDeepSearchExplorer(false)
-    setDeepSearchExplorerFullscreen(false)
-    setActiveDeepSearchRunId(null)
-    setKilledDeepSearchRunIds(new Set())
+    clearDeepSearchExplorerUiState({ clearKilledRunIds: true })
 
     // 重置思维链大小追踪 ref，防止切换会话后自动打开错误的思维链
     prevMindMapSizeRef.current = mindMapManagersMap.size
@@ -2545,9 +2617,18 @@ const AppsPage: React.FC = () => {
         Object.entries(conversation.config.deepSearchRunIds as Record<string, string>)
       )
       setDeepSearchRunIds(restoredMap)
+      restoredMap.forEach((runId) => {
+        deepSearchApi.primeRunContext(runId, { spaceId: user?.spaceId || getDefaultSpaceId() })
+      })
     } else {
       setDeepSearchRunIds(new Map())
     }
+  }
+
+  const handleDeleteConversation = async (conversationId: string) => {
+    const conversation = getConversationById(conversationId)
+    await cancelDeepSearchConversationRuns(conversation?.config, deepSearchApi.killRun)
+    await deleteConversation(conversationId)
   }
 
   // ===== DeepSearch 插件：消息发送处理 =====
@@ -3099,8 +3180,9 @@ const AppsPage: React.FC = () => {
         <ConversationHistorySidebar
           currentConversationId={currentConversationId}
           onConversationSelect={handleConversationSelect}
+          onDeleteConversation={handleDeleteConversation}
           onNewConversation={handleNewConversation}
-          isStreaming={isStreaming}
+          isStreaming={isConversationHistoryBusy}
           forceCollapsed={!!selectedResultMessageId}
         />
 
@@ -3341,10 +3423,13 @@ const AppsPage: React.FC = () => {
                     onKilled={(runId) => {
                       setKilledDeepSearchRunIds((prev) => new Set(prev).add(runId))
                     }}
-                    onClose={() => {
-                      setShowDeepSearchExplorer(false)
-                      setDeepSearchExplorerFullscreen(false)
-                      setActiveDeepSearchRunId(null)
+                    onClose={async () => {
+                      await handleDeepSearchExplorerLeave(
+                        'close-panel',
+                        { deepSearchRunIds, activeDeepSearchRunId, killedDeepSearchRunIds },
+                        deepSearchApi.killRun,
+                      )
+                      clearDeepSearchExplorerUiState()
                     }}
                     isFullscreen={deepSearchExplorerFullscreen}
                     onToggleFullscreen={() => setDeepSearchExplorerFullscreen((prev) => !prev)}

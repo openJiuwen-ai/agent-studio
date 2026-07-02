@@ -11,6 +11,10 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/pages/Apps/components/ReportPanel/editor/**/*.test.ts'],
+    include: [
+      'src/pages/Apps/components/ReportPanel/editor/**/*.test.ts',
+      'src/pages/Apps/components/DeepSearchExplorer/**/*.test.ts',
+      'src/pages/Apps/utils/**/*.test.ts',
+    ],
   },
 })

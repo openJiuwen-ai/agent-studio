@@ -35,7 +35,7 @@ interface DeepSearchTelemetryEnvelope {
   payload?: unknown;
 }
 
-interface RunContext {
+export interface RunContext {
   conversationId?: string;
   spaceId?: string;
 }
@@ -185,89 +185,169 @@ function normalizeMessageRecords(raw: unknown): Record<string, unknown>[] {
   return [];
 }
 
-function extractToolCallsFromMessagesPayload(payload: Record<string, unknown>): Array<{ tool: string; query: string }> {
-  const messagesRoot = isRecord(payload.messages) ? payload.messages : payload;
-  const messages = normalizeMessageRecords(payload.messages);
+function extractToolCallsFromMessageRecord(
+  message: Record<string, unknown>,
+  fallbackToolMessagesRoot?: Record<string, unknown> | null,
+): Array<{ tool: string; query: string }> {
   const extracted: Array<{ tool: string; query: string }> = [];
 
-  for (const message of messages) {
-    const toolNames = asStringArray(message.last_assistant_tool_call_names);
-    const messageToolName = asString(message.last_assistant_tool_call_name);
-    const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
-    const toolsExecuted = message.tools_executed === true || payload.tools_executed === true;
+  const toolNames = asStringArray(message.last_assistant_tool_call_names);
+  const messageToolName = asString(message.last_assistant_tool_call_name);
+  const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+  const toolsExecuted = message.tools_executed === true || fallbackToolMessagesRoot?.tools_executed === true;
 
-    for (const toolCall of toolCalls) {
-      if (!isRecord(toolCall)) continue;
-      const fnBlock = isRecord(toolCall.function) ? toolCall.function : null;
-      const tool =
-        asString(toolCall.name)
-        ?? (fnBlock ? asString(fnBlock.name) : null)
-        ?? messageToolName
-        ?? 'tool_call';
-      const rawArgs =
-        (fnBlock ? fnBlock.arguments : undefined)
-        ?? toolCall.args
-        ?? toolCall.arguments
-        ?? toolCall.query
-        ?? toolCall.input
-        ?? toolCall.content;
-      const query = normalizeToolCallQuery(rawArgs);
-      if (!query) continue;
-      extracted.push({ tool, query });
-    }
+  for (const toolCall of toolCalls) {
+    if (!isRecord(toolCall)) continue;
+    const fnBlock = isRecord(toolCall.function) ? toolCall.function : null;
+    const tool =
+      asString(toolCall.name)
+      ?? (fnBlock ? asString(fnBlock.name) : null)
+      ?? messageToolName
+      ?? 'tool_call';
+    const rawArgs =
+      (fnBlock ? fnBlock.arguments : undefined)
+      ?? toolCall.args
+      ?? toolCall.arguments
+      ?? toolCall.query
+      ?? toolCall.input
+      ?? toolCall.content;
+    const query = normalizeToolCallQuery(rawArgs);
+    if (!query) continue;
+    extracted.push({ tool, query });
+  }
 
-    const messageContents = Array.isArray(message.message_contents)
-      ? message.message_contents.filter((item): item is Record<string, unknown> => isRecord(item))
-      : [];
-    const toolMessages = messageContents.filter(item => asString(item.role) === 'tool');
-    if (toolMessages.length > 0) {
-      toolMessages.forEach((toolMessage, index) => {
-        const content = asString(toolMessage.content);
-        if (!content) {
-          return;
-        }
-        const query = extractToolResultQuery(content);
-        if (!query) {
-          return;
-        }
-        const inferredTool = toolNames[index] ?? toolNames[0] ?? inferToolNameFromContent(content);
-        extracted.push({ tool: inferredTool, query });
-      });
-      continue;
-    }
-
-    if (toolCalls.length === 0 && toolsExecuted && messageToolName) {
-      const query = normalizeToolCallQuery(message.content);
-      if (query) {
-        extracted.push({ tool: messageToolName, query });
+  const messageContents = Array.isArray(message.message_contents)
+    ? message.message_contents.filter((item): item is Record<string, unknown> => isRecord(item))
+    : [];
+  const toolMessages = messageContents.filter(item => asString(item.role) === 'tool');
+  if (toolMessages.length > 0) {
+    toolMessages.forEach((toolMessage, index) => {
+      const content = asString(toolMessage.content);
+      if (!content) {
+        return;
       }
+      const query = extractToolResultQuery(content);
+      if (!query) {
+        return;
+      }
+      const inferredTool = toolNames[index] ?? toolNames[0] ?? inferToolNameFromContent(content);
+      extracted.push({ tool: inferredTool, query });
+    });
+  } else if (toolCalls.length === 0 && toolsExecuted && messageToolName) {
+    const query = normalizeToolCallQuery(message.content);
+    if (query) {
+      extracted.push({ tool: messageToolName, query });
     }
   }
 
-  // Current telemetry shape uses payload.messages.message_contents + payload.tools_executed.
-  const rootToolNames = asStringArray(messagesRoot.last_assistant_tool_call_names);
-  const rootMessageContents = Array.isArray(messagesRoot.message_contents)
-    ? messagesRoot.message_contents.filter((item): item is Record<string, unknown> => isRecord(item))
-    : [];
-  const rootToolMessages = rootMessageContents.filter(item => asString(item.role) === 'tool');
-  rootToolMessages.forEach((toolMessage, index) => {
-    const content = asString(toolMessage.content);
-    if (!content) {
-      return;
-    }
-    const query = extractToolResultQuery(content);
-    if (!query) {
-      return;
-    }
-    const tool = rootToolNames[index] ?? rootToolNames[0] ?? inferToolNameFromContent(content);
-    extracted.push({ tool, query });
-  });
+  if (extracted.length === 0 && fallbackToolMessagesRoot) {
+    const rootToolNames = asStringArray(fallbackToolMessagesRoot.last_assistant_tool_call_names);
+    const rootMessageContents = Array.isArray(fallbackToolMessagesRoot.message_contents)
+      ? fallbackToolMessagesRoot.message_contents.filter((item): item is Record<string, unknown> => isRecord(item))
+      : [];
+    const rootToolMessages = rootMessageContents.filter(item => asString(item.role) === 'tool');
+    rootToolMessages.forEach((toolMessage, index) => {
+      const content = asString(toolMessage.content);
+      if (!content) {
+        return;
+      }
+      const query = extractToolResultQuery(content);
+      if (!query) {
+        return;
+      }
+      const tool = rootToolNames[index] ?? rootToolNames[0] ?? inferToolNameFromContent(content);
+      extracted.push({ tool, query });
+    });
+  }
 
   const dedup = new Map<string, { tool: string; query: string }>();
   for (const entry of extracted) {
     dedup.set(`${entry.tool}|${entry.query}`, entry);
   }
   return Array.from(dedup.values());
+}
+
+function getDirectActionIds(payload: Record<string, unknown>): string[] {
+  const ids: string[] = [];
+  const directActionId =
+    asString(payload.action_id)
+    ?? asString(payload.current_action_id);
+  if (directActionId) {
+    ids.push(directActionId);
+  }
+
+  const actionExecution = payload.action_execution;
+  if (isRecord(actionExecution)) {
+    const nestedActionId = asString(actionExecution.action_id);
+    if (nestedActionId) {
+      ids.push(nestedActionId);
+    }
+  }
+
+  return Array.from(new Set(ids));
+}
+
+function getActionIds(payload: Record<string, unknown>): string[] {
+  const ids = getDirectActionIds(payload);
+
+  const messageRecords = normalizeMessageRecords(payload.messages);
+  messageRecords.forEach((message) => {
+    if (!isRecord(message)) {
+      return;
+    }
+    getActionIds(message).forEach((id) => ids.push(id));
+  });
+
+  return Array.from(new Set(ids));
+}
+
+function extractToolCallsByActionFromMessagesPayload(
+  payload: Record<string, unknown>,
+): Array<{ actionId: string; calls: Array<{ tool: string; query: string }> }> {
+  const messagesRoot = isRecord(payload.messages) ? payload.messages : payload;
+  const messages = normalizeMessageRecords(payload.messages);
+  const grouped = new Map<string, Array<{ tool: string; query: string }>>();
+  const payloadActionIds = getDirectActionIds(payload);
+
+  const appendCalls = (actionIds: string[], calls: Array<{ tool: string; query: string }>) => {
+    actionIds.forEach((actionId) => {
+      const existing = grouped.get(actionId) ?? [];
+      grouped.set(actionId, [...existing, ...calls]);
+    });
+  };
+
+  for (const message of messages) {
+    const calls = extractToolCallsFromMessageRecord(message, messagesRoot);
+    if (calls.length === 0) {
+      continue;
+    }
+
+    const actionIds = getDirectActionIds(message);
+    const targetActionIds = actionIds.length > 0 ? actionIds : payloadActionIds;
+    if (targetActionIds.length === 0) {
+      continue;
+    }
+    appendCalls(targetActionIds, calls);
+  }
+
+  if (grouped.size === 0) {
+    const actionIds = getActionIds(payload);
+    const calls = [
+      ...messages.flatMap(message => extractToolCallsFromMessageRecord(message, messagesRoot)),
+      ...extractToolCallsFromMessageRecord(messagesRoot, messagesRoot),
+    ];
+    if (calls.length > 0) {
+      appendCalls(actionIds, calls);
+    }
+  }
+
+  return Array.from(grouped.entries()).map(([actionId, calls]) => {
+    const dedup = new Map<string, { tool: string; query: string }>();
+    calls.forEach((call) => {
+      dedup.set(`${call.tool}|${call.query}`, call);
+    });
+    return { actionId, calls: Array.from(dedup.values()) };
+  });
 }
 
 function extractAssistantFinalAnswerFromMessagesPayload(
@@ -306,41 +386,7 @@ function asTelemetryItems(value: unknown): DeepSearchTelemetryEnvelope[] {
 }
 
 function getActionId(payload: Record<string, unknown>): string | null {
-  const directActionId =
-    asString(payload.action_id)
-    ?? asString(payload.current_action_id);
-  if (directActionId) {
-    return directActionId;
-  }
-
-  const actionExecution = payload.action_execution;
-  if (isRecord(actionExecution)) {
-    const nestedActionId = asString(actionExecution.action_id);
-    if (nestedActionId) {
-      return nestedActionId;
-    }
-  }
-
-  if (Array.isArray(payload.messages)) {
-    for (let i = payload.messages.length - 1; i >= 0; i -= 1) {
-      const message = payload.messages[i];
-      if (!isRecord(message)) continue;
-
-      const messageActionId = asString(message.action_id);
-      if (messageActionId) {
-        return messageActionId;
-      }
-
-      if (isRecord(message.action_execution)) {
-        const nestedMessageActionId = asString(message.action_execution.action_id);
-        if (nestedMessageActionId) {
-          return nestedMessageActionId;
-        }
-      }
-    }
-  }
-
-  return null;
+  return getActionIds(payload)[0] ?? null;
 }
 
 function mapTerminationToStatus(termination: string | null, hasPrediction: unknown): string {
@@ -415,6 +461,97 @@ function boundedMapSet<K, V>(map: Map<K, V>, key: K, value: V, maxSize: number):
     if (firstKey === undefined) break;
     map.delete(firstKey);
   }
+}
+
+function mergeActionInfo(
+  run: RunCacheState,
+  actionId: string,
+  updater: (existingInfo: ActionInfoResponse | undefined, existingResult: Record<string, unknown>) => ActionInfoResponse,
+): void {
+  const existingInfo = run.actionInfoById.get(actionId);
+  const existingResult = isRecord(existingInfo?.result)
+    ? { ...(existingInfo?.result as Record<string, unknown>) }
+    : {};
+  const nextInfo = updater(existingInfo, existingResult);
+  boundedMapSet(run.actionInfoById, actionId, nextInfo, MAX_TRACKED_ACTION_INFOS);
+}
+
+function mergeActionStatePayloads(
+  run: RunCacheState,
+  actionId: string,
+  statePayloads: Record<string, unknown>[],
+): void {
+  if (statePayloads.length === 0) {
+    return;
+  }
+
+  mergeActionInfo(run, actionId, (existingInfo, existingResult) => {
+    const existingNewStates = Array.isArray(existingResult.new_states)
+      ? existingResult.new_states
+      : [];
+    existingResult.new_states = [...existingNewStates, ...statePayloads];
+
+    return {
+      action_id: actionId,
+      previous_action: existingInfo?.previous_action ?? null,
+      previous_state: existingInfo?.previous_state ?? null,
+      result: existingResult,
+      time_taken: existingInfo?.time_taken ?? null,
+    };
+  });
+}
+
+function mergeActionToolCalls(
+  run: RunCacheState,
+  actionId: string,
+  calls: Array<{ tool: string; query: string }>,
+): void {
+  if (calls.length === 0) {
+    return;
+  }
+
+  mergeActionInfo(run, actionId, (existingInfo, existingResult) => {
+    const existingHistory = Array.isArray(existingResult.tool_calls_history)
+      ? existingResult.tool_calls_history.filter((item): item is Record<string, unknown> => isRecord(item))
+      : [];
+    const dedup = new Map<string, { tool: string; query: string }>();
+    existingHistory.forEach(item => {
+      const tool = asString(item.tool);
+      const query = asString(item.query);
+      if (tool && query) {
+        dedup.set(`${tool}|${query}`, { tool, query });
+      }
+    });
+    calls.forEach((call) => {
+      dedup.set(`${call.tool}|${call.query}`, call);
+    });
+    existingResult.tool_calls_history = Array.from(dedup.values());
+
+    return {
+      action_id: actionId,
+      previous_action: existingInfo?.previous_action ?? null,
+      previous_state: existingInfo?.previous_state ?? null,
+      result: existingResult,
+      time_taken: existingInfo?.time_taken ?? null,
+    };
+  });
+}
+
+function mergeActionResultPayload(
+  run: RunCacheState,
+  actionId: string,
+  payload: Record<string, unknown>,
+): void {
+  mergeActionInfo(run, actionId, (existingInfo, existingResult) => ({
+    action_id: actionId,
+    previous_action: existingInfo?.previous_action ?? null,
+    previous_state: existingInfo?.previous_state ?? null,
+    result: {
+      ...existingResult,
+      ...payload,
+    },
+    time_taken: existingInfo?.time_taken ?? null,
+  }));
 }
 
 function buildActionFromSnapshot(raw: unknown, type: ActionType): ActionResponse | null {
@@ -541,34 +678,22 @@ function processTelemetryEvent(
         };
       }
 
-      const actionId = getActionId(payload);
-      if (actionId) {
-        const existingInfo = run.actionInfoById.get(actionId);
-        const statePayloads = states
-          .map(stateItem => {
-            if (!isRecord(stateItem)) return null;
-            return isRecord(stateItem.state) ? stateItem.state : null;
-          })
-          .filter((item): item is Record<string, unknown> => item !== null);
-        if (statePayloads.length > 0 || existingInfo) {
-          const existingResult = isRecord(existingInfo?.result)
-            ? { ...(existingInfo?.result as Record<string, unknown>) }
-            : {};
-          const existingNewStates = Array.isArray(existingResult.new_states)
-            ? existingResult.new_states
-            : [];
-          existingResult.new_states = [...existingNewStates, ...statePayloads];
-
-          const info: ActionInfoResponse = {
-            action_id: actionId,
-            previous_action: existingInfo?.previous_action ?? null,
-            previous_state: existingInfo?.previous_state ?? null,
-            result: existingResult,
-            time_taken: existingInfo?.time_taken ?? null,
-          };
-          boundedMapSet(run.actionInfoById, actionId, info, MAX_TRACKED_ACTION_INFOS);
+      const groupedStates = new Map<string, Record<string, unknown>[]>();
+      states.forEach((stateItem) => {
+        if (!isRecord(stateItem) || !isRecord(stateItem.state)) {
+          return;
         }
-      }
+        const actionIds = getActionIds(stateItem);
+        const fallbackActionId = getActionId(payload);
+        const targetActionIds = actionIds.length > 0 ? actionIds : (fallbackActionId ? [fallbackActionId] : []);
+        targetActionIds.forEach((actionId) => {
+          const existing = groupedStates.get(actionId) ?? [];
+          groupedStates.set(actionId, [...existing, stateItem.state]);
+        });
+      });
+      groupedStates.forEach((statePayloads, actionId) => {
+        mergeActionStatePayloads(run, actionId, statePayloads);
+      });
       break;
     }
     case 'action_proposals_created': {
@@ -625,90 +750,49 @@ function processTelemetryEvent(
         });
       }
 
-      const actionId = getActionId(payload);
-      if (actionId) {
-        const calls = extractToolCallsFromMessagesPayload(payload);
-        if (calls.length > 0) {
-          const existingInfo = run.actionInfoById.get(actionId);
-          const existingResult = isRecord(existingInfo?.result)
-            ? { ...(existingInfo?.result as Record<string, unknown>) }
-            : {};
-          const existingHistory = Array.isArray(existingResult.tool_calls_history)
-            ? existingResult.tool_calls_history.filter((item): item is Record<string, unknown> => isRecord(item))
-            : [];
-          const dedup = new Map<string, { tool: string; query: string }>();
-          existingHistory.forEach(item => {
-            const tool = asString(item.tool);
-            const query = asString(item.query);
-            if (tool && query) dedup.set(`${tool}|${query}`, { tool, query });
-          });
-          calls.forEach(item => {
-            dedup.set(`${item.tool}|${item.query}`, item);
-          });
-          existingResult.tool_calls_history = Array.from(dedup.values());
-
-          const info: ActionInfoResponse = {
-            action_id: actionId,
-            previous_action: existingInfo?.previous_action ?? null,
-            previous_state: existingInfo?.previous_state ?? null,
-            result: existingResult,
-            time_taken: existingInfo?.time_taken ?? null,
-          };
-          boundedMapSet(run.actionInfoById, actionId, info, MAX_TRACKED_ACTION_INFOS);
-        }
-      }
+      extractToolCallsByActionFromMessagesPayload(payload).forEach(({ actionId, calls }) => {
+        mergeActionToolCalls(run, actionId, calls);
+      });
       break;
     }
     case 'action_result_saved': {
-      const actionId = getActionId(payload);
-      const hasAnswer = payload.has_answer === true;
-      if (actionId) {
-        const existingAction = run.actionsById.get(actionId);
-        if (existingAction) {
-          boundedMapSet(
-            run.actionsById,
-            actionId,
-            {
-              ...existingAction,
-              had_result: true,
-            },
-            MAX_TRACKED_ACTIONS,
-          );
+      const actionResultItems = Array.isArray(payload.action_results)
+        ? payload.action_results.filter((item): item is Record<string, unknown> => isRecord(item))
+        : [payload];
+      actionResultItems.forEach((actionResultPayload) => {
+        const actionId = getActionId(actionResultPayload);
+        const hasAnswer = actionResultPayload.has_answer === true;
+        if (actionId) {
+          const existingAction = run.actionsById.get(actionId);
+          if (existingAction) {
+            boundedMapSet(
+              run.actionsById,
+              actionId,
+              {
+                ...existingAction,
+                had_result: true,
+              },
+              MAX_TRACKED_ACTIONS,
+            );
+          }
+          mergeActionResultPayload(run, actionId, actionResultPayload);
         }
 
-        const existingInfo = run.actionInfoById.get(actionId);
-        const existingResult = isRecord(existingInfo?.result)
-          ? { ...(existingInfo?.result as Record<string, unknown>) }
-          : {};
-        const mergedResult = {
-          ...existingResult,
-          ...payload,
-        };
-
-        const info: ActionInfoResponse = {
-          action_id: actionId,
-          previous_action: existingInfo?.previous_action ?? null,
-          previous_state: existingInfo?.previous_state ?? null,
-          result: mergedResult,
-          time_taken: existingInfo?.time_taken ?? null,
-        };
-        boundedMapSet(run.actionInfoById, actionId, info, MAX_TRACKED_ACTION_INFOS);
-      }
-
-      if (hasAnswer) {
-        const answerPreview = asString(payload.answer_preview);
-        const answer: AnswerResponse = {
-          source: asString(payload.source) ?? 'telemetry',
-          file: asString(payload.result_file) ?? '',
-          answer: answerPreview,
-          summary: answerPreview,
-          termination: null,
-          completion_time: null,
-          previous_action: null,
-          previous_action_id: actionId,
-        };
-        upsertAnswer(run, answer);
-      }
+        if (hasAnswer) {
+          const answerPreview = asString(actionResultPayload.answer_preview);
+          const answer: AnswerResponse = {
+            source: asString(actionResultPayload.source) ?? 'telemetry',
+            file: asString(actionResultPayload.result_file) ?? '',
+            answer: answerPreview,
+            summary: answerPreview,
+            termination: null,
+            completion_time: null,
+            previous_action: null,
+            previous_action_id: actionId,
+          };
+          upsertAnswer(run, answer);
+        }
+      });
       break;
     }
     case 'search_final_result': {
@@ -771,6 +855,10 @@ function processTelemetryEvent(
 
 function getRunOrDefault(runId: string): RunCacheState {
   return ensureRunCache(runId);
+}
+
+export function primeRunContext(runId: string, context?: RunContext): void {
+  ensureRunCache(runId, '', context);
 }
 
 function buildAuthHeaders(): HeadersInit {
@@ -1029,3 +1117,34 @@ export async function healthCheck(): Promise<unknown> {
   if (!res.ok) throw new Error(`healthCheck failed: ${res.status}`);
   return res.json();
 }
+
+export const __testUtils = {
+  clearRunCache(): void {
+    runCache.clear();
+    telemetrySyncs.clear();
+  },
+  processTelemetryEvent,
+  getRunSnapshot(runId: string) {
+    const run = getRunOrDefault(runId);
+    return {
+      runStatus: { ...run.runStatus },
+      actions: Array.from(run.actionsById.values()).map(action => ({ ...action })),
+      actionInfoById: new Map(
+        Array.from(run.actionInfoById.entries()).map(([actionId, info]) => [
+          actionId,
+          {
+            ...info,
+            result: isRecord(info.result) ? { ...(info.result as Record<string, unknown>) } : info.result,
+          },
+        ]),
+      ),
+      answers: run.answers.map(answer => ({ ...answer })),
+      entities: {
+        answer_variable: run.entities.answer_variable,
+        entities: run.entities.entities.map(entity => ({ ...entity })),
+      },
+      lastSeq: run.lastSeq,
+      context: { ...run.context },
+    };
+  },
+};

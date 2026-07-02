@@ -6,6 +6,7 @@ import { Action } from './ActionQueue'
 import { Entity, CandidateEntity, ActionToolCall } from './EntityPanel'
 import * as api from './api'
 import { deriveEntitiesFromActionInfo } from './deriveActionEntities'
+import { killDeepSearchExplorerRun } from '../../utils/deepSearchExplorerRunManagement'
 import type {
   RunStatusResponse,
   ActionResponse,
@@ -465,7 +466,7 @@ export default function DeepSearchExplorerPanel({
   const handleKill = async () => {
     if (!runId) return
     try {
-      await api.killRun(runId)
+      await killDeepSearchExplorerRun(runId, api.killRun)
       setRunStatus((prev) => (prev ? { ...prev, status: 'cancelled' } : prev))
       onKilled?.(runId)
     } catch (e) {
