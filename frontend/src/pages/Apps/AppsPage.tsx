@@ -1418,17 +1418,23 @@ const AppsPage: React.FC = () => {
                 tvData.event === 'summary_response'
               ) {
                 if (typeof tvData.content === 'string') {
-                  // 旧格式：content 直接是核验结论文本
+                  // 先当作纯文本赋值，再尝试解析 JSON 覆盖
                   tvContent = tvData.content
-                  // 兜底：content 也可能是含 feedback_interaction_count 的 JSON 字符串
                   try {
-                    const parsed = JSON.parse(tvData.content) as { feedback_interaction_count?: number }
+                    const parsed = JSON.parse(tvData.content) as {
+                      display_text?: string
+                      feedback_interaction_count?: number
+                    }
+                    // 新格式 JSON 字符串：有 display_text 则用它替换原始 JSON 字符串
+                    if (typeof parsed.display_text === 'string') {
+                      tvContent = parsed.display_text
+                    }
                     if (typeof parsed.feedback_interaction_count === 'number') {
                       tvFeedbackInteractionCount = parsed.feedback_interaction_count
                     }
-                  } catch { /* 纯文本核验结论，跳过 */ }
+                  } catch { /* 纯文本核验结论，无需解析 */ }
                 } else if (typeof tvData.content === 'object' && tvData.content !== null) {
-                  // 新格式：content = { display_text, feedback_interaction_count }
+                  // content 直接为对象格式：{ display_text, feedback_interaction_count }
                   const obj = tvData.content as { display_text?: string; feedback_interaction_count?: number }
                   if (typeof obj.display_text === 'string') {
                     tvContent = obj.display_text
