@@ -5,7 +5,10 @@ import type { Paragraph, Root, RootContent } from 'mdast'
 
 import type { ParagraphLine } from './types'
 
-const paragraphProcessor = unified().use(remarkParse).use(remarkGfm)
+// singleTilde: false — keep lone `~` (e.g. "30~40%") from being parsed as strikethrough.
+const paragraphProcessor = unified()
+  .use(remarkParse)
+  .use(remarkGfm, { singleTilde: false })
 
 const normalizeVisibleText = (input: string) => input.replace(/\s+/g, ' ').trim()
 
@@ -22,6 +25,8 @@ const extractInlineText = (node: RootContent): string => {
       return node.children.map(extractInlineText).join('')
     case 'break':
       return '\n'
+    case 'footnoteReference':
+      return `[^${node.label ?? node.identifier}]`
     default:
       return ''
   }

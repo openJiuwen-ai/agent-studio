@@ -20,6 +20,7 @@ import {
 import RecordingPanel from '../../components/Conversation/RecordingPanel'
 import UnifiedSnackbar, { useUnifiedSnackbar } from '../../Common/UnifiedSnackbar'
 import ConversationLimitDialog from '../../components/Common/ConversationLimitDialog'
+import KeepAliveGuideDialog from '../../components/Common/KeepAliveGuideDialog'
 import { conversationEventEmitter, conversationDB } from '../../utils/conversationDB'
 import type { MessageInputRef } from './components/MessageInput'
 import { copyToClipboard, STORAGE_KEYS, storage, getAgentConfigKeys } from './utils/utils'
@@ -235,7 +236,7 @@ const AppsPage: React.FC = () => {
   const { user } = useAuthStore()
   const { t } = useTranslation()
   // Snackbar 支持 - 必须在组件顶层调用以监听全局事件
-  const { snackbar, closeSnackbar } = useUnifiedSnackbar()
+  const { snackbar, closeSnackbar, showSuccess } = useUnifiedSnackbar()
 
   const [inputValue, setInputValue] = useState('')
   const [selectedModel, setSelectedModel] = useState('')
@@ -543,6 +544,9 @@ const AppsPage: React.FC = () => {
   const [showModelPicker, setShowModelPicker] = useState(false)
   const [modelPickerPosition, setModelPickerPosition] = useState<{ x: number; y: number } | null>(null)
   const modelButtonRef = useRef<HTMLButtonElement>(null)
+
+  // "设置本网页保持活跃"操作指引弹窗状态
+  const [showKeepAliveGuide, setShowKeepAliveGuide] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<MessageInputRef>(null)
@@ -2450,6 +2454,49 @@ const AppsPage: React.FC = () => {
     }
   }, [mindMapManagersMap, currentConversationId, selectedResultMessageId, showMindMap, mindMapMessageItemsId, getMessageItemsByConversationId])
 
+  // 深度研究进行中时申请 Screen Wake Lock，降低设备自动息屏导致 SSE 中断的概率
+  // 注意：页面切到后台（visibilitychange -> hidden）时锁会被浏览器自动释放，
+  // 重新变为可见时需要重新申请；不支持该 API 的浏览器（如 Firefox）直接静默跳过
+  useEffect(() => {
+    if (!isStreaming) return
+    if (!('wakeLock' in navigator)) return
+
+    let sentinel: WakeLockSentinel | null = null
+    let cancelled = false
+
+    const requestWakeLock = async () => {
+      try {
+        const lock = await navigator.wakeLock.request('screen')
+        if (cancelled) {
+          lock.release().catch(() => {})
+          return
+        }
+        sentinel = lock
+      } catch (err) {
+        // 请求失败（如非安全上下文、浏览器拒绝等），静默降级，不影响主流程
+        console.warn('[WakeLock] request failed:', err)
+      }
+    }
+
+    requestWakeLock()
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !sentinel) {
+        requestWakeLock()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (sentinel) {
+        sentinel.release().catch(() => {})
+        sentinel = null
+      }
+    }
+  }, [isStreaming])
+
   // 打开思维链面板
   const handleOpenMindMap = (messageItemsId: string) => {
     // 如果当前已经在显示思维链且是同一个messageItemsId，关闭思维链面板
@@ -3321,7 +3368,26 @@ const AppsPage: React.FC = () => {
                 {isStreaming && isDeepSearchMode && (
                   <div className="flex items-center justify-center gap-2 mb-3 text-amber-600 text-sm">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
-                    <span className="whitespace-pre-line">{t('apps.chat.taskRunning.statusText')}</span>
+                    <span className="whitespace-pre-line">
+                      {t('apps.chat.taskRunning.statusTextBefore')}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          // 无法直接跳转到浏览器内部设置页（edge://、chrome:// 属于浏览器特权页面，
+                          // 普通网页无权限导航过去），退而求其次：点击时自动复制好网址，
+                          // 用户只需按弹窗里的步骤打开设置页粘贴添加即可
+                          const success = await copyToClipboard(window.location.origin)
+                          if (success) {
+                            showSuccess(t('apps.chat.taskRunning.keepAliveGuide.urlCopiedToast'))
+                          }
+                          setShowKeepAliveGuide(true)
+                        }}
+                        className="underline underline-offset-2 hover:text-amber-700 font-medium"
+                      >
+                        {t('apps.chat.taskRunning.keepAliveLinkText')}
+                      </button>
+                      {t('apps.chat.taskRunning.statusTextAfter')}
+                    </span>
                   </div>
                 )}
                 <div className="max-w-4xl mx-auto">
@@ -3493,6 +3559,12 @@ const AppsPage: React.FC = () => {
         deleteDetails={limitDialogData.deleteDetails}
         onConfirm={handleLimitDialogConfirm}
         onCancel={handleLimitDialogCancel}
+      />
+
+      {/* "设置本网页保持活跃"操作指引弹窗 */}
+      <KeepAliveGuideDialog
+        open={showKeepAliveGuide}
+        onClose={() => setShowKeepAliveGuide(false)}
       />
 
     </div>

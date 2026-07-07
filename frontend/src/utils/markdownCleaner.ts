@@ -21,6 +21,7 @@ import remarkParse from 'remark-parse'
 import remarkRehype from 'remark-rehype'
 import { unified } from 'unified'
 import type { Node as UnistNode, Parent as UnistParent } from 'unist'
+import { remarkDemoteFalsePositiveInlineMath } from './remarkDemoteFalsePositiveInlineMath'
 
 export interface PreprocessResult {
   cleaned: string
@@ -69,10 +70,17 @@ type VisibleProjectionOptions = {
 const createBaseMarkdownProcessor = () =>
   unified()
     .use(remarkParse)
-    .use(remarkGfm)
+    // singleTilde: false — a lone `~` (e.g. "30~40%") must not be parsed as a
+    // strikethrough delimiter; only `~~text~~` should be.
+    .use(remarkGfm, { singleTilde: false })
     .use(remarkCjkFriendly)
-    .use(remarkCjkFriendlyGfmStrikethrough)
+    .use(remarkCjkFriendlyGfmStrikethrough, { singleTilde: false })
+    // singleDollarTextMath: true so `$x=1$`-style inline math renders (matching
+    // VS Code/Pandoc). remarkDemoteFalsePositiveInlineMath then demotes spans
+    // like "price from $30 to $40" back to text — same anti-currency rule
+    // VS Code's KaTeX preview uses.
     .use(remarkMath, { singleDollarTextMath: true })
+    .use(remarkDemoteFalsePositiveInlineMath)
 
 const markdownAstProcessor = createBaseMarkdownProcessor()
 

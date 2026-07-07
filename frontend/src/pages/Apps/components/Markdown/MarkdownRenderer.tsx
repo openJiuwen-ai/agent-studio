@@ -27,6 +27,7 @@ import {
   insertVLMChartsIntoReportContent,
   isVLMChartReference,
 } from '@/utils/reportUtils'
+import { remarkDemoteFalsePositiveInlineMath } from '@/utils/remarkDemoteFalsePositiveInlineMath'
 
 export const MarkdownRenderer: React.FC<{
   instanceId?: MarkdownProps['instanceId']
@@ -196,10 +197,17 @@ export const MarkdownRenderer: React.FC<{
   return (
     <ReactMarkdown
       remarkPlugins={[
-        remarkGfm,
+        // singleTilde: false — a lone `~` (e.g. "30~40%") must not be parsed as a
+        // strikethrough delimiter; only `~~text~~` should be.
+        [remarkGfm, { singleTilde: false }],
         remarkCjkFriendly,
-        remarkCjkFriendlyGfmStrikethrough,
+        [remarkCjkFriendlyGfmStrikethrough, { singleTilde: false }],
+        // singleDollarTextMath: true so `$x=1$`-style inline math renders (matching
+        // VS Code/Pandoc). remarkDemoteFalsePositiveInlineMath then demotes spans
+        // like "price from $30 to $40" back to text — same anti-currency rule
+        // VS Code's KaTeX preview uses.
         [remarkMath, { singleDollarTextMath: true }],
+        remarkDemoteFalsePositiveInlineMath,
       ]}
       rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeKatex]}
       components={defaultComponents}
