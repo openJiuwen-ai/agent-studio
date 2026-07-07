@@ -150,6 +150,50 @@ describe('parseMarkdownToCanonical', () => {
   })
 })
 
+describe('footnote handling', () => {
+  it('keeps a footnote definition block instead of dropping it', () => {
+    const rawMarkdown = '国产化率约30%[^1]，预计2030年增长\n\n[^1]: 来源：工信部《产业报告》'
+    const document = parseMarkdownToCanonical({
+      rawMarkdown,
+      baseVersion: 'test-v1',
+      draftRevision: 0,
+    })
+
+    expect(document.blocks.map((block) => block.kind)).toEqual([
+      'paragraph',
+      'footnoteDefinition',
+    ])
+
+    const definitionBlock = document.blocks[1]
+    if (definitionBlock.kind !== 'footnoteDefinition') {
+      throw new Error('expected footnoteDefinition block')
+    }
+    expect(definitionBlock.identifier).toBe('1')
+    expect(definitionBlock.editable).toBe(false)
+    expect(definitionBlock.aiRewritable).toBe(false)
+    expect(definitionBlock.source.rawSlice).toContain('来源：工信部《产业报告》')
+  })
+
+  it('preserves the footnote reference marker as visible paragraph text', () => {
+    const rawMarkdown = '国产化率约30%[^1]，预计2030年增长\n\n[^1]: 来源：工信部《产业报告》'
+    const document = parseMarkdownToCanonical({
+      rawMarkdown,
+      baseVersion: 'test-v1',
+      draftRevision: 0,
+    })
+
+    const paragraph = document.blocks[0]
+    if (paragraph.kind !== 'paragraph') {
+      throw new Error('expected paragraph block')
+    }
+
+    expect(paragraph.visibleText).toBe('国产化率约30%[^1]，预计2030年增长')
+
+    const footnoteInline = paragraph.inlines.find((inline) => inline.kind === 'footnoteReference')
+    expect(footnoteInline?.text).toBe('[^1]')
+  })
+})
+
 describe('projectParagraphView', () => {
   it('preserves paragraph soft-break lines without splitting the paragraph block', () => {
     const projected = projectParagraphView('第一行\n第二行\n第三行')

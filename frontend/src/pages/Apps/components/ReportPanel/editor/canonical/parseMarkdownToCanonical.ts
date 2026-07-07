@@ -5,6 +5,8 @@ import type {
   Blockquote,
   Code,
   Content,
+  FootnoteDefinition,
+  FootnoteReference,
   Heading,
   Link,
   List,
@@ -29,7 +31,11 @@ import type {
   TableBlock,
 } from './types'
 
-const markdownProcessor = unified().use(remarkParse).use(remarkGfm)
+// singleTilde: false — a lone `~` (e.g. Chinese approximate-range notation "30~40%")
+// must not be parsed as a GFM strikethrough delimiter; only `~~text~~` should be.
+const markdownProcessor = unified()
+  .use(remarkParse)
+  .use(remarkGfm, { singleTilde: false })
 
 const createBlockId = (kind: string, source: BlockSource, blockIndex: number) =>
   `${kind}:${source.rawStart}:${source.rawEnd}:${blockIndex}`
@@ -80,6 +86,8 @@ const extractInlineText = (node: PhrasingContent): string => {
       return node.children.map(extractInlineText).join('')
     case 'break':
       return '\n'
+    case 'footnoteReference':
+      return `[^${node.label ?? node.identifier}]`
     default:
       return ''
   }
@@ -95,6 +103,8 @@ const toInlineKind = (node: PhrasingContent): CanonicalInlineKind => {
       return 'delete'
     case 'inlineCode':
       return 'code'
+    case 'footnoteReference':
+      return 'footnoteReference'
     case 'link':
       if (/^#inference:\d+$/.test(node.url ?? '')) {
         return 'inference'
@@ -152,6 +162,15 @@ const buildInline = (
       ...baseInline,
       kind: 'citation',
       href: (node as Link).url,
+    }
+  }
+
+  if (baseInline.kind === 'footnoteReference') {
+    const footnoteReference = node as FootnoteReference
+    return {
+      ...baseInline,
+      kind: 'footnoteReference',
+      identifier: footnoteReference.identifier,
     }
   }
 
@@ -246,6 +265,23 @@ const buildCodeBlock = (rawMarkdown: string, node: Code, blockIndex: number): Ca
   }
 }
 
+const buildFootnoteDefinitionBlock = (
+  rawMarkdown: string,
+  node: FootnoteDefinition,
+  blockIndex: number,
+): CanonicalBlock => {
+  const source = getBlockSource(rawMarkdown, node)
+
+  return {
+    id: createBlockId('footnoteDefinition', source, blockIndex),
+    kind: 'footnoteDefinition',
+    source,
+    editable: false,
+    aiRewritable: false,
+    identifier: node.identifier,
+  }
+}
+
 const buildTableBlock = (rawMarkdown: string, node: Table, blockIndex: number): TableBlock => {
   const source = getBlockSource(rawMarkdown, node)
 
@@ -277,6 +313,8 @@ const toCanonicalBlock = (
       return buildCodeBlock(rawMarkdown, node, blockIndex)
     case 'table':
       return buildTableBlock(rawMarkdown, node, blockIndex)
+    case 'footnoteDefinition':
+      return buildFootnoteDefinitionBlock(rawMarkdown, node, blockIndex)
     default:
       return null
   }

@@ -260,7 +260,7 @@ export default function EvaluationHelpModal({ open, onClose }: Props) {
               }}
             >
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
                 components={{
                   // Add IDs only to H2 (##) for navigation
                   h2: ({ children, ...props }) => {

@@ -12,6 +12,7 @@ import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'
 import remarkRehype from 'remark-rehype'
 import { unified } from 'unified'
+import { remarkDemoteFalsePositiveInlineMath } from '@/utils/remarkDemoteFalsePositiveInlineMath'
 import { CustomSideMenu, AIRewritePanel, AIRewriteStatusIndicator } from './sideMenu'
 import { buildBlockTransitionStyleRule, buildRewriteDiffStyleRule } from './blockTransitionStyle'
 import { PANEL_TOTAL_HEIGHT, HIGHLIGHT_CSS, HIGHLIGHT_STYLE_ID } from '../constants'
@@ -279,12 +280,19 @@ const createSelectionSnapshotFromBlock = (blockElement: HTMLElement): RangeSelec
   }
 }
 
+// singleTilde: false on both strikethrough extensions — a lone `~` (e.g. "30~40%")
+// must not be parsed as a strikethrough delimiter; only `~~text~~` should be.
 const htmlRendererProcessor = unified()
   .use(remarkParse)
-  .use(remarkGfm)
+  .use(remarkGfm, { singleTilde: false })
   .use(remarkCjkFriendly)
-  .use(remarkCjkFriendlyGfmStrikethrough)
+  .use(remarkCjkFriendlyGfmStrikethrough, { singleTilde: false })
+  // singleDollarTextMath: true so `$x=1$`-style inline math renders (matching
+  // VS Code/Pandoc). remarkDemoteFalsePositiveInlineMath then demotes spans
+  // like "price from $30 to $40" back to text — same anti-currency rule
+  // VS Code's KaTeX preview uses.
   .use(remarkMath, { singleDollarTextMath: true })
+  .use(remarkDemoteFalsePositiveInlineMath)
   .use(remarkRehype, { allowDangerousHtml: true })
   .use(rehypeRaw)
   .use(rehypeStringify)

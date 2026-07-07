@@ -5,6 +5,7 @@ export type CanonicalBlockKind =
   | 'blockquote'
   | 'code'
   | 'table'
+  | 'footnoteDefinition'
 
 export type CanonicalInlineKind =
   | 'text'
@@ -15,6 +16,7 @@ export type CanonicalInlineKind =
   | 'link'
   | 'inference'
   | 'citation'
+  | 'footnoteReference'
 
 export interface BlockSource {
   rawStart: number
@@ -78,6 +80,11 @@ export interface CitationInline extends BaseInline {
   href: string
 }
 
+export interface FootnoteReferenceInline extends BaseInline {
+  kind: 'footnoteReference'
+  identifier: string
+}
+
 export type CanonicalInline =
   | TextInline
   | StrongInline
@@ -87,6 +94,7 @@ export type CanonicalInline =
   | LinkInline
   | InferenceInline
   | CitationInline
+  | FootnoteReferenceInline
 
 export interface BaseBlock {
   id: string
@@ -130,6 +138,11 @@ export interface TableBlock extends BaseBlock {
   columnCount: number
 }
 
+export interface FootnoteDefinitionBlock extends BaseBlock {
+  kind: 'footnoteDefinition'
+  identifier: string
+}
+
 export type CanonicalBlock =
   | ParagraphBlock
   | HeadingBlock
@@ -137,6 +150,7 @@ export type CanonicalBlock =
   | BlockquoteBlock
   | CodeBlock
   | TableBlock
+  | FootnoteDefinitionBlock
 
 export interface CanonicalDocument {
   rawMarkdown: string
