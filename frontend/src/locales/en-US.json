@@ -719,7 +719,36 @@
       "deepsearchServiceDown": "DeepSearch service is temporarily unavailable",
       "stopDeepSearch": "Stop DeepSearch",
       "taskRunning": {
-        "statusText": "Content is being generated. Do not refresh or close the page, or the research will be cancelled.\nIf generation takes too long, keep this page active to avoid cancellation."
+        "statusTextBefore": "Content is being generated. Do not refresh or close the page, or the research will be cancelled.\nIf generation takes too long, ",
+        "keepAliveLinkText": "keep this page active",
+        "statusTextAfter": " to avoid cancellation.",
+        "keepAliveGuide": {
+          "title": "Keep this page active",
+          "description": "Browsers may pause or discard inactive tabs to save resources, which can interrupt an ongoing research task. Adding this site to your browser's \"keep active\" list prevents this from happening.",
+          "urlCopiedToast": "Site address copied. Follow the steps below to open your browser settings and paste it in.",
+          "currentSite": "Current site address",
+          "copy": "Copy",
+          "copied": "Copied",
+          "edge": {
+            "title": "Microsoft Edge",
+            "steps": [
+              "Click the \"...\" (Settings and more) icon in the top-right corner, then select \"Settings\"",
+              "Select \"System and performance\" from the left menu",
+              "Under \"Performance\", find \"Keep these sites active\"",
+              "Click \"Add\" and enter or paste the site address above"
+            ]
+          },
+          "chrome": {
+            "title": "Google Chrome",
+            "steps": [
+              "Click the three-dot icon in the top-right corner, then select \"Settings\"",
+              "Select \"Performance\" from the left menu",
+              "Under \"Memory\", find \"Always keep these sites active\"",
+              "Click \"Add\" and enter or paste the site address above"
+            ]
+          },
+          "close": "Got it"
+        }
       }
     },
     "picker": {
