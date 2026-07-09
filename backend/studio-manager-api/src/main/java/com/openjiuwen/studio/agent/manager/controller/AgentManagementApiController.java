@@ -193,7 +193,7 @@ public class AgentManagementApiController implements AgentManagementApi {
         String importAgents, String importTools, String importWorkflows) {
         return ResponseModel.success(
             agentManagementService.importAgents(workspaceId, projectId, file, importAgents, importTools,
-                importWorkflows));
+                importWorkflows, ExportModeEnum.STRICT.getCode()));
     }
 
     @Override

@@ -4,6 +4,7 @@
 
 package com.openjiuwen.studio.agent.manager.workflow.resource.adapt;
 
+import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.enums.ImportDescEnum;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
@@ -12,6 +13,7 @@ import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
 import com.openjiuwen.studio.agent.manager.mapper.workspace.WorkspaceMapper;
+import com.openjiuwen.studio.agent.manager.workflow.resource.model.ExportInfo;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ExportResourceUnit;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ExportResp;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ExportResult;
@@ -23,6 +25,7 @@ import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportResourc
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -68,7 +71,7 @@ public abstract class ResourceAdapter {
     public List<ReleaseVersion> getReleaseVersions(List<ExportResult> exportResults) {
         // 查询导出资源版本dsl
         List<ExportResult> successExportResults = exportResults.stream()
-            .filter(p -> p.getStatus() == ImportExportStatusEnum.SUCCESS)
+            .filter(p -> p.getStatus() == ImportExportStatusEnum.SUCCESS && p.getResourceLevel() == 2)
             .toList();
         if (CollectionUtils.isEmpty(successExportResults)) {
             log.info("all export workflow resource failed");
@@ -77,6 +80,16 @@ public abstract class ResourceAdapter {
         List<ReleaseVersion> releaseVersions = releaseVersionMapper.queryByWfVersions(
             convert2ReleaseParam(successExportResults));
         return releaseVersions;
+    }
+
+    public String getDsl(ExportResourceUnit resourceUnit, String dsl, ExportInfo latestInfo) {
+        if (!Strings.CS.equals(resourceUnit.getResourceVersion(), Constants.LATEST_PUBLISH_VERSION)) {
+            ReleaseVersion releaseVersion = releaseVersionMapper.selectByAppIdAndVersionId(resourceUnit.getResourceId(),
+                resourceUnit.getResourceVersion());
+            latestInfo.setReleaseVersion(releaseVersion);
+            return releaseVersion.getDslPath();
+        }
+        return dsl;
     }
 
     private List<ReleaseVersion> convert2ReleaseParam(List<ExportResult> successExportResults) {

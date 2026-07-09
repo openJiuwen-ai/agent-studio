@@ -4,6 +4,7 @@
 package com.openjiuwen.studio.agent.manager.workflow.resource.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 
 import lombok.Data;
 
@@ -27,6 +28,9 @@ public class ExportResourceUnit {
     @JsonProperty("parent_resource_id")
     private String parentResourceId;
 
+    @JsonProperty("resource_level")
+    private Integer resourceLevel;
+
     @JsonProperty("level2_resources")
     private List<String> level2Resources;
 
@@ -36,5 +40,6 @@ public class ExportResourceUnit {
     @JsonProperty("app_type")
     private String appType;
 
-    private Integer resourceLevel;
+    @JsonProperty("l1_mappings")
+    private List<MappingEntity> l1Mappings;
 }

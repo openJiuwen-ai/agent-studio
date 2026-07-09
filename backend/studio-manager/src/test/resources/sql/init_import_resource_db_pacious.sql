@@ -1,0 +1,72 @@
+INSERT INTO t_agent_workflow (id, name, code, description, avatar, icon_name, dsl_path, ir_path,
+                              status, trigger_list, visibility, created_at, updated_at, published_at,
+                              created_by, creator_id, updated_by, updater_id, project_id, workspace_id,
+                              domain_id, deploy_wf_version, ref_workflows, last_version_id, deleted,
+                              test_status, customize_node, is_share, workflow_type, trace_id)
+VALUES ('a7a312f0-c110-4714-834d-2a7577d0fbbc', 'wzd-主智能体-工作流', 'wzd-zhuzhinengti-gongzuoliu',
+        'wzd-主智能体-工作流',
+        'data:image/svg+xml;base64,PHNCg==',
+        NULL, 'workflow/flow/a7a312f0-c110-4714-834d-2a7577d0fbbc/a7a312f0-c110-4714-834d-2a7577d0fbbc.json',
+        'workflow/ir/a7a312f0-c110-4714-834d-2a7577d0fbbc/a7a312f0-c110-4714-834d-2a7577d0fbbc.json', 'published', NULL,
+        'project', 1781664575020, 1782185711307, 1781664588232, 'testUser', 'testUser', 'testUser', 'testUser',
+        'test_project_id',
+        'default', 'test_project_id', 1781664575020, NULL, '1781664588194', 0, 0, NULL, 0, 'chat',
+        'a7a312f0-c110-4714-834d-2a7577d0fbbc');
+INSERT INTO `t_agent_workflow` (`id`, `name`, `code`, `description`, `avatar`, `icon_name`, `dsl_path`, `ir_path`,
+                                `status`, `trigger_list`, `visibility`, `created_at`, `updated_at`, `published_at`,
+                                `created_by`, `creator_id`, `updated_by`, `updater_id`, `project_id`, `workspace_id`,
+                                `domain_id`, `deploy_wf_version`, `ref_workflows`, `last_version_id`, `deleted`,
+                                `test_status`, `customize_node`, `is_share`, `workflow_type`, `trace_id`)
+VALUES ('1fc3eed4-effa-4c8a-b419-82c6b9b8481f', 'wzd-主智能体-其他工作流', 'wzd-zhuzhinengti-qitagongzuoliu', 'dd',
+        'data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNTYgNTYiIHhtbG5zPSJodHRwO=',
+        NULL, 'workflow/flow/1fc3eed4-effa-4c8a-b419-82c6b9b8481f/1fc3eed4-effa-4c8a-b419-82c6b9b8481f.json',
+        'workflow/ir/1fc3eed4-effa-4c8a-b419-82c6b9b8481f/1fc3eed4-effa-4c8a-b419-82c6b9b8481f.json', 'published', NULL,
+        'project', 1781749979664, 1782180811724, 1782180811636, 'testUser', 'testUser', 'testUser', 'testUser',
+        'test_project_id',
+        'default', 'test_project_id', 1782178763353, NULL, '1782180811597', 0, 0, NULL, 0, 'chat',
+        '5b496558-aaed-4aae-b040-29a3e54fdde6');
+INSERT INTO `t_agent_workflow` (`id`, `name`, `code`, `description`, `avatar`, `icon_name`, `dsl_path`, `ir_path`,
+                                `status`, `trigger_list`, `visibility`, `created_at`, `updated_at`, `published_at`,
+                                `created_by`, `creator_id`, `updated_by`, `updater_id`, `project_id`, `workspace_id`,
+                                `domain_id`, `deploy_wf_version`, `ref_workflows`, `last_version_id`, `deleted`,
+                                `test_status`, `customize_node`, `is_share`, `workflow_type`, `trace_id`)
+VALUES ('5b496558-aaed-4aae-b040-29a3e54fdde6', 'wzd-主智能体-其他工作流', 'wzd-zhuzhinengti-qitagongzuoliu', 'dd',
+        'data:image/svg+xml;base64,PHN2ZyB2QoJPHJMzMzMzAyIiBmaWxsPSJyZ2JhKDI==',
+        NULL, 'workflow/flow/5b496558-aaed-4aae-b040-29a3e54fdde6/5b496558-aaed-4aae-b040-29a3e54fdde6.json',
+        'workflow/ir/5b496558-aaed-4aae-b040-29a3e54fdde6/5b496558-aaed-4aae-b040-29a3e54fdde6.json', 'published', NULL,
+        'project', 1781664616958, 1781664621682, 1781664621623, 'testUser', 'testUser', 'testUser', 'testUser',
+        'test_project_id',
+        'default', 'test_project_id', 1781664616958, NULL, '1781664621585', 0, 0, NULL, 0, 'chat',
+        '5b496558-aaed-4aae-b040-29a3e54fdde6');
+
+
+INSERT INTO `t_agent` (`agent_id`, `project_id`, `name`, `description`, `icon`, `icon_name`,
+                       `model_deployment_id`, `model_name`, `model_config`, `instructions`,
+                       `trigger_list`, `memory_variables`, `prologue`, `suggest_queries`,
+                       `additional_questions_config`, `voice_interaction`, `dsl_path`, `ir_path`,
+                       `type`, `sub_type`, `status`, `creator`, `creator_id`, `created_on`,
+                       `updated_on`, `published_on`, `is_share`, `model_type`,
+                       `knowledge_retrieve_policy`, `workflow_switch_enabled`, `scheduling_mode`,
+                       `model`, `content_review`, `safety_barrier`, `workspace_id`, `trace_id`,
+                       `domain_id`, `agent_variables`, `memory_config`, `plan_qa_independent`,
+                       `plan_model`, `plan_model_deployment_id`, `plan_model_name`,
+                       `plan_model_config`, `plan_model_type`, `deleted`, `reference`,
+                       `input_variables`)
+VALUES ('26d0d5df-1921-4aa4-9eb6-625287c59705', 'test_project_id', 'wzd-sub-智能体-误删', 'ss',
+        'data:image/svg+xml;base64g==',
+        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+        'agent/flow/26d0d5df-1921-4aa4-9eb6-625287c59705/26d0d5df-1921-4aa4-9eb6-625287c59705.json',
+        'agent/ir/26d0d5df-1921-4aa4-9eb6-625287c59705/26d0d5df-1921-4aa4-9eb6-625287c59705.json', 'controller', NULL,
+        'published', 'testUser', 'testUser', '2026-06-17 02:48:35', '2026-06-17 02:50:58', '2026-06-17 02:50:58', 0,
+        NULL, NULL, 0, 'ReAct', NULL, NULL, NULL, 'default',
+        '26d0d5df-1921-4aa4-9eb6-625287c59705', 'test_project_id', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0,
+        NULL, NULL);
+
+INSERT INTO `t_release_version` (`id`, `version_id`, `version_name`, `version_note`, `app_id`, `app_type`, `status`,
+                                 `dsl_path`, `ir_path`, `creator`, `creator_id`, `app_sub_type`, `released_on`,
+                                 `extend1`, `deleted`, `updated_on`)
+VALUES ('95b783d9-d7e2-4824-b930-8c98a78f1aea', '1781664658199', 'v20260617105056', '',
+        '26d0d5df-1921-4aa4-9eb6-625287c59705', 'agent', 'normal',
+        'agent/flow/26d0d5df-1921-4aa4-9eb6-625287c59705/26d0d5df-1921-4aa4-9eb6-625287c59705_1781664658199.json',
+        'agent/ir/26d0d5df-1921-4aa4-9eb6-625287c59705/26d0d5df-1921-4aa4-9eb6-625287c59705_1781664658199.json',
+        'testUser', 'testUser', NULL, '2026-06-17 02:50:58', NULL, 0, '2026-06-17 02:50:58');

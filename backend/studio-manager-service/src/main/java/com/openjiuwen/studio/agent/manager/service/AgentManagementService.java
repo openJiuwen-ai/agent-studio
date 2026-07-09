@@ -3399,11 +3399,11 @@ public class AgentManagementService implements IAgentManagementService {
         resourceName = ""
     )
     public ImportRsp importAgents(String workspaceId, String projectId, MultipartFile file, String importAgents,
-        String importTools, String importWorkflows) {
+        String importTools, String importWorkflows, String mode) {
         checkImportFile(file);
         skuManageService.validateAttrEnable(CommonConstant.SKU_ATTR_CODE.EXPORT_AND_IMPORT);
         if (agentCommonService.isExportFileV2(file)) {
-            return agentImportService.importFile(projectId, RequestContextUtils.getRequestWorkspaceId(), file);
+            return agentImportService.importFile(projectId, RequestContextUtils.getRequestWorkspaceId(), file, mode);
         }
         return agentImportExportService.importAgents(projectId, file, importAgents, importTools, importWorkflows);
     }
