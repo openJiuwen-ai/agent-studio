@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Plus, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useConversationStore } from '../../../../stores/useConversationStore'
 import { RADIUS_BUTTON, BUTTON_HOVER_EFFECTS, BUTTON_TRANSITION, RADIUS_CIRCLE } from '../../constants/styles'
 import ConversationList from './ConversationList'
 import type { ConversationHistorySidebarProps } from './types'
@@ -12,6 +11,7 @@ const SIDEBAR_COLLAPSED_KEY = 'deepsearch_sidebar_collapsed'
 const ConversationHistorySidebar: React.FC<ConversationHistorySidebarProps> = ({
   currentConversationId,
   onConversationSelect,
+  onDeleteConversation,
   onNewConversation,
   isStreaming,
   forceCollapsed = false,
@@ -41,11 +41,6 @@ const ConversationHistorySidebar: React.FC<ConversationHistorySidebarProps> = ({
       localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(isCollapsed))
     }
   }, [isCollapsed, forceCollapsed])
-
-  const handleDeleteConversation = async (conversationId: string) => {
-    const { deleteConversation } = useConversationStore.getState()
-    await deleteConversation(conversationId)
-  }
 
   // 统一的图标按钮样式
   const iconButtonClass = `
@@ -122,7 +117,7 @@ const ConversationHistorySidebar: React.FC<ConversationHistorySidebarProps> = ({
       <ConversationList
         currentConversationId={currentConversationId}
         onConversationSelect={onConversationSelect}
-        onDeleteConversation={handleDeleteConversation}
+        onDeleteConversation={onDeleteConversation}
         isStreaming={isStreaming}
       />
     </div>

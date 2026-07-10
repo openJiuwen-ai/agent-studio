@@ -5,6 +5,8 @@ export interface ConversationHistorySidebarProps {
   currentConversationId: string | null;
   /** Callback when a conversation is selected */
   onConversationSelect: (conversationId: string) => Promise<void>;
+  /** Callback when delete is requested */
+  onDeleteConversation: (conversationId: string) => Promise<void>;
   /** Callback to create a new conversation */
   onNewConversation: () => void;
   /** Whether SSE streaming is in progress */
