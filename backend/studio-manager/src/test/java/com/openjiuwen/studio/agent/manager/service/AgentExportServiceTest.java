@@ -88,7 +88,6 @@ public class AgentExportServiceTest extends BaseTest {
 
     @Test
     @Sql(scripts = {
-        "classpath:sql/card/card_create_db.sql", "classpath:sql/card/card_init_data.sql",
         "classpath:sql/resource_export_setup_db.sql"
     }, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
     void testAgentExportV2() throws IOException {
@@ -128,7 +127,7 @@ public class AgentExportServiceTest extends BaseTest {
         when(mgObsService.uploadObsFile(anyString(), any(InputStream.class), anyInt())).thenReturn(StringUtils.EMPTY);
 
         ExportResourceRsp exportWfResourceRsp = agentExportService.exportResource(projectId,
-            Constants.TEST_WORKSPACE_ID, MediaType.APPLICATION_JSON_VALUE, body);
+            Constants.TEST_WORKSPACE_ID, body);
         assertNotNull(exportWfResourceRsp);
 
         // 测试agent导出
@@ -141,7 +140,7 @@ public class AgentExportServiceTest extends BaseTest {
         body.setMode(ExportModeEnum.STRICT.getCode());
 
         ExportResourceRsp exportAgentResourceRsp = agentExportService.exportResource(projectId,
-            Constants.TEST_WORKSPACE_ID, MediaType.APPLICATION_JSON_VALUE, body);
+            Constants.TEST_WORKSPACE_ID, body);
         assertNotNull(exportAgentResourceRsp);
 
         // 测试多agent导出
@@ -154,7 +153,7 @@ public class AgentExportServiceTest extends BaseTest {
         body.setMode(ExportModeEnum.STRICT.getCode());
 
         ExportResourceRsp exportControllerResourceRsp = agentExportService.exportResource(projectId,
-            Constants.TEST_WORKSPACE_ID, MediaType.APPLICATION_OCTET_STREAM_VALUE, body);
+            Constants.TEST_WORKSPACE_ID, body);
         assertEquals(exportControllerResourceRsp,null);
 
         // 测试validResource分支：指定不存在的版本号，validResource返回true，资源被跳过并记录错误
@@ -168,7 +167,7 @@ public class AgentExportServiceTest extends BaseTest {
         body.setMode(ExportModeEnum.STRICT.getCode());
 
         ExportResourceRsp exportInvalidRsp = agentExportService.exportResource(projectId, Constants.TEST_WORKSPACE_ID,
-            MediaType.APPLICATION_JSON_VALUE, body);
+            body);
         assertNotNull(exportInvalidRsp);
         assertNotNull(exportInvalidRsp.getExportResult());
 
@@ -183,7 +182,7 @@ public class AgentExportServiceTest extends BaseTest {
         body.setMode(ExportModeEnum.STRICT.getCode());
 
         ExportResourceRsp exportExistRsp = agentExportService.exportResource(projectId, Constants.TEST_WORKSPACE_ID,
-            MediaType.APPLICATION_JSON_VALUE, body);
+            body);
         assertNotNull(exportExistRsp);
         assertNotNull(exportExistRsp.getExportResult());
 
@@ -199,7 +198,7 @@ public class AgentExportServiceTest extends BaseTest {
         body.setResourceType("agent");
 
         ExportResourceRsp exportMergeRsp = agentExportService.exportResource(projectId, Constants.TEST_WORKSPACE_ID,
-            MediaType.APPLICATION_JSON_VALUE, body);
+            body);
         assertNotNull(exportMergeRsp);
         assertNotNull(exportMergeRsp.getExportResult());
     }

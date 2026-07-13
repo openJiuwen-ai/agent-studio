@@ -17,7 +17,6 @@ import com.openjiuwen.studio.agent.manager.constant.Constants;
 import com.openjiuwen.studio.agent.manager.dto.ImportListInfo;
 import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
-import com.openjiuwen.studio.agent.manager.rce.client.AgentBaseRuntimeClient;
 import com.openjiuwen.studio.agent.manager.utils.BaseTest;
 import com.openjiuwen.studio.agent.manager.utils.TestUtil;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportExportStatusEnum;
@@ -46,8 +45,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @MockitoSettings(strictness = Strictness.LENIENT)
-@Sql(scripts = {"classpath:sql/card/card_create_db.sql", "classpath:sql/card/card_init_data.sql"},
-    executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 @Sql(scripts = {"classpath:sql/after_test_clear_db.sql"}, executionPhase = Sql.ExecutionPhase.AFTER_TEST_CLASS)
 public class AgentImportServiceTest extends BaseTest {
 
@@ -70,9 +67,6 @@ public class AgentImportServiceTest extends BaseTest {
 
     @MockitoBean
     private MgObsService obsService;
-
-    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
-    private AgentBaseRuntimeClient agentBaseRuntimeClient;
 
     @Mock(answer = RETURNS_DEEP_STUBS)
     private MgObsService mgObsService;
@@ -159,7 +153,6 @@ public class AgentImportServiceTest extends BaseTest {
     void testImportFileNewResource() {
         // When
         when(obsService.uploadObsFile(any(), any(), any(), any(), any())).thenReturn("test_dsl_path");
-        when(agentBaseRuntimeClient.listKnowledgeRepos(any(), any(), any())).thenReturn(null);
 
         ImportRsp importRsp = agentImportService.importFile(Constants.TEST_PROJECT_ID, Constants.TEST_WORKSPACE_ID,
             testFile, null);
@@ -177,7 +170,6 @@ public class AgentImportServiceTest extends BaseTest {
     void testImportFileNewResourceSpacious() {
         // When
         when(obsService.uploadObsFile(any(), any(), any(), any(), any())).thenReturn("test_dsl_path");
-        when(agentBaseRuntimeClient.listKnowledgeRepos(any(), any(), any())).thenReturn(null);
 
         ImportRsp importRsp = agentImportService.importFile(Constants.TEST_PROJECT_ID, Constants.TEST_WORKSPACE_ID,
             testSpaciousFile, "SPACIOUS");
