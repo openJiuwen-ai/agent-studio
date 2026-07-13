@@ -181,13 +181,13 @@ class ReActAgentRunner:
         """解析最大迭代次数"""
         return ir_json.get("configs", {}).get("maxIteration", 5)
 
-    def _create_llm(self, ir_json: dict) -> Model:
+    async def _create_llm(self, ir_json: dict) -> Model:
         """根据 IR 配置创建 LLM 模型实例"""
-        from agent_runtime.common.model_providers import IRModelConfigProvider
+        from jiuwen.serve.controllers.execution.ir_converter import _get_model_config_provider
 
         adapted_conf = _adapt_react_agent_config(ir_json)
-        provider = IRModelConfigProvider()
-        llm_comp_config = provider.get_llm_config(adapted_conf)
+        provider = _get_model_config_provider()
+        llm_comp_config = await provider.get_llm_config(adapted_conf)
 
         return Model(
             model_client_config=llm_comp_config.model_client_config,
@@ -607,7 +607,7 @@ class ReActAgentRunner:
 
         # 创建 LLM 模型
         try:
-            llm = self._create_llm(ir_json)
+            llm = await self._create_llm(ir_json)
         except Exception as e:
             workflow_logger.error(f"Failed to create LLM: {e}")
             yield adapter.adapt_error(f"Failed to create LLM: {e}")

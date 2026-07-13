@@ -65,6 +65,19 @@ spec:
             # 模型路由接口地址，HTTPS启动需要改成https
             - name: MODEL_ROUTER_API
               value: 'http://studio-service:31113/v1/agent-builder'
+            # 模型配置来源策略：env（环境变量）/ ir（旧版路由）/ obs（OBS直连，默认，绕过模型路由）
+            - name: MODEL_CONFIG_STRATEGY
+              value: 'obs'
+            # 模型缓存 LRU 容量，默认 500
+            - name: MAX_MODEL_SERVICE_CACHE_NUM
+              value: '500'
+            - name: MAX_MODEL_AUTH_CACHE_NUM
+              value: '500'
+            # 模型缓存 TTL（秒），默认 L1=60 / L2=300
+            - name: MODEL_CACHE_MEM_TTL
+              value: '60'
+            - name: MODEL_CACHE_REDIS_TTL
+              value: '300'
             # ======== [选填] HTTPS证书 ========
             # 启用时设HTTPS=true，并填写证书Base64编码
             - name: HTTPS

@@ -7,6 +7,8 @@
 # NOTE: These tests are TDD — the "enabled"/"disabled" tests are expected to FAIL
 # until the thinking→extra_body implementation is added in a subsequent task.
 
+import asyncio
+
 import pytest
 
 from agent_runtime.ir_config.model_config import IRModelConfigProvider
@@ -50,7 +52,7 @@ class TestThinkingEnabled:
         ir_node = _make_ir_node({"type": "enabled"})
         provider = IRModelConfigProvider()
 
-        result = provider.get_llm_config(ir_node)
+        result = asyncio.run(provider.get_llm_config(ir_node))
 
         model_config = result.model_config
         extra_body = getattr(model_config, "extra_body", None)
@@ -65,7 +67,7 @@ class TestThinkingDisabled:
         ir_node = _make_ir_node({"type": "disabled"})
         provider = IRModelConfigProvider()
 
-        result = provider.get_llm_config(ir_node)
+        result = asyncio.run(provider.get_llm_config(ir_node))
 
         model_config = result.model_config
         extra_body = getattr(model_config, "extra_body", None)
@@ -79,7 +81,7 @@ class TestThinkingAbsent:
         ir_node = _make_ir_node(None)
         provider = IRModelConfigProvider()
 
-        result = provider.get_llm_config(ir_node)
+        result = asyncio.run(provider.get_llm_config(ir_node))
 
         model_config = result.model_config
         extra_body = getattr(model_config, "extra_body", None)
@@ -94,7 +96,7 @@ class TestThinkingInvalid:
         ir_node = _make_ir_node("enabled")
         provider = IRModelConfigProvider()
 
-        result = provider.get_llm_config(ir_node)
+        result = asyncio.run(provider.get_llm_config(ir_node))
 
         extra_body = getattr(result.model_config, "extra_body", None)
         assert extra_body is None
@@ -104,7 +106,7 @@ class TestThinkingInvalid:
         ir_node = _make_ir_node({"foo": "bar"})
         provider = IRModelConfigProvider()
 
-        result = provider.get_llm_config(ir_node)
+        result = asyncio.run(provider.get_llm_config(ir_node))
 
         extra_body = getattr(result.model_config, "extra_body", None)
         assert extra_body is None

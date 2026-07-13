@@ -146,6 +146,14 @@ services:
       GUNICORN_WORK_NUM: ${GUNICORN_WORK_NUM:-}
       # 模型路由接口地址，HTTPS启动需要改成https
       MODEL_ROUTER_API: ${MODEL_ROUTER_API:-http://studio-service:31113/v1/agent-builder}
+      # 模型配置来源策略：env/ir/obs（默认 obs：OBS 直连，绕过模型路由）
+      MODEL_CONFIG_STRATEGY: ${MODEL_CONFIG_STRATEGY:-obs}
+      # 模型缓存 LRU 容量，默认 500
+      MAX_MODEL_SERVICE_CACHE_NUM: ${MAX_MODEL_SERVICE_CACHE_NUM:-500}
+      MAX_MODEL_AUTH_CACHE_NUM: ${MAX_MODEL_AUTH_CACHE_NUM:-500}
+      # 模型缓存 TTL（秒），L1 内存默认 60s，L2 Redis 默认 300s
+      MODEL_CACHE_MEM_TTL: ${MODEL_CACHE_MEM_TTL:-60}
+      MODEL_CACHE_REDIS_TTL: ${MODEL_CACHE_REDIS_TTL:-300}
       HTTPS: ${SERVER_SSL_ENABLED:-false}
       HTTPS_CERT_FILE: ${HTTPS_CERT_FILE:-}
       HTTPS_KEY_FILE: ${HTTPS_KEY_FILE:-}

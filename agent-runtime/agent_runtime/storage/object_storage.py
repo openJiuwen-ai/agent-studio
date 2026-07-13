@@ -27,10 +27,20 @@ from agent_runtime.common.config import settings
 from agent_runtime.common.ir_interfaces import (
     ObjectStorageProvider,
     StorageConfigError,
+    StorageNotFoundError,
     StorageReadError,
 )
 from botocore.config import Config as BotoConfig
+from botocore.exceptions import ClientError
 from openjiuwen.core.common.logging import workflow_logger
+
+
+def _is_s3_not_found(client_error: ClientError) -> bool:
+    """S3 对象不存在：NoSuchKey/404 code 或 HTTP 404 status。"""
+    response = getattr(client_error, "response", {}) or {}
+    code = (response.get("Error") or {}).get("Code", "")
+    status = (response.get("ResponseMetadata") or {}).get("HTTPStatusCode")
+    return code in ("NoSuchKey", "404", "NotFound") or status == 404
 
 
 class S3StorageProvider(ObjectStorageProvider):
@@ -164,6 +174,19 @@ class S3StorageProvider(ObjectStorageProvider):
             )
             async with response["Body"] as stream:
                 return await stream.read()
+        except StorageConfigError:
+            raise
+        except ClientError as e:
+            if _is_s3_not_found(e):
+                raise StorageNotFoundError(
+                    f"S3 object not found: object_key={object_key}"
+                ) from e
+            workflow_logger.error(
+                f"S3 read failed: object_key={object_key}, {e}", exc_info=True
+            )
+            raise StorageReadError(
+                f"S3 read failed: object_key={object_key}, error={e}"
+            ) from e
         except Exception as e:
             if isinstance(e, (StorageConfigError, StorageReadError)):
                 raise
@@ -189,6 +212,35 @@ class S3StorageProvider(ObjectStorageProvider):
         """
         data = await self.get_object_bytes(object_key)
         return data.decode("utf-8")
+
+    async def list_keys(self, prefix: str) -> list[str]:
+        """列出指定前缀下的所有对象 key
+
+        Args:
+            prefix: S3 对象 key 前缀
+
+        Returns:
+            list[str]: 匹配的对象 key 列表
+
+        Raises:
+            StorageConfigError: 未初始化
+            StorageReadError: 列出失败
+        """
+        self._ensure_initialized()
+        try:
+            keys = []
+            paginator = self._client.get_paginator("list_objects_v2")
+            async for page in paginator.paginate(
+                Bucket=self._bucket, Prefix=prefix, MaxKeys=1000
+            ):
+                for obj in page.get("Contents", []):
+                    keys.append(obj["Key"])
+            return keys
+        except Exception as e:
+            workflow_logger.error("S3 list failed: prefix=%s, error=%s", prefix, e)
+            raise StorageReadError(
+                f"S3 list failed: prefix={prefix}, error={e}"
+            ) from e
 
     @classmethod
     def reset(cls):
@@ -222,7 +274,7 @@ class LocalStorageProvider(ObjectStorageProvider):
         """
         if not os.path.exists(object_key):
             workflow_logger.error(f"File not found: {object_key}")
-            raise StorageReadError(f"File not found: {object_key}")
+            raise StorageNotFoundError(f"File not found: {object_key}")
 
         try:
             loop = asyncio.get_running_loop()
@@ -234,6 +286,12 @@ class LocalStorageProvider(ObjectStorageProvider):
         except Exception as e:
             workflow_logger.error(f"File read failed: {object_key}, {e}", exc_info=True)
             raise StorageReadError(f"File read failed: {object_key}, {e}") from e
+
+    async def list_keys(self, prefix: str) -> list[str]:
+        """列出本地目录下匹配前缀的文件"""
+        import glob as glob_mod
+        pattern = f"{prefix}*" if prefix.endswith("/") else f"{prefix}/*"
+        return sorted(glob_mod.glob(pattern))
 
 
 def get_storage_provider() -> ObjectStorageProvider:

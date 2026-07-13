@@ -31,6 +31,17 @@ class StorageReadError(AgentBuilderError):
         super().__init__(ExtensionStatusCode.STORAGE_READ_ERROR, msg=msg, **kwargs)
 
 
+class StorageNotFoundError(StorageReadError):
+    """存储对象不存在（S3 404/NoSuchKey 或本地文件缺失）— 区别于传输层读失败。
+
+    继承 ``StorageReadError`` 以兼容既有 ``except StorageReadError`` 的调用方（404 仍被捕获）；
+    上层（如 model_service.resolver）可按子类区分"未配置"（→None）与"OBS 不可达"（→读错误）。
+    """
+
+    def __init__(self, msg: str = "", **kwargs):
+        super().__init__(msg=msg, **kwargs)
+
+
 class ObjectStorageProvider(ABC):
     """对象存储提供者抽象类
 
@@ -51,14 +62,27 @@ class ObjectStorageProvider(ABC):
         Raises:
             StorageReadError: 读取失败
         """
-        pass
+
+    async def list_keys(self, prefix: str) -> list[str]:
+        """列出指定前缀下的所有对象 key
+
+        Args:
+            prefix: 对象 key 前缀（如 "model-auth/auth/0/provider-id/"）
+
+        Returns:
+            list[str]: 匹配的对象 key 列表
+
+        Note:
+            默认实现返回空列表；子类可按需覆写。
+        """
+        return []
 
 
 class ModelConfigProvider(ABC):
     """模型配置提供者接口"""
 
     @abstractmethod
-    def get_llm_config(
+    async def get_llm_config(
         self,
         ir_node: dict,
         global_config: Optional[dict] = None,

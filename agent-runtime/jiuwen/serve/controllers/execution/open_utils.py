@@ -64,18 +64,28 @@ class CacheUtils:
             self._async_redis_cache = get_redis_client()
         return self._async_redis_cache
 
-    async def aput(self, key: str, value: Any):
-        """异步刷新内存和redis缓存"""
+    async def aput(self, key: str, value: Any, ttl: Optional[int] = None):
+        """异步刷新内存和redis缓存
+
+        Args:
+            key: 缓存键
+            value: 缓存值
+            ttl: Redis TTL 覆盖值。None 表示使用 self.redis_ttl；
+                 正整数表示自定义秒数；-1 表示永不过期(ex=None)。
+        """
         try:
+            effective_ttl = self.redis_ttl
+            if ttl is not None:
+                effective_ttl = None if ttl == -1 else ttl
             unique_key = self._generate_unique_key(key)
             self._update_memory_cache(unique_key, value)
             if self.should_serialize:
                 await self.async_redis_cache.set(
-                    unique_key, serialize_object(value), ex=self.redis_ttl
+                    unique_key, serialize_object(value), ex=effective_ttl
                 )
             else:
                 await self.async_redis_cache.set(
-                    unique_key, value, ex=self.redis_ttl
+                    unique_key, value, ex=effective_ttl
                 )
             logger.info(
                 f"put {key} in {self.cache_name} memory and redis, "
@@ -84,17 +94,27 @@ class CacheUtils:
         except Exception as e:
             logger.error(f"cache put error, exception {e}", exc_info=True)
 
-    def put(self, key: str, value: Any):
-        """刷新内存和redis缓存"""
+    def put(self, key: str, value: Any, ttl: Optional[int] = None):
+        """刷新内存和redis缓存
+
+        Args:
+            key: 缓存键
+            value: 缓存值
+            ttl: Redis TTL 覆盖值。None 表示使用 self.redis_ttl；
+                 正整数表示自定义秒数；-1 表示永不过期(ex=None)。
+        """
         try:
+            effective_ttl = self.redis_ttl
+            if ttl is not None:
+                effective_ttl = None if ttl == -1 else ttl
             unique_key = self._generate_unique_key(key)
             self._update_memory_cache(unique_key, value)
             if self.should_serialize:
                 self.redis_cache.set(
-                    unique_key, serialize_object(value), ex=self.redis_ttl
+                    unique_key, serialize_object(value), ex=effective_ttl
                 )
             else:
-                self.redis_cache.set(unique_key, value, ex=self.redis_ttl)
+                self.redis_cache.set(unique_key, value, ex=effective_ttl)
             logger.info(
                 f"put {key} in {self.cache_name} memory and redis, "
                 f"memory size {self.memory_cache.currsize}/{self.memory_cache.maxsize}"
@@ -263,6 +283,20 @@ cache_intent_rule_queue = CacheUtils(
     should_serialize=True,
     cache_name="intent_rule",
     redis_ttl=settings.cache.cache_ttl_seconds,
+)
+cache_model_service_queue = CacheUtils(
+    capacity=settings.cache.max_model_service_cache_num,
+    should_serialize=True,
+    cache_name="model_service",
+    memory_ttl=settings.cache.model_cache_mem_ttl,
+    redis_ttl=settings.cache.model_cache_redis_ttl,
+)
+cache_model_auth_queue = CacheUtils(
+    capacity=settings.cache.max_model_auth_cache_num,
+    should_serialize=True,
+    cache_name="model_auth",
+    memory_ttl=settings.cache.model_cache_mem_ttl,
+    redis_ttl=settings.cache.model_cache_redis_ttl,
 )
 
 

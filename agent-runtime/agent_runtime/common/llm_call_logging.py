@@ -80,31 +80,44 @@ def register_llm_call_logging_callbacks() -> None:
                            tools=None, temperature=None, top_p=None,
                            max_tokens=None, **kwargs):
         """打印模型请求体"""
-        request_data = {}
-        if model_name:
-            request_data["model"] = model_name
-        if model_provider:
-            request_data["model_provider"] = model_provider
-        request_data["stream"] = kwargs.get("is_stream", False)
-        if temperature is not None:
-            request_data["temperature"] = temperature
-        if top_p is not None:
-            request_data["top_p"] = top_p
-        if max_tokens is not None:
-            request_data["max_tokens"] = max_tokens
-        # messages 已是 SDK _build_request_params() 转换后的 dict 格式
-        if messages is not None:
-            request_data["messages"] = messages
-        if tools:
-            request_data["tools"] = tools
+        params = kwargs.get("params")
+        if params is not None:
+            # trigger 携带完整 pre-send params 时，构造 wire-body 等效内容：
+            # extra_body 解包到顶层，extra_headers 排除（属 HTTP 头非 body）。
+            request_data = {k: v for k, v in params.items()
+                            if k not in ("extra_headers", "extra_body")}
+            extra_body = params.get("extra_body")
+            if isinstance(extra_body, dict):
+                request_data.update(extra_body)
+            # model_provider 为元数据，不在 wire body 中，单独补充。
+            if model_provider:
+                request_data["model_provider"] = model_provider
+        else:
+            # trigger 未带 params 的路径（如直接使用 OpenAIModelClient 的非 studio 调用）。
+            request_data = {}
+            if model_name:
+                request_data["model"] = model_name
+            if model_provider:
+                request_data["model_provider"] = model_provider
+            request_data["stream"] = kwargs.get("is_stream", False)
+            if temperature is not None:
+                request_data["temperature"] = temperature
+            if top_p is not None:
+                request_data["top_p"] = top_p
+            if max_tokens is not None:
+                request_data["max_tokens"] = max_tokens
+            # messages 已是 SDK _build_request_params() 转换后的 dict 格式
+            if messages is not None:
+                request_data["messages"] = messages
+            if tools:
+                request_data["tools"] = tools
 
-        # 从 kwargs 中提取 SDK trigger 传递的额外参数（如 frequency_penalty、presence_penalty、stop 等）
-        # agent-core 升级前这些参数不会出现在 kwargs 中，升级后会通过 trigger 传递
-        _EXTRA_PARAM_KEYS = ("frequency_penalty", "presence_penalty", "stop")
-        for key in _EXTRA_PARAM_KEYS:
-            val = kwargs.get(key)
-            if val is not None:
-                request_data[key] = val
+            # 从 kwargs 中提取 SDK trigger 传递的额外参数（如 frequency_penalty、presence_penalty、stop 等）
+            _extra_param_keys = ("frequency_penalty", "presence_penalty", "stop")
+            for key in _extra_param_keys:
+                val = kwargs.get(key)
+                if val is not None:
+                    request_data[key] = val
 
         try:
             request_json = json.dumps(request_data, ensure_ascii=False)
