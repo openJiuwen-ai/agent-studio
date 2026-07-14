@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react'
-import { AlertCircle, Check, CheckCircle, Cpu, Eye, EyeOff, Loader2, Play, Search, Settings, Trash2, X } from 'lucide-react'
-import { IconButton, Tooltip } from '@mui/material'
+import { AlertCircle, Check, Cpu, Loader2, Play, Search, Settings, Trash2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { MentionItem } from '../MentionPicker'
 import type { Model } from '@/types/promptType'
@@ -12,13 +11,16 @@ import {
   type DeepSearchExplorerConfig,
   toDeepSearchExplorerConfig,
 } from '../../utils/deepsearchConstants'
-import { taskSpaceWebSearchEngineService } from './taskSpaceWebSearchEngineService'
+import WebFetchProviderConfigDialog, { WebFetchProviderSummaryCard } from './WebFetchProviderConfigDialog'
+import WebSearchEngineConfigDialog, { WebSearchEngineSummaryCard } from './WebSearchEngineConfigDialog'
+import { testWebFetchProvider, testWebSearchProvider, type ProviderTestResponse } from './api'
 
 interface DeepSearchExplorerConfigDialogProps {
   agent: MentionItem | null
   open: boolean
   onClose: () => void
   onSave: (agentId: string, config: DeepSearchExplorerConfig) => void
+  onClearProviderCredentials?: (agentId: string, config: DeepSearchExplorerConfig) => void
   savedConfigs?: Record<string, AppAgentConfig>
   spaceId?: string
   isFirstConfig?: boolean
@@ -27,21 +29,15 @@ interface DeepSearchExplorerConfigDialogProps {
 }
 
 type DeepSearchExplorerTabId = 'general' | 'search' | 'model'
+type ProviderTestKind = 'search' | 'fetch'
+type ProviderTestStatusValue = 'untested' | 'passed' | 'failed'
+type ProviderTestStatus = Record<ProviderTestKind, ProviderTestStatusValue>
 
 interface KnowledgeBaseDetail {
   id: string
   name: string
   desc?: string
   status?: string
-}
-
-type ProviderTestName = 'jina' | 'serper'
-
-type ProviderTestStatus = 'idle' | 'testing' | 'success' | 'error'
-
-interface ProviderTestState {
-  status: ProviderTestStatus
-  message: string
 }
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
@@ -72,6 +68,7 @@ const DeepSearchExplorerConfigDialog: React.FC<DeepSearchExplorerConfigDialogPro
   open,
   onClose,
   onSave,
+  onClearProviderCredentials,
   savedConfigs = {},
   spaceId = '',
   isFirstConfig = false,
@@ -79,105 +76,112 @@ const DeepSearchExplorerConfigDialog: React.FC<DeepSearchExplorerConfigDialogPro
   modelsLoading = false,
 }) => {
   const { t } = useTranslation()
-  const [showKnowledgeBaseSelector, setShowKnowledgeBaseSelector] = useState(false)
-  const [activeTab, setActiveTab] = useState<DeepSearchExplorerTabId>('general')
-  const [selectedKnowledgeBasesDetail, setSelectedKnowledgeBasesDetail] = useState<KnowledgeBaseDetail[]>([])
-  const [providerTests, setProviderTests] = useState<Record<ProviderTestName, ProviderTestState>>({
-    jina: { status: 'idle', message: '' },
-    serper: { status: 'idle', message: '' },
-  })
-  const [apiKeyVisibility, setApiKeyVisibility] = useState<Record<ProviderTestName, boolean>>({
-    jina: false,
-    serper: false,
-  })
-
   const defaultConfig = useMemo(
     () => toDeepSearchExplorerConfig(savedConfigs[agent?.id || 'deepsearch-explorer']),
     [savedConfigs, agent?.id],
   )
+  const [showKnowledgeBaseSelector, setShowKnowledgeBaseSelector] = useState(false)
+  const [webSearchConfigDialogOpen, setWebSearchConfigDialogOpen] = useState(false)
+  const [webFetchConfigDialogOpen, setWebFetchConfigDialogOpen] = useState(false)
+  const [providerTestKind, setProviderTestKind] = useState<ProviderTestKind | null>(null)
+  const [providerTestInput, setProviderTestInput] = useState('')
+  const [providerTestResults, setProviderTestResults] = useState<Record<string, unknown>[] | null>(null)
+  const [providerTestError, setProviderTestError] = useState('')
+  const [providerTestRunning, setProviderTestRunning] = useState(false)
+  const [providerTestStatus, setProviderTestStatus] = useState<ProviderTestStatus>({
+    search: defaultConfig.webSearchProviderTestPassed ? 'passed' : 'untested',
+    fetch: defaultConfig.webFetchProviderTestPassed ? 'passed' : 'untested',
+  })
+  const [activeTab, setActiveTab] = useState<DeepSearchExplorerTabId>('general')
+  const [selectedKnowledgeBasesDetail, setSelectedKnowledgeBasesDetail] = useState<KnowledgeBaseDetail[]>([])
 
   const [config, setConfig] = useState<DeepSearchExplorerConfig>(defaultConfig)
-
-  const buildInitialProviderTests = useCallback((nextConfig: DeepSearchExplorerConfig) => {
-    const getState = (provider: ProviderTestName, apiKey?: string): ProviderTestState => {
-      if (!apiKey?.trim()) {
-        return { status: 'idle', message: '' }
-      }
-
-      return {
-        status: 'success',
-        message: t('apps.config.explorerEngine.test.providerSuccess', {
-          provider: t(`apps.config.explorerEngine.test.providers.${provider}`),
-        }),
-      }
-    }
-
-    return {
-      jina: getState('jina', nextConfig.jinaApiKey),
-      serper: getState('serper', nextConfig.serperApiKey),
-    }
-  }, [t])
 
   React.useEffect(() => {
     if (open) {
       const nextConfig = toDeepSearchExplorerConfig(savedConfigs[agent?.id || 'deepsearch-explorer'])
       setConfig(nextConfig)
       setActiveTab('general')
-      setProviderTests(buildInitialProviderTests(nextConfig))
-    } else {
-      setProviderTests({
-        jina: { status: 'idle', message: '' },
-        serper: { status: 'idle', message: '' },
+      setProviderTestStatus({
+        search: nextConfig.webSearchProviderTestPassed ? 'passed' : 'untested',
+        fetch: nextConfig.webFetchProviderTestPassed ? 'passed' : 'untested',
       })
+    } else {
+      setProviderTestStatus({ search: 'untested', fetch: 'untested' })
     }
     setShowKnowledgeBaseSelector(false)
-    setApiKeyVisibility({
-      jina: false,
-      serper: false,
-    })
-  }, [open, savedConfigs, agent?.id, buildInitialProviderTests])
-
-  const getProviderErrorMessage = useCallback((
-    provider: ProviderTestName,
-    rawMessage: string,
-    statusCode?: number
-  ) => {
-    const normalizedMessage = rawMessage.toLowerCase()
-    const providerLabel = t(`apps.config.explorerEngine.test.providers.${provider}`)
-    const isAuthorizationError =
-      statusCode === 401
-      || statusCode === 403
-      || normalizedMessage.includes('forbidden')
-      || normalizedMessage.includes('unauthorized')
-      || normalizedMessage.includes('invalid api key')
-      || normalizedMessage.includes('api key is invalid')
-      || normalizedMessage.includes('permission denied')
-      || normalizedMessage.includes('execution_error')
-
-    if (isAuthorizationError) {
-      return t('apps.config.explorerEngine.test.invalidApiKey', { provider: providerLabel })
-    }
-
-    const isNetworkIssue =
-      normalizedMessage.includes('network')
-      || normalizedMessage.includes('timeout')
-      || normalizedMessage.includes('timed out')
-      || normalizedMessage.includes('connection')
-      || normalizedMessage.includes('dns')
-
-    if (isNetworkIssue) {
-      return t('apps.config.explorerEngine.test.networkError')
-    }
-
-    return t('apps.config.explorerEngine.test.providerFailed', { provider: providerLabel })
-  }, [t])
+    setProviderTestKind(null)
+    setProviderTestInput('')
+    setProviderTestResults(null)
+    setProviderTestError('')
+  }, [open, savedConfigs, agent?.id])
 
   const updateConfig = useCallback(<K extends keyof DeepSearchExplorerConfig>(
     key: K,
     value: DeepSearchExplorerConfig[K],
   ) => {
+    const previousValue = config[key]
+    if (JSON.stringify(previousValue) === JSON.stringify(value)) return
+
     setConfig(prev => ({ ...prev, [key]: value }))
-  }, [])
+    if (key === 'webSearchEngineConfig') {
+      setProviderTestStatus(prev => ({ ...prev, search: 'untested' }))
+      setConfig(prev => ({ ...prev, webSearchProviderTestPassed: false }))
+    }
+    if (key === 'webFetchProviderConfig') {
+      setProviderTestStatus(prev => ({ ...prev, fetch: 'untested' }))
+      setConfig(prev => ({ ...prev, webFetchProviderTestPassed: false }))
+    }
+  }, [config])
+
+  const openProviderTest = useCallback((kind: ProviderTestKind) => {
+    setProviderTestKind(kind)
+    setProviderTestInput(kind === 'search' ? t('apps.config.deepSearchProviderTest.defaultQuery') : t('apps.config.deepSearchProviderTest.defaultUrl'))
+    setProviderTestResults(null)
+    setProviderTestError('')
+  }, [t])
+
+  const closeProviderTest = useCallback(() => {
+    if (providerTestRunning) return
+    setProviderTestKind(null)
+    setProviderTestInput('')
+    setProviderTestResults(null)
+    setProviderTestError('')
+  }, [providerTestRunning])
+
+  const executeProviderTest = useCallback(async () => {
+    if (!providerTestKind || !spaceId) return
+
+    const searchConfig = config.webSearchEngineConfig
+    const fetchConfig = config.webFetchProviderConfig
+    if ((providerTestKind === 'search' && !searchConfig) || (providerTestKind === 'fetch' && !fetchConfig)) {
+      setProviderTestError(t('apps.config.validation.webModeRequiresApiKey'))
+      return
+    }
+
+    setProviderTestRunning(true)
+    setProviderTestResults(null)
+    setProviderTestError('')
+    setProviderTestStatus(previous => ({ ...previous, [providerTestKind]: 'untested' }))
+    try {
+      const response: ProviderTestResponse = providerTestKind === 'search'
+        ? await testWebSearchProvider(spaceId, searchConfig!, providerTestInput)
+        : await testWebFetchProvider(spaceId, fetchConfig!, providerTestInput)
+      setProviderTestResults(response.datas)
+      setProviderTestStatus(previous => ({ ...previous, [providerTestKind]: 'passed' }))
+      setConfig(previous => ({
+        ...previous,
+        ...(providerTestKind === 'search'
+          ? { webSearchProviderTestPassed: true }
+          : { webFetchProviderTestPassed: true }),
+      }))
+    } catch (err) {
+      setProviderTestError(err instanceof Error ? err.message : t('apps.config.deepSearchProviderTest.failed'))
+      setProviderTestStatus(previous => ({ ...previous, [providerTestKind]: 'failed' }))
+    } finally {
+      setProviderTestRunning(false)
+    }
+  }, [config.webFetchProviderConfig, config.webSearchEngineConfig, providerTestInput, providerTestKind, spaceId, t])
 
   const loadKnowledgeBasesDetail = useCallback(async (kbIds: string[]) => {
     if (!spaceId || kbIds.length === 0) {
@@ -248,11 +252,18 @@ const DeepSearchExplorerConfigDialog: React.FC<DeepSearchExplorerConfigDialogPro
     if (!config.searchModelId) errors.push(t('apps.config.validation.searchModelRequired'))
 
     if (config.searchMode === 'web') {
-      const hasJinaKey = Boolean((config.jinaApiKey ?? '').trim())
-      const hasSerperKey = Boolean((config.serperApiKey ?? '').trim())
-      if (!hasJinaKey || !hasSerperKey) {
+      const hasWebSearchConfig = Boolean(
+        config.webSearchEngineConfig?.searchEngineName
+        && config.webSearchEngineConfig.searchApiKey.trim()
+        && config.webSearchEngineConfig.searchUrl.trim(),
+      )
+      const hasWebFetchConfig = Boolean(
+        config.webFetchProviderConfig?.providerName && config.webFetchProviderConfig.apiKey.trim(),
+      )
+      if (!hasWebSearchConfig || !hasWebFetchConfig) {
         errors.push(t('apps.config.validation.webModeRequiresApiKey'))
-      } else if (providerTests.jina.status !== 'success' || providerTests.serper.status !== 'success') {
+      }
+      if (providerTestStatus.search !== 'passed' || providerTestStatus.fetch !== 'passed') {
         errors.push(t('apps.config.validation.webModeRequiresProviderVerified'))
       }
     }
@@ -269,7 +280,7 @@ const DeepSearchExplorerConfigDialog: React.FC<DeepSearchExplorerConfigDialogPro
     }
 
     return { valid: errors.length === 0, errors }
-  }, [config, providerTests, t])
+  }, [config, providerTestStatus, t])
 
   const { valid, errors } = validateConfig()
 
@@ -279,72 +290,20 @@ const DeepSearchExplorerConfigDialog: React.FC<DeepSearchExplorerConfigDialogPro
     onClose()
   }
 
-  const handleProviderConnectionTest = useCallback(async (provider: ProviderTestName) => {
-    const apiKey = (provider === 'jina' ? config.jinaApiKey : config.serperApiKey) ?? ''
-    if (!spaceId) {
-      setProviderTests(prev => ({
-        ...prev,
-        [provider]: {
-          status: 'error',
-          message: t('apps.config.explorerEngine.test.networkError'),
-        },
-      }))
-      return
-    }
-    if (!apiKey.trim()) {
-      setProviderTests(prev => ({
-        ...prev,
-        [provider]: {
-          status: 'error',
-          message: t('apps.config.validation.webModeRequiresApiKey'),
-        },
-      }))
-      return
-    }
+  const clearProviderCredentials = () => {
+    if (!agent) return
 
-    setProviderTests(prev => ({
-      ...prev,
-      [provider]: {
-        status: 'testing',
-        message: '',
-      },
-    }))
-
-    try {
-      const response = await taskSpaceWebSearchEngineService.testProviderConnection(spaceId, provider, apiKey.trim())
-      if (response.code >= 200 && response.code < 300) {
-        const providerLabel = t(`apps.config.explorerEngine.test.providers.${provider}`)
-        setProviderTests(prev => ({
-          ...prev,
-          [provider]: {
-            status: 'success',
-            message: t('apps.config.explorerEngine.test.providerSuccess', { provider: providerLabel }),
-          },
-        }))
-      } else {
-        setProviderTests(prev => ({
-          ...prev,
-          [provider]: {
-            status: 'error',
-            message: getProviderErrorMessage(
-              provider,
-              response.msg || t('apps.config.explorerEngine.test.testFailed'),
-              response.code
-            ),
-          },
-        }))
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : t('apps.config.explorerEngine.test.networkError')
-      setProviderTests(prev => ({
-        ...prev,
-        [provider]: {
-          status: 'error',
-          message: getProviderErrorMessage(provider, errorMessage),
-        },
-      }))
+    const clearedConfig: DeepSearchExplorerConfig = {
+      ...config,
+      webSearchEngineConfig: undefined,
+      webFetchProviderConfig: undefined,
+      webSearchProviderTestPassed: false,
+      webFetchProviderTestPassed: false,
     }
-  }, [config.jinaApiKey, config.serperApiKey, getProviderErrorMessage, spaceId, t])
+    setConfig(clearedConfig)
+    setProviderTestStatus({ search: 'untested', fetch: 'untested' })
+    onClearProviderCredentials?.(agent.id, clearedConfig)
+  }
 
   const modelOptions = availableModels.map(model => ({
     id: model.openModel.model_id,
@@ -375,6 +334,21 @@ const DeepSearchExplorerConfigDialog: React.FC<DeepSearchExplorerConfigDialogPro
     const mapped = new Map(selectedKnowledgeBasesDetail.map(kb => [kb.id, kb]))
     return config.selectedKnowledgeBaseIds.map(id => mapped.get(id) ?? { id, name: id })
   }, [config.selectedKnowledgeBaseIds, selectedKnowledgeBasesDetail])
+
+  // Provider dialogs update this local task configuration immediately. Do not
+  // compare against the initially loaded config here: doing so hides Test
+  // whenever a user confirms an updated provider configuration.
+  const hasTestableWebSearchConfig = Boolean(
+    spaceId
+    && config.webSearchEngineConfig?.searchEngineName
+    && config.webSearchEngineConfig.searchApiKey.trim()
+    && config.webSearchEngineConfig.searchUrl.trim(),
+  )
+  const hasTestableWebFetchConfig = Boolean(
+    spaceId
+    && config.webFetchProviderConfig?.providerName
+    && config.webFetchProviderConfig.apiKey.trim(),
+  )
 
   const renderGeneralTab = () => (
     <div className="space-y-8">
@@ -455,119 +429,30 @@ const DeepSearchExplorerConfigDialog: React.FC<DeepSearchExplorerConfigDialogPro
       <ConfigSection title={t('apps.config.search.source')}>
         {config.searchMode === 'web' ? (
           <div className="space-y-5">
-            <label className="block">
-              <span className="block text-sm font-medium text-gray-700 mb-2">{t('apps.config.search.jinaApiKey')}</span>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type={apiKeyVisibility.jina ? 'text' : 'password'}
-                    value={config.jinaApiKey ?? ''}
-                    onChange={e => {
-                      updateConfig('jinaApiKey', e.target.value)
-                      setProviderTests(prev => ({
-                        ...prev,
-                        jina: { status: 'idle', message: '' },
-                      }))
-                    }}
-                    placeholder={t('apps.config.search.apiKeyPlaceholder')}
-                    className={`w-full px-3 pr-10 py-2 ${RADIUS_BUTTON} border border-gray-300 text-sm`}
-                  />
-                  <Tooltip title={apiKeyVisibility.jina ? t('apps.config.explorerEngine.test.hideApiKey') : t('apps.config.explorerEngine.test.showApiKey')}>
-                    <IconButton
-                      size="small"
-                      onClick={() => {
-                        setApiKeyVisibility(prev => ({
-                          ...prev,
-                          jina: !prev.jina,
-                        }))
-                      }}
-                      className="!absolute right-1 top-1/2 -translate-y-1/2 text-gray-700 hover:text-blue-600 hover:bg-blue-50"
-                    >
-                      {apiKeyVisibility.jina ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </IconButton>
-                  </Tooltip>
-                </div>
-                <Tooltip title={providerTests.jina.status === 'testing' ? t('apps.config.explorerEngine.test.testing') : t('apps.config.explorerEngine.action.test')}>
-                  <span>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleProviderConnectionTest('jina')}
-                      disabled={providerTests.jina.status === 'testing'}
-                      className="text-gray-700 hover:text-blue-600 hover:bg-blue-50"
-                    >
-                      {providerTests.jina.status === 'testing'
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <Play className="w-4 h-4" />}
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              </div>
-              {providerTests.jina.status !== 'idle' && (
-                <p className={`mt-2 text-xs flex items-center gap-1.5 ${providerTests.jina.status === 'success' ? 'text-green-700' : providerTests.jina.status === 'error' ? 'text-red-700' : 'text-gray-600'}`}>
-                  {providerTests.jina.status === 'success' && <CheckCircle className="w-3.5 h-3.5" />}
-                  {providerTests.jina.status === 'error' && <AlertCircle className="w-3.5 h-3.5" />}
-                  {providerTests.jina.status === 'testing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{providerTests.jina.status === 'testing' ? t('apps.config.explorerEngine.test.testing') : providerTests.jina.message}</span>
-                </p>
-              )}
-            </label>
-
-            <label className="block">
-              <span className="block text-sm font-medium text-gray-700 mb-2">{t('apps.config.search.serperApiKey')}</span>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type={apiKeyVisibility.serper ? 'text' : 'password'}
-                    value={config.serperApiKey ?? ''}
-                    onChange={e => {
-                      updateConfig('serperApiKey', e.target.value)
-                      setProviderTests(prev => ({
-                        ...prev,
-                        serper: { status: 'idle', message: '' },
-                      }))
-                    }}
-                    placeholder={t('apps.config.search.apiKeyPlaceholder')}
-                    className={`w-full px-3 pr-10 py-2 ${RADIUS_BUTTON} border border-gray-300 text-sm`}
-                  />
-                  <Tooltip title={apiKeyVisibility.serper ? t('apps.config.explorerEngine.test.hideApiKey') : t('apps.config.explorerEngine.test.showApiKey')}>
-                    <IconButton
-                      size="small"
-                      onClick={() => {
-                        setApiKeyVisibility(prev => ({
-                          ...prev,
-                          serper: !prev.serper,
-                        }))
-                      }}
-                      className="!absolute right-1 top-1/2 -translate-y-1/2 text-gray-700 hover:text-blue-600 hover:bg-blue-50"
-                    >
-                      {apiKeyVisibility.serper ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </IconButton>
-                  </Tooltip>
-                </div>
-                <Tooltip title={providerTests.serper.status === 'testing' ? t('apps.config.explorerEngine.test.testing') : t('apps.config.explorerEngine.action.test')}>
-                  <span>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleProviderConnectionTest('serper')}
-                      disabled={providerTests.serper.status === 'testing'}
-                      className="text-gray-700 hover:text-blue-600 hover:bg-blue-50"
-                    >
-                      {providerTests.serper.status === 'testing'
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <Play className="w-4 h-4" />}
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              </div>
-              {providerTests.serper.status !== 'idle' && (
-                <p className={`mt-2 text-xs flex items-center gap-1.5 ${providerTests.serper.status === 'success' ? 'text-green-700' : providerTests.serper.status === 'error' ? 'text-red-700' : 'text-gray-600'}`}>
-                  {providerTests.serper.status === 'success' && <CheckCircle className="w-3.5 h-3.5" />}
-                  {providerTests.serper.status === 'error' && <AlertCircle className="w-3.5 h-3.5" />}
-                  {providerTests.serper.status === 'testing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{providerTests.serper.status === 'testing' ? t('apps.config.explorerEngine.test.testing') : providerTests.serper.message}</span>
-                </p>
-              )}
-            </label>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm text-amber-900">
+                {t('apps.config.deepSearchLocalStorage.warning')}
+              </p>
+              <button
+                type="button"
+                onClick={clearProviderCredentials}
+                className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
+              >
+                {t('apps.config.deepSearchLocalStorage.clearKeys')}
+              </button>
+            </div>
+            <WebSearchEngineSummaryCard
+              config={config.webSearchEngineConfig}
+              onConfigure={() => setWebSearchConfigDialogOpen(true)}
+              onTest={hasTestableWebSearchConfig ? () => openProviderTest('search') : undefined}
+              testStatus={providerTestStatus.search}
+            />
+            <WebFetchProviderSummaryCard
+              config={config.webFetchProviderConfig}
+              onConfigure={() => setWebFetchConfigDialogOpen(true)}
+              onTest={hasTestableWebFetchConfig ? () => openProviderTest('fetch') : undefined}
+              testStatus={providerTestStatus.fetch}
+            />
           </div>
         ) : (
           <div className="space-y-6">
@@ -775,6 +660,119 @@ const DeepSearchExplorerConfigDialog: React.FC<DeepSearchExplorerConfigDialogPro
         }}
         selectionMode="single"
       />
+      <WebSearchEngineConfigDialog
+        open={webSearchConfigDialogOpen}
+        config={config.webSearchEngineConfig}
+        onCancel={() => setWebSearchConfigDialogOpen(false)}
+        onConfirm={webSearchEngineConfig => {
+          updateConfig('webSearchEngineConfig', webSearchEngineConfig)
+          setWebSearchConfigDialogOpen(false)
+        }}
+      />
+      <WebFetchProviderConfigDialog
+        open={webFetchConfigDialogOpen}
+        config={config.webFetchProviderConfig}
+        onCancel={() => setWebFetchConfigDialogOpen(false)}
+        onConfirm={webFetchProviderConfig => {
+          updateConfig('webFetchProviderConfig', webFetchProviderConfig)
+          setWebFetchConfigDialogOpen(false)
+        }}
+      />
+      {providerTestKind && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className={`w-full max-w-lg ${RADIUS_CONTAINER} overflow-hidden bg-white shadow-2xl`}>
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">
+                {providerTestKind === 'search'
+                  ? t('apps.config.deepSearchProviderTest.searchTitle')
+                  : t('apps.config.deepSearchProviderTest.fetchTitle')}
+              </h2>
+              <button
+                type="button"
+                onClick={closeProviderTest}
+                disabled={providerTestRunning}
+                className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label={t('apps.config.deepSearchProviderTest.close')}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="px-6 py-4">
+              <label className="block text-sm font-medium text-gray-700">
+                {providerTestKind === 'search'
+                  ? t('apps.config.deepSearchProviderTest.queryLabel')
+                  : t('apps.config.deepSearchProviderTest.urlLabel')}
+                <input
+                  value={providerTestInput}
+                  onChange={event => setProviderTestInput(event.target.value)}
+                  disabled={providerTestRunning}
+                  className={`mt-2 w-full border border-gray-300 px-3 py-2 text-sm ${RADIUS_BUTTON}`}
+                />
+              </label>
+
+              <div className="mt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={executeProviderTest}
+                  disabled={!providerTestInput.trim() || providerTestRunning}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium ${RADIUS_BUTTON} ${
+                    !providerTestInput.trim() || providerTestRunning
+                      ? 'cursor-not-allowed bg-gray-300 text-gray-500'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  {providerTestRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                  {providerTestRunning
+                    ? t('apps.config.deepSearchProviderTest.testing')
+                    : t('apps.config.deepSearchProviderTest.run')}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeProviderTest}
+                  disabled={providerTestRunning}
+                  className={`px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 ${RADIUS_BUTTON}`}
+                >
+                  {t('apps.config.deepSearchProviderTest.cancel')}
+                </button>
+              </div>
+
+              {providerTestError && (
+                <div className="mt-4 flex gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                  <p className="break-words">{providerTestError}</p>
+                </div>
+              )}
+              {providerTestResults && !providerTestError && (
+                <div className="mt-4">
+                  <div className="mb-4 flex items-center gap-2 rounded-lg bg-green-50 p-3 text-sm text-green-700">
+                    <Check className="h-5 w-5 flex-shrink-0" />
+                    <p>{t('apps.config.deepSearchProviderTest.succeeded')}</p>
+                  </div>
+                  <div className="border-t border-gray-200 pt-4">
+                  <h3 className="mb-3 text-sm font-medium text-gray-900">
+                    {t('apps.config.deepSearchProviderTest.results', { count: providerTestResults.length })}
+                  </h3>
+                  {providerTestResults.length === 0 ? (
+                    <p className="text-sm text-gray-500">{t('apps.config.deepSearchProviderTest.noResults')}</p>
+                  ) : (
+                    <div className="max-h-64 space-y-3 overflow-y-auto">
+                      {providerTestResults.map((result, index) => (
+                        <pre
+                          key={index}
+                          className="whitespace-pre-wrap break-all rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700"
+                        >
+                          {JSON.stringify(result, null, 2)}
+                        </pre>
+                      ))}
+                    </div>
+                  )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

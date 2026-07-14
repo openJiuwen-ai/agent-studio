@@ -1,21 +1,29 @@
-import type { DeepSearchConfig as DeepResearchConfig } from '../components/AgentConfigDialog'
+import type { DeepSearchConfig as DeepResearchConfig } from '../components/AgentConfigDialog';
+import {
+  normalizeDeepSearchWebFetchProviderConfig,
+  normalizeDeepSearchWebSearchEngineConfig,
+  type DeepSearchWebFetchProviderConfig,
+  type DeepSearchWebSearchEngineConfig,
+} from '../components/DeepSearchExplorer/webSearchFetchTypes';
 
 /**
  * DeepSearch 配置模式
  */
-export type DeepSearchConfigMode = 'research' | 'search'
+export type DeepSearchConfigMode = 'research' | 'search';
 
 export interface DeepSearchExplorerConfig {
-  enableQuestionRouter: boolean
-  actionsExploredLimit: number
-  timeLimit: number
-  searchMode: 'local' | 'web'
-  selectedKnowledgeBaseIds: string[]
-  planningModelId?: string
-  searchModelId?: string
-  generalModelId?: string
-  jinaApiKey?: string
-  serperApiKey?: string
+  enableQuestionRouter: boolean;
+  actionsExploredLimit: number;
+  timeLimit: number;
+  searchMode: 'local' | 'web';
+  selectedKnowledgeBaseIds: string[];
+  planningModelId?: string;
+  searchModelId?: string;
+  generalModelId?: string;
+  webSearchEngineConfig?: DeepSearchWebSearchEngineConfig;
+  webFetchProviderConfig?: DeepSearchWebFetchProviderConfig;
+  webSearchProviderTestPassed?: boolean;
+  webFetchProviderTestPassed?: boolean;
 }
 
 export type AppAgentConfig = DeepResearchConfig | DeepSearchExplorerConfig
@@ -63,9 +71,7 @@ export const DEFAULT_DEEPSEARCH_EXPLORER_CONFIG: DeepSearchExplorerConfig = {
   planningModelId: undefined,
   searchModelId: undefined,
   generalModelId: undefined,
-  jinaApiKey: '',
-  serperApiKey: '',
-}
+};
 
 /**
  * 兼容旧引用：DEFAULT_DEEPSEARCH_CONFIG 指向 DeepResearch 默认配置
@@ -91,9 +97,9 @@ export const getDefaultDeepSearchConfigByAgentId = (
 const asStringArray = (value: unknown): string[] => (
   Array.isArray(value)
     ? value
-      .filter((item): item is string => typeof item === 'string')
-      .map(item => item.trim())
-      .filter(item => item.length > 0)
+        .filter((item): item is string => typeof item === 'string')
+        .map(item => item.trim())
+        .filter(item => item.length > 0)
     : []
 )
 
@@ -127,11 +133,6 @@ const toOptionalFiniteNumber = (value: unknown): number | undefined => (
     : undefined
 )
 
-const toApiKeyString = (value: unknown, fallback: string): string => (
-  typeof value === 'string'
-    ? value
-    : fallback
-)
 
 export const toDeepResearchConfig = (config?: AppAgentConfig): DeepResearchConfig => {
   const merged = {
@@ -147,10 +148,8 @@ export const toDeepResearchConfig = (config?: AppAgentConfig): DeepResearchConfi
   }
 }
 
-export const toDeepSearchExplorerConfig = (
-  config?: AppAgentConfig
-): DeepSearchExplorerConfig => {
-  const rawConfig = (config as Partial<Record<string, unknown>> | undefined) ?? {}
+export const toDeepSearchExplorerConfig = (config?: AppAgentConfig): DeepSearchExplorerConfig => {
+  const rawConfig = (config as Partial<Record<string, unknown>> | undefined) ?? {};
   const merged = {
     ...DEFAULT_DEEPSEARCH_EXPLORER_CONFIG,
     ...(rawConfig as Partial<DeepSearchExplorerConfig>),
@@ -158,14 +157,17 @@ export const toDeepSearchExplorerConfig = (
 
   return {
     enableQuestionRouter: Boolean(merged.enableQuestionRouter),
-    actionsExploredLimit: toOptionalFiniteNumber(merged.actionsExploredLimit) ?? DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.actionsExploredLimit,
+    actionsExploredLimit:
+      toOptionalFiniteNumber(merged.actionsExploredLimit) ?? DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.actionsExploredLimit,
     timeLimit: toOptionalFiniteNumber(merged.timeLimit) ?? DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.timeLimit,
     searchMode: normalizeExplorerSearchMode(merged.searchMode),
     selectedKnowledgeBaseIds: asStringArray(merged.selectedKnowledgeBaseIds),
     planningModelId: toOptionalString(merged.planningModelId),
     searchModelId: toOptionalString(merged.searchModelId),
     generalModelId: toOptionalString(merged.generalModelId),
-    jinaApiKey: toApiKeyString(merged.jinaApiKey, DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.jinaApiKey ?? ''),
-    serperApiKey: toApiKeyString(merged.serperApiKey, DEFAULT_DEEPSEARCH_EXPLORER_CONFIG.serperApiKey ?? ''),
-  }
-}
+    webSearchEngineConfig: normalizeDeepSearchWebSearchEngineConfig(merged.webSearchEngineConfig) ?? undefined,
+    webFetchProviderConfig: normalizeDeepSearchWebFetchProviderConfig(merged.webFetchProviderConfig) ?? undefined,
+    webSearchProviderTestPassed: merged.webSearchProviderTestPassed === true,
+    webFetchProviderTestPassed: merged.webFetchProviderTestPassed === true,
+  };
+};

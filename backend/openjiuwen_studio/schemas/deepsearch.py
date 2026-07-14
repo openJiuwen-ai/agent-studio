@@ -8,6 +8,17 @@ MAX_TEMPLATE_CONTENT_LENGTH = 5 * 1000 * 1000
 MAX_TEMPLATE_DESC_LENGTH = 2000
 MAX_TEMPLATE_FILE_NAME_LENGTH = 255
 MAX_TEMPLATE_NAME_LENGTH = 255
+WebSearchProviderName = Literal[
+    "xunfei",
+    "petal",
+    "tavily",
+    "google",
+    "jina",
+    "serper",
+    "bocha",
+    "perplexity",
+    "custom",
+]
 
 
 class WebSearchConfig(BaseModel):
@@ -102,6 +113,30 @@ class DeepSearchSearchRunMilvusConfig(BaseModel):
         return self
 
 
+class DeepSearchSearchRunWebSearchEngineConfig(BaseModel):
+    """Telemetry web-search provider configuration for search-mode runs."""
+
+    search_engine_name: str = Field(..., min_length=1, max_length=255, description="Search provider name")
+    search_api_key: str = Field(..., min_length=1, max_length=255, description="Search provider API key")
+    search_url: Optional[str] = Field(default=None, max_length=2048, description="Optional search endpoint")
+    max_web_search_results: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Maximum results returned per web search",
+    )
+    extension: Dict[str, Any] = Field(default_factory=dict, description="Provider-specific search options")
+
+
+class DeepSearchSearchRunWebFetchProviderConfig(BaseModel):
+    """Telemetry web-fetch provider configuration for search-mode runs."""
+
+    provider_name: Literal["jina"] = Field(..., description="Fetch provider name")
+    api_key: str = Field(..., min_length=1, max_length=255, description="Fetch provider API key")
+    base_url: Optional[str] = Field(default=None, max_length=2048, description="Optional fetch endpoint")
+    extension: Dict[str, Any] = Field(default_factory=dict, description="Provider-specific fetch options")
+
+
 class DeepSearchSearchWorkflowPerQuestionParams(BaseModel):
     time_limit: Optional[int] = Field(default=None, description="Workflow time limit in seconds")
     actions_explored_limit: Optional[int] = Field(default=None, description="Maximum actions explored per question")
@@ -115,8 +150,14 @@ class DeepSearchSearchRunRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Search-mode query")
     llm: DeepSearchSearchRunLLMConfig = Field(..., description="Search-mode LLM config")
     tool_map: Literal["search_fetch", "retrieve"] = Field(..., description="Search tool strategy")
-    jina_api_key: Optional[str] = Field(default=None, description="Jina API key（search_fetch 必填）")
-    serper_api_key: Optional[str] = Field(default=None, description="Serper API key（search_fetch 必填）")
+    web_search_engine_config: Optional[DeepSearchSearchRunWebSearchEngineConfig] = Field(
+        default=None,
+        description="Web search provider config (required with web_fetch_provider_config for search_fetch)",
+    )
+    web_fetch_provider_config: Optional[DeepSearchSearchRunWebFetchProviderConfig] = Field(
+        default=None,
+        description="Web fetch provider config (required with web_search_engine_config for search_fetch)",
+    )
     milvus: Optional[DeepSearchSearchRunMilvusConfig] = Field(
         default=None,
         description="Milvus config（retrieve 必填）",
@@ -322,11 +363,29 @@ class WebSearchEngineAccessRes(BasicResponseDTO):
 
 
 class TaskSpaceWebSearchProviderAccessRequestDTO(BaseModel):
-    '''task-space 搜索模式下的供应商凭据测试请求'''
+    """Request-only test of a browser-local web-search provider configuration."""
     space_id: str = Field(..., min_length=1, max_length=255, description="用户空间id")
-    provider: Literal["jina", "serper"] = Field(..., description="待测试的供应商")
-    api_key: str = Field(..., min_length=1, max_length=255, description="供应商 API Key")
+    search_engine_name: WebSearchProviderName = Field(..., description="待测试的搜索服务商")
+    search_api_key: str = Field(..., min_length=1, max_length=255, description="搜索服务商 API Key")
+    search_url: Optional[str] = Field(default=None, max_length=2048, description="可选搜索服务地址")
+    extension: Dict[str, Any] = Field(default_factory=dict, description="服务商扩展配置")
     query: str = Field(default="Latest AI developments", min_length=1, max_length=500, description="测试查询")
+
+
+class TaskSpaceWebFetchProviderAccessRequestDTO(BaseModel):
+    """Request-only test of a browser-local web-fetch provider configuration."""
+    space_id: str = Field(..., min_length=1, max_length=255, description="用户空间id")
+    provider_name: Literal["jina"] = Field(..., description="待测试的抓取服务商")
+    api_key: str = Field(..., min_length=1, max_length=255, description="抓取服务商 API Key")
+    base_url: Optional[str] = Field(default=None, max_length=2048, description="可选抓取服务地址")
+    extension: Dict[str, Any] = Field(default_factory=dict, description="服务商扩展配置")
+    test_url: str = Field(default="https://example.com", min_length=1, max_length=2048, description="测试抓取 URL")
+
+
+class TaskSpaceProviderAccessRes(BasicResponseDTO):
+    """Result of a non-persistent task-space provider connection test."""
+    provider_name: str = Field(..., min_length=1, max_length=255, description="已测试的服务商")
+    datas: List[dict[str, Any]] = Field(default=[], description="服务商返回结果")
 
 
 class ReportConvertFinalResult(BaseModel):
