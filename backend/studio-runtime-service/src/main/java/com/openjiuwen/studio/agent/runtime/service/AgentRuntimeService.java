@@ -14,7 +14,6 @@ import com.alibaba.fastjson.JSONException;
 import com.alibaba.fastjson.JSONObject;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.obs.services.model.TemporarySignatureResponse;
 import com.openjiuwen.studio.agent.common.bo.AgentMetadata;
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.AgentInvokeInfo;
@@ -283,7 +282,7 @@ public class AgentRuntimeService implements IAgentRuntimeService {
     @Value("${file.time-scope-upload-total-size}")
     private int timeScopeUploadTotalSize;
 
-    @Value("${obs.bucket_storage_limit:100}")
+    @Value("${storage.bucket-storage-limit:100}")
     private long bucketStorageLimit;
 
     @Value("${file.video-type}")
@@ -2624,16 +2623,12 @@ public class AgentRuntimeService implements IAgentRuntimeService {
             int fileExpireDays = DatetimeUtils.calculateCeilingDaysFromMinutes(expiresMinutes);
 
             if (fileReadOnly) {
-                String objectName = obsService.uploadToStagingWithPublicRead(inputStream, safeFileName, fileExpireDays);
-                fileUploadRsp.setUrl(objectName);
+                String url = obsService.uploadToStagingWithPublicRead(inputStream, safeFileName, fileExpireDays);
+                fileUploadRsp.setUrl(url);
             } else {
                 String objectName = obsService.uploadToStagingWithExpires(inputStream, safeFileName, fileExpireDays);
-                TemporarySignatureResponse temporaryGetRsp =
-                        obsService.getStagingTemporaryGetRsp(objectName,
-                                (long) expiresMinutes * 60);
-
-                fileUploadRsp.setUrl(temporaryGetRsp.getSignedUrl());
-                fileUploadRsp.setHeaders(temporaryGetRsp.getActualSignedRequestHeaders());
+                String downloadUrl = obsService.getStagingDownloadUrl(objectName, (long) expiresMinutes * 60);
+                fileUploadRsp.setUrl(downloadUrl);
             }
 
             return fileUploadRsp;
@@ -2656,19 +2651,6 @@ public class AgentRuntimeService implements IAgentRuntimeService {
     private void checkUserCanUpload(MultipartFile file, String userId) {
         checkUploadNum(userId);
         checkUploadTotalSize(file, userId);
-        if ("hc".equals(envType)) {
-            isReachBucketStorageLimit();
-        }
-    }
-
-    private void isReachBucketStorageLimit() {
-        long limit = bucketStorageLimit * KB * KB * KB;
-        long capacity = obsService.bucketStorage();
-        if (limit <= capacity) {
-            log.error("The obs bucket capacity is critically low; file uploads are temporarily unavailable."
-                    + "Limit:{}, Capacity:{}", limit, capacity);
-            throw new AgentStudioException(StudioError.OBS_BUCKET_CAPACITY_LIMIT);
-        }
     }
 
     private void checkUploadTotalSize(MultipartFile file, String userId) {

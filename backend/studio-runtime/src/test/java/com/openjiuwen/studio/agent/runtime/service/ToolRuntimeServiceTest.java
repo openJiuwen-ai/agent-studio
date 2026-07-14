@@ -28,7 +28,6 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.obs.services.exception.ObsException;
-import com.obs.services.model.TemporarySignatureResponse;
 import com.openjiuwen.studio.agent.common.crypt.Ciphers;
 import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
@@ -357,8 +356,7 @@ public class ToolRuntimeServiceTest extends BaseTest {
         when(obsService.putObjectToBucket(anyString(), anyString(), any(InputStream.class), anyInt()))
                 .thenReturn("/file/test.docx");
         when(obsService.getStagingBucket()).thenReturn("test-bucket");
-        TemporarySignatureResponse temporarySignatureResponse = new TemporarySignatureResponse(testUrl);
-        when(obsService.getStagingTemporaryGetRsp(anyString(), anyLong())).thenReturn(temporarySignatureResponse);
+        when(obsService.getStagingDownloadUrl(anyString(), anyLong())).thenReturn(testUrl);
 
         CreateDocumentRsp createDocumentRsp1 = toolRuntimeService.createDocument(buildCreateDocumentReq("test_name"));
         CreateDocumentRsp createDocumentRsp2 = toolRuntimeService.createDocument(buildCreateDocumentReq("test/name"));

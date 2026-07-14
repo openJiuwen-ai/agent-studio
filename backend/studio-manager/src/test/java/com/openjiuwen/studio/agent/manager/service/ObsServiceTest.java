@@ -5,38 +5,28 @@
 package com.openjiuwen.studio.agent.manager.service;
 
 import static com.openjiuwen.studio.agent.manager.constant.Constants.TEST_PROJECT_ID;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import com.alibaba.fastjson2.JSON;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.common.storage.FileStore;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.constant.Constants;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.utils.BaseTest;
-import com.obs.services.ObsClient;
-import com.obs.services.exception.ObsException;
-import com.obs.services.model.CreateBucketRequest;
-import com.obs.services.model.DeleteObjectsRequest;
-import com.obs.services.model.DeleteObjectsResult;
-import com.obs.services.model.ListObjectsRequest;
-import com.obs.services.model.ObjectListing;
-import com.obs.services.model.ObsObject;
-import com.obs.services.model.PutObjectRequest;
-import com.obs.services.model.TemporarySignatureRequest;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Answers;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -51,22 +41,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * obs测试
- *
- */
 @MockitoSettings(strictness = Strictness.LENIENT)
 class ObsServiceTest extends BaseTest {
     private static MockedStatic<RequestContextUtils> mockedStatic;
 
-    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
-    private ObsClient obsClient;
+    @Mock
+    private FileStore fileStore;
 
-    @InjectMocks
     private MgObsService obsService;
 
     private AutoCloseable mockitoCloseable;
@@ -86,8 +72,9 @@ class ObsServiceTest extends BaseTest {
     @BeforeEach
     void setUp() {
         mockitoCloseable = MockitoAnnotations.openMocks(this);
-        ReflectionTestUtils.setField(obsService, "obsClient", obsClient);
-        ReflectionTestUtils.setField(obsService, "bucket", "workflow-ir");
+        when(fileStore.getDefaultNamespace()).thenReturn("workflow-ir");
+        when(fileStore.getStagingNamespace()).thenReturn("staging-bucket");
+        obsService = new MgObsService(fileStore);
     }
 
     @AfterEach
@@ -100,101 +87,55 @@ class ObsServiceTest extends BaseTest {
         String objectKey = Constants.TEST_DIR_NAME + "/" + Constants.TEST_WORKFLOW_ID + ".json";
         Map<String, Object> irInfo = new HashMap<>();
         irInfo.put("components", new ArrayList<>());
-        when(obsClient.headBucket(eq(Constants.TEST_BUCKET_NAME))).thenReturn(false);
-        when(obsClient.createBucket(any(CreateBucketRequest.class))).thenReturn(null);
-        when(obsClient.putObject(eq(Constants.TEST_BUCKET_NAME), eq(objectKey), any(ByteArrayInputStream.class)))
-            .thenReturn(null);
-        obsService.uploadObsFile(Constants.TEST_WORKFLOW_ID, Constants.TEST_WORKFLOW_ID, CommonConstant.WORKFLOW,
-            JSON.toJSONString(irInfo), CommonConstant.Workflow.FLOW);
+        when(fileStore.write(anyString(), any(), anyInt())).thenReturn(objectKey);
+        String result = obsService.uploadObsFile(Constants.TEST_WORKFLOW_ID, Constants.TEST_WORKFLOW_ID,
+            CommonConstant.WORKFLOW, JSON.toJSONString(irInfo), CommonConstant.Workflow.FLOW);
+        assertNotNull(result);
     }
 
     @Test
     void testObsUploadFailed() {
         Map<String, Object> irInfo = new HashMap<>();
         irInfo.put("components", new ArrayList<>());
-        when(obsClient.headBucket(eq(Constants.TEST_BUCKET_NAME))).thenReturn(false);
-        when(obsClient.createBucket(any(CreateBucketRequest.class))).thenThrow(ObsException.class);
-        Assertions.assertThrows(AgentStudioException.class, () -> {
-            obsService.uploadObsFile(Constants.TEST_WORKFLOW_ID, Constants.TEST_WORKFLOW_ID, CommonConstant.WORKFLOW,
-                JSON.toJSONString(irInfo), CommonConstant.Workflow.FLOW);
+        when(fileStore.write(anyString(), any(), anyInt())).thenThrow(new RuntimeException("upload failed"));
+        assertThrows(AgentStudioException.class, () -> {
+            obsService.uploadObsFile(Constants.TEST_WORKFLOW_ID, Constants.TEST_WORKFLOW_ID,
+                CommonConstant.WORKFLOW, JSON.toJSONString(irInfo), CommonConstant.Workflow.FLOW);
         });
     }
 
     @Test
     void testObsDownloadFile() {
         String objectKey = Constants.TEST_DIR_NAME + "/" + Constants.TEST_WORKFLOW_ID + ".json";
-        when(obsClient.getObject(eq(Constants.TEST_BUCKET_NAME), eq(objectKey))).thenThrow(ObsException.class);
-        Assertions.assertThrows(AgentStudioException.class, () -> {
-            obsService.downloadObsFile(objectKey);
-        });
+        when(fileStore.read(anyString())).thenThrow(new RuntimeException("download failed"));
+        assertThrows(AgentStudioException.class, () -> obsService.downloadObsFile(objectKey));
     }
 
     @Test
     void testObsDeleteFile() {
-        String objectKey = Constants.TEST_DIR_NAME + "/" + Constants.TEST_WORKFLOW_ID + ".json";
-        when(obsClient.doesObjectExist(eq(Constants.TEST_BUCKET_NAME), eq(objectKey))).thenReturn(true);
-        when(obsClient.deleteObject(eq(Constants.TEST_BUCKET_NAME), eq(objectKey))).thenReturn(null);
-        obsService.deleteObsFile(objectKey);
-    }
-
-    @Test
-    void testObsDeleteFileFailed() {
-        String objectKey = Constants.TEST_DIR_NAME + "/" + Constants.TEST_WORKFLOW_ID + ".json";
-        when(obsClient.doesObjectExist(eq(Constants.TEST_BUCKET_NAME), eq(objectKey))).thenReturn(true);
-        when(obsClient.deleteObject(eq(Constants.TEST_BUCKET_NAME), eq(objectKey))).thenThrow(ObsException.class);
-        Assertions.assertThrows(AgentStudioException.class, () -> obsService.deleteObsFile(objectKey));
+        when(fileStore.delete(anyString())).thenReturn(true);
+        obsService.deleteObsFile("testKey");
     }
 
     @Test
     void testObsDeleteObjects() {
-        String dirPath = Constants.TEST_DIR_NAME + "/" + Constants.TEST_WORKFLOW_ID;
-        ListObjectsRequest request = new ListObjectsRequest();
-        ObjectListing objects = new ObjectListing.Builder().objectSummaries(new ArrayList<>()).builder();
-        when(obsClient.listObjects(request)).thenReturn(objects);
-        obsService.deleteObsObjects(dirPath);
+        when(fileStore.deleteByPrefix(anyString())).thenReturn(true);
+        obsService.deleteObsObjects("dirPath");
     }
 
     @Test
     void testUploadObsFileWithExpires() throws IOException {
-        when(obsClient.headBucket(eq(Constants.TEST_BUCKET_NAME))).thenReturn(false);
-        when(obsClient.createBucket(any(CreateBucketRequest.class))).thenReturn(null);
-        when(obsClient.putObject(any(PutObjectRequest.class))).thenReturn(null);
-        obsService.uploadObsFileWithExpires(mockInputStream(), "name", 100);
+        when(fileStore.write(anyString(), any(InputStream.class), anyInt())).thenReturn("path");
+        MockMultipartFile file = new MockMultipartFile("file", "test.txt", "text/plain",
+            "test".getBytes(StandardCharsets.UTF_8));
+        String result = obsService.uploadObsFileWithExpires(file.getInputStream(), "name", 100);
+        assertNotNull(result);
     }
 
     @Test
-    void testCleanObsObjects() {
-        ListObjectsRequest request = new ListObjectsRequest();
-        ObjectListing objects = new ObjectListing.Builder().objectSummaries(new ArrayList<>()).builder();
-        when(obsClient.listObjects(request)).thenReturn(objects);
-        obsService.cleanObsObjects();
-    }
-
-    @Test
-    void testGetTemporaryGetRsp() {
-        when(obsClient.createTemporarySignature(any(TemporarySignatureRequest.class))).thenReturn(null);
-        assertNull(obsService.getTemporaryGetRsp(true, "obsKey", 100));
-    }
-
-    private InputStream mockInputStream() throws IOException {
-        MockMultipartFile file = new MockMultipartFile("file",  // 参数名
-            "test.txt",  // 原始文件名
-            "text/plain",  // MIME类型
-            "test".getBytes(StandardCharsets.UTF_8)  // 文件内容
-        );
-        return file.getInputStream();
-    }
-
-    @Test
-    public void testDeleteByPrefix() {
-        ObjectListing objectListing = mock(ObjectListing.class);
-        List<ObsObject> obsObjects = new ArrayList<>();
-        ObsObject obsObject = new ObsObject();
-        obsObject.setObjectKey("mock_obs_key");
-        obsObjects.add(obsObject);
-        when(objectListing.getObjects()).thenReturn(obsObjects);
-        when(obsClient.listObjects(any(ListObjectsRequest.class))).thenReturn(objectListing);
-        when(obsClient.deleteObjects(any(DeleteObjectsRequest.class))).thenReturn(new DeleteObjectsResult());
-        Assertions.assertNotNull(obsService.deleteByPrefix("mock_delete_obs_prefix"));
+    void testDeleteByPrefix() {
+        when(fileStore.deleteByPrefix(anyString())).thenReturn(true);
+        boolean result = obsService.deleteByPrefix("mock_delete_obs_prefix");
+        assertTrue(result);
     }
 }
