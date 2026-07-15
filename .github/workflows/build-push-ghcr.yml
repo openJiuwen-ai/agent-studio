@@ -215,6 +215,20 @@ jobs:
           cache-from: type=gha,scope=studio-runtime
           cache-to: type=gha,scope=studio-runtime,mode=max
 
+      - name: Build and push Grafana with VictoriaLogs datasource to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/grafana
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ steps.image_config.outputs.ghcr_repository }}/grafana-victorialogs:11.3.0-0.29.0
+          build-args: |
+            GRAFANA_VERSION=11.3.0
+            VICTORIA_LOGS_DATASOURCE_VERSION=0.29.0
+          cache-from: type=gha,scope=grafana-victorialogs
+          cache-to: type=gha,scope=grafana-victorialogs,mode=max
+
       # ======================== Per-architecture timestamp tags ========================
 
       - name: Create per-architecture timestamp tags on GHCR
@@ -234,7 +248,6 @@ jobs:
             docker buildx imagetools create -t "${GHCR_REPOSITORY}/${SVC}:${BUILD_TS}.arm64"   "${GHCR_REPOSITORY}/${SVC}@${ARM64_DIGEST}"
             echo "${SVC}  ->  :${BUILD_TS}.x86_64 , :${BUILD_TS}.arm64"
           done
-
       # ======================== Push to Docker Hub ========================
 
       - name: Tag and push studio-manager to Docker Hub
@@ -286,6 +299,8 @@ jobs:
             echo "    ${GHCR_REPOSITORY}/${SVC}:${BUILD_TS}.x86_64"
             echo "    ${GHCR_REPOSITORY}/${SVC}:${BUILD_TS}.arm64"
           done
+          echo "  grafana-victorialogs"
+          echo "    ${GHCR_REPOSITORY}/grafana-victorialogs:11.3.0-0.29.0"
           echo ""
           echo "  === Docker Hub ==="
           if [ "${DOCKERHUB_ENABLED}" = "true" ]; then

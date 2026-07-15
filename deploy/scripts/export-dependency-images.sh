@@ -37,7 +37,7 @@ fi
 mkdir -p "${OUTPUT_DIR}"
 
 # 拉取并导出（使用固定版本号确保可复现）
-IMAGES=("mysql:8.0" "redis:7" "minio/minio:RELEASE.2024-11-07T00-52-20Z" "minio/mc:RELEASE.2024-11-05T11-29-45Z")
+IMAGES=("mysql:8.0" "redis:7" "minio/minio:RELEASE.2024-11-07T00-52-20Z" "minio/mc:RELEASE.2024-11-05T11-29-45Z" "victoriametrics/victoria-logs:v1.50.0" "timberio/vector:0.55.0-alpine")
 
 for image in "${IMAGES[@]}"; do
     log_info "拉取镜像: ${image}"

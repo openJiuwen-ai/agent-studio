@@ -36,9 +36,9 @@
         <Property name="TRACE_FILE_MAX_AGE" value="${env:TRACE_FILE_MAX_AGE:-180d}" />
 
         <Property name="LOG_PATTERN"
-                  value="[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%-5level] [%X{request-id}] [%thread] [%logger{15}:%L] - [%msg]%n" />
-        <Property name="INF_LOG_PATTERN" value="[%X{request-id}] [%thread] - [%msg]%n" />
-        <Property name="PERF_LOG_PATTERN" value="[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%X{request-id}] - %msg%n" />
+                  value="[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%-5level] [%X{request-id}] [%X{task-id}] [%thread] [%logger{15}:%L] - [%msg]%n" />
+        <Property name="INF_LOG_PATTERN" value="[%X{request-id}] [%X{task-id}] [%thread] - [%msg]%n" />
+        <Property name="PERF_LOG_PATTERN" value="[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%X{request-id}] [%X{task-id}] - %msg%n" />
         <Property name="TRACE_LOG_PATTERN" value="%msg%n" />
     </Properties>
 

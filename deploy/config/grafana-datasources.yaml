@@ -1,0 +1,14 @@
+# Grafana 数据源自动 provisioning（启动时自动加载，免手动配置）
+# 文档：https://grafana.com/docs/grafana/latest/administration/provisioning/
+
+apiVersion: 1
+
+datasources:
+  - name: VictoriaLogs
+    uid: victorialogs
+    type: victoriametrics-logs-datasource
+    access: proxy
+    url: http://victoria-logs:9428
+    isDefault: true
+    jsonData:
+      maxLines: 5000  # 单次查询最多返回行数，防止浏览器卡顿

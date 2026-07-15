@@ -1,0 +1,58 @@
+{
+  "uid": "vlogs-logs",
+  "title": "VictoriaLogs 日志查询",
+  "tags": ["agent-studio", "victorialogs"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "10s",
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "custom",
+        "query": "manager,service,runtime,console",
+        "current": {"text": "manager", "value": "manager"},
+        "options": [
+          {"text": "manager", "value": "manager"},
+          {"text": "service", "value": "service"},
+          {"text": "runtime", "value": "runtime"},
+          {"text": "console", "value": "console"}
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "logs",
+      "title": "服务日志",
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+          "expr": "_stream:{service=\"$service\"}"
+        }
+      ],
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 12},
+      "options": {"showTime": true, "wrapLogMessage": true}
+    },
+    {
+      "id": 2,
+      "type": "logs",
+      "title": "ERROR 日志",
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+          "expr": "_stream:{service=\"$service\"} level:=\"ERROR\""
+        }
+      ],
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 8},
+      "options": {"showTime": true, "wrapLogMessage": true}
+    }
+  ]
+}
