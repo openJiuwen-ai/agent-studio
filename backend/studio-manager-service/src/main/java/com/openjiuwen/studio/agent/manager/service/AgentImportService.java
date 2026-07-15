@@ -613,6 +613,17 @@ public class AgentImportService {
                     MappingEntity parentMapping = getMappingEntity(currentMapping, parentResult,
                         importInfo.getTargetWorkspaceId());
                     mappingList.add(parentMapping);
+
+                    // 发布态导入时 parentMapping.appVersion 非空，需额外插入一份 app_version=null 的草稿态 mapping
+                    // 确保 buildComplexAgentInfo 的 selectByAppIdAndResourceType（and app_version is null）能查到
+                    // 草稿态导入时 parentMapping.appVersion 已为 null，无需重复插入
+                    if (StringUtils.isNotEmpty(parentMapping.getAppVersion())) {
+                        MappingEntity draftMapping = new MappingEntity();
+                        BeanUtils.copyProperties(parentMapping, draftMapping);
+                        draftMapping.setMappingId(UUID.randomUUID().toString());
+                        draftMapping.setAppVersion(null);
+                        mappingList.add(draftMapping);
+                    }
                 }
             }
         });
@@ -626,6 +637,16 @@ public class AgentImportService {
                 importInfo.getTargetWorkspaceId());
             parentMapping.setResourceId(parentMapping.getResourceId() + "#" + toolId);
             mappingList.add(parentMapping);
+
+            // 发布态导入时 parentMapping.appVersion 非空，需额外插入草稿态 mapping
+            // 草稿态导入时 parentMapping.appVersion 已为 null，无需重复插入
+            if (StringUtils.isNotEmpty(parentMapping.getAppVersion())) {
+                MappingEntity draftMapping = new MappingEntity();
+                BeanUtils.copyProperties(parentMapping, draftMapping);
+                draftMapping.setMappingId(UUID.randomUUID().toString());
+                draftMapping.setAppVersion(null);
+                mappingList.add(draftMapping);
+            }
         }
     }
 
@@ -712,20 +733,31 @@ public class AgentImportService {
         }
         resourceList.stream().filter(v -> CollectionUtils.isNotEmpty(v.getParents())).forEach(p -> {
             ImportResourceResult result = resultMap.get(p.getResourceId());
-            if (result == null || Strings.CS.equals(result.getStatus(), ImportExportStatusEnum.FAILED.getCode())) {
+            
+            if (result == null) {
+                
                 return;
             }
+            if (Strings.CS.equals(result.getStatus(), ImportExportStatusEnum.FAILED.getCode())) {
+                
+                return;
+            }
+            
             // 若当前资源id与版本无变化，则无需更新父资源的dsl
             if (StringUtils.isEmpty(result.getNewId()) && StringUtils.isEmpty(result.getNewVersion())) {
+                
                 return;
             }
             p.getParents().forEach(parentId -> {
                 ImportInfo parentResource = resourceMap.get(parentId);
                 ImportResourceResult parentResult = resultMap.get(parentId);
-                if (parentResult == null || Strings.CS.equals(parentResult.getStatus(),
-                    ImportExportStatusEnum.FAILED.getCode())) {
+                if (parentResult == null) {
                     return;
                 }
+                if (Strings.CS.equals(parentResult.getStatus(), ImportExportStatusEnum.FAILED.getCode())) {
+                    return;
+                }
+                
                 switch (ResourceTypeEnum.fromValue(parentResource.getResourceType())) {
                     case WORKFLOW -> handleWorkflowDsl(parentResource, parentResult, result);
                     case AGENT -> handleAgentDsl(parentResource, parentResult, result);
