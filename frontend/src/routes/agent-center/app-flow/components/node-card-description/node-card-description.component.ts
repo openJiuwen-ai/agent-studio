@@ -1,4 +1,4 @@
-import { Component, OnInit, Input, SimpleChanges } from '@angular/core';
+import { Component, OnInit, Input, SimpleChanges, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
 import { MODULES } from '@shared/modules';
 import { FlowUtils } from '@routes/agent-center/app-flow/utils/flow-utils';
 
@@ -17,15 +17,30 @@ export class NodeCardDescriptionComponent implements OnInit {
 
   public descriptionText = '';
   public showDescription = false;
+  public isOverflow = false;
 
-  constructor() {}
+  @ViewChild('descEl') descEl: ElementRef;
+
+  constructor(private cdr: ChangeDetectorRef) {}
 
   ngOnInit() {}
+
+  private checkOverflow() {
+    if (this.descEl?.nativeElement) {
+      const el = this.descEl.nativeElement as HTMLElement;
+      const overflow = el.scrollWidth > el.clientWidth;
+      if (overflow !== this.isOverflow) {
+        this.isOverflow = overflow;
+        this.cdr.markForCheck();
+      }
+    }
+  }
 
   initDescription() {
     const defaultDescription = FlowUtils.nodeDesci18nMap(this.nodeInfo?.type);
     this.showDescription = Boolean(this.description);
     this.descriptionText = this.description || this.originDescription || defaultDescription;
+    setTimeout(() => this.checkOverflow());
   }
 
   ngOnChanges(changes: SimpleChanges): void {
