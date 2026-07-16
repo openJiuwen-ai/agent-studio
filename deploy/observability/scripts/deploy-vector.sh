@@ -24,6 +24,7 @@ fi
 init_env() {
   if [ ! -f .env ]; then
     cp .env.template .env
+    chmod 600 .env
     log_warn "已生成 .env；请填写 LOGS_GATEWAY_HOST、LOGS_WRITE_* 和 NODE_NAME 后重试"
     exit 0
   fi

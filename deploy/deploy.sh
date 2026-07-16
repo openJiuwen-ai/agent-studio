@@ -707,6 +707,17 @@ show_status() {
 # ========================================
 start_logging() {
     validate_logging_image_source
+    local max_disk_usage min_free_disk
+    max_disk_usage=$(get_env_value VICTORIA_LOGS_MAX_DISK_USAGE_BYTES 10737418240)
+    min_free_disk=$(get_env_value VICTORIA_LOGS_MIN_FREE_DISK_BYTES 2147483648)
+    if ! [[ "$max_disk_usage" =~ ^[1-9][0-9]*$ ]]; then
+        log_error "VICTORIA_LOGS_MAX_DISK_USAGE_BYTES 必须是大于 0 的字节数，禁止无限制写盘"
+        exit 1
+    fi
+    if ! [[ "$min_free_disk" =~ ^[1-9][0-9]*$ ]]; then
+        log_error "VICTORIA_LOGS_MIN_FREE_DISK_BYTES 必须是大于 0 的字节数"
+        exit 1
+    fi
     log_info "Starting logging stack (victoria-logs / vector / grafana)..."
     cd "$SCRIPT_DIR"
     compose --profile logging up -d victoria-logs vector grafana

@@ -3,10 +3,17 @@
 # 在线部署：IMAGE_SOURCE=ghcr/dockerhub，脚本自动 pull 镜像
 # 离线部署：IMAGE_SOURCE=offline，脚本自动 docker load 镜像
 
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: ${DOCKER_LOG_MAX_SIZE:-100m}
+    max-file: ${DOCKER_LOG_MAX_FILES:-5}
+
 services:
   # ── 基础设施 ──
 
   mysql:
+    logging: *default-logging
     image: ${MYSQL_IMAGE:-mysql:8.0}
     pull_policy: if_not_present
     restart: always
@@ -29,6 +36,7 @@ services:
       - agent-net
 
   redis:
+    logging: *default-logging
     image: ${REDIS_IMAGE:-redis:7}
     pull_policy: if_not_present
     restart: always
@@ -43,6 +51,7 @@ services:
       - agent-net
 
   minio:
+    logging: *default-logging
     image: ${MINIO_IMAGE:-minio/minio:latest}
     pull_policy: if_not_present
     restart: always
@@ -72,6 +81,7 @@ services:
           - ${OBS_BUCKET:-agent-builder}.minio
 
   minio-init:
+    logging: *default-logging
     image: ${MINIO_MC_IMAGE:-minio/mc:latest}
     pull_policy: if_not_present
     depends_on:
@@ -94,6 +104,7 @@ services:
   # ── 应用服务 ──
 
   studio-console:
+    logging: *default-logging
     image: ${STUDIO_CONSOLE_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
@@ -126,6 +137,7 @@ services:
       - agent-net
 
   studio-manager:
+    logging: *default-logging
     image: ${STUDIO_MANAGER_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
@@ -187,6 +199,7 @@ services:
       - agent-net
 
   studio-service:
+    logging: *default-logging
     image: ${STUDIO_SERVICE_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
@@ -241,6 +254,7 @@ services:
       - agent-net
 
   studio-runtime:
+    logging: *default-logging
     image: ${STUDIO_RUNTIME_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
@@ -339,11 +353,12 @@ services:
   # 四个 app 服务通过命名卷共享日志给 Vector。
 
   victoria-logs:
+    logging: *default-logging
     image: ${VICTORIA_LOGS_IMAGE:-victoriametrics/victoria-logs:v1.50.0}
     pull_policy: ${MONITOR_PULL_POLICY:-if_not_present}
     restart: always
     profiles: ["logging"]
-    command: -storageDataPath=/victoria-logs-data -retentionPeriod=${VICTORIA_LOGS_RETENTION:-7d} -retention.maxDiskSpaceUsageBytes=${VICTORIA_LOGS_MAX_DISK_USAGE_BYTES:-0}
+    command: -storageDataPath=/victoria-logs-data -retentionPeriod=${VICTORIA_LOGS_RETENTION:-7d} -retention.maxDiskSpaceUsageBytes=${VICTORIA_LOGS_MAX_DISK_USAGE_BYTES:-10737418240} -storage.minFreeDiskSpaceBytes=${VICTORIA_LOGS_MIN_FREE_DISK_BYTES:-2147483648}
     volumes:
       - victoria_logs_data:/victoria-logs-data
     networks:
@@ -356,6 +371,7 @@ services:
       start_period: 30s
 
   vector:
+    logging: *default-logging
     image: ${VECTOR_IMAGE:-timberio/vector:0.55.0-alpine}
     pull_policy: ${MONITOR_PULL_POLICY:-if_not_present}
     restart: always
@@ -363,6 +379,8 @@ services:
     command: ["--config", "/etc/vector/vector.yaml"]
     environment:
       NODE_NAME: ${NODE_NAME:-local}
+      APP_LOG_TIMEZONE: ${APP_LOG_TIMEZONE:-Asia/Shanghai}
+      APP_PROJECT_NAME: ${APP_PROJECT_NAME:-deploy}
     volumes:
       - ./config/vector.yaml:/etc/vector/vector.yaml:ro
       # 与各 app 服务共享同一命名卷（只读），tail 其中的日志文件
@@ -370,6 +388,7 @@ services:
       - service_logs:/logs/studio-service:ro
       - runtime_logs:/logs/studio-runtime:ro
       - console_logs:/logs/studio-console:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - vector_data:/var/lib/vector
     depends_on:
       victoria-logs:
@@ -384,6 +403,7 @@ services:
       start_period: 15s
 
   grafana:
+    logging: *default-logging
     image: ${GRAFANA_IMAGE:-grafana-victorialogs:11.3.0-0.29.0}
     pull_policy: ${MONITOR_PULL_POLICY:-if_not_present}
     restart: always
