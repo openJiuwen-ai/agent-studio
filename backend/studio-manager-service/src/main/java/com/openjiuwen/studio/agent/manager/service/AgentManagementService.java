@@ -2391,6 +2391,15 @@ public class AgentManagementService implements IAgentManagementService {
                 boundSubControllerMappings);
         }
 
+        // 发布版本时，将 controller 引用的单智能体（resource_type=agent）草稿 mapping 复制为版本 mapping，
+        // 否则版本导出（依赖 t_mapping）查不到单智能体，导致导出包丢失、导入后单智能体缺失
+        List<MappingEntity> boundSubAgentMappings = mappingMapper.selectByAppIdAndResourceType(agentId,
+            CommonConstant.AGENT_TYPE);
+        if (!boundSubAgentMappings.isEmpty()) {
+            relationManagementService.createAgentSubAgent(projectId, workspaceId, agentId, versionId,
+                boundSubAgentMappings);
+        }
+
         // 设置agent的状态为已发布
         agent.setStatus(AgentStatus.PUBLISHED.toString());
         agent.setPublishedOn(new Date(System.currentTimeMillis()));
