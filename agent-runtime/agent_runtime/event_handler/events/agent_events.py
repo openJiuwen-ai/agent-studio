@@ -108,7 +108,7 @@ class AgentEventsProcessor(BaseEventsProcessor):
 
     @classmethod
     def _process_agent_node_message(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
-        """Capture LLM call events into trace.events for non-streaming DEBUG response."""
+        """Capture LLM call events for DEBUG mode — store in trace.events AND return for streaming."""
         if not trace.is_debug:
             return None
 
@@ -135,4 +135,10 @@ class AgentEventsProcessor(BaseEventsProcessor):
             "meta_data": meta_data,
         }
         trace.events.append(event_info)
-        return None
+
+        # 流式模式：返回事件给客户端
+        return EventField(
+            event=ConversationEvent.AGENT_NODE_MSG.value,
+            data=event_info,
+            createdTime=full_data.get("createdTime"),
+        )
