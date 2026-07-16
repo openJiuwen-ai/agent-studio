@@ -184,6 +184,8 @@ services:
       knowledge_lakeSearch_endpoint: ${KNOWLEDGE_LAKESEARCH_ENDPOINT:-}
       # LakeSearch 鉴权方式（可选，默认 basic；mock 无鉴权用 none）
       knowledge_lakeSearch_auth_mode: ${KNOWLEDGE_LAKESEARCH_AUTH_MODE:-basic}
+      # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
+      auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
     depends_on:
       mysql:
         condition: service_healthy
@@ -237,6 +239,8 @@ services:
       agent_manager_endpoint: ${AGENT_MANAGER_ENDPOINT:-http://studio-manager:31111}
       jiuwen_base_url: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
       koosearch_endpoint: ${KOOSEARCH_ENDPOINT:-}
+      # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
+      auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
     depends_on:
       mysql:
         condition: service_healthy
