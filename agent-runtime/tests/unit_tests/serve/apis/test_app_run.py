@@ -2,9 +2,11 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Tests for app_run.py — trial run API endpoints."""
 
+import asyncio
 import sys
 from typing import Optional, Dict, Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 from pydantic import BaseModel
 
 # Stub agent_builder modules to avoid import errors
@@ -36,15 +38,12 @@ if "agent_builder.nl_to_agent.nl2" not in sys.modules:
 
     stub_nl2 = MagicMock()
     stub_nl2.N2LRequestBody = _StubN2LRequestBody
-    stub_nl2._n2l_json_wapper = MagicMock()
-    stub_nl2._chat = MagicMock()
+    stub_nl2.n2l_json_wapper = MagicMock()
+    stub_nl2.chat = MagicMock()
     sys.modules["agent_builder.nl_to_agent.nl2"] = stub_nl2
     stub_nl_to_agent = MagicMock()
     stub_nl_to_agent.nl2 = stub_nl2
     sys.modules["agent_builder.nl_to_agent"] = stub_nl_to_agent
-
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import Request

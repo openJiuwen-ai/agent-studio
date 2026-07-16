@@ -50,17 +50,17 @@ class BaseEventsProcessor(ABC):
         if cls._initialized:
             return
         cls._handler_methods = {
-            ConversationEvent.START.value: cls._process_start_event,
-            ConversationEvent.MESSAGE_END.value: cls._process_message_end_event,
-            ConversationEvent.FUNCTION_CALL.value: cls._process_function_call_event,
-            ConversationEvent.API_EXEC_DATA.value: cls._process_api_exec_data_event,
-            ConversationEvent.STATISTIC_DATA.value: cls._process_statistic_data_event,
-            ConversationEvent.SUMMARY_RESPONSE.value: cls._process_summary_response_event,
-            ConversationEvent.ERROR.value: cls._process_error_event,
-            ConversationEvent.DONE.value: cls._process_done_event,
-            ConversationEvent.WORKFLOW_NODE_MESSAGE.value: cls._process_workflow_node_message,
-            ConversationEvent.INTERMEDIATE_MESSAGE.value: cls._process_intermediate_message_event,
-            EVENT_THROUGH: cls._process_event_through,
+            ConversationEvent.START.value: cls.process_start_event,
+            ConversationEvent.MESSAGE_END.value: cls.process_message_end_event,
+            ConversationEvent.FUNCTION_CALL.value: cls.process_function_call_event,
+            ConversationEvent.API_EXEC_DATA.value: cls.process_api_exec_data_event,
+            ConversationEvent.STATISTIC_DATA.value: cls.process_statistic_data_event,
+            ConversationEvent.SUMMARY_RESPONSE.value: cls.process_summary_response_event,
+            ConversationEvent.ERROR.value: cls.process_error_event,
+            ConversationEvent.DONE.value: cls.process_done_event,
+            ConversationEvent.WORKFLOW_NODE_MESSAGE.value: cls.process_workflow_node_message,
+            ConversationEvent.INTERMEDIATE_MESSAGE.value: cls.process_intermediate_message_event,
+            EVENT_THROUGH: cls.process_event_through,
         }
         cls._initialized = True
 
@@ -69,17 +69,17 @@ class BaseEventsProcessor(ABC):
         pass
 
     @classmethod
-    def _process_default_event(cls, full_data: Dict[str, Any], trace: Trace) -> Dict[str, Any]:
+    def process_default_event(cls, full_data: Dict[str, Any], trace: Trace) -> Dict[str, Any]:
         return full_data
 
     @classmethod
-    def _process_start_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_start_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         start_time = full_data.get("createdTime")
         trace.start_time = start_time
         return full_data
 
     @classmethod
-    def _process_message_end_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_message_end_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         data = full_data.get("data", {})
         node_type = data.get(NODE_TYPE_KEY, "unknown")
         node_type = node_type_mapping.get(node_type, node_type)
@@ -101,7 +101,7 @@ class BaseEventsProcessor(ABC):
         )
 
     @classmethod
-    def _process_error_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_error_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         trace.task_end = True
         trace.end_time = full_data.get("createdTime")
         data = full_data.get("data", {})
@@ -126,7 +126,7 @@ class BaseEventsProcessor(ABC):
         # Agent needs statistic event
         if trace.handler_type in ("ReAct", "PlanExecute"):
             data[LatencyMapper.ANSWER_KEY] = {LatencyMapper.OVERALL_LATENCY: trace.overall_time()}
-            static = cls._process_statistic_data_event(full_data, trace)
+            static = cls.process_statistic_data_event(full_data, trace)
             event_list.append(static.model_dump(exclude_none=True, by_alias=True))
         trace.error_code = data.get("code", CODE)
         trace.error_message = data.get("message", "unknown error")
@@ -136,7 +136,7 @@ class BaseEventsProcessor(ABC):
         return event_list
 
     @classmethod
-    def _process_function_call_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_function_call_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         data = full_data.get("data", {})
         latency = LatencyMapper.get_function_call_latency(data)
         answer = data.get("answer", {})
@@ -155,7 +155,7 @@ class BaseEventsProcessor(ABC):
         )
 
     @classmethod
-    def _process_api_exec_data_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_api_exec_data_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         data = full_data.get("data", {})
         content = data.get("answer", {}).get("content")
         role = data.get("answer", {}).get("role")
@@ -169,7 +169,7 @@ class BaseEventsProcessor(ABC):
         )
 
     @classmethod
-    def _process_statistic_data_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_statistic_data_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         data = full_data.get("data", {})
         latency = LatencyMapper.get_statistic_latency(data)
         return PluginEventField(
@@ -179,7 +179,7 @@ class BaseEventsProcessor(ABC):
         )
 
     @classmethod
-    def _process_summary_response_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_summary_response_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         data = full_data.get("data", {})
         content = data.get("answer", {}).get("content")
         role = data.get("answer", {}).get("role")
@@ -194,14 +194,14 @@ class BaseEventsProcessor(ABC):
         return summary_response_field
 
     @classmethod
-    def _process_done_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_done_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         return EventField(
             event=ConversationEvent.DONE.value,
             createdTime=full_data.get("createdTime"),
         )
 
     @classmethod
-    def _process_workflow_node_message(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
+    def process_workflow_node_message(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
         data = full_data.get("data", {})
         node_status, status = NodeStatusMapper.resolve_node_status(data.get("status", ""))
         inputs = FieldDataProcessor.process_field_data(data.get("inputs", {}), FIELD_VALUES)
@@ -247,16 +247,16 @@ class BaseEventsProcessor(ABC):
                 data=node_data.model_dump(exclude_none=True, by_alias=True),
                 createdTime=full_data.get("createdTime"),
             ).model_dump(exclude_none=True, by_alias=True),
-            cls._process_default_event(full_data, trace),
+            cls.process_default_event(full_data, trace),
         ]
 
     @classmethod
-    def _process_intermediate_message_event(cls, full_data: Dict[str, Any], trace: Trace = None):
+    def process_intermediate_message_event(cls, full_data: Dict[str, Any], trace: Trace = None):
         FieldDataProcessor.process_history_message(node_type="", full_data=full_data, trace=trace)
         return None
 
     @classmethod
-    def _process_event_through(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_event_through(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         if full_data.get("event") == ConversationEvent.WORKFLOW_BLOCKED.value:
             trace.block = True
         data = full_data.get("data", {})

@@ -89,7 +89,7 @@ class EventHandler:
         self.conv_manager = ConversationManager()
 
     @staticmethod
-    def _parse_sse_line(data: bytes) -> Optional[dict]:
+    def parse_sse_line(data: bytes) -> Optional[dict]:
         """Parse a single SSE data line into a dict. Returns None if not a valid data line."""
         data_str = data.decode("utf-8") if isinstance(data, bytes) else str(data)
         if not data_str.startswith("data: "):
@@ -103,7 +103,7 @@ class EventHandler:
             return None
 
     @staticmethod
-    def _serialize_sse(item: dict) -> bytes:
+    def serialize_sse(item: dict) -> bytes:
         """Serialize a dict to SSE data line."""
         return f"data: {json.dumps(item, ensure_ascii=False)}\n\n".encode("utf-8")
 
@@ -122,7 +122,7 @@ class EventHandler:
         else:
             return
         for item in items:
-            yield cls._serialize_sse(item)
+            yield cls.serialize_sse(item)
 
     async def _persist_conversation(self):
         """Persist conversation history and dialogue count."""
@@ -143,7 +143,7 @@ class EventHandler:
         try:
             event_handler = self.get_event_handler(handler_type, self.trace)
             async for data in body_iterator:
-                data_dict = self._parse_sse_line(data)
+                data_dict = self.parse_sse_line(data)
                 if data_dict is None:
                     continue
 
@@ -156,14 +156,14 @@ class EventHandler:
 
             # Agent mode: inject done event
             if handler_type in (PlanModeType.ReAct.value, PlanModeType.PlanExecute.value):
-                yield self._serialize_sse({
+                yield self.serialize_sse({
                     "event": ConversationEvent.DONE.value,
                     "createdTime": self.trace.end_time or int(time.time() * 1000),
                 })
 
             # Controller mode: inject end event
             if handler_type == PlanModeType.Controller.value:
-                yield self._serialize_sse({
+                yield self.serialize_sse({
                     "event": EventMapping.DONE.value,
                     "createdTime": self.trace.end_time or int(time.time() * 1000),
                 })
@@ -172,7 +172,7 @@ class EventHandler:
             workflow_logger.error("encapsulate stream response failed.")
             workflow_logger.error("".join(traceback.format_exception(e)))
             error_event = FieldDataProcessor.generate_error_event_field(self.trace)
-            yield self._serialize_sse(error_event.model_dump(by_alias=True, exclude_none=True))
+            yield self.serialize_sse(error_event.model_dump(by_alias=True, exclude_none=True))
 
     async def get_stream_result(self, handler_type: str, body_iterator: AsyncGenerator) -> StreamingResponse:
         transformed_iterator = self.get_handler_body_iterator(
@@ -186,7 +186,7 @@ class EventHandler:
         try:
             event_handler = self.get_event_handler(handler_type, self.trace)
             async for data in body_iterator:
-                data_dict = self._parse_sse_line(data)
+                data_dict = self.parse_sse_line(data)
                 if data_dict is None:
                     continue
                 output_event = event_handler.process_event(data_dict, self.trace)

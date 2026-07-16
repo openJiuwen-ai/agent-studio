@@ -18,33 +18,33 @@ class TestParseSSELine:
 
     @staticmethod
     def test_valid_data_line():
-        result = EventHandler._parse_sse_line(b'data: {"event":"start"}')
+        result = EventHandler.parse_sse_line(b'data: {"event":"start"}')
         assert result == {"event": "start"}
 
     @staticmethod
     def test_valid_data_line_string():
-        result = EventHandler._parse_sse_line('data: {"event":"message"}')
+        result = EventHandler.parse_sse_line('data: {"event":"message"}')
         assert result == {"event": "message"}
 
     @staticmethod
     def test_non_data_line():
-        result = EventHandler._parse_sse_line(b"event: ping")
+        result = EventHandler.parse_sse_line(b"event: ping")
         assert result is None
 
     @staticmethod
     def test_empty_data():
-        result = EventHandler._parse_sse_line(b"data: ")
+        result = EventHandler.parse_sse_line(b"data: ")
         assert result is None
 
     @staticmethod
     def test_invalid_json():
-        result = EventHandler._parse_sse_line(b"data: not-json")
+        result = EventHandler.parse_sse_line(b"data: not-json")
         assert result is None
 
     @staticmethod
     def test_complex_payload():
         payload = {"event": "message", "data": {"answer": "hello", "node_type": "LLM"}}
-        result = EventHandler._parse_sse_line(f"data: {json.dumps(payload)}".encode())
+        result = EventHandler.parse_sse_line(f"data: {json.dumps(payload)}".encode())
         assert result == payload
 
 
@@ -53,17 +53,17 @@ class TestSerializeSSE:
 
     @staticmethod
     def test_basic_serialization():
-        result = EventHandler._serialize_sse({"event": "start"})
+        result = EventHandler.serialize_sse({"event": "start"})
         assert result == b'data: {"event": "start"}\n\n'
 
     @staticmethod
     def test_unicode_content():
-        result = EventHandler._serialize_sse({"event": "message", "content": "你好"})
+        result = EventHandler.serialize_sse({"event": "message", "content": "你好"})
         assert "你好".encode("utf-8") in result
 
     @staticmethod
     def test_ends_with_double_newline():
-        result = EventHandler._serialize_sse({"event": "done"})
+        result = EventHandler.serialize_sse({"event": "done"})
         assert result.endswith(b"\n\n")
 
 

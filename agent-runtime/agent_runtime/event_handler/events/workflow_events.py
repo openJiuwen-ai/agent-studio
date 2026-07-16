@@ -46,13 +46,13 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
             super()._initialize_handlers()
         cls._handler_methods = {
             **cls._handler_methods,
-            ConversationEvent.WORKFLOW_START.value: cls._process_workflow_start,
-            ConversationEvent.MESSAGE.value: cls._process_message,
-            ConversationEvent.MESSAGE_END.value: cls._process_message_end,
-            ConversationEvent.ERROR.value: cls._process_error_message,
-            ConversationEvent.WORKFLOW_END.value: cls._process_workflow_end,
-            ConversationEvent.DONE.value: cls._process_done,
-            ConversationEvent.EXCEPTION.value: cls._process_exception,
+            ConversationEvent.WORKFLOW_START.value: cls.process_workflow_start,
+            ConversationEvent.MESSAGE.value: cls.process_message,
+            ConversationEvent.MESSAGE_END.value: cls.process_message_end,
+            ConversationEvent.ERROR.value: cls.process_error_message,
+            ConversationEvent.WORKFLOW_END.value: cls.process_workflow_end,
+            ConversationEvent.DONE.value: cls.process_done,
+            ConversationEvent.EXCEPTION.value: cls.process_exception,
         }
         cls._initialized = True
 
@@ -63,7 +63,7 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         if event_type in _WORKFLOW_BLOCKED_EVENTS:
             return None
         try:
-            handler_method = cls._handler_methods.get(event_type, cls._process_default)
+            handler_method = cls._handler_methods.get(event_type, cls.process_default)
             if handler_method is None:
                 workflow_logger.warning(
                     f"unknown jiuwen workflow event, use event through method, event type is {event_type}"
@@ -79,13 +79,13 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
             raise
 
     @classmethod
-    def _process_default(cls, full_data: Dict[str, Any], trace: Trace) -> Dict[str, Any]:
+    def process_default(cls, full_data: Dict[str, Any], trace: Trace) -> Dict[str, Any]:
         if full_data.get("event") == ConversationEvent.WORKFLOW_START.value:
             trace.start_time = full_data.get("createdTime", int(time.time() * 1000))
         return full_data
 
     @classmethod
-    def _process_workflow_start(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
+    def process_workflow_start(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
         data = {"start_time": full_data.get("createdTime")}
         return EventField(
             event=EventMapping.WORKFLOW_START.value,
@@ -94,7 +94,7 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         )
 
     @classmethod
-    def _process_message(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
+    def process_message(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
         data = full_data.get("data", {})
         node_type = data.get(NODE_TYPE_KEY, "unknown")
         node_type = node_type_mapping.get(node_type, node_type)
@@ -117,7 +117,7 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         )
 
     @classmethod
-    def _process_message_end(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_message_end(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         data = full_data.get("data", {})
         node_type = data.get(NODE_TYPE_KEY, "unknown")
         node_type = node_type_mapping.get(node_type, node_type)
@@ -155,7 +155,7 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         )
 
     @classmethod
-    def _process_error_message(cls, full_data: Dict[str, Any], trace: Trace) -> List[Dict[str, Any]]:
+    def process_error_message(cls, full_data: Dict[str, Any], trace: Trace) -> List[Dict[str, Any]]:
         trace.task_end = True
         data = full_data.get("data", {})
         node_type = data.get(NODE_TYPE_KEY, "unknown")
@@ -188,12 +188,12 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         trace.error_code = data.get("code", CODE)
         trace.error_message = data.get("message", "unknown error")
         error_field.append(
-            cls._process_workflow_end(full_data, trace).model_dump(exclude_none=True, by_alias=True)
+            cls.process_workflow_end(full_data, trace).model_dump(exclude_none=True, by_alias=True)
         )
         return error_field
 
     @classmethod
-    def _process_workflow_end(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_workflow_end(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         current_time = full_data.get("createdTime", int(time.time() * 1000))
         trace.dialogue_end = True
         trace.end_time = current_time
@@ -214,14 +214,14 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         )
 
     @classmethod
-    def _process_done(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
+    def process_done(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
         return EventField(
             event=EventMapping.DONE.value,
             createdTime=full_data.get("createdTime"),
         )
 
     @classmethod
-    def _process_exception(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
+    def process_exception(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
         trace.task_end = True
         data = full_data.get("data", {})
         data.pop(EXCEPTION_NO_KEY, None)

@@ -37,6 +37,19 @@ from jiuwen.serve.controllers.execution.ir_converter import IRConverter
 pytestmark = pytest.mark.asyncio
 
 
+class _MockStateWithCopiedParam:
+    """Mock state that supports copied parameter to avoid deepcopy."""
+
+    def __init__(self, state_dict):
+        self._state = state_dict
+
+    def get_state(self, copied=True):
+        import copy
+        if copied:
+            return copy.deepcopy(self._state)
+        return self._state
+
+
 class _FakeLoopComponent:
     """替代真实 LoopComponent，避免 check_validate 校验空 LoopGroup。
 
@@ -98,10 +111,10 @@ async def _capture_loop_transformer(node):
 
 
 async def test_loop_inputs_transformer_does_not_deepcopy_inmemory_state(monkeypatch):
-    """transformer 接收 InMemoryStateLike 实例时不应 deepcopy 内部 _state。
+    """transformer 接收支持 copied 参数的 state 实例时不应 deepcopy 内部 _state。
 
     通过 spy copy.deepcopy 计数验证：transformer 调用期间 deepcopy 应被 0 次调用
-    （原 bug 是 InMemoryStateLike.get_state() 默认 copied=True 触发 deepcopy）。
+    （原 bug 是 state.get_state() 默认 copied=True 触发 deepcopy）。
 
     同时验证:
     - 调用后 state._state 内容未被修改（只读保证）
@@ -117,21 +130,13 @@ async def test_loop_inputs_transformer_does_not_deepcopy_inmemory_state(monkeypa
         return original_deepcopy(obj, *args, **kwargs)
 
     monkeypatch.setattr(_copy, "deepcopy", _spy_deepcopy)
-    # ir_converter 模块内 from copy import deepcopy 是模块级 import，
-    # 但 _loop_inputs_transformer 内部不直接用 deepcopy，而是通过
-    # InMemoryStateLike.get_state() 间接触发。InMemoryStateLike 在
-    # openjiuwen.core.session.state.base 模块里用的是模块级 deepcopy 引用，
-    # 需要 patch 那个模块的 deepcopy。
-    import openjiuwen.core.session.state.base as _state_base
-    monkeypatch.setattr(_state_base, "deepcopy", _spy_deepcopy)
 
     io_state_dict = {
         "node_start": {"userFields": {"query": "hello world"}},
         "node_llm_1": {"raw_output": "llm result"},
         "_big_field": [{"k": i} for i in range(50)],
     }
-    state_like = InMemoryStateLike()
-    state_like.set_state(io_state_dict)
+    state_like = _MockStateWithCopiedParam(io_state_dict)
     original_state_content = state_like.get_state(copied=False)
 
     transformer = await _capture_loop_transformer(_build_loop_node())

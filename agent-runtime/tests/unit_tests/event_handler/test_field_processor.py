@@ -73,19 +73,19 @@ class TestProcessNodeMessage:
 
 
 class TestHandleOtherMessage:
-    """_handle_other_message — intermediate message processing."""
+    """handle_other_message — intermediate message processing."""
 
     @staticmethod
     def test_empty_answer():
         trace = Trace()
-        FieldDataProcessor._handle_other_message({"answer": []}, [], trace)
+        FieldDataProcessor.handle_other_message({"answer": []}, [], trace)
         assert trace.conversation_info["messages"] == []
 
     @staticmethod
     def test_json_string_answer():
         trace = Trace()
         answer_json = json.dumps([{"role": "user", "content": "hi"}])
-        FieldDataProcessor._handle_other_message({"answer": answer_json}, [], trace)
+        FieldDataProcessor.handle_other_message({"answer": answer_json}, [], trace)
         msgs = trace.conversation_info["messages"]
         assert len(msgs) == 1
         assert msgs[0]["role"] == "user"
@@ -93,14 +93,14 @@ class TestHandleOtherMessage:
     @staticmethod
     def test_invalid_json_string():
         trace = Trace()
-        FieldDataProcessor._handle_other_message({"answer": "not-valid-json"}, [], trace)
+        FieldDataProcessor.handle_other_message({"answer": "not-valid-json"}, [], trace)
         assert trace.conversation_info["messages"] == []
 
     @staticmethod
     def test_list_filters_none_values():
         trace = Trace()
         data = {"answer": [{"role": "user", "content": None}, {"role": "assistant", "content": "hi"}]}
-        FieldDataProcessor._handle_other_message(data, [], trace)
+        FieldDataProcessor.handle_other_message(data, [], trace)
         msgs = trace.conversation_info["messages"]
         assert len(msgs) == 2
         assert "content" not in msgs[0]
@@ -110,20 +110,20 @@ class TestHandleOtherMessage:
     def test_dict_answer_calls_summary_response():
         trace = Trace()
         data = {"answer": {"role": "assistant", "content": "final"}}
-        FieldDataProcessor._handle_other_message(data, [], trace)
+        FieldDataProcessor.handle_other_message(data, [], trace)
         msgs = trace.conversation_info["messages"]
         assert len(msgs) == 1
         assert msgs[0]["role"] == "assistant"
 
 
 class TestHandleSummaryResponse:
-    """_handle_summary_response — dedup and append."""
+    """handle_summary_response — dedup and append."""
 
     @staticmethod
     def test_append_when_empty():
         trace = Trace()
         messages = []
-        FieldDataProcessor._handle_summary_response(
+        FieldDataProcessor.handle_summary_response(
             {"role": "user", "content": "hi"}, messages, trace
         )
         assert len(messages) == 1
@@ -132,7 +132,7 @@ class TestHandleSummaryResponse:
     def test_skip_duplicate():
         trace = Trace()
         messages = [{"role": "user", "content": "hi"}]
-        FieldDataProcessor._handle_summary_response(
+        FieldDataProcessor.handle_summary_response(
             {"role": "user", "content": "hi"}, messages, trace
         )
         assert len(messages) == 1
@@ -141,7 +141,7 @@ class TestHandleSummaryResponse:
     def test_append_different_role():
         trace = Trace()
         messages = [{"role": "user", "content": "hi"}]
-        FieldDataProcessor._handle_summary_response(
+        FieldDataProcessor.handle_summary_response(
             {"role": "assistant", "content": "hello"}, messages, trace
         )
         assert len(messages) == 2

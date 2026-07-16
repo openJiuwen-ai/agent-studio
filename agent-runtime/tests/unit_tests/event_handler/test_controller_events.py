@@ -79,7 +79,7 @@ class TestProcessEvent:
 
 
 class TestProcessMessageEvent:
-    """_process_message_event — message with text and reasoning."""
+    """process_message_event — message with text and reasoning."""
 
     @staticmethod
     def test_extracts_text_and_reasoning():
@@ -119,7 +119,7 @@ class TestProcessMessageEvent:
 
 
 class TestProcessTaskStartEvent:
-    """_process_task_start_event — set execution_id."""
+    """process_task_start_event — set execution_id."""
 
     @staticmethod
     def test_sets_execution_id():
@@ -135,7 +135,7 @@ class TestProcessTaskStartEvent:
 
 
 class TestProcessAgentInterruptedEvent:
-    """_process_agent_interrupted_event — set block flag."""
+    """process_agent_interrupted_event — set block flag."""
 
     @staticmethod
     def test_sets_block_flag():
@@ -149,7 +149,7 @@ class TestProcessAgentInterruptedEvent:
 
 
 class TestProcessTaskEndEvent:
-    """_process_task_end_event — conditional execution_id logic."""
+    """process_task_end_event — conditional execution_id logic."""
 
     @staticmethod
     def test_no_execution_id_after_task_start():
@@ -213,7 +213,7 @@ class TestProcessTaskEndEvent:
 
 
 class TestProcessWorkflowNodeMessage:
-    """_process_workflow_node_message — controller version."""
+    """process_workflow_node_message — controller version."""
 
     @staticmethod
     def test_calls_super_and_returns_default():

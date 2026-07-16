@@ -31,7 +31,8 @@ class LanguageManager:
             )
             self._initialized = True
 
-    def _parse_properties(self, filepath: str) -> Dict[str, str]:
+    @staticmethod
+    def _parse_properties(filepath: str) -> Dict[str, str]:
         """解析Java .properties文件为dict."""
         props = {}
         if not os.path.exists(filepath):

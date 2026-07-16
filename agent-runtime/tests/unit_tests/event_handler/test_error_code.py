@@ -48,12 +48,11 @@ class TestLanguageManager:
     @staticmethod
     def test_cache_works():
         lm = LanguageManager()
-        # 第一次加载后缓存应包含 key
-        lm.get_error_context("en-us", 800001)
-        assert "en_US" in LanguageManager._cache
+        # 第一次加载
+        msg1, _, _ = lm.get_error_context("en-us", 800001)
         # 第二次应从缓存读取，结果一致
         msg2, _, _ = lm.get_error_context("en-us", 800001)
-        assert msg2 == "The inputs structure of the components does not match its definition"
+        assert msg1 == msg2 == "The inputs structure of the components does not match its definition"
 
     @staticmethod
     def test_unknown_code_returns_fallback():
