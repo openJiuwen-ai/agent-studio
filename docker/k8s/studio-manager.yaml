@@ -110,6 +110,20 @@ spec:
               value: 'NO_OP_CIPHER'
             - name: enable_tool_url_check
               value: 'true'
+            - name: storage_type
+              value: 'OBS'
+            - name: STORAGE_CUSTOM_CLASS
+              value: ''
+            - name: STORAGE_CUSTOM_CLASSPATH
+              value: ''
+            - name: storage_local_base_path
+              value: ''
+            - name: storage_local_bucket
+              value: ''
+            - name: storage_local_staging_bucket
+              value: ''
+            - name: storage_local_server_url
+              value: ''
             # 是否启用资源管理的操作日志
             - name: studio_operationLog_switch
               value: 'false'

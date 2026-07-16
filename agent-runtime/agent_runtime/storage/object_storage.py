@@ -8,13 +8,17 @@
 提供可插拔的 ObjectStorageProvider 抽象类，内置实现：
 - S3StorageProvider — 基于 aioboto3 的 S3 兼容存储（ OBS S3 端口、AWS S3、MinIO 等）
 - LocalStorageProvider — 本地文件系统读取
+- CUSTOM — 通过 importlib 动态加载自定义实现
 
 配置项（通过 settings.object_storage 或环境变量）:
-    DATASOURCE_OBS_SERVER      — S3 endpoint（如 https://obs.example.com:30443）
-    DATASOURCE_OBS_BUCKET      — 桶名
-    DATASOURCE_OBS_AK          — Access Key
-    DATASOURCE_OBS_SK          — Secret Key
-    DATASOURCE_OBS_PATH_STYLE  — 寻址方式："path"（默认，路径风格）或 "virtual"（虚拟托管风格）
+    STORAGE_TYPE                — 存储类型：OBS（默认）/ LOCAL / CUSTOM
+    STORAGE_CUSTOM_MODULE       — CUSTOM 类型的模块路径或 .py 文件路径
+    STORAGE_CUSTOM_CLASS        — CUSTOM 类型的实现类名
+    DATASOURCE_OBS_SERVER       — S3 endpoint（如 https://obs.example.com:30443）
+    DATASOURCE_OBS_BUCKET       — 桶名
+    DATASOURCE_OBS_AK           — Access Key
+    DATASOURCE_OBS_SK           — Secret Key
+    DATASOURCE_OBS_PATH_STYLE   — 寻址方式："path"（默认，路径风格）或 "virtual"（虚拟托管风格）
 """
 
 import asyncio
@@ -213,6 +217,39 @@ class S3StorageProvider(ObjectStorageProvider):
         data = await self.get_object_bytes(object_key)
         return data.decode("utf-8")
 
+    async def download_to_file(self, object_key: str, local_path: str) -> None:
+        """流式下载 S3 对象到本地文件
+
+        Args:
+            object_key: S3 对象 key
+            local_path: 本地保存路径
+
+        Raises:
+            StorageConfigError: 配置缺失或未初始化
+            StorageReadError: 读取或写入失败
+        """
+        self._ensure_initialized()
+        try:
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            response = await self._client.get_object(
+                Bucket=self._bucket, Key=object_key
+            )
+            async with response["Body"] as stream:
+                chunk = await stream.read()
+                with open(local_path, "wb") as f:
+                    f.write(chunk)
+        except Exception as e:
+            if isinstance(e, (StorageConfigError, StorageReadError)):
+                raise
+            workflow_logger.error(
+                f"S3 download failed: object_key={object_key}, local_path={local_path}, {e}",
+                exc_info=True,
+            )
+            raise StorageReadError(
+                f"S3 download failed: object_key={object_key}, error={e}"
+            ) from e
+    
+    
     async def list_keys(self, prefix: str) -> list[str]:
         """列出指定前缀下的所有对象 key
 
@@ -261,31 +298,132 @@ class S3StorageProvider(ObjectStorageProvider):
 
 
 class LocalStorageProvider(ObjectStorageProvider):
-    """本地文件系统存储提供者"""
+    """本地文件系统存储提供者
+
+    路径规则与 Java 侧 LocalFileStoreImpl 对齐：
+    实际文件路径 = local_base_path / local_bucket / object_key
+    例如 object_key="ir/xxx.json" → /data/storage/default-bucket/ir/xxx.json
+    """
+
+    def __init__(self, base_path: str = "", bucket: str = ""):
+        self._base_path = base_path or settings.object_storage.local_base_path
+        self._bucket = bucket or settings.object_storage.local_bucket
+
+    def _resolve(self, object_key: str) -> str:
+        return os.path.join(self._base_path, self._bucket, object_key)
 
     async def get_content(self, object_key: str) -> str:
         """读取本地文件内容，返回 UTF-8 字符串
 
         Args:
-            object_key: 文件路径
+            object_key: 对象 key（如 ir/xxx.json）
 
         Raises:
             StorageReadError: 文件不存在或读取失败
         """
-        if not os.path.exists(object_key):
-            workflow_logger.error(f"File not found: {object_key}")
-            raise StorageNotFoundError(f"File not found: {object_key}")
+
+        file_path = self._resolve(object_key)
+        if not os.path.exists(file_path):
+            workflow_logger.error(f"File not found: {file_path}")
+            raise StorageReadError(f"File not found: {file_path}")
 
         try:
             loop = asyncio.get_running_loop()
             content = await loop.run_in_executor(
                 None,
-                lambda: open(object_key, "r", encoding="utf-8").read(),
+                lambda: open(file_path, "r", encoding="utf-8").read(),
             )
             return content
         except Exception as e:
-            workflow_logger.error(f"File read failed: {object_key}, {e}", exc_info=True)
-            raise StorageReadError(f"File read failed: {object_key}, {e}") from e
+            workflow_logger.error(f"File read failed: {file_path}, {e}", exc_info=True)
+            raise StorageReadError(f"File read failed: {file_path}, {e}") from e
+
+    async def get_object_bytes(self, object_key: str) -> bytes:
+        """读取本地文件内容，返回原始字节
+
+        Args:
+            object_key: 对象 key
+
+        Raises:
+            StorageReadError: 文件不存在或读取失败
+        """
+        file_path = self._resolve(object_key)
+        if not os.path.exists(file_path):
+            workflow_logger.error(f"File not found: {file_path}")
+            raise StorageReadError(f"File not found: {file_path}")
+
+        try:
+            loop = asyncio.get_running_loop()
+            content = await loop.run_in_executor(
+                None,
+                lambda: open(file_path, "rb").read(),
+            )
+            return content
+        except Exception as e:
+            workflow_logger.error(f"File read failed: {file_path}, {e}", exc_info=True)
+            raise StorageReadError(f"File read failed: {file_path}, {e}") from e
+
+
+def _load_custom_provider(module_path: str, class_name: str) -> ObjectStorageProvider:
+    """通过 importlib 动态加载自定义存储实现
+
+    Args:
+        module_path: Python 模块路径或 .py 文件绝对路径
+            - 文件路径：/opt/plugins/custom_storage（自动加 .py 后缀）
+            - 模块名：my_package.custom_storage（需已安装到 site-packages）
+        class_name: 实现类名（必须继承 ObjectStorageProvider）
+
+    Returns:
+        ObjectStorageProvider 实例
+
+    Raises:
+        StorageConfigError: 配置缺失或加载失败
+    """
+    import importlib
+    import importlib.util
+    from pathlib import Path
+
+    if not module_path:
+        raise StorageConfigError("STORAGE_CUSTOM_MODULE is required when STORAGE_TYPE=CUSTOM")
+    if not class_name:
+        raise StorageConfigError("STORAGE_CUSTOM_CLASS is required when STORAGE_TYPE=CUSTOM")
+
+    p = Path(module_path)
+    try:
+        if p.suffix == ".py" or (p.exists() and p.is_file()):
+            # 按文件路径加载
+            py_path = p if p.suffix == ".py" else p.with_suffix(".py")
+            if not py_path.exists():
+                raise StorageConfigError(f"Custom storage module file not found: {py_path}")
+            spec = importlib.util.spec_from_file_location(py_path.stem, str(py_path))
+            if spec is None:
+                raise StorageConfigError(f"Cannot load module spec from: {py_path}")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        else:
+            # 按 Python 模块名加载
+            module = importlib.import_module(module_path)
+    except Exception as e:
+        raise StorageConfigError(
+            f"Failed to load custom storage module '{module_path}': {e}"
+        ) from e
+
+    cls = getattr(module, class_name, None)
+    if cls is None:
+        raise StorageConfigError(
+            f"Class '{class_name}' not found in module '{module_path}'"
+        )
+    if not issubclass(cls, ObjectStorageProvider):
+        raise StorageConfigError(
+            f"Class '{class_name}' must extend ObjectStorageProvider"
+        )
+
+    try:
+        return cls()
+    except Exception as e:
+        raise StorageConfigError(
+            f"Failed to instantiate custom storage class '{class_name}': {e}"
+        ) from e
 
     async def list_keys(self, prefix: str) -> list[str]:
         """列出本地目录下匹配前缀的文件"""
@@ -297,14 +435,27 @@ class LocalStorageProvider(ObjectStorageProvider):
 def get_storage_provider() -> ObjectStorageProvider:
     """根据配置获取存储提供者
 
-    当 object_storage.server 已配置且 S3 client 已初始化时返回 S3StorageProvider，
-    否则返回 LocalStorageProvider 作为降级。
+    STORAGE_TYPE 环境变量控制返回哪种实现：
+    - OBS (默认): S3StorageProvider（需 S3 配置完整且已初始化）
+    - LOCAL: LocalStorageProvider
+    - CUSTOM: 通过 STORAGE_CUSTOM_MODULE + STORAGE_CUSTOM_CLASS 动态加载
     """
+    storage_type = settings.object_storage.type.upper()
+
+    if storage_type == "CUSTOM":
+        return _load_custom_provider(
+            settings.object_storage.custom_module,
+            settings.object_storage.custom_class,
+        )
+
+    if storage_type == "LOCAL":
+        return LocalStorageProvider()
+
+    # OBS / S3 — 默认行为
     if settings.object_storage.server:
         provider = S3StorageProvider.instance()
         if provider.is_initialized:
             return provider
-        # S3 未初始化（lifespan 初始化失败）— 降级到本地存储
         workflow_logger.warning(
             "S3StorageProvider not initialized, falling back to LocalStorageProvider"
         )

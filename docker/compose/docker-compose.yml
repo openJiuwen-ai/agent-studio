@@ -40,6 +40,13 @@ services:
       cluster_node_list: ${REDIS_CLUSTER_NODES:-}
       redis_master_name: ${REDIS_SENTINEL_MASTER:-}
       redis_sentinel_ports: ${REDIS_SENTINEL_PORTS:-}
+      storage_type: ${STORAGE_TYPE:OBS}
+      storage_custom_class: ${STORAGE_CUSTOM_CLASS:-}
+      storage_custom_classpath: ${STORAGE_CUSTOM_CLASSPATH:-}
+      storage_local_base_path: ${STORAGE_LOCAL_BASE_PATH:-}
+      storage_local_bucket: ${STORAGE_LOCAL_BUCKET:-}
+      storage_local_staging_bucket: ${STORAGE_LOCAL_STAGING_BUCKET:-}
+      storage_local_server_url: ${STORAGE_LOCAL_SERVER_URL:-}
       obs_url: ${OBS_URL:-}
       obs_bucket: ${OBS_BUCKET:-}
       obs_staging_bucket: ${OBS_BUCKET:-}
@@ -96,6 +103,13 @@ services:
       cluster_node_list: ${REDIS_CLUSTER_NODES:-}
       redis_master_name: ${REDIS_SENTINEL_MASTER:-}
       redis_sentinel_ports: ${REDIS_SENTINEL_PORTS:-}
+      storage_type: ${STORAGE_TYPE:OBS}
+      storage_custom_class: ${STORAGE_CUSTOM_CLASS:-}
+      storage_custom_classpath: ${STORAGE_CUSTOM_CLASSPATH:-}
+      storage_local_base_path: ${STORAGE_LOCAL_BASE_PATH:-}
+      storage_local_bucket: ${STORAGE_LOCAL_BUCKET:-}
+      storage_local_staging_bucket: ${STORAGE_LOCAL_STAGING_BUCKET:-}
+      storage_local_server_url: ${STORAGE_LOCAL_SERVER_URL:-}
       obs_url: ${OBS_URL:-}
       obs_bucket: ${OBS_BUCKET:-}
       obs_staging_bucket: ${OBS_BUCKET:-}
@@ -140,6 +154,11 @@ services:
       DATASOURCE_OBS_AK: ${OBS_AK:-}
       DATASOURCE_OBS_SK: ${OBS_SK:-}
       DATASOURCE_OBS_ENABLE_SSL: ${DATASOURCE_OBS_ENABLE_SSL:-false}
+      STORAGE_TYPE: ${STORAGE_TYPE:OBS}
+      STORAGE_CUSTOM_MODULE: ${RUNTIME_STORAGE_CUSTOM_MODULE:-}
+      STORAGE_CUSTOM_CLASS: ${RUNTIME_STORAGE_CUSTOM_CLASS:-}
+      STORAGE_LOCAL_BASE_PATH: ${STORAGE_LOCAL_BASE_PATH:-}
+      STORAGE_LOCAL_BUCKET: ${STORAGE_LOCAL_BUCKET:-}
       # 对象存储寻址方式：path（路径风格，默认）或 virtual（虚拟托管风格）
       DATASOURCE_OBS_PATH_STYLE: ${DATASOURCE_OBS_PATH_STYLE:-path}
       # Uvicorn worker 数量，未设置时默认 CPU 核心数 + 1

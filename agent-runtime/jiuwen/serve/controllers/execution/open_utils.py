@@ -3,6 +3,7 @@
 
 """This module contains open utilities — CacheUtils (LRU + Redis) and IR loading."""
 
+import asyncio
 import builtins
 import importlib
 import io
@@ -16,7 +17,7 @@ from typing import Any, Optional
 from cachetools import LRUCache
 from agent_runtime.common.redis_manager import get_redis_client
 
-from jiuwen.common.store.obs import OBSUtil
+from agent_runtime.storage.object_storage import get_storage_provider
 from agent_runtime.common.config import settings
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
@@ -375,7 +376,18 @@ def ir_load(path: str) -> dict:
         return ir_value
 
     logger.info("Cache MISS! Process %d loading from OBS: %s", os.getpid(), path)
-    ir_json_str: str = OBSUtil.get_content(object_key=path).decode("utf-8")
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            ir_json_str = pool.submit(
+                asyncio.run, get_storage_provider().get_content(path)
+            ).result()
+    else:
+        ir_json_str = asyncio.run(get_storage_provider().get_content(path))
 
     try:
         ir_data = safe_json_loads_raise_exception(ir_json_str)

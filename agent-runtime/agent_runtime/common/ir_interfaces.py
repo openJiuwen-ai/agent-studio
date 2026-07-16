@@ -10,6 +10,7 @@ IR 相关接口定义 — 供 agentBuilder-engine workflow runner 使用的抽�
 - ModelConfigProvider   → agent_runtime.common.model_providers
 """
 
+import os
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -76,6 +77,40 @@ class ObjectStorageProvider(ABC):
             默认实现返回空列表；子类可按需覆写。
         """
         return []
+
+    async def get_object_bytes(self, object_key: str) -> bytes:
+        """读取对象原始字节
+
+        默认实现基于 get_content() 转换，子类可覆写为更高效的字节读取。
+
+        Args:
+            object_key: 对象 key
+
+        Returns:
+            bytes: 对象原始字节内容
+
+        Raises:
+            StorageReadError: 读取失败
+        """
+        content = await self.get_content(object_key)
+        return content.encode("utf-8")
+
+    async def download_to_file(self, object_key: str, local_path: str) -> None:
+        """下载对象到本地文件
+
+        默认实现基于 get_object_bytes()，子类可覆写为流式下载。
+
+        Args:
+            object_key: 对象 key
+            local_path: 本地保存路径
+
+        Raises:
+            StorageReadError: 读取或写入失败
+        """
+        data = await self.get_object_bytes(object_key)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        with open(local_path, "wb") as f:
+            f.write(data)
 
 
 class ModelConfigProvider(ABC):

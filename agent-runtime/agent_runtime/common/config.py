@@ -150,6 +150,9 @@ class LLMSettings(BaseSettings):
 
 
 class ObjectStorageSettings(BaseSettings):
+    type: str = Field(default="OBS", validation_alias="STORAGE_TYPE")
+    custom_module: str = Field(default="", validation_alias="STORAGE_CUSTOM_MODULE")
+    custom_class: str = Field(default="", validation_alias="STORAGE_CUSTOM_CLASS")
     server: str = Field(default="", validation_alias="DATASOURCE_OBS_SERVER")
     bucket: str = Field(default="", validation_alias="DATASOURCE_OBS_BUCKET")
     access_key: str = Field(default="", validation_alias="DATASOURCE_OBS_AK")
@@ -159,6 +162,12 @@ class ObjectStorageSettings(BaseSettings):
     )
     path_style: Literal["path", "virtual"] = Field(
         default="path", validation_alias="DATASOURCE_OBS_PATH_STYLE"
+    )
+    local_base_path: str = Field(
+        default="", validation_alias="STORAGE_LOCAL_BASE_PATH"
+    )
+    local_bucket: str = Field(
+        default="", validation_alias="STORAGE_LOCAL_BUCKET"
     )
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

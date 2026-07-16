@@ -16,7 +16,6 @@ import com.openjiuwen.studio.agent.manager.mapper.ShareScopeMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolCredentialMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ros.ResourceCleanMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
-import com.obs.services.model.DeleteObjectsResult;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,8 +77,7 @@ class PluginRelationCleanerTest {
                 when(shareResourceMapper.deleteByPrimaryKey(anyString())).thenReturn(0);
                 when(shareScopeMapper.deleteByResourceId(anyString())).thenReturn(0);
 
-                DeleteObjectsResult deleteObjectsResult = new DeleteObjectsResult();
-                when(obsService.deleteByPrefix(anyString())).thenReturn(deleteObjectsResult);
+                when(obsService.deleteByPrefix(anyString())).thenReturn(true);
 
                 List<String> ids = new ArrayList<>();
                 ids.add("not_empty");
@@ -99,8 +97,7 @@ class PluginRelationCleanerTest {
                 mockedStaticRequestContextUtils.when(() -> RequestContextUtils.getRequestAuthToken()).thenReturn("");
                 mockedStaticRequestContextUtils.when(() -> RequestContextUtils.getRequestProjectId()).thenReturn("");
 
-                DeleteObjectsResult deleteObjectsResult = new DeleteObjectsResult();
-                when(obsService.deleteByPrefix(anyString())).thenReturn(deleteObjectsResult);
+                when(obsService.deleteByPrefix(anyString())).thenReturn(true);
 
                 List<String> ids = new ArrayList<>();
                 ids.add("");
@@ -120,7 +117,7 @@ class PluginRelationCleanerTest {
                 mockedStaticRequestContextUtils.when(() -> RequestContextUtils.getRequestAuthToken()).thenReturn(null);
                 mockedStaticRequestContextUtils.when(() -> RequestContextUtils.getRequestProjectId()).thenReturn(null);
 
-                when(obsService.deleteByPrefix(anyString())).thenReturn(null);
+                when(obsService.deleteByPrefix(anyString())).thenReturn(false);
 
                 // When
                 pluginRelationCleaner.clean(null, null);

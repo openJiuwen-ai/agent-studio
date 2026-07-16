@@ -360,10 +360,10 @@ public class AgentExportService {
         log.info("upload export to obs:{}", obsKey);
         if (Strings.CI.equals(envType, CommonConstant.EnvType.HC)) {
             String obsFileKey = obsService.uploadStagingBucket(obsKey, tempJson.toString(), 30);
-            return obsService.getTemporaryGetRsp(true, obsFileKey, 3600).getSignedUrl();
+            return obsService.getTemporaryGetRsp(true, obsFileKey, 3600);
         }
         String obsFileKey = obsService.uploadObsFile(obsKey, tempJson.toString(), 30);
-        return obsService.getTemporaryGetRsp(false, obsFileKey, 3600).getSignedUrl();
+        return obsService.getTemporaryGetRsp(false, obsFileKey, 3600);
     }
 
     @NotNull

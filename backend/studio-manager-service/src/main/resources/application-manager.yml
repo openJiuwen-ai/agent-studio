@@ -224,16 +224,26 @@ iam:
     name: ${iam_project_name:}
   assumeRole:
     agencyName: ${iam_assumeRole_agencyName:}
-obs:
-  url: ${obs_url:}
-  ak: ${obs_ak:}
-  sk: ${obs_sk:}
-  bucket: ${obs_bucket:}
-  stagingBucket: ${obs_stagingBucket:}
-  opensource: ${obs_opensource:true}
-  expires: ${obs_expires:7}
-  path:
-    style: ${DATASOURCE_OBS_PATH_STYLE:path}
+storage:
+  type: ${storage_type:OBS}
+  expires: ${obs_expire_time:7}
+  bucket-storage-limit: ${obs_bucket_storage_limit:100}
+  custom-class: ${STORAGE_CUSTOM_CLASS:}
+  custom-classpath: ${STORAGE_CUSTOM_CLASSPATH:}
+  obs:
+    url: ${obs_url:}
+    ak: ${obs_ak:}
+    sk: ${obs_sk:}
+    bucket: ${obs_bucket:}
+    staging-bucket: ${obs_staging_bucket:}
+    opensource: ${obs_opensource:true}
+    auto-create-bucket: ${obs_bucket_auto_create:true}
+    path-style: ${DATASOURCE_OBS_PATH_STYLE:path}
+  local:
+    base-path: ${storage_local_base_path:}
+    bucket: ${storage_local_bucket:}
+    staging-bucket: ${storage_local_staging_bucket:}
+    server-url: ${storage_local_server_url:}
 
 model:
   platform:

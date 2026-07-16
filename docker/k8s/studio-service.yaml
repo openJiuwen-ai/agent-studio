@@ -98,6 +98,20 @@ spec:
             # 系统默认的加解密方式，NO_OP_CIPHER-表示不加密
             - name: system_crypt_name
               value: 'NO_OP_CIPHER'
+            - name: storage_type
+              value: 'OBS'
+            - name: STORAGE_CUSTOM_CLASS
+              value: ''
+            - name: STORAGE_CUSTOM_CLASSPATH
+              value: ''
+            - name: storage_local_base_path
+              value: ''
+            - name: storage_local_bucket
+              value: ''
+            - name: storage_local_staging_bucket
+              value: ''
+            - name: storage_local_server_url
+              value: ''
           resources:
             limits:
               cpu: '2'

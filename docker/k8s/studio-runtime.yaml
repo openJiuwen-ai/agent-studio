@@ -207,6 +207,16 @@ spec:
               value: 'true'
             - name: EXECUTION_STATE_STORAGE_MEDIUM
               value: 'redis'
+            - name: STORAGE_TYPE
+              value: 'OBS'
+            - name: STORAGE_CUSTOM_MODULE
+              value: ''
+            - name: STORAGE_CUSTOM_CLASS
+              value: ''
+            - name: STORAGE_LOCAL_BASE_PATH
+              value: ''
+            - name: STORAGE_LOCAL_BUCKET
+              value: ''
           resources:
             limits:
               cpu: '2'

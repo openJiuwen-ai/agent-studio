@@ -10,7 +10,6 @@ from copy import deepcopy
 from typing import Union
 
 from agent_runtime.common.config import settings, ModelConfigStrategyType
-from agent_runtime.runner.workflow_runner import WorkflowRunner, ModelConfigStrategy
 from agent_runtime.common.ir_exceptions import IRBuildException
 from agent_runtime.common.ir_interfaces import (
     StorageConfigError,
@@ -18,15 +17,23 @@ from agent_runtime.common.ir_interfaces import (
 )
 from agent_runtime.runner.controller_runner import ControllerRunner
 from agent_runtime.runner.react_agent_runner import ReActAgentRunner
-from agent_runtime.runner.workflow_runner import WorkflowRunner
+from agent_runtime.runner.workflow_runner import WorkflowRunner, ModelConfigStrategy
 from agent_runtime.schemas.orchestration_mgr import (
     ComponentDebugRequest,
     ExecutionRequest,
     ResponseMode,
     DeleteExecutionInstanceRequest,
 )
+from agent_runtime.schemas.additional_questions import (
+    AdditionalQuestionsContext,
+    AdditionalQuestionsRequest,
+    AdditionalQuestionsResponse,
+)
+from agent_runtime.additional_questions.service import (
+    AdditionalQuestionsService,
+)
 from agent_runtime.storage import get_storage_provider
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
 from jiuwen.common.exception import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
@@ -35,6 +42,7 @@ from jiuwen.serve.controllers.execution.open_utils import async_ir_load, cache_w
 from openjiuwen.core.common.logging import workflow_logger
 from pydantic import ValidationError
 from agent_builder.nl_to_agent.nl2 import N2LRequestBody, _n2l_json_wapper, _chat
+
 
 execution_app = APIRouter(tags=["execution_app"])
 
@@ -354,3 +362,104 @@ async def chat_n2l(project_id: str, agent_type: str, cid: str, body: N2LRequestB
     # run chat
     chat_response = await _chat(payload)
     return chat_response
+
+# ── Additional Questions (追问) ──────────────────────────────────────
+_additional_questions_service: AdditionalQuestionsService | None = None
+
+
+def _get_additional_questions_service() -> AdditionalQuestionsService:
+    global _additional_questions_service
+    if _additional_questions_service is None:
+        _additional_questions_service = AdditionalQuestionsService()
+    return _additional_questions_service
+
+
+@execution_app.post(
+    "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions"
+)
+async def agent_additional_questions(
+    project_id: str,
+    agent_id: str,
+    conversation_id: str,
+    workspace_id: str = Query(...),
+    req_json: dict = Body(...),
+):
+    """自动生成追问（Agent 场景）。"""
+    ctx = AdditionalQuestionsContext(
+        resource_type="agent",
+        resource_id=agent_id,
+        project_id=project_id,
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+    )
+    return await _handle_additional_questions(ctx=ctx, req_json=req_json)
+
+
+@execution_app.post(
+    "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/additional-questions"
+)
+async def workflow_additional_questions(
+    project_id: str,
+    workflow_id: str,
+    conversation_id: str,
+    workspace_id: str = Query(...),
+    req_json: dict = Body(...),
+):
+    """自动生成追问（Workflow 场景）。"""
+    ctx = AdditionalQuestionsContext(
+        resource_type="workflow",
+        resource_id=workflow_id,
+        project_id=project_id,
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
+    )
+    return await _handle_additional_questions(ctx=ctx, req_json=req_json)
+
+
+async def _handle_additional_questions(
+    ctx: AdditionalQuestionsContext,
+    req_json: dict,
+):
+    """追问接口统一处理入口 — 解析请求、调用 Service、返回响应。"""
+    workflow_logger.debug(
+        "Additional questions request: resource_type=%s, resource_id=%s, "
+        "conversation_id=%s, workspace_id=%s",
+        ctx.resource_type, ctx.resource_id, ctx.conversation_id, ctx.workspace_id,
+    )
+    try:
+        req = AdditionalQuestionsRequest.model_validate(req_json)
+    except ValidationError as e:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "validation_failed", "details": str(e)},
+        )
+
+    service = _get_additional_questions_service()
+    try:
+        from agent_runtime.context.request_context import _request_ctx
+        req_ctx = _request_ctx.get()
+        headers = req_ctx.headers if req_ctx else {}
+        result = await service.generate(
+            ctx=ctx,
+            request=req,
+            headers=headers,
+        )
+        return JSONResponse(content=result.model_dump())
+    except JiuWenBaseException as e:
+        workflow_logger.error(
+            "Additional questions error: code=%s, message=%s",
+            e.error_code, e.message,
+        )
+        return JSONResponse(
+            status_code=400,
+            content={"code": e.error_code, "message": e.message},
+        )
+    except Exception as e:
+        workflow_logger.error(
+            "Unexpected error in additional questions: %s", e, exc_info=True,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"error": "internal_error", "details": str(e)},
+        )
+
