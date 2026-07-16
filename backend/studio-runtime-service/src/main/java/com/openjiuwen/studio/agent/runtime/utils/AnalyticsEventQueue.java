@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.runtime.utils;
 
 import com.openjiuwen.studio.agent.runtime.entity.analytics.AnalyticsEventEntity;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -15,6 +17,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * 分析事件缓存队列
  *
  */
+@Slf4j
 public class AnalyticsEventQueue {
     private static final LinkedBlockingQueue<AnalyticsEventEntity> EVENTS =
         new LinkedBlockingQueue<>(100000);
@@ -33,8 +36,8 @@ public class AnalyticsEventQueue {
      */
     public static void push(AnalyticsEventEntity event) {
         if (!EVENTS.offer(event)) {
-            EVENTS.poll();
-            EVENTS.offer(event);
+            log.warn("Analytics event queue full (capacity={}), event discarded. eventType={}, eventId={}",
+                100000, event.getEventType(), event.getEventId());
         }
     }
 

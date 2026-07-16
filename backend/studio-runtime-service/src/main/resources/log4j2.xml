@@ -147,9 +147,8 @@
             <AppenderRef ref="ROLLING_FILE_INF"/>
             <OverflowAction>DISCARD</OverflowAction>
         </Async>
-        <Async name="ASYNC_ROLLING_FILE_TRACE" bufferSize="65536" blocking="false">
+        <Async name="ASYNC_ROLLING_FILE_TRACE" bufferSize="65536">
             <AppenderRef ref="ROLLING_FILE_TRACE"/>
-            <OverflowAction>DISCARD</OverflowAction>
         </Async>
     </Appenders>
 
