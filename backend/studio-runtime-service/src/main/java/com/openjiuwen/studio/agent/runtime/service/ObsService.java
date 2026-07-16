@@ -165,7 +165,7 @@ public class ObsService implements CommonObsService {
     public String uploadToStagingWithPublicRead(InputStream inputStream, String fileName, int expires) {
         String objectKey = String.format("%s/%s", Constant.FILE, fileName);
         fileStore.write(stagingPath(objectKey), inputStream, expires);
-        return fileStore.getDownloadUrl(stagingPath(objectKey), expires > 0 ? (long) expires * 86400 : 3600L);
+        return fileStore.getUrl(stagingPath(objectKey), expires > 0 ? (long) expires * 86400 : 3600L);
     }
 
     public String uploadToStagingWithExpires(InputStream inputStream, String fileName, int expires) {
@@ -174,7 +174,7 @@ public class ObsService implements CommonObsService {
     }
 
     public String getStagingDownloadUrl(String objectName, long expiresSeconds) {
-        return fileStore.getDownloadUrl(stagingBucket + "/" + objectName, expiresSeconds);
+        return fileStore.getUrl(stagingBucket + "/" + objectName, expiresSeconds);
     }
 
     private String md5Hex(String content) {

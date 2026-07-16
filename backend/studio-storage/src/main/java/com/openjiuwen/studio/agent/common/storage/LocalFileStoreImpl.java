@@ -147,7 +147,7 @@ public class LocalFileStoreImpl implements FileStore {
     }
 
     @Override
-    public String getDownloadUrl(String path, long expiresSeconds) {
+    public String getUrl(String path, long expiresSeconds) {
         String encoded = java.net.URLEncoder.encode(path, java.nio.charset.StandardCharsets.UTF_8);
         return serverUrl + "/api/storage/download?path=" + encoded;
     }

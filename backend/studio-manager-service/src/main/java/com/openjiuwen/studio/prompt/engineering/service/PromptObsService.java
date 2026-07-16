@@ -137,7 +137,7 @@ public class PromptObsService {
 
     public String getObsTempUrl(String objectKey, long expireSeconds) {
         try {
-            return fileStore.getDownloadUrl(path(objectKey), expireSeconds);
+            return fileStore.getUrl(path(objectKey), expireSeconds);
         } catch (Exception e) {
             log.error("getObsTempUrl: getting temporary signature");
             throw new AgentStudioException(StudioError.DOWNLOAD_FILE_ERROR);

@@ -54,7 +54,7 @@ public class ObsApiClient {
 
     public String getTemporaryGetRsp(String bucketName, String objectName, long expires) {
         try {
-            return fileStore.getDownloadUrl(bucketName + "/" + objectName, expires);
+            return fileStore.getUrl(bucketName + "/" + objectName, expires);
         } catch (Exception e) {
             log.error("Get temporary getRsp failed, error is {}", e);
             throw new AgentSpaceException(AgentSpaceErrorCodes.AGENT_BUILDER_OBS_EXECUTE_ERROR);

@@ -79,7 +79,7 @@ class ObsApiClientTest {
 
     @Test
     void test_getTemporaryGetRsp_success() {
-        when(fileStore.getDownloadUrl(anyString(), anyLong())).thenReturn("https://example.com/signed");
+        when(fileStore.getUrl(anyString(), anyLong())).thenReturn("https://example.com/signed");
 
         String result = obsApiClient.getTemporaryGetRsp("bucket", "key", 3600L);
 
@@ -88,7 +88,7 @@ class ObsApiClientTest {
 
     @Test
     void test_getTemporaryGetRsp_throw_AgentSpaceException_on_failure() {
-        when(fileStore.getDownloadUrl(anyString(), anyLong())).thenThrow(new RuntimeException("fail"));
+        when(fileStore.getUrl(anyString(), anyLong())).thenThrow(new RuntimeException("fail"));
 
         assertThrows(AgentSpaceException.class, () -> obsApiClient.getTemporaryGetRsp("bucket", "key", 3600L));
     }

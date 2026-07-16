@@ -255,7 +255,7 @@ public class ObsFileStoreImpl implements FileStore {
     }
 
     @Override
-    public String getDownloadUrl(String path, long expiresSeconds) {
+    public String getUrl(String path, long expiresSeconds) {
         String[] parts = splitPath(path);
         try {
             TemporarySignatureRequest request = new TemporarySignatureRequest(HttpMethodEnum.GET, expiresSeconds);

@@ -129,7 +129,7 @@ class MgObsServiceTest {
 
     @Test
     void testGetTemporaryGetRsp_Success() {
-        when(fileStore.getDownloadUrl(anyString(), anyLong())).thenReturn("https://example.com/signed");
+        when(fileStore.getUrl(anyString(), anyLong())).thenReturn("https://example.com/signed");
         String result = mgObsService.getTemporaryGetRsp(false, "object", 3600);
         assertEquals("https://example.com/signed", result);
     }
