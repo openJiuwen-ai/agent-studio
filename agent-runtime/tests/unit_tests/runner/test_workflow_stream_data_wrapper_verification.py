@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+# pylint: disable=protected-access
 """
 workflow_stream_data_wrapper.py 问题域 1 验证场景集
 
@@ -75,7 +76,7 @@ def _make_end_node_def(field_defs):
 # P1-1: End 节点未执行分支引用 — 残留边界风险验证
 # =====================================================================
 
-class TestP1_1_EndNodeUnexecBranchRef:
+class TestEndNodeUnexecBranchRef:
     """
     P1-1 验证场景: End 节点引用未执行分支输出时类型强转
 
@@ -266,7 +267,7 @@ class TestP1_1_EndNodeUnexecBranchRef:
 # P1-2: OutputSchema/CustomSchema 转换代码重复 — 行为一致性验证
 # =====================================================================
 
-class TestP1_2SchemaConversionDuplication:
+class TestSchemaConversionDuplication:
     """
     P1-2 验证场景: OutputSchema 与 CustomSchema 转换方法行为一致性
 
@@ -285,7 +286,8 @@ class TestP1_2SchemaConversionDuplication:
       - 分别模拟 OutputSchema 和 CustomSchema chunk
     """
 
-    def _make_wrapper(self):
+    @staticmethod
+    def _make_wrapper():
         """构造测试用 wrapper 实例。"""
         return WorkflowStreamDataWrapper(
             execution_id="test-exec-001",
@@ -433,7 +435,7 @@ class TestP1_2SchemaConversionDuplication:
 # P1-3: ContextVar 跨 Task 数据传递 — 耦合性风险验证
 # =====================================================================
 
-class TestP1_3ContextVarCrossTaskCoupling:
+class TestContextVarCrossTaskCoupling:
     """
     P1-3 验证场景: ContextVar 在跨 asyncio Task 时的数据传递行为
 
@@ -620,7 +622,7 @@ class TestP1_3ContextVarCrossTaskCoupling:
 # P1-4: 回调注册静默失败 — 无日志可观测性验证
 # =====================================================================
 
-class TestP1_4SilentCallbackRegistrationFailure:
+class TestSilentCallbackRegistrationFailure:
     """
     P1-4 验证场景: _register_jiuwen_callbacks() 异常被静默吞掉
 
@@ -762,7 +764,7 @@ class TestP1_4SilentCallbackRegistrationFailure:
 # 综合: 回调注册失败后的级联影响验证
 # =====================================================================
 
-class TestP1_4CascadeImpact:
+class TestCallbackRegistrationCascadeImpact:
     """
     P1-4 级联影响验证: 回调注册失败后, 类型强转系统完全失效
 
