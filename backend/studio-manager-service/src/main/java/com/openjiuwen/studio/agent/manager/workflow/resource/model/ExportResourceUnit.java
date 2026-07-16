@@ -35,4 +35,6 @@ public class ExportResourceUnit {
 
     @JsonProperty("app_type")
     private String appType;
+
+    private Integer resourceLevel;
 }

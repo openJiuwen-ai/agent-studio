@@ -4,6 +4,8 @@
 
 import sys
 from unittest.mock import MagicMock, patch, AsyncMock
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
 
 # agent_builder.app triggers SSL context creation at import time (reads YAML
 # config and tries to create an SSLContext with None certs). Pre-populate
@@ -20,6 +22,39 @@ if "agent_builder.app" not in sys.modules:
     _stub_mod = MagicMock()
     _stub_mod.app = _Flask(__name__)
     sys.modules["agent_builder.app"] = _stub_mod
+
+# agent_builder.nl_to_agent.nl2 is imported by orchestration.py at module level.
+# N2LRequestBody is used as a FastAPI body parameter type, so it MUST be a real
+# Pydantic model — a MagicMock causes FastAPI's schema generation to fail.
+# _n2l_json_wapper and _chat are only called at runtime, so MagicMock stubs suffice.
+if "agent_builder.nl_to_agent.nl2" not in sys.modules:
+
+    class _StubN2LResource(BaseModel):
+        plugins: Optional[Dict[str, Any]] = None
+        workflows: Optional[Dict[str, Any]] = None
+        knowledge_base: Optional[Dict[str, Any]] = None
+
+    class _StubN2LModel(BaseModel):
+        modelName: Optional[str] = None
+        modelExplicitName: Optional[str] = None
+        extension: Optional[Dict[str, Any]] = None
+        modelType: Optional[str] = None
+        modelInterfaceProtocol: Optional[str] = None
+
+    class _StubN2LRequestBody(BaseModel):
+        query: str
+        model: Optional[_StubN2LModel] = None
+        resource: Optional[_StubN2LResource] = None
+        conversationId: Optional[str] = None
+
+    _nl2_stub = MagicMock()
+    _nl2_stub.N2LRequestBody = _StubN2LRequestBody
+    _nl2_stub._n2l_json_wapper = MagicMock()
+    _nl2_stub._chat = MagicMock()
+    sys.modules["agent_builder.nl_to_agent.nl2"] = _nl2_stub
+    _nl_to_agent_stub = MagicMock()
+    _nl_to_agent_stub.nl2 = _nl2_stub
+    sys.modules["agent_builder.nl_to_agent"] = _nl_to_agent_stub
 
 import pytest
 from openjiuwen.core.sys_operation import OperationMode

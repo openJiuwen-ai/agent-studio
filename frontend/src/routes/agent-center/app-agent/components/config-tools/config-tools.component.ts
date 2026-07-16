@@ -2275,18 +2275,16 @@ export class ConfigToolsComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
     const drawerRef = this.drawerServ.create({
-      nzTitle: this.i18n.transform('knowledge'),
       nzContent: KnowledgeBaseSelectorComponent,
-      nzWidth: this.halfModalWidth,
+      nzPlacement: 'right',
+      nzWidth: '700px',
       nzClosable: true,
       nzMaskClosable: true,
-      nzMask: true,
-      nzFooter: null,
+      nzKeyboard: true,
       nzData: {
-        existedKbs: this.knowledgeAdded.list.map(kb => this.kbAbilitiesService.getKbId(kb))
-      }
+        existedKbs: this.knowledgeAdded.list.map(kb => this.kbAbilitiesService.getKbId(kb)),
+      },
     });
-    let confirmed = false;
     drawerRef.afterOpen.subscribe(() => {
       const comp = drawerRef.getContentComponent();
       if (comp) {
@@ -2295,21 +2293,15 @@ export class ConfigToolsComponent implements OnInit, AfterViewInit, OnDestroy {
           this.kbCreation.createKb();
         });
         comp.addKB.subscribe(() => {
-          confirmed = true;
+          const selectedKbIds = drawerRef.getContentComponent()?.selectedIds ?? [];
+          const selectedKbs = drawerRef.getContentComponent()?.selectedKbs ?? [];
+          this.knowledgeAdded.isLoading = true;
+          const data = {
+            knowledge_repos: selectedKbIds,
+          };
+          this.updateKBConfig(data, selectedKbs);
         });
       }
-    });
-    drawerRef.afterClose.subscribe(() => {
-      if (!confirmed) {
-        return;
-      }
-      const selectedKbIds = drawerRef.getContentComponent()?.selectedIds ?? [];
-      const selectedKbs = drawerRef.getContentComponent()?.selectedKbs ?? [];
-      this.knowledgeAdded.isLoading = true;
-      const data = {
-        knowledge_repos: selectedKbIds
-      };
-      this.updateKBConfig(data, selectedKbs);
     });
   }
 

@@ -1,65 +1,49 @@
 <div class="com-drawer-title">{{ 'kb_reference_list' | i18nextEager }}</div>
 <div class="com-drawer-content">
-  <div class="kb-reference-container">
-    <nz-spin
-      *ngIf="isLoading"
-      class="loading-icon"
-      nzSimple
-      nzSize="large"
-    ></nz-spin>
+  <nz-spin [nzSpinning]="isLoading" class="h-full">
+    <div class="kb-reference-container">
+      <nz-tabset class="kb-reference-tabs" [(nzSelectedIndex)]="selectedIndex" (nzSelectedIndexChange)="onTabChange($event)">
+        <nz-tab *ngFor="let tab of tabs" [nzTitle]="tab.title"></nz-tab>
+      </nz-tabset>
 
-    <nz-tabset class="kb-reference-tabs" [(nzSelectedIndex)]="selectedIndex" (nzSelectedIndexChange)="onTabChange($event)">
-      <nz-tab *ngFor="let tab of tabs" [nzTitle]="tab.title"></nz-tab>
-    </nz-tabset>
+      <nz-table #basicTable [nzData]="srcData.data" [nzShowPagination]="false" [nzFrontPagination]="false" nzSize="small">
+        <thead>
+          <tr>
+            <th *ngFor="let column of columns">
+              {{ column.title }}
+            </th>
+          </tr>
+        </thead>
+        <tbody *ngIf="basicTable.data.length">
+          <tr *ngFor="let row of basicTable.data">
+            <td nzEllipsis>
+              <a nz-tooltip [nzTooltipTitle]="row.app_name" class="cursor-pointer w-full" (click)="navigateAppDetail(row)">
+                {{ row.app_name }}
+              </a>
+            </td>
+            <td nzEllipsis>
+              <span nz-tooltip [nzTooltipTitle]="row.app_version || ('unpublished' | i18nextEager)" class="w-full">
+                {{ row.app_version || ('unpublished' | i18nextEager) }}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </nz-table>
 
-    <nz-table
-      #basicTable
-      [nzData]="srcData.data"
-      [nzShowPagination]="false"
-      [nzFrontPagination]="false"
-      nzSize="small"
-    >
-      <thead>
-      <tr>
-        <th *ngFor="let column of columns">
-          {{ column.title }}
-        </th>
-      </tr>
-      </thead>
-      <tbody *ngIf="basicTable.data.length">
-      <tr *ngFor="let row of basicTable.data">
-        <td nzEllipsis>
-          <a
-            nz-tooltip
-            [nzTooltipTitle]="row.app_name"
-            class="cursor-pointer w-full"
-            (click)="navigateAppDetail(row)"
-          >
-            {{ row.app_name }}
-          </a>
-        </td>
-        <td nzEllipsis>
-            <span nz-tooltip [nzTooltipTitle]="row.app_version || ('unpublished' | i18nextEager)" class="w-full">
-              {{ row.app_version || ('unpublished' | i18nextEager) }}
-            </span>
-        </td>
-      </tr>
-      </tbody>
-    </nz-table>
+      <div class="mt-[16px] flex justify-end" *ngIf="totalNumber > 0">
+        <nz-pagination
+          [(nzPageIndex)]="currentPage"
+          [nzTotal]="totalNumber"
+          [(nzPageSize)]="pageSize.size"
+          [nzPageSizeOptions]="pageSize.options"
+          nzShowSizeChanger
+          nzSize="small"
+          (nzPageIndexChange)="getReferenceList()"
+          (nzPageSizeChange)="currentPage = 1; getReferenceList()"
+        ></nz-pagination>
+      </div>
 
-    <div class="mt-[16px] flex justify-end" *ngIf="totalNumber > 0">
-      <nz-pagination
-        [(nzPageIndex)]="currentPage"
-        [nzTotal]="totalNumber"
-        [(nzPageSize)]="pageSize.size"
-        [nzPageSizeOptions]="pageSize.options"
-        nzShowSizeChanger
-        nzSize="small"
-        (nzPageIndexChange)="getReferenceList()"
-        (nzPageSizeChange)="currentPage = 1; getReferenceList()"
-      ></nz-pagination>
+      <app-common-no-data class="kb-reference-no-data" *ngIf="!srcData.data.length && !isLoading"></app-common-no-data>
     </div>
-
-    <app-common-no-data class="kb-reference-no-data" *ngIf="!srcData.data.length && !isLoading"></app-common-no-data>
-  </div>
+  </nz-spin>
 </div>

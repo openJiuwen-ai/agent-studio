@@ -93,7 +93,7 @@ function runtime_copy() {
   echo "[PACKAGE] 复制 agent-runtime 源码到 ${RUNTIME_TARGET_PATH}..."
 
   rm -rf ${RUNTIME_TARGET_PATH}/agent_builder
-  cp -rf ${WORKSPACE}/agent-runtime/agent_builder ${RUNTIME_TARGET_PATH}/agent_builder
+  cp -rf ${WORKSPACE}/agent_builder ${RUNTIME_TARGET_PATH}/agent_builder
 
   rm -rf ${RUNTIME_TARGET_PATH}/agent_runtime
   cp -rf ${WORKSPACE}/agent-runtime/agent_runtime ${RUNTIME_TARGET_PATH}/agent_runtime
@@ -105,6 +105,11 @@ function runtime_copy() {
   cp -rf ${WORKSPACE}/agent-runtime/tests ${RUNTIME_TARGET_PATH}/tests
 
   cp -f ${WORKSPACE}/agent-runtime/requirements.txt ${RUNTIME_TARGET_PATH}/requirements.txt
+
+  # 模型调用机制层共享包（packages/model_service）：作为纯模块目录放进 app/，
+  # 与 agent_runtime/jiuwen 一致，靠 PYTHONPATH=$SERVICE_HOME/app 导入（非 pip 安装）。
+  rm -rf ${RUNTIME_TARGET_PATH}/model_service
+  cp -rf ${WORKSPACE}/packages/model_service/model_service ${RUNTIME_TARGET_PATH}/model_service
 
   rm -rf ${RUNTIME_TARGET_PATH}/bin
   cp -rf ${RUNTIME_TARGET_PATH}/script ${RUNTIME_TARGET_PATH}/bin
@@ -172,6 +177,9 @@ function clean() {
   fi
   if [ -f "${WORKSPACE}/docker/studio-runtime/requirements.txt" ]; then
     rm -f ${WORKSPACE}/docker/studio-runtime/requirements.txt
+  fi
+  if [ -d "${WORKSPACE}/docker/studio-runtime/model_service" ]; then
+    rm -rf ${WORKSPACE}/docker/studio-runtime/model_service
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/bin" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/bin

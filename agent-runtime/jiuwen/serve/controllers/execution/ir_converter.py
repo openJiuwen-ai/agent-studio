@@ -10,7 +10,7 @@ import re
 import secrets
 import copy
 from collections import defaultdict
-from typing import Any, AsyncIterator, Dict, Iterable, List, Optional
+from typing import Any, AsyncIterator, Dict, Iterable, List, NamedTuple, Optional
 
 from agent_runtime.extension.workflow_node.flow_code import FlowCode
 from agent_runtime.extension.workflow_node.flow_knowledge_retrieval import FlowKnowledgeRetrieval
@@ -113,8 +113,42 @@ from agent_runtime.common.ir_exceptions import IRBuildException
 _AGENT_VERSION = "agentVersion"
 _WORKFLOW_VERSION = "workflowVersion"
 _USE_AGENT_CORE_MODEL_ENV = "USE_AGENT_CORE_MODEL"
+
+
+class _LLMModelIdentifiers(NamedTuple):
+    """创建 LLM 模型所需的标识集合（task/agent/conversation 三件套）。"""
+
+    task_id: str
+    agent_id: str
+    conversation_id: str
+
 _BASE_AGENT_SWITCH = "BASE_AGENT_SWITCH"
 _AGENT_CORE_REGISTERED_MODEL_IDS = set()
+
+# 可插拔的 ModelConfigProvider 工厂函数，默认使用 IRModelConfigProvider。
+# WorkflowRunner 在初始化时根据 MODEL_CONFIG_STRATEGY 环境变量覆盖此函数，
+# 使 IRConverter 内部的模型注册逻辑自动切换到对应的 Provider 实现。
+_model_config_provider_factory = None
+
+
+def set_model_config_provider_factory(factory):
+    """设置全局 ModelConfigProvider 工厂函数。
+
+    Args:
+        factory: 无参可调用对象，返回 ModelConfigProvider 实例。
+                 例如: lambda: OBSModelConfigProvider()
+    """
+    global _model_config_provider_factory
+    _model_config_provider_factory = factory
+
+
+def _get_model_config_provider():
+    """获取当前 ModelConfigProvider 实例。"""
+    from agent_runtime.common.model_providers import IRModelConfigProvider
+
+    if _model_config_provider_factory is not None:
+        return _model_config_provider_factory()
+    return IRModelConfigProvider()
 UNSUPPORTED_COMPONENT_DEBUG_LIST = [
     "jiuwen.start",
     "jiuwen.end",
@@ -1067,13 +1101,15 @@ class IRConverter:
             )
             # 创建LLM模型（合并变量）
             if model_configs:
-                llm = IRConverter._create_llm_model(
+                llm = await IRConverter._create_llm_model(
                     model_configs,
                     cust_headers={},
                     project_id="",
-                    task_id=task_id,
-                    conversation_id=conversation_id,
-                    agent_id=current_metadata.id or "",
+                    identifiers=_LLMModelIdentifiers(
+                        task_id=task_id,
+                        conversation_id=conversation_id,
+                        agent_id=current_metadata.id or "",
+                    ),
                 )
             else:
                 llm = None
@@ -1265,13 +1301,15 @@ class IRConverter:
         task_model, model_configs = AgentIrUtils().get_task_model(ir_data, task_id)
         cust_headers = kwargs.get("cust_headers", {})
         if model_configs:
-            llm = IRConverter._create_llm_model(
+            llm = await IRConverter._create_llm_model(
                 model_configs,
                 cust_headers,
                 kwargs.get("project_id", ""),
-                task_id=task_id,
-                conversation_id=conversation_id,
-                agent_id=ir_data.get("agentId", ""),
+                identifiers=_LLMModelIdentifiers(
+                    task_id=task_id,
+                    conversation_id=conversation_id,
+                    agent_id=ir_data.get("agentId", ""),
+                ),
             )
         else:
             llm = None
@@ -3015,21 +3053,19 @@ class IRConverter:
             ) from e
 
     @staticmethod
-    def _create_llm_model(
+    async def _create_llm_model(
         model_configs: dict,
         cust_headers: dict,
         project_id: str,
-        task_id: str = "",
-        agent_id: str = "",
-        conversation_id: str = "",
+        identifiers: "_LLMModelIdentifiers",
     ):
         """创建 LLM 模型"""
         if IRConverter._use_agent_core_model(model_configs):
-            return IRConverter._create_agent_core_llm_model(
+            return await IRConverter._create_agent_core_llm_model(
                 model_configs,
-                task_id,
-                agent_id,
-                conversation_id=conversation_id,
+                identifiers.task_id,
+                identifiers.agent_id,
+                conversation_id=identifiers.conversation_id,
             )
 
         runtime_context = {
@@ -3077,7 +3113,7 @@ class IRConverter:
         }
 
     @staticmethod
-    def _create_agent_core_llm_model(
+    async def _create_agent_core_llm_model(
         model_configs: dict, task_id: str, agent_id: str, conversation_id: str = ""
     ):
         """Create jiuwen model contract layer backed by openjiuwen's ModelWrapper."""
@@ -3109,7 +3145,7 @@ class IRConverter:
             or agent_id
             or ""
         )
-        IRConverter._register_agent_core_llm_model(model_id, model_configs)
+        await IRConverter._register_agent_core_llm_model(model_id, model_configs)
         return AgentCoreModelLayer(
             runtime=ModelWrapper(),
             default_model_id=model_id,
@@ -3118,11 +3154,11 @@ class IRConverter:
         )
 
     @staticmethod
-    def _register_agent_core_llm_model(model_id: str, model_configs: dict) -> None:
+    async def _register_agent_core_llm_model(model_id: str, model_configs: dict) -> None:
         """Register an openjiuwen model resource from jiuwen IR model config.
 
-        Uses IRModelConfigProvider for consistent model configuration across
-        all components, including per-request auth headers.
+        Uses the configured ModelConfigProvider (via _get_model_config_provider())
+        for consistent model configuration across all components.
         """
 
         if not model_id:
@@ -3135,14 +3171,13 @@ class IRConverter:
             return
 
         from agent_runtime.common.model_adapters import adapt_ir_converter_model_config
-        from agent_runtime.common.model_providers import IRModelConfigProvider
         from openjiuwen.core.foundation.llm import Model
         from openjiuwen.core.runner import Runner
 
         adapted_conf = adapt_ir_converter_model_config(model_configs, model_id)
 
-        provider = IRModelConfigProvider()
-        llm_comp_config = provider.get_llm_config(adapted_conf)
+        provider = _get_model_config_provider()
+        llm_comp_config = await provider.get_llm_config(adapted_conf)
 
         # Extract model name for logging
         model_name = model_configs.get("modelName") or model_id

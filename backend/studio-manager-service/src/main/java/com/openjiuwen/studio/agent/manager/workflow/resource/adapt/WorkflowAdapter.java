@@ -170,9 +170,8 @@ public class WorkflowAdapter extends ResourceAdapter {
                     i18nUtil.getMessage(StudioError.EXPORT_RESOURCE_NOT_EXISTS, ResourceTypeEnum.WORKFLOW.toString()));
                 result.setStatus(ImportExportStatusEnum.FAILED);
             }
-            if (Strings.CS.equals(exportResourceUnit.getResourceVersion(), Constants.LATEST_PUBLISH_VERSION)) {
-                result.setLevel2Resources(exportResourceUnit.getLevel2Resources());
-            }
+            result.setLevel2Resources(exportResourceUnit.getLevel2Resources());
+            result.setResourceLevel(exportResourceUnit.getResourceLevel());
             exportResults.add(result);
         }
         return exportResults;

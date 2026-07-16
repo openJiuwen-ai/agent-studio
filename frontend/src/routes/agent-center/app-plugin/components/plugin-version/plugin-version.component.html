@@ -1,5 +1,5 @@
-<div *nzModalTitle>{{ 'release_history' | i18nextEager }}</div>
-<div class="h-[700px] overflow-auto">
+<div class="com-drawer-title">{{ 'release_history' | i18nextEager }}</div>
+<div class="com-drawer-content">
   <nz-spin *ngIf="isLoading; else cardList" class="loading-icon" nzSimple></nz-spin>
   <ng-template #cardList>
     <div class="flex h-full flex-col items-center justify-center" *ngIf="publishedCards.length === 0; else notEmptyCards">
@@ -50,8 +50,10 @@
               <span class="label">{{ 'description' | i18nextEager }}</span>
               <span>{{ card.version_note || '--' }}</span>
             </div>
-            <div class="action flex items-center">
-              <span nz-icon nzType="delete" nzTheme="outline" class="icon"></span>
+            <div class="action flex items-center gap-[4px]">
+              <a nzTypography (click)="restoreVersion($event, card)">
+                {{ 'version_restored' | i18nextEager }}
+              </a>
               <a nzTypography (click)="deleteVersionModal($event, card.version_id)">{{ 'delete' | i18nextEager }}</a>
             </div>
           </div>
@@ -60,7 +62,7 @@
     </ng-template>
   </ng-template>
 </div>
-<div *nzModalFooter>
+<div class="com-drawer-footer">
   <nz-space>
     <button type="button" nz-button nzType="primary" nzDanger (click)="exitPreview()">
       {{ 'exit_version_preview' | i18nextEager }}

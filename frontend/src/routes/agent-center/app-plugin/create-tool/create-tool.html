@@ -159,7 +159,7 @@
                       <div class="mt-2 flex items-center gap-2">
                         <div class="text-label" style="flex: 1; padding-left: 30px">{{ 'param_name' | i18nextEager }}</div>
                         <div class="w-[86px] text-label">{{ 'chinese_name' | i18nextEager }}</div>
-                        <div class="w-[110px] text-label">{{ 'param_type' | i18nextEager }}</div>
+                        <div class="w-[150px] text-label">{{ 'param_type' | i18nextEager }}</div>
                         <div class="w-[86px] text-label">{{ 'default_v' | i18nextEager }}</div>
                         <div class="flex w-[120px] items-center gap-[4px] text-label">
                           <div>{{ 'description' | i18nextEager }}</div>
@@ -236,7 +236,7 @@
                             </div>
 
                             <!-- 参数类型 -->
-                            <div class="w-[110px]">
+                            <div class="w-[150px]">
                               <nz-select
                                 *ngIf="origin.depth === 5||tabs[2].active; else otherTypes"
                                 style="width: 100%"
@@ -430,17 +430,17 @@
                               </label>
                             </div>
 
-                            <meta-add-props-icon class="ml-[8px]" *ngIf="isObjectLikeType(origin.type)" (click)="addReqObjProps(origin)" />
-
-                            <div *ngIf="!isObjectLikeType(origin.type)" class="ml-[8px] h-[28px] w-[16px]"></div>
-
-                            <div
-                              *ngIf="showReqPropsDelete(origin)"
-                              (click)="removeArg(origin, 'req')"
-                              class="plugin-op-icon flex h-[28px] items-center justify-center"
-                            >
+                            @if(isObjectLikeType(origin.type)){
+                            <meta-add-props-icon class="ml-[8px]" (click)="addReqObjProps(origin)" />
+                            } @else{
+                            <div class="ml-[8px] h-[28px] w-[16px]"></div>
+                            } @if(showReqPropsDelete(origin)){
+                            <div (click)="removeArg(origin, 'req')" class="plugin-op-icon flex h-[28px] items-center justify-center">
                               <nz-icon nzType="delete" nzTheme="outline" style="font-size: 16px; cursor: pointer; padding-top: 8px"></nz-icon>
                             </div>
+                            } @else{
+                            <div class="ml-[8px] h-[28px] w-[16px]"></div>
+                            }
                           </div>
                         </ng-template>
                       </nz-tree>
@@ -719,8 +719,8 @@
               <form #responseForm="ngForm">
                 <div class="mt-2 flex items-center gap-2">
                   <div class="text-label" style="flex: 1; padding-left: 30px">{{ 'param_name' | i18nextEager }}</div>
-                  <div class="w-[290px] text-label">{{ 'description' | i18nextEager }}</div>
-                  <div class="w-[115px] text-label">{{ 'param_type' | i18nextEager }}</div>
+                  <div class="w-[230px] text-label">{{ 'description' | i18nextEager }}</div>
+                  <div class="w-[175px] text-label">{{ 'param_type' | i18nextEager }}</div>
                   <div class="w-[90px] text-label">{{ 'required' | i18nextEager }}</div>
                 </div>
                 <nz-tree id="cp-res-tree" [nzData]="responseArgs" nzBlockNode nzShowLine [nzTreeTemplate]="nzTreeTemplate3">
@@ -760,7 +760,7 @@
                           {{responseForm?.controls['responseFormName' + origin.keyindex]?.errors?.serviceName?.tiErrorMessage}}
                         </div>
                       </div>
-                      <div class="w-[290px]">
+                      <div class="w-[230px]">
                         <input
                           style="width: 100%"
                           type="text"
@@ -775,7 +775,7 @@
                         />
                       </div>
 
-                      <div class="w-[96px]">
+                      <div class="w-[156px]">
                         <nz-select
                           *ngIf="origin.depth === 5; else otherTypes"
                           style="width: 100%"
@@ -813,17 +813,17 @@
                         </label>
                       </div>
 
-                      <meta-add-props-icon class="ml-[4px]" *ngIf="isObjectLikeType(origin.type)" (click)="addResObjProps(origin)" />
-
-                      <div *ngIf="!isObjectLikeType(origin.type)" class="ml-[4px] h-[28px] w-[16px]"></div>
-
-                      <div
-                        *ngIf="showResPropsDelete(origin)"
-                        (click)="removeArg(origin, 'res')"
-                        class="plugin-op-icon flex h-[28px] items-center justify-center"
-                      >
+                      @if(isObjectLikeType(origin.type)){
+                      <meta-add-props-icon class="ml-[4px]" (click)="addResObjProps(origin)" />
+                      } @else{
+                      <div class="ml-[4px] h-[28px] w-[16px]"></div>
+                      } @if(showResPropsDelete(origin)){
+                      <div (click)="removeArg(origin, 'res')" class="plugin-op-icon flex h-[28px] items-center justify-center">
                         <nz-icon nzType="delete" nzTheme="outline" style="font-size: 16px; cursor: pointer; padding-top: 8px" />
                       </div>
+                      } @else{
+                      <div class="ml-[4px] h-[28px] w-[16px]"></div>
+                      }
                     </div>
                   </ng-template>
                 </nz-tree>

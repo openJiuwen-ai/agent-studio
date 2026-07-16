@@ -12,7 +12,6 @@ import type { IPlugin } from '../app-plugin.interface';
 import { pluginSchemaStr2Args, initializeReqItem } from '../utils';
 import { PublishVersionModalComponent } from '@shared/components/publish-version-modal/publish-version-modal.component';
 import { PluginDebugModalComponent } from '../components/plugin-debug-modal/plugin-debug-modal.component';
-import { PluginVersionComponent } from '../components/plugin-version/plugin-version.component';
 import { PluginReferenceComponent } from '../components/plugin-reference/plugin-reference.component';
 import { NgIf } from '@angular/common';
 import { AddPluginAuthComponent } from '@routes/plugin-market/add-plugin/add-plugin-auth.component';
@@ -222,14 +221,12 @@ export class PluginHeaderNewComponent {
   getReference() {
     const modalRef: any = this.nzModal.create({
       nzContent: PluginReferenceComponent,
-      nzWidth: '1000px',
-      nzFooter: null,
-      nzClosable: true,
-      nzMaskClosable: false,
+      nzWidth: 600,
+      nzData: {
+        tool_id: this.pluginInfo.plugin_id,
+        type: 'system',
+      },
     });
-    const instance = modalRef.getContentComponent();
-    instance.tool_id = this.pluginInfo?.plugin_id;
-    instance.type = 'system';
   }
 
   gotoPluginList() {

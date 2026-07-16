@@ -2193,6 +2193,24 @@ public class PluginService implements IPluginService {
         return response;
     }
 
+    @Override
+    @Transactional
+    @OperationLog(
+        operationType = OperationType.UPDATE,
+        resourceType = "Plugin",
+        description = "插件版本还原",
+        resourceId = "pluginId",
+        resourceName = "versionId"
+    )
+    public BaseResp updatePluginVersionByVersionId(String projectId, String pluginId, String versionId,
+        String workspaceId) {
+        log.info("operation log {}: start to update plugin version by version id", projectId);
+        PluginEntity pluginEntityByVersion = pluginBase.getPluginEntityByVersion(pluginId, versionId);
+        PluginDTO pluginDTO = pluginBase.transformEntityToDTO(pluginEntityByVersion);
+        pluginMapper.updateByPrimaryKeySelective(pluginEntityByVersion);
+        return new BaseResp().setCode(200).setMessage("success").setData(pluginDTO);
+    }
+
     /**
      * 处理basicPath的路径拼接多斜杠的问题
      * @param basicInfo 基准信息

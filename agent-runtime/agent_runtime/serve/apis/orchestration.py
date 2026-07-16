@@ -9,7 +9,8 @@ import uuid
 from copy import deepcopy
 from typing import Union
 
-from agent_runtime.common.config import settings
+from agent_runtime.common.config import settings, ModelConfigStrategyType
+from agent_runtime.runner.workflow_runner import WorkflowRunner, ModelConfigStrategy
 from agent_runtime.common.ir_exceptions import IRBuildException
 from agent_runtime.common.ir_interfaces import (
     StorageConfigError,
@@ -47,9 +48,16 @@ _DEFAULT = "default"
 def _get_workflow_runner() -> WorkflowRunner:
     global _workflow_runner
     if _workflow_runner is None:
+        strategy_env = settings.llm.model_config_strategy
+        strategy_map = {
+            ModelConfigStrategyType.ENV: ModelConfigStrategy.ENV,
+            ModelConfigStrategyType.IR: ModelConfigStrategy.IR,
+            ModelConfigStrategyType.OBS: ModelConfigStrategy.OBS,
+        }
         _workflow_runner = WorkflowRunner(
             api_key=os.environ.get("API_KEY"),
             api_base=os.environ.get("API_BASE"),
+            model_strategy=strategy_map.get(strategy_env, ModelConfigStrategy.IR),
         )
     return _workflow_runner
 
@@ -57,6 +65,8 @@ def _get_workflow_runner() -> WorkflowRunner:
 def _get_react_runner() -> ReActAgentRunner:
     global _react_runner
     if _react_runner is None:
+        # 确保 model config provider factory 已初始化
+        _get_workflow_runner()
         _react_runner = ReActAgentRunner(
             api_key=os.environ.get("API_KEY"),
             api_base=os.environ.get("API_BASE"),
@@ -67,6 +77,8 @@ def _get_react_runner() -> ReActAgentRunner:
 def _get_controller_runner() -> ControllerRunner:
     global _controller_runner
     if _controller_runner is None:
+        # 确保 model config provider factory 已初始化
+        _get_workflow_runner()
         _controller_runner = ControllerRunner(
             api_key=os.environ.get("API_KEY"),
             api_base=os.environ.get("API_BASE"),
@@ -152,9 +164,6 @@ async def ir_execute(req_json: dict, request: Request):
 
     mode = (ir_json.get("configs") or {}).get("mode", "workflow")
     runner = _get_runner_by_type(mode)
-
-    # 将已加载的 IR 通过 params.ir_cache 传递给 runner，避免重复读取
-    req.params.ir_cache = ir_json
 
     if req.response_mode == ResponseMode.STREAMING:
         return StreamingResponse(

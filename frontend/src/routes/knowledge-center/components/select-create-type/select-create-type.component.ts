@@ -35,6 +35,8 @@ import { KnowledgeBaseExceedModalComponent } from '@routes/knowledge-center/comp
 })
 export class SelectCreateTypeComponent implements OnInit {
   @ViewChild('selectCreateType') selectCreateType: any;
+  @ViewChild('selectCreateTitle') selectCreateTitle: any;
+  @ViewChild('selectCreateFooter') selectCreateFooter: any;
   @ViewChild('exceedModal') exceedModal: KnowledgeBaseExceedModalComponent;
   @Output() openDefaultKnowledgeBase = new EventEmitter<string>();
   @Output() openThirdPartyKnowledgeBase = new EventEmitter<string>();
@@ -152,11 +154,11 @@ export class SelectCreateTypeComponent implements OnInit {
         this.accessDataTotal = result.total;
         this.typeItems[1].disabled = this.accessDataTotal === 0;
         this.modalRef = this.nzModalService.create({
-          nzTitle: '',
-          nzFooter: null,
+          nzTitle: this.selectCreateTitle,
+          nzFooter: this.selectCreateFooter,
           nzContent: this.selectCreateType,
           nzWidth: 500,
-          nzClosable: false,
+          nzClosable: true,
           nzMaskClosable: false,
         });
       });

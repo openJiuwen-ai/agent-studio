@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnInit, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { I18nNamespace } from '@i18n';
 import { CommonNoDataComponent } from '@shared/components/common-no-data/common-no-data.component';
@@ -85,7 +85,8 @@ export class ReferenceModalComponent implements OnInit {
     private readonly mcpRepoServe: MCPService,
     private router: Router,
     private route: ActivatedRoute,
-    private readonly http: HttpService
+    private readonly http: HttpService,
+    private cdr: ChangeDetectorRef
   ) {
     this.route.queryParams.subscribe(params => {
       this.isDevelopSpace = (params.from && params.from === 'develop-space') || this.router.url.includes('develop-space');
@@ -111,7 +112,10 @@ export class ReferenceModalComponent implements OnInit {
         this.relations = res.relations;
         this.srcData.data = this.relations.filter(item => item.app_type === this.currentActiveTab);
         this.totalNumber = res.count;
+      })
+      .finally(() => {
         this.isLoading = false;
+        this.cdr.markForCheck();
       });
   }
 

@@ -62,7 +62,7 @@ class ControllerRunner:
         exec_id = execution_id or session_id or str(uuid.uuid4())
         adapter = ControllerStreamDataAdapter(execution_id=exec_id)
 
-        # 1. Load IR from cache or storage
+        # 1. Load IR from storage
         try:
             ir_json = await async_ir_load(req.ir_path)
         except Exception as e:

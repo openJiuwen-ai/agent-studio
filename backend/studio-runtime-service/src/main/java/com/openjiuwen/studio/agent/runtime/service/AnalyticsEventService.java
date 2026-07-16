@@ -55,6 +55,7 @@ public class AnalyticsEventService implements IAnalyticsEventService {
                 Enum.valueOf(AnalyticsEventType.class, StringUtils.isEmpty(body.getEventType()) ? body.getEventType()
                     : body.getEventType().toUpperCase(Locale.getDefault()));
             AnalyticsEventEntity event = AnalyticsEventEntity.builder()
+                .eventId(body.getEventId())
                 .eventType(eventType.toString())
                 .appType(body.getAppType())
                 .appId(agentId)
@@ -73,6 +74,9 @@ public class AnalyticsEventService implements IAnalyticsEventService {
     }
 
     public void addEvent(AnalyticsEventEntity event) {
+        if (!analyticsEventEnable) {
+            return;
+        }
         if (StringUtils.isEmpty(event.getEventId())) {
             event.setEventId(UUID.randomUUID().toString());
         }

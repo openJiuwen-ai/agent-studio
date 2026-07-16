@@ -5,6 +5,8 @@ APP_PATH=${APP_PATH:-/opt/cloud/studio-service}
 MICROSERVICE_NAME="studio-service"
 ACTIVE_PROFILES='runtime'
 PERCENT_AGE=${jvm_xmx_percent:-0.6}
+DIRECT_RATIO=${jvm_direct_memory_ratio:-0.2}
+DIRECT_CAP_MB=${jvm_direct_memory_cap_mb:-1024}
 # https证书
 if [ -z "$CB_CF_SERVER_KEYSTORE" ] || [ -z "$CB_CF_TRUST_KEYSTORE" ]; then
     echo "WARNING: SSL certificate env vars not set"
@@ -28,8 +30,15 @@ heap_size=$(awk "BEGIN {printf \"%.0f\", $limit_in_mb * $PERCENT_AGE}")
 INIT_JAVA_HEAP_SIZE=${heap_size}m
 MAX_JAVA_HEAP_SIZE=${heap_size}m
 
+direct_size=$(awk "BEGIN {printf \"%.0f\", $limit_in_mb * $DIRECT_RATIO}")
+if [ "$direct_size" -gt "$DIRECT_CAP_MB" ]; then
+  direct_size=$DIRECT_CAP_MB
+fi
+MAX_DIRECT_MEMORY_SIZE=${direct_size}m
+
 # 启动服务
 exec java -Xms${INIT_JAVA_HEAP_SIZE} -Xmx${MAX_JAVA_HEAP_SIZE} \
+  -XX:MaxDirectMemorySize=${MAX_DIRECT_MEMORY_SIZE} \
   -Dfile.encoding=UTF-8 \
   -jar ${APP_PATH}/app/${MICROSERVICE_NAME}.jar \
   --spring.config.additional-location=${APP_PATH}/config/ \

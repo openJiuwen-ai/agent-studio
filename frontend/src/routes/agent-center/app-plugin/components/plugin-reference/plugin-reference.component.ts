@@ -1,4 +1,4 @@
-import { Component, ViewChild, Input, inject } from '@angular/core';
+import { Component, ViewChild, Input, inject, Inject } from '@angular/core';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzTabsModule } from 'ng-zorro-antd/tabs';
 import { NzEmptyModule } from 'ng-zorro-antd/empty';
@@ -12,7 +12,7 @@ import { cdnAssetUrl } from 'src/single-spa/assets-url';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { ActivatedRoute } from '@angular/router';
 import { HttpService } from '@services/http.service';
-
+import { NZ_DRAWER_DATA, NzDrawerRef } from 'ng-zorro-antd/drawer';
 @Component({
   selector: 'meta-plugin-reference',
   templateUrl: './plugin-reference.component.html',
@@ -95,8 +95,13 @@ export class PluginReferenceComponent {
     private i18n: I18NextEagerPipe,
     private readonly mcpRepoServe: MCPService,
     private route: ActivatedRoute,
-    private readonly http: HttpService
+    private readonly http: HttpService,
+    @Inject(NZ_DRAWER_DATA) public nzData: any
   ) {
+    this.tool_id = this.nzData.tool_id;
+    if (this.nzData.type) {
+      this.type = this.nzData.type;
+    }
     this.route.queryParams.subscribe(params => {
       if (params.from && params.from === 'agentBuilder') {
         this.isFromAgentBuilder = true;
@@ -141,7 +146,7 @@ export class PluginReferenceComponent {
   }
 
   public tabActiveChange(e: any) {
-    const id =this.tabs[e.index]?.id;
+    const id = this.tabs[e.index]?.id;
     this.curActiveTabId = id;
     this.getReferenceList();
   }

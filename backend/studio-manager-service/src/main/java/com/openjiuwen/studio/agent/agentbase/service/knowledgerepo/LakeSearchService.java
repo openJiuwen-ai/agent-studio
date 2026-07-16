@@ -173,7 +173,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to create LakeSearch knowledge repo, projectId: {}, repoName: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepo.getDisplayName(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
         CreateKnowledgeRepoInfo createKnowledgeRepoInfo = new CreateKnowledgeRepoInfo();
         createKnowledgeRepoInfo.setKnowledgeBaseId(createKnowledgeRepoResp.getRepoId());
@@ -202,7 +202,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to modify knowledge repo, projectId: {}, repoName: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepo.getDisplayName(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -220,7 +220,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to delete knowledge repo, projectId: {}, knowledgeRepoId: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepo.getKnowledgeRepoId(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -236,7 +236,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to retrieve knowledge repo, projectId: {}, knowledgeRepoId: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepoId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
         if (Objects.isNull(knowledgeRepoInfo)) {
             log.error("Knowledge repo is not exist in LakeSearch: {}", knowledgeRepoId);
@@ -281,7 +281,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to list knowledge repos, projectId: {}, knowledgeRepoName: {}.",
                 RequestContextUtils.getRequestProjectId(), req.getName(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -299,7 +299,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             log.error("Fail to upload file to knowledge repo, projectId: {}, knowledgeRepoId: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepoId, exception);
 
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
         return uploadFilesResp.getFileId();
     }
@@ -314,7 +314,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to delete file from knowledge repo, projectId: {}, knowledgeRepoId: {}, fileId: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepoId, fileId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -332,7 +332,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             log.error("Fail to list file from knowledge repo, projectId: {}, knowledgeRepoId: {}, fileName: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepo.getKnowledgeRepoId(),
                 listFileReq.getFileName(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
         List<FileInfo> fileInfos = new ArrayList<>();
         for (CssFileInfo cssFileInfo : listFilesRsp.getFiles()) {
@@ -353,7 +353,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to download file from knowledge repo, projectId: {}, fileId: {}.",
                 RequestContextUtils.getRequestProjectId(), fileId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
         return responseEntity;
     }
@@ -367,7 +367,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to create file chunk from knowledge repo, projectId: {}, fileId: {}.",
                 RequestContextUtils.getRequestProjectId(), fileId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -380,7 +380,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to update file chunk from knowledge repo, projectId: {}, fileId: {}, chunkId: {}.",
                 RequestContextUtils.getRequestProjectId(), fileId, chunkId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -394,7 +394,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to update file info from knowledge repo, projectId: {}, fileId: {}, error: {}.",
                 RequestContextUtils.getRequestProjectId(), fileId, exception.getMessage(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -407,7 +407,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to delete file chunk from knowledge repo, projectId: {}, fileId: {}, chunkId: {}.",
                 RequestContextUtils.getRequestProjectId(), fileId, chunkId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -422,7 +422,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to list file chunks from knowledge repo, projectId: {}, fileId: {}.",
                 RequestContextUtils.getRequestProjectId(), listFileChunksReq.getFileId(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
         FileChunkListRsp fileChunkListRsp = new FileChunkListRsp();
         fileChunkListRsp.setCount(listFileDocsRsp.getTotal());
@@ -454,7 +454,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             log.info("Success to search knowledge repo: {}", knowledgeRepoId);
         } catch (Exception exception) {
             log.error("Fail to search text from knowledge repo, knowledgeRepoId: {}.", knowledgeRepoId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
         return searchTextResp;
     }
@@ -483,7 +483,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             return faqResp.getFaqId();
         } catch (Exception exception) {
             log.error("Fail to createFaq, repo: {}.", knowledgeFaq.getKnowledgeRepoId(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -496,7 +496,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             log.info("Success to delete faq: {}", faqId);
         } catch (Exception exception) {
             log.error("Fail to delete faq, repo: {}.", repoId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -512,7 +512,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             return faqResp.getDeletedCount();
         } catch (Exception exception) {
             log.error("Fail to batch delete faq, repo: {}.", repoId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -526,7 +526,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             return knowledgeFaq.getFaqId();
         } catch (Exception exception) {
             log.error("Fail to update faq: {}.", knowledgeFaq.getFaqId(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -540,7 +540,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             return faqInfo.convertToDto();
         } catch (Exception exception) {
             log.error("Fail to retrieve faq: {}.", faqId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -558,7 +558,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             return new ListFaqResp().setFaqList(knowledgeFaqs).setCount(listFaqResponse.getTotal());
         } catch (Exception exception) {
             log.error("Fail to list faq, repo: {}.", faqSearchCriteria.getRepoId(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -572,7 +572,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             log.info("Success to start knowledge repo: {}", knowledgeRepoId);
         } catch (Exception exception) {
             log.error("Fail to start knowledge repo, knowledgeRepoId: {}.", knowledgeRepoId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -586,7 +586,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             log.info("Success to stop knowledge repo: {}", knowledgeRepoId);
         } catch (Exception exception) {
             log.error("Fail to stop knowledge repo, knowledgeRepoId: {}.", knowledgeRepoId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -607,7 +607,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             return knowledgeSegRuleInfo;
         } catch (Exception exception) {
             log.error("Fail to create segment rule.", exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -622,7 +622,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             return ruleId;
         } catch (Exception exception) {
             log.error("Fail to modify segment rule: {}.", segmentRule.getId(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -635,7 +635,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             log.info("Success to delete segment rule: {}", ruleId);
         } catch (Exception exception) {
             log.error("Fail to delete segment rule: {}.", ruleId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -665,7 +665,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             throw exception;
         } catch (Exception exception) {
             log.error("Fail to list models.", exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -681,7 +681,7 @@ public class LakeSearchService implements KnowledgeRepoService {
                 .setTotalCount(task.getTotalCount());
         } catch (Exception exception) {
             log.error("Fail to create task, repo: {}", repoId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
 
         }
     }
@@ -698,7 +698,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             log.info("Success to list tasks: {}", listKnowledgeTaskResp.getTotal());
         } catch (Exception exception) {
             log.error("Fail to list tasks!", exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
 
         }
         return listKnowledgeTaskResp;
@@ -716,7 +716,7 @@ public class LakeSearchService implements KnowledgeRepoService {
                 .setDeletedCount(resp.getDeletedCount());
         } catch (Exception exception) {
             log.error("Fail to delete tasks: {}.", taskIds, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
 
         }
     }
@@ -748,7 +748,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             return new ListKnowledgeTagsResp().setCount(listKnowledgeLabelsResp.getTotal()).setTagList(tagList);
         } catch (Exception exception) {
             log.error("Fail to list knowledge repo labels, knowledgeRepoId: {}.", knowledgeRepoId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
 
         }
     }
@@ -783,7 +783,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to create knowledge repo labels, knowledgeRepoId: {}, error: {}.", knowledgeRepoId,
                 exception.getMessage(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -806,7 +806,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to delete repo labels, knowledgeRepoId: {}, error: {}.", knowledgeRepoId,
                 exception.getMessage(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -916,7 +916,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to upload FAQ file to knowledge repo, projectId: {}, knowledgeRepoId: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepoId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
         return uploadFaqFileResp.getFileId();
     }
@@ -932,7 +932,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to delete FAQ file from knowledge repo, projectId: {}, knowledgeRepoId: {}, fileId: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepoId, fileId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
 
         }
     }
@@ -951,7 +951,7 @@ public class LakeSearchService implements KnowledgeRepoService {
             log.error("Fail to list FAQ file from knowledge repo, projectId: {}, knowledgeRepoId: {}, fileName: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepo.getKnowledgeRepoId(),
                 listFaqFileReq.getFileName(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
         List<FileInfo> fileInfos = new ArrayList<>();
         for (CssFileInfo cssFileInfo : listFilesRsp.getFiles()) {
@@ -972,7 +972,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to download FAQ file from knowledge repo, projectId: {}, fileId: {}.",
                 RequestContextUtils.getRequestProjectId(), fileId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
         return responseEntity;
     }
@@ -986,7 +986,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to create FAQ file chunk from knowledge repo, projectId: {}, fileId: {}.",
                 RequestContextUtils.getRequestProjectId(), fileId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -999,7 +999,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to delete FAQ file chunk from knowledge repo, projectId: {}, fileId: {}, chunkId: {}.",
                 RequestContextUtils.getRequestProjectId(), fileId, chunkId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -1012,7 +1012,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to query image, projectId: {}, knowledgeRepoId: {}, imageId: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepo.getKnowledgeRepoId(), imageId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -1026,7 +1026,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to update FAQ file chunk from knowledge repo, projectId: {}, fileId: {}, chunkId: {}.",
                 RequestContextUtils.getRequestProjectId(), fileId, chunkId, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -1042,7 +1042,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to list FAQ file chunks from knowledge repo, projectId: {}, fileId: {}.",
                 RequestContextUtils.getRequestProjectId(), listFaqFileChunksReq.getFileId(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
         FaqFileChunkListRsp faqFileChunkListRsp = new FaqFileChunkListRsp();
         faqFileChunkListRsp.setCount(listFileDocsRsp.getTotal());
@@ -1062,7 +1062,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to batch delete file from knowledge repo, projectId: {}, knowledgeRepoId: {}, fileIds: {}.",
                 RequestContextUtils.getRequestProjectId(), knowledgeRepoId, deleteFileReq, exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 
@@ -1081,7 +1081,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         } catch (Exception exception) {
             log.error("Fail to list knowledge repos, projectId: {}, knowledgeRepoName: {}.",
                 RequestContextUtils.getRequestProjectId(), req.getName(), exception);
-            throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR, exception);
+            throw new AgentBaseException(ErrorCode.LAKE_SEARCH_SERVICE_EXCEPTION, exception);
         }
     }
 

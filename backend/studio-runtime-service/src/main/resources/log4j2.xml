@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="WARN" monitorInterval="30">
+<Configuration status="WARN">
     <contextName>studio-agent-service</contextName>
 
     <Properties>
@@ -128,22 +128,26 @@
         </RollingFile>
 
         <!-- Async appenders -->
-        <Async name="ASYNC_STDOUT">
+        <Async name="ASYNC_STDOUT" bufferSize="65536" blocking="false">
             <AppenderRef ref="STDOUT"/>
+            <OverflowAction>DISCARD</OverflowAction>
         </Async>
 
-        <Async name="ASYNC_ROLLING_FILE">
+        <Async name="ASYNC_ROLLING_FILE" bufferSize="65536" blocking="false">
             <AppenderRef ref="ROLLING_FILE"/>
+            <OverflowAction>DISCARD</OverflowAction>
         </Async>
 
-        <Async name="ASYNC_ROLLING_FILE_PERFORM">
+        <Async name="ASYNC_ROLLING_FILE_PERFORM" bufferSize="65536" blocking="false">
             <AppenderRef ref="ROLLING_FILE_PERFORM"/>
+            <OverflowAction>DISCARD</OverflowAction>
         </Async>
 
-        <Async name="ASYNC_ROLLING_FILE_INF">
+        <Async name="ASYNC_ROLLING_FILE_INF" bufferSize="65536" blocking="false">
             <AppenderRef ref="ROLLING_FILE_INF"/>
+            <OverflowAction>DISCARD</OverflowAction>
         </Async>
-        <Async name="ASYNC_ROLLING_FILE_TRACE">
+        <Async name="ASYNC_ROLLING_FILE_TRACE" bufferSize="65536">
             <AppenderRef ref="ROLLING_FILE_TRACE"/>
         </Async>
     </Appenders>

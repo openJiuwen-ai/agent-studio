@@ -28,7 +28,7 @@ import { WindowResizeService } from '@shared/base/window-resize.service';
 import { cdnAssetUrl } from 'src/single-spa/assets-url';
 import { CommonService } from '@services/common.service';
 import { HttpService } from '@services/http.service';
-
+import { MessageComponent } from '@shared/services/cfdata.service';
 enum mapKeys {
   from = 'from',
   work_space_id = 'work_space_id',
@@ -38,17 +38,7 @@ enum mapKeys {
   selector: 'meta-plugin',
   templateUrl: './plugin.component.html',
   styleUrls: ['./plugin.component.scss'],
-  imports: [
-    MODULES,
-    PluginHeaderComponent,
-    NzTableModule,
-    NzButtonModule,
-    NzIconModule,
-    NzDropDownModule,
-    NzTabsModule,
-    NzToolTipModule,
-    NzSpaceModule,
-  ],
+  imports: [MODULES, PluginHeaderComponent, NzTableModule, NzButtonModule, NzIconModule, NzDropDownModule, NzTabsModule, NzToolTipModule, NzSpaceModule],
   standalone: true,
   providers: [
     {
@@ -267,7 +257,7 @@ export class PluginComponent implements OnInit {
   }
 
   getPluginVersion(version_id) {
-    this.agentRepoServe.getPluginVersion(this.toolId, version_id).then(res => {
+    this.agentRepoServe.getPluginVersion(this.toolId, version_id).then((res) => {
       this.plugin = res?.data;
       this.coverPluginInfo();
     });
@@ -301,6 +291,8 @@ export class PluginComponent implements OnInit {
     this.listDataLoading = false;
   }
   async getPluginDetails() {
+    this.previewVersionId = '';
+    this.previewVersionName = '';
     try {
       this.isLoading = true;
       let value = await this.appPluginRepoServ.getPluginById(this.toolId);
@@ -312,6 +304,10 @@ export class PluginComponent implements OnInit {
   }
 
   createTool() {
+    if (this.previewVersionId) {
+      MessageComponent.showPrompt('预览状态无法操作', 3000);
+      return;
+    }
     const thisNzModal: any = this.nzModal.create({
       nzContent: CreateToolComponent,
       nzWidth: '1000px',
@@ -349,6 +345,10 @@ export class PluginComponent implements OnInit {
     });
   }
   modifyPlugin(stepIndex: number) {
+    if (this.previewVersionId) {
+      MessageComponent.showPrompt('预览状态无法操作', 3000);
+      return;
+    }
     if (this.subscribeBtnStatus) {
       const thisNzModal: any = this.nzModal.create({
         nzContent: CreatePluginBaseComponent,
@@ -464,6 +464,10 @@ export class PluginComponent implements OnInit {
     this.deleteContent.toolDependency = tool.toolDependency;
   }
   goDetail(row) {
+    if (this.previewVersionId) {
+      MessageComponent.showPrompt('预览状态无法操作', 3000);
+      return;
+    }
     let queryParams = {
       plugin_id: this.plugin.plugin_id,
       tool_id: row.tool_info.tool_id,
@@ -488,6 +492,10 @@ export class PluginComponent implements OnInit {
     });
   }
   handleToolsAction(item: any, row: any) {
+    if (this.previewVersionId) {
+      MessageComponent.showPrompt('预览状态无法操作', 3000);
+      return;
+    }
     if (item.label === this.i18n.transform('edit')) {
       this.editTool(row.tool_info);
     } else if (item.label === this.i18n.transform('debugging')) {

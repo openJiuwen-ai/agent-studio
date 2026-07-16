@@ -162,6 +162,30 @@ import org.springframework.web.multipart.MultipartFile;
         @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
+    @ApiOperation(value = "根据工具id和版本id进行版本还原", nickname = "updatePluginVersionByVersionId",
+        notes = "根据工具id和版本id进行版本还原", response = BaseResp.class, tags = {"Plugin"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "插件版本响应体", response = BaseResp.class),
+        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
+        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = String.class),
+        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorRsp.class),
+        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
+        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/agent-manager/plugins/{plugin_id}/versions/{version_id}",
+        produces = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<BaseResp> updatePluginVersionByVersionId(
+        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
+        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
+        @PathVariable("project_id") String projectId,
+        @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "插件ID", required = true, schema = @Schema())
+        @PathVariable("plugin_id") String pluginId,
+        @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "插件版本id", required = true, schema = @Schema())
+        @PathVariable("version_id") String versionId,
+        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
+        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
+        String workspaceId);
+
     @ApiOperation(value = "删除一个工具版本定义", nickname = "deletePluginVersion", notes = "删除一个工具版本定义",
         response = CommonDeleteRsp.class, tags = {"Plugin"})
     @ApiResponses(value = {

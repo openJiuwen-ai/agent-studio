@@ -226,6 +226,8 @@ export class KnowledgeBaseListComponent implements OnInit, AfterViewInit, OnDest
   ];
   public total = 0;
   public loading = false;
+  // 知识库列表加载失败（如 CUSTOM 模式连不上 LakeSearch），本地展示，不弹全局 toast
+  public loadError = false;
 
   public accessPlaceholder: string = this.i18n.transform('cardlistcomponent_55');
 
@@ -440,6 +442,10 @@ export class KnowledgeBaseListComponent implements OnInit, AfterViewInit, OnDest
   }
 
   newAddKnowledge() {
+    // CUSTOM 模式：知识库来源为外部 LakeSearch，创建走本地库+LakeSearch 不可用，禁用创建入口
+    if (this.isCustomSource) {
+      return;
+    }
     if (this.configServ.createKnowledgeBase()) {
       this.selectCreateType.show();
     } else {
@@ -484,6 +490,7 @@ export class KnowledgeBaseListComponent implements OnInit, AfterViewInit, OnDest
     this.total = 0;
     try {
       this.loading = true;
+      this.loadError = false;
       let currentPage = this.isList ? this.knowledgeBaseService.listCurrentPage : this.knowledgeBaseService.cardCurrentPage;
       let pageSize = this.isList ? this.knowledgeBaseService.listSize : this.knowledgeBaseService.cardSize;
 
@@ -505,6 +512,8 @@ export class KnowledgeBaseListComponent implements OnInit, AfterViewInit, OnDest
         limit: pageSize,
         offset: (currentPage - 1) * pageSize,
         ...customParams,
+        // 列表页静默全局 error toast，避免加载失败污染其他页面；失败时本地兜底展示重试 UI
+        cancelGlobalError: true,
       });
       const kbs = this.kbAbilitiesService.normalizeKBList(result.items ?? []);
       this.srcData.data = kbs;
@@ -514,6 +523,13 @@ export class KnowledgeBaseListComponent implements OnInit, AfterViewInit, OnDest
       });
       this.normalizeKbs = kbs;
       this.total = result.total;
+    } catch (e) {
+      // 知识库列表加载失败（如 CUSTOM 模式连不上 LakeSearch）：上方调用已显式传 cancelGlobalError，
+      // 不会弹全局 toast 污染其他页面，这里本地兜底，标记 loadError 在列表区展示失败提示
+      this.loadError = true;
+      this.srcData.data = [];
+      this.normalizeKbs = [];
+      this.total = 0;
     } finally {
       this.loading = false;
       this.isFirstLoading = false;

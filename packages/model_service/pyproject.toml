@@ -1,0 +1,16 @@
+[project]
+name = "model-service"
+version = "0.1.0"
+description = "agent-studio 模型调用机制层（runtime / agent-builder 共享；迁移自 Java studio-runtime-service，照抄）"
+requires-python = ">=3.11"
+dependencies = [
+    "openjiuwen",   # Model / OpenAIModelClient / AnthropicModelClient / client registry
+    "httpx",        # dispatch.build_httpx_client / embed 构造 httpx.AsyncClient
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["model_service*"]

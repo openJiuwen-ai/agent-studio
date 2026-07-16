@@ -4,6 +4,7 @@
 
 """IRModelConfigProvider (model_providers 副本) thinking → extra_body 单元测试"""
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -35,11 +36,20 @@ def _make_ir_node(thinking_config, hyper_params_override=None):
 def _call_provider(ir_node):
     """统一调用 IRModelConfigProvider 并返回结果"""
     provider = IRModelConfigProvider()
-    with patch("agent_runtime.common.model_providers._request_ctx") as mock_ctx:
+    mock_settings = MagicMock()
+    mock_settings.llm.api_key = "sk-placeholder"
+    mock_settings.llm.api_base = "https://api.openai.com/v1"
+    mock_settings.llm.model_name = "test-model"
+    mock_settings.llm.temperature = 0.5
+    mock_settings.llm.top_p = 0.5
+    mock_settings.llm.timeout = 900.0
+    mock_settings.llm.ssl_verify = False
+    with patch("agent_runtime.common.model_providers._request_ctx") as mock_ctx, \
+         patch("agent_runtime.common.model_providers.settings", mock_settings):
         mock_ctx_instance = MagicMock()
         mock_ctx_instance.headers = {"X-Auth-Token": "test_token"}
         mock_ctx.get.return_value = mock_ctx_instance
-        return provider.get_llm_config(ir_node)
+        return asyncio.run(provider.get_llm_config(ir_node))
 
 
 class TestThinkingEnabled:

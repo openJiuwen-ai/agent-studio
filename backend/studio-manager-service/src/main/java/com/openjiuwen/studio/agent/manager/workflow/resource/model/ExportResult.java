@@ -37,6 +37,9 @@ public class ExportResult {
     @JsonProperty("level2_resources")
     private List<String> level2Resources;
 
+    @JsonProperty("resource_level")
+    private Integer resourceLevel;
+
     @JsonProperty("child_results")
     private List<ExportResult> childResults;
 }

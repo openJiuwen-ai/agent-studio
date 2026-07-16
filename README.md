@@ -1,43 +1,45 @@
 # openJiuwen AgentStudio
 
-openJiuwen AgentStudio提供了一站式AI Agent开发平台，为开发者提供从开发到部署的全栈解决方案。该部分采用低代码 / 零代码的可视化设计与编排工具，能让开发者快速打造和调试智能体和工作流。
+[中文](README_zh.md) | English
+
+openJiuwen AgentStudio is an all-in-one AI Agent development platform that provides developers with a full-stack solution from development to deployment. It offers low-code / no-code visual design and orchestration tools that let developers rapidly build and debug agents and workflows.
 
 ---
 
-## 1 文档适用人群
+## 1 Intended Audience
 
-本项目适用于以下类型的读者：
+This project is intended for the following readers:
 
-| 适用人群 | 说明 |
-|----------|------|
-| **后端开发工程师** | 想要了解Java后端服务架构、API设计、业务逻辑实现的开发者 |
-| **前端开发工程师** | 想要了解Angular前端项目结构、组件开发、路由配置的开发者 |
-| **运维工程师** | 想要了解Docker部署、服务配置、环境变量设置的运维人员 |
-| **技术架构师** | 想要了解整体系统架构、技术选型、模块划分的技术决策者 |
-| **AI应用开发者** | 想要了解Agent开发平台能力、RAG知识库、工作流编排的开发者 |
-| **测试工程师** | 想要了解系统功能模块、接口规范的测试人员 |
+| Audience | Description |
+|----------|-------------|
+| **Backend Engineers** | Developers who want to understand the Java backend service architecture, API design, and business logic implementation |
+| **Frontend Engineers** | Developers who want to understand the Angular frontend project structure, component development, and routing configuration |
+| **DevOps Engineers** | Operators who want to understand Docker deployment, service configuration, and environment variable setup |
+| **Technical Architects** | Decision-makers who want to understand the overall system architecture, technology selection, and module breakdown |
+| **AI Application Developers** | Developers who want to understand the Agent development platform capabilities, RAG knowledge base, and workflow orchestration |
+| **QA Engineers** | Testers who want to understand the system's functional modules and interface specifications |
 
 ---
 
-## 2 项目整体结构
+## 2 Project Structure
 
 ```
 agent-studio/
-├── backend/                          # Java后端服务模块
-├── frontend/                         # Angular前端应用模块
-├── docs/                             # 项目文档模块
-├── docker/                           # Docker部署配置
-└── LICENSE / README.md 等根文件
+├── backend/                          # Java backend service module
+├── frontend/                         # Angular frontend application module
+├── docs/                             # Project documentation
+├── docker/                           # Docker deployment configuration
+└── LICENSE / README.md (root files)
 ```
 
 ---
 
-## 3 快速开始
+## 3 Quick Start
 
-### 3.1 环境要求
+### 3.1 Requirements
 
-| 要求 | 版本 |
-|------|------|
+| Requirement | Version |
+|-------------|---------|
 | JDK | 17+ |
 | Maven | 3.8+ |
 | Node.js | 18+ |
@@ -46,87 +48,87 @@ agent-studio/
 | Redis | 6+ |
 | Docker | 20+ |
 
-### 3.2 后端开发
+### 3.2 Backend Development
 
-1. 克隆代码仓库
-2. 执行`backend/sql/schema.sql`创建数据库表
-3. 执行`backend/sql/init.sql`和`data.sql`初始化数据
-4. 配置数据库和Redis连接信息
-5. 运行Maven构建：`mvn clean install`
-6. 启动Manager服务或Runtime服务
+1. Clone the repository
+2. Execute `backend/sql/schema.sql` to create database tables
+3. Execute `backend/sql/init.sql` and `data.sql` to initialize data
+4. Configure the database and Redis connection information
+5. Run the Maven build: `mvn clean install`
+6. Start the Manager service or the Runtime service
 
-### 3.3 前端开发
+### 3.3 Frontend Development
 
-1. 进入`frontend`目录
-2. 安装依赖：`pnpm install`
-3. 启动开发服务器：`pnpm start`
+1. Change into the `frontend` directory
+2. Install dependencies: `pnpm install`
+3. Start the development server: `pnpm start`
 
-### 3.4 Docker部署
+### 3.4 Docker Deployment
 
-1. 源码编译构建指导：[源码编译构建指导.md](docker/%E6%BA%90%E7%A0%81%E7%BC%96%E8%AF%91%E6%9E%84%E5%BB%BA%E6%8C%87%E5%AF%BC.md)
-2. 安装部署指南：[安装部署指南.md](docs/%E5%AE%89%E8%A3%85%E9%83%A8%E7%BD%B2%E6%8C%87%E5%8D%97.md)
-
----
-
-## 4 特性表格
-
-| 特性 | 说明 |
-|------|------|
-| **低代码/零代码开发** | 提供可视化的Agent和工作流设计与编排工具 |
-| **多模型支持** | 支持主流大语言模型的集成与切换 |
-| **RAG知识库** | 提供了知识库的创建、上传、检索功能 |
-| **工作流编排** | 支持复杂工作流的编排与执行 |
-| **插件市场** | 支持插件的浏览、安装与管理 |
-| **提示词工程** | 提供提示词的编写、调试、优化功能 |
-| **MCP协议支持** | 支持Model Context Protocol协议 |
-| **多数据源集成** | 支持MySQL、PostgreSQL等多种数据源 |
-| **云原生部署** | 提供Docker和Kubernetes部署支持 |
-| **权限与认证** | 支持JWT、LDAP、SAML等多种认证方式 |
+1. Source build guide: [源码编译构建指导.md](docker/%E6%BA%90%E7%A0%81%E7%BC%96%E8%AF%91%E6%9E%84%E5%BB%BA%E6%8C%87%E5%AF%BC.md)
+2. Installation and deployment guide: [安装部署指南.md](docs/%E5%AE%89%E8%A3%85%E9%83%A8%E7%BD%B2%E6%8C%87%E5%8D%97.md)
 
 ---
 
-## 5 约束条件
+## 4 Features
 
-| 约束项 | 说明 |
-|--------|------|
-| **JDK版本** | 必须使用JDK 17或更高版本 |
-| **Node.js版本** | 必须使用Node.js 18或更高版本 |
-| **数据库要求** | 生产环境推荐使用PostgreSQL 12+ |
-| **浏览器兼容** | 前端支持主流浏览器的最近两个版本 |
-| **网络要求** | 服务间通信需要内网互通或正确配置安全组 |
-| **内存要求** | 单服务最低建议2GB内存，生产环境建议4GB+ |
-| **存储要求** | 根据业务数据量预留足够的数据库和对象存储空间 |
-
----
-
-## 6 技术栈概览
-
-| 层级 | 技术 |
-|------|------|
-| **后端框架** | Spring Boot 3.5.14、Spring Security 6.5.10 |
-| **前端框架** | Angular 20.3.17、NG-ZORRO 20.4.4 |
-| **数据库** | PostgreSQL 42.7.11、Redis 3.39.0、H2 2.2.224 |
-| **对象存储** | 华为云OBS SDK 3.23.9 |
-| **通信框架** | Netty 4.1.133.Final |
-| **构建工具** | Maven 3.8+、Angular Build 20.3.13 |
-
-详细技术栈请参考 [项目架构.md](docs/项目架构.md)。
+| Feature | Description |
+|---------|-------------|
+| **Low-code / No-code Development** | Provides visual Agent and workflow design and orchestration tools |
+| **Multi-Model Support** | Supports the integration and switching of mainstream large language models |
+| **RAG Knowledge Base** | Provides knowledge base creation, upload, and retrieval capabilities |
+| **Workflow Orchestration** | Supports the orchestration and execution of complex workflows |
+| **Plugin Marketplace** | Supports browsing, installing, and managing plugins |
+| **Prompt Engineering** | Provides prompt writing, debugging, and optimization features |
+| **MCP Protocol Support** | Supports the Model Context Protocol |
+| **Multi-Datasource Integration** | Supports multiple datasources such as MySQL and PostgreSQL |
+| **Cloud-Native Deployment** | Provides Docker and Kubernetes deployment support |
+| **Authentication & Authorization** | Supports multiple authentication methods including JWT, LDAP, and SAML |
 
 ---
 
-## 7 更多信息
+## 5 Constraints
 
-- 安装部署参考 [安装部署指南](docs/安装部署指南.md)
-- 快速体验参考 [用户指南](docs/用户指南.md)
-- API接口参考 [API参考](docs/API参考.md)
-- 架构设计参考 [项目架构](docs/项目架构.md)
+| Constraint | Description |
+|------------|-------------|
+| **JDK Version** | JDK 17 or higher is required |
+| **Node.js Version** | Node.js 18 or higher is required |
+| **Database** | PostgreSQL 12+ is recommended for production |
+| **Browser Compatibility** | The frontend supports the latest two versions of mainstream browsers |
+| **Network** | Inter-service communication requires intra-network connectivity or properly configured security groups |
+| **Memory** | A minimum of 2 GB per service is recommended; 4 GB+ is recommended for production |
+| **Storage** | Reserve sufficient database and object storage capacity based on your data volume |
 
 ---
 
-# ⚖️ **许可证**
+## 6 Technology Stack
 
-本项目采用 Apache 2.0 许可证。详见 [LICENSE](LICENSE) 文件。
+| Layer | Technology |
+|-------|------------|
+| **Backend Framework** | Spring Boot 3.5.14, Spring Security 6.5.10 |
+| **Frontend Framework** | Angular 20.3.17, NG-ZORRO 20.4.4 |
+| **Database** | PostgreSQL 42.7.11, Redis 3.39.0, H2 2.2.224 |
+| **Object Storage** | Huawei Cloud OBS SDK 3.23.9 |
+| **Communication Framework** | Netty 4.1.133.Final |
+| **Build Tools** | Maven 3.8+, Angular Build 20.3.13 |
 
-# 🤝 **贡献指南**
+For the detailed technology stack, see [项目架构.md](docs/项目架构.md).
 
-欢迎提交 Issue 和 Pull Request！
+---
+
+## 7 More Information
+
+- Installation and deployment: [安装部署指南.md](docs/安装部署指南.md)
+- Quick experience: [用户指南.md](docs/用户指南.md)
+- API reference: [API参考.md](docs/API参考.md)
+- Architecture design: [项目架构.md](docs/项目架构.md)
+
+---
+
+# ⚖️ License
+
+This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.
+
+# 🤝 Contributing
+
+Issues and Pull Requests are welcome!

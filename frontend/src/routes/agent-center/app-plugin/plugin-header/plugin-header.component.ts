@@ -1,11 +1,4 @@
-import {
-  Component,
-  ChangeDetectionStrategy,
-  Input,
-  Output,
-  ChangeDetectorRef,
-  EventEmitter,
-} from '@angular/core';
+import { Component, ChangeDetectionStrategy, Input, Output, ChangeDetectorRef, EventEmitter } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { I18nNamespace } from '@i18n';
 import { NzModalService } from 'ng-zorro-antd/modal';
@@ -29,33 +22,34 @@ import { PublishVersionModalComponent } from '@shared/components/publish-version
 import { PluginDebugModalComponent } from '../components/plugin-debug-modal/plugin-debug-modal.component';
 import { PluginVersionComponent } from '../components/plugin-version/plugin-version.component';
 import { PluginReferenceComponent } from '../components/plugin-reference/plugin-reference.component';
-import {NgIf} from "@angular/common";
-import {PermissionService} from "@services/permission.service";
+import { NgIf } from '@angular/common';
+import { PermissionService } from '@services/permission.service';
 import { PrevRouteService } from '@services/prev-route.service';
 import { CommonService } from '@services/common.service';
 import { HttpService } from '@services/http.service';
 
 enum mapKeys {
-  work_space_id = 'work_space_id'
+  work_space_id = 'work_space_id',
 }
 
 @Component({
   selector: 'meta-plugin-header',
   standalone: true,
-    imports: [COMMON_MODULES, MODULES, InlineSvgComponent, NgIf, NzIconModule, NzTagModule, NzToolTipModule, NzButtonModule, NzModalModule, NzDrawerModule],
+  imports: [COMMON_MODULES, MODULES, InlineSvgComponent, NgIf, NzIconModule, NzTagModule, NzToolTipModule, NzButtonModule, NzModalModule, NzDrawerModule],
   templateUrl: './plugin-header.component.html',
   styleUrl: './plugin-header.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [
     {
       provide: I18NEXT_NAMESPACE,
-      useValue: [I18nNamespace.AGENT_CENTER,I18nNamespace.REVIEW],
+      useValue: [I18nNamespace.AGENT_CENTER, I18nNamespace.REVIEW],
     },
   ],
 })
 export class PluginHeaderComponent {
   @Input() pluginInfo;
   @Input() isToolDetail: boolean = false;
+  @Input() previewVersionId = '';
   @Output() update = new EventEmitter<void>();
   // 是否来自agentBuilder
   @Input() isFromAgentBuilder: boolean = false;
@@ -63,13 +57,9 @@ export class PluginHeaderComponent {
 
   @Input() showCrumb: boolean = true;
 
-  public historyIcon = cdnAssetUrl(
-    'assets/agent-center/icons/release-history.svg',
-  );
+  public historyIcon = cdnAssetUrl('assets/agent-center/icons/release-history.svg');
 
-  public referenceIcon = cdnAssetUrl(
-    'assets/agent-center/icons/public_link.svg',
-  );
+  public referenceIcon = cdnAssetUrl('assets/agent-center/icons/public_link.svg');
 
   historyVersionList = [];
 
@@ -83,7 +73,7 @@ export class PluginHeaderComponent {
   pageFrom: any;
 
   subscribeBtnStatus = this.commonService.getSubscribeStatus();
-  workSpaceId='';
+  workSpaceId = '';
 
   constructor(
     private router: Router,
@@ -95,17 +85,18 @@ export class PluginHeaderComponent {
     private permissionService: PermissionService,
     private activeRoute: ActivatedRoute,
     private commonService: CommonService,
+    private nzDrawerService: NzDrawerService
   ) {}
 
   ngOnInit() {
-    this.activeRoute.queryParams.subscribe((params) => {
+    this.activeRoute.queryParams.subscribe(params => {
       this.pageFromId = params.from_id;
       this.pageFrom = params.from;
       if (params[mapKeys.work_space_id]) {
         this.workSpaceId = params[mapKeys.work_space_id];
       }
     });
-    this.isPluginMarket = this.router.url.indexOf('plugin-market/detail')> -1
+    this.isPluginMarket = this.router.url.indexOf('plugin-market/detail') > -1;
     this.agentDataServe
       .publishStatusUpdate$()
       .pipe(takeUntil(this.destroy$))
@@ -117,11 +108,9 @@ export class PluginHeaderComponent {
         }
       });
     // 订阅权限变化
-    this.permissionSubscription = this.permissionService.permissions$.subscribe(
-      permissions => {
-        this.currentPermissions = permissions;
-      }
-    );
+    this.permissionSubscription = this.permissionService.permissions$.subscribe(permissions => {
+      this.currentPermissions = permissions;
+    });
   }
 
   ngOnDestroy(): void {
@@ -141,22 +130,9 @@ export class PluginHeaderComponent {
   }
 
   public openDebugModal() {
-    let requestArgs = [
-      ...pluginSchemaStr2Args(this.pluginInfo?.input_schema),
-      ...pluginSchemaStr2Path(this.pluginInfo?.input_schema)
-    ];
-    const {
-      tool_display_name,
-      tool_desc,
-      visibility,
-      tool_chinese_name,
-      request_info,
-      auth_info,
-      is_input_list,
-      is_output_list,
-      intf_type,
-      input_schema,
-    } = this.pluginInfo;
+    let requestArgs = [...pluginSchemaStr2Args(this.pluginInfo?.input_schema), ...pluginSchemaStr2Path(this.pluginInfo?.input_schema)];
+    const { tool_display_name, tool_desc, visibility, tool_chinese_name, request_info, auth_info, is_input_list, is_output_list, intf_type, input_schema } =
+      this.pluginInfo;
     let pluginBodyParams = {
       tool_display_name,
       tool_desc,
@@ -180,11 +156,9 @@ export class PluginHeaderComponent {
     });
     const instance = modalRef.getContentComponent();
     instance.hideParseBtn = true;
-    instance.requestArgs = requestArgs.map((item) => initializeReqItem(item));
-    instance.pluginBodyParams = this.pluginInfo.tool_id
-      ? { tool_id: this.pluginInfo.tool_id }
-      : pluginBodyParams;
-      instance.afterClose.subscribe(async () => {
+    instance.requestArgs = requestArgs.map(item => initializeReqItem(item));
+    instance.pluginBodyParams = this.pluginInfo.tool_id ? { tool_id: this.pluginInfo.tool_id } : pluginBodyParams;
+    instance.afterClose.subscribe(async () => {
       const result = instance.debugResult;
       if (!result) {
         return;
@@ -225,31 +199,32 @@ export class PluginHeaderComponent {
   }
 
   getReference() {
-    const drawerRef = this.nzModal.create({
+    const drawerRef = this.nzDrawerService.create({
       nzContent: PluginReferenceComponent,
-      nzWidth: '1000px',
-      nzClosable: true,
-      nzMaskClosable: false,
+      nzWidth: 600,
+      nzData: {
+        tool_id: this.pluginInfo.plugin_id,
+      },
     });
-    const instance = drawerRef.getContentComponent();
-    instance.tool_id = this.pluginInfo.plugin_id;
   }
 
   getHistory() {
-    const drawerRef = this.nzModal.create({
+    const drawerRef = this.nzDrawerService.create({
       nzContent: PluginVersionComponent,
-      nzWidth: '1000px',
-      nzClosable: true,
-      nzMaskClosable: false,
+      nzWidth: 600,
+      nzData: {
+        tool_id: this.pluginInfo.plugin_id,
+        update: () => {
+          this.update.emit();
+        },
+      },
     });
-    const instance = drawerRef.getContentComponent();
-    instance.tool_id = this.pluginInfo.plugin_id;
   }
 
   publishPlugin() {
     const modalRef: any = this.nzModal.create({
       nzContent: PublishVersionModalComponent,
-      nzWidth: '1000px',
+      nzWidth: 600,
       nzFooter: null,
       nzClosable: true,
       nzMaskClosable: false,
@@ -262,7 +237,7 @@ export class PluginHeaderComponent {
       this.update.emit();
     });
   }
-  gotoPluginList(queryParams?: Record<string, string>){
+  gotoPluginList(queryParams?: Record<string, string>) {
     if (this.isFromDevelopSpace) {
       this.router.navigate(['/home/develop-space']);
       return;
@@ -285,22 +260,20 @@ export class PluginHeaderComponent {
         queryParams: {
           id: this.pageFromId,
           ..._queryParams,
-        }
+        },
       });
     } else if (this.pageFrom === 'overview') {
       this.router.navigate(['/home/overview']);
-    }
-    else if (this.isToolDetail){
+    } else if (this.isToolDetail) {
       // 需要保留从工作流或智能体跳转过来全部的query
       this.router.navigate(['/home/agent-center/custom-plugin/detail'], {
         queryParams: {
           id: this.pluginInfo?.plugin_id,
           ..._queryParams,
-        }
+        },
       });
     } else {
       this.gotoPluginList(_queryParams);
     }
   }
-
 }

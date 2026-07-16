@@ -45,6 +45,7 @@ class ModelConfigStrategy(Enum):
 
     ENV = "env"
     IR = "ir"
+    OBS = "obs"
 
 
 class WorkflowRunner:
@@ -65,7 +66,13 @@ class WorkflowRunner:
             "API_BASE", "https://api.deepseek.com"
         )
         self._model_strategy = model_strategy
+        workflow_logger.info("WorkflowRunner: model_config_strategy=%s", model_strategy.value)
         self._ir_converter = IRConverter()
+
+        # 将策略感知的 ModelConfigProvider 工厂注入 IRConverter，
+        # 使 IRConverter 内部的 _register_agent_core_llm_model 使用正确的 Provider
+        from jiuwen.serve.controllers.execution.ir_converter import set_model_config_provider_factory
+        set_model_config_provider_factory(self._create_model_provider)
 
     def _create_model_provider(self) -> ModelConfigProvider:
         match self._model_strategy:
@@ -73,6 +80,9 @@ class WorkflowRunner:
                 return EnvVarModelConfigProvider()
             case ModelConfigStrategy.IR:
                 return IRModelConfigProvider()
+            case ModelConfigStrategy.OBS:
+                from agent_runtime.common.model_providers import OBSModelConfigProvider
+                return OBSModelConfigProvider()
 
     async def _is_session_interrupted(self, session_id: str) -> bool:
         """检查指定 session 是否存在已保存的 checkpoint（即处于中断状态）"""
@@ -96,7 +106,7 @@ class WorkflowRunner:
         session_id = req.conversation_id
         exec_id = execution_id or session_id
 
-        # 2. 使用缓存的 IR（如果存在）或从存储读取
+        # 2. 从存储读取 IR
         ir_path = req.ir_path
         try:
             ir_json = await async_ir_load(ir_path)

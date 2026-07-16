@@ -311,7 +311,9 @@
                     alt=""
                   />
                   <span
-                    class="knowledgeName max-w-[150px] leading-[1] text-overflow"
+                    class="knowledgeName max-w-[150px]"
+                    nz-tooltip
+                    [nzTooltipTitle]="knowledgeItem?.name || knowledgeItem?.knowledge_repo_name"
                   >
                     {{
                       knowledgeItem?.name || knowledgeItem?.knowledge_repo_name

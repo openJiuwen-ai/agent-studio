@@ -158,4 +158,11 @@ public class PluginApiController implements PluginApi {
         String pluginId, PluginAuthUpdateReq body) {
         return ResponseModel.success(pluginService.updatePluginAuthInfo(projectId, workspaceId, pluginId, body));
     }
+
+    @Override
+    public ResponseEntity<BaseResp> updatePluginVersionByVersionId(String projectId, String pluginId,
+        String versionId, String workspaceId) {
+        return ResponseModel.success(
+            pluginService.updatePluginVersionByVersionId(projectId, pluginId, versionId, workspaceId));
+    }
 }

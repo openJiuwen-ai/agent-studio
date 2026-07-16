@@ -1,5 +1,5 @@
-<div *nzModalTitle>{{ 'reference_plugins' | i18nextEager }}</div>
-<div class="h-[700px] overflow-auto">
+<div class="com-drawer-title">{{ 'reference_plugins' | i18nextEager }}</div>
+<div class="com-drawer-content">
   <nz-spin nzSimple [nzSpinning]="isLoading" class="loading-icon"></nz-spin>
   <div *ngIf="!isLoading">
     <nz-tabs class="add-mcp-tabs" [(nzSelectedIndex)]="tabSelectIndex" (nzSelectChange)="tabActiveChange($event)">
@@ -37,4 +37,4 @@
     </nz-table>
   </div>
 </div>
-<div *nzModalFooter></div>
+<div class="com-drawer-footer"></div>

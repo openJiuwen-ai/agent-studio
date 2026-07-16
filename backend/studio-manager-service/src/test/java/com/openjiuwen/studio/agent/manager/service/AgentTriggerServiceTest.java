@@ -22,6 +22,7 @@ import org.quartz.JobDataMap;
 import org.quartz.JobDetail;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobKey;
+import java.lang.ref.WeakReference;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -61,7 +62,7 @@ class AgentTriggerServiceTest {
         MgAsyncService mgAsyncService = org.mockito.Mockito.mock(MgAsyncService.class);
         ApplicationContext mockCtx = org.mockito.Mockito.mock(ApplicationContext.class);
         lenient().when(mockCtx.getBean(MgAsyncService.class)).thenReturn(mgAsyncService);
-        ReflectionTestUtils.setField(SpringBeanUtils.class, "applicationContext", mockCtx);
+        ReflectionTestUtils.setField(SpringBeanUtils.class, "applicationContextRef", new WeakReference<>(mockCtx));
     }
 
     @Test

@@ -1,16 +1,14 @@
 <div class="header-container">
   <div class="header-content">
     <div class="pb-3 pl-[34px] pt-2" *ngIf="showCrumb">
-      <span (click)="gotoPluginList()" class="cursor-pointer">{{
-        'plugin' | i18nextEager
-      }}</span>
-      <ng-container *ngIf="!isToolDetail;else ToolDetail">
+      <span (click)="gotoPluginList()" class="cursor-pointer">{{ 'plugin' | i18nextEager }}</span>
+      <ng-container *ngIf="!isToolDetail; else ToolDetail">
         <span class="ml-[5px] mr-[5px] text-[#808080]">/</span>
         <span class="font-semibold">{{ 'plugin_details' | i18nextEager }}</span>
       </ng-container>
       <ng-template #ToolDetail>
         <span class="ml-[5px] mr-[5px] text-[#808080]">/</span>
-        <span (click)="onPageBack()"  class="cursor-pointer">{{ 'plugin_details' | i18nextEager }}</span>
+        <span (click)="onPageBack()" class="cursor-pointer">{{ 'plugin_details' | i18nextEager }}</span>
         <span class="ml-[5px] mr-[5px] text-[#808080]">/</span>
         <span class="font-semibold">{{ 'tool_details' | i18nextEager }}</span>
       </ng-template>
@@ -39,51 +37,37 @@
               {{ 'debug_failed' | i18nextEager }}
             </nz-tag>
           </div>
-          <nz-tag
-            *ngIf="pluginInfo.last_version_id "
-            nzSize="small"
-            nzColor="#1476FF"
-            class="!rounded-[4px] py-[1px] pl-[2px] pr-[4px]"
-          >
-            <span nz-icon nzType="cloud-upload" style="margin-right: 4px"></span>
-            {{ 'published' | i18nextEager }}
-          </nz-tag>
-          <nz-tag
-            *ngIf="!pluginInfo.last_version_id"
-            nzSize="small"
-            class="!rounded-[4px] py-[1px] pl-[2px] pr-[4px]"
-          >
-            <span nz-icon nzType="cloud-upload" style="margin-right: 4px"></span>
-            {{ 'unpublished' | i18nextEager }}
-          </nz-tag>
+          @if (pluginInfo.last_version_id || previewVersionId) {
+            <nz-tag nzSize="small" nzColor="#1476FF" class="!rounded-[4px] py-[1px] pl-[2px] pr-[4px]">
+              <span nz-icon nzType="cloud-upload" style="margin-right: 4px"></span>
+              {{ 'published' | i18nextEager }}
+            </nz-tag>
+          } @else {
+            <nz-tag nzSize="small" class="!rounded-[4px] py-[1px] pl-[2px] pr-[4px]">
+              <span nz-icon nzType="cloud-upload" style="margin-right: 4px"></span>
+              {{ 'unpublished' | i18nextEager }}
+            </nz-tag>
+          }
         </div>
       </div>
       <div class="header-right">
         <div class="px-4 text-[#dbdbdb]">|</div>
-        <div class="icon-border" (click)="!hasPermission() && getReference()" nz-tooltip [nzTooltipTitle]="'pluginheadercomponent_1139'| i18nextEager">
-          <meta-inline-svg
-            src="assets/agent-center/icons/public_link.svg"
-            [style.color]="'#000'"
-            [style.fontSize]="'16px'"
-            [isInline]="false"
-          />
+        <div class="icon-border" (click)="!hasPermission() && getReference()" nz-tooltip [nzTooltipTitle]="'pluginheadercomponent_1139' | i18nextEager">
+          <meta-inline-svg src="assets/agent-center/icons/public_link.svg" [style.color]="'#000'" [style.fontSize]="'16px'" [isInline]="false" />
         </div>
-        <div class="icon-border" (click)="getHistory()"  nz-tooltip [nzTooltipTitle]="'release_history' | i18nextEager">
+        <div class="icon-border" (click)="getHistory()" nz-tooltip [nzTooltipTitle]="'release_history' | i18nextEager">
           <img alt="" [src]="historyIcon" />
         </div>
         <button
           *ngIf="!isPluginMarket"
           type="button"
           (click)="publishPlugin()"
-          nz-tooltip [nzTooltipTitle]="getPublishTip()"
+          nz-tooltip
+          [nzTooltipTitle]="getPublishTip()"
           [disabled]="!subscribeBtnStatus"
           nz-button
         >
-          {{
-            historyVersionList.length
-              ? ('update_release' | i18next)
-              : ('publish' | i18next)
-          }}
+          {{ historyVersionList.length ? ('update_release' | i18next) : ('publish' | i18next) }}
         </button>
       </div>
     </div>

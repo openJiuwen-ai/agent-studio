@@ -2,28 +2,51 @@
   <img [src]="icon" alt="icon" />
   <div class="content-wrapper">
     <div>
-      <div class="flex" style="align-items: center;">
-        <span class="inline-block" style="max-width: 150px;margin-right: 6px;color: #191919;" tiOverflow>{{ knowledge?.name }}</span>
-        <nz-icon nzType="message" nzTheme="outline" *ngIf="knowledge?.status === 'CLOSE'" class="prompt-icon text-[#f23030]"
-                 [nzTooltipTitle]="tipContent" nzTooltipPlacement="top" nz-button nz-tooltip
-        />
-        <nz-icon
-          *ngIf="knowledge?.status === 'CLOSE'"
-          nzType="info-circle"
-          nzTheme="outline"
-          class="prompt-icon text-[#f23030]"
+      <div class="flex" style="align-items: center">
+        <span
+          class="inline-block"
+          style="
+            max-width: 300px;
+            margin-right: 6px;
+            color: #191919;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+          "
           nz-tooltip
-          [nzTooltipTitle]="tipContent"
-        />
+          [nzTooltipTitle]="knowledge?.name"
+          >{{ knowledge?.name }}</span
+        >
+        <nz-icon nzType="message" nzTheme="outline" *ngIf="knowledge?.status === 'CLOSE'" class="prompt-icon text-[#f23030]" nz-button />
+        <nz-icon *ngIf="knowledge?.status === 'CLOSE'" nzType="info-circle" nzTheme="outline" class="prompt-icon text-[#f23030]" />
       </div>
     </div>
-    <div>{{ knowledge?.description }}</div>
+    <div
+      style="
+        max-width: 300px;
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+      "
+      nz-tooltip
+      [nzTooltipTitle]="knowledge?.description"
+    >
+      {{ knowledge?.description }}
+    </div>
   </div>
-
 
   <nz-icon
     class="cursor-pointer"
-    nzType="minus-circle" nzTheme="outline"
+    nzType="minus-circle"
+    nzTheme="outline"
     [class.disabled]="kbAbilitiesService.isResourceDisabled"
     (click)="handleDelete($event)"
   />

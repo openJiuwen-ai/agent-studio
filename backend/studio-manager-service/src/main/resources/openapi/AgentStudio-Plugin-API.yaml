@@ -730,6 +730,73 @@ paths:
           schema:
             $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
       x-order: 5
+    post:
+      tags:
+        - Plugin
+      summary: 根据工具id和版本id进行版本还原
+      description: 根据工具id和版本id进行版本还原
+      operationId: UpdatePluginVersionByVersionId
+      x-api-type: open-api
+      x-support-sdk: 'N'
+      x-is-registered: 'N'
+      consumes:
+        - application/json;charset=utf-8
+      produces:
+        - application/json
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          type: string
+          maxLength: 64
+          description: 租户项目id。
+          pattern: ^[a-zA-Z0-9_-]+$
+        - name: plugin_id
+          in: path
+          required: true
+          type: string
+          maxLength: 64
+          description: 插件ID。
+        - name: version_id
+          in: path
+          required: true
+          type: string
+          description: 插件版本id。
+          maxLength: 64
+        - name: workspace_id
+          in: query
+          required: true
+          type: string
+          description: 项目空间id
+          pattern: ^[a-zA-Z0-9_()\-]+$
+          maxLength: 64
+          minLength: 1
+      responses:
+        '200':
+          description: 插件版本响应体
+          schema:
+            $ref: '#/definitions/BaseResp'
+        '400':
+          description: Bad Request 请求错误
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+        '401':
+          description: Unauthorized 鉴权失败
+          schema:
+            type: string
+        '403':
+          description: Forbidden 没有操作权限
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+        '404':
+          description: Not Found 找不到资源
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+        '500':
+          description: Internal Server Error 服务内部错误
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+      x-order: 1
   /v1/{project_id}/agent-manager/plugins/openapi/{plugin_id}:
     post:
       tags:

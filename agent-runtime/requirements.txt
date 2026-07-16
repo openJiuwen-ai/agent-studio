@@ -17,7 +17,7 @@ spiffworkflow==2.0.1
 pydantic-core==2.46.3
 elasticsearch==8.19.3
 jieba==0.42.1
-openjiuwen==0.1.15.post2
+openjiuwen==0.1.16
 agent-sandbox==0.0.30
 opensearch-py==2.8.0
 sqlalchemy==2.0.44

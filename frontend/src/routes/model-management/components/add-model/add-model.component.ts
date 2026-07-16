@@ -134,6 +134,14 @@ export class AddModelComponent implements OnInit {
   validateServiceUrlTip = ``;
   logoIsError = false;
 
+  urlSuffixMap: Record<string, string> = {
+    'LLM': '/v1/chat/completions',
+    'IMAGE-TO-TEXT': '/v1/chat/completions',
+    'Text-Embedding': '/v1/embeddings',
+    'RERANK': '/v1/rerank',
+  };
+  apiUrlPlaceholder = '请完整填写路径，例如：http://{ip:port}/v1/chat/completions';
+
   constructor(
     private i18n: I18NextEagerPipe,
     private fb: FormBuilder,
@@ -335,6 +343,8 @@ export class AddModelComponent implements OnInit {
   }
 
   changeModelType(type) {
+    const suffix = this.urlSuffixMap[type] || '/v1/chat/completions';
+    this.apiUrlPlaceholder = `请完整填写路径，例如：http://{ip:port}${suffix}`;
     this.apiProtocolOptions = this.modelProtocolMap[type] || [];
     if (this.apiProtocolOptions.length) {
       this.apiProtocolModel = this.apiProtocolOptions[0].value;

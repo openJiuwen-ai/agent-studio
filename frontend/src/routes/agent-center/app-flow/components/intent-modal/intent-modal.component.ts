@@ -53,6 +53,8 @@ import { SaveTmplLibraryModalComponent } from '@routes/prompt/prompt-candidate-t
 import moment from 'moment';
 import { CandidateTemplateListService } from '@services/candidate-template-list.service';
 import { MessageComponent } from '@shared/services/cfdata.service';
+import { NzDrawerService } from 'ng-zorro-antd/drawer';
+
 @Component({
   selector: 'meta-intent-modal',
   templateUrl: './intent-modal.component.html',
@@ -277,7 +279,8 @@ export class IntentModalComponent extends ModalBaseComponent implements OnInit, 
     private helpCenterService: HelpCenterService,
     protected commonService: CommonService,
     private candidateTemplateListServe: CandidateTemplateListService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private drawerService: NzDrawerService
   ) {
     super(nodeServ, appFlowServ);
   }
@@ -653,21 +656,29 @@ export class IntentModalComponent extends ModalBaseComponent implements OnInit, 
     if (this.kbAbilitiesService.isResourceDisabled) {
       return;
     }
-    const thisNzModal: any = this.nzModal.create({
-      nzTitle: '',
+    const drawerRef = this.drawerService.create({
+      nzPlacement: 'right',
+      nzWidth: '700px',
+      nzClosable: true,
+      nzMaskClosable: true,
+      nzKeyboard: true,
       nzContent: KnowledgeBaseSelectorComponent,
-      nzClassName: 'add-kb-modal',
-      nzWidth: 600,
-      nzOnOk: () => {
-        this.kbs = (thisNzModal.componentInstance as any).selectedKbs ?? [];
+      nzData: {
+        existedKbs: this.kbs.map(kb => this.kbAbilitiesService.getKbId(kb)),
       },
     });
 
-    const instance = thisNzModal.getContentComponent();
-    instance.existedKbs = this.kbs.map(kb => this.kbAbilitiesService.getKbId(kb));
-    instance.createKB.subscribe(() => {
-      thisNzModal.close();
-      this.kbCreation.createKb();
+    drawerRef.afterOpen.subscribe(() => {
+      const instance = drawerRef.getContentComponent();
+      instance.createKB.subscribe(() => {
+        drawerRef.close();
+        this.kbCreation.createKb();
+      });
+      instance.addKB.subscribe(() => {
+        this.kbs = drawerRef.getContentComponent().selectedKbs ?? [];
+        this.cdr.detectChanges();
+        this.onSave();
+      });
     });
   }
 

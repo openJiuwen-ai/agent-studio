@@ -223,4 +223,16 @@ public interface IPluginService {
      */
     PluginAuthUpdateRsp updatePluginAuthInfo(String projectId, String workspaceId, String pluginId,
         PluginAuthUpdateReq body);
+
+    /**
+     * 根据工具id和版本id进行版本还原
+     *
+     * @param projectId projectId
+     * @param pluginId pluginId
+     * @param versionId versionId
+     * @param workspaceId workspaceId
+     * @return BaseResp
+     */
+    BaseResp updatePluginVersionByVersionId(String projectId, String pluginId, String versionId,
+        String workspaceId);
 }

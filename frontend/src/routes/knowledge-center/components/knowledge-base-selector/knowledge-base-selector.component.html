@@ -1,7 +1,7 @@
-<div class="drawer-header">
+<div class="com-drawer-title">
   {{ 'add_knowledge' | i18nextEager }}
 </div>
-<div class="drawer-body" style="padding-right: 24px;margin-top: 16px;">
+<div class="com-drawer-content">
   <div id="kb-selector">
 
     <nz-alert nzType="info" class="kb-selector-limit-content" [nzShowIcon]="false" [nzMessage]="alertMsg">
@@ -90,7 +90,7 @@
     </div>
   </div>
 </div>
-<div class="flex justify-end gap-[8px]">
+<div class="com-drawer-footer">
   <button nz-button id="cancel" (click)="dismiss()">
     {{ 'cancel' | i18nextEager }}
   </button>

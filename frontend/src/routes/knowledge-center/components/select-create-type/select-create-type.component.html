@@ -1,7 +1,4 @@
 <ng-template #selectCreateType let-context="context">
-  <div class="ant-modal-header">
-    <div class="ant-modal-title">{{ 'select_create_type'|i18nextEager }}</div>
-  </div>
   <div class="ant-modal-body" id="select-create-type">
     <nz-alert
       *ngIf="accessDataTotal === 0"
@@ -33,10 +30,16 @@
       </label>
     </nz-radio-group>
   </div>
-  <div class="ant-modal-footer">
-    <button (click)="onCancel()" type="button" nz-button>{{ 'cancel' | i18nextEager }}</button>
-    <button (click)="onOk()" type="button" nz-button nzType="primary">{{ 'ok' | i18nextEager }}</button>
-  </div>
 </ng-template>
+
+<ng-template #selectCreateTitle>
+    <div class="ant-modal-title">{{ 'select_create_type'|i18nextEager }}</div>
+</ng-template>
+
+<ng-template #selectCreateFooter>
+  <button (click)="onCancel()" type="button" nz-button>{{ 'cancel' | i18nextEager }}</button>
+  <button (click)="onOk()" type="button" nz-button nzType="primary">{{ 'ok' | i18nextEager }}</button>
+</ng-template>
+
 <knowledge-base-exceed-modal #exceedModal></knowledge-base-exceed-modal>
 

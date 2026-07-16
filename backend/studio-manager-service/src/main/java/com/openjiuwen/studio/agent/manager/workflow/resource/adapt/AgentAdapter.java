@@ -156,6 +156,7 @@ public class AgentAdapter extends ResourceAdapter {
             result.setResourceType(exportResourceUnit.getResourceType());
             result.setResourceVersion(exportResourceUnit.getResourceVersion());
             result.setLevel2Resources(exportResourceUnit.getLevel2Resources());
+            result.setResourceLevel(exportResourceUnit.getResourceLevel());
             result.setStatus(ImportExportStatusEnum.SUCCESS);
             if (!validAgentIds.contains(exportResourceUnit.getResourceId())) {
                 result.setReason(

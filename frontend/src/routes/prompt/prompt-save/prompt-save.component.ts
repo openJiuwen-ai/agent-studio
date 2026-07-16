@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, Output, TemplateRef, Inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, inject, Inject } from '@angular/core';
 import { MODULES } from '@shared/modules';
 import { FormBuilder, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { NzModalRef, NzModalService } from 'ng-zorro-antd/modal';
@@ -18,7 +18,7 @@ import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzSelectModule } from 'ng-zorro-antd/select';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzFormModule } from 'ng-zorro-antd/form';
-import { NZ_DRAWER_DATA, NzDrawerModule} from 'ng-zorro-antd/drawer';
+import { NZ_DRAWER_DATA, NzDrawerModule, NzDrawerRef } from 'ng-zorro-antd/drawer';
 @Component({
   selector: 'meta-prompt-save',
   standalone: true,
@@ -44,6 +44,7 @@ import { NZ_DRAWER_DATA, NzDrawerModule} from 'ng-zorro-antd/drawer';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PromptSaveComponent {
+  readonly drawerRef = inject(NzDrawerRef);
   @Input() isOptimize = false;
   @Input() title?: string = this.i18n.transform('save_prompt');
   @Input() promptSaveInitInfo?: {
@@ -136,7 +137,9 @@ export class PromptSaveComponent {
     this.cdr.markForCheck();
   }
 
-  dismiss() {}
+  dismiss() {
+    this.drawerRef.close();
+  }
 
   public listTags() {
     const params = {

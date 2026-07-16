@@ -54,6 +54,8 @@ export class PublishVersionModalComponent {
   versionName = '';
 
   public publishVersionForm: FormGroup;
+  
+  @Input() title = this.i18n.transform('submit_version');
 
   constructor(
     fb: FormBuilder,

@@ -32,7 +32,7 @@ public interface SessionRepository extends JpaRepository<Session, Long> {
     int expireSessions(@Param("currentTime") LocalDateTime currentTime);
 
     @Modifying
-    @Query("DELETE FROM Session s WHERE s.loginTime < :retentionTime")
+    @Query("DELETE FROM Session WHERE loginTime < :retentionTime")
     int deleteOldSessions(@Param("retentionTime") LocalDateTime retentionTime);
 
 }

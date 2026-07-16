@@ -803,7 +803,7 @@ export class AiAssistCreateWorkflowComponent
   public publishWorkflow() {
     const modalRef = this.tiModal.create({
       nzContent: PublishVersionModalComponent,
-      nzWidth: '520px',
+      nzWidth: 600,
       nzMaskClosable: false,
       nzFooter: null,
     });

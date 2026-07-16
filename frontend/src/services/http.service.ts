@@ -18,6 +18,8 @@ import { CommonUtils } from "../utils/common.util";
 interface IHttpConfig extends HttpConfig {
   /** 是否覆写 url */
   overrideUrl?: boolean;
+  /** 跳过 handleError 里的全局错误 toast，由调用方自行 catch 处理（避免错误提示污染其他页面） */
+  cancelGlobalError?: boolean;
 }
 
 enum mapKeys {
@@ -84,7 +86,7 @@ export class HttpService {
     return this.setPermission$.asObservable();
   }
 
-  private handleError(error: HttpErrorResponse): Observable<any> {
+  private handleError(error: HttpErrorResponse, httpConfig?: IHttpConfig): Observable<any> {
     // 处理接口application/json返回text
     if (error.status === 200 && error.error?.text) {
       return new Observable(observer => {
@@ -132,7 +134,7 @@ export class HttpService {
     }
 
     let cancelInterfaceErrorFlag = error.url?.indexOf('cancelInterfaceErrorTip') > -1;
-    if (blockedErrorUrls.some(i => error.url?.includes(i)) || cancelInterfaceErrorFlag) {
+    if (blockedErrorUrls.some(i => error.url?.includes(i)) || cancelInterfaceErrorFlag || httpConfig?.cancelGlobalError) {
       return throwError(() => error);
     }
     const errorInstance: ICommonError = error.error as ICommonError;
@@ -250,7 +252,7 @@ export class HttpService {
     }
     const headers = this.buildHeaders();
     return this.httpClient.get<T>(config.url as string, {params, headers}).pipe(
-      catchError((err) => this.handleError(err))
+      catchError((err) => this.handleError(err, httpConfig))
     ) as Observable<T>;
   }
 
@@ -265,7 +267,7 @@ export class HttpService {
     const headers = this.buildHeaders();
     const body = config.body ?? config.params;
     return this.httpClient.post<T>(config.url as string, body, {params: queryParams, headers}).pipe(
-      catchError((err) => this.handleError(err))
+      catchError((err) => this.handleError(err, httpConfig))
     ) as Observable<T>;
   }
 
@@ -293,7 +295,7 @@ export class HttpService {
     const headers = this.buildHeaders();
     const body = config.body ?? config.params;
     return this.httpClient.put<T>(config.url as string, body, {params: queryParams, headers}).pipe(
-      catchError((err) => this.handleError(err))
+      catchError((err) => this.handleError(err, httpConfig))
     ) as Observable<T>;
   }
 
@@ -308,7 +310,7 @@ export class HttpService {
     const headers = this.buildHeaders();
     const body = config.body ?? config.params;
     return this.httpClient.delete<T>(config.url as string, {params, headers, body}).pipe(
-      catchError((err) => this.handleError(err))
+      catchError((err) => this.handleError(err, httpConfig))
     ) as Observable<T>;
   }
 
@@ -323,7 +325,7 @@ export class HttpService {
     const headers = this.buildHeaders();
     const body = config.body ?? config.params;
     return this.httpClient.patch<T>(config.url as string, body, {params: queryParams, headers}).pipe(
-      catchError((err) => this.handleError(err))
+      catchError((err) => this.handleError(err, httpConfig))
     ) as Observable<T>;
   }
 

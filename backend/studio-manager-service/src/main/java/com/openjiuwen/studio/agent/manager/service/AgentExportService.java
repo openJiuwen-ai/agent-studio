@@ -129,6 +129,8 @@ public class AgentExportService {
         }
         skuManageService.validateAttrEnable(CommonConstant.SKU_ATTR_CODE.EXPORT_AND_IMPORT);
         ResourceTypeEnum resourceTypeEnum = ResourceTypeEnum.fromValue(body.getResourceType());
+        // 规范化 resourceType 为枚举标准值（小写），避免用户传 "Agent" 等大写导致 buildSubResource 大小写敏感匹配失败
+        body.setResourceType(resourceTypeEnum.toString());
         switch (resourceTypeEnum) {
             case AGENT, CONTROLLER:
                 exportRsp = exportAgents(projectId, workspaceId, body);
@@ -284,6 +286,7 @@ public class AgentExportService {
             }
         }
         currentResource.setLevel2Resources(new ArrayList<>(l2ResourceIds));
+        currentResource.setResourceLevel(1);
         return currentResource;
     }
 
@@ -300,9 +303,9 @@ public class AgentExportService {
             .values()
             .stream()
             .toList();
-        // 分组
+        // 分组：主资源 resourceLevel=1（对齐旧版 lumina，不依赖 level2Resources）
         List<ExportResult> level1Results = exportResults.stream()
-            .filter(p -> Strings.CS.equals(p.getResourceVersion(), Constants.LATEST_PUBLISH_VERSION))
+            .filter(p -> p.getResourceLevel() != null && p.getResourceLevel() == 1)
             .toList();
         for (ExportResult rootResult : level1Results) {
             if (CollectionUtils.isEmpty(rootResult.getLevel2Resources())) {
@@ -326,8 +329,23 @@ public class AgentExportService {
             .filter(CollectionUtils::isNotEmpty)
             .flatMap(List::stream)
             .collect(Collectors.toList());
-        exportInfos = new ArrayList<>(
-            exportInfos.stream().collect(Collectors.toMap(ExportInfo::getResourceId, p -> p, (p1, p2) -> p1)).values());
+        exportInfos = new ArrayList<>(exportInfos.stream()
+            .collect(Collectors.toMap(
+                p -> p.getResourceId() + "|" + p.getResourceLevel() + "|"
+                    + (p.getReleaseVersion() != null ? p.getReleaseVersion().getVersionId() : ""),
+                p -> p,
+                (p1, p2) -> {
+                    List<String> mergedParents = new ArrayList<>();
+                    if (CollectionUtils.isNotEmpty(p1.getParents())) {
+                        mergedParents.addAll(p1.getParents());
+                    }
+                    if (CollectionUtils.isNotEmpty(p2.getParents())) {
+                        mergedParents.addAll(p2.getParents());
+                    }
+                    p1.setParents(mergedParents.stream().distinct().toList());
+                    return p1;
+                }))
+            .values());
         for (ExportInfo exportInfo : exportInfos) {
             tempJson.append(jacksonObjectMapper.writeValueAsString(exportInfo)).append("\n");
         }

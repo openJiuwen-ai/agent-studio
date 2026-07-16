@@ -162,6 +162,12 @@ services:
       front_page_block_nodes: ${FRONT_PAGE_BLOCK_NODES:-Sql,DataQuery,Agent}
       share_knowledge_enabled: ${SHARE_KNOWLEDGE_ENABLED:-true}
       workflow_async_enable: ${WORKFLOW_ASYNC_ENABLED:-true}
+      # 知识库模式（可选，默认 LakeSearch 行为不变）：LakeSearch/CUSTOM
+      knowledge_source: ${KNOWLEDGE_SOURCE:-LakeSearch}
+      # LakeSearch 地址（可选，CUSTOM 模式必填，默认空）
+      knowledge_lakeSearch_endpoint: ${KNOWLEDGE_LAKESEARCH_ENDPOINT:-}
+      # LakeSearch 鉴权方式（可选，默认 basic；mock 无鉴权用 none）
+      knowledge_lakeSearch_auth_mode: ${KNOWLEDGE_LAKESEARCH_AUTH_MODE:-basic}
     depends_on:
       mysql:
         condition: service_healthy

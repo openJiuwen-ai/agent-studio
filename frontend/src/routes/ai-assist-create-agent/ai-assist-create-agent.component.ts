@@ -658,7 +658,7 @@ export class AiAssistCreateAgentComponent
   public publishAgent() {
     const modalRef = this.tiModal.create({
       nzContent: PublishVersionModalComponent,
-      nzWidth: '520px',
+      nzWidth: 600,
       nzMaskClosable: false,
       nzFooter: null,
     });

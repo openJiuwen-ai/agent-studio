@@ -1505,23 +1505,32 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         response.setTotal(knowledgeRepoResp.getTotal());
         response.setItems(Lists.newArrayList());
         for (KnowledgeRepoInfo knowledgeRepoInfo : knowledgeRepoResp.getDataList()) {
-            KnowledgeBaseListItem knowledgeBase = new KnowledgeBaseListItem();
-            knowledgeBase.setName(knowledgeRepoInfo.getName());
-            KnowledgeBaseListItem.StatusEnum statusEnum = KnowledgeBaseListItem.StatusEnum.fromValue(
-                knowledgeRepoInfo.getStatus());
-            knowledgeBase.setStatus(Objects.requireNonNullElse(statusEnum, KnowledgeBaseListItem.StatusEnum.OPEN));
-            knowledgeBase.setRepoType(KnowledgeBaseListItem.RepoTypeEnum.EXCLUSIVE);
-            knowledgeBase.setKnowledgeBaseId(knowledgeRepoInfo.getId());
-            knowledgeBase.setDescription(knowledgeRepoInfo.getDetail());
-            knowledgeBase.setIcon(defaultIcon);
-            knowledgeBase.setLastUpdateUserId(RequestContextUtils.getRequestUserId());
-            knowledgeBase.setLastUpdateUserName(RequestContextUtils.getRequestUserName());
-            knowledgeBase.setCreateTime(convertTimeForCustom(knowledgeRepoInfo.getCreateTime()));
-            knowledgeBase.setUpdateTime(convertTimeForCustom(knowledgeRepoInfo.getUpdateTime()));
-            knowledgeBase.setType(KnowledgeBaseListItem.TypeEnum.INTERNAL);
-            response.getItems().add(knowledgeBase);
+            response.getItems().add(buildCustomKnowledgeBaseItem(knowledgeRepoInfo));
         }
         return response;
+    }
+
+    /**
+     * CUSTOM 场景下，将 LakeSearch 返回的 KnowledgeRepoInfo 构建为完整的 KnowledgeBaseListItem。
+     * 列表查询与按 ids 批量查询共用，保证两条路径返回的字段一致（含 description/icon 等），
+     * 避免前端按 ids 回查详情时拿到的精简对象覆盖掉已有的描述等字段。
+     */
+    private KnowledgeBaseListItem buildCustomKnowledgeBaseItem(KnowledgeRepoInfo knowledgeRepoInfo) {
+        KnowledgeBaseListItem knowledgeBase = new KnowledgeBaseListItem();
+        knowledgeBase.setName(knowledgeRepoInfo.getName());
+        KnowledgeBaseListItem.StatusEnum statusEnum = KnowledgeBaseListItem.StatusEnum.fromValue(
+            knowledgeRepoInfo.getStatus());
+        knowledgeBase.setStatus(Objects.requireNonNullElse(statusEnum, KnowledgeBaseListItem.StatusEnum.OPEN));
+        knowledgeBase.setRepoType(KnowledgeBaseListItem.RepoTypeEnum.EXCLUSIVE);
+        knowledgeBase.setKnowledgeBaseId(knowledgeRepoInfo.getId());
+        knowledgeBase.setDescription(knowledgeRepoInfo.getDetail());
+        knowledgeBase.setIcon(defaultIcon);
+        knowledgeBase.setLastUpdateUserId(RequestContextUtils.getRequestUserId());
+        knowledgeBase.setLastUpdateUserName(RequestContextUtils.getRequestUserName());
+        knowledgeBase.setCreateTime(convertTimeForCustom(knowledgeRepoInfo.getCreateTime()));
+        knowledgeBase.setUpdateTime(convertTimeForCustom(knowledgeRepoInfo.getUpdateTime()));
+        knowledgeBase.setType(KnowledgeBaseListItem.TypeEnum.INTERNAL);
+        return knowledgeBase;
     }
 
     /**
@@ -1563,11 +1572,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         response.setTotal((long) knowledgeBaseToReturn.size());
         response.setItems(knowledgeBaseToReturn.values()
             .stream()
-            .map(item -> new KnowledgeBaseListItem().setKnowledgeBaseId(item.getId())
-                .setName(item.getName())
-                .setType(KnowledgeBaseListItem.TypeEnum.INTERNAL)
-                .setStatus(Objects.requireNonNullElse(KnowledgeBaseListItem.StatusEnum.fromValue(item.getStatus()),
-                    KnowledgeBaseListItem.StatusEnum.OPEN)))
+            .map(item -> buildCustomKnowledgeBaseItem(item))
             .toList());
         return response;
     }

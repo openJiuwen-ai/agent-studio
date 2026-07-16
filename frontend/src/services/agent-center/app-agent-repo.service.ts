@@ -487,6 +487,16 @@ export class AppAgentRepoService {
     });
   }
 
+  /** 插件详情，还原一个版本 */
+  public restorePluginVersion(
+    tool_id: string,
+    version_id: string,
+  ): Promise<any> {
+    return this.http.postAsync({
+      url: `${this.ctxServ.baseUrl}/agent-manager/plugins/${tool_id}/versions/${version_id}`,
+    });
+  }
+
   /** 获取长期记忆列表 */
   public getLongMemoryList(
     agent_id: string,

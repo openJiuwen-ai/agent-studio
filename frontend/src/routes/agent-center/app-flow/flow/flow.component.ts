@@ -4437,7 +4437,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   handelPublish() {
     const modalRef = this.nzModal.create({
       nzContent: PublishVersionModalComponent,
-      nzWidth: '520px',
+      nzWidth: 600,
       nzMaskClosable: false,
       nzFooter: null,
     });

@@ -828,4 +828,45 @@ class PluginServiceTest {
 
         assertEquals("******", pluginDTO.getToolRequestInfo().getToolsInfoList().get(0).getUrl());
     }
+
+    @Test
+    void testUpdatePluginVersionByVersionId_Success() {
+        String projectId = "project-123";
+        String pluginId = "plugin-456";
+        String versionId = "version-789";
+        String workspaceId = "workspace-001";
+
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId(pluginId);
+        pluginEntity.setVersionId(versionId);
+        pluginEntity.setPluginChineseName("Test Plugin");
+
+        PluginDTO pluginDTO = new PluginDTO();
+        pluginDTO.setPluginId(pluginId);
+        pluginDTO.setVersionId(versionId);
+        pluginDTO.setPluginChineseName("Test Plugin");
+
+        when(pluginBase.getPluginEntityByVersion(pluginId, versionId)).thenReturn(pluginEntity);
+        when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
+        when(pluginMapper.updateByPrimaryKeySelective(pluginEntity)).thenReturn(1);
+
+        BaseResp result = pluginService.updatePluginVersionByVersionId(projectId, pluginId, versionId, workspaceId);
+
+        assertEquals(200, result.getCode());
+        assertEquals("success", result.getMessage());
+    }
+
+    @Test
+    void testUpdatePluginVersionByVersionId_PluginNotFound() {
+        String projectId = "project-123";
+        String pluginId = "plugin-456";
+        String versionId = "version-789";
+        String workspaceId = "workspace-001";
+
+        when(pluginBase.getPluginEntityByVersion(pluginId, versionId)).thenReturn(null);
+
+        BaseResp result = pluginService.updatePluginVersionByVersionId(projectId, pluginId, versionId, workspaceId);
+
+        assertEquals(200, result.getCode());
+    }
 }

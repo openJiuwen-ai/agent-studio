@@ -642,19 +642,18 @@ export class AgentBotPageComponent implements OnInit, OnDestroy {
   }
 
   public publishAgent() {
-    const drawerRef = this.nzDrawerService.create({
+    const drawerRef = this.nzModalService.create({
       nzTitle: this.i18n.transform(this.historyVersionList.length > 0 ? "update_version" : "submit_version"),
       nzContent: PublishVersionModalComponent,
-      nzPlacement: "right",
-      nzWidth: 520,
-      nzClosable: true,
+      nzWidth: 600,
       nzMaskClosable: false,
-      nzMask: true,
-      nzContentParams: {
-        app_id: this.agentId,
-        app_type: "agent",
-        isFromDevelopSpace: this.isFromDevelopSpace
-      }
+      nzFooter: null,
+    });
+
+    Object.assign(drawerRef.componentInstance, {
+      app_id: this.agentId,
+      app_type: "agent",
+      isFromDevelopSpace: this.isFromDevelopSpace,
     });
 
     drawerRef.afterOpen.subscribe(() => {

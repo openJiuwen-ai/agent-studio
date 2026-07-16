@@ -74,6 +74,7 @@
   "upload": "上传",
   "all_retry": "全部重试",
   "retry": "重试",
+  "kb_load_error_tip": "知识库服务暂不可用，请检查知识库服务配置",
   "qa": "QA生成",
   "download": "下载",
   "all_retry_prompt_content": "点击重试后，所有的知识文档将按照最新的模型设置、解析设置、拆分设置重新对文档进行解析拆分",

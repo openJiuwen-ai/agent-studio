@@ -1,4 +1,4 @@
-import { Component, Input, inject } from '@angular/core';
+import { Component, Input, inject, Output, EventEmitter, Inject, ChangeDetectorRef } from '@angular/core';
 import { MODULES } from '@shared/modules';
 import { I18nNamespace } from '@i18n';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
@@ -10,10 +10,11 @@ import { NoDataIconComponent } from '@shared/components//no-data-icon/no-data-ic
 import { PipesModule } from '../../../../../pipes/pipes.module';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzTypographyModule } from 'ng-zorro-antd/typography';
-import { NzModalRef } from 'ng-zorro-antd/modal';
 import { NzSpaceModule } from 'ng-zorro-antd/space';
 import { NzSpinModule } from 'ng-zorro-antd/spin';
-
+import { NzModalService } from 'ng-zorro-antd/modal';
+import { NZ_DRAWER_DATA, NzDrawerRef } from 'ng-zorro-antd/drawer';
+import { NzMessageService } from 'ng-zorro-antd/message';
 @Component({
   selector: 'meta-plugin-version',
   templateUrl: './plugin-version.component.html',
@@ -31,7 +32,7 @@ import { NzSpinModule } from 'ng-zorro-antd/spin';
 export class PluginVersionComponent {
   @Input() tool_id = '';
 
-  readonly modalRef = inject(NzModalRef);
+  readonly drawerRef = inject(NzDrawerRef);
 
   isLoading = false;
 
@@ -44,9 +45,14 @@ export class PluginVersionComponent {
     private deleteRefsServe: DeleteRefsService,
     private agentRepoServe: AppAgentRepoService,
     private agentDataServe: AgentDataService,
+    private modal: NzModalService,
+    private message: NzMessageService,
+    @Inject(NZ_DRAWER_DATA) public nzData: any,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
+    this.tool_id = this.nzData.tool_id;
     this.getPluginVersionList();
   }
 
@@ -54,11 +60,12 @@ export class PluginVersionComponent {
     this.isLoading = true;
     this.agentRepoServe
       .getPluginVersionList(this.tool_id)
-      .then((res) => {
+      .then(res => {
         this.publishedCards = res.version_list;
       })
       .finally(() => {
         this.isLoading = false;
+        this.cdr.markForCheck();
       });
   }
 
@@ -67,7 +74,7 @@ export class PluginVersionComponent {
 
     const query = {
       version: version_id,
-      resource_type :'tool'
+      resource_type: 'tool',
     };
 
     this.deleteRefsServe.onDeleteRefs(
@@ -78,15 +85,13 @@ export class PluginVersionComponent {
       {
         title: this.i18n.transform('del_workflow_version'),
         alertText: this.i18n.transform('del_plugin_version_tips'),
-        secondConfirmLabel: `${this.i18n.transform(
-          'del_sure_tips',
-        )} <strong>DELETE</strong>`,
+        secondConfirmLabel: `${this.i18n.transform('del_sure_tips')} <strong>DELETE</strong>`,
         tiMsgTitle: this.i18n.transform('del_plugin_version_title'),
         tiMsgContent: this.i18n.transform('del_plugin_version_msg_content'),
       },
       () => {
         this.deleteVersion(version_id);
-      },
+      }
     );
   }
 
@@ -95,17 +100,13 @@ export class PluginVersionComponent {
       .deletePluginVersion(this.tool_id, version_id)
       .then(() => {
         this.isLoading = false;
-        this.publishedCards = this.publishedCards.filter(
-          (item) => item.version_id !== version_id,
-        );
+        this.publishedCards = this.publishedCards.filter(item => item.version_id !== version_id);
         this.getPluginVersionList();
-        MessageComponent.showSuccess(
-          this.i18n.transform('version_deleted_successfully'),
-          3000,
-        );
+        MessageComponent.showSuccess(this.i18n.transform('version_deleted_successfully'), 3000);
       })
       .finally(() => {
         this.isLoading = false;
+        this.cdr.markForCheck();
       });
   }
 
@@ -119,6 +120,26 @@ export class PluginVersionComponent {
   exitPreview() {
     this.selectedTab = -1;
     this.agentDataServe.setPreviewVersion(undefined);
-    this.modalRef.destroy();
+    if (this.drawerRef?.close) {
+      this.drawerRef?.close();
+    }
+  }
+
+  restoreVersion(event, card) {
+    this.modal.create({
+      nzTitle: '确定还原该版本吗?',
+      nzContent: '还原后，将覆盖最新编写的内容，使用原本版本配置的内容',
+      nzMaskClosable: false,
+      nzClosable: false,
+      nzOnOk: () => {
+        this.agentRepoServe.restorePluginVersion(this.tool_id, card.version_id).then(res => {
+          if (this.nzData.update) {
+            this.message.create(`success`, `版本还原成功`);
+            this.nzData.update();
+            this.drawerRef?.close();
+          }
+        });
+      },
+    });
   }
 }
