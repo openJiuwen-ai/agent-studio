@@ -45,6 +45,7 @@ import com.openjiuwen.studio.agent.common.utils.JsonUtils;
 import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
+import com.openjiuwen.studio.agent.common.utils.ResponseModel;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.BatchDeleteUserVariableMemoryRequestBody;
@@ -78,6 +79,7 @@ import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.RouterStrategyMapper;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 
+import com.openjiuwen.studio.agent.manager.service.plugin.IPlugin;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
 import okhttp3.Request;
@@ -86,6 +88,7 @@ import okhttp3.sse.EventSource;
 import okhttp3.sse.EventSources;
 
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -133,6 +136,9 @@ public class AgentServiceProxyService {
 
     @Value("${op.svc.project-id}")
     private String opSvcProjectId;
+
+    @Autowired
+    private IPlugin iPlugin;
 
     private String getToken() {
         return RequestContextUtils.getRequestAuthToken();
@@ -372,7 +378,7 @@ public class AgentServiceProxyService {
         String[] tool = body.getToolObsKey().split("#");
         ToolEntity entity = toolMapper.selectById(tool[0]);
         checkToolsPermission(entity, projectId, workspaceId);
-        return runtimeClient.runTool(getToken(), workspaceId, projectId, body, toolId);
+        return ResponseModel.success(iPlugin.runTool(projectId, body));
     }
 
     public ResponseEntity<RunToolResponseBody> runToolForValidateToolCredential(String workspaceId, String projectId,
