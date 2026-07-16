@@ -402,8 +402,16 @@ public class WorkflowAdapter extends ResourceAdapter {
         WorkflowEntity updateWorkflow = new WorkflowEntity();
         updateWorkflow.setUpdaterId(metadata.getUpdaterId());
         updateWorkflow.setUpdatedAt(metadata.getUpdatedAt());
-        updateWorkflow.setLastVersionId(
-            releaseVersion.getVersionId().compareTo(lastVersionId) > 0 ? releaseVersion.getVersionId() : lastVersionId);
+        String versionId = releaseVersion.getVersionId();
+        String newLastVersionId;
+        if (versionId == null) {
+            newLastVersionId = lastVersionId;
+        } else if (lastVersionId == null) {
+            newLastVersionId = versionId;
+        } else {
+            newLastVersionId = versionId.compareTo(lastVersionId) > 0 ? versionId : lastVersionId;
+        }
+        updateWorkflow.setLastVersionId(newLastVersionId);
         workflowMapper.updateWorkflowEntityByTraceId(metadata.getProjectId(), metadata.getTraceId(),
             metadata.getWorkspaceId(), updateWorkflow);
     }

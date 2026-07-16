@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * card资产类型枚举
+ * 导出模式枚举
  *
  * @author w30009177
  * @since 2025-11-19

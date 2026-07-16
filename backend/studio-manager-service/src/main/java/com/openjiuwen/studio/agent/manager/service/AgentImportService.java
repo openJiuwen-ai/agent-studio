@@ -414,7 +414,7 @@ public class AgentImportService {
         List<MappingEntity> l1Mappings) {
         List<SpaciousInfo> spaciousInfoList = new ArrayList<>();
         for (MappingEntity mapping : l1Mappings) {
-            String lastestVersionId = null;
+            String latestVersionId = null;
             String latestVersionName = null;
             String targetResourceId = null;
             if (Strings.CS.equals(mapping.getResourceType(), ResourceTypeEnum.WORKFLOW.toString())) {
@@ -425,7 +425,7 @@ public class AgentImportService {
                     targetResourceId = wf.getId();
                     List<ReleaseVersion> versions = releaseVersionMapper.selectByAppId(targetResourceId);
                     if (CollectionUtils.isNotEmpty(versions)) {
-                        lastestVersionId = versions.get(0).getVersionId();
+                        latestVersionId = versions.get(0).getVersionId();
                         latestVersionName = versions.get(0).getVersionName();
                     }
                 }
@@ -437,16 +437,16 @@ public class AgentImportService {
                     targetResourceId = agent.getAgentId();
                     List<ReleaseVersion> versions = releaseVersionMapper.selectByAppId(agent.getAgentId());
                     if (CollectionUtils.isNotEmpty(versions)) {
-                        lastestVersionId = versions.get(0).getVersionId();
+                        latestVersionId = versions.get(0).getVersionId();
                         latestVersionName = versions.get(0).getVersionName();
                     }
                 }
             }
-            if (StringUtils.isNotEmpty(lastestVersionId) && StringUtils.isNotEmpty(targetResourceId)) {
+            if (StringUtils.isNotEmpty(latestVersionId) && StringUtils.isNotEmpty(targetResourceId)) {
                 SpaciousInfo spaciousInfo = new SpaciousInfo();
                 spaciousInfo.setTargetResourceId(targetResourceId);
                 spaciousInfo.setOriginalResourceId(mapping.getResourceId());
-                spaciousInfo.setLatestVersionId(lastestVersionId);
+                spaciousInfo.setLatestVersionId(latestVersionId);
                 spaciousInfo.setLatestVersionName(latestVersionName);
                 spaciousInfoList.add(spaciousInfo);
             }
@@ -486,14 +486,14 @@ public class AgentImportService {
             .collect(Collectors.toMap(ImportResourceResult::getId, v -> v, (existing, incoming) -> existing));
         ImportResourceResult importResourceResult = importResourceResultMap.get(importInfo.getResourceId());
 
-        String appId = StringUtils.isEmpty(importResourceResult.getNewId())
+        String appId = (importResourceResult == null || StringUtils.isEmpty(importResourceResult.getNewId()))
             ? importInfo.getResourceId()
             : importResourceResult.getNewId();
         String appVersion = null;
         String importInfoResourceType = importInfo.getResourceType();
         if (Objects.nonNull(importInfo.getReleaseVersion())) {
             ReleaseVersion releaseVersion = importInfo.getReleaseVersion();
-            appVersion = StringUtils.isEmpty(importResourceResult.getNewVersion())
+            appVersion = (importResourceResult == null || StringUtils.isEmpty(importResourceResult.getNewVersion()))
                 ? releaseVersion.getVersionId()
                 : importResourceResult.getNewVersion();
             String obsKey = appId + Constants.UNDERLINE_STR + appVersion;
@@ -504,14 +504,14 @@ public class AgentImportService {
             }
             insertMapping(l1Mappings, spaciousInfoMap, appId, appVersion);
         }
-        // 检查mappging表是否存在草稿
+        // 检查mapping表是否存在草稿
         List<MappingEntity> draftMappings = mappingMapper.selectByAppIdAndAppVersion(appId, Constants.LATEST_PUBLISH_VERSION, null, null);
         if (CollectionUtils.isEmpty(draftMappings)) {
 
             if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
                 uploadControllerDsl(importInfo, appId, null);
             } else {
-                uploadWorkflowDsl(importInfo, appId, appId, appVersion);
+                uploadWorkflowDsl(importInfo, appId, appId, null);
             }
             insertMapping(l1Mappings, spaciousInfoMap, appId, null);
         }
@@ -1828,7 +1828,7 @@ public class AgentImportService {
             config.put("id", relationInfo.getTargetResourceId());
         }
         // 替换版本
-        if (Strings.CS.equals(config.get("version_id").toString(), LATEST_PARAM)) {
+        if (Strings.CS.equals(String.valueOf(config.get("version_id")), LATEST_PARAM)) {
             if (Objects.isNull(relationInfo)) {
                 log.error("can not find relation info:{}", resourceId);
                 throw new AgentStudioException(StudioError.LATEST_REPLACE_NOT_EXISTS);
