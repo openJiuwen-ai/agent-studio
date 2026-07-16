@@ -41,7 +41,6 @@ from jiuwen.serve.controllers.execution.manager import AsyncStateManager
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load, cache_workflow_queue
 from openjiuwen.core.common.logging import workflow_logger
 from pydantic import ValidationError
-from agent_builder.nl_to_agent.nl2 import N2LRequestBody, _n2l_json_wapper, _chat
 
 
 execution_app = APIRouter(tags=["execution_app"])
@@ -343,26 +342,6 @@ async def delete_ir_execution_instance(req_json: dict):
     }
 
 
-@execution_app.post("/v1/{project_id}/{agent_type}/generator/conversations/{cid}/chat")
-async def chat_n2l(project_id: str, agent_type: str, cid: str, body: N2LRequestBody,
-                   request: Request) -> StreamingResponse:
-    workflow_logger.debug(
-        "NL2 Chat Request - URL: %s %s", request.method, request.url
-    )
-    workflow_logger.debug(
-        "NL2 Chat Request - Headers: %s",
-        json.dumps(dict(request.headers), ensure_ascii=False),
-    )
-    workflow_logger.debug(
-        "NL2 Chat Request - Body: %s",
-        json.dumps(body.model_dump(exclude_unset=True), ensure_ascii=False),
-    )
-    # 包装req_json，使得和jiuwen的chat_build接口保持json格式一致
-    payload = _n2l_json_wapper(project_id, agent_type, cid, body.model_dump(exclude_unset=True), request)
-    # run chat
-    chat_response = await _chat(payload)
-    return chat_response
-
 # ── Additional Questions (追问) ──────────────────────────────────────
 _additional_questions_service: AdditionalQuestionsService | None = None
 
@@ -462,4 +441,3 @@ async def _handle_additional_questions(
             status_code=500,
             content={"error": "internal_error", "details": str(e)},
         )
-

@@ -157,7 +157,7 @@ services:
       server_ssl_key_password: ${SERVER_SSL_KEY_PASSWORD:-}
       agent_runtime_endpoint: ${AGENT_RUNTIME_ENDPOINT:-http://studio-service:31113}
       user_auth_endpoint: ${USER_AUTH_ENDPOINT:-http://studio-manager:31111}
-      jiu_wen_service_endpoint: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
+      jiu_wen_service_endpoint: ${JIUWEN_BASE_URL:-http://studio-builder:31015}
       jiuwen_base_url: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
       front_page_block_nodes: ${FRONT_PAGE_BLOCK_NODES:-Sql,DataQuery,Agent}
       share_knowledge_enabled: ${SHARE_KNOWLEDGE_ENABLED:-true}

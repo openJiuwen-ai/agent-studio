@@ -38,25 +38,34 @@ function main() {
   log "开始构建 Docker 镜像，DOCKER_DIR=${DOCKER_DIR}"
   log "VERSION=${VERSION}, BUILD_PLATFORM=${BUILD_PLATFORM}, BUILD_TIME=${BUILD_TIME}"
 
-  log "[1/5] 构建 studio-manager 镜像"
+  log "[1/6] 构建 studio-manager 镜像"
   docker_build_manager
-  log "[1/5] studio-manager 镜像构建完成"
+  log "[1/6] studio-manager 镜像构建完成"
 
-  log "[2/5] 构建 studio-service 镜像"
+  log "[2/6] 构建 studio-service 镜像"
   docker_build_service
-  log "[2/5] studio-service 镜像构建完成"
+  log "[2/6] studio-service 镜像构建完成"
 
-  log "[3/5] 构建 studio-console 镜像"
+  log "[3/6] 构建 studio-console 镜像"
   docker_build_console
-  log "[3/5] studio-console 镜像构建完成"
+  log "[3/6] studio-console 镜像构建完成"
 
-  log "[4/5] 构建 studio-runtime 镜像"
+  log "[4/6] 构建 studio-runtime 镜像"
+  copy_agent_core
   docker_build_runtime
-  log "[4/5] studio-runtime 镜像构建完成"
+  cleanup_agent_core
+  log "[4/6] studio-runtime 镜像构建完成"
 
-  log "[5/5] 打包所有镜像为 AgentBuilder.tar.gz"
+  log "[5/6] 构建 studio-builder 镜像"
+  copy_builder_sources
+  docker_build_builder
+  cleanup_builder_sources
+  docker_save_builder
+  log "[5/6] studio-builder 镜像构建完成"
+
+  log "[6/6] 打包所有镜像为 AgentBuilder.tar.gz"
   docker_save_package
-  log "[5/5] 打包完成"
+  log "[6/6] 打包完成"
 
   log "Docker 镜像构建全部完成"
 }
@@ -80,6 +89,33 @@ function docker_build_service() {
     --build-arg BASE_IMAGE=${BASE_IMAGE_JAVA} \
     -t ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} .
 }
+# 将 agent-core（openjiuwen 本地源码）复制到 studio-runtime 构建上下文
+# 构建完成后由 cleanup_agent_core 清理
+function copy_agent_core() {
+  local AGENT_CORE_SRC=${WORKSPACE}/agent-core
+  local AGENT_CORE_DST=${DOCKER_DIR}/studio-runtime/agent-core
+  if [ ! -d "${AGENT_CORE_SRC}" ]; then
+    echo "[ERROR] agent-core 目录不存在: ${AGENT_CORE_SRC}"
+    echo "[ERROR] 请先 git clone agent-core 到项目根目录"
+    exit 1
+  fi
+  echo "[BUILD] 复制 agent-core 到构建上下文: ${AGENT_CORE_DST}"
+  cp -r ${AGENT_CORE_SRC} ${AGENT_CORE_DST}
+  # 清理不需要的文件以减小构建上下文
+  rm -rf ${AGENT_CORE_DST}/.git ${AGENT_CORE_DST}/tests ${AGENT_CORE_DST}/docs \
+         ${AGENT_CORE_DST}/.venv ${AGENT_CORE_DST}/__pycache__ \
+         ${AGENT_CORE_DST}/.pytest_cache ${AGENT_CORE_DST}/report
+}
+
+# 构建完成后清理 agent-core 临时目录
+function cleanup_agent_core() {
+  local AGENT_CORE_DST=${DOCKER_DIR}/studio-runtime/agent-core
+  if [ -d "${AGENT_CORE_DST}" ]; then
+    echo "[BUILD] 清理构建上下文中的 agent-core: ${AGENT_CORE_DST}"
+    rm -rf ${AGENT_CORE_DST}
+  fi
+}
+
 function docker_build_runtime() {
   IMAGE_NAME=studio-runtime
   cd ${DOCKER_DIR}/studio-runtime/
@@ -87,6 +123,74 @@ function docker_build_runtime() {
   docker build \
     --build-arg BASE_IMAGE=${BASE_IMAGE_PYTHON} \
     -t ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} .
+}
+
+# 将 builder 构建上下文（agent_builder、jiuwen、agent-core）复制到 studio-builder 目录
+# 构建完成后由 cleanup_builder_sources 清理
+function copy_builder_sources() {
+  local STAGE_BUILDER=${DOCKER_DIR}/studio-builder
+  mkdir -p "${STAGE_BUILDER}"
+  if [ ! -d "${WORKSPACE}/agent_builder" ]; then
+    echo "[ERROR] agent_builder 目录不存在: ${WORKSPACE}/agent_builder"
+    exit 1
+  fi
+  echo "[BUILD] 复制 agent_builder 到构建上下文: ${STAGE_BUILDER}"
+  cp -r ${WORKSPACE}/agent_builder "${STAGE_BUILDER}/"
+  echo "[BUILD] 复制 jiuwen 到构建上下文: ${STAGE_BUILDER}"
+  cp -r ${WORKSPACE}/jiuwen "${STAGE_BUILDER}/"
+  # 清理不需要的文件以减小构建上下文
+  rm -rf ${STAGE_BUILDER}/agent_builder/.git ${STAGE_BUILDER}/agent_builder/tests \
+         ${STAGE_BUILDER}/agent_builder/docs ${STAGE_BUILDER}/agent_builder/.venv \
+         ${STAGE_BUILDER}/agent_builder/__pycache__ ${STAGE_BUILDER}/agent_builder/.pytest_cache \
+         ${STAGE_BUILDER}/agent_builder/report
+  rm -rf ${STAGE_BUILDER}/jiuwen/.git ${STAGE_BUILDER}/jiuwen/tests \
+         ${STAGE_BUILDER}/jiuwen/docs ${STAGE_BUILDER}/jiuwen/.venv \
+         ${STAGE_BUILDER}/jiuwen/__pycache__ ${STAGE_BUILDER}/jiuwen/.pytest_cache \
+         ${STAGE_BUILDER}/jiuwen/report
+  # agent-core（openjiuwen 本地源码），构建完成后清理
+  local AGENT_CORE_SRC=${WORKSPACE}/agent-core
+  local AGENT_CORE_DST=${STAGE_BUILDER}/agent-core
+  if [ ! -d "${AGENT_CORE_SRC}" ]; then
+    echo "[ERROR] agent-core 目录不存在: ${AGENT_CORE_SRC}"
+    echo "[ERROR] 请先 git clone agent-core 到项目根目录"
+    exit 1
+  fi
+  echo "[BUILD] 复制 agent-core 到构建上下文: ${AGENT_CORE_DST}"
+  cp -r ${AGENT_CORE_SRC} ${AGENT_CORE_DST}
+  # 清理不需要的文件以减小构建上下文
+  rm -rf ${AGENT_CORE_DST}/.git ${AGENT_CORE_DST}/tests ${AGENT_CORE_DST}/docs \
+         ${AGENT_CORE_DST}/.venv ${AGENT_CORE_DST}/__pycache__ \
+         ${AGENT_CORE_DST}/.pytest_cache ${AGENT_CORE_DST}/report
+}
+
+# 构建完成后清理 builder 构建上下文中的临时源码（保留已提交的 Dockerfile）
+function cleanup_builder_sources() {
+  local STAGE_BUILDER=${DOCKER_DIR}/studio-builder
+  for sub in agent-core agent_builder jiuwen; do
+    if [ -d "${STAGE_BUILDER}/${sub}" ]; then
+      echo "[BUILD] 清理构建上下文中的 ${sub}: ${STAGE_BUILDER}/${sub}"
+      rm -rf "${STAGE_BUILDER}/${sub}"
+    fi
+  done
+}
+
+# 打studio-builder的docker镜像（agent_builder 独立微服务镜像）
+function docker_build_builder() {
+  IMAGE_NAME=studio-builder
+  cd ${DOCKER_DIR}/studio-builder/
+  echo "[BUILD] docker build ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}"
+  docker build \
+    --build-arg BASE_IMAGE=${BASE_IMAGE_PYTHON} \
+    -t ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} .
+}
+
+# docker save studio-builder 为独立 StudioBuilder.tar.gz
+function docker_save_builder() {
+  cd ${DOCKER_DIR}
+  if [ -f "StudioBuilder.tar.gz" ]; then
+    rm -f "StudioBuilder.tar.gz"
+  fi
+  docker save studio-builder:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} | gzip > StudioBuilder.tar.gz
 }
 
 # 打studio-console的docker镜像

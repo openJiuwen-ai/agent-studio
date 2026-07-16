@@ -91,10 +91,22 @@ class ServerApp:
         self.host, self.port = extract_host_and_port(config=self.server_config)
         self.tls_config = self.server_config.get("tls")
         self.init_sts_config()
-        self.http_ssl_context = (
-            create_context(self.tls_config) if self.server_config.get("https") else None
-        )
+        self.http_ssl_context = self._create_ssl_context()
         self.app = self.instance_app()
+
+    def _create_ssl_context(self):
+        """Create SSL context; warn-and-continue on failure (mirrors
+        init_sts_config). Prevents import-time crash when https is enabled
+        in config but cert/key files are not provisioned (e.g. test env)."""
+        if not self.server_config.get("https"):
+            return None
+        try:
+            return create_context(self.tls_config)
+        except Exception as e:
+            logger.warning(
+                f"SSL context creation failed (non-critical): {str(e)}"
+            )
+            return None
 
     @staticmethod
     def init_sts_config():

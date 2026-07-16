@@ -86,9 +86,9 @@ spec:
             # 鉴权配置，默认调自身，HTTPS启动需要改成https
             - name: user_auth_endpoint
               value: 'http://studio-manager:31111'
-            # studio-runtime调用地址，HTTPS启动需要改成https
+            # studio-builder调用地址（n2l生成接口），HTTPS启动需要改成https
             - name: jiu_wen_service_endpoint
-              value: 'http://studio-runtime:31014'
+              value: 'http://studio-builder:31015'
             # studio-runtime调用地址，HTTPS启动需要改成https
             - name: jiuwen_base_url
               value: 'http://studio-runtime:31014'
