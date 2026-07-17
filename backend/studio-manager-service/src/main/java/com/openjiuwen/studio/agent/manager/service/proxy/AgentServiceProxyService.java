@@ -128,6 +128,9 @@ public class AgentServiceProxyService {
     @Value("${agent_runtime_endpoint:}")
     private String runtimeEndpoint;
 
+    @Value("${agent_builder_endpoint:}")
+    private String agentBuilderEndpoint;
+
     @Value("${env.type}")
     private String envType;
 
@@ -344,7 +347,7 @@ public class AgentServiceProxyService {
         String modelId = request.getModel();
         checkModelPermission(projectId, workspaceId, modelId);
         if (request.getStream() == null || request.getStream()) {
-            String url = runtimeEndpoint + "/v1/agent-builder/chat/completions?project_id=" + projectId + "&workspace_id="
+            String url = agentBuilderEndpoint + "/v1/agent-builder/chat/completions?project_id=" + projectId + "&workspace_id="
                 + workspaceId + "&refresh=" + (Boolean.FALSE.equals(refresh) ? "false" : "true");
 
             return stream(url, headers, JsonUtils.encode(request));

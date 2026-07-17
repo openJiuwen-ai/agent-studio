@@ -276,11 +276,8 @@ class StudioModelClient(OpenAIModelClient):
 def _request_headers() -> dict:
     """从请求上下文取请求头。
 
-    延迟导入 agent_runtime：其顶层反向 import model_service，顶层导入会循环。
+    经 ``ports.set_request_headers`` 由宿主注入：agent_runtime 注入其
+    ``_request_ctx.get().headers``，agent_builder 注入其 ``request_context_bridge``。
     """
-    try:
-        from agent_runtime.context.request_context import _request_ctx
-        ctx = _request_ctx.get()
-        return ctx.headers if ctx else {}
-    except Exception:
-        return {}
+    from .ports import get_request_headers
+    return get_request_headers()

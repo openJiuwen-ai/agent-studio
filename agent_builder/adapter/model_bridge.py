@@ -22,6 +22,57 @@ from agent_builder.adapter.config_bridge import settings
 from openjiuwen.core.foundation.llm import Model, ModelClientConfig, ModelRequestConfig
 from openjiuwen.core.workflow.components.llm.llm_comp import LLMCompConfig
 
+# 导入即触发 StudioModelClient 注册进 openjiuwen client registry（client_provider="studio"），
+# 使未配置 MODEL_ROUTER_API 时 prompt/NL2 可进程内直连真实模型（机制层来自 packages/model_service）。
+import model_service  # noqa: F401
+
+
+def _router_api_configured() -> bool:
+    """是否配置了 MODEL_ROUTER_API 模型网关。
+
+    - 已配置（settings.llm.api_base 非空）→ 走原有网关逻辑（client_provider="openai"）。
+    - 未配置 → 进程内直连真实模型（client_provider="studio"，由 resolver 在 invoke 时解析 OBS）。
+    """
+    return bool((settings.llm.api_base or "").strip())
+
+
+def _extract_model_service_id(model_info) -> str:
+    """取 modelInfo.model 的首段作为 OBS modelServiceId（对应 ref-commit OBSModelConfigProvider 归一）。"""
+    return (getattr(model_info, "model", "") or "").split("|")[0]
+
+
+def _extract_auth_id(model_info) -> str:
+    """从 modelInfo.headers 提取 authId（兼容下划线 / HTTP 头两种 key 格式）。"""
+    headers = getattr(model_info, "headers", None) or {}
+    return (
+        headers.get("auth_id", "")
+        or headers.get("Auth_id", "")
+        or headers.get("X-Auth-Id", "")
+        or headers.get("x-auth-id", "")
+    )
+
+
+def _build_studio_client_config(model_info) -> ModelClientConfig:
+    """构建 ``client_provider="studio"`` 薄配置：真实连接信息延迟到 invoke 时由 resolver 解析。
+
+    对应 ref-commit ``OBSModelConfigProvider``：api_key/api_base 为占位（BaseModelClient 校验要求非空），
+    解析所需输入放 extra 字段（model_service_id / auth_id / refresh），projectId/workspace_id
+    由 ``StudioModelClient._resolve_inputs`` 从请求头（_request_ctx）取。
+    """
+    base = settings.llm
+    msid = _extract_model_service_id(model_info)
+    auth_id = _extract_auth_id(model_info)
+    return ModelClientConfig(
+        client_provider="studio",
+        api_key="sk-placeholder",
+        api_base="https://studio-placeholder",
+        timeout=base.timeout,
+        verify_ssl=base.ssl_verify,
+        model_service_id=msid,
+        auth_id=auth_id,
+        refresh=False,
+    )
+
 
 def _normalize_api_base(url: str) -> str:
     """标准化 API base URL，去除末尾的 /chat/completions 路径"""
@@ -129,7 +180,14 @@ class Nl2ModelConfigProvider:
 
     @staticmethod
     def get_llm_config(model_info) -> LLMCompConfig:
-        """从 modelInfo 构建 LLM 组件配置"""
+        """从 modelInfo 构建 LLM 组件配置
+
+        - 配置了 MODEL_ROUTER_API → 走网关逻辑（client_provider="openai" + 认证头透传）。
+        - 未配置 MODEL_ROUTER_API → 进程内直连真实模型（client_provider="studio" 薄配置，
+          真实连接信息由 resolver 在 invoke 时解析 OBS）。
+        """
+        if not _router_api_configured():
+            return Nl2ModelConfigProvider._build_studio_config(model_info)
         base = settings.llm
 
         headers = model_info.headers or {}
@@ -167,8 +225,23 @@ class Nl2ModelConfigProvider:
             cache_stream=True,
         )
 
+    @staticmethod
+    def _build_studio_config(model_info) -> LLMCompConfig:
+        """未配置 MODEL_ROUTER_API 时构建 studio 直连配置（对应 ref-commit OBSModelConfigProvider）。"""
+        msid = _extract_model_service_id(model_info)
+        base = settings.llm
+        return LLMCompConfig(
+            model_client_config=_build_studio_client_config(model_info),
+            model_config=ModelRequestConfig(
+                model=msid,
+                temperature=model_info.temperature if model_info.temperature is not None else base.temperature,
+                top_p=model_info.top_p if model_info.top_p is not None else base.top_p,
+            ),
+            cache_stream=True,
+        )
 
-def get_nl2_model(model_info) -> Model:
+
+async def get_nl2_model(model_info) -> Model:
     """工厂方法：根据 modelInfo 创建 openjiuwen Model 实例
 
     用于 nl_to_agent 模块中 Nl2AgentProcessor 获取模型实例，
@@ -201,6 +274,9 @@ class PromptOptimizeModelProvider:
     def get_llm_config(model_info) -> LLMCompConfig:
         """从 modelInfo 构建提示词优化专用的 LLM 组件配置
 
+        - 配置了 MODEL_ROUTER_API → 走网关逻辑（settings.llm 为主源 + modelInfo 兜底 + 认证头透传）。
+        - 未配置 MODEL_ROUTER_API → 进程内直连真实模型（client_provider="studio" 薄配置）。
+
         Args:
             model_info: LLMModelInfo 实例（agent_builder.prompt.common.config.LLMModelInfo），
                         包含 model、headers、temperature、top_p 等字段
@@ -208,6 +284,8 @@ class PromptOptimizeModelProvider:
         Returns:
             LLMCompConfig: LLM 组件配置
         """
+        if not _router_api_configured():
+            return PromptOptimizeModelProvider._build_studio_config(model_info)
         base = settings.llm
         headers = model_info.headers or {}
 
@@ -260,12 +338,36 @@ class PromptOptimizeModelProvider:
             cache_stream=True,
         )
 
+    @staticmethod
+    def _build_studio_config(model_info) -> LLMCompConfig:
+        """未配置 MODEL_ROUTER_API 时构建 studio 直连配置（对应 ref-commit OBSModelConfigProvider）。"""
+        msid = _extract_model_service_id(model_info)
+        base = settings.llm
+        temperature = getattr(model_info, "temperature", None)
+        if temperature is None:
+            temperature = base.temperature
+        top_p = getattr(model_info, "top_p", None)
+        if top_p is None:
+            top_p = base.top_p
+        return LLMCompConfig(
+            model_client_config=_build_studio_client_config(model_info),
+            model_config=ModelRequestConfig(
+                model=msid,
+                temperature=temperature,
+                top_p=top_p,
+            ),
+            cache_stream=True,
+        )
 
-def get_prompt_optimize_model(model_info) -> Model:
+
+async def get_prompt_optimize_model(model_info) -> Model:
     """工厂方法：为提示词优化特性创建 openjiuwen Model 实例
 
     用于 agent_builder 的 prompt 管理模块（prompt.py / mmapo.py）获取模型实例，
     替代原来通过 LLMServiceManager -> EiCloudLLMService -> OpenAICompatibleService 的调用链。
+
+    按 MODEL_ROUTER_API 是否配置在网关（openai）与直连（studio）两条路径间切换：
+    get_llm_config 已封装该判断，此处仅组装 Model。async 以匹配调用方 await/_run_async。
 
     Args:
         model_info: LLMModelInfo 实例（agent_builder.prompt.common.config.LLMModelInfo），

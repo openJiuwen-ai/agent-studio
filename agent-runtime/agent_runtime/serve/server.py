@@ -47,7 +47,7 @@ def _plain_decrypt(encrypt_str: str):
 JiuWenCrypt.encrypt = staticmethod(_plain_encrypt)
 JiuWenCrypt.decrypt = staticmethod(_plain_decrypt)
 
-from agent_runtime.storage import S3StorageProvider
+from storage import S3StorageProvider
 
 from agent_runtime.common import settings
 from agent_runtime.common.checkpointer_config import build_redis_checkpointer_config
@@ -176,8 +176,10 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
         CheckpointerFactory.set_default_checkpointer(redis_checkpointer)
         logger.info("Redis checkpointer initialized and set as default (fast checkpointer disabled)")
 
-    # 初始化异步 S3 存储客户端
+    # 初始化异步 S3 存储客户端（实现位于共享包 storage；先注入 OBS 配置再 initialize）
     try:
+        import storage as _storage
+        _storage.set_settings(lambda: settings.object_storage)
         s3_provider = S3StorageProvider.instance()
         await s3_provider.initialize()
         logger.info("S3 async storage client initialized")
@@ -271,6 +273,26 @@ def instance_app(config: dict | None = None):
                     "message": str(exc),
                 }
             },
+        )
+
+    # Storage 异常已迁移至共享包 storage（不再是 AgentBuilderError 子类），
+    # 这里单独兜底，保持未捕获 storage 错误的结构化 500 响应不变（code 取 exc.code）。
+    from storage.exceptions import StorageConfigError, StorageReadError
+
+    @app.exception_handler(StorageReadError)
+    async def storage_read_error_handler(request: Request, exc: StorageReadError):
+        logger.error(f"StorageReadError: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": getattr(exc, "code", 188911), "message": str(exc)}},
+        )
+
+    @app.exception_handler(StorageConfigError)
+    async def storage_config_error_handler(request: Request, exc: StorageConfigError):
+        logger.error(f"StorageConfigError: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": getattr(exc, "code", 188910), "message": str(exc)}},
         )
 
     @app.exception_handler(Exception)

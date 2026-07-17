@@ -275,7 +275,7 @@ class ComplexIntentDetection(WorkflowComponent):
     async def _recover_sub_workflow(self, workflow_id: str, recover_data: dict) -> None:
         """恢复子工作流实例"""
         from jiuwen.serve.controllers.execution.ir_converter import IRConverter
-        from agent_runtime.storage import get_storage_provider
+        from storage import get_storage_provider
         from agent_runtime.common.ir_interfaces import StorageConfigError, StorageReadError
 
         try:
@@ -586,7 +586,7 @@ class ComplexIntentDetection(WorkflowComponent):
     ) -> None:
         """初始化子工作流"""
         from jiuwen.serve.controllers.execution.ir_converter import IRConverter
-        from agent_runtime.storage import get_storage_provider
+        from storage import get_storage_provider
         from agent_runtime.common.ir_interfaces import StorageConfigError, StorageReadError
 
         ir_path = branch_config.ir_path

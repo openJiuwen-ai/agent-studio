@@ -485,7 +485,9 @@ feign:
       elbClient:
         url: ${elb_client_endpoint:http://mock-elb:8080}
       jiuWenService:
-        url: ${jiu_wen_service_endpoint:http://127.0.0.1:31015}
+        url: ${jiu_wen_service_endpoint:http://127.0.0.1:31014}
+      agentBuilder:
+        url: ${agent_builder_endpoint:http://127.0.0.1:31015}
       maasModel:
         url: ${maas_model_endpoint:http://mock-maas-model:8080}
       managementCenterFeignClient:

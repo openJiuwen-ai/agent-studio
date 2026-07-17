@@ -16,66 +16,15 @@ from typing import Optional
 from agent_runtime.common.exception.errors import AgentBuilderError, ExtensionStatusCode
 from openjiuwen.core.workflow.components.llm.llm_comp import LLMCompConfig
 
-
-class StorageConfigError(AgentBuilderError):
-    """存储配置异常 — 环境变量缺失或无效"""
-
-    def __init__(self, msg: str = "", **kwargs):
-        super().__init__(ExtensionStatusCode.STORAGE_CONFIG_ERROR, msg=msg, **kwargs)
-
-
-class StorageReadError(AgentBuilderError):
-    """存储读取异常 — 下载对象失败"""
-
-    def __init__(self, msg: str = "", **kwargs):
-        super().__init__(ExtensionStatusCode.STORAGE_READ_ERROR, msg=msg, **kwargs)
-
-
-class StorageNotFoundError(StorageReadError):
-    """存储对象不存在（S3 404/NoSuchKey 或本地文件缺失）— 区别于传输层读失败。
-
-    继承 ``StorageReadError`` 以兼容既有 ``except StorageReadError`` 的调用方（404 仍被捕获）；
-    上层（如 model_service.resolver）可按子类区分"未配置"（→None）与"OBS 不可达"（→读错误）。
-    """
-
-    def __init__(self, msg: str = "", **kwargs):
-        super().__init__(msg=msg, **kwargs)
-
-
-class ObjectStorageProvider(ABC):
-    """对象存储提供者抽象类
-
-    扩展时继承此类并实现 get_content()，然后通过
-    WorkflowRunner 注入。
-    """
-
-    @abstractmethod
-    async def get_content(self, object_key: str) -> str:
-        """读取对象内容，返回 UTF-8 字符串
-
-        Args:
-            object_key: 对象 key（如 workflow/ir/xxx/xxx.json）
-
-        Returns:
-            str: 对象内容的 UTF-8 字符串
-
-        Raises:
-            StorageReadError: 读取失败
-        """
-
-    async def list_keys(self, prefix: str) -> list[str]:
-        """列出指定前缀下的所有对象 key
-
-        Args:
-            prefix: 对象 key 前缀（如 "model-auth/auth/0/provider-id/"）
-
-        Returns:
-            list[str]: 匹配的对象 key 列表
-
-        Note:
-            默认实现返回空列表；子类可按需覆写。
-        """
-        return []
+# Storage 异常与 ObjectStorageProvider 已迁移至共享包 ``storage``（agent_runtime /
+# agent_builder 共用）。这里保留为别名，使 ``from agent_runtime.common.ir_interfaces
+# import StorageNotFoundError`` 等既有引用继续可用（同一类对象）。
+from storage.exceptions import (  # noqa: F401
+    StorageConfigError,
+    StorageNotFoundError,
+    StorageReadError,
+)
+from storage.object_storage import ObjectStorageProvider  # noqa: F401
 
 
 class ModelConfigProvider(ABC):

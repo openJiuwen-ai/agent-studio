@@ -2,18 +2,18 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 
-"""S3StorageProvider unit tests — aioboto3 migration"""
+"""S3StorageProvider unit tests — aioboto3 migration
+
+S3StorageProvider 实现已迁移至共享包 ``storage``（agent_runtime / agent_builder 共用）。
+OBS 配置经 ``storage.set_settings`` 注入；aioboto3 在 ``storage.object_storage`` 模块 patch。
+"""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent_runtime.common.ir_interfaces import (
-    StorageConfigError,
-    StorageNotFoundError,
-    StorageReadError,
-)
-from agent_runtime.storage.object_storage import S3StorageProvider
+from storage.exceptions import StorageConfigError, StorageNotFoundError, StorageReadError
+from storage.object_storage import S3StorageProvider
 
 
 # ---------------------------------------------------------------------------
@@ -22,11 +22,17 @@ from agent_runtime.storage.object_storage import S3StorageProvider
 
 
 @pytest.fixture(autouse=True)
-def reset_singleton():
-    """Ensure singleton is clean before and after every test."""
+def _setup_storage():
+    """每个测试前后：重置 S3 单例 + 注入默认 mock settings（供 initialize 读取）。"""
+    import storage
+
     S3StorageProvider.reset()
-    yield
-    S3StorageProvider.reset()
+    storage.set_settings(lambda: _make_mock_settings().object_storage)
+    try:
+        yield
+    finally:
+        S3StorageProvider.reset()
+        storage.set_settings(None)
 
 
 def _make_mock_client():
@@ -75,6 +81,12 @@ def _make_mock_settings(
     return mock_settings
 
 
+def _set_settings(**kwargs):
+    """覆盖注入的 settings（供 missing-config / missing-bucket 等用例）。"""
+    import storage
+    storage.set_settings(lambda: _make_mock_settings(**kwargs).object_storage)
+
+
 # ---------------------------------------------------------------------------
 # TestS3StorageProviderInitialize
 # ---------------------------------------------------------------------------
@@ -84,15 +96,13 @@ class TestS3StorageProviderInitialize:
     """Tests for S3StorageProvider.initialize()"""
 
     @pytest.mark.asyncio
-    @patch("agent_runtime.storage.object_storage.settings")
-    @patch("agent_runtime.storage.object_storage.aioboto3")
-    async def test_initialize_success(self, mock_aioboto3, mock_settings):
+    @patch("storage.object_storage.aioboto3")
+    async def test_initialize_success(self, mock_aioboto3):
         mock_client = _make_mock_client()
         mock_context = _make_mock_context(mock_client)
         mock_session = MagicMock()
         mock_session.client = MagicMock(return_value=mock_context)
         mock_aioboto3.Session = MagicMock(return_value=mock_session)
-        mock_settings.object_storage = _make_mock_settings().object_storage
 
         provider = S3StorageProvider()
         await provider.initialize()
@@ -104,28 +114,18 @@ class TestS3StorageProviderInitialize:
         mock_session.client.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("agent_runtime.storage.object_storage.settings")
-    async def test_initialize_missing_config_raises(self, mock_settings):
+    async def test_initialize_missing_config_raises(self):
         # server, ak, sk all empty
-        mock_settings.object_storage = _make_mock_settings(
-            server="", access_key="", secret_key=""
-        ).object_storage
-
+        _set_settings(server="", access_key="", secret_key="")
         provider = S3StorageProvider()
         with pytest.raises(StorageConfigError, match="DATASOURCE_OBS_SERVER/AK/SK"):
             await provider.initialize()
 
     @pytest.mark.asyncio
-    @patch("agent_runtime.storage.object_storage.settings")
-    async def test_initialize_missing_bucket_raises(self, mock_settings):
+    async def test_initialize_missing_bucket_raises(self):
         # server/ak/sk present but bucket empty
-        mock_settings.object_storage = _make_mock_settings(
-            server="https://obs.example.com",
-            access_key="ak123",
-            secret_key="sk456",
-            bucket="",
-        ).object_storage
-
+        _set_settings(server="https://obs.example.com", access_key="ak123",
+                      secret_key="sk456", bucket="")
         provider = S3StorageProvider()
         with pytest.raises(StorageConfigError, match="DATASOURCE_OBS_BUCKET"):
             await provider.initialize()
@@ -140,15 +140,13 @@ class TestS3StorageProviderClose:
     """Tests for S3StorageProvider.close()"""
 
     @pytest.mark.asyncio
-    @patch("agent_runtime.storage.object_storage.settings")
-    @patch("agent_runtime.storage.object_storage.aioboto3")
-    async def test_close_calls_aexit(self, mock_aioboto3, mock_settings):
+    @patch("storage.object_storage.aioboto3")
+    async def test_close_calls_aexit(self, mock_aioboto3):
         mock_client = _make_mock_client()
         mock_context = _make_mock_context(mock_client)
         mock_session = MagicMock()
         mock_session.client = MagicMock(return_value=mock_context)
         mock_aioboto3.Session = MagicMock(return_value=mock_session)
-        mock_settings.object_storage = _make_mock_settings().object_storage
 
         provider = S3StorageProvider()
         await provider.initialize()
@@ -179,9 +177,8 @@ class TestS3StorageProviderRead:
     """Tests for S3StorageProvider.get_object_bytes() and get_content()"""
 
     @pytest.mark.asyncio
-    @patch("agent_runtime.storage.object_storage.settings")
-    @patch("agent_runtime.storage.object_storage.aioboto3")
-    async def test_get_object_bytes_success(self, mock_aioboto3, mock_settings):
+    @patch("storage.object_storage.aioboto3")
+    async def test_get_object_bytes_success(self, mock_aioboto3):
         mock_client = _make_mock_client()
         mock_body = _make_mock_body(b'{"key": "value"}')
         mock_client.get_object = AsyncMock(return_value={"Body": mock_body})
@@ -189,7 +186,6 @@ class TestS3StorageProviderRead:
         mock_session = MagicMock()
         mock_session.client = MagicMock(return_value=mock_context)
         mock_aioboto3.Session = MagicMock(return_value=mock_session)
-        mock_settings.object_storage = _make_mock_settings().object_storage
 
         provider = S3StorageProvider()
         await provider.initialize()
@@ -202,9 +198,8 @@ class TestS3StorageProviderRead:
         )
 
     @pytest.mark.asyncio
-    @patch("agent_runtime.storage.object_storage.settings")
-    @patch("agent_runtime.storage.object_storage.aioboto3")
-    async def test_get_content_returns_utf8_string(self, mock_aioboto3, mock_settings):
+    @patch("storage.object_storage.aioboto3")
+    async def test_get_content_returns_utf8_string(self, mock_aioboto3):
         mock_client = _make_mock_client()
         mock_body = _make_mock_body(b'{"key": "value"}')
         mock_client.get_object = AsyncMock(return_value={"Body": mock_body})
@@ -212,7 +207,6 @@ class TestS3StorageProviderRead:
         mock_session = MagicMock()
         mock_session.client = MagicMock(return_value=mock_context)
         mock_aioboto3.Session = MagicMock(return_value=mock_session)
-        mock_settings.object_storage = _make_mock_settings().object_storage
 
         provider = S3StorageProvider()
         await provider.initialize()
@@ -235,18 +229,14 @@ class TestS3StorageProviderRead:
             await provider.get_content("some/key.json")
 
     @pytest.mark.asyncio
-    @patch("agent_runtime.storage.object_storage.settings")
-    @patch("agent_runtime.storage.object_storage.aioboto3")
-    async def test_read_s3_error_wraps_as_storage_read_error(
-        self, mock_aioboto3, mock_settings
-    ):
+    @patch("storage.object_storage.aioboto3")
+    async def test_read_s3_error_wraps_as_storage_read_error(self, mock_aioboto3):
         mock_client = _make_mock_client()
         mock_client.get_object = AsyncMock(side_effect=Exception("S3 connection lost"))
         mock_context = _make_mock_context(mock_client)
         mock_session = MagicMock()
         mock_session.client = MagicMock(return_value=mock_context)
         mock_aioboto3.Session = MagicMock(return_value=mock_session)
-        mock_settings.object_storage = _make_mock_settings().object_storage
 
         provider = S3StorageProvider()
         await provider.initialize()
@@ -255,11 +245,8 @@ class TestS3StorageProviderRead:
             await provider.get_object_bytes("workflow/ir/test.json")
 
     @pytest.mark.asyncio
-    @patch("agent_runtime.storage.object_storage.settings")
-    @patch("agent_runtime.storage.object_storage.aioboto3")
-    async def test_read_s3_not_found_raises_storage_not_found(
-        self, mock_aioboto3, mock_settings
-    ):
+    @patch("storage.object_storage.aioboto3")
+    async def test_read_s3_not_found_raises_storage_not_found(self, mock_aioboto3):
         """S3 404/NoSuchKey → StorageNotFoundError（区别于传输层 StorageReadError）。
 
         上层（model_service.resolver）据此区分"未配置"与"OBS 不可达"。
@@ -278,7 +265,6 @@ class TestS3StorageProviderRead:
         mock_session = MagicMock()
         mock_session.client = MagicMock(return_value=mock_context)
         mock_aioboto3.Session = MagicMock(return_value=mock_session)
-        mock_settings.object_storage = _make_mock_settings().object_storage
 
         provider = S3StorageProvider()
         await provider.initialize()

@@ -464,7 +464,7 @@ class ReActAgentRunner:
             try:
                 downloaded = False
                 try:
-                    from agent_runtime.storage.object_storage import S3StorageProvider
+                    from storage import S3StorageProvider
                     content = await S3StorageProvider().get_object_bytes(skill_path)
                     os.makedirs(os.path.dirname(local_zip_path), exist_ok=True)
                     with open(local_zip_path, "wb") as f:

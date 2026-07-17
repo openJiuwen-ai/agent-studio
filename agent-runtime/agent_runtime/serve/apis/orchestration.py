@@ -32,7 +32,7 @@ from agent_runtime.schemas.additional_questions import (
 from agent_runtime.additional_questions.service import (
     AdditionalQuestionsService,
 )
-from agent_runtime.storage import get_storage_provider
+from storage import get_storage_provider
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
 from jiuwen.common.exception import JiuWenBaseException

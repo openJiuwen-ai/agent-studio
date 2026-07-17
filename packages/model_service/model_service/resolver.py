@@ -23,6 +23,7 @@ from typing import Optional
 # OBS 对象 key 模板（对应 Java ModelStorageService / ModelAuthStorageService 的路径规则）。
 MODEL_PATH = "model-service/ir/%s.json"
 AUTH_PATH = "model-auth/auth/%s/%s/%s.json"          # projectId / providerId / authId
+AUTH_LIST_PATH = "model-auth/auth/%s/%s/"             # projectId / providerId（V1 列举回退）
 
 # 平台模型判定：project_id == "SYSTEM"（对应 Java isPlatformModel）。
 PLATFORM_PROJECT_IDS = {"SYSTEM"}
@@ -184,9 +185,16 @@ async def _build_detail(model, project_id, workspace_id, auth_id, refresh) -> Mo
     """构造单模型 detail（对应 Java ``getModelServiceDetail``）。
 
     解析 auth；``available`` 取决于 auth 是否存在（free model 当前恒为 False）。
+    authId 为空时回退到 V1 列举（对应 Java ``queryProviderAuth`` → ``queryProviderAuthV1``），
+    按 workspace 匹配取 auth，与 Java 网关"不传 authId 也能用"的行为一致。
     """
     auth_proj = _auth_project_id(model.project_id, project_id)
-    auth = await _query_auth(auth_proj, model.provider_id, auth_id, refresh) if auth_id else None
+    if auth_id:
+        auth = await _query_auth(auth_proj, model.provider_id, auth_id, refresh)
+    else:
+        auth = await _query_auth_v1(
+            auth_proj, model.provider_id, workspace_id, model.workspace_id, refresh
+        )
     available = auth is not None
     return ModelServiceDetail(model=model, auth=auth, available=available, is_free_model=False)
 
@@ -209,15 +217,14 @@ def _model_from_data(data: dict) -> ModelServiceBase:
 async def _query_model_metadata(model_id: str, refresh: bool) -> Optional[dict]:
     """读取模型元数据：缓存 → OBS，带性能日志与降级。"""
     from openjiuwen.core.common.logging import performance_logger
-    from agent_runtime.storage import get_storage_provider
-    from agent_runtime.common.ir_interfaces import StorageNotFoundError
-    from jiuwen.serve.controllers.execution.open_utils import cache_model_service_queue
+    from .ports import get_storage_provider, get_model_cache, StorageNotFoundError
 
     key = MODEL_PATH % model_id
     t_start = time.perf_counter()
-    if not refresh:
+    cache = get_model_cache()
+    if cache is not None and not refresh:
         try:
-            cached, source = await cache_model_service_queue.aget_with_source(key)
+            cached, source = await cache.aget_with_source(key)
             if cached is not None:
                 performance_logger.info(
                     f"model_service_load|{round((time.perf_counter() - t_start) * 1000)}|{source}")
@@ -236,10 +243,11 @@ async def _query_model_metadata(model_id: str, refresh: bool) -> Optional[dict]:
         metadata = json.loads(content)
     except Exception as e:
         raise ModelServiceError("MD_OBS_READ_ERROR", f"parse model metadata {key}: {e}") from e
-    try:
-        await cache_model_service_queue.aput(key, metadata, ttl=_cache_ttl_for_model(metadata))
-    except Exception as e:
-        _logger.warning("model-service cache write failed key=%s: %s", key, e)
+    if cache is not None:
+        try:
+            await cache.aput(key, metadata, ttl=_cache_ttl_for_model(metadata))
+        except Exception as e:
+            _logger.warning("model-service cache write failed key=%s: %s", key, e)
     performance_logger.info(
         f"model_service_load|{round((time.perf_counter() - t_start) * 1000)}|obs")
     return metadata
@@ -248,15 +256,14 @@ async def _query_model_metadata(model_id: str, refresh: bool) -> Optional[dict]:
 async def _query_auth(project_id, provider_id, auth_id, refresh) -> Optional[ProviderAuth]:
     """读取 auth（V2 直查，对应 Java ``queryProviderAuthV2``）：缓存 → OBS，带性能日志与降级。"""
     from openjiuwen.core.common.logging import performance_logger
-    from agent_runtime.storage import get_storage_provider
-    from agent_runtime.common.ir_interfaces import StorageNotFoundError
-    from jiuwen.serve.controllers.execution.open_utils import cache_model_auth_queue
+    from .ports import get_storage_provider, get_auth_cache, StorageNotFoundError
 
     key = AUTH_PATH % (project_id, provider_id, auth_id)
     t_start = time.perf_counter()
-    if not refresh:
+    cache = get_auth_cache()
+    if cache is not None and not refresh:
         try:
-            cached, source = await cache_model_auth_queue.aget_with_source(key)
+            cached, source = await cache.aget_with_source(key)
             if cached is not None:
                 performance_logger.info(
                     f"model_auth_load|{round((time.perf_counter() - t_start) * 1000)}|{source}")
@@ -275,25 +282,95 @@ async def _query_auth(project_id, provider_id, auth_id, refresh) -> Optional[Pro
         auth_data = json.loads(content)
     except Exception as e:
         raise ModelServiceError("MD_OBS_READ_ERROR", f"parse auth {key}: {e}") from e
-    try:
-        # auth 缓存使用默认 TTL（5min），与 Java ModelAuthStorageService 一致。
-        await cache_model_auth_queue.aput(key, auth_data)
-    except Exception as e:
-        _logger.warning("model-auth cache write failed key=%s: %s", key, e)
+    if cache is not None:
+        try:
+            # auth 缓存使用默认 TTL（5min），与 Java ModelAuthStorageService 一致。
+            await cache.aput(key, auth_data)
+        except Exception as e:
+            _logger.warning("model-auth cache write failed key=%s: %s", key, e)
     performance_logger.info(
         f"model_auth_load|{round((time.perf_counter() - t_start) * 1000)}|obs")
     return _auth_from_data(auth_data)
 
 
+async def _query_auth_v1(project_id, provider_id, workspace_id, model_workspace, refresh) -> Optional[ProviderAuth]:
+    """V1 回退：authId 为空时列 ``model-auth/auth/{projectId}/{providerId}/`` 目录取 auth。
+
+    移植自 Java ``ModelAuthStorageService.getProviderAuthFromObsV1``（旧数据兼容路径，
+    Java 日志 "Query provider auth from old data."）。不写 L2 缓存（与 Java V1 仅用 localCache 一致，
+    且 V1 是 rare/legacy 路径）。
+
+    - 列举目录下对象；空 → None。
+    - workspaceId 为空 → 取第一个 ``.json`` 对象。
+    - 否则按 auth 的 workspaceId 匹配请求 workspaceId 或模型自带 workspaceId，命中即取。
+    - 无命中 → None。
+    """
+    from openjiuwen.core.common.logging import performance_logger
+    from .ports import get_storage_provider, StorageNotFoundError
+
+    prefix = AUTH_LIST_PATH % (project_id, provider_id)
+    t_start = time.perf_counter()
+    storage = get_storage_provider()
+    try:
+        keys = await storage.list_keys(prefix)
+    except Exception as e:
+        raise ModelServiceError("MD_OBS_READ_ERROR", f"list auth {prefix}: {e}") from e
+    keys = [k for k in keys if k.endswith(".json")]
+    if not keys:
+        return None
+
+    async def _read(key):
+        try:
+            return await storage.get_content(key)
+        except StorageNotFoundError:
+            return None
+        except Exception as e:
+            raise ModelServiceError("MD_OBS_READ_ERROR", f"read auth {key}: {e}") from e
+
+    selected = None
+    if not workspace_id:
+        selected = await _read(keys[0])
+        if selected is None:
+            return None
+        data = json.loads(selected)
+    else:
+        for key in keys:
+            content = await _read(key)
+            if content is None:
+                continue
+            data = json.loads(content)
+            aw = str(
+                data.get("workspace_id")
+                if data.get("workspace_id") is not None
+                else data.get("workspaceId", "")
+            )
+            if aw == workspace_id or (model_workspace and aw == model_workspace):
+                selected = content
+                break
+        if selected is None:
+            return None
+        data = json.loads(selected)
+
+    performance_logger.info(
+        f"model_auth_load|{round((time.perf_counter() - t_start) * 1000)}|obs-v1")
+    return _auth_from_data(data)
+
+
 def _auth_from_data(auth_data: dict) -> Optional[ProviderAuth]:
     """由 auth JSON 构造 ``ProviderAuth``（对应 Java ``getProviderAuth``）。
+
+    字段名兼容 camelCase（Java ``ProviderAuthData`` 实际写入格式）与 snake_case
+    （ref-commit 测试 fixture 格式）两种，避免与 OBS 真实数据格式漂移。
 
     - ``API_KEY``：取 ``auth_info["API Key"]`` 作为 api_key。
     - ``CUSTOM_APIKEY``：``auth_info`` 各项作为自定义 header，``cust-`` 前缀剥离。
     """
+    def _get(snake: str, camel: str):
+        return auth_data.get(snake) if auth_data.get(snake) is not None else auth_data.get(camel)
+
     auth_id = str(auth_data.get("id", ""))
-    auth_type = auth_data.get("auth_type", "")
-    raw = auth_data.get("auth_info", "")
+    auth_type = _get("auth_type", "authType") or ""
+    raw = _get("auth_info", "authInfo") or ""
     if auth_type == "API_KEY":
         info = json.loads(raw) if raw else {}
         return ProviderAuth(auth_id=auth_id, auth_type="API_KEY",

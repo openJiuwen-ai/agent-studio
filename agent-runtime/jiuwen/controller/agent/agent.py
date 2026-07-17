@@ -1014,7 +1014,7 @@ class Agent(BaseAgent):
                         f"Trying S3StorageProvider (aioboto3) as fallback."
                     )
                     try:
-                        from agent_runtime.storage.object_storage import S3StorageProvider
+                        from storage import S3StorageProvider
                         s3_provider = S3StorageProvider.instance()
                         content_bytes = await s3_provider.get_object_bytes(skill_path)
                         os.makedirs(os.path.dirname(local_zip_path), exist_ok=True)

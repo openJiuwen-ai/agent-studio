@@ -15,6 +15,14 @@ from .authz import assert_project_id_trusted, check_authz, extract_project_id
 from .policy import AuditLog, alarm, invoke_with_strategy, record_audit
 from .dispatch import build_httpx_client, embed, get_chat_connection, normalize_protocol, rerank
 from .client import StudioModelClient
+from . import ports
+from .ports import (
+    StorageNotFoundError, wrap_storage,
+    set_storage_provider, get_storage_provider,
+    set_llm_settings, get_llm_settings,
+    set_request_headers, get_request_headers,
+    set_cache_queues, get_model_cache, get_auth_cache,
+)
 
 __all__ = [
     # resolver
@@ -28,4 +36,10 @@ __all__ = [
     "get_chat_connection", "normalize_protocol", "embed", "rerank", "build_httpx_client",
     # client
     "StudioModelClient",
+    # ports (decoupling injection points)
+    "ports", "StorageNotFoundError", "wrap_storage",
+    "set_storage_provider", "get_storage_provider",
+    "set_llm_settings", "get_llm_settings",
+    "set_request_headers", "get_request_headers",
+    "set_cache_queues", "get_model_cache", "get_auth_cache",
 ]

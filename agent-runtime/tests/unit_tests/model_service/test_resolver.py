@@ -21,7 +21,7 @@ from model_service.resolver import (
     ModelStrategy, ProviderAuth, StrategyType, _auth_from_data, _auth_project_id,
     _cache_ttl_for_model, resolve_strategy,
 )
-from agent_runtime.common.ir_interfaces import StorageNotFoundError, StorageReadError
+from storage.exceptions import StorageNotFoundError, StorageReadError
 
 
 # ── 测试数据 ─────────────────────────────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ def _patch_cache_and_storage(svc_cache_ret, auth_cache_ret, svc_obs=None, auth_o
 
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
-@patch("agent_runtime.storage.get_storage_provider")
+@patch("storage.get_storage_provider")
 def test_resolve_strategy_model_cache_hit(mock_storage_fn, mock_svc_cache, mock_auth_cache):
     """cache 命中 → 不读 OBS。回归测：aget_with_source 返回 (value, source) 二元组须解包。"""
     mock_svc_cache.aget_with_source = AsyncMock(return_value=(json.loads(_svc_json()), "memory"))
@@ -141,7 +141,7 @@ def test_resolve_strategy_model_cache_hit(mock_storage_fn, mock_svc_cache, mock_
 
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
-@patch("agent_runtime.storage.get_storage_provider")
+@patch("storage.get_storage_provider")
 def test_resolve_strategy_cache_miss_reads_obs(mock_storage_fn, mock_svc_cache, mock_auth_cache):
     """cache miss → 读 OBS 并回填。auth 路径用 authProject（model project_id="0" 非平台 → 用 "0"）。"""
     mock_svc_cache.aget_with_source = AsyncMock(return_value=(None, ""))
@@ -168,7 +168,7 @@ def test_resolve_strategy_cache_miss_reads_obs(mock_storage_fn, mock_svc_cache, 
 
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
-@patch("agent_runtime.storage.get_storage_provider")
+@patch("storage.get_storage_provider")
 def test_resolve_strategy_refresh_bypasses_cache(mock_storage_fn, mock_svc_cache, mock_auth_cache):
     """refresh=True → 不读 cache，直接读 OBS 并回填（对应 Java queryModelMetadata refresh 分支）。"""
     mock_svc_cache.aget_with_source = AsyncMock(side_effect=AssertionError("refresh 不应读 cache"))
@@ -195,7 +195,7 @@ def test_resolve_strategy_refresh_bypasses_cache(mock_storage_fn, mock_svc_cache
 
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
-@patch("agent_runtime.storage.get_storage_provider")
+@patch("storage.get_storage_provider")
 def test_resolve_strategy_not_found(mock_storage_fn, mock_svc_cache, mock_auth_cache):
     """OBS 也没有 → 返回 None。"""
     mock_svc_cache.aget_with_source = AsyncMock(return_value=(None, ""))
@@ -211,7 +211,7 @@ def test_resolve_strategy_not_found(mock_storage_fn, mock_svc_cache, mock_auth_c
 
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
-@patch("agent_runtime.storage.get_storage_provider")
+@patch("storage.get_storage_provider")
 def test_resolve_strategy_platform_model_auth_project_uses_caller(mock_storage_fn, mock_svc_cache, mock_auth_cache):
     """model project_id=SYSTEM → auth 路径用 caller projectId（'0'），对应 Java getModelServiceDetail。"""
     mock_svc_cache.aget_with_source = AsyncMock(return_value=(None, ""))
@@ -239,7 +239,7 @@ def test_resolve_strategy_platform_model_auth_project_uses_caller(mock_storage_f
 
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
-@patch("agent_runtime.storage.get_storage_provider")
+@patch("storage.get_storage_provider")
 def test_resolve_strategy_router(mock_storage_fn, mock_svc_cache, mock_auth_cache):
     """ROUTER：拆 service_id_list/auth_id_list，逐子解析，带 strategyTimeout/retryCount。"""
     # router 元数据走 cache 命中；子模型 m1/m2 走 OBS
@@ -291,7 +291,7 @@ def test_build_router_strategy_invalid_raises():
 @patch("openjiuwen.core.common.logging.performance_logger")
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
-@patch("agent_runtime.storage.get_storage_provider")
+@patch("storage.get_storage_provider")
 def test_query_model_metadata_perf_log_cache_hit(mock_storage_fn, mock_svc_cache, mock_auth_cache, mock_perf):
     """cache 命中时发 model_service_load|<ms>|memory 性能日志（对齐 async_ir_load 范式）。"""
     from model_service.resolver import _query_model_metadata
@@ -314,7 +314,7 @@ def test_query_model_metadata_perf_log_cache_hit(mock_storage_fn, mock_svc_cache
 
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
-@patch("agent_runtime.storage.get_storage_provider")
+@patch("storage.get_storage_provider")
 def test_resolve_strategy_obs_read_error_raises_md_obs_read_error(
         mock_storage_fn, mock_svc_cache, mock_auth_cache):
     """OBS 传输层读失败（非 not-found）→ MD_OBS_READ_ERROR，不再吞成'未配置'误导运维。"""
@@ -334,7 +334,7 @@ def test_resolve_strategy_obs_read_error_raises_md_obs_read_error(
 @patch("model_service.resolver._logger")
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
 @patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
-@patch("agent_runtime.storage.get_storage_provider")
+@patch("storage.get_storage_provider")
 def test_query_model_metadata_cache_read_failure_warns_and_falls_through(
         mock_storage_fn, mock_svc_cache, mock_auth_cache, mock_logger):
     """cache 读故障（aget_with_source raise）→ 告警 + 降级到 OBS（不破坏调用）。"""
@@ -356,3 +356,120 @@ def test_query_model_metadata_cache_read_failure_warns_and_falls_through(
     strat = _run(resolve_strategy("m1", "0", "w", "a1"))
     assert strat.type == StrategyType.MODEL          # cache 挂了仍能从 OBS 解析
     mock_logger.warning.assert_called()              # cache 降级有告警
+
+
+# ── V1 回退（authId 为空）+ camelCase 解析 ──────────────────────────────────────────────
+
+def _auth_json_camel(auth_id="a1", auth_type="API_KEY", auth_info=None,
+                     workspace_id="w"):
+    """Java ProviderAuthData 实际写入的 camelCase 格式（authType/authInfo/workspaceId）。"""
+    return json.dumps({
+        "id": auth_id, "authType": auth_type,
+        "authInfo": auth_info if auth_info is not None else json.dumps({"API Key": "k1"}),
+        "workspaceId": workspace_id,
+    })
+
+
+def test_auth_from_data_camel_case():
+    """Java 写的 camelCase auth JSON 也应被解析（兼容 OBS 真实数据格式）。"""
+    a = _auth_from_data({
+        "id": "a1", "authType": "API_KEY",
+        "authInfo": json.dumps({"API Key": "k1"}), "workspaceId": "w",
+    })
+    assert a.auth_type == "API_KEY"
+    assert a.auth_info == {"api_key": "k1"}
+
+
+@patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
+@patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
+@patch("storage.get_storage_provider")
+def test_resolve_strategy_no_auth_id_falls_back_to_v1(mock_storage_fn, mock_svc_cache, mock_auth_cache):
+    """authId 为空 → V1 列 model-auth/auth/{proj}/{provider}/ 按 workspace 匹配取 auth。
+
+    对应 Java queryProviderAuth → queryProviderAuthV1（"不传 authId 也能用"的旧数据路径）。
+    """
+    mock_svc_cache.aget_with_source = AsyncMock(return_value=(None, ""))
+    mock_svc_cache.aput = AsyncMock()
+    mock_auth_cache.aget_with_source = AsyncMock(return_value=(None, ""))
+    mock_auth_cache.aput = AsyncMock()
+
+    listed = [
+        "model-auth/auth/0/prov1/other.json",
+        "model-auth/auth/0/prov1/a1.json",
+    ]
+
+    async def _get(key):
+        if key == "model-service/ir/m1.json":
+            return _svc_json()
+        if key == "model-auth/auth/0/prov1/a1.json":
+            return _auth_json_camel(workspace_id="w")  # workspace 命中
+        if key == "model-auth/auth/0/prov1/other.json":
+            return _auth_json_camel(auth_id="other", workspace_id="other-ws")
+        raise StorageNotFoundError(key)
+
+    mock_storage = AsyncMock()
+    mock_storage.get_content = AsyncMock(side_effect=_get)
+    mock_storage.list_keys = AsyncMock(return_value=listed)
+    mock_storage_fn.return_value = mock_storage
+
+    # authId="" 触发 V1
+    strat = _run(resolve_strategy("m1", "0", "w", ""))
+    assert strat is not None
+    assert strat.type == StrategyType.MODEL
+    d = strat.models[0]
+    assert d.auth is not None
+    assert d.auth.auth_id == "a1"            # 命中 workspace=w 的那个
+    assert d.auth.auth_info == {"api_key": "k1"}   # camelCase auth_info 也解析成功
+    assert d.available is True
+    mock_storage.list_keys.assert_awaited()
+
+
+@patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
+@patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
+@patch("storage.get_storage_provider")
+def test_resolve_strategy_v1_empty_workspace_picks_first(mock_storage_fn, mock_svc_cache, mock_auth_cache):
+    """V1 下 workspaceId 为空 → 取目录第一个 .json（对应 Java getProviderAuthFromObsV1）。"""
+    mock_svc_cache.aget_with_source = AsyncMock(return_value=(None, ""))
+    mock_svc_cache.aput = AsyncMock()
+    mock_auth_cache.aget_with_source = AsyncMock(return_value=(None, ""))
+    mock_auth_cache.aput = AsyncMock()
+
+    async def _get(key):
+        if key == "model-service/ir/m1.json":
+            return _svc_json()
+        if key == "model-auth/auth/0/prov1/first.json":
+            return _auth_json_camel(auth_id="first", workspace_id="anything")
+        raise StorageNotFoundError(key)
+
+    mock_storage = AsyncMock()
+    mock_storage.get_content = AsyncMock(side_effect=_get)
+    mock_storage.list_keys = AsyncMock(return_value=["model-auth/auth/0/prov1/first.json"])
+    mock_storage_fn.return_value = mock_storage
+
+    strat = _run(resolve_strategy("m1", "0", "", ""))   # workspace 与 authId 均空
+    assert strat.models[0].auth.auth_id == "first"
+
+
+@patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue")
+@patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue")
+@patch("storage.get_storage_provider")
+def test_resolve_strategy_v1_no_auth_dir_returns_unavailable(mock_storage_fn, mock_svc_cache, mock_auth_cache):
+    """V1 目录为空 → auth=None → available=False（对应 Java V1 objects.isEmpty → null）。"""
+    mock_svc_cache.aget_with_source = AsyncMock(return_value=(None, ""))
+    mock_svc_cache.aput = AsyncMock()
+    mock_auth_cache.aget_with_source = AsyncMock(return_value=(None, ""))
+    mock_auth_cache.aput = AsyncMock()
+    mock_storage = AsyncMock()
+    mock_storage.get_content = AsyncMock(side_effect=_svc_get_only)
+    mock_storage.list_keys = AsyncMock(return_value=[])
+    mock_storage_fn.return_value = mock_storage
+
+    strat = _run(resolve_strategy("m1", "0", "w", ""))
+    assert strat.models[0].auth is None
+    assert strat.models[0].available is False
+
+
+async def _svc_get_only(key):
+    if key == "model-service/ir/m1.json":
+        return _svc_json()
+    raise StorageNotFoundError(key)

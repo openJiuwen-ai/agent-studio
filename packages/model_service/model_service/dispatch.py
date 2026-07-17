@@ -77,9 +77,13 @@ def build_httpx_client(api_base: str, verify_ssl: bool, ssl_cert: Optional[str] 
 
 
 def _settings_llm():
-    """timeout / verify_ssl 兜底取自 settings.llm（对应旧 OBSModelConfigProvider 的 base=settings.llm）。"""
-    from agent_runtime.common.config import settings   # 延迟导入：agent_runtime 顶层反向 import model_service，顶层导入会循环
-    return settings.llm
+    """timeout / verify_ssl 兜底取自宿主注入的 llm settings（对应旧 OBSModelConfigProvider 的 base=settings.llm）。
+
+    宿主在启动时经 ``ports.set_llm_settings`` 注入；agent_runtime 注入其 settings.llm，
+    agent_builder 注入 config_bridge.settings.llm。
+    """
+    from .ports import get_llm_settings
+    return get_llm_settings()
 
 
 def get_chat_connection(model: ModelServiceBase, auth: Optional[ProviderAuth]) -> ResolvedConnection:
@@ -142,10 +146,53 @@ async def embed(model, auth, request) -> object:
         await client.close()
 
 
-async def rerank(model, auth, request) -> object:
+async def rerank(model, auth, request) -> dict:
     """rerank 入口，供 agent-builder ``/v1/agent-builder/rerank`` facade 调用。
 
-    rerank 无 SDK 可用（非 OpenAI API），需用 httpx 移植 Java ``maas_rerank`` adapter
-    （``RankDocumentsRequest`` → ``{model, query, documents}``，响应解析 + topN 截断）。当前未实现。
+    移植自 Java ``MaasRerankRequestAdaptor`` + ``AbstractRequestAdapter.resBodyConvert``：
+    - 上游请求体：``{model, query, documents}``（``documents`` ← ``request.docs``）；
+      ``top_n`` 不上传，仅用于响应截断（与 Java 一致）。
+    - POST 到 ``model.api_url``（verbatim，``get_chat_connection`` 已做 ``/chat/completions`` 兜底裁剪，
+      rerank URL 无此后缀故为 no-op）。
+    - 鉴权：``API_KEY`` → ``Authorization: Bearer <api_key>``；``CUSTOM_APIKEY`` → ``auth_info`` 各项作为自定义头。
+    - 响应后处理：``results`` 按 ``index`` 升序排序（null 置后），截断到 ``top_n``，其余字段原样保留。
     """
-    raise ModelServiceError("NOT_IMPLEMENTED", "rerank httpx port 待实现")
+    conn = get_chat_connection(model, auth)
+    client = build_httpx_client(conn.api_base, conn.verify_ssl)
+    headers = {"Content-Type": "application/json"}
+    if conn.custom_headers:
+        # CUSTOM_APIKEY：auth_info 各项作为自定义请求头（对应 Java CustomApiKeyAuthAdapter）
+        headers.update(conn.custom_headers)
+    else:
+        # API_KEY：标准 Bearer 鉴权
+        headers["Authorization"] = f"Bearer {conn.api_key}"
+
+    body = {
+        "model": conn.model_name,
+        "query": request.query,
+        "documents": list(request.docs or []),
+    }
+    try:
+        resp = await client.post(
+            conn.api_base, json=body, headers=headers, timeout=conn.timeout
+        )
+        if resp.status_code >= 300:
+            raise ModelServiceError(
+                "MD_INVOKE_MODEL_SERVICE_FAIL",
+                f"rerank upstream {conn.api_base} returned {resp.status_code}: {resp.text}",
+            )
+        data = resp.json()
+    finally:
+        await client.aclose()
+
+    results = data.get("results") or []
+    # 按 index 升序排序，缺失 index 置后（对应 Java results.sort(comparator nullsLast）。
+    results = sorted(
+        results,
+        key=lambda r: r.get("index") if r.get("index") is not None else float("inf"),
+    )
+    top_n = request.top_n
+    if top_n is not None:
+        results = results[: max(0, min(int(top_n), len(results)))]
+    data["results"] = results
+    return data

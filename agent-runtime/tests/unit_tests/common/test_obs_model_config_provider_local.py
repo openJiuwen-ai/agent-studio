@@ -83,7 +83,7 @@ class TestOBSModelConfigProviderLocal:
         resolver 而非薄 provider——薄 provider 只塞解析输入，真实 api_base / api_key / model_name
         在此解析。
         """
-        from agent_runtime.storage.object_storage import LocalStorageProvider
+        from storage import LocalStorageProvider
         from model_service.resolver import StrategyType, resolve_strategy
 
         modelcase_dir = os.path.abspath(MODELCASE_DIR)
@@ -114,7 +114,7 @@ class TestOBSModelConfigProviderLocal:
         # cache miss → 读 OBS（modelcase）；aput no-op
         with patch("jiuwen.serve.controllers.execution.open_utils.cache_model_service_queue") as mock_svc, \
              patch("jiuwen.serve.controllers.execution.open_utils.cache_model_auth_queue") as mock_auth, \
-             patch("agent_runtime.storage.get_storage_provider", return_value=ModelCaseStorageProvider()):
+             patch("storage.get_storage_provider", return_value=ModelCaseStorageProvider()):
             mock_svc.aget_with_source = AsyncMock(return_value=(None, ""))
             mock_svc.aput = AsyncMock()
             mock_auth.aget_with_source = AsyncMock(return_value=(None, ""))
