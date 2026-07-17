@@ -72,5 +72,8 @@ def create_context(config: ContexConfigDict) -> Optional[ssl.SSLContext]:
     )
     password = os.getenv("TLS_CERT_KEY_PASSWD", config.get("password"))
     ca_file = os.getenv("TLS_CA_PATH", config.get("ca_cert"))
+    # HTTPS=true 但未配置证书/密钥 → 降级为不启用 SSL（http），避免无证书环境（测试/本地）启动失败
+    if not cert or not key:
+        return None
     ssl_context = set_ssl_cert(cert, key, ca_file, password)
     return ssl_context
