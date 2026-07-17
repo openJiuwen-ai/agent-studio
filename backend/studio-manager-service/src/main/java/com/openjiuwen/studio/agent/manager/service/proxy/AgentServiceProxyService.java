@@ -5,6 +5,7 @@ package com.openjiuwen.studio.agent.manager.service.proxy;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.obs.services.model.TemporarySignatureResponse;
 import com.openjiuwen.studio.agent.common.annotation.OperationLog;
 import com.openjiuwen.studio.agent.common.dto.BatchDeleteUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
@@ -12,6 +13,7 @@ import com.openjiuwen.studio.agent.common.dto.agent.Message;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventReq;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventResp;
+import com.openjiuwen.studio.agent.common.dto.knowledge.FileUploadRsp;
 import com.openjiuwen.studio.agent.common.dto.knowledge.ListUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationReq;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationResp;
@@ -24,13 +26,12 @@ import com.openjiuwen.studio.agent.common.enums.OperationType;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
-import com.openjiuwen.studio.agent.common.utils.JsonUtils;
-import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
-import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.*;
+import com.openjiuwen.studio.agent.manager.bo.FileCheckWrapper;
+import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.constant.Constant;
 import com.openjiuwen.studio.agent.manager.dto.*;
 import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
-import com.openjiuwen.studio.agent.common.utils.ResponseModel;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.BatchDeleteUserVariableMemoryRequestBody;
@@ -64,11 +65,13 @@ import com.openjiuwen.studio.agent.manager.model.ExecuteParams;
 import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionBriefModel;
 import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionDetailModel;
 import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionInvokeModel;
+import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.debugging.ControllerDebuggingMgmtService;
 
 import com.openjiuwen.studio.agent.manager.service.plugin.IPlugin;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
 import okhttp3.Request;
@@ -83,14 +86,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.UUID;
+import java.io.IOException;
+import java.io.InputStream;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Service
 @Validated
@@ -121,6 +127,10 @@ public class AgentServiceProxyService {
 
     private final ControllerDebuggingMgmtService controllerDebuggingMgmtService;
 
+    private static final int KB = 1024;
+
+    private final MgObsService mgObsService;
+
     @Value("${agent_runtime_endpoint:}")
     private String runtimeEndpoint;
 
@@ -130,8 +140,60 @@ public class AgentServiceProxyService {
     @Value("${op.svc.project-id}")
     private String opSvcProjectId;
 
+    @Value("${icon.max-size}")
+    private long iconMaxSize;
+
+    @Value("${agent.max-upload-file-size}")
+    private long fileMaxSize;
+
+    @Value("${agent.max-upload-image-size}")
+    private long imageMaxSize;
+
+    @Value("${file.max-upload-num}")
+    private int maxUploadNum;
+
+    @Value("${file.time-scope-upload-num}")
+    private int timeScopeUploadNum;
+
+    @Value("${file.max-upload-total-size}")
+    private int maxUploadTotalSize;
+
+    @Value("${file.time-scope-upload-total-size}")
+    private int timeScopeUploadTotalSize;
+
+    @Value("${obs.bucket_storage_limit:100}")
+    private long bucketStorageLimit;
+
+    @Value("${file.default-type}")
+    private String allowedDefaultTypeStr;
+
+    @Value("${file.icon-type}")
+    private String allowedIconTypeStr;
+
+    @Value("${file.img-type}")
+    private String allowedImgTypeStr;
+
+    @Value("${file.readonly.enable:false}")
+    private boolean fileReadOnly;
+
+    private Set<String> allowedIconType = new HashSet<>();
+
+    private Set<String> allowedImgType = new HashSet<>();
+
+    private Set<String> allowedDefaultType = new HashSet<>();
+
     @Autowired
     private IPlugin iPlugin;
+
+    /**
+     * 初始化
+     */
+    @PostConstruct
+    public void init() {
+        allowedIconType = Arrays.stream(allowedIconTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
+        allowedImgType = Arrays.stream(allowedImgTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
+        allowedDefaultType = Arrays.stream(allowedDefaultTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
+    }
 
     private String getToken() {
         return RequestContextUtils.getRequestAuthToken();
@@ -141,7 +203,7 @@ public class AgentServiceProxyService {
         WorkflowMapper workflowMapper, ModelServiceMapper modelServiceMapper, OkHttpClientUtils okHttpClientUtils,
         RouterStrategyMapper routerStrategyMapper, FreeModelServiceMapper freeModelServiceMapper,
         ToolMapper toolMapper, AgentRuntimeService agentRuntimeService,
-        ControllerDebuggingMgmtService controllerDebuggingMgmtService) {
+        ControllerDebuggingMgmtService controllerDebuggingMgmtService, MgObsService mgObsService) {
         this.runtimeClient = runtimeClient;
         this.redisClient = redisClient;
         this.agentMapper = agentMapper;
@@ -153,6 +215,7 @@ public class AgentServiceProxyService {
         this.toolMapper = toolMapper;
         this.agentRuntimeService = agentRuntimeService;
         this.controllerDebuggingMgmtService = controllerDebuggingMgmtService;
+        this.mgObsService = mgObsService;
     }
 
     public ResponseEntity<List<MemoryVariable>> resetConversationMemory(String workspaceId, String projectId,
@@ -713,5 +776,145 @@ public class AgentServiceProxyService {
 
         WorkflowListener listener = new WorkflowListener(MDC.get(REQUEST_ID), executeParams, result, headers);
         return stream(url, headers, bodyJson, 900000L, listener);
+    }
+
+    @OperationLog(
+            operationType = OperationType.EXECUTE,
+            resourceType = "agent",
+            description = "上传文件"
+    )
+    public FileUploadRsp uploadAgentFile(MultipartFile file, Integer expiresDays, Boolean isImage) {
+        if (file.isEmpty()) {
+            log.error("file cannot be empty!");
+            throw new AgentStudioException(StudioError.FILE_CANNOT_BE_EMPTY);
+        }
+
+        // 文件上传校验
+        String safeFileName = checkUploadFile(file, isImage ? CommonConstant.IMAGE : CommonConstant.FILE);
+        checkUserCanUpload(file, RequestContextUtils.getRequestUserId());
+
+        return uploadFileToObs(file, expiresDays, safeFileName);
+    }
+
+    /**
+     * 上传文件到OBS
+     *
+     * @param file 文件
+     * @param expiresDays 过期天数
+     * @param safeFileName 安全文件名
+     * @return 上传结果
+     */
+    private FileUploadRsp uploadFileToObs(MultipartFile file, Integer expiresDays, String safeFileName) {
+        try {
+            InputStream inputStream = file.getInputStream();
+            // 设置返回响应体Url和Headers参数
+            FileUploadRsp fileUploadRsp = new FileUploadRsp();
+
+            String objectKey = String.format("%s/%s", CommonConstant.FILE, safeFileName);
+
+            String objectName = mgObsService.uploadStreamStagingBucket(objectKey, inputStream, expiresDays);
+            String url = mgObsService.getTemporaryGetRsp(true, objectName, (long) expiresDays * 24L * 60* 60);
+            fileUploadRsp.setUrl(url);
+
+            return fileUploadRsp;
+        } catch (IOException e) {
+            log.error("OBS failure", e);
+            throw new AgentStudioException(StudioError.OBS_FAILED);
+        }
+    }
+
+    private void checkUserCanUpload(MultipartFile file, String userId) {
+        checkUploadNum(userId);
+        checkUploadTotalSize(file, userId);
+    }
+
+    private void checkUploadTotalSize(MultipartFile file, String userId) {
+        String key = "uploadFile:new:size:" + userId;
+        boolean exist = redisClient.exists(key);
+        BigDecimal currentSize = new BigDecimal(file.getSize()).divide(new BigDecimal(KB));
+        if (exist) {
+            BigDecimal obsSize = new BigDecimal(redisClient.get(key));
+            currentSize = currentSize.add(obsSize);
+        }
+
+        // 存在 -> 获取已上传的文件大小，与最大值比较
+        if (currentSize.compareTo(new BigDecimal(maxUploadTotalSize)) < 0) {
+            // 过期时间
+            redisClient.setAndKeepTtl(key, String.valueOf(currentSize), Duration.ofSeconds(timeScopeUploadTotalSize));
+        } else {
+            log.error(
+                    "The total size of the upload files exceeds the limit. fileSize:{}, currentSize:{}, maxUploadTotalSize:{}",
+                    file.getSize(), currentSize, maxUploadTotalSize);
+            throw new AgentStudioException(StudioError.FILE_SIZE_EXCEED_LIMIT);
+        }
+    }
+
+    private void checkUploadNum(String userId) {
+        String key = "uploadFile:num:" + userId;
+        long currentCount = redisClient.getAndIncrement(key, timeScopeUploadNum);
+        if (currentCount == 0) {
+            // 如果是第一次上传，设置过期时间5分钟
+            redisClient.expire(key, Duration.ofSeconds(timeScopeUploadNum));
+        }
+        if (currentCount > maxUploadNum) {
+            log.error("The number of the upload files exceeds the limit. currentCount:{}, maxUploadNum:{}",
+                    currentCount, maxUploadNum);
+            throw new AgentStudioException(StudioError.AGENT_UPLOAD_FILE_NUM);
+        }
+    }
+
+    /**
+     * 上传文件校验
+     *
+     * @param file 文件
+     * @param type 文件类型
+     * @return 新生成的文件名
+     */
+    private String checkUploadFile(MultipartFile file, String type) {
+        // 文件为空
+        if (file == null || file.isEmpty()) {
+            log.error("The uploaded file cannot be empty.");
+            throw new AgentStudioException(StudioError.ILLEGAL_FILE);
+        }
+
+        FileCheckWrapper fileCheckWrapper = buildFileCheckWrapper(type);
+        // 校验文件大小
+        if (file.getSize() > fileCheckWrapper.getSize() * KB) {
+            log.error("The avatar file size exceeds the limit: {}KB", iconMaxSize);
+            throw new AgentStudioException(StudioError.PICTURE_FILE_SIZE_EXCEED_LIMIT);
+        }
+
+        // 校验文件名
+        String fileName = file.getOriginalFilename();
+        if (org.apache.commons.lang3.StringUtils.isBlank(fileName) || fileName.contains("..") || fileName.contains("\\") || fileName.contains(
+                "/")) {
+            log.error("The file name is illegal: {}", LogUtils.encodeForLog(fileName));
+            throw new AgentStudioException(StudioError.ILLEGAL_FILE_NAME);
+        }
+
+        // 校验文件类型
+        String fileType = fileName.substring(fileName.lastIndexOf('.'));
+        if (org.apache.commons.lang3.StringUtils.isBlank(fileType) || !fileCheckWrapper.getType().contains(fileType.toLowerCase(Locale.ROOT))) {
+            log.error("The file type is not supported: {}", LogUtils.encodeForLog(fileType));
+            throw new AgentStudioException(StudioError.ILLEGAL_FILE_TYPE);
+        }
+
+        // 生成随机名
+        return UUID.randomUUID() + fileType;
+    }
+
+    /**
+     * 根据校验类型获取文件校验包装类
+     *
+     * @param type 校验类型
+     * @return FileCheckWrapper 文件校验包装类
+     */
+    private FileCheckWrapper buildFileCheckWrapper(String type) {
+        FileCheckWrapper.FileCheckWrapperBuilder builder = FileCheckWrapper.builder();
+        return switch (type) {
+            case CommonConstant.ICON -> builder.size(iconMaxSize).type(allowedIconType).build();
+            case CommonConstant.IMAGE -> builder.size(imageMaxSize).type(allowedImgType).build();
+            default -> builder.size(fileMaxSize).type(allowedDefaultType).build();
+        };
     }
 }

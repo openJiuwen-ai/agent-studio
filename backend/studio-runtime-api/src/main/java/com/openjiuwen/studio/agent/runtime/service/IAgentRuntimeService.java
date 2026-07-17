@@ -61,17 +61,6 @@ public interface IAgentRuntimeService {
     String deleteReleaseInfo(String projectId, String releaseId, String channelType, String versionId) ;
 
     /**
-     * uploadAgentFile
-     *
-     * @param workspaceId workspaceId
-     * @param projectId projectId
-     * @param file file
-     * @param expires expires
-     * @param isImage isImage
-     */
-    FileUploadRsp uploadAgentFile(String workspaceId, String projectId, MultipartFile file, Integer expires, Boolean isImage) ;
-
-    /**
      * voiceRecognition
      *
      * @param projectId projectId

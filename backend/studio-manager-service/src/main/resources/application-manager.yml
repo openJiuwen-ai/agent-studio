@@ -236,10 +236,11 @@ storage:
     ak: ${obs_ak:}
     sk: ${obs_sk:}
     bucket: ${obs_bucket:}
-    staging-bucket: ${obs_staging_bucket:}
+    staging-bucket: ${obs_staging_bucket:agent-builder-files-staging}
     opensource: ${obs_opensource:true}
     auto-create-bucket: ${obs_bucket_auto_create:true}
     path-style: ${DATASOURCE_OBS_PATH_STYLE:path}
+    bucket_storage_limit: ${obs_bucket_storage_limit:100}
   local:
     base-path: ${storage_local_base_path:}
     bucket: ${storage_local_bucket:}
@@ -445,7 +446,14 @@ file:
   icon-type: ${file_icon_type:.jpg,.jpeg,.png,.gif}
   import-type: ${file_import_type:.jsonl}
   default-type: ${file_default_type:.doc,.docx,.txt,.pdf,.csv,.xlsx,.xls,.pptx,.ppt,.png,.jpg,.jpeg,.bmp,.gif,.mp3,.mp4,.wav,.amr,.m4a,.ogg,.flac,.webm,.aac,.ac3,.mov,.wma,.avi,.rmvb,.mkv,.flv,.f4v,.wmv,.3gp,.jsonl}
-
+  max-upload-num: ${max_upload_num:20}
+  time-scope-upload-num: ${time_scope_upload_num:300}
+  max-upload-total-size: ${max_upload_total_size:204800}
+  time-scope-upload-total-size: ${time_scope_upload_total_size:86400}
+  readonly:
+    enable: ${file_readonly_enable:false}
+  access:
+    expiration-days: ${file_upload_expiration_days:7}
 icon:
   max-size: ${icon_max_size:200}
 

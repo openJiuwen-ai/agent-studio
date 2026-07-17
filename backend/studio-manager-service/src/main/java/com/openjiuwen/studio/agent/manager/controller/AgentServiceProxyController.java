@@ -169,6 +169,9 @@ public class AgentServiceProxyController {
     @Value("${conversations.abort.enable:false}")
     private boolean abortEnable;
 
+    @Value("${file.access.expiration-days:7}")
+    private int expireDays;
+
     private AppMapper appMapper;
 
     private ReleaseVersionMapper releaseVersionMapper;
@@ -586,9 +589,8 @@ public class AgentServiceProxyController {
         @ApiParam(value = "是否是图片上传", defaultValue = "false")
         @RequestParam(value = "is_image", required = false, defaultValue = "false") Boolean isImage,
         @RequestHeader HttpHeaders httpHeaders) {
-        return runtimeClient.uploadAgentFile(
-                RequestContextUtils.getRequestAuthToken(), projectId, workspaceId,
-                expires, isImage, file).getBody();
+        int finalExpires = (expires == null) ? expireDays : expires;
+        return agentServiceProxyService.uploadAgentFile(file,finalExpires,isImage);
 
     }
 
