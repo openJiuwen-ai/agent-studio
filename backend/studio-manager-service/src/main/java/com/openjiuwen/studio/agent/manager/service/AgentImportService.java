@@ -87,6 +87,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -1016,6 +1017,19 @@ public class AgentImportService {
             .collect(Collectors.toMap(ImportResourceResult::getId, result -> result, (existing, incoming) -> existing));
         Map<String, ImportInfo> resourceMap = resourceList.stream()
             .collect(Collectors.toMap(ImportInfo::getResourceId, result -> result, (existing, incoming) -> existing));
+        // 按 resourceId+versionId 联合构建版本映射，解决同 resourceId 多版本去重问题：
+        // resourceMap 按 resourceId 去重后只剩1个 ImportInfo，导致多版本上传 DSL 时取到同一份。
+        // versionedResourceMap 按 resourceId+versionId 区分，确保每个版本用各自的 ImportInfo。
+        // 无版本资源（model/tool/mcp 等）versionId 为空串，仍可正确匹配。
+        Map<String, ImportInfo> versionedResourceMap = resourceList.stream()
+            .collect(Collectors.toMap(
+                p -> p.getResourceId() + "|" + (p.getReleaseVersion() != null
+                    ? p.getReleaseVersion().getVersionId() : ""),
+                result -> result, (existing, incoming) -> existing));
+        // 按 resourceId 分组所有版本 ImportInfo，用于子资源引用更新时遍历同 resourceId 的所有版本
+        // （resourceMap 去重后只剩1个，会导致同 resourceId 多版本只有1个的 dsl 引用被更新）
+        Map<String, List<ImportInfo>> resourceListMap = resourceList.stream()
+            .collect(Collectors.groupingBy(ImportInfo::getResourceId));
 
         // 构建完整 ID 映射：resource_id 和 metadata.trace_id 都映射到 newId
         // 解决导出包 DSL 里 configs.id 是上次导入生成的旧 ID（= trace_id）而非原始 resource_id 的问题
@@ -1053,7 +1067,6 @@ public class AgentImportService {
                 return;
             }
             p.getParents().forEach(parentId -> {
-                ImportInfo parentResource = resourceMap.get(parentId);
                 ImportResourceResult parentResult = resultMap.get(parentId);
                 if (parentResult == null) {
                     return;
@@ -1061,25 +1074,33 @@ public class AgentImportService {
                 if (Strings.CS.equals(parentResult.getStatus(), ImportExportStatusEnum.FAILED.getCode())) {
                     return;
                 }
-                
-                switch (ResourceTypeEnum.fromValue(parentResource.getResourceType())) {
-                    case WORKFLOW -> handleWorkflowDsl(parentResource, parentResult, result);
-                    case AGENT -> handleAgentDsl(parentResource, parentResult, result);
-                    case CONTROLLER -> {
-                        handleControllerDsl(parentResource, parentResult, result, allIdMappings);
-                        if (CollectionUtils.isNotEmpty(parentResource.getParents())) {
-                            parentResource.getParents().forEach(grandParentId -> {
-                                ImportInfo grandParentResource = resourceMap.get(grandParentId);
-                                ImportResourceResult grandParentResult = resultMap.get(grandParentId);
-                                if (grandParentResult == null || Strings.CS.equals(grandParentResult.getStatus(),
-                                    ImportExportStatusEnum.FAILED.getCode())) {
-                                    return;
-                                }
-                                handleGrandControllerDsl(grandParentResource, grandParentResult, result);
+                // 遍历该 parentId 的所有版本 ImportInfo（同 resourceId 多版本），对每个版本都更新子资源引用。
+                // resourceMap 去重后只剩1个，会导致多版本只有1个版本的 dsl 引用被更新。
+                List<ImportInfo> parentResources = resourceListMap.getOrDefault(parentId,
+                    Collections.singletonList(resourceMap.get(parentId)));
+                parentResources.forEach(parentResource -> {
+                    if (parentResource == null) {
+                        return;
+                    }
+                    switch (ResourceTypeEnum.fromValue(parentResource.getResourceType())) {
+                        case WORKFLOW -> handleWorkflowDsl(parentResource, parentResult, result);
+                        case AGENT -> handleAgentDsl(parentResource, parentResult, result);
+                        case CONTROLLER -> {
+                            handleControllerDsl(parentResource, parentResult, result, allIdMappings);
+                            if (CollectionUtils.isNotEmpty(parentResource.getParents())) {
+                                parentResource.getParents().forEach(grandParentId -> {
+                                    ImportInfo grandParentResource = resourceMap.get(grandParentId);
+                                    ImportResourceResult grandParentResult = resultMap.get(grandParentId);
+                                    if (grandParentResult == null || Strings.CS.equals(grandParentResult.getStatus(),
+                                        ImportExportStatusEnum.FAILED.getCode())) {
+                                        return;
+                                    }
+                                    handleGrandControllerDsl(grandParentResource, grandParentResult, result);
                             });
                         }
                     }
                 }
+                });
             });
         });
 
@@ -1096,18 +1117,26 @@ public class AgentImportService {
                 case WORKFLOW -> {
                     uploadWorkflowDsl(resourceMap.get(result.getId()), id, id, null);
                     if (StringUtils.isNotEmpty(versionId)) {
-                        uploadWorkflowDsl(resourceMap.get(result.getId()), id, objectKey, versionId);
+                        // 版本 DSL 用按版本区分的 ImportInfo，避免同 resourceId 多版本取到同一份
+                        ImportInfo versionedInfo = versionedResourceMap.get(result.getId() + "|" + result.getVersion());
+                        uploadWorkflowDsl(
+                            versionedInfo != null ? versionedInfo : resourceMap.get(result.getId()), id, objectKey,
+                            versionId);
                     }
                 }
                 case AGENT -> {
                     uploadAgentDsl(resourceMap.get(result.getId()), id, id);
                     if (StringUtils.isNotEmpty(versionId)) {
-                        uploadAgentDsl(resourceMap.get(result.getId()), id, objectKey);
+                        ImportInfo versionedInfo = versionedResourceMap.get(result.getId() + "|" + result.getVersion());
+                        uploadAgentDsl(
+                            versionedInfo != null ? versionedInfo : resourceMap.get(result.getId()), id, objectKey);
                     }
                 }
                 case CONTROLLER -> {
                     if (StringUtils.isNotEmpty(versionId)) {
-                        uploadControllerDsl(resourceMap.get(result.getId()), id, versionId);
+                        ImportInfo versionedInfo = versionedResourceMap.get(result.getId() + "|" + result.getVersion());
+                        uploadControllerDsl(
+                            versionedInfo != null ? versionedInfo : resourceMap.get(result.getId()), id, versionId);
                     }
                     uploadControllerDsl(resourceMap.get(result.getId()), id, null);
                 }
@@ -1137,6 +1166,37 @@ public class AgentImportService {
                 case (CommonConstant.COMMON_AGENT_TYPE) -> {
                     agent.setDslPath(null);
                     agentInfo = agentCommonService.buildComplexAgentInfo(agent);
+                    // 用导入包版本快照（importInfo.getDsl()）覆盖用户配置类字段，恢复版本特有内容。
+                    // buildComplexAgentInfo 从 DB agent 表重建，agent 表只有草稿态一份，
+                    // 导致所有版本的用户配置类字段（instructions/prologue/suggestQueries 等）都被草稿态覆盖，版本差异丢失。
+                    // ID 类、关联资源类（tools/mcp/skills/knowledge/workflows）保留 DB 重建值（目标空间新 ID/新关联）。
+                    AgentInfo versionedInfo = JsonUtils.objectToClassType(importInfo.getDsl(), AgentInfo.class);
+                    if (versionedInfo != null) {
+                        agentInfo.setName(versionedInfo.getName());
+                        agentInfo.setDescription(versionedInfo.getDescription());
+                        agentInfo.setIcon(versionedInfo.getIcon());
+                        agentInfo.setInstructions(versionedInfo.getInstructions());
+                        agentInfo.setPrologue(versionedInfo.getPrologue());
+                        agentInfo.setSuggestQueries(versionedInfo.getSuggestQueries());
+                        agentInfo.setAdditionalQuestionsConfig(versionedInfo.getAdditionalQuestionsConfig());
+                        agentInfo.setTriggerList(versionedInfo.getTriggerList());
+                        agentInfo.setMemoryVariables(versionedInfo.getMemoryVariables());
+                        agentInfo.setMemoryConfig(versionedInfo.getMemoryConfig());
+                        agentInfo.setAgentVariables(versionedInfo.getAgentVariables());
+                        agentInfo.setInputVariables(versionedInfo.getInputVariables());
+                        agentInfo.setKnowledgeRetrievePolicy(versionedInfo.getKnowledgeRetrievePolicy());
+                        agentInfo.setWorkflowSwitchEnabled(versionedInfo.isWorkflowSwitchEnabled());
+                        agentInfo.setSchedulingMode(versionedInfo.getSchedulingMode());
+                        agentInfo.setVoiceInteraction(versionedInfo.getVoiceInteraction());
+                        agentInfo.setSafetyBarrier(versionedInfo.isSafetyBarrier());
+                        agentInfo.setContentReview(versionedInfo.getContentReview());
+                        // 模型为版本特有（不同版本可能用不同 model），modelDeploymentId 已由 handleAgentDsl 更新为新 ID
+                        agentInfo.setModelDeploymentId(versionedInfo.getModelDeploymentId());
+                        agentInfo.setModelName(versionedInfo.getModelName());
+                        agentInfo.setModelType(versionedInfo.getModelType());
+                        agentInfo.setModel(versionedInfo.getModel());
+                        agentInfo.setModelConfig(versionedInfo.getModelConfig());
+                    }
                 }
                 // 规划模式
                 case (CommonConstant.PLANEXECUTE_TYPE) -> {

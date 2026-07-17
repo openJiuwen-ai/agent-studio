@@ -61,6 +61,7 @@ from agent_runtime.serve.apis.app_run import (
 from agent_runtime.serve.apis.app_run_request import (
     WorkflowAppRunRequest,
     AgentAppRunRequest,
+    ExecutionContext,
 )
 
 
@@ -104,26 +105,34 @@ class TestBuildReqJsonFromWorkflow:
     """Workflow request builder tests."""
 
     @staticmethod
+    def _make_ctx(**overrides):
+        defaults = dict(
+            conversation_id="conv-1", ir_path="ir/path",
+            conversation_history=[], dialogue_count=1, user_id="anonymous",
+        )
+        defaults.update(overrides)
+        return ExecutionContext(**defaults)
+
+    @staticmethod
     def test_query_from_inputs():
         body = WorkflowAppRunRequest(inputs={"query": "hello"})
-        result = build_req_json_from_workflow(body, "conv-1", "ir/path", [], 1)
+        result = build_req_json_from_workflow(body, TestBuildReqJsonFromWorkflow._make_ctx())
         assert result["query"] == "hello"
 
     @staticmethod
     def test_query_empty_when_not_in_inputs():
         body = WorkflowAppRunRequest(inputs={})
-        result = build_req_json_from_workflow(body, "conv-1", "ir/path", [], 1)
+        result = build_req_json_from_workflow(body, TestBuildReqJsonFromWorkflow._make_ctx())
         assert result["query"] == ""
 
     @staticmethod
-    def test_body_messages_override_history():
-        from jiuwen.serve.schemas.orchestration_mgr import ConversationHistoryMessage
-        msg = ConversationHistoryMessage(role="user", content="hi")
-        body = WorkflowAppRunRequest(messages=[msg])
-        result = build_req_json_from_workflow(
-            body, "conv-1", "ir/path",
-            [{"role": "assistant", "content": "old"}], 5
+    def test_conversation_history_from_ctx():
+        body = WorkflowAppRunRequest()
+        ctx = TestBuildReqJsonFromWorkflow._make_ctx(
+            conversation_history=[{"role": "user", "content": "hi"}],
+            dialogue_count=5,
         )
+        result = build_req_json_from_workflow(body, ctx)
         assert len(result["params"]["conversationHistory"]) == 1
         assert result["params"]["conversationHistory"][0]["role"] == "user"
 
@@ -131,7 +140,8 @@ class TestBuildReqJsonFromWorkflow:
     def test_empty_body_messages_use_history():
         body = WorkflowAppRunRequest()
         history = [{"role": "user", "content": "cached"}]
-        result = build_req_json_from_workflow(body, "conv-1", "ir/path", history, 3)
+        ctx = TestBuildReqJsonFromWorkflow._make_ctx(conversation_history=history, dialogue_count=3)
+        result = build_req_json_from_workflow(body, ctx)
         assert result["params"]["conversationHistory"] == history
         assert result["dialogueCount"] == 3
 
@@ -141,20 +151,20 @@ class TestBuildReqJsonFromWorkflow:
             globals={"key1": "val1"},
             memory_inputs={"key2": "val2"},
         )
-        result = build_req_json_from_workflow(body, "conv-1", "ir/path", [], 1)
+        result = build_req_json_from_workflow(body, TestBuildReqJsonFromWorkflow._make_ctx())
         assert result["params"]["globalVariables"]["key1"] == "val1"
         assert result["params"]["globalVariables"]["key2"] == "val2"
 
     @staticmethod
     def test_user_id_defaults_to_anonymous():
         body = WorkflowAppRunRequest()
-        result = build_req_json_from_workflow(body, "conv-1", "ir/path", [], 1)
+        result = build_req_json_from_workflow(body, TestBuildReqJsonFromWorkflow._make_ctx())
         assert result["userId"] == "anonymous"
 
     @staticmethod
     def test_response_mode_always_streaming():
         body = WorkflowAppRunRequest()
-        result = build_req_json_from_workflow(body, "conv-1", "ir/path", [], 1)
+        result = build_req_json_from_workflow(body, TestBuildReqJsonFromWorkflow._make_ctx())
         assert result["responseMode"] == "streaming"
 
 
@@ -162,38 +172,46 @@ class TestBuildReqJsonFromAgent:
     """Agent request builder tests."""
 
     @staticmethod
+    def _make_ctx(**overrides):
+        defaults = dict(
+            conversation_id="conv-1", ir_path="ir/path",
+            conversation_history=[], dialogue_count=1, user_id="",
+        )
+        defaults.update(overrides)
+        return ExecutionContext(**defaults)
+
+    @staticmethod
     def test_query_from_body():
         body = AgentAppRunRequest(query="test query")
-        result = build_req_json_from_agent(body, "conv-1", "ir/path", [], 1)
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
         assert result["query"] == "test query"
 
     @staticmethod
     def test_query_fallback_to_inputs():
         body = AgentAppRunRequest(inputs={"query": "from inputs"})
-        result = build_req_json_from_agent(body, "conv-1", "ir/path", [], 1)
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
         assert result["query"] == "from inputs"
 
     @staticmethod
     def test_query_body_takes_priority():
         body = AgentAppRunRequest(query="body query", inputs={"query": "inputs query"})
-        result = build_req_json_from_agent(body, "conv-1", "ir/path", [], 1)
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
         assert result["query"] == "body query"
 
     @staticmethod
     def test_query_empty_when_missing():
         body = AgentAppRunRequest()
-        result = build_req_json_from_agent(body, "conv-1", "ir/path", [], 1)
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
         assert result["query"] == ""
 
     @staticmethod
-    def test_histories_override_redis():
-        from jiuwen.serve.schemas.orchestration_mgr import ConversationHistoryMessage
-        msg = ConversationHistoryMessage(role="user", content="new")
-        body = AgentAppRunRequest(histories=[msg])
-        result = build_req_json_from_agent(
-            body, "conv-1", "ir/path",
-            [{"role": "assistant", "content": "old"}], 5
+    def test_conversation_history_from_ctx():
+        body = AgentAppRunRequest()
+        ctx = TestBuildReqJsonFromAgent._make_ctx(
+            conversation_history=[{"role": "user", "content": "new"}],
+            dialogue_count=5,
         )
+        result = build_req_json_from_agent(body, ctx)
         assert len(result["params"]["conversationHistory"]) == 1
         assert result["params"]["conversationHistory"][0]["role"] == "user"
 
@@ -201,13 +219,14 @@ class TestBuildReqJsonFromAgent:
     def test_empty_histories_use_redis():
         body = AgentAppRunRequest()
         history = [{"role": "user", "content": "redis"}]
-        result = build_req_json_from_agent(body, "conv-1", "ir/path", history, 2)
+        ctx = TestBuildReqJsonFromAgent._make_ctx(conversation_history=history, dialogue_count=2)
+        result = build_req_json_from_agent(body, ctx)
         assert result["params"]["conversationHistory"] == history
 
     @staticmethod
     def test_user_id_defaults_to_empty():
         body = AgentAppRunRequest()
-        result = build_req_json_from_agent(body, "conv-1", "ir/path", [], 1)
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
         assert result["userId"] == ""
 
 

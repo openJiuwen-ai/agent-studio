@@ -81,6 +81,8 @@ services:
       enable_tool_url_check: ${ENABLE_TOOL_URL_CHECK:-true}
       # 是否启用资源管理的操作日志
       studio_operationLog_switch: ${STUDIO_OPERATION_LOG_SWITCH:-false}
+      # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
+      auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
     networks:
       - default
 
@@ -129,6 +131,8 @@ services:
       server_ssl_key_password: ${SERVER_SSL_KEY_PASSWORD:-}
       koosearch_endpoint: ${KOOSEARCH_ENDPOINT:-}
       system_crypt_name: ${SYSTEM_CRYPT_NAME:-}
+      # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
+      auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
     networks:
       - default
 

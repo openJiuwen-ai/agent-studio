@@ -1,11 +1,11 @@
 # -*- coding: UTF-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
-"""Base event processor"""
+"""通用事件处理基类"""
 
 from typing import Dict, Any
 from abc import ABC, abstractmethod
 
-from jiuwen.serve.controllers.execution.enum import ConversationEvent
+from jiuwen.serve.controllers.execution.enum import ConversationEvent, PlanModeType
 from openjiuwen.core.common.logging import workflow_logger
 
 from agent_runtime.event_handler.base.enums import EventMapping, ToolType
@@ -35,20 +35,23 @@ from agent_runtime.event_handler.base.constants import (
 
 
 class BaseEventsProcessor(ABC):
-    """Base event processor with handler dispatch."""
+    """通用事件处理基类"""
 
     _initialized = False
-    _handler_methods = {}
+    _handler_methods = {}  # 类变量，所有子类共享基类的处理方法
 
     @classmethod
     def _ensure_initialized(cls):
+        """确保处理器已经初始化，延迟初始化策略"""
         if not cls._initialized:
             cls._initialize_handlers()
 
     @classmethod
     def _initialize_handlers(cls):
+        """初始化处理器映射"""
         if cls._initialized:
             return
+
         cls._handler_methods = {
             ConversationEvent.START.value: cls.process_start_event,
             ConversationEvent.MESSAGE_END.value: cls.process_message_end_event,
@@ -62,24 +65,29 @@ class BaseEventsProcessor(ABC):
             ConversationEvent.INTERMEDIATE_MESSAGE.value: cls.process_intermediate_message_event,
             EVENT_THROUGH: cls.process_event_through,
         }
+
         cls._initialized = True
 
     @abstractmethod
     def process_event(self, full_data: Dict[str, Any], trace: Trace) -> Any:
+        """处理事件的主入口方法"""
         pass
 
     @classmethod
     def process_default_event(cls, full_data: Dict[str, Any], trace: Trace) -> Dict[str, Any]:
+        """返回九问原始事件"""
         return full_data
 
     @classmethod
     def process_start_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+        """start事件"""
         start_time = full_data.get("createdTime")
         trace.start_time = start_time
         return full_data
 
     @classmethod
     def process_message_end_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+        """message_end事件"""
         data = full_data.get("data", {})
         node_type = data.get(NODE_TYPE_KEY, "unknown")
         node_type = node_type_mapping.get(node_type, node_type)
@@ -93,7 +101,9 @@ class BaseEventsProcessor(ABC):
             workflow_id=data.get("workflow_id"),
             workflow_name=data.get("workflow_name"),
         )
+
         FieldDataProcessor.process_node_message(node_type=node_type, full_data=full_data, trace=trace)
+
         return EventField(
             event=ConversationEvent.MESSAGE.value,
             data=message_data.model_dump(exclude_none=True, by_alias=True),
@@ -102,13 +112,13 @@ class BaseEventsProcessor(ABC):
 
     @classmethod
     def process_error_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+        """error事件"""
         trace.task_end = True
         trace.end_time = full_data.get("createdTime")
         data = full_data.get("data", {})
         code = data.get("code", 999999)
         error_code, error_msg, error_reason, error_suggestion = (
-            ErrorContextBuilder.get_language_context(trace.language, code)
-        )
+            ErrorContextBuilder.get_language_context(trace.language, code))
         error_data_field = ErrorEventDataField(
             code=code,
             message=data.get("message", "unknown error"),
@@ -123,22 +133,27 @@ class BaseEventsProcessor(ABC):
             createdTime=full_data.get("createdTime"),
         )
         event_list = [error_field.model_dump(exclude_none=True, by_alias=True)]
-        # Agent needs statistic event
-        if trace.handler_type in ("ReAct", "PlanExecute"):
+        # agent需要发送统计事件
+        if trace.handler_type == PlanModeType.ReAct.value or trace.handler_type == PlanModeType.PlanExecute.value:
             data[LatencyMapper.ANSWER_KEY] = {LatencyMapper.OVERALL_LATENCY: trace.overall_time()}
             static = cls.process_statistic_data_event(full_data, trace)
             event_list.append(static.model_dump(exclude_none=True, by_alias=True))
+        # 记录错误信息
         trace.error_code = data.get("code", CODE)
         trace.error_message = data.get("message", "unknown error")
         workflow_logger.error(
             f"receive error event, error_code is {trace.error_code}, error_message is {trace.error_message}"
         )
+
         return event_list
 
     @classmethod
     def process_function_call_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+        """function_call事件"""
         data = full_data.get("data", {})
+        # 统计数据
         latency = LatencyMapper.get_function_call_latency(data)
+        # 工具类型
         answer = data.get("answer", {})
         plugin_type = ToolType.PLUGIN.value
         if answer.get("is_mcp"):
@@ -146,43 +161,54 @@ class BaseEventsProcessor(ABC):
         if answer.get("is_workflow"):
             plugin_type = ToolType.WORKFLOW.value
         plugin = answer.get("function_call")
-        return PluginEventField(
+
+        function_call_field = PluginEventField(
             event=EventMapping.FUNCTION_CALL.value,
             type=plugin_type,
-            latency=latency.to_dict(),
+            latency=latency,
             plugin=plugin,
             createdTime=full_data.get("createdTime"),
         )
 
+        return function_call_field
+
     @classmethod
     def process_api_exec_data_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+        """api_exec_data事件"""
         data = full_data.get("data", {})
         content = data.get("answer", {}).get("content")
         role = data.get("answer", {}).get("role")
         latency = LatencyMapper.get_function_call_latency(data)
-        return PluginEventField(
+        function_call_field = PluginEventField(
             event=EventMapping.API_EXEC_DATA.value,
             content=content,
             role=role,
-            latency=latency.to_dict(),
+            latency=latency,
             createdTime=full_data.get("createdTime"),
         )
+
+        return function_call_field
 
     @classmethod
     def process_statistic_data_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+        """statistic_data事件"""
         data = full_data.get("data", {})
         latency = LatencyMapper.get_statistic_latency(data)
-        return PluginEventField(
+        statistic_data_field = PluginEventField(
             event=ConversationEvent.STATISTIC_DATA.value,
-            latency=latency.to_dict(),
+            latency=latency,
             createdTime=full_data.get("createdTime"),
         )
 
+        return statistic_data_field
+
     @classmethod
     def process_summary_response_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+        """summary_response事件"""
         data = full_data.get("data", {})
         content = data.get("answer", {}).get("content")
         role = data.get("answer", {}).get("role")
+
         summary_response_field = EventField(
             event=ConversationEvent.SUMMARY_RESPONSE.value,
             content=content,
@@ -190,24 +216,34 @@ class BaseEventsProcessor(ABC):
             createdTime=full_data.get("createdTime"),
             executionId=full_data.get("executionId"),
         )
+
         FieldDataProcessor.process_history_message(node_type="", full_data=full_data, trace=trace)
+
         return summary_response_field
 
     @classmethod
     def process_done_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
-        return EventField(
-            event=ConversationEvent.DONE.value,
-            createdTime=full_data.get("createdTime"),
-        )
+        """done事件"""
+        return EventField(event=ConversationEvent.DONE.value,
+                          createdTime=full_data.get("createdTime")
+                          )
 
     @classmethod
     def process_workflow_node_message(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
+        """workflow_node_message事件"""
         data = full_data.get("data", {})
+
+        # 解析节点状态
         node_status, status = NodeStatusMapper.resolve_node_status(data.get("status", ""))
+
+        # 处理输入输出数据
         inputs = FieldDataProcessor.process_field_data(data.get("inputs", {}), FIELD_VALUES)
         outputs = FieldDataProcessor.process_field_data(data.get("outputs", {}), FIELD_VALUES)
+
+        # 转换时间
         start_time = TimeConverter.datetime_to_timestamp_ms(data.get("startTime"))
         end_time = TimeConverter.datetime_to_timestamp_ms(data.get("endTime"))
+
         node_type = data.get(DEBUG_NODE_KEY, "unknown")
         node_type = node_type_mapping.get(node_type, node_type)
         node_data = WorkflowNodeMessageDataField(
@@ -225,6 +261,7 @@ class BaseEventsProcessor(ABC):
             end_time=end_time,
             execution_id=data.get("traceId"),
         )
+
         invoke_data = data.get("onInvokeData")
         if invoke_data and isinstance(invoke_data, list):
             messages = []
@@ -237,18 +274,17 @@ class BaseEventsProcessor(ABC):
             node_data.messages = messages
         if data.get("metaData"):
             node_data.metadata = data.get("metaData")
-        if trace and trace.is_debug:
+
+        if trace.is_debug:
             if trace.node_info is None:
                 trace.node_info = []
-            trace.node_info.append(node_data.model_dump(exclude_none=True, by_alias=True))
-        return [
-            EventField(
-                event=node_status,
-                data=node_data.model_dump(exclude_none=True, by_alias=True),
-                createdTime=full_data.get("createdTime"),
-            ).model_dump(exclude_none=True, by_alias=True),
-            cls.process_default_event(full_data, trace),
-        ]
+            trace.node_info.append(node_data)
+
+        return [EventField(
+            event=node_status,
+            data=node_data.model_dump(exclude_none=True, by_alias=True),
+            createdTime=full_data.get("createdTime")
+        ).model_dump(exclude_none=True, by_alias=True), cls.process_default_event(full_data, trace)]
 
     @classmethod
     def process_intermediate_message_event(cls, full_data: Dict[str, Any], trace: Trace = None):
@@ -257,8 +293,11 @@ class BaseEventsProcessor(ABC):
 
     @classmethod
     def process_event_through(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+        """通用格式事件"""
+        # controller block状态
         if full_data.get("event") == ConversationEvent.WORKFLOW_BLOCKED.value:
             trace.block = True
+
         data = full_data.get("data", {})
         return EventField(
             event=full_data.get("event"),

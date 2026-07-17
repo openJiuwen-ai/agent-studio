@@ -82,6 +82,7 @@ class Trace:
     outputs: Optional[dict] = None
     metadata: Optional[dict] = None
     events: Optional[list] = None
+    knowledge_base_files_info: list = field(default_factory=list)
     node_info: Optional[list] = None
     conversation_info: dict = field(default_factory=lambda: {"messages": []})
     dialogue_end: bool = False

@@ -961,6 +961,82 @@ public class RelationManagementService implements IRelationManagementService {
     }
 
     /**
+     * 发布版本时，将 controller 引用的单智能体（resource_type=agent）草稿 mapping 复制为版本 mapping。
+     *
+     * 背景：controller 保存时（ControllerManagementService.recordRefAgent）把引用的单智能体写入 t_mapping，
+     * app_version=null（草稿态），resource_type=agent。发布时需为这些引用创建 app_version=versionId 的版本记录，
+     * 否则版本导出（依赖 t_mapping）查不到单智能体，导致导出包丢失、导入后单智能体缺失。
+     * 对齐子多智能体的 createAgentSubController，区别仅在校验的 AgentType 与写入的 resource_type。
+     *
+     * @param projectId      项目ID
+     * @param workspaceId    工作空间ID
+     * @param agentId        controller（多智能体）ID
+     * @param versionId      发布版本ID；null 表示草稿态（仅校验，不写版本记录）
+     * @param agentReferences 草稿态单智能体引用 mapping 列表
+     */
+    public void createAgentSubAgent(String projectId, String workspaceId, String agentId, String versionId,
+        List<MappingEntity> agentReferences) {
+        if (CollectionUtils.isEmpty(agentReferences)) {
+            return;
+        }
+        // 校验 controller 是否存在
+        final Agent agent = agentMapper.selectByProjectIdAndWorkspaceId(projectId, workspaceId, agentId);
+        if (Objects.isNull(agent)) {
+            throw new AgentStudioException(StudioError.MULTI_AGENT_VERSION_NOT_EXIST, agentId, versionId);
+        }
+
+        Map<String, MappingEntity> versionMap = new HashMap<>();
+        agentReferences.forEach(agentRef -> versionMap.put(agentRef.getResourceId(), agentRef));
+
+        // 校验引用的单智能体是否存在（仅查 type=agent）
+        List<String> agentIds = agentReferences.stream().map(MappingEntity::getResourceId).distinct().toList();
+        final List<Agent> agents = agentMapper.selectByAgentIds(projectId, AgentType.AGENT.getValue(), agentIds);
+        final List<String> existAgentIds = agents.stream().map(Agent::getAgentId).toList();
+        List<String> notExistAgentIds = agentIds.stream().filter(id -> !existAgentIds.contains(id)).toList();
+        if (!CollectionUtils.isEmpty(notExistAgentIds)) {
+            log.error("These single agent not exist: {}", notExistAgentIds);
+        }
+
+        // 草稿态（versionId==null）才做重复绑定与数量校验；版本态直接复制版本记录
+        if (versionId == null) {
+            final List<MappingEntity> agentSubAgentList = mappingMapper.selectByAppIdAndResourceType(agentId,
+                CommonConstant.AGENT_TYPE);
+            if (!CollectionUtils.isEmpty(agentSubAgentList)) {
+                List<String> boundAgentIds = agentSubAgentList.stream().map(MappingEntity::getResourceId).toList();
+                agents.removeIf(item -> boundAgentIds.contains(item.getAgentId()));
+                if (CollectionUtils.isEmpty(agents)) {
+                    return;
+                }
+                if (agents.size() + boundAgentIds.size() > controllerSubAgentLimit) {
+                    throw new AgentStudioException(StudioError.MULTI_AGENT_NUMBER_EXCEED_LIMIT);
+                }
+            }
+        }
+
+        // 复制版本 mapping：resource_type=agent，app_version=versionId
+        List<MappingEntity> agentSubAgent = new ArrayList<>();
+        for (Agent item : agents) {
+            MappingEntity originMapping = versionMap.get(item.getAgentId());
+            MappingEntity agentMapping = new MappingEntity();
+            agentMapping.setMappingId(UUID.randomUUID().toString());
+            agentMapping.setAppId(agentId);
+            agentMapping.setAppType(CommonConstant.AGENT_TYPE);
+            agentMapping.setAppName(agent.getName());
+            agentMapping.setAppVersion(versionId);
+            agentMapping.setResourceId(item.getAgentId());
+            agentMapping.setResourceType(CommonConstant.AGENT_TYPE);
+            agentMapping.setResourceVersion(originMapping.getResourceVersion());
+            agentMapping.setResourceName(StringUtils.isEmpty(originMapping.getResourceName())
+                ? item.getName()
+                : originMapping.getResourceName());
+            agentSubAgent.add(agentMapping);
+        }
+        if (!CollectionUtils.isEmpty(agentSubAgent)) {
+            mappingMapper.insertBatch(agentSubAgent);
+        }
+    }
+
+    /**
      * 根据传入的Mcp server绑定信息关联agent
      *
      * @param projectId projectId

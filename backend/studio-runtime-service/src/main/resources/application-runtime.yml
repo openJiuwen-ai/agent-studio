@@ -466,3 +466,23 @@ system:
   crypt:
     # 系统默认的加解密方式，NO_OP_CIPHER-表示不加密
     name: ${system_crypt_name:NO_OP_CIPHER}
+# 鉴权配置
+auth:
+  path:
+    # 免鉴权路径（逗号分隔），环境变量：auth_path_excluded
+    excluded: ${auth_path_excluded:/v1/health, /health}
+  sso:
+    # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权（验证 Access-Token），留空则使用默认简单鉴权，环境变量：auth_sso_validate_url
+    validate-url: ${auth_sso_validate_url:}
+    # SSO 请求头名称（用于传递 Access-Token），环境变量：auth_sso_header
+    header: ${auth_sso_header:Access-Token}
+  # SSO 响应字段与用户属性映射
+  user-info:
+    claims:
+      user-id: ${user_info_claims_user_id:user_id}
+      user-name: ${user_info_claims_username:user_name}
+      domain-id: ${user_info_claims_domain_id:domain_id}
+      project-id: ${user_info_claims_project_id:project_id}
+    defaults:
+      domain-id: ${user_info_defaults_domain_id:0}
+      project-id: ${user_info_defaults_project_id:0}

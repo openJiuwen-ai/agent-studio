@@ -158,7 +158,8 @@ jobs:
           rm -rf docker/studio-runtime/jiuwen
           cp -rf agent-runtime/jiuwen docker/studio-runtime/jiuwen
           rm -rf docker/studio-runtime/agent_builder
-          cp -rf agent-runtime/agent_builder docker/studio-runtime/agent_builder
+          test -d agent_builder
+          cp -rf agent_builder docker/studio-runtime/agent_builder
           rm -rf docker/studio-runtime/tests
           cp -rf agent-runtime/tests docker/studio-runtime/tests
           cp -f agent-runtime/requirements.txt docker/studio-runtime/requirements.txt
