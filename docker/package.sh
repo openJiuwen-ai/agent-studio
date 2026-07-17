@@ -92,8 +92,8 @@ function runtime_copy() {
   RUNTIME_TARGET_PATH=${WORKSPACE}/docker/studio-runtime
   echo "[PACKAGE] 复制 agent-runtime 源码到 ${RUNTIME_TARGET_PATH}..."
 
-  rm -rf ${RUNTIME_TARGET_PATH}/agent_builder
-  cp -rf ${WORKSPACE}/agent_builder ${RUNTIME_TARGET_PATH}/agent_builder
+  # 注：agent_builder 已剥离为独立 studio-builder 镜像，不再拷入 studio-runtime 构建上下文
+  # （runtime Dockerfile 不 COPY agent_builder，拷了也是死重量）。
 
   rm -rf ${RUNTIME_TARGET_PATH}/agent_runtime
   cp -rf ${WORKSPACE}/agent-runtime/agent_runtime ${RUNTIME_TARGET_PATH}/agent_runtime
@@ -110,6 +110,10 @@ function runtime_copy() {
   # 与 agent_runtime/jiuwen 一致，靠 PYTHONPATH=$SERVICE_HOME/app 导入（非 pip 安装）。
   rm -rf ${RUNTIME_TARGET_PATH}/model_service
   cp -rf ${WORKSPACE}/packages/model_service/model_service ${RUNTIME_TARGET_PATH}/model_service
+
+  # 对象存储共享包（packages/storage）：同 model_service，靠 PYTHONPATH=app 导入
+  rm -rf ${RUNTIME_TARGET_PATH}/storage
+  cp -rf ${WORKSPACE}/packages/storage/storage ${RUNTIME_TARGET_PATH}/storage
 
   rm -rf ${RUNTIME_TARGET_PATH}/bin
   cp -rf ${RUNTIME_TARGET_PATH}/script ${RUNTIME_TARGET_PATH}/bin
@@ -180,6 +184,9 @@ function clean() {
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/model_service" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/model_service
+  fi
+  if [ -d "${WORKSPACE}/docker/studio-runtime/storage" ]; then
+    rm -rf ${WORKSPACE}/docker/studio-runtime/storage
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/bin" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/bin

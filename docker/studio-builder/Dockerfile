@@ -27,16 +27,18 @@ RUN pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
     && pip3 install -r $SERVICE_HOME/app/agent_builder/requirements.txt \
     && rm -rf ${PACKAGES_HOME}/future/backports/test
 
-# 从本地源码安装 openjiuwen（替代 PyPI 版本，使用最新 Git 代码）
-# 完整安装 agent-core 及其所有依赖
-COPY agent-core/ $SERVICE_HOME/app/agent-core/
-RUN pip3 install $SERVICE_HOME/app/agent-core/ \
-    && rm -rf $SERVICE_HOME/app/agent-core/
+# openjiuwen 不再从本地 agent-core 安装，改由 requirements.txt 从 PyPI(aliyun) 装 openjiuwen==0.1.16
 
 # 再复制应用代码（变更频率高，放在依赖安装之后）
-# 注意：studio-builder 镜像不包含 agent_runtime/ —— agent_builder 已与运行时解耦
+# 注意：studio-builder 镜像不包含 agent_runtime / jiuwen —— agent_builder 已与运行时解耦，
+# 用本地 adapter（adapter.jiuwen_bridge 等）替代 jiuwen 包
 COPY agent_builder/ $SERVICE_HOME/app/agent_builder/
-COPY jiuwen/ $SERVICE_HOME/app/jiuwen/
+# 共享包 model_service / storage：agent_builder 运行时 import，靠 PYTHONPATH=${SERVICE_HOME}/app 解析
+COPY model_service/ $SERVICE_HOME/app/model_service/
+COPY storage/ $SERVICE_HOME/app/storage/
+
+# 启动脚本（init.sh / start.sh / start_server.sh）—— 参考 studio-runtime 启动模式
+COPY script/ $SERVICE_HOME/script/
 
 # 设置目录与权限
 RUN mkdir -p /opt/cloud/logs \
@@ -45,6 +47,7 @@ RUN mkdir -p /opt/cloud/logs \
     && mkdir -p /opt/cloud/logs/agent-builder/run \
     && touch /opt/cloud/logs/agent-builder/run/agent-builder.pid \
     && chmod 750 -R /opt/cloud/logs \
+    && chmod +x $SERVICE_HOME/script/*.sh \
     && chmod u+w ${PACKAGES_HOME} \
     && chown -R service:service ${PACKAGES_HOME} \
     && chmod 700 $SERVICE_HOME/.. \
@@ -58,4 +61,5 @@ USER service
 ENV SERVER_HOST=0.0.0.0
 ENV SERVER_PORT=31015
 
-CMD ["/bin/bash", "-c", "cd ${SERVICE_HOME}/app; exec python -m agent_builder.EIBuilder --host ${SERVER_HOST} --port ${SERVER_PORT}"]
+# 参考 studio-runtime：先 init.sh（目录/TLS），再 start.sh（nohup 拉起服务 + 主循环保活）
+CMD ["/bin/bash", "-c", "cd ${SERVICE_HOME}; ./script/init.sh; exec ./script/start.sh"]

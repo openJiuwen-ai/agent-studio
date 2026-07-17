@@ -87,6 +87,17 @@ spec:
             # 日志详细模式，设为true时显示完整错误信息
             - name: LOG_VERBOSE
               value: 'true'
+            # ======== [必填] 对象存储 ========
+            - name: DATASOURCE_OBS_SERVER
+              value: ''
+            - name: DATASOURCE_OBS_BUCKET
+              value: ''
+            - name: DATASOURCE_OBS_AK
+              value: ''
+            - name: DATASOURCE_OBS_SK
+              value: ''
+            - name: DATASOURCE_OBS_ENABLE_SSL
+              value: 'false'
           resources:
             limits:
               cpu: '2'
