@@ -9,6 +9,20 @@ from typing import Optional, Any
 from agent_runtime.event_handler.base.enums import EventStatus
 
 
+# 秒级时间戳阈值：小于此值视为秒级，需乘1000转为毫秒级
+_MS_THRESHOLD = 1_000_000_000_000
+
+
+def ensure_ms(ts) -> Optional[int]:
+    """确保时间戳为毫秒级（13位），秒级（10位）自动转换."""
+    if ts is None:
+        return None
+    ts = int(ts)
+    if ts < _MS_THRESHOLD:
+        ts = ts * 1000
+    return ts
+
+
 @dataclass
 class Latency:
     """Runtime latency stats — 内部数据搬运."""

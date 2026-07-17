@@ -26,7 +26,7 @@ from agent_runtime.event_handler.base.models import (
     EventField,
     ErrorEventDataField,
 )
-from agent_runtime.event_handler.base.trace import Trace
+from agent_runtime.event_handler.base.trace import Trace, ensure_ms
 from agent_runtime.event_handler.base.mappers import ErrorContextBuilder
 from agent_runtime.event_handler.base.field_processor import FieldDataProcessor
 from agent_runtime.event_handler.events.base_events import BaseEventsProcessor
@@ -81,12 +81,14 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
     @classmethod
     def process_default(cls, full_data: Dict[str, Any], trace: Trace) -> Dict[str, Any]:
         if full_data.get("event") == ConversationEvent.WORKFLOW_START.value:
-            trace.start_time = full_data.get("createdTime", int(time.time() * 1000))
+            trace.start_time = ensure_ms(
+                full_data.get("createdTime", int(time.time() * 1000))
+            )
         return full_data
 
     @classmethod
     def process_workflow_start(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
-        data = {"start_time": full_data.get("createdTime")}
+        data = {"start_time": ensure_ms(full_data.get("createdTime"))}
         return EventField(
             event=EventMapping.WORKFLOW_START.value,
             data=data,
@@ -194,7 +196,9 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
 
     @classmethod
     def process_workflow_end(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
-        current_time = full_data.get("createdTime", int(time.time() * 1000))
+        current_time = ensure_ms(
+            full_data.get("createdTime", int(time.time() * 1000))
+        )
         trace.dialogue_end = True
         trace.end_time = current_time
         workflow_end_data = WorkflowEndDataField(

@@ -12,9 +12,9 @@ class TestProcessStartEvent:
     @staticmethod
     def test_sets_start_time():
         trace = Trace()
-        result = BaseEventsProcessor.process_start_event({"createdTime": 5000}, trace)
-        assert trace.start_time == 5000
-        assert result == {"createdTime": 5000}
+        result = BaseEventsProcessor.process_start_event({"createdTime": 1784279775000}, trace)
+        assert trace.start_time == 1784279775000
+        assert result == {"createdTime": 1784279775000}
 
 
 class TestProcessErrorEvent:

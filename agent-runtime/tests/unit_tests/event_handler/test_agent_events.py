@@ -116,11 +116,11 @@ class TestProcessSummaryResponseEvent:
             {
                 "event": "summary_response",
                 "data": {"answer": {"content": "final", "role": "assistant"}},
-                "createdTime": 2000,
+                "createdTime": 1784279772000,
             },
             trace,
         )
-        assert trace.end_time == 2000
+        assert trace.end_time == 1784279772000
 
     @staticmethod
     def test_initializes_outputs_when_none():

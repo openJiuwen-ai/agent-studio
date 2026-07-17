@@ -20,6 +20,11 @@ from agent_runtime.serve.apis.app_run_request import (
     NodeExecuteRequest,
 )
 from agent_runtime.serve.apis.orchestration import ir_execute, component_debug_execute
+from agent_runtime.serve.apis.run_check import (
+    RunCheckContext,
+    check_before_workflow_run,
+    check_before_agent_run,
+)
 from agent_runtime.event_handler.event_handler import EventHandler
 from agent_runtime.event_handler.base.conversation import (
     ConversationManager,
@@ -211,6 +216,19 @@ async def _execute_workflow_run(
     ir_path = build_workflow_ir_path(ctx.workflow_id, ctx.version)
     workflow_logger.debug(f"Built IR path: {ir_path}")
 
+    # 运行前校验
+    query = body.inputs.get("query", "")
+    err = await check_before_workflow_run(RunCheckContext(
+        query=query,
+        project_id=ctx.project_id,
+        ir_path=ir_path,
+        body_version=body.version,
+        has_published_version=ctx.version is not None,
+        request=request,
+    ))
+    if err:
+        return err
+
     instance_id = ctx.workflow_id
     user_id = _request_ctx.get().user_id
     version_id = ctx.version or ""
@@ -285,6 +303,19 @@ async def _execute_agent_run(
 
     ir_path = build_agent_ir_path(ctx.agent_id, ctx.version)
     workflow_logger.debug(f"Built IR path: {ir_path}")
+
+    # 运行前校验
+    query = body.query or body.inputs.get("query", "")
+    err = await check_before_agent_run(RunCheckContext(
+        query=query,
+        project_id=ctx.project_id,
+        ir_path=ir_path,
+        body_version=body.version,
+        has_published_version=ctx.version is not None,
+        request=request,
+    ))
+    if err:
+        return err
 
     instance_id = ctx.agent_id
     user_id = _request_ctx.get().user_id

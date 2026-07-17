@@ -40,10 +40,10 @@ class TestProcessWorkflowStart:
     def test_returns_workflow_started_event():
         trace = Trace(handler_type="Workflow")
         result = WorkflowEventsProcessor.process_event(
-            {"event": "workflow_start", "createdTime": 1000}, trace
+            {"event": "workflow_start", "createdTime": 1784279771000}, trace
         )
         assert result.event == "workflow_started"
-        assert result.data == {"start_time": 1000}
+        assert result.data == {"start_time": 1784279771000}
 
 
 class TestProcessMessage:
@@ -227,16 +227,16 @@ class TestProcessWorkflowEnd:
     @staticmethod
     def test_sets_end_time_and_dialogue_end():
         trace = Trace(handler_type="Workflow")
-        trace.start_time = 1000
+        trace.start_time = 1784279771000
         result = WorkflowEventsProcessor.process_event(
             {
                 "event": "workflow_end",
                 "data": {"answer": "done"},
-                "createdTime": 5000,
+                "createdTime": 1784279775000,
             },
             trace,
         )
-        assert trace.end_time == 5000
+        assert trace.end_time == 1784279775000
         assert trace.dialogue_end is True
         assert result.event == "workflow_finished"
 

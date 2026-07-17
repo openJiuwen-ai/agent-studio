@@ -9,7 +9,7 @@ from jiuwen.serve.controllers.execution.enum import ConversationEvent, PlanModeT
 from openjiuwen.core.common.logging import workflow_logger
 
 from agent_runtime.event_handler.base.models import EventField
-from agent_runtime.event_handler.base.trace import Trace
+from agent_runtime.event_handler.base.trace import Trace, ensure_ms
 from agent_runtime.event_handler.base.constants import EVENT_THROUGH, CODE
 from agent_runtime.event_handler.events.base_events import BaseEventsProcessor
 
@@ -77,7 +77,7 @@ class AgentEventsProcessor(BaseEventsProcessor):
     @classmethod
     def process_start_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         """start事件"""
-        trace.start_time = full_data.get("createdTime")
+        trace.start_time = ensure_ms(full_data.get("createdTime"))
         return EventField(
             event=ConversationEvent.START.value,
             createdTime=full_data.get("createdTime"),
@@ -111,7 +111,7 @@ class AgentEventsProcessor(BaseEventsProcessor):
                 trace.messages = []
             trace.messages.append({"role": role, "content": content})
         # summary_response 是 done 之前最后一个有效事件，在此设置非流式所需字段
-        trace.end_time = full_data.get("createdTime")
+        trace.end_time = ensure_ms(full_data.get("createdTime"))
         if trace.outputs is None:
             trace.outputs = {}
         if trace.events is None:

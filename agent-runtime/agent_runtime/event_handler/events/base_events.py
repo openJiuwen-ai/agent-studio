@@ -22,7 +22,7 @@ from agent_runtime.event_handler.base.models import (
     PluginEventField,
     ErrorEventDataField,
 )
-from agent_runtime.event_handler.base.trace import Trace
+from agent_runtime.event_handler.base.trace import Trace, ensure_ms
 from agent_runtime.event_handler.base.field_processor import FieldDataProcessor
 from agent_runtime.event_handler.base.constants import (
     NODE_TYPE_KEY,
@@ -81,7 +81,7 @@ class BaseEventsProcessor(ABC):
     @classmethod
     def process_start_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         """start事件"""
-        start_time = full_data.get("createdTime")
+        start_time = ensure_ms(full_data.get("createdTime"))
         trace.start_time = start_time
         return full_data
 
@@ -114,7 +114,7 @@ class BaseEventsProcessor(ABC):
     def process_error_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         """error事件"""
         trace.task_end = True
-        trace.end_time = full_data.get("createdTime")
+        trace.end_time = ensure_ms(full_data.get("createdTime"))
         data = full_data.get("data", {})
         code = data.get("code", 999999)
         error_code, error_msg, error_reason, error_suggestion = (

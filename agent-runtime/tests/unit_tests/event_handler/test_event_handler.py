@@ -252,10 +252,10 @@ class TestGetNonStreamResult:
         request.headers = {}
         handler.init_trace("workflow", request, "wf/ir/wf-1/wf-1.json")
 
-        start_event = json.dumps({"event": "workflow_start", "createdTime": 1000})
+        start_event = json.dumps({"event": "workflow_start", "createdTime": 1784279771000})
         end_event = json.dumps({
             "event": "workflow_end",
-            "createdTime": 2000,
+            "createdTime": 1784279772000,
             "data": {"answer": "result"},
         })
 
@@ -268,7 +268,7 @@ class TestGetNonStreamResult:
 
         assert isinstance(result, JSONResponse)
         # workflow_start 事件会设置 start_time 为 createdTime
-        assert handler.trace.end_time == 2000
+        assert handler.trace.end_time == 1784279772000
 
 
 class TestGetStreamResult:
