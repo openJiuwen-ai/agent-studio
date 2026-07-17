@@ -1115,7 +1115,11 @@ public class AgentImportService {
             }
             switch (ResourceTypeEnum.fromValue(result.getType())) {
                 case WORKFLOW -> {
-                    uploadWorkflowDsl(resourceMap.get(result.getId()), id, id, null);
+                    // 草稿 DSL 上传：仅首次导入（addTag=true，资源新建）或草稿态导入（versionId 空）时上传。
+                    // 已发布版本导入到已有资源（addTag=false 且 versionId 非空）时跳过，避免覆盖用户草稿。
+                    if (Boolean.TRUE.equals(result.getAddTag()) || StringUtils.isEmpty(versionId)) {
+                        uploadWorkflowDsl(resourceMap.get(result.getId()), id, id, null);
+                    }
                     if (StringUtils.isNotEmpty(versionId)) {
                         // 版本 DSL 用按版本区分的 ImportInfo，避免同 resourceId 多版本取到同一份
                         ImportInfo versionedInfo = versionedResourceMap.get(result.getId() + "|" + result.getVersion());
@@ -1138,7 +1142,10 @@ public class AgentImportService {
                         uploadControllerDsl(
                             versionedInfo != null ? versionedInfo : resourceMap.get(result.getId()), id, versionId);
                     }
-                    uploadControllerDsl(resourceMap.get(result.getId()), id, null);
+                    // 草稿 DSL 上传：仅首次导入或草稿态导入时上传，避免已发布版本导入覆盖用户草稿。
+                    if (Boolean.TRUE.equals(result.getAddTag()) || StringUtils.isEmpty(versionId)) {
+                        uploadControllerDsl(resourceMap.get(result.getId()), id, null);
+                    }
                 }
             }
         });
