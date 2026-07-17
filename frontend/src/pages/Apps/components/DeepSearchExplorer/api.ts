@@ -11,6 +11,12 @@ import type {
 } from './types';
 import { DEEP_SEARCH_API_BASE } from './apiConfig';
 import { getToken } from '@test-agentstudio/api-client';
+import {
+  mapWebFetchProviderConfigToTelemetry,
+  mapWebSearchEngineConfigToTelemetry,
+  type DeepSearchWebFetchProviderConfig,
+  type DeepSearchWebSearchEngineConfig,
+} from './webSearchFetchTypes';
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'killed', 'cancelled', 'aborted']);
 const SIMPLE_ROUTE_EVENTS = new Set(['react_run_started', 'react_llm_turn']);
@@ -1028,6 +1034,84 @@ export async function createRun(question: string, config?: Record<string, unknow
     status: run.runStatus.status,
     mode: 'search',
   };
+}
+
+export interface ProviderTestResponse {
+  code: number;
+  msg: string;
+  provider_name: string;
+  datas: Record<string, unknown>[];
+}
+
+const DEFAULT_SEARCH_TEST_QUERY = 'Latest AI developments';
+const DEFAULT_FETCH_TEST_URL = 'https://example.com';
+
+async function readProviderTestError(response: Response): Promise<string> {
+  try {
+    const payload: unknown = await response.json();
+    if (isRecord(payload)) {
+      const detail = asString(payload.detail) ?? asString(payload.msg) ?? asString(payload.message);
+      if (detail) return detail;
+    }
+  } catch {
+    // The provider-test endpoint may return an empty or non-JSON error response.
+  }
+  return `Provider test failed: ${response.status}`;
+}
+
+async function postProviderTest(path: string, body: Record<string, unknown>): Promise<ProviderTestResponse> {
+  const response = await fetch(`${DEEP_SEARCH_API_BASE}${path}`, {
+    method: 'POST',
+    headers: buildAuthHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(await readProviderTestError(response));
+  }
+
+  const payload: unknown = await response.json();
+  if (
+    !isRecord(payload)
+    || typeof payload.code !== 'number'
+    || typeof payload.msg !== 'string'
+    || typeof payload.provider_name !== 'string'
+    || !Array.isArray(payload.datas)
+  ) {
+    throw new Error('Provider test failed: invalid response');
+  }
+
+  return {
+    code: payload.code,
+    msg: payload.msg,
+    provider_name: payload.provider_name,
+    datas: payload.datas.filter((item): item is Record<string, unknown> => isRecord(item)),
+  };
+}
+
+export async function testWebSearchProvider(
+  spaceId: string,
+  config: DeepSearchWebSearchEngineConfig,
+  query = DEFAULT_SEARCH_TEST_QUERY,
+): Promise<ProviderTestResponse> {
+  const telemetryConfig = mapWebSearchEngineConfigToTelemetry(config);
+  return postProviderTest('/task_space/web_search/provider_test', {
+    space_id: spaceId,
+    ...telemetryConfig,
+    query: query.trim().slice(0, 500) || DEFAULT_SEARCH_TEST_QUERY,
+  });
+}
+
+export async function testWebFetchProvider(
+  spaceId: string,
+  config: DeepSearchWebFetchProviderConfig,
+  testUrl = DEFAULT_FETCH_TEST_URL,
+): Promise<ProviderTestResponse> {
+  const telemetryConfig = mapWebFetchProviderConfigToTelemetry(config);
+  return postProviderTest('/task_space/web_fetch/provider_test', {
+    space_id: spaceId,
+    ...telemetryConfig,
+    test_url: testUrl.trim().slice(0, 2048) || DEFAULT_FETCH_TEST_URL,
+  });
 }
 
 export async function listRuns(): Promise<RunStatusResponse[]> {

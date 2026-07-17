@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable
-import asyncio
 import httpx
 from httpx import HTTPStatusError
 from fastapi import APIRouter, Depends, status, HTTPException, Query
@@ -25,6 +24,7 @@ from openjiuwen_studio.core.utils.deepsearch_payload import (
 from openjiuwen_studio.core.utils.deepsearch_stream import normalize_relay_stream_line
 from openjiuwen_studio.core.common.exceptions import DeepSearchClientError
 from openjiuwen_studio.core.config import settings
+from openjiuwen_studio.core.common.url_validator import validate_plugin_url
 from openjiuwen_studio.schemas.common import ResponseModel
 from openjiuwen_studio.schemas.deepsearch import (
     DeepSearchRequest,
@@ -48,6 +48,8 @@ from openjiuwen_studio.schemas.deepsearch import (
     WebSearchEngineAccessRequestDTO,
     WebSearchEngineAccessRes,
     TaskSpaceWebSearchProviderAccessRequestDTO,
+    TaskSpaceWebFetchProviderAccessRequestDTO,
+    TaskSpaceProviderAccessRes,
     ReportConvertReq,
     ReportConvertRes,
 )
@@ -59,18 +61,12 @@ from openjiuwen_studio.routers.deepsearch_logger import (
 )
 
 deepsearch_router = APIRouter()
-TASK_SPACE_PROVIDER_TEST_PRESETS: dict[str, dict[str, str]] = {
-    "jina": {"engine_name": "jina", "endpoint": "https://s.jina.ai/"},
-    "serper": {"engine_name": "google", "endpoint": "https://google.serper.dev/search"},
-}
-# Jina / Serper API key credential test timeout (seconds).
 PROVIDER_TEST_TIMEOUT_SECONDS = 30.0
 PROVIDER_TEST_HTTPX_TIMEOUT = httpx.Timeout(PROVIDER_TEST_TIMEOUT_SECONDS, connect=10.0)
-# Jina Search: try China first, then global mirror (same API key & payload).
-JINA_SEARCH_PROVIDER_ENDPOINTS: tuple[str, ...] = (
-    "https://s.jinaai.cn/",
-    "https://s.jina.ai/",
-)
+
+
+def get_agent_client():
+    return DeepSearchAgentClient()
 
 
 @dataclass
@@ -89,11 +85,6 @@ class DeepSearchTelemetryRangeQuery:
     start_seq: int = Query(..., ge=0)
     end_seq: int = Query(..., ge=0)
     space_id: str | None = Query(default=None)
-
-
-# 依赖注入（或直接使用单例）
-def get_agent_client():
-    return DeepSearchAgentClient()  # 或全局单例
 
 
 def build_single_model_config(model_id, space_id):
@@ -140,11 +131,8 @@ def build_single_vlm_model_config(model_id: int, space_id: str, db: Session):
 
 def get_model_configs(query: DeepSearchModelConfigQuery, db: Session = None):
     """构建 llm_config 结构，高级配置仅在有值时添加"""
-    # llm_config = build_single_model_config(general_model_id, space_id)
-    llm_config = {}
-    llm_config["general"] = build_single_model_config(query.general_model_id, query.space_id)
+    llm_config = {"general": build_single_model_config(query.general_model_id, query.space_id)}
 
-    # 高级配置：仅在有值时添加
     if query.plan_understanding_model_id:
         llm_config["plan_understanding"] = build_single_model_config(
             query.plan_understanding_model_id,
@@ -171,15 +159,11 @@ def get_model_configs(query: DeepSearchModelConfigQuery, db: Session = None):
             query.space_id,
             db,
         )
-
     return llm_config
 
 
 def handle_deepsearch_errors(func: Callable[..., Any]) -> Callable[..., Any]:
-    """
-    装饰器：自动捕获 HTTPStatusError 并返回通用错误响应。
-    适用于返回 JSONResponse 或 dict 的非流式接口。
-    """
+    """Normalize downstream DeepSearch failures for non-streaming endpoints."""
     @wraps(func)
     async def wrapper(*args, **kwargs):
         try:
@@ -191,13 +175,11 @@ def handle_deepsearch_errors(func: Callable[..., Any]) -> Callable[..., Any]:
                 content={"detail": exc.message},
             )
         except HTTPStatusError as exc:
-            # 记录原始错误详情到服务器日志，便于排查问题
             logger.error(
                 "DeepSearch service error: status=%s, body=%s",
                 exc.response.status_code,
                 exc.response.text[:1000] if exc.response.text else "",
             )
-            # 状态码规范化：内部服务的5xx错误统一返回502，4xx错误保留原始状态码
             status_code = exc.response.status_code if 400 <= exc.response.status_code < 500 else 502
             return JSONResponse(
                 status_code=status_code,
@@ -208,12 +190,28 @@ def handle_deepsearch_errors(func: Callable[..., Any]) -> Callable[..., Any]:
 
 def validate_search_run_tool_credentials(request: DeepSearchSearchRunRequest) -> None:
     if request.tool_map == "search_fetch":
-        has_jina_key = bool((request.jina_api_key or "").strip())
-        has_serper_key = bool((request.serper_api_key or "").strip())
-        if not has_jina_key or not has_serper_key:
+        has_search_config = request.web_search_engine_config is not None
+        has_fetch_config = request.web_fetch_provider_config is not None
+
+        if not has_search_config:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="tool_map=search_fetch requires both jina_api_key and serper_api_key",
+                detail="tool_map=search_fetch requires web_search_engine_config",
+            )
+        if not has_fetch_config:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="tool_map=search_fetch requires web_fetch_provider_config",
+            )
+        if not request.web_search_engine_config.search_api_key.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="web_search_engine_config.search_api_key must be non-empty",
+            )
+        if not request.web_fetch_provider_config.api_key.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="web_fetch_provider_config.api_key must be non-empty",
             )
         return
 
@@ -230,208 +228,324 @@ def validate_search_run_tool_credentials(request: DeepSearchSearchRunRequest) ->
             )
 
 
-def extract_http_status_error_detail(exc: HTTPStatusError) -> str | None:
-    response = exc.response
-    try:
-        payload = response.json()
-    except ValueError:
-        payload = None
+PROVIDER_TEST_RESERVED_EXTENSION_KEYS = frozenset({
+    "api_key",
+    "authorization",
+    "headers",
+    "url",
+    "endpoint",
+    "query",
+    "q",
+    "messages",
+    "model",
+})
+PROVIDER_TEST_SENSITIVE_RESULT_KEY_PARTS = ("api_key", "authorization", "token", "secret", "password")
 
-    if isinstance(payload, dict):
-        for key in ("detail", "msg", "message", "error"):
-            value = payload.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        if payload:
-            return str(payload)
+
+def sanitize_provider_test_extension(extension: dict[str, Any]) -> dict[str, Any]:
+    """Keep provider options while preventing extension data from replacing request controls."""
+    return {
+        key: value
+        for key, value in extension.items()
+        if isinstance(key, str) and key.lower() not in PROVIDER_TEST_RESERVED_EXTENSION_KEYS
+    }
+
+
+def redact_provider_test_result(value: Any, credential: str) -> Any:
+    """Redact credentials from provider payloads before they reach the browser."""
+    if isinstance(value, dict):
+        return {
+            key: (
+                "[REDACTED]"
+                if isinstance(key, str) and any(part in key.lower() for part in PROVIDER_TEST_SENSITIVE_RESULT_KEY_PARTS)
+                else redact_provider_test_result(item, credential)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_provider_test_result(item, credential) for item in value]
+    if isinstance(value, str) and credential:
+        return value.replace(credential, "[REDACTED]")
+    return value
+
+
+def _search_results_from_keys(payload: Any, keys: tuple[str, ...]) -> list[dict[str, Any]]:
     if isinstance(payload, list):
-        return "; ".join(str(item) for item in payload if item)
-
-    text = (response.text or "").strip()
-    return text if text else None
-
-
-def raise_provider_test_http_error(exc: HTTPStatusError, fallback_detail: str) -> None:
-    downstream_detail = extract_http_status_error_detail(exc)
-    detail = fallback_detail
-    if downstream_detail:
-        detail = f"{fallback_detail}: {downstream_detail}"
-    raise HTTPException(
-        status_code=(
-            exc.response.status_code
-            if 400 <= exc.response.status_code < 500
-            else status.HTTP_502_BAD_GATEWAY
-        ),
-        detail=detail,
-    ) from exc
-
-
-def normalize_provider_test_results(response_payload: Any, provider: str) -> list[dict[str, Any]]:
-    if isinstance(response_payload, list):
-        return [item for item in response_payload if isinstance(item, dict)]
-
-    if not isinstance(response_payload, dict):
+        return [item for item in payload if isinstance(item, dict)]
+    if not isinstance(payload, dict):
         return []
-
-    if provider == "serper":
-        organic_results = response_payload.get("organic")
-        if isinstance(organic_results, list):
-            return [item for item in organic_results if isinstance(item, dict)]
-
-    for key in ("data", "results", "items"):
-        value = response_payload.get(key)
-        if isinstance(value, list):
-            return [item for item in value if isinstance(item, dict)]
-
-    return [response_payload]
+    for key in keys:
+        items = payload.get(key)
+        if isinstance(items, list):
+            return [item for item in items if isinstance(item, dict)]
+    return [payload]
 
 
-async def _post_provider_test(
-    endpoint: str,
-    headers: dict[str, str],
-    request_body: dict[str, Any],
-    timeout: httpx.Timeout | float,
-    client: httpx.AsyncClient | None = None,
-) -> httpx.Response:
-    if client is not None:
-        return await client.post(endpoint, headers=headers, json=request_body)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as http_client:
-        return await http_client.post(endpoint, headers=headers, json=request_body)
+def _normalize_perplexity_results(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    choices = payload.get("choices")
+    if not isinstance(choices, list):
+        return [payload]
+    results: list[dict[str, Any]] = []
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        message = choice.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, str):
+            results.append({"content": content})
+    return results
 
 
-def _jina_provider_auth_failure(response: httpx.Response) -> bool:
-    if response.status_code in (401, 403):
-        return True
-    if response.status_code < 500:
-        return False
-    body = (response.text or "").lower()
-    return "authenticate" in body or "authenticationrequired" in body
+def _build_q_request(
+    api_key: str,
+    query: str,
+    extension: dict[str, Any],
+    auth_header: str = "Authorization",
+) -> tuple[dict[str, str], dict[str, Any]]:
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    headers[auth_header] = f"Bearer {api_key}" if auth_header == "Authorization" else api_key
+    return headers, {"q": query, **sanitize_provider_test_extension(extension)}
 
 
-async def _perform_jina_provider_test(
-    headers: dict[str, str],
-    request_body: dict[str, Any],
-) -> httpx.Response:
-    """Race Jina CN/global endpoints; return as soon as one succeeds or auth fails."""
-    async with httpx.AsyncClient(timeout=PROVIDER_TEST_HTTPX_TIMEOUT, follow_redirects=True) as client:
-
-        async def probe(endpoint: str) -> tuple[str, httpx.Response | None, BaseException | None]:
-            try:
-                response = await _post_provider_test(
-                    endpoint,
-                    headers,
-                    request_body,
-                    PROVIDER_TEST_HTTPX_TIMEOUT,
-                    client=client,
-                )
-                return endpoint, response, None
-            except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout) as exc:
-                logger.warning(
-                    "Provider credential test connect failed provider=jina endpoint=%s: %s",
-                    endpoint,
-                    exc,
-                )
-                return endpoint, None, exc
-
-        tasks = [asyncio.create_task(probe(endpoint)) for endpoint in JINA_SEARCH_PROVIDER_ENDPOINTS]
-        connect_errors: list[BaseException] = []
-        server_error_response: httpx.Response | None = None
-
-        try:
-            for finished in asyncio.as_completed(tasks):
-                _endpoint, response, error = await finished
-                if error is not None:
-                    connect_errors.append(error)
-                    continue
-                if response.status_code == 200:
-                    return response
-                if _jina_provider_auth_failure(response):
-                    try:
-                        response.raise_for_status()
-                    except HTTPStatusError as exc:
-                        raise_provider_test_http_error(exc, "Provider credential test failed")
-                if response.status_code >= 500 and server_error_response is None:
-                    logger.warning(
-                        "Provider credential test server error provider=jina endpoint=%s status=%s",
-                        _endpoint,
-                        response.status_code,
-                    )
-                    server_error_response = response
-        finally:
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-    if server_error_response is not None:
-        return server_error_response
-    if connect_errors:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Provider credential test failed: unable to reach Jina endpoints",
-        ) from connect_errors[0]
-    raise HTTPException(
-        status_code=status.HTTP_502_BAD_GATEWAY,
-        detail="Provider credential test failed",
+def _build_tavily_request(
+    api_key: str,
+    query: str,
+    extension: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, Any]]:
+    return (
+        {"Accept": "application/json", "Content-Type": "application/json"},
+        {"api_key": api_key, "query": query, **sanitize_provider_test_extension(extension)},
     )
 
 
-async def perform_provider_test(provider: str, api_key: str, query: str) -> list[dict[str, Any]]:
-    provider_preset = TASK_SPACE_PROVIDER_TEST_PRESETS[provider]
+def _build_serper_request(
+    api_key: str,
+    query: str,
+    extension: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, Any]]:
+    """Match Deep Research's GoogleSearchAPIWrapper request payload."""
+    options = sanitize_provider_test_extension(extension)
+    options.pop("type", None)  # Selects the endpoint path, not a request-body field.
+    return (
+        {"Accept": "application/json", "Content-Type": "application/json", "X-API-KEY": api_key},
+        {"q": query, "gl": options.pop("gl", "us"), "hl": options.pop("hl", "en"), **options},
+    )
 
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
-    request_body: dict[str, Any] = {"q": query}
 
-    if provider == "jina":
-        headers["Authorization"] = f"Bearer {api_key}"
-    elif provider == "serper":
-        headers["X-API-KEY"] = api_key
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported provider '{provider}' for credential test",
-        )
+def _build_bocha_request(
+    api_key: str,
+    query: str,
+    extension: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, Any]]:
+    headers = {"Accept": "application/json", "Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    return headers, {"query": query, **sanitize_provider_test_extension(extension)}
 
-    if provider == "jina":
-        response = await _perform_jina_provider_test(headers, request_body)
-    else:
-        endpoint = provider_preset["endpoint"]
-        try:
-            response = await _post_provider_test(
-                endpoint,
-                headers,
-                request_body,
-                PROVIDER_TEST_HTTPX_TIMEOUT,
-            )
-        except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout) as exc:
-            logger.warning(
-                "Provider credential test connect failed provider=%s endpoint=%s: %s",
-                provider,
-                endpoint,
-                exc,
-            )
+
+def _build_perplexity_request(
+    api_key: str,
+    query: str,
+    extension: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, Any]]:
+    options = sanitize_provider_test_extension(extension)
+    return (
+        {"Accept": "application/json", "Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        {
+            "model": "sonar",
+            "messages": [{"role": "user", "content": query}],
+            **options,
+        },
+    )
+
+
+@dataclass(frozen=True)
+class SearchProviderTestAdapter:
+    name: str
+    default_endpoint: str | None
+    build_request: Callable[[str, str, dict[str, Any]], tuple[dict[str, str], dict[str, Any]]]
+    normalize_results: Callable[[Any], list[dict[str, Any]]]
+
+    def resolve_endpoint(self, submitted_endpoint: str | None, extension: dict[str, Any]) -> str:
+        endpoint = (submitted_endpoint or self.default_endpoint or "").strip()
+        if not endpoint:
             raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Provider credential test failed: unable to reach provider endpoint",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Search provider '{self.name}' requires search_url",
+            )
+        try:
+            endpoint = validate_plugin_url(endpoint)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid search_url for provider '{self.name}'",
             ) from exc
 
-    try:
-        response.raise_for_status()
-    except HTTPStatusError as exc:
-        raise_provider_test_http_error(exc, "Provider credential test failed")
+        endpoint = endpoint.rstrip("/")
+        if self.name == "tavily":
+            # The runtime Tavily wrapper stores a base URL and appends `/search`.
+            return endpoint if endpoint.endswith("/search") else f"{endpoint}/search"
 
+        if self.name in {"google", "serper"}:
+            # Deep Research routes both providers through GoogleSearchAPIWrapper,
+            # which appends the configured result type to the base URL.
+            search_type = extension.get("type", "search")
+            if search_type not in {"search", "news", "places", "images"}:
+                search_type = "search"
+            if endpoint.rsplit("/", 1)[-1] not in {"search", "news", "places", "images"}:
+                return f"{endpoint}/{search_type}"
+        return endpoint
+
+
+SEARCH_PROVIDER_TEST_ADAPTERS: dict[str, SearchProviderTestAdapter] = {
+    "xunfei": SearchProviderTestAdapter(
+        "xunfei", "https://api.xunfei.cn", _build_q_request, lambda payload: _search_results_from_keys(payload, ("data", "results", "items")),
+    ),
+    "petal": SearchProviderTestAdapter(
+        "petal", "https://api.petal.dev", _build_q_request, lambda payload: _search_results_from_keys(payload, ("data", "results", "items")),
+    ),
+    "tavily": SearchProviderTestAdapter(
+        "tavily", "https://api.tavily.com", _build_tavily_request, lambda payload: _search_results_from_keys(payload, ("results",)),
+    ),
+    "google": SearchProviderTestAdapter(
+        "google", "https://google.serper.dev", _build_serper_request,
+        lambda payload: _search_results_from_keys(payload, ("organic", "results")),
+    ),
+    "jina": SearchProviderTestAdapter(
+        "jina", "https://s.jina.ai", _build_q_request, lambda payload: _search_results_from_keys(payload, ("data", "results", "items")),
+    ),
+    "serper": SearchProviderTestAdapter(
+        "serper", "https://google.serper.dev", _build_serper_request,
+        lambda payload: _search_results_from_keys(payload, ("organic", "results")),
+    ),
+    "bocha": SearchProviderTestAdapter(
+        "bocha", "https://api.bocha.cn/v1/web-search", _build_bocha_request, lambda payload: _search_results_from_keys(payload, ("data", "results", "items")),
+    ),
+    "perplexity": SearchProviderTestAdapter(
+        "perplexity", "https://api.perplexity.ai/chat/completions", _build_perplexity_request, _normalize_perplexity_results,
+    ),
+    "custom": SearchProviderTestAdapter(
+        "custom", None, _build_q_request, lambda payload: _search_results_from_keys(payload, ("data", "results", "items")),
+    ),
+}
+
+
+async def _post_generic_provider_test(
+    endpoint: str,
+    headers: dict[str, str],
+    request_body: dict[str, Any],
+) -> httpx.Response:
     try:
-        response_payload = response.json()
+        async with httpx.AsyncClient(timeout=PROVIDER_TEST_HTTPX_TIMEOUT, follow_redirects=False) as client:
+            response = await client.post(endpoint, headers=headers, json=request_body)
+    except (httpx.TimeoutException, httpx.RequestError) as exc:
+        logger.warning("Provider test request failed provider_endpoint=%s error_type=%s", endpoint, type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Provider test failed: unable to reach provider",
+        ) from exc
+
+    if response.status_code in (401, 403):
+        raise HTTPException(status_code=response.status_code, detail="Provider authentication failed")
+    if 400 <= response.status_code < 500:
+        raise HTTPException(status_code=response.status_code, detail="Provider rejected the test request")
+    if response.status_code >= 500:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Provider test failed: provider unavailable")
+    return response
+
+
+async def perform_web_search_provider_test(
+    provider_name: str,
+    api_key: str,
+    search_url: str | None,
+    extension: dict[str, Any],
+    query: str,
+) -> list[dict[str, Any]]:
+    adapter = SEARCH_PROVIDER_TEST_ADAPTERS.get(provider_name)
+    if adapter is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported search provider '{provider_name}'")
+
+    endpoint = adapter.resolve_endpoint(search_url, extension)
+    headers, request_body = adapter.build_request(api_key, query, extension)
+    response = await _post_generic_provider_test(endpoint, headers, request_body)
+    try:
+        return redact_provider_test_result(adapter.normalize_results(response.json()), api_key)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Provider credential test returned a non-JSON response",
+            detail="Provider test returned a non-JSON response",
         ) from exc
 
-    return normalize_provider_test_results(response_payload, provider)
+
+@dataclass(frozen=True)
+class FetchProviderTestAdapter:
+    name: str
+    default_base_url: str
+
+    def resolve_base_url(self, submitted_base_url: str | None) -> str:
+        base_url = (submitted_base_url or self.default_base_url).strip()
+        try:
+            return validate_plugin_url(base_url).rstrip("/")
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid base_url for provider '{self.name}'",
+            ) from exc
+
+    async def test(
+        self,
+        api_key: str,
+        base_url: str | None,
+        extension: dict[str, Any],
+        test_url: str,
+    ) -> list[dict[str, Any]]:
+        try:
+            safe_test_url = validate_plugin_url(test_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid test_url") from exc
+
+        endpoint = f"{self.resolve_base_url(base_url)}/{safe_test_url}"
+        params = sanitize_provider_test_extension(extension)
+        try:
+            async with httpx.AsyncClient(timeout=PROVIDER_TEST_HTTPX_TIMEOUT, follow_redirects=False) as client:
+                response = await client.get(
+                    endpoint,
+                    headers={"Accept": "text/plain", "Authorization": f"Bearer {api_key}"},
+                    params=params,
+                )
+        except (httpx.TimeoutException, httpx.RequestError) as exc:
+            logger.warning("Fetch provider test request failed provider=%s error_type=%s", self.name, type(exc).__name__)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Fetch provider test failed: unable to reach provider",
+            ) from exc
+
+        if response.status_code in (401, 403):
+            raise HTTPException(status_code=response.status_code, detail="Provider authentication failed")
+        if 400 <= response.status_code < 500:
+            raise HTTPException(status_code=response.status_code, detail="Provider rejected the test request")
+        if response.status_code >= 500:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Fetch provider test failed: provider unavailable")
+
+        return redact_provider_test_result([{"url": safe_test_url, "content": response.text[:2000]}], api_key)
+
+
+FETCH_PROVIDER_TEST_ADAPTERS: dict[str, FetchProviderTestAdapter] = {
+    "jina": FetchProviderTestAdapter(name="jina", default_base_url="https://r.jina.ai"),
+}
+
+
+async def perform_web_fetch_provider_test(
+    provider_name: str,
+    api_key: str,
+    base_url: str | None,
+    extension: dict[str, Any],
+    test_url: str,
+) -> list[dict[str, Any]]:
+    adapter = FETCH_PROVIDER_TEST_ADAPTERS.get(provider_name)
+    if adapter is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported fetch provider '{provider_name}'")
+    return await adapter.test(api_key, base_url, extension, test_url)
 
 
 @deepsearch_router.post("/run", response_model=ResponseModel[dict])
@@ -800,7 +914,7 @@ async def access_web_search_engine(
 
 @deepsearch_router.post(
     "/task_space/web_search/provider_test",
-    response_model=WebSearchEngineAccessRes,
+    response_model=TaskSpaceProviderAccessRes,
     status_code=status.HTTP_200_OK,
 )
 @handle_deepsearch_errors
@@ -812,25 +926,74 @@ async def access_task_space_web_search_provider(
     space_id = payload["space_id"]
     _ = check_user_space(space_id, current_user)
 
-    provider = payload["provider"]
-    api_key = payload["api_key"].strip()
+    provider_name = payload["search_engine_name"]
+    api_key = payload["search_api_key"].strip()
     query = payload["query"].strip()
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provider credential test requires a non-empty api_key",
+            detail="Search provider test requires a non-empty search_api_key",
         )
     if not query:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provider credential test requires a non-empty query",
+            detail="Search provider test requires a non-empty query",
         )
 
-    datas = await perform_provider_test(provider=provider, api_key=api_key, query=query)
+    datas = await perform_web_search_provider_test(
+        provider_name=provider_name,
+        api_key=api_key,
+        search_url=payload["search_url"],
+        extension=payload["extension"],
+        query=query,
+    )
     return {
         "code": status.HTTP_200_OK,
         "msg": "success",
-        "search_engine_name": TASK_SPACE_PROVIDER_TEST_PRESETS[provider]["engine_name"],
+        "provider_name": provider_name,
+        "datas": datas,
+    }
+
+
+@deepsearch_router.post(
+    "/task_space/web_fetch/provider_test",
+    response_model=TaskSpaceProviderAccessRes,
+    status_code=status.HTTP_200_OK,
+)
+@handle_deepsearch_errors
+async def access_task_space_web_fetch_provider(
+        request: TaskSpaceWebFetchProviderAccessRequestDTO,
+        current_user: dict = Depends(get_current_user),
+):
+    payload = request.model_dump()
+    space_id = payload["space_id"]
+    _ = check_user_space(space_id, current_user)
+
+    provider_name = payload["provider_name"]
+    api_key = payload["api_key"].strip()
+    test_url = payload["test_url"].strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Fetch provider test requires a non-empty api_key",
+        )
+    if not test_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Fetch provider test requires a non-empty test_url",
+        )
+
+    datas = await perform_web_fetch_provider_test(
+        provider_name=provider_name,
+        api_key=api_key,
+        base_url=payload["base_url"],
+        extension=payload["extension"],
+        test_url=test_url,
+    )
+    return {
+        "code": status.HTTP_200_OK,
+        "msg": "success",
+        "provider_name": provider_name,
         "datas": datas,
     }
 
