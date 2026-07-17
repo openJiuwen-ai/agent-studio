@@ -6,19 +6,21 @@ package com.openjiuwen.studio.agent.runtime.utils;
 
 import com.openjiuwen.studio.agent.runtime.entity.analytics.AnalyticsEventEntity;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * 分析事件缓存队列
  *
  */
+@Slf4j
 public class AnalyticsEventQueue {
-    private static final List<AnalyticsEventEntity> EVENTS = new ArrayList<>();
-
-    // 最大缓存100000条事件， 超过时，默认丢弃事件最早的事件
-    private static final int SIZE = 100000;
+    private static final LinkedBlockingQueue<AnalyticsEventEntity> EVENTS =
+        new LinkedBlockingQueue<>(100000);
 
     private AnalyticsEventQueue() {
     }
@@ -33,9 +35,9 @@ public class AnalyticsEventQueue {
      * @param event 事件
      */
     public static void push(AnalyticsEventEntity event) {
-        EVENTS.add(event);
-        if (EVENTS.size() > SIZE) {
-            EVENTS.remove(0);
+        if (!EVENTS.offer(event)) {
+            log.warn("Analytics event queue full (capacity={}), event discarded. eventType={}, eventId={}",
+                100000, event.getEventType(), event.getEventId());
         }
     }
 
@@ -46,9 +48,11 @@ public class AnalyticsEventQueue {
      */
     public static List<AnalyticsEventEntity> popBatchByTime(Date endTime) {
         List<AnalyticsEventEntity> events = new ArrayList<>();
-        while (!EVENTS.isEmpty()) {
-            if (EVENTS.get(0).getEventTime().before(endTime)) {
-                events.add(EVENTS.remove(0));
+        AnalyticsEventEntity first;
+        while ((first = EVENTS.peek()) != null) {
+            if (first.getEventTime().before(endTime)) {
+                EVENTS.poll();
+                events.add(first);
             } else {
                 break;
             }

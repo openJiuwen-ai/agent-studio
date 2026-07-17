@@ -181,13 +181,13 @@ class ReActAgentRunner:
         """解析最大迭代次数"""
         return ir_json.get("configs", {}).get("maxIteration", 5)
 
-    def _create_llm(self, ir_json: dict) -> Model:
+    async def _create_llm(self, ir_json: dict) -> Model:
         """根据 IR 配置创建 LLM 模型实例"""
-        from agent_runtime.common.model_providers import IRModelConfigProvider
+        from jiuwen.serve.controllers.execution.ir_converter import _get_model_config_provider
 
         adapted_conf = _adapt_react_agent_config(ir_json)
-        provider = IRModelConfigProvider()
-        llm_comp_config = provider.get_llm_config(adapted_conf)
+        provider = _get_model_config_provider()
+        llm_comp_config = await provider.get_llm_config(adapted_conf)
 
         return Model(
             model_client_config=llm_comp_config.model_client_config,
@@ -462,23 +462,9 @@ class ReActAgentRunner:
             local_zip_path = os.path.join(skill_local_path_prefix, f"{skill_name}.zip")
 
             try:
-                downloaded = False
-                try:
-                    from agent_runtime.storage.object_storage import S3StorageProvider
-                    content = await S3StorageProvider().get_object_bytes(skill_path)
-                    os.makedirs(os.path.dirname(local_zip_path), exist_ok=True)
-                    with open(local_zip_path, "wb") as f:
-                        f.write(content)
-                    downloaded = True
-                except Exception as s3_err:
-                    try:
-                        from jiuwen.common.store.async_obs import AsyncOBSUtil
-                        await AsyncOBSUtil.download_to_file(object_key=skill_path, local_path=local_zip_path)
-                        downloaded = True
-                    except Exception as obs_err:
-                        workflow_logger.error(
-                            f"[SkillDownload] Both failed for {skill_name}: S3={s3_err}, OBS={obs_err}")
-                        continue
+                from agent_runtime.storage.object_storage import get_storage_provider
+                provider = get_storage_provider()
+                await provider.download_to_file(object_key=skill_path, local_path=local_zip_path)
 
                 with zipfile.ZipFile(local_zip_path, "r") as zip_ref:
                     for member in zip_ref.infolist():
@@ -607,7 +593,7 @@ class ReActAgentRunner:
 
         # 创建 LLM 模型
         try:
-            llm = self._create_llm(ir_json)
+            llm = await self._create_llm(ir_json)
         except Exception as e:
             workflow_logger.error(f"Failed to create LLM: {e}")
             yield adapter.adapt_error(f"Failed to create LLM: {e}")

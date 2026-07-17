@@ -2921,6 +2921,7 @@
   "intent_add_success_tip": "Intent package created successfully!",
   "intent_add_success_tip_content": "{{packName}} intent package created. Add to current workflow?",
   "input_length_not_allow_over": "The length cannot exceed {{length}}.",
+  "input_length_not_allow_over_tip": "The length cannot exceed {{length}}",
   "input_invalid_value": "The entered value is invalid.",
   "variables_data": "Data processing",
   "workflow_chat_error": "Execution failed. {{time}} View details.",

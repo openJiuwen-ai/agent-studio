@@ -185,6 +185,7 @@ redis:
   cluster_node_list: ${cluster_node_list:}
   client-type: ${redis_client_type:redisson}
   enable-log: ${redis_enable_log:false}
+  max-debug-msg-size: ${redis_max_debug_msg_size:10000}
 
 # health check
 management:
@@ -224,16 +225,26 @@ iam:
     name: ${iam_project_name:}
   assumeRole:
     agencyName: ${iam_assumeRole_agencyName:}
-obs:
-  url: ${obs_url:}
-  ak: ${obs_ak:}
-  sk: ${obs_sk:}
-  bucket: ${obs_bucket:}
-  stagingBucket: ${obs_stagingBucket:}
-  opensource: ${obs_opensource:true}
-  expires: ${obs_expires:7}
-  path:
-    style: ${DATASOURCE_OBS_PATH_STYLE:path}
+storage:
+  type: ${storage_type:OBS}
+  expires: ${obs_expire_time:7}
+  bucket-storage-limit: ${obs_bucket_storage_limit:100}
+  custom-class: ${STORAGE_CUSTOM_CLASS:}
+  custom-classpath: ${STORAGE_CUSTOM_CLASSPATH:}
+  obs:
+    url: ${obs_url:}
+    ak: ${obs_ak:}
+    sk: ${obs_sk:}
+    bucket: ${obs_bucket:}
+    staging-bucket: ${obs_staging_bucket:}
+    opensource: ${obs_opensource:true}
+    auto-create-bucket: ${obs_bucket_auto_create:true}
+    path-style: ${DATASOURCE_OBS_PATH_STYLE:path}
+  local:
+    base-path: ${storage_local_base_path:}
+    bucket: ${storage_local_bucket:}
+    staging-bucket: ${storage_local_staging_bucket:}
+    server-url: ${storage_local_server_url:}
 
 model:
   platform:
@@ -553,6 +564,15 @@ workflow:
   connector_config_host_whitelist: ${host_whitelist:}
   enable-url-check: ${enable_url_check:true}
   demo-workflow-id: ${demo_workflow_id:}
+  insight-exec-rel: ${workflow_insight_exec_rel:insight_exec_rel_%s_%s_%s}
+  insight-conv-rel: ${workflow_insight_conv_rel:insight_conv_%s_%s}
+  insight-exec: ${workflow_insight_exec:insight_exec_%s_%s}
+  max-execution-size: ${workflow_max_execution_size:20}
+  instance-expire: ${workflow_instance_expire:10}
+  conversation-expire: ${workflow_conversation_expire:7}
+  max-conversation-size: ${workflow_max_conversation_size:20}
+  max-query-length: ${workflow_max_query_length:100000}
+  sse-timeout-milliseconds: ${workflow_sse_timeout_milliseconds:900000}
 # ==========================================工作流相关配置end=======================================
 
 # ==========================================agent相关配置start=======================================
@@ -572,6 +592,11 @@ agent:
   init-template-path: ${agent_init_template_path:classpath:template/app/**.jsonl}
   max-iteration: ${agent_manx_iteration:15}
   demo-agent-id: ${demo_agent_id:}
+  insight-exec-rel: ${agent_insight_exec_rel:insight_exec_rel_%s_%s_%s}
+  insight-conv-rel: ${agent_insight_conv_rel:insight_conv_%s_%s}
+  insight-exec: ${agent_insight_exec:insight_exec_%s_%s}
+  max-execution-size: ${agent_max_execution_size:20}
+  max-conversation-size: ${agent_max_conversation_size:20}
   deepresearch-character: ${outliner_max_section_num:10}
   builder:
     iam:

@@ -10,6 +10,7 @@
 
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -24,6 +25,8 @@ class RequestContext:
     secret_env_keys: list = field(default_factory=list)
     # 当前节点引用了加密环境变量的字段名集合（由 on_* 入口设置，供模板渲染层读取）
     current_secret_field_names: dict = field(default_factory=dict)
+    # 内容审核引擎实例（由请求入口设置，供审核节点读取）
+    moderation_engine: Any = None
 
 
 _request_ctx: ContextVar[RequestContext] = ContextVar(

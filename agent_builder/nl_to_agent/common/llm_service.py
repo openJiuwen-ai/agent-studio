@@ -19,7 +19,13 @@ class Nl2AgentProcessor:
 
     def __init__(self, model_info):
         self.model_info = model_info
-        self.model = get_nl2_model(model_info)
+        self._model = None
+
+    async def _get_model(self):
+        """Lazy-constructed model instance (async factory)."""
+        if self._model is None:
+            self._model = await get_nl2_model(self.model_info)
+        return self._model
 
     def chat(
         self,
@@ -85,7 +91,8 @@ class Nl2AgentProcessor:
         usage_metadata = UsageMetadata()
         usage_metadata.type = kwargs.get("type")
         complete_content = ""
-        async for chunk in self.model.stream(messages=messages):
+        model = await self._get_model()
+        async for chunk in model.stream(messages=messages):
             content = chunk.content if isinstance(chunk.content, str) else ""
             if content:
                 complete_content += content

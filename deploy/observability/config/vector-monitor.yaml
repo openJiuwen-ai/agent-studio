@@ -1,0 +1,81 @@
+data_dir: /var/lib/vector
+timezone: ${APP_LOG_TIMEZONE}
+
+api:
+  enabled: true
+  address: 0.0.0.0:8686
+
+sources:
+  docker:
+    type: docker_logs
+    include_labels:
+      - com.docker.compose.project=${MONITOR_PROJECT_NAME}
+    exclude_containers:
+      - ${MONITOR_PROJECT_NAME}-vector
+
+  vector_internal:
+    type: internal_logs
+
+transforms:
+  docker_fields:
+    type: remap
+    inputs: [docker]
+    source: |
+      .host = get_env_var!("NODE_NAME")
+      .collector = "vector-docker"
+      .parse_status = "native"
+      level_parts, level_err = parse_regex(.message, r'(?i)(?:level\s*[:=]\s*"?|\[)(?P<level>trace|debug|info|warn|warning|error|fatal|critical)(?:"|\]|\s|,|$)')
+      if level_err == null {
+        normalized_level = upcase!(level_parts.level)
+        if normalized_level == "WARNING" { normalized_level = "WARN" }
+        if normalized_level == "CRITICAL" { normalized_level = "FATAL" }
+        .level = normalized_level
+        .parse_status = "parsed"
+      }
+      service_name = get(.label, ["com.docker.compose.service"]) ?? null
+      if is_string(service_name) && service_name != "" {
+        .service = service_name
+      } else {
+        .service = .container_name
+      }
+      .filename = "docker://" + to_string!(.container_name) + "/" + to_string!(.stream)
+
+  vector_internal_fields:
+    type: remap
+    inputs: [vector_internal]
+    source: |
+      .host = get_env_var!("NODE_NAME")
+      .service = "vector"
+      .collector = "vector-internal"
+      .parse_status = "native"
+      .filename = "vector://internal"
+
+  redact_sensitive:
+    type: remap
+    inputs: [docker_fields, vector_internal_fields]
+    source: |
+      .message = redact(string!(.message), filters: [
+        r'(?i)authorization\s*[:=]\s*(?:bearer|basic)\s+[^\s,;"\]]+',
+        r'(?i)(?:password|passwd|token|api[_-]?key|secret|access[_-]?key|private[_-]?key)\s*[:=]\s*[^\s&,;"\]]+',
+        r'(?i)(?:password|passwd|token|api[_-]?key|secret|access[_-]?key)=([^&\s]+)'
+      ])
+
+sinks:
+  victoria_logs:
+    type: elasticsearch
+    inputs: [redact_sensitive]
+    endpoints:
+      - http://victoria-logs:9428/insert/elasticsearch/
+    mode: bulk
+    api_version: v8
+    compression: gzip
+    healthcheck:
+      enabled: false
+    query:
+      _msg_field: message
+      _time_field: timestamp
+      _stream_fields: host,service
+    buffer:
+      type: disk
+      max_size: ${VECTOR_BUFFER_MAX_SIZE}
+      when_full: block

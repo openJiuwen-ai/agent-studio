@@ -30,6 +30,7 @@ RUN pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
 COPY agent_builder/ $SERVICE_HOME/app/agent_builder/
 COPY agent_runtime/ $SERVICE_HOME/app/agent_runtime/
 COPY jiuwen/ $SERVICE_HOME/app/jiuwen/
+COPY model_service/ $SERVICE_HOME/app/model_service/
 COPY tests/ $SERVICE_HOME/app/tests/
 COPY bin/ $SERVICE_HOME/bin/
 # Nginx load balancing configuration and scripts

@@ -39,12 +39,14 @@ import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.MemoryRepoEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
 import com.openjiuwen.studio.agent.manager.entity.ShareInfo;
+import com.openjiuwen.studio.agent.manager.entity.SpaciousInfo;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
 import com.openjiuwen.studio.agent.manager.entity.md.ProviderAuthMetadata;
 import com.openjiuwen.studio.agent.common.entity.RouterStrategyEntity;
 import com.openjiuwen.studio.agent.manager.entity.plugin.PluginVO;
+import com.openjiuwen.studio.agent.manager.enums.ExportModeEnum;
 import com.openjiuwen.studio.agent.manager.enums.ResourceTypeEnum;
 import com.openjiuwen.studio.agent.manager.enums.controller.AgentNodeType;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
@@ -73,6 +75,7 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -107,6 +110,8 @@ public class AgentImportService {
     private int importMaxLen;
 
     private static final String IMPORT_FILE_TYPE = ".jsonl";
+
+    public static final String LATEST_PARAM = "{{latest}}";
 
     @Autowired
     private I18nUtil i18nUtil;
@@ -286,6 +291,19 @@ public class AgentImportService {
      * @return ImportRsp
      */
     public ImportRsp importFile(String projectId, String workspaceId, MultipartFile file) {
+        return importFile(projectId, workspaceId, file, null);
+    }
+
+    /**
+     * 文件导入
+     *
+     * @param projectId projectId
+     * @param workspaceId 空间id
+     * @param file 前端传入的导入文件，文件内容格式为多条jsonl，每个资源一行
+     * @param mode 导入模式
+     * @return ImportRsp
+     */
+    public ImportRsp importFile(String projectId, String workspaceId, MultipartFile file, String mode) {
         List<ImportInfo> resourceList = getAndValidateImportInfos(workspaceId, file);
         List<ImportResourceResult> result = new ArrayList<>();
         resourceList.forEach(p -> {
@@ -305,7 +323,294 @@ public class AgentImportService {
             }
             result.add(importResourceResult);
         });
+        if (Strings.CS.equals(mode, ExportModeEnum.SPACIOUS.getCode())) {
+            handleSpaciousImport(projectId, workspaceId, resourceList, result);
+        } else {
+            handleStrictImport(projectId, resourceList, result);
+        }
+        return handleImportRsp(resourceList, result);
+    }
 
+    /**
+     * 宽松导入模式
+     *
+     * @param projectId
+     * @param workspaceId
+     * @param resourceList
+     * @param result
+     */
+    private void handleSpaciousImport(String projectId, String workspaceId, List<ImportInfo> resourceList,
+        List<ImportResourceResult> result) {
+        Map<String, ImportResourceResult> resultMap = result.stream()
+            .collect(Collectors.toMap(ImportResourceResult::getId, r -> r, (existing, incoming) -> existing));
+
+        resourceList = resourceList.stream()
+            .filter(p -> Strings.CS.equalsAny(p.getResourceType(), ResourceTypeEnum.WORKFLOW.toString(),
+                ResourceTypeEnum.CONTROLLER.toString()))
+            .filter(p -> p.getDsl() != null)
+            .toList();
+        for (ImportInfo importInfo : resourceList) {
+            ImportResourceResult importResult = resultMap.get(importInfo.getResourceId());
+            try {
+                if (importResult == null || Strings.CS.equals(importResult.getStatus(),
+                    ImportExportStatusEnum.FAILED.getCode())) {
+                    continue;
+                }
+                List<MappingEntity> l1Mappings = importInfo.getL1Mappings();
+                if (CollectionUtils.isEmpty(l1Mappings)) {
+                    continue;
+                }
+                String dslJson = JSON.toJSONString(importInfo.getDsl());
+                if (!Strings.CI.contains(dslJson, LATEST_PARAM)) {
+                    continue;
+                }
+                // 最新版本的信息构造
+                List<SpaciousInfo> spaciousInfoList = getSpaciousInfos(projectId, workspaceId, l1Mappings);
+
+                if (Strings.CS.equals(importInfo.getResourceType(), ResourceTypeEnum.WORKFLOW.toString())) {
+                    WorkflowVO workflowVO = JSONObject.parseObject(dslJson, WorkflowVO.class);
+                    handleSpaciousWorkflowDsl(workflowVO, spaciousInfoList);
+                    importInfo.setDsl(workflowVO);
+                } else if (Strings.CS.equals(importInfo.getResourceType(), ResourceTypeEnum.CONTROLLER.toString())) {
+                    ControllerVO controllerVO = JSONObject.parseObject(dslJson, ControllerVO.class);
+                    handleSpaciousControllerWorkflow(importInfo, controllerVO, spaciousInfoList);
+                    handleSpaciousSubController(controllerVO, spaciousInfoList);
+                    importInfo.setDsl(controllerVO);
+                } else {
+                    continue;
+                }
+                handleSpaciousMappingAndDsl(importInfo, spaciousInfoList, result);
+            } catch (AgentStudioException e) {
+                log.error("import spacious error, resourceId:{}, resourceType:{}", importInfo.getResourceId(), importInfo.getResourceType());
+                // 删除插入的主数据
+                importResult.setStatus(ImportExportStatusEnum.FAILED.getCode());
+                importResult.setErrorMsg(i18nUtil.getMessage(e.getErrorCode()));
+                importResult.setSuggestion(i18nUtil.getSuggestion(e.getErrorCode()));
+                handleException(importInfo, importResult);
+            } catch (Exception e) {
+                log.error("resourceAdapter error,resourceType:{},resourceId:{},resourceName:{}", importInfo.getResourceType(),
+                    importInfo.getResourceId(), importInfo.getResourceName(), e);
+                importResult.setStatus(ImportExportStatusEnum.FAILED.getCode());
+                importResult.setErrorMsg(i18nUtil.getMessage(StudioError.UNEXPECTED_ERROR));
+                handleException(importInfo, importResult);
+            }
+
+        }
+    }
+
+    private void handleException(ImportInfo importInfo, ImportResourceResult importResult) {
+        if (importResult.getAddTag()){
+            String resourceId = StringUtils.isEmpty(importResult.getNewId()) ? importInfo.getResourceId() : importResult.getNewId();
+            if (Strings.CS.equals(importInfo.getResourceType(), ResourceTypeEnum.WORKFLOW.toString())) {
+                workflowMapper.deleteByPrimaryKeys(List.of(resourceId));
+            }
+            if (Strings.CS.equals(importInfo.getResourceType(), ResourceTypeEnum.CONTROLLER.toString())) {
+                agentMapper.deleteByPrimaryKeys(List.of(resourceId));
+            }
+        }
+    }
+
+    private @NotNull List<SpaciousInfo> getSpaciousInfos(String projectId, String workspaceId,
+        List<MappingEntity> l1Mappings) {
+        List<SpaciousInfo> spaciousInfoList = new ArrayList<>();
+        for (MappingEntity mapping : l1Mappings) {
+            String latestVersionId = null;
+            String latestVersionName = null;
+            String targetResourceId = null;
+            if (Strings.CS.equals(mapping.getResourceType(), ResourceTypeEnum.WORKFLOW.toString())) {
+                List<WorkflowEntity> workflows = workflowMapper.selectByTraceId(projectId, workspaceId,
+                    mapping.getTraceId());
+                if (CollectionUtils.isNotEmpty(workflows)) {
+                    WorkflowEntity wf = workflows.get(0);
+                    targetResourceId = wf.getId();
+                    List<ReleaseVersion> versions = releaseVersionMapper.selectByAppId(targetResourceId);
+                    if (CollectionUtils.isNotEmpty(versions)) {
+                        latestVersionId = versions.get(0).getVersionId();
+                        latestVersionName = versions.get(0).getVersionName();
+                    }
+                }
+            } else if (Strings.CS.equals(mapping.getResourceType(), ResourceTypeEnum.CONTROLLER.toString())) {
+                List<Agent> agents = agentMapper.selectAgentByTraceIdAndWorkspaceId(projectId, workspaceId,
+                    mapping.getTraceId());
+                if (CollectionUtils.isNotEmpty(agents)) {
+                    Agent agent = agents.get(0);
+                    targetResourceId = agent.getAgentId();
+                    List<ReleaseVersion> versions = releaseVersionMapper.selectByAppId(agent.getAgentId());
+                    if (CollectionUtils.isNotEmpty(versions)) {
+                        latestVersionId = versions.get(0).getVersionId();
+                        latestVersionName = versions.get(0).getVersionName();
+                    }
+                }
+            }
+            if (StringUtils.isNotEmpty(latestVersionId) && StringUtils.isNotEmpty(targetResourceId)) {
+                SpaciousInfo spaciousInfo = new SpaciousInfo();
+                spaciousInfo.setTargetResourceId(targetResourceId);
+                spaciousInfo.setOriginalResourceId(mapping.getResourceId());
+                spaciousInfo.setLatestVersionId(latestVersionId);
+                spaciousInfo.setLatestVersionName(latestVersionName);
+                spaciousInfoList.add(spaciousInfo);
+            }
+        }
+        return spaciousInfoList;
+    }
+
+    private void handleSpaciousWorkflowDsl(WorkflowVO workflowVO, List<SpaciousInfo> spaciousInfoList) {
+        workflowVO.getNodes().forEach(node -> {
+            if (!Strings.CI.equals(node.getType(), NodeType.WORKFLOW.getType())) {
+                return;
+            }
+            Map<String, Object> configs = MapReadUtil.safeCastToMapWithStringKey(node.getConfigs());
+            SpaciousInfo relationInfo = spaciousInfoList.stream()
+                .filter(p -> Strings.CS.equals(p.getOriginalResourceId(), String.valueOf(configs.get("id"))))
+                .findFirst().orElse(null);
+            handleSpaciousVersionResource(configs, relationInfo);
+            node.setConfigs(configs);
+        });
+    }
+
+    private void handleSpaciousMappingAndDsl(ImportInfo importInfo, List<SpaciousInfo> spaciousInfoList,
+        List<ImportResourceResult> result) {
+        List<MappingEntity> l1Mappings = importInfo.getL1Mappings();
+        if (CollectionUtils.isEmpty(l1Mappings)) {
+            log.info("spacious mapping is null");
+            return;
+        }
+        Map<String, SpaciousInfo> spaciousInfoMap = new HashMap<>();
+        if (CollectionUtils.isNotEmpty(spaciousInfoList)) {
+            spaciousInfoMap = spaciousInfoList.stream()
+                .collect(
+                    Collectors.toMap(SpaciousInfo::getOriginalResourceId, v -> v, (existing, incoming) -> existing));
+        }
+
+        Map<String, ImportResourceResult> importResourceResultMap = result.stream()
+            .collect(Collectors.toMap(ImportResourceResult::getId, v -> v, (existing, incoming) -> existing));
+        ImportResourceResult importResourceResult = importResourceResultMap.get(importInfo.getResourceId());
+
+        String appId = (importResourceResult == null || StringUtils.isEmpty(importResourceResult.getNewId()))
+            ? importInfo.getResourceId()
+            : importResourceResult.getNewId();
+        String appVersion = null;
+        String importInfoResourceType = importInfo.getResourceType();
+        if (Objects.nonNull(importInfo.getReleaseVersion())) {
+            ReleaseVersion releaseVersion = importInfo.getReleaseVersion();
+            appVersion = (importResourceResult == null || StringUtils.isEmpty(importResourceResult.getNewVersion()))
+                ? releaseVersion.getVersionId()
+                : importResourceResult.getNewVersion();
+            String obsKey = appId + Constants.UNDERLINE_STR + appVersion;
+            if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
+                uploadControllerDsl(importInfo, appId, appVersion);
+            } else {
+                uploadWorkflowDsl(importInfo, appId, obsKey, appVersion);
+            }
+            insertMapping(l1Mappings, spaciousInfoMap, appId, appVersion);
+        }
+        // 检查mapping表是否存在草稿
+        List<MappingEntity> draftMappings = mappingMapper.selectByAppIdAndAppVersion(appId, Constants.LATEST_PUBLISH_VERSION, null, null);
+        if (CollectionUtils.isEmpty(draftMappings)) {
+
+            if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
+                uploadControllerDsl(importInfo, appId, null);
+            } else {
+                uploadWorkflowDsl(importInfo, appId, appId, null);
+            }
+            insertMapping(l1Mappings, spaciousInfoMap, appId, null);
+        }
+
+    }
+
+    private void insertMapping(List<MappingEntity> l1Mappings, Map<String, SpaciousInfo> spaciousInfoMap, String appId,
+        String appVersion) {
+        List<MappingEntity> mappingEntities = new ArrayList<>();
+        for (MappingEntity l1Mapping : l1Mappings) {
+            SpaciousInfo spaciousInfo = spaciousInfoMap.get(l1Mapping.getResourceId());
+            MappingEntity mappingEntity = new MappingEntity();
+            BeanUtils.copyProperties(l1Mapping, mappingEntity);
+            mappingEntity.setMappingId(UUID.randomUUID().toString());
+            mappingEntity.setAppId(appId);
+            mappingEntity.setAppVersion(appVersion);
+            mappingEntity.setValid(false);
+            if (spaciousInfo != null) {
+                mappingEntity.setValid(true);
+                mappingEntity.setResourceId(spaciousInfo.getTargetResourceId());
+                mappingEntity.setResourceName(spaciousInfo.getLatestVersionName());
+                mappingEntity.setResourceVersion(spaciousInfo.getLatestVersionId());
+            }
+            mappingEntities.add(mappingEntity);
+        }
+        mappingMapper.insertBatch(mappingEntities);
+    }
+
+    private void handleSpaciousSubController(ControllerVO controllerVO, List<SpaciousInfo> spaciousInfoList) {
+        controllerVO.getNodes().forEach(node -> {
+            if (Strings.CS.equals(node.getType(), AgentNodeType.SUB_CONTROLLER.getType())) {
+                Map<String, Object> configs = MapReadUtil.safeCastToMapWithStringKey(node.getConfigs());
+                SpaciousInfo relationInfo = getNodeSpaciousInfo(spaciousInfoList, node, String.valueOf(configs.get("id")));
+                handleSpaciousVersionResource(configs, relationInfo);
+                node.setConfigs(configs);
+            }
+            if (Strings.CS.equals(node.getType(), AgentNodeType.CONTROLLER.getType())) {
+                Map<String, Object> configs = MapReadUtil.safeCastToMapWithStringKey(node.getConfigs());
+                List<Map<String, Object>> agents = MapReadUtil.safeCastToListWithMap(configs.get("agents"));
+                agents.forEach(agentMap -> {
+                    String resourceId = String.valueOf(agentMap.get("id"));
+                    Map<String, Object> agentConfigs = MapReadUtil.safeCastToMapWithStringKey(agentMap.get("configs"));
+                    SpaciousInfo relationInfo = getSpaciousInfo(spaciousInfoList, agentMap, resourceId);
+                    handleSpaciousVersionResource(agentConfigs, relationInfo);
+                    agentMap.put("configs", agentConfigs);
+                });
+                configs.put("agents", agents);
+                node.setConfigs(configs);
+            }
+        });
+    }
+
+
+    private static @Nullable SpaciousInfo getNodeSpaciousInfo(List<SpaciousInfo> spaciousInfoList, ControllerNodeVO node,
+        String dslId) {
+        return spaciousInfoList.stream()
+            .filter(p -> Strings.CS.equals(p.getOriginalResourceId(), dslId))
+            .findFirst().orElse(null);
+    }
+
+    private void handleSpaciousControllerWorkflow(ImportInfo importInfo, ControllerVO controllerVO, List<SpaciousInfo> spaciousInfoList) {
+        controllerVO.getNodes().stream().forEach(node -> {
+            if (Strings.CS.equals(node.getType(), AgentNodeType.WORKFLOW.getType())) {
+                Map<String, Object> configs = MapReadUtil.safeCastToMapWithStringKey(node.getConfigs());
+                SpaciousInfo relationInfo = getNodeSpaciousInfo(spaciousInfoList, node, String.valueOf(configs.get("id")));
+                handleSpaciousVersionResource(configs, relationInfo);
+                node.setConfigs(configs);
+            }
+            if (Strings.CS.equals(node.getType(), AgentNodeType.CONTROLLER.getType())) {
+                Map<String, Object> configs = MapReadUtil.safeCastToMapWithStringKey(node.getConfigs());
+                List<Map<String, Object>> workflows = MapReadUtil.safeCastToListWithMap(configs.get("workflows"));
+                workflows.forEach(workflowMap -> {
+                    String resourceId = String.valueOf(workflowMap.get("id"));
+                    SpaciousInfo relationInfo = getSpaciousInfo(spaciousInfoList, workflowMap, resourceId);
+                    Map<String, Object> workflowConfigs = MapReadUtil.safeCastToMapWithStringKey(
+                        workflowMap.get("configs"));
+                    handleSpaciousVersionResource(workflowConfigs, relationInfo);
+                    workflowMap.put("configs", workflowConfigs);
+                });
+                configs.put("workflows", workflows);
+                node.setConfigs(configs);
+            }
+        });
+
+    }
+
+    private static @Nullable SpaciousInfo getSpaciousInfo(List<SpaciousInfo> spaciousInfoList,
+        Map<String, Object> workflowMap, String resourceId) {
+        SpaciousInfo relationInfo = spaciousInfoList.stream()
+            .filter(p -> Strings.CS.equals(p.getOriginalResourceId(), resourceId))
+            .findFirst().orElse(null);
+        // 替换为目标id
+        if (Objects.nonNull(relationInfo) && StringUtils.isNotEmpty(relationInfo.getTargetResourceId())) {
+            workflowMap.put("id", relationInfo.getTargetResourceId());
+        }
+        return relationInfo;
+    }
+
+    private void handleStrictImport(String projectId, List<ImportInfo> resourceList, List<ImportResourceResult> result) {
         // 处理供应商与模型的关系
         handleProviderModel(resourceList, result);
         // 处理路由策略与模型的关系
@@ -321,7 +626,6 @@ public class AgentImportService {
 
         // 处理分享信息
         handleShareInfo(resourceList, result, projectId);
-        return handleImportRsp(resourceList, result);
     }
 
     private ImportRsp handleImportRsp(List<ImportInfo> resourceList, List<ImportResourceResult> result) {
@@ -613,6 +917,17 @@ public class AgentImportService {
                     MappingEntity parentMapping = getMappingEntity(currentMapping, parentResult,
                         importInfo.getTargetWorkspaceId());
                     mappingList.add(parentMapping);
+
+                    // 发布态导入时 parentMapping.appVersion 非空，需额外插入一份 app_version=null 的草稿态 mapping
+                    // 确保 buildComplexAgentInfo 的 selectByAppIdAndResourceType（and app_version is null）能查到
+                    // 草稿态导入时 parentMapping.appVersion 已为 null，无需重复插入
+                    if (StringUtils.isNotEmpty(parentMapping.getAppVersion())) {
+                        MappingEntity draftMapping = new MappingEntity();
+                        BeanUtils.copyProperties(parentMapping, draftMapping);
+                        draftMapping.setMappingId(UUID.randomUUID().toString());
+                        draftMapping.setAppVersion(null);
+                        mappingList.add(draftMapping);
+                    }
                 }
             }
         });
@@ -626,6 +941,16 @@ public class AgentImportService {
                 importInfo.getTargetWorkspaceId());
             parentMapping.setResourceId(parentMapping.getResourceId() + "#" + toolId);
             mappingList.add(parentMapping);
+
+            // 发布态导入时 parentMapping.appVersion 非空，需额外插入草稿态 mapping
+            // 草稿态导入时 parentMapping.appVersion 已为 null，无需重复插入
+            if (StringUtils.isNotEmpty(parentMapping.getAppVersion())) {
+                MappingEntity draftMapping = new MappingEntity();
+                BeanUtils.copyProperties(parentMapping, draftMapping);
+                draftMapping.setMappingId(UUID.randomUUID().toString());
+                draftMapping.setAppVersion(null);
+                mappingList.add(draftMapping);
+            }
         }
     }
 
@@ -712,20 +1037,31 @@ public class AgentImportService {
         }
         resourceList.stream().filter(v -> CollectionUtils.isNotEmpty(v.getParents())).forEach(p -> {
             ImportResourceResult result = resultMap.get(p.getResourceId());
-            if (result == null || Strings.CS.equals(result.getStatus(), ImportExportStatusEnum.FAILED.getCode())) {
+            
+            if (result == null) {
+                
                 return;
             }
+            if (Strings.CS.equals(result.getStatus(), ImportExportStatusEnum.FAILED.getCode())) {
+                
+                return;
+            }
+            
             // 若当前资源id与版本无变化，则无需更新父资源的dsl
             if (StringUtils.isEmpty(result.getNewId()) && StringUtils.isEmpty(result.getNewVersion())) {
+                
                 return;
             }
             p.getParents().forEach(parentId -> {
                 ImportInfo parentResource = resourceMap.get(parentId);
                 ImportResourceResult parentResult = resultMap.get(parentId);
-                if (parentResult == null || Strings.CS.equals(parentResult.getStatus(),
-                    ImportExportStatusEnum.FAILED.getCode())) {
+                if (parentResult == null) {
                     return;
                 }
+                if (Strings.CS.equals(parentResult.getStatus(), ImportExportStatusEnum.FAILED.getCode())) {
+                    return;
+                }
+                
                 switch (ResourceTypeEnum.fromValue(parentResource.getResourceType())) {
                     case WORKFLOW -> handleWorkflowDsl(parentResource, parentResult, result);
                     case AGENT -> handleAgentDsl(parentResource, parentResult, result);
@@ -1479,6 +1815,26 @@ public class AgentImportService {
         if (Strings.CS.equals(config.get("version_id").toString(), result.getVersion()) && StringUtils.isNotEmpty(
             result.getNewVersion())) {
             config.put("version_id", result.getNewVersion());
+        }
+    }
+
+    private void handleSpaciousVersionResource(Map<String, Object> config, SpaciousInfo relationInfo) {
+        if (MapUtils.isEmpty(config)) {
+            return;
+        }
+        String resourceId = String.valueOf(config.get("id"));
+        // 替换为目标id
+        if (Objects.nonNull(relationInfo) && StringUtils.isNotEmpty(relationInfo.getTargetResourceId())) {
+            config.put("id", relationInfo.getTargetResourceId());
+        }
+        // 替换版本
+        if (Strings.CS.equals(String.valueOf(config.get("version_id")), LATEST_PARAM)) {
+            if (Objects.isNull(relationInfo)) {
+                log.error("can not find relation info:{}", resourceId);
+                throw new AgentStudioException(StudioError.LATEST_REPLACE_NOT_EXISTS);
+            }
+            config.put("version_id", relationInfo.getLatestVersionId());
+            config.put("version_name", relationInfo.getLatestVersionName());
         }
     }
 

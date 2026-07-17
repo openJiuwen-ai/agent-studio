@@ -61,7 +61,7 @@
       <nz-form-item>
         <nz-form-label nzRequired>{{ 'service_url' | i18nextEager }}</nz-form-label>
         <nz-form-control [nzErrorTip]="descErrorTpl">
-          <input nz-input class="w-full" type="text" formControlName="api_url" />
+          <input nz-input class="w-full" type="text" [placeholder]="apiUrlPlaceholder" formControlName="api_url" />
           <p class="name-rule">{{ validateServiceUrlTip }}</p>
           <ng-template #descErrorTpl let-control>
             输入网址格式无效，请输入例如https://xxx.demo.com网址

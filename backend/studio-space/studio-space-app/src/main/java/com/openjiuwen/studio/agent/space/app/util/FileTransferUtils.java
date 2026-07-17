@@ -8,9 +8,8 @@ import static com.openjiuwen.studio.agent.space.app.constant.Constant.SPACE_OBS_
 import static com.openjiuwen.studio.agent.space.app.constant.Constant.SPACE_OBS_TASK_ID_PREFIX;
 import static com.openjiuwen.studio.agent.space.app.constant.Constant.SPACE_OBS_TEMP_DIRECTORY_PREFIX;
 
-import com.obs.services.model.ObjectMetadata;
-import com.obs.services.model.ObsObject;
-import com.obs.services.model.TemporarySignatureResponse;
+import com.openjiuwen.studio.agent.common.storage.FileMeta;
+import com.openjiuwen.studio.agent.common.storage.FileStore;
 import com.openjiuwen.studio.agent.space.api.vo.AgentBuilderFileVo;
 import com.openjiuwen.studio.agent.space.app.enums.AgentBuilderMediaType;
 import com.openjiuwen.studio.agent.space.app.enums.AgentBuilderStorageType;
@@ -38,7 +37,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
@@ -54,14 +52,14 @@ import java.util.UUID;
 @Slf4j
 @Service
 public class FileTransferUtils {
-    @Value("${obs.enabled:true}")
-    private Boolean obsEnable;
-
-    @Value("${agent.builder.task.obs.file.expireTime:35}")
-    private String obsTaskFileExpireTime;
+    @Value("${storage.type:OBS}")
+    private String storageType;
 
     @Resource
     private ObsApiClient obsApiClient;
+
+    @Resource
+    private FileStore fileStore;
 
     @Value("${agent.builder.task.obs.bucket.name:agentBuilder}")
     private String SPACE_OBS_BUCKET_NAME;
@@ -91,13 +89,7 @@ public class FileTransferUtils {
             log.info("[uploadTaskFile2Obs] Runtime upload directory set to: {}", uploadDirectory);
         }
 
-        // 设置对象元数据
-        ObjectMetadata exMeta = new ObjectMetadata();
-        exMeta.setExpires(obsTaskFileExpireTime);
-        log.info("[uploadTaskFile2Obs] Object metadata set with expiration time: {}", obsTaskFileExpireTime);
-
-        // 上传文件并获取上传键
-        String uploadKey = obsApiClient.uploadFile(SPACE_OBS_BUCKET_NAME, uploadDirectory, file, exMeta);
+        String uploadKey = obsApiClient.uploadFile(SPACE_OBS_BUCKET_NAME, uploadDirectory, file);
         log.info("[uploadTaskFile2Obs] File uploaded successfully with key: {}", uploadKey);
 
         // 创建并返回文件传输结果
@@ -116,8 +108,9 @@ public class FileTransferUtils {
      */
     public FileTransferResult uploadTaskFile(AgentBuilderFile file, @Nullable String taskId,
         AgentBuilderUploadScene scene) {
-        log.info("[uploadTaskFile] obsEnable : {}", obsEnable);
-        if (obsEnable) {
+        boolean storageEnabled = "OBS".equalsIgnoreCase(storageType);
+        log.info("[uploadTaskFile] storageEnabled : {}", storageEnabled);
+        if (storageEnabled) {
             try {
                 return uploadTaskFile2Obs(file, taskId, scene);
             } catch (AgentSpaceException e) {
@@ -125,8 +118,8 @@ public class FileTransferUtils {
                 throw new AgentSpaceException("failed to upload file to obs!");
             }
         } else {
-            log.error("obs is disabled failed to upload file to obs!");
-            throw new AgentSpaceException("obs is disabled failed to upload file to obs!");
+            log.error("storage is disabled, failed to upload file!");
+            throw new AgentSpaceException("storage is disabled, failed to upload file!");
         }
     }
 
@@ -204,12 +197,12 @@ public class FileTransferUtils {
     }
 
     @NotNull
-    private ObsObject getObsObject(AgentBuilderFileEntity file) {
-        ObsObject obsObject = null;
+    private InputStream getObsInputStream(AgentBuilderFileEntity file) {
+        InputStream inputStream = null;
         int count = 0;
         while (count < 3) {
             try {
-                obsObject = obsApiClient.downloadFile(SPACE_OBS_BUCKET_NAME, file.getUri());
+                inputStream = obsApiClient.downloadFile(SPACE_OBS_BUCKET_NAME, file.getUri());
                 break;
             } catch (Exception ex) {
                 log.error("download file {} from OBS failed, ex is {}", file.getId() + ":" + file.getName(),
@@ -221,16 +214,11 @@ public class FileTransferUtils {
             log.error("download file {} from OBS failed, exceed max retry times", file.getId() + ":" + file.getName());
             throw new AgentSpaceException(AgentSpaceErrorCodes.AGENT_BUILDER_FILE_DOWNLOAD_FAIL_ERROR);
         }
-        return obsObject;
+        return inputStream;
     }
 
     public String getDownloadUrlFromObs(String bucketName, String obsKey, long expires) {
-        TemporarySignatureResponse temporaryGetRsp = obsApiClient.getTemporaryGetRsp(bucketName, obsKey,
-            expires * 86400);
-        if (temporaryGetRsp == null) {
-            return null;
-        }
-        return temporaryGetRsp.getSignedUrl();
+        return obsApiClient.getTemporaryGetRsp(bucketName, obsKey, expires * 86400);
     }
 
     private ResponseEntity<InputStreamResource> buildDownloadFileRsp(String fileName, long fileLength,
@@ -307,15 +295,9 @@ public class FileTransferUtils {
     }
 
     private FileInfo getObsFileInfo(AgentBuilderFileEntity file) {
-        ObsObject obsObject = getObsObject(file);
-        long fileLength = obsObject.getMetadata().getContentLength();
-        // obsObject.getObjectContent()读出来是文件流，这个过程中这个流已经被消费了，所以需要使用FilterInputStream包一下
-        InputStream contentStream = new FilterInputStream(obsObject.getObjectContent()) {
-            @Override
-            public void close() throws IOException {
-                super.close();
-            }
-        };
+        InputStream contentStream = getObsInputStream(file);
+        FileMeta meta = fileStore.getMeta(SPACE_OBS_BUCKET_NAME + "/" + file.getUri());
+        long fileLength = meta != null ? meta.getSize() : 0L;
         return new FileInfo(contentStream, fileLength);
     }
 

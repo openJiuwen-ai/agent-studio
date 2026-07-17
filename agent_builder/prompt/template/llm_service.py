@@ -52,7 +52,7 @@ class EiCloudLLMService(BaseLLMService):
         if self.add_prefix:
             messages = self.system_message + messages
         try:
-            model = get_prompt_optimize_model(self.model_info)
+            model = _run_async(get_prompt_optimize_model(self.model_info))
             response = _run_async(model.invoke(messages))
             content = response.content if hasattr(response, "content") else str(response)
             return dict(code=0, message="success", data=content)
@@ -85,7 +85,7 @@ class EiCloudLLMService(BaseLLMService):
         if self.add_prefix:
             messages = self.system_message + messages
         try:
-            model = get_prompt_optimize_model(self.model_info)
+            model = _run_async(get_prompt_optimize_model(self.model_info))
             chunks = _collect_async_gen(model.stream(messages))
             for chunk in chunks:
                 content = chunk.content if hasattr(chunk, "content") else str(chunk)
@@ -113,7 +113,7 @@ class EiCloudLLMService(BaseLLMService):
         if self.add_prefix:
             messages = self.system_message + messages
         try:
-            model = get_prompt_optimize_model(self.model_info)
+            model = await get_prompt_optimize_model(self.model_info)
             async for chunk in model.stream(messages):
                 content = chunk.content if hasattr(chunk, "content") else str(chunk)
                 if content:

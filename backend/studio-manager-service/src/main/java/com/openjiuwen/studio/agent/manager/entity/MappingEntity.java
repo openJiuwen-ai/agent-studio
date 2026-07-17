@@ -138,4 +138,7 @@ public class MappingEntity {
     @JsonProperty("resource_choose_tools")
     private String resourceChooseTools;
 
+    @JsonProperty("trace_id")
+    private String traceId;
+
 }

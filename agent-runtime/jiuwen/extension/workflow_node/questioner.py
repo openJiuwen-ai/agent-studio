@@ -1177,8 +1177,10 @@ class Questioner(WorkflowComponent):
                 extension=self._config.extension or {},
             )
 
-            provider = IRModelConfigProvider()
-            llm_comp_config = provider.get_llm_config(adapted_conf)
+            from jiuwen.serve.controllers.execution.ir_converter import _get_model_config_provider
+
+            provider = _get_model_config_provider()
+            llm_comp_config = await provider.get_llm_config(adapted_conf)
 
             self._model = Model(
                 model_client_config=llm_comp_config.model_client_config,

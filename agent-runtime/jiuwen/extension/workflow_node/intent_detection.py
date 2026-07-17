@@ -339,7 +339,8 @@ class IntentDetection(WorkflowComponent):
 
     def __init__(self, conf: dict) -> None:
         super().__init__()
-        self.llm = self._get_llm_instance(conf)
+        self._llm_conf = conf
+        self.llm = None
         self.intent_config = IntentDetectionConfig(**self._get_config_info(conf))
         self.intent_config_retry = IntentDetectionConfig(**self._get_config_info(conf))
         self.node_state = IntentDetectionState()
@@ -753,14 +754,14 @@ class IntentDetection(WorkflowComponent):
     # LLM 调用
     # --------------------------------------------------------------------------
 
-    def _get_llm_instance(self, conf: dict) -> Model:
+    async def _get_llm_instance(self, conf: dict) -> Model:
         from agent_runtime.common.model_adapters import adapt_intent_detection_config
-        from agent_runtime.common.model_providers import IRModelConfigProvider
+        from jiuwen.serve.controllers.execution.ir_converter import _get_model_config_provider
 
         adapted_conf = adapt_intent_detection_config(conf)
 
-        provider = IRModelConfigProvider()
-        llm_comp_config = provider.get_llm_config(adapted_conf)
+        provider = _get_model_config_provider()
+        llm_comp_config = await provider.get_llm_config(adapted_conf)
 
         return Model(
             model_client_config=llm_comp_config.model_client_config,
@@ -768,6 +769,10 @@ class IntentDetection(WorkflowComponent):
         )
 
     async def get_llm_result(self, current_inputs: dict) -> str:
+        # Lazy initialization of LLM (cannot await in __init__)
+        if self.llm is None:
+            self.llm = await self._get_llm_instance(self._llm_conf)
+
         template = self.intent_config.intent_detection_template
         if template is None:
             template = _get_default_prompt_template()
