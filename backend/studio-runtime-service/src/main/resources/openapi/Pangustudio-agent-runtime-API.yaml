@@ -890,31 +890,6 @@ paths:
             $ref: '#/definitions/ErrorRsp'
       x-order: 1
 
-  /v1/inner-tools/file/resolve:
-    post:
-      tags:
-        - ToolRuntime
-      summary: 解析文件
-      description: 解析文件
-      operationId: ResolveFile
-      produces:
-        - application/json
-      parameters:
-        - name: file_url
-          in: query
-          required: true
-          type: string
-          description: 文件访问url
-      responses:
-        '200':
-          description: 文件内容
-          schema:
-            type: string
-        '400':
-          description: Bad Request 请求错误
-          schema:
-            $ref: '#/definitions/ErrorRsp'
-      x-order: 1
   /v1/{project_id}/workflows/{workflow_id}/conversations:
     get:
       tags:
@@ -2029,40 +2004,6 @@ paths:
             $ref: '#/definitions/ErrorRsp'
       x-order: 0
 
-  /v1/inner-tools/document/create:
-    post:
-      tags:
-        - ToolRuntime
-      summary: 文档生成
-      description: 文档生成
-      operationId: CreateDocument
-      produces:
-        - application/json
-      parameters:
-        - name: document_info
-          in: body
-          required: true
-          schema:
-            $ref: '#/definitions/CreateDocumentReq'
-          description: 文档生成请求体
-      responses:
-        '200':
-          description: 文档下载链接
-          schema:
-            $ref: '#/definitions/CreateDocumentRsp'
-        '400':
-          description: Bad Request 请求错误
-          schema:
-            $ref: '#/definitions/ErrorRsp'
-        '404':
-          description: Not Found 找不到资源
-          schema:
-            $ref: '#/definitions/ErrorRsp'
-        '500':
-          description: Internal Server Error 服务内部错误
-          schema:
-            $ref: '#/definitions/ErrorRsp'
-      x-order: 1
   /v1/inner-tools/image-convert/file2base64:
     post:
       tags:
@@ -6006,23 +5947,6 @@ definitions:
         type: string
         description: 鉴权秘钥描述信息
         maxLength: 128
-  CreateDocumentReq:
-    type: object
-    required:
-      - input
-      - document_name
-    properties:
-      input:
-        type: string
-        example: 文档内容
-        description: 文档内容
-      document_name:
-        type: string
-        example: 文档名
-        description: 文档名
-      expires:
-        type: integer
-        description: 过期时间
   ResolveDocumentReq:
     type: object
     required:
@@ -6109,13 +6033,6 @@ definitions:
         type: string
         format: byte
         description: 图片二进制文件（Base64 编码的字节流）
-  CreateDocumentRsp:
-    type: object
-    properties:
-      url:
-        type: string
-        example: 文档下载链接
-        description: 文档下载链接
   ResolveDocumentRsp:
     type: object
     properties:

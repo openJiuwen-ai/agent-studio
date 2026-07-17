@@ -61,7 +61,7 @@ class PromptObsServiceTest {
 
     @Test
     void upLoadImage() throws IOException {
-        when(fileStore.getDownloadUrl(anyString(), anyLong())).thenReturn("https://example.com/signed");
+        when(fileStore.getUrl(anyString(), anyLong())).thenReturn("https://example.com/signed");
 
         MockMultipartFile file = new MockMultipartFile("file",
                 "test.jpg",
@@ -78,14 +78,14 @@ class PromptObsServiceTest {
 
     @Test
     void testGetObsTempUrl() {
-        when(fileStore.getDownloadUrl(anyString(), anyLong())).thenReturn("https://example.com/signed");
+        when(fileStore.getUrl(anyString(), anyLong())).thenReturn("https://example.com/signed");
         String url = obsService.getObsTempUrl("image/file-001", 3600L);
         assertEquals("https://example.com/signed", url);
     }
 
     @Test
     void testGetObsTempUrl_Exception_Throws() {
-        when(fileStore.getDownloadUrl(anyString(), anyLong())).thenThrow(new RuntimeException("OBS error"));
+        when(fileStore.getUrl(anyString(), anyLong())).thenThrow(new RuntimeException("OBS error"));
 
         assertThrows(AgentStudioException.class,
             () -> obsService.getObsTempUrl("image/file-001", 3600L));

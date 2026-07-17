@@ -29,6 +29,16 @@ class AgentRunContext:
     version: Optional[str]
 
 
+@dataclass
+class ExecutionContext:
+    """执行上下文 — 封装 build_req_json 所需的运行时参数."""
+    conversation_id: str
+    ir_path: str
+    conversation_history: list
+    dialogue_count: int
+    user_id: str
+
+
 class WorkflowAppRunRequest(BaseModel):
     """工作流试运行请求"""
 
@@ -60,5 +70,25 @@ class AgentAppRunRequest(BaseModel):
     histories: list[ConversationHistoryMessage] = Field(default_factory=list)
     files: list[dict] = Field(default_factory=list)
     agent_type: str = Field(alias="agent_type", default="auto")
+    version: Optional[Union[str, int]] = None
+    user_id: Optional[str] = Field(alias="userId", default=None)
+
+
+@dataclass
+class NodeRunContext:
+    """工作流单节点执行上下文 — 封装路径参数."""
+    project_id: str
+    workflow_id: str
+    conversation_id: str
+    node_id: str
+
+
+class NodeExecuteRequest(BaseModel):
+    """工作流单节点执行请求"""
+
+    inputs: dict = Field(default_factory=dict)
+    plugin_configs: Optional[list[PluginConfig]] = Field(
+        alias="plugin_configs", default=None
+    )
     version: Optional[Union[str, int]] = None
     user_id: Optional[str] = Field(alias="userId", default=None)

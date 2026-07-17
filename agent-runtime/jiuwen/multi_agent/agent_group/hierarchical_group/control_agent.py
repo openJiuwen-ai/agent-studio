@@ -132,7 +132,7 @@ class HierarchicalControlAgent(BaseControlAgent):
 
             # 如果达到最大调用次数，返回Error消息
             if (
-                self.current_agent_calls_count >= self.config.max_agent_calls
+                self.current_agent_calls_count > self.config.max_agent_calls
                 and not force_default_workflow
             ):
                 error_msg = (
@@ -382,7 +382,7 @@ class HierarchicalControlAgent(BaseControlAgent):
         Returns:
             Tuple[Optional[str], bool]: 调用的agent_id(可为None), 是否存在调用agent循环
         """
-        if self.current_agent_calls_count >= self.config.max_agent_calls:
+        if self.current_agent_calls_count > self.config.max_agent_calls:
             if self._detect_cycle():
                 logger.warning(
                     f"Cyclic repeated calls, call chain: {self.call_agent_history}",

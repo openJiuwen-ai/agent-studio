@@ -137,8 +137,8 @@ class TestProcessStatisticDataEvent:
         }
         result = BaseEventsProcessor.process_statistic_data_event(full_data, trace)
         assert result.event == "statistic_data"
-        assert result.latency["overall"] == 1.5
-        assert result.latency["model"] == 1.2
+        assert result.latency.overall == 1.5
+        assert result.latency.model == 1.2
 
 
 class TestProcessDoneEvent:

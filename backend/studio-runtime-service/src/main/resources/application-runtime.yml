@@ -296,7 +296,6 @@ agent:
   insight-exec: ${agent_insight_exec:insight_exec_%s_%s}
   max-conversation-size: ${agent_max_conversation_size:50}
   max-execution-size: ${agent_max_execution_size:20}
-  max-resolve-size: ${agent_max_resolve_size:5000}
   max-resolve-file-number: ${agent_max_resolve_file_number:10}
   max-upload-file-size: ${agent_max_upload_file_size:131072}
   max-upload-image-size: ${agent_max_upload_image_size:5120}

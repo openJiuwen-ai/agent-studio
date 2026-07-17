@@ -22,6 +22,7 @@
 """
 
 import asyncio
+import inspect
 import os
 import threading
 from typing import Optional
@@ -33,6 +34,7 @@ from agent_runtime.common.ir_interfaces import (
     StorageConfigError,
     StorageNotFoundError,
     StorageReadError,
+    StorageWriteError,
 )
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
@@ -128,6 +130,11 @@ class S3StorageProvider(ObjectStorageProvider):
                 s3={"addressing_style": settings.object_storage.path_style},
                 connect_timeout=5,
                 read_timeout=30,
+                # 禁用可选 CRC32 校验和 — botocore 1.40+ 默认启用会触发 aws-chunked
+                # 分块编码（Transfer-Encoding: chunked），要求必须提供 Content-Length
+                # 添加以下参数后，就不会要求传入了
+                request_checksum_calculation="when_required",
+                response_checksum_validation="when_required",
             ),
         )
         # __aenter__() returns the actual S3 client; the context is the wrapper
@@ -278,6 +285,62 @@ class S3StorageProvider(ObjectStorageProvider):
             raise StorageReadError(
                 f"S3 list failed: prefix={prefix}, error={e}"
             ) from e
+
+    async def put_object_bytes(
+        self, object_key: str, data: bytes, bucket_name: Optional[str] = None
+    ) -> None:
+        """异步上传二进制内容到 S3/OBS
+
+        Args:
+            object_key: S3 对象 key
+            data: 原始字节内容
+            bucket_name: 目标桶名；None 时用默认桶
+
+        Raises:
+            StorageConfigError: 未初始化
+            StorageWriteError: 上传失败
+        """
+        self._ensure_initialized()
+        bucket = bucket_name or self._bucket
+        try:
+            await self._client.put_object(Bucket=bucket, Key=object_key, Body=data)
+        except Exception as e:
+            if isinstance(e, (StorageConfigError, StorageWriteError)):
+                raise
+            workflow_logger.error(
+                f"S3 put failed: object_key={object_key}, bucket={bucket}, {e}",
+                exc_info=True,
+            )
+            raise StorageWriteError(
+                f"S3 put failed: object_key={object_key}, error={e}"
+            ) from e
+
+    async def get_presigned_url(
+        self, object_key: str, expires_seconds: int, bucket_name: Optional[str] = None
+    ) -> str:
+        """生成临时签名下载 URL（纯本地计算，无网络 I/O）
+
+        Args:
+            object_key: S3 对象 key
+            expires_seconds: URL 有效期（秒）
+            bucket_name: 目标桶名；None 时用默认桶
+
+        Returns:
+            str: 预签名下载 URL
+
+        Raises:
+            StorageConfigError: 未初始化
+        """
+        self._ensure_initialized()
+        bucket = bucket_name or self._bucket
+        url = self._client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": object_key},
+            ExpiresIn=expires_seconds,
+        )
+        if inspect.isawaitable(url):
+            url = await url
+        return url
 
     @classmethod
     def reset(cls):

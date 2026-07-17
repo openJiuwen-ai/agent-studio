@@ -217,7 +217,7 @@ public class MgObsService implements CommonObsService {
 
     public String getTemporaryGetRsp(boolean stagingFlag, String objectName, long expires) {
         String ns = stagingFlag ? stagingBucket : bucket;
-        return fileStore.getDownloadUrl(ns + "/" + objectName, expires);
+        return fileStore.getUrl(ns + "/" + objectName, expires);
     }
 
     public void copyObsObject(String sourceIrName, String targetIrName) {
