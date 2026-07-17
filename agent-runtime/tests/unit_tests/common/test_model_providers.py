@@ -4,6 +4,7 @@
 
 """IRModelConfigProvider (model_providers 副本) thinking → extra_body 单元测试"""
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -48,7 +49,7 @@ def _call_provider(ir_node):
         mock_ctx_instance = MagicMock()
         mock_ctx_instance.headers = {"X-Auth-Token": "test_token"}
         mock_ctx.get.return_value = mock_ctx_instance
-        return provider.get_llm_config(ir_node)
+        return asyncio.run(provider.get_llm_config(ir_node))
 
 
 class TestThinkingEnabled:

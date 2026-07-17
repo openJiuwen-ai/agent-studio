@@ -5,16 +5,11 @@
 package com.openjiuwen.studio.agent.runtime.controller;
 
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
-import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
-import com.openjiuwen.studio.agent.common.dto.run.AgentExecutionQueries;
 import com.openjiuwen.studio.agent.runtime.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.common.dto.run.ConversationDeleteResp;
 import com.openjiuwen.studio.agent.common.dto.agent.ConversionQueries;
 import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
-import com.openjiuwen.studio.agent.common.dto.run.GetAgentExecutionInfoQo;
 import com.openjiuwen.studio.agent.runtime.dto.GetMemoryChunksQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentConversationsQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentExecutionQueriesQo;
 import com.openjiuwen.studio.agent.runtime.dto.MemoryChunk;
 import com.openjiuwen.studio.agent.runtime.dto.MemoryVariable;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
@@ -161,23 +156,6 @@ public interface ConversationManagementApi {
         @NotNull @ApiParam(value = "", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId);
 
-    @ApiOperation(value = "", nickname = "getAgentExecutionInfo", notes = "查询 agent 会话信息",
-        response = AgentExecutionInfo.class, tags = {"ConversationManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "Agent对话信息列表", response = AgentExecutionInfo.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agents/{agent_id}/executions/{execution_id}",
-        produces = {"application/json"}, method = RequestMethod.GET)
-    ResponseEntity<AgentExecutionInfo> getAgentExecutionInfo(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-        String projectId,
-        @Size(max = 64) @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
-        @PathVariable("execution_id") String executionId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
-        @PathVariable("agent_id") String agentId,
-        @ApiParam(value = "GetAgentExecutionInfoQo: converted from multi query params") @Valid
-        GetAgentExecutionInfoQo getAgentExecutionInfoQo);
-
     @ApiOperation(value = "", nickname = "getMemoryChunks", notes = "获取记忆片段",
         response = AutoAddResultJsonObject.class, tags = {"ConversationManagement"})
     @ApiResponses(value = {
@@ -195,40 +173,6 @@ public interface ConversationManagementApi {
         @PathVariable("conversation_id") String conversationId,
         @ApiParam(value = "GetMemoryChunksQo: converted from multi query params") @Valid
         GetMemoryChunksQo getMemoryChunksQo);
-
-    @ApiOperation(value = "查询当前Agent应用的会话列表", nickname = "listAgentConversations", notes = "",
-        response = ConversionQueries.class, tags = {"ConversationManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "", response = ConversionQueries.class),
-        @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agents/{agent_id}/conversations", produces = {"application/json"},
-        method = RequestMethod.GET)
-    ResponseEntity<ConversionQueries> listAgentConversations(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-    @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
-    String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-    @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("agent_id")
-    String agentId, @ApiParam(value = "ListAgentConversationsQo: converted from multi query params") @Valid
-    ListAgentConversationsQo listAgentConversationsQo);
-
-    @ApiOperation(value = "", nickname = "listAgentExecutionQueries", notes = "查询用户的Agent对话输入内容的列表",
-        response = AgentExecutionQueries.class, tags = {"ConversationManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "agent对话query列表", response = AgentExecutionQueries.class),
-        @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/execution-queries",
-        produces = {"application/json"}, method = RequestMethod.GET)
-    ResponseEntity<AgentExecutionQueries> listAgentExecutionQueries(
-        @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
-        @PathVariable("agent_id") String agentId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema())
-        @PathVariable("conversation_id") String conversationId,
-        @ApiParam(value = "ListAgentExecutionQueriesQo: converted from multi query params") @Valid
-        ListAgentExecutionQueriesQo listAgentExecutionQueriesQo);
 
     @ApiOperation(value = "根据conversation_id重置会话记忆", nickname = "resetConversationMemory",
         notes = "根据conversation_id重置会话记忆", response = MemoryVariable.class, responseContainer = "List",

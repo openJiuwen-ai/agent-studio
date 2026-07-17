@@ -3,10 +3,17 @@
 # 在线部署：IMAGE_SOURCE=ghcr/dockerhub，脚本自动 pull 镜像
 # 离线部署：IMAGE_SOURCE=offline，脚本自动 docker load 镜像
 
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: ${DOCKER_LOG_MAX_SIZE:-100m}
+    max-file: ${DOCKER_LOG_MAX_FILES:-5}
+
 services:
   # ── 基础设施 ──
 
   mysql:
+    logging: *default-logging
     image: ${MYSQL_IMAGE:-mysql:8.0}
     pull_policy: if_not_present
     restart: always
@@ -29,6 +36,7 @@ services:
       - agent-net
 
   redis:
+    logging: *default-logging
     image: ${REDIS_IMAGE:-redis:7}
     pull_policy: if_not_present
     restart: always
@@ -43,6 +51,7 @@ services:
       - agent-net
 
   minio:
+    logging: *default-logging
     image: ${MINIO_IMAGE:-minio/minio:latest}
     pull_policy: if_not_present
     restart: always
@@ -72,6 +81,7 @@ services:
           - ${OBS_BUCKET:-agent-builder}.minio
 
   minio-init:
+    logging: *default-logging
     image: ${MINIO_MC_IMAGE:-minio/mc:latest}
     pull_policy: if_not_present
     depends_on:
@@ -94,6 +104,7 @@ services:
   # ── 应用服务 ──
 
   studio-console:
+    logging: *default-logging
     image: ${STUDIO_CONSOLE_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
@@ -101,6 +112,7 @@ services:
     mem_limit: 512m
     volumes:
       - ./config/nginx.conf:/home/conf/nginx.conf
+      - console_logs:/opt/cloud/wiseagent-nginx/logs
       # HTTPS启动：取消以下注释，并将证书文件放到 ./config/ 目录
       # - ./config/keypassfifo:/home/service/nginx/keypassfifo
       # - ./config/cert.pem:/home/secret/cert.pem
@@ -125,6 +137,7 @@ services:
       - agent-net
 
   studio-manager:
+    logging: *default-logging
     image: ${STUDIO_MANAGER_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
@@ -133,6 +146,9 @@ services:
     mem_limit: 4g
     ports:
       - "${MANAGER_PORT:-31111}:31111"
+    volumes:
+      # 日志聚合：暴露 Java 日志供 Vector 采集（可选，见 ./deploy.sh logging）
+      - manager_logs:/opt/cloud/studio-manager/logs
     environment:
       spring_datasource_url: ${SPRING_DATASOURCE_URL:-}
       spring_datasource_username: ${SPRING_DATASOURCE_USERNAME:-}
@@ -183,6 +199,7 @@ services:
       - agent-net
 
   studio-service:
+    logging: *default-logging
     image: ${STUDIO_SERVICE_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
@@ -191,6 +208,9 @@ services:
     mem_limit: 4g
     ports:
       - "${SERVICE_PORT:-31113}:31113"
+    volumes:
+      # 日志聚合：暴露 Java 日志供 Vector 采集（可选，见 ./deploy.sh logging）
+      - service_logs:/opt/cloud/studio-service/logs
     environment:
       spring_datasource_url: ${SPRING_DATASOURCE_URL:-}
       spring_datasource_username: ${SPRING_DATASOURCE_USERNAME:-}
@@ -234,6 +254,7 @@ services:
       - agent-net
 
   studio-runtime:
+    logging: *default-logging
     image: ${STUDIO_RUNTIME_IMAGE}
     pull_policy: ${APP_PULL_POLICY:-always}
     restart: always
@@ -242,6 +263,9 @@ services:
     mem_limit: 4g
     ports:
       - "${RUNTIME_PORT:-31014}:31014"
+    volumes:
+      # 日志聚合：暴露 Python/NGINX 日志供 Vector 采集（可选，见 ./deploy.sh logging）
+      - runtime_logs:/opt/cloud/logs
     environment:
       REDIS_HOST: ${REDIS_HOST:-}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
@@ -324,9 +348,104 @@ services:
     networks:
       - agent-net
 
+  # ── 日志聚合栈（可选；profiles: logging，默认不启动；用 ./deploy.sh logging 启停）──
+  # 数据流：app 日志命名卷 → Vector tail/缓冲 → VictoriaLogs 存储 → Grafana 查询
+  # 四个 app 服务通过命名卷共享日志给 Vector。
+
+  victoria-logs:
+    logging: *default-logging
+    image: ${VICTORIA_LOGS_IMAGE:-victoriametrics/victoria-logs:v1.50.0}
+    pull_policy: ${MONITOR_PULL_POLICY:-if_not_present}
+    restart: always
+    profiles: ["logging"]
+    command: -storageDataPath=/victoria-logs-data -retentionPeriod=${VICTORIA_LOGS_RETENTION:-7d} -retention.maxDiskSpaceUsageBytes=${VICTORIA_LOGS_MAX_DISK_USAGE_BYTES:-10737418240} -storage.minFreeDiskSpaceBytes=${VICTORIA_LOGS_MIN_FREE_DISK_BYTES:-2147483648}
+    volumes:
+      - victoria_logs_data:/victoria-logs-data
+    networks:
+      - agent-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9428/health 2>/dev/null | grep -q OK || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  vector:
+    logging: *default-logging
+    image: ${VECTOR_IMAGE:-timberio/vector:0.55.0-alpine}
+    pull_policy: ${MONITOR_PULL_POLICY:-if_not_present}
+    restart: always
+    profiles: ["logging"]
+    command: ["--config", "/etc/vector/vector.yaml"]
+    environment:
+      NODE_NAME: ${NODE_NAME:-local}
+      APP_LOG_TIMEZONE: ${APP_LOG_TIMEZONE:-Asia/Shanghai}
+      APP_PROJECT_NAME: ${APP_PROJECT_NAME:-deploy}
+    volumes:
+      - ./config/vector.yaml:/etc/vector/vector.yaml:ro
+      # 与各 app 服务共享同一命名卷（只读），tail 其中的日志文件
+      - manager_logs:/logs/studio-manager:ro
+      - service_logs:/logs/studio-service:ro
+      - runtime_logs:/logs/studio-runtime:ro
+      - console_logs:/logs/studio-console:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - vector_data:/var/lib/vector
+    depends_on:
+      victoria-logs:
+        condition: service_healthy
+    networks:
+      - agent-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8686/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  grafana:
+    logging: *default-logging
+    image: ${GRAFANA_IMAGE:-grafana-victorialogs:11.3.0-0.29.0}
+    pull_policy: ${MONITOR_PULL_POLICY:-if_not_present}
+    restart: always
+    profiles: ["logging"]
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false
+      - GF_PLUGINS_PREINSTALL_DISABLED=true
+      - GF_PLUGINS_PLUGIN_ADMIN_ENABLED=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      # 启动时自动 provisioning VictoriaLogs 数据源和日志 dashboard
+      - ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./observability/config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./observability/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      victoria-logs:
+        condition: service_healthy
+    networks:
+      - agent-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health 2>/dev/null | grep -q '\"database\":.*\"ok\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
 volumes:
   mysql_data:
   minio_data:
+  manager_logs:
+  service_logs:
+  runtime_logs:
+  console_logs:
+  victoria_logs_data:
+  grafana_data:
+  vector_data:
 
 networks:
   agent-net:

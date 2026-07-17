@@ -89,6 +89,7 @@ import com.openjiuwen.studio.agent.manager.entity.StructuredMessageEntity;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowExportEntity;
 import com.openjiuwen.studio.agent.manager.enums.AgentStatus;
+import com.openjiuwen.studio.agent.manager.enums.ExportModeEnum;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.AppMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
@@ -1240,8 +1241,8 @@ class AgentManagementServiceTest extends BaseTest {
 
         String workflowIds = "test_code_interpreter_workflow_id_123";
         when(RequestContextUtils.getRequestUserDomainId()).thenReturn("test_domain_id");
-        ImportRsp importRsp =
-            workflowManagementService.importWorkflows(Constants.TEST_WORKSPACE_ID, projectId, file, workflowIds, "");
+        ImportRsp importRsp = workflowManagementService.importWorkflows(Constants.TEST_WORKSPACE_ID, projectId, file,
+            workflowIds, "", ExportModeEnum.STRICT.getCode());
 
         assertEquals(1, importRsp.getSucceedLen());
         assertEquals(0, importRsp.getFailedLen());
@@ -1260,7 +1261,7 @@ class AgentManagementServiceTest extends BaseTest {
 
         when(RequestContextUtils.getRequestUserDomainId()).thenReturn(Constants.TEST_DOMAIN_ID);
         ImportRsp importRsp = agentManagementService.importAgents(Constants.TEST_WORKSPACE_ID, projectId, file,
-            agentIds, "", "workflowIds");
+            agentIds, "", "workflowIds", ExportModeEnum.STRICT.getCode());
 
         assertEquals(1, importRsp.getSucceedLen());
         assertEquals(0, importRsp.getFailedLen());
@@ -1397,8 +1398,8 @@ class AgentManagementServiceTest extends BaseTest {
 
         String workflowIds = "test_code_interpreter_workflow_id";
         when(RequestContextUtils.getRequestProjectId()).thenReturn(Constants.TEST_PROJECT_ID);
-        ImportRsp importRsp =
-            workflowManagementService.importWorkflows(Constants.TEST_WORKSPACE_ID, projectId, file, workflowIds, "");
+        ImportRsp importRsp = workflowManagementService.importWorkflows(Constants.TEST_WORKSPACE_ID, projectId, file,
+            workflowIds, "", ExportModeEnum.STRICT.getCode());
 
         assertEquals(1, importRsp.getSucceedLen());
         assertEquals(0, importRsp.getFailedLen());
@@ -1424,7 +1425,7 @@ class AgentManagementServiceTest extends BaseTest {
         when(mgObsService.uploadObsFile(anyString(), anyString(), anyString(), anyString(), anyString()))
             .thenThrow(new AgentStudioException(StudioError.WORKFLOW_IMPORT_FILE));
         ImportRsp importRsp = workflowManagementService.importWorkflows(Constants.TEST_WORKSPACE_ID, projectId, file,
-            workflowIds, toolIds);
+            workflowIds, toolIds, ExportModeEnum.STRICT.getCode());
 
         assertEquals(2, importRsp.getFailedLen());
         assertEquals(ids, importRsp.getFailedIds());
@@ -1551,7 +1552,7 @@ class AgentManagementServiceTest extends BaseTest {
             releaseVersion2);
 
         ImportRsp importRsp = agentManagementService.importAgents(Constants.TEST_WORKSPACE_ID, projectId, file,
-            agentIds, toolIds, workflowIds);
+            agentIds, toolIds, workflowIds, ExportModeEnum.STRICT.getCode());
 
         assertEquals(1, importRsp.getSucceedLen());
     }
@@ -1571,7 +1572,8 @@ class AgentManagementServiceTest extends BaseTest {
 
         when(RequestContextUtils.getRequestProjectId()).thenReturn(Constants.TEST_PROJECT_ID);
         ImportRsp importRsp =
-            agentManagementService.importAgents(Constants.TEST_WORKSPACE_ID, projectId, file, agentIds, toolIds, "");
+            agentManagementService.importAgents(Constants.TEST_WORKSPACE_ID, projectId, file, agentIds, toolIds, "",
+                ExportModeEnum.STRICT.getCode());
 
         assertEquals(0, importRsp.getSucceedLen());
         assertEquals(1, importRsp.getFailedLen());
@@ -1609,7 +1611,8 @@ class AgentManagementServiceTest extends BaseTest {
         );
         String agentIds = "test_agent_id,test_agent_id2";
         ImportRsp importRsp =
-            agentManagementService.importAgents(Constants.TEST_WORKSPACE_ID, projectId, file, agentIds, "", "");
+            agentManagementService.importAgents(Constants.TEST_WORKSPACE_ID, projectId, file, agentIds, "", "",
+                ExportModeEnum.STRICT.getCode());
 
         assertEquals(2, importRsp.getSucceedLen());
     }
@@ -1635,7 +1638,7 @@ class AgentManagementServiceTest extends BaseTest {
             .thenThrow(new AgentStudioException(StudioError.WORKFLOW_IMPORT_FILE));
 
         ImportRsp importRsp = agentManagementService.importAgents(Constants.TEST_WORKSPACE_ID, projectId, file,
-            agentIds, toolIds, workflowIds);
+            agentIds, toolIds, workflowIds, ExportModeEnum.STRICT.getCode());
 
         assertEquals(0, importRsp.getSucceedLen());
         assertEquals(2, importRsp.getFailedLen());
@@ -1653,7 +1656,8 @@ class AgentManagementServiceTest extends BaseTest {
         String toolIds = "reserve_meeting_room_1";
         when(mappingMapper.selectByAppIdAndResourceId(any(), any())).thenThrow(AgentStudioException.class);
         ImportRsp importRsp =
-            agentManagementService.importAgents(Constants.TEST_WORKSPACE_ID, projectId, file, agentIds, toolIds, "");
+            agentManagementService.importAgents(Constants.TEST_WORKSPACE_ID, projectId, file, agentIds, toolIds, "",
+                ExportModeEnum.STRICT.getCode());
 
         assertEquals(1, importRsp.getFailedLen());
         assertEquals(0, importRsp.getSucceedLen());
@@ -1670,7 +1674,8 @@ class AgentManagementServiceTest extends BaseTest {
         String agentIds = "test_agent_id";
 
         ImportRsp importRsp =
-            agentManagementService.importAgents(Constants.TEST_WORKSPACE_ID, projectId, file, agentIds, "", "");
+            agentManagementService.importAgents(Constants.TEST_WORKSPACE_ID, projectId, file, agentIds, "", "",
+                ExportModeEnum.STRICT.getCode());
 
         assertEquals(0, importRsp.getSucceedLen());
         assertEquals(1, importRsp.getFailedLen());

@@ -119,7 +119,7 @@ public class AgentAdapter extends ResourceAdapter {
 
         // 构造导出根数据
         List<ExportResourceUnit> latestResources = exportResources.stream()
-            .filter(p -> Strings.CS.equals(p.getResourceVersion(), Constants.LATEST_PUBLISH_VERSION))
+            .filter(p -> p.getResourceLevel() == 1)
             .toList();
         if (CollectionUtils.isNotEmpty(latestResources)) {
             for (ExportResourceUnit resourceUnit : latestResources) {
@@ -129,9 +129,10 @@ public class AgentAdapter extends ResourceAdapter {
                     continue;
                 }
                 ExportInfo latestInfo = new ExportInfo();
+                String dsl = getDsl(resourceUnit, latestagent.getDslPath(), latestInfo);
                 latestInfo.setResourceId(resourceUnit.getResourceId());
                 latestInfo.setResourceType(ResourceTypeEnum.AGENT.toString());
-                AgentInfo agentInfo = JSONObject.parseObject(obsService.downloadObsFile(latestagent.getDslPath()),
+                AgentInfo agentInfo = JSONObject.parseObject(obsService.downloadObsFile(dsl),
                     AgentInfo.class);
                 latestInfo.setDsl(agentInfo);
                 latestInfo.setResourceName(agentInfo.getName());
@@ -154,6 +155,7 @@ public class AgentAdapter extends ResourceAdapter {
             result.setResourceId(exportResourceUnit.getResourceId());
             result.setResourceName(exportResourceUnit.getResourceName());
             result.setResourceType(exportResourceUnit.getResourceType());
+            result.setResourceLevel(exportResourceUnit.getResourceLevel());
             result.setResourceVersion(exportResourceUnit.getResourceVersion());
             result.setLevel2Resources(exportResourceUnit.getLevel2Resources());
             result.setResourceLevel(exportResourceUnit.getResourceLevel());

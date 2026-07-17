@@ -7,7 +7,7 @@ import com.alibaba.fastjson.JSON;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.pagehelper.PageInfo;
-import com.obs.services.exception.ObsException;
+
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
@@ -388,7 +388,7 @@ public class PromptEngineerDataSetService implements IPromptEngineerDataSetServi
             UUID.randomUUID().toString() + '.' + ext);
         try (InputStream inputStream = file.getInputStream()) {
             obsService.uploadObsFile(inputStream, objectKey);
-        } catch (ObsException | IOException e) {
+        } catch (IOException e) {
             log.error("upload obs file failed, {}", e.getMessage());
             throw new AgentStudioException(StudioError.UPLOAD_FILE_TO_OBS_FAILED);
         }

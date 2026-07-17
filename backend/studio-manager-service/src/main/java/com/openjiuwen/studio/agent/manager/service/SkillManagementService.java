@@ -30,7 +30,6 @@ import com.openjiuwen.studio.agent.manager.mapper.SkillVersionMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.utils.MultipartFileToZipUtils;
 import com.openjiuwen.studio.agent.manager.utils.ZipValidationUtils;
-import com.obs.services.model.TemporarySignatureResponse;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -119,8 +118,7 @@ public class SkillManagementService implements ISkillManagementService {
 
         String temporaryObsUrl = "";
         if (!Strings.isEmpty(skill.getObsPath())) {
-            temporaryObsUrl = mgObsService.getTemporaryGetRsp(false, skill.getObsPath(), 3600)
-                .getSignedUrl();
+            temporaryObsUrl = mgObsService.getTemporaryGetRsp(false, skill.getObsPath(), 3600);
         }
 
         StudioSkillInfo skillInfo = new StudioSkillInfo().setSkillId(skill.getSkillId())
@@ -180,7 +178,7 @@ public class SkillManagementService implements ISkillManagementService {
         try (InputStream inputStream = new FileInputStream(zipFile)) {
             log.warn("File upload to OBS, obsKey: {}", obsKey);
             mgObsService.uploadObsFile(obsKey, inputStream, -1);
-            obsUrl = mgObsService.getTemporaryGetRsp(false, obsKey, 3600).getSignedUrl();
+            obsUrl = mgObsService.getTemporaryGetRsp(false, obsKey, 3600);
         } catch (Exception e) {
             log.error("Error OBS upload, skillId: {}, filename: {}", skillId, zipFile.getName(), e);
             throw new AgentStudioException(StudioError.UPLOAD_FILE_TO_OBS_FAILED);
@@ -269,17 +267,16 @@ public class SkillManagementService implements ISkillManagementService {
 
         // 生成带签名的OBS临时下载URL
         long expiresInSeconds = 600L;
-        TemporarySignatureResponse tempUrlResponse = mgObsService
+        String tempUrl = mgObsService
                 .getTemporaryGetRsp(false, obsUrl, expiresInSeconds);
-        if (tempUrlResponse == null) {
+        if (tempUrl == null || tempUrl.isEmpty()) {
             log.error("Export skill failed: failed to generate temporary URL, skillId: {}, skillVersion: {}",
                     skillId, versionId);
             throw new AgentStudioException(StudioError.GET_OBS_TEMPORARY_URL_NOT_EXIST);
         }
 
-        // 构造返回结果
         ExportStudioSkillResponseBody response = new ExportStudioSkillResponseBody()
-                .setObsUrl(tempUrlResponse.getSignedUrl())
+                .setObsUrl(tempUrl)
                 .setSkillName(skillEntity.getName())
                 .setVersionName(versionEntity.getVersionName())
                 .setSkillId(skillId);
@@ -332,7 +329,7 @@ public class SkillManagementService implements ISkillManagementService {
         skills.forEach(skill -> {
             String temporaryObsUrl = "";
             if (!Strings.isEmpty(skill.getObsPath())) {
-                temporaryObsUrl = mgObsService.getTemporaryGetRsp(false, skill.getObsPath(), 3600).getSignedUrl();
+                temporaryObsUrl = mgObsService.getTemporaryGetRsp(false, skill.getObsPath(), 3600);
             }
             items.add(new StudioSkillInfo()
                 .setSkillId(skill.getSkillId())

@@ -1729,8 +1729,10 @@ class Questioner(WorkflowComponent):
                 extension=self._config.extension or {},
             )
 
-            provider = IRModelConfigProvider()
-            llm_comp_config = provider.get_llm_config(adapted_conf)
+            from jiuwen.serve.controllers.execution.ir_converter import _get_model_config_provider
+
+            provider = _get_model_config_provider()
+            llm_comp_config = await provider.get_llm_config(adapted_conf)
 
             workflow_logger.info(
                 f"[Questioner] _initialize_model: model_name={self._config.model_name}, "

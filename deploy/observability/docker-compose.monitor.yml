@@ -1,0 +1,122 @@
+# L2 跨节点日志聚合 — 监控节点编排
+# 日志存储：VictoriaLogs（全文索引、本地存储、无对象存储依赖）
+# 可视化：Grafana（VictoriaLogs datasource plugin）
+# 启动：scripts/deploy-monitor.sh
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: ${DOCKER_LOG_MAX_SIZE:-100m}
+    max-file: ${DOCKER_LOG_MAX_FILES:-5}
+
+services:
+  # ── 鉴权网关：跨节点 push/查询入口，Basic Auth 保护 ──
+  nginx-gateway:
+    logging: *default-logging
+    image: ${NGINX_IMAGE:-nginx:1.27-alpine}
+    restart: always
+    ports:
+      - "${LOGS_GATEWAY_HTTPS_PORT:-3100}:3100"
+    volumes:
+      - ./config/nginx-gateway.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./config/write.htpasswd:/etc/nginx/htpasswd/write.htpasswd:ro
+      - ./config/query.htpasswd:/etc/nginx/htpasswd/query.htpasswd:ro
+      - ./config/gateway.crt:/etc/nginx/tls/gateway.crt:ro
+      - ./config/gateway.key:/etc/nginx/tls/gateway.key:ro
+    depends_on:
+      victoria-logs:
+        condition: service_healthy
+    networks:
+      - monitor-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1:3100/health 2>/dev/null | grep -q OK || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── VictoriaLogs：全文索引日志存储 ──
+  # 优势：全文索引（查询快，不扫正文）、本地存储（无对象存储依赖）、单 binary（轻量）
+  # Vector 通过 Elasticsearch Bulk API 写入，并在 app 节点使用磁盘缓冲。
+  victoria-logs:
+    logging: *default-logging
+    image: ${VICTORIA_LOGS_IMAGE:-victoriametrics/victoria-logs:v1.50.0}
+    restart: always
+    command: -storageDataPath=/victoria-logs-data -retentionPeriod=${VICTORIA_LOGS_RETENTION:-7d} -retention.maxDiskSpaceUsageBytes=${VICTORIA_LOGS_MAX_DISK_USAGE_BYTES:-10737418240} -storage.minFreeDiskSpaceBytes=${VICTORIA_LOGS_MIN_FREE_DISK_BYTES:-2147483648}
+    volumes:
+      - victoria_logs_data:/victoria-logs-data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9428/health 2>/dev/null | grep -q OK || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - monitor-net
+
+  # ── 监控节点采集：Grafana/VictoriaLogs/gateway 等容器标准输出 ──
+  vector:
+    logging: *default-logging
+    image: ${VECTOR_IMAGE:-timberio/vector:0.55.0-alpine}
+    restart: always
+    command: ["--config", "/etc/vector/vector.yaml"]
+    environment:
+      NODE_NAME: ${NODE_NAME:-monitor}
+      APP_LOG_TIMEZONE: ${APP_LOG_TIMEZONE:-Asia/Shanghai}
+      VECTOR_BUFFER_MAX_SIZE: ${VECTOR_BUFFER_MAX_SIZE:-1073741824}
+      MONITOR_PROJECT_NAME: ${MONITOR_PROJECT_NAME:-observability-monitor}
+    volumes:
+      - ./config/vector-monitor.yaml:/etc/vector/vector.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - monitor_vector_data:/var/lib/vector
+    depends_on:
+      victoria-logs:
+        condition: service_healthy
+    networks:
+      - monitor-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8686/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+  # ── Grafana：VictoriaLogs datasource + dashboard 自动 provisioning ──
+  grafana:
+    logging: *default-logging
+    image: ${GRAFANA_IMAGE:-grafana-victorialogs:11.3.0-0.29.0}
+    restart: always
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false
+      - GF_PLUGINS_PREINSTALL_DISABLED=true
+      - GF_PLUGINS_PLUGIN_ADMIN_ENABLED=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      victoria-logs:
+        condition: service_healthy
+    networks:
+      - monitor-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health 2>/dev/null | grep -q '\"database\":.*\"ok\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  victoria_logs_data:
+  grafana_data:
+  monitor_vector_data:
+
+networks:
+  monitor-net:
+    driver: bridge

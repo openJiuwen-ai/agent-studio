@@ -14,6 +14,7 @@
     <name>studio</name>
     <description/>
     <modules>
+        <module>studio-storage</module>
         <module>studio-common</module>
         <module>studio-manager</module>
         <module>studio-manager-api</module>

@@ -5,16 +5,10 @@
 
 package com.openjiuwen.studio.agent.runtime.controller;
 
-import com.openjiuwen.studio.agent.common.dto.agent.ConversionQueries;
-import com.openjiuwen.studio.agent.common.dto.agent.ExecutionInfo;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.common.dto.run.AdditionalQuestionsWorkflowReq;
-import com.openjiuwen.studio.agent.common.dto.run.ListConversationQueriesQo;
 import com.openjiuwen.studio.agent.common.utils.ResponseModel;
 import com.openjiuwen.studio.agent.runtime.dto.AutoAddResultJsonObject;
-import com.openjiuwen.studio.agent.common.dto.ExecutionQueries;
-import com.openjiuwen.studio.agent.common.dto.run.GetExecutionInsightQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListExecutionQueriesQo;
 import com.openjiuwen.studio.agent.runtime.service.IWorkflowRuntimeService;
 
 import org.slf4j.Logger;
@@ -43,20 +37,5 @@ public class WorkflowRuntimeApiController implements WorkflowRuntimeApi {
     @Override
     public ResponseEntity<AutoAddResultJsonObject> additionalQuestionsWorkflow(String projectId, String workflowId, String conversationId, String workspaceId, AdditionalQuestionsWorkflowReq body) {
         return ResponseModel.success(workflowRuntimeService.additionalQuestionsWorkflow(projectId, workflowId, conversationId, workspaceId, body));
-    }
-
-    @Override
-    public ResponseEntity<ExecutionInfo> getExecutionInsight(String projectId, String workflowId, String executionId, GetExecutionInsightQo getExecutionInsightQo) {
-        return ResponseModel.success(workflowRuntimeService.getExecutionInsight(projectId, workflowId, executionId, getExecutionInsightQo));
-    }
-
-    @Override
-    public ResponseEntity<ConversionQueries> listConversationQueries(String projectId, String workflowId, ListConversationQueriesQo listConversationQueriesQo) {
-        return ResponseModel.success(workflowRuntimeService.listConversationQueries(projectId, workflowId, listConversationQueriesQo));
-    }
-
-    @Override
-    public ResponseEntity<ExecutionQueries> listExecutionQueries(String projectId, String workflowId, String conversationId, ListExecutionQueriesQo listExecutionQueriesQo) {
-        return ResponseModel.success(workflowRuntimeService.listExecutionQueries(projectId, workflowId, conversationId, listExecutionQueriesQo));
     }
 }

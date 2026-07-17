@@ -121,6 +121,27 @@ prepare_compose_env() {
             exit 1
             ;;
     esac
+
+    # Grafana 是项目构建的定制镜像。优先使用显式地址；否则复用 GHCR 仓库前缀。
+    # 非日志命令也需要给 Compose 一个合法值，但 start_logging 会严格校验来源。
+    local grafana_image grafana_tag grafana_repo
+    grafana_image=$(get_env_value GRAFANA_IMAGE "")
+    grafana_tag=$(get_env_value GRAFANA_IMAGE_TAG "11.3.0-0.29.0")
+    grafana_repo=$(get_env_value GHCR_IMAGE_REPOSITORY "")
+    if [ -n "$grafana_image" ]; then
+        export GRAFANA_IMAGE="$grafana_image"
+    elif [ -n "$grafana_repo" ]; then
+        export GRAFANA_IMAGE="${grafana_repo}/grafana-victorialogs:${grafana_tag}"
+    else
+        export GRAFANA_IMAGE="grafana-victorialogs:${grafana_tag}"
+    fi
+}
+
+validate_logging_image_source() {
+    if [ -z "$(get_env_value GRAFANA_IMAGE '')" ] && [ -z "$(get_env_value GHCR_IMAGE_REPOSITORY '')" ]; then
+        log_error "Logging requires GRAFANA_IMAGE or GHCR_IMAGE_REPOSITORY in $ENV_FILE"
+        exit 1
+    fi
 }
 
 # ========================================
@@ -568,6 +589,31 @@ restart_services() {
 }
 
 # ========================================
+# 用本地已有镜像重建容器（不 pull）
+# 适用：docker build + docker tag 之后，切换到新镜像（restart 不会换镜像，update 会 pull 覆盖本地）
+# ========================================
+recreate_services() {
+    cd "$SCRIPT_DIR"
+    local services=()
+    if [ $# -ge 1 ]; then
+        services=("$@")
+    else
+        services=("${APP_SERVICES[@]}")
+    fi
+    log_info "Recreating from LOCAL images (no pull): ${services[*]}"
+    # prepare_compose_env 设 STUDIO_*_IMAGE（compose 文件依赖），但 ghcr/dockerhub 模式会
+    # 同时把 APP_PULL_POLICY 设成 always——这里强制改回 if_not_present，避免 up 时 pull
+    # 覆盖本地刚 build/retag 的新镜像。故不走 compose()（它会再次 prepare 覆盖回来）。
+    prepare_compose_env
+    export APP_PULL_POLICY=if_not_present
+    "${COMPOSE_CMD[@]}" --project-name "$PROJECT_NAME" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+        up -d --force-recreate "${services[@]}"
+    wait_for_services "${services[@]}"
+    verify_deployment
+    log_info "Services recreated"
+}
+
+# ========================================
 # 更新服务
 # ========================================
 update_services() {
@@ -656,10 +702,60 @@ show_status() {
 }
 
 # ========================================
+# 日志聚合栈（VictoriaLogs + Vector + Grafana，可选组件，profiles: logging）
+# 默认 infra/start 不会启动；通过 `logging` 子命令显式启停。
+# ========================================
+start_logging() {
+    validate_logging_image_source
+    local max_disk_usage min_free_disk
+    max_disk_usage=$(get_env_value VICTORIA_LOGS_MAX_DISK_USAGE_BYTES 10737418240)
+    min_free_disk=$(get_env_value VICTORIA_LOGS_MIN_FREE_DISK_BYTES 2147483648)
+    if ! [[ "$max_disk_usage" =~ ^[1-9][0-9]*$ ]]; then
+        log_error "VICTORIA_LOGS_MAX_DISK_USAGE_BYTES 必须是大于 0 的字节数，禁止无限制写盘"
+        exit 1
+    fi
+    if ! [[ "$min_free_disk" =~ ^[1-9][0-9]*$ ]]; then
+        log_error "VICTORIA_LOGS_MIN_FREE_DISK_BYTES 必须是大于 0 的字节数"
+        exit 1
+    fi
+    log_info "Starting logging stack (victoria-logs / vector / grafana)..."
+    cd "$SCRIPT_DIR"
+    compose --profile logging up -d victoria-logs vector grafana
+    wait_for_services victoria-logs vector grafana
+
+    local host_ip grafana_port grafana_pw
+    host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
+    grafana_port=$(get_env_value GRAFANA_PORT 3000)
+    grafana_pw=$(get_env_value GRAFANA_ADMIN_PASSWORD admin)
+    log_info "============================================"
+    log_info " Logging stack started!"
+    log_info "============================================"
+    log_info ""
+    log_info "  Grafana : http://${host_ip}:${grafana_port}/"
+    log_info "            (login: admin / ${grafana_pw})"
+    log_info ""
+    log_info "  Stop    : $0 logging stop"
+    log_info "  Status  : $0 logging status"
+    log_info "============================================"
+}
+
+stop_logging() {
+    log_info "Stopping logging stack (victoria-logs / vector / grafana)..."
+    cd "$SCRIPT_DIR"
+    compose --profile logging stop victoria-logs vector grafana
+    log_info "Logging stack stopped"
+}
+
+status_logging() {
+    cd "$SCRIPT_DIR"
+    compose --profile logging ps victoria-logs vector grafana
+}
+
+# ========================================
 # 使用说明
 # ========================================
 print_usage() {
-    echo "Usage: $0 {infra|init-db|start|stop|stop-infra|stop-all|restart|update|clean [data|images|all]|logs [service]|status|verify|all}"
+    echo "Usage: $0 {infra|init-db|start|stop|stop-infra|stop-all|restart|update|recreate [service...]|clean [data|images|all]|logs [service]|status|verify|all}"
     echo ""
     echo "  infra     - Start MySQL/Redis/MinIO and initialize database + MinIO bucket"
     echo "  init-db   - Initialize database and MinIO bucket (infra must be running)"
@@ -669,9 +765,17 @@ print_usage() {
     echo "  stop-all  - Stop all services (same as stop)"
     echo "  restart   - Restart application services"
     echo "  update    - Pull/load images and recreate services"
+    echo "  recreate  - Recreate services from LOCAL images (no pull)."
+    echo "              Use after docker build + retag. Optional: recreate studio-manager studio-service"
     echo "  clean     - Remove containers, networks and VOLUMES (data lost). Optional: clean images|all"
     echo "  logs      - Tail service logs (optional: service name)"
     echo "  status    - Show service status"
+    echo "  logging   - Manage optional logging stack (VictoriaLogs + Vector + Grafana)."
+    echo "              Subcommands: logging start | stop | status  (default: start)"
+    echo "  logging-remote - Manage L2 remote Vector on this app node (push to monitor node)."
+    echo "              Subcommands: logging-remote start | stop | status  (default: start)"
+    echo "  monitor   - Deploy L2 logging stack on this MONITOR node (VictoriaLogs+Grafana+gateway)."
+    echo "              Subcommands: monitor start | stop | status  [--local-storage]  (default: start)"
     echo "  verify    - Verify HTTP health endpoints"
     echo "  all       - Pull/load images, start all services, and verify (first-time deploy)"
     echo ""
@@ -728,6 +832,12 @@ case "${1:-}" in
         check_image_prerequisites
         update_services
         ;;
+    recreate)
+        # 用本地镜像重建容器（不 pull）。docker build + docker tag 后用此切换新镜像。
+        # 可带参数指定服务：recreate studio-manager studio-service studio-runtime
+        check_runtime_prerequisites
+        recreate_services "${@:2}"
+        ;;
     logs)
         check_docker_prerequisites
         show_logs "${2:-}"
@@ -735,6 +845,36 @@ case "${1:-}" in
     status)
         check_docker_prerequisites
         show_status
+        ;;
+    logging)
+        check_docker_prerequisites
+        case "${2:-start}" in
+            start)      start_logging ;;
+            stop)       stop_logging ;;
+            status|ps)  status_logging ;;
+            *) log_error "Usage: $0 logging [start|stop|status]"; exit 1 ;;
+        esac
+        ;;
+    logging-remote)
+        # L2：在 app 节点启动/停止远程 Vector（push 到监控节点）。
+        check_docker_prerequisites
+        VECTOR_SCRIPT="$SCRIPT_DIR/observability/scripts/deploy-vector.sh"
+        if [ ! -f "$VECTOR_SCRIPT" ]; then
+            log_error "L2 Vector 脚本不存在: $VECTOR_SCRIPT"
+            exit 1
+        fi
+        bash "$VECTOR_SCRIPT" "${2:-start}"
+        ;;
+    monitor)
+        # L2：在【监控节点】部署日志聚合栈（VictoriaLogs/Grafana/gateway）。转发到 observability 脚本。
+        # 注意：不调 check_docker_prerequisites —— 那会创建 deploy/.env（app 节点用），监控节点不需要。
+        # docker/compose 检测由 deploy-monitor.sh 自身完成。监控节点只需此子命令。
+        MONITOR_SCRIPT="$SCRIPT_DIR/observability/scripts/deploy-monitor.sh"
+        if [ ! -f "$MONITOR_SCRIPT" ]; then
+            log_error "L2 monitor 脚本不存在: $MONITOR_SCRIPT"
+            exit 1
+        fi
+        bash "$MONITOR_SCRIPT" "${@:2}"
         ;;
     verify)
         check_docker_prerequisites

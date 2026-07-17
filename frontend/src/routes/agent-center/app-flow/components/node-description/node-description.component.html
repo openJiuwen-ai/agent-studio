@@ -1,11 +1,11 @@
 <!-- 节点半屏弹窗显示/修改描述 -->
-<div *ngIf="!isEdit" class="mt-[8px] text-[12px] font-normal leading-[20px] text-[#808080] node-description overflow-hidden text-ellipsis whitespace-nowrap" (click)="changeEdit()">
+<div *ngIf="!isEdit" class="mt-[8px] text-[12px] font-normal leading-[20px] text-[#808080] node-description" (click)="changeEdit()">
   {{ description }}
 </div>
 
 <form *ngIf="isEdit" class="w-full mt-[8px]" [formGroup]="descriptionForm">
   <nz-form-item class="w-full">
-    <nz-form-control>
+    <nz-form-control [nzErrorTip]="errorTip">
       <input
         class="w-full font-normal"
         type="text"
@@ -16,4 +16,12 @@
       />
     </nz-form-control>
   </nz-form-item>
+  <ng-template #errorTip>
+    <span *ngIf="descriptionForm.get('description')?.errors?.interfaceValidate" class="text-[#ff4d4f] text-[12px]">
+      {{ 'input_cannot_be_empty' | i18nextEager }}
+    </span>
+    <span *ngIf="descriptionForm.get('description')?.errors?.maxlength" class="text-[#ff4d4f] text-[12px]">
+      {{ 'input_length_not_allow_over_tip'| i18nextEager:{length: 256} }}
+    </span>
+  </ng-template>
 </form>

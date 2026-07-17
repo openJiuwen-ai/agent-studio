@@ -51,6 +51,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         ctx = RequestContext(
             headers={
                 "X-Auth-Token": request.headers.get("x-auth-token", ""),
+                "Cookie": request.headers.get("cookie", ""),
+                "x-language": request.headers.get("x-language", ""),
+                "accept-language": request.headers.get("accept-language", ""),
             },
             user_id="",
             conversation_id="",

@@ -8,7 +8,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent_runtime.common.ir_interfaces import StorageConfigError, StorageReadError
+from agent_runtime.common.ir_interfaces import (
+    StorageConfigError,
+    StorageNotFoundError,
+    StorageReadError,
+)
 from agent_runtime.storage.object_storage import S3StorageProvider
 
 
@@ -249,6 +253,43 @@ class TestS3StorageProviderRead:
 
         with pytest.raises(StorageReadError, match="S3 read failed"):
             await provider.get_object_bytes("workflow/ir/test.json")
+
+    @pytest.mark.asyncio
+    @patch("agent_runtime.storage.object_storage.settings")
+    @patch("agent_runtime.storage.object_storage.aioboto3")
+    async def test_read_s3_not_found_raises_storage_not_found(
+        self, mock_aioboto3, mock_settings
+    ):
+        """S3 404/NoSuchKey → StorageNotFoundError（区别于传输层 StorageReadError）。
+
+        上层（model_service.resolver）据此区分"未配置"与"OBS 不可达"。
+        StorageNotFoundError 是 StorageReadError 子类，既有 ``except StorageReadError`` 仍兼容。
+        """
+        from botocore.exceptions import ClientError
+
+        not_found_response = {
+            "Error": {"Code": "NoSuchKey", "Message": "The specified key does not exist."},
+            "ResponseMetadata": {"HTTPStatusCode": 404},
+        }
+        mock_client = _make_mock_client()
+        mock_client.get_object = AsyncMock(
+            side_effect=ClientError(not_found_response, "GetObject"))
+        mock_context = _make_mock_context(mock_client)
+        mock_session = MagicMock()
+        mock_session.client = MagicMock(return_value=mock_context)
+        mock_aioboto3.Session = MagicMock(return_value=mock_session)
+        mock_settings.object_storage = _make_mock_settings().object_storage
+
+        provider = S3StorageProvider()
+        await provider.initialize()
+
+        with pytest.raises(StorageNotFoundError, match="S3 object not found"):
+            await provider.get_object_bytes("workflow/ir/missing.json")
+        # 子类兼容：仍 isinstance StorageReadError
+        provider2 = S3StorageProvider()
+        await provider2.initialize()
+        with pytest.raises(StorageReadError):
+            await provider2.get_object_bytes("workflow/ir/missing.json")
 
 
 # ---------------------------------------------------------------------------

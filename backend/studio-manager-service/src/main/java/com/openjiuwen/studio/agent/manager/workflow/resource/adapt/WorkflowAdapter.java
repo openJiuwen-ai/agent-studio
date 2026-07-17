@@ -127,22 +127,28 @@ public class WorkflowAdapter extends ResourceAdapter {
             }
         }
 
-        // 构造导出根数据
+        // 构造导出草稿根数据
         List<ExportResourceUnit> latestResources = exportResources.stream()
-            .filter(p -> Strings.CS.equals(p.getResourceVersion(), Constants.LATEST_PUBLISH_VERSION))
+            .filter(p -> p.getResourceLevel() == 1)
             .toList();
         if (CollectionUtils.isNotEmpty(latestResources)) {
             for (ExportResourceUnit resourceUnit : latestResources) {
                 WorkflowEntity latestWorkflow = workflowIdMap.get(resourceUnit.getResourceId());
+                // 置空导出的草稿wf的latest
+                if (Strings.CS.equals(Constants.LATEST_PUBLISH_VERSION, resourceUnit.getResourceVersion())) {
+                    latestWorkflow.setLastVersionId(null);
+                    latestWorkflow.setDeployWfVersion(null);
+                }
                 ExportInfo latestInfo = new ExportInfo();
+                String dsl = getDsl(resourceUnit, latestWorkflow.getDslPath(), latestInfo);
                 latestInfo.setResourceId(resourceUnit.getResourceId());
                 latestInfo.setResourceType(ResourceTypeEnum.WORKFLOW.toString());
-                WorkflowVO workflowVO = JSONObject.parseObject(obsService.downloadObsFile(latestWorkflow.getDslPath()),
-                    WorkflowVO.class);
+                WorkflowVO workflowVO = JSONObject.parseObject(obsService.downloadObsFile(dsl), WorkflowVO.class);
                 latestInfo.setResourceName(workflowIdMap.get(resourceUnit.getResourceId()).getName());
                 latestInfo.setDsl(workflowVO);
                 latestInfo.setMetadata(latestWorkflow);
                 latestInfo.setResourceLevel(1);
+                latestInfo.setL1Mappings(resourceUnit.getL1Mappings());
                 latestInfo.setShareInfo(shareResourceManagerService.exportShareInfo(resourceUnit.getResourceId()));
                 latestInfo.setLevel2Resources(resourceUnit.getLevel2Resources());
                 exportInfos.add(latestInfo);
@@ -161,6 +167,7 @@ public class WorkflowAdapter extends ResourceAdapter {
         for (ExportResourceUnit exportResourceUnit : exportResources) {
             ExportResult result = new ExportResult();
             result.setResourceId(exportResourceUnit.getResourceId());
+            result.setResourceLevel(exportResourceUnit.getResourceLevel());
             result.setResourceName(exportResourceUnit.getResourceName());
             result.setResourceType(exportResourceUnit.getResourceType());
             result.setResourceVersion(exportResourceUnit.getResourceVersion());
@@ -275,7 +282,7 @@ public class WorkflowAdapter extends ResourceAdapter {
                 workflow.setId(existingWorkflow.getId());
                 result.setNewId(existingWorkflow.getId());
             }
-            updateWorkflow(workflow, importInfo.getReleaseVersion(), result);
+            updateWorkflow(workflow, importInfo.getReleaseVersion(), existingWorkflow.getLastVersionId(), result);
         }
     }
 
@@ -334,14 +341,16 @@ public class WorkflowAdapter extends ResourceAdapter {
 
     private void insertWorkflow(WorkflowEntity metadata, ReleaseVersion releaseVersion, ImportResourceResult result) {
         updatePath(metadata);
+        result.setAddTag(true);
         metadata.setStatus(releaseVersion == null ? AgentStatus.DRAFT.toString() : AgentStatus.PUBLISHED.toString());
         workflowMapper.createWorkflowEntity(metadata);
 
         // 创建版本数据
-        handleReleaseVersion(metadata, releaseVersion, result);
+        handleReleaseVersion(metadata, releaseVersion, metadata.getLastVersionId(), result);
     }
 
-    private void updateWorkflow(WorkflowEntity metadata, ReleaseVersion releaseVersion, ImportResourceResult result) {
+    private void updateWorkflow(WorkflowEntity metadata, ReleaseVersion releaseVersion, String lastVersionId,
+        ImportResourceResult result) {
         // 草稿态不需要发版本
         if (!Strings.CS.equals(CommonConstant.WORKFLOW_PUBLISHED, metadata.getStatus()) || releaseVersion == null) {
             updatePath(metadata);
@@ -356,7 +365,7 @@ public class WorkflowAdapter extends ResourceAdapter {
             return;
         }
         // 处理版本
-        handleReleaseVersion(metadata, releaseVersion, result);
+        handleReleaseVersion(metadata, releaseVersion, lastVersionId, result);
     }
 
     public void updatePath(WorkflowEntity metadata) {
@@ -368,7 +377,7 @@ public class WorkflowAdapter extends ResourceAdapter {
         metadata.setIrPath(irPath);
     }
 
-    private void handleReleaseVersion(WorkflowEntity metadata, ReleaseVersion releaseVersion,
+    private void handleReleaseVersion(WorkflowEntity metadata, ReleaseVersion releaseVersion, String lastVersionId,
         ImportResourceResult result) {
         if (releaseVersion == null) {
             return;
@@ -388,6 +397,23 @@ public class WorkflowAdapter extends ResourceAdapter {
         releaseVersion.setCreator(metadata.getCreatedBy());
         releaseVersionMapper.insert(releaseVersion);
         result.setVersion(releaseVersion.getVersionId());
+
+        // 刷新工作流更新时间
+        WorkflowEntity updateWorkflow = new WorkflowEntity();
+        updateWorkflow.setUpdaterId(metadata.getUpdaterId());
+        updateWorkflow.setUpdatedAt(metadata.getUpdatedAt());
+        String versionId = releaseVersion.getVersionId();
+        String newLastVersionId;
+        if (versionId == null) {
+            newLastVersionId = lastVersionId;
+        } else if (lastVersionId == null) {
+            newLastVersionId = versionId;
+        } else {
+            newLastVersionId = versionId.compareTo(lastVersionId) > 0 ? versionId : lastVersionId;
+        }
+        updateWorkflow.setLastVersionId(newLastVersionId);
+        workflowMapper.updateWorkflowEntityByTraceId(metadata.getProjectId(), metadata.getTraceId(),
+            metadata.getWorkspaceId(), updateWorkflow);
     }
 
 }

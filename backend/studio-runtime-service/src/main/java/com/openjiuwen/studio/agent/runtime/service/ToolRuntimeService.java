@@ -11,8 +11,6 @@ import com.alibaba.excel.exception.ExcelAnalysisStopException;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.obs.services.exception.ObsException;
-import com.obs.services.model.TemporarySignatureResponse;
 import com.openjiuwen.studio.agent.common.dto.run.RunToolRequestBody;
 import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
@@ -252,7 +250,7 @@ public class ToolRuntimeService implements IToolRuntimeService {
     @Value("${agent.max-resolve-file-number}")
     private int maxResolveFileNumber;
 
-    @Value("${obs.expire-time}")
+    @Value("${storage.expires:7}")
     private int obsExpireTime;
 
     @Value("${env.type}")
@@ -810,7 +808,7 @@ public class ToolRuntimeService implements IToolRuntimeService {
                 String objectKey = String.format("%s/%s", BASE64_IMAGE_OBS_PATH, fileName);
                 String path =
                         obsService.putObjectToBucket(obsService.getStagingBucket(), objectKey, inputStream, obsExpireTime);
-                String obsUrl = obsService.getStagingTemporaryGetRsp(path, 3600L).getSignedUrl();
+                String obsUrl = obsService.getStagingDownloadUrl(path, 3600L);
 
                 // 10. 构建成功响应
                 response.setSuccess(true);
@@ -997,7 +995,7 @@ public class ToolRuntimeService implements IToolRuntimeService {
         }
 
         // 将文档存入obs，并获取临时下载链接
-        TemporarySignatureResponse temporaryGetRsp;
+        String downloadUrl;
         try {
             int expires = obsExpireTime;
             if (body.getExpires() != null && body.getExpires() > 0) {
@@ -1007,13 +1005,13 @@ public class ToolRuntimeService implements IToolRuntimeService {
             String filePath =
                     obsService.putObjectToBucket(obsService.getStagingBucket(),
                             String.format(CREATE_DOCUMENT_OBS_PATH_PATTERN, UUID.randomUUID().toString(), newName), inputStream, expires);
-            temporaryGetRsp = obsService.getStagingTemporaryGetRsp(filePath, (long) expires * 86400);
+         downloadUrl = obsService.getStagingDownloadUrl(filePath, (long) expires * 86400);
             log.info("create document succeed.");
-        } catch (ObsException e) {
+        } catch (Exception e) {
             log.error("Get obs temporary signature url failed.", e);
             throw new AgentStudioException(StudioError.GET_OBS_TEMPORARY_URL_FAILED);
         }
-        return new CreateDocumentRsp().setUrl(temporaryGetRsp.getSignedUrl());
+        return new CreateDocumentRsp().setUrl(downloadUrl);
     }
 
     /**

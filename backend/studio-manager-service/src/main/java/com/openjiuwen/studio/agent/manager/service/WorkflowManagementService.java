@@ -3605,11 +3605,11 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         resourceId = "-1"
     )
     public ImportRsp importWorkflows(String workspaceId, String projectId, MultipartFile file, String importWorkflows,
-        String importTools) {
+        String importTools, String mode) {
         agentManagementService.checkImportFile(file);
         skuManageService.validateAttrEnable(CommonConstant.SKU_ATTR_CODE.EXPORT_AND_IMPORT);
         if (agentCommonService.isExportFileV2(file)) {
-            return agentImportService.importFile(projectId, RequestContextUtils.getRequestWorkspaceId(), file);
+            return agentImportService.importFile(projectId, RequestContextUtils.getRequestWorkspaceId(), file, mode);
         }
         return agentImportExportService.importWorkflows(projectId, workspaceId, file, importWorkflows, importTools);
     }

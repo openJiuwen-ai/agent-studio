@@ -14,7 +14,6 @@ import com.alibaba.fastjson.JSONException;
 import com.alibaba.fastjson.JSONObject;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.obs.services.model.TemporarySignatureResponse;
 import com.openjiuwen.studio.agent.common.bo.AgentMetadata;
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.AgentInvokeInfo;
@@ -283,7 +282,7 @@ public class AgentRuntimeService implements IAgentRuntimeService {
     @Value("${file.time-scope-upload-total-size}")
     private int timeScopeUploadTotalSize;
 
-    @Value("${obs.bucket_storage_limit:100}")
+    @Value("${storage.bucket-storage-limit:100}")
     private long bucketStorageLimit;
 
     @Value("${file.video-type}")
@@ -871,10 +870,6 @@ public class AgentRuntimeService implements IAgentRuntimeService {
 
             @Override
             public void onClosed(@NotNull EventSource eventSource) {
-                if (Constant.AppType.CONTROLLER.equals(executeParams.getExecuteType())) {
-                    log.info("EventSource closed. type is controller");
-                    saveInsightData(executeParams, traceData);
-                }
                 cancelFuture();
 
                 log.info("End to receive sse message.");
@@ -1020,7 +1015,7 @@ public class AgentRuntimeService implements IAgentRuntimeService {
                 case WORKFLOW_START, WORKFLOW_END, TASK_TERMINATED -> passThrough(sseData, sseEmitter, executeParams);
                 case WORKFLOW_NODE_MESSAGE ->
                         processOnControllerWorkflowNodeMessage(sseData, result, executeParams, traceData, sseEmitter);
-                case AGENT_NODE_MESSAGE -> processOnCtrlAgentNodeMessage(eventObj, executeParams,traceData);
+                case AGENT_NODE_MESSAGE -> processOnCtrlAgentNodeMessage(sseData, eventObj, executeParams, traceData, sseEmitter);
                 case TASK_END -> processTaskEnd(sseEmitter, executeParams, traceData);
                 case SCENE_MATCH, PLAN_START, PLAN_END, STEP_START, STEP_END, TASK_COMPLETE, TASK_START ->
                         agentEventPassThrough(sseData, sseEmitter, executeParams);
@@ -1047,7 +1042,7 @@ public class AgentRuntimeService implements IAgentRuntimeService {
                 case WORKFLOW_BLOCKED -> passBlockThrough(sseData, result, executeParams, traceData);
                 case WORKFLOW_RESUME -> passResumeThrough(sseData, result, executeParams, traceData);
                 case WORKFLOW_START, WORKFLOW_END, TASK_TERMINATED -> passThrough(sseData, result, executeParams);
-                case AGENT_NODE_MESSAGE -> processOnCtrlAgentNodeMessage(eventObj, executeParams, traceData);
+                case AGENT_NODE_MESSAGE -> processOnCtrlAgentNodeMessage(sseData, eventObj, executeParams, traceData, sseEmitter);
                 case TASK_END -> processTaskEnd(null, executeParams, traceData);
                 case DONE -> processOnControllerDoneMessage(eventObj, executeParams);
                 default -> log.debug("not process event: [{}]", eventType);
@@ -1077,7 +1072,12 @@ public class AgentRuntimeService implements IAgentRuntimeService {
                 case FUNCTION_CALL -> processOnFunctionCall(sseEmitter, eventObj, executeParams);
                 case FUNCTION_CALL_END -> processOnFunctionCallEnd(sseEmitter, eventObj, executeParams);
                 case API_EXEC_DATA -> processOnApiExecData(sseEmitter, eventObj, executeParams);
-                case AGENT_NODE_MESSAGE -> processOnAgentNodeMessage(eventObj, executeParams, null);
+                case AGENT_NODE_MESSAGE -> {
+                    processOnAgentNodeMessage(eventObj, executeParams, null);
+                    if (executeParams.isDebug()) {
+                        agentEventPassThrough(sseData, sseEmitter, executeParams);
+                    }
+                }
                 case INTERMEDIATE_MESSAGE -> processOnIntermediateMessage(sseEmitter, eventObj, executeParams);
                 case STATISTIC_DATA -> processOnStaticData(sseEmitter, eventObj, executeParams);
                 case SUMMARY_RESPONSE -> processOnSummaryResponse(sseEmitter, eventObj, executeParams);
@@ -1588,10 +1588,12 @@ public class AgentRuntimeService implements IAgentRuntimeService {
      */
     private void processOnAgentNodeMessage(JiuwenAgentEvent eventObj, AgentExecuteParams executeParams,
                                            WorkflowRunResult result) {
-        if (executeParams.isDebug()) {
-            conversationManagementService.saveAgentExecutionInfo(eventObj, executeParams, result);
-        } else {
+        if (!executeParams.isDebug()) {
             conversationManagementService.saveAgentExecutionToOps(eventObj, executeParams);
+        }
+        // debug 模式下：设置 executionId，确保转发给 manager 后能正确保存调试记录
+        if (executeParams.isDebug()) {
+            eventObj.setExecutionId(executeParams.getExecutionId());
         }
     }
 
@@ -2624,16 +2626,12 @@ public class AgentRuntimeService implements IAgentRuntimeService {
             int fileExpireDays = DatetimeUtils.calculateCeilingDaysFromMinutes(expiresMinutes);
 
             if (fileReadOnly) {
-                String objectName = obsService.uploadToStagingWithPublicRead(inputStream, safeFileName, fileExpireDays);
-                fileUploadRsp.setUrl(objectName);
+                String url = obsService.uploadToStagingWithPublicRead(inputStream, safeFileName, fileExpireDays);
+                fileUploadRsp.setUrl(url);
             } else {
                 String objectName = obsService.uploadToStagingWithExpires(inputStream, safeFileName, fileExpireDays);
-                TemporarySignatureResponse temporaryGetRsp =
-                        obsService.getStagingTemporaryGetRsp(objectName,
-                                (long) expiresMinutes * 60);
-
-                fileUploadRsp.setUrl(temporaryGetRsp.getSignedUrl());
-                fileUploadRsp.setHeaders(temporaryGetRsp.getActualSignedRequestHeaders());
+                String downloadUrl = obsService.getStagingDownloadUrl(objectName, (long) expiresMinutes * 60);
+                fileUploadRsp.setUrl(downloadUrl);
             }
 
             return fileUploadRsp;
@@ -2656,19 +2654,6 @@ public class AgentRuntimeService implements IAgentRuntimeService {
     private void checkUserCanUpload(MultipartFile file, String userId) {
         checkUploadNum(userId);
         checkUploadTotalSize(file, userId);
-        if ("hc".equals(envType)) {
-            isReachBucketStorageLimit();
-        }
-    }
-
-    private void isReachBucketStorageLimit() {
-        long limit = bucketStorageLimit * KB * KB * KB;
-        long capacity = obsService.bucketStorage();
-        if (limit <= capacity) {
-            log.error("The obs bucket capacity is critically low; file uploads are temporarily unavailable."
-                    + "Limit:{}, Capacity:{}", limit, capacity);
-            throw new AgentStudioException(StudioError.OBS_BUCKET_CAPACITY_LIMIT);
-        }
     }
 
     private void checkUploadTotalSize(MultipartFile file, String userId) {
@@ -2767,12 +2752,14 @@ public class AgentRuntimeService implements IAgentRuntimeService {
      * @param eventObj eventObj
      * @param executeParams executeParams
      */
-    private void processOnCtrlAgentNodeMessage(JiuwenAgentEvent eventObj, AgentExecuteParams executeParams, AgentCtrlTraceData traceData) {
+    private void processOnCtrlAgentNodeMessage(String sseData, JiuwenAgentEvent eventObj, AgentExecuteParams executeParams, AgentCtrlTraceData traceData, SseEmitter sseEmitter) {
         eventObj.setExecutionId(executeParams.getExecutionId());
         conversationManagementService.reportToAgentOps(executeParams, eventObj);
         if (executeParams.isDebug()) {
             traceData.appendAgentNode(eventObj);
-            // 废弃 controllerDebuggingMgmtService.saveControllerDebuggingInfo(executeParams, eventObj);
+            if (sseEmitter != null) {
+                agentEventPassThrough(sseData, sseEmitter, executeParams);
+            }
         }
     }
 
@@ -2793,6 +2780,9 @@ public class AgentRuntimeService implements IAgentRuntimeService {
 
             if (result != null) {
                 result.getNodeRunInfoList().add(nodeRunInfo);
+            }
+            if (sseEmitter != null) {
+                agentEventPassThrough(sseData, sseEmitter, executeParams);
             }
         }
         if (Constant.KnowledgeRetrievalNode.PLUGIN.equals(nodeRunInfo.getNodeType())) {
@@ -2880,26 +2870,6 @@ public class AgentRuntimeService implements IAgentRuntimeService {
                 .setToolSwitchDict(Optional.ofNullable(executeParams.getToolSwitchDict()).orElse(new HashMap<>()))
                 .setEnableHistory(executeParams.isHistoryEnabled());
     }
-
-    private void saveInsightData(AgentExecuteParams executeParams, AgentCtrlTraceData traceData){
-        if(!executeParams.isDebug()){
-            return;
-        }
-        try{
-            if(!traceData.isResume()){
-                traceData.setInputs(executeParams.getInputs());
-            }
-            traceData.setEndTime(System.currentTimeMillis());
-            if(traceData.getStatus() == null){
-                traceData.setStatus("succeeded");
-            }
-            traceData.setAgentId(executeParams.getAgentId());
-            controllerDebuggingMgmtService.saveControllerDebuggingInfo(executeParams, traceData);
-        }catch (Exception e){
-            log.error("Fail save insight data.", e);
-        }
-    }
-
 
     /**
      * 处理agent执行时，传给九问的executeParam中的用户ID
