@@ -1,20 +1,19 @@
 name: Build & Push Docker Images
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - studio-2.0
 
-# 并发控制：同一分支多次手动触发只保留最新一次，取消进行中的旧构建（省额度）
 concurrency:
   group: build-push-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-push:
+  prepare:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,94 +22,19 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '17'
-          distribution: 'temurin'
+          distribution: temurin
           cache: maven
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.13.1
+          run_install: false
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-
-      - name: Install pnpm
-        run: npm install -g pnpm@8.13.1
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Resolve image repository config
-        id: image_config
-        shell: bash
-        env:
-          GHCR_IMAGE_REPOSITORY_OVERRIDE: ${{ vars.GHCR_IMAGE_REPOSITORY }}
-          DOCKERHUB_IMAGE_REPOSITORY_OVERRIDE: ${{ vars.DOCKERHUB_IMAGE_REPOSITORY }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          REPOSITORY_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          GHCR_IMAGE_REPOSITORY="${GHCR_IMAGE_REPOSITORY_OVERRIDE:-ghcr.io/${REPOSITORY_LOWER}}"
-          DOCKERHUB_IMAGE_REPOSITORY="${DOCKERHUB_IMAGE_REPOSITORY_OVERRIDE:-${GHCR_IMAGE_REPOSITORY#ghcr.io/}}"
-          IMAGE_TAG="latest"
-          GHCR_REGISTRY="${GHCR_IMAGE_REPOSITORY%%/*}"
-
-          if [ "$GHCR_REGISTRY" = "$GHCR_IMAGE_REPOSITORY" ]; then
-            echo "GHCR_IMAGE_REPOSITORY must include a registry host, for example registry-host/owner/repo" >&2
-            exit 1
-          fi
-
-          DOCKERHUB_ENABLED=false
-          if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
-            if curl -fsS "https://hub.docker.com/v2/repositories/${DOCKERHUB_IMAGE_REPOSITORY}/" >/dev/null; then
-              DOCKERHUB_ENABLED=true
-            else
-              echo "Docker Hub repository ${DOCKERHUB_IMAGE_REPOSITORY} was not found or is not accessible; Docker Hub push will be skipped."
-            fi
-          else
-            echo "Docker Hub credentials are not configured; Docker Hub push will be skipped."
-          fi
-
-          echo "ghcr_registry=${GHCR_REGISTRY}" >> "$GITHUB_OUTPUT"
-          echo "ghcr_repository=${GHCR_IMAGE_REPOSITORY}" >> "$GITHUB_OUTPUT"
-          echo "dockerhub_repository=${DOCKERHUB_IMAGE_REPOSITORY}" >> "$GITHUB_OUTPUT"
-          echo "dockerhub_enabled=${DOCKERHUB_ENABLED}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "GHCR repository: ${GHCR_IMAGE_REPOSITORY}"
-          echo "Docker Hub repository: ${DOCKERHUB_IMAGE_REPOSITORY}"
-          echo "Docker Hub enabled: ${DOCKERHUB_ENABLED}"
-          echo "Default image tag: ${IMAGE_TAG}"
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ steps.image_config.outputs.ghcr_registry }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to Docker Hub
-        if: steps.image_config.outputs.dockerhub_enabled == 'true'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        run: |
-          BRANCH_NAME=$(echo "${GITHUB_REF_NAME}" | sed 's/[^a-zA-Z0-9._-]/-/g')
-          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
-          BUILD_DATE=$(date +"%Y%m%d")
-          BUILD_TS=$(date +"%Y%m%d%H%M%S")
-          echo "branch=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
-          echo "build_ts=${BUILD_TS}" >> "$GITHUB_OUTPUT"
-          echo "Branch: ${BRANCH_NAME}, SHA: ${SHORT_SHA}, Date: ${BUILD_DATE}, TS: ${BUILD_TS}"
-
-      # ======================== Backend Build ========================
 
       - name: Build backend with Maven
         run: |
@@ -139,8 +63,6 @@ jobs:
           cp backend/studio-runtime-service/src/main/resources/application-runtime.yml docker/studio-service/config/
           cp backend/studio-runtime-service/src/main/resources/log4j2.xml docker/studio-service/config/
 
-      # ======================== Frontend Build ========================
-
       - name: Build frontend with pnpm
         run: |
           cd frontend
@@ -149,8 +71,6 @@ jobs:
           cd ..
           tar -cf docker/studio-console/agent-console.tar -C frontend dist
 
-      # ======================== Runtime Prepare ========================
-
       - name: Prepare studio-runtime artifacts
         run: |
           rm -rf docker/studio-runtime/agent_runtime
@@ -158,156 +78,154 @@ jobs:
           rm -rf docker/studio-runtime/jiuwen
           cp -rf agent-runtime/jiuwen docker/studio-runtime/jiuwen
           rm -rf docker/studio-runtime/agent_builder
-          cp -rf agent-runtime/agent_builder docker/studio-runtime/agent_builder
+          test -d agent_builder
+          cp -rf agent_builder docker/studio-runtime/agent_builder
+          rm -rf docker/studio-runtime/model_service
+          test -d packages/model_service/model_service
+          cp -rf packages/model_service/model_service docker/studio-runtime/model_service
           rm -rf docker/studio-runtime/tests
           cp -rf agent-runtime/tests docker/studio-runtime/tests
           cp -f agent-runtime/requirements.txt docker/studio-runtime/requirements.txt
           rm -rf docker/studio-runtime/bin
           cp -rf docker/studio-runtime/script docker/studio-runtime/bin
 
-      # ======================== Build & Push to GHCR ========================
+      - name: Use official package repositories in CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          find docker -type f -name 'Dockerfile*' -print0 | while IFS= read -r -d '' dockerfile; do
+            sed -i \
+              -e 's|https://mirrors.aliyun.com/pypi/simple/|https://pypi.org/simple|g' \
+              -e '/pip3 config set global.trusted-host mirrors.aliyun.com/d' \
+              -e 's|mirrors.aliyun.com|deb.debian.org|g' \
+              "${dockerfile}"
+          done
 
-      - name: Build and push studio-manager to GHCR
+      - name: Upload build contexts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-build-contexts
+          path: |
+            docker/studio-manager
+            docker/studio-service
+            docker/studio-console
+            docker/studio-runtime
+            docker/grafana
+          retention-days: 1
+          if-no-files-found: error
+
+  build-and-push:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: studio-manager
+            context_dir: studio-manager
+            base_image: eclipse-temurin:17-jre
+            cache_scope: studio-manager
+          - service: studio-service
+            context_dir: studio-service
+            base_image: eclipse-temurin:17-jre
+            cache_scope: studio-service
+          - service: studio-console
+            context_dir: studio-console
+            base_image: nginx:1.27
+            cache_scope: studio-console
+          - service: studio-runtime
+            context_dir: studio-runtime
+            base_image: python:3.11-slim
+            cache_scope: studio-runtime
+          - service: grafana-victorialogs
+            context_dir: grafana
+            cache_scope: grafana-victorialogs
+
+    steps:
+      - name: Download build contexts
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-build-contexts
+          path: docker
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve image repository config
+        id: image_config
+        shell: bash
+        env:
+          GHCR_IMAGE_REPOSITORY_OVERRIDE: ${{ vars.GHCR_IMAGE_REPOSITORY }}
+          DOCKERHUB_IMAGE_REPOSITORY_OVERRIDE: ${{ vars.DOCKERHUB_IMAGE_REPOSITORY }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPOSITORY_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          GHCR_IMAGE_REPOSITORY="${GHCR_IMAGE_REPOSITORY_OVERRIDE:-ghcr.io/${REPOSITORY_LOWER}}"
+          DOCKERHUB_IMAGE_REPOSITORY="${DOCKERHUB_IMAGE_REPOSITORY_OVERRIDE:-${GHCR_IMAGE_REPOSITORY#ghcr.io/}}"
+          GHCR_REGISTRY="${GHCR_IMAGE_REPOSITORY%%/*}"
+          DOCKERHUB_ENABLED=false
+          if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ] \
+            && curl -fsS "https://hub.docker.com/v2/repositories/${DOCKERHUB_IMAGE_REPOSITORY}/" >/dev/null; then
+            DOCKERHUB_ENABLED=true
+          fi
+          echo "ghcr_registry=${GHCR_REGISTRY}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_repository=${GHCR_IMAGE_REPOSITORY}" >> "$GITHUB_OUTPUT"
+          echo "dockerhub_repository=${DOCKERHUB_IMAGE_REPOSITORY}" >> "$GITHUB_OUTPUT"
+          echo "dockerhub_enabled=${DOCKERHUB_ENABLED}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.image_config.outputs.ghcr_registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        if: matrix.service != 'grafana-victorialogs' && steps.image_config.outputs.dockerhub_enabled == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
-          context: docker/studio-manager
+          context: docker/${{ matrix.context_dir }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ steps.image_config.outputs.ghcr_repository }}/studio-manager:${{ steps.image_config.outputs.image_tag }}
-          build-args: BASE_IMAGE=eclipse-temurin:17-jre
-          cache-from: type=gha,scope=studio-manager
-          cache-to: type=gha,scope=studio-manager,mode=max
-
-      - name: Build and push studio-service to GHCR
-        uses: docker/build-push-action@v6
-        with:
-          context: docker/studio-service
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ steps.image_config.outputs.ghcr_repository }}/studio-service:${{ steps.image_config.outputs.image_tag }}
-          build-args: BASE_IMAGE=eclipse-temurin:17-jre
-          cache-from: type=gha,scope=studio-service
-          cache-to: type=gha,scope=studio-service,mode=max
-
-      - name: Build and push studio-console to GHCR
-        uses: docker/build-push-action@v6
-        with:
-          context: docker/studio-console
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ steps.image_config.outputs.ghcr_repository }}/studio-console:${{ steps.image_config.outputs.image_tag }}
-          build-args: BASE_IMAGE=nginx:1.27
-          cache-from: type=gha,scope=studio-console
-          cache-to: type=gha,scope=studio-console,mode=max
-
-      - name: Build and push studio-runtime to GHCR
-        uses: docker/build-push-action@v6
-        with:
-          context: docker/studio-runtime
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ steps.image_config.outputs.ghcr_repository }}/studio-runtime:${{ steps.image_config.outputs.image_tag }}
-          build-args: BASE_IMAGE=python:3.11-slim
-          cache-from: type=gha,scope=studio-runtime
-          cache-to: type=gha,scope=studio-runtime,mode=max
-
-      - name: Build and push Grafana with VictoriaLogs datasource to GHCR
-        uses: docker/build-push-action@v6
-        with:
-          context: docker/grafana
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ steps.image_config.outputs.ghcr_repository }}/grafana-victorialogs:11.3.0-0.29.0
+          tags: ${{ steps.image_config.outputs.ghcr_repository }}/${{ matrix.service }}:${{ matrix.service == 'grafana-victorialogs' && '11.3.0-0.29.0' || 'latest' }}
           build-args: |
+            BASE_IMAGE=${{ matrix.base_image }}
             GRAFANA_VERSION=11.3.0
             VICTORIA_LOGS_DATASOURCE_VERSION=0.29.0
-          cache-from: type=gha,scope=grafana-victorialogs
-          cache-to: type=gha,scope=grafana-victorialogs,mode=max
+          cache-from: type=gha,scope=${{ matrix.cache_scope }}
+          cache-to: type=gha,scope=${{ matrix.cache_scope }},mode=max
 
-      # ======================== Per-architecture timestamp tags ========================
-
-      - name: Create per-architecture timestamp tags on GHCR
+      - name: Create architecture tags on GHCR
+        if: matrix.service != 'grafana-victorialogs'
         env:
-          GHCR_REPOSITORY: ${{ steps.image_config.outputs.ghcr_repository }}
-          IMAGE_TAG: ${{ steps.image_config.outputs.image_tag }}
-          BUILD_TS: ${{ steps.meta.outputs.build_ts }}
+          REPOSITORY: ${{ steps.image_config.outputs.ghcr_repository }}
+          SERVICE: ${{ matrix.service }}
         run: |
-          set -eu
-          # 多架构构建已把 :<image_tag> 推为 manifest list（含 amd64+arm64）。
-          # 这里按架构取出子 manifest 的 digest，分别打成 <时间戳>.<架构> 的单架构 tag。
-          for SVC in studio-manager studio-service studio-console studio-runtime; do
-            SRC="${GHCR_REPOSITORY}/${SVC}:${IMAGE_TAG}"
-            AMD64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
-            ARM64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
-            docker buildx imagetools create -t "${GHCR_REPOSITORY}/${SVC}:${BUILD_TS}.x86_64" "${GHCR_REPOSITORY}/${SVC}@${AMD64_DIGEST}"
-            docker buildx imagetools create -t "${GHCR_REPOSITORY}/${SVC}:${BUILD_TS}.arm64"   "${GHCR_REPOSITORY}/${SVC}@${ARM64_DIGEST}"
-            echo "${SVC}  ->  :${BUILD_TS}.x86_64 , :${BUILD_TS}.arm64"
-          done
-      # ======================== Push to Docker Hub ========================
+          set -euo pipefail
+          BUILD_TS=$(date +"%Y%m%d%H%M%S")
+          SRC="${REPOSITORY}/${SERVICE}:latest"
+          AMD64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+          ARM64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+          docker buildx imagetools create -t "${REPOSITORY}/${SERVICE}:${BUILD_TS}.x86_64" "${REPOSITORY}/${SERVICE}@${AMD64_DIGEST}"
+          docker buildx imagetools create -t "${REPOSITORY}/${SERVICE}:${BUILD_TS}.arm64" "${REPOSITORY}/${SERVICE}@${ARM64_DIGEST}"
 
-      - name: Tag and push studio-manager to Docker Hub
-        if: steps.image_config.outputs.dockerhub_enabled == 'true'
+      - name: Mirror image to Docker Hub
+        if: matrix.service != 'grafana-victorialogs' && steps.image_config.outputs.dockerhub_enabled == 'true'
         run: |
           docker buildx imagetools create \
-            -t ${{ steps.image_config.outputs.dockerhub_repository }}:studio-manager-${{ steps.image_config.outputs.image_tag }} \
-            ${{ steps.image_config.outputs.ghcr_repository }}/studio-manager:${{ steps.image_config.outputs.image_tag }}
-
-      - name: Tag and push studio-service to Docker Hub
-        if: steps.image_config.outputs.dockerhub_enabled == 'true'
-        run: |
-          docker buildx imagetools create \
-            -t ${{ steps.image_config.outputs.dockerhub_repository }}:studio-service-${{ steps.image_config.outputs.image_tag }} \
-            ${{ steps.image_config.outputs.ghcr_repository }}/studio-service:${{ steps.image_config.outputs.image_tag }}
-
-      - name: Tag and push studio-console to Docker Hub
-        if: steps.image_config.outputs.dockerhub_enabled == 'true'
-        run: |
-          docker buildx imagetools create \
-            -t ${{ steps.image_config.outputs.dockerhub_repository }}:studio-console-${{ steps.image_config.outputs.image_tag }} \
-            ${{ steps.image_config.outputs.ghcr_repository }}/studio-console:${{ steps.image_config.outputs.image_tag }}
-
-      - name: Tag and push studio-runtime to Docker Hub
-        if: steps.image_config.outputs.dockerhub_enabled == 'true'
-        run: |
-          docker buildx imagetools create \
-            -t ${{ steps.image_config.outputs.dockerhub_repository }}:studio-runtime-${{ steps.image_config.outputs.image_tag }} \
-            ${{ steps.image_config.outputs.ghcr_repository }}/studio-runtime:${{ steps.image_config.outputs.image_tag }}
-
-      - name: Print image summary
-        env:
-          GHCR_REPOSITORY: ${{ steps.image_config.outputs.ghcr_repository }}
-          DOCKERHUB_REPOSITORY: ${{ steps.image_config.outputs.dockerhub_repository }}
-          IMAGE_TAG: ${{ steps.image_config.outputs.image_tag }}
-          BUILD_TS: ${{ steps.meta.outputs.build_ts }}
-          DOCKERHUB_ENABLED: ${{ steps.image_config.outputs.dockerhub_enabled }}
-        run: |
-          echo "============================================"
-          echo " Docker image publish summary"
-          echo "============================================"
-          echo ""
-          echo "  Tags per image (3): :${IMAGE_TAG} (multi-arch) , :${BUILD_TS}.x86_64 , :${BUILD_TS}.arm64"
-          echo ""
-          echo "  === GHCR ==="
-          for SVC in studio-manager studio-service studio-console studio-runtime; do
-            echo "  ${SVC}"
-            echo "    ${GHCR_REPOSITORY}/${SVC}:${IMAGE_TAG}"
-            echo "    ${GHCR_REPOSITORY}/${SVC}:${BUILD_TS}.x86_64"
-            echo "    ${GHCR_REPOSITORY}/${SVC}:${BUILD_TS}.arm64"
-          done
-          echo "  grafana-victorialogs"
-          echo "    ${GHCR_REPOSITORY}/grafana-victorialogs:11.3.0-0.29.0"
-          echo ""
-          echo "  === Docker Hub ==="
-          if [ "${DOCKERHUB_ENABLED}" = "true" ]; then
-            for SVC in studio-manager studio-service studio-console studio-runtime; do
-              echo "  ${SVC} : ${DOCKERHUB_REPOSITORY}:${SVC}-${IMAGE_TAG}"
-            done
-          else
-            echo "  skipped: repository missing/inaccessible or Docker Hub credentials not configured"
-          fi
-          echo "============================================"
+            -t ${{ steps.image_config.outputs.dockerhub_repository }}:${{ matrix.service }}-latest \
+            ${{ steps.image_config.outputs.ghcr_repository }}/${{ matrix.service }}:latest

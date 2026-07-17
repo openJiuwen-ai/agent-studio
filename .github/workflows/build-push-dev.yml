@@ -1,108 +1,55 @@
 name: Build & Push Dev Docker Images
 
-# Dev 流水线：使用 agent-core develop 分支源码构建，替代 PyPI openjiuwen 包
-# 与正式流水线 (build-push-ghcr.yml) 的区别：
-#   1. studio-runtime 从 gitcode.com/openJiuwen/agent-core develop 分支拉取源码安装
-#   2. requirements.txt 中移除 openjiuwen 行
-#   3. 镜像 tag 带有 dev 前缀
-#   4. 不推送 Docker Hub（仅 GHCR）
-
 on:
   workflow_dispatch:
     inputs:
       agent_core_ref:
         description: 'agent-core 分支/tag (默认 develop)'
         required: false
-        default: 'develop'
+        default: develop
 
 concurrency:
   group: build-push-dev-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-push-dev:
+  prepare:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-
+    outputs:
+      build_ts: ${{ steps.meta.outputs.build_ts }}
     steps:
       - name: Checkout agent-studio
         uses: actions/checkout@v4
 
       - name: Checkout agent-core
         run: |
+          set -euo pipefail
           AGENT_CORE_REF="${{ inputs.agent_core_ref || 'develop' }}"
-          echo "Cloning agent-core from gitcode.com, ref=${AGENT_CORE_REF}"
           git clone --branch "${AGENT_CORE_REF}" --depth 1 https://gitcode.com/openJiuwen/agent-core.git agent-core
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
-          distribution: 'temurin'
+          distribution: temurin
           cache: maven
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.13.1
+          run_install: false
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Install pnpm
-        run: npm install -g pnpm@8.13.1
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Resolve image repository config
-        id: image_config
-        shell: bash
-        env:
-          GHCR_IMAGE_REPOSITORY_OVERRIDE: ${{ vars.GHCR_IMAGE_REPOSITORY }}
-        run: |
-          set -euo pipefail
-
-          REPOSITORY_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          GHCR_IMAGE_REPOSITORY="${GHCR_IMAGE_REPOSITORY_OVERRIDE:-ghcr.io/${REPOSITORY_LOWER}}"
-
-          GHCR_REGISTRY="${GHCR_IMAGE_REPOSITORY%%/*}"
-          if [ "$GHCR_REGISTRY" = "$GHCR_IMAGE_REPOSITORY" ]; then
-            echo "GHCR_IMAGE_REPOSITORY must include a registry host, for example registry-host/owner/repo" >&2
-            exit 1
-          fi
-
-          IMAGE_TAG="dev"
-
-          echo "ghcr_registry=${GHCR_REGISTRY}" >> "$GITHUB_OUTPUT"
-          echo "ghcr_repository=${GHCR_IMAGE_REPOSITORY}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-          echo "GHCR repository: ${GHCR_IMAGE_REPOSITORY}"
-          echo "Image tag: ${IMAGE_TAG}"
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ steps.image_config.outputs.ghcr_registry }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract metadata
         id: meta
-        run: |
-          BRANCH_NAME=$(echo "${GITHUB_REF_NAME}" | sed 's/[^a-zA-Z0-9._-]/-/g')
-          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
-          BUILD_DATE=$(date +"%Y%m%d")
-          BUILD_TS=$(date +"%Y%m%d%H%M%S")
-          echo "branch=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
-          echo "build_ts=${BUILD_TS}" >> "$GITHUB_OUTPUT"
-          echo "Branch: ${BRANCH_NAME}, SHA: ${SHORT_SHA}, Date: ${BUILD_DATE}, TS: ${BUILD_TS}"
-
-      # ======================== Backend Build ========================
+        run: echo "build_ts=$(date +"%Y%m%d%H%M%S")" >> "$GITHUB_OUTPUT"
 
       - name: Build backend with Maven
         run: |
@@ -131,8 +78,6 @@ jobs:
           cp backend/studio-runtime-service/src/main/resources/application-runtime.yml docker/studio-service/config/
           cp backend/studio-runtime-service/src/main/resources/log4j2.xml docker/studio-service/config/
 
-      # ======================== Frontend Build ========================
-
       - name: Build frontend with pnpm
         run: |
           cd frontend
@@ -140,8 +85,6 @@ jobs:
           pnpm run build
           cd ..
           tar -cf docker/studio-console/agent-console.tar -C frontend dist
-
-      # ======================== Runtime Prepare ========================
 
       - name: Prepare studio-runtime artifacts (dev)
         run: |
@@ -151,7 +94,11 @@ jobs:
           rm -rf docker/studio-runtime/jiuwen
           cp -rf agent-runtime/jiuwen docker/studio-runtime/jiuwen
           rm -rf docker/studio-runtime/agent_builder
-          cp -rf agent-runtime/agent_builder docker/studio-runtime/agent_builder
+          test -d agent_builder
+          cp -rf agent_builder docker/studio-runtime/agent_builder
+          rm -rf docker/studio-runtime/model_service
+          test -d packages/model_service/model_service
+          cp -rf packages/model_service/model_service docker/studio-runtime/model_service
           rm -rf docker/studio-runtime/tests
           cp -rf agent-runtime/tests docker/studio-runtime/tests
           rm -rf docker/studio-runtime/bin
@@ -159,7 +106,7 @@ jobs:
 
           # 移除 requirements.txt 中的 openjiuwen 行（改为从源码安装）—— 先拷贝再 sed 副本，不动检出源文件
           cp -f agent-runtime/requirements.txt docker/studio-runtime/requirements.txt
-          sed -i '/^openjiuwen==/d' docker/studio-runtime/requirements.txt
+          sed -i -E '/^openjiuwen([[:space:]]|[<>=!~]|$)/d' docker/studio-runtime/requirements.txt
 
           # 复制 agent-core 源码到构建上下文（清理不必要的文件以减小构建上下文）
           cp -rf agent-core docker/studio-runtime/agent-core
@@ -171,71 +118,106 @@ jobs:
                  docker/studio-runtime/agent-core/.pytest_cache \
                  docker/studio-runtime/agent-core/report
 
-      # ======================== Build & Push to GHCR (per-architecture) ========================
-
-      - name: Build and push all images (per-architecture)
-        env:
-          GHCR_REPOSITORY: ${{ steps.image_config.outputs.ghcr_repository }}
-          IMAGE_TAG: ${{ steps.image_config.outputs.image_tag }}
-          BUILD_TS: ${{ steps.meta.outputs.build_ts }}
+      - name: Use official package repositories in CI
+        shell: bash
         run: |
-          set -eu
-
-          # 按架构单独构建，每个镜像只产生 2 个 tag: dev-{ts}.x86_64 和 dev-{ts}.arm64
-          build_and_push() {
-            local svc="$1"
-            local context="$2"
-            local base_image="$3"
-            local arch="$4"
-            local suffix="$5"
-            local tag="${IMAGE_TAG}-${BUILD_TS}.${suffix}"
-            local scope="${svc}-dev"
-
-            echo ">>> Building ${svc} for ${arch} -> :${tag}"
-            docker buildx build \
-              --platform "linux/${arch}" \
-              --build-arg "BASE_IMAGE=${base_image}" \
-              --cache-from "type=gha,scope=${scope}" \
-              --cache-to "type=gha,scope=${scope},mode=max" \
-              -t "${GHCR_REPOSITORY}/${svc}:${tag}" \
-              --push \
-              "${context}"
-            echo "    Done: ${GHCR_REPOSITORY}/${svc}:${tag}"
-          }
-
-          for arch_pair in "amd64 x86_64" "arm64 arm64"; do
-            ARCH=$(echo "${arch_pair}" | cut -d' ' -f1)
-            SUFFIX=$(echo "${arch_pair}" | cut -d' ' -f2)
-
-            build_and_push "studio-manager" "docker/studio-manager" "eclipse-temurin:17-jre" "${ARCH}" "${SUFFIX}"
-            build_and_push "studio-service" "docker/studio-service" "eclipse-temurin:17-jre" "${ARCH}" "${SUFFIX}"
-            build_and_push "studio-console" "docker/studio-console" "nginx:1.27" "${ARCH}" "${SUFFIX}"
-            build_and_push "studio-runtime" "docker/studio-runtime" "python:3.11-slim" "${ARCH}" "${SUFFIX}"
+          set -euo pipefail
+          find docker -type f -name 'Dockerfile*' -print0 | while IFS= read -r -d '' dockerfile; do
+            sed -i \
+              -e 's|https://mirrors.aliyun.com/pypi/simple/|https://pypi.org/simple|g' \
+              -e '/pip3 config set global.trusted-host mirrors.aliyun.com/d' \
+              -e 's|mirrors.aliyun.com|deb.debian.org|g' \
+              "${dockerfile}"
           done
 
-      # ======================== Summary ========================
+      - name: Upload build contexts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-dev-build-contexts
+          path: |
+            docker/studio-manager
+            docker/studio-service
+            docker/studio-console
+            docker/studio-runtime
+          retention-days: 1
+          if-no-files-found: error
 
+  build-and-push:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [studio-manager, studio-service, studio-console, studio-runtime]
+        arch: [amd64, arm64]
+
+    steps:
+      - name: Download build contexts
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-dev-build-contexts
+          path: docker
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve image repository config
+        id: image_config
+        env:
+          GHCR_IMAGE_REPOSITORY_OVERRIDE: ${{ vars.GHCR_IMAGE_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          REPOSITORY_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          GHCR_IMAGE_REPOSITORY="${GHCR_IMAGE_REPOSITORY_OVERRIDE:-ghcr.io/${REPOSITORY_LOWER}}"
+          echo "ghcr_registry=${GHCR_IMAGE_REPOSITORY%%/*}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_repository=${GHCR_IMAGE_REPOSITORY}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.image_config.outputs.ghcr_registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }} for ${{ matrix.arch }}
+        env:
+          REPOSITORY: ${{ steps.image_config.outputs.ghcr_repository }}
+          SERVICE: ${{ matrix.service }}
+          ARCH: ${{ matrix.arch }}
+          BUILD_TS: ${{ needs.prepare.outputs.build_ts }}
+        run: |
+          set -euo pipefail
+          case "${SERVICE}" in
+            studio-manager) BASE_IMAGE=eclipse-temurin:17-jre; DOCKERFILE=Dockerfile ;;
+            studio-service) BASE_IMAGE=eclipse-temurin:17-jre; DOCKERFILE=Dockerfile ;;
+            studio-console) BASE_IMAGE=nginx:1.27; DOCKERFILE=Dockerfile ;;
+            studio-runtime) BASE_IMAGE=python:3.11-slim; DOCKERFILE=Dockerfile.dev ;;
+          esac
+          if [ "${ARCH}" = amd64 ]; then SUFFIX=x86_64; else SUFFIX=arm64; fi
+          TAG="dev-${BUILD_TS}.${SUFFIX}"
+          docker buildx build \
+            --file "docker/${SERVICE}/${DOCKERFILE}" \
+            --platform "linux/${ARCH}" \
+            --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
+            --cache-from "type=gha,scope=${SERVICE}-dev-${ARCH}" \
+            --cache-to "type=gha,scope=${SERVICE}-dev-${ARCH},mode=min" \
+            --tag "${REPOSITORY}/${SERVICE}:${TAG}" \
+            --progress plain \
+            --push \
+            "docker/${SERVICE}"
+
+  summary:
+    needs: [prepare, build-and-push]
+    runs-on: ubuntu-latest
+    steps:
       - name: Print image summary
-        env:
-          GHCR_REPOSITORY: ${{ steps.image_config.outputs.ghcr_repository }}
-          IMAGE_TAG: ${{ steps.image_config.outputs.image_tag }}
-          BUILD_TS: ${{ steps.meta.outputs.build_ts }}
         run: |
-          echo "============================================"
-          echo " Dev Docker image publish summary"
-          echo "============================================"
-          echo ""
-          echo "  Tags per image (exactly 2):"
-          echo "    :${IMAGE_TAG}-${BUILD_TS}.x86_64"
-          echo "    :${IMAGE_TAG}-${BUILD_TS}.arm64"
-          echo ""
-          for SVC in studio-manager studio-service studio-console studio-runtime; do
-            NOTE=""
-            if [ "${SVC}" = "studio-runtime" ]; then
-              NOTE=" (agent-core from source)"
-            fi
-            echo "  ${SVC}${NOTE}"
-            echo "    ${GHCR_REPOSITORY}/${SVC}:${IMAGE_TAG}-${BUILD_TS}.x86_64"
-            echo "    ${GHCR_REPOSITORY}/${SVC}:${IMAGE_TAG}-${BUILD_TS}.arm64"
-          done
-          echo "============================================"
+          echo "Dev images published with tags:"
+          echo "  dev-${{ needs.prepare.outputs.build_ts }}.x86_64"
+          echo "  dev-${{ needs.prepare.outputs.build_ts }}.arm64"
