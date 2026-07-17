@@ -4,10 +4,6 @@
 
 package com.openjiuwen.studio.agent.runtime.service;
 
-import com.alibaba.excel.EasyExcel;
-import com.alibaba.excel.context.AnalysisContext;
-import com.alibaba.excel.event.AnalysisEventListener;
-import com.alibaba.excel.exception.ExcelAnalysisStopException;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
@@ -22,8 +18,6 @@ import com.openjiuwen.studio.agent.runtime.config.FileConfig;
 import com.openjiuwen.studio.agent.runtime.constant.Constant;
 import com.openjiuwen.studio.agent.runtime.dto.AudioResult;
 import com.openjiuwen.studio.agent.runtime.dto.Base64ToImageReq;
-import com.openjiuwen.studio.agent.runtime.dto.CreateDocumentReq;
-import com.openjiuwen.studio.agent.runtime.dto.CreateDocumentRsp;
 import com.openjiuwen.studio.agent.runtime.dto.OcrRecognizeRsp;
 import com.openjiuwen.studio.agent.runtime.dto.OcrResultInfo;
 import com.openjiuwen.studio.agent.runtime.dto.OcrResultInfoWordsBlockList;
@@ -40,7 +34,6 @@ import com.openjiuwen.studio.agent.runtime.dto.Url2Base64Req;
 import com.openjiuwen.studio.agent.runtime.dto.md.CustomIAMAuthInfo;
 import com.openjiuwen.studio.agent.runtime.dto.md.HisIAMAuthInfo;
 import com.openjiuwen.studio.agent.runtime.dto.md.SgovAuthInfo;
-import com.openjiuwen.studio.agent.runtime.entity.FileResolveEntity;
 import com.openjiuwen.studio.agent.runtime.model.RequestResult;
 import com.openjiuwen.studio.agent.runtime.rce.client.OCRClient;
 import com.openjiuwen.studio.agent.runtime.rce.client.SISClient;
@@ -71,26 +64,9 @@ import jodd.util.StringUtil;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.io.FilenameUtils;
-import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.poi.hwpf.HWPFDocument;
-import org.apache.poi.hwpf.usermodel.Paragraph;
-import org.apache.poi.hwpf.usermodel.Range;
-import org.apache.poi.hwpf.usermodel.Table;
-import org.apache.poi.ss.usermodel.CellBase;
-import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xwpf.usermodel.IBodyElement;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
-import org.apache.poi.xwpf.usermodel.XWPFParagraph;
-import org.apache.poi.xwpf.usermodel.XWPFTable;
-import org.apache.poi.xwpf.usermodel.XWPFTableCell;
-import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
@@ -100,12 +76,10 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
@@ -146,19 +120,9 @@ public class ToolRuntimeService implements IToolRuntimeService {
     public static final String TOOL_TEST_OBS_PATH = "temp/tools/openapi";
 
     /**
-     * 文档生成插件OBS文件名
-     */
-    public static final String CREATE_DOCUMENT_OBS_PATH_PATTERN = "file/%s/%s.docx";
-
-    /**
      * base64转图片OBS路径
      */
     public static final String BASE64_IMAGE_OBS_PATH = "Image";
-
-    /**
-     * 非法字符校验规则
-     */
-    private static final Pattern ILLEGAL_CHARS_PATTERN = Pattern.compile("[\\\\/:*?\"<>|]");
 
     /**
      * 用于提取文件名的正则表达式
@@ -184,11 +148,6 @@ public class ToolRuntimeService implements IToolRuntimeService {
      * 加密的字段，例如apikey鉴权的秘钥，返回前端******
      */
     public static final String ENCRYPTED_VALUE = "******";
-
-    /**
-     * 解析文件成功输出日志
-     */
-    public static final String RESOLVE_FILE_SUCCEED = "Resolve file succeed!";
 
     /**
      * 支持的图片格式
@@ -243,9 +202,6 @@ public class ToolRuntimeService implements IToolRuntimeService {
 
     @Value("${tool.request.max-image-size}")
     private  long imageFileSize;
-
-    @Value("${agent.max-resolve-size}")
-    private int agentMaxResolveSize;
 
     @Value("${agent.max-resolve-file-number}")
     private int maxResolveFileNumber;
@@ -366,28 +322,6 @@ public class ToolRuntimeService implements IToolRuntimeService {
             // host 不是合法的IP地址，可能是域名，不进行网段判断
             log.warn("Host is not a valid IP address, skip subnet check: {}", host);
         }
-    }
-
-    /**
-     * 根据文件访问url解析文件内容
-     *
-     * @param fileUrl fileUrl
-     * @return String 文件内容
-     */
-    @Override
-    public String resolveFile(String fileUrl) {
-        //  检查url合法性
-        checkSwaggerUrlValid(fileUrl, connectorConfigHostBlacklist);
-        // 根据文件类型解析文件内容
-        String fileSufix = getSuffixByUri(fileUrl).getType();
-        return switch (fileSufix) {
-            case Constant.File.TXT -> resolveTxtFile(fileUrl);
-            case Constant.File.XLSX, Constant.File.XLS -> resolveExcelFile(fileUrl, fileSufix);
-            case Constant.File.CSV -> resolveCsvFile(fileUrl);
-            case Constant.File.DOCX -> resolveDocxFile(fileUrl);
-            case Constant.File.DOC -> resolveDocFile(fileUrl);
-            default -> "";
-        };
     }
 
     private String processNestedStructure(String rawJson) {
@@ -963,55 +897,6 @@ public class ToolRuntimeService implements IToolRuntimeService {
 
     private boolean isValidTiff(byte[] data) {
         return data[0] == (byte) 0x49 && data[1] == (byte) 0x49 || data[0] == (byte) 0x4D && data[1] == (byte) 0x4D;
-    }
-
-    /**
-     * 文档生成插件
-     *
-     * @param body 文档生成请求体
-     * @return CreateDocumentRsp 文档生成响应体
-     */
-    @Override
-    public CreateDocumentRsp createDocument(CreateDocumentReq body) {
-        InputStream inputStream;
-        try (XWPFDocument xwpfDocument = new XWPFDocument();
-             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            String[] contents = Optional.ofNullable(body.getInput()).orElse("").split("\n");
-
-            // 设置文档内容
-            xwpfDocument.createStyles();
-            for (String content : contents) {
-                XWPFParagraph paragraph = xwpfDocument.createParagraph();
-                paragraph.createRun().setText(content);
-            }
-
-            // 构造输入流
-            xwpfDocument.write(outputStream);
-            outputStream.flush();
-            inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-        } catch (IOException e) {
-            log.error("build file inputStream failed.", e);
-            throw new AgentStudioException(StudioError.BUILD_INPUT_STREAM_FAILED);
-        }
-
-        // 将文档存入obs，并获取临时下载链接
-        String downloadUrl;
-        try {
-            int expires = obsExpireTime;
-            if (body.getExpires() != null && body.getExpires() > 0) {
-                expires = body.getExpires();
-            }
-            String newName = buildLegalName(body.getDocumentName());
-            String filePath =
-                    obsService.putObjectToBucket(obsService.getStagingBucket(),
-                            String.format(CREATE_DOCUMENT_OBS_PATH_PATTERN, UUID.randomUUID().toString(), newName), inputStream, expires);
-         downloadUrl = obsService.getStagingDownloadUrl(filePath, (long) expires * 86400);
-            log.info("create document succeed.");
-        } catch (Exception e) {
-            log.error("Get obs temporary signature url failed.", e);
-            throw new AgentStudioException(StudioError.GET_OBS_TEMPORARY_URL_FAILED);
-        }
-        return new CreateDocumentRsp().setUrl(downloadUrl);
     }
 
     /**
@@ -1747,14 +1632,6 @@ public class ToolRuntimeService implements IToolRuntimeService {
         return component.getTitle() + "\n" + component.getText();
     }
 
-    // 构建合法文件名
-    private String buildLegalName(String name) {
-        if (StringUtils.isEmpty(name) || ILLEGAL_CHARS_PATTERN.matcher(name).find()) {
-            return UUID.randomUUID().toString();
-        }
-        return name;
-    }
-
     // 取消任务
     private void cancelTask(ScheduledFuture<?> future) {
         if (future != null) {
@@ -1777,314 +1654,6 @@ public class ToolRuntimeService implements IToolRuntimeService {
             return "";
         }
         return extensions.get(key).toString();
-    }
-
-    /**
-     * 解析txt文件
-     *
-     * @param fileUrl 文件访问Url
-     * @return 解析结果
-     */
-    public String resolveTxtFile(String fileUrl) {
-        StringBuilder sb = new StringBuilder();
-        FileResolveEntity fileResolveEntity = new FileResolveEntity();
-        try (BufferedReader bufferedReader =
-                     new BufferedReader(new InputStreamReader(obsService.getByUrl(fileUrl), StandardCharsets.UTF_8))) {
-            String line;
-
-            // 处理数据
-            while ((line = bufferedReader.readLine()) != null) {
-                if (isExceedMaxSize(sb, line)) {
-                    sb.append(line, 0, agentMaxResolveSize - sb.length()).append("\n");
-                    break;
-                }
-                sb.append(line).append("\n");
-            }
-        } catch (Exception e) {
-            log.error("Resolve file failed.", e);
-            throw new AgentStudioException(StudioError.RESOLVE_FILE_FAILED);
-        }
-        log.info(RESOLVE_FILE_SUCCEED);
-        fileResolveEntity.setContent(sb.toString());
-        return JSON.toJSONString(fileResolveEntity);
-    }
-
-    /**
-     * 解析docx文件
-     *
-     * @param fileUrl 文件访问Url
-     * @return 解析结果
-     */
-    public String resolveDocxFile(String fileUrl) {
-        StringBuilder sb = new StringBuilder();
-        FileResolveEntity fileResolveEntity = new FileResolveEntity();
-        try (XWPFDocument document = new XWPFDocument(obsService.getByUrl(fileUrl))) {
-            List<IBodyElement> bodyElements = document.getBodyElements();
-            if (CollectionUtils.isEmpty(bodyElements)) {
-                return sb.toString();
-            }
-            for (IBodyElement element : bodyElements) {
-                if (element instanceof XWPFParagraph paragraph) {
-
-                    // 处理文本、图片段落
-                    String text = paragraph.getText();
-                    if (StringUtils.isEmpty(text)) {
-                        continue;
-                    }
-                    if (isExceedMaxSize(sb, text)) {
-                        sb.append(text, 0, agentMaxResolveSize - sb.length()).append("\n");
-                        break;
-                    }
-                    sb.append(text).append("\n");
-                } else if (element instanceof XWPFTable table) {
-
-                    // 处理表格段落
-                    String tableStr = resolveDocxTables(table);
-                    if (isExceedMaxSize(sb, tableStr)) {
-                        sb.append(tableStr, 0, agentMaxResolveSize - sb.length()).append("\n");
-                        break;
-                    }
-                    sb.append(tableStr).append("\n");
-                }
-            }
-        } catch (Exception e) {
-            log.error("Resolve file failed.", e);
-            throw new AgentStudioException(StudioError.RESOLVE_FILE_FAILED);
-        }
-        log.info(RESOLVE_FILE_SUCCEED);
-        fileResolveEntity.setContent(sb.toString());
-        return JSON.toJSONString(fileResolveEntity);
-    }
-
-    /**
-     * 解析doc文件
-     *
-     * @param fileUrl 文件访问Url
-     * @return 解析结果
-     */
-    public String resolveDocFile(String fileUrl) {
-        StringBuilder sb = new StringBuilder();
-        FileResolveEntity fileResolveEntity = new FileResolveEntity();
-        try (HWPFDocument document = new HWPFDocument(obsService.getByUrl(fileUrl))) {
-            Range range = document.getRange();
-            if (ObjectUtils.isEmpty(range)) {
-                return sb.toString();
-            }
-            resolveDocRanges(range, sb);
-        } catch (Exception e) {
-            log.error("Resolve file failed.", e);
-            throw new AgentStudioException(StudioError.RESOLVE_FILE_FAILED);
-        }
-        log.info(RESOLVE_FILE_SUCCEED);
-        fileResolveEntity.setContent(sb.toString());
-        return JSON.toJSONString(fileResolveEntity);
-    }
-
-    /**
-     * 解析excel文件
-     *
-     * @param fileUrl 文件访问Url
-     * @return 解析结果
-     */
-    public String resolveExcelFile(String fileUrl, String suffix) {
-        List<List<Object>> allDataList = new ArrayList<>();
-
-        // 按文件大小截断
-        long maxBytes = agentMaxResolveSize;
-
-        try (InputStream inputStream = obsService.getByUrl(fileUrl)) {
-            //  先拿到流大小（OBS 流支持 available）
-            long totalSize = inputStream.available();   // 如果 available 不准确，可先读到临时文件再取大小
-            if (totalSize > maxBytes) {
-                log.warn("File size {} exceeds limit {}, will be truncated", totalSize, maxBytes);
-            }
-
-            EasyExcel.read(inputStream, new AnalysisEventListener<Map<Integer, String>>() {
-                private long readBytes = 0L;          // 字节计数器
-
-                @Override
-                public void invoke(Map<Integer, String> data, AnalysisContext context) {
-                    // 转成 List<Object>，保持原来逻辑
-                    List<Object> row = new ArrayList<>(data.values());
-                    readBytes += row.toString().getBytes(StandardCharsets.UTF_8).length + 1;
-                    if (readBytes >= maxBytes) {
-                        log.warn("Read {} bytes, reached max size limit {}, stop reading further rows.", readBytes, maxBytes);
-                        throw new ExcelAnalysisStopException();
-                    }
-                    allDataList.add(row);
-                }
-
-                @Override
-                public void doAfterAllAnalysed(AnalysisContext context) {
-                    log.info("All sheets processed, total rows read: {}.", allDataList.size());
-                }
-            }).doReadAll();
-
-        } catch (Exception e) {
-            if (e.getMessage() != null && e.getMessage().contains("Maximum row limit reached")) {
-                log.warn("Excel reading truncated due to size limit", e);
-            } else {
-                log.error("Failed to parse Excel", e);
-                throw new AgentStudioException(StudioError.RESOLVE_FILE_FAILED, e);
-            }
-        }
-        StringBuilder sb = new StringBuilder();
-        for (List<Object> row : allDataList) {
-            sb.append(row.toString()).append("\n");
-        }
-        FileResolveEntity fileResolveEntity = new FileResolveEntity();
-        fileResolveEntity.setContent(sb.toString());
-        return JSON.toJSONString(fileResolveEntity);
-    }
-
-    /**
-     * 解析csv文件
-     *
-     * @param fileUrl 文件访问Url
-     * @return 解析结果
-     */
-    public String resolveCsvFile(String fileUrl) {
-        StringBuilder sb = new StringBuilder();
-        FileResolveEntity fileResolveEntity = new FileResolveEntity();
-
-        // 处理数据
-        try (BufferedReader bufferedReader =
-                     new BufferedReader(new InputStreamReader(obsService.getByUrl(fileUrl), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = bufferedReader.readLine()) != null) {
-                String[] split = line.split(",");
-                for (String subStr : split) {
-                    if (isExceedMaxSize(sb, subStr)) {
-                        sb.append(subStr, 0, agentMaxResolveSize - sb.length()).append("\n");
-                        break;
-                    }
-                    sb.append(subStr).append(" ");
-                }
-                sb.append("\n");
-            }
-        } catch (Exception e) {
-            log.error("Resolve file failed.", e);
-            throw new AgentStudioException(StudioError.RESOLVE_FILE_FAILED);
-        }
-        log.info(RESOLVE_FILE_SUCCEED);
-        fileResolveEntity.setContent(sb.toString());
-        return JSON.toJSONString(fileResolveEntity);
-    }
-
-    /**
-     * 解析Docx中的表格
-     *
-     * @param table 表格
-     * @return 表格内容
-     */
-    private String resolveDocxTables(XWPFTable table) {
-        StringBuilder sb = new StringBuilder();
-        List<XWPFTableRow> rows = table.getRows();
-        if (CollectionUtils.isEmpty(rows)) {
-            return sb.toString();
-        }
-        for (XWPFTableRow row : rows) {
-            List<XWPFTableCell> tableCells = row.getTableCells();
-            if (CollectionUtils.isEmpty(tableCells)) {
-                continue;
-            }
-            for (XWPFTableCell tableCell : tableCells) {
-                sb.append(tableCell.getText()).append(" ");
-            }
-            sb.append("\n");
-        }
-        return sb.toString();
-    }
-
-    /**
-     * 读取doc文件内容
-     *
-     * @param range 文件段落range
-     * @param sb StringBuilder
-     * @return 文件内容
-     */
-    private void resolveDocRanges(Range range, StringBuilder sb) {
-        for (int i = 0; i < range.numParagraphs(); i++) {
-            Paragraph paragraph = range.getParagraph(i);
-            if (paragraph.isInTable()) {
-                // 读取表格内容
-                Table table = range.getTable(paragraph);
-                for (int row = 0; row < table.numRows(); row++) {
-                    for (int col = 0; col < table.getRow(row).numCells(); col++, i++) {
-                        String text = table.getRow(row).getCell(col).text().trim();
-                        if (isExceedMaxSize(sb, text)) {
-                            sb.append(text, 0, agentMaxResolveSize - sb.length()).append("\n");
-                            return;
-                        }
-                        sb.append(text).append(" ");
-                    }
-                    sb.append("\n");
-                }
-                i++;
-            } else {
-                // 读取文本内容
-                String text = paragraph.text();
-                if (StringUtils.isEmpty(text)) {
-                    continue;
-                }
-                if (isExceedMaxSize(sb, text)) {
-                    sb.append(text, 0, agentMaxResolveSize - sb.length()).append("\n");
-                    break;
-                }
-                sb.append(text);
-            }
-            sb.append("\n");
-        }
-    }
-
-    /**
-     * 读取excel文件内容
-     *
-     * @param sheets 表格sheet页
-     * @param sb StringBuilder
-     * @return 文件内容
-     */
-    private void resolveExcelSheets(Workbook sheets, StringBuilder sb) {
-        for (int i = 0; i < sheets.getNumberOfSheets(); i++) {
-            Sheet sheet = sheets.getSheetAt(i);
-
-            // 解析当前sheet页数据
-            for (int j = 0; j <= sheet.getLastRowNum(); j++) {
-                Row row = sheet.getRow(j);
-                if (row == null) {
-                    continue;
-                }
-                for (int k = 0; k <= row.getLastCellNum(); k++) {
-                    CellBase cell = (CellBase) row.getCell(k);
-                    if (cell == null) {
-                        continue;
-                    }
-                    cell.setCellType(CellType.STRING);
-                    String stringCellValue = cell.getStringCellValue();
-                    if (StringUtils.isEmpty(stringCellValue)) {
-                        continue;
-                    }
-                    if (isExceedMaxSize(sb, stringCellValue)) {
-                        sb.append(stringCellValue, 0, agentMaxResolveSize - sb.length()).append("\n");
-                        return;
-                    }
-                    sb.append(cell).append(" ");
-                }
-                sb.append("\n");
-            }
-            sb.append("\n");
-        }
-    }
-
-    /**
-     * 字符串拼接后是否超出长度限制
-     *
-     * @param str 原字符串
-     * @param append 拼接字符串
-     * @return boolean
-     */
-    public boolean isExceedMaxSize(StringBuilder str, String append) {
-        return str.length() + append.length() >= agentMaxResolveSize;
     }
 
     /**

@@ -32,6 +32,13 @@ class StorageReadError(AgentBuilderError):
         super().__init__(ExtensionStatusCode.STORAGE_READ_ERROR, msg=msg, **kwargs)
 
 
+class StorageWriteError(AgentBuilderError):
+    """存储写入异常 — 上传对象失败"""
+
+    def __init__(self, msg: str = "", **kwargs):
+        super().__init__(ExtensionStatusCode.STORAGE_WRITE_ERROR, msg=msg, **kwargs)
+
+
 class StorageNotFoundError(StorageReadError):
     """存储对象不存在（S3 404/NoSuchKey 或本地文件缺失）— 区别于传输层读失败。
 

@@ -8,8 +8,6 @@ import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.common.dto.run.RunToolRequestBody;
 import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.runtime.dto.Base64ToImageReq;
-import com.openjiuwen.studio.agent.runtime.dto.CreateDocumentReq;
-import com.openjiuwen.studio.agent.runtime.dto.CreateDocumentRsp;
 import com.openjiuwen.studio.agent.runtime.dto.OcrRecognizeRsp;
 import com.openjiuwen.studio.agent.runtime.dto.ResolveAudioFileReq;
 import com.openjiuwen.studio.agent.runtime.dto.ResolveAudioFileRsp;
@@ -61,19 +59,6 @@ public interface ToolRuntimeApi {
         consumes = {"application/json"}, method = RequestMethod.POST)
     ResponseEntity<ToImageRsp> base64ToImage(
         @NotNull @ApiParam(value = "base64字符串", required = true) @Valid @RequestBody Base64ToImageReq body);
-
-    @ApiOperation(value = "文档生成", nickname = "createDocument", notes = "文档生成",
-        response = CreateDocumentRsp.class, tags = {"ToolRuntime"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "文档下载链接", response = CreateDocumentRsp.class),
-        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
-        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
-        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/inner-tools/document/create", produces = {"application/json"},
-        consumes = {"application/json"}, method = RequestMethod.POST)
-    ResponseEntity<CreateDocumentRsp> createDocument(
-        @NotNull @ApiParam(value = "文档生成请求体", required = true) @Valid @RequestBody CreateDocumentReq body);
 
     @ApiOperation(value = "图片转base64", nickname = "file2Base64", notes = "图片转base64",
         response = ToBase64Rsp.class, tags = {"ToolRuntime"})
@@ -129,18 +114,6 @@ public interface ToolRuntimeApi {
         consumes = {"application/json"}, method = RequestMethod.POST)
     ResponseEntity<ResolveDocumentRsp> resolveDocument(
         @NotNull @ApiParam(value = "文档解析请求体", required = true) @Valid @RequestBody ResolveDocumentReq body);
-
-    @ApiOperation(value = "解析文件", nickname = "resolveFile", notes = "解析文件", response = String.class,
-        tags = {"ToolRuntime"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "文件内容", response = String.class),
-        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/inner-tools/file/resolve", produces = {"application/json"},
-        method = RequestMethod.POST)
-    ResponseEntity<String> resolveFile(
-        @NotNull @ApiParam(value = "文件访问url", required = true) @RequestParam(value = "file_url", required = true)
-        String fileUrl);
 
     @ApiOperation(value = "工具执行", nickname = "runTool", notes = "执行一个工具",
         response = RunToolResponseBody.class, tags = {"ToolRuntime"})

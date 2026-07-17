@@ -41,6 +41,10 @@ ExtensionStatusCode.STORAGE_READ_ERROR = ExtensionStatusCode(
     188911, "storage read error, reason: {reason}", "STORAGE_READ_ERROR"
 )
 
+ExtensionStatusCode.STORAGE_WRITE_ERROR = ExtensionStatusCode(
+    188912, "storage write error, reason: {reason}", "STORAGE_WRITE_ERROR"
+)
+
 ExtensionStatusCode.IR_BUILD_ERROR = ExtensionStatusCode(
     188920, "IR build error, reason: {reason}", "IR_BUILD_ERROR"
 )

@@ -169,6 +169,13 @@ class ObjectStorageSettings(BaseSettings):
     local_bucket: str = Field(
         default="", validation_alias="STORAGE_LOCAL_BUCKET"
     )
+    staging_bucket: str = Field(
+        default="agent-builder-files-staging", validation_alias="OBS_STAGING_BUCKET"
+    )
+    expire_time: int = Field(default=7, validation_alias="OBS_EXPIRE_TIME")
+    max_resolve_size: int = Field(
+        default=5000, validation_alias="AGENT_MAX_RESOLVE_SIZE"
+    )
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
