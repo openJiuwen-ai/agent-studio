@@ -8,6 +8,7 @@ WSGIMiddleware and includes the builder_router (n2l + health) BEFORE the
 Flask mount (Flask catches all routes).
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -99,6 +100,11 @@ def _register_model_service_ports() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
+    # 注入主 FastAPI event loop，供 Flask 同步路由的 _run_async 桥接（run_coroutine_threadsafe）
+    # 调度协程到主 loop，避免新建 loop 与主 loop 上的 async 单例（S3StorageProvider 等）跨 loop。
+    from agent_builder.adapter.llm_bridge import set_main_loop
+    set_main_loop(asyncio.get_running_loop())
+
     await _init_prompt_store()
     await _ping_redis()
     await _init_s3_storage()
