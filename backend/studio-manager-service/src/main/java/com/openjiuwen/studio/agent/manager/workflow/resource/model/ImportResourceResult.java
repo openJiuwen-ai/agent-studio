@@ -43,4 +43,6 @@ public class ImportResourceResult {
      */
     private boolean valid = true;
 
+    private Boolean addTag = false;
+
 }

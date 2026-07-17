@@ -42,7 +42,7 @@ public class InnerToolService {
     @Value("${op.svc.project-id}")
     private String opSvcProjectId;
 
-    @Value("${inner.agent-runtime.endpoint}")
+    @Value("${jiuwen.base-url}")
     private String runtimeServerEndpoint;
 
     @Value("${inner.exclude-tools}")

@@ -14,6 +14,7 @@ FlowMcp - MCP 调用组件
 - 从 session 提取 runtime_auth，通过 JIUWEN_RUNTIME_KWARGS 机制传递到 SSE 底层
 """
 
+import asyncio
 from builtins import ExceptionGroup
 from enum import Enum
 
@@ -110,6 +111,7 @@ class FlowMcp(WorkflowComponent):
         self.api: MCPTool = None
         self._is_older_version: bool = False
         self._header_params: dict = {}
+        self._init_lock: asyncio.Lock = asyncio.Lock()
         if conf:
             self.init(conf)
 
@@ -268,7 +270,11 @@ class FlowMcp(WorkflowComponent):
             }
 
         if self.api is None:
-            await self._init_api()
+            # 加锁防止并发 invoke 重复初始化 MCPTool（旧版路径会 await list_tools，
+            # 让出协程期间其他协程可能同时进入 _init_api）
+            async with self._init_lock:
+                if self.api is None:
+                    await self._init_api()
 
         inputs_data = inputs.get(USER_FIELDS, {})
         if not self._is_older_version:

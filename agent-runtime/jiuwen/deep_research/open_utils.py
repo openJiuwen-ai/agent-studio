@@ -11,7 +11,7 @@ from jiuwen.common.exception import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 from jiuwen.common.net import Connector
-from jiuwen.common.store.async_obs import AsyncOBSUtil
+from storage import get_storage_provider
 from jiuwen.deep_research.env_constants import (
     MAX_TEMPLATE_CACHE_NUM_KEY,
     TEMPLATE_CACHE_ENABLE_KEY,
@@ -61,7 +61,7 @@ async def async_template_load(path: str, is_external_path: bool) -> str:
         logger.info(
             "Cache MISS! Process %d async loading from OBS: %s", os.getpid(), path
         )
-        template_bytes = await AsyncOBSUtil.get_content(object_key=path)
+        template_bytes = await get_storage_provider().get_object_bytes(object_key=path)
     template_file_stream = base64.b64encode(template_bytes).decode("utf-8")
 
     if str(os.environ.get(TEMPLATE_CACHE_ENABLE_KEY, "false")).lower() == "true":

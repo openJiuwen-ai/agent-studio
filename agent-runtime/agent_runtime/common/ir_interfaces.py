@@ -23,6 +23,7 @@ from storage.exceptions import (  # noqa: F401
     StorageConfigError,
     StorageNotFoundError,
     StorageReadError,
+    StorageWriteError,
 )
 from storage.object_storage import ObjectStorageProvider  # noqa: F401
 

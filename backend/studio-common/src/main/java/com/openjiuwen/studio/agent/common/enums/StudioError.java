@@ -942,6 +942,11 @@ public enum StudioError {
     MISSING_REQUIRED_INSTRUCTIONS(BAD_REQUEST, AGENT, "1053"),
 
     /**
+     * {{latest}}变量对应的资源不存在替换
+     */
+    LATEST_REPLACE_NOT_EXISTS(BAD_REQUEST, AGENT, "1056"),
+
+    /**
      * ============================== WORKFLOW ==============================
      */
 

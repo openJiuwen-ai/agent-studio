@@ -5,16 +5,11 @@
 
 package com.openjiuwen.studio.agent.runtime.service;
 
-import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
-import com.openjiuwen.studio.agent.common.dto.run.AgentExecutionQueries;
 import com.openjiuwen.studio.agent.runtime.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.common.dto.run.ConversationDeleteResp;
 import com.openjiuwen.studio.agent.common.dto.agent.ConversionQueries;
 import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
-import com.openjiuwen.studio.agent.common.dto.run.GetAgentExecutionInfoQo;
 import com.openjiuwen.studio.agent.runtime.dto.GetMemoryChunksQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentConversationsQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentExecutionQueriesQo;
 import com.openjiuwen.studio.agent.runtime.dto.MemoryChunk;
 import com.openjiuwen.studio.agent.runtime.dto.MemoryVariable;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
@@ -90,16 +85,6 @@ public interface IConversationManagementService {
     MemoryChunk generateMemoryChunk(String projectId, String agentId, String conversationId, Long start, Long end, Integer offset, Integer limit, String versionId, String workspaceId) ;
 
     /**
-     * getAgentExecutionInfo
-     *
-     * @param projectId projectId
-     * @param executionId executionId
-     * @param agentId agentId
-     * @param getAgentExecutionInfoQo getAgentExecutionInfoQo
-     */
-    AgentExecutionInfo getAgentExecutionInfo(String projectId, String executionId, String agentId, GetAgentExecutionInfoQo getAgentExecutionInfoQo) ;
-
-    /**
      * getMemoryChunks
      *
      * @param projectId projectId
@@ -108,25 +93,6 @@ public interface IConversationManagementService {
      * @param getMemoryChunksQo getMemoryChunksQo
      */
     AutoAddResultJsonObject getMemoryChunks(String projectId, String agentId, String conversationId, GetMemoryChunksQo getMemoryChunksQo) ;
-
-    /**
-     * listAgentConversations
-     *
-     * @param projectId projectId
-     * @param agentId agentId
-     * @param listAgentConversationsQo listAgentConversationsQo
-     */
-    ConversionQueries listAgentConversations(String projectId, String agentId, ListAgentConversationsQo listAgentConversationsQo) ;
-
-    /**
-     * listAgentExecutionQueries
-     *
-     * @param projectId projectId
-     * @param agentId agentId
-     * @param conversationId conversationId
-     * @param listAgentExecutionQueriesQo listAgentExecutionQueriesQo
-     */
-    AgentExecutionQueries listAgentExecutionQueries(String projectId, String agentId, String conversationId, ListAgentExecutionQueriesQo listAgentExecutionQueriesQo) ;
 
     /**
      * resetConversationMemory

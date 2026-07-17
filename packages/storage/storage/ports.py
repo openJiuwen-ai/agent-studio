@@ -20,6 +20,12 @@ class ObjectStorageSettingsLike(Protocol):
     secret_key: str
     enable_ssl: bool
     path_style: str
+    # CUSTOM 存储类型 + Local 重构（对齐远程 OBS 存储扩展 f00cd2ba）
+    type: str               # STORAGE_TYPE: OBS / LOCAL / CUSTOM
+    custom_module: str      # STORAGE_CUSTOM_MODULE
+    custom_class: str       # STORAGE_CUSTOM_CLASS
+    local_base_path: str
+    local_bucket: str
 
 
 _settings_factory: Optional[Callable[[], ObjectStorageSettingsLike]] = None

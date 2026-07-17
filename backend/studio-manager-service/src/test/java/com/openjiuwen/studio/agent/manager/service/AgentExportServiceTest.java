@@ -4,9 +4,15 @@ package com.openjiuwen.studio.agent.manager.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
+import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.ExportResourceParams;
 import com.openjiuwen.studio.agent.manager.dto.ExportResourceVersion;
+import com.openjiuwen.studio.agent.manager.dto.ExportResourceRsp;
+import com.openjiuwen.studio.agent.manager.entity.Agent;
+import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
+import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
+import com.openjiuwen.studio.agent.manager.enums.ExportModeEnum;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
@@ -18,13 +24,22 @@ import com.openjiuwen.studio.agent.manager.workflow.resource.adapt.ResourceAdapt
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
@@ -138,11 +153,7 @@ class AgentExportServiceTest {
         when(mappingMapper.selectByAppIdAndAppVersion(eq("wf-1"), eq("latest"), isNull(), isNull()))
             .thenReturn(new ArrayList<>());
         // mock OBS 上传
-        com.openjiuwen.studio.agent.manager.obs.dto.TemporaryGetRsp rsp = mock(
-            com.openjiuwen.studio.agent.manager.obs.dto.TemporaryGetRsp.class);
-        when(rsp.getSignedUrl()).thenReturn("http://download/url");
-        when(obsService.uploadObsFile(anyString(), anyString(), anyString(), anyString())).thenReturn("obs-key");
-        when(obsService.getTemporaryGetRsp(anyBoolean(), anyString(), anyLong())).thenReturn(rsp);
+        mockObsForExport();
 
         assertDoesNotThrow(() -> agentExportService.exportResource("p1", "w1", params));
         // 验证用 "latest" 查了草稿 mapping
@@ -182,11 +193,7 @@ class AgentExportServiceTest {
         when(resourceAdapterFactory.getAdapter(anyString())).thenReturn(adapter);
         when(adapter.parseExport(anyList())).thenReturn(null);
         // mock OBS 上传
-        com.openjiuwen.studio.agent.manager.obs.dto.TemporaryGetRsp rsp = mock(
-            com.openjiuwen.studio.agent.manager.obs.dto.TemporaryGetRsp.class);
-        when(rsp.getSignedUrl()).thenReturn("http://download/url");
-        when(obsService.uploadObsFile(anyString(), anyString(), anyString(), anyString())).thenReturn("obs-key");
-        when(obsService.getTemporaryGetRsp(anyBoolean(), anyString(), anyLong())).thenReturn(rsp);
+        mockObsForExport();
 
         assertDoesNotThrow(() -> agentExportService.exportResource("p1", "w1", params));
         // 验证校验了版本存在性
@@ -216,11 +223,7 @@ class AgentExportServiceTest {
         // 版本不存在
         when(releaseVersionMapper.selectByAppIdAndVersionId("wf-1", "non-exist")).thenReturn(null);
         // mock OBS 上传（容错后仍会走 buildExportFile 上传空 jsonl）
-        com.openjiuwen.studio.agent.manager.obs.dto.TemporaryGetRsp rsp = mock(
-            com.openjiuwen.studio.agent.manager.obs.dto.TemporaryGetRsp.class);
-        when(rsp.getSignedUrl()).thenReturn("http://download/url");
-        when(obsService.uploadObsFile(anyString(), anyString(), anyString(), anyString())).thenReturn("obs-key");
-        when(obsService.getTemporaryGetRsp(anyBoolean(), anyString(), anyLong())).thenReturn(rsp);
+        mockObsForExport();
 
         // 不抛异常（容错，对齐旧版 lumina）
         com.openjiuwen.studio.agent.manager.dto.ExportResourceRsp rsp1 = assertDoesNotThrow(() ->
@@ -232,5 +235,166 @@ class AgentExportServiceTest {
         // 导出仍返回下载 URL（不中断）
         assertNotNull(rsp1);
         assertNotNull(rsp1.getDownloadUrl());
+    }
+
+    @Test
+    void testExportAgent_WithStrictMode() {
+        ExportResourceParams params = new ExportResourceParams();
+        params.setResourceIds(List.of("agent-1"));
+        params.setResourceType("AGENT");
+        params.setMode(ExportModeEnum.STRICT.getCode());
+
+        Agent agent = new Agent();
+        agent.setAgentId("agent-1");
+        agent.setName("test-agent");
+        when(agentMapper.selectByIdsAndProjectIdAndWorkspaceId("p1", "w1", List.of("agent-1")))
+            .thenReturn(List.of(agent));
+        when(agentMapper.selectById("agent-1")).thenReturn(agent);
+        when(mappingMapper.selectByAppIdAndAppVersion(eq("agent-1"), any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+        mockObsForExport();
+
+        ExportResourceRsp rsp = agentExportService.exportResource("p1", "w1", params);
+        assertNotNull(rsp);
+    }
+
+    @Test
+    void testExportAgent_WithSpaciousMode() {
+        ExportResourceParams params = new ExportResourceParams();
+        params.setResourceIds(List.of("agent-1"));
+        params.setResourceType("AGENT");
+        params.setMode(ExportModeEnum.SPACIOUS.getCode());
+
+        Agent agent = new Agent();
+        agent.setAgentId("agent-1");
+        agent.setName("test-agent");
+        when(agentMapper.selectByIdsAndProjectIdAndWorkspaceId("p1", "w1", List.of("agent-1")))
+            .thenReturn(List.of(agent));
+        when(agentMapper.selectById("agent-1")).thenReturn(agent);
+
+        MappingEntity mappingEntity = new MappingEntity();
+        mappingEntity.setResourceId("wf-1");
+        mappingEntity.setResourceType("WORKFLOW");
+        when(mappingMapper.selectByAppIdAndAppVersion(eq("agent-1"), any(), any(), any()))
+            .thenReturn(List.of(mappingEntity));
+        when(workflowMapper.selectByWorkflowIdList("p1", "w1", List.of("wf-1")))
+            .thenReturn(Collections.emptyList());
+        mockObsForExport();
+
+        ExportResourceRsp rsp = agentExportService.exportResource("p1", "w1", params);
+        assertNotNull(rsp);
+    }
+
+    @Test
+    void testExportAgent_WithSpaciousMode_NoMappingEntities() {
+        ExportResourceParams params = new ExportResourceParams();
+        params.setResourceIds(List.of("agent-1"));
+        params.setResourceType("AGENT");
+        params.setMode(ExportModeEnum.SPACIOUS.getCode());
+
+        Agent agent = new Agent();
+        agent.setAgentId("agent-1");
+        agent.setName("test-agent");
+        when(agentMapper.selectByIdsAndProjectIdAndWorkspaceId("p1", "w1", List.of("agent-1")))
+            .thenReturn(List.of(agent));
+        when(agentMapper.selectById("agent-1")).thenReturn(agent);
+        when(mappingMapper.selectByAppIdAndAppVersion(eq("agent-1"), any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+        mockObsForExport();
+
+        ExportResourceRsp rsp = agentExportService.exportResource("p1", "w1", params);
+        assertNotNull(rsp);
+    }
+
+    @Test
+    void testExportWorkflow_WithSpaciousMode() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = Mockito.mockStatic(RequestContextUtils.class)) {
+            mockedStatic.when(RequestContextUtils::getRequestProjectId).thenReturn("p1");
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+
+            ExportResourceParams params = new ExportResourceParams();
+            params.setResourceIds(List.of("wf-1"));
+            params.setResourceType("WORKFLOW");
+            params.setMode(ExportModeEnum.SPACIOUS.getCode());
+
+            WorkflowEntity workflowEntity = new WorkflowEntity();
+            workflowEntity.setId("wf-1");
+            workflowEntity.setName("test-wf");
+            when(workflowMapper.selectByWorkflowIds("p1", "w1", List.of("wf-1")))
+                .thenReturn(List.of(workflowEntity));
+            when(workflowMapper.getWorkflowById("wf-1")).thenReturn(workflowEntity);
+            when(workflowMapper.selectByWorkflowId("p1", "w1", "wf-1")).thenReturn(workflowEntity);
+
+            MappingEntity mappingEntity = new MappingEntity();
+            mappingEntity.setResourceId("sub-wf-1");
+            mappingEntity.setResourceType("WORKFLOW");
+            when(mappingMapper.selectByAppIdAndAppVersion(eq("wf-1"), any(), any(), any()))
+                .thenReturn(List.of(mappingEntity));
+            when(workflowMapper.selectByWorkflowIdList("p1", "w1", List.of("sub-wf-1")))
+                .thenReturn(Collections.emptyList());
+            mockObsForExport();
+
+            ExportResourceRsp rsp = agentExportService.exportResource("p1", "w1", params);
+            assertNotNull(rsp);
+        }
+    }
+
+    @Test
+    void testExportWorkflow_WithStrictMode() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = Mockito.mockStatic(RequestContextUtils.class)) {
+            mockedStatic.when(RequestContextUtils::getRequestProjectId).thenReturn("p1");
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
+
+            ExportResourceParams params = new ExportResourceParams();
+            params.setResourceIds(List.of("wf-1"));
+            params.setResourceType("WORKFLOW");
+            params.setMode(ExportModeEnum.STRICT.getCode());
+
+            WorkflowEntity workflowEntity = new WorkflowEntity();
+            workflowEntity.setId("wf-1");
+            workflowEntity.setName("test-wf");
+            when(workflowMapper.selectByWorkflowIds("p1", "w1", List.of("wf-1")))
+                .thenReturn(List.of(workflowEntity));
+            when(workflowMapper.getWorkflowById("wf-1")).thenReturn(workflowEntity);
+            when(workflowMapper.selectByWorkflowId("p1", "w1", "wf-1")).thenReturn(workflowEntity);
+            when(mappingMapper.selectByAppIdAndAppVersion(eq("wf-1"), any(), any(), any()))
+                .thenReturn(Collections.emptyList());
+            mockObsForExport();
+
+            ExportResourceRsp rsp = agentExportService.exportResource("p1", "w1", params);
+            assertNotNull(rsp);
+        }
+    }
+
+    @Test
+    void testExportController_WithSpaciousMode() {
+        ExportResourceParams params = new ExportResourceParams();
+        params.setResourceIds(List.of("controller-1"));
+        params.setResourceType("CONTROLLER");
+        params.setMode(ExportModeEnum.SPACIOUS.getCode());
+
+        Agent agent = new Agent();
+        agent.setAgentId("controller-1");
+        agent.setName("test-controller");
+        when(agentMapper.selectByIdsAndProjectIdAndWorkspaceId("p1", "w1", List.of("controller-1")))
+            .thenReturn(List.of(agent));
+        when(agentMapper.selectById("controller-1")).thenReturn(agent);
+
+        MappingEntity mappingEntity = new MappingEntity();
+        mappingEntity.setResourceId("sub-controller-1");
+        mappingEntity.setResourceType("CONTROLLER");
+        when(mappingMapper.selectByAppIdAndAppVersion(eq("controller-1"), any(), any(), any()))
+            .thenReturn(List.of(mappingEntity));
+        when(agentMapper.selectByAgentIds("p1", "CONTROLLER", List.of("sub-controller-1")))
+            .thenReturn(Collections.emptyList());
+        mockObsForExport();
+
+        ExportResourceRsp rsp = agentExportService.exportResource("p1", "w1", params);
+        assertNotNull(rsp);
+    }
+
+    private void mockObsForExport() {
+        when(obsService.uploadObsFile(anyString(), anyString(), anyInt())).thenReturn("test-obs-key");
+        when(obsService.getTemporaryGetRsp(anyBoolean(), anyString(), anyLong())).thenReturn("test-signed-url");
     }
 }

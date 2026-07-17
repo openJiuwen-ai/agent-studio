@@ -100,35 +100,21 @@ class ConversationManager:
             workflow_logger.error("".join(traceback.format_exception(e)))
             return _new_conversation()
 
-    async def get_latest_messages(
+    async def get_conversation_data(
         self,
         conversation_id: str,
         instance_id: str,
         user_id: str,
         version_id: str = "",
-    ) -> list:
-        """便捷方法: 返回messageList，按create_time升序排列."""
+    ) -> tuple[list, int]:
+        """一次Redis读取同时返回messageList和dialogueCount."""
         conversation = await self.get_conversation(
             conversation_id, instance_id, user_id, version_id
         )
         message_list = conversation.get("messageList", [])
-        # 按create_time升序排序（与Java一致）
         message_list.sort(key=lambda m: m.get("create_time") or 0)
-        return message_list
-
-    async def get_dialogue_count(
-        self,
-        conversation_id: str,
-        instance_id: str,
-        user_id: str,
-        version_id: str = "",
-    ) -> int:
-        """便捷方法: 返回dialogueCount, 默认1."""
-        conversation = await self.get_conversation(
-            conversation_id, instance_id, user_id, version_id
-        )
-        count = conversation.get("dialogueCount", 1)
-        return max(1, int(count))
+        dialogue_count = max(1, int(conversation.get("dialogueCount", 1)))
+        return message_list, dialogue_count
 
     async def update_conversation(
         self,

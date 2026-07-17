@@ -9,8 +9,6 @@ import com.openjiuwen.studio.agent.common.dto.run.RunToolRequestBody;
 import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.common.utils.ResponseModel;
 import com.openjiuwen.studio.agent.runtime.dto.Base64ToImageReq;
-import com.openjiuwen.studio.agent.runtime.dto.CreateDocumentReq;
-import com.openjiuwen.studio.agent.runtime.dto.CreateDocumentRsp;
 import com.openjiuwen.studio.agent.runtime.dto.OcrRecognizeRsp;
 import com.openjiuwen.studio.agent.runtime.dto.ResolveAudioFileReq;
 import com.openjiuwen.studio.agent.runtime.dto.ResolveAudioFileRsp;
@@ -45,11 +43,6 @@ public class ToolRuntimeApiController implements ToolRuntimeApi {
     }
 
     @Override
-    public ResponseEntity<CreateDocumentRsp> createDocument(CreateDocumentReq body) {
-        return ResponseModel.success(toolRuntimeService.createDocument(body));
-    }
-
-    @Override
     public ResponseEntity<ToBase64Rsp> file2Base64(MultipartFile file, String mimetype, Boolean isDataUrl) {
         return ResponseModel.success(toolRuntimeService.file2Base64(file, mimetype, isDataUrl));
     }
@@ -67,11 +60,6 @@ public class ToolRuntimeApiController implements ToolRuntimeApi {
     @Override
     public ResponseEntity<ResolveDocumentRsp> resolveDocument(ResolveDocumentReq body) {
         return ResponseModel.success(toolRuntimeService.resolveDocument(body));
-    }
-
-    @Override
-    public ResponseEntity<String> resolveFile(String fileUrl) {
-        return ResponseModel.success(toolRuntimeService.resolveFile(fileUrl));
     }
 
     @Override

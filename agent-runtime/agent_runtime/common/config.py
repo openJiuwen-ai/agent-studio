@@ -150,6 +150,9 @@ class LLMSettings(BaseSettings):
 
 
 class ObjectStorageSettings(BaseSettings):
+    type: str = Field(default="OBS", validation_alias="STORAGE_TYPE")
+    custom_module: str = Field(default="", validation_alias="STORAGE_CUSTOM_MODULE")
+    custom_class: str = Field(default="", validation_alias="STORAGE_CUSTOM_CLASS")
     server: str = Field(default="", validation_alias="DATASOURCE_OBS_SERVER")
     bucket: str = Field(default="", validation_alias="DATASOURCE_OBS_BUCKET")
     access_key: str = Field(default="", validation_alias="DATASOURCE_OBS_AK")
@@ -159,6 +162,19 @@ class ObjectStorageSettings(BaseSettings):
     )
     path_style: Literal["path", "virtual"] = Field(
         default="path", validation_alias="DATASOURCE_OBS_PATH_STYLE"
+    )
+    local_base_path: str = Field(
+        default="", validation_alias="STORAGE_LOCAL_BASE_PATH"
+    )
+    local_bucket: str = Field(
+        default="", validation_alias="STORAGE_LOCAL_BUCKET"
+    )
+    staging_bucket: str = Field(
+        default="agent-builder-files-staging", validation_alias="OBS_STAGING_BUCKET"
+    )
+    expire_time: int = Field(default=7, validation_alias="OBS_EXPIRE_TIME")
+    max_resolve_size: int = Field(
+        default=5000, validation_alias="AGENT_MAX_RESOLVE_SIZE"
     )
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

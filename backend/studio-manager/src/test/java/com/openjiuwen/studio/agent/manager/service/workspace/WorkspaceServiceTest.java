@@ -547,13 +547,13 @@ class WorkspaceServiceTest {
                 ImportRsp importRsp = new ImportRsp();
                 when(
                     agentManagementService.importAgents(anyString(), anyString(), any(MultipartFile.class), anyString(),
-                        anyString(), anyString())).thenReturn(importRsp);
+                        anyString(), anyString(), anyString())).thenReturn(importRsp);
                 List<ImportListInfo> importResultList = new ArrayList<>();
                 when(agentManagementService.listImportFile(anyString(), anyString(), any(MultipartFile.class), eq(0),
                     eq(10))).thenReturn(importResultList);
                 ImportRsp importRsp1 = new ImportRsp();
                 when(workflowManagementService.importWorkflows(anyString(), anyString(), any(MultipartFile.class),
-                    anyString(), anyString())).thenReturn(importRsp1);
+                    anyString(), anyString(), anyString())).thenReturn(importRsp1);
 
                 Resource[] resourceArray = new Resource[1];
 
@@ -591,10 +591,10 @@ class WorkspaceServiceTest {
             ImportRsp importRsp = new ImportRsp();
             when(workflowManagementService.importWorkflows(anyString(), anyString(), any(MultipartFile.class),
                 anyString(),
-                anyString())).thenReturn(importRsp);
+                anyString(), anyString())).thenReturn(importRsp);
             ImportRsp importRsp1 = new ImportRsp();
             when(agentManagementService.importAgents(anyString(), anyString(), any(MultipartFile.class), anyString(),
-                anyString(), anyString())).thenReturn(importRsp1);
+                anyString(), anyString(), anyString())).thenReturn(importRsp1);
 
             MockMultipartFile file = new MockMultipartFile("file",  // 参数名
                 "test.jsonl",  // 原始文件名

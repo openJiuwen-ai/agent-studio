@@ -61,3 +61,20 @@ env/
 .venv/
 venv/
 __pycache__/
+
+### Docker build context artifacts ###
+### 以下为 build.sh / 准备脚本拷贝进 docker/studio-*/ 的构建产物，不应入库
+docker/studio-console/config/
+docker/studio-console/*.tar
+docker/studio-manager/config/
+docker/studio-manager/lib/
+docker/studio-service/config/
+docker/studio-service/lib/
+docker/studio-runtime/agent_builder/
+docker/studio-runtime/agent_runtime/
+docker/studio-runtime/bin/
+docker/studio-runtime/jiuwen/
+docker/studio-runtime/tests/
+docker/studio-runtime/requirements.txt
+docker/image/
+docker/AgentBuilder.tar.gz

@@ -263,9 +263,10 @@ public interface IAgentManagementService {
      * @param importAgents importAgents
      * @param importTools importTools
      * @param importWorkflows importWorkflows
+     * @param mode mode
      */
     ImportRsp importAgents(String workspaceId, String projectId, MultipartFile file, String importAgents,
-        String importTools, String importWorkflows);
+        String importTools, String importWorkflows, String mode);
 
     /**
      * importTools

@@ -8,6 +8,7 @@ import static org.apache.commons.configuration2.io.FileOptionsProvider.CURRENT_U
 
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
+import com.openjiuwen.studio.agent.common.security.properties.AuthProperties;
 
 import jakarta.annotation.Nullable;
 import jakarta.servlet.http.HttpServletRequest;
@@ -200,12 +201,21 @@ public class RequestContextUtils {
             RequestContextUtils.getRequestAuthToken());
         ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         HttpServletRequest request = attrs.getRequest();
+        AuthProperties authProperties = SpringBeanUtils.getBean(AuthProperties.class);
+        if (authProperties != null && authProperties.getSso() != null
+            && StringUtils.isNotEmpty(authProperties.getSso().getHeader())) {
+            String ssoHeaderName = authProperties.getSso().getHeader();
+            String ssoToken = request.getHeader(ssoHeaderName);
+            if (StringUtils.isNotEmpty(ssoToken)) {
+                headers.add(ssoHeaderName, ssoToken);
+            }
+        }
         String token = request.getHeader(Constants.CustomModel.CUSTOM_TOKEN);
         String userId = request.getHeader(Constants.CustomModel.CUSTOM_USER_ID);
         if (StringUtils.isNotEmpty(token)) {
             headers.add(Constants.CustomModel.CUSTOM_TOKEN, token);
         }
-        if (StringUtils.isNotEmpty(token)) {
+        if (StringUtils.isNotEmpty(userId)) {
             headers.add(Constants.CustomModel.CUSTOM_USER_ID, userId);
         }
         return headers;

@@ -257,7 +257,7 @@ export class PluginComponent implements OnInit {
   }
 
   getPluginVersion(version_id) {
-    this.agentRepoServe.getPluginVersion(this.toolId, version_id).then((res) => {
+    this.agentRepoServe.getPluginVersion(this.toolId, version_id).then(res => {
       this.plugin = res?.data;
       this.coverPluginInfo();
     });
@@ -436,6 +436,42 @@ export class PluginComponent implements OnInit {
       nzContent: PluginDebugModalComponent,
       nzWidth: '1000px',
       nzStyle: { top: '20px' },
+      nzOnCancel: () => {
+        const instance = thisNzModal.getContentComponent();
+        const result = instance.debugResult;
+        if (!result) {
+          return;
+        }
+
+        if (result?.success) {
+          toolInfo.test_status = 'SUCCESS';
+        }
+
+        if (result?.success === false) {
+          toolInfo.test_status = 'FAILED';
+        }
+        const { protocol, host, path } = pluginBodyParams.request_info.basic_info;
+        const cleanToolUrl = toolInfo.path;
+        const params = {
+          data: {
+            ...pluginBodyParams,
+            is_input_list: toolInfo.is_input_list,
+            is_output_list: toolInfo.is_output_list,
+            request_info: {
+              method: toolInfo.method,
+              url: `${protocol}://${host}${path}${cleanToolUrl}`,
+            },
+            test_status: toolInfo.test_status,
+            plugin_id: this.plugin.plugin_id,
+          },
+          id: toolInfo.tool_id,
+        };
+        delete params.data.auth_info;
+        this.appPluginRepoServ.updateTool(params).then(res => {
+          this.getPluginDetails();
+        });
+        this.cdr.markForCheck();
+      },
     });
     const instance = thisNzModal.getContentComponent();
     instance.hideParseBtn = true;

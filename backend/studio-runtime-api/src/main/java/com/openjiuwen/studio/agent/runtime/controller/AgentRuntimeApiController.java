@@ -54,11 +54,6 @@ public class AgentRuntimeApiController implements AgentRuntimeApi {
     }
 
     @Override
-    public ResponseEntity<FileUploadRsp> uploadAgentFile(String workspaceId, String projectId, MultipartFile file, Integer expires, Boolean isImage) {
-        return ResponseModel.success(agentRuntimeService.uploadAgentFile(workspaceId, projectId, file, expires, isImage));
-    }
-
-    @Override
     public ResponseEntity<AsrRsp> voiceRecognition(String projectId, AsrReq body) {
         return ResponseModel.success(agentRuntimeService.voiceRecognition(projectId, body));
     }

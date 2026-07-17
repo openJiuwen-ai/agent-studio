@@ -62,6 +62,7 @@ from agent_runtime.memory.internal_routes import memory_internal_router
 from agent_runtime.serve.apis.orchestration import execution_app
 from agent_runtime.serve.apis.app_run import app_run_app
 from agent_runtime.serve.apis.user_variable_api import user_variable_router
+from agent_runtime.serve.apis.inner_tools import inner_tools_router
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -101,7 +102,12 @@ from agent_runtime.extension.workflow_node.flow_code import FlowCode, JIUWEN_COD
 component_class_pool.register_component_class(JIUWEN_CODE_TYPE, FlowCode)
 logger.info("Registered workflow component: jiuwen.code")
 
-apps_map = [execution_app, app_run_app, user_variable_router, memory_internal_router]
+# FastAPI routers must be included BEFORE Flask app mount (Flask catches all routes)
+# 注：prompt_manage_app（agent_builder.app）已随 agent_builder 抽离到 studio-builder 镜像，runtime 不含。
+apps_map = [
+    execution_app, app_run_app, user_variable_router,
+    memory_internal_router, inner_tools_router,
+]
 
 
 @asynccontextmanager

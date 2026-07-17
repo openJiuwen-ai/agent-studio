@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import com.obs.services.model.DeleteObjectsResult;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
@@ -98,7 +97,7 @@ public class CleanResourceServiceTest extends BaseTest {
     @Sql(scripts = {"classpath:sql/ros/resource_clean_db.sql"}, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
     @Transactional
     public void testClean_outoftime_failed() {
-        when(obsService.deleteByPrefix(any())).thenReturn(new DeleteObjectsResult());
+        when(obsService.deleteByPrefix(any())).thenReturn(true);
         ReflectionTestUtils.setField(resourceCleanMaster, "timeWindow", Arrays.asList(0, 0));
         NotifyReq req = new NotifyReq();
         req.setDomainId(Constants.TEST_DOMAIN_ID);

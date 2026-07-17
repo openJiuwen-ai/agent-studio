@@ -40,11 +40,11 @@ class ControllerEventsProcessor(BaseEventsProcessor):
             super()._initialize_handlers()
         cls._handler_methods = {
             **cls._handler_methods,
-            ConversationEvent.MESSAGE.value: cls._process_message_event,
-            ConversationEvent.TASK_START.value: cls._process_task_start_event,
-            ConversationEvent.WORKFLOW_NODE_MESSAGE.value: cls._process_workflow_node_message,
-            ConversationEvent.AGENT_INTERRUPTED.value: cls._process_agent_interrupted_event,
-            ConversationEvent.TASK_END.value: cls._process_task_end_event,
+            ConversationEvent.MESSAGE.value: cls.process_message_event,
+            ConversationEvent.TASK_START.value: cls.process_task_start_event,
+            ConversationEvent.WORKFLOW_NODE_MESSAGE.value: cls.process_workflow_node_message,
+            ConversationEvent.AGENT_INTERRUPTED.value: cls.process_agent_interrupted_event,
+            ConversationEvent.TASK_END.value: cls.process_task_end_event,
         }
         cls._initialized = True
 
@@ -55,7 +55,7 @@ class ControllerEventsProcessor(BaseEventsProcessor):
         if event_type in _CONTROLLER_BLOCKED_EVENTS:
             return None
         try:
-            handler_method = cls._handler_methods.get(event_type, cls._process_default_event)
+            handler_method = cls._handler_methods.get(event_type, cls.process_default_event)
             if event_type in _CONTROLLER_THROUGH_EVENTS:
                 handler_method = cls._handler_methods.get(EVENT_THROUGH)
             if handler_method is None:
@@ -79,7 +79,7 @@ class ControllerEventsProcessor(BaseEventsProcessor):
             raise
 
     @classmethod
-    def _process_message_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_message_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         data = full_data.get("data", {})
         node_type = data.get(NODE_TYPE_KEY, "unknown")
         node_type = node_type_mapping.get(node_type, node_type)
@@ -100,12 +100,12 @@ class ControllerEventsProcessor(BaseEventsProcessor):
         )
 
     @classmethod
-    def _process_workflow_node_message(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
-        super()._process_workflow_node_message(full_data, trace)
-        return cls._process_default_event(full_data, trace)
+    def process_workflow_node_message(cls, full_data: Dict[str, Any], trace: Trace = None) -> Any:
+        super().process_workflow_node_message(full_data, trace)
+        return cls.process_default_event(full_data, trace)
 
     @classmethod
-    def _process_task_start_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_task_start_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         execution_id = full_data.get("executionId", "")
         trace.execution_id = execution_id
         data = {"executionId": execution_id}
@@ -117,12 +117,12 @@ class ControllerEventsProcessor(BaseEventsProcessor):
         )
 
     @classmethod
-    def _process_agent_interrupted_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_agent_interrupted_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         trace.block = True
         return None
 
     @classmethod
-    def _process_task_end_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
+    def process_task_end_event(cls, full_data: Dict[str, Any], trace: Trace) -> Any:
         data = {}
         if trace.pre_event != ConversationEvent.TASK_START.value:
             execution_id = trace.execution_id if trace.execution_id else full_data.get("executionId", "")

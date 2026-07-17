@@ -130,6 +130,12 @@ class LLMSettings(BaseSettings):
 
 
 class ObjectStorageSettings(BaseSettings):
+    # CUSTOM 存储类型 + Local 重构（对齐远程 OBS 存储扩展 f00cd2ba，与 agent_runtime 一致）
+    type: str = Field(default="OBS", validation_alias="STORAGE_TYPE")
+    custom_module: str = Field(default="", validation_alias="STORAGE_CUSTOM_MODULE")
+    custom_class: str = Field(default="", validation_alias="STORAGE_CUSTOM_CLASS")
+    local_base_path: str = Field(default="", validation_alias="STORAGE_LOCAL_BASE_PATH")
+    local_bucket: str = Field(default="default-bucket", validation_alias="STORAGE_LOCAL_BUCKET")
     server: str = Field(default="", validation_alias="DATASOURCE_OBS_SERVER")
     bucket: str = Field(default="", validation_alias="DATASOURCE_OBS_BUCKET")
     access_key: str = Field(default="", validation_alias="DATASOURCE_OBS_AK")

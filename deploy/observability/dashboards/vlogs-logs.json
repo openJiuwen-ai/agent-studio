@@ -1,0 +1,89 @@
+{
+  "uid": "vlogs-logs",
+  "title": "VictoriaLogs 日志观测与运维",
+  "tags": ["agent-studio", "victorialogs"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 6,
+  "time": {"from": "now-1h", "to": "now"},
+  "refresh": "10s",
+  "templating": {
+    "list": [
+      {
+        "name": "service", "label": "服务", "type": "custom",
+        "query": "manager,service,runtime,console,mysql,redis,minio,minio-init,grafana,victoria-logs,nginx-gateway,vector",
+        "includeAll": true, "allValue": ".*", "multi": true,
+        "current": {"text": "All", "value": "$__all"}
+      },
+      {
+        "name": "host", "label": "主机正则", "type": "textbox",
+        "query": ".*", "current": {"text": ".*", "value": ".*"}
+      },
+      {
+        "name": "trace", "label": "Trace ID", "type": "textbox",
+        "query": "请输入trace_id", "current": {"text": "请输入trace_id", "value": "请输入trace_id"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "日志量趋势（按级别）",
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "targets": [{"refId": "A", "queryType": "statsRange", "expr": "_stream:{service=~\"$service\",host=~\"$host\"} | stats by (_time:$__interval, level) count() logs", "legendFormat": "{{level}}"}],
+      "gridPos": {"x": 0, "y": 0, "w": 14, "h": 8},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineWidth": 1, "fillOpacity": 10}}, "overrides": []}
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "WARN / ERROR 趋势",
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "targets": [{"refId": "A", "queryType": "statsRange", "expr": "_stream:{service=~\"$service\",host=~\"$host\"} (level:=\"WARN\" OR level:=\"ERROR\" OR level:=\"FATAL\") | stats by (_time:$__interval, level) count() logs", "legendFormat": "{{level}}"}],
+      "gridPos": {"x": 14, "y": 0, "w": 10, "h": 8}
+    },
+    {
+      "id": 3, "type": "table", "title": "高频错误模式（数字/UUID 归一化）",
+      "description": "按错误首行归一化数字、UUID 等动态内容后聚合；时间为该模式最近一次发生时间，完整堆栈请查看下方 ERROR / FATAL 日志面板。",
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "targets": [{"refId": "A", "queryType": "instant", "maxLines": 20, "expr": "_stream:{service=~\"$service\",host=~\"$host\"} (level:=\"ERROR\" OR level:=\"FATAL\" OR (level:\"\" error)) | copy _msg as error_pattern | replace_regexp (\"(?s:\\\\n.*)\", \"\") at error_pattern | collapse_nums at error_pattern | stats by (error_pattern) count() hits, max(_time) last_seen | sort by (hits) desc | limit 20 | rename error_pattern as _msg, last_seen as _time | fields _time, _msg, hits"}],
+      "transformations": [
+        {"id": "organize", "options": {"excludeByName": {"detected_level": true, "id": true, "labels": true}, "indexByName": {"Time": 0, "Line": 1, "hits": 2}, "renameByName": {"Time": "最近发生时间", "Line": "错误模式", "hits": "出现次数"}}}
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "错误模式"}, "properties": [{"id": "custom.width", "value": 700}, {"id": "custom.cellOptions", "value": {"type": "auto", "wrapText": true}}]},
+          {"matcher": {"id": "byName", "options": "最近发生时间"}, "properties": [{"id": "custom.width", "value": 180}]},
+          {"matcher": {"id": "byName", "options": "出现次数"}, "properties": [{"id": "custom.width", "value": 110}, {"id": "unit", "value": "short"}]}
+        ]
+      },
+      "gridPos": {"x": 0, "y": 8, "w": 14, "h": 8}
+    },
+    {
+      "id": 4, "type": "table", "title": "采集器与解析状态",
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "targets": [{"refId": "A", "queryType": "stats", "expr": "_stream:{service=~\"$service\",host=~\"$host\"} | stats by (host, service, collector, parse_status) count() logs | sort by (logs) desc"}],
+      "gridPos": {"x": 14, "y": 8, "w": 10, "h": 8}
+    },
+    {
+      "id": 5, "type": "logs", "title": "服务日志",
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "targets": [{"refId": "A", "queryType": "instant", "expr": "_stream:{service=~\"$service\",host=~\"$host\"}"}],
+      "gridPos": {"x": 0, "y": 16, "w": 24, "h": 11},
+      "options": {"showTime": true, "wrapLogMessage": true}
+    },
+    {
+      "id": 6, "type": "logs", "title": "ERROR / FATAL 日志",
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "targets": [{"refId": "A", "queryType": "instant", "expr": "_stream:{service=~\"$service\",host=~\"$host\"} (level:=\"ERROR\" OR level:=\"FATAL\" OR (level:\"\" error))"}],
+      "gridPos": {"x": 0, "y": 27, "w": 24, "h": 9},
+      "options": {"showTime": true, "wrapLogMessage": true}
+    },
+    {
+      "id": 7, "type": "logs", "title": "Trace 精确查询",
+      "description": "在顶部 Trace ID 输入框粘贴完整 trace_id。",
+      "datasource": {"type": "victoriametrics-logs-datasource", "uid": "victorialogs"},
+      "targets": [{"refId": "A", "queryType": "instant", "expr": "_stream:{service=~\"$service\",host=~\"$host\"} trace_id:=\"$trace\""}],
+      "gridPos": {"x": 0, "y": 36, "w": 24, "h": 8},
+      "options": {"showTime": true, "wrapLogMessage": true}
+    }
+  ]
+}

@@ -4,7 +4,6 @@
 package com.openjiuwen.studio.agent.manager.workflow.resource.adapt;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.enums.ImportDescEnum;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
@@ -124,27 +123,26 @@ public class ControllerAdapter extends ResourceAdapter {
             }
         }
         List<ExportResourceUnit> latestResources = exportResources.stream()
-            .filter(p -> Strings.CS.equals(p.getResourceVersion(), Constants.LATEST_PUBLISH_VERSION))
-            .toList();
-        List<ExportResult> successExportResults = exportResults.stream()
-            .filter(p -> p.getStatus() == ImportExportStatusEnum.SUCCESS)
+            .filter(p -> p.getResourceLevel() == 1)
             .toList();
         if (CollectionUtils.isNotEmpty(latestResources)) {
-            for (ExportResult resourceUnit : successExportResults) {
+            for (ExportResourceUnit resourceUnit : latestResources) {
                 Agent agent = agentMap.get(resourceUnit.getResourceId());
                 if (Objects.isNull(agent)) {
                     log.info("controller :{} is null", resourceUnit.getResourceId());
                     continue;
                 }
                 ExportInfo latestInfo = new ExportInfo();
+                String dsl = getDsl(resourceUnit, agent.getDslPath(), latestInfo);
                 latestInfo.setResourceId(resourceUnit.getResourceId());
                 latestInfo.setResourceType(ResourceTypeEnum.CONTROLLER.toString());
-                ControllerVO agentInfo = JSONObject.parseObject(obsService.downloadObsFile(agent.getDslPath()),
+                ControllerVO agentInfo = JSONObject.parseObject(obsService.downloadObsFile(dsl),
                     ControllerVO.class);
                 latestInfo.setResourceName(agentInfo.getName());
+                latestInfo.setResourceLevel(1);
+                latestInfo.setL1Mappings(resourceUnit.getL1Mappings());
                 latestInfo.setDsl(agentInfo);
                 latestInfo.setMetadata(agent);
-                latestInfo.setResourceLevel(1);
                 latestInfo.setShareInfo(shareResourceManagerService.exportShareInfo(resourceUnit.getResourceId()));
                 latestInfo.setLevel2Resources(resourceUnit.getLevel2Resources());
                 exportInfos.add(latestInfo);
@@ -161,6 +159,7 @@ public class ControllerAdapter extends ResourceAdapter {
         for (ExportResourceUnit exportResourceUnit : exportResources) {
             ExportResult result = new ExportResult();
             result.setResourceId(exportResourceUnit.getResourceId());
+            result.setResourceLevel(exportResourceUnit.getResourceLevel());
             result.setResourceName(exportResourceUnit.getResourceName());
             result.setResourceType(exportResourceUnit.getResourceType());
             result.setResourceVersion(exportResourceUnit.getResourceVersion());
@@ -262,6 +261,7 @@ public class ControllerAdapter extends ResourceAdapter {
             agent.setAgentId(agentId);
             result.setNewId(agentId);
         }
+        result.setAddTag(true);
         verifyingAndReplaceResourceInfo(agent);
         String dslPath = agentCommonService.getAgentObsPath(agent.getAgentId(), CommonConstant.Workflow.FLOW);
         String irPath = agentCommonService.getAgentObsPath(agent.getAgentId(), CommonConstant.Workflow.IR);
@@ -288,6 +288,11 @@ public class ControllerAdapter extends ResourceAdapter {
         releaseVersion.setCreatorId(agent.getCreatorId());
         releaseVersion.setCreator(agent.getCreator());
         releaseVersionMapper.insert(releaseVersion);
+
+        // 刷新多智能体更新时间
+        Agent updateAgent = new Agent();
+        updateAgent.setUpdatedOn(agent.getUpdatedOn());
+        agentMapper.updateAgentByTraceId(agent.getProjectId(), agent.getWorkspaceId(), agent.getTraceId(), updateAgent);
     }
 
     private void verifyingAndReplaceResourceInfo(Agent agent) {
@@ -301,8 +306,9 @@ public class ControllerAdapter extends ResourceAdapter {
     }
 
     private void updateController(ImportInfo importInfo, Agent agent, ImportResourceResult result) {
-
         if (importInfo.getReleaseVersion() == null) {
+            agentMapper.updateAgentByTraceId(importInfo.getTargetProjectId(), importInfo.getTargetWorkspaceId(),
+                agent.getTraceId(), agent);
             return;
         }
         ReleaseVersion existVersion = releaseVersionMapper.selectByAppIdAndVersionId(agent.getAgentId(),

@@ -1,5 +1,4 @@
 <!-- 节点卡片显示描述 -->
-<div *ngIf="showDescription" tiOverflow class=" text-[12px] font-normal text-[#808080]">
+<div *ngIf="showDescription" #descEl nz-tooltip [nzTooltipTitle]="descriptionText" [nzTooltipTrigger]="isOverflow ? 'hover' : null" class="node-card-desc text-[12px] font-normal text-[#808080]">
   {{ descriptionText }}
 </div>
-  

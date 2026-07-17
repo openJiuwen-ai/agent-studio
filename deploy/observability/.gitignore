@@ -1,0 +1,18 @@
+# 实际部署配置（含对象存储口令、gateway 口令，从 .env.template 复制，勿提交）
+.env
+# 旧版本遗留文件可能仍含凭据；不再读取，但继续忽略以防误提交。
+.env.promtail
+
+# gateway TLS 与 Basic Auth 运行时凭据（由 deploy-monitor.sh 用 openssl 生成）
+config/write.htpasswd
+config/query.htpasswd
+config/gateway.crt
+config/gateway.key
+config/gateway-ca.crt
+# 旧版单账号凭据
+config/gateway.htpasswd
+# 旧版本生成的凭据文件；迁移完成后可由管理员手动删除。
+config/loki.htpasswd
+
+# 若启用本地 MinIO / 持久卷落到宿主机，忽略运行时数据
+data/

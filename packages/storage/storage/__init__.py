@@ -11,7 +11,12 @@ agent_runtime / agent_builder 在启动 lifespan 中：
     await storage.S3StorageProvider.instance().initialize()
 """
 
-from .exceptions import StorageConfigError, StorageNotFoundError, StorageReadError
+from .exceptions import (
+    StorageConfigError,
+    StorageNotFoundError,
+    StorageReadError,
+    StorageWriteError,
+)
 from .object_storage import (
     LocalStorageProvider,
     ObjectStorageProvider,
@@ -21,7 +26,7 @@ from .object_storage import (
 from .ports import ObjectStorageSettingsLike, get_settings, set_settings
 
 __all__ = [
-    "StorageConfigError", "StorageNotFoundError", "StorageReadError",
+    "StorageConfigError", "StorageNotFoundError", "StorageReadError", "StorageWriteError",
     "ObjectStorageProvider", "S3StorageProvider", "LocalStorageProvider",
     "get_storage_provider",
     "ObjectStorageSettingsLike", "get_settings", "set_settings",

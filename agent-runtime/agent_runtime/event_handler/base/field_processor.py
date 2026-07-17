@@ -54,12 +54,12 @@ class FieldDataProcessor:
         messages = trace.conversation_info.get("messages", [])
 
         if event == ConversationEvent.MESSAGE_END.value:
-            FieldDataProcessor._handle_message_end(node_type, data, messages, trace)
+            FieldDataProcessor.handle_message_end(node_type, data, messages, trace)
         else:
-            FieldDataProcessor._handle_other_message(data, messages, trace)
+            FieldDataProcessor.handle_other_message(data, messages, trace)
 
     @staticmethod
-    def _handle_message_end(node_type: str, data: Dict[str, Any], messages: List[Dict[str, Any]], trace: Trace):
+    def handle_message_end(node_type: str, data: Dict[str, Any], messages: List[Dict[str, Any]], trace: Trace):
         enable_history = data.get("enable_history", True)
         if not enable_history:
             return
@@ -75,7 +75,7 @@ class FieldDataProcessor:
         trace.conversation_info.update({"messages": messages})
 
     @staticmethod
-    def _handle_other_message(data: Dict[str, Any], messages: List[Dict[str, Any]], trace: Trace):
+    def handle_other_message(data: Dict[str, Any], messages: List[Dict[str, Any]], trace: Trace):
         answer_messages = data.get("answer", [])
         if not answer_messages:
             return
@@ -86,7 +86,7 @@ class FieldDataProcessor:
                 workflow_logger.warning(f"Failed to parse intermediate message answer: {e}")
                 return
         if isinstance(answer_messages, dict):
-            FieldDataProcessor._handle_summary_response(answer_messages, messages, trace)
+            FieldDataProcessor.handle_summary_response(answer_messages, messages, trace)
             return
         if isinstance(answer_messages, list):
             messages = []
@@ -96,7 +96,7 @@ class FieldDataProcessor:
             trace.conversation_info.update({"messages": messages})
 
     @staticmethod
-    def _handle_summary_response(answer_messages: dict, messages: List[Dict[str, Any]], trace: Trace):
+    def handle_summary_response(answer_messages: dict, messages: List[Dict[str, Any]], trace: Trace):
         last_msg = None
         if messages:
             last_msg = messages[-1]

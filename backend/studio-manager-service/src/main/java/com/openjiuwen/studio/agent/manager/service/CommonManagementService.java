@@ -67,9 +67,6 @@ public class CommonManagementService implements ICommonManagementService {
 
     private final AppMapper appMapper;
 
-    @Value("${obs.expires}")
-    private int obsExpires;
-
     @Value("${agent.max-upload-file-size}")
     private long fileMaxSize;
 

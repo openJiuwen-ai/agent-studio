@@ -4,15 +4,13 @@
 
 package com.openjiuwen.studio.agent.manager.service.proxy;
 
-import com.openjiuwen.studio.agent.common.utils.JsonUtils;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
-
+import com.openjiuwen.studio.agent.common.utils.JsonUtils;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Response;
 import okhttp3.sse.EventSource;
 import okhttp3.sse.EventSourceListener;
-
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.MDC;

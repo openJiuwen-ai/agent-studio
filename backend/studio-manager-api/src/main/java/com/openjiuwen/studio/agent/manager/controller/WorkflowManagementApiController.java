@@ -31,6 +31,7 @@ import com.openjiuwen.studio.agent.common.dto.run.WorkflowListRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowSceneRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowValidationVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowVersionListRsp;
+import com.openjiuwen.studio.agent.manager.enums.ExportModeEnum;
 import com.openjiuwen.studio.agent.manager.service.IWorkflowManagementService;
 import com.openjiuwen.studio.agent.common.utils.ResponseModel;
 
@@ -157,7 +158,8 @@ public class WorkflowManagementApiController implements WorkflowManagementApi {
     public ResponseEntity<ImportRsp> importWorkflows(String workspaceId, String projectId, MultipartFile file,
         String importWorkflows, String importTools) {
         return ResponseModel.success(
-            workflowManagementService.importWorkflows(workspaceId, projectId, file, importWorkflows, importTools));
+            workflowManagementService.importWorkflows(workspaceId, projectId, file, importWorkflows, importTools,
+                ExportModeEnum.STRICT.getCode()));
     }
 
     @Override

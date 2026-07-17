@@ -5,45 +5,32 @@ package com.openjiuwen.studio.agent.manager.service.proxy;
 
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.obs.services.model.TemporarySignatureResponse;
 import com.openjiuwen.studio.agent.common.annotation.OperationLog;
-import com.openjiuwen.studio.agent.common.dto.agent.ConversionQueries;
-import com.openjiuwen.studio.agent.common.dto.agent.ExecutionInfo;
+import com.openjiuwen.studio.agent.common.dto.BatchDeleteUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
+import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventReq;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventResp;
+import com.openjiuwen.studio.agent.common.dto.knowledge.FileUploadRsp;
 import com.openjiuwen.studio.agent.common.dto.knowledge.ListUserVariableMemoryResponseBody;
+import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationReq;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationResp;
-import com.openjiuwen.studio.agent.common.dto.run.AdditionalQuestionsReq;
-import com.openjiuwen.studio.agent.common.dto.run.AdditionalQuestionsWorkflowReq;
-import com.openjiuwen.studio.agent.common.dto.run.AgentExecutionQueries;
-import com.openjiuwen.studio.agent.common.dto.run.AsrReq;
-import com.openjiuwen.studio.agent.common.dto.run.AsrRsp;
-import com.openjiuwen.studio.agent.common.dto.run.CancelTaskRsp;
-import com.openjiuwen.studio.agent.common.dto.run.CreateTaskReq;
-import com.openjiuwen.studio.agent.common.dto.run.GetAgentExecutionInfoQo;
-import com.openjiuwen.studio.agent.common.dto.run.GetControllerExecutionDetailQo;
-import com.openjiuwen.studio.agent.common.dto.run.GetExecutionInsightQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentConversationsQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentExecutionQueriesQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListControllerExecutionsQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListConversationQueriesQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListExecutionQueriesQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListTaskQo;
-import com.openjiuwen.studio.agent.common.dto.run.ModifyTaskReq;
-import com.openjiuwen.studio.agent.common.dto.run.ResumeTaskReq;
-import com.openjiuwen.studio.agent.common.dto.run.RetrieveTaskQo;
-import com.openjiuwen.studio.agent.common.dto.run.TaskListRsp;
-import com.openjiuwen.studio.agent.common.dto.run.TaskRsp;
+import com.openjiuwen.studio.agent.common.dto.md.ChatCompletionRequest;
+import com.openjiuwen.studio.agent.common.dto.run.*;
 import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
+import com.openjiuwen.studio.agent.common.entity.RouterStrategyEntity;
 import com.openjiuwen.studio.agent.common.entity.Text2AudioReq;
 import com.openjiuwen.studio.agent.common.enums.OperationType;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
-import com.openjiuwen.studio.agent.common.utils.JsonUtils;
-import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
-import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.*;
+import com.openjiuwen.studio.agent.manager.bo.FileCheckWrapper;
+import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
+import com.openjiuwen.studio.agent.manager.constant.Constant;
+import com.openjiuwen.studio.agent.manager.dto.*;
 import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
@@ -59,46 +46,57 @@ import com.openjiuwen.studio.agent.common.dto.run.RunToolRequestBody;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowRunReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.Audio2TextReq;
-import com.openjiuwen.studio.agent.common.dto.md.ChatCompletionRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.EmbeddingRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.RankDocumentsRequest;
-import com.openjiuwen.studio.agent.common.dto.run.RetrieveConversationMemoryQo;
-import com.openjiuwen.studio.agent.common.dto.run.RetrieveConversationQo;
 import com.openjiuwen.studio.agent.manager.dto.runtime.StsTextResp;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
+import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowRunResult;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
-import com.openjiuwen.studio.agent.common.entity.RouterStrategyEntity;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.FreeModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.RouterStrategyMapper;
+import com.openjiuwen.studio.agent.manager.model.AgentExecuteParams;
+import com.openjiuwen.studio.agent.manager.model.ExecuteParams;
+import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionBriefModel;
+import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionDetailModel;
+import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionInvokeModel;
+import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
+import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
+import com.openjiuwen.studio.agent.manager.service.debugging.ControllerDebuggingMgmtService;
 
+import com.openjiuwen.studio.agent.manager.service.plugin.IPlugin;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.sse.EventSource;
 import okhttp3.sse.EventSources;
-
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
+import java.io.IOException;
+import java.io.InputStream;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Service
 @Validated
@@ -125,6 +123,14 @@ public class AgentServiceProxyService {
 
     private final ToolMapper toolMapper;
 
+    private final AgentRuntimeService agentRuntimeService;
+
+    private final ControllerDebuggingMgmtService controllerDebuggingMgmtService;
+
+    private static final int KB = 1024;
+
+    private final MgObsService mgObsService;
+
     @Value("${agent_runtime_endpoint:}")
     private String runtimeEndpoint;
 
@@ -137,6 +143,61 @@ public class AgentServiceProxyService {
     @Value("${op.svc.project-id}")
     private String opSvcProjectId;
 
+    @Value("${icon.max-size}")
+    private long iconMaxSize;
+
+    @Value("${agent.max-upload-file-size}")
+    private long fileMaxSize;
+
+    @Value("${agent.max-upload-image-size}")
+    private long imageMaxSize;
+
+    @Value("${file.max-upload-num}")
+    private int maxUploadNum;
+
+    @Value("${file.time-scope-upload-num}")
+    private int timeScopeUploadNum;
+
+    @Value("${file.max-upload-total-size}")
+    private int maxUploadTotalSize;
+
+    @Value("${file.time-scope-upload-total-size}")
+    private int timeScopeUploadTotalSize;
+
+    @Value("${obs.bucket_storage_limit:100}")
+    private long bucketStorageLimit;
+
+    @Value("${file.default-type}")
+    private String allowedDefaultTypeStr;
+
+    @Value("${file.icon-type}")
+    private String allowedIconTypeStr;
+
+    @Value("${file.img-type}")
+    private String allowedImgTypeStr;
+
+    @Value("${file.readonly.enable:false}")
+    private boolean fileReadOnly;
+
+    private Set<String> allowedIconType = new HashSet<>();
+
+    private Set<String> allowedImgType = new HashSet<>();
+
+    private Set<String> allowedDefaultType = new HashSet<>();
+
+    @Autowired
+    private IPlugin iPlugin;
+
+    /**
+     * 初始化
+     */
+    @PostConstruct
+    public void init() {
+        allowedIconType = Arrays.stream(allowedIconTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
+        allowedImgType = Arrays.stream(allowedImgTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
+        allowedDefaultType = Arrays.stream(allowedDefaultTypeStr.split(CommonConstant.SEPARATOR)).collect(Collectors.toSet());
+    }
+
     private String getToken() {
         return RequestContextUtils.getRequestAuthToken();
     }
@@ -144,7 +205,8 @@ public class AgentServiceProxyService {
     public AgentServiceProxyService(AgentRuntimeClient runtimeClient, RedisClient redisClient, AgentMapper agentMapper,
         WorkflowMapper workflowMapper, ModelServiceMapper modelServiceMapper, OkHttpClientUtils okHttpClientUtils,
         RouterStrategyMapper routerStrategyMapper, FreeModelServiceMapper freeModelServiceMapper,
-        ToolMapper toolMapper) {
+        ToolMapper toolMapper, AgentRuntimeService agentRuntimeService,
+        ControllerDebuggingMgmtService controllerDebuggingMgmtService, MgObsService mgObsService) {
         this.runtimeClient = runtimeClient;
         this.redisClient = redisClient;
         this.agentMapper = agentMapper;
@@ -154,6 +216,9 @@ public class AgentServiceProxyService {
         this.routerStrategyMapper = routerStrategyMapper;
         this.freeModelServiceMapper = freeModelServiceMapper;
         this.toolMapper = toolMapper;
+        this.agentRuntimeService = agentRuntimeService;
+        this.controllerDebuggingMgmtService = controllerDebuggingMgmtService;
+        this.mgObsService = mgObsService;
     }
 
     public ResponseEntity<List<MemoryVariable>> resetConversationMemory(String workspaceId, String projectId,
@@ -224,30 +289,6 @@ public class AgentServiceProxyService {
 
         checkAgentPermission(projectId, workspaceId, agentId);
         return runtimeClient.resetUserVariableMemory(getToken(), projectId, agentId, workspaceId);
-    }
-
-    public ResponseEntity<ConversionQueries> listConversationQueries(String projectId, String workflowId,
-        ListConversationQueriesQo listConversationQueriesQo, String workspaceId) {
-
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.listConversationQueries(getToken(), projectId, workflowId, listConversationQueriesQo,
-            workspaceId);
-    }
-
-    public ResponseEntity<ExecutionQueries> listExecutionQueries(String projectId, String workflowId,
-        String conversationId, ListExecutionQueriesQo listExecutionQueriesQo, String workspaceId) {
-
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.listExecutionQueries(getToken(), projectId, workflowId, conversationId,
-            listExecutionQueriesQo, workspaceId);
-    }
-
-    public ResponseEntity<ExecutionInfo> getExecutionInsight(String projectId, String workflowId, String executionId,
-        GetExecutionInsightQo getExecutionInsightQo, String workspaceId) {
-
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.getExecutionInsight(getToken(), projectId, workflowId, executionId, getExecutionInsightQo,
-            workspaceId);
     }
 
     public ResponseEntity<List<Message>> retrieveConversation(String projectId, String agentId, String conversationId,
@@ -375,7 +416,7 @@ public class AgentServiceProxyService {
         String[] tool = body.getToolObsKey().split("#");
         ToolEntity entity = toolMapper.selectById(tool[0]);
         checkToolsPermission(entity, projectId, workspaceId);
-        return runtimeClient.runTool(getToken(), workspaceId, projectId, body, toolId);
+        return ResponseModel.success(iPlugin.runTool(projectId, body));
     }
 
     public ResponseEntity<RunToolResponseBody> runToolForValidateToolCredential(String workspaceId, String projectId,
@@ -399,31 +440,9 @@ public class AgentServiceProxyService {
         return runtimeClient.analyticsEvent(getToken(), projectId, agentId, body, workspaceId);
     }
 
-    public ResponseEntity<AgentExecutionQueries> listAgentExecutionQueries(String projectId, String agentId,
-        String conversationId, ListAgentExecutionQueriesQo listAgentExecutionQueriesQo, String workspaceId) {
-
-        return runtimeClient.listAgentExecutionQueries(getToken(), projectId, agentId, conversationId,
-            listAgentExecutionQueriesQo, workspaceId);
-    }
-
-    public ResponseEntity<AgentExecutionInfo> getAgentExecutionInfo(String projectId, String executionId,
-        String agentId, GetAgentExecutionInfoQo getAgentExecutionInfoQo, String workspaceId) {
-
-        return runtimeClient.getAgentExecutionInfo(getToken(), projectId, executionId, agentId, getAgentExecutionInfoQo,
-            workspaceId);
-    }
-
     public ResponseEntity<AsrRsp> voiceRecognition(String projectId, AsrReq body, String workspaceId) {
 
         return runtimeClient.voiceRecognition(getToken(), projectId, body, workspaceId);
-    }
-
-    public ResponseEntity<ConversionQueries> listAgentConversations(String projectId, String agentId,
-        ListAgentConversationsQo listAgentConversationsQo, String workspaceId, String type) {
-
-        checkAgentPermission(projectId, workspaceId, agentId);
-        return runtimeClient.listAgentConversations(getToken(), projectId, agentId, listAgentConversationsQo,
-            workspaceId);
     }
 
     public ResponseEntity<Status> abortConversation(String projectId, String workflowId, String conversationId,
@@ -435,46 +454,101 @@ public class AgentServiceProxyService {
 
     public ResponseEntity<Object> listControllerExecutions(String projectId, String agentId, String conversationId,
         ListControllerExecutionsQo listControllerExecutionsQo, String workspaceId) {
-        return runtimeClient.listControllerExecutions(getToken(), projectId, agentId, conversationId, workspaceId,
-            listControllerExecutionsQo);
+        List<ControllerExecutionBriefModel> briefModels = controllerDebuggingMgmtService.queryCtrlExecutions(
+            agentId, conversationId, listControllerExecutionsQo);
+
+        List<ControllerExecution> executions = briefModels.stream().map(brief -> {
+            ControllerExecution exec = new ControllerExecution();
+            exec.setExecutionId(brief.getExecutionId());
+            exec.setQuery(brief.getQuery());
+            exec.setStatus(brief.getStatus());
+            exec.setErrorInfo(brief.getError());
+            exec.setStartTime(brief.getStartTime());
+            return exec;
+        }).toList();
+
+        ListControllerExecutionsResp resp = new ListControllerExecutionsResp();
+        resp.setCount(executions.size());
+        resp.setExecutions(executions);
+        return ResponseEntity.ok(resp);
     }
 
     public ResponseEntity<Object> getControllerExecutionDetail(String projectId, String agentId, String executionId,
         GetControllerExecutionDetailQo body, String workspaceId) {
 
-        ResponseEntity<Object> getControllerExecutionDetailResp = runtimeClient.getControllerExecutionDetail(getToken(),
-            projectId, agentId, executionId, workspaceId, body);
-        Object respBody = getControllerExecutionDetailResp.getBody();
-        if (respBody == null) {
-            return getControllerExecutionDetailResp;
+        ControllerExecutionDetailModel detailModel = controllerDebuggingMgmtService.queryCtrlExecutionDetail(
+            agentId, executionId);
+        if (detailModel == null || detailModel.getExecutionId() == null) {
+            return ResponseEntity.ok(new JSONObject());
         }
 
         try {
-            JSONObject controllerExecutionDetail = JSONObject.parseObject(JSONObject.toJSONString(respBody));
+            ControllerExecutionDetail detail = new ControllerExecutionDetail();
+            detail.setExecutionId(detailModel.getExecutionId());
+            detail.setConversationId(detailModel.getConversationId());
+            detail.setStatus(detailModel.getStatus());
+            detail.setStartTime(detailModel.getStartTime());
+            detail.setEndTime(detailModel.getEndTime());
+            detail.setErrorInfo(detailModel.getError());
 
-            JSONArray nestedWorkflowArr = controllerExecutionDetail.getJSONArray("nestedWorkflows");
-            if (nestedWorkflowArr != null && !nestedWorkflowArr.isEmpty()) {
-                List<String> nestedWorkflowIds = nestedWorkflowArr.stream()
-                    .map(workflow -> ((JSONObject) workflow).getString("workflow_id"))
-                    .toList();
-
-                List<WorkflowEntity> workflowEntities = workflowMapper.selectByWorkflowIds(projectId, workspaceId,
-                    nestedWorkflowIds);
-                List<JSONObject> workflowBaseDataList = workflowEntities.stream().map(workflowEntity -> {
-                    JSONObject workflowBaseData = new JSONObject();
-                    workflowBaseData.put("workflow_id", workflowEntity.getId());
-                    workflowBaseData.put("workflow_name", workflowEntity.getName());
-
-                    return workflowBaseData;
-                }).toList();
-
-                controllerExecutionDetail.put("nestedWorkflows", workflowBaseDataList);
+            // Convert invocations
+            if (detailModel.getInvocations() != null) {
+                List<ControllerInvokeInfo> invokeInfos = detailModel.getInvocations().stream()
+                    .map(this::convertToInvokeInfo).toList();
+                detail.setInvocations(invokeInfos);
             }
 
-            return ResponseEntity.ok(controllerExecutionDetail);
+            // Enrich nested workflows with names
+            List<String> nestedWorkflowIds = detailModel.getNestedWorkflowIds();
+            if (nestedWorkflowIds != null && !nestedWorkflowIds.isEmpty()) {
+                List<WorkflowEntity> workflowEntities = workflowMapper.selectByWorkflowIds(projectId, workspaceId,
+                    nestedWorkflowIds);
+                List<WorkflowBaseData> workflowBaseDataList = workflowEntities.stream().map(entity -> {
+                    WorkflowBaseData data = new WorkflowBaseData();
+                    data.setFlowId(entity.getId());
+                    data.setFlowName(entity.getName());
+                    return data;
+                }).toList();
+                detail.setNestedWorkflows(workflowBaseDataList);
+            }
+
+            return ResponseEntity.ok(detail);
         } catch (Exception e) {
-            return getControllerExecutionDetailResp;
+            log.error("Failed to get controller execution detail", e);
+            return ResponseEntity.ok(new JSONObject());
         }
+    }
+
+    private ControllerInvokeInfo convertToInvokeInfo(ControllerExecutionInvokeModel model) {
+        ControllerInvokeInfo info = new ControllerInvokeInfo();
+        info.setInvokeId(model.getInvokeId());
+        info.setParentInvokeId(model.getParentInvokeId());
+        info.setNodeId(model.getNodeId());
+        info.setNodeName(model.getNodeName());
+        info.setNodeType(model.getNodeType());
+        info.setNodeStatus(model.getNodeStatus());
+        info.setParentNodeId(model.getParentNodeId());
+        info.setModelDeploymentId(model.getModelDeploymentId());
+        info.setErrorMessage(model.getErrorMsg());
+        info.setInputs(model.getInput());
+        info.setOutputs(model.getOutput());
+        info.setStartTime(model.getStartTime());
+        info.setEndTime(model.getEndTime());
+        info.setApplicationId(model.getApplicationId());
+        info.setParentApplicationId(model.getParentApplicationId());
+        info.setMetadata(model.getMetadata());
+        info.setMessages(model.getMessages());
+        if (model.getStatus() != null) {
+            ControllerInvokeInfoStatus invokeStatus = new ControllerInvokeInfoStatus();
+            invokeStatus.setCode(model.getStatus().getCode());
+            invokeStatus.setDesc(model.getStatus().getDesc());
+            info.setStatus(invokeStatus);
+        }
+        if (model.getApplicationType() != null) {
+            info.setApplicationType(
+                ControllerInvokeInfo.ApplicationTypeEnum.fromValue(model.getApplicationType()));
+        }
+        return info;
     }
 
     public Object runWebWorkflow(String shortCode, String projectId, HttpHeaders httpHeaders, String workspaceId,
@@ -602,7 +676,7 @@ public class AgentServiceProxyService {
         });
 
         Request request = builder.url(url).post(body).build();
-        EventSource.Factory factory = factory = EventSources.createFactory(okHttpClientUtils.getHttpClient());
+        EventSource.Factory factory = EventSources.createFactory(okHttpClientUtils.getHttpClient());
         SseEmitter sseEmitter = new SseEmitter(timeout);
 
         String requestId = MDC.get(REQUEST_ID);
@@ -623,5 +697,227 @@ public class AgentServiceProxyService {
             return listener.getErrorRsp();
         }
         return sseEmitter;
+    }
+
+    public Object stream(String url, HttpHeaders headers, String bodyJson, Long timeout, BaseEventListener listener) {
+        RequestBody body = RequestBody.create(bodyJson, MediaType.parse("application/json; charset=utf-8"));
+
+        Request.Builder builder = new Request.Builder();
+        headers.forEach((key, value) -> {
+            if (value != null && !value.isEmpty()) {
+                builder.addHeader(key, String.join(",", value));
+            }
+        });
+
+        Request request = builder.url(url).post(body).build();
+        EventSource.Factory factory = EventSources.createFactory(okHttpClientUtils.getHttpClient());
+        SseEmitter sseEmitter = new SseEmitter(timeout);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        listener.setLatch(latch);
+        listener.setSseEmitter(sseEmitter);
+
+        // 创建事件
+        log.info("http stream request, url: {}", url);
+        EventSource eventSource = factory.newEventSource(request, listener);
+        try {
+            latch.await(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            log.error("Request agent service timeout.", e);
+            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
+        }
+        if (listener.getErrorRsp() != null) {
+            return listener.getErrorRsp();
+        }
+        return sseEmitter;
+    }
+
+    /**
+     * Agent专用流式方法，根据executeType选择LLMAgentListener或ControllerAgentListener处理事件并存储调测数据
+     */
+    public Object agentStream(String url, HttpHeaders headers, String bodyJson, AgentExecuteParams executeParams) {
+        String taskId = agentRuntimeService.queryTaskId(executeParams.getAgentId(), executeParams.getExecutionId());
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = MDC.get(REQUEST_ID);
+        }
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = headers.getFirst("X-Execution-Id");
+        }
+        MDC.put(Constant.TASK_ID, taskId);
+        headers.set("X-Execution-Id", taskId);
+        executeParams.setExecutionId(taskId);
+
+        if (Constant.AppType.CONTROLLER.equals(executeParams.getExecuteType())) {
+            ControllerAgentListener listener = new ControllerAgentListener(MDC.get(REQUEST_ID), executeParams, headers);
+            return stream(url, headers, bodyJson, 900000L, listener);
+        } else if (Constant.AppType.AGENT.equals(executeParams.getExecuteType())) {
+            LLMAgentListener listener = new LLMAgentListener(MDC.get(REQUEST_ID), executeParams, headers);
+            return stream(url, headers, bodyJson, 900000L, listener);
+        } else {
+            return stream(url, headers, bodyJson, 900000L, new BaseEventListener(MDC.get(REQUEST_ID), headers));
+        }
+    }
+
+    /**
+     * 工作流专用流式方法，使用WorkflowListener处理事件并存储调测数据
+     */
+    public Object workflowStream(String url, HttpHeaders headers, String bodyJson, WorkflowRunResult result,
+        ExecuteParams executeParams) {
+        String taskId = executeParams.getExecutionId();
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = headers.getFirst("X-Execution-Id");
+        }
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = MDC.get(REQUEST_ID);
+        }
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = UUID.randomUUID().toString();
+        }
+        MDC.put(Constant.TASK_ID, taskId);
+        headers.set("X-Execution-Id", taskId);
+        executeParams.setExecutionId(taskId);
+
+        WorkflowListener listener = new WorkflowListener(MDC.get(REQUEST_ID), executeParams, result, headers);
+        return stream(url, headers, bodyJson, 900000L, listener);
+    }
+
+    @OperationLog(
+            operationType = OperationType.EXECUTE,
+            resourceType = "agent",
+            description = "上传文件"
+    )
+    public FileUploadRsp uploadAgentFile(MultipartFile file, Integer expiresDays, Boolean isImage) {
+        if (file.isEmpty()) {
+            log.error("file cannot be empty!");
+            throw new AgentStudioException(StudioError.FILE_CANNOT_BE_EMPTY);
+        }
+
+        // 文件上传校验
+        String safeFileName = checkUploadFile(file, isImage ? CommonConstant.IMAGE : CommonConstant.FILE);
+        checkUserCanUpload(file, RequestContextUtils.getRequestUserId());
+
+        return uploadFileToObs(file, expiresDays, safeFileName);
+    }
+
+    /**
+     * 上传文件到OBS
+     *
+     * @param file 文件
+     * @param expiresDays 过期天数
+     * @param safeFileName 安全文件名
+     * @return 上传结果
+     */
+    private FileUploadRsp uploadFileToObs(MultipartFile file, Integer expiresDays, String safeFileName) {
+        try {
+            InputStream inputStream = file.getInputStream();
+            // 设置返回响应体Url和Headers参数
+            FileUploadRsp fileUploadRsp = new FileUploadRsp();
+
+            String objectKey = String.format("%s/%s", CommonConstant.FILE, safeFileName);
+
+            String objectName = mgObsService.uploadStreamStagingBucket(objectKey, inputStream, expiresDays);
+            String url = mgObsService.getTemporaryGetRsp(true, objectName, (long) expiresDays * 24L * 60* 60);
+            fileUploadRsp.setUrl(url);
+
+            return fileUploadRsp;
+        } catch (IOException e) {
+            log.error("OBS failure", e);
+            throw new AgentStudioException(StudioError.OBS_FAILED);
+        }
+    }
+
+    private void checkUserCanUpload(MultipartFile file, String userId) {
+        checkUploadNum(userId);
+        checkUploadTotalSize(file, userId);
+    }
+
+    private void checkUploadTotalSize(MultipartFile file, String userId) {
+        String key = "uploadFile:new:size:" + userId;
+        boolean exist = redisClient.exists(key);
+        BigDecimal currentSize = new BigDecimal(file.getSize()).divide(new BigDecimal(KB));
+        if (exist) {
+            BigDecimal obsSize = new BigDecimal(redisClient.get(key));
+            currentSize = currentSize.add(obsSize);
+        }
+
+        // 存在 -> 获取已上传的文件大小，与最大值比较
+        if (currentSize.compareTo(new BigDecimal(maxUploadTotalSize)) < 0) {
+            // 过期时间
+            redisClient.setAndKeepTtl(key, String.valueOf(currentSize), Duration.ofSeconds(timeScopeUploadTotalSize));
+        } else {
+            log.error(
+                    "The total size of the upload files exceeds the limit. fileSize:{}, currentSize:{}, maxUploadTotalSize:{}",
+                    file.getSize(), currentSize, maxUploadTotalSize);
+            throw new AgentStudioException(StudioError.FILE_SIZE_EXCEED_LIMIT);
+        }
+    }
+
+    private void checkUploadNum(String userId) {
+        String key = "uploadFile:num:" + userId;
+        long currentCount = redisClient.getAndIncrement(key, timeScopeUploadNum);
+        if (currentCount == 0) {
+            // 如果是第一次上传，设置过期时间5分钟
+            redisClient.expire(key, Duration.ofSeconds(timeScopeUploadNum));
+        }
+        if (currentCount > maxUploadNum) {
+            log.error("The number of the upload files exceeds the limit. currentCount:{}, maxUploadNum:{}",
+                    currentCount, maxUploadNum);
+            throw new AgentStudioException(StudioError.AGENT_UPLOAD_FILE_NUM);
+        }
+    }
+
+    /**
+     * 上传文件校验
+     *
+     * @param file 文件
+     * @param type 文件类型
+     * @return 新生成的文件名
+     */
+    private String checkUploadFile(MultipartFile file, String type) {
+        // 文件为空
+        if (file == null || file.isEmpty()) {
+            log.error("The uploaded file cannot be empty.");
+            throw new AgentStudioException(StudioError.ILLEGAL_FILE);
+        }
+
+        FileCheckWrapper fileCheckWrapper = buildFileCheckWrapper(type);
+        // 校验文件大小
+        if (file.getSize() > fileCheckWrapper.getSize() * KB) {
+            log.error("The avatar file size exceeds the limit: {}KB", iconMaxSize);
+            throw new AgentStudioException(StudioError.PICTURE_FILE_SIZE_EXCEED_LIMIT);
+        }
+
+        // 校验文件名
+        String fileName = file.getOriginalFilename();
+        if (org.apache.commons.lang3.StringUtils.isBlank(fileName) || fileName.contains("..") || fileName.contains("\\") || fileName.contains(
+                "/")) {
+            log.error("The file name is illegal: {}", LogUtils.encodeForLog(fileName));
+            throw new AgentStudioException(StudioError.ILLEGAL_FILE_NAME);
+        }
+
+        // 校验文件类型
+        String fileType = fileName.substring(fileName.lastIndexOf('.'));
+        if (org.apache.commons.lang3.StringUtils.isBlank(fileType) || !fileCheckWrapper.getType().contains(fileType.toLowerCase(Locale.ROOT))) {
+            log.error("The file type is not supported: {}", LogUtils.encodeForLog(fileType));
+            throw new AgentStudioException(StudioError.ILLEGAL_FILE_TYPE);
+        }
+
+        // 生成随机名
+        return UUID.randomUUID() + fileType;
+    }
+
+    /**
+     * 根据校验类型获取文件校验包装类
+     *
+     * @param type 校验类型
+     * @return FileCheckWrapper 文件校验包装类
+     */
+    private FileCheckWrapper buildFileCheckWrapper(String type) {
+        FileCheckWrapper.FileCheckWrapperBuilder builder = FileCheckWrapper.builder();
+        return switch (type) {
+            case CommonConstant.ICON -> builder.size(iconMaxSize).type(allowedIconType).build();
+            case CommonConstant.IMAGE -> builder.size(imageMaxSize).type(allowedImgType).build();
+            default -> builder.size(fileMaxSize).type(allowedDefaultType).build();
+        };
     }
 }

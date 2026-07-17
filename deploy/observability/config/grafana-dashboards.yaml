@@ -1,0 +1,16 @@
+# Grafana dashboard provisioning（启动时自动从 /var/lib/grafana/dashboards 加载 JSON）
+# 修改 dashboards/ 下的 JSON 后，30s 内热加载，或在 UI 点「Reload」即时生效。
+# 文档：https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+apiVersion: 1
+
+providers:
+  - name: 'agent-studio'
+    orgId: 1
+    folder: 'AgentStudio'        # dashboard 归集到此文件夹
+    type: file
+    disableDeletion: false       # 允许在 UI 删除（仅删 Grafana DB 记录，不删 JSON 文件）
+    updateIntervalSeconds: 30    # 监听 JSON 变更并热加载
+    allowUiUpdates: true         # 允许在 UI 调整（调整存 Grafana DB，不回写 JSON）
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

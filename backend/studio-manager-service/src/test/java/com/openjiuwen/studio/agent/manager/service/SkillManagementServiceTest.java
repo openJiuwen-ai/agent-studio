@@ -39,7 +39,7 @@ import com.openjiuwen.studio.agent.manager.mapper.SkillVersionMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.utils.MultipartFileToZipUtils;
 import com.openjiuwen.studio.agent.manager.utils.ZipValidationUtils;
-import com.obs.services.model.TemporarySignatureResponse;
+
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -153,7 +153,7 @@ public class SkillManagementServiceTest {
         when(skillMapper.searchBySkillId(skillId)).thenReturn(mockSkill);
 
         lenient().when(mgObsService.getTemporaryGetRsp(anyBoolean(), anyString(), anyLong()))
-            .thenReturn(new TemporarySignatureResponse("https://obs-url.com"));
+            .thenReturn("https://obs-url.com");
         mockSkill.setObsPath("https://obs-url.com");
 
         GetStudioSkillDetailsResponseBody result = skillManagementService.showStudioSkillDetail(skillId, "mock"
@@ -228,7 +228,7 @@ public class SkillManagementServiceTest {
             lenient().when(mgObsService.uploadObsFile(anyString(), any(InputStream.class), anyInt()))
                 .thenReturn("user-001/skills/a1bc4d53-9965-4ff7-bb8c-4ec9649fc808/a1bc4d53-9965-4ff7-bb8c-4ec9649fc808/agentBuilder-import-test-13846229055125705451.zip");
             lenient().when(mgObsService.getTemporaryGetRsp(anyBoolean(), anyString(), anyLong()))
-                .thenReturn(new TemporarySignatureResponse("https://obs-url.com"));
+                .thenReturn("https://obs-url.com");
             ImportStudioSkillResponseBody result = skillManagementService.importStudioSkill("mock-workspace-id",
                 "mock-project-id", mockMultipartFile);
 
@@ -339,9 +339,8 @@ public class SkillManagementServiceTest {
         when(skillMapper.searchBySkillId(skillId)).thenReturn(mockSkill);
         when(skillVersionMapper.searchByVersionId(skillVersion)).thenReturn(mockVersion);
 
-        // Mock 获取临时URL
         lenient().when(mgObsService.getTemporaryGetRsp(anyBoolean(), anyString(), anyLong()))
-                .thenReturn(new TemporarySignatureResponse("https://obs-temp-url.com/skill.zip"));
+                .thenReturn("https://obs-temp-url.com/skill.zip");
 
         // 执行测试
         ExportStudioSkillResponseBody result = skillManagementService.exportStudioSkill(skillId,"mock-workspace-id", "mock-project-id");

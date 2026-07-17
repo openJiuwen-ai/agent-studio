@@ -8,8 +8,6 @@ package com.openjiuwen.studio.agent.runtime.service;
 import com.openjiuwen.studio.agent.common.dto.run.RunToolRequestBody;
 import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.runtime.dto.Base64ToImageReq;
-import com.openjiuwen.studio.agent.runtime.dto.CreateDocumentReq;
-import com.openjiuwen.studio.agent.runtime.dto.CreateDocumentRsp;
 import com.openjiuwen.studio.agent.runtime.dto.OcrRecognizeRsp;
 import com.openjiuwen.studio.agent.runtime.dto.ResolveAudioFileReq;
 import com.openjiuwen.studio.agent.runtime.dto.ResolveAudioFileRsp;
@@ -34,13 +32,6 @@ public interface IToolRuntimeService {
      * @param body body
      */
     ToImageRsp base64ToImage(Base64ToImageReq body) ;
-
-    /**
-     * createDocument
-     *
-     * @param body body
-     */
-    CreateDocumentRsp createDocument(CreateDocumentReq body) ;
 
     /**
      * file2Base64
@@ -71,13 +62,6 @@ public interface IToolRuntimeService {
      * @param body body
      */
     ResolveDocumentRsp resolveDocument(ResolveDocumentReq body) ;
-
-    /**
-     * resolveFile
-     *
-     * @param fileUrl fileUrl
-     */
-    String resolveFile(String fileUrl) ;
 
     /**
      * runTool
