@@ -118,7 +118,7 @@ def build_req_json_from_workflow(
         "userId": body.user_id or "anonymous",
         "irPath": ir_path,
         "params": params,
-        "query": "default",
+        "query": body.inputs.get("query", ""),
         "responseMode": "streaming",
         "dialogueCount": dialogue_count,
     }
@@ -153,7 +153,7 @@ def build_req_json_from_agent(
         "userId": body.user_id or "",
         "irPath": ir_path,
         "params": params,
-        "query": body.query,
+        "query": body.query or body.inputs.get("query", ""),
         "responseMode": "streaming",
         "dialogueCount": dialogue_count,
     }
@@ -200,6 +200,7 @@ async def _encapsulate_response(
     handler_type: str,
     request: Request,
     ir_path: str,
+    stream: bool = True,
 ):
     """对 ir_execute 返回的 StreamingResponse 进行事件封装.
 
@@ -208,12 +209,20 @@ async def _encapsulate_response(
     if not isinstance(response, StreamingResponse):
         return response
 
-    return await EventHandler.encapsulate_stream_response(
-        response=response,
-        handler_type=handler_type,
-        request=request,
-        ir_path=ir_path,
-    )
+    if stream:
+        return await EventHandler.encapsulate_stream_response(
+            response=response,
+            handler_type=handler_type,
+            request=request,
+            ir_path=ir_path,
+        )
+    else:
+        return await EventHandler.encapsulate_non_stream_response(
+            response=response,
+            handler_type=handler_type,
+            request=request,
+            ir_path=ir_path,
+        )
 
 
 async def _execute_workflow_run(
@@ -243,6 +252,9 @@ async def _execute_workflow_run(
         ctx.conversation_id, instance_id, user_id, version_id
     )
 
+    # 从请求头读取stream参数，默认为True
+    stream = request.headers.get("stream", "true").lower() == "true"
+
     req_json = build_req_json_from_workflow(
         body, ctx.conversation_id, ir_path, conversation_history, dialogue_count
     )
@@ -251,7 +263,7 @@ async def _execute_workflow_run(
 
     # 工作流固定使用 workflow handler_type
     return await _encapsulate_response(
-        response, IRType.Workflow.value, request, ir_path
+        response, IRType.Workflow.value, request, ir_path, stream
     )
 
 
@@ -308,6 +320,9 @@ async def _execute_agent_run(
         ctx.conversation_id, instance_id, user_id, version_id
     )
 
+    # 从请求头读取stream参数，默认为True
+    stream = request.headers.get("stream", "true").lower() == "true"
+
     req_json = build_req_json_from_agent(
         body, ctx.conversation_id, ir_path, conversation_history, dialogue_count
     )
@@ -322,7 +337,7 @@ async def _execute_agent_run(
         raise
 
     return await _encapsulate_response(
-        response, handler_type, request, ir_path
+        response, handler_type, request, ir_path, stream
     )
 
 

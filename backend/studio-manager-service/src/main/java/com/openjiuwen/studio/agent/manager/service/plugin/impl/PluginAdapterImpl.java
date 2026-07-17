@@ -42,7 +42,6 @@ import com.openjiuwen.studio.agent.manager.enums.ToolType;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
 import com.openjiuwen.studio.agent.manager.mapper.plugin.PluginMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
-import com.openjiuwen.studio.agent.manager.rce.client.StudioJiuWenClient;
 import com.openjiuwen.studio.agent.manager.service.plugin.IPlugin;
 import com.openjiuwen.studio.agent.manager.service.plugin.IPluginBase;
 import com.openjiuwen.studio.agent.manager.service.share.ShareInnerService;

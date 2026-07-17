@@ -1,0 +1,14 @@
+# Grafana 数据源（监控节点用，启动时自动 provisioning）
+# VictoriaLogs 日志数据源。Grafana 通过 compose 环境变量安装对应插件。
+
+apiVersion: 1
+
+datasources:
+  - name: VictoriaLogs
+    uid: victorialogs
+    type: victoriametrics-logs-datasource
+    access: proxy
+    url: http://victoria-logs:9428
+    isDefault: true
+    jsonData:
+      maxLines: 5000

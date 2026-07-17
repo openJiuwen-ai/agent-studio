@@ -185,6 +185,7 @@ redis:
   cluster_node_list: ${cluster_node_list:}
   client-type: ${redis_client_type:redisson}
   enable-log: ${redis_enable_log:false}
+  max-debug-msg-size: ${redis_max_debug_msg_size:10000}
 
 # health check
 management:
@@ -563,6 +564,15 @@ workflow:
   connector_config_host_whitelist: ${host_whitelist:}
   enable-url-check: ${enable_url_check:true}
   demo-workflow-id: ${demo_workflow_id:}
+  insight-exec-rel: ${workflow_insight_exec_rel:insight_exec_rel_%s_%s_%s}
+  insight-conv-rel: ${workflow_insight_conv_rel:insight_conv_%s_%s}
+  insight-exec: ${workflow_insight_exec:insight_exec_%s_%s}
+  max-execution-size: ${workflow_max_execution_size:20}
+  instance-expire: ${workflow_instance_expire:10}
+  conversation-expire: ${workflow_conversation_expire:7}
+  max-conversation-size: ${workflow_max_conversation_size:20}
+  max-query-length: ${workflow_max_query_length:100000}
+  sse-timeout-milliseconds: ${workflow_sse_timeout_milliseconds:900000}
 # ==========================================工作流相关配置end=======================================
 
 # ==========================================agent相关配置start=======================================
@@ -582,6 +592,11 @@ agent:
   init-template-path: ${agent_init_template_path:classpath:template/app/**.jsonl}
   max-iteration: ${agent_manx_iteration:15}
   demo-agent-id: ${demo_agent_id:}
+  insight-exec-rel: ${agent_insight_exec_rel:insight_exec_rel_%s_%s_%s}
+  insight-conv-rel: ${agent_insight_conv_rel:insight_conv_%s_%s}
+  insight-exec: ${agent_insight_exec:insight_exec_%s_%s}
+  max-execution-size: ${agent_max_execution_size:20}
+  max-conversation-size: ${agent_max_conversation_size:20}
   deepresearch-character: ${outliner_max_section_num:10}
   builder:
     iam:
@@ -811,3 +826,23 @@ springdoc:
     enabled: false
   swagger-ui:
     enabled: false
+# 鉴权配置
+auth:
+  path:
+    # 免鉴权路径（逗号分隔），环境变量：auth_path_excluded
+    excluded: ${auth_path_excluded:/v1/health, /health}
+  sso:
+    # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权（验证 Access-Token），留空则使用默认简单鉴权，环境变量：auth_sso_validate_url
+    validate-url: ${auth_sso_validate_url:}
+    # SSO 请求头名称（用于传递 Access-Token），环境变量：auth_sso_header
+    header: ${auth_sso_header:Access-Token}
+  # SSO 响应字段与用户属性映射
+  user-info:
+    claims:
+      user-id: ${user_info_claims_user_id:user_id}
+      user-name: ${user_info_claims_username:user_name}
+      domain-id: ${user_info_claims_domain_id:domain_id}
+      project-id: ${user_info_claims_project_id:project_id}
+    defaults:
+      domain-id: ${user_info_defaults_domain_id:0}
+      project-id: ${user_info_defaults_project_id:0}

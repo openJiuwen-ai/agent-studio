@@ -17,7 +17,7 @@ import java.util.List;
  *
  * <h3>实现类</h3>
  * <ul>
- *   <li>{@code ObsFileStoreImpl} — 华为云 OBS，通过 {@code storage.type=OBS} 激活</li>
+ *   <li>{@code ObsFileStoreImpl} — OBS，通过 {@code storage.type=OBS} 激活</li>
  *   <li>{@code LocalFileStoreImpl} — 本地文件系统，通过 {@code storage.type=LOCAL} 激活</li>
  *   <li>自定义实现 — 通过 {@code storage.type=CUSTOM} + 外部 JAR 加载</li>
  * </ul>

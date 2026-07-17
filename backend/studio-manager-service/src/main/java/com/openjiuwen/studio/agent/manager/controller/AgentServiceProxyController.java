@@ -56,6 +56,7 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.JsonUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.manager.constant.Constant;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
@@ -75,12 +76,19 @@ import com.openjiuwen.studio.agent.manager.dto.runtime.interfaces.SecurityCheck;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
+import com.openjiuwen.studio.agent.manager.model.ExecuteParams;
+import com.openjiuwen.studio.agent.manager.model.AgentExecuteParams;
+import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowInstanceEntity;
+import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowRunResult;
+import com.openjiuwen.studio.agent.manager.enums.WorkflowRunStatus;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.AppMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.service.ShareResourceManagerService;
+import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
+import com.openjiuwen.studio.agent.manager.service.WorkflowRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.asset.AssetFreeTrialMgmtService;
 import com.openjiuwen.studio.agent.manager.service.proxy.AgentServiceProxyService;
 
@@ -116,6 +124,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -147,6 +156,10 @@ public class AgentServiceProxyController {
 
     private AssetFreeTrialMgmtService assetFreeTrialMgmtService;
 
+    private WorkflowRuntimeService workflowRuntimeService;
+
+    private AgentRuntimeService agentRuntimeService;
+
     @Value("${agent_runtime_endpoint:}")
     private String runtimeEndpoint;
 
@@ -163,7 +176,8 @@ public class AgentServiceProxyController {
     public AgentServiceProxyController(AgentRuntimeClient runtimeClient, RedisClient redisClient,
         AgentMapper agentMapper, WorkflowMapper workflowMapper, AgentServiceProxyService agentServiceProxyService,
         ShareResourceManagerService shareResourceManagerService, AppMapper appMapper,
-        AssetFreeTrialMgmtService assetFreeTrialMgmtService, ReleaseVersionMapper releaseVersionMapper) {
+        AssetFreeTrialMgmtService assetFreeTrialMgmtService, ReleaseVersionMapper releaseVersionMapper,
+        WorkflowRuntimeService workflowRuntimeService, AgentRuntimeService agentRuntimeService) {
         this.runtimeClient = runtimeClient;
         this.redisClient = redisClient;
         this.agentMapper = agentMapper;
@@ -173,6 +187,21 @@ public class AgentServiceProxyController {
         this.appMapper = appMapper;
         this.assetFreeTrialMgmtService = assetFreeTrialMgmtService;
         this.releaseVersionMapper = releaseVersionMapper;
+        this.workflowRuntimeService = workflowRuntimeService;
+        this.agentRuntimeService = agentRuntimeService;
+    }
+
+    /**
+     * 从请求体中提取query，优先取顶层query，为空则从inputs.query中提取
+     */
+    private String extractQuery(ServiceRunAgentReq body) {
+        if (body.getQuery() != null) {
+            return body.getQuery();
+        }
+        if (body.getInputs() != null && body.getInputs().get("query") != null) {
+            return body.getInputs().get("query").toString();
+        }
+        return null;
     }
 
     private Object runningAgent(String projectId, String workspaceId, String agentType, String agentId,
@@ -203,6 +232,33 @@ public class AgentServiceProxyController {
             if (CommonConstant.DEEPRESEARCH_TYPE.equals(agentType)) {
                 return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body), 7200000L);
             }
+
+            // 判断是否为debug模式
+            List<String> invokeModeList = httpHeaders.get(Constant.Agent.INVOKE_HEADER_KEY);
+            String invokeMode = invokeModeList != null && !invokeModeList.isEmpty() ? invokeModeList.get(0) : "";
+            boolean isDebug = Constant.Common.INVOKE_MOD_DEBUG.equalsIgnoreCase(invokeMode);
+
+            if (isDebug) {
+                String executeType = agentType != null ? agentType : (type != null ? type : Constant.AppType.AGENT);
+                AgentExecuteParams executeParams = AgentExecuteParams.builder()
+                    .projectId(projectId)
+                    .agentId(agentId)
+                    .conversationId(conversationId)
+                    .workspaceId(workspaceId)
+                    .query(extractQuery(body))
+                    .inputs(body.getInputs())
+                    .debug(true)
+                    .executeType(executeType)
+                    .userId(RequestContextUtils.getRequestUserId())
+                    .versionId(version)
+                    .modelDeploymentId(body.getModelDeploymentId())
+                    .toolSwitchDict(body.getToolSwitchDict())
+                    .type(type)
+                    .token(RequestContextUtils.getRequestAuthToken())
+                    .build();
+                return agentServiceProxyService.agentStream(url, httpHeaders, JsonUtils.encode(body), executeParams);
+            }
+
             return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body));
         } else {
             return runtimeClient.runAgentWithConversation(RequestContextUtils.getRequestAuthToken(), getApiCode(projectId, workspaceId), projectId,
@@ -340,6 +396,31 @@ public class AgentServiceProxyController {
             if (CommonConstant.DEEPRESEARCH_TYPE.equals(agentType)) {
                 return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body), 7200000L);
             }
+
+            // 判断是否为debug模式
+            List<String> invokeModeList = httpHeaders.get(Constant.Agent.INVOKE_HEADER_KEY);
+            String invokeMode = invokeModeList != null && !invokeModeList.isEmpty() ? invokeModeList.get(0) : "";
+            boolean isDebug = Constant.Common.INVOKE_MOD_DEBUG.equalsIgnoreCase(invokeMode);
+
+            if (isDebug) {
+                String executeType = agentType != null ? agentType : Constant.AppType.AGENT;
+                AgentExecuteParams executeParams = AgentExecuteParams.builder()
+                    .projectId(projectId)
+                    .agentId(agentId)
+                    .workspaceId(workspaceId)
+                    .query(extractQuery(body))
+                    .inputs(body.getInputs())
+                    .debug(true)
+                    .executeType(executeType)
+                    .userId(RequestContextUtils.getRequestUserId())
+                    .versionId(version)
+                    .modelDeploymentId(body.getModelDeploymentId())
+                    .toolSwitchDict(body.getToolSwitchDict())
+                    .token(RequestContextUtils.getRequestAuthToken())
+                    .build();
+                return agentServiceProxyService.agentStream(url, httpHeaders, JsonUtils.encode(body), executeParams);
+            }
+
             return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body));
         } else {
             return runtimeClient.runAgent(RequestContextUtils.getRequestAuthToken(), projectId, agentId,
@@ -365,7 +446,39 @@ public class AgentServiceProxyController {
                 url += "&version=" + version;
             }
 
-            return agentServiceProxyService.stream(url, httpHeaders, JsonUtils.encode(body));
+            // 判断是否为debug模式
+            List<String> invokeModeList = httpHeaders.get("X-Invoke-Mode");
+            String invokeMode = invokeModeList != null && !invokeModeList.isEmpty() ? invokeModeList.get(0) : "";
+            boolean isDebug = "debug".equalsIgnoreCase(invokeMode);
+
+            ExecuteParams executeParams = ExecuteParams.builder()
+                .projectId(projectId)
+                .workflowId(workflowId)
+                .userId(RequestContextUtils.getRequestUserId())
+                .debug(isDebug)
+                .traceMode(invokeMode)
+                .stream(true)
+                .startTime(System.currentTimeMillis())
+                .conversationId(conversationId)
+                .releasedVersion(version)
+                .environmentId(environmentId)
+                .inputs(body.getInputs())
+                .build();
+
+            WorkflowRunResult result = new WorkflowRunResult();
+            WorkflowInstanceEntity instance = new WorkflowInstanceEntity();
+            instance.setConversationId(conversationId);
+            instance.setWorkflowId(workflowId);
+            instance.setInputs(body.getInputs());
+            instance.setStatus(WorkflowRunStatus.RUNNING.getStatus().getDesc());
+            instance.setStartTime(executeParams.getStartTime());
+            instance.setEventList(new ArrayList<>());
+            instance.setUserId(executeParams.getUserId());
+            instance.setProjectId(projectId);
+            result.setInstance(instance);
+
+            return agentServiceProxyService.workflowStream(url, httpHeaders, JsonUtils.encode(body), result,
+                executeParams);
         } else {
             return runtimeClient.runWorkflowWithConversation(RequestContextUtils.getRequestAuthToken(), projectId,
                 workflowId, conversationId, workspaceId, environmentId, version, body).getBody();
@@ -710,8 +823,7 @@ public class AgentServiceProxyController {
         ListConversationQueriesQo listConversationQueriesQo,
         @RequestParam(value = "workspace_id", required = false) String workspaceId) {
 
-        return agentServiceProxyService.listConversationQueries(projectId, workflowId, listConversationQueriesQo,
-            workspaceId).getBody();
+        return workflowRuntimeService.listConversationQueries(projectId, workflowId, listConversationQueriesQo);
     }
 
     @ApiOperation(value = "查询当前对话中用户输入内容的列表", nickname = "listExecutionQueries", notes = "",
@@ -733,8 +845,8 @@ public class AgentServiceProxyController {
         ListExecutionQueriesQo listExecutionQueriesQo,
         @RequestParam(value = "workspace_id", required = false) String workspaceId) {
 
-        return agentServiceProxyService.listExecutionQueries(projectId, workflowId, conversationId,
-            listExecutionQueriesQo, workspaceId).getBody();
+        return workflowRuntimeService.listExecutionQueries(projectId, workflowId, conversationId,
+            listExecutionQueriesQo);
     }
 
     @ApiOperation(value = "", nickname = "getExecutionInsight", notes = "", response = ExecutionInfo.class,
@@ -756,8 +868,7 @@ public class AgentServiceProxyController {
         GetExecutionInsightQo getExecutionInsightQo,
         @RequestParam(value = "workspace_id", required = false) String workspaceId) {
 
-        return agentServiceProxyService.getExecutionInsight(projectId, workflowId, executionId, getExecutionInsightQo,
-            workspaceId).getBody();
+        return workflowRuntimeService.getExecutionInsight(projectId, workflowId, executionId, getExecutionInsightQo);
     }
 
     @ApiOperation(value = "根据conversation_id删除会话", nickname = "deleteConversation",
@@ -1165,8 +1276,8 @@ public class AgentServiceProxyController {
         @ApiParam(value = "ListAgentExecutionQueriesQo: converted from multi query params") @Valid
         ListAgentExecutionQueriesQo listAgentExecutionQueriesQo,
         @RequestParam(value = "workspace_id", required = false) String workspaceId) {
-        return agentServiceProxyService.listAgentExecutionQueries(projectId, agentId, conversationId,
-            listAgentExecutionQueriesQo, workspaceId).getBody();
+        return agentRuntimeService.listAgentExecutionQueries(projectId, agentId, conversationId,
+            listAgentExecutionQueriesQo);
     }
 
     @ApiOperation(value = "", nickname = "getAgentExecutionInfo", notes = "查询 agent 会话信息",
@@ -1187,8 +1298,7 @@ public class AgentServiceProxyController {
         GetAgentExecutionInfoQo getAgentExecutionInfoQo,
         @RequestParam(value = "workspace_id", required = false) String workspaceId) {
 
-        return agentServiceProxyService.getAgentExecutionInfo(projectId, executionId, agentId, getAgentExecutionInfoQo,
-            workspaceId).getBody();
+        return agentRuntimeService.getAgentExecutionInfo(projectId, executionId, agentId, getAgentExecutionInfoQo);
     }
 
     @ApiOperation(value = "", nickname = "voiceRecognition", notes = "一句话语音识别", response = AsrRsp.class,
@@ -1223,8 +1333,7 @@ public class AgentServiceProxyController {
         ListAgentConversationsQo listAgentConversationsQo,
         @RequestParam(value = "workspace_id", required = false) String workspaceId,
         @RequestParam(value = "type", required = false) String type) {
-        return agentServiceProxyService.listAgentConversations(projectId, agentId, listAgentConversationsQo,
-            workspaceId, type).getBody();
+        return agentRuntimeService.listAgentConversations(projectId, agentId, listAgentConversationsQo);
     }
 
     @ApiOperation(value = "停止对话生成并清空会话", nickname = "abortConversation", notes = "", response = Status.class,

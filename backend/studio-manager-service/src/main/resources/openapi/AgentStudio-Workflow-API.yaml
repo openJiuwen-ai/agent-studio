@@ -2209,6 +2209,11 @@ paths:
           required: false
           description: 需要导入的工具ID。
           type: string
+        - name: mode
+          in: formData
+          required: false
+          type: string
+          description: 模式:STRICT-严格模式/SPACIOUS-宽松模式
       responses:
         '200':
           description: 导入响应体。

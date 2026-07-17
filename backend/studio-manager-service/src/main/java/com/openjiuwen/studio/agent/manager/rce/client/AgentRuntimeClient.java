@@ -5,7 +5,6 @@
 package com.openjiuwen.studio.agent.manager.rce.client;
 
 import com.alibaba.fastjson2.JSONObject;
-import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
 import com.openjiuwen.studio.agent.common.dto.BatchDeleteUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.ExecutionQueries;
 import com.openjiuwen.studio.agent.common.dto.agent.ConversionQueries;
@@ -24,17 +23,13 @@ import com.openjiuwen.studio.agent.common.dto.md.ModelServiceCheckReq;
 import com.openjiuwen.studio.agent.common.dto.md.ModelServiceCheckRsp;
 import com.openjiuwen.studio.agent.common.dto.run.AdditionalQuestionsReq;
 import com.openjiuwen.studio.agent.common.dto.run.AdditionalQuestionsWorkflowReq;
-import com.openjiuwen.studio.agent.common.dto.run.AgentExecutionQueries;
 import com.openjiuwen.studio.agent.common.dto.run.AsrReq;
 import com.openjiuwen.studio.agent.common.dto.run.AsrRsp;
 import com.openjiuwen.studio.agent.common.dto.run.CancelTaskRsp;
 import com.openjiuwen.studio.agent.common.dto.run.ConversationDeleteResp;
 import com.openjiuwen.studio.agent.common.dto.run.CreateTaskReq;
-import com.openjiuwen.studio.agent.common.dto.run.GetAgentExecutionInfoQo;
 import com.openjiuwen.studio.agent.common.dto.run.GetControllerExecutionDetailQo;
 import com.openjiuwen.studio.agent.common.dto.run.GetExecutionInsightQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentConversationsQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentExecutionQueriesQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListControllerExecutionsQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListConversationQueriesQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListExecutionQueriesQo;
@@ -326,29 +321,6 @@ public interface AgentRuntimeClient {
         @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
         @RequestParam("workspace_id") String workspaceId);
 
-    @GetMapping(value = "/v1/{project_id}/workflows/{workflow_id}/conversations")
-    ResponseEntity<ConversionQueries> listConversationQueries(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("workflow_id") String workflowId,
-        @SpringQueryMap ListConversationQueriesQo listConversationQueriesQo,
-        @RequestParam("workspace_id") String workspaceId);
-
-    @GetMapping(value = "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/executions")
-    ResponseEntity<ExecutionQueries> listExecutionQueries(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("workflow_id") String workflowId,
-        @PathVariable("conversation_id") String conversationId,
-        @SpringQueryMap ListExecutionQueriesQo listExecutionQueriesQo,
-        @RequestParam("workspace_id") String workspaceId);
-
-    @GetMapping(value = "/v1/{project_id}/workflows/{workflow_id}/executions/{execution_id}")
-    ResponseEntity<ExecutionInfo> getExecutionInsight(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("workflow_id") String workflowId,
-        @PathVariable("execution_id") String executionId,
-        @SpringQueryMap GetExecutionInsightQo getExecutionInsightQo,
-        @RequestParam("workspace_id") String workspaceId);
-
     @GetMapping(value = "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/history")
     ResponseEntity<List<Message>> retrieveConversation(
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
@@ -488,34 +460,11 @@ public interface AgentRuntimeClient {
         @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
         @RequestBody AnalyticsEventReq body, @RequestHeader("workspace_id") String workspaceId);
 
-    @GetMapping("/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/execution-queries")
-    ResponseEntity<AgentExecutionQueries> listAgentExecutionQueries(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
-        @PathVariable("conversation_id") String conversationId,
-        @SpringQueryMap ListAgentExecutionQueriesQo listAgentExecutionQueriesQo,
-        @RequestParam("workspace_id") String workspaceId);
-
-    @GetMapping("/v1/{project_id}/agents/{agent_id}/executions/{execution_id}")
-    ResponseEntity<AgentExecutionInfo> getAgentExecutionInfo(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("execution_id") String executionId,
-        @PathVariable("agent_id") String agentId,
-        @SpringQueryMap GetAgentExecutionInfoQo getAgentExecutionInfoQo,
-        @RequestParam("workspace_id") String workspaceId);
-
     @PostMapping("/v1/{project_id}/asr/short-audio")
     ResponseEntity<AsrRsp> voiceRecognition(
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
         @PathVariable("project_id") String projectId,
         @RequestBody AsrReq body, @RequestParam("workspace_id") String workspaceId);
-
-    @GetMapping("/v1/{project_id}/agents/{agent_id}/conversations")
-    ResponseEntity<ConversionQueries> listAgentConversations(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
-        @SpringQueryMap ListAgentConversationsQo listAgentConversationsQo,
-        @RequestParam("workspace_id") String workspaceId);
 
     @PostMapping("/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/abort")
     ResponseEntity<Status> abortConversation(

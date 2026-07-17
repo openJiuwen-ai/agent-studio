@@ -204,9 +204,10 @@ public interface IWorkflowManagementService {
      * @param file file
      * @param importWorkflows importWorkflows
      * @param importTools importTools
+     * @param mode mode
      */
     ImportRsp importWorkflows(String workspaceId, String projectId, MultipartFile file, String importWorkflows,
-        String importTools);
+        String importTools, String mode);
 
     /**
      * listWorkflowChannels

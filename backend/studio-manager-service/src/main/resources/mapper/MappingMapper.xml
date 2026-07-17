@@ -232,17 +232,18 @@
         m.valid,
         m.created_on,
         m.updated_on
-        <if test="appType == 'workflow'">
+        <if test="referenceType != 'share' and appType == 'workflow'">
             , w.name
         </if>
         from t_mapping m
-        <if test="appType == 'workflow'">
+        <if test="referenceType != 'share' and appType == 'workflow'">
             INNER JOIN t_agent_workflow w ON m.app_id = w.id
         </if>
-        <if test="appType == 'agent'">
+        <if test="referenceType != 'share' and appType == 'agent'">
             INNER JOIN t_agent a ON m.app_id = a.agent_id
         </if>
-        where m.resource_id like concat(#{resourceId,jdbcType=VARCHAR}, '%')
+        where (m.resource_id = #{resourceId,jdbcType=VARCHAR}
+            OR m.resource_id like concat(#{resourceId,jdbcType=VARCHAR}, '#%'))
         <if test="referenceType != 'share' and workspaceId != null and appType == 'workflow'">
             and w.workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
@@ -250,7 +251,7 @@
             and a.workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
         <if test="referenceType == 'share'">
-            and m.reference_type = #{referenceType,jdbcType=VARCHAR}
+            and m.resource_workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
         <if test="resourceVersion != null and resourceVersion != 'latest'">
             and m.resource_version = #{resourceVersion,jdbcType=VARCHAR}
@@ -258,8 +259,11 @@
         <if test="resourceVersion == 'latest'">
             and m.resource_version IS NULL
         </if>
-        <if test="appType != null">
+        <if test="appType != null and appType == 'workflow'">
             and m.app_type = #{appType,jdbcType=VARCHAR}
+        </if>
+        <if test="appType != null and appType == 'agent'">
+            and (m.app_type = 'agent' OR m.app_type = 'controller')
         </if>
         and valid = 1
     </select>

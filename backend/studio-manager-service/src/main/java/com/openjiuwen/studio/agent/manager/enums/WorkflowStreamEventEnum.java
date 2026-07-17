@@ -14,7 +14,11 @@ public enum WorkflowStreamEventEnum {
     NODE_WAIT,
     NODE_FINISHED,
     WORKFLOW_FINISHED,
-    TEXT_CHUNK,
-
-    END
+    MESSAGE,
+    SENSITIVE,
+    ERROR,
+    EXCEPTION,
+    END,
+    HEARTBEAT,
+    KNOWLEDGE_BASE_FILES_INFO
 }

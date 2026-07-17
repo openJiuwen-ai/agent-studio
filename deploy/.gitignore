@@ -1,0 +1,6 @@
+# 实际部署配置（由 deploy.sh 从 .env.template 复制，含数据库/对象存储口令，勿提交）
+.env
+
+# 日志聚合栈若改用 bind mount 暴露日志，忽略运行时产物
+logs/
+data/

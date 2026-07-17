@@ -127,6 +127,9 @@ spec:
             # 是否启用资源管理的操作日志
             - name: studio_operationLog_switch
               value: 'false'
+            # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
+            - name: auth_sso_validate_url
+              value: ''
           resources:
             limits:
               cpu: '2'

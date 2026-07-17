@@ -32,6 +32,11 @@ from agent_runtime.schemas.additional_questions import (
 from agent_runtime.additional_questions.service import (
     AdditionalQuestionsService,
 )
+from agent_runtime.moderation.stream_moderation import (
+    apply_stream_moderation,
+    block_event_generator,
+    init_moderation_from_ir,
+)
 from agent_runtime.storage import get_storage_provider
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
@@ -171,11 +176,23 @@ async def ir_execute(req_json: dict, request: Request):
         )
 
     mode = (ir_json.get("configs") or {}).get("mode", "workflow")
+
+    # 内容审核：初始化引擎 + 输入审核
+    moderation_engine = init_moderation_from_ir(ir_json)
+    if moderation_engine:
+        is_safe, result = moderation_engine.check_input_query(req.query)
+        if not is_safe:
+            workflow_logger.info("Input moderation blocked query for execution_id=%s", execution_id)
+            return StreamingResponse(
+                content=block_event_generator(result, mode, execution_id),
+                media_type="text/event-stream",
+            )
+
     runner = _get_runner_by_type(mode)
 
     if req.response_mode == ResponseMode.STREAMING:
         return StreamingResponse(
-            content=stream_response(req, execution_id, runner),
+            content=stream_response(req, execution_id, runner, moderation_engine),
             media_type="text/event-stream",
         )
     else:
@@ -191,14 +208,21 @@ async def ir_execute(req_json: dict, request: Request):
         )
 
 
-async def stream_response(req: ExecutionRequest, execution_id: str, runner):
+async def stream_response(req: ExecutionRequest, execution_id: str, runner, moderation_engine=None):
     """
     透传 OutputSchema 格式
     输出格式: data: {"type": "end node stream", "index": 0, "payload": {"response": "text"}}\n\n
+
+    审核层：在 dict 层插入 apply_stream_moderation()，对 message/message_end 事件的
+    think/answer 做内容审核。事件包装层（未来）将作为另一个 generator wrapper 插入。
     """
     execution_id = execution_id or str(uuid.uuid4())
     last_event = ""
-    async for chunk in runner.run_streaming(req, execution_id):
+
+    raw_gen = runner.run_streaming(req, execution_id)
+    moderated_gen = apply_stream_moderation(raw_gen, moderation_engine) if moderation_engine else raw_gen
+
+    async for chunk in moderated_gen:
         if chunk is None:
             continue
         if isinstance(chunk, bytes):

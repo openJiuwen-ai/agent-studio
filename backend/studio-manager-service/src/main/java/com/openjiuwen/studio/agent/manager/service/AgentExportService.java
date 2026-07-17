@@ -21,6 +21,7 @@ import com.openjiuwen.studio.agent.manager.entity.ModelStrategyExportEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
+import com.openjiuwen.studio.agent.manager.enums.ExportModeEnum;
 import com.openjiuwen.studio.agent.manager.enums.ResourceTypeEnum;
 import com.openjiuwen.studio.agent.manager.enums.relation.ReferenceTypeEnum;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
@@ -50,6 +51,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -161,26 +163,33 @@ public class AgentExportService {
                     ? Constants.LATEST_PUBLISH_VERSION : exportResourceVersion.getResourceVersion();
                 log.debug("Processing workflow ID: {} version:{}", workflowId, versionId);
                 WorkflowEntity currentWorkflow = workflowMapper.getWorkflowById(workflowId);
-                // 指定版本时校验版本存在性：不存在则记录失败项并跳过该资源（对齐旧版 lumina validResource）
-                if (validReleaseVersion(workflowId, versionId, currentWorkflow.getName(), body.getResourceType(),
-                    exportResps)) {
-                    continue;
+                List<ExportResourceUnit> exportResourceUnits;
+                if (ExportModeEnum.SPACIOUS.getCode().equals(body.getMode())) {
+                    // SPACIOUS 模式：仅导出父工作流自身资源（不递归展开子资源）
+                    exportResourceUnits = getSpaciousExportResourceUnits(projectId, workspaceId, body,
+                        workflowId, Constants.LATEST_PUBLISH_VERSION, currentWorkflow.getName());
+                } else {
+                    // strict 模式：指定版本时校验版本存在性：不存在则记录失败项并跳过该资源（对齐旧版 lumina validResource）
+                    if (validReleaseVersion(workflowId, versionId, currentWorkflow.getName(), body.getResourceType(),
+                        exportResps)) {
+                        continue;
+                    }
+                    // 获取该版本下所有资源（versionId=latest 查草稿 mapping，具体 versionId 查版本 mapping）
+                    List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(workflowId,
+                        versionId, null, null);
+                    List<MappingEntity> subExportResources = new ArrayList<>();
+                    buildSubExportResources(subExportResources, mappingEntities);
+                    // 过滤共享资源
+                    subExportResources = filterShareResource(workspaceId, subExportResources);
+                    exportResourceUnits = convertMapping2ExportParam(subExportResources);
+                    // 模型供应商查询
+                    List<ModelExportEntity> modelProviders = getModelProviders(projectId, workspaceId,
+                        subExportResources);
+                    // 添加当前节点（透传 versionId，使 ExportResourceUnit.resourceVersion 携带具体版本）
+                    exportResourceUnits.add(
+                        addCurrentResource(workflowId, currentWorkflow.getName(), body.getResourceType(), versionId,
+                            subExportResources, modelProviders));
                 }
-                // 获取该版本下所有资源（versionId=latest 查草稿 mapping，具体 versionId 查版本 mapping）
-                List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(workflowId,
-                    versionId, null, null);
-                List<MappingEntity> subExportResources = new ArrayList<>();
-                buildSubExportResources(subExportResources, mappingEntities);
-                // 过滤共享资源
-                subExportResources = filterShareResource(workspaceId, subExportResources);
-                List<ExportResourceUnit> exportResourceUnits = convertMapping2ExportParam(subExportResources);
-                // 模型供应商查询
-                List<ModelExportEntity> modelProviders = getModelProviders(projectId, workspaceId,
-                    subExportResources);
-                // 添加当前节点（透传 versionId，使 ExportResourceUnit.resourceVersion 携带具体版本）
-                exportResourceUnits.add(
-                    addCurrentResource(workflowId, currentWorkflow.getName(), body.getResourceType(), versionId,
-                        subExportResources, modelProviders));
                 for (ResourceTypeEnum resourceTypeEnum : EXPORT_RESOURCE_TYPE_LIST) {
                     ExportResp exportResp = buildSubResource(exportResourceUnits, workflowId, resourceTypeEnum);
                     if (Objects.nonNull(exportResp)) {
@@ -267,6 +276,7 @@ public class AgentExportService {
         currentResource.setResourceType(resourceType);
         currentResource.setResourceName(resourceName);
         currentResource.setResourceVersion(versionId);
+        currentResource.setResourceLevel(1);
         Set<String> l2ResourceIds = subExportResources.stream()
             .map(MappingEntity::getResourceId)
             .collect(Collectors.toSet());
@@ -453,6 +463,7 @@ public class AgentExportService {
             exportResult.setResourceId(p.getResourceId());
             exportResult.setResourceName(p.getResourceName());
             exportResult.setResourceType(p.getResourceType());
+            exportResult.setResourceLevel(p.getResourceLevel());
             exportResult.setReason(i18nUtil.getMessage(StudioError.EXPORT_RESOURCE_COMMON_ERROR));
             return exportResult;
         }).toList();
@@ -467,6 +478,7 @@ public class AgentExportService {
             resourceUnit.setResourceType(p.getResourceType());
             resourceUnit.setResourceVersion(p.getResourceVersion());
             resourceUnit.setParentResourceId(p.getAppId());
+            resourceUnit.setResourceLevel(2);
             resourceUnit.setAppId(p.getAppId());
             resourceUnit.setAppType(p.getAppType());
             return resourceUnit;
@@ -502,23 +514,30 @@ public class AgentExportService {
                     ? Constants.LATEST_PUBLISH_VERSION : exportResourceVersion.getResourceVersion();
                 log.info("parse Processing:{} version:{}", agentId, versionId);
                 Agent currentAgent = agentMapper.selectById(agentId);
-                // 指定版本时校验版本存在性：不存在则记录失败项并跳过该资源（对齐旧版 lumina validResource）
-                if (validReleaseVersion(agentId, versionId, currentAgent.getName(), body.getResourceType(),
-                    exportResps)) {
-                    continue;
-                }
-                // 获取该版本下所有资源（versionId=latest 查草稿 mapping，具体 versionId 查版本 mapping）
-                List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(agentId,
-                    versionId, null, null);
-                List<MappingEntity> subExportResources = new ArrayList<>();
-                buildSubExportResources(subExportResources, mappingEntities);
+                List<ExportResourceUnit> exportResourceUnits;
+                if (ExportModeEnum.SPACIOUS.getCode().equals(body.getMode())) {
+                    // SPACIOUS 模式：仅导出父智能体自身资源（不递归展开子资源）
+                    exportResourceUnits = getSpaciousExportResourceUnits(projectId, workspaceId, body,
+                        agentId, Constants.LATEST_PUBLISH_VERSION, currentAgent.getName());
+                } else {
+                    // strict 模式：指定版本时校验版本存在性：不存在则记录失败项并跳过该资源（对齐旧版 lumina validResource）
+                    if (validReleaseVersion(agentId, versionId, currentAgent.getName(), body.getResourceType(),
+                        exportResps)) {
+                        continue;
+                    }
+                    // 获取该版本下所有资源（versionId=latest 查草稿 mapping，具体 versionId 查版本 mapping）
+                    List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(agentId,
+                        versionId, null, null);
+                    List<MappingEntity> subExportResources = new ArrayList<>();
+                    buildSubExportResources(subExportResources, mappingEntities);
 
-                subExportResources = filterShareResource(workspaceId, subExportResources);
-                List<ExportResourceUnit> exportResourceUnits = convertMapping2ExportParam(subExportResources);
-                // 模型供应商查询
-                List<ModelExportEntity> modelProviders = getModelProviders(projectId, workspaceId, subExportResources);
-                exportResourceUnits.add(addCurrentResource(agentId, currentAgent.getName(), body.getResourceType(), versionId,
-                    subExportResources, modelProviders));
+                    subExportResources = filterShareResource(workspaceId, subExportResources);
+                    exportResourceUnits = convertMapping2ExportParam(subExportResources);
+                    // 模型供应商查询
+                    List<ModelExportEntity> modelProviders = getModelProviders(projectId, workspaceId, subExportResources);
+                    exportResourceUnits.add(addCurrentResource(agentId, currentAgent.getName(), body.getResourceType(), versionId,
+                        subExportResources, modelProviders));
+                }
                 for (ResourceTypeEnum resourceTypeEnum : EXPORT_RESOURCE_TYPE_LIST) {
                     ExportResp exportResp = buildSubResource(exportResourceUnits, agentId, resourceTypeEnum);
                     if (Objects.nonNull(exportResp)) {
@@ -553,5 +572,47 @@ public class AgentExportService {
             throw new AgentStudioException(StudioError.AGENT_NOT_EXIST_OR_NO_PERMISSION,
                 String.join(",", cannotExportAgentIds));
         }
+    }
+
+    private List<ExportResourceUnit> getSpaciousExportResourceUnits(String projectId, String workspaceId,
+        ExportResourceParams body, String appId, String appVersion, String appName) {
+        List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(appId, appVersion, null, null);
+        if (CollectionUtils.isEmpty(mappingEntities)) {
+            return null;
+        }
+        List<MappingEntity> workflowMappings = mappingEntities.stream()
+            .filter(p -> Strings.CS.equals(p.getResourceType(), ResourceTypeEnum.WORKFLOW.toString()))
+            .collect(Collectors.toList());
+        if (CollectionUtils.isNotEmpty(workflowMappings)) {
+            List<String> workflowIds
+                = workflowMappings.stream().map(MappingEntity::getResourceId).distinct().toList();
+            List<WorkflowEntity> workflowEntities = workflowMapper.selectByWorkflowIdList(projectId, workspaceId,
+                workflowIds);
+            Map<String, String> workflowTraceIdMap = workflowEntities.stream()
+                .filter(w -> StringUtils.isNotEmpty(w.getTraceId()))
+                .collect(Collectors.toMap(WorkflowEntity::getId, WorkflowEntity::getTraceId, (v1, v2) -> v1));
+            workflowMappings.forEach(m -> m.setTraceId(workflowTraceIdMap.get(m.getResourceId())));
+        }
+
+        List<MappingEntity> controllerMappings = mappingEntities.stream()
+            .filter(p -> Strings.CS.equals(p.getResourceType(), ResourceTypeEnum.CONTROLLER.toString()))
+            .collect(Collectors.toList());
+        if (CollectionUtils.isNotEmpty(controllerMappings)) {
+            List<String> controllerIds
+                = controllerMappings.stream().map(MappingEntity::getResourceId).distinct().toList();
+            List<Agent> agents = agentMapper.selectByAgentIds(projectId, ResourceTypeEnum.CONTROLLER.toString(),
+                controllerIds);
+            Map<String, String> agentTraceIdMap = agents.stream()
+                .filter(a -> StringUtils.isNotEmpty(a.getTraceId()))
+                .collect(Collectors.toMap(Agent::getAgentId, Agent::getTraceId, (v1, v2) -> v1));
+            controllerMappings.forEach(m -> m.setTraceId(agentTraceIdMap.get(m.getResourceId())));
+        }
+
+        List<ExportResourceUnit> exportResourceUnits = new ArrayList<>();
+        ExportResourceUnit currentResource = addCurrentResource(appId, appName, body.getResourceType(),
+            Constants.LATEST_PUBLISH_VERSION, mappingEntities, null);
+        currentResource.setL1Mappings(mappingEntities);
+        exportResourceUnits.add(currentResource);
+        return exportResourceUnits;
     }
 }

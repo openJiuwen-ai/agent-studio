@@ -5,13 +5,26 @@ package com.openjiuwen.studio.agent.manager.service;
 
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AgentMemoryConfig;
 import com.openjiuwen.studio.agent.manager.dto.ControllerVO;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowVO;
+import com.openjiuwen.studio.agent.manager.entity.Agent;
+import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.MemoryRepoEntity;
+import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
+import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
+import com.openjiuwen.studio.agent.manager.enums.ExportModeEnum;
+import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
+import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
+import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
+import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportExportStatusEnum;
+import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportInfo;
+import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportResourceResult;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +40,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,6 +49,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
@@ -45,6 +60,21 @@ class AgentImportServiceTest {
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     private MemoryRepoMapper memoryRepoMapper;
 
+    @Mock
+    private WorkflowMapper workflowMapper;
+
+    @Mock
+    private AgentMapper agentMapper;
+
+    @Mock
+    private ReleaseVersionMapper releaseVersionMapper;
+
+    @Mock
+    private MappingMapper mappingMapper;
+
+    @Mock
+    private I18nUtil i18nUtil;
+
     @InjectMocks
     private AgentImportService agentImportService;
 
@@ -54,6 +84,11 @@ class AgentImportServiceTest {
     void setUp() throws Exception {
         mockitoCloseable = MockitoAnnotations.openMocks(this);
         ReflectionTestUtils.setField(agentImportService, "memoryRepoMapper", memoryRepoMapper);
+        ReflectionTestUtils.setField(agentImportService, "workflowMapper", workflowMapper);
+        ReflectionTestUtils.setField(agentImportService, "agentMapper", agentMapper);
+        ReflectionTestUtils.setField(agentImportService, "releaseVersionMapper", releaseVersionMapper);
+        ReflectionTestUtils.setField(agentImportService, "mappingMapper", mappingMapper);
+        ReflectionTestUtils.setField(agentImportService, "i18nUtil", i18nUtil);
     }
 
     @AfterEach
@@ -508,6 +543,228 @@ class AgentImportServiceTest {
             method.invoke(agentImportService, dsl);
         } catch (Exception e) {
             throw new AgentStudioException("Failed to invoke verifyingAndReplaceControllerResourceInfo");
+        }
+    }
+
+    /**
+     * 测试SPACIOUS模式导入：handleSpaciousImport方法
+     * 场景：workflow资源包含{{latest}}参数，且有l1Mappings
+     */
+    @Test
+    void testHandleSpaciousImport_workflowWithLatestParam() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class, RETURNS_DEEP_STUBS)) {
+            String projectId = "test-project";
+            String workspaceId = "test-workspace";
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("wf-1");
+            importInfo.setResourceType("WORKFLOW");
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "wf-1");
+            dsl.put("name", "test-workflow");
+            dsl.put("configs", Map.of("version", AgentImportService.LATEST_PARAM));
+            importInfo.setDsl(dsl);
+
+            MappingEntity mappingEntity = new MappingEntity();
+            mappingEntity.setResourceId("target-wf-1");
+            mappingEntity.setResourceType("WORKFLOW");
+            mappingEntity.setTraceId("trace-1");
+            importInfo.setL1Mappings(List.of(mappingEntity));
+
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("wf-1");
+            importResult.setStatus(ImportExportStatusEnum.SUCCESS.getCode());
+
+            WorkflowEntity workflowEntity = new WorkflowEntity();
+            workflowEntity.setId("target-wf-1");
+            ReleaseVersion releaseVersion = new ReleaseVersion();
+            releaseVersion.setVersionId("v1");
+            releaseVersion.setVersionName("version1");
+
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+            when(workflowMapper.selectByTraceId(projectId, workspaceId, "trace-1"))
+                .thenReturn(List.of(workflowEntity));
+            when(releaseVersionMapper.selectByAppId("target-wf-1"))
+                .thenReturn(List.of(releaseVersion));
+            when(mappingMapper.selectByAppIdAndAppVersion(any(), any(), any(), any()))
+                .thenReturn(List.of(new MappingEntity()));
+
+            invokeHandleSpaciousImport(projectId, workspaceId, List.of(importInfo), List.of(importResult));
+
+            assertNotNull(importInfo.getDsl());
+        }
+    }
+
+    /**
+     * 测试SPACIOUS模式导入：handleSpaciousImport方法
+     * 场景：controller资源包含{{latest}}参数，且有l1Mappings
+     */
+    @Test
+    void testHandleSpaciousImport_controllerWithLatestParam() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class, RETURNS_DEEP_STUBS)) {
+            String projectId = "test-project";
+            String workspaceId = "test-workspace";
+
+            ImportInfo importInfo = new ImportInfo();
+            importInfo.setResourceId("controller-1");
+            importInfo.setResourceType("CONTROLLER");
+            Map<String, Object> dsl = new HashMap<>();
+            dsl.put("id", "controller-1");
+            dsl.put("name", "test-controller");
+            dsl.put("nodes", List.of(Map.of("configs", Map.of("version", AgentImportService.LATEST_PARAM))));
+            importInfo.setDsl(dsl);
+
+            MappingEntity mappingEntity = new MappingEntity();
+            mappingEntity.setResourceId("target-controller-1");
+            mappingEntity.setResourceType("CONTROLLER");
+            mappingEntity.setTraceId("trace-controller-1");
+            importInfo.setL1Mappings(List.of(mappingEntity));
+
+            ImportResourceResult importResult = new ImportResourceResult();
+            importResult.setId("controller-1");
+            importResult.setStatus(ImportExportStatusEnum.SUCCESS.getCode());
+
+            Agent agent = new Agent();
+            agent.setAgentId("target-controller-1");
+            ReleaseVersion releaseVersion = new ReleaseVersion();
+            releaseVersion.setVersionId("v1");
+            releaseVersion.setVersionName("version1");
+
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(workspaceId);
+            when(agentMapper.selectAgentByTraceIdAndWorkspaceId(projectId, workspaceId, "trace-controller-1"))
+                .thenReturn(List.of(agent));
+            when(releaseVersionMapper.selectByAppId("target-controller-1"))
+                .thenReturn(List.of(releaseVersion));
+            when(mappingMapper.selectByAppIdAndAppVersion(any(), any(), any(), any()))
+                .thenReturn(List.of(new MappingEntity()));
+
+            invokeHandleSpaciousImport(projectId, workspaceId, List.of(importInfo), List.of(importResult));
+
+            assertNotNull(importInfo.getDsl());
+        }
+    }
+
+    /**
+     * 测试SPACIOUS模式导入：handleSpaciousImport方法
+     * 场景：资源不包含{{latest}}参数，应跳过处理
+     */
+    @Test
+    void testHandleSpaciousImport_noLatestParam() {
+        String projectId = "test-project";
+        String workspaceId = "test-workspace";
+
+        ImportInfo importInfo = new ImportInfo();
+        importInfo.setResourceId("wf-1");
+        importInfo.setResourceType("WORKFLOW");
+        Map<String, Object> dsl = new HashMap<>();
+        dsl.put("id", "wf-1");
+        dsl.put("name", "test-workflow");
+        importInfo.setDsl(dsl);
+
+        MappingEntity mappingEntity = new MappingEntity();
+        mappingEntity.setResourceId("target-wf-1");
+        mappingEntity.setResourceType("WORKFLOW");
+        importInfo.setL1Mappings(List.of(mappingEntity));
+
+        ImportResourceResult importResult = new ImportResourceResult();
+        importResult.setId("wf-1");
+        importResult.setStatus(ImportExportStatusEnum.SUCCESS.getCode());
+
+        invokeHandleSpaciousImport(projectId, workspaceId, List.of(importInfo), List.of(importResult));
+
+        assertNotNull(importInfo.getDsl());
+    }
+
+    /**
+     * 测试SPACIOUS模式导入：handleSpaciousImport方法
+     * 场景：资源没有l1Mappings，应跳过处理
+     */
+    @Test
+    void testHandleSpaciousImport_emptyL1Mappings() {
+        String projectId = "test-project";
+        String workspaceId = "test-workspace";
+
+        ImportInfo importInfo = new ImportInfo();
+        importInfo.setResourceId("wf-1");
+        importInfo.setResourceType("WORKFLOW");
+        Map<String, Object> dsl = new HashMap<>();
+        dsl.put("id", "wf-1");
+        dsl.put("configs", Map.of("version", AgentImportService.LATEST_PARAM));
+        importInfo.setDsl(dsl);
+        importInfo.setL1Mappings(Collections.emptyList());
+
+        ImportResourceResult importResult = new ImportResourceResult();
+        importResult.setId("wf-1");
+        importResult.setStatus(ImportExportStatusEnum.SUCCESS.getCode());
+
+        invokeHandleSpaciousImport(projectId, workspaceId, List.of(importInfo), List.of(importResult));
+
+        assertNotNull(importInfo.getDsl());
+    }
+
+    /**
+     * 测试SPACIOUS模式导入：handleSpaciousImport方法
+     * 场景：导入结果为FAILED状态，应跳过处理
+     */
+    @Test
+    void testHandleSpaciousImport_failedResult() {
+        String projectId = "test-project";
+        String workspaceId = "test-workspace";
+
+        ImportInfo importInfo = new ImportInfo();
+        importInfo.setResourceId("wf-1");
+        importInfo.setResourceType("WORKFLOW");
+        Map<String, Object> dsl = new HashMap<>();
+        dsl.put("id", "wf-1");
+        dsl.put("configs", Map.of("version", AgentImportService.LATEST_PARAM));
+        importInfo.setDsl(dsl);
+
+        MappingEntity mappingEntity = new MappingEntity();
+        mappingEntity.setResourceId("target-wf-1");
+        mappingEntity.setResourceType("WORKFLOW");
+        importInfo.setL1Mappings(List.of(mappingEntity));
+
+        ImportResourceResult importResult = new ImportResourceResult();
+        importResult.setId("wf-1");
+        importResult.setStatus(ImportExportStatusEnum.FAILED.getCode());
+
+        invokeHandleSpaciousImport(projectId, workspaceId, List.of(importInfo), List.of(importResult));
+
+        assertNotNull(importInfo.getDsl());
+    }
+
+    /**
+     * 测试ExportModeEnum枚举值
+     */
+    @Test
+    void testExportModeEnum() {
+        assertEquals("STRICT", ExportModeEnum.STRICT.getCode());
+        assertEquals("SPACIOUS", ExportModeEnum.SPACIOUS.getCode());
+        assertEquals("严格模式", ExportModeEnum.STRICT.getDesc());
+        assertEquals("宽松模式", ExportModeEnum.SPACIOUS.getDesc());
+    }
+
+    /**
+     * 测试LATEST_PARAM常量
+     */
+    @Test
+    void testLatestParamConstant() {
+        assertEquals("{{latest}}", AgentImportService.LATEST_PARAM);
+    }
+
+    /**
+     * 使用反射调用私有方法handleSpaciousImport
+     */
+    @SuppressWarnings("unchecked")
+    private void invokeHandleSpaciousImport(String projectId, String workspaceId,
+        List<ImportInfo> resourceList, List<ImportResourceResult> result) {
+        try {
+            Method method = AgentImportService.class.getDeclaredMethod("handleSpaciousImport",
+                String.class, String.class, List.class, List.class);
+            method.setAccessible(true);
+            method.invoke(agentImportService, projectId, workspaceId, resourceList, result);
+        } catch (Exception e) {
+            throw new AgentStudioException("Failed to invoke handleSpaciousImport: " + e.getMessage());
         }
     }
 }

@@ -1,16 +1,30 @@
+/*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
+ */
 package com.openjiuwen.studio.agent.manager.constant;
 
 /**
  * 常量
  *
- * @author d00634523
- * @since 2024-09-26
  */
 public interface Constant {
     interface Workflow {
+        String NODE_START = "node_start";
+
+        String NODE_END = "node_end";
 
         String REF = "ref";
 
+        String REF_START = "${";
+
+        String RAW_END = ".raw_output}";
+
+        String TOKENS = "tokens";
+
+        /**
+         * 流式调用workflow超时时间
+         */
+        long WORKFLOW_TIMEOUT = 120000L;
     }
 
     interface AppType {
@@ -19,6 +33,69 @@ public interface Constant {
         String AGENT = "agent";
 
         String CONTROLLER = "controller";
+
+        String DEEP_RESEARCH = "deepresearch";
+
+        String PLAN_EXECUTE = "plan";
+    }
+
+    interface Obs {
+        String CONTENT = "CONTENT";
+
+        String MD5 = "MD5";
+    }
+
+    interface Jiuwen {
+        String RESPONSE_MODE_STREAMING = "streaming";
+
+        String RESPONSE_MODE_BLOCKING = "blocking";
+
+        String USER_MSG_FIELD = "query";
+
+        String END_NODE_DEFAULT_OUTPUT_FIELD = "responseContent";
+
+        String NODE_TYPE_PREFIX = "jiuwen.";
+
+        String ERROR_CODE_FIELD = "code";
+
+        String ERROR_MSG_FIELD = "message";
+
+        /**
+         * 控制器指定执行workflow id序列
+         */
+        String WORKFLOW_SEQUENCE_FIELD = "workflowSequence";
+
+        /**
+         * 控制器激活的workflow id序列
+         */
+        String ACTIVE_WORKFLOWS_FIELD = "activeWorkflows";
+
+        /**
+         * 控制器指定意图参数
+         */
+        String INTENT_FIELD = "intent";
+
+        String IMAGE_TYPE = "image_url";
+
+        String VIDEO_TYPE = "video_url";
+    }
+
+    interface DeepResearch {
+        String MESSAGE_FIELD = "message";
+
+        String FEEDBACK_FIELD = "interrupt_feedback";
+
+        String TEMPLATE_FIELD = "template";
+
+        String FILE_NAME_FIELD = "file_name";
+
+        String FILE_PATH_FIELD = "file_path";
+
+        String IS_TEMPLATE_FIELD = "is_template";
+
+        String FEEDBACK_ACCEPTED = "accepted";
+
+        String SUB_REPORTER_NODE = "sub_reporter";
     }
 
     interface File {
@@ -93,45 +170,87 @@ public interface Constant {
     interface Common {
         String X_AUTH_TOKEN = "X-Auth-Token";
 
+        String X_SUBJECT_TOKEN = "X-Subject-Token";
+
         String INVOKE_MOD_DEBUG = "debug";
 
         String INVOKE_MOD_PUBLISHED = "published";
+
+        String AUTHORIZATION = "Authorization";
+
+        String X_USER_ID = "X-USER-ID";
+
+        String X_KNOWLEDGE_ENDPOINT = "X-Knowledge-Endpoint";
+
+        String X_WORKSPACE_ID = "X-Workspace-Id";
     }
 
-    interface Jiuwen {
-        String RESPONSE_MODE_STREAMING = "streaming";
+    /**
+     * 生成追问prompt
+     */
+    String ADDITIONAL_QUESTIONS_PROMPT = "prompts/additional_questions_prompt.pt";
 
-        String RESPONSE_MODE_BLOCKING = "blocking";
+    /**
+     * 生成英文追问prompt
+     */
+    String ADDITIONAL_QUESTIONS_PROMPT_EN = "prompts/additional_questions_prompt_en.pt";
 
-        String USER_MSG_FIELD = "query";
+    /**
+     * 追问自定义prompt
+     */
+    String ADDITIONAL_QUESTIONS_PROMPT_CUSTOM
+        = "- 问题应该与你最后一轮的回复紧密相关\n- 问题不要与上文已经提问或者回答过的内容重复\n- 每句话只包含一个问题，但也可以不是问句而是一句指令\n- 推荐你有能力回答的问题";
 
-        String END_NODE_DEFAULT_OUTPUT_FIELD = "responseContent";
+    /**
+     * 追问自定义prompt英文版
+     */
+    String ADDITIONAL_QUESTIONS_PROMPT_CUSTOM_EN
+        = "- The question should be closely related to your last round of responses\n- Do not repeat questions that have been asked or answered above\n- Each sentence contains only one question, but it can also be a command instead of a question\n- Recommend questions that you can answer";
 
-        String NODE_TYPE_PREFIX = "jiuwen.";
+    /**
+     * 生成记忆片段prompt
+     */
+    String MEMORY_CHUNK_PROMPT = "prompts/memory_chunk_prompt.pt";
 
-        String ERROR_CODE_FIELD = "code";
+    /**
+     * 模型复调次数
+     */
+    int MODEL_CALLS = 3;
 
-        String ERROR_MSG_FIELD = "message";
+    /**
+     * 最多生成的追问个数
+     */
+    int MAX_QUESTION_NUMS = 3;
 
-        /**
-         * 控制器指定执行workflow id序列
-         */
-        String WORKFLOW_SEQUENCE_FIELD = "workflowSequence";
+    /**
+     * promptBuilder流式返回超时时间
+     */
+    long PROMPT_BUILDER_STREAM_TIMEOUT = 120000L;
 
-        /**
-         * 控制器激活的workflow id序列
-         */
-        String ACTIVE_WORKFLOWS_FIELD = "activeWorkflows";
+    /**
+     * 字符串常量
+     */
+    String CONFIGS = "configs";
 
-        /**
-         * 控制器指定意图参数
-         */
-        String INTENT_FIELD = "intent";
+    /**
+     * 字符串常量
+     */
+    String MODEL_CONFIG = "modelConfig";
 
-        String IMAGE_TYPE = "image_url";
+    /**
+     * 字符串常量
+     */
+    String LLM_CONFIG = "llm_config";
 
-        String VIDEO_TYPE = "video_url";
-    }
+    /**
+     * 字符串常量
+     */
+    String CONTEXT = "context";
+
+    /**
+     * 字符串常量
+     */
+    String METADATA = "metadata";
 
     /**
      * 字符串常量
@@ -162,6 +281,11 @@ public interface Constant {
      * 字符串常量
      */
     String NAME = "name";
+
+    /**
+     * 用户自定义追问提示词模板变量
+     */
+    String USER_PROMPT = "user_prompt";
 
     /**
      * 字符串常量
@@ -212,6 +336,37 @@ public interface Constant {
      * 应用百宝箱通道类型
      */
     String APP_STORE_CHANNEL = "APP_STORE";
+
+    /**
+     *云商店通道类型
+     */
+    String CLOUD_STORE_CHANNEL = "CLOUD_STORE";
+
+    /**
+     * UniFactory图片解析方式：TEXT
+     */
+    String TEXT_STR = "TEXT";
+
+    /**
+     * UniFactory切分模式：AUTO
+     */
+    String AUTO_MODE = "AUTO";
+
+    /**
+     * AGENT运行失败报错内容
+     */
+    String AGENT_ERROR_CONTENT = "Agent运行失败，错误码：%s，错误信息：%s，请参考产品文档解决或联系系统管理员。";
+
+    /**
+     * request-id
+     */
+    String REQUEST_ID = "request-id";
+
+    String X_REQUEST_ID = "X-Request-Id";
+
+    String TASK_ID = "task-id";
+
+    String X_TASK_ID = "X-Execution-Id";
 
     /**
      * 字符串：file
@@ -480,7 +635,25 @@ public interface Constant {
         String PLUGIN = "Plugin";
     }
 
-    String TASK_ID = "task-id";
+    interface KnowledgeConstant {
 
-    String REQUEST_ID = "request-id";
+        /**
+         * 图片ID在redis缓存中key的前缀
+         */
+        String KNOWLEDGE_IMAGE_CACHE_PREFIX = "knowledge:image:";
+
+        /**
+         * 文件id在redis缓存中key的前缀
+         */
+        String KNOWLEDGE_FILE_CACHE_PREFIX = "knowledge:file:";
+
+        String KNOWLEDGE_FILE_TYPE_DOC = "doc";
+
+        String KNOWLEDGE_FILE_TYPE_FAQ = "faq";
+
+        /**
+         * 分页每页最大展示数量，kooSearch限制最大数量100
+         */
+        int KNOWLEDGE_MAX_PAGE_SIZE = 100;
+    }
 }

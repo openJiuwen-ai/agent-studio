@@ -6,36 +6,19 @@ package com.openjiuwen.studio.agent.manager.service.proxy;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.openjiuwen.studio.agent.common.annotation.OperationLog;
-import com.openjiuwen.studio.agent.common.dto.agent.ConversionQueries;
-import com.openjiuwen.studio.agent.common.dto.agent.ExecutionInfo;
+import com.openjiuwen.studio.agent.common.dto.BatchDeleteUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
+import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventReq;
 import com.openjiuwen.studio.agent.common.dto.analytics.AnalyticsEventResp;
 import com.openjiuwen.studio.agent.common.dto.knowledge.ListUserVariableMemoryResponseBody;
+import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationReq;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationResp;
-import com.openjiuwen.studio.agent.common.dto.run.AdditionalQuestionsReq;
-import com.openjiuwen.studio.agent.common.dto.run.AdditionalQuestionsWorkflowReq;
-import com.openjiuwen.studio.agent.common.dto.run.AgentExecutionQueries;
-import com.openjiuwen.studio.agent.common.dto.run.AsrReq;
-import com.openjiuwen.studio.agent.common.dto.run.AsrRsp;
-import com.openjiuwen.studio.agent.common.dto.run.CancelTaskRsp;
-import com.openjiuwen.studio.agent.common.dto.run.CreateTaskReq;
-import com.openjiuwen.studio.agent.common.dto.run.GetAgentExecutionInfoQo;
-import com.openjiuwen.studio.agent.common.dto.run.GetControllerExecutionDetailQo;
-import com.openjiuwen.studio.agent.common.dto.run.GetExecutionInsightQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentConversationsQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentExecutionQueriesQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListControllerExecutionsQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListConversationQueriesQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListExecutionQueriesQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListTaskQo;
-import com.openjiuwen.studio.agent.common.dto.run.ModifyTaskReq;
-import com.openjiuwen.studio.agent.common.dto.run.ResumeTaskReq;
-import com.openjiuwen.studio.agent.common.dto.run.RetrieveTaskQo;
-import com.openjiuwen.studio.agent.common.dto.run.TaskListRsp;
-import com.openjiuwen.studio.agent.common.dto.run.TaskRsp;
+import com.openjiuwen.studio.agent.common.dto.md.ChatCompletionRequest;
+import com.openjiuwen.studio.agent.common.dto.run.*;
 import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
+import com.openjiuwen.studio.agent.common.entity.RouterStrategyEntity;
 import com.openjiuwen.studio.agent.common.entity.Text2AudioReq;
 import com.openjiuwen.studio.agent.common.enums.OperationType;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
@@ -44,6 +27,8 @@ import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.JsonUtils;
 import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.manager.constant.Constant;
+import com.openjiuwen.studio.agent.manager.dto.*;
 import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
 import com.openjiuwen.studio.agent.common.utils.ResponseModel;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
@@ -60,24 +45,28 @@ import com.openjiuwen.studio.agent.common.dto.run.RunToolRequestBody;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowRunReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.Audio2TextReq;
-import com.openjiuwen.studio.agent.common.dto.md.ChatCompletionRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.EmbeddingRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.RankDocumentsRequest;
-import com.openjiuwen.studio.agent.common.dto.run.RetrieveConversationMemoryQo;
-import com.openjiuwen.studio.agent.common.dto.run.RetrieveConversationQo;
 import com.openjiuwen.studio.agent.manager.dto.runtime.StsTextResp;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
+import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowRunResult;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
-import com.openjiuwen.studio.agent.common.entity.RouterStrategyEntity;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ToolMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.FreeModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.RouterStrategyMapper;
+import com.openjiuwen.studio.agent.manager.model.AgentExecuteParams;
+import com.openjiuwen.studio.agent.manager.model.ExecuteParams;
+import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionBriefModel;
+import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionDetailModel;
+import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionInvokeModel;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
+import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
+import com.openjiuwen.studio.agent.manager.service.debugging.ControllerDebuggingMgmtService;
 
 import com.openjiuwen.studio.agent.manager.service.plugin.IPlugin;
 import lombok.extern.slf4j.Slf4j;
@@ -86,7 +75,6 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.sse.EventSource;
 import okhttp3.sse.EventSources;
-
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -100,6 +88,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -128,6 +117,10 @@ public class AgentServiceProxyService {
 
     private final ToolMapper toolMapper;
 
+    private final AgentRuntimeService agentRuntimeService;
+
+    private final ControllerDebuggingMgmtService controllerDebuggingMgmtService;
+
     @Value("${agent_runtime_endpoint:}")
     private String runtimeEndpoint;
 
@@ -147,7 +140,8 @@ public class AgentServiceProxyService {
     public AgentServiceProxyService(AgentRuntimeClient runtimeClient, RedisClient redisClient, AgentMapper agentMapper,
         WorkflowMapper workflowMapper, ModelServiceMapper modelServiceMapper, OkHttpClientUtils okHttpClientUtils,
         RouterStrategyMapper routerStrategyMapper, FreeModelServiceMapper freeModelServiceMapper,
-        ToolMapper toolMapper) {
+        ToolMapper toolMapper, AgentRuntimeService agentRuntimeService,
+        ControllerDebuggingMgmtService controllerDebuggingMgmtService) {
         this.runtimeClient = runtimeClient;
         this.redisClient = redisClient;
         this.agentMapper = agentMapper;
@@ -157,6 +151,8 @@ public class AgentServiceProxyService {
         this.routerStrategyMapper = routerStrategyMapper;
         this.freeModelServiceMapper = freeModelServiceMapper;
         this.toolMapper = toolMapper;
+        this.agentRuntimeService = agentRuntimeService;
+        this.controllerDebuggingMgmtService = controllerDebuggingMgmtService;
     }
 
     public ResponseEntity<List<MemoryVariable>> resetConversationMemory(String workspaceId, String projectId,
@@ -227,30 +223,6 @@ public class AgentServiceProxyService {
 
         checkAgentPermission(projectId, workspaceId, agentId);
         return runtimeClient.resetUserVariableMemory(getToken(), projectId, agentId, workspaceId);
-    }
-
-    public ResponseEntity<ConversionQueries> listConversationQueries(String projectId, String workflowId,
-        ListConversationQueriesQo listConversationQueriesQo, String workspaceId) {
-
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.listConversationQueries(getToken(), projectId, workflowId, listConversationQueriesQo,
-            workspaceId);
-    }
-
-    public ResponseEntity<ExecutionQueries> listExecutionQueries(String projectId, String workflowId,
-        String conversationId, ListExecutionQueriesQo listExecutionQueriesQo, String workspaceId) {
-
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.listExecutionQueries(getToken(), projectId, workflowId, conversationId,
-            listExecutionQueriesQo, workspaceId);
-    }
-
-    public ResponseEntity<ExecutionInfo> getExecutionInsight(String projectId, String workflowId, String executionId,
-        GetExecutionInsightQo getExecutionInsightQo, String workspaceId) {
-
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.getExecutionInsight(getToken(), projectId, workflowId, executionId, getExecutionInsightQo,
-            workspaceId);
     }
 
     public ResponseEntity<List<Message>> retrieveConversation(String projectId, String agentId, String conversationId,
@@ -402,31 +374,9 @@ public class AgentServiceProxyService {
         return runtimeClient.analyticsEvent(getToken(), projectId, agentId, body, workspaceId);
     }
 
-    public ResponseEntity<AgentExecutionQueries> listAgentExecutionQueries(String projectId, String agentId,
-        String conversationId, ListAgentExecutionQueriesQo listAgentExecutionQueriesQo, String workspaceId) {
-
-        return runtimeClient.listAgentExecutionQueries(getToken(), projectId, agentId, conversationId,
-            listAgentExecutionQueriesQo, workspaceId);
-    }
-
-    public ResponseEntity<AgentExecutionInfo> getAgentExecutionInfo(String projectId, String executionId,
-        String agentId, GetAgentExecutionInfoQo getAgentExecutionInfoQo, String workspaceId) {
-
-        return runtimeClient.getAgentExecutionInfo(getToken(), projectId, executionId, agentId, getAgentExecutionInfoQo,
-            workspaceId);
-    }
-
     public ResponseEntity<AsrRsp> voiceRecognition(String projectId, AsrReq body, String workspaceId) {
 
         return runtimeClient.voiceRecognition(getToken(), projectId, body, workspaceId);
-    }
-
-    public ResponseEntity<ConversionQueries> listAgentConversations(String projectId, String agentId,
-        ListAgentConversationsQo listAgentConversationsQo, String workspaceId, String type) {
-
-        checkAgentPermission(projectId, workspaceId, agentId);
-        return runtimeClient.listAgentConversations(getToken(), projectId, agentId, listAgentConversationsQo,
-            workspaceId);
     }
 
     public ResponseEntity<Status> abortConversation(String projectId, String workflowId, String conversationId,
@@ -438,46 +388,101 @@ public class AgentServiceProxyService {
 
     public ResponseEntity<Object> listControllerExecutions(String projectId, String agentId, String conversationId,
         ListControllerExecutionsQo listControllerExecutionsQo, String workspaceId) {
-        return runtimeClient.listControllerExecutions(getToken(), projectId, agentId, conversationId, workspaceId,
-            listControllerExecutionsQo);
+        List<ControllerExecutionBriefModel> briefModels = controllerDebuggingMgmtService.queryCtrlExecutions(
+            agentId, conversationId, listControllerExecutionsQo);
+
+        List<ControllerExecution> executions = briefModels.stream().map(brief -> {
+            ControllerExecution exec = new ControllerExecution();
+            exec.setExecutionId(brief.getExecutionId());
+            exec.setQuery(brief.getQuery());
+            exec.setStatus(brief.getStatus());
+            exec.setErrorInfo(brief.getError());
+            exec.setStartTime(brief.getStartTime());
+            return exec;
+        }).toList();
+
+        ListControllerExecutionsResp resp = new ListControllerExecutionsResp();
+        resp.setCount(executions.size());
+        resp.setExecutions(executions);
+        return ResponseEntity.ok(resp);
     }
 
     public ResponseEntity<Object> getControllerExecutionDetail(String projectId, String agentId, String executionId,
         GetControllerExecutionDetailQo body, String workspaceId) {
 
-        ResponseEntity<Object> getControllerExecutionDetailResp = runtimeClient.getControllerExecutionDetail(getToken(),
-            projectId, agentId, executionId, workspaceId, body);
-        Object respBody = getControllerExecutionDetailResp.getBody();
-        if (respBody == null) {
-            return getControllerExecutionDetailResp;
+        ControllerExecutionDetailModel detailModel = controllerDebuggingMgmtService.queryCtrlExecutionDetail(
+            agentId, executionId);
+        if (detailModel == null || detailModel.getExecutionId() == null) {
+            return ResponseEntity.ok(new JSONObject());
         }
 
         try {
-            JSONObject controllerExecutionDetail = JSONObject.parseObject(JSONObject.toJSONString(respBody));
+            ControllerExecutionDetail detail = new ControllerExecutionDetail();
+            detail.setExecutionId(detailModel.getExecutionId());
+            detail.setConversationId(detailModel.getConversationId());
+            detail.setStatus(detailModel.getStatus());
+            detail.setStartTime(detailModel.getStartTime());
+            detail.setEndTime(detailModel.getEndTime());
+            detail.setErrorInfo(detailModel.getError());
 
-            JSONArray nestedWorkflowArr = controllerExecutionDetail.getJSONArray("nestedWorkflows");
-            if (nestedWorkflowArr != null && !nestedWorkflowArr.isEmpty()) {
-                List<String> nestedWorkflowIds = nestedWorkflowArr.stream()
-                    .map(workflow -> ((JSONObject) workflow).getString("workflow_id"))
-                    .toList();
-
-                List<WorkflowEntity> workflowEntities = workflowMapper.selectByWorkflowIds(projectId, workspaceId,
-                    nestedWorkflowIds);
-                List<JSONObject> workflowBaseDataList = workflowEntities.stream().map(workflowEntity -> {
-                    JSONObject workflowBaseData = new JSONObject();
-                    workflowBaseData.put("workflow_id", workflowEntity.getId());
-                    workflowBaseData.put("workflow_name", workflowEntity.getName());
-
-                    return workflowBaseData;
-                }).toList();
-
-                controllerExecutionDetail.put("nestedWorkflows", workflowBaseDataList);
+            // Convert invocations
+            if (detailModel.getInvocations() != null) {
+                List<ControllerInvokeInfo> invokeInfos = detailModel.getInvocations().stream()
+                    .map(this::convertToInvokeInfo).toList();
+                detail.setInvocations(invokeInfos);
             }
 
-            return ResponseEntity.ok(controllerExecutionDetail);
+            // Enrich nested workflows with names
+            List<String> nestedWorkflowIds = detailModel.getNestedWorkflowIds();
+            if (nestedWorkflowIds != null && !nestedWorkflowIds.isEmpty()) {
+                List<WorkflowEntity> workflowEntities = workflowMapper.selectByWorkflowIds(projectId, workspaceId,
+                    nestedWorkflowIds);
+                List<WorkflowBaseData> workflowBaseDataList = workflowEntities.stream().map(entity -> {
+                    WorkflowBaseData data = new WorkflowBaseData();
+                    data.setFlowId(entity.getId());
+                    data.setFlowName(entity.getName());
+                    return data;
+                }).toList();
+                detail.setNestedWorkflows(workflowBaseDataList);
+            }
+
+            return ResponseEntity.ok(detail);
         } catch (Exception e) {
-            return getControllerExecutionDetailResp;
+            log.error("Failed to get controller execution detail", e);
+            return ResponseEntity.ok(new JSONObject());
         }
+    }
+
+    private ControllerInvokeInfo convertToInvokeInfo(ControllerExecutionInvokeModel model) {
+        ControllerInvokeInfo info = new ControllerInvokeInfo();
+        info.setInvokeId(model.getInvokeId());
+        info.setParentInvokeId(model.getParentInvokeId());
+        info.setNodeId(model.getNodeId());
+        info.setNodeName(model.getNodeName());
+        info.setNodeType(model.getNodeType());
+        info.setNodeStatus(model.getNodeStatus());
+        info.setParentNodeId(model.getParentNodeId());
+        info.setModelDeploymentId(model.getModelDeploymentId());
+        info.setErrorMessage(model.getErrorMsg());
+        info.setInputs(model.getInput());
+        info.setOutputs(model.getOutput());
+        info.setStartTime(model.getStartTime());
+        info.setEndTime(model.getEndTime());
+        info.setApplicationId(model.getApplicationId());
+        info.setParentApplicationId(model.getParentApplicationId());
+        info.setMetadata(model.getMetadata());
+        info.setMessages(model.getMessages());
+        if (model.getStatus() != null) {
+            ControllerInvokeInfoStatus invokeStatus = new ControllerInvokeInfoStatus();
+            invokeStatus.setCode(model.getStatus().getCode());
+            invokeStatus.setDesc(model.getStatus().getDesc());
+            info.setStatus(invokeStatus);
+        }
+        if (model.getApplicationType() != null) {
+            info.setApplicationType(
+                ControllerInvokeInfo.ApplicationTypeEnum.fromValue(model.getApplicationType()));
+        }
+        return info;
     }
 
     public Object runWebWorkflow(String shortCode, String projectId, HttpHeaders httpHeaders, String workspaceId,
@@ -605,7 +610,7 @@ public class AgentServiceProxyService {
         });
 
         Request request = builder.url(url).post(body).build();
-        EventSource.Factory factory = factory = EventSources.createFactory(okHttpClientUtils.getHttpClient());
+        EventSource.Factory factory = EventSources.createFactory(okHttpClientUtils.getHttpClient());
         SseEmitter sseEmitter = new SseEmitter(timeout);
 
         String requestId = MDC.get(REQUEST_ID);
@@ -626,5 +631,87 @@ public class AgentServiceProxyService {
             return listener.getErrorRsp();
         }
         return sseEmitter;
+    }
+
+    public Object stream(String url, HttpHeaders headers, String bodyJson, Long timeout, BaseEventListener listener) {
+        RequestBody body = RequestBody.create(bodyJson, MediaType.parse("application/json; charset=utf-8"));
+
+        Request.Builder builder = new Request.Builder();
+        headers.forEach((key, value) -> {
+            if (value != null && !value.isEmpty()) {
+                builder.addHeader(key, String.join(",", value));
+            }
+        });
+
+        Request request = builder.url(url).post(body).build();
+        EventSource.Factory factory = EventSources.createFactory(okHttpClientUtils.getHttpClient());
+        SseEmitter sseEmitter = new SseEmitter(timeout);
+
+        CountDownLatch latch = new CountDownLatch(1);
+        listener.setLatch(latch);
+        listener.setSseEmitter(sseEmitter);
+
+        // 创建事件
+        log.info("http stream request, url: {}", url);
+        EventSource eventSource = factory.newEventSource(request, listener);
+        try {
+            latch.await(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            log.error("Request agent service timeout.", e);
+            throw new AgentStudioException(StudioError.CALL_RUNTIME_ERROR);
+        }
+        if (listener.getErrorRsp() != null) {
+            return listener.getErrorRsp();
+        }
+        return sseEmitter;
+    }
+
+    /**
+     * Agent专用流式方法，根据executeType选择LLMAgentListener或ControllerAgentListener处理事件并存储调测数据
+     */
+    public Object agentStream(String url, HttpHeaders headers, String bodyJson, AgentExecuteParams executeParams) {
+        String taskId = agentRuntimeService.queryTaskId(executeParams.getAgentId(), executeParams.getExecutionId());
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = MDC.get(REQUEST_ID);
+        }
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = headers.getFirst("X-Execution-Id");
+        }
+        MDC.put(Constant.TASK_ID, taskId);
+        headers.set("X-Execution-Id", taskId);
+        executeParams.setExecutionId(taskId);
+
+        if (Constant.AppType.CONTROLLER.equals(executeParams.getExecuteType())) {
+            ControllerAgentListener listener = new ControllerAgentListener(MDC.get(REQUEST_ID), executeParams, headers);
+            return stream(url, headers, bodyJson, 900000L, listener);
+        } else if (Constant.AppType.AGENT.equals(executeParams.getExecuteType())) {
+            LLMAgentListener listener = new LLMAgentListener(MDC.get(REQUEST_ID), executeParams, headers);
+            return stream(url, headers, bodyJson, 900000L, listener);
+        } else {
+            return stream(url, headers, bodyJson, 900000L, new BaseEventListener(MDC.get(REQUEST_ID), headers));
+        }
+    }
+
+    /**
+     * 工作流专用流式方法，使用WorkflowListener处理事件并存储调测数据
+     */
+    public Object workflowStream(String url, HttpHeaders headers, String bodyJson, WorkflowRunResult result,
+        ExecuteParams executeParams) {
+        String taskId = executeParams.getExecutionId();
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = headers.getFirst("X-Execution-Id");
+        }
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = MDC.get(REQUEST_ID);
+        }
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = UUID.randomUUID().toString();
+        }
+        MDC.put(Constant.TASK_ID, taskId);
+        headers.set("X-Execution-Id", taskId);
+        executeParams.setExecutionId(taskId);
+
+        WorkflowListener listener = new WorkflowListener(MDC.get(REQUEST_ID), executeParams, result, headers);
+        return stream(url, headers, bodyJson, 900000L, listener);
     }
 }

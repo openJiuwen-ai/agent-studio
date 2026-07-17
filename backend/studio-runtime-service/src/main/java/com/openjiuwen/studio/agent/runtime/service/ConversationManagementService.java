@@ -23,17 +23,13 @@ import com.openjiuwen.studio.agent.common.dto.AgentInvokeInfo;
 import com.openjiuwen.studio.agent.runtime.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.common.dto.run.ConversationDeleteResp;
 import com.openjiuwen.studio.agent.common.dto.agent.ConversationInfo;
-import com.openjiuwen.studio.agent.common.dto.agent.ConversionQueries;
-import com.openjiuwen.studio.agent.common.dto.run.ExecutionQuery;
-import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
+
 import com.openjiuwen.studio.agent.common.dto.run.GetAgentExecutionInfoQo;
+import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
 import com.openjiuwen.studio.agent.runtime.dto.GetMemoryChunksQo;
 import com.openjiuwen.studio.agent.runtime.dto.JiuwenAgentEvent;
 import com.openjiuwen.studio.agent.runtime.dto.JiuwenAgentEventData;
 import com.openjiuwen.studio.agent.runtime.dto.JiuwenEvent;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentConversationsQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentExecutionQueriesQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListControllerExecutionsQo;
 import com.openjiuwen.studio.agent.runtime.dto.MemoryChunk;
 import com.openjiuwen.studio.agent.runtime.dto.MemoryVariable;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
@@ -52,7 +48,6 @@ import com.openjiuwen.studio.agent.runtime.model.Conversation;
 import com.openjiuwen.studio.agent.runtime.model.ConversationParams;
 import com.openjiuwen.studio.agent.runtime.model.ExecuteParams;
 import com.openjiuwen.studio.agent.runtime.model.WorkflowRunResult;
-import com.openjiuwen.studio.agent.runtime.model.debugging.ControllerExecutionBriefModel;
 import com.openjiuwen.studio.agent.runtime.rce.client.JiuWenClient;
 import com.openjiuwen.studio.agent.runtime.rce.model.BackflowMessage;
 import com.openjiuwen.studio.agent.runtime.rce.model.BackflowModel;
@@ -63,7 +58,7 @@ import com.openjiuwen.studio.agent.runtime.rce.model.JiuWenDeleteIrReq;
 import com.openjiuwen.studio.agent.runtime.rce.service.DataManagerService;
 import com.openjiuwen.studio.agent.runtime.service.debugging.ControllerDebuggingMgmtService;
 import com.openjiuwen.studio.agent.runtime.utils.AlarmLogUtil;
-import com.openjiuwen.studio.agent.runtime.utils.CommonUtils;
+
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 
 import lombok.extern.slf4j.Slf4j;
@@ -161,17 +156,8 @@ public class ConversationManagementService implements IConversationManagementSer
     @Value("${agent.insight-conv-rel:}")
     private String agentInsightConvRel; // conversation 记录
 
-    @Value("${agent.insight-exec-rel:}")
-    private String agentInsightExecRel; // execution 记录
-
     @Value("${agent.insight-exec:}")
     private String agentInsightExec;
-
-    @Value("${agent.max-conversation-size:}")
-    private Integer maxConversationSize;
-
-    @Value("${agent.max-execution-size:}")
-    private Integer maxExecutionSize;
 
     @Value("${memory.chunk-num}")
     private Integer memoryChunkNum;
@@ -553,10 +539,6 @@ public class ConversationManagementService implements IConversationManagementSer
             if (StringUtils.isEmpty(conversationStr) || Constant.AppType.CONTROLLER.equals(
                     conversationParams.getExecuteType())) {
                 // agent接口刷新conversation insight信息，工作流单独刷新逻辑和executions保持一致
-                if (Constant.AppType.AGENT.equals(conversationParams.getExecuteType())
-                        || Constant.AppType.CONTROLLER.equals(conversationParams.getExecuteType())) {
-                    saveAgentConversations(conversationParams.getId(), conversationParams.getConversationId(), conversationParams.getExecuteType());
-                }
                 messageList = new ArrayList<>();
                 conversation = new Conversation();
                 conversation.setMessageList(messageList);
@@ -728,204 +710,6 @@ public class ConversationManagementService implements IConversationManagementSer
         return conversationKey + "_" + versionId;
     }
 
-    /**
-     * 保存agent应用conversation记录列表
-     *
-     * @param conversationId conversationId
-     */
-    private void saveAgentConversations(String agentId, String conversationId, String agentType) {
-        RedisLock lock = null;
-        String conversationInfosKey = String.format(agentInsightConvRel, agentId,
-                RequestContextUtils.getRequestUserId());
-        try {
-            lock = redisClient.getLock(conversationInfosKey + LOCK_STR);
-
-            // 获取redis分布式锁，如果锁不可用，则等待3秒，如果还是无法获取，则抛出异常
-            if (lock.tryLock(Duration.ofSeconds(3))) {
-                List<ConversationInfo> conversationInfoList = new ArrayList<>();
-                if (redisClient.exists(conversationInfosKey)) {
-                    String text = redisClient.get(conversationInfosKey);
-                    if (StringUtils.isNotEmpty(text)) {
-                        conversationInfoList = JSON.parseObject(text, new TypeReference<>() { });
-                    }
-                }
-
-                // 读取历史信息，判断当前conversationInfo是否存在，不存在则添加
-                List<String> conversationIds = conversationInfoList.stream()
-                        .map(ConversationInfo::getConversationId)
-                        .distinct()
-                        .toList();
-                if (!conversationIds.contains(conversationId)) {
-                    ConversationInfo conversationInfo = new ConversationInfo();
-                    conversationInfo.setConversationId(conversationId);
-                    conversationInfo.setStartTime(System.currentTimeMillis());
-                    conversationInfoList.add(conversationInfo);
-                    log.info("update conversation list: conversationId={}, startTime={}",
-                            conversationInfo.getConversationId(), conversationInfo.getStartTime());
-                }
-
-                // 根据conversation size按时间戳倒序截断
-                conversationInfoList = conversationInfoList.stream()
-                        .sorted(Comparator.comparing(ConversationInfo::getStartTime).reversed())
-                        .toList();
-
-                if (conversationInfoList.size() > maxConversationSize) {
-                    clearAgentConversationRecords(RequestContextUtils.getRequestAuthToken(), RequestContextUtils.getRequestUserId(), agentId,
-                            conversationInfoList.subList(maxConversationSize, conversationInfoList.size()), agentType);
-                }
-
-                conversationInfoList = CommonUtils.subList(0, maxConversationSize, conversationInfoList);
-
-                // 设置最后更新时间
-                redisClient.set(conversationInfosKey, JSON.toJSONString(conversationInfoList),
-                        Duration.ofSeconds(expireTime));
-            } else {
-                log.error("failed to get lock, other user is processing same workflow!");
-                throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);
-            }
-        } catch (Exception e) {
-            log.error("redisson get bucket failed", e);
-            String detail = e.getMessage();
-            if (e instanceof AgentStudioException) {
-                detail = ((AgentStudioException) e).getErrorCode().toString();
-            }
-            alarmLogUtil.logAlarm("REDIS", "redisson get bucket failed ", detail);
-            throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);
-        } finally {
-            if (lock != null) {
-                lock.unlock();
-            }
-        }
-    }
-
-    /**
-     * 从事件中提取Agent应用对话query记录并保存
-     */
-    private void saveAgentExecutionQueries(AgentExecutionInfo executionInfo, AgentExecuteParams executeParams) {
-        RedisLock lock = null;
-
-        // 通过userId校验query key所属
-        String userId = RequestContextUtils.getRequestUserId();
-        String executionQueryKey = String.format(agentInsightExecRel, userId, executeParams.getAgentId(),
-                executeParams.getConversationId());
-        try {
-            lock = redisClient.getLock(executionQueryKey + "_lock");
-
-            // 获取分布式锁，如果锁不可用，则等待3秒，如果还是无法获取，则抛出异常
-            if (lock.tryLock(Duration.ofSeconds(3))) {
-                List<ExecutionQuery> executionQueries = new ArrayList<>();
-                if (redisClient.exists(executionQueryKey)) {
-                    String text = redisClient.get(executionQueryKey);
-                    if (StringUtils.isNotEmpty(text)) {
-                        executionQueries = JSON.parseObject(text, new TypeReference<List<ExecutionQuery>>() { });
-                    }
-                }
-
-                // 读取历史query，判断当前executionQuery是否存在
-                List<String> queryIds = executionQueries.stream()
-                        .map(ExecutionQuery::getExecutionId)
-                        .distinct()
-                        .toList();
-                if (!queryIds.contains(executionInfo.getExecutionId())) {
-                    ExecutionQuery executionQuery = new ExecutionQuery();
-                    executionQuery.setExecutionId(executionInfo.getExecutionId());
-                    executionQuery.setQuery(executeParams.getQuery());
-                    executionQuery.setStatus(executionInfo.getStatus());
-                    executionQuery.setErrorInfo(executionInfo.getErrorInfo());
-                    executionQuery.setStartTime(executionInfo.getStartTime());
-                    executionQueries.add(executionQuery);
-                    log.info("update execution query: executionId={}, query={}, startTime={}",
-                            executionQuery.getExecutionId(), executionQuery.getQuery(), executionQuery.getStartTime());
-                }
-
-                // 根据query size按时间戳倒序截断
-                executionQueries = executionQueries.stream()
-                        .sorted(Comparator.comparing(ExecutionQuery::getStartTime).reversed())
-                        .toList();
-
-                if (executionQueries.size() > maxExecutionSize) {
-                    clearAgentExecutionRecordsAsync(userId,
-                            executionQueries.subList(maxExecutionSize, executionQueries.size()));
-                }
-
-                executionQueries = CommonUtils.subList(0, maxExecutionSize, executionQueries);
-
-                // 设置最后更新时间
-                redisClient.set(executionQueryKey, JSON.toJSONString(executionQueries), Duration.ofSeconds(expireTime));
-            } else {
-                log.error("failed to get lock, other user is processing same agent query!");
-                throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);
-            }
-        } catch (Exception e) {
-            String detail = e.getMessage();
-            if (e instanceof AgentStudioException) {
-                detail = ((AgentStudioException) e).getErrorCode().toString();
-            }
-            alarmLogUtil.logAlarm("REDIS", "redisson get bucket failed ", detail);
-            throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);
-        } finally {
-            if (lock != null) {
-                lock.unlock();
-            }
-        }
-    }
-
-    /**
-     * 保存Agent execution info
-     *
-     * @param eventObj eventObj
-     * @param executeParams executeParams
-     */
-    public void saveAgentExecutionInfo(JiuwenAgentEvent eventObj, AgentExecuteParams executeParams,
-                                       WorkflowRunResult result) {
-        log.info("start saveAgentExecutionInfo: {} invokeType:{}", eventObj.getConversationId(),
-                eventObj.getData().getInvokeType());
-        RedisLock lock = null;
-        String userId = RequestContextUtils.getRequestUserId();
-        String executionId = eventObj.getExecutionId();
-        executeParams.setExecutionId(executionId);
-        String insightExecKey = String.format(agentInsightExec, userId, executionId);
-        try {
-            lock = redisClient.getLock(insightExecKey + "_lock");
-
-            // 获取分布式锁，如果锁不可用，则等待3秒，如果还是无法获取，则抛出异常
-            if (lock.tryLock(Duration.ofSeconds(3))) {
-                // execution info已存在则更新invoke list
-                AgentExecutionInfo executionInfo = new AgentExecutionInfo();
-                if (redisClient.exists(insightExecKey)) {
-                    String text = redisClient.get(insightExecKey);
-                    if (StringUtils.isNotEmpty(text)) {
-                        executionInfo = JSON.parseObject(text, AgentExecutionInfo.class);
-                    }
-                }
-                convertAgentExecutionInfo(executionInfo, eventObj.getData(), executeParams);
-
-                // execution info的endTime不为Null时，标识对话结束
-                if (executionInfo.getEndTime() != null) {
-                    saveAgentExecutionQueries(executionInfo, executeParams);
-                }
-                reportToAgentOps(executeParams, executionInfo);
-                log.info("redisClient saveAgentExecutionInfo set.");
-                if (executeParams.isDebug() && ObjectUtils.isNotEmpty(result)) {
-                    result.setInvokeList(executionInfo.getInvokeList());
-                }
-                redisClient.set(insightExecKey, JSON.toJSONString(executionInfo), Duration.ofSeconds(expireTime));
-            }
-        } catch (Exception e) {
-            log.error("redisson get bucket failed", e);
-            String detail = e.getMessage();
-            if (e instanceof AgentStudioException) {
-                detail = ((AgentStudioException) e).getErrorCode().toString();
-            }
-            alarmLogUtil.logAlarm("REDIS", "redisson get bucket failed ", detail);
-            throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);
-        } finally {
-            if (lock != null) {
-                lock.unlock();
-            }
-        }
-    }
-
     public void saveAgentExecutionToOps(JiuwenAgentEvent eventObj, AgentExecuteParams executeParams) {
         if (!executeParams.isUploadOpsSwitch()) {
             return;
@@ -1008,82 +792,7 @@ public class ConversationManagementService implements IConversationManagementSer
         }
     }
 
-    @Override
-    public ConversionQueries listAgentConversations(String projectId, String agentId,
-                                                    ListAgentConversationsQo listAgentConversationsQo) {
-        log.info("list agent conversations projectId is {}, agentId is {}, type is {}",
-                projectId, agentId, listAgentConversationsQo.getType());
-        try {
-            String userId = RequestContextUtils.getRequestUserId();
-            String executionQueryKey = String.format(agentInsightConvRel, agentId, userId);
-            List<ConversationInfo> conversationInfoList = new ArrayList<>();
-            String text = redisClient.get(executionQueryKey);
-            if (StringUtils.isNotEmpty(text)) {
-                conversationInfoList = JSON.parseObject(text, new TypeReference<>() { });
-            }
-
-            if (conversationInfoList.isEmpty()) {
-                log.warn("Not found agent execution record. key:{}  value:{}", executionQueryKey, text);
-            }
-
-            ConversionQueries conversionQueries = new ConversionQueries();
-
-            // 按照创建日期过滤conversation
-            long filterStartTime = listAgentConversationsQo.getStartTime() != null
-                    ? listAgentConversationsQo.getStartTime()
-                    : Long.MIN_VALUE;
-            long filterEndTime = listAgentConversationsQo.getEndTime() != null
-                    ? listAgentConversationsQo.getEndTime()
-                    : Long.MAX_VALUE;
-            conversationInfoList = conversationInfoList.stream()
-                    .filter(conversationInfo -> conversationInfo.getStartTime() >= filterStartTime
-                            && conversationInfo.getStartTime() <= filterEndTime)
-                    .toList();
-            conversationInfoList = filterAndUpdateConversationStatus(projectId, agentId, conversationInfoList,
-                    listAgentConversationsQo.getType());
-            conversionQueries.setCount(conversationInfoList.size());
-            conversionQueries.setConversationInfos(
-                    CommonUtils.subList(listAgentConversationsQo.getOffset(), listAgentConversationsQo.getLimit(),
-                            conversationInfoList));
-            return conversionQueries;
-        } catch (Exception e) {
-            log.error("redisson get bucket failed", e);
-
-            throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);
-        }
-    }
-
-    @Override
-    public AgentExecutionQueries listAgentExecutionQueries(String projectId, String agentId, String conversationId,
-                                                           ListAgentExecutionQueriesQo listAgentExecutionQueriesQo) {
-        try {
-            String userId = RequestContextUtils.getRequestUserId();
-            String executionQueryKey = String.format(agentInsightExecRel, userId, agentId, conversationId);
-            List<ExecutionQuery> executionQueriyList = new ArrayList<>();
-            if (redisClient.exists(executionQueryKey)) {
-                String text = redisClient.get(executionQueryKey);
-                if (StringUtils.isNotEmpty(text)) {
-                    executionQueriyList = JSON.parseObject(text, new TypeReference<>() { });
-                }
-            }
-
-            AgentExecutionQueries executionQueries = new AgentExecutionQueries();
-            executionQueries.setCount(executionQueriyList.size());
-            executionQueries.setExecutionQueries(executionQueriyList);
-            return executionQueries;
-        } catch (Exception e) {
-            log.error("redisson get bucket failed", e);
-            String detail = e.getMessage();
-            if (e instanceof AgentStudioException) {
-                detail = ((AgentStudioException) e).getErrorCode().toString();
-            }
-            alarmLogUtil.logAlarm("REDIS", "redisson get bucket failed", detail);
-            throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);
-        }
-    }
-
-    @Override
-    public AgentExecutionInfo getAgentExecutionInfo(String projectId, String executionId, String agentId,
+    private AgentExecutionInfo getAgentExecutionInfo(String projectId, String executionId, String agentId,
                                                     GetAgentExecutionInfoQo getAgentExecutionInfoQo) {
         AgentExecutionInfo executionInfo = new AgentExecutionInfo();
         try {
@@ -1270,49 +979,6 @@ public class ConversationManagementService implements IConversationManagementSer
             // 数据回流不是强制步骤，异常时容错处理，打印错误日志，不抛出异常
             log.error("create feedback data backflow job failed, {}", e.getMessage());
         }
-    }
-
-    private List<ConversationInfo> filterAndUpdateConversationStatus(String projectId, String agentId,
-                                                                     List<ConversationInfo> conversationInfos, String type) {
-        List<ConversationInfo> result = new ArrayList<>();
-        for (ConversationInfo info : conversationInfos) {
-            // 过滤掉会话记录中不存在执行记录的会话
-            if (Constant.AppType.CONTROLLER.equals(type)) {
-                log.info("now filter type is {}", type);
-                List<ControllerExecutionBriefModel> ctrlExecBriefModels = controllerDebuggingMgmtService
-                        .queryCtrlExecutions(agentId, info.getConversationId(), new ListControllerExecutionsQo());
-                if (!ctrlExecBriefModels.isEmpty()) {
-                    result.add(info);
-                    info.setSuccessCount(0).setFailureCount(0);
-                    for (ControllerExecutionBriefModel model : ctrlExecBriefModels) {
-                        if (StringUtils.isEmpty(model.getStatus())
-                                || Objects.equals(model.getStatus(), WorkflowRunStatus.SUCCEEDED.getStatus().getDesc())) {
-                            info.setSuccessCount(info.getSuccessCount() + 1);
-                        } else {
-                            info.setFailureCount(info.getFailureCount() + 1);
-                        }
-                    }
-                }
-            } else {
-                AgentExecutionQueries queries = listAgentExecutionQueries(projectId, agentId, info.getConversationId(),
-                        new ListAgentExecutionQueriesQo());
-                if (queries.getCount() > 0) {
-                    result.add(info);
-                    info.setSuccessCount(0).setFailureCount(0);
-                    for (ExecutionQuery query : queries.getExecutionQueries()) {
-                        if (StringUtils.isEmpty(query.getStatus())
-                                || Objects.equals(query.getStatus(), WorkflowRunStatus.SUCCEEDED.getStatus().getDesc())) {
-                            info.setSuccessCount(info.getSuccessCount() + 1);
-                        } else {
-                            info.setFailureCount(info.getFailureCount() + 1);
-                        }
-                    }
-                }
-            }
-        }
-        log.info("agent conversations with id: {}, total: {}, valid: {}", agentId, conversationInfos.size(),
-                result.size());
-        return result;
     }
 
     private String getMessageExecutorId(FeedbackEntity feedback) {
@@ -1569,48 +1235,6 @@ public class ConversationManagementService implements IConversationManagementSer
         return agentInvokeInfo;
     }
 
-    private void clearAgentConversationRecords(String token, String userId, String agentId,
-                                               List<ConversationInfo> needDeleteConversations, String agentType) {
-        if (Constant.AppType.CONTROLLER.equals(agentType)) {
-            controllerDebuggingMgmtService.clearAgentConversationRecords(userId, agentId, needDeleteConversations);
-            CompletableFuture.runAsync(() -> {
-                for (ConversationInfo conversationInfo : needDeleteConversations) {
-                    try {
-                        clearJiuwenConversaion(token, conversationInfo.getConversationId());
-                    } catch (Exception e) {
-                        log.warn("clear controller agent record. agent:{} userId:{} conversation:{} {}", agentId,
-                                userId, conversationInfo.getConversationId(), e.getMessage());
-                    }
-                }
-            });
-            log.info("success clear agent conversation records. {}", agentId);
-            return;
-        }
-        CompletableFuture.runAsync(() -> {
-            log.info("start to clear agent conversation records. {}", agentId);
-            for (ConversationInfo conversationInfo : needDeleteConversations) {
-                try {
-                    log.info("Start to clear agent record. agent:{} userId:{} conversation:{}", agentId, userId,
-                            conversationInfo.getConversationId());
-                    String executionQueryKey = String.format(agentInsightExecRel, userId, agentId,
-                            conversationInfo.getConversationId());
-                    String text = redisClient.get(executionQueryKey);
-                    if (StringUtils.isNotEmpty(text)) {
-                        List<ExecutionQuery> queries = JsonUtils.decode(text,
-                                new com.fasterxml.jackson.core.type.TypeReference<List<ExecutionQuery>>() { });
-                        clearAgentExecutionRecords(userId, queries);
-                        redisClient.delete(executionQueryKey);
-                    }
-                    clearJiuwenConversaion(token, conversationInfo.getConversationId());
-                } catch (Exception e) {
-                    log.warn("To clear agent record. agent:{} userId:{} conversation:{} {}", agentId, userId,
-                            conversationInfo.getConversationId(), e.getMessage());
-                }
-            }
-            log.info("success clear agent conversation records. {}", agentId);
-        });
-    }
-
     private void clearJiuwenConversaion(String token, String conversationId) {
         try {
             JiuWenDeleteIrReq jiuWenDeleteIrReq = JiuWenDeleteIrReq.builder().conversationId(conversationId).build();
@@ -1619,20 +1243,6 @@ public class ConversationManagementService implements IConversationManagementSer
         } catch (Exception e) {
             log.warn("Fail clear jiuwen conversation record. conversation:{}", conversationId, e);
         }
-    }
-
-    private void clearAgentExecutionRecords(String userId, List<ExecutionQuery> needDeleteInfos) {
-        if (needDeleteInfos == null || needDeleteInfos.isEmpty()) {
-            return;
-        }
-        for (ExecutionQuery query : needDeleteInfos) {
-            String insightExecKey = String.format(agentInsightExec, userId, query.getExecutionId());
-            redisClient.delete(insightExecKey);
-        }
-    }
-
-    private void clearAgentExecutionRecordsAsync(String userId, List<ExecutionQuery> needDeleteInfos) {
-        CompletableFuture.runAsync(() -> clearAgentExecutionRecords(userId, needDeleteInfos));
     }
 
     private List<Message> getTrimmedMessageList(List<Message> messageList, int offset) {

@@ -4,10 +4,13 @@
 
 package com.openjiuwen.studio.agent.common.filter.simple;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
 
 /**
  * filter注册类
@@ -15,7 +18,7 @@ import org.springframework.context.annotation.Configuration;
  *
  */
 @Configuration
-@ConditionalOnProperty(prefix = "env", name = "type", havingValue = "simple")
+@ConditionalOnExpression("'simple'.equals('${env.type:}') && ''.equals('${auth.sso.validate-url:}')")
 public class FilterConfig {
     @Bean
     public FilterRegistrationBean<SimpleAuthFilter> simpleAuthFilter() {
@@ -45,5 +48,12 @@ public class FilterConfig {
         filterRegistrationBean.addUrlPatterns("/*");
         filterRegistrationBean.setOrder(Integer.MIN_VALUE + 1); // 在SidToTokenFilter之后执行
         return filterRegistrationBean;
+    }
+
+    @Bean
+    public SecurityFilterChain simpleSecurityFilterChain(HttpSecurity http) throws Exception {
+        http.csrf(csrf -> csrf.disable())
+            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+        return http.build();
     }
 }

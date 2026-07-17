@@ -108,26 +108,33 @@ build_and_save_images() {
         log_info "检测到编译产物，跳过源码编译"
     fi
 
-    # ---- 构建 4 个 Docker 镜像 ----
-    log_info "[1/4] 构建 studio-manager 镜像..."
+    # ---- 构建应用镜像和内置日志数据源的 Grafana 镜像 ----
+    log_info "[1/5] 构建 studio-manager 镜像..."
     cd "${DOCKER_DIR}/studio-manager"
     docker build --build-arg BASE_IMAGE="${BASE_IMAGE_JAVA}" \
         -t "studio-manager:${IMAGE_TAG}" .
 
-    log_info "[2/4] 构建 studio-service 镜像..."
+    log_info "[2/5] 构建 studio-service 镜像..."
     cd "${DOCKER_DIR}/studio-service"
     docker build --build-arg BASE_IMAGE="${BASE_IMAGE_JAVA}" \
         -t "studio-service:${IMAGE_TAG}" .
 
-    log_info "[3/4] 构建 studio-console 镜像..."
+    log_info "[3/5] 构建 studio-console 镜像..."
     cd "${DOCKER_DIR}/studio-console"
     docker build --build-arg BASE_IMAGE="${BASE_IMAGE_NGINX}" \
         -t "studio-console:${IMAGE_TAG}" .
 
-    log_info "[4/4] 构建 studio-runtime 镜像..."
+    log_info "[4/5] 构建 studio-runtime 镜像..."
     cd "${DOCKER_DIR}/studio-runtime"
     docker build --build-arg BASE_IMAGE="${BASE_IMAGE_PYTHON}" \
         -t "studio-runtime:${IMAGE_TAG}" .
+
+    log_info "[5/5] 构建内置 VictoriaLogs 数据源的 Grafana 镜像..."
+    cd "${DOCKER_DIR}/grafana"
+    docker build \
+        --build-arg GRAFANA_VERSION=11.3.0 \
+        --build-arg VICTORIA_LOGS_DATASOURCE_VERSION=0.29.0 \
+        -t "openjiuwen/grafana-victorialogs:11.3.0-0.29.0" .
 
     log_info "所有镜像构建完成"
 }
@@ -146,6 +153,10 @@ save_images() {
         docker save "${image}:${IMAGE_TAG}" -o "${OUTPUT_DIR}/images/${tar_name}"
     done
 
+    log_info "导出内置插件 Grafana 镜像"
+    docker save "openjiuwen/grafana-victorialogs:11.3.0-0.29.0" \
+        -o "${OUTPUT_DIR}/images/grafana-victorialogs_11.3.0-0.29.0.${BUILD_PLATFORM}.tar"
+
     log_info "所有应用镜像导出完成"
 }
 
@@ -153,9 +164,16 @@ save_images() {
 # 导出依赖 Docker 镜像
 # ========================================
 export_dep_images() {
-    log_step "导出依赖镜像（MySQL/Redis/MinIO/MC）..."
+    log_step "导出依赖镜像（基础设施与日志组件）..."
 
-    local dep_images=("mysql:8.0" "redis:7" "minio/minio:latest" "minio/mc:latest")
+    local dep_images=(
+        "mysql:8.0"
+        "redis:7"
+        "minio/minio:latest"
+        "minio/mc:latest"
+        "victoriametrics/victoria-logs:v1.50.0"
+        "timberio/vector:0.55.0-alpine"
+    )
 
     for image in "${dep_images[@]}"; do
         log_info "拉取并导出: ${image}"
@@ -181,6 +199,29 @@ copy_configs() {
     mkdir -p "${OUTPUT_DIR}/config"
     cp "${DEPLOY_DIR}/config/nginx.conf" "${OUTPUT_DIR}/config/"
 
+    # L1 日志聚合配置
+    cp "${DEPLOY_DIR}/config/vector.yaml" "${OUTPUT_DIR}/config/"
+    cp "${DEPLOY_DIR}/config/grafana-datasources.yaml" "${OUTPUT_DIR}/config/"
+    mkdir -p "${OUTPUT_DIR}/observability/config" "${OUTPUT_DIR}/observability/dashboards"
+    cp "${DEPLOY_DIR}/observability/config/grafana-dashboards.yaml" \
+        "${OUTPUT_DIR}/observability/config/"
+    cp -R "${DEPLOY_DIR}/observability/dashboards/." \
+        "${OUTPUT_DIR}/observability/dashboards/"
+
+    # L2 跨节点日志聚合配置与脚本（TLS 证书和凭据在目标机生成，不打包）。
+    mkdir -p "${OUTPUT_DIR}/observability/scripts"
+    cp "${DEPLOY_DIR}/observability/docker-compose.monitor.yml" \
+       "${DEPLOY_DIR}/observability/docker-compose.vector.yml" \
+       "${DEPLOY_DIR}/observability/.env.template" \
+       "${OUTPUT_DIR}/observability/"
+    cp "${DEPLOY_DIR}/observability/config/vector.yaml" \
+       "${DEPLOY_DIR}/observability/config/nginx-gateway.conf" \
+       "${DEPLOY_DIR}/observability/config/grafana-datasources.yaml" \
+       "${OUTPUT_DIR}/observability/config/"
+    cp "${DEPLOY_DIR}/observability/scripts/deploy-monitor.sh" \
+       "${DEPLOY_DIR}/observability/scripts/deploy-vector.sh" \
+       "${OUTPUT_DIR}/observability/scripts/"
+
     # nginx-https.conf（可选）
     if [ -f "${DEPLOY_DIR}/config/nginx-https.conf" ]; then
         cp "${DEPLOY_DIR}/config/nginx-https.conf" "${OUTPUT_DIR}/config/"
@@ -197,6 +238,8 @@ copy_configs() {
     sed "s/TAG_PLACEHOLDER/${IMAGE_TAG}/g" "${DEPLOY_DIR}/.env.template" > "${OUTPUT_DIR}/.env.template"
     sed -i 's/^IMAGE_SOURCE=ghcr/IMAGE_SOURCE=offline/' "${OUTPUT_DIR}/.env.template"
     sed -i 's/^# \(STUDIO_.*_IMAGE=\)/\1/' "${OUTPUT_DIR}/.env.template"
+    # 离线包内保存的是本地标签，避免目标机尝试访问 GHCR。
+    sed -i 's|^GRAFANA_IMAGE=.*|GRAFANA_IMAGE=openjiuwen/grafana-victorialogs:11.3.0-0.29.0|' "${OUTPUT_DIR}/.env.template"
 
     # 统一部署脚本
     cp "${DEPLOY_DIR}/deploy.sh" "${OUTPUT_DIR}/"

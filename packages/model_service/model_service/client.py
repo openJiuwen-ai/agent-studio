@@ -195,8 +195,11 @@ class StudioModelClient(OpenAIModelClient):
                 elif stream_options is None:
                     params["stream_options"] = {"include_usage": True}
 
+                # 过滤掉 tracer 相关参数，OpenAI SDK 不认识这些参数，保证控制器执行
+                openai_params = {k: v for k, v in params.items() if not k.startswith("tracer_")}
+
                 await trigger(LLMCallEvents.LLM_INPUT, is_stream=True, **_input_kwargs, params=params)
-                response_stream = await client.chat.completions.create(**params)
+                response_stream = await client.chat.completions.create(**openai_params)
 
                 async def _parsed():
                     final_message = None
@@ -226,8 +229,11 @@ class StudioModelClient(OpenAIModelClient):
                         await client.close()
                 return _parsed()
             else:
+                # 过滤掉 tracer 相关参数，OpenAI SDK 不认识这些参数，保证控制器执行
+                openai_params = {k: v for k, v in params.items() if not k.startswith("tracer_")}
+
                 await trigger(LLMCallEvents.LLM_INPUT, is_stream=False, **_input_kwargs, params=params)
-                response = await client.chat.completions.create(**params)
+                response = await client.chat.completions.create(**openai_params)
                 await client.close()
                 assistant_message = await self._parse_response(response, output_parser)
                 await trigger(LLMCallEvents.LLM_OUTPUT, is_stream=False,

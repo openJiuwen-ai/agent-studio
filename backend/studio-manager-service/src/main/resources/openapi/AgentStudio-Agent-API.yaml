@@ -799,6 +799,11 @@ paths:
           required: false
           description: 需要导入的工作流ID。
           type: string
+        - name: mode
+          in: formData
+          required: false
+          description: 模式:STRICT-严格模式/SPACIOUS-宽松模式
+          type: string
       responses:
         '200':
           description: 导入响应体。
@@ -4740,6 +4745,9 @@ definitions:
       resource_type:
         type: string
         description: 资源类型:workflow/agent/controller
+      mode:
+        type: string
+        description: 模式:STRICT-严格模式/SPACIOUS-宽松模式
   ExportResourceVersion:
     type: object
     description: 导出相关参数。

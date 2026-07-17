@@ -8,6 +8,7 @@ from typing import Optional
 from agent_runtime.event_handler.base.enums import EventStatus, NodeStatus, OriginStatus
 from agent_runtime.event_handler.base.constants import TIME_FORMAT
 from agent_runtime.event_handler.base.trace import Latency
+from agent_runtime.event_handler.base.language import LanguageManager
 
 
 class NodeStatusMapper:
@@ -30,12 +31,14 @@ class NodeStatusMapper:
 class ErrorContextBuilder:
     """Error context builder."""
 
+    _language_manager = LanguageManager()
+
     @staticmethod
     def get_language_context(language, key):
-        error_code = f"Openjiuwen.{key}"
-        error_msg = f"Error {key}"
-        error_reason = "Internal error"
-        error_suggestion = "Please try again later"
+        error_code = f"openjiuwen.{key}"
+        error_msg, error_reason, error_suggestion = (
+            ErrorContextBuilder._language_manager.get_error_context(language, key)
+        )
         return error_code, error_msg, error_reason, error_suggestion
 
 

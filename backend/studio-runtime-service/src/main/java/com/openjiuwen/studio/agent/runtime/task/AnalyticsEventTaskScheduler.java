@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +26,7 @@ import java.util.Date;
 
 @Slf4j
 @Component
+@ConditionalOnProperty(name = "ANALYTICS_EVENT_ENABLE", havingValue = "true")
 public class AnalyticsEventTaskScheduler {
     @Value("${ANALYTICS_EVENT_RETENTION_PERIOD_DAY:180}")
     private int retentionPeriodDay;

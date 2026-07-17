@@ -26,6 +26,7 @@ import com.openjiuwen.studio.agent.manager.dto.WorkspaceInfo;
 import com.openjiuwen.studio.agent.manager.dto.WorkspaceMemberInfo;
 import com.openjiuwen.studio.agent.manager.entity.WorkSpaceMemberEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkspaceEntity;
+import com.openjiuwen.studio.agent.manager.enums.ExportModeEnum;
 import com.openjiuwen.studio.agent.manager.mapper.workspace.WorkspaceMapper;
 import com.openjiuwen.studio.agent.manager.service.AgentManagementService;
 import com.openjiuwen.studio.agent.manager.service.IWorkspaceService;
@@ -521,15 +522,15 @@ public class WorkspaceService implements IWorkspaceService {
         switch (resourceType) {
             case "agent" -> {
                 agentManagementService.importAgents(workspaceId, projectId, multipartFile, resourceIds.get("agent"),
-                    resourceIds.get("plugin"), resourceIds.get("workflow"));
+                    resourceIds.get("plugin"), resourceIds.get("workflow"), ExportModeEnum.STRICT.getCode());
             }
             case "workflow" -> {
                 workflowManagementService.importWorkflows(workspaceId, projectId, multipartFile,
-                    resourceIds.get("workflow"), resourceIds.get("plugin"));
+                    resourceIds.get("workflow"), resourceIds.get("plugin"), ExportModeEnum.STRICT.getCode());
             }
             case "controller" -> {
                 agentManagementService.importAgents(workspaceId, projectId, multipartFile,
-                    resourceIds.get("controller"), resourceIds.get("plugin"), resourceIds.get("workflow"));
+                    resourceIds.get("controller"), resourceIds.get("plugin"), resourceIds.get("workflow"), ExportModeEnum.STRICT.getCode());
             }
             default -> {
                 // 无效作用域，记录错误日志并抛出异常
