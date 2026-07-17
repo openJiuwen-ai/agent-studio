@@ -2314,6 +2314,9 @@ public class AgentManagementService implements IAgentManagementService {
         releaseVersion.setSubType(agent.getSubType());
         releaseVersion.setCreator(RequestContextUtils.getRequestUserName());
         releaseVersion.setCreatorId(RequestContextUtils.getRequestUserId());
+        Date now = new Date(System.currentTimeMillis());
+        releaseVersion.setReleasedOn(now);
+        releaseVersion.setUpdatedOn(now);
         releaseVersionMapper.insert(releaseVersion);
 
         boolean isReviewEnabled = false;

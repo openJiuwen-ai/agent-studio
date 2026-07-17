@@ -14,6 +14,7 @@
         <result column="creator_id" jdbcType="VARCHAR" property="creatorId"/>
         <result column="app_sub_type" jdbcType="VARCHAR" property="subType" />
         <result column="released_on" jdbcType="TIMESTAMP" property="releasedOn"/>
+        <result column="updated_on" jdbcType="TIMESTAMP" property="updatedOn"/>
     </resultMap>
     <sql id="Base_Column_List">
         id,
@@ -32,11 +33,12 @@
     </sql>
     <insert id="insert" parameterType="com.openjiuwen.studio.agent.manager.entity.ReleaseVersion">
         insert into t_release_version (id, version_id, version_name, version_note, app_id, app_type, status, dsl_path,
-        ir_path,creator, creator_id, app_sub_type)
+        ir_path, creator, creator_id, app_sub_type, released_on, updated_on)
         values (#{id,jdbcType=VARCHAR}, #{versionId,jdbcType=VARCHAR}, #{versionName,jdbcType=VARCHAR},
                 #{versionNote,jdbcType=VARCHAR}, #{appId,jdbcType=VARCHAR}, #{appType,jdbcType=VARCHAR},
                 #{status,jdbcType=VARCHAR}, #{dslPath,jdbcType=VARCHAR}, #{irPath,jdbcType=VARCHAR},
-                #{creator,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR}, #{subType,jdbcType=VARCHAR})
+                #{creator,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR}, #{subType,jdbcType=VARCHAR},
+                #{releasedOn,jdbcType=TIMESTAMP}, #{updatedOn,jdbcType=TIMESTAMP})
     </insert>
     <select id="selectByPrimaryKey" parameterType="map" resultMap="BaseResultMap">
         select
