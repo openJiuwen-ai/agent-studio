@@ -21,6 +21,7 @@ from starlette.requests import Request
 
 X_EXECUTION_ID = "x-execution-id"
 X_REQUEST_ID = "x-request-id"
+DEFAULT_USER = "testUser"
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -61,10 +62,26 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             request_id=request_id,
         )
 
+        # 从 X-Auth-Token 或 AGENT_SID cookie 解析 user_id（格式: userId|projectId）
+        # 优先级: X-Auth-Token > AGENT_SID cookie > body.userId > 默认值
+        auth_token = ctx.headers.get("X-Auth-Token", "")
+        if not auth_token:
+            cookie_header = ctx.headers.get("Cookie", "")
+            for cookie_part in cookie_header.split(";"):
+                cookie_part = cookie_part.strip()
+                if cookie_part.startswith("AGENT_SID="):
+                    auth_token = cookie_part.split("=", 1)[1]
+                    break
+
+        if auth_token and "|" in auth_token:
+            ctx.user_id = auth_token.split("|", 1)[0]
+
         if body:
             try:
                 body_json = json.loads(body)
-                ctx.user_id = body_json.get("userId", "")
+                # 如果 X-Auth-Token 未提供 user_id，则从 body 读取
+                if not ctx.user_id:
+                    ctx.user_id = body_json.get("userId", DEFAULT_USER)
                 ctx.conversation_id = body_json.get("conversationId", "")
                 params = body_json.get("params") or {}
                 ctx.secret_env_keys = params.get("secretEnvKeys", [])

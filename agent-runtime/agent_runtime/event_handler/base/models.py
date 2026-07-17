@@ -2,7 +2,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Event handler models"""
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -91,7 +91,7 @@ class PluginEventField(BaseModel):
     type: Optional[str] = Field(default=None)
     content: Optional[dict] = Field(default=None)
     role: Optional[str] = Field(default=None)
-    latency: Optional[dict] = Field(default=None)
+    latency: Any = Field(default=None)
     plugin: Optional[dict] = Field(default=None)
     created_time: Optional[int] = Field(alias="createdTime", default=None)
 
@@ -110,4 +110,5 @@ class NonStreamingResponse(BaseModel):
     start_time: Optional[int] = Field(default=None)
     end_time: Optional[int] = Field(default=None)
     events: Optional[list] = Field(default=None)
+    knowledge_base_files_info: Optional[list] = Field(default=None)
     node_info: Optional[list] = Field(default=None)

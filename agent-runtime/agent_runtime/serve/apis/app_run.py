@@ -15,12 +15,14 @@ from agent_runtime.serve.apis.app_run_request import (
     AgentAppRunRequest,
     WorkflowRunContext,
     AgentRunContext,
+    ExecutionContext,
 )
 from agent_runtime.serve.apis.orchestration import ir_execute
 from agent_runtime.event_handler.event_handler import EventHandler
 from agent_runtime.event_handler.base.conversation import (
     ConversationManager,
 )
+from agent_runtime.context.request_context import _request_ctx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from jiuwen.serve.controllers.execution.enum import PlanModeType, IRType
@@ -32,12 +34,16 @@ app_run_app = APIRouter(tags=["app_run"])
 _conv_manager = ConversationManager()
 
 
-async def _load_conversation_history(
+async def _load_conversation_data(
     conversation_id: str, instance_id: str, user_id: str, version_id: str = ""
-) -> list:
-    """从Redis加载会话历史消息列表."""
+) -> tuple[list, int]:
+    """从Redis一次加载会话历史和对话轮次.
+
+    Returns:
+        (conversation_history, dialogue_count)
+    """
     try:
-        messages = await _conv_manager.get_latest_messages(
+        messages, dialogue_count = await _conv_manager.get_conversation_data(
             conversation_id, instance_id, user_id, version_id
         )
         if messages:
@@ -45,28 +51,12 @@ async def _load_conversation_history(
                 f"Loaded {len(messages)} conversation messages from Redis "
                 f"for instance={instance_id}, conversation={conversation_id}"
             )
-        return messages or []
+        return messages, dialogue_count
     except Exception as e:
         workflow_logger.warning(
-            f"Failed to load conversation history from Redis: {e}"
+            f"Failed to load conversation data from Redis: {e}"
         )
-        return []
-
-
-async def _load_dialogue_count(
-    conversation_id: str, instance_id: str, user_id: str, version_id: str = ""
-) -> int:
-    """从Redis加载对话轮次数."""
-    try:
-        count = await _conv_manager.get_dialogue_count(
-            conversation_id, instance_id, user_id, version_id
-        )
-        return count
-    except Exception as e:
-        workflow_logger.warning(
-            f"Failed to load dialogue count from Redis: {e}"
-        )
-        return 1
+        return [], 1
 
 
 def build_workflow_ir_path(workflow_id: str, version: Optional[str]) -> str:
@@ -87,61 +77,41 @@ def build_agent_ir_path(agent_id: str, version: Optional[str]) -> str:
 
 def build_req_json_from_workflow(
     body: WorkflowAppRunRequest,
-    conversation_id: str,
-    ir_path: str,
-    conversation_history: list,
-    dialogue_count: int,
+    exec_ctx: ExecutionContext,
 ) -> dict:
-    """WorkflowAppRunRequest → ExecutionRequest dict.
-    """
+    """WorkflowAppRunRequest → ExecutionRequest dict."""
     global_vars = {**body.globals}
     if body.memory_inputs:
         global_vars.update(body.memory_inputs)
 
-    # body.messages 非空时优先使用body，否则用Redis加载的历史
-    if body.messages:
-        history = [msg.model_dump(by_alias=True) for msg in body.messages]
-    else:
-        history = conversation_history
-
     params = {
         "globalVariables": global_vars,
         "environmentVariables": body.environment,
-        "conversationHistory": history,
+        "conversationHistory": exec_ctx.conversation_history,
         "pluginConfigs": [pc.model_dump(by_alias=True) for pc in (body.plugin_configs or [])],
         "enableHistory": body.enable_history,
         # "long_term_memory"
     }
 
     return {
-        "conversationId": conversation_id,
-        "userId": body.user_id or "anonymous",
-        "irPath": ir_path,
+        "conversationId": exec_ctx.conversation_id,
+        "userId": exec_ctx.user_id,
+        "irPath": exec_ctx.ir_path,
         "params": params,
         "query": body.inputs.get("query", ""),
         "responseMode": "streaming",
-        "dialogueCount": dialogue_count,
+        "dialogueCount": exec_ctx.dialogue_count,
     }
 
 
 def build_req_json_from_agent(
     body: AgentAppRunRequest,
-    conversation_id: str,
-    ir_path: str,
-    conversation_history: list,
-    dialogue_count: int,
+    exec_ctx: ExecutionContext,
 ) -> dict:
-    """AgentAppRunRequest → ExecutionRequest dict.
-    """
-    # body.histories 非空时覆盖Redis历史，否则用Redis加载的
-    if body.histories:
-        history = [msg.model_dump(by_alias=True) for msg in body.histories]
-    else:
-        history = conversation_history
-
+    """AgentAppRunRequest → ExecutionRequest dict."""
     params = {
         "globalVariables": body.inputs,
-        "conversationHistory": history,
+        "conversationHistory": exec_ctx.conversation_history,
         "toolSwitchDict": body.tool_switch_dict,
         "files": body.files,
         "enableHistory": body.enable_history,
@@ -149,13 +119,13 @@ def build_req_json_from_agent(
     }
 
     return {
-        "conversationId": conversation_id,
-        "userId": body.user_id or "",
-        "irPath": ir_path,
+        "conversationId": exec_ctx.conversation_id,
+        "userId": exec_ctx.user_id,
+        "irPath": exec_ctx.ir_path,
         "params": params,
         "query": body.query or body.inputs.get("query", ""),
         "responseMode": "streaming",
-        "dialogueCount": dialogue_count,
+        "dialogueCount": exec_ctx.dialogue_count,
     }
 
 
@@ -239,25 +209,32 @@ async def _execute_workflow_run(
     ir_path = build_workflow_ir_path(ctx.workflow_id, ctx.version)
     workflow_logger.debug(f"Built IR path: {ir_path}")
 
-    # 从Redis加载会话历史和对话轮次
     instance_id = ctx.workflow_id
-    user_id = body.user_id or "anonymous"
+    user_id = _request_ctx.get().user_id
     version_id = ctx.version or ""
     request.state.user_id = user_id
     request.state.version_id = version_id
-    conversation_history = await _load_conversation_history(
-        ctx.conversation_id, instance_id, user_id, version_id
-    )
-    dialogue_count = await _load_dialogue_count(
-        ctx.conversation_id, instance_id, user_id, version_id
-    )
+
+    # body已携带会话历史时跳过Redis加载
+    if body.messages:
+        conversation_history = [msg.model_dump(by_alias=True) for msg in body.messages]
+        dialogue_count = 1
+    else:
+        conversation_history, dialogue_count = await _load_conversation_data(
+            ctx.conversation_id, instance_id, user_id, version_id
+        )
 
     # 从请求头读取stream参数，默认为True
     stream = request.headers.get("stream", "true").lower() == "true"
 
-    req_json = build_req_json_from_workflow(
-        body, ctx.conversation_id, ir_path, conversation_history, dialogue_count
+    exec_ctx = ExecutionContext(
+        conversation_id=ctx.conversation_id,
+        ir_path=ir_path,
+        conversation_history=conversation_history,
+        dialogue_count=dialogue_count,
+        user_id=user_id,
     )
+    req_json = build_req_json_from_workflow(body, exec_ctx)
 
     response = await ir_execute(req_json, request)
 
@@ -307,25 +284,32 @@ async def _execute_agent_run(
     ir_path = build_agent_ir_path(ctx.agent_id, ctx.version)
     workflow_logger.debug(f"Built IR path: {ir_path}")
 
-    # 从Redis加载会话历史和对话轮次
     instance_id = ctx.agent_id
-    user_id = body.user_id or ""
+    user_id = _request_ctx.get().user_id
     version_id = ctx.version or ""
     request.state.user_id = user_id
     request.state.version_id = version_id
-    conversation_history = await _load_conversation_history(
-        ctx.conversation_id, instance_id, user_id, version_id
-    )
-    dialogue_count = await _load_dialogue_count(
-        ctx.conversation_id, instance_id, user_id, version_id
-    )
+
+    # body已携带会话历史时跳过Redis加载
+    if body.histories:
+        conversation_history = [msg.model_dump(by_alias=True) for msg in body.histories]
+        dialogue_count = 1
+    else:
+        conversation_history, dialogue_count = await _load_conversation_data(
+            ctx.conversation_id, instance_id, user_id, version_id
+        )
 
     # 从请求头读取stream参数，默认为True
     stream = request.headers.get("stream", "true").lower() == "true"
 
-    req_json = build_req_json_from_agent(
-        body, ctx.conversation_id, ir_path, conversation_history, dialogue_count
+    exec_ctx = ExecutionContext(
+        conversation_id=ctx.conversation_id,
+        ir_path=ir_path,
+        conversation_history=conversation_history,
+        dialogue_count=dialogue_count,
+        user_id=user_id,
     )
+    req_json = build_req_json_from_agent(body, exec_ctx)
 
     response = await ir_execute(req_json, request)
 

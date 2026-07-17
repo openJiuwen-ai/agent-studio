@@ -29,6 +29,16 @@ class AgentRunContext:
     version: Optional[str]
 
 
+@dataclass
+class ExecutionContext:
+    """执行上下文 — 封装 build_req_json 所需的运行时参数."""
+    conversation_id: str
+    ir_path: str
+    conversation_history: list
+    dialogue_count: int
+    user_id: str
+
+
 class WorkflowAppRunRequest(BaseModel):
     """工作流试运行请求"""
 

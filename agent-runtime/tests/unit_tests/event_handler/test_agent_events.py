@@ -32,9 +32,9 @@ class TestAgentThroughEvents:
     @staticmethod
     def test_through_events_list():
         expected = {
-            "workflow_blocked", "workflow_resume", "workflow_start", "workflow_end",
-            "task_terminated", "scene_match", "plan_start", "plan_end",
-            "step_start", "step_end", "task_complete",
+            "agent_interrupted", "scene_match", "plan_start", "plan_end",
+            "step_start", "step_end", "task_complete", "task_start", "task_end",
+            "workflow_blocked", "workflow_end", "workflow_resume", "workflow_start",
         }
         assert _AGENT_THROUGH_EVENTS == expected
 
@@ -165,7 +165,7 @@ class TestProcessSummaryResponseEvent:
         assert len(trace.events) == 1
 
     @staticmethod
-    def test_sets_status_to_none():
+    def test_status_remains_default():
         trace = Trace(handler_type="ReAct")
         AgentEventsProcessor.process_event(
             {
@@ -175,7 +175,8 @@ class TestProcessSummaryResponseEvent:
             },
             trace,
         )
-        assert trace.status is None
+        # status 保持默认 SUCCESS，不被 summary_response 修改
+        assert trace.status is not None
 
     @staticmethod
     def test_appends_to_messages():
@@ -208,7 +209,7 @@ class TestProcessSummaryResponseEvent:
 
 
 class TestProcessAgentNodeMessage:
-    """Agent node message — captures LLM events only in DEBUG mode."""
+    """Agent node message — 原样透传给客户端，LLM类型额外写trace.events."""
 
     @staticmethod
     def test_debug_mode_captures_llm():
@@ -234,13 +235,11 @@ class TestProcessAgentNodeMessage:
             },
             trace,
         )
-        # 流式模式：返回 EventField
+        # 流式模式：原样透传
         assert result is not None
-        assert result.event == "agent_node_message"
-        assert result.data["node_id"] == "node-1"
-        assert result.data["node_type"] == "llm"
-        assert result.data["node_status"] == "succeeded"
-        assert result.data["model_deployment_id"] == "model-123"
+        assert result["event"] == "agent_node_message"
+        assert result["data"]["invokeId"] == "node-1"
+        assert result["data"]["invokeType"] == "llm"
         # 非流式模式：同时存入 trace.events
         assert trace.events is not None
         assert len(trace.events) == 1
@@ -251,7 +250,7 @@ class TestProcessAgentNodeMessage:
         assert event_info["model_deployment_id"] == "model-123"
 
     @staticmethod
-    def test_non_debug_mode_skips():
+    def test_non_debug_mode_passes_through():
         trace = Trace(handler_type="ReAct", is_debug=False)
         result = AgentEventsProcessor.process_event(
             {
@@ -267,17 +266,19 @@ class TestProcessAgentNodeMessage:
             },
             trace,
         )
-        assert result is None
+        # 非 debug 模式也原样透传
+        assert result is not None
+        assert result["event"] == "agent_node_message"
         assert trace.events is None
 
     @staticmethod
-    def test_non_llm_invoke_type_skips():
+    def test_non_llm_invoke_type_passes_through():
         trace = Trace(handler_type="ReAct", is_debug=True)
         result = AgentEventsProcessor.process_event(
             {
                 "event": "agent_node_message",
                 "data": {
-                    "invokeType": "tool",
+                    "invokeType": "chain",
                     "invokeId": "node-2",
                     "inputs": [],
                     "outputs": {},
@@ -287,7 +288,10 @@ class TestProcessAgentNodeMessage:
             },
             trace,
         )
-        assert result is None
+        # chain 类型原样透传，不写 trace.events
+        assert result is not None
+        assert result["event"] == "agent_node_message"
+        assert result["data"]["invokeType"] == "chain"
         assert trace.events is None
 
     @staticmethod
