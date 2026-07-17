@@ -62,6 +62,8 @@ from agent_runtime.serve.apis.app_run_request import (
     WorkflowAppRunRequest,
     AgentAppRunRequest,
     ExecutionContext,
+    NodeRunContext,
+    NodeExecuteRequest,
 )
 
 
@@ -348,3 +350,30 @@ class TestEncapsulateResponse:
                 mock_stream, "Workflow", request, "ir/path.json", stream=False
             )
             mock_handler.assert_awaited_once()
+
+
+class TestNodeExecuteRequest:
+    """Node execute request tests."""
+
+    @staticmethod
+    def test_defaults():
+        body = NodeExecuteRequest()
+        assert body.inputs == {}
+        assert body.plugin_configs is None
+        assert body.version is None
+        assert body.user_id is None
+
+    @staticmethod
+    def test_with_values():
+        from agent_runtime.schemas.orchestration_mgr import PluginConfig
+        pc = PluginConfig(pluginId="p1")
+        body = NodeExecuteRequest(
+            inputs={"key": "val"},
+            plugin_configs=[pc],
+            version="v2",
+            userId="user-1",
+        )
+        assert body.inputs == {"key": "val"}
+        assert len(body.plugin_configs) == 1
+        assert body.version == "v2"
+        assert body.user_id == "user-1"

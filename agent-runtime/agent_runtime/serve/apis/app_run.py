@@ -16,8 +16,10 @@ from agent_runtime.serve.apis.app_run_request import (
     WorkflowRunContext,
     AgentRunContext,
     ExecutionContext,
+    NodeRunContext,
+    NodeExecuteRequest,
 )
-from agent_runtime.serve.apis.orchestration import ir_execute
+from agent_runtime.serve.apis.orchestration import ir_execute, component_debug_execute
 from agent_runtime.event_handler.event_handler import EventHandler
 from agent_runtime.event_handler.base.conversation import (
     ConversationManager,
@@ -343,3 +345,76 @@ async def run_agent_app(
         version=version,
     )
     return await _execute_agent_run(ctx, body, request)
+
+
+async def _execute_node_run(
+    ctx: NodeRunContext,
+    body: NodeExecuteRequest,
+    request: Request,
+):
+    """工作流单节点执行核心逻辑."""
+    workflow_logger.info(
+        f"Node execute request: project={ctx.project_id}, workflow={ctx.workflow_id}, "
+        f"conversation={ctx.conversation_id}, node={ctx.node_id}"
+    )
+
+    # 单节点执行使用开发版IR（无version）
+    ir_path = build_workflow_ir_path(ctx.workflow_id, None)
+    workflow_logger.debug(f"Built IR path: {ir_path}")
+
+    instance_id = ctx.workflow_id
+    user_id = body.user_id or _request_ctx.get().user_id
+    version_id = ""
+    request.state.user_id = user_id
+    request.state.version_id = version_id
+
+    # 加载会话历史
+    conversation_history, dialogue_count = await _load_conversation_data(
+        ctx.conversation_id, instance_id, user_id, version_id
+    )
+
+    # 构建 ComponentDebugRequest dict
+    params = {
+        "conversationHistory": conversation_history,
+        "pluginConfigs": [pc.model_dump(by_alias=True) for pc in (body.plugin_configs or [])],
+        "globalVariables": body.inputs,
+    }
+
+    req_json = {
+        "conversationId": ctx.conversation_id,
+        "userId": user_id,
+        "irPath": ir_path,
+        "inputs": body.inputs,
+        "params": params,
+    }
+
+    # 调用底层 component execute
+    response = await component_debug_execute(ctx.node_id, req_json, request)
+
+    # 单节点执行固定 workflow handler_type，始终流式
+    if isinstance(response, StreamingResponse):
+        return await EventHandler.encapsulate_stream_response(
+            response=response,
+            handler_type=IRType.Workflow.value,
+            request=request,
+            ir_path=ir_path,
+        )
+    return response
+
+
+@app_run_app.post(
+    "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/node_execute/{node_id}"
+)
+async def run_node_execute(
+    body: NodeExecuteRequest,
+    request: Request,
+):
+    """工作流单节点执行接口"""
+    path_params = request.path_params
+    ctx = NodeRunContext(
+        project_id=path_params["project_id"],
+        workflow_id=path_params["workflow_id"],
+        conversation_id=path_params["conversation_id"],
+        node_id=path_params["node_id"],
+    )
+    return await _execute_node_run(ctx, body, request)

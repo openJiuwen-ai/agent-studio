@@ -72,3 +72,23 @@ class AgentAppRunRequest(BaseModel):
     agent_type: str = Field(alias="agent_type", default="auto")
     version: Optional[Union[str, int]] = None
     user_id: Optional[str] = Field(alias="userId", default=None)
+
+
+@dataclass
+class NodeRunContext:
+    """工作流单节点执行上下文 — 封装路径参数."""
+    project_id: str
+    workflow_id: str
+    conversation_id: str
+    node_id: str
+
+
+class NodeExecuteRequest(BaseModel):
+    """工作流单节点执行请求"""
+
+    inputs: dict = Field(default_factory=dict)
+    plugin_configs: Optional[list[PluginConfig]] = Field(
+        alias="plugin_configs", default=None
+    )
+    version: Optional[Union[str, int]] = None
+    user_id: Optional[str] = Field(alias="userId", default=None)
