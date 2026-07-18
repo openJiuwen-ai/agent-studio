@@ -753,15 +753,13 @@ class ReActAgentRunner:
             if chunk is None:
                 continue
             try:
-                chunk_str = chunk.decode() if isinstance(chunk, bytes) else chunk
-                if chunk_str.startswith("data: "):
-                    data = json.loads(chunk_str[6:])
-                    if data.get("event") == "message":
-                        answer = data.get("data", {}).get("answer", "")
-                        if answer:
-                            result_parts.append(answer)
+                event = chunk.get("event", "")
+                data = chunk.get("data", {})
+                if event == "message":
+                    answer = data.get("answer", "")
+                    if answer:
+                        result_parts.append(str(answer))
             except Exception as e:
                 workflow_logger.error(f"Error processing agent run blocking chunk: {e}")
-                pass
 
         return "".join(result_parts)
