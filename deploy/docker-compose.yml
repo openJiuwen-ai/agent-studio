@@ -175,7 +175,7 @@ services:
       server_ssl_key_password: ${SERVER_SSL_KEY_PASSWORD:-}
       agent_runtime_endpoint: ${AGENT_RUNTIME_ENDPOINT:-http://studio-service:31113}
       user_auth_endpoint: ${USER_AUTH_ENDPOINT:-http://studio-manager:31111}
-      jiu_wen_service_endpoint: ${JIUWEN_BUILDER_URL:-http://studio-builder:31015}
+      jiu_wen_service_endpoint: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
       agent_builder_endpoint: ${AGENT_BUILDER_ENDPOINT:-http://studio-builder:31015}
       jiuwen_base_url: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
       front_page_block_nodes: ${FRONT_PAGE_BLOCK_NODES:-Sql,DataQuery,Agent}
@@ -287,7 +287,6 @@ services:
       DATASOURCE_OBS_AK: ${OBS_AK:-}
       DATASOURCE_OBS_SK: ${OBS_SK:-}
       DATASOURCE_OBS_ENABLE_SSL: ${DATASOURCE_OBS_ENABLE_SSL:-false}
-      MODEL_ROUTER_API: ${MODEL_ROUTER_API:-http://studio-service:31113/v1/agent-builder}
       HTTPS: ${SERVER_SSL_ENABLED:-false}
       HTTPS_CERT_FILE: ${HTTPS_CERT_FILE:-}
       HTTPS_KEY_FILE: ${HTTPS_KEY_FILE:-}
@@ -392,7 +391,6 @@ services:
       DATASOURCE_OBS_SK: ${OBS_SK:-}
       DATASOURCE_OBS_ENABLE_SSL: ${DATASOURCE_OBS_ENABLE_SSL:-false}
       DATASOURCE_OBS_PATH_STYLE: ${DATASOURCE_OBS_PATH_STYLE:-path}
-      MODEL_ROUTER_API: ${MODEL_ROUTER_API:-http://studio-service:31113/v1/agent-builder}
       IR_LLM_API_KEY: ${IR_LLM_API_KEY:-sk-placeholder}
       LOGGING_LOG_PATH: /opt/cloud/logs/agent-builder
       LOG_VERBOSE: ${LOG_VERBOSE:-true}

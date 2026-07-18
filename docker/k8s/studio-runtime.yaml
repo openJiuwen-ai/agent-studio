@@ -62,9 +62,6 @@ spec:
             - name: DATASOURCE_OBS_PATH_STYLE
               value: 'path'
             # ======== 服务间调用地址（默认无需修改） ========
-            # 模型路由接口地址，HTTPS启动需要改成https
-            - name: MODEL_ROUTER_API
-              value: 'http://studio-service:31113/v1/agent-builder'
             # 模型配置来源策略：env（环境变量）/ ir（旧版路由）/ obs（OBS直连，默认，绕过模型路由）
             - name: MODEL_CONFIG_STRATEGY
               value: 'obs'

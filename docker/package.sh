@@ -19,7 +19,7 @@ function log() {
 function main() {
   log "开始构建打包，WORKSPACE=${WORKSPACE}"
 
-  log "[1/3] 后端编译复制 (studio-manager & studio-service)"
+  log "[1/3] 后端编译复制 (studio-manager)"
   backend_build_copy
   log "[1/3] 后端编译复制完成"
 
@@ -56,10 +56,6 @@ function backend_build_copy() {
   echo "[PACKAGE] 复制 studio-manager 产物..."
   copy_manager
   echo "[PACKAGE] studio-manager 复制完成"
-
-  echo "[PACKAGE] 复制 studio-service 产物..."
-  copy_service
-  echo "[PACKAGE] studio-service 复制完成"
 }
 
 function frontend_build_copy() {
@@ -139,26 +135,13 @@ function copy_manager() {
   cp -f ${WORKSPACE}/backend/studio-manager-service/src/main/resources/log4j2.xml ${MANAGER_TARGET_PATH}/config/
 }
 
-function copy_service() {
-  # 复制studio-service的jar包和配置文件
-  SERVICE_TARGET_PATH=${WORKSPACE}/docker/studio-service
-  mkdir -pv ${SERVICE_TARGET_PATH}/lib
-  cp -f ${WORKSPACE}/backend/studio-runtime/target/studio-runtime-*.jar ${SERVICE_TARGET_PATH}/lib/studio-service.jar
-  if [ -e ${WORKSPACE}/backend/studio-runtime/target/lib ];then
-    cp ${WORKSPACE}/backend/studio-runtime/target/lib/* ${SERVICE_TARGET_PATH}/lib/
-  fi
-  mkdir -pv ${SERVICE_TARGET_PATH}/config
-  cp -f ${WORKSPACE}/backend/studio-runtime-service/src/main/resources/application-runtime.yml ${SERVICE_TARGET_PATH}/config/
-  cp -f ${WORKSPACE}/backend/studio-runtime-service/src/main/resources/log4j2.xml ${SERVICE_TARGET_PATH}/config/
-}
-
 function package() {
   # 产物全部打成压缩包
   cd ${WORKSPACE}/docker
   if [ -f "package.tar.gz" ]; then
       rm -f "package.tar.gz"
   fi
-  tar -czvf package.tar.gz ./compose ./k8s ./studio-manager ./studio-service ./studio-runtime ./studio-builder ./studio-console ./build.sh
+  tar -czvf package.tar.gz ./compose ./k8s ./studio-manager ./studio-runtime ./studio-builder ./studio-console ./build.sh
 }
 
 function clean() {
@@ -168,12 +151,6 @@ function clean() {
   fi
   if [ -d "${WORKSPACE}/docker/studio-manager/config" ]; then
     rm -rf ${WORKSPACE}/docker/studio-manager/config
-  fi
-  if [ -d "${WORKSPACE}/docker/studio-service/lib" ]; then
-    rm -rf ${WORKSPACE}/docker/studio-service/lib
-  fi
-  if [ -d "${WORKSPACE}/docker/studio-service/config" ]; then
-    rm -rf ${WORKSPACE}/docker/studio-service/config
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/agent_runtime" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/agent_runtime

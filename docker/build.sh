@@ -7,7 +7,7 @@ set -xe
 # "client version 1.43 is too old"。如需显式指定，改成 daemon 支持的版本（如 1.44）。
 # export DOCKER_API_VERSION=1.43
 
-# java基础镜像 (Debian-based, for manager/service)
+# java基础镜像 (Debian-based, for manager)
 BASE_IMAGE_JAVA="eclipse-temurin:17-jre"
 # java基础镜像 (公共标准镜像，yum-based，for runtime)
 # nginx基础镜像
@@ -52,41 +52,66 @@ function main() {
     return
   fi
 
-  log "[1/7] 构建 studio-manager 镜像"
+  log "[1/6] 构建 studio-manager 镜像"
   docker_build_manager
-  log "[1/7] studio-manager 镜像构建完成"
+  log "[1/6] studio-manager 镜像构建完成"
 
-  log "[2/7] 构建 studio-service 镜像"
-  docker_build_service
-  log "[2/7] studio-service 镜像构建完成"
-
-  log "[3/7] 构建 studio-console 镜像"
+  log "[2/6] 构建 studio-console 镜像"
   docker_build_console
-  log "[3/7] studio-console 镜像构建完成"
+  log "[2/6] studio-console 镜像构建完成"
 
-  log "[4/7] 构建 studio-runtime 镜像"
+  log "[3/6] 构建 studio-runtime 镜像"
+  copy_agent_core
   docker_build_runtime
-  log "[4/7] studio-runtime 镜像构建完成"
+  cleanup_agent_core
+  log "[3/6] studio-runtime 镜像构建完成"
 
-  log "[5/7] 构建 studio-builder 镜像"
+  log "[4/6] 构建 studio-builder 镜像"
   build_builder_image
-  log "[5/7] studio-builder 镜像构建完成"
+  log "[4/6] studio-builder 镜像构建完成"
 
-  log "[6/7] 构建内置 VictoriaLogs 数据源的 Grafana 镜像"
+  log "[5/6] 构建内置 VictoriaLogs 数据源的 Grafana 镜像"
   docker_build_grafana
-  log "[6/7] Grafana 镜像构建完成"
+  log "[5/6] Grafana 镜像构建完成"
 
-  log "[7/7] 打包所有镜像（含 builder + Grafana）为 AgentBuilder.tar.gz"
+  log "[6/6] 打包所有镜像（含 builder + Grafana）为 AgentBuilder.tar.gz"
   docker_save_package
-  log "[7/7] 打包完成"
+  log "[6/6] 打包完成"
 
   write_build_info
 
   log "Docker 镜像构建全部完成"
 }
 
+# 将 agent-core（openjiuwen 本地源码）复制到 studio-runtime 构建上下文
+# 构建完成后由 cleanup_agent_core 清理
+function copy_agent_core() {
+  local AGENT_CORE_SRC=${WORKSPACE}/agent-core
+  local AGENT_CORE_DST=${DOCKER_DIR}/studio-runtime/agent-core
+  if [ ! -d "${AGENT_CORE_SRC}" ]; then
+    echo "[ERROR] agent-core 目录不存在: ${AGENT_CORE_SRC}"
+    echo "[ERROR] 请先 git clone agent-core 到项目根目录"
+    exit 1
+  fi
+  echo "[BUILD] 复制 agent-core 到构建上下文: ${AGENT_CORE_DST}"
+  cp -r ${AGENT_CORE_SRC} ${AGENT_CORE_DST}
+  # 清理不需要的文件以减小构建上下文
+  rm -rf ${AGENT_CORE_DST}/.git ${AGENT_CORE_DST}/tests ${AGENT_CORE_DST}/docs \
+         ${AGENT_CORE_DST}/.venv ${AGENT_CORE_DST}/__pycache__ \
+         ${AGENT_CORE_DST}/.pytest_cache ${AGENT_CORE_DST}/report
+}
+
+# 构建完成后清理 agent-core 临时目录
+function cleanup_agent_core() {
+  local AGENT_CORE_DST=${DOCKER_DIR}/studio-runtime/agent-core
+  if [ -d "${AGENT_CORE_DST}" ]; then
+    echo "[BUILD] 清理构建上下文中的 agent-core: ${AGENT_CORE_DST}"
+    rm -rf ${AGENT_CORE_DST}
+  fi
+}
+
 function usage() {
-  echo "用法: bash docker/build.sh [all|manager|service|console|runtime|builder|grafana ...]"
+  echo "用法: bash docker/build.sh [all|manager|console|runtime|builder|grafana ...]"
 }
 
 function parse_targets() {
@@ -97,7 +122,6 @@ function parse_targets() {
     case "${target}" in
       all) normalized=all ;;
       manager|studio-manager) normalized=studio-manager ;;
-      service|studio-service) normalized=studio-service ;;
       console|studio-console) normalized=studio-console ;;
       runtime|studio-runtime) normalized=studio-runtime ;;
       builder|studio-builder) normalized=studio-builder ;;
@@ -119,7 +143,6 @@ function parse_targets() {
 function build_single_service() {
   case "${TARGET_SERVICE}" in
     studio-manager) docker_build_manager ;;
-    studio-service) docker_build_service ;;
     studio-console) docker_build_console ;;
     studio-runtime) docker_build_runtime ;;
     studio-builder) build_builder_image ;;
@@ -131,7 +154,6 @@ function write_build_info() {
   if [ "${TARGET_SERVICES[0]}" = "all" ]; then
     cat > "${DOCKER_DIR}/.last-build.env" <<EOF
 STUDIO_MANAGER_IMAGE=studio-manager:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}
-STUDIO_SERVICE_IMAGE=studio-service:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}
 STUDIO_RUNTIME_IMAGE=studio-runtime:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}
 STUDIO_BUILDER_IMAGE=studio-builder:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}
 STUDIO_CONSOLE_IMAGE=studio-console:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}
@@ -145,7 +167,6 @@ EOF
   for TARGET_SERVICE in "${TARGET_SERVICES[@]}"; do
     case "${TARGET_SERVICE}" in
       studio-manager) echo "STUDIO_MANAGER_IMAGE=studio-manager:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}" ;;
-      studio-service) echo "STUDIO_SERVICE_IMAGE=studio-service:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}" ;;
       studio-console) echo "STUDIO_CONSOLE_IMAGE=studio-console:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}" ;;
       studio-runtime) echo "STUDIO_RUNTIME_IMAGE=studio-runtime:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}" ;;
       studio-builder) echo "STUDIO_BUILDER_IMAGE=studio-builder:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}" ;;
@@ -162,16 +183,6 @@ function docker_build_manager() {
   docker build \
   --build-arg BASE_IMAGE=${BASE_IMAGE_JAVA} \
   -t ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} .
-}
-
-# 打studio-service的docker镜像
-function docker_build_service() {
-  IMAGE_NAME=studio-service
-  cd ${DOCKER_DIR}/studio-service/
-  echo "[BUILD] docker build ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}"
-  docker build \
-    --build-arg BASE_IMAGE=${BASE_IMAGE_JAVA} \
-    -t ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} .
 }
 
 function docker_build_runtime() {
@@ -240,7 +251,7 @@ function build_builder_image() {
 }
 
 # studio-builder 不再单独保存为 StudioBuilder.tar.gz —— 已并入 docker_save()，
-# 与 manager/service/runtime/console 一起进 docker/image/ + AgentBuilder.tar.gz。
+# 与 manager/runtime/console 一起进 docker/image/ + AgentBuilder.tar.gz。
 
 # 打studio-console的docker镜像
 function docker_build_console() {
@@ -278,7 +289,6 @@ function docker_save() {
   mkdir -p ${DOCKER_DIR}/image
   cd ${DOCKER_DIR}/image
   docker save studio-manager:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} > studio-manager_${BUILD_TIME}.${BUILD_PLATFORM}.tar
-  docker save studio-service:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} > studio-service_${BUILD_TIME}.${BUILD_PLATFORM}.tar
   docker save studio-runtime:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} > studio-runtime_${BUILD_TIME}.${BUILD_PLATFORM}.tar
   docker save studio-console:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} > studio-console_${BUILD_TIME}.${BUILD_PLATFORM}.tar
   docker save studio-builder:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} > studio-builder_${BUILD_TIME}.${BUILD_PLATFORM}.tar

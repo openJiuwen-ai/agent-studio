@@ -58,9 +58,9 @@ services:
       # 鉴权配置，默认调自身，HTTPS启动需要改成https
       user_auth_endpoint: ${USER_AUTH_ENDPOINT:-http://studio-manager:31111}
       # studio-builder调用地址，HTTPS启动需要改成https
-      jiu_wen_service_endpoint: ${JIUWEN_BUILDER_URL:-http://studio-builder:31015}
       agent_builder_endpoint: ${AGENT_BUILDER_ENDPOINT:-http://studio-builder:31015}
       # studio-runtime调用地址，HTTPS启动需要改成https
+      jiu_wen_service_endpoint: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
       jiuwen_base_url: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
       server_ssl_enabled: ${SERVER_SSL_ENABLED:-false}
       CB_CF_SERVER_KEYSTORE: ${CB_CF_SERVER_KEYSTORE:-}
@@ -83,56 +83,6 @@ services:
       enable_tool_url_check: ${ENABLE_TOOL_URL_CHECK:-true}
       # 是否启用资源管理的操作日志
       studio_operationLog_switch: ${STUDIO_OPERATION_LOG_SWITCH:-false}
-      # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
-      auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
-    networks:
-      - default
-
-  studio-service:
-    image: ${STUDIO_SERVICE_IMAGE}
-    restart: always
-    privileged: true
-    cpus: 2
-    mem_limit: 4g
-    ports:
-      - "31113:31113"
-    environment:
-      spring_datasource_url: ${SPRING_DATASOURCE_URL:-}
-      spring_datasource_username: ${SPRING_DATASOURCE_USERNAME:-}
-      spring_datasource_password: ${SPRING_DATASOURCE_PASSWORD:-}
-      spring_datasource_driver_class_name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:-}
-      redis_host: ${REDIS_HOST:-}
-      redis_password: ${REDIS_PASSWORD:-}
-      redis_port: ${REDIS_PORT:-6379}
-      cluster_node_list: ${REDIS_CLUSTER_NODES:-}
-      redis_master_name: ${REDIS_SENTINEL_MASTER:-}
-      redis_sentinel_ports: ${REDIS_SENTINEL_PORTS:-}
-      storage_type: ${STORAGE_TYPE:-OBS}
-      storage_custom_class: ${STORAGE_CUSTOM_CLASS:-}
-      storage_custom_classpath: ${STORAGE_CUSTOM_CLASSPATH:-}
-      storage_local_base_path: ${STORAGE_LOCAL_BASE_PATH:-}
-      storage_local_bucket: ${STORAGE_LOCAL_BUCKET:-}
-      storage_local_staging_bucket: ${STORAGE_LOCAL_STAGING_BUCKET:-}
-      storage_local_server_url: ${STORAGE_LOCAL_SERVER_URL:-}
-      obs_url: ${OBS_URL:-}
-      obs_bucket: ${OBS_BUCKET:-}
-      obs_staging_bucket: ${OBS_BUCKET:-}
-      obs_ak: ${OBS_AK:-}
-      obs_sk: ${OBS_SK:-}
-      # 鉴权配置，默认调自身，HTTPS启动需要改成https
-      user_auth_endpoint: ${USER_AUTH_ENDPOINT:-http://studio-service:31113}
-      # studio-manager调用地址，HTTPS启动需要改成https
-      agent_manager_endpoint: ${AGENT_MANAGER_ENDPOINT:-http://studio-manager:31111}
-      # studio-runtime调用地址，HTTPS启动需要改成https
-      jiuwen_base_url: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
-      server_ssl_enabled: ${SERVER_SSL_ENABLED:-false}
-      CB_CF_SERVER_KEYSTORE: ${CB_CF_SERVER_KEYSTORE:-}
-      CB_CF_TRUST_KEYSTORE: ${CB_CF_TRUST_KEYSTORE:-}
-      server_ssl_trust_store_password: ${SERVER_SSL_TRUST_STORE_PASSWORD:-}
-      server_ssl_key_store_password: ${SERVER_SSL_KEY_STORE_PASSWORD:-}
-      server_ssl_key_password: ${SERVER_SSL_KEY_PASSWORD:-}
-      koosearch_endpoint: ${KOOSEARCH_ENDPOINT:-}
-      system_crypt_name: ${SYSTEM_CRYPT_NAME:-}
       # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
       auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
     networks:
@@ -170,7 +120,6 @@ services:
       # Uvicorn worker 数量，未设置时默认 CPU 核心数 + 1
       GUNICORN_WORK_NUM: ${GUNICORN_WORK_NUM:-}
       # 模型路由接口地址，HTTPS启动需要改成https
-      MODEL_ROUTER_API: ${MODEL_ROUTER_API:-http://studio-service:31113/v1/agent-builder}
       # 模型配置来源策略：env/ir/obs（默认 obs：OBS 直连，绕过模型路由）
       MODEL_CONFIG_STRATEGY: ${MODEL_CONFIG_STRATEGY:-obs}
       # 模型缓存 LRU 容量，默认 500
@@ -271,11 +220,11 @@ services:
       DATASOURCE_OBS_SK: ${OBS_SK:-}
       DATASOURCE_OBS_ENABLE_SSL: ${DATASOURCE_OBS_ENABLE_SSL:-false}
       DATASOURCE_OBS_PATH_STYLE: ${DATASOURCE_OBS_PATH_STYLE:-path}
-      MODEL_ROUTER_API: ${MODEL_ROUTER_API:-http://studio-service:31113/v1/agent-builder}
       IR_LLM_API_KEY: ${IR_LLM_API_KEY:-sk-placeholder}
       LOGGING_LOG_PATH: /opt/cloud/logs/agent-builder
       LOG_VERBOSE: ${LOG_VERBOSE:-true}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      MODEL_CONFIG_STRATEGY: ${MODEL_CONFIG_STRATEGY:-obs}
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:31015/v1/health >/dev/null || exit 1"]
       interval: 10s

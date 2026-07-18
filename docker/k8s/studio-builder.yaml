@@ -98,6 +98,8 @@ spec:
               value: ''
             - name: DATASOURCE_OBS_ENABLE_SSL
               value: 'false'
+            - name: MODEL_CONFIG_STRATEGY
+              value: 'obs'
           resources:
             limits:
               cpu: '2'

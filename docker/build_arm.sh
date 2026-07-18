@@ -12,7 +12,7 @@ set -xe
 # 可通过 docker version 查看 daemon 的 API version，按需修改
 # 不固定 DOCKER_API_VERSION，由 Docker 客户端与 daemon 自动协商。
 
-# java基础镜像 (Debian-based, for manager/service)
+# java基础镜像 (Debian-based, for manager)
 BASE_IMAGE_JAVA="eclipse-temurin:17-jre"
 # nginx基础镜像
 BASE_IMAGE_NGINX="nginx:1.27"
@@ -68,6 +68,14 @@ function main() {
     exit 1
   fi
 
+  # buildx 调用的 builder 参数：BUILDER=default 时复用 daemon 的 docker 驱动，
+  # 此时不能传 `--builder default`（buildx 会把 default 当作 builder 名而非 context，
+  # 报 "use docker --context=default buildx"），故省略该 flag 让 buildx 走默认 context。
+  BUILDX_BUILDER_FLAG=()
+  if [ "${BUILDER}" != "default" ]; then
+    BUILDX_BUILDER_FLAG+=(--builder "${BUILDER}")
+  fi
+
   if [ "${TARGET_SERVICES[0]}" != "all" ]; then
     log "仅构建以下 ARM64 镜像: ${TARGET_SERVICES[*]}"
     for TARGET_SERVICE in "${TARGET_SERVICES[@]}"; do
@@ -78,37 +86,35 @@ function main() {
     return
   fi
 
-  log "[1/8] 构建 studio-manager 镜像 (arm64)"
+  log "[1/7] 构建 studio-manager 镜像 (arm64)"
   docker_build_manager
-  log "[1/8] studio-manager 镜像构建完成"
+  log "[1/7] studio-manager 镜像构建完成"
 
-  log "[2/8] 构建 studio-service 镜像 (arm64)"
-  docker_build_service
-  log "[2/8] studio-service 镜像构建完成"
-
-  log "[3/8] 构建 studio-console 镜像 (arm64)"
+  log "[2/7] 构建 studio-console 镜像 (arm64)"
   docker_build_console
-  log "[3/8] studio-console 镜像构建完成"
+  log "[2/7] studio-console 镜像构建完成"
 
-  log "[4/8] 构建 runtime-base 基础镜像 (arm64, apt+pip)"
+  log "[3/7] 构建 runtime-base 基础镜像 (arm64, apt+pip)"
   docker_build_runtime_base
-  log "[4/8] runtime-base 基础镜像构建完成"
+  log "[3/7] runtime-base 基础镜像构建完成"
 
-  log "[5/8] 构建 studio-runtime 镜像 (arm64)"
+  log "[4/7] 构建 studio-runtime 镜像 (arm64)"
+  copy_agent_core
   docker_build_runtime
-  log "[5/8] studio-runtime 镜像构建完成"
+  cleanup_agent_core
+  log "[4/7] studio-runtime 镜像构建完成"
 
-  log "[6/8] 构建 studio-builder 镜像 (arm64)"
+  log "[5/7] 构建 studio-builder 镜像 (arm64)"
   build_builder_image
-  log "[6/8] studio-builder 镜像构建完成"
+  log "[5/7] studio-builder 镜像构建完成"
 
-  log "[7/8] 构建内置 VictoriaLogs 数据源的 Grafana 镜像 (arm64)"
-  docker_build_grafana
-  log "[7/8] Grafana ARM64 镜像构建完成"
+#  log "[6/7] 构建内置 VictoriaLogs 数据源的 Grafana 镜像 (arm64)"
+#  docker_build_grafana
+#  log "[6/7] Grafana ARM64 镜像构建完成"
 
-  log "[8/8] 打包所有镜像（含 builder + Grafana）为 AgentBuilder-arm64.tar.gz"
+  log "[7/7] 打包所有镜像（含 builder + Grafana）为 AgentBuilder-arm64.tar.gz"
   docker_save_package
-  log "[8/8] 打包完成"
+  log "[7/7] 打包完成"
 
   write_build_info
 
@@ -116,7 +122,34 @@ function main() {
 }
 
 function usage() {
-  echo "用法: bash docker/build_arm.sh [all|manager|service|console|runtime|builder|grafana ...]"
+  echo "用法: bash docker/build_arm.sh [all|manager|console|runtime|builder|grafana ...]"
+}
+
+# 将 agent-core（openjiuwen 本地源码）复制到 studio-runtime 构建上下文
+# 构建完成后由 cleanup_agent_core 清理
+function copy_agent_core() {
+  local AGENT_CORE_SRC=${WORKSPACE}/agent-core
+  local AGENT_CORE_DST=${DOCKER_DIR}/studio-runtime/agent-core
+  if [ ! -d "${AGENT_CORE_SRC}" ]; then
+    echo "[ERROR] agent-core 目录不存在: ${AGENT_CORE_SRC}"
+    echo "[ERROR] 请先 git clone agent-core 到项目根目录"
+    exit 1
+  fi
+  echo "[BUILD] 复制 agent-core 到构建上下文: ${AGENT_CORE_DST}"
+  cp -r ${AGENT_CORE_SRC} ${AGENT_CORE_DST}
+  # 清理不需要的文件以减小构建上下文
+  rm -rf ${AGENT_CORE_DST}/.git ${AGENT_CORE_DST}/tests ${AGENT_CORE_DST}/docs \
+         ${AGENT_CORE_DST}/.venv ${AGENT_CORE_DST}/__pycache__ \
+         ${AGENT_CORE_DST}/.pytest_cache ${AGENT_CORE_DST}/report
+}
+
+# 构建完成后清理 agent-core 临时目录
+function cleanup_agent_core() {
+  local AGENT_CORE_DST=${DOCKER_DIR}/studio-runtime/agent-core
+  if [ -d "${AGENT_CORE_DST}" ]; then
+    echo "[BUILD] 清理构建上下文中的 agent-core: ${AGENT_CORE_DST}"
+    rm -rf ${AGENT_CORE_DST}
+  fi
 }
 
 function parse_targets() {
@@ -127,7 +160,6 @@ function parse_targets() {
     case "${target}" in
       all) normalized=all ;;
       manager|studio-manager) normalized=studio-manager ;;
-      service|studio-service) normalized=studio-service ;;
       console|studio-console) normalized=studio-console ;;
       runtime|studio-runtime) normalized=studio-runtime ;;
       builder|studio-builder) normalized=studio-builder ;;
@@ -149,7 +181,6 @@ function parse_targets() {
 function build_single_service() {
   case "${TARGET_SERVICE}" in
     studio-manager) docker_build_manager ;;
-    studio-service) docker_build_service ;;
     studio-console) docker_build_console ;;
     studio-runtime)
       docker_build_runtime_base
@@ -164,7 +195,6 @@ function write_build_info() {
   if [ "${TARGET_SERVICES[0]}" = "all" ]; then
     cat > "${DOCKER_DIR}/.last-build.env" <<EOF
 STUDIO_MANAGER_IMAGE=studio-manager:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}
-STUDIO_SERVICE_IMAGE=studio-service:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}
 STUDIO_RUNTIME_IMAGE=studio-runtime:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}
 STUDIO_BUILDER_IMAGE=studio-builder:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}
 STUDIO_CONSOLE_IMAGE=studio-console:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}
@@ -178,7 +208,6 @@ EOF
   for TARGET_SERVICE in "${TARGET_SERVICES[@]}"; do
     case "${TARGET_SERVICE}" in
       studio-manager) echo "STUDIO_MANAGER_IMAGE=studio-manager:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}" ;;
-      studio-service) echo "STUDIO_SERVICE_IMAGE=studio-service:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}" ;;
       studio-console) echo "STUDIO_CONSOLE_IMAGE=studio-console:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}" ;;
       studio-runtime) echo "STUDIO_RUNTIME_IMAGE=studio-runtime:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}" ;;
       studio-builder) echo "STUDIO_BUILDER_IMAGE=studio-builder:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}" ;;
@@ -193,20 +222,7 @@ function docker_build_manager() {
   cd ${DOCKER_DIR}/studio-manager
   echo "[BUILD] docker buildx build --platform linux/arm64 ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}"
   docker buildx build \
-    --builder ${BUILDER} \
-    --platform linux/arm64 \
-    --build-arg BASE_IMAGE=${BASE_IMAGE_JAVA} \
-    --load \
-    -t ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} .
-}
-
-# 打studio-service的docker镜像 (arm64)
-function docker_build_service() {
-  IMAGE_NAME=studio-service
-  cd ${DOCKER_DIR}/studio-service/
-  echo "[BUILD] docker buildx build --platform linux/arm64 ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}"
-  docker buildx build \
-    --builder ${BUILDER} \
+    "${BUILDX_BUILDER_FLAG[@]}" \
     --platform linux/arm64 \
     --build-arg BASE_IMAGE=${BASE_IMAGE_JAVA} \
     --load \
@@ -225,7 +241,7 @@ function docker_build_runtime_base() {
   else
     echo "[BUILD] docker buildx build --platform linux/arm64 ${BASE_TAG} (requirements.txt 已变更，需要重建，约需 2 小时)"
     docker buildx build \
-      --builder ${BUILDER} \
+      "${BUILDX_BUILDER_FLAG[@]}" \
       --platform linux/arm64 \
       --build-arg BASE_IMAGE=${BASE_IMAGE_PYTHON} \
       --load \
@@ -295,7 +311,7 @@ function docker_build_builder() {
   cd ${DOCKER_DIR}/studio-builder/
   echo "[BUILD] docker buildx build --platform linux/arm64 ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}"
   docker buildx build \
-    --builder ${BUILDER} \
+    "${BUILDX_BUILDER_FLAG[@]}" \
     --platform linux/arm64 \
     --build-arg BASE_IMAGE=${BASE_IMAGE_PYTHON} \
     --load \
@@ -312,7 +328,7 @@ function build_builder_image() {
 }
 
 # studio-builder 不再单独保存为 StudioBuilder-arm64.tar.gz —— 已并入 docker_save()，
-# 与 manager/service/runtime/console 一起进 docker/image/ + AgentBuilder-arm64.tar.gz。
+# 与 manager/runtime/console 一起进 docker/image/ + AgentBuilder-arm64.tar.gz。
 
 # 打studio-console的docker镜像 (arm64)
 function docker_build_console() {
@@ -320,7 +336,7 @@ function docker_build_console() {
   cd ${DOCKER_DIR}/studio-console/
   echo "[BUILD] docker buildx build --platform linux/arm64 ${IMAGE_NAME}:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM}"
   docker buildx build \
-    --builder ${BUILDER} \
+    "${BUILDX_BUILDER_FLAG[@]}" \
     --platform linux/arm64 \
     --build-arg BASE_IMAGE=${BASE_IMAGE_NGINX} \
     --load \
@@ -344,7 +360,7 @@ function docker_build_grafana() {
     [ -z "${https_proxy}" ] || proxy_args+=(--build-arg "HTTPS_PROXY=${https_proxy}" --build-arg "https_proxy=${https_proxy}")
   fi
   docker buildx build \
-    --builder ${BUILDER} \
+    "${BUILDX_BUILDER_FLAG[@]}" \
     --platform linux/arm64 \
     "${proxy_args[@]}" \
     --build-arg GRAFANA_VERSION=11.3.0 \
@@ -366,11 +382,9 @@ function docker_save() {
   mkdir -p ${DOCKER_DIR}/image
   cd ${DOCKER_DIR}/image
   docker save studio-manager:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} > studio-manager_${BUILD_TIME}.${BUILD_PLATFORM}.tar
-  docker save studio-service:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} > studio-service_${BUILD_TIME}.${BUILD_PLATFORM}.tar
   docker save studio-runtime:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} > studio-runtime_${BUILD_TIME}.${BUILD_PLATFORM}.tar
   docker save studio-console:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} > studio-console_${BUILD_TIME}.${BUILD_PLATFORM}.tar
   docker save studio-builder:${VERSION}.${BUILD_TIME}.${BUILD_PLATFORM} > studio-builder_${BUILD_TIME}.${BUILD_PLATFORM}.tar
-  docker save "${GRAFANA_ARM_IMAGE}" > grafana-victorialogs_11.3.0-0.29.0.${BUILD_PLATFORM}.tar
 }
 
 # docker镜像打成压缩包
