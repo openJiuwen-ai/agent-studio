@@ -37,6 +37,7 @@ dependencies = [
     "flask>=3.1.0",
     "pyahocorasick>=2.2.0",
     "model-service",
+    "storage",
 ]
 
 [project.optional-dependencies]
@@ -75,3 +76,4 @@ default = true
 [tool.uv.sources]
 # 机制层共享包（monorepo 同仓，runtime/agent-builder 都依赖）。path 相对于本 pyproject。
 model-service = { path = "../packages/model_service", editable = true }
+storage = { path = "../packages/storage", editable = true }
