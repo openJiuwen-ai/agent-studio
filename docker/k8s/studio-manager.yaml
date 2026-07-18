@@ -82,7 +82,7 @@ spec:
             # ======== 服务间调用地址（默认无需修改） ========
             # studio-service调用地址，HTTPS启动需要改成https
             - name: agent_runtime_endpoint
-              value: 'http://studio-service:31113'
+              value: 'http://studio-runtime:31014'
             # 鉴权配置，默认调自身，HTTPS启动需要改成https
             - name: user_auth_endpoint
               value: 'http://studio-manager:31111'

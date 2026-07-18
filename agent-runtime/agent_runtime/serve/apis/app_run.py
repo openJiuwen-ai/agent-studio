@@ -34,7 +34,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from jiuwen.serve.controllers.execution.enum import PlanModeType, IRType
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
-from openjiuwen.core.common.logging import workflow_logger
+from openjiuwen.core.common.logging import workflow_logger, set_session_id
 
 app_run_app = APIRouter(tags=["app_run"])
 
@@ -178,6 +178,7 @@ async def _encapsulate_response(
     request: Request,
     ir_path: str,
     stream: bool = True,
+    query: str = "",
 ):
     """对 ir_execute 返回的 StreamingResponse 进行事件封装.
 
@@ -192,6 +193,7 @@ async def _encapsulate_response(
             handler_type=handler_type,
             request=request,
             ir_path=ir_path,
+            query=query,
         )
     else:
         return await EventHandler.encapsulate_non_stream_response(
@@ -199,6 +201,7 @@ async def _encapsulate_response(
             handler_type=handler_type,
             request=request,
             ir_path=ir_path,
+            query=query,
         )
 
 
@@ -208,6 +211,9 @@ async def _execute_workflow_run(
     request: Request,
 ):
     """工作流试运行核心逻辑."""
+    # 中间件在路由匹配前执行、拿不到 path_params，trace_id 会回退成 execution_id；
+    # 此处路由已匹配、ctx.conversation_id 已从 path 取到，覆盖日志上下文使日志按会话可追踪
+    set_session_id(ctx.conversation_id or getattr(request.state, "execution_id", "") or "")
     workflow_logger.info(
         f"Workflow app run request: project={ctx.project_id}, workflow={ctx.workflow_id}, "
         f"conversation={ctx.conversation_id}, version={ctx.version}"
@@ -260,7 +266,7 @@ async def _execute_workflow_run(
 
     # 工作流固定使用 workflow handler_type
     return await _encapsulate_response(
-        response, IRType.Workflow.value, request, ir_path, stream
+        response, IRType.Workflow.value, request, ir_path, stream, query=query
     )
 
 
@@ -290,6 +296,8 @@ async def _execute_agent_run(
     request: Request,
 ):
     """智能体试运行核心逻辑."""
+    # 同 _execute_workflow_run：路由匹配后用 path 的 conversation_id 覆盖 trace_id
+    set_session_id(ctx.conversation_id or getattr(request.state, "execution_id", "") or "")
     workflow_logger.info(
         f"Agent app run request: project={ctx.project_id}, agent={ctx.agent_id}, "
         f"conversation={ctx.conversation_id}, version={ctx.version}"
@@ -354,7 +362,7 @@ async def _execute_agent_run(
         raise
 
     return await _encapsulate_response(
-        response, handler_type, request, ir_path, stream
+        response, handler_type, request, ir_path, stream, query=query
     )
 
 

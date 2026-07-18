@@ -84,6 +84,8 @@ class Trace:
     version_id: str = ""
     is_debug: bool = False
     language: str = "en-us"
+    # 本轮用户输入，用于落库时把 user 一轮写入会话历史（对齐旧 Java 路径的 seed 行为）
+    query: str = ""
 
     # 运行时状态
     start_time: int = field(default_factory=lambda: int(time.time() * 1000))
