@@ -106,6 +106,14 @@ class RedisSettings(BaseSettings):
         return _decrypt(v)
 
 
+class ModelConfigStrategyType(str, Enum):
+    """模型配置来源策略（与 agent_runtime.common.config.ModelConfigStrategyType 对齐）。"""
+
+    ENV = "env"
+    IR = "ir"
+    OBS = "obs"
+
+
 class LLMSettings(BaseSettings):
     api_key: str = Field(default="sk-placeholder", validation_alias="IR_LLM_API_KEY")
     api_base: str = Field(default="", validation_alias="MODEL_ROUTER_API")
@@ -115,6 +123,13 @@ class LLMSettings(BaseSettings):
     temperature: float = Field(default=0.5, validation_alias="IR_LLM_TEMPERATURE")
     top_p: float = Field(default=0.5, validation_alias="IR_LLM_TOP_P")
     max_tokens: int = Field(default=4096, validation_alias="IR_LLM_MAX_TOKENS")
+    # 模型配置来源策略: env / ir / obs（默认 obs：OBS 直连，绕过模型路由网关）。
+    # obs → client_provider="studio" 进程内直连真实模型；
+    # ir  → client_provider="openai" 走 MODEL_ROUTER_API 网关；
+    # env → client_provider="openai" 走 IR_LLM_* 环境变量。
+    model_config_strategy: ModelConfigStrategyType = Field(
+        default=ModelConfigStrategyType.OBS, validation_alias="MODEL_CONFIG_STRATEGY"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

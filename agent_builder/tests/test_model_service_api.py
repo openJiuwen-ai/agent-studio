@@ -61,7 +61,8 @@ class _ModelInfo:
         self.api_key = api_key
 
 
-def test_nl2_uses_openai_gateway_when_router_api_configured(monkeypatch):
+def test_nl2_uses_ir_gateway_when_strategy_ir(monkeypatch):
+    monkeypatch.setattr(settings.llm, "model_config_strategy", model_bridge.ModelConfigStrategyType.IR)
     monkeypatch.setattr(settings.llm, "api_base", "http://gw:31113/v1/agent-builder")
     cfg = model_bridge.Nl2ModelConfigProvider.get_llm_config(
         _ModelInfo("msid", {"auth_id": "a1", "x_auth_token": "tok"})
@@ -73,8 +74,8 @@ def test_nl2_uses_openai_gateway_when_router_api_configured(monkeypatch):
     }
 
 
-def test_nl2_uses_studio_direct_when_router_api_unconfigured(monkeypatch):
-    monkeypatch.setattr(settings.llm, "api_base", "")
+def test_nl2_uses_studio_direct_when_strategy_obs(monkeypatch):
+    monkeypatch.setattr(settings.llm, "model_config_strategy", model_bridge.ModelConfigStrategyType.OBS)
     cfg = model_bridge.Nl2ModelConfigProvider.get_llm_config(
         _ModelInfo("signed|msid", {"auth_id": "a1"})
     )
@@ -85,7 +86,18 @@ def test_nl2_uses_studio_direct_when_router_api_unconfigured(monkeypatch):
     assert cfg.model_client_config.api_key == "sk-placeholder"
 
 
-def test_prompt_optimize_uses_openai_gateway_when_router_api_configured(monkeypatch):
+def test_nl2_uses_env_vars_when_strategy_env(monkeypatch):
+    monkeypatch.setattr(settings.llm, "model_config_strategy", model_bridge.ModelConfigStrategyType.ENV)
+    monkeypatch.setenv("IR_LLM_API_BASE", "https://env.example.com")
+    cfg = model_bridge.Nl2ModelConfigProvider.get_llm_config(
+        _ModelInfo("my-model", {"auth_id": "a1"})
+    )
+    assert str(cfg.model_client_config.client_provider).lower() == "openai"
+    assert cfg.model_client_config.api_base == "https://env.example.com"
+
+
+def test_prompt_optimize_uses_ir_gateway_when_strategy_ir(monkeypatch):
+    monkeypatch.setattr(settings.llm, "model_config_strategy", model_bridge.ModelConfigStrategyType.IR)
     monkeypatch.setattr(settings.llm, "api_base", "http://gw:31113/v1/agent-builder")
     cfg = model_bridge.PromptOptimizeModelProvider.get_llm_config(
         _ModelInfo("msid", {"auth_id": "a1", "x_auth_token": "tok"})
@@ -93,14 +105,24 @@ def test_prompt_optimize_uses_openai_gateway_when_router_api_configured(monkeypa
     assert str(cfg.model_client_config.client_provider).lower() == "openai"
 
 
-def test_prompt_optimize_uses_studio_direct_when_router_api_unconfigured(monkeypatch):
-    monkeypatch.setattr(settings.llm, "api_base", "")
+def test_prompt_optimize_uses_studio_direct_when_strategy_obs(monkeypatch):
+    monkeypatch.setattr(settings.llm, "model_config_strategy", model_bridge.ModelConfigStrategyType.OBS)
     cfg = model_bridge.PromptOptimizeModelProvider.get_llm_config(
         _ModelInfo("msid", {"auth_id": "a1"})
     )
     assert cfg.model_client_config.client_provider == "studio"
     assert cfg.model_client_config.model_service_id == "msid"
     assert cfg.model_client_config.auth_id == "a1"
+
+
+def test_prompt_optimize_uses_env_vars_when_strategy_env(monkeypatch):
+    monkeypatch.setattr(settings.llm, "model_config_strategy", model_bridge.ModelConfigStrategyType.ENV)
+    monkeypatch.setenv("IR_LLM_API_BASE", "https://env.example.com")
+    cfg = model_bridge.PromptOptimizeModelProvider.get_llm_config(
+        _ModelInfo("my-model", {})
+    )
+    assert str(cfg.model_client_config.client_provider).lower() == "openai"
+    assert cfg.model_client_config.api_base == "https://env.example.com"
 
 
 async def _await(coro):
