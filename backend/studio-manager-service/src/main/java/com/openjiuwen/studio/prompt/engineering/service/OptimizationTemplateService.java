@@ -49,8 +49,8 @@ public class OptimizationTemplateService {
 
     private static final Logger logger = LoggerFactory.getLogger(OptimizationTemplateService.class);
 
-    @Value("${jiuwen.base-url}")
-    private String jiuwenBaseUrl;
+    @Value("${agent_builder_endpoint:}")
+    private String agentBuilderEndpoint;
 
     @Resource(name = "remoteClientTemplate")
     private ClientTemplate clientTemplate;
@@ -59,7 +59,7 @@ public class OptimizationTemplateService {
         try {
             log.info("createOptimization req: {}", JsonUtil.object2Json(req));
             ResponseEntity<TemplateOptimizeResp> response =
-                clientTemplate.postForEntity(jiuwenBaseUrl + TEMPLATES_OPTIMIZATION_CREATE_API, token,
+                clientTemplate.postForEntity(agentBuilderEndpoint + TEMPLATES_OPTIMIZATION_CREATE_API, token,
                     JsonUtil.object2Json(req), TemplateOptimizeResp.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
                 logger.error("Create optimization task from jiuwen server error! response:{}", response);
@@ -85,7 +85,7 @@ public class OptimizationTemplateService {
             String url = ifRestart ? TEMPLATES_OPTIMIZATION_RESTART_API : TEMPLATES_OPTIMIZATION_STOP_API;
             log.info("change jiuwen optimization taskId: {}", jiuwenTaskId);
             ResponseEntity<TemplateOptimizeResp> response =
-                clientTemplate.postForEntity(jiuwenBaseUrl + String.format(url, jiuwenTaskId), RequestContextUtils.getRequestAuthToken(),
+                clientTemplate.postForEntity(agentBuilderEndpoint + String.format(url, jiuwenTaskId), RequestContextUtils.getRequestAuthToken(),
                     null, TemplateOptimizeResp.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
                 logger.error("Change optimization task from jiuwen server error! response:{}", response);
@@ -110,7 +110,7 @@ public class OptimizationTemplateService {
         try {
             log.info("delete jiuwen optimization taskId: {}", jiuwenTaskId);
             ResponseEntity<TemplateOptimizeResp> response = clientTemplate.deleteForEntity(
-                jiuwenBaseUrl + String.format(TEMPLATES_OPTIMIZATION_DELETE_API, jiuwenTaskId),
+                agentBuilderEndpoint + String.format(TEMPLATES_OPTIMIZATION_DELETE_API, jiuwenTaskId),
                     RequestContextUtils.getRequestAuthToken(), TemplateOptimizeResp.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
                 logger.error("Delete optimization task from jiuwen server error! response:{}", response);
@@ -134,7 +134,7 @@ public class OptimizationTemplateService {
         try {
             log.info("getOptimizationProgress jiuwenTaskId: {}", jiuwenTaskId);
             ResponseEntity<JSONObject> response = clientTemplate.getForEntity(
-                jiuwenBaseUrl + String.format(TEMPLATES_OPTIMIZATION_PROGRESS_API, jiuwenTaskId), token,
+                agentBuilderEndpoint + String.format(TEMPLATES_OPTIMIZATION_PROGRESS_API, jiuwenTaskId), token,
                 JSONObject.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
                 logger.error("Get optimization task progress from jiuwen server error! response:{}", response);

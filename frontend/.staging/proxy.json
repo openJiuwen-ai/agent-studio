@@ -28,7 +28,7 @@
     }
   },
   "/v2": {
-    "target": "http://127.0.0.1:31113/",
+    "target": "http://127.0.0.1:31111/",
     "changeOrigin": true,
     "secure": false,
     "router": {
