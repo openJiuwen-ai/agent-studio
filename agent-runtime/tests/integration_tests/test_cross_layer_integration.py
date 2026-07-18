@@ -7,8 +7,9 @@
 """
 import json
 import asyncio
-import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
+
+import pytest
 
 from agent_runtime.schemas.orchestration_mgr import ExecutionRequest, ResponseMode
 
@@ -16,7 +17,8 @@ from agent_runtime.schemas.orchestration_mgr import ExecutionRequest, ResponseMo
 class TestIRDispatch:
     """场景一：IR 下发（Python 侧接收与解析）"""
 
-    def test_execution_request_parsing_streaming(self):
+    @staticmethod
+    def test_execution_request_parsing_streaming():
         """用例 1.1：工作流模式 IR 下发 → ExecutionRequest 解析 → mode=workflow"""
         req_json = {
             "conversationId": "conv-test-001",
@@ -32,7 +34,8 @@ class TestIRDispatch:
         assert req.ir_path == "agent/dsl/test-agent/test-agent.json"
         assert req.response_mode == ResponseMode.STREAMING
 
-    def test_execution_request_parsing_react(self):
+    @staticmethod
+    def test_execution_request_parsing_react():
         """用例 1.2：ReAct 模式 IR 下发 → ExecutionRequest 解析"""
         req_json = {
             "conversationId": "conv-test-002",
@@ -45,7 +48,8 @@ class TestIRDispatch:
         assert req.ir_path == "agent/dsl/react-agent/react-agent.json"
         assert req.response_mode == ResponseMode.STREAMING
 
-    def test_execution_request_parsing_controller(self):
+    @staticmethod
+    def test_execution_request_parsing_controller():
         """用例 1.3：Controller 模式 IR 下发 → ExecutionRequest 解析"""
         req_json = {
             "conversationId": "conv-test-003",
@@ -57,7 +61,8 @@ class TestIRDispatch:
         assert req.conversation_id == "conv-test-003"
         assert req.ir_path == "agent/dsl/controller/controller.json"
 
-    def test_execution_request_parsing_blocking(self):
+    @staticmethod
+    def test_execution_request_parsing_blocking():
         """用例 1.4a：非流式模式解析"""
         req_json = {
             "conversationId": "conv-test-004",
@@ -68,7 +73,8 @@ class TestIRDispatch:
         req = ExecutionRequest.model_validate(req_json)
         assert req.response_mode == ResponseMode.BLOCKING
 
-    def test_ir_load_failure_invalid_path(self):
+    @staticmethod
+    def test_ir_load_failure_invalid_path():
         """用例 1.4b：IR 加载失败 → 请求解析正确但 ir_path 无效"""
         req_json = {
             "conversationId": "conv-test-005",
@@ -81,7 +87,8 @@ class TestIRDispatch:
         # ir_execute 会尝试加载该路径并失败，返回 400
         # 这里验证请求解析层面的正确性（实际 OBS 加载需集成环境）
 
-    def test_runner_dispatch_workflow(self):
+    @staticmethod
+    def test_runner_dispatch_workflow():
         """用例 1.1b：mode=workflow → 应分派到 WorkflowRunner（通过 mock 验证逻辑）"""
         mode = "workflow"
         # 模拟 _get_runner_by_type 的分派逻辑
@@ -93,7 +100,8 @@ class TestIRDispatch:
             runner_type = "WorkflowRunner"
         assert runner_type == "WorkflowRunner", "workflow 模式应分派到 WorkflowRunner"
 
-    def test_runner_dispatch_react(self):
+    @staticmethod
+    def test_runner_dispatch_react():
         """用例 1.2b：mode=ReAct → 应分派到 ReActAgentRunner"""
         mode = "ReAct"
         if mode == "ReAct":
@@ -104,7 +112,8 @@ class TestIRDispatch:
             runner_type = "WorkflowRunner"
         assert runner_type == "ReActAgentRunner", "ReAct 模式应分派到 ReActAgentRunner"
 
-    def test_runner_dispatch_controller(self):
+    @staticmethod
+    def test_runner_dispatch_controller():
         """用例 1.3b：mode=Controller → 应分派到 ControllerRunner"""
         mode = "Controller"
         if mode == "ReAct":
@@ -119,7 +128,8 @@ class TestIRDispatch:
 class TestResultCallback:
     """场景二：执行结果回写（Python 侧返回格式）"""
 
-    def test_streaming_sse_event_sequence(self):
+    @staticmethod
+    def test_streaming_sse_event_sequence():
         """用例 2.1：流式 SSE 事件序列正确"""
         # 模拟 Python stream_response 产出的 SSE 帧
         sse_frames = [
@@ -138,7 +148,8 @@ class TestResultCallback:
         assert full.index("partial_content") < full.index("workflow_end")
         assert full.index("workflow_end") < full.index("finish")
 
-    def test_blocking_json_response_format(self):
+    @staticmethod
+    def test_blocking_json_response_format():
         """用例 2.2：非流式 JSON 响应格式正确"""
         # 对齐 orchestration.py 的 JSONResponse 结构
         response = {
@@ -152,7 +163,8 @@ class TestResultCallback:
         assert response["executionId"] == "exec-test"
         assert "createdTime" in response
 
-    def test_interrupt_event_format(self):
+    @staticmethod
+    def test_interrupt_event_format():
         """用例 2.3：中断事件格式正确"""
         interrupt_data = {
             "type": "interactive_input",
@@ -167,7 +179,8 @@ class TestResultCallback:
         assert '"name"' in sse_frame
         assert '"required": true' in sse_frame
 
-    def test_error_event_format(self):
+    @staticmethod
+    def test_error_event_format():
         """用例 2.4：错误事件格式正确"""
         error_data = {
             "type": "error",
@@ -187,7 +200,8 @@ class TestResultCallback:
 class TestStateSync:
     """场景三：工作流状态同步（Python 侧接收发布信息）"""
 
-    def test_release_info_received_from_java(self):
+    @staticmethod
+    def test_release_info_received_from_java():
         """用例 3.1：Python 侧接收 Java 下发的 ReleaseInfo 字段完整性"""
         release_info = {
             "app_id": "agent-001",
@@ -208,7 +222,8 @@ class TestStateSync:
         assert release_info["short_code"] == "sc-abc123"
         assert release_info["call_count"] == 0
 
-    def test_execution_status_consistency(self):
+    @staticmethod
+    def test_execution_status_consistency():
         """用例 3.2：执行状态一致性"""
         statuses = ["RUNNING", "COMPLETED", "FAILED"]
         for status in statuses:
@@ -223,7 +238,8 @@ class TestStateSync:
             if status == "FAILED":
                 assert "error" in response
 
-    def test_delete_release_info_params(self):
+    @staticmethod
+    def test_delete_release_info_params():
         """用例 3.3：删除发布信息参数一致性"""
         delete_params = {
             "release_id": "release-001",
