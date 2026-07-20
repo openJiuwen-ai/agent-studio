@@ -172,37 +172,48 @@ def _extract_instance_id(ir_path: str) -> str:
     return remainder
 
 
-async def _encapsulate_response(
+async def _encapsulate_stream_response(
     response,
     handler_type: str,
     request: Request,
     ir_path: str,
-    stream: bool = True,
     query: str = "",
 ):
-    """对 ir_execute 返回的 StreamingResponse 进行事件封装.
+    """对 ir_execute 返回的 StreamingResponse 进行流式事件封装.
 
-    仅处理 StreamingResponse，JSONResponse 直接透传。
+    非 StreamingResponse（如 JSONResponse）直接透传。
     """
     if not isinstance(response, StreamingResponse):
         return response
+    return await EventHandler.encapsulate_stream_response(
+        response=response,
+        handler_type=handler_type,
+        request=request,
+        ir_path=ir_path,
+        query=query,
+    )
 
-    if stream:
-        return await EventHandler.encapsulate_stream_response(
-            response=response,
-            handler_type=handler_type,
-            request=request,
-            ir_path=ir_path,
-            query=query,
-        )
-    else:
-        return await EventHandler.encapsulate_non_stream_response(
-            response=response,
-            handler_type=handler_type,
-            request=request,
-            ir_path=ir_path,
-            query=query,
-        )
+
+async def _encapsulate_non_stream_response(
+    response,
+    handler_type: str,
+    request: Request,
+    ir_path: str,
+    query: str = "",
+):
+    """对 ir_execute 返回的 StreamingResponse 进行非流式事件封装.
+
+    非 StreamingResponse（如 JSONResponse）直接透传。
+    """
+    if not isinstance(response, StreamingResponse):
+        return response
+    return await EventHandler.encapsulate_non_stream_response(
+        response=response,
+        handler_type=handler_type,
+        request=request,
+        ir_path=ir_path,
+        query=query,
+    )
 
 
 async def _execute_workflow_run(
@@ -265,8 +276,12 @@ async def _execute_workflow_run(
     response = await ir_execute(req_json, request)
 
     # 工作流固定使用 workflow handler_type
-    return await _encapsulate_response(
-        response, IRType.Workflow.value, request, ir_path, stream, query=query
+    if stream:
+        return await _encapsulate_stream_response(
+            response, IRType.Workflow.value, request, ir_path, query
+        )
+    return await _encapsulate_non_stream_response(
+        response, IRType.Workflow.value, request, ir_path, query
     )
 
 
@@ -361,8 +376,12 @@ async def _execute_agent_run(
         workflow_logger.error(f"Failed to resolve handler type from IR: {ir_path}, error: {e}")
         raise
 
-    return await _encapsulate_response(
-        response, handler_type, request, ir_path, stream, query=query
+    if stream:
+        return await _encapsulate_stream_response(
+            response, handler_type, request, ir_path, query
+        )
+    return await _encapsulate_non_stream_response(
+        response, handler_type, request, ir_path, query
     )
 
 

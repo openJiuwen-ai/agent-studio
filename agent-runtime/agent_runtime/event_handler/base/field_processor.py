@@ -164,12 +164,8 @@ class FieldDataProcessor:
                 content = ""
             # 与已前置的 user query 去重：若 conversation_info 里有相同 query 且带 agent_id，
             # 用其 agent_id 覆盖前置的（保留正确的 member agent_id），跳过重复
-            if (
-                role == "user"
-                and content == query
-                and messages
-                and messages[0].get("content") == query
-            ):
+            is_dup_user_query = role == "user" and content == query
+            if is_dup_user_query and messages and messages[0].get("content") == query:
                 if msg.get("agent_id"):
                     messages[0]["agent_id"] = msg["agent_id"]
                 continue

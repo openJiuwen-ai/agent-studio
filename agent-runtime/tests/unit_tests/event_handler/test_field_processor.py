@@ -208,8 +208,7 @@ class TestGenerateMemoryHistoryMessages:
 
     @staticmethod
     def test_agent_id_preserved_from_trace_instance_id():
-        """agent/controller 运行时 trace.instance_id 作为 agent_id 写入每条消息，
-        保证 control_agent._prepare_agent_inputs 按 agent_id 过滤时历史不被丢掉。"""
+        """agent/controller 运行时 trace.instance_id 作为 agent_id 写入每条消息，保证 control_agent._prepare_agent_inputs 按 agent_id 过滤时历史不被丢掉。"""
         trace = Trace(query="我要转账", instance_id="5de09986")
         trace.conversation_info["messages"] = [
             {"role": "assistant", "content": "多少钱？"},
@@ -220,9 +219,7 @@ class TestGenerateMemoryHistoryMessages:
 
     @staticmethod
     def test_preserve_member_agent_id_from_conversation_info():
-        """双层 controller：conversation_info 消息带 member agent_id（来自 controller
-        intermediate_message 流），trace.instance_id 是外层 agent_id。
-        保留 member agent_id，不覆盖成外层——子控制器按 member id 过滤才能命中历史。"""
+        """双层 controller：conversation_info 消息带 member agent_id（来自 controllerintermediate_message 流），trace.instance_id 是外层 agent_id。保留 member agent_id，不覆盖成外层——子控制器按 member id 过滤才能命中历史。"""
         trace = Trace(query="800元", instance_id="9413e37a")  # 外层 controller
         trace.conversation_info["messages"] = [
             {"role": "user", "content": "800元", "agent_id": "5de09986"},  # 子控制器
