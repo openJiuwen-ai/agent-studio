@@ -22,7 +22,7 @@ Beta5 对执行面做了拆分与下沉，核心变化两点：
 | studio-console | Nginx + Angular | 80 | ✅ | ✅（nginx 上游需重定向，见三） |
 | studio-manager | Spring Boot (Java 17) | 31111 | ✅ | ✅ |
 | studio-service | Spring Boot (Java 17) | 31113 | ✅ | ❌ **已移除** |
-| studio-runtime | Python (FastAPI) | 31014 | ✅ | ✅（内置 `agent-core` 本地源码） |
+| studio-runtime | Python (FastAPI) | 31014 | ✅ | ✅ |
 | studio-builder | Python (FastAPI) | 31015 | ❌ | ✅ **新增** |
 
 > 服务总数不变（仍为 4 个应用服务），但执行面由“一个 Java service”变为“runtime + builder 两个 Python 服务”。
@@ -81,7 +81,6 @@ runtime → service（模型路由）   runtime → OBS 直连模型（绕过路
 | 模型配置 | `MODEL_CONFIG_STRATEGY` | 默认 `obs` |
 | 提示词任务持久化 [选填] | `STORE_DB_TYPE`（mysql/gaussdb）`STORE_DB_HOST` `STORE_DB_PORT` `STORE_DB_USER` `STORE_DB_PASSWORD` `STORE_DB_DATABASE`（默认 `agent-builder`）`STORE_DB_SCHEMA` `STORE_DB_SSLMODE` | 不填则仅存内存；与 runtime 共用同一套 `STORE_DB_*` 语义 |
 | 日志 | `JIUWEN_LOG_FILE` `JIUWEN_LOG_PATH` `JIUWEN_LOGGING_LOG_FILE` `LOGGING_LOG_PATH` `TGF_LOG_DIR` `LOG_VERBOSE` | 默认写到 `/opt/cloud/logs/` |
-| 其他 | `IR_LLM_API_KEY` | 默认 `sk-placeholder` |
 
 > studio-builder 无数据库 schema 初始化需求，表结构由 `studio-manager` 首次启动时创建；`STORE_DB_*` 仅用于提示词优化任务的持久化。
 
