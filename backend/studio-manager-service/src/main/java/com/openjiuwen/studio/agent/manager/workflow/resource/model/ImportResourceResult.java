@@ -43,4 +43,11 @@ public class ImportResourceResult {
      */
     private boolean valid = true;
 
+    /**
+     * 是否为首次导入（新建资源）。insertWorkflow/createController 首次导入时设 true，
+     * update 不设（默认 false）。用于 handleResourceDsl 判断是否上传草稿 DSL：
+     * 已发布版本导入到已有资源时跳过草稿上传，避免覆盖用户草稿。
+     */
+    private Boolean addTag = false;
+
 }

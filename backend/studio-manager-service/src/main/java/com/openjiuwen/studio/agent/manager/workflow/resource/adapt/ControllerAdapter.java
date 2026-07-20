@@ -262,6 +262,7 @@ public class ControllerAdapter extends ResourceAdapter {
             agent.setAgentId(agentId);
             result.setNewId(agentId);
         }
+        result.setAddTag(true);
         verifyingAndReplaceResourceInfo(agent);
         String dslPath = agentCommonService.getAgentObsPath(agent.getAgentId(), CommonConstant.Workflow.FLOW);
         String irPath = agentCommonService.getAgentObsPath(agent.getAgentId(), CommonConstant.Workflow.IR);

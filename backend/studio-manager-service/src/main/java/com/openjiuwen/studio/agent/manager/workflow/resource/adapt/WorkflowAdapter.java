@@ -334,6 +334,7 @@ public class WorkflowAdapter extends ResourceAdapter {
 
     private void insertWorkflow(WorkflowEntity metadata, ReleaseVersion releaseVersion, ImportResourceResult result) {
         updatePath(metadata);
+        result.setAddTag(true);
         metadata.setStatus(releaseVersion == null ? AgentStatus.DRAFT.toString() : AgentStatus.PUBLISHED.toString());
         workflowMapper.createWorkflowEntity(metadata);
 
