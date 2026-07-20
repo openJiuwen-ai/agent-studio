@@ -74,7 +74,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                     break
 
         if auth_token and "|" in auth_token:
-            ctx.user_id = auth_token.split("|", 1)[0]
+            parts = auth_token.split("|", 1)
+            ctx.user_id = parts[0]
+            ctx.project_id = parts[1] if len(parts) > 1 else ""
 
         if body:
             try:
