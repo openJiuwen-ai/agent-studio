@@ -88,7 +88,7 @@ class ContextConfig(BaseModel):
 
             # validate field: defaultValue
             if (
-                not isinstance(variable.get(VARIABLE_DESC_KEY), str)
+                not isinstance(variable.get(VARIABLE_DEFAULT_KEY), str)
                 or len(variable.get(VARIABLE_DEFAULT_KEY, ""))
                 > VARIABLE_DEFAULT_MAX_LENGTH
             ):
