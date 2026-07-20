@@ -856,3 +856,13 @@ auth:
     defaults:
       domain-id: ${user_info_defaults_domain_id:0}
       project-id: ${user_info_defaults_project_id:0}
+
+task:
+  async:
+    pool-size: ${task_async_pool_size:100}
+    execute-cron-expression: ${task_async_execute_cron_expression:0/30 * * * * ?}
+    expire-days: ${task_async_expire_days:7}
+    clear-cron-expression: ${task_async_clear_cron_expression:0 0 2 */7 * ?}
+    max-execute-milliseconds: ${task_async_max_execute_milliseconds:172800000}
+    execute-lock-key: ${task_async_execute_lock_key:async_execute_lock}
+    clear-lock-key: ${task_async_clear_lock_key:async_clear_lock}

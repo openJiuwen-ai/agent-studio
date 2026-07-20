@@ -2153,3 +2153,32 @@ CREATE TABLE IF NOT EXISTS `t_mapping_tool_function`
     PRIMARY KEY (`id`),
     KEY  `idx_t_mapping_tool_function_updated_on` (`updated_on`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='tool和function多对多关系映射表';
+
+CREATE TABLE IF NOT EXISTS `t_task` (
+                                        `id`                VARCHAR(64)     NOT NULL COMMENT '任务 id， 主键',
+    `name`              VARCHAR(64)     NOT NULL COMMENT '任务名称，可修改',
+    `conversation_id`   VARCHAR(64)     NULL COMMENT '会话ID',
+    `user_id`           VARCHAR(64)     NULL COMMENT 'user id',
+    `project_id`        VARCHAR(64)     NULL COMMENT 'project id',
+    `domain_id`         VARCHAR(64)     NULL COMMENT 'domain id',
+    `workspace_id`      VARCHAR(64)     NULL COMMENT 'workspace id',
+    `type`              VARCHAR(32)     NULL COMMENT '任务类型',
+    `mode`              VARCHAR(32)     NULL COMMENT '任务模式，当前仅支持ASYNC',
+    `app_id`            VARCHAR(64)     NULL COMMENT '对应工作流或agent id',
+    `app_version`       VARCHAR(128)    NULL COMMENT '任务应用版本',
+    `is_published`      TINYINT(1)      NULL COMMENT '此工作流是否是发布后',
+    `status`            VARCHAR(32)     NULL COMMENT '任务状态',
+    `inputs`            MEDIUMTEXT      NULL COMMENT '任务输入',
+    `outputs`           MEDIUMTEXT      NULL COMMENT '任务输出',
+    `timeout`           INTEGER         NULL COMMENT '工作流超时时间',
+    `message`           VARCHAR(2048)   NULL COMMENT '提示消息',
+    `create_time`       TIMESTAMP       NOT NULL COMMENT '创建时间',
+    `start_time`        TIMESTAMP       NULL COMMENT '任务实际开始时间',
+    `update_time`       TIMESTAMP       NULL COMMENT '任务更新日期',
+    `finish_time`       TIMESTAMP       NULL COMMENT '任务结束日期',
+    PRIMARY KEY (`id`),
+    INDEX `idx_create_time`(`create_time` ASC) USING BTREE,
+    INDEX `idx_status_time`(`status` ASC, `create_time` ASC) USING BTREE,
+    INDEX `idx_finish_time`(`finish_time` ASC) USING BTREE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='任务记录表';
+

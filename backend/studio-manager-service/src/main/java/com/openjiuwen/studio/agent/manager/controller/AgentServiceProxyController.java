@@ -28,9 +28,7 @@ import com.openjiuwen.studio.agent.common.dto.run.AdditionalQuestionsWorkflowReq
 import com.openjiuwen.studio.agent.common.dto.run.AgentExecutionQueries;
 import com.openjiuwen.studio.agent.common.dto.run.AsrReq;
 import com.openjiuwen.studio.agent.common.dto.run.AsrRsp;
-import com.openjiuwen.studio.agent.common.dto.run.CancelTaskRsp;
 import com.openjiuwen.studio.agent.common.dto.run.ConversationDeleteResp;
-import com.openjiuwen.studio.agent.common.dto.run.CreateTaskReq;
 import com.openjiuwen.studio.agent.common.dto.run.GetAgentExecutionInfoQo;
 import com.openjiuwen.studio.agent.common.dto.run.GetControllerExecutionDetailQo;
 import com.openjiuwen.studio.agent.common.dto.run.GetExecutionInsightQo;
@@ -39,16 +37,10 @@ import com.openjiuwen.studio.agent.common.dto.run.ListAgentExecutionQueriesQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListControllerExecutionsQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListConversationQueriesQo;
 import com.openjiuwen.studio.agent.common.dto.run.ListExecutionQueriesQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListTaskQo;
-import com.openjiuwen.studio.agent.common.dto.run.ModifyTaskReq;
 import com.openjiuwen.studio.agent.common.dto.run.ResetUserVariableMemoryResponseBody;
-import com.openjiuwen.studio.agent.common.dto.run.ResumeTaskReq;
 import com.openjiuwen.studio.agent.common.dto.run.RetrieveConversationMemoryQo;
 import com.openjiuwen.studio.agent.common.dto.run.RetrieveConversationQo;
-import com.openjiuwen.studio.agent.common.dto.run.RetrieveTaskQo;
 import com.openjiuwen.studio.agent.common.dto.run.RunToolRequestBody;
-import com.openjiuwen.studio.agent.common.dto.run.TaskListRsp;
-import com.openjiuwen.studio.agent.common.dto.run.TaskRsp;
 import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.common.entity.Text2AudioReq;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
@@ -61,7 +53,6 @@ import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AgentRunReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.BatchDeleteUserVariableMemoryRequestBody;
-import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.MemoryVariable;
 import com.openjiuwen.studio.agent.manager.dto.ServiceRunAgentReq;
 import com.openjiuwen.studio.agent.manager.dto.ServiceWorkflowRunReq;
@@ -873,207 +864,11 @@ public class AgentServiceProxyController {
         return workflowRuntimeService.getExecutionInsight(projectId, workflowId, executionId, getExecutionInsightQo);
     }
 
-    @ApiOperation(value = "根据conversation_id删除会话", nickname = "deleteConversation",
-        notes = "根据conversation_id删除会话", response = ConversationDeleteResp.class,
-        tags = {"ConversationManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "", response = ConversationDeleteResp.class),
-        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
-        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = String.class),
-        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorRsp.class),
-        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
-        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}/conversations/{conversation_id}/history",
-        produces = {"application/json"}, method = RequestMethod.DELETE)
-    public ConversationDeleteResp deleteConversation(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "workflow/agent id", required = true, schema = @Schema())
-        @PathVariable("agent_id") String agentId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "conversation_id", required = true, schema = @Schema())
-        @PathVariable("conversation_id") String conversationId,
-        @Size(max = 32) @ApiParam(value = "版本号") @RequestParam(value = "version_id", required = false)
-        String versionId, @RequestParam(value = "workspace_id", required = false) String workspaceId) {
 
-        return agentServiceProxyService.deleteConversation(projectId, agentId, conversationId, versionId, workspaceId)
-            .getBody();
-    }
 
-    @ApiOperation(value = "提交异步工作流任务", nickname = "createTask", notes = "", response = TaskRsp.class,
-        tags = {"TaskManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "", response = TaskRsp.class),
-        @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/{workflow_id}/tasks",
-        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.POST)
-    public TaskRsp createTask(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "工作流id", required = true, schema = @Schema())
-        @PathVariable("workflow_id") String workflowId,
-        @Size(max = 64) @ApiParam(value = "版本号") @RequestParam(value = "version", required = false) String version,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
-        @RequestParam(value = "workspace_id", required = false) String workspaceId,
-        @NotNull @ApiParam(value = "创建文件请求体", required = true) @Valid @RequestBody CreateTaskReq body) {
 
-        return agentServiceProxyService.createTask(projectId, workflowId, version, workspaceId, body).getBody();
-    }
 
-    @ApiOperation(value = "根据conversation_id查询会话", nickname = "retrieveConversation",
-        notes = "根据conversation_id查询会话", response = Message.class, responseContainer = "List",
-        tags = {"ConversationManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "conversation消息", response = Message.class, responseContainer = "List"),
-        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
-        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = String.class),
-        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorRsp.class),
-        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
-        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-manager/agents/{agent_id}/conversations/{conversation_id}/history",
-        produces = {"application/json"}, method = RequestMethod.GET)
-    public List<Message> retrieveConversation(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "workflow/agent id", required = true, schema = @Schema())
-        @PathVariable("agent_id") String agentId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "conversation_id", required = true, schema = @Schema())
-        @PathVariable("conversation_id") String conversationId,
-        @ApiParam(value = "RetrieveConversationQo: converted from multi query params") @Valid
-        RetrieveConversationQo retrieveConversationQo,
-        @RequestParam(value = "workspace_id", required = false) String workspaceId) {
 
-        return agentServiceProxyService.retrieveConversation(projectId, agentId, conversationId, retrieveConversationQo,
-            workspaceId).getBody();
-    }
-
-    @ApiOperation(value = "查看任务列表", nickname = "listTask", notes = "", response = TaskListRsp.class,
-        tags = {"TaskManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "", response = TaskListRsp.class),
-        @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/{workflow_id}/tasks",
-        produces = {"application/json"}, method = RequestMethod.GET)
-    public TaskListRsp listTask(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "工作流id", required = true, schema = @Schema())
-        @PathVariable("workflow_id") String workflowId,
-        @ApiParam(value = "ListTaskQo: converted from multi query params") @Valid  ListTaskQo listTaskQo,
-        @RequestParam(value = "workspace_id", required = false) String workspaceId) {
-
-        return agentServiceProxyService.listTask(projectId, workflowId, listTaskQo, workspaceId).getBody();
-    }
-
-    @ApiOperation(value = "获取异步任务详情", nickname = "retrieveTask", notes = "", response = TaskRsp.class,
-        tags = {"TaskManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "", response = TaskRsp.class),
-        @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/{workflow_id}/tasks/{task_id}",
-        produces = {"application/json"}, method = RequestMethod.GET)
-    public TaskRsp retrieveTask(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "工作流id", required = true, schema = @Schema())
-        @PathVariable("workflow_id") String workflowId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "异步任务id", required = true, schema = @Schema())
-        @PathVariable("task_id") String taskId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
-        @RequestParam(value = "workspace_id", required = false) String workspaceId) {
-
-        return agentServiceProxyService.retrieveTask(projectId, workflowId, taskId, workspaceId).getBody();
-    }
-
-    @ApiOperation(value = "继续执行任务", nickname = "resumeTask", notes = "", response = TaskRsp.class,
-        tags = {"TaskManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "", response = TaskRsp.class),
-        @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/{workflow_id}/tasks/{task_id}",
-        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.POST)
-    public TaskRsp resumeTask(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "工作流id", required = true, schema = @Schema())
-        @PathVariable("workflow_id") String workflowId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "异步任务id", required = true, schema = @Schema())
-        @PathVariable("task_id") String taskId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
-        @RequestParam(value = "workspace_id", required = false) String workspaceId,
-        @NotNull @ApiParam(value = "创建文件请求体", required = true) @Valid @RequestBody ResumeTaskReq body) {
-
-        return agentServiceProxyService.resumeTask(projectId, workflowId, taskId, workspaceId, body).getBody();
-    }
-
-    @ApiOperation(value = "修改任务信息", nickname = "modifyTask", notes = "", response = TaskRsp.class,
-        tags = {"TaskManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "", response = TaskRsp.class),
-        @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/{workflow_id}/tasks/{task_id}",
-        produces = {"application/json"}, consumes = {"application/json"}, method = RequestMethod.PUT)
-    public TaskRsp modifyTask(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "工作流id", required = true, schema = @Schema())
-        @PathVariable("workflow_id") String workflowId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "异步任务id", required = true, schema = @Schema())
-        @PathVariable("task_id") String taskId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
-        @RequestParam(value = "workspace_id", required = false) String workspaceId,
-        @NotNull @ApiParam(value = "创建文件请求体", required = true) @Valid @RequestBody ModifyTaskReq body) {
-
-        return agentServiceProxyService.modifyTask(projectId, workflowId, taskId, workspaceId, body).getBody();
-    }
-
-    @ApiOperation(value = "取消异步任务详情", nickname = "deleteTask", notes = "", response = CommonDeleteRsp.class,
-        tags = {"TaskManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "", response = CommonDeleteRsp.class),
-        @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/{workflow_id}/tasks/{task_id}",
-        produces = {"application/json"}, method = RequestMethod.DELETE)
-    public CommonDeleteRsp deleteTask(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "工作流id", required = true, schema = @Schema())
-        @PathVariable("workflow_id") String workflowId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "异步任务id", required = true, schema = @Schema())
-        @PathVariable("task_id") String taskId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
-        @RequestParam(value = "workspace_id", required = false) String workspaceId) {
-
-        return agentServiceProxyService.deleteTask(projectId, workflowId, taskId, workspaceId).getBody();
-    }
-
-    @ApiOperation(value = "取消异步任务详情", nickname = "cancelTask", notes = "", response = CancelTaskRsp.class,
-        tags = {"TaskManagement"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "", response = CancelTaskRsp.class),
-        @ApiResponse(code = 400, message = "", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-manager/workflows/{workflow_id}/tasks/{task_id}/cancel",
-        produces = {"application/json"}, method = RequestMethod.DELETE)
-    public CancelTaskRsp cancelTask(@Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "工作流id", required = true, schema = @Schema())
-        @PathVariable("workflow_id") String workflowId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(min = 1, max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "异步任务id", required = true, schema = @Schema())
-        @PathVariable("task_id") String taskId,
-        @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64) @ApiParam(value = "项目空间id")
-        @RequestParam(value = "workspace_id", required = false) String workspaceId) {
-
-        return agentServiceProxyService.cancelTask(projectId, workflowId, taskId, workspaceId).getBody();
-    }
 
     // 此接口已弃用
     @ApiOperation(value = "测试 mcp 服务", nickname = "testServer", notes = "测试 mcp 服务",

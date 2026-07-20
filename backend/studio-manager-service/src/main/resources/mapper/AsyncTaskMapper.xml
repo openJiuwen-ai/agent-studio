@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.openjiuwen.studio.agent.manager.mapper.AsyncTaskMapper">
+    <resultMap id="BaseResultMap" type="com.openjiuwen.studio.agent.manager.entity.TaskEntity">
+        <id column="id" jdbcType="VARCHAR" property="id"/>
+        <result column="name" jdbcType="VARCHAR" property="name"/>
+        <result column="conversation_id" jdbcType="VARCHAR" property="conversationId"/>
+        <result column="user_id" jdbcType="VARCHAR" property="userId"/>
+        <result column="project_id" jdbcType="VARCHAR" property="projectId"/>
+        <result column="domain_id" jdbcType="VARCHAR" property="domainId"/>
+        <result column="workspace_id" jdbcType="VARCHAR" property="workspaceId"/>
+        <result column="type" jdbcType="VARCHAR" property="type"/>
+        <result column="mode" jdbcType="VARCHAR" property="mode"/>
+        <result column="app_id" jdbcType="VARCHAR" property="appId"/>
+        <result column="app_version" jdbcType="VARCHAR" property="appVersion"/>
+        <result column="is_published" jdbcType="TINYINT" property="isPublished"/>
+        <result column="status" jdbcType="VARCHAR" property="status"/>
+        <result column="inputs" jdbcType="VARCHAR" property="inputs"/>
+        <result column="outputs" jdbcType="VARCHAR" property="outputs"/>
+        <result column="timeout" jdbcType="INTEGER" property="timeout"/>
+        <result column="message" jdbcType="VARCHAR" property="message"/>
+        <result column="create_time" jdbcType="TIMESTAMP" property="createTime"/>
+        <result column="start_time" jdbcType="TIMESTAMP" property="startTime"/>
+        <result column="update_time" jdbcType="TIMESTAMP" property="updateTime"/>
+        <result column="finish_time" jdbcType="TIMESTAMP" property="finishTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id,
+        `name`,
+        conversation_id,
+        user_id,
+        project_id,
+        domain_id,
+        workspace_id,
+        `type`,
+        mode,
+        app_id,
+        app_version,
+        is_published,
+        status,
+        inputs,
+        outputs,
+        timeout,
+        message,
+        create_time,
+        start_time,
+        update_time,
+        finish_time
+    </sql>
+    <insert id="createEntity"
+            parameterType="com.openjiuwen.studio.agent.manager.entity.TaskEntity">
+        insert into t_task (id, name, conversation_id, user_id, project_id, domain_id, workspace_id, type, mode,
+                            app_id, app_version, is_published, status, inputs, outputs, timeout, create_time,
+                            start_time, update_time, finish_time)
+        values (#{entity.id,jdbcType=VARCHAR}, #{entity.name,jdbcType=VARCHAR},
+                #{entity.conversationId,jdbcType=VARCHAR}, #{entity.userId,jdbcType=VARCHAR},
+                #{entity.projectId,jdbcType=VARCHAR}, #{entity.domainId,jdbcType=VARCHAR},
+                #{entity.workspaceId,jdbcType=VARCHAR}, #{entity.type,jdbcType=VARCHAR},
+                #{entity.mode,jdbcType=VARCHAR}, #{entity.appId,jdbcType=VARCHAR},
+                #{entity.appVersion,jdbcType=VARCHAR}, #{entity.isPublished,jdbcType=TINYINT},
+                #{entity.status,jdbcType=VARCHAR}, #{entity.inputs,jdbcType=VARCHAR},
+                #{entity.outputs,jdbcType=VARCHAR}, #{entity.timeout,jdbcType=INTEGER},
+                #{entity.createTime,jdbcType=TIMESTAMP}, #{entity.startTime,jdbcType=TIMESTAMP},
+                #{entity.updateTime,jdbcType=TIMESTAMP}, #{entity.finishTime,jdbcType=TIMESTAMP})
+    </insert>
+    <select id="getTaskEntity" parameterType="com.openjiuwen.studio.agent.manager.entity.TaskEntity"
+            resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from t_task
+        where 1 = 1
+        <if test="entity.id != null and entity.id != ''">
+            and id=#{entity.id}
+        </if>
+        <if test="entity.projectId != null and entity.projectId != ''">
+            and project_id=#{entity.projectId}
+        </if>
+        <if test="entity.workspaceId != null and entity.workspaceId != ''">
+            and workspace_id=#{entity.workspaceId}
+        </if>
+        <if test="entity.name != null and entity.name != ''">
+            and `name` like concat('%', #{entity.name,jdbcType=VARCHAR}, '%')
+        </if>
+        <if test="entity.type != null and entity.type != ''">
+            and `type`=#{entity.type}
+        </if>
+        <if test="entity.mode != null and entity.mode != ''">
+            and mode=#{entity.mode}
+        </if>
+        <if test="entity.appId != null and entity.appId != ''">
+            and app_id=#{entity.appId}
+        </if>
+        <if test="entity.appVersion != null and entity.appVersion != ''">
+            and app_version=#{entity.appVersion}
+        </if>
+        <if test="entity.status != null and entity.status != ''">
+            and status=#{entity.status}
+        </if>
+        order by
+        <choose>
+            <when test="sort != null and sort == 'create_time'">
+                create_time
+            </when>
+            <otherwise>
+                #{sort}
+            </otherwise>
+        </choose>
+        <choose>
+            <when test="order != null and order == 'asc'">
+                asc
+            </when>
+            <otherwise>
+                desc
+            </otherwise>
+        </choose>
+    </select>
+    <update id="updateByPrimaryKey"
+            parameterType="com.openjiuwen.studio.agent.manager.entity.TaskEntity">
+        update t_task
+        <set>
+            <if test="entity.name != null">
+                `name` = #{entity.name, jdbcType=VARCHAR},
+            </if>
+            <if test="entity.status != null">
+                status = #{entity.status, jdbcType=VARCHAR},
+            </if>
+            <if test="entity.message != null">
+                message = #{entity.message, jdbcType=VARCHAR},
+            </if>
+            <if test="entity.inputs != null">
+                inputs = #{entity.inputs, jdbcType=VARCHAR},
+            </if>
+            <if test="entity.outputs != null">
+                outputs = #{entity.outputs, jdbcType=VARCHAR},
+            </if>
+            <if test="entity.timeout != null">
+                timeout = #{entity.timeout, jdbcType=INTEGER},
+            </if>
+            <if test="entity.startTime != null">
+                start_time = #{entity.startTime, jdbcType=TIMESTAMP},
+            </if>
+            <if test="entity.updateTime != null">
+                update_time = #{entity.updateTime, jdbcType=TIMESTAMP},
+            </if>
+            <if test="entity.finishTime != null">
+                finish_time = #{entity.finishTime, jdbcType=TIMESTAMP},
+            </if>
+        </set>
+        where id = #{entity.id, jdbcType=VARCHAR}
+        and project_id = #{entity.projectId, jdbcType=VARCHAR}
+        and user_id = #{entity.userId, jdbcType=VARCHAR}
+    </update>
+    <select id="getInitWorkflowTaskEntity" parameterType="com.openjiuwen.studio.agent.manager.entity.TaskEntity"
+            resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from t_task
+        where status='INIT' and (`type`='chat' or `type`='task')
+        order by create_time asc limit #{limit, jdbcType=INTEGER}
+    </select>
+    <select id="getExpiredTaskEntity" parameterType="com.openjiuwen.studio.agent.manager.entity.TaskEntity"
+            resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from t_task
+        where finish_time is not null and finish_time &lt;= #{expireTime, jdbcType=TIMESTAMP}
+    </select>
+    <delete id="deleteByIds" parameterType="map">
+        delete
+        from t_task
+        where id in
+        <foreach collection="ids" item="taskId" open="(" separator="," close=")">
+            #{taskId, jdbcType=VARCHAR}
+        </foreach>
+    </delete>
+</mapper>

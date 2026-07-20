@@ -37,6 +37,8 @@ public class ExecuteParams {
 
     private String projectId;
 
+    private String workspaceId;
+
     /**
      * 工作流OBS IR路径
      */

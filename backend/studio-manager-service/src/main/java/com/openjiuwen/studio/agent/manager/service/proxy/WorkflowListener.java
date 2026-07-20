@@ -42,9 +42,9 @@ public class WorkflowListener extends BaseEventListener {
 
     private final JiuwenEventProcessor eventProcessor;
 
-    private final ExecuteParams executeParams;
+    protected final ExecuteParams executeParams;
 
-    private final WorkflowRunResult result;
+    protected final WorkflowRunResult result;
 
     private static final String JIUWEN_EXCEPTION_NODE_ID = "jiuwen_exception_node_id";
 
@@ -257,7 +257,7 @@ public class WorkflowListener extends BaseEventListener {
         }
     }
 
-    private void saveInstance() {
+    protected void saveInstance() {
         WorkflowInstanceEntity instance = result.getInstance();
         if (instance == null) {
             return;

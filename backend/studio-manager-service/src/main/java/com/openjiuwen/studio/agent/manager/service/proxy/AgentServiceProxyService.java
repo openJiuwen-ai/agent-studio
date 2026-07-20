@@ -291,76 +291,12 @@ public class AgentServiceProxyService {
         return runtimeClient.resetUserVariableMemory(getToken(), projectId, agentId, workspaceId);
     }
 
-    public ResponseEntity<List<Message>> retrieveConversation(String projectId, String agentId, String conversationId,
-        RetrieveConversationQo retrieveConversationQo, String workspaceId) {
 
-        // agentId可能是workflowId
-        try {
-            checkWorkflowPermission(projectId, workspaceId, agentId);
-        } catch (AgentStudioException e) {
-            if (StudioError.WORKFLOW_NOT_EXIST == e.getErrorCode()) {
-                checkAgentPermission(projectId, workspaceId, agentId);
-            } else {
-                throw e;
-            }
-        }
-        return runtimeClient.retrieveConversation(getToken(), projectId, agentId, conversationId,
-            retrieveConversationQo, workspaceId);
-    }
 
-    public ResponseEntity<ConversationDeleteResp> deleteConversation(String projectId, String agentId,
-        String conversationId, String versionId, String workspaceId) {
-        checkAgentPermission(projectId, workspaceId, agentId);
-        return runtimeClient.deleteConversation(getToken(), projectId, agentId, conversationId, versionId, workspaceId);
-    }
 
-    public ResponseEntity<TaskRsp> createTask(String projectId, String workflowId, String version, String workspaceId,
-        CreateTaskReq body) {
 
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.createTask(getToken(), projectId, workflowId, version, workspaceId, body);
-    }
 
-    public ResponseEntity<TaskListRsp> listTask(String projectId, String workflowId, ListTaskQo listTaskQo,
-        String workspaceId) {
 
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.listTask(getToken(), projectId, workflowId, listTaskQo.getStatus(), listTaskQo.getType(), listTaskQo.getSort(), listTaskQo.getOrder(), workspaceId);
-    }
-
-    public ResponseEntity<TaskRsp> retrieveTask(String projectId, String workflowId, String taskId, String workspaceId) {
-
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.retrieveTask(getToken(), projectId, workflowId, taskId, workspaceId);
-    }
-
-    public ResponseEntity<TaskRsp> resumeTask(String projectId, String workflowId, String taskId, String workspaceId,
-        ResumeTaskReq body) {
-
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.resumeTask(getToken(), projectId, workflowId, taskId, workspaceId, body);
-    }
-
-    public ResponseEntity<TaskRsp> modifyTask(String projectId, String workflowId, String taskId, String workspaceId,
-        ModifyTaskReq body) {
-
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.modifyTask(getToken(), projectId, workflowId, taskId, workspaceId, body);
-    }
-
-    public ResponseEntity<CommonDeleteRsp> deleteTask(String projectId, String workflowId, String taskId,
-        String workspaceId) {
-
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.deleteTask(getToken(), projectId, workflowId, taskId, workspaceId);
-    }
-
-    public ResponseEntity<CancelTaskRsp> cancelTask(String projectId, String workflowId, String taskId,
-        String workspaceId) {
-
-        checkWorkflowPermission(projectId, workspaceId, workflowId);
-        return runtimeClient.cancelTask(getToken(), projectId, workflowId, taskId, workspaceId);
-    }
 
     public ResponseEntity<McpValidationResp> testServer(String projectId, McpValidationReq body, String workspaceId) {
 
