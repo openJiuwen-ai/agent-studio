@@ -119,7 +119,7 @@ class WorkflowRunner:
                 "data": {"response": "Failed to load workflow configuration"},
                 "executionId": exec_id,
                 "index": 0,
-                "createdTime": int(time.time()),
+                "createdTime": int(time.time() * 1000),
             }
             return
 
@@ -143,7 +143,7 @@ class WorkflowRunner:
                 "data": {"response": "Failed to build workflow"},
                 "executionId": exec_id,
                 "index": 0,
-                "createdTime": int(time.time()),
+                "createdTime": int(time.time() * 1000),
             }
             return
 
@@ -236,7 +236,7 @@ class WorkflowRunner:
             "data": {},
             "index": 0,
             "executionId": exec_id,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
         if not is_resuming:
@@ -245,7 +245,7 @@ class WorkflowRunner:
                 "data": {},
                 "index": 0,
                 "executionId": exec_id,
-                "createdTime": int(time.time()),
+                "createdTime": int(time.time() * 1000),
             }
 
         # 7. 执行工作流
@@ -339,7 +339,7 @@ class WorkflowRunner:
                     },
                     "executionId": exec_id,
                     "index": 0,
-                    "createdTime": int(time.time()),
+                    "createdTime": int(time.time() * 1000),
                 }
             yield {
                 "event": "done",
@@ -350,7 +350,7 @@ class WorkflowRunner:
                 },
                 "executionId": exec_id,
                 "index": 0,
-                "createdTime": int(time.time()),
+                "createdTime": int(time.time() * 1000),
             }
             # 异常结束节点终止后，清除 Redis 中保存的 execution_id，
             # 确保下次运行不会被误判为中断恢复
@@ -377,7 +377,7 @@ class WorkflowRunner:
                 },
                 "executionId": exec_id,
                 "index": 0,
-                "createdTime": int(time.time()),
+                "createdTime": int(time.time() * 1000),
             }
             yield {
                 "event": "done",
@@ -388,7 +388,7 @@ class WorkflowRunner:
                 },
                 "executionId": exec_id,
                 "index": 0,
-                "createdTime": int(time.time()),
+                "createdTime": int(time.time() * 1000),
             }
         except Exception as e:
             workflow_logger.error(f"Workflow execution failed: {e}, type={type(e).__name__}", exc_info=True)
@@ -425,7 +425,7 @@ class WorkflowRunner:
                 },
                 "executionId": exec_id,
                 "index": 0,
-                "createdTime": int(time.time()),
+                "createdTime": int(time.time() * 1000),
             }
 
     async def run_blocking(self, req: ExecutionRequest) -> str:

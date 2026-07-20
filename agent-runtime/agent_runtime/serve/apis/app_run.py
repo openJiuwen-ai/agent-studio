@@ -20,6 +20,10 @@ from agent_runtime.serve.apis.app_run_request import (
     NodeExecuteRequest,
 )
 from agent_runtime.serve.apis.orchestration import ir_execute, component_debug_execute
+from agent_runtime.serve.apis.publish_version_cache import (
+    LATEST_PUBLISH_VERSION,
+    resolve_published_version,
+)
 from agent_runtime.serve.apis.run_check import (
     RunCheckContext,
     check_before_workflow_run,
@@ -35,6 +39,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from jiuwen.serve.controllers.execution.enum import PlanModeType, IRType
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
 from openjiuwen.core.common.logging import workflow_logger, set_session_id
+
+# USER_MSG_FIELD
+_USER_MSG_FIELD = "query"
+
+# 从inputs中排除的系统字段
+_AGENT_SYSTEM_INPUTS = {_USER_MSG_FIELD, "workflowSequence", "activeWorkflows", "intent"}
 
 app_run_app = APIRouter(tags=["app_run"])
 
@@ -87,9 +97,10 @@ def build_req_json_from_workflow(
     exec_ctx: ExecutionContext,
 ) -> dict:
     """WorkflowAppRunRequest → ExecutionRequest dict."""
-    global_vars = {**body.globals}
+    global_vars = {**body.inputs}
     if body.memory_inputs:
         global_vars.update(body.memory_inputs)
+    global_vars.pop(_USER_MSG_FIELD, None)
 
     params = {
         "globalVariables": global_vars,
@@ -105,7 +116,7 @@ def build_req_json_from_workflow(
         "userId": exec_ctx.user_id,
         "irPath": exec_ctx.ir_path,
         "params": params,
-        "query": body.inputs.get("query", ""),
+        "query": body.inputs.get(_USER_MSG_FIELD, ""),
         "responseMode": "streaming",
         "dialogueCount": exec_ctx.dialogue_count,
     }
@@ -116,8 +127,9 @@ def build_req_json_from_agent(
     exec_ctx: ExecutionContext,
 ) -> dict:
     """AgentAppRunRequest → ExecutionRequest dict."""
+    global_vars = {k: v for k, v in body.inputs.items() if k not in _AGENT_SYSTEM_INPUTS}
     params = {
-        "globalVariables": body.inputs,
+        "globalVariables": global_vars,
         "conversationHistory": exec_ctx.conversation_history,
         "toolSwitchDict": body.tool_switch_dict,
         "files": body.files,
@@ -130,7 +142,7 @@ def build_req_json_from_agent(
         "userId": exec_ctx.user_id,
         "irPath": exec_ctx.ir_path,
         "params": params,
-        "query": body.query or body.inputs.get("query", ""),
+        "query": body.query or body.inputs.get(_USER_MSG_FIELD, ""),
         "responseMode": "streaming",
         "dialogueCount": exec_ctx.dialogue_count,
     }
@@ -230,7 +242,19 @@ async def _execute_workflow_run(
         f"conversation={ctx.conversation_id}, version={ctx.version}"
     )
 
-    ir_path = build_workflow_ir_path(ctx.workflow_id, ctx.version)
+    # version=latest 时从发布缓存解析实际版本号
+    resolved_version = await resolve_published_version(ctx.workflow_id, ctx.version)
+    if ctx.version == LATEST_PUBLISH_VERSION and resolved_version is None:
+        workflow_logger.error(
+            "Failed to resolve latest publish version: workflow_id=%s",
+            ctx.workflow_id,
+        )
+        return JSONResponse(
+            status_code=400,
+            content={"error": "use latest publish version need republish first"},
+        )
+
+    ir_path = build_workflow_ir_path(ctx.workflow_id, resolved_version)
     workflow_logger.debug(f"Built IR path: {ir_path}")
 
     # 运行前校验
@@ -240,7 +264,7 @@ async def _execute_workflow_run(
         project_id=ctx.project_id,
         ir_path=ir_path,
         body_version=body.version,
-        has_published_version=ctx.version is not None,
+        has_published_version=resolved_version is not None,
         request=request,
     ))
     if err:
@@ -248,7 +272,7 @@ async def _execute_workflow_run(
 
     instance_id = ctx.workflow_id
     user_id = _request_ctx.get().user_id
-    version_id = ctx.version or ""
+    version_id = resolved_version or ""
     request.state.user_id = user_id
     request.state.version_id = version_id
 
@@ -324,7 +348,19 @@ async def _execute_agent_run(
             content={"error": "DeepResearch mode is not supported"},
         )
 
-    ir_path = build_agent_ir_path(ctx.agent_id, ctx.version)
+    # version=latest 时从发布缓存解析实际版本号
+    resolved_version = await resolve_published_version(ctx.agent_id, ctx.version)
+    if ctx.version == LATEST_PUBLISH_VERSION and resolved_version is None:
+        workflow_logger.error(
+            "Failed to resolve latest publish version: agent_id=%s",
+            ctx.agent_id,
+        )
+        return JSONResponse(
+            status_code=400,
+            content={"error": "use latest publish version need republish first"},
+        )
+
+    ir_path = build_agent_ir_path(ctx.agent_id, resolved_version)
     workflow_logger.debug(f"Built IR path: {ir_path}")
 
     # 运行前校验
@@ -334,7 +370,7 @@ async def _execute_agent_run(
         project_id=ctx.project_id,
         ir_path=ir_path,
         body_version=body.version,
-        has_published_version=ctx.version is not None,
+        has_published_version=resolved_version is not None,
         request=request,
     ))
     if err:
@@ -342,7 +378,7 @@ async def _execute_agent_run(
 
     instance_id = ctx.agent_id
     user_id = _request_ctx.get().user_id
-    version_id = ctx.version or ""
+    version_id = resolved_version or ""
     request.state.user_id = user_id
     request.state.version_id = version_id
 

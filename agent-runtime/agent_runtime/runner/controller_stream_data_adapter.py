@@ -86,7 +86,7 @@ class ControllerStreamDataAdapter:
                 "data": data,
                 "executionId": execution_id,
                 "index": index,
-                "createdTime": int(time.time()),
+                "createdTime": int(time.time() * 1000),
                 "isStructMessage": False,
             }
         ]
@@ -98,7 +98,7 @@ class ControllerStreamDataAdapter:
             "data": {},
             "executionId": execution_id or self._execution_id,
             "index": 0,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
             "isStructMessage": False,
         }
 
@@ -109,7 +109,7 @@ class ControllerStreamDataAdapter:
             "data": {},
             "executionId": execution_id or self._execution_id,
             "index": 0,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
             "isStructMessage": False,
         }
 
@@ -133,7 +133,7 @@ class ControllerStreamDataAdapter:
             },
             "executionId": execution_id or self._execution_id,
             "index": 0,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
             "isStructMessage": False,
         }
 

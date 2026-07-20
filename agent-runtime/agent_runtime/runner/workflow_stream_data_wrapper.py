@@ -490,7 +490,7 @@ class WorkflowStreamDataWrapper:
             "data": data,
             "executionId": self._execution_id,
             "index": chunk.index,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_end_node_stream(self, chunk: OutputSchema) -> dict:
@@ -515,7 +515,7 @@ class WorkflowStreamDataWrapper:
             "data": data,
             "executionId": self._execution_id,
             "index": chunk.index,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_message_end(self, chunk: OutputSchema) -> dict:
@@ -551,7 +551,7 @@ class WorkflowStreamDataWrapper:
             "data": data,
             "executionId": self._execution_id,
             "index": chunk.index,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_workflow_end(self, chunk: OutputSchema) -> dict:
@@ -576,7 +576,7 @@ class WorkflowStreamDataWrapper:
             "data": data,
             "executionId": self._execution_id,
             "index": chunk.index,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_workflow_start(self, chunk: OutputSchema) -> dict:
@@ -590,7 +590,7 @@ class WorkflowStreamDataWrapper:
             "data": payload,
             "executionId": self._execution_id,
             "index": chunk.index,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_workflow_exception(self, chunk: OutputSchema) -> dict:
@@ -604,7 +604,7 @@ class WorkflowStreamDataWrapper:
             "data": payload,
             "executionId": self._execution_id,
             "index": chunk.index,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_error(self, chunk: OutputSchema) -> dict:
@@ -618,7 +618,7 @@ class WorkflowStreamDataWrapper:
             "data": payload,
             "executionId": self._execution_id,
             "index": chunk.index,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_partial_content_from_output(self, chunk: OutputSchema) -> dict:
@@ -643,7 +643,7 @@ class WorkflowStreamDataWrapper:
             "data": result_data,
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_partial_content_from_custom(self, chunk: CustomSchema) -> dict:
@@ -668,7 +668,7 @@ class WorkflowStreamDataWrapper:
             "data": result_data,
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_end_node_stream_from_custom(self, chunk: CustomSchema) -> dict:
@@ -693,7 +693,7 @@ class WorkflowStreamDataWrapper:
             "data": result_data,
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_message_end_from_custom(self, chunk: CustomSchema) -> dict:
@@ -728,7 +728,7 @@ class WorkflowStreamDataWrapper:
             "data": result_data,
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_workflow_end_from_custom(self, chunk: CustomSchema) -> dict:
@@ -757,7 +757,7 @@ class WorkflowStreamDataWrapper:
             "data": result_data,
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_workflow_final_from_custom(self, chunk: CustomSchema) -> dict:
@@ -775,7 +775,7 @@ class WorkflowStreamDataWrapper:
             "data": dict(data),
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_workflow_start_from_custom(self, chunk: CustomSchema) -> dict:
@@ -789,7 +789,7 @@ class WorkflowStreamDataWrapper:
             "data": data,
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_workflow_exception_from_custom(self, chunk: CustomSchema) -> dict:
@@ -803,7 +803,7 @@ class WorkflowStreamDataWrapper:
             "data": data,
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _convert_error_from_custom(self, chunk: CustomSchema) -> dict:
@@ -817,7 +817,7 @@ class WorkflowStreamDataWrapper:
             "data": data,
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _is_skip_component(self, payload: dict):
@@ -1031,7 +1031,7 @@ class WorkflowStreamDataWrapper:
             "data": data,
             "executionId": self._execution_id,
             "index": 0,
-            "createdTime": int(time.time()),
+            "createdTime": int(time.time() * 1000),
         }
 
     def _enrich_loop_outputs(self, payload: dict, outputs: dict | None) -> dict | None:

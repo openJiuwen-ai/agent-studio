@@ -24,11 +24,11 @@ class EventField(BaseModel):
 
 class WorkflowMessageDataField(BaseModel):
     """message event data (SSE response)."""
-    text: Optional[str] = Field(default="")
+    text: Optional[Any] = Field(default="")
     reasoning_content: Optional[str] = Field(default=None)
     index: Optional[int] = Field(default=None)
-    summary: Optional[str] = Field(default=None)
-    origin: Optional[str] = Field(default=None)
+    summary: Optional[Any] = Field(default=None)
+    origin: Optional[Any] = Field(default=None)
     node_id: Optional[str] = Field(default=None)
     node_type: Optional[str] = Field(default=None)
     node_name: Optional[str] = Field(default=None)

@@ -151,12 +151,29 @@ class TestBuildReqJsonFromWorkflow:
     @staticmethod
     def test_memory_inputs_merged_into_globals():
         body = WorkflowAppRunRequest(
-            globals={"key1": "val1"},
+            inputs={"key1": "val1"},
             memory_inputs={"key2": "val2"},
         )
         result = build_req_json_from_workflow(body, TestBuildReqJsonFromWorkflow._make_ctx())
         assert result["params"]["globalVariables"]["key1"] == "val1"
         assert result["params"]["globalVariables"]["key2"] == "val2"
+
+    @staticmethod
+    def test_query_excluded_from_global_variables():
+        body = WorkflowAppRunRequest(inputs={"query": "hello", "key1": "val1"})
+        result = build_req_json_from_workflow(body, TestBuildReqJsonFromWorkflow._make_ctx())
+        assert "query" not in result["params"]["globalVariables"]
+        assert result["params"]["globalVariables"]["key1"] == "val1"
+        assert result["query"] == "hello"
+
+    @staticmethod
+    def test_memory_inputs_override_inputs():
+        body = WorkflowAppRunRequest(
+            inputs={"key1": "original"},
+            memory_inputs={"key1": "overridden"},
+        )
+        result = build_req_json_from_workflow(body, TestBuildReqJsonFromWorkflow._make_ctx())
+        assert result["params"]["globalVariables"]["key1"] == "overridden"
 
     @staticmethod
     def test_user_id_defaults_to_anonymous():
@@ -231,6 +248,29 @@ class TestBuildReqJsonFromAgent:
         body = AgentAppRunRequest()
         result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
         assert result["userId"] == ""
+
+    @staticmethod
+    def test_system_inputs_excluded_from_global_variables():
+        body = AgentAppRunRequest(inputs={
+            "query": "hello",
+            "workflowSequence": ["wf1"],
+            "activeWorkflows": ["wf2"],
+            "intent": "greet",
+            "customKey": "customVal",
+        })
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
+        gv = result["params"]["globalVariables"]
+        assert "query" not in gv
+        assert "workflowSequence" not in gv
+        assert "activeWorkflows" not in gv
+        assert "intent" not in gv
+        assert gv["customKey"] == "customVal"
+
+    @staticmethod
+    def test_agent_query_from_body_or_inputs():
+        body = AgentAppRunRequest(query="body query", inputs={"query": "inputs query"})
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
+        assert result["query"] == "body query"
 
 
 class TestResolveHandlerType:
