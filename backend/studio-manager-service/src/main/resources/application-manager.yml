@@ -99,7 +99,7 @@ spring:
       client:
         config:
           agentRuntime:
-            url: ${agent_runtime_endpoint:http://127.0.0.1:31113}
+            url: ${agent_runtime_endpoint:http://127.0.0.1:31014}
             connectTimeout: ${feign.agentRuntime.connectTimeout:10000}
             readTimeout: ${feign.agentRuntime.readTimeout:120000}
 
@@ -491,7 +491,7 @@ feign:
   client:
     config:
       agentRuntime:
-        url: ${agent_runtime_endpoint:http://127.0.0.1:31113}
+        url: ${agent_runtime_endpoint:http://127.0.0.1:31014}
       cseClient:
         url: ${cse_client_endpoint:http://mock-cse:8080}
       apigClient:
@@ -504,7 +504,7 @@ feign:
       elbClient:
         url: ${elb_client_endpoint:http://mock-elb:8080}
       jiuWenService:
-        url: ${jiu_wen_service_endpoint:http://127.0.0.1:31014}
+        url: ${agent_runtime_endpoint:http://127.0.0.1:31014}
       agentBuilder:
         url: ${agent_builder_endpoint:http://127.0.0.1:31015}
       maasModel:
@@ -712,7 +712,7 @@ task.quota: ${task_quota:600}
 model.manager.server.endpoint: ${manager_server_baseurl:}
 
 jiuwen:
-  base-url: ${jiuwen_base_url:http://127.0.0.1:31014}
+  base-url: ${agent_runtime_endpoint:http://127.0.0.1:31014}
 
 prompt:
   contentlenth: ${prompt_max_length:10000}
