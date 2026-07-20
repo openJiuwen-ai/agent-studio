@@ -91,7 +91,7 @@ def _convert_legacy_format(raw: dict) -> dict:
                 },
             })
 
-    # reply: 输入+输出双侧阻断
+    # reply: 根据 input_enable / output_enable 独立控制双通道阻断
     for item in raw.get("reply", []):
         if not isinstance(item, dict):
             continue
@@ -102,20 +102,27 @@ def _convert_legacy_format(raw: dict) -> dict:
             else kw
         )
         if kw_list:
-            rules.append({
-                "keywords": kw_list,
-                "actions": {
-                    "input": {
-                        "enable": True,
-                        "type": "reply",
-                        "content": item.get("content") or item.get("reply", ""),
-                    },
-                    "output": {
-                        "enable": True,
-                        "type": "reply",
-                        "content": item.get("content") or item.get("reply", ""),
-                    },
-                },
-            })
+            # 旧版格式使用 input_text / output_text 分别存储输入/输出兜底话术
+            # input_enable / output_enable 独立控制各通道是否启用
+            input_enable = item.get("input_enable", True)
+            output_enable = item.get("output_enable", True)
+            actions = {}
+            if input_enable:
+                actions["input"] = {
+                    "enable": True,
+                    "type": "reply",
+                    "content": item.get("input_text", ""),
+                }
+            if output_enable:
+                actions["output"] = {
+                    "enable": True,
+                    "type": "reply",
+                    "content": item.get("output_text", ""),
+                }
+            if actions:
+                rules.append({
+                    "keywords": kw_list,
+                    "actions": actions,
+                })
 
     return {"enabled": raw.get("enabled", False), "rules": rules}

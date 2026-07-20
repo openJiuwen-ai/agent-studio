@@ -98,6 +98,34 @@ class TestModerationEngineDynamicAC:
         assert isinstance(event["createdTime"], int)
 
     @staticmethod
+    def test_build_sensitive_event_with_node_context():
+        """sensitive 事件应携带 node_id/index 等上下文，node_type 自动映射。"""
+        event = ModerationEngineDynamicAC.build_sensitive_event(
+            "blocked",
+            1000,
+            node_id="node_end",
+            node_type="jiuwen.end",
+            node_name="结束",
+            index=6,
+        )
+        assert event["event"] == "sensitive"
+        assert event["data"]["text"] == "blocked"
+        assert event["data"]["node_id"] == "node_end"
+        assert event["data"]["node_type"] == "End"  # jiuwen.end → End
+        assert event["data"]["node_name"] == "结束"
+        assert event["data"]["index"] == 6
+        assert event["data"]["offset"] == 0
+
+    @staticmethod
+    def test_build_sensitive_event_no_node_context():
+        """无节点上下文时不生成 node_id/node_type 字段。"""
+        event = ModerationEngineDynamicAC.build_sensitive_event("fallback", 1000)
+        assert "node_id" not in event["data"]
+        assert "node_type" not in event["data"]
+        assert "node_name" not in event["data"]
+        assert "index" not in event["data"]
+
+    @staticmethod
     def test_empty_keyword_is_ignored():
         engine = ModerationEngineDynamicAC(_make_config(["", "badword"], "filter"))
         is_int, text = engine.clean_full_text("badword")

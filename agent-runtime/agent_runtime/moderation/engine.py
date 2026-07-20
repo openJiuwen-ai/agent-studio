@@ -7,6 +7,8 @@ from typing import Any, Dict, Tuple
 
 import ahocorasick
 
+from agent_runtime.event_handler.base.constants import node_type_mapping
+
 
 class ActionType:
     """审核动作类型"""
@@ -124,16 +126,40 @@ class ModerationEngineDynamicAC:
         return True, text
 
     @staticmethod
-    def build_sensitive_event(fallback_msg: str, original_created_time: int = None) -> Dict[str, Any]:
-        """构建风控阻断时的 sensitive 事件。"""
+    def build_sensitive_event(
+        fallback_msg: str,
+        original_created_time: int = None,
+        *,
+        node_id: str = "",
+        node_type: str = "",
+        node_name: str = "",
+        index: int = 0,
+    ) -> Dict[str, Any]:
+        """构建风控阻断时的 sensitive 事件。
+
+        包含前端所需的节点上下文字段（node_id, node_type, node_name, index），
+        前端使用 node_id 匹配对应的消息块并用 offset+text 执行文本替换。
+        node_type 会自动映射为前端识别的短名称（如 jiuwen.end → End）。
+        """
         ts = original_created_time or int(time.time() * 1000)
+        # 映射内部 node_type 为前端识别的短名称
+        mapped_type = node_type_mapping.get(node_type, node_type) if node_type else ""
+        data = {
+            "text": fallback_msg,
+            "createdTime": ts,
+            "offset": 0,
+        }
+        if node_id:
+            data["node_id"] = node_id
+        if mapped_type:
+            data["node_type"] = mapped_type
+        if node_name:
+            data["node_name"] = node_name
+        if index:
+            data["index"] = index
         return {
             "event": "sensitive",
-            "data": {
-                "text": fallback_msg,
-                "createdTime": ts,
-                "offset": 0,
-            },
+            "data": data,
             "createdTime": ts,
         }
 

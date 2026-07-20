@@ -11,6 +11,7 @@
 新增事件只需实现 handler 并注册即可，无需修改主循环。
 """
 
+import json
 import time
 from typing import Any, AsyncGenerator, Callable
 
@@ -39,7 +40,10 @@ from openjiuwen.core.common.logging import workflow_logger
 class _ModerationCtx:
     """单次流式审核的上下文状态，在 apply_stream_moderation 内部使用。"""
 
-    __slots__ = ("mods", "last_created_time", "interrupted", "int_msg")
+    __slots__ = (
+        "mods", "last_created_time", "interrupted", "int_msg",
+        "int_node_id", "int_node_type", "int_node_name", "int_index",
+    )
 
     def __init__(self, engine: ModerationEngineDynamicAC):
         self.mods = {
@@ -49,11 +53,22 @@ class _ModerationCtx:
         self.last_created_time = 0
         self.interrupted = False
         self.int_msg = ""
+        # 中断时从触发 chunk 携带的节点上下文
+        self.int_node_id = ""
+        self.int_node_type = ""
+        self.int_node_name = ""
+        self.int_index = 0
 
-    def interrupt(self, fallback_msg: str) -> None:
-        """标记流被阻断。"""
+    def interrupt(self, fallback_msg: str, chunk: dict | None = None) -> None:
+        """标记流被阻断，同时从触发 chunk 提取节点上下文。"""
         self.interrupted = True
         self.int_msg = fallback_msg
+        if chunk is not None:
+            data = chunk.get("data", {})
+            self.int_node_id = data.get("node_id", "")
+            self.int_node_type = data.get("node_type", "")
+            self.int_node_name = data.get("node_name", "")
+            self.int_index = chunk.get("index", 0)
 
 
 # ── 辅助函数 ──────────────────────────────────────────────────────────
@@ -62,6 +77,7 @@ def _clean_text_and_check_interrupt(
     engine: ModerationEngineDynamicAC,
     text: str,
     ctx: _ModerationCtx,
+    chunk: dict | None = None,
 ) -> str | None:
     """全量审核文本，REPLY 阻断时设置 ctx.interrupt() 并返回 None。
 
@@ -71,7 +87,7 @@ def _clean_text_and_check_interrupt(
     """
     is_int, result = engine.clean_full_text(text)
     if is_int:
-        ctx.interrupt(result)
+        ctx.interrupt(result, chunk)
         return None
     return result
 
@@ -92,7 +108,7 @@ def _handle_message(chunk: dict, engine: ModerationEngineDynamicAC, ctx: _Modera
     safe_answer, int_answer = ctx.mods["answer"].process_chunk(answer_chunk)
 
     if int_think or int_answer:
-        ctx.interrupt(int_answer or int_think)
+        ctx.interrupt(int_answer or int_think, chunk)
         return None
 
     data["think"] = safe_think
@@ -101,7 +117,7 @@ def _handle_message(chunk: dict, engine: ModerationEngineDynamicAC, ctx: _Modera
     # message_end 的 origin_answer 也需审核（含 REPLY 阻断检查）
     origin_answer = data.get("origin_answer")
     if origin_answer:
-        safe_origin = _clean_text_and_check_interrupt(engine, origin_answer, ctx)
+        safe_origin = _clean_text_and_check_interrupt(engine, origin_answer, ctx, chunk)
         if safe_origin is None:
             return None
         data["origin_answer"] = safe_origin
@@ -115,13 +131,13 @@ def _handle_workflow_end(chunk: dict, engine: ModerationEngineDynamicAC, ctx: _M
     answer_text = data.get("answer", "") or ""
     origin_answer = data.get("origin_answer", "")
 
-    safe_answer = _clean_text_and_check_interrupt(engine, answer_text, ctx)
+    safe_answer = _clean_text_and_check_interrupt(engine, answer_text, ctx, chunk)
     if safe_answer is None:
         return None
     data["answer"] = safe_answer
 
     if origin_answer:
-        safe_origin = _clean_text_and_check_interrupt(engine, origin_answer, ctx)
+        safe_origin = _clean_text_and_check_interrupt(engine, origin_answer, ctx, chunk)
         if safe_origin is None:
             return None
         data["origin_answer"] = safe_origin
@@ -140,7 +156,7 @@ def _handle_agent_node_message(chunk: dict, engine: ModerationEngineDynamicAC, c
     if isinstance(outputs, dict):
         content = outputs.get("content", "")
         if isinstance(content, str) and content:
-            safe_content = _clean_text_and_check_interrupt(engine, content, ctx)
+            safe_content = _clean_text_and_check_interrupt(engine, content, ctx, chunk)
             if safe_content is None:
                 return None
             outputs["content"] = safe_content
@@ -153,7 +169,7 @@ def _handle_agent_node_message(chunk: dict, engine: ModerationEngineDynamicAC, c
             outputs["reasoning_content"] = safe_reasoning
 
     elif isinstance(outputs, str) and outputs:
-        safe_outputs = _clean_text_and_check_interrupt(engine, outputs, ctx)
+        safe_outputs = _clean_text_and_check_interrupt(engine, outputs, ctx, chunk)
         if safe_outputs is None:
             return None
         data["outputs"] = safe_outputs
@@ -170,7 +186,7 @@ def _handle_workflow_node_message(chunk: dict, engine: ModerationEngineDynamicAC
     outputs = data.get("outputs")
 
     if isinstance(outputs, str) and outputs:
-        safe_outputs = _clean_text_and_check_interrupt(engine, outputs, ctx)
+        safe_outputs = _clean_text_and_check_interrupt(engine, outputs, ctx, chunk)
         if safe_outputs is None:
             return None
         data["outputs"] = safe_outputs
@@ -178,6 +194,14 @@ def _handle_workflow_node_message(chunk: dict, engine: ModerationEngineDynamicAC
         # dict 形式的 outputs 递归清洗字符串值（与 intermediate_message 类似）
         _clean_dict_outputs(outputs, engine, ctx)
         if ctx.interrupted:
+            # dict outputs 不应触发 REPLY 阻断，但如果意外触发了，
+            # 仍需从 chunk 提取节点上下文
+            if not ctx.int_node_id:
+                data = chunk.get("data", {})
+                ctx.int_node_id = data.get("node_id", "")
+                ctx.int_node_type = data.get("node_type", "")
+                ctx.int_node_name = data.get("node_name", "")
+                ctx.int_index = chunk.get("index", 0)
             return None
 
     return chunk
@@ -193,12 +217,12 @@ def _handle_intermediate_message(chunk: dict, engine: ModerationEngineDynamicAC,
             if isinstance(item, dict):
                 content = item.get("content", "")
                 if isinstance(content, str) and content:
-                    safe_content = _clean_text_and_check_interrupt(engine, content, ctx)
+                    safe_content = _clean_text_and_check_interrupt(engine, content, ctx, chunk)
                     if safe_content is None:
                         return None
                     item["content"] = safe_content
     elif isinstance(answer_val, str) and answer_val:
-        safe_answer = _clean_text_and_check_interrupt(engine, answer_val, ctx)
+        safe_answer = _clean_text_and_check_interrupt(engine, answer_val, ctx, chunk)
         if safe_answer is None:
             return None
         data["answer"] = safe_answer
@@ -212,7 +236,7 @@ def _handle_summary_response(chunk: dict, engine: ModerationEngineDynamicAC, ctx
     if isinstance(answer_data, dict):
         content = answer_data.get("content", "")
         if isinstance(content, str) and content:
-            safe_content = _clean_text_and_check_interrupt(engine, content, ctx)
+            safe_content = _clean_text_and_check_interrupt(engine, content, ctx, chunk)
             if safe_content is None:
                 return None
             answer_data["content"] = safe_content
@@ -321,7 +345,33 @@ async def apply_stream_moderation(
 
         # handler 标记了中断（REPLY 阻断）
         if ctx.interrupted:
-            yield engine.build_sensitive_event(ctx.int_msg, ctx.last_created_time)
+            # 1. sensitive 事件：携带 node_id/index 等上下文，前端据此匹配并替换文本
+            yield engine.build_sensitive_event(
+                ctx.int_msg,
+                ctx.last_created_time,
+                node_id=ctx.int_node_id,
+                node_type=ctx.int_node_type,
+                node_name=ctx.int_node_name,
+                index=ctx.int_index,
+            )
+            # 2. message_end 事件：标记当前节点的消息为已完成，
+            #    前端据此设置 isFinished=true 并停止 loading 指示
+            yield {
+                "event": "message_end",
+                "data": {
+                    "answer": ctx.int_msg,
+                    "node_id": ctx.int_node_id,
+                    "node_type": ctx.int_node_type,
+                    "node_name": ctx.int_node_name,
+                },
+                "createdTime": ctx.last_created_time,
+            }
+            # 3. workflow_end 事件：通知前端工作流执行结束
+            yield {
+                "event": "workflow_end",
+                "data": {"answer": ctx.int_msg},
+                "createdTime": ctx.last_created_time,
+            }
             break
 
         # handler 返回 None 表示吞掉该事件
@@ -357,30 +407,35 @@ async def block_event_generator(
     """
     ts = int(time.time() * 1000)
 
+    # 与 stream_response 一致，dict 序列化为 SSE 帧（data: <json>\n\n）后再 yield，
+    # 否则 StreamingResponse 会对 dict 调用 .encode() 报 AttributeError。
+    def _sse(d: dict) -> str:
+        return f"data: {json.dumps(d, ensure_ascii=False)}\n\n"
+
     # 消息事件
-    yield {
+    yield _sse({
         "event": "message",
         "data": {"answer": fallback_msg},
         "executionId": execution_id,
         "index": 0,
         "createdTime": ts,
-    }
+    })
 
     # workflow 模式额外发送 workflow_end
     if mode == "workflow":
-        yield {
+        yield _sse({
             "event": "workflow_end",
             "data": {"answer": fallback_msg},
             "executionId": execution_id,
             "index": 1,
             "createdTime": ts,
-        }
+        })
 
     # done 事件
-    yield {
+    yield _sse({
         "event": "done",
         "data": {},
         "executionId": execution_id,
         "index": 2 if mode == "workflow" else 1,
         "createdTime": ts,
-    }
+    })

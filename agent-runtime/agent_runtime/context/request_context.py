@@ -19,6 +19,7 @@ class RequestContext:
 
     headers: dict = field(default_factory=dict)
     user_id: str = ""
+    project_id: str = ""
     conversation_id: str = ""
     execution_id: str = ""
     request_id: str = ""

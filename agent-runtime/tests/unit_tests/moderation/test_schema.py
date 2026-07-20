@@ -72,35 +72,107 @@ class TestNormalizeContentReview:
         assert rule["actions"]["output"]["content"] == "XXX"
 
     @staticmethod
-    def test_legacy_reply_converts_to_input_and_output():
+    def test_legacy_reply_with_input_text_and_output_text():
+        """旧版 IR 格式使用 input_text / output_text 存储各通道兜底话术。"""
         config = {
             "enabled": True,
             "filter": {},
             "replace": [],
-            "reply": [{"keywords": "forbidden", "content": "不允许"}],
+            "reply": [{
+                "keywords": "华为",
+                "input_text": "输入审核-华为",
+                "output_text": "",
+                "input_enable": True,
+                "output_enable": False,
+            }],
         }
         result = normalize_content_review(config)
         assert len(result["rules"]) == 1
         rule = result["rules"][0]
-        assert rule["keywords"] == ["forbidden"]
+        assert rule["keywords"] == ["华为"]
         assert rule["actions"]["input"]["type"] == "reply"
-        assert rule["actions"]["input"]["content"] == "不允许"
+        assert rule["actions"]["input"]["content"] == "输入审核-华为"
+        assert "output" not in rule["actions"]
 
     @staticmethod
-    def test_legacy_reply_with_reply_field_name():
-        """旧格式 IR 中 reply 的兜底话术字段名可能是 'reply' 而非 'content'。"""
+    def test_legacy_reply_output_only():
+        """旧版 IR 格式：仅启用输出审核通道。"""
         config = {
             "enabled": True,
             "filter": {},
             "replace": [],
-            "reply": [{"keywords": "badword", "reply": "blocked"}],
+            "reply": [{
+                "keywords": "京东",
+                "input_text": "",
+                "output_text": "输出审核京东",
+                "input_enable": False,
+                "output_enable": True,
+            }],
+        }
+        result = normalize_content_review(config)
+        assert len(result["rules"]) == 1
+        rule = result["rules"][0]
+        assert rule["keywords"] == ["京东"]
+        assert "input" not in rule["actions"]
+        assert rule["actions"]["output"]["type"] == "reply"
+        assert rule["actions"]["output"]["content"] == "输出审核京东"
+
+    @staticmethod
+    def test_legacy_reply_dual_channel():
+        """旧版 IR 格式：输入输出双通道同时启用，各自有独立兜底话术。"""
+        config = {
+            "enabled": True,
+            "filter": {},
+            "replace": [],
+            "reply": [{
+                "keywords": "双向词",
+                "input_text": "【输入拦截】",
+                "output_text": "【输出拦截】",
+                "input_enable": True,
+                "output_enable": True,
+            }],
         }
         result = normalize_content_review(config)
         assert len(result["rules"]) == 1
         rule = result["rules"][0]
         assert rule["actions"]["input"]["type"] == "reply"
-        assert rule["actions"]["input"]["content"] == "blocked"
-        assert rule["actions"]["output"]["content"] == "blocked"
+        assert rule["actions"]["input"]["content"] == "【输入拦截】"
+        assert rule["actions"]["output"]["type"] == "reply"
+        assert rule["actions"]["output"]["content"] == "【输出拦截】"
+
+    @staticmethod
+    def test_legacy_reply_default_enable():
+        """旧版 IR 格式：未指定 enable 字段时默认两个通道都启用。"""
+        config = {
+            "enabled": True,
+            "filter": {},
+            "replace": [],
+            "reply": [{"keywords": "forbidden", "input_text": "input-blocked", "output_text": "output-blocked"}],
+        }
+        result = normalize_content_review(config)
+        rule = result["rules"][0]
+        assert "input" in rule["actions"]
+        assert "output" in rule["actions"]
+        assert rule["actions"]["input"]["content"] == "input-blocked"
+        assert rule["actions"]["output"]["content"] == "output-blocked"
+
+    @staticmethod
+    def test_legacy_reply_both_disabled_skipped():
+        """旧版 IR 格式：两个通道都禁用时，该规则不应生成。"""
+        config = {
+            "enabled": True,
+            "filter": {},
+            "replace": [],
+            "reply": [{
+                "keywords": "skipme",
+                "input_text": "",
+                "output_text": "",
+                "input_enable": False,
+                "output_enable": False,
+            }],
+        }
+        result = normalize_content_review(config)
+        assert len(result["rules"]) == 0
 
     @staticmethod
     def test_legacy_all_three_actions():
@@ -108,7 +180,13 @@ class TestNormalizeContentReview:
             "enabled": True,
             "filter": {"keywords": "fw1,fw2"},
             "replace": [{"keywords": "rw", "content": "***"}],
-            "reply": [{"keywords": "ban", "content": "nope"}],
+            "reply": [{
+                "keywords": "ban",
+                "input_text": "nope",
+                "output_text": "nope",
+                "input_enable": True,
+                "output_enable": True,
+            }],
         }
         result = normalize_content_review(config)
         assert len(result["rules"]) == 3
@@ -165,3 +243,51 @@ class TestNormalizeContentReview:
         }
         result = normalize_content_review(config)
         assert len(result["rules"]) == 1
+
+    @staticmethod
+    def test_legacy_reply_e2e_input_block():
+        """End-to-end: IR 旧格式 content_review 配置 → normalize → engine → check_input_query
+
+        验证 bug 修复：旧版 IR 中 reply 配置的 input_text 字段能正确传到引擎的输入审核结果。
+        """
+        from agent_runtime.moderation.engine import ModerationEngineDynamicAC
+
+        # 模拟真实 IR 的 content_review 配置
+        ir_content_review = {
+            "enabled": True,
+            "filter": {"keywords": "字节跳动"},
+            "replace": [{"keywords": "阿里巴巴", "replace": "XXX"}],
+            "reply": [
+                {
+                    "keywords": "华为",
+                    "input_text": "输入审核-华为",
+                    "output_text": "",
+                    "input_enable": True,
+                    "output_enable": False,
+                },
+                {
+                    "keywords": "京东",
+                    "input_text": "",
+                    "output_text": "输出审核京东",
+                    "input_enable": False,
+                    "output_enable": True,
+                },
+            ],
+        }
+
+        normalized = normalize_content_review(ir_content_review)
+        engine = ModerationEngineDynamicAC(normalized)
+
+        # 华为 → input_enable=True → 输入审核应阻断并返回兜底话术
+        is_safe, result = engine.check_input_query("什么是华为")
+        assert is_safe is False
+        assert result == "输入审核-华为"
+
+        # 京东 → input_enable=False → 输入审核不应阻断
+        is_safe, result = engine.check_input_query("什么是京东")
+        assert is_safe is True
+
+        # 京东 → output_enable=True → 输出审核应阻断
+        is_int, text = engine.clean_full_text("京东很好")
+        assert is_int is True
+        assert text == "输出审核京东"

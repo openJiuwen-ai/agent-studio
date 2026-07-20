@@ -131,9 +131,43 @@ class FieldDataProcessor:
 
     @staticmethod
     def generate_memory_history_messages(trace: Trace):
-        """Convert trace conversation_info messages to persistence format."""
+        """Convert trace conversation_info messages to persistence format.
+
+        - content 只取消息正文，不再把整条消息 dict 序列化成 JSON 串。
+        - agent_id: **保留** conversation_info["messages"] 里已有的 agent_id（来自
+          controller 的 intermediate_message 流，是正确的 member agent_id）。
+          只有没有 agent_id 的消息（trace.query 的 user、handle_message_end 的 assistant）
+          才用 trace.instance_id 兜底。这样单层/双层 controller 都能正确按 member
+          agent_id 过滤历史——旧 Java 路径靠 processOnEvent 原样存流里的消息
+          （带 member agent_id）实现同样的效果。
+        - 本轮 user query 由 trace.query 提供，前置写入（若 conversation_info 已有
+          相同 query 且带 agent_id，则用那条的 agent_id 覆盖前置的，去重）。
+        """
+        fallback_agent_id = getattr(trace, "instance_id", "") or ""
+
+        def _msg(role: str, content: str, existing_agent_id=None) -> dict:
+            m = {"role": role, "content": content}
+            aid = existing_agent_id if existing_agent_id else fallback_agent_id
+            if aid:
+                m["agent_id"] = aid
+            return m
+
         messages = []
+        query = getattr(trace, "query", "") or ""
+        if query:
+            messages.append(_msg("user", query))
+
         for msg in trace.conversation_info.get("messages", []):
             role = "user" if msg.get("role", "") == "user" else "assistant"
-            messages.append({"role": role, "content": json.dumps(msg, ensure_ascii=False)})
+            content = msg.get("content", "")
+            if content is None:
+                content = ""
+            # 与已前置的 user query 去重：若 conversation_info 里有相同 query 且带 agent_id，
+            # 用其 agent_id 覆盖前置的（保留正确的 member agent_id），跳过重复
+            is_dup_user_query = role == "user" and content == query
+            if is_dup_user_query and messages and messages[0].get("content") == query:
+                if msg.get("agent_id"):
+                    messages[0]["agent_id"] = msg["agent_id"]
+                continue
+            messages.append(_msg(role, content, msg.get("agent_id")))
         return messages

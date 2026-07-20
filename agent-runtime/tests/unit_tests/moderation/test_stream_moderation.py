@@ -84,9 +84,14 @@ class TestApplyStreamModeration:
             yield {"event": "done", "data": {}}
 
         result = await _collect(apply_stream_moderation(raw_gen(), engine))
-        assert len(result) == 1
+        # REPLY 阻断后产生 3 个事件：sensitive + message_end + workflow_end
+        assert len(result) == 3
         assert result[0]["event"] == "sensitive"
         assert result[0]["data"]["text"] == "不允许"
+        assert result[1]["event"] == "message_end"
+        assert result[1]["data"]["answer"] == "不允许"
+        assert result[2]["event"] == "workflow_end"
+        assert result[2]["data"]["answer"] == "不允许"
 
     @pytest.mark.asyncio
     async def test_non_message_events_pass_through(self):
@@ -180,9 +185,11 @@ class TestApplyStreamModeration:
             yield {"event": "done", "data": {}}
 
         result = await _collect(apply_stream_moderation(raw_gen(), engine))
-        assert len(result) == 1
+        assert len(result) == 3
         assert result[0]["event"] == "sensitive"
         assert result[0]["data"]["text"] == "不允许"
+        assert result[1]["event"] == "message_end"
+        assert result[2]["event"] == "workflow_end"
 
     @pytest.mark.asyncio
     async def test_workflow_end_safe_passes_through(self):
@@ -276,9 +283,11 @@ class TestApplyStreamModeration:
             yield {"event": "done", "data": {}}
 
         result = await _collect(apply_stream_moderation(raw_gen(), engine))
-        assert len(result) == 1
+        assert len(result) == 3
         assert result[0]["event"] == "sensitive"
         assert result[0]["data"]["text"] == "blocked"
+        assert result[1]["event"] == "message_end"
+        assert result[2]["event"] == "workflow_end"
 
     # ── intermediate_message tests ──
 
@@ -323,9 +332,11 @@ class TestApplyStreamModeration:
             yield {"event": "done", "data": {}}
 
         result = await _collect(apply_stream_moderation(raw_gen(), engine))
-        assert len(result) == 1
+        assert len(result) == 3
         assert result[0]["event"] == "sensitive"
         assert result[0]["data"]["text"] == "blocked"
+        assert result[1]["event"] == "message_end"
+        assert result[2]["event"] == "workflow_end"
 
     @pytest.mark.asyncio
     async def test_intermediate_message_list_reply_blocks(self):
@@ -340,7 +351,7 @@ class TestApplyStreamModeration:
             yield {"event": "done", "data": {}}
 
         result = await _collect(apply_stream_moderation(raw_gen(), engine))
-        assert len(result) == 1
+        assert len(result) == 3
         assert result[0]["event"] == "sensitive"
 
     @pytest.mark.asyncio
@@ -352,7 +363,7 @@ class TestApplyStreamModeration:
             yield {"event": "done", "data": {}}
 
         result = await _collect(apply_stream_moderation(raw_gen(), engine))
-        assert len(result) == 1
+        assert len(result) == 3
         assert result[0]["event"] == "sensitive"
 
     @pytest.mark.asyncio
@@ -365,7 +376,7 @@ class TestApplyStreamModeration:
             yield {"event": "done", "data": {}}
 
         result = await _collect(apply_stream_moderation(raw_gen(), engine))
-        assert len(result) == 1
+        assert len(result) == 3
         assert result[0]["event"] == "sensitive"
 
     # ── workflow_node_message tests ──
@@ -399,8 +410,75 @@ class TestApplyStreamModeration:
             yield {"event": "done", "data": {}}
 
         result = await _collect(apply_stream_moderation(raw_gen(), engine))
-        assert len(result) == 1
+        assert len(result) == 3
         assert result[0]["event"] == "sensitive"
+
+    @pytest.mark.asyncio
+    async def test_reply_sensitive_event_carries_node_context(self):
+        """REPLY 阻断时 sensitive 事件应携带 node_id/index 等节点上下文。"""
+        engine = _make_engine(["badword"], "reply", "blocked", channel="output")
+
+        async def raw_gen():
+            yield {
+                "event": "message",
+                "data": {
+                    "answer": "badword",
+                    "think": "",
+                    "node_id": "node_end",
+                    "node_type": "End",
+                    "node_name": "结束",
+                },
+                "index": 6,
+            }
+            yield {"event": "done", "data": {}}
+
+        result = await _collect(apply_stream_moderation(raw_gen(), engine))
+        # sensitive 事件应包含 node_id / node_type / node_name / index
+        sensitive_event = result[0]
+        assert sensitive_event["event"] == "sensitive"
+        assert sensitive_event["data"]["node_id"] == "node_end"
+        assert sensitive_event["data"]["node_type"] == "End"
+        assert sensitive_event["data"]["node_name"] == "结束"
+        assert sensitive_event["data"]["index"] == 6
+        assert sensitive_event["data"]["text"] == "blocked"
+        assert sensitive_event["data"]["offset"] == 0
+
+        # message_end 事件应携带相同节点上下文
+        msg_end_event = result[1]
+        assert msg_end_event["event"] == "message_end"
+        assert msg_end_event["data"]["answer"] == "blocked"
+        assert msg_end_event["data"]["node_id"] == "node_end"
+        assert msg_end_event["data"]["node_type"] == "End"
+        assert msg_end_event["data"]["node_name"] == "结束"
+
+        # workflow_end 事件
+        wf_end_event = result[2]
+        assert wf_end_event["event"] == "workflow_end"
+        assert wf_end_event["data"]["answer"] == "blocked"
+
+    @pytest.mark.asyncio
+    async def test_reply_sensitive_event_no_node_context(self):
+        """REPLY 阻断时若原始事件无 node_id，sensitive 事件也不含该字段。"""
+        engine = _make_engine(["badword"], "reply", "blocked")
+
+        async def raw_gen():
+            yield {"event": "message", "data": {"answer": "badword", "think": ""}}
+            yield {"event": "done", "data": {}}
+
+        result = await _collect(apply_stream_moderation(raw_gen(), engine))
+        sensitive_event = result[0]
+        assert sensitive_event["event"] == "sensitive"
+        assert sensitive_event["data"]["text"] == "blocked"
+        # 无 node_id 时不生成该字段
+        assert "node_id" not in sensitive_event["data"]
+
+
+def _parse_sse(item):
+    """Parse SSE string from block_event_generator into dict."""
+    import json
+    if isinstance(item, str) and item.startswith("data: "):
+        return json.loads(item[len("data: "):].strip())
+    return item
 
 
 class TestBlockEventGenerator:
@@ -408,8 +486,8 @@ class TestBlockEventGenerator:
     @pytest.mark.asyncio
     async def test_workflow_mode_generates_correct_sequence(self):
         result = await _collect(block_event_generator("blocked msg", "workflow", "exec-1"))
-        events = [r for r in result if isinstance(r, dict)]
-        event_names = [e["event"] for e in events]
+        events = [_parse_sse(r) for r in result]
+        event_names = [e["event"] for e in events if isinstance(e, dict)]
         assert "message" in event_names
         assert "workflow_end" in event_names
         assert "done" in event_names
@@ -417,8 +495,8 @@ class TestBlockEventGenerator:
     @pytest.mark.asyncio
     async def test_react_mode_generates_message_and_done(self):
         result = await _collect(block_event_generator("blocked msg", "ReAct", "exec-1"))
-        events = [r for r in result if isinstance(r, dict)]
-        event_names = [e["event"] for e in events]
+        events = [_parse_sse(r) for r in result]
+        event_names = [e["event"] for e in events if isinstance(e, dict)]
         assert "message" in event_names
         assert "done" in event_names
         assert "workflow_end" not in event_names
@@ -426,8 +504,8 @@ class TestBlockEventGenerator:
     @pytest.mark.asyncio
     async def test_default_mode_generates_message_and_done(self):
         result = await _collect(block_event_generator("blocked msg", "Controller", "exec-1"))
-        events = [r for r in result if isinstance(r, dict)]
-        event_names = [e["event"] for e in events]
+        events = [_parse_sse(r) for r in result]
+        event_names = [e["event"] for e in events if isinstance(e, dict)]
         assert "message" in event_names
         assert "done" in event_names
 

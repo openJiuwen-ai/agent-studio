@@ -56,7 +56,8 @@ from agent_runtime.serve.apis.app_run import (
     build_req_json_from_agent,
     _resolve_handler_type,
     _extract_instance_id,
-    _encapsulate_response,
+    _encapsulate_stream_response,
+    _encapsulate_non_stream_response,
 )
 from agent_runtime.serve.apis.app_run_request import (
     WorkflowAppRunRequest,
@@ -305,7 +306,7 @@ class TestEncapsulateResponse:
     async def test_json_response_passthrough():
         json_resp = JSONResponse(content={"key": "value"})
         request = MagicMock(spec=Request)
-        result = await _encapsulate_response(
+        result = await _encapsulate_stream_response(
             json_resp, "Workflow", request, "ir/path.json"
         )
         assert result is json_resp
@@ -325,8 +326,8 @@ class TestEncapsulateResponse:
             new_callable=AsyncMock,
         ) as mock_handler:
             mock_handler.return_value = mock_stream
-            result = await _encapsulate_response(
-                mock_stream, "Workflow", request, "ir/path.json", stream=True
+            result = await _encapsulate_stream_response(
+                mock_stream, "Workflow", request, "ir/path.json"
             )
             mock_handler.assert_awaited_once()
             assert result is mock_stream
@@ -346,8 +347,8 @@ class TestEncapsulateResponse:
             new_callable=AsyncMock,
         ) as mock_handler:
             mock_handler.return_value = JSONResponse(content={})
-            result = await _encapsulate_response(
-                mock_stream, "Workflow", request, "ir/path.json", stream=False
+            result = await _encapsulate_non_stream_response(
+                mock_stream, "Workflow", request, "ir/path.json"
             )
             mock_handler.assert_awaited_once()
 

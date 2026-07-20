@@ -119,7 +119,8 @@ public class WorkflowListener extends BaseEventListener {
         try {
             eventType = JiuwenEventType.valueOf(event.toUpperCase(Locale.ROOT));
         } catch (Exception e) {
-            log.error("not support event:{}.", event);
+            log.warn("not support event:{}, passThrough anyway.", event);
+            passThrough(eventStr);
             return JiuwenEventType.NOT_EXIST;
         }
 
@@ -180,7 +181,7 @@ public class WorkflowListener extends BaseEventListener {
                             && executeParams.getAsyncTaskParamHolder().isAsync());
                 }
             }
-            case MESSAGE -> {
+            case MESSAGE, SENSITIVE -> {
                 passThrough(eventStr);
             }
             case DONE -> {

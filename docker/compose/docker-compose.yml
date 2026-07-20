@@ -53,15 +53,12 @@ services:
       obs_staging_bucket: ${OBS_BUCKET:-}
       obs_ak: ${OBS_AK:-}
       obs_sk: ${OBS_SK:-}
-      # studio-service调用地址，HTTPS启动需要改成https
-      agent_runtime_endpoint: ${AGENT_RUNTIME_ENDPOINT:-http://studio-service:31113}
+      # studio-runtime调用地址，HTTPS启动需要改成https
+      agent_runtime_endpoint: ${AGENT_RUNTIME_ENDPOINT:-http://studio-runtime:31014}
       # 鉴权配置，默认调自身，HTTPS启动需要改成https
       user_auth_endpoint: ${USER_AUTH_ENDPOINT:-http://studio-manager:31111}
       # studio-builder调用地址，HTTPS启动需要改成https
       agent_builder_endpoint: ${AGENT_BUILDER_ENDPOINT:-http://studio-builder:31015}
-      # studio-runtime调用地址，HTTPS启动需要改成https
-      jiu_wen_service_endpoint: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
-      jiuwen_base_url: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
       server_ssl_enabled: ${SERVER_SSL_ENABLED:-false}
       CB_CF_SERVER_KEYSTORE: ${CB_CF_SERVER_KEYSTORE:-}
       CB_CF_TRUST_KEYSTORE: ${CB_CF_TRUST_KEYSTORE:-}

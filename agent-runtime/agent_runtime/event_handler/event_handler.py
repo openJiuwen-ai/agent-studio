@@ -66,6 +66,7 @@ class EventHandler:
         handler_type: str,
         request: Request,
         ir_path: str,
+        query: str = "",
     ):
         """Initialize trace context from request and IR path."""
         conversation_id = request.path_params.get("conversation_id", "")
@@ -85,6 +86,7 @@ class EventHandler:
             version_id=version_id,
             is_debug=is_debug,
             language=language,
+            query=query,
         )
         self.conv_manager = ConversationManager()
 
@@ -212,6 +214,7 @@ class EventHandler:
         handler_type: str,
         request: Request,
         ir_path: str,
+        query: str = "",
     ) -> StreamingResponse:
         """Unified entry point for stream response encapsulation."""
         handler = cls()
@@ -219,6 +222,7 @@ class EventHandler:
             handler_type=handler_type,
             request=request,
             ir_path=ir_path,
+            query=query,
         )
         return await handler.get_stream_result(
             handler_type=handler_type,
@@ -232,6 +236,7 @@ class EventHandler:
         handler_type: str,
         request: Request,
         ir_path: str,
+        query: str = "",
     ) -> Any:
         """Unified entry point for non-stream response encapsulation."""
         handler = cls()
@@ -239,6 +244,7 @@ class EventHandler:
             handler_type=handler_type,
             request=request,
             ir_path=ir_path,
+            query=query,
         )
         return await handler.get_non_stream_result(
             handler_type=handler_type,
