@@ -850,7 +850,7 @@ auth:
   user-info:
     claims:
       user-id: ${user_info_claims_user_id:user_id}
-      user-name: ${user_info_claims_username:user_name}
+      user-name: ${user_info_claims_user_name:user_name}
       domain-id: ${user_info_claims_domain_id:domain_id}
       project-id: ${user_info_claims_project_id:project_id}
     defaults:
