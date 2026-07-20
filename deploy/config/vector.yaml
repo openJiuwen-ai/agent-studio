@@ -27,27 +27,6 @@ sources:
     read_from: beginning
     fingerprint: {strategy: checksum, lines: 1}
 
-  service:
-    type: file
-    include:
-      - /logs/studio-service/studio-agent-service.log
-    read_from: beginning
-    fingerprint: {strategy: checksum, lines: 1}
-    multiline:
-      start_pattern: '^\[\d{4}-\d{2}-\d{2} '
-      mode: halt_before
-      condition_pattern: '^\[\d{4}-\d{2}-\d{2} '
-      timeout_ms: 1000
-
-  service_aux:
-    type: file
-    include:
-      - /logs/studio-service/perform.log
-      - /logs/studio-service/studio-agent-service-interface.log
-      - /logs/studio-service/audit/trace.log
-    read_from: beginning
-    fingerprint: {strategy: checksum, lines: 1}
-
   runtime_common:
     type: file
     include:
@@ -97,7 +76,6 @@ sources:
     exclude_containers:
       - ${APP_PROJECT_NAME}-vector
       - ${APP_PROJECT_NAME}-studio-manager
-      - ${APP_PROJECT_NAME}-studio-service
       - ${APP_PROJECT_NAME}-studio-runtime
       - ${APP_PROJECT_NAME}-studio-builder
       - ${APP_PROJECT_NAME}-studio-console
@@ -124,37 +102,15 @@ transforms:
         if time_err == null { .timestamp = event_time }
       }
 
-  service_fields:
-    type: remap
-    inputs: [service]
-    source: |
-      .service = "service"
-      .host = get_env_var!("NODE_NAME")
-      .collector = "vector"
-      .filename = .file
-      .parse_status = "unparsed"
-      parsed, err = parse_regex(.message, r'^\[(?P<log_time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\] \[(?P<level>[A-Z ]+)\] \[(?P<trace_id>[^\]]*)\]')
-      if err == null {
-        .parse_status = "parsed"
-        .level = strip_whitespace!(parsed.level)
-        if parsed.trace_id != "" { .trace_id = parsed.trace_id }
-        event_time, time_err = parse_timestamp(parsed.log_time, format: "%Y-%m-%d %H:%M:%S%.3f", timezone: get_env_var!("APP_LOG_TIMEZONE"))
-        if time_err == null { .timestamp = event_time }
-      }
-
   java_aux_fields:
     type: remap
-    inputs: [manager_aux, service_aux]
+    inputs: [manager_aux]
     source: |
       .host = get_env_var!("NODE_NAME")
       .collector = "vector"
       .filename = .file
       .parse_status = "unparsed"
-      if contains(string!(.file), "studio-manager") {
-        .service = "manager"
-      } else {
-        .service = "service"
-      }
+      .service = "manager"
       if contains(string!(.file), "/audit/") {
         .log_kind = "audit"
       } else if contains(string!(.file), "interface") {
@@ -273,7 +229,7 @@ transforms:
 
   redact_sensitive:
     type: remap
-    inputs: [manager_fields, service_fields, java_aux_fields, runtime_fields, builder_fields, console_fields, docker_fields, vector_internal_fields]
+    inputs: [manager_fields, java_aux_fields, runtime_fields, builder_fields, console_fields, docker_fields, vector_internal_fields]
     source: |
       .message = redact(string!(.message), filters: [
         r'(?i)authorization\s*[:=]\s*(?:bearer|basic)\s+[^\s,;"\]]+',

@@ -68,8 +68,6 @@ docker/studio-console/config/
 docker/studio-console/*.tar
 docker/studio-manager/config/
 docker/studio-manager/lib/
-docker/studio-service/config/
-docker/studio-service/lib/
 docker/studio-runtime/agent_builder/
 docker/studio-runtime/agent_runtime/
 docker/studio-runtime/bin/

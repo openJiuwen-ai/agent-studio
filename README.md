@@ -26,9 +26,13 @@ This project is intended for the following readers:
 ```
 agent-studio/
 ├── backend/                          # Java backend service module
+├── agent-runtime/                    # Python runtime service
+├── agent_builder/                    # NL2, prompt, and model facade service
+├── packages/                         # Shared Python packages
 ├── frontend/                         # Angular frontend application module
 ├── docs/                             # Project documentation
 ├── docker/                           # Docker deployment configuration
+├── deploy/                           # Unified deployment scripts and Compose files
 └── LICENSE / README.md (root files)
 ```
 
@@ -42,20 +46,22 @@ agent-studio/
 |-------------|---------|
 | JDK | 17+ |
 | Maven | 3.8+ |
-| Node.js | 18+ |
+| Node.js | 22 (18 minimum) |
 | npm/pnpm | 9+ / 7+ |
-| PostgreSQL | 12+ |
-| Redis | 6+ |
+| MySQL / GaussDB | MySQL 8.0+ |
+| Redis | 7+ |
 | Docker | 20+ |
 
-### 3.2 Backend Development
+### 3.2 Start the Complete Local Environment
 
-1. Clone the repository
-2. Execute `backend/sql/schema.sql` to create database tables
-3. Execute `backend/sql/init.sql` and `data.sql` to initialize data
-4. Configure the database and Redis connection information
-5. Run the Maven build: `mvn clean install`
-6. Start the Manager service or the Runtime service
+```bash
+cp deploy/.env.template deploy/.env
+bash docker/package.sh
+bash docker/build.sh
+bash deploy/deploy.sh local
+```
+
+The complete environment contains four application services: `studio-console`, `studio-manager`, `studio-runtime`, and `studio-builder`. The former `studio-service` capabilities have been split across Manager, Runtime, and Builder. See the [local development quick start](docs/本地开发快速启动.md) for initial setup, incremental builds, and `.last-build.env` behavior.
 
 ### 3.3 Frontend Development
 
@@ -67,6 +73,7 @@ agent-studio/
 
 1. Source build guide: [源码编译构建指导.md](docker/%E6%BA%90%E7%A0%81%E7%BC%96%E8%AF%91%E6%9E%84%E5%BB%BA%E6%8C%87%E5%AF%BC.md)
 2. Installation and deployment guide: [安装部署指南.md](docs/%E5%AE%89%E8%A3%85%E9%83%A8%E7%BD%B2%E6%8C%87%E5%8D%97.md)
+3. Local development quick start: [本地开发快速启动.md](docs/%E6%9C%AC%E5%9C%B0%E5%BC%80%E5%8F%91%E5%BF%AB%E9%80%9F%E5%90%AF%E5%8A%A8.md)
 
 ---
 
@@ -93,7 +100,7 @@ agent-studio/
 |------------|-------------|
 | **JDK Version** | JDK 17 or higher is required |
 | **Node.js Version** | Node.js 18 or higher is required |
-| **Database** | PostgreSQL 12+ is recommended for production |
+| **Database** | MySQL 8.0 is the default; GaussDB is also supported |
 | **Browser Compatibility** | The frontend supports the latest two versions of mainstream browsers |
 | **Network** | Inter-service communication requires intra-network connectivity or properly configured security groups |
 | **Memory** | A minimum of 2 GB per service is recommended; 4 GB+ is recommended for production |
@@ -105,9 +112,9 @@ agent-studio/
 
 | Layer | Technology |
 |-------|------------|
-| **Backend Framework** | Spring Boot 3.5.14, Spring Security 6.5.10 |
-| **Frontend Framework** | Angular 20.3.17, NG-ZORRO 20.4.4 |
-| **Database** | PostgreSQL 42.7.11, Redis 3.39.0, H2 2.2.224 |
+| **Backend Framework** | Spring Boot 3.5.15, Spring Security 6.5.10 |
+| **Frontend Framework** | Angular 20.3.25, NG-ZORRO 20.4.4 |
+| **Data Access** | MariaDB JDBC 3.5.6 (default MySQL-compatible database), PostgreSQL JDBC 42.7.11, H2 2.2.224, Redis/Redisson 3.39.0 |
 | **Object Storage** | Huawei Cloud OBS SDK 3.23.9 |
 | **Communication Framework** | Netty 4.1.133.Final |
 | **Build Tools** | Maven 3.8+, Angular Build 20.3.13 |

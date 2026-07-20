@@ -13,7 +13,7 @@ ENV_FILE="$SCRIPT_DIR/.env"
 PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$(basename "$SCRIPT_DIR")}"
 
 INFRA_SERVICES=(mysql redis minio minio-init)
-APP_SERVICES=(studio-manager studio-service studio-runtime studio-builder studio-console)
+APP_SERVICES=(studio-manager studio-runtime studio-builder studio-console)
 ALL_SERVICES=("${INFRA_SERVICES[@]}" "${APP_SERVICES[@]}")
 
 RED='\033[0;31m'
@@ -79,7 +79,6 @@ prepare_compose_env() {
             require_env_value GHCR_IMAGE_REPOSITORY
             export STUDIO_CONSOLE_IMAGE="${ghcr_repo}/studio-console:${image_tag}"
             export STUDIO_MANAGER_IMAGE="${ghcr_repo}/studio-manager:${image_tag}"
-            export STUDIO_SERVICE_IMAGE="${ghcr_repo}/studio-service:${image_tag}"
             export STUDIO_RUNTIME_IMAGE="${ghcr_repo}/studio-runtime:${image_tag}"
             export STUDIO_BUILDER_IMAGE="${ghcr_repo}/studio-builder:${image_tag}"
             export APP_PULL_POLICY="always"
@@ -90,7 +89,6 @@ prepare_compose_env() {
             require_env_value DOCKERHUB_IMAGE_REPOSITORY
             export STUDIO_CONSOLE_IMAGE="${dockerhub_repo}:studio-console-${image_tag}"
             export STUDIO_MANAGER_IMAGE="${dockerhub_repo}:studio-manager-${image_tag}"
-            export STUDIO_SERVICE_IMAGE="${dockerhub_repo}:studio-service-${image_tag}"
             export STUDIO_RUNTIME_IMAGE="${dockerhub_repo}:studio-runtime-${image_tag}"
             export STUDIO_BUILDER_IMAGE="${dockerhub_repo}:studio-builder-${image_tag}"
             export APP_PULL_POLICY="always"
@@ -99,12 +97,10 @@ prepare_compose_env() {
             # 离线部署：镜像通过 docker load 加载，STUDIO_*_IMAGE 在 .env 中已指定
             require_env_value STUDIO_CONSOLE_IMAGE
             require_env_value STUDIO_MANAGER_IMAGE
-            require_env_value STUDIO_SERVICE_IMAGE
             require_env_value STUDIO_RUNTIME_IMAGE
             require_env_value STUDIO_BUILDER_IMAGE
             export STUDIO_CONSOLE_IMAGE="$(get_env_value STUDIO_CONSOLE_IMAGE)"
             export STUDIO_MANAGER_IMAGE="$(get_env_value STUDIO_MANAGER_IMAGE)"
-            export STUDIO_SERVICE_IMAGE="$(get_env_value STUDIO_SERVICE_IMAGE)"
             export STUDIO_RUNTIME_IMAGE="$(get_env_value STUDIO_RUNTIME_IMAGE)"
             export STUDIO_BUILDER_IMAGE="$(get_env_value STUDIO_BUILDER_IMAGE)"
             export APP_PULL_POLICY="never"
@@ -112,12 +108,10 @@ prepare_compose_env() {
         custom)
             require_env_value STUDIO_CONSOLE_IMAGE
             require_env_value STUDIO_MANAGER_IMAGE
-            require_env_value STUDIO_SERVICE_IMAGE
             require_env_value STUDIO_RUNTIME_IMAGE
             require_env_value STUDIO_BUILDER_IMAGE
             export STUDIO_CONSOLE_IMAGE="$(get_env_value STUDIO_CONSOLE_IMAGE)"
             export STUDIO_MANAGER_IMAGE="$(get_env_value STUDIO_MANAGER_IMAGE)"
-            export STUDIO_SERVICE_IMAGE="$(get_env_value STUDIO_SERVICE_IMAGE)"
             export STUDIO_RUNTIME_IMAGE="$(get_env_value STUDIO_RUNTIME_IMAGE)"
             export STUDIO_BUILDER_IMAGE="$(get_env_value STUDIO_BUILDER_IMAGE)"
             export APP_PULL_POLICY="$(get_env_value APP_PULL_POLICY 'if_not_present')"
@@ -416,10 +410,9 @@ verify_deployment() {
         return 0
     fi
 
-    local console_port manager_port service_port runtime_port builder_port
+    local console_port manager_port runtime_port builder_port
     console_port=$(get_env_value CONSOLE_PORT 80)
     manager_port=$(get_env_value MANAGER_PORT 31111)
-    service_port=$(get_env_value SERVICE_PORT 31113)
     runtime_port=$(get_env_value RUNTIME_PORT 31014)
     builder_port=$(get_env_value BUILDER_PORT 31015)
 
@@ -440,14 +433,6 @@ verify_deployment() {
         log_info "studio-manager /health ✓"
     else
         log_warn "studio-manager /health not ready (HTTP ${code})"
-    fi
-
-    # studio-service
-    code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "http://localhost:${service_port}/v1/health" 2>/dev/null || echo "000")
-    if [ "$code" = "200" ]; then
-        log_info "studio-service /v1/health ✓"
-    else
-        log_warn "studio-service /v1/health not ready (HTTP ${code})"
     fi
 
     # studio-runtime
@@ -553,17 +538,17 @@ start_services() {
     log_info "============================================"
     log_info " Services started successfully!"
     log_info "============================================"
-    local console_port manager_port service_port runtime_port host_ip
+    local console_port manager_port runtime_port builder_port host_ip
     console_port=$(get_env_value CONSOLE_PORT 80)
     manager_port=$(get_env_value MANAGER_PORT 31111)
-    service_port=$(get_env_value SERVICE_PORT 31113)
     runtime_port=$(get_env_value RUNTIME_PORT 31014)
+    builder_port=$(get_env_value BUILDER_PORT 31015)
     host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
     log_info ""
     log_info "  Frontend : http://${host_ip}:${console_port}/openjiuwen/"
     log_info "  Manager  : http://${host_ip}:${manager_port}/health"
-    log_info "  Service  : http://${host_ip}:${service_port}/v1/health"
     log_info "  Runtime  : http://${host_ip}:${runtime_port}/v1/health"
+    log_info "  Builder  : http://${host_ip}:${builder_port}/v1/health"
     log_info ""
     log_info "  Stop     : $0 stop"
     log_info "  Logs     : $0 logs [service]"
@@ -653,7 +638,7 @@ deploy_local_build() {
     # 文件由 docker/build.sh 生成，只包含受控的 KEY=VALUE 镜像信息。
     # shellcheck disable=SC1090
     source "$build_info"
-    export STUDIO_CONSOLE_IMAGE STUDIO_MANAGER_IMAGE STUDIO_SERVICE_IMAGE STUDIO_RUNTIME_IMAGE STUDIO_BUILDER_IMAGE
+    export STUDIO_CONSOLE_IMAGE STUDIO_MANAGER_IMAGE STUDIO_RUNTIME_IMAGE STUDIO_BUILDER_IMAGE
     export GRAFANA_IMAGE="${GRAFANA_IMAGE:-grafana-victorialogs:11.3.0-0.29.0}"
     export APP_PULL_POLICY=never
 
@@ -662,7 +647,6 @@ deploy_local_build() {
         case "$service" in
             studio-console) key=STUDIO_CONSOLE_IMAGE; image="$STUDIO_CONSOLE_IMAGE" ;;
             studio-manager) key=STUDIO_MANAGER_IMAGE; image="$STUDIO_MANAGER_IMAGE" ;;
-            studio-service) key=STUDIO_SERVICE_IMAGE; image="$STUDIO_SERVICE_IMAGE" ;;
             studio-runtime) key=STUDIO_RUNTIME_IMAGE; image="$STUDIO_RUNTIME_IMAGE" ;;
             studio-builder) key=STUDIO_BUILDER_IMAGE; image="$STUDIO_BUILDER_IMAGE" ;;
             *) log_error "Unsupported local application service: $service"; exit 1 ;;
@@ -846,7 +830,7 @@ print_usage() {
     echo "  restart   - Restart application services"
     echo "  update    - Pull/load images and recreate services"
     echo "  recreate  - Recreate services from LOCAL images (no pull)."
-    echo "              Use after docker build + retag. Optional: recreate studio-manager studio-service studio-builder"
+    echo "              Use after docker build + retag. Optional: recreate studio-manager studio-runtime studio-builder"
     echo "  local     - Deploy images from the latest docker/build.sh run (no retag or .env edits)."
     echo "  clean     - Remove containers, networks and VOLUMES (data lost). Optional: clean images|all"
     echo "  logs      - Tail service logs (optional: service name)"
@@ -915,7 +899,7 @@ case "${1:-}" in
         ;;
     recreate)
         # 用本地镜像重建容器（不 pull）。docker build + docker tag 后用此切换新镜像。
-        # 可带参数指定服务：recreate studio-manager studio-service studio-runtime studio-builder
+        # 可带参数指定服务：recreate studio-manager studio-runtime studio-builder
         check_runtime_prerequisites
         recreate_services "${@:2}"
         ;;

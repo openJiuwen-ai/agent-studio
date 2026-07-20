@@ -11,7 +11,7 @@ sources:
     include_labels:
       - com.docker.compose.project=${MONITOR_PROJECT_NAME}
     exclude_containers:
-      - ${MONITOR_PROJECT_NAME}-vector
+      - "${MONITOR_PROJECT_NAME}-vector*"
 
   vector_internal:
     type: internal_logs

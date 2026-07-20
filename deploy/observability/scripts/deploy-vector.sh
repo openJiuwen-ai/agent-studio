@@ -58,7 +58,7 @@ validate_config() {
 validate_volumes() {
   local project missing=0 volume
   project=$(get_env APP_PROJECT_NAME deploy)
-  for volume in manager_logs service_logs runtime_logs console_logs; do
+  for volume in manager_logs runtime_logs builder_logs console_logs; do
     if ! docker volume inspect "${project}_${volume}" >/dev/null 2>&1; then
       log_warn "缺少卷 ${project}_${volume}，请先启动或重建 app 服务"
       missing=1

@@ -30,8 +30,8 @@ services:
       - vector_data:/var/lib/vector
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - manager_logs:/logs/manager:ro
-      - service_logs:/logs/service:ro
       - runtime_logs:/logs/runtime:ro
+      - builder_logs:/logs/builder:ro
       - console_logs:/logs/console:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8686/health >/dev/null || exit 1"]
@@ -45,12 +45,12 @@ volumes:
   manager_logs:
     external: true
     name: ${APP_PROJECT_NAME:-deploy}_manager_logs
-  service_logs:
-    external: true
-    name: ${APP_PROJECT_NAME:-deploy}_service_logs
   runtime_logs:
     external: true
     name: ${APP_PROJECT_NAME:-deploy}_runtime_logs
+  builder_logs:
+    external: true
+    name: ${APP_PROJECT_NAME:-deploy}_builder_logs
   console_logs:
     external: true
     name: ${APP_PROJECT_NAME:-deploy}_console_logs

@@ -1,5 +1,5 @@
 # openJiuwen AgentStudio Docker Compose 部署编排
-# 在线/离线统一编排：9 个服务（4 基础设施 + 5 应用）
+# 在线/离线统一编排：默认 8 个服务（4 基础设施 + 4 应用），另有 3 个可选日志服务
 # 在线部署：IMAGE_SOURCE=ghcr/dockerhub，脚本自动 pull 镜像
 # 离线部署：IMAGE_SOURCE=offline，脚本自动 docker load 镜像
 
@@ -129,8 +129,6 @@ services:
     depends_on:
       studio-manager:
         condition: service_healthy
-      studio-service:
-        condition: service_healthy
       studio-runtime:
         condition: service_healthy
       studio-builder:
@@ -173,11 +171,9 @@ services:
       server_ssl_trust_store_password: ${SERVER_SSL_TRUST_STORE_PASSWORD:-}
       server_ssl_key_store_password: ${SERVER_SSL_KEY_STORE_PASSWORD:-}
       server_ssl_key_password: ${SERVER_SSL_KEY_PASSWORD:-}
-      agent_runtime_endpoint: ${AGENT_RUNTIME_ENDPOINT:-http://studio-service:31113}
+      agent_runtime_endpoint: ${AGENT_RUNTIME_ENDPOINT:-http://studio-runtime:31014}
       user_auth_endpoint: ${USER_AUTH_ENDPOINT:-http://studio-manager:31111}
-      jiu_wen_service_endpoint: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
       agent_builder_endpoint: ${AGENT_BUILDER_ENDPOINT:-http://studio-builder:31015}
-      jiuwen_base_url: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
       front_page_block_nodes: ${FRONT_PAGE_BLOCK_NODES:-Sql,DataQuery,Agent}
       share_knowledge_enabled: ${SHARE_KNOWLEDGE_ENABLED:-true}
       workflow_async_enable: ${WORKFLOW_ASYNC_ENABLED:-true}
@@ -196,63 +192,6 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/31111'"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 60s
-    networks:
-      - agent-net
-
-  studio-service:
-    logging: *default-logging
-    image: ${STUDIO_SERVICE_IMAGE}
-    pull_policy: ${APP_PULL_POLICY:-always}
-    restart: always
-    privileged: true
-    cpus: 2
-    mem_limit: 4g
-    ports:
-      - "${SERVICE_PORT:-31113}:31113"
-    volumes:
-      # 日志聚合：暴露 Java 日志供 Vector 采集（可选，见 ./deploy.sh logging）
-      - service_logs:/opt/cloud/studio-service/logs
-    environment:
-      spring_datasource_url: ${SPRING_DATASOURCE_URL:-}
-      spring_datasource_username: ${SPRING_DATASOURCE_USERNAME:-}
-      spring_datasource_password: ${SPRING_DATASOURCE_PASSWORD:-}
-      spring_datasource_driver_class_name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:-}
-      redis_host: ${REDIS_HOST:-}
-      redis_password: ${REDIS_PASSWORD:-}
-      redis_port: ${REDIS_PORT:-6379}
-      cluster_node_list: ${REDIS_CLUSTER_NODES:-}
-      redis_master_name: ${REDIS_SENTINEL_MASTER:-}
-      redis_sentinel_ports: ${REDIS_SENTINEL_PORTS:-}
-      obs_url: ${OBS_URL:-}
-      obs_bucket: ${OBS_BUCKET:-}
-      obs_staging_bucket: ${OBS_BUCKET:-}
-      obs_ak: ${OBS_AK:-}
-      obs_sk: ${OBS_SK:-}
-      server_ssl_enabled: ${SERVER_SSL_ENABLED:-false}
-      CB_CF_SERVER_KEYSTORE: ${CB_CF_SERVER_KEYSTORE:-}
-      CB_CF_TRUST_KEYSTORE: ${CB_CF_TRUST_KEYSTORE:-}
-      server_ssl_trust_store_password: ${SERVER_SSL_TRUST_STORE_PASSWORD:-}
-      server_ssl_key_store_password: ${SERVER_SSL_KEY_STORE_PASSWORD:-}
-      server_ssl_key_password: ${SERVER_SSL_KEY_PASSWORD:-}
-      user_auth_endpoint: ${USER_AUTH_ENDPOINT:-http://studio-manager:31111}
-      agent_manager_endpoint: ${AGENT_MANAGER_ENDPOINT:-http://studio-manager:31111}
-      jiuwen_base_url: ${JIUWEN_BASE_URL:-http://studio-runtime:31014}
-      koosearch_endpoint: ${KOOSEARCH_ENDPOINT:-}
-      # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
-      auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      studio-manager:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/31113'"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -343,8 +282,6 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      studio-service:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/31014'"]
       interval: 10s
@@ -402,8 +339,6 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      studio-service:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:31015/v1/health >/dev/null || exit 1"]
       interval: 10s
@@ -415,7 +350,7 @@ services:
 
   # ── 日志聚合栈（可选；profiles: logging，默认不启动；用 ./deploy.sh logging 启停）──
   # 数据流：app 日志命名卷 → Vector tail/缓冲 → VictoriaLogs 存储 → Grafana 查询
-  # 五个 app 服务通过命名卷共享日志给 Vector。
+  # 四个 app 服务通过命名卷共享日志给 Vector。
 
   victoria-logs:
     logging: *default-logging
@@ -450,7 +385,6 @@ services:
       - ./config/vector.yaml:/etc/vector/vector.yaml:ro
       # 与各 app 服务共享同一命名卷（只读），tail 其中的日志文件
       - manager_logs:/logs/studio-manager:ro
-      - service_logs:/logs/studio-service:ro
       - runtime_logs:/logs/studio-runtime:ro
       - builder_logs:/logs/studio-builder:ro
       - console_logs:/logs/studio-console:ro
@@ -506,7 +440,6 @@ volumes:
   mysql_data:
   minio_data:
   manager_logs:
-  service_logs:
   runtime_logs:
   builder_logs:
   console_logs:

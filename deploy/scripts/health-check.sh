@@ -39,7 +39,6 @@ get_env_value() {
 # 加载配置
 CONSOLE_PORT=$(get_env_value CONSOLE_PORT 80)
 MANAGER_PORT=$(get_env_value MANAGER_PORT 31111)
-SERVICE_PORT=$(get_env_value SERVICE_PORT 31113)
 RUNTIME_PORT=$(get_env_value RUNTIME_PORT 31014)
 BUILDER_PORT=$(get_env_value BUILDER_PORT 31015)
 HOST_IP=$(get_env_value HOST_IP 127.0.0.1)
@@ -161,7 +160,6 @@ main() {
 
     check_port "studio-console" "127.0.0.1" "${CONSOLE_PORT}" && pass=$((pass+1)) || fail=$((fail+1))
     check_port "studio-manager" "127.0.0.1" "${MANAGER_PORT}" && pass=$((pass+1)) || fail=$((fail+1))
-    check_port "studio-service" "127.0.0.1" "${SERVICE_PORT}" && pass=$((pass+1)) || fail=$((fail+1))
     check_port "studio-runtime" "127.0.0.1" "${RUNTIME_PORT}" && pass=$((pass+1)) || fail=$((fail+1))
     check_port "studio-builder" "127.0.0.1" "${BUILDER_PORT}" && pass=$((pass+1)) || fail=$((fail+1))
 
@@ -172,7 +170,6 @@ main() {
     echo "─────────────────────────────────────────"
 
     check_http "studio-manager" "http://${HOST_IP}:${MANAGER_PORT}/health" || true
-    check_http "studio-service" "http://${HOST_IP}:${SERVICE_PORT}/v1/health" || true
     check_http "studio-runtime" "http://${HOST_IP}:${RUNTIME_PORT}/v1/health" || true
     check_http "studio-builder" "http://${HOST_IP}:${BUILDER_PORT}/v1/health" || true
 
@@ -195,7 +192,7 @@ main() {
         echo "  排查建议："
         echo "    查看容器状态：cd ${DEPLOY_DIR} && docker compose ps"
         echo "    查看容器日志：cd ${DEPLOY_DIR} && docker compose logs -f <服务名>"
-        echo "    服务名列表：studio-console, studio-manager, studio-service, studio-runtime, studio-builder"
+        echo "    服务名列表：studio-console, studio-manager, studio-runtime, studio-builder"
     fi
     echo "============================================================"
 }

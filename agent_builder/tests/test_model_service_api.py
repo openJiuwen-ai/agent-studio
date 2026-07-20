@@ -63,7 +63,7 @@ class _ModelInfo:
 
 def test_nl2_uses_ir_gateway_when_strategy_ir(monkeypatch):
     monkeypatch.setattr(settings.llm, "model_config_strategy", model_bridge.ModelConfigStrategyType.IR)
-    monkeypatch.setattr(settings.llm, "api_base", "http://gw:31113/v1/agent-builder")
+    monkeypatch.setattr(settings.llm, "api_base", "http://model-gateway:8080/v1/agent-builder")
     cfg = model_bridge.Nl2ModelConfigProvider.get_llm_config(
         _ModelInfo("msid", {"auth_id": "a1", "x_auth_token": "tok"})
     )
@@ -98,7 +98,7 @@ def test_nl2_uses_env_vars_when_strategy_env(monkeypatch):
 
 def test_prompt_optimize_uses_ir_gateway_when_strategy_ir(monkeypatch):
     monkeypatch.setattr(settings.llm, "model_config_strategy", model_bridge.ModelConfigStrategyType.IR)
-    monkeypatch.setattr(settings.llm, "api_base", "http://gw:31113/v1/agent-builder")
+    monkeypatch.setattr(settings.llm, "api_base", "http://model-gateway:8080/v1/agent-builder")
     cfg = model_bridge.PromptOptimizeModelProvider.get_llm_config(
         _ModelInfo("msid", {"auth_id": "a1", "x_auth_token": "tok"})
     )

@@ -26,9 +26,13 @@ openJiuwen AgentStudio提供了一站式AI Agent开发平台，为开发者提�
 ```
 agent-studio/
 ├── backend/                          # Java后端服务模块
+├── agent-runtime/                    # Python运行时服务
+├── agent_builder/                    # NL2、Prompt与模型调用服务
+├── packages/                         # Python共享包
 ├── frontend/                         # Angular前端应用模块
 ├── docs/                             # 项目文档模块
 ├── docker/                           # Docker部署配置
+├── deploy/                           # 统一部署脚本与Compose配置
 └── LICENSE / README.md 等根文件
 ```
 
@@ -42,20 +46,22 @@ agent-studio/
 |------|------|
 | JDK | 17+ |
 | Maven | 3.8+ |
-| Node.js | 18+ |
+| Node.js | 22（最低18） |
 | npm/pnpm | 9+ / 7+ |
-| PostgreSQL | 12+ |
-| Redis | 6+ |
+| MySQL / GaussDB | MySQL 8.0+ |
+| Redis | 7+ |
 | Docker | 20+ |
 
-### 3.2 后端开发
+### 3.2 本地完整启动
 
-1. 克隆代码仓库
-2. 执行`backend/sql/schema.sql`创建数据库表
-3. 执行`backend/sql/init.sql`和`data.sql`初始化数据
-4. 配置数据库和Redis连接信息
-5. 运行Maven构建：`mvn clean install`
-6. 启动Manager服务或Runtime服务
+```bash
+cp deploy/.env.template deploy/.env
+bash docker/package.sh
+bash docker/build.sh
+bash deploy/deploy.sh local
+```
+
+当前完整环境包含 `studio-console`、`studio-manager`、`studio-runtime` 和 `studio-builder` 四个应用服务。原 `studio-service` 的能力已拆分并集成到 Manager、Runtime 和 Builder。首次启动、单服务增量构建和 `.last-build.env` 使用方法详见[本地开发快速启动](docs/本地开发快速启动.md)。
 
 ### 3.3 前端开发
 
@@ -67,6 +73,7 @@ agent-studio/
 
 1. 源码编译构建指导：[源码编译构建指导.md](docker/%E6%BA%90%E7%A0%81%E7%BC%96%E8%AF%91%E6%9E%84%E5%BB%BA%E6%8C%87%E5%AF%BC.md)
 2. 安装部署指南：[安装部署指南.md](docs/%E5%AE%89%E8%A3%85%E9%83%A8%E7%BD%B2%E6%8C%87%E5%8D%97.md)
+3. 本地开发快速启动：[本地开发快速启动.md](docs/%E6%9C%AC%E5%9C%B0%E5%BC%80%E5%8F%91%E5%BF%AB%E9%80%9F%E5%90%AF%E5%8A%A8.md)
 
 ---
 
@@ -93,7 +100,7 @@ agent-studio/
 |--------|------|
 | **JDK版本** | 必须使用JDK 17或更高版本 |
 | **Node.js版本** | 必须使用Node.js 18或更高版本 |
-| **数据库要求** | 生产环境推荐使用PostgreSQL 12+ |
+| **数据库要求** | 默认使用MySQL 8.0，也支持GaussDB |
 | **浏览器兼容** | 前端支持主流浏览器的最近两个版本 |
 | **网络要求** | 服务间通信需要内网互通或正确配置安全组 |
 | **内存要求** | 单服务最低建议2GB内存，生产环境建议4GB+ |
@@ -105,9 +112,9 @@ agent-studio/
 
 | 层级 | 技术 |
 |------|------|
-| **后端框架** | Spring Boot 3.5.14、Spring Security 6.5.10 |
-| **前端框架** | Angular 20.3.17、NG-ZORRO 20.4.4 |
-| **数据库** | PostgreSQL 42.7.11、Redis 3.39.0、H2 2.2.224 |
+| **后端框架** | Spring Boot 3.5.15、Spring Security 6.5.10 |
+| **前端框架** | Angular 20.3.25、NG-ZORRO 20.4.4 |
+| **数据访问** | MariaDB JDBC 3.5.6（默认连接 MySQL 兼容数据库）、PostgreSQL JDBC 42.7.11、H2 2.2.224、Redis/Redisson 3.39.0 |
 | **对象存储** | 华为云OBS SDK 3.23.9 |
 | **通信框架** | Netty 4.1.133.Final |
 | **构建工具** | Maven 3.8+、Angular Build 20.3.13 |

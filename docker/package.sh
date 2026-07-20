@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 set -xe
 
-# npm 中央仓库 (public)
-NPM_CENTRAL_REPO="https://registry.npmjs.org/"
-
 # 获取根路径
 WORKSPACE=${WORKSPACE:-$(
   cd $(dirname $0/)/..
@@ -62,8 +59,12 @@ function frontend_build_copy() {
   cd ${WORKSPACE}/frontend
   CONSOLE_TARGET_PATH=${WORKSPACE}/docker/studio-console
 
-  echo "[PACKAGE] 安装 pnpm..."
-  npm install -g pnpm --registry=${NPM_CENTRAL_REPO}
+  echo "[PACKAGE] 检查 pnpm..."
+  if ! command -v pnpm >/dev/null 2>&1; then
+    echo "[PACKAGE] 未检测到 pnpm。请先执行: corepack enable && corepack prepare pnpm@10 --activate"
+    exit 1
+  fi
+  echo "[PACKAGE] 使用 pnpm $(pnpm --version)"
 
   echo "[PACKAGE] 安装前端依赖 (pnpm install)..."
   pnpm install --ignore-scripts

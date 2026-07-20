@@ -16,7 +16,6 @@ services:
       - '80:80'
     depends_on:
       - studio-manager
-      - studio-service
       - studio-runtime
       - studio-builder
     networks:

@@ -23,23 +23,6 @@ sources:
     read_from: beginning
     fingerprint: {strategy: checksum, lines: 1}
 
-  service:
-    type: file
-    include: [/logs/service/studio-agent-service.log]
-    read_from: beginning
-    fingerprint: {strategy: checksum, lines: 1}
-    multiline:
-      start_pattern: '^\[\d{4}-\d{2}-\d{2} '
-      mode: halt_before
-      condition_pattern: '^\[\d{4}-\d{2}-\d{2} '
-      timeout_ms: 1000
-
-  service_aux:
-    type: file
-    include: [/logs/service/perform.log, /logs/service/studio-agent-service-interface.log, /logs/service/audit/trace.log]
-    read_from: beginning
-    fingerprint: {strategy: checksum, lines: 1}
-
   runtime_common:
     type: file
     include: [/logs/runtime/common.log]
@@ -54,11 +37,24 @@ sources:
   runtime_other:
     type: file
     include:
+      - /logs/runtime/tgf_python.log
+      - /logs/runtime/jiuwen_python.log
       - /logs/runtime/agent-runtime/run/*.log
       - /logs/runtime/jiuwen.log/**/*.log*
     exclude: [/logs/runtime/jiuwen.log]
     read_from: beginning
     fingerprint: {strategy: checksum, lines: 1}
+
+  builder:
+    type: file
+    include: [/logs/builder/agent-builder/*.log, /logs/builder/agent-builder/**/*.log]
+    read_from: beginning
+    fingerprint: {strategy: checksum, lines: 1}
+    multiline:
+      start_pattern: '^\d{4}-\d{2}-\d{2} '
+      mode: halt_before
+      condition_pattern: '^\d{4}-\d{2}-\d{2} '
+      timeout_ms: 1000
 
   console:
     type: file
@@ -71,11 +67,10 @@ sources:
     include_labels:
       - com.docker.compose.project=${APP_PROJECT_NAME}
     exclude_containers:
-      - ${APP_PROJECT_NAME}-vector
-      - ${APP_PROJECT_NAME}-studio-manager
-      - ${APP_PROJECT_NAME}-studio-service
-      - ${APP_PROJECT_NAME}-studio-runtime
-      - ${APP_PROJECT_NAME}-studio-console
+      - "${APP_PROJECT_NAME}-studio-manager*"
+      - "${APP_PROJECT_NAME}-studio-runtime*"
+      - "${APP_PROJECT_NAME}-studio-builder*"
+      - "${APP_PROJECT_NAME}-studio-console*"
 
   vector_internal:
     type: internal_logs
@@ -99,33 +94,15 @@ transforms:
         if time_err == null { .timestamp = event_time }
       }
 
-  service_fields:
-    type: remap
-    inputs: [service]
-    source: |
-      .service = "service"
-      .host = get_env_var!("NODE_NAME")
-      .collector = "vector"
-      .filename = .file
-      .parse_status = "unparsed"
-      parsed, err = parse_regex(.message, r'^\[(?P<log_time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\] \[(?P<level>[A-Z ]+)\] \[(?P<trace_id>[^\]]*)\]')
-      if err == null {
-        .parse_status = "parsed"
-        .level = strip_whitespace!(parsed.level)
-        if parsed.trace_id != "" { .trace_id = parsed.trace_id }
-        event_time, time_err = parse_timestamp(parsed.log_time, format: "%Y-%m-%d %H:%M:%S%.3f", timezone: get_env_var!("APP_LOG_TIMEZONE"))
-        if time_err == null { .timestamp = event_time }
-      }
-
   java_aux_fields:
     type: remap
-    inputs: [manager_aux, service_aux]
+    inputs: [manager_aux]
     source: |
       .host = get_env_var!("NODE_NAME")
       .collector = "vector"
       .filename = .file
       .parse_status = "unparsed"
-      if contains(string!(.file), "/manager/") { .service = "manager" } else { .service = "service" }
+      .service = "manager"
       if contains(string!(.file), "/audit/") {
         .log_kind = "audit"
       } else if contains(string!(.file), "interface") {
@@ -192,6 +169,21 @@ transforms:
         }
       }
 
+  builder_fields:
+    type: remap
+    inputs: [builder]
+    source: |
+      .service = "builder"
+      .host = get_env_var!("NODE_NAME")
+      .collector = "vector"
+      .filename = .file
+      .parse_status = "unparsed"
+      level_parts, level_err = parse_regex(.message, r'(?i)(?:level\s*[:=]\s*"?|\[)(?P<level>trace|debug|info|warn|warning|error|fatal|critical)(?:"|\]|\s|,|$)')
+      if level_err == null {
+        .level = upcase!(level_parts.level)
+        .parse_status = "parsed"
+      }
+
   docker_fields:
     type: remap
     inputs: [docker]
@@ -225,9 +217,19 @@ transforms:
       .parse_status = "native"
       .filename = "vector://internal"
 
-  redact_sensitive:
+  redact_file_sensitive:
     type: remap
-    inputs: [manager_fields, service_fields, java_aux_fields, runtime_fields, console_fields, docker_fields, vector_internal_fields]
+    inputs: [manager_fields, java_aux_fields, runtime_fields, builder_fields, console_fields]
+    source: |
+      .message = redact(string!(.message), filters: [
+        r'(?i)authorization\s*[:=]\s*(?:bearer|basic)\s+[^\s,;"\]]+',
+        r'(?i)(?:password|passwd|token|api[_-]?key|secret|access[_-]?key|private[_-]?key)\s*[:=]\s*[^\s&,;"\]]+',
+        r'(?i)(?:password|passwd|token|api[_-]?key|secret|access[_-]?key)=([^&\s]+)'
+      ])
+
+  redact_docker_sensitive:
+    type: remap
+    inputs: [docker_fields, vector_internal_fields]
     source: |
       .message = redact(string!(.message), filters: [
         r'(?i)authorization\s*[:=]\s*(?:bearer|basic)\s+[^\s,;"\]]+',
@@ -238,7 +240,7 @@ transforms:
 sinks:
   victoria_logs:
     type: elasticsearch
-    inputs: [redact_sensitive]
+    inputs: [redact_file_sensitive]
     endpoints:
       - https://${LOGS_GATEWAY_HOST}:${LOGS_GATEWAY_HTTPS_PORT}/insert/elasticsearch/
     mode: bulk
@@ -260,6 +262,33 @@ sinks:
       _stream_fields: host,service
     acknowledgements:
       enabled: true
+    buffer:
+      type: disk
+      max_size: ${VECTOR_BUFFER_MAX_SIZE}
+      when_full: block
+
+  victoria_logs_docker:
+    type: elasticsearch
+    inputs: [redact_docker_sensitive]
+    endpoints:
+      - https://${LOGS_GATEWAY_HOST}:${LOGS_GATEWAY_HTTPS_PORT}/insert/elasticsearch/
+    mode: bulk
+    api_version: v8
+    compression: gzip
+    auth:
+      strategy: basic
+      user: ${LOGS_WRITE_USER}
+      password: ${LOGS_WRITE_PASSWORD}
+    tls:
+      ca_file: /etc/vector/tls/gateway-ca.crt
+      verify_certificate: true
+      verify_hostname: true
+    healthcheck:
+      enabled: false
+    query:
+      _msg_field: message
+      _time_field: timestamp
+      _stream_fields: host,service
     buffer:
       type: disk
       max_size: ${VECTOR_BUFFER_MAX_SIZE}

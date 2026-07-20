@@ -11,7 +11,7 @@
     "list": [
       {
         "name": "service", "label": "服务", "type": "custom",
-        "query": "manager,service,runtime,console,mysql,redis,minio,minio-init,grafana,victoria-logs,nginx-gateway,vector",
+        "query": "manager,runtime,builder,console,mysql,redis,minio,minio-init,grafana,victoria-logs,nginx-gateway,vector",
         "includeAll": true, "allValue": ".*", "multi": true,
         "current": {"text": "All", "value": "$__all"}
       },

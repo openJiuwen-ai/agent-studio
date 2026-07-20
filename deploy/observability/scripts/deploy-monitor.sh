@@ -261,7 +261,7 @@ do_start() {
   host=$(get_env LOGS_GATEWAY_HOST); port=$(get_env LOGS_GATEWAY_HTTPS_PORT 3100); grafana_port=$(get_env GRAFANA_PORT 3000)
   log_info "Grafana: http://${host}:${grafana_port}/"
   log_info "日志 HTTPS 网关: https://${host}:${port}/"
-  log_info "将 config/gateway-ca.crt 安全复制到每个 app 节点同一路径，再执行 ./deploy.sh logging-remote"
+  log_info "将 config/gateway-ca.crt 安全复制到每个 app 节点同一路径，再执行 bash ../deploy.sh logging-remote"
 }
 
 do_stop() {

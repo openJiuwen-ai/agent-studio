@@ -30,7 +30,7 @@ import static org.mockito.Mockito.*;
  * 3. 工作流状态同步：Java 发布/删除 → studio-runtime Redis 同步
  *
  * 测试策略：Mock AgentRuntimeClient（Feign），验证 Java 侧发送的数据正确性，
- * 验证 Python 侧（studio-runtime 31113）的接收逻辑。
+ * 验证 Python 侧（studio-runtime 31014）的接收逻辑。
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Java→Python 跨层集成测试")
@@ -175,13 +175,13 @@ class CrossLayerIntegrationTest {
             ReleaseInfo releaseInfo = buildReleaseInfo(CHANNEL_TYPE_WEB);
 
             when(agentRuntimeClient.createReleaseInfo(eq(AUTH_TOKEN), eq(PROJECT_ID), any(ReleaseInfo.class)))
-                .thenThrow(new RuntimeException("Connection refused: studio-runtime 31113 不可达"));
+                .thenThrow(new RuntimeException("Connection refused: studio-runtime 31014 不可达"));
 
             RuntimeException ex = assertThrows(RuntimeException.class, () ->
                 agentRuntimeClient.createReleaseInfo(AUTH_TOKEN, PROJECT_ID, releaseInfo));
 
             assertTrue(ex.getMessage().contains("Connection refused"), "异常消息应包含连接拒绝信息");
-            assertTrue(ex.getMessage().contains("31113"), "异常消息应包含端口信息");
+            assertTrue(ex.getMessage().contains("31014"), "异常消息应包含端口信息");
         }
     }
 

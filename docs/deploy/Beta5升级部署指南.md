@@ -11,7 +11,7 @@
 Beta5 对执行面做了拆分与下沉，核心变化两点：
 
 1. **移除 `studio-service`**（Java / Spring Boot，端口 31113）。原执行面的 Agent 执行 / 对话 / 模型调用 / 知识检索 等职责被拆解：
-   - 模型调用下沉到 `studio-runtime` 直连真实模型（OBS 直读模型配置，绕过原模型路由）；
+   - 模型调用能力迁入 Python 服务；默认使用 OBS 模型配置直连真实模型，不再依赖原 `studio-service` 路由；如部署方另有独立模型网关，仍可显式配置外部网关；
    - NL2 生成、提示词优化、模型调测等“构建期”能力独立为新的 `studio-builder` 微服务。
 2. **新增 `studio-builder`**（Python / FastAPI，端口 31015）。承担原嵌在 `studio-runtime` 镜像内的 `agent_builder` 模块——NL2 接口、提示词优化任务、模型调测等，独立构建、独立伸缩。
 
@@ -38,11 +38,13 @@ console → manager             console → manager
         → runtime ──┤                 → builder ──┤
                     │                              │
 manager → service（模型路由）   manager → builder（n2l/提示词）
-runtime → service（模型路由）   runtime → OBS 直连模型（绕过路由）
+runtime → service（模型路由）   runtime → OBS 直连模型（默认）
+                                      └→ 外部模型网关（可选）
 ```
 
 - `studio-manager` 不再调用 `studio-service`，改调 `studio-builder`（n2l 生成）与 `studio-runtime`。
-- `studio-runtime` 不再经 `studio-service` 做模型路由，默认 `MODEL_CONFIG_STRATEGY=obs` 直连真实模型。
+- `studio-runtime` 不再经 `studio-service` 做模型路由，默认 `MODEL_CONFIG_STRATEGY=obs` 直连真实模型。仅在部署了独立外部模型网关时配置 `MODEL_ROUTER_API`。
+
 ---
 
 ## 二、环境变量变化
@@ -64,10 +66,10 @@ runtime → service（模型路由）   runtime → OBS 直连模型（绕过路
 
 | 变量 | 变化 | Beta5 取值 / 说明 |
 |------|------|-------------------|
-| `MODEL_ROUTER_API` | 🗑️ | 不再经 studio-service 路由，整项删除 |
+| `MODEL_ROUTER_API` | 🔁 可选 | 删除旧值 `http://studio-service:31113/v1/agent-builder`；默认不配置。仅使用独立外部模型网关时设置，例如 `https://<model-gateway>/v1/agent-builder`，不得指向 `studio-runtime` 或 `studio-builder` 自身 |
 | `MODEL_CONFIG_STRATEGY` | 🔁 默认值 | 默认 `obs`（OBS 直连，绕过模型路由）；可选 `env` / `ir` |
 
-模型缓存、沙箱、OpenSearch、记忆库、`STORE_DB_*`、`STORE_DB_*` 提示词持久化、`IR_LLM_API_KEY`、日志等变量不变。
+模型缓存、沙箱、OpenSearch、记忆库、`STORE_DB_*`、`IR_LLM_API_KEY`、日志等变量不变。若使用 `MODEL_CONFIG_STRATEGY=ir` 并通过网关解析模型，应同时提供有效的外部 `MODEL_ROUTER_API`。
 
 ### 2.3 studio-builder（🆕 全新服务）
 
@@ -79,10 +81,11 @@ runtime → service（模型路由）   runtime → OBS 直连模型（绕过路
 | Redis [必填] | `REDIS_HOST` `REDIS_PASSWORD` `REDIS_PORT` `REDIS_MODE` `REDIS_DATABASE`（集群 `REDIS_CLUSTER_NODES`、哨兵 `REDIS_SENTINEL_MASTER` `REDIS_SENTINEL_NODES`） | 与 studio-runtime 同一套 Redis 语义 |
 | 对象存储 [必填] | `DATASOURCE_OBS_SERVER` `DATASOURCE_OBS_BUCKET` `DATASOURCE_OBS_AK` `DATASOURCE_OBS_SK` `DATASOURCE_OBS_ENABLE_SSL` | 与 studio-runtime 一致 |
 | 模型配置 | `MODEL_CONFIG_STRATEGY` | 默认 `obs` |
+| 外部模型网关 [选填] | `MODEL_ROUTER_API` | 默认不配置；仅接入独立外部模型网关时填写 `https://<model-gateway>/v1/agent-builder`，不得填写旧 `studio-service:31113`，也不得指向 builder 自身 |
 | 提示词任务持久化 [选填] | `STORE_DB_TYPE`（mysql/gaussdb）`STORE_DB_HOST` `STORE_DB_PORT` `STORE_DB_USER` `STORE_DB_PASSWORD` `STORE_DB_DATABASE`（默认 `agent-builder`）`STORE_DB_SCHEMA` `STORE_DB_SSLMODE` | 不填则仅存内存；与 runtime 共用同一套 `STORE_DB_*` 语义 |
 | 日志 | `JIUWEN_LOG_FILE` `JIUWEN_LOG_PATH` `JIUWEN_LOGGING_LOG_FILE` `LOGGING_LOG_PATH` `TGF_LOG_DIR` `LOG_VERBOSE` | 默认写到 `/opt/cloud/logs/` |
 
-> studio-builder 无数据库 schema 初始化需求，表结构由 `studio-manager` 首次启动时创建；`STORE_DB_*` 仅用于提示词优化任务的持久化。
+> studio-builder 启动时会按需初始化提示词优化任务所需的存储表；`studio-manager` 负责主业务表。`STORE_DB_*` 未完整配置时，提示词任务存储不可按数据库持久化。
 
 ### 2.4 studio-service（🗑️ 整体移除）
 
@@ -103,7 +106,7 @@ console 容器本身无新增环境变量，但其 nginx 上游（`backend.conf`
 | `manager_backend` | `studio-manager` | `studio-manager`（不变） |
 | `service_backend` | `studio-service:31113` | **需移除** |
 
-> 升级时检查 nginx.conf 中所有 `$service_backend:31113` 的 location，按路由语义改指到 runtime（执行/对话/检索）或 builder（n2l/提示词/模型调测）。具体路由表以发版时的 `studio-console.yaml` 内 nginx.conf 为准。
+> 不要把旧 `$service_backend:31113` location 机械改成 Runtime。Beta5 标准路由中，`/v1/agent-builder/chat/completions`、`/v1/agent-builder/embeddings`、`/v1/agent-builder/rerank` 直达 Builder，其余 `/v1`、`/v2` 请求默认进入 Manager，再由 Manager 按业务语义调用 Runtime 或 Builder。升级时应整体替换为发版包 `docker/compose/config/nginx.conf`（K8s 场景使用 `studio-console.yaml` 中对应配置），不要手工维护旧路由清单。
 
 ---
 
@@ -159,7 +162,7 @@ bash deploy.sh verify
 bash deploy.sh status
 ```
 
-> `deploy.sh update` 会读取新版 `docker-compose.yml`：旧 `studio-service` 服务块已移除，新增 `studio-builder` 服务块。若 `.env` 仍残留 `STUDIO_SERVICE_IMAGE` 等旧变量可忽略（不再被引用），但建议清理以避免误解。
+> `deploy.sh update` 会读取新版 `docker-compose.yml`：旧 `studio-service` 服务块已移除，新增 `studio-builder` 服务块。应从 `.env` 清理 `STUDIO_SERVICE_IMAGE`、`SERVICE_PORT`、`JIUWEN_BASE_URL`、`JIUWEN_BUILDER_URL` 以及指向 `studio-service:31113` 的 `MODEL_ROUTER_API`；如需外部模型网关，再以新的外部 HTTPS 地址单独配置 `MODEL_ROUTER_API`。
 
 ---
 
@@ -182,7 +185,7 @@ bash deploy.sh status
 | builder 已就绪 | `kubectl get pods -l app=studio-builder` 全 `Running`；`curl http://<builder_ip>:31015/v1/health` |
 | service 已下线 | `kubectl get deploy studio-service` 应返回 NotFound；console 不再有指向 31113 的健康流量 |
 | manager 调用 builder | manager 日志无 `studio-builder:31015` 连接失败；n2l / 提示词优化功能可用 |
-| runtime 直连模型 | runtime 日志无 `MODEL_ROUTER_API` / `studio-service:31113` 报错；`MODEL_CONFIG_STRATEGY=obs` 生效，模型调用成功 |
+| 模型调用 | 默认模式下 `MODEL_CONFIG_STRATEGY=obs` 生效，Runtime/Builder 日志无 `studio-service:31113` 报错且模型调用成功；若配置 `MODEL_ROUTER_API`，确认目标是独立外部网关且网关调用成功 |
 | 历史会话 / 工作流 | 升级后对存量 Agent / 工作流做一次对话与执行回归（Beta5 修复了控制器与 LLM 节点历史会话问题） |
 
 如出现 builder / runtime 反复重启，先查 Redis 与 OBS 连通性（Python 服务启动必须连 Redis，不可达会直接失败），再查 `STORE_DB_*` 凭证是否含特殊字符（旧版曾因密码特殊字符导致连接失败）。

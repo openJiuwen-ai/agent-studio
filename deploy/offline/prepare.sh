@@ -85,7 +85,6 @@ build_and_save_images() {
     #   console 产出 agent-console.tar（不是 dist/ 目录）
     #   runtime 的 EIStart.py 位于 agent_runtime/ 下（不是 src/）
     if [ ! -f "${DOCKER_DIR}/studio-manager/lib/studio-manager.jar" ] || \
-       [ ! -f "${DOCKER_DIR}/studio-service/lib/studio-service.jar" ] || \
        [ ! -f "${DOCKER_DIR}/studio-console/agent-console.tar" ] || \
        [ ! -f "${DOCKER_DIR}/studio-runtime/agent_runtime/EIStart.py" ]; then
         need_build=true
@@ -121,27 +120,22 @@ build_and_save_images() {
     fi
 
     # ---- 构建应用镜像和内置日志数据源的 Grafana 镜像 ----
-    log_info "[1/6] 构建 studio-manager 镜像..."
+    log_info "[1/5] 构建 studio-manager 镜像..."
     cd "${DOCKER_DIR}/studio-manager"
     docker build --build-arg BASE_IMAGE="${BASE_IMAGE_JAVA}" \
         -t "studio-manager:${IMAGE_TAG}" .
 
-    log_info "[2/6] 构建 studio-service 镜像..."
-    cd "${DOCKER_DIR}/studio-service"
-    docker build --build-arg BASE_IMAGE="${BASE_IMAGE_JAVA}" \
-        -t "studio-service:${IMAGE_TAG}" .
-
-    log_info "[3/6] 构建 studio-console 镜像..."
+    log_info "[2/5] 构建 studio-console 镜像..."
     cd "${DOCKER_DIR}/studio-console"
     docker build --build-arg BASE_IMAGE="${BASE_IMAGE_NGINX}" \
         -t "studio-console:${IMAGE_TAG}" .
 
-    log_info "[4/6] 构建 studio-runtime 镜像..."
+    log_info "[3/5] 构建 studio-runtime 镜像..."
     cd "${DOCKER_DIR}/studio-runtime"
     docker build --build-arg BASE_IMAGE="${BASE_IMAGE_PYTHON}" \
         -t "studio-runtime:${IMAGE_TAG}" .
 
-    log_info "[5/6] 构建 studio-builder 镜像..."
+    log_info "[4/5] 构建 studio-builder 镜像..."
     rm -rf "${DOCKER_DIR}/studio-builder/agent_builder" \
            "${DOCKER_DIR}/studio-builder/model_service" \
            "${DOCKER_DIR}/studio-builder/storage"
@@ -156,7 +150,7 @@ build_and_save_images() {
     fi
     rm -rf agent_builder model_service storage
 
-    log_info "[6/6] 构建内置 VictoriaLogs 数据源的 Grafana 镜像..."
+    log_info "[5/5] 构建内置 VictoriaLogs 数据源的 Grafana 镜像..."
     local grafana_image="openjiuwen/grafana-victorialogs:11.3.0-0.29.0"
     if docker image inspect "${grafana_image}" > /dev/null 2>&1; then
         log_info "${grafana_image} 已存在，跳过构建"
@@ -177,7 +171,7 @@ build_and_save_images() {
 save_images() {
     log_step "导出应用 Docker 镜像到 tar 文件..."
 
-    local images=("studio-manager" "studio-service" "studio-console" "studio-runtime" "studio-builder")
+    local images=("studio-manager" "studio-console" "studio-runtime" "studio-builder")
 
     for image in "${images[@]}"; do
         local tar_name="${image}_${BUILD_TIME}.${BUILD_PLATFORM}.tar"
@@ -301,7 +295,6 @@ generate_image_info() {
 # 部署时 .env 中镜像配置应为:
 STUDIO_CONSOLE_IMAGE=studio-console:${IMAGE_TAG}
 STUDIO_MANAGER_IMAGE=studio-manager:${IMAGE_TAG}
-STUDIO_SERVICE_IMAGE=studio-service:${IMAGE_TAG}
 STUDIO_RUNTIME_IMAGE=studio-runtime:${IMAGE_TAG}
 STUDIO_BUILDER_IMAGE=studio-builder:${IMAGE_TAG}
 EOF

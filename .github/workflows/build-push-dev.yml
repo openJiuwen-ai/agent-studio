@@ -67,17 +67,6 @@ jobs:
           cp backend/studio-manager-service/src/main/resources/application-manager.yml docker/studio-manager/config/
           cp backend/studio-manager-service/src/main/resources/log4j2.xml docker/studio-manager/config/
 
-      - name: Prepare studio-service artifacts
-        run: |
-          mkdir -p docker/studio-service/lib
-          cp backend/studio-runtime/target/studio-runtime-*.jar docker/studio-service/lib/studio-service.jar
-          if [ -d backend/studio-runtime/target/lib ]; then
-            cp backend/studio-runtime/target/lib/* docker/studio-service/lib/
-          fi
-          mkdir -p docker/studio-service/config
-          cp backend/studio-runtime-service/src/main/resources/application-runtime.yml docker/studio-service/config/
-          cp backend/studio-runtime-service/src/main/resources/log4j2.xml docker/studio-service/config/
-
       - name: Build frontend with pnpm
         run: |
           cd frontend
@@ -146,7 +135,6 @@ jobs:
           name: docker-dev-build-contexts
           path: |
             docker/studio-manager
-            docker/studio-service
             docker/studio-console
             docker/studio-runtime
             docker/studio-builder
@@ -162,7 +150,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [studio-manager, studio-service, studio-console, studio-runtime, studio-builder]
+        service: [studio-manager, studio-console, studio-runtime, studio-builder]
         arch: [amd64, arm64]
 
     steps:
@@ -206,7 +194,6 @@ jobs:
           set -euo pipefail
           case "${SERVICE}" in
             studio-manager) BASE_IMAGE=eclipse-temurin:17-jre; DOCKERFILE=Dockerfile ;;
-            studio-service) BASE_IMAGE=eclipse-temurin:17-jre; DOCKERFILE=Dockerfile ;;
             studio-console) BASE_IMAGE=nginx:1.27; DOCKERFILE=Dockerfile ;;
             studio-runtime) BASE_IMAGE=python:3.11-slim; DOCKERFILE=Dockerfile.dev ;;
             studio-builder) BASE_IMAGE=python:3.11-slim; DOCKERFILE=Dockerfile ;;
