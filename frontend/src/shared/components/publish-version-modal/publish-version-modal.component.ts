@@ -191,10 +191,12 @@ export class PublishVersionModalComponent {
             },
           });
         }
+        this.publishSuccess.emit();
         this.close();
         return;
       }
       this.message.create('success', this.i18n.transform('publish_success'));
+      this.publishSuccess.emit();
     }
     this.agentDataServe.setPublishStatus('succeeded');
     this.close();
