@@ -206,7 +206,8 @@ public class ModelAdapter extends ResourceAdapter {
         if (modelBase == null) {
             try {
                 // id已存在,需要更换id
-                if (modelServiceMapper.queryModelServiceDetail(model.getId()) != null) {
+                boolean globalExists = modelServiceMapper.queryModelServiceDetail(model.getId()) != null;
+                if (globalExists) {
                     String newId = UUID.randomUUID().toString();
                     model.setId(newId);
                     result.setNewId(newId);
@@ -215,6 +216,8 @@ public class ModelAdapter extends ResourceAdapter {
                     Arrays.asList(model), false);
             } catch (AgentStudioException e) {
                 handleException(result, e);
+            } catch (Exception e) {
+                log.warn("Failed to import model. modelId:{}", model.getId(), e);
             }
         } else {
             if (!Strings.CS.equals(model.getId(), modelBase.getId())) {

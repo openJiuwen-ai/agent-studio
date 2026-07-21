@@ -7,8 +7,8 @@
 
 提供可插拔的模型配置来源：
 1. EnvVarModelConfigProvider - 从环境变量读取
-2. OBSModelConfigProvider - 从 OBS 模型网关读取（后续开发）
-3. IRModelConfigProvider - 从 IR 配置读取，环境变量作为默认值兜底（推荐用于商用九问 IR 兼容）
+2. OBSModelConfigProvider - 从 OBS 对象存储读取模型服务元数据和认证信息
+3. IRModelConfigProvider - 从 IR 配置读取，环境变量作为默认值兜底（推荐用于旧版九问 IR 兼容）
 4. Nl2ModelConfigProvider - 从 NL2 Agent 的 modelInfo 读取模型配置，用于 nl_to_agent 模块调用模型
 """
 
@@ -19,6 +19,8 @@ from agent_runtime.common.ir_interfaces import ModelConfigProvider
 from agent_runtime.context.request_context import _request_ctx
 from openjiuwen.core.foundation.llm import Model, ModelClientConfig, ModelRequestConfig
 from openjiuwen.core.workflow.components.llm.llm_comp import LLMCompConfig
+
+import model_service  # noqa: F401  -- 触发 StudioModelClient 注册进 openjiuwen registry（client_provider="studio" 须先注册）
 
 
 def _normalize_api_base(url: str) -> str:
@@ -80,7 +82,7 @@ def _extract_auth_headers(headers: dict) -> dict:
 class EnvVarModelConfigProvider(ModelConfigProvider):
     """从环境变量读取模型配置"""
 
-    def get_llm_config(
+    async def get_llm_config(
         self,
         ir_node: dict,
         global_config: Optional[dict] = None,
@@ -132,7 +134,7 @@ class Nl2ModelConfigProvider:
     """
 
     @staticmethod
-    def get_llm_config(model_info) -> LLMCompConfig:
+    async def get_llm_config(model_info) -> LLMCompConfig:
         """从 modelInfo 构建 LLM 组件配置
 
         Args:
@@ -185,7 +187,7 @@ class Nl2ModelConfigProvider:
         )
 
 
-def get_nl2_model(model_info) -> Model:
+async def get_nl2_model(model_info) -> Model:
     """工厂方法：根据 modelInfo 创建 openjiuwen Model 实例
 
     用于 nl_to_agent 模块中 Nl2AgentProcessor 获取模型实例，
@@ -197,7 +199,7 @@ def get_nl2_model(model_info) -> Model:
     Returns:
         Model: openjiuwen 的 Model 实例，支持 invoke/stream 等调用方式
     """
-    llm_config = Nl2ModelConfigProvider.get_llm_config(model_info)
+    llm_config = await Nl2ModelConfigProvider.get_llm_config(model_info)
     return Model(
         model_client_config=llm_config.model_client_config,
         model_config=llm_config.model_config,
@@ -215,7 +217,7 @@ class PromptOptimizeModelProvider:
     """
 
     @staticmethod
-    def get_llm_config(model_info) -> LLMCompConfig:
+    async def get_llm_config(model_info) -> LLMCompConfig:
         """从 modelInfo 构建提示词优化专用的 LLM 组件配置
 
         Args:
@@ -279,7 +281,7 @@ class PromptOptimizeModelProvider:
         )
 
 
-def get_prompt_optimize_model(model_info) -> Model:
+async def get_prompt_optimize_model(model_info) -> Model:
     """工厂方法：为提示词优化特性创建 openjiuwen Model 实例
 
     用于 agent_builder 的 prompt 管理模块（prompt.py / mmapo.py）获取模型实例，
@@ -292,7 +294,7 @@ def get_prompt_optimize_model(model_info) -> Model:
     Returns:
         Model: openjiuwen 的 Model 实例，支持 invoke/stream 等调用方式
     """
-    llm_config = PromptOptimizeModelProvider.get_llm_config(model_info)
+    llm_config = await PromptOptimizeModelProvider.get_llm_config(model_info)
     return Model(
         model_client_config=llm_config.model_client_config,
         model_config=llm_config.model_config,
@@ -300,14 +302,96 @@ def get_prompt_optimize_model(model_info) -> Model:
 
 
 class OBSModelConfigProvider(ModelConfigProvider):
-    """从 OBS 模型网关读取模型配置（后续开发）"""
+    """从 OBS 对象存储读取模型配置（薄配置）。
 
-    def get_llm_config(
+    IR 节点的 modelName 存储的是 modelServiceId（UUID），据此定位 OBS 元数据：
+
+    - ``model-service/ir/{modelServiceId}.json``：模型服务信息（apiUrl / modelName / providerId /
+      projectId）。
+    - ``model-auth/auth/{projectId}/{providerId}/{authId}.json``：鉴权信息（authType / authInfo）。
+
+    本 provider 只构建薄 ``LLMCompConfig``（``client_provider="studio"`` + extra 字段携带
+    model_service_id / auth_id / refresh），真实解析延迟到 ``StudioModelClient.invoke`` 时由
+    ``model_service.resolver`` 完成，以支持 refresh / failover 重解析。projectId / workspace_id
+    不放入 config，由 ``StudioModelClient`` 从请求头取。
+    """
+
+    async def get_llm_config(
         self,
         ir_node: dict,
         global_config: Optional[dict] = None,
     ) -> LLMCompConfig:
-        raise NotImplementedError("OBSModelConfigProvider 尚未实现")
+        """构建薄 ``LLMCompConfig``，真实解析延迟到 ``StudioModelClient.invoke`` 时完成。
+
+        不在此解析真实 api_base / api_key，仅把解析所需输入放入 ``ModelClientConfig`` extra 字段
+        （model_service_id / auth_id / refresh）；连接信息由 ``model_service.resolver`` 在 invoke
+        时解析，支持 refresh / failover 重解析。
+        """
+        # 1. 从 IR 节点提取 modelServiceId 和超参数
+        configs = ir_node.get("configs", {})
+        model_config = configs.get("modelConfig") or configs.get("model", {})
+        hyper_params = model_config.get("hyperParameters", {})
+
+        raw_model_name = (
+            model_config.get("modelName")
+            or model_config.get("model_name")
+            or ""
+        )
+
+        if not raw_model_name:
+            raise ValueError(
+                "OBSModelConfigProvider: modelName (modelServiceId) is required in IR node"
+            )
+
+        # pipe-delimited 格式 "deploymentId|serviceId" 取首段作为 modelServiceId
+        model_service_id = raw_model_name.split("|")[0]
+
+        # 2. 提取 auth_id / refresh（解析延迟到 invoke 时）
+        extension = model_config.get("extension", {})
+        auth_id = extension.get("authId", "")
+        refresh = bool(model_config.get("refresh") or extension.get("refresh"))
+
+        # 3. 薄配置：api_base / api_key 为占位（BaseModelClient._validate_config 要求非空），
+        #    真实连接信息由 resolver 在 invoke 时解析。
+        base = settings.llm
+        model_client_config = ModelClientConfig(
+            client_provider="studio",
+            api_key="sk-placeholder",
+            api_base="https://studio-placeholder",
+            timeout=base.timeout,
+            verify_ssl=base.ssl_verify,
+            model_service_id=model_service_id,   # extra 字段，供 StudioModelClient 解析
+            auth_id=auth_id,
+            refresh=refresh,
+        )
+
+        # 4. 请求级超参数；真实 model_name 由 resolver 解析后在 _invoke_one_model 覆盖。
+        temperature = hyper_params.get("temperature", base.temperature)
+        top_p = hyper_params.get("top_p", base.top_p)
+        max_tokens = hyper_params.get("max_tokens", None)
+        frequency_penalty = hyper_params.get("frequency_penalty", None)
+
+        extra_body = None
+        thinking = hyper_params.get("thinking")
+        if thinking and isinstance(thinking, dict) and "type" in thinking:
+            extra_body = {"thinking": thinking}
+
+        model_request_config = ModelRequestConfig(
+            model=model_service_id,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            extra_body=extra_body,
+        )
+        if frequency_penalty is not None:
+            model_request_config.frequency_penalty = frequency_penalty
+
+        return LLMCompConfig(
+            model_client_config=model_client_config,
+            model_config=model_request_config,
+            cache_stream=True,
+        )
+
 
 
 class IRModelConfigProvider(ModelConfigProvider):
@@ -319,7 +403,7 @@ class IRModelConfigProvider(ModelConfigProvider):
     - 环境变量作为兜底默认值
     """
 
-    def get_llm_config(
+    async def get_llm_config(
         self,
         ir_node: dict,
         global_config: Optional[dict] = None,

@@ -129,17 +129,26 @@ lite:
   api-code:
     enabled: ${lite_api_code_enabled:false}
 
-obs:
-  url: ${obs_url:}
-  ak: ${obs_ak:}
-  sk: ${obs_sk:}
-  bucket: ${obs_bucket:}
-  staging-bucket: ${obs_staging_bucket:agent-builder-files-staging}
-  opensource: ${obs_opensource:true}
-  expire-time: ${obs_expire_time:7}
-  bucket_storage_limit: ${obs_bucket_storage_limit:100}
-  path:
-    style: ${DATASOURCE_OBS_PATH_STYLE:path}
+storage:
+  type: ${storage_type:OBS}
+  expires: ${obs_expire_time:7}
+  bucket-storage-limit: ${obs_bucket_storage_limit:100}
+  custom-class: ${STORAGE_CUSTOM_CLASS:}
+  custom-classpath: ${STORAGE_CUSTOM_CLASSPATH:}
+  obs:
+    url: ${obs_url:}
+    ak: ${obs_ak:}
+    sk: ${obs_sk:}
+    bucket: ${obs_bucket:}
+    staging-bucket: ${obs_staging_bucket:}
+    opensource: ${obs_opensource:true}
+    auto-create-bucket: ${obs_bucket_auto_create:true}
+    path-style: ${DATASOURCE_OBS_PATH_STYLE:path}
+  local:
+    base-path: ${storage_local_base_path:}
+    bucket: ${storage_local_bucket:}
+    staging-bucket: ${storage_local_staging_bucket:}
+    server-url: ${storage_local_server_url:}
 
 iam:
   url: ${iam_endpoint:}
@@ -287,7 +296,6 @@ agent:
   insight-exec: ${agent_insight_exec:insight_exec_%s_%s}
   max-conversation-size: ${agent_max_conversation_size:50}
   max-execution-size: ${agent_max_execution_size:20}
-  max-resolve-size: ${agent_max_resolve_size:5000}
   max-resolve-file-number: ${agent_max_resolve_file_number:10}
   max-upload-file-size: ${agent_max_upload_file_size:131072}
   max-upload-image-size: ${agent_max_upload_image_size:5120}
@@ -457,3 +465,23 @@ system:
   crypt:
     # 系统默认的加解密方式，NO_OP_CIPHER-表示不加密
     name: ${system_crypt_name:NO_OP_CIPHER}
+# 鉴权配置
+auth:
+  path:
+    # 免鉴权路径（逗号分隔），环境变量：auth_path_excluded
+    excluded: ${auth_path_excluded:/v1/health, /health}
+  sso:
+    # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权（验证 Access-Token），留空则使用默认简单鉴权，环境变量：auth_sso_validate_url
+    validate-url: ${auth_sso_validate_url:}
+    # SSO 请求头名称（用于传递 Access-Token），环境变量：auth_sso_header
+    header: ${auth_sso_header:Access-Token}
+  # SSO 响应字段与用户属性映射
+  user-info:
+    claims:
+      user-id: ${user_info_claims_user_id:user_id}
+      user-name: ${user_info_claims_user_name:user_name}
+      domain-id: ${user_info_claims_domain_id:domain_id}
+      project-id: ${user_info_claims_project_id:project_id}
+    defaults:
+      domain-id: ${user_info_defaults_domain_id:0}
+      project-id: ${user_info_defaults_project_id:0}

@@ -105,30 +105,6 @@ public interface AgentRuntimeApi {
         @RequestParam(value = "channel_type", required = true) String channelType,
         @ApiParam(value = "版本ID") @RequestParam(value = "version_id", required = false) String versionId);
 
-    @ApiOperation(value = "Agent对话上传文件", nickname = "uploadAgentFile", notes = "Agent对话上传文件",
-        response = FileUploadRsp.class, tags = {"AgentRuntime"})
-    @ApiResponses(value = {
-        @ApiResponse(code = 200, message = "agent文件上传响应体", response = FileUploadRsp.class),
-        @ApiResponse(code = 400, message = "Bad Request 请求错误", response = ErrorRsp.class),
-        @ApiResponse(code = 401, message = "Unauthorized 鉴权失败", response = String.class),
-        @ApiResponse(code = 403, message = "Forbidden 没有操作权限", response = ErrorRsp.class),
-        @ApiResponse(code = 404, message = "Not Found 找不到资源", response = ErrorRsp.class),
-        @ApiResponse(code = 500, message = "Internal Server Error 服务内部错误", response = ErrorRsp.class)
-    })
-    @RequestMapping(value = "/v1/{project_id}/agent-runtime/upload-file", produces = {"application/json"},
-        consumes = {"multipart/form-data"}, method = RequestMethod.POST)
-    ResponseEntity<FileUploadRsp> uploadAgentFile(
-        @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
-        @ApiParam(value = "项目空间id", required = true) @RequestParam(value = "workspace_id", required = true)
-        String workspaceId, @Pattern(regexp = "^[a-zA-Z0-9_-]+$") @Size(max = 64)
-        @Parameter(in = ParameterIn.PATH, description = "租户项目id", required = true, schema = @Schema())
-        @PathVariable("project_id") String projectId,
-        @Parameter(description = "file detail") @Valid @RequestPart(value = "file", required = true) MultipartFile file,
-        @Min(1) @Max(180) @ApiParam(value = "访问授权过期时间（天）", allowableValues = "180, 1")
-        @RequestParam(value = "expires", required = false) Integer expires,
-        @ApiParam(value = "是否是图片上传", defaultValue = "false")
-        @RequestParam(value = "is_image", required = false, defaultValue = "false") Boolean isImage);
-
     @ApiOperation(value = "", nickname = "voiceRecognition", notes = "一句话语音识别", response = AsrRsp.class,
         tags = {"AgentRuntime"})
     @ApiResponses(value = {

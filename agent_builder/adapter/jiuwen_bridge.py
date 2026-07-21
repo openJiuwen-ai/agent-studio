@@ -10,8 +10,6 @@ agent_builder depends on, with implementations identical to the originals:
   - ToolCall, Tool, UsageMetadata, BaseMessage, ChatMessage,
     AIMessage, HumanMessage, SystemMessage, FunctionMessage, ToolMessage
     (from jiuwen.common.llm_service.messages)
-  - DATASOURCE_REDIS_TTL_KEY  (from jiuwen.common.configs.env_constants)
-  - EXPIRATION_TIME  (from jiuwen.memory.store.history)
   - request_json, request_ctx, request, g  (from jiuwen.serve.common.context)
 """
 
@@ -292,10 +290,6 @@ class ToolMessage(BaseMessage):
     tool_call_id: str
 
 
-# ─── jiuwen.common.configs.env_constants ─────────────────────────────────────
-
-DATASOURCE_REDIS_TTL_KEY = "DATASOURCE_REDIS_TTL"
-
 # ─── jiuwen.common.utils.singleton ───────────────────────────────────────────
 
 singleton_lock = threading.Lock()
@@ -312,10 +306,6 @@ class Singleton(abc.ABCMeta, type):
                 cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
             return cls._instances[cls]
 
-
-# ─── jiuwen.memory.store.history ─────────────────────────────────────────────
-
-EXPIRATION_TIME = 3 * 24 * 60 * 60  # 259200 seconds = 3 days
 
 # ─── jiuwen.serve.common.context ─────────────────────────────────────────────
 

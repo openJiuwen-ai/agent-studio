@@ -6,16 +6,11 @@
 package com.openjiuwen.studio.agent.runtime.controller;
 
 import com.openjiuwen.studio.agent.common.utils.ResponseModel;
-import com.openjiuwen.studio.agent.common.dto.AgentExecutionInfo;
-import com.openjiuwen.studio.agent.common.dto.run.AgentExecutionQueries;
 import com.openjiuwen.studio.agent.runtime.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.common.dto.run.ConversationDeleteResp;
 import com.openjiuwen.studio.agent.common.dto.agent.ConversionQueries;
 import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
-import com.openjiuwen.studio.agent.common.dto.run.GetAgentExecutionInfoQo;
 import com.openjiuwen.studio.agent.runtime.dto.GetMemoryChunksQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentConversationsQo;
-import com.openjiuwen.studio.agent.common.dto.run.ListAgentExecutionQueriesQo;
 import com.openjiuwen.studio.agent.runtime.dto.MemoryChunk;
 import com.openjiuwen.studio.agent.runtime.dto.MemoryVariable;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
@@ -69,23 +64,8 @@ public class ConversationManagementApiController implements ConversationManageme
     }
 
     @Override
-    public ResponseEntity<AgentExecutionInfo> getAgentExecutionInfo(String projectId, String executionId, String agentId, GetAgentExecutionInfoQo getAgentExecutionInfoQo) {
-        return ResponseModel.success(conversationManagementService.getAgentExecutionInfo(projectId, executionId, agentId, getAgentExecutionInfoQo));
-    }
-
-    @Override
     public ResponseEntity<AutoAddResultJsonObject> getMemoryChunks(String projectId, String agentId, String conversationId, GetMemoryChunksQo getMemoryChunksQo) {
         return ResponseModel.success(conversationManagementService.getMemoryChunks(projectId, agentId, conversationId, getMemoryChunksQo));
-    }
-
-    @Override
-    public ResponseEntity<ConversionQueries> listAgentConversations(String projectId, String agentId, ListAgentConversationsQo listAgentConversationsQo) {
-        return ResponseModel.success(conversationManagementService.listAgentConversations(projectId, agentId, listAgentConversationsQo));
-    }
-
-    @Override
-    public ResponseEntity<AgentExecutionQueries> listAgentExecutionQueries(String projectId, String agentId, String conversationId, ListAgentExecutionQueriesQo listAgentExecutionQueriesQo) {
-        return ResponseModel.success(conversationManagementService.listAgentExecutionQueries(projectId, agentId, conversationId, listAgentExecutionQueriesQo));
     }
 
     @Override

@@ -30,9 +30,7 @@ function env_init(){
 
   # 合并包修改agent-service的endpoint
   if [[ "${RUN_WITH_ENGINE}" == "true" ]]; then
-      export MODEL_ROUTER_API=https://${host}:31113/v1/agent-builder/chat/completions
-      export AGENT_RUNTIME_ENDPOINT=https://${host}:31113
-      echo "MODEL_ROUTER_API: $MODEL_ROUTER_API"
+      export AGENT_RUNTIME_ENDPOINT=https://${host}:31014
       echo "AGENT_RUNTIME_ENDPOINT: $AGENT_RUNTIME_ENDPOINT"
   fi
 }

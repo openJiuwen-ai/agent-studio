@@ -49,6 +49,7 @@ enum mapKeys {
 export class PluginHeaderComponent {
   @Input() pluginInfo;
   @Input() isToolDetail: boolean = false;
+  @Input() previewVersionId = '';
   @Output() update = new EventEmitter<void>();
   // 是否来自agentBuilder
   @Input() isFromAgentBuilder: boolean = false;

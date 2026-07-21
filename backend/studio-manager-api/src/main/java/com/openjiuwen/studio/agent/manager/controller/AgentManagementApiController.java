@@ -13,6 +13,7 @@ import com.openjiuwen.studio.agent.manager.dto.AgentVersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ApplicationListReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddStudioResourceRequestBody;
+import com.openjiuwen.studio.agent.manager.enums.ExportModeEnum;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CreateAgentReq;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -193,7 +194,7 @@ public class AgentManagementApiController implements AgentManagementApi {
         String importAgents, String importTools, String importWorkflows) {
         return ResponseModel.success(
             agentManagementService.importAgents(workspaceId, projectId, file, importAgents, importTools,
-                importWorkflows));
+                importWorkflows, ExportModeEnum.STRICT.getCode()));
     }
 
     @Override

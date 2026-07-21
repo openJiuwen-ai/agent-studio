@@ -92,7 +92,6 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -146,9 +145,6 @@ public class AgentRuntimeServiceTest extends BaseTest {
 
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     private RuntimeModelServiceController modelController;
-
-    @Value("${obs.bucket}")
-    private String bucket;
 
     @BeforeAll
     static void init() {
@@ -537,9 +533,8 @@ public class AgentRuntimeServiceTest extends BaseTest {
 
         InputStream inputStream = file.getInputStream();
         String originalFilename = file.getOriginalFilename();
-        TemporarySignatureResponse temporarySignatureResponse = new TemporarySignatureResponse("url");
         when(obsService.uploadObsFileWithExpires(inputStream, originalFilename, 7)).thenReturn("name");
-        when(obsService.getStagingTemporaryGetRsp(anyString(), anyLong())).thenReturn(temporarySignatureResponse);
+        when(obsService.getStagingDownloadUrl(anyString(), anyLong())).thenReturn("url");
         when(obsService.uploadObsFileWithExpires(inputStream, "test.txt", 300)).thenReturn("url");
         try {
             agentRuntimeService.uploadAgentFile(workspaceId, projectId, file, -1, false);
@@ -578,9 +573,8 @@ public class AgentRuntimeServiceTest extends BaseTest {
 
         InputStream inputStream = file.getInputStream();
         String originalFilename = file.getOriginalFilename();
-        TemporarySignatureResponse temporarySignatureResponse = new TemporarySignatureResponse("url");
         when(obsService.uploadObsFileWithExpires(inputStream, originalFilename, 7)).thenReturn("name");
-        when(obsService.getStagingTemporaryGetRsp(anyString(), anyLong())).thenReturn(temporarySignatureResponse);
+        when(obsService.getStagingDownloadUrl(anyString(), anyLong())).thenReturn("url");
         when(obsService.uploadObsFileWithExpires(inputStream, "test.jpg", 300)).thenReturn("url");
         // 用力不通过
         try {
@@ -677,9 +671,7 @@ public class AgentRuntimeServiceTest extends BaseTest {
         ReflectionTestUtils.setField(service, "obsService", obs);
         when(obs.uploadObsFileWithExpires(any(), any(), anyInt())).thenReturn("url");
         when(obs.uploadToStagingWithPublicRead(any(), any(), anyInt())).thenReturn("url");
-
-        TemporarySignatureResponse rsp = new TemporarySignatureResponse("url");
-        when(obs.getStagingTemporaryGetRsp(any(), Mockito.anyLong())).thenReturn(rsp);
+        when(obsService.getStagingDownloadUrl(anyString(), anyLong())).thenReturn("url");
 
         ReflectionTestUtils.setField(service, "fileReadOnly", true);
 

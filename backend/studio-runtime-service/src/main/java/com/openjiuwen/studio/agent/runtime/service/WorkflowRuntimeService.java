@@ -13,13 +13,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.openjiuwen.studio.agent.common.bo.AgentMetadata;
 import com.openjiuwen.studio.agent.common.constant.Constants;
 import com.openjiuwen.studio.agent.common.dto.agent.ConversationInfo;
-import com.openjiuwen.studio.agent.common.dto.agent.ConversionQueries;
-import com.openjiuwen.studio.agent.common.dto.agent.ExecutionInfo;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
 import com.openjiuwen.studio.agent.common.dto.agent.NodeRunInfo;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.common.dto.run.AdditionalQuestionsWorkflowReq;
-import com.openjiuwen.studio.agent.common.dto.run.ListConversationQueriesQo;
 import com.openjiuwen.studio.agent.common.enums.NodeType;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
@@ -32,11 +29,8 @@ import com.openjiuwen.studio.agent.common.utils.RequestHeaderHolderUtils;
 import com.openjiuwen.studio.agent.runtime.constant.Constant;
 import com.openjiuwen.studio.agent.runtime.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.runtime.dto.ContextDTO;
-import com.openjiuwen.studio.agent.common.dto.ExecutionQueries;
-import com.openjiuwen.studio.agent.common.dto.run.GetExecutionInsightQo;
 import com.openjiuwen.studio.agent.runtime.dto.JiuwenEvent;
 import com.openjiuwen.studio.agent.runtime.dto.JiuwenEventData;
-import com.openjiuwen.studio.agent.common.dto.run.ListExecutionQueriesQo;
 import com.openjiuwen.studio.agent.runtime.dto.ParamExtractionIndex;
 import com.openjiuwen.studio.agent.common.dto.run.RetrieveConversationQo;
 import com.openjiuwen.studio.agent.runtime.dto.RoundDTO;
@@ -75,7 +69,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -906,248 +899,6 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
             return list;
         }
         return input;
-    }
-
-    @Override
-    public ExecutionInfo getExecutionInsight(String projectId, String workflowId, String executionId,
-        GetExecutionInsightQo getExecutionInsightQo) {
-        WorkflowInstanceEntity workflowInstances = workflowInstanceService.get(executionId,
-            getExecutionInsightQo.getVersion());
-        if (workflowInstances == null) {
-            return new ExecutionInfo();
-        }
-        ExecutionInfo executionInfo = workflowInstanceService.convertExecutionInfo(workflowInstances);
-        // 处理异常的事件, 对每条workflow_node_message debug事件进行转换并倒叙排序
-        Map<String, String> nodeIdToErrorMessage = nodeIdToErrorMessage(workflowInstances);
-        List<NodeRunInfo> nodeRunInfos = getSortedNodeRunInfos(workflowInstances, nodeIdToErrorMessage);
-        try {
-            // 参数提取事件的特殊处理
-            List<NodeRunInfo> finalNodeRunInfos = processParamsExtractionEvent(nodeRunInfos);
-            executionInfo.setEventList(finalNodeRunInfos);
-            setJiuwenOriginEventTime(executionInfo, finalNodeRunInfos);
-        } catch (Exception e) {
-            log.error("Failed to obtain debugging event", e);
-            throw new AgentStudioException(StudioError.OBTAIN_DEBUG_EVENT_FAILED);
-        }
-        return executionInfo;
-    }
-
-    private List<NodeRunInfo> getSortedNodeRunInfos(WorkflowInstanceEntity workflowInstances,
-        Map<String, String> nodeIdToErrorMessage) {
-        List<NodeRunInfo> nodeRunInfos = new ArrayList<>();
-        for (JiuwenEvent jiuwenEvent : workflowInstances.getEventList()) {
-            if (Strings.CS.equals(jiuwenEvent.getEvent(),
-                JiuwenEventType.WORKFLOW_NODE_MESSAGE.name().toLowerCase(Locale.ROOT))) {
-                // 异常节点errorMessage处理
-                errorNodeMessage(jiuwenEvent, nodeIdToErrorMessage);
-                nodeRunInfos.add(JiuwenEventProcessor.convertNodeRunInfo(jiuwenEvent.getData()));
-            }
-        }
-        nodeRunInfos = nodeRunInfos.stream().sorted(Comparator.comparing(NodeRunInfo::getStartTime)).toList();
-        processOriginLoopInputs(nodeRunInfos);
-        return nodeRunInfos;
-    }
-
-    private void processOriginLoopInputs(List<NodeRunInfo> nodeRunInfos) {
-        if (nodeRunInfos.size() <= 1) {
-            return;
-        }
-        for (int i = 1; i < nodeRunInfos.size(); i++) {
-            NodeRunInfo currentNode = nodeRunInfos.get(i);
-            NodeRunInfo previousNode = nodeRunInfos.get(i - 1);
-            if (NodeType.LOOP.getType().equals(currentNode.getNodeType()) &&
-                    NodeRunInfo.NodeStatusEnum.FINISHED.equals(currentNode.getNodeStatus())) {
-                currentNode.setInputs(previousNode.getInputs());
-            }
-        }
-    }
-
-    private Map<String, String> nodeIdToErrorMessage(WorkflowInstanceEntity workflowInstances) {
-        Map<String, String> nodeIdToErrorMessage = new HashMap<>();
-        for (JiuwenEvent jiuwenEvent : workflowInstances.getEventList()) {
-            if (Strings.CS.equals(jiuwenEvent.getEvent(), JiuwenEventType.EXCEPTION.name().toLowerCase(Locale.ROOT))) {
-                Map<String, String> dataMap = JsonUtils.json2Obj(jiuwenEvent.getDataException(),
-                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {
-                    });
-
-                if (dataMap == null || dataMap.isEmpty()) {
-                    continue;
-                }
-                String nodeId = dataMap.get(JIUWEN_EXCEPTION_NODE_ID);
-                dataMap.remove(JIUWEN_EXCEPTION_NODE_ID);
-                String oriMessage = JSON.toJSONString(dataMap, SerializerFeature.WriteMapNullValue);
-                nodeIdToErrorMessage.put(nodeId, oriMessage);
-            }
-        }
-        return nodeIdToErrorMessage;
-    }
-
-    private void errorNodeMessage(JiuwenEvent jiuwenEvent, Map<String, String> nodeIdToErrorMessage) {
-        if (nodeIdToErrorMessage.containsKey(jiuwenEvent.getData().getComponentId())
-            && JiuwenEventData.StatusEnum.ERROR.equals(jiuwenEvent.getData().getStatus())) {
-            jiuwenEvent.getData()
-                .getError()
-                .setMessage(nodeIdToErrorMessage.get(jiuwenEvent.getData().getComponentId()));
-        }
-    }
-
-    private void setJiuwenOriginEventTime(ExecutionInfo executionInfo, List<NodeRunInfo> finalNodeRunInfos) {
-        if (finalNodeRunInfos.isEmpty()) {
-            return;
-        }
-        if (executionInfo.getStartTime() == null && finalNodeRunInfos.get(0).getStartTime() != null) {
-            executionInfo.setStartTime(finalNodeRunInfos.get(0).getStartTime());
-        }
-        int endIndex = finalNodeRunInfos.size() - 1;
-        if (executionInfo.getEndTime() == null) {
-            if (finalNodeRunInfos.get(endIndex).getEndTime() != null) {
-                executionInfo.setEndTime(finalNodeRunInfos.get(endIndex).getEndTime());
-            } else {
-                executionInfo.setEndTime(finalNodeRunInfos.get(endIndex).getStartTime());
-            }
-        }
-    }
-
-    private boolean otherNoUseParamsExtractionEvent(NodeRunInfo node) {
-        String nodeId = node.getNodeId();
-        if (nodeId.contains(COMPOSITE)) {
-            boolean match = Arrays.stream(ParamExtractionType.values())
-                .noneMatch(type -> nodeId.contains(type.name().toLowerCase(Locale.ROOT)));
-            return Arrays.stream(ParamExtractionType.values())
-                .noneMatch(type -> nodeId.contains(type.name().toLowerCase(Locale.ROOT)));
-        }
-        return false;
-    }
-
-    private List<NodeRunInfo> processParamsExtractionEvent(List<NodeRunInfo> nodeRunInfo) {
-        // 过滤参数提取事件中的无用事件
-        nodeRunInfo = nodeRunInfo.stream()
-            .filter(node -> !otherNoUseParamsExtractionEvent(node))
-            .collect(Collectors.toList());
-
-        List<NodeRunInfo> finalNodeRunInfos = new ArrayList<>();
-        for (int index = 0; index < nodeRunInfo.size(); index++) {
-            // 如果是参数提取事件，就开始做处理
-            NodeRunInfo nowNode = nodeRunInfo.get(index);
-            if (isStartCompositeEvent(nowNode)) {
-                log.info("param extraction out cycle begin, event index is {}", index);
-                // 开始节点直接加入
-                index = index + 1;// 跳到对应的finish事件
-                nowNode = nodeRunInfo.get(index);
-                String sumName = nowNode.getNodeName();
-
-                NodeRunInfo sumStartNode = createSumNode(nodeRunInfo, index, sumName,
-                    NodeRunInfo.NodeStatusEnum.STARTED);
-                finalNodeRunInfos.add(sumStartNode);
-
-                Map<String, Object> inputs = nowNode.getInputs();
-                index = index + 1; // 跳转到start的下一个事件，可能是before或者cycle事件，直接做处理
-                if (index >= nodeRunInfo.size()) {
-                    break;
-                }
-                ParamExtractionIndex paramFinishNode = paramExtractionOutCirculation(nodeRunInfo, index, sumName,
-                    inputs);
-                paramFinishNode.getParamFinishNode().setStartTime(nowNode.getStartTime());
-                index = paramFinishNode.getIndex();
-                setParamFinishNodeEndTime(paramFinishNode, nodeRunInfo);
-                finalNodeRunInfos.add(paramFinishNode.getParamFinishNode());
-            } else {
-                finalNodeRunInfos.add(nowNode);
-            }
-        }
-        return finalNodeRunInfos;
-    }
-
-    private void setParamFinishNodeEndTime(ParamExtractionIndex paramFinishNode, List<NodeRunInfo> nodeRunInfo) {
-        int endIndex = paramFinishNode.getIndex();
-        if (endIndex >= nodeRunInfo.size()) {
-            endIndex = nodeRunInfo.size() - 1;
-        }
-
-        if (nodeRunInfo.get(endIndex).getEndTime() != null) {
-            paramFinishNode.getParamFinishNode().setEndTime(nodeRunInfo.get(endIndex).getEndTime());
-        } else {
-            paramFinishNode.getParamFinishNode().setEndTime(nodeRunInfo.get(endIndex).getStartTime());
-        }
-    }
-
-    @Override
-    public ConversionQueries listConversationQueries(String projectId, String workflowId,
-        ListConversationQueriesQo listConversationQueriesQo) {
-        ConversionQueries conversionQueries = new ConversionQueries();
-        // 对每条debug事件进行转换
-        List<ConversationInfo> conversationInfos = workflowInstanceService.getConversationInfos(workflowId,
-            listConversationQueriesQo.getVersion());
-        conversionQueries.setCount(conversationInfos.size());
-        conversationInfos = conversationInfos.stream()
-            .filter(conversationInfo -> filterTimeRange(conversationInfo.getStartTime(),
-                listConversationQueriesQo.getStartTime(), listConversationQueriesQo.getEndTime()))
-            .sorted(Comparator.comparing(ConversationInfo::getStartTime).reversed())
-            .toList();
-        conversationInfos =
-            filterAndUpdateConversations(projectId, workflowId, listConversationQueriesQo, conversationInfos);
-        conversionQueries.setConversationInfos(
-            CommonUtils.subList(listConversationQueriesQo.getOffset(), listConversationQueriesQo.getLimit(),
-                conversationInfos));
-
-        return conversionQueries;
-    }
-
-    @Override
-    public ExecutionQueries listExecutionQueries(String projectId, String workflowId, String conversationId,
-        ListExecutionQueriesQo listExecutionQueriesQo) {
-        ExecutionQueries executionQueries = new ExecutionQueries();
-        // 对每条debug事件进行
-        List<ExecutionInfo> executionInfos = workflowInstanceService.getExecutionInfos(workflowId, conversationId,
-            listExecutionQueriesQo.getVersion());
-        executionQueries.setCount(executionInfos.size());
-        executionInfos = executionInfos.stream()
-            .filter(
-                executionInfo -> filterTimeRange(executionInfo.getStartTime(), listExecutionQueriesQo.getStartTime(),
-                    listExecutionQueriesQo.getEndTime()))
-            .sorted(Comparator.comparing(ExecutionInfo::getStartTime).reversed())
-            .toList();
-
-        executionQueries.setExecutionInfos(
-            CommonUtils.subList(listExecutionQueriesQo.getOffset(), listExecutionQueriesQo.getLimit(), executionInfos));
-
-        return executionQueries;
-    }
-
-    private boolean filterTimeRange(Long currentTime, Long startTime, Long endTime) {
-        startTime = startTime != null ? startTime : Long.MIN_VALUE;
-        endTime = endTime != null ? endTime : Long.MAX_VALUE;
-        return currentTime != null && currentTime >= startTime && currentTime <= endTime;
-    }
-
-    private List<ConversationInfo> filterAndUpdateConversations(String projectId, String workflowId,
-        ListConversationQueriesQo listConversationQueriesQo, List<ConversationInfo> conversationInfos) {
-        ListExecutionQueriesQo queriesQo = new ListExecutionQueriesQo();
-        queriesQo.setStartTime(listConversationQueriesQo.getStartTime())
-            .setEndTime(listConversationQueriesQo.getEndTime())
-            .setOffset(0)
-            .setLimit(maxExecutionSize)
-            .setVersion(listConversationQueriesQo.getVersion());
-        List<ConversationInfo> result = new ArrayList<>();
-        for (ConversationInfo info : conversationInfos) {
-            ExecutionQueries executionQueries =
-                listExecutionQueries(projectId, workflowId, info.getConversationId(), queriesQo);
-            if (executionQueries.getCount() > 0) {
-                result.add(info);
-                info.setSuccessCount(0).setFailureCount(0);
-                for (ExecutionInfo executionInfo : executionQueries.getExecutionInfos()) {
-                    if (StringUtils.isEmpty(executionInfo.getStatus()) || Objects.equals(executionInfo.getStatus(),
-                        WorkflowRunStatus.SUCCEEDED.getStatus().getDesc())) {
-                        info.setSuccessCount(info.getSuccessCount() + 1);
-                    } else {
-                        info.setFailureCount(info.getFailureCount() + 1);
-                    }
-                }
-            }
-        }
-        log.info("workflow conversations with id: {}, total: {}, valid: {}", workflowId, conversationInfos.size(),
-            result.size());
-        return result;
     }
 
     private boolean isEndExceptionNode(NodeRunInfo node) {

@@ -74,6 +74,7 @@
   "upload": "Upload",
   "all_retry": "Retry All",
   "retry": "Retry",
+  "kb_load_error_tip": "Knowledge base service is temporarily unavailable. Please check the knowledge base service configuration.",
   "qa": "QA Generation",
   "download": "Download",
   "all_retry_prompt_content": "After clicking Retry, all knowledge documents will be re-parsed and re-chunked using the latest model, parsing, and splitting settings.",

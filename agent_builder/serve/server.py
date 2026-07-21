@@ -12,6 +12,7 @@ from datetime import timedelta
 
 from agent_builder.adapter.exception_bridge import JiuWenException
 from agent_builder.adapter.init_server import load_yaml_config, env_to_config
+from agent_builder.adapter.redis_bridge import RedisClientManager
 from agent_builder.common.logging.base import set_thread_session, logger
 from agent_builder.common.security.sts_service import sts_init
 from agent_builder.serve.apis.mmapo import mmapo_app
@@ -91,6 +92,7 @@ class ServerApp:
         self.host, self.port = extract_host_and_port(config=self.server_config)
         self.tls_config = self.server_config.get("tls")
         self.init_sts_config()
+        self.init_redis()
         self.http_ssl_context = (
             create_context(self.tls_config) if self.server_config.get("https") else None
         )
@@ -110,6 +112,21 @@ class ServerApp:
             )
         except Exception as e:
             logger.warning(f"sts init failed: {str(e)}")
+
+    @staticmethod
+    def init_redis():
+        """init redis client"""
+        try:
+            redis_mgr = RedisClientManager.get_instance()
+            redis_mgr.init()
+            if not redis_mgr.is_initialized:
+                logger.warning(
+                    "Redis client not initialized, please check REDIS_* configuration"
+                )
+            else:
+                logger.info("Redis client initialized successfully")
+        except Exception as e:
+            logger.warning(f"Redis init failed: {str(e)}")
 
     def init_framework_config(self):
         """init framework config using local adapter"""

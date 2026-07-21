@@ -7,7 +7,7 @@
 
 提供可插拔的模型配置来源：
 1. EnvVarModelConfigProvider - 从环境变量读取
-2. OBSModelConfigProvider - 从 OBS 模型网关读取（后续开发）
+2. OBSModelConfigProvider - 从 OBS 对象存储读取模型服务元数据和认证信息
 """
 
 import os
@@ -23,7 +23,7 @@ from openjiuwen.core.workflow.components.llm.llm_comp import LLMCompConfig
 class EnvVarModelConfigProvider(ModelConfigProvider):
     """从环境变量读取模型配置"""
 
-    def get_llm_config(
+    async def get_llm_config(
         self,
         ir_node: dict,
         global_config: Optional[dict] = None,
@@ -76,20 +76,25 @@ class EnvVarModelConfigProvider(ModelConfigProvider):
 
 
 class OBSModelConfigProvider(ModelConfigProvider):
-    """从 OBS 模型网关读取模型配置（后续开发）"""
+    """从 OBS 模型网关读取模型配置
 
-    def get_llm_config(
+    实际实现位于 agent_runtime.common.model_providers.OBSModelConfigProvider，
+    此处仅做别名导出，保持向后兼容。
+    """
+
+    async def get_llm_config(
         self,
         ir_node: dict,
         global_config: Optional[dict] = None,
     ) -> LLMCompConfig:
-        raise NotImplementedError("OBSModelConfigProvider 尚未实现")
+        from agent_runtime.common.model_providers import OBSModelConfigProvider as _OBSProvider
+        return await _OBSProvider().get_llm_config(ir_node, global_config)
 
 
 class IRModelConfigProvider(ModelConfigProvider):
     """从 IR 配置读取模型参数，环境变量作为默认值兜底"""
 
-    def get_llm_config(
+    async def get_llm_config(
         self,
         ir_node: dict,
         global_config: Optional[dict] = None,

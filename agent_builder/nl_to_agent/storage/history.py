@@ -2,7 +2,6 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 # N2L临时九问补丁，若jiuwen已更新该代码，则删除
 import json
-import os
 import ssl
 from typing import List, Union
 
@@ -11,9 +10,7 @@ from redis.cluster import RedisCluster, ClusterNode
 
 from agent_builder.adapter.config_bridge import RedisMode, settings as global_settings
 from agent_builder.adapter.logger_rt_bridge import logger as rt_logger
-from agent_builder.adapter.jiuwen_bridge import DATASOURCE_REDIS_TTL_KEY
 from agent_builder.adapter.singleton import Singleton
-from agent_builder.adapter.jiuwen_bridge import EXPIRATION_TIME
 
 from .base import BaseConversationMemory
 
@@ -177,7 +174,7 @@ class AsyncHistoryStorage(metaclass=Singleton):
 
     async def add(self, key: str, value: dict) -> bool:
         redis_client = await self._get_async_redis_client()
-        ttl = int(os.getenv(DATASOURCE_REDIS_TTL_KEY, EXPIRATION_TIME))
+        ttl = global_settings.redis.datasource_ttl_seconds
         await redis_client.rpush(key, json.dumps(value, ensure_ascii=False))
         await redis_client.expire(key, ttl)
         return True
@@ -259,15 +256,16 @@ class SessionStorage(metaclass=Singleton):
     ) -> bool:
         """保存会话状态。"""
         redis_client = SessionStorage._get_sync_redis_client()
-        redis_client.set(f"agent:{task_id}", state)
+        ttl = global_settings.redis.datasource_ttl_seconds
+        redis_client.set(f"agent:{task_id}", state, ex=ttl)
         redis_client.set(
-            f"resource:{task_id}", json.dumps(resource_config)
+            f"resource:{task_id}", json.dumps(resource_config), ex=ttl
         )
         redis_client.set(
-            f"plugin_dict:{task_id}", json.dumps(plugin_dict)
+            f"plugin_dict:{task_id}", json.dumps(plugin_dict), ex=ttl
         )
         redis_client.set(
-            f"workflow_dict:{task_id}", json.dumps(workflow_dict)
+            f"workflow_dict:{task_id}", json.dumps(workflow_dict), ex=ttl
         )
         return True
 
@@ -345,15 +343,16 @@ class AsyncSessionStorage(metaclass=Singleton):
     ) -> bool:
         """保存会话状态。"""
         redis_client = await AsyncSessionStorage._get_async_redis_client()
-        await redis_client.set(f"agent:{task_id}", state)
+        ttl = global_settings.redis.datasource_ttl_seconds
+        await redis_client.set(f"agent:{task_id}", state, ex=ttl)
         await redis_client.set(
-            f"resource:{task_id}", json.dumps(resource_config)
+            f"resource:{task_id}", json.dumps(resource_config), ex=ttl
         )
         await redis_client.set(
-            f"plugin_dict:{task_id}", json.dumps(plugin_dict)
+            f"plugin_dict:{task_id}", json.dumps(plugin_dict), ex=ttl
         )
         await redis_client.set(
-            f"workflow_dict:{task_id}", json.dumps(workflow_dict)
+            f"workflow_dict:{task_id}", json.dumps(workflow_dict), ex=ttl
         )
         return True
 
@@ -378,7 +377,7 @@ class ImRedisConversation(BaseConversationMemory):
         self.redis_db = _create_sync_redis_client()
 
     def add(self, key: object, value: object) -> bool:
-        ttl = int(os.getenv(DATASOURCE_REDIS_TTL_KEY, EXPIRATION_TIME))
+        ttl = global_settings.redis.datasource_ttl_seconds
         self.redis_db.rpush(key, json.dumps(value, ensure_ascii=False))
         self.redis_db.expire(key, ttl)
         return True

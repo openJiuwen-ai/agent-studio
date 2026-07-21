@@ -1,0 +1,17 @@
+# -*- coding: utf-8 -*-
+[project]
+name = "storage"
+version = "0.1.0"
+description = "agent-studio 对象存储共享层（agent_runtime / agent_builder 共用；迁移自 agent_runtime.storage）"
+requires-python = ">=3.11"
+dependencies = [
+    "openjiuwen",   # workflow_logger
+    "aioboto3",     # S3StorageProvider
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["storage*"]

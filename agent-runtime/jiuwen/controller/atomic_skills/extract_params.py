@@ -60,7 +60,7 @@ class ExtractParams(Skill):
         # 预处理响应，处理可能的markdown代码块
         cleaned_response = response
         if "```" in response:
-            code_block_match = re.search(r"(?:json)?\s*([\s\S]*?)\s*", response)
+            code_block_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", response)
             if code_block_match:
                 cleaned_response = code_block_match.group(1).strip()
         # 如果看起来像JSON且包含null，先替换为None

@@ -4,9 +4,7 @@
 
 package com.openjiuwen.studio.agent.agentbase.utils;
 
-/**
- * spring bean工具类
- */
+import java.lang.ref.WeakReference;
 
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
@@ -18,11 +16,15 @@ import org.springframework.stereotype.Component;
 @Order(100)
 public class MgSpringBeanUtils implements ApplicationContextAware {
 
-    private static ApplicationContext applicationContext;
+    private static WeakReference<ApplicationContext> applicationContextRef;
 
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-        MgSpringBeanUtils.applicationContext = applicationContext;
+        MgSpringBeanUtils.applicationContextRef = new WeakReference<>(applicationContext);
+    }
+
+    private static ApplicationContext getApplicationContext() {
+        return applicationContextRef != null ? applicationContextRef.get() : null;
     }
 
     /**
@@ -33,7 +35,8 @@ public class MgSpringBeanUtils implements ApplicationContextAware {
      * @return bean的实例，如果找不到则返回null
      */
     public static <T> T getBean(String beanName, Class<T> requiredType) {
-        return applicationContext.getBean(beanName, requiredType);
+        ApplicationContext ctx = getApplicationContext();
+        return ctx != null ? ctx.getBean(beanName, requiredType) : null;
     }
 
     /**
@@ -43,7 +46,8 @@ public class MgSpringBeanUtils implements ApplicationContextAware {
      * @return bean的实例
      */
     public static <T> T getBean(Class<T> requiredType) {
-        return applicationContext.getBean(requiredType);
+        ApplicationContext ctx = getApplicationContext();
+        return ctx != null ? ctx.getBean(requiredType) : null;
     }
 
     /**
@@ -54,6 +58,7 @@ public class MgSpringBeanUtils implements ApplicationContextAware {
      * @return
      */
     public static String getProperty(String key, String defValue) {
-        return applicationContext.getEnvironment().getProperty(key, defValue);
+        ApplicationContext ctx = getApplicationContext();
+        return ctx != null ? ctx.getEnvironment().getProperty(key, defValue) : defValue;
     }
 }

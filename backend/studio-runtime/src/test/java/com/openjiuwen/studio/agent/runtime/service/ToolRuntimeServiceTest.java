@@ -28,7 +28,6 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.obs.services.exception.ObsException;
-import com.obs.services.model.TemporarySignatureResponse;
 import com.openjiuwen.studio.agent.common.crypt.Ciphers;
 import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
@@ -37,8 +36,6 @@ import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.runtime.dto.Base64ToImageReq;
-import com.openjiuwen.studio.agent.runtime.dto.CreateDocumentReq;
-import com.openjiuwen.studio.agent.runtime.dto.CreateDocumentRsp;
 import com.openjiuwen.studio.agent.runtime.dto.OcrRecognizeRsp;
 import com.openjiuwen.studio.agent.runtime.dto.ResolveAudioFileReq;
 import com.openjiuwen.studio.agent.runtime.dto.ResolveAudioFileRsp;
@@ -197,12 +194,6 @@ public class ToolRuntimeServiceTest extends BaseTest {
         mockitoCloseable.close();
     }
 
-    @Test
-    void test_resolveTxtFile_should_succeed() throws IOException {
-        // Test skipped due to library compatibility issue (NoSuchMethodError in commons-io)
-        // The functionality is covered by other tests
-    }
-
     @SuppressWarnings("unchecked")
     @Test
     void test_resolve_document_should_succeed() throws IOException {
@@ -350,38 +341,6 @@ public class ToolRuntimeServiceTest extends BaseTest {
 
         assertThrows(AgentStudioException.class, () -> toolRuntimeService.ocrRecognize(buildresolveDocumentReq()));
     }
-
-    @Test
-    void test_create_document_should_success() {
-        String testUrl = "https://test.com/test.docx?";
-        when(obsService.putObjectToBucket(anyString(), anyString(), any(InputStream.class), anyInt()))
-                .thenReturn("/file/test.docx");
-        when(obsService.getStagingBucket()).thenReturn("test-bucket");
-        TemporarySignatureResponse temporarySignatureResponse = new TemporarySignatureResponse(testUrl);
-        when(obsService.getStagingTemporaryGetRsp(anyString(), anyLong())).thenReturn(temporarySignatureResponse);
-
-        CreateDocumentRsp createDocumentRsp1 = toolRuntimeService.createDocument(buildCreateDocumentReq("test_name"));
-        CreateDocumentRsp createDocumentRsp2 = toolRuntimeService.createDocument(buildCreateDocumentReq("test/name"));
-        assertEquals(testUrl, createDocumentRsp1.getUrl());
-        assertEquals(testUrl, createDocumentRsp2.getUrl());
-    }
-
-    @Test
-    void test_create_document_should_failed_when_obs_exception() {
-        when(obsService.getStagingBucket()).thenReturn("test-bucket");
-        when(obsService.putObjectToBucket(anyString(), anyString(), any(InputStream.class), anyInt()))
-                .thenThrow(ObsException.class);
-
-        assertThrows(AgentStudioException.class,
-                () -> toolRuntimeService.createDocument(buildCreateDocumentReq("test_name")));
-    }
-
-    @Test
-    void test_resolveTxtFile_should_failed() {
-        // Test skipped due to library compatibility issue (NoSuchMethodError in commons-io)
-        // The functionality is covered by other tests
-    }
-
 
     @Test
     void test_run_tool_post_formdata_should_succeed() throws IOException {
@@ -563,14 +522,6 @@ public class ToolRuntimeServiceTest extends BaseTest {
         resolveAudioFileReq.setAddPunc(true);
         resolveAudioFileReq.setDigitNorm(false);
         return resolveAudioFileReq;
-    }
-
-    private CreateDocumentReq buildCreateDocumentReq(String name) {
-        CreateDocumentReq createDocumentReq = new CreateDocumentReq();
-        createDocumentReq.setDocumentName(name);
-        createDocumentReq.setInput("test");
-        createDocumentReq.setExpires(1);
-        return createDocumentReq;
     }
 
     @Test

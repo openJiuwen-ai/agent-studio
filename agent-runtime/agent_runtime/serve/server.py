@@ -47,7 +47,7 @@ def _plain_decrypt(encrypt_str: str):
 JiuWenCrypt.encrypt = staticmethod(_plain_encrypt)
 JiuWenCrypt.decrypt = staticmethod(_plain_decrypt)
 
-from agent_runtime.storage import S3StorageProvider
+from storage import S3StorageProvider
 
 from agent_runtime.common import settings
 from agent_runtime.common.checkpointer_config import build_redis_checkpointer_config
@@ -60,14 +60,13 @@ from agent_runtime.observability import setup_otel_tracer
 from agent_runtime.memory.adapter.ltm_manager import init_ltm
 from agent_runtime.memory.internal_routes import memory_internal_router
 from agent_runtime.serve.apis.orchestration import execution_app
+from agent_runtime.serve.apis.app_run import app_run_app
+from agent_runtime.serve.apis.web_run import web_run_app
 from agent_runtime.serve.apis.user_variable_api import user_variable_router
+from agent_runtime.serve.apis.inner_tools import inner_tools_router
+from agent_runtime.serve.apis.release_api import release_api_router
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from flask import Flask
-from starlette.middleware.wsgi import WSGIMiddleware
-
-# 导入 Flask prompt 子应用（agent_builder 构建侧）
-from agent_builder.app import app as prompt_manage_app
 
 # 初始化 prompt 模板
 from jiuwen.common.init import init_prompt
@@ -106,7 +105,11 @@ component_class_pool.register_component_class(JIUWEN_CODE_TYPE, FlowCode)
 logger.info("Registered workflow component: jiuwen.code")
 
 # FastAPI routers must be included BEFORE Flask app mount (Flask catches all routes)
-apps_map = [execution_app, user_variable_router, memory_internal_router, prompt_manage_app]
+# 注：prompt_manage_app（agent_builder.app）已随 agent_builder 抽离到 studio-builder 镜像，runtime 不含。
+apps_map = [
+    execution_app, app_run_app, web_run_app, user_variable_router,
+    memory_internal_router, inner_tools_router, release_api_router,
+]
 
 
 @asynccontextmanager
@@ -181,21 +184,15 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
         CheckpointerFactory.set_default_checkpointer(redis_checkpointer)
         logger.info("Redis checkpointer initialized and set as default (fast checkpointer disabled)")
 
-    # 初始化异步 S3 存储客户端
+    # 初始化异步 S3 存储客户端（实现位于共享包 storage；先注入 OBS 配置再 initialize）
     try:
+        import storage as _storage
+        _storage.set_settings(lambda: settings.object_storage)
         s3_provider = S3StorageProvider.instance()
         await s3_provider.initialize()
         logger.info("S3 async storage client initialized")
     except Exception as e:
         logger.warning(f"S3 async storage client initialization failed (non-critical): {e}")
-
-    # 初始化提示词优化任务的数据库持久化存储
-    try:
-        from agent_builder.prompt.tune.base.context_manager import ContextManager
-        ContextManager().set_store()
-        logger.info("Prompt optimization store initialized")
-    except Exception as e:
-        logger.warning(f"Prompt optimization store init failed (non-critical): {e}")
 
     # 注册 flow_code 专用的 SysOperation（local mode）
     # 注意：当 LOCAL_CODE_EXEC_MODE=inprocess（默认）时，代码节点使用进程内 exec() 执行，
@@ -265,23 +262,8 @@ def instance_app(config: dict | None = None):
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)  # noqa: redefined-outer-name
     app.add_middleware(RequestContextMiddleware)
 
-    # Flask 路径规范化中间件：OptimizationTemplateService.java 调用 /v1/prompt/...
-    # 而 Flask blueprint 注册了 url_prefix="/flask"，需要统一补上前缀
-    # 注意：这里操作的是 URL 路径（非文件系统路径），分隔符固定为 /
-    @app.middleware("http")
-    async def normalize_flask_path(request: Request, call_next):
-        path = request.url.path
-        if path.startswith("/v1/prompt/") and not path.startswith("/flask"):
-            prefixed = f"/flask{path}"
-            request = Request(request.scope, request.receive)
-            request.scope["path"] = prefixed
-        return await call_next(request)
-
     for i in apps_map:
-        if isinstance(i, Flask):
-            app.mount("/", WSGIMiddleware(i))
-        else:
-            app.include_router(i)
+        app.include_router(i)
 
     @app.exception_handler(AgentBuilderError)
     async def agent_builder_error_handler(request: Request, exc: AgentBuilderError):
@@ -299,6 +281,26 @@ def instance_app(config: dict | None = None):
                     "message": str(exc),
                 }
             },
+        )
+
+    # Storage 异常已迁移至共享包 storage（不再是 AgentBuilderError 子类），
+    # 这里单独兜底，保持未捕获 storage 错误的结构化 500 响应不变（code 取 exc.code）。
+    from storage.exceptions import StorageConfigError, StorageReadError
+
+    @app.exception_handler(StorageReadError)
+    async def storage_read_error_handler(request: Request, exc: StorageReadError):
+        logger.error(f"StorageReadError: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": getattr(exc, "code", 188911), "message": str(exc)}},
+        )
+
+    @app.exception_handler(StorageConfigError)
+    async def storage_config_error_handler(request: Request, exc: StorageConfigError):
+        logger.error(f"StorageConfigError: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": getattr(exc, "code", 188910), "message": str(exc)}},
         )
 
     @app.exception_handler(Exception)

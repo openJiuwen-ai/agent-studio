@@ -1,0 +1,295 @@
+data_dir: /var/lib/vector
+timezone: ${APP_LOG_TIMEZONE}
+
+api:
+  enabled: true
+  address: 0.0.0.0:8686
+
+sources:
+  manager:
+    type: file
+    include: [/logs/manager/studio-agent-manager.log]
+    read_from: beginning
+    fingerprint: {strategy: checksum, lines: 1}
+    multiline:
+      start_pattern: '^\[\d{4}-\d{2}-\d{2} '
+      mode: halt_before
+      condition_pattern: '^\[\d{4}-\d{2}-\d{2} '
+      timeout_ms: 1000
+
+  manager_aux:
+    type: file
+    include: [/logs/manager/perform.log, /logs/manager/studio-agent-manager-interface.log, /logs/manager/audit/trace.log]
+    read_from: beginning
+    fingerprint: {strategy: checksum, lines: 1}
+
+  runtime_common:
+    type: file
+    include: [/logs/runtime/common.log]
+    read_from: beginning
+    fingerprint: {strategy: checksum, lines: 1}
+    multiline:
+      start_pattern: '^\d{4}-\d{2}-\d{2} '
+      mode: halt_before
+      condition_pattern: '^\d{4}-\d{2}-\d{2} '
+      timeout_ms: 1000
+
+  runtime_other:
+    type: file
+    include:
+      - /logs/runtime/tgf_python.log
+      - /logs/runtime/jiuwen_python.log
+      - /logs/runtime/agent-runtime/run/*.log
+      - /logs/runtime/jiuwen.log/**/*.log*
+    exclude: [/logs/runtime/jiuwen.log]
+    read_from: beginning
+    fingerprint: {strategy: checksum, lines: 1}
+
+  builder:
+    type: file
+    include: [/logs/builder/agent-builder/*.log, /logs/builder/agent-builder/**/*.log]
+    read_from: beginning
+    fingerprint: {strategy: checksum, lines: 1}
+    multiline:
+      start_pattern: '^\d{4}-\d{2}-\d{2} '
+      mode: halt_before
+      condition_pattern: '^\d{4}-\d{2}-\d{2} '
+      timeout_ms: 1000
+
+  console:
+    type: file
+    include: [/logs/console/*.log]
+    read_from: beginning
+    fingerprint: {strategy: checksum, lines: 1}
+
+  docker:
+    type: docker_logs
+    include_labels:
+      - com.docker.compose.project=${APP_PROJECT_NAME}
+    exclude_containers:
+      - "${APP_PROJECT_NAME}-studio-manager*"
+      - "${APP_PROJECT_NAME}-studio-runtime*"
+      - "${APP_PROJECT_NAME}-studio-builder*"
+      - "${APP_PROJECT_NAME}-studio-console*"
+
+  vector_internal:
+    type: internal_logs
+
+transforms:
+  manager_fields:
+    type: remap
+    inputs: [manager]
+    source: |
+      .service = "manager"
+      .host = get_env_var!("NODE_NAME")
+      .collector = "vector"
+      .filename = .file
+      .parse_status = "unparsed"
+      parsed, err = parse_regex(.message, r'^\[(?P<log_time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\] \[(?P<level>[A-Z ]+)\] \[(?P<trace_id>[^\]]*)\]')
+      if err == null {
+        .parse_status = "parsed"
+        .level = strip_whitespace!(parsed.level)
+        if parsed.trace_id != "" { .trace_id = parsed.trace_id }
+        event_time, time_err = parse_timestamp(parsed.log_time, format: "%Y-%m-%d %H:%M:%S%.3f", timezone: get_env_var!("APP_LOG_TIMEZONE"))
+        if time_err == null { .timestamp = event_time }
+      }
+
+  java_aux_fields:
+    type: remap
+    inputs: [manager_aux]
+    source: |
+      .host = get_env_var!("NODE_NAME")
+      .collector = "vector"
+      .filename = .file
+      .parse_status = "unparsed"
+      .service = "manager"
+      if contains(string!(.file), "/audit/") {
+        .log_kind = "audit"
+      } else if contains(string!(.file), "interface") {
+        .log_kind = "interface"
+      } else {
+        .log_kind = "performance"
+      }
+      parsed, err = parse_json(.message)
+      if err == null {
+        .parse_status = "parsed"
+        level_value = get(parsed, ["level"]) ?? get(parsed, ["log_level"]) ?? null
+        if is_string(level_value) { .level = upcase(string!(level_value)) }
+        trace_value = get(parsed, ["trace_id"]) ?? get(parsed, ["traceId"]) ?? null
+        if is_string(trace_value) && trace_value != "" { .trace_id = trace_value }
+      }
+
+  runtime_fields:
+    type: remap
+    inputs: [runtime_common, runtime_other]
+    source: |
+      .service = "runtime"
+      .host = get_env_var!("NODE_NAME")
+      .collector = "vector"
+      .filename = .file
+      .parse_status = "unparsed"
+      parsed, err = parse_regex(.message, r'(?i)^(?:[^|\n]*\|){1,8}\s*(?P<level>TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\s*\|')
+      if err == null {
+        .parse_status = "parsed"
+        .level = upcase!(parsed.level)
+      }
+      time_parts, time_err = parse_regex(.message, r'^(?P<log_time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[,.]\d{3})')
+      if time_err == null {
+        normalized_time = replace!(time_parts.log_time, ",", ".")
+        event_time, parse_err = parse_timestamp(normalized_time, format: "%Y-%m-%d %H:%M:%S%.3f", timezone: get_env_var!("APP_LOG_TIMEZONE"))
+        if parse_err == null { .timestamp = event_time }
+      }
+      trace_parts, trace_err = parse_regex(.message, r'^(?:[^|]*\|){4}(?P<trace_id>[^|]+)\|')
+      if trace_err == null && trace_parts.trace_id != "" && trace_parts.trace_id != "default_trace_id" { .trace_id = trace_parts.trace_id }
+      request_parts, request_err = parse_regex(.message, r'(?i)request_id=(?P<request_id>[0-9a-f-]{16,})')
+      if request_err == null { .request_id = request_parts.request_id }
+      execution_parts, execution_err = parse_regex(.message, r'(?i)execution_id=(?P<execution_id>[0-9a-f-]{16,})')
+      if execution_err == null { .execution_id = execution_parts.execution_id }
+
+  console_fields:
+    type: remap
+    inputs: [console]
+    source: |
+      .service = "console"
+      .host = get_env_var!("NODE_NAME")
+      .collector = "vector"
+      .filename = .file
+      .parse_status = "unparsed"
+      access_time, access_err = parse_regex(.message, r'^\S+.*\[(?P<log_time>\d{2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4})\]')
+      if access_err == null {
+        .parse_status = "parsed"
+        event_time, parse_err = parse_timestamp(access_time.log_time, format: "%d/%b/%Y:%H:%M:%S %z")
+        if parse_err == null { .timestamp = event_time }
+      } else {
+        error_time, error_err = parse_regex(.message, r'^(?P<log_time>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})')
+        if error_err == null {
+          .parse_status = "parsed"
+          event_time, parse_err = parse_timestamp(error_time.log_time, format: "%Y/%m/%d %H:%M:%S", timezone: get_env_var!("APP_LOG_TIMEZONE"))
+          if parse_err == null { .timestamp = event_time }
+        }
+      }
+
+  builder_fields:
+    type: remap
+    inputs: [builder]
+    source: |
+      .service = "builder"
+      .host = get_env_var!("NODE_NAME")
+      .collector = "vector"
+      .filename = .file
+      .parse_status = "unparsed"
+      level_parts, level_err = parse_regex(.message, r'(?i)(?:level\s*[:=]\s*"?|\[)(?P<level>trace|debug|info|warn|warning|error|fatal|critical)(?:"|\]|\s|,|$)')
+      if level_err == null {
+        .level = upcase!(level_parts.level)
+        .parse_status = "parsed"
+      }
+
+  docker_fields:
+    type: remap
+    inputs: [docker]
+    source: |
+      .host = get_env_var!("NODE_NAME")
+      .collector = "vector-docker"
+      .parse_status = "native"
+      level_parts, level_err = parse_regex(.message, r'(?i)(?:level\s*[:=]\s*"?|\[)(?P<level>trace|debug|info|warn|warning|error|fatal|critical)(?:"|\]|\s|,|$)')
+      if level_err == null {
+        normalized_level = upcase!(level_parts.level)
+        if normalized_level == "WARNING" { normalized_level = "WARN" }
+        if normalized_level == "CRITICAL" { normalized_level = "FATAL" }
+        .level = normalized_level
+        .parse_status = "parsed"
+      }
+      service_name = get(.label, ["com.docker.compose.service"]) ?? null
+      if is_string(service_name) && service_name != "" {
+        .service = service_name
+      } else {
+        .service = .container_name
+      }
+      .filename = "docker://" + to_string!(.container_name) + "/" + to_string!(.stream)
+
+  vector_internal_fields:
+    type: remap
+    inputs: [vector_internal]
+    source: |
+      .host = get_env_var!("NODE_NAME")
+      .service = "vector"
+      .collector = "vector-internal"
+      .parse_status = "native"
+      .filename = "vector://internal"
+
+  redact_file_sensitive:
+    type: remap
+    inputs: [manager_fields, java_aux_fields, runtime_fields, builder_fields, console_fields]
+    source: |
+      .message = redact(string!(.message), filters: [
+        r'(?i)authorization\s*[:=]\s*(?:bearer|basic)\s+[^\s,;"\]]+',
+        r'(?i)(?:password|passwd|token|api[_-]?key|secret|access[_-]?key|private[_-]?key)\s*[:=]\s*[^\s&,;"\]]+',
+        r'(?i)(?:password|passwd|token|api[_-]?key|secret|access[_-]?key)=([^&\s]+)'
+      ])
+
+  redact_docker_sensitive:
+    type: remap
+    inputs: [docker_fields, vector_internal_fields]
+    source: |
+      .message = redact(string!(.message), filters: [
+        r'(?i)authorization\s*[:=]\s*(?:bearer|basic)\s+[^\s,;"\]]+',
+        r'(?i)(?:password|passwd|token|api[_-]?key|secret|access[_-]?key|private[_-]?key)\s*[:=]\s*[^\s&,;"\]]+',
+        r'(?i)(?:password|passwd|token|api[_-]?key|secret|access[_-]?key)=([^&\s]+)'
+      ])
+
+sinks:
+  victoria_logs:
+    type: elasticsearch
+    inputs: [redact_file_sensitive]
+    endpoints:
+      - https://${LOGS_GATEWAY_HOST}:${LOGS_GATEWAY_HTTPS_PORT}/insert/elasticsearch/
+    mode: bulk
+    api_version: v8
+    compression: gzip
+    auth:
+      strategy: basic
+      user: ${LOGS_WRITE_USER}
+      password: ${LOGS_WRITE_PASSWORD}
+    tls:
+      ca_file: /etc/vector/tls/gateway-ca.crt
+      verify_certificate: true
+      verify_hostname: true
+    healthcheck:
+      enabled: false
+    query:
+      _msg_field: message
+      _time_field: timestamp
+      _stream_fields: host,service
+    acknowledgements:
+      enabled: true
+    buffer:
+      type: disk
+      max_size: ${VECTOR_BUFFER_MAX_SIZE}
+      when_full: block
+
+  victoria_logs_docker:
+    type: elasticsearch
+    inputs: [redact_docker_sensitive]
+    endpoints:
+      - https://${LOGS_GATEWAY_HOST}:${LOGS_GATEWAY_HTTPS_PORT}/insert/elasticsearch/
+    mode: bulk
+    api_version: v8
+    compression: gzip
+    auth:
+      strategy: basic
+      user: ${LOGS_WRITE_USER}
+      password: ${LOGS_WRITE_PASSWORD}
+    tls:
+      ca_file: /etc/vector/tls/gateway-ca.crt
+      verify_certificate: true
+      verify_hostname: true
+    healthcheck:
+      enabled: false
+    query:
+      _msg_field: message
+      _time_field: timestamp
+      _stream_fields: host,service
+    buffer:
+      type: disk
+      max_size: ${VECTOR_BUFFER_MAX_SIZE}
+      when_full: block

@@ -5,7 +5,7 @@
     "secure": false
   },
   "/v1/0/agent-runtime": {
-    "target": "http://127.0.0.1:31113/",
+    "target": "http://127.0.0.1:31014/",
     "changeOrigin": true,
     "secure": false
   },
@@ -15,7 +15,7 @@
     "secure": false
   },
   "/v2/0/agent-runtime": {
-    "target": "http://127.0.0.1:31113/",
+    "target": "http://127.0.0.1:31014/",
     "changeOrigin": true,
     "secure": false
   },
@@ -28,7 +28,7 @@
     }
   },
   "/v2": {
-    "target": "http://127.0.0.1:31113/",
+    "target": "http://127.0.0.1:31111/",
     "changeOrigin": true,
     "secure": false,
     "router": {

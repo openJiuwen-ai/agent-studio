@@ -16,49 +16,23 @@ from typing import Optional
 from agent_runtime.common.exception.errors import AgentBuilderError, ExtensionStatusCode
 from openjiuwen.core.workflow.components.llm.llm_comp import LLMCompConfig
 
-
-class StorageConfigError(AgentBuilderError):
-    """存储配置异常 — 环境变量缺失或无效"""
-
-    def __init__(self, msg: str = "", **kwargs):
-        super().__init__(ExtensionStatusCode.STORAGE_CONFIG_ERROR, msg=msg, **kwargs)
-
-
-class StorageReadError(AgentBuilderError):
-    """存储读取异常 — 下载对象失败"""
-
-    def __init__(self, msg: str = "", **kwargs):
-        super().__init__(ExtensionStatusCode.STORAGE_READ_ERROR, msg=msg, **kwargs)
-
-
-class ObjectStorageProvider(ABC):
-    """对象存储提供者抽象类
-
-    扩展时继承此类并实现 get_content()，然后通过
-    WorkflowRunner 注入。
-    """
-
-    @abstractmethod
-    async def get_content(self, object_key: str) -> str:
-        """读取对象内容，返回 UTF-8 字符串
-
-        Args:
-            object_key: 对象 key（如 workflow/ir/xxx/xxx.json）
-
-        Returns:
-            str: 对象内容的 UTF-8 字符串
-
-        Raises:
-            StorageReadError: 读取失败
-        """
-        pass
+# Storage 异常与 ObjectStorageProvider 已迁移至共享包 ``storage``（agent_runtime /
+# agent_builder 共用）。这里保留为别名，使 ``from agent_runtime.common.ir_interfaces
+# import StorageNotFoundError`` 等既有引用继续可用（同一类对象）。
+from storage.exceptions import (  # noqa: F401
+    StorageConfigError,
+    StorageNotFoundError,
+    StorageReadError,
+    StorageWriteError,
+)
+from storage.object_storage import ObjectStorageProvider  # noqa: F401
 
 
 class ModelConfigProvider(ABC):
     """模型配置提供者接口"""
 
     @abstractmethod
-    def get_llm_config(
+    async def get_llm_config(
         self,
         ir_node: dict,
         global_config: Optional[dict] = None,

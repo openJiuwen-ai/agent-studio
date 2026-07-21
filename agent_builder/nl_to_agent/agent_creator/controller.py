@@ -142,7 +142,7 @@ class AgentTypeIdentifier:
                 retry_cnt += 1
             except Exception as e:
                 llm_request_error_msg = str(e)
-                logger.error("AgentTypeIdentifier run error")
+                logger.error(f"AgentTypeIdentifier run error: {llm_request_error_msg}")
                 if retry_cnt < max_retries:
                     wait_time = (2 * retry_cnt) + random.uniform(0, 1)
                     await asyncio.sleep(wait_time)

@@ -105,8 +105,8 @@ public class JiuWenPromptTaskJob implements Job {
 
     private static final String PROMPT_FEEDBACK_API = "/flask/v1/prompt/optimize_feedback";
 
-    @Value("${jiuwen.base-url:}")
-    private String jiuwenBaseUrl;
+    @Value("${agent_builder_endpoint:}")
+    private String agentBuilderEndpoint;
 
     @Resource(name = "remoteClientTemplate")
     private ClientTemplate clientTemplate;
@@ -156,7 +156,7 @@ public class JiuWenPromptTaskJob implements Job {
                 headers.set(CommonConstant.X_AUTH_TOKEN, token);
             }
             headers.set(CommonConstant.X_WORKSPACE_ID, promptTaskDetailVo.getWorkspaceId());
-            ResponseEntity<JiuWenCreTaskRes> response = clientTemplate.postForEntity(jiuwenBaseUrl + jiuwenPath,
+            ResponseEntity<JiuWenCreTaskRes> response = clientTemplate.postForEntity(agentBuilderEndpoint + jiuwenPath,
                 headers, JsonUtil.object2Json(req), JiuWenCreTaskRes.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
                 String errorMsg = "Runtime returned " + response.getStatusCode();
@@ -218,7 +218,7 @@ public class JiuWenPromptTaskJob implements Job {
                 ? TEMPLATES_OPTIMIZATION_DELETE_API
                 : TEMPLATES_OPTIMIZATION_DELETE_MULTI_API;
             ResponseEntity<JIuWenPromptBaseRes> response = clientTemplate.deleteForEntity(
-                jiuwenBaseUrl + String.format(jiuwenPath, jiuwenTaskId), token, JIuWenPromptBaseRes.class);
+                agentBuilderEndpoint + String.format(jiuwenPath, jiuwenTaskId), token, JIuWenPromptBaseRes.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
                 if (response.getBody() != null) {
                     log.error("Delete optimization task from jiuwen server error! response:{}",
@@ -250,7 +250,7 @@ public class JiuWenPromptTaskJob implements Job {
                 ? TEMPLATES_OPTIMIZATION_PROGRESS_API
                 : TEMPLATES_OPTIMIZATION_PROGRESS_MULTI_API;
             ResponseEntity<JiuWenPromptDeatilRes> response = clientTemplate.getForEntity(
-                jiuwenBaseUrl + String.format(jiuwenPath, jiuwenTaskId), token, JiuWenPromptDeatilRes.class);
+                agentBuilderEndpoint + String.format(jiuwenPath, jiuwenTaskId), token, JiuWenPromptDeatilRes.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
                 if (response.getBody() != null) {
                     log.error("Get optimization task progress from jiuwen server error! response:{}",
@@ -281,7 +281,7 @@ public class JiuWenPromptTaskJob implements Job {
         try {
             log.info("getOptimizationProgress jiuwenTaskIds: {}", jiuwenTaskIds);
             ResponseEntity<JiuWenPromptBatchRes> response = clientTemplate.postForEntity(
-                jiuwenBaseUrl + TEMPLATES_OPTIMIZATION_BATCH_PROGRESS_MULTI_API, token,
+                agentBuilderEndpoint + TEMPLATES_OPTIMIZATION_BATCH_PROGRESS_MULTI_API, token,
                 JsonUtil.object2Json(JiuWenPromptBatchReq.builder().idList(jiuwenTaskIds).build()),
                 JiuWenPromptBatchRes.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
@@ -314,7 +314,7 @@ public class JiuWenPromptTaskJob implements Job {
         try {
             log.info("getOptimizationProgress jiuwenTaskIds: {}", jiuwenTaskIds);
             ResponseEntity<JiuWenPromptBatchRes> response = clientTemplate.postForEntity(
-                jiuwenBaseUrl + TEMPLATES_OPTIMIZATION_BATCH_PROGRESS_API, token,
+                agentBuilderEndpoint + TEMPLATES_OPTIMIZATION_BATCH_PROGRESS_API, token,
                 JsonUtil.object2Json(JiuWenPromptBatchReq.builder().idList(jiuwenTaskIds).build()),
                 JiuWenPromptBatchRes.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
@@ -344,7 +344,7 @@ public class JiuWenPromptTaskJob implements Job {
                 ? TEMPLATES_OPTIMIZATION_STOP_API
                 : TEMPLATES_OPTIMIZATION_STOP_MULTI_API;
             ResponseEntity<JIuWenPromptBaseRes> response = clientTemplate.postForEntity(
-                jiuwenBaseUrl + String.format(jiuwenPath, jiuwenTaskId), token, null, JIuWenPromptBaseRes.class);
+                agentBuilderEndpoint + String.format(jiuwenPath, jiuwenTaskId), token, null, JIuWenPromptBaseRes.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
                 if (response.getBody() != null) {
                     log.error("Get optimization task progresses from jiuwen server error! response:{}",
@@ -372,7 +372,7 @@ public class JiuWenPromptTaskJob implements Job {
             }
             headers.set(CommonConstant.X_WORKSPACE_ID, promptTaskDetailVo.getWorkspaceId());
             ResponseEntity<JIuWenPromptBaseRes> response = clientTemplate.postForEntity(
-                jiuwenBaseUrl + String.format(jiuwenPath, jiuwenTaskId), headers, null, JIuWenPromptBaseRes.class);
+                agentBuilderEndpoint + String.format(jiuwenPath, jiuwenTaskId), headers, null, JIuWenPromptBaseRes.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
                 if (response.getBody() != null) {
                     log.error("resume optimization task progresses from jiuwen server error! response:{}",
@@ -395,7 +395,7 @@ public class JiuWenPromptTaskJob implements Job {
         }
 
         Flux<String> dataFlux = webClient.post()
-            .uri(jiuwenBaseUrl + PROMPT_GENERATE_API)
+            .uri(agentBuilderEndpoint + PROMPT_GENERATE_API)
             .contentType(MediaType.APPLICATION_JSON)
             .header(CommonConstant.X_AUTH_TOKEN, token)
             .header(CommonConstant.X_WORKSPACE_ID, workspaceId)
@@ -466,7 +466,7 @@ public class JiuWenPromptTaskJob implements Job {
             }
 
             Flux<String> dataFlux = webClient.post()
-                .uri(jiuwenBaseUrl + PROMPT_FEEDBACK_API)
+                .uri(agentBuilderEndpoint + PROMPT_FEEDBACK_API)
                 .contentType(MediaType.APPLICATION_JSON)
                 .header(CommonConstant.X_AUTH_TOKEN, token)
                 .bodyValue(body)

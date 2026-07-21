@@ -600,7 +600,7 @@ public class AgentCommonService {
         if (StringUtils.isNotBlank(agent.getDslPath()) && CommonConstant.DEEPRESEARCH_TYPE.equals(agent.getSubType())) {
             // 如果有dsl 直接从dsl返回
             String agentJson = mgObsService.downloadObsFile(agent.getDslPath());
-            return JSON.parseObject(agentJson, AgentInfo.class).setUpdateTime(agent.getUpdatedOn());
+            return JSON.parseObject(agentJson, AgentInfo.class).setUpdateTime(agent.getUpdatedOn()).setPublishTime(agent.getPublishedOn());
         }
 
         AgentInfo agentInfo = agent.convertToDto();
@@ -620,7 +620,7 @@ public class AgentCommonService {
         // 自主动态规划模式
         if (StringUtils.isNotBlank(agent.getDslPath()) && CommonConstant.PLANEXECUTE_TYPE.equals(agent.getSubType())) {
             String agentJson = mgObsService.downloadObsFile(agent.getDslPath());
-            AgentInfo agentInfoFromDSL = JSON.parseObject(agentJson, AgentInfo.class).setUpdateTime(agent.getUpdatedOn());
+            AgentInfo agentInfoFromDSL = JSON.parseObject(agentJson, AgentInfo.class).setUpdateTime(agent.getUpdatedOn()).setPublishTime(agent.getPublishedOn());
 
             // 解决导入后空间内无插件和MCP问题
             // 计算当前工具和MCP数量

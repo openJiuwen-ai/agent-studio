@@ -62,7 +62,7 @@ class ControllerRunner:
         exec_id = execution_id or session_id or str(uuid.uuid4())
         adapter = ControllerStreamDataAdapter(execution_id=exec_id)
 
-        # 1. Load IR from cache or storage
+        # 1. Load IR from storage
         try:
             ir_json = await async_ir_load(req.ir_path)
         except Exception as e:
@@ -285,22 +285,14 @@ class ControllerRunner:
         async for chunk in self.run_streaming(req):
             if chunk is None:
                 continue
-            # Parse SSE bytes to extract message text
             try:
-                import json
-
-                chunk_str = chunk.decode() if isinstance(chunk, bytes) else chunk
-                if chunk_str.startswith("data: "):
-                    data = json.loads(chunk_str[6:])
-                    event = data.get("event", "")
-                    answer = data.get("data", {}).get("answer", "") or data.get(
-                        "data", {}
-                    ).get("output", "")
-                    if answer:
-                        result_parts.append(str(answer))
+                event = chunk.get("event", "")
+                data = chunk.get("data", {})
+                answer = data.get("answer", "") or data.get("output", "")
+                if event == "message" and answer:
+                    result_parts.append(str(answer))
             except Exception as e:
                 workflow_logger.error(
                     f"Agent group blocking failed with exception: {e}", exc_info=True
                 )
-                continue
         return "".join(result_parts)

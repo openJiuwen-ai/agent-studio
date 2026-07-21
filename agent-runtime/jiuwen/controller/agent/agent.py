@@ -975,7 +975,7 @@ class Agent(BaseAgent):
             logger.error(f"[SkillDownload] Failed to create directory {skill_local_path_prefix}: {e}")
             return False
 
-        from jiuwen.common.store.async_obs import AsyncOBSUtil
+        from storage import get_storage_provider
 
         all_success = True
         for skill in self.skill_info:
@@ -1001,36 +1001,8 @@ class Agent(BaseAgent):
 
             try:
                 logger.info(f"Downloading skill {skill_name} from OBS path {skill_path} to {local_zip_path}")
-                # 优先使用 OBS SDK 流式下载，失败时回退到 S3StorageProvider (boto3)
-                downloaded = False
-                try:
-                    await AsyncOBSUtil.download_to_file(
-                        object_key=skill_path, local_path=local_zip_path
-                    )
-                    downloaded = True
-                except Exception as obs_sdk_err:
-                    logger.warning(
-                        f"[SkillDownload] OBS SDK download failed for {skill_name}: {obs_sdk_err}. "
-                        f"Trying S3StorageProvider (aioboto3) as fallback."
-                    )
-                    try:
-                        from agent_runtime.storage.object_storage import S3StorageProvider
-                        s3_provider = S3StorageProvider.instance()
-                        content_bytes = await s3_provider.get_object_bytes(skill_path)
-                        os.makedirs(os.path.dirname(local_zip_path), exist_ok=True)
-                        with open(local_zip_path, "wb") as f:
-                            f.write(content_bytes)
-                        downloaded = True
-                        logger.info(f"[SkillDownload] Fallback S3StorageProvider download succeeded for {skill_name}")
-                    except Exception as s3_err:
-                        logger.error(
-                            f"[SkillDownload] Both OBS SDK and S3StorageProvider failed for {skill_name}. "
-                            f"OBS SDK: {obs_sdk_err}, S3: {s3_err}"
-                        )
-
-                if not downloaded:
-                    all_success = False
-                    continue
+                provider = get_storage_provider()
+                await provider.download_to_file(object_key=skill_path, local_path=local_zip_path)
 
                 # 解压 zip 到 skill 目录
                 with zipfile.ZipFile(local_zip_path, "r") as zip_ref:

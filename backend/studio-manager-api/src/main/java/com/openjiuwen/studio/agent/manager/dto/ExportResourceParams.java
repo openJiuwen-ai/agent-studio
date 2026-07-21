@@ -43,6 +43,9 @@ public class ExportResourceParams implements Serializable {
     @JsonProperty("resource_type")
     private String resourceType = null;
 
+    @JsonProperty("mode")
+    private String mode = null;
+
     public List<String> getResourceIds() {
         return resourceIds;
     }
@@ -70,6 +73,15 @@ public class ExportResourceParams implements Serializable {
         return this;
     }
 
+    public String getMode() {
+        return mode;
+    }
+
+    public ExportResourceParams setMode(String mode) {
+        this.mode = mode;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -78,6 +90,7 @@ public class ExportResourceParams implements Serializable {
         sb.append("    resourceIds: ").append(toIndentedString(resourceIds)).append("\n");
         sb.append("    resourceVersions: ").append(toIndentedString(resourceVersions)).append("\n");
         sb.append("    resourceType: ").append(toIndentedString(resourceType)).append("\n");
+        sb.append("    mode: ").append(toIndentedString(mode)).append("\n");
         sb.append("}");
         return sb.toString();
     }
@@ -93,12 +106,12 @@ public class ExportResourceParams implements Serializable {
         ExportResourceParams exportResourceParams = (ExportResourceParams) o;
         return Objects.equals(this.resourceIds, exportResourceParams.resourceIds) && Objects.equals(
             this.resourceVersions, exportResourceParams.resourceVersions) && Objects.equals(this.resourceType,
-            exportResourceParams.resourceType);
+            exportResourceParams.resourceType) && Objects.equals(this.mode, exportResourceParams.mode);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(resourceIds, resourceVersions, resourceType);
+        return Objects.hash(resourceIds, resourceVersions, resourceType, mode);
     }
 
     /**

@@ -60,8 +60,8 @@ public class JiuWenService {
     @Value("${agent_runtime_endpoint:}")
     private String runtimeEndpoint;
 
-    @Value("${feign.client.config.jiuWenService.url:}")
-    private String jiuWenServiceEndpoint;
+    @Value("${feign.client.config.agentBuilder.url:}")
+    private String agentBuilderEndpoint;
 
     /**
      * 调用模型
@@ -128,7 +128,7 @@ public class JiuWenService {
     public Flux<Map<String, Object>> generatorAgentOrWorkflow(String token, String projectId,
         String agentType, String cid, String workspaceId, Object body) {
         return webClient.post()
-            .uri(jiuWenServiceEndpoint + "/v1/" + projectId + "/" + agentType
+            .uri(agentBuilderEndpoint + "/v1/" + projectId + "/" + agentType
                 + "/generator/conversations/" + cid + "/chat?workspace_id=" + workspaceId)
             .contentType(MediaType.APPLICATION_JSON)
             .header(CommonConstant.X_AUTH_TOKEN, token)

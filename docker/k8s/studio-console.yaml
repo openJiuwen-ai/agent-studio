@@ -38,7 +38,8 @@ data:
   backend.conf: |-
     set $server_scheme "http";
     set $manager_backend "studio-manager.default.svc.cluster.local";
-    set $service_backend "studio-service.default.svc.cluster.local";
+    set $runtime_backend "studio-runtime.default.svc.cluster.local";
+    set $builder_backend "studio-builder.default.svc.cluster.local";
     set $agent_base_backend "agent-base-runtime.default.svc.cluster.local";
   resolver.conf: resolver coredns.kube-system.svc.cluster.local valid=10s;
   nginx.conf: |-
@@ -264,10 +265,11 @@ data:
                 proxy_set_header Connection "";
             }
     
-    		# /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/history
-    		location ~^/v1/.*/agents/.*/conversations/.*/history {
+            # /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/history
+        location ~^/v1/.*/agents/.*/conversations/.*/history {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                rewrite ^/v1/([^/]+)/(agents/.*)$ /v1/$1/agent-manager/$2 break;
+                proxy_pass  $server_scheme://$manager_backend:31111;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -275,8 +277,8 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/releases/{release_id}
-    		location ~^/v1/.*/releases/.* {
+            # /v1/{project_id}/releases/{release_id}
+            location ~^/v1/.*/releases/.* {
                 limit_except GET {
                   deny all;
                 }
@@ -290,9 +292,9 @@ data:
                 proxy_set_header Connection "";
                 break;
             }
-    		location ~^/v1/.*/releases/.* {
+            location ~^/v1/.*/releases/.* {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -300,10 +302,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/memory-variables
-    		location ~^/v1/.*/agents/.*/conversations/.*/memory-variables {
+            # /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/memory-variables
+            location ~^/v1/.*/agents/.*/conversations/.*/memory-variables {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -311,10 +313,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/workflows/{workflow_id}/tasks
-    		location ~^/v1/.*/workflows/.*/tasks {
+            # /v1/{project_id}/workflows/{workflow_id}/tasks
+            location ~^/v1/.*/workflows/.*/tasks {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -322,10 +324,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/workflows/{workflow_id}/tasks/{task_id}/cancel
-    		location ~^/v1/.*/workflows/.*/tasks/.*/cancel {
+            # /v1/{project_id}/workflows/{workflow_id}/tasks/{task_id}/cancel
+            location ~^/v1/.*/workflows/.*/tasks/.*/cancel {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -333,10 +335,11 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions
-    		location ~^/v1/.*/agents/.*/conversations/.*/additional-questions {
+            # /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions
+        location ~^/v1/.*/agents/.*/conversations/.*/additional-questions {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                rewrite ^/v1/([^/]+)/(agents/.*)$ /v1/$1/agent-manager/$2 break;
+                proxy_pass  $server_scheme://$manager_backend:31111;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -344,10 +347,11 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/agents/{agent_id}/conversations
-    		location ~^/v1/.*/agents/.*/conversations {
+            # /v1/{project_id}/agents/{agent_id}/conversations
+        location ~^/v1/.*/agents/.*/conversations {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                rewrite ^/v1/([^/]+)/(agents/.*)$ /v1/$1/agent-manager/$2 break;
+                proxy_pass  $server_scheme://$manager_backend:31111;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -355,10 +359,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/mcp-servers/tools
-    		location ~^/v1/.*/mcp-servers/tools {
+            # /v1/{project_id}/mcp-servers/tools
+            location ~^/v1/.*/mcp-servers/tools {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -366,10 +370,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/workflows/{workflow_id}/tasks/{task_id}
-    		location ~^/v1/.*/workflows/.*/tasks/.* {
+            # /v1/{project_id}/workflows/{workflow_id}/tasks/{task_id}
+            location ~^/v1/.*/workflows/.*/tasks/.* {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -377,10 +381,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-        	  # /v1/inner-tools/document/resolve-audio
-          	location ~^/v1/inner-tools/document/resolve-audio {
+              # /v1/inner-tools/document/resolve-audio
+              location ~^/v1/inner-tools/document/resolve-audio {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -388,10 +392,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-        	# /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/execution-queries
-        	location ~^/v1/.*/agents/.*/conversations/.*/execution-queries {
+            # /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/execution-queries
+            location ~^/v1/.*/agents/.*/conversations/.*/execution-queries {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -399,10 +403,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/mcp-servers/tools/run
-    		location ~^/v1/.*/mcp-servers/tools/run {
+            # /v1/{project_id}/mcp-servers/tools/run
+            location ~^/v1/.*/mcp-servers/tools/run {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -410,10 +414,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/agents/token
-    		location ~^/v1/.*/agents/token {
+            # /v1/{project_id}/agents/token
+            location ~^/v1/.*/agents/token {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -421,10 +425,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/agents/{agent_id}/executions/{execution_id}
-    		location ~^/v1/.*/agents/.*/executions/.* {
+            # /v1/{project_id}/agents/{agent_id}/executions/{execution_id}
+            location ~^/v1/.*/agents/.*/executions/.* {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -432,10 +436,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/memory-chunks
-    		location ~^/v1/.*/agents/.*/conversations/.*/memory-chunks {
+            # /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/memory-chunks
+            location ~^/v1/.*/agents/.*/conversations/.*/memory-chunks {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -443,10 +447,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/mcp-servers/test
-    		location ~^/v1/.*/mcp-servers/test {
+            # /v1/{project_id}/mcp-servers/test
+            location ~^/v1/.*/mcp-servers/test {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -454,10 +458,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/releases
-    		location ~^/v1/.*/releases {
+            # /v1/{project_id}/releases
+            location ~^/v1/.*/releases {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -465,10 +469,11 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/workflows/{workflow_id}/conversations
-    		location ~^/v1/.*/workflows/.*/conversations {
+            # /v1/{project_id}/workflows/{workflow_id}/conversations
+        location ~^/v1/.*/workflows/.*/conversations {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                rewrite ^/v1/([^/]+)/(workflows/.*)$ /v1/$1/agent-manager/$2 break;
+                proxy_pass  $server_scheme://$manager_backend:31111;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -476,10 +481,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/knowledge/rag-search
-    		location ~^/v1/.*/knowledge/rag-search {
+            # /v1/{project_id}/knowledge/rag-search
+            location ~^/v1/.*/knowledge/rag-search {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -487,10 +492,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/inner-tools/document/create
-    		location ~^/v1/inner-tools/document/create {
+            # /v1/inner-tools/document/create
+            location ~^/v1/inner-tools/document/create {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -498,10 +503,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/agents/{agent_id}/analytics/event
-    		location ~^/v1/.*/agents/.*/analytics/event {
+            # /v1/{project_id}/agents/{agent_id}/analytics/event
+            location ~^/v1/.*/agents/.*/analytics/event {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -509,10 +514,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/asr/short-audio
-    		location ~^/v1/.*/asr/short-audio {
+            # /v1/{project_id}/asr/short-audio
+            location ~^/v1/.*/asr/short-audio {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -520,10 +525,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/inner-tools/document/resolve
-    		location ~^/v1/inner-tools/document/resolve {
+            # /v1/inner-tools/document/resolve
+            location ~^/v1/inner-tools/document/resolve {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -531,10 +536,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/inner-tools/file/resolve
-    		location ~^/v1/inner-tools/file/resolve {
+            # /v1/inner-tools/file/resolve
+            location ~^/v1/inner-tools/file/resolve {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -542,10 +547,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/apps/{app_id}/conversions/{conversation_id}/messages/{message_id}/feedback
-    		location ~^/v1/.*/apps/.*/conversions/.*/messages/.*/feedback {
+            # /v1/{project_id}/apps/{app_id}/conversions/{conversation_id}/messages/{message_id}/feedback
+            location ~^/v1/.*/apps/.*/conversions/.*/messages/.*/feedback {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -553,10 +558,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/memory-variables/reset
-    		location ~^/v1/.*/agents/.*/conversations/.*/memory-variables/reset {
+            # /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/memory-variables/reset
+            location ~^/v1/.*/agents/.*/conversations/.*/memory-variables/reset {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -564,10 +569,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/tools/{tool_id}
-    		location ~^/v1/([^/]+)/tools/([^/]+)$ {
+            # /v1/{project_id}/tools/{tool_id}
+            location ~^/v1/([^/]+)/tools/([^/]+)$ {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -575,10 +580,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/inner-tools/document/ocr-recognize
-    		location ~^/v1/inner-tools/document/ocr-recognize {
+            # /v1/inner-tools/document/ocr-recognize
+            location ~^/v1/inner-tools/document/ocr-recognize {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -586,10 +591,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/token/resolve
-    		location ~^/v1/token/resolve {
+            # /v1/token/resolve
+            location ~^/v1/token/resolve {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -597,10 +602,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/workflows/{workflow_id}/executions/{execution_id}
-    		location ~^/v1/.*/workflows/.*/executions/.* {
+            # /v1/{project_id}/workflows/{workflow_id}/executions/{execution_id}
+            location ~^/v1/.*/workflows/.*/executions/.* {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -608,10 +613,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/datasource/{datasource_id}/execute
-    		location ~^/v1/datasource/.*/execute {
+            # /v1/datasource/{datasource_id}/execute
+            location ~^/v1/datasource/.*/execute {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -619,10 +624,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/abort
-    		location ~^/v1/.*/workflows/.*/conversations/.*/abort {
+            # /v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/abort
+            location ~^/v1/.*/workflows/.*/conversations/.*/abort {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -630,10 +635,10 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/executions
-    		location ~^/v1/.*/workflows/.*/conversations/.*/executions {
+            # /v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/executions
+            location ~^/v1/.*/workflows/.*/conversations/.*/executions {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -641,10 +646,11 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		# /v1/{project_id}/agent-runtime/upload-file
-    		location ~^/v1/.*/agent-runtime/upload-file {
+            # /v1/{project_id}/agent-runtime/upload-file
+        location ~^/v1/.*/agent-runtime/upload-file {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                rewrite ^/v1/([^/]+)/agent-runtime/upload-file$ /v1/$1/agent-manager/agents/upload-file break;
+                proxy_pass  $server_scheme://$manager_backend:31111;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -654,7 +660,7 @@ data:
             }
             location /v1/agent-builder {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113/v1/agent-builder;
+                proxy_pass  $server_scheme://$builder_backend:31015;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -664,9 +670,9 @@ data:
             }
     
             #/v1/{project_id}/agents/{agent_id}/prompt/build
-    		location ~^/v1/.*/agents/.*/prompt/build {
+            location ~^/v1/.*/agents/.*/prompt/build {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -675,10 +681,10 @@ data:
                 proxy_set_header Connection "";
             }
     
-    		#/v1/{project_id}/f1/agents/{agent_id}/conversations/{conversation_id}
-    		location ~^/v1/.*/f1/agents/.*/conversations/.* {
+            #/v1/{project_id}/f1/agents/{agent_id}/conversations/{conversation_id}
+            location ~^/v1/.*/f1/agents/.*/conversations/.* {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -686,21 +692,9 @@ data:
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
             }
-    		location ~^/v1/.*/agents/.*/prompt {
+            location ~^/v1/.*/agents/.*/prompt {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
-                proxy_http_version 1.1;
-                proxy_set_header Connection "";
-            }
-    
-    		#/v1/{project_id}/agents/{agent_id}/triggers/hook/{trigger_id}
-    		location ~^/v1/.*/agents/.*/triggers/hook/.* {
-                include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -709,10 +703,10 @@ data:
                 proxy_set_header Connection "";
             }
     
-    		#/v1/{project_id}/model-service/status/check
-    		location ~^/v1/.*/model-service/status/check {
+            #/v1/{project_id}/agents/{agent_id}/triggers/hook/{trigger_id}
+            location ~^/v1/.*/agents/.*/triggers/hook/.* {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -721,10 +715,10 @@ data:
                 proxy_set_header Connection "";
             }
     
-    		#/v1/{project_id}/agents/{agent_id}/prompt/build
-    		location ~^/v1/.*/agents/.*/prompt/build {
+            #/v1/{project_id}/model-service/status/check
+        location ~^/v1/.*/model-service/status/check {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$builder_backend:31015;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -733,10 +727,10 @@ data:
                 proxy_set_header Connection "";
             }
     
-    		#/v1/agent-builder/chat/completions
-    		location ~^/v1/agent-builder/chat/completions {
+            #/v1/{project_id}/agents/{agent_id}/prompt/build
+            location ~^/v1/.*/agents/.*/prompt/build {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -745,21 +739,10 @@ data:
                 proxy_set_header Connection "";
             }
     
-    		#/v1/workflows/chat/{short_code}/conversations/{conversation_id}
-    		location ~^/v1/.*/chat/.*/conversations/.* {
+            #/v1/agent-builder/chat/completions
+        location ~^/v1/agent-builder/chat/completions {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
-                proxy_http_version 1.1;
-                proxy_set_header Connection "";
-            }
-    		#/v1/agents/chat/{short_code}
-    		location ~^/v1/agents/chat/.* {
-                include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$builder_backend:31015;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -768,10 +751,21 @@ data:
                 proxy_set_header Connection "";
             }
     
-    		#/v1/agent-builder/embeddings
-    		location ~^/v1/agent-builder/embeddings {
+            #/v1/workflows/chat/{short_code}/conversations/{conversation_id}
+            location ~^/v1/.*/chat/.*/conversations/.* {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_http_version 1.1;
+                proxy_set_header Connection "";
+            }
+            #/v1/agents/chat/{short_code}
+            location ~^/v1/agents/chat/.* {
+                include /home/conf/backend.conf;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -780,10 +774,22 @@ data:
                 proxy_set_header Connection "";
             }
     
-    		#/v1/agent-builder/rerank
-    		location ~^/v1/agent-builder/rerank {
+            #/v1/agent-builder/embeddings
+        location ~^/v1/agent-builder/embeddings {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$builder_backend:31015;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_http_version 1.1;
+                proxy_set_header Connection "";
+            }
+    
+            #/v1/agent-builder/rerank
+        location ~^/v1/agent-builder/rerank {
+                include /home/conf/backend.conf;
+                proxy_pass  $server_scheme://$builder_backend:31015;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -795,7 +801,7 @@ data:
             # /v2/{project_id}/knowledge-bases/retrieve
             location ~^/v2/([^/]+)/knowledge-bases/retrieve {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -807,7 +813,7 @@ data:
             # /v2/{project_id}/knowledge-bases/images/{image_id}
             location ~^/v2/([^/]+)/knowledge-bases/images/([^/]+)$ {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -817,7 +823,7 @@ data:
             }
             location ~^/v2/.*/agent-runtime {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -827,7 +833,7 @@ data:
             }
             location ~^/v1/.*/agent-runtime {
                 include /home/conf/backend.conf;
-                proxy_pass  $server_scheme://$service_backend:31113;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

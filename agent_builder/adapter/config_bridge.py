@@ -95,6 +95,11 @@ class RedisSettings(BaseSettings):
     ssl_ca_cert: str = Field(default="", validation_alias="REDIS_SSL_CA_CERT")
     ssl_cert_file: str = Field(default="", validation_alias="REDIS_SSL_CERT_FILE")
     ssl_key_file: str = Field(default="", validation_alias="REDIS_SSL_KEY_FILE")
+    # Redis 写入 TTL（秒）：用于会话状态、对话历史等业务的过期兜底，防止 key 永久驻留。
+    # 与 agent_runtime 侧 jiuwen RedisUtils.set 的 REDIS_TTL 跨进程约定保持同名。
+    datasource_ttl_seconds: int = Field(
+        default=3 * 24 * 60 * 60, validation_alias="REDIS_TTL"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -106,6 +111,14 @@ class RedisSettings(BaseSettings):
         return _decrypt(v)
 
 
+class ModelConfigStrategyType(str, Enum):
+    """模型配置来源策略（与 agent_runtime.common.config.ModelConfigStrategyType 对齐）。"""
+
+    ENV = "env"
+    IR = "ir"
+    OBS = "obs"
+
+
 class LLMSettings(BaseSettings):
     api_key: str = Field(default="sk-placeholder", validation_alias="IR_LLM_API_KEY")
     api_base: str = Field(default="", validation_alias="MODEL_ROUTER_API")
@@ -115,6 +128,13 @@ class LLMSettings(BaseSettings):
     temperature: float = Field(default=0.5, validation_alias="IR_LLM_TEMPERATURE")
     top_p: float = Field(default=0.5, validation_alias="IR_LLM_TOP_P")
     max_tokens: int = Field(default=4096, validation_alias="IR_LLM_MAX_TOKENS")
+    # 模型配置来源策略: env / ir / obs（默认 obs：OBS 直连，绕过模型路由网关）。
+    # obs → client_provider="studio" 进程内直连真实模型；
+    # ir  → client_provider="openai" 走 MODEL_ROUTER_API 网关；
+    # env → client_provider="openai" 走 IR_LLM_* 环境变量。
+    model_config_strategy: ModelConfigStrategyType = Field(
+        default=ModelConfigStrategyType.OBS, validation_alias="MODEL_CONFIG_STRATEGY"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -130,6 +150,12 @@ class LLMSettings(BaseSettings):
 
 
 class ObjectStorageSettings(BaseSettings):
+    # CUSTOM 存储类型 + Local 重构（对齐远程 OBS 存储扩展 f00cd2ba，与 agent_runtime 一致）
+    type: str = Field(default="OBS", validation_alias="STORAGE_TYPE")
+    custom_module: str = Field(default="", validation_alias="STORAGE_CUSTOM_MODULE")
+    custom_class: str = Field(default="", validation_alias="STORAGE_CUSTOM_CLASS")
+    local_base_path: str = Field(default="", validation_alias="STORAGE_LOCAL_BASE_PATH")
+    local_bucket: str = Field(default="default-bucket", validation_alias="STORAGE_LOCAL_BUCKET")
     server: str = Field(default="", validation_alias="DATASOURCE_OBS_SERVER")
     bucket: str = Field(default="", validation_alias="DATASOURCE_OBS_BUCKET")
     access_key: str = Field(default="", validation_alias="DATASOURCE_OBS_AK")

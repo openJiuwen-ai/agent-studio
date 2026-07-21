@@ -96,6 +96,12 @@ public class ReleaseVersion {
     private Date releasedOn;
 
     /**
+     * Update time
+     */
+    @JsonProperty("updated_on")
+    private Date updatedOn;
+
+    /**
      * 转换DTO Info
      */
     public VersionInfo convertToInfo() {

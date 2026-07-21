@@ -2946,6 +2946,7 @@
   "intent_add_success_tip": "意图包创建成功！",
   "intent_add_success_tip_content": "{{packName}}意图包创建成功，是否直接添加于当前工作流？",
   "input_length_not_allow_over": "输入长度不能超过{{length}}。",
+  "input_length_not_allow_over_tip": "输入长度不能超过{{length}}",
   "input_invalid_value": "输入值非法。",
   "variables_data": "数据处理",
   "view_reason": "查看原因",

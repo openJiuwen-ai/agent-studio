@@ -35,6 +35,9 @@ dependencies = [
     "aiomysql>=0.2.0",
     "PyMySQL>=1.1.0",
     "flask>=3.1.0",
+    "pyahocorasick>=2.2.0",
+    "model-service",
+    "storage",
 ]
 
 [project.optional-dependencies]
@@ -69,3 +72,8 @@ asyncio_default_test_loop_scope = "session"
 name = "aliyun-mirrors"
 url = "https://mirrors.aliyun.com/pypi/simple"
 default = true
+
+[tool.uv.sources]
+# 机制层共享包（monorepo 同仓，runtime/agent-builder 都依赖）。path 相对于本 pyproject。
+model-service = { path = "../packages/model_service", editable = true }
+storage = { path = "../packages/storage", editable = true }

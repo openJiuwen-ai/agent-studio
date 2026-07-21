@@ -4,6 +4,7 @@
 package com.openjiuwen.studio.agent.manager.workflow.resource.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
 import com.openjiuwen.studio.agent.manager.entity.ShareInfo;
 
@@ -46,5 +47,8 @@ public class ExportInfo {
 
     @JsonProperty("schema_version")
     private String schemaVersion = "V2.0";
+
+    @JsonProperty("l1_mappings")
+    private List<MappingEntity> l1Mappings;
 
 }

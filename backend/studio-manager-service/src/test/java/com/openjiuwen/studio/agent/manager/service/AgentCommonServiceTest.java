@@ -48,6 +48,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -623,5 +624,73 @@ class AgentCommonServiceTest {
 
         verify(historyReleaseVersionMapper, times(1)).insert(any(HistoryReleaseVersionEntity.class));
         verify(releaseVersionMapper, times(1)).deleteByPrimaryKey("id-123");
+    }
+
+    @Test
+    void testBuildComplexAgentInfo_PlanExecute_PublishTimeFromDatabase() {
+        // 准备测试数据
+        Date dbPublishTime = new Date(System.currentTimeMillis() - 86400000); // 1天前
+        Date dslPublishTime = new Date(System.currentTimeMillis() - 172800000); // 2天前（过期的）
+        Date updateTime = new Date();
+
+        Agent agent = new Agent();
+        agent.setAgentId("agent-123");
+        agent.setProjectId("project-1");
+        agent.setWorkspaceId("workspace-1");
+        agent.setSubType(CommonConstant.PLANEXECUTE_TYPE);
+        agent.setDslPath("/obs/dsl/path");
+        agent.setPublishedOn(dbPublishTime);
+        agent.setUpdatedOn(updateTime);
+
+        // DSL中返回过期的publish_time
+        String dslJson = String.format("{\"agentId\":\"agent-123\",\"publishTime\":%d,\"updateTime\":%d}",
+            dslPublishTime.getTime(), updateTime.getTime());
+        when(mgObsService.downloadObsFile("/obs/dsl/path")).thenReturn(dslJson);
+
+        // Mock依赖服务
+        when(relationManagementService.listAgentTools(anyString(), anyString(), anyString(), anyInt(), anyInt()))
+            .thenReturn(Collections.emptyList());
+        when(relationManagementService.listAgentMcpServers(anyString()))
+            .thenReturn(Collections.emptyList());
+        when(relationManagementService.listAgentSkills(anyString()))
+            .thenReturn(Collections.emptyList());
+
+        // 执行
+        var result = agentCommonService.buildComplexAgentInfo(agent);
+
+        // 验证publishTime应该来自数据库，而不是DSL
+        assertNotNull(result);
+        assertEquals(dbPublishTime, result.getPublishTime(),
+            "publishTime should be from database, not from DSL");
+    }
+
+    @Test
+    void testBuildComplexAgentInfo_DeepResearch_PublishTimeFromDatabase() {
+        // 准备测试数据
+        Date dbPublishTime = new Date(System.currentTimeMillis() - 86400000); // 1天前
+        Date dslPublishTime = new Date(System.currentTimeMillis() - 172800000); // 2天前（过期的）
+        Date updateTime = new Date();
+
+        Agent agent = new Agent();
+        agent.setAgentId("agent-456");
+        agent.setProjectId("project-1");
+        agent.setWorkspaceId("workspace-1");
+        agent.setSubType(CommonConstant.DEEPRESEARCH_TYPE);
+        agent.setDslPath("/obs/dsl/path");
+        agent.setPublishedOn(dbPublishTime);
+        agent.setUpdatedOn(updateTime);
+
+        // DSL中返回过期的publish_time
+        String dslJson = String.format("{\"agentId\":\"agent-456\",\"publishTime\":%d,\"updateTime\":%d}",
+            dslPublishTime.getTime(), updateTime.getTime());
+        when(mgObsService.downloadObsFile("/obs/dsl/path")).thenReturn(dslJson);
+
+        // 执行
+        var result = agentCommonService.buildComplexAgentInfo(agent);
+
+        // 验证publishTime应该来自数据库，而不是DSL
+        assertNotNull(result);
+        assertEquals(dbPublishTime, result.getPublishTime(),
+            "publishTime should be from database, not from DSL for DeepResearch");
     }
 }

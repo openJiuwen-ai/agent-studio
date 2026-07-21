@@ -99,7 +99,7 @@ spring:
       client:
         config:
           agentRuntime:
-            url: ${agent_runtime_endpoint:http://127.0.0.1:31113}
+            url: ${agent_runtime_endpoint:http://127.0.0.1:31014}
             connectTimeout: ${feign.agentRuntime.connectTimeout:10000}
             readTimeout: ${feign.agentRuntime.readTimeout:120000}
 
@@ -185,6 +185,7 @@ redis:
   cluster_node_list: ${cluster_node_list:}
   client-type: ${redis_client_type:redisson}
   enable-log: ${redis_enable_log:false}
+  max-debug-msg-size: ${redis_max_debug_msg_size:10000}
 
 # health check
 management:
@@ -224,16 +225,27 @@ iam:
     name: ${iam_project_name:}
   assumeRole:
     agencyName: ${iam_assumeRole_agencyName:}
-obs:
-  url: ${obs_url:}
-  ak: ${obs_ak:}
-  sk: ${obs_sk:}
-  bucket: ${obs_bucket:}
-  stagingBucket: ${obs_stagingBucket:}
-  opensource: ${obs_opensource:true}
-  expires: ${obs_expires:7}
-  path:
-    style: ${DATASOURCE_OBS_PATH_STYLE:path}
+storage:
+  type: ${storage_type:OBS}
+  expires: ${obs_expire_time:7}
+  bucket-storage-limit: ${obs_bucket_storage_limit:100}
+  custom-class: ${STORAGE_CUSTOM_CLASS:}
+  custom-classpath: ${STORAGE_CUSTOM_CLASSPATH:}
+  obs:
+    url: ${obs_url:}
+    ak: ${obs_ak:}
+    sk: ${obs_sk:}
+    bucket: ${obs_bucket:}
+    staging-bucket: ${obs_staging_bucket:agent-builder-files-staging}
+    opensource: ${obs_opensource:true}
+    auto-create-bucket: ${obs_bucket_auto_create:true}
+    path-style: ${DATASOURCE_OBS_PATH_STYLE:path}
+    bucket_storage_limit: ${obs_bucket_storage_limit:100}
+  local:
+    base-path: ${storage_local_base_path:}
+    bucket: ${storage_local_bucket:}
+    staging-bucket: ${storage_local_staging_bucket:}
+    server-url: ${storage_local_server_url:}
 
 model:
   platform:
@@ -434,7 +446,14 @@ file:
   icon-type: ${file_icon_type:.jpg,.jpeg,.png,.gif}
   import-type: ${file_import_type:.jsonl}
   default-type: ${file_default_type:.doc,.docx,.txt,.pdf,.csv,.xlsx,.xls,.pptx,.ppt,.png,.jpg,.jpeg,.bmp,.gif,.mp3,.mp4,.wav,.amr,.m4a,.ogg,.flac,.webm,.aac,.ac3,.mov,.wma,.avi,.rmvb,.mkv,.flv,.f4v,.wmv,.3gp,.jsonl}
-
+  max-upload-num: ${max_upload_num:20}
+  time-scope-upload-num: ${time_scope_upload_num:300}
+  max-upload-total-size: ${max_upload_total_size:204800}
+  time-scope-upload-total-size: ${time_scope_upload_total_size:86400}
+  readonly:
+    enable: ${file_readonly_enable:false}
+  access:
+    expiration-days: ${file_upload_expiration_days:7}
 icon:
   max-size: ${icon_max_size:200}
 
@@ -472,7 +491,7 @@ feign:
   client:
     config:
       agentRuntime:
-        url: ${agent_runtime_endpoint:http://127.0.0.1:31113}
+        url: ${agent_runtime_endpoint:http://127.0.0.1:31014}
       cseClient:
         url: ${cse_client_endpoint:http://mock-cse:8080}
       apigClient:
@@ -485,7 +504,9 @@ feign:
       elbClient:
         url: ${elb_client_endpoint:http://mock-elb:8080}
       jiuWenService:
-        url: ${jiu_wen_service_endpoint:http://127.0.0.1:31014}
+        url: ${agent_runtime_endpoint:http://127.0.0.1:31014}
+      agentBuilder:
+        url: ${agent_builder_endpoint:http://127.0.0.1:31015}
       maasModel:
         url: ${maas_model_endpoint:http://mock-maas-model:8080}
       managementCenterFeignClient:
@@ -553,6 +574,15 @@ workflow:
   connector_config_host_whitelist: ${host_whitelist:}
   enable-url-check: ${enable_url_check:true}
   demo-workflow-id: ${demo_workflow_id:}
+  insight-exec-rel: ${workflow_insight_exec_rel:insight_exec_rel_%s_%s_%s}
+  insight-conv-rel: ${workflow_insight_conv_rel:insight_conv_%s_%s}
+  insight-exec: ${workflow_insight_exec:insight_exec_%s_%s}
+  max-execution-size: ${workflow_max_execution_size:20}
+  instance-expire: ${workflow_instance_expire:10}
+  conversation-expire: ${workflow_conversation_expire:7}
+  max-conversation-size: ${workflow_max_conversation_size:20}
+  max-query-length: ${workflow_max_query_length:100000}
+  sse-timeout-milliseconds: ${workflow_sse_timeout_milliseconds:900000}
 # ==========================================工作流相关配置end=======================================
 
 # ==========================================agent相关配置start=======================================
@@ -572,6 +602,11 @@ agent:
   init-template-path: ${agent_init_template_path:classpath:template/app/**.jsonl}
   max-iteration: ${agent_manx_iteration:15}
   demo-agent-id: ${demo_agent_id:}
+  insight-exec-rel: ${agent_insight_exec_rel:insight_exec_rel_%s_%s_%s}
+  insight-conv-rel: ${agent_insight_conv_rel:insight_conv_%s_%s}
+  insight-exec: ${agent_insight_exec:insight_exec_%s_%s}
+  max-execution-size: ${agent_max_execution_size:20}
+  max-conversation-size: ${agent_max_conversation_size:20}
   deepresearch-character: ${outliner_max_section_num:10}
   builder:
     iam:
@@ -677,7 +712,7 @@ task.quota: ${task_quota:600}
 model.manager.server.endpoint: ${manager_server_baseurl:}
 
 jiuwen:
-  base-url: ${jiuwen_base_url:http://127.0.0.1:31014}
+  base-url: ${agent_runtime_endpoint:http://127.0.0.1:31014}
 
 prompt:
   contentlenth: ${prompt_max_length:10000}
@@ -801,3 +836,23 @@ springdoc:
     enabled: false
   swagger-ui:
     enabled: false
+# 鉴权配置
+auth:
+  path:
+    # 免鉴权路径（逗号分隔），环境变量：auth_path_excluded
+    excluded: ${auth_path_excluded:/v1/health, /health}
+  sso:
+    # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权（验证 Access-Token），留空则使用默认简单鉴权，环境变量：auth_sso_validate_url
+    validate-url: ${auth_sso_validate_url:}
+    # SSO 请求头名称（用于传递 Access-Token），环境变量：auth_sso_header
+    header: ${auth_sso_header:Access-Token}
+  # SSO 响应字段与用户属性映射
+  user-info:
+    claims:
+      user-id: ${user_info_claims_user_id:user_id}
+      user-name: ${user_info_claims_user_name:user_name}
+      domain-id: ${user_info_claims_domain_id:domain_id}
+      project-id: ${user_info_claims_project_id:project_id}
+    defaults:
+      domain-id: ${user_info_defaults_domain_id:0}
+      project-id: ${user_info_defaults_project_id:0}

@@ -1463,7 +1463,6 @@ export class ConfigToolsComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.isFlowReadonly) {
       return;
     }
-    console.log("xxx");
     if (type === "userVars") {
       this.varMemoryModal.open(this.agent_variables, true, false);
     } else {

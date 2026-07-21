@@ -79,16 +79,27 @@ build_and_save_images() {
     docker pull "${BASE_IMAGE_NGINX}" || log_warn "基础镜像 ${BASE_IMAGE_NGINX} 拉取失败，尝试使用本地缓存"
     docker pull "${BASE_IMAGE_PYTHON}" || log_warn "基础镜像 ${BASE_IMAGE_PYTHON} 拉取失败，尝试使用本地缓存"
 
-    # ---- 检查是否已有编译产物 ----
+    # ---- 检查编译产物是否完整且与当前源码一致 ----
     local need_build=false
     # 产物路径需与 package.sh 实际输出一致：
     #   console 产出 agent-console.tar（不是 dist/ 目录）
     #   runtime 的 EIStart.py 位于 agent_runtime/ 下（不是 src/）
     if [ ! -f "${DOCKER_DIR}/studio-manager/lib/studio-manager.jar" ] || \
-       [ ! -f "${DOCKER_DIR}/studio-service/lib/studio-service.jar" ] || \
        [ ! -f "${DOCKER_DIR}/studio-console/agent-console.tar" ] || \
        [ ! -f "${DOCKER_DIR}/studio-runtime/agent_runtime/EIStart.py" ]; then
         need_build=true
+    fi
+
+    local hash_script="${DOCKER_DIR}/source_hash.sh"
+    local hash_file="${DOCKER_DIR}/.source-build-hash"
+    if [ "${need_build}" = false ] && [ -f "${hash_script}" ]; then
+        local current_hash recorded_hash
+        current_hash=$(bash "${hash_script}" 2>/dev/null || true)
+        recorded_hash=$(cat "${hash_file}" 2>/dev/null || true)
+        if [ -z "${current_hash}" ] || [ "${current_hash}" != "${recorded_hash}" ]; then
+            log_warn "现有编译产物与当前源码指纹不一致"
+            need_build=true
+        fi
     fi
 
     if [ "${need_build}" = true ]; then
@@ -108,26 +119,48 @@ build_and_save_images() {
         log_info "检测到编译产物，跳过源码编译"
     fi
 
-    # ---- 构建 4 个 Docker 镜像 ----
-    log_info "[1/4] 构建 studio-manager 镜像..."
+    # ---- 构建应用镜像和内置日志数据源的 Grafana 镜像 ----
+    log_info "[1/5] 构建 studio-manager 镜像..."
     cd "${DOCKER_DIR}/studio-manager"
     docker build --build-arg BASE_IMAGE="${BASE_IMAGE_JAVA}" \
         -t "studio-manager:${IMAGE_TAG}" .
 
-    log_info "[2/4] 构建 studio-service 镜像..."
-    cd "${DOCKER_DIR}/studio-service"
-    docker build --build-arg BASE_IMAGE="${BASE_IMAGE_JAVA}" \
-        -t "studio-service:${IMAGE_TAG}" .
-
-    log_info "[3/4] 构建 studio-console 镜像..."
+    log_info "[2/5] 构建 studio-console 镜像..."
     cd "${DOCKER_DIR}/studio-console"
     docker build --build-arg BASE_IMAGE="${BASE_IMAGE_NGINX}" \
         -t "studio-console:${IMAGE_TAG}" .
 
-    log_info "[4/4] 构建 studio-runtime 镜像..."
+    log_info "[3/5] 构建 studio-runtime 镜像..."
     cd "${DOCKER_DIR}/studio-runtime"
     docker build --build-arg BASE_IMAGE="${BASE_IMAGE_PYTHON}" \
         -t "studio-runtime:${IMAGE_TAG}" .
+
+    log_info "[4/5] 构建 studio-builder 镜像..."
+    rm -rf "${DOCKER_DIR}/studio-builder/agent_builder" \
+           "${DOCKER_DIR}/studio-builder/model_service" \
+           "${DOCKER_DIR}/studio-builder/storage"
+    cp -rf "${PROJECT_DIR}/agent_builder" "${DOCKER_DIR}/studio-builder/agent_builder"
+    cp -rf "${PROJECT_DIR}/packages/model_service/model_service" "${DOCKER_DIR}/studio-builder/model_service"
+    cp -rf "${PROJECT_DIR}/packages/storage/storage" "${DOCKER_DIR}/studio-builder/storage"
+    cd "${DOCKER_DIR}/studio-builder"
+    if ! docker build --build-arg BASE_IMAGE="${BASE_IMAGE_PYTHON}" \
+        -t "studio-builder:${IMAGE_TAG}" .; then
+        rm -rf agent_builder model_service storage
+        return 1
+    fi
+    rm -rf agent_builder model_service storage
+
+    log_info "[5/5] 构建内置 VictoriaLogs 数据源的 Grafana 镜像..."
+    local grafana_image="openjiuwen/grafana-victorialogs:11.3.0-0.29.0"
+    if docker image inspect "${grafana_image}" > /dev/null 2>&1; then
+        log_info "${grafana_image} 已存在，跳过构建"
+    else
+        cd "${DOCKER_DIR}/grafana"
+        docker build \
+            --build-arg GRAFANA_VERSION=11.3.0 \
+            --build-arg VICTORIA_LOGS_DATASOURCE_VERSION=0.29.0 \
+            -t "${grafana_image}" .
+    fi
 
     log_info "所有镜像构建完成"
 }
@@ -138,13 +171,17 @@ build_and_save_images() {
 save_images() {
     log_step "导出应用 Docker 镜像到 tar 文件..."
 
-    local images=("studio-manager" "studio-service" "studio-console" "studio-runtime")
+    local images=("studio-manager" "studio-console" "studio-runtime" "studio-builder")
 
     for image in "${images[@]}"; do
         local tar_name="${image}_${BUILD_TIME}.${BUILD_PLATFORM}.tar"
         log_info "导出 ${image}:${IMAGE_TAG} -> images/${tar_name}"
         docker save "${image}:${IMAGE_TAG}" -o "${OUTPUT_DIR}/images/${tar_name}"
     done
+
+    log_info "导出内置插件 Grafana 镜像"
+    docker save "openjiuwen/grafana-victorialogs:11.3.0-0.29.0" \
+        -o "${OUTPUT_DIR}/images/grafana-victorialogs_11.3.0-0.29.0.${BUILD_PLATFORM}.tar"
 
     log_info "所有应用镜像导出完成"
 }
@@ -153,9 +190,16 @@ save_images() {
 # 导出依赖 Docker 镜像
 # ========================================
 export_dep_images() {
-    log_step "导出依赖镜像（MySQL/Redis/MinIO/MC）..."
+    log_step "导出依赖镜像（基础设施与日志组件）..."
 
-    local dep_images=("mysql:8.0" "redis:7" "minio/minio:latest" "minio/mc:latest")
+    local dep_images=(
+        "mysql:8.0"
+        "redis:7"
+        "minio/minio:latest"
+        "minio/mc:latest"
+        "victoriametrics/victoria-logs:v1.50.0"
+        "timberio/vector:0.55.0-alpine"
+    )
 
     for image in "${dep_images[@]}"; do
         log_info "拉取并导出: ${image}"
@@ -181,6 +225,29 @@ copy_configs() {
     mkdir -p "${OUTPUT_DIR}/config"
     cp "${DEPLOY_DIR}/config/nginx.conf" "${OUTPUT_DIR}/config/"
 
+    # L1 日志聚合配置
+    cp "${DEPLOY_DIR}/config/vector.yaml" "${OUTPUT_DIR}/config/"
+    cp "${DEPLOY_DIR}/config/grafana-datasources.yaml" "${OUTPUT_DIR}/config/"
+    mkdir -p "${OUTPUT_DIR}/observability/config" "${OUTPUT_DIR}/observability/dashboards"
+    cp "${DEPLOY_DIR}/observability/config/grafana-dashboards.yaml" \
+        "${OUTPUT_DIR}/observability/config/"
+    cp -R "${DEPLOY_DIR}/observability/dashboards/." \
+        "${OUTPUT_DIR}/observability/dashboards/"
+
+    # L2 跨节点日志聚合配置与脚本（TLS 证书和凭据在目标机生成，不打包）。
+    mkdir -p "${OUTPUT_DIR}/observability/scripts"
+    cp "${DEPLOY_DIR}/observability/docker-compose.monitor.yml" \
+       "${DEPLOY_DIR}/observability/docker-compose.vector.yml" \
+       "${DEPLOY_DIR}/observability/.env.template" \
+       "${OUTPUT_DIR}/observability/"
+    cp "${DEPLOY_DIR}/observability/config/vector.yaml" \
+       "${DEPLOY_DIR}/observability/config/nginx-gateway.conf" \
+       "${DEPLOY_DIR}/observability/config/grafana-datasources.yaml" \
+       "${OUTPUT_DIR}/observability/config/"
+    cp "${DEPLOY_DIR}/observability/scripts/deploy-monitor.sh" \
+       "${DEPLOY_DIR}/observability/scripts/deploy-vector.sh" \
+       "${OUTPUT_DIR}/observability/scripts/"
+
     # nginx-https.conf（可选）
     if [ -f "${DEPLOY_DIR}/config/nginx-https.conf" ]; then
         cp "${DEPLOY_DIR}/config/nginx-https.conf" "${OUTPUT_DIR}/config/"
@@ -197,6 +264,8 @@ copy_configs() {
     sed "s/TAG_PLACEHOLDER/${IMAGE_TAG}/g" "${DEPLOY_DIR}/.env.template" > "${OUTPUT_DIR}/.env.template"
     sed -i 's/^IMAGE_SOURCE=ghcr/IMAGE_SOURCE=offline/' "${OUTPUT_DIR}/.env.template"
     sed -i 's/^# \(STUDIO_.*_IMAGE=\)/\1/' "${OUTPUT_DIR}/.env.template"
+    # 离线包内保存的是本地标签，避免目标机尝试访问 GHCR。
+    sed -i 's|^GRAFANA_IMAGE=.*|GRAFANA_IMAGE=openjiuwen/grafana-victorialogs:11.3.0-0.29.0|' "${OUTPUT_DIR}/.env.template"
 
     # 统一部署脚本
     cp "${DEPLOY_DIR}/deploy.sh" "${OUTPUT_DIR}/"
@@ -226,8 +295,8 @@ generate_image_info() {
 # 部署时 .env 中镜像配置应为:
 STUDIO_CONSOLE_IMAGE=studio-console:${IMAGE_TAG}
 STUDIO_MANAGER_IMAGE=studio-manager:${IMAGE_TAG}
-STUDIO_SERVICE_IMAGE=studio-service:${IMAGE_TAG}
 STUDIO_RUNTIME_IMAGE=studio-runtime:${IMAGE_TAG}
+STUDIO_BUILDER_IMAGE=studio-builder:${IMAGE_TAG}
 EOF
 
     log_info "镜像信息文件已生成"
@@ -279,7 +348,7 @@ main() {
     echo "  离线部署包: ${SCRIPT_DIR}/AgentBuilder-offline-${VERSION}.tar.gz"
     echo ""
     echo "  离线包内容："
-    echo "    images/              - 4个应用镜像 tar + image_info.txt"
+    echo "    images/              - 5个应用镜像 tar + image_info.txt"
     echo "    dep-images/          - MySQL/Redis/MinIO/MC 镜像 tar"
     echo "    scripts/             - 辅助脚本（install-docker-offline）"
     echo "    config/nginx.conf    - Nginx 配置（HTTP 模式）"

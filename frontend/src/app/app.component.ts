@@ -100,7 +100,7 @@ export class AppComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     this.initLinkInterceptor();
     this.http.getPermissionError().subscribe((data) => {
-      if (data?.error_code === 'oepnjiuwen.02001084') {
+      if (data?.error_code === 'Openjiuwen.02001084') {
         this.permissionUse = false;
         this.permissionMessage = data?.error_msg || this.i18NextEagerPipe.transform('app_component_2');
       }

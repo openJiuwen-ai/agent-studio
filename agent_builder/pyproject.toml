@@ -1,0 +1,33 @@
+# -*- coding: UTF-8 -*-
+[project]
+name = "agent-builder"
+version = "0.1.0"
+description = "agent_builder microservice — FastAPI shell wrapping the Flask prompt/mmapo app + n2l router"
+requires-python = ">=3.11"
+# 依赖由共享的 agent-runtime venv 提供（openjiuwen/agent-core、model-service、
+# fastapi/flask/uvicorn/pydantic/pydantic-settings/redis/sqlalchemy 等）。
+# 此处不重复声明，避免 `pip install -e` 重新解析/拉取 openjiuwen(来自 git) 与
+# model-service(来自 ../packages/model_service) —— 它们已在 venv 中。
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# agent_builder 包位于本 pyproject 的父目录（仓库根），故 where 指向 ".."。
+# 这样 `pip install -e agent_builder` 后，任意 CWD 都能 `import agent_builder`，
+# 从而可以从 agent_builder/ 当 CWD 启动、读取 agent_builder/.env（与 agent-runtime 布局一致）。
+where = [".."]
+include = ["agent_builder*"]
+exclude = ["agent_builder.tests*", "agent_builder.__pycache__*"]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"

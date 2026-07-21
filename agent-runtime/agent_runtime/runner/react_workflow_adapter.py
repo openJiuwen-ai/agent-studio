@@ -4,7 +4,7 @@ ReActAgent Workflow Adapter — 将 Workflow 适配为 ReActAgent 可调用的 T
 """
 
 import uuid
-from typing import List, Any
+from typing import List
 
 from openjiuwen.core.foundation.tool import Tool, ToolCard
 from openjiuwen.core.session.stream import BaseStreamMode
@@ -16,34 +16,39 @@ class ReactWorkflowAdapter(Tool):
 
     def __init__(
         self,
-        workflow_instance: Any,
+        ir_data: dict,
+        card_id: str,
         workflow_name: str,
         workflow_desc: str,
         input_params: dict,
         user_fields_keys: List[str],
     ):
         card = ToolCard(
-            id=workflow_instance.card.id,
+            id=card_id,
             name=workflow_name,
             description=workflow_desc,
             input_params=input_params,
         )
         super().__init__(card=card)
-        self._workflow_instance = workflow_instance
+        # R-02: 只存只读 IR,不存共享 workflow 实例;invoke 每次自建,消除并发竞写
+        self._ir_data = ir_data
         self._user_fields_keys = user_fields_keys
 
     async def invoke(self, inputs: dict, **kwargs) -> dict:
         """调用工作流"""
         from openjiuwen.core.workflow import create_workflow_session
+        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
 
         session_id = kwargs.get("session_id", str(uuid.uuid4()))
         session = create_workflow_session(session_id=session_id)
         wf_inputs = self._convert_inputs(inputs)
+        # R-02: per-call 新建 workflow 实例 → 各自独立 _session/_graph → 并发 stream() 不竞写
+        wf_instance = await IRConverter.async_ir_to_workflow(self._ir_data)
 
         final_answer = None
         fallback_result = None
 
-        async for chunk in self._workflow_instance.stream(
+        async for chunk in wf_instance.stream(
             inputs=wf_inputs,
             session=session,
             stream_modes=[BaseStreamMode.OUTPUT, BaseStreamMode.CUSTOM],

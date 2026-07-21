@@ -504,6 +504,7 @@ export class KnowledgeRepoService {
     let v2Prefix = this.prefix.replaceAll('/v1/', '/v2/');
     return this.http.getAsync({
       url: `${v2Prefix}/knowledge-bases`,
+      cancelGlobalError: params?.cancelGlobalError,
       query: {
         ids: params?.ids ?? [],
         offset: params?.offset,

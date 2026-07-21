@@ -98,38 +98,6 @@ public interface Constant {
         String SUB_REPORTER_NODE = "sub_reporter";
     }
 
-    interface File {
-        /**
-         * txt文件后缀
-         */
-        String TXT = "txt";
-
-        /**
-         * doc文件后缀
-         */
-        String DOC = "doc";
-
-        /**
-         * docx文件后缀
-         */
-        String DOCX = "docx";
-
-        /**
-         * xlsx 文件后缀
-         */
-        String XLSX = "xlsx";
-
-        /**
-         * xls 文件后缀
-         */
-        String XLS = "xls";
-
-        /**
-         * csv文件后缀
-         */
-        String CSV = "csv";
-    }
-
     interface Agent {
         /**
          * 百宝箱Agent类型

@@ -9,7 +9,7 @@ import uuid
 from copy import deepcopy
 from typing import Union
 
-from agent_runtime.common.config import settings
+from agent_runtime.common.config import settings, ModelConfigStrategyType
 from agent_runtime.common.ir_exceptions import IRBuildException
 from agent_runtime.common.ir_interfaces import (
     StorageConfigError,
@@ -17,15 +17,28 @@ from agent_runtime.common.ir_interfaces import (
 )
 from agent_runtime.runner.controller_runner import ControllerRunner
 from agent_runtime.runner.react_agent_runner import ReActAgentRunner
-from agent_runtime.runner.workflow_runner import WorkflowRunner
+from agent_runtime.runner.workflow_runner import WorkflowRunner, ModelConfigStrategy
 from agent_runtime.schemas.orchestration_mgr import (
     ComponentDebugRequest,
     ExecutionRequest,
     ResponseMode,
     DeleteExecutionInstanceRequest,
 )
-from agent_runtime.storage import get_storage_provider
-from fastapi import APIRouter, Request
+from agent_runtime.schemas.additional_questions import (
+    AdditionalQuestionsContext,
+    AdditionalQuestionsRequest,
+    AdditionalQuestionsResponse,
+)
+from agent_runtime.additional_questions.service import (
+    AdditionalQuestionsService,
+)
+from agent_runtime.moderation.stream_moderation import (
+    apply_stream_moderation,
+    block_event_generator,
+    init_moderation_from_ir,
+)
+from storage import get_storage_provider
+from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
 from jiuwen.common.exception import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
@@ -33,7 +46,9 @@ from jiuwen.serve.controllers.execution.manager import AsyncStateManager
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load, cache_workflow_queue
 from openjiuwen.core.common.logging import workflow_logger
 from pydantic import ValidationError
-from agent_builder.nl_to_agent.nl2 import N2LRequestBody, _n2l_json_wapper, _chat
+# 注：N2L chat 端点已随 agent_builder 抽离到 studio-builder 镜像（agent_builder/serve/apis/n2l_api.py），
+# runtime 不再 import agent_builder.nl_to_agent.nl2（避免 runtime→agent_builder 耦合）。
+
 
 execution_app = APIRouter(tags=["execution_app"])
 
@@ -47,9 +62,16 @@ _DEFAULT = "default"
 def _get_workflow_runner() -> WorkflowRunner:
     global _workflow_runner
     if _workflow_runner is None:
+        strategy_env = settings.llm.model_config_strategy
+        strategy_map = {
+            ModelConfigStrategyType.ENV: ModelConfigStrategy.ENV,
+            ModelConfigStrategyType.IR: ModelConfigStrategy.IR,
+            ModelConfigStrategyType.OBS: ModelConfigStrategy.OBS,
+        }
         _workflow_runner = WorkflowRunner(
             api_key=os.environ.get("API_KEY"),
             api_base=os.environ.get("API_BASE"),
+            model_strategy=strategy_map.get(strategy_env, ModelConfigStrategy.IR),
         )
     return _workflow_runner
 
@@ -57,6 +79,8 @@ def _get_workflow_runner() -> WorkflowRunner:
 def _get_react_runner() -> ReActAgentRunner:
     global _react_runner
     if _react_runner is None:
+        # 确保 model config provider factory 已初始化
+        _get_workflow_runner()
         _react_runner = ReActAgentRunner(
             api_key=os.environ.get("API_KEY"),
             api_base=os.environ.get("API_BASE"),
@@ -67,6 +91,8 @@ def _get_react_runner() -> ReActAgentRunner:
 def _get_controller_runner() -> ControllerRunner:
     global _controller_runner
     if _controller_runner is None:
+        # 确保 model config provider factory 已初始化
+        _get_workflow_runner()
         _controller_runner = ControllerRunner(
             api_key=os.environ.get("API_KEY"),
             api_base=os.environ.get("API_BASE"),
@@ -151,14 +177,23 @@ async def ir_execute(req_json: dict, request: Request):
         )
 
     mode = (ir_json.get("configs") or {}).get("mode", "workflow")
-    runner = _get_runner_by_type(mode)
 
-    # 将已加载的 IR 通过 params.ir_cache 传递给 runner，避免重复读取
-    req.params.ir_cache = ir_json
+    # 内容审核：初始化引擎 + 输入审核
+    moderation_engine = init_moderation_from_ir(ir_json)
+    if moderation_engine:
+        is_safe, result = moderation_engine.check_input_query(req.query)
+        if not is_safe:
+            workflow_logger.info("Input moderation blocked query for execution_id=%s", execution_id)
+            return StreamingResponse(
+                content=block_event_generator(result, mode, execution_id),
+                media_type="text/event-stream",
+            )
+
+    runner = _get_runner_by_type(mode)
 
     if req.response_mode == ResponseMode.STREAMING:
         return StreamingResponse(
-            content=stream_response(req, execution_id, runner),
+            content=stream_response(req, execution_id, runner, moderation_engine),
             media_type="text/event-stream",
         )
     else:
@@ -174,14 +209,21 @@ async def ir_execute(req_json: dict, request: Request):
         )
 
 
-async def stream_response(req: ExecutionRequest, execution_id: str, runner):
+async def stream_response(req: ExecutionRequest, execution_id: str, runner, moderation_engine=None):
     """
     透传 OutputSchema 格式
     输出格式: data: {"type": "end node stream", "index": 0, "payload": {"response": "text"}}\n\n
+
+    审核层：在 dict 层插入 apply_stream_moderation()，对 message/message_end 事件的
+    think/answer 做内容审核。事件包装层（未来）将作为另一个 generator wrapper 插入。
     """
     execution_id = execution_id or str(uuid.uuid4())
     last_event = ""
-    async for chunk in runner.run_streaming(req, execution_id):
+
+    raw_gen = runner.run_streaming(req, execution_id)
+    moderated_gen = apply_stream_moderation(raw_gen, moderation_engine) if moderation_engine else raw_gen
+
+    async for chunk in moderated_gen:
         if chunk is None:
             continue
         if isinstance(chunk, bytes):
@@ -326,22 +368,107 @@ async def delete_ir_execution_instance(req_json: dict):
     }
 
 
-@execution_app.post("/v1/{project_id}/{agent_type}/generator/conversations/{cid}/chat")
-async def chat_n2l(project_id: str, agent_type: str, cid: str, body: N2LRequestBody,
-                   request: Request) -> StreamingResponse:
-    workflow_logger.debug(
-        "NL2 Chat Request - URL: %s %s", request.method, request.url
+# 注：N2L chat 端点（/v1/{project_id}/{agent_type}/generator/conversations/{cid}/chat）
+# 已随 agent_builder 抽离到 studio-builder 镜像（agent_builder/serve/apis/n2l_api.py）。
+
+
+# ── Additional Questions (追问) ──────────────────────────────────────
+_additional_questions_service: AdditionalQuestionsService | None = None
+
+
+def _get_additional_questions_service() -> AdditionalQuestionsService:
+    global _additional_questions_service
+    if _additional_questions_service is None:
+        _additional_questions_service = AdditionalQuestionsService()
+    return _additional_questions_service
+
+
+@execution_app.post(
+    "/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions"
+)
+async def agent_additional_questions(
+    project_id: str,
+    agent_id: str,
+    conversation_id: str,
+    workspace_id: str = Query(...),
+    req_json: dict = Body(...),
+):
+    """自动生成追问（Agent 场景）。"""
+    ctx = AdditionalQuestionsContext(
+        resource_type="agent",
+        resource_id=agent_id,
+        project_id=project_id,
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
     )
-    workflow_logger.debug(
-        "NL2 Chat Request - Headers: %s",
-        json.dumps(dict(request.headers), ensure_ascii=False),
+    return await _handle_additional_questions(ctx=ctx, req_json=req_json)
+
+
+@execution_app.post(
+    "/v1/{project_id}/workflows/{workflow_id}/conversations/{conversation_id}/additional-questions"
+)
+async def workflow_additional_questions(
+    project_id: str,
+    workflow_id: str,
+    conversation_id: str,
+    workspace_id: str = Query(...),
+    req_json: dict = Body(...),
+):
+    """自动生成追问（Workflow 场景）。"""
+    ctx = AdditionalQuestionsContext(
+        resource_type="workflow",
+        resource_id=workflow_id,
+        project_id=project_id,
+        conversation_id=conversation_id,
+        workspace_id=workspace_id,
     )
+    return await _handle_additional_questions(ctx=ctx, req_json=req_json)
+
+
+async def _handle_additional_questions(
+    ctx: AdditionalQuestionsContext,
+    req_json: dict,
+):
+    """追问接口统一处理入口 — 解析请求、调用 Service、返回响应。"""
     workflow_logger.debug(
-        "NL2 Chat Request - Body: %s",
-        json.dumps(body.model_dump(exclude_unset=True), ensure_ascii=False),
+        "Additional questions request: resource_type=%s, resource_id=%s, "
+        "conversation_id=%s, workspace_id=%s",
+        ctx.resource_type, ctx.resource_id, ctx.conversation_id, ctx.workspace_id,
     )
-    # 包装req_json，使得和jiuwen的chat_build接口保持json格式一致
-    payload = _n2l_json_wapper(project_id, agent_type, cid, body.model_dump(exclude_unset=True), request)
-    # run chat
-    chat_response = await _chat(payload)
-    return chat_response
+    try:
+        req = AdditionalQuestionsRequest.model_validate(req_json)
+    except ValidationError as e:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "validation_failed", "details": str(e)},
+        )
+
+    service = _get_additional_questions_service()
+    try:
+        from agent_runtime.context.request_context import _request_ctx
+        req_ctx = _request_ctx.get()
+        headers = req_ctx.headers if req_ctx else {}
+        result = await service.generate(
+            ctx=ctx,
+            request=req,
+            headers=headers,
+        )
+        return JSONResponse(content=result.model_dump())
+    except JiuWenBaseException as e:
+        workflow_logger.error(
+            "Additional questions error: code=%s, message=%s",
+            e.error_code, e.message,
+        )
+        return JSONResponse(
+            status_code=400,
+            content={"code": e.error_code, "message": e.message},
+        )
+    except Exception as e:
+        workflow_logger.error(
+            "Unexpected error in additional questions: %s", e, exc_info=True,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"error": "internal_error", "details": str(e)},
+        )
+

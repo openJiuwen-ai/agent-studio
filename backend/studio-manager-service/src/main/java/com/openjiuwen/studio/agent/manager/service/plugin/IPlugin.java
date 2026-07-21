@@ -3,6 +3,8 @@
  */
 package com.openjiuwen.studio.agent.manager.service.plugin;
 
+import com.openjiuwen.studio.agent.common.dto.run.RunToolRequestBody;
+import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ToolReference;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
 import com.openjiuwen.studio.agent.manager.entity.ToolEntity;
@@ -49,4 +51,6 @@ public interface IPlugin {
     PluginEntity getPluginByTraceId(String workspaceId, String traceId);
 
     String getToolIdFromPlugin(String toolId);
+
+    RunToolResponseBody runTool(String projectId, RunToolRequestBody body);
 }

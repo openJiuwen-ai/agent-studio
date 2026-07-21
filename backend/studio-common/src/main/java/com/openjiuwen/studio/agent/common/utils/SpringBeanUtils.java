@@ -4,6 +4,8 @@
 
 package com.openjiuwen.studio.agent.common.utils;
 
+import java.lang.ref.WeakReference;
+
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
@@ -18,11 +20,15 @@ import org.springframework.stereotype.Component;
 @Order(100)
 public class SpringBeanUtils implements ApplicationContextAware {
 
-    private static ApplicationContext applicationContext;
+    private static WeakReference<ApplicationContext> applicationContextRef;
 
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-        SpringBeanUtils.applicationContext = applicationContext;
+        SpringBeanUtils.applicationContextRef = new WeakReference<>(applicationContext);
+    }
+
+    private static ApplicationContext getApplicationContext() {
+        return applicationContextRef != null ? applicationContextRef.get() : null;
     }
 
     /**
@@ -33,7 +39,8 @@ public class SpringBeanUtils implements ApplicationContextAware {
      * @return bean的实例，如果找不到则返回null
      */
     public static <T> T getBean(String beanName, Class<T> requiredType) {
-        return applicationContext.getBean(beanName, requiredType);
+        ApplicationContext ctx = getApplicationContext();
+        return ctx != null ? ctx.getBean(beanName, requiredType) : null;
     }
 
     /**
@@ -43,7 +50,8 @@ public class SpringBeanUtils implements ApplicationContextAware {
      * @return bean的实例
      */
     public static <T> T getBean(Class<T> requiredType) {
-        return applicationContext.getBean(requiredType);
+        ApplicationContext ctx = getApplicationContext();
+        return ctx != null ? ctx.getBean(requiredType) : null;
     }
 
     /**
@@ -54,6 +62,7 @@ public class SpringBeanUtils implements ApplicationContextAware {
      * @return 属性值
      */
     public static String getProperty(String key, String defValue) {
-        return applicationContext.getEnvironment().getProperty(key, defValue);
+        ApplicationContext ctx = getApplicationContext();
+        return ctx != null ? ctx.getEnvironment().getProperty(key, defValue) : defValue;
     }
 }

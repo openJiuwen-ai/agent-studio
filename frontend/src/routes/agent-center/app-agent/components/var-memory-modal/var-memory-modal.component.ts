@@ -28,6 +28,7 @@ import {
 import { AgentDataService } from "@services/agent-center/agent-data.service";
 import { cloneDeep } from "lodash";
 import { NzInputNumberModule } from 'ng-zorro-antd/input-number';
+import { CommonNoDataComponent } from "@shared/components/common-no-data/common-no-data.component";
 
 enum mapKeys {
   userVars = "userVars",
@@ -36,7 +37,7 @@ enum mapKeys {
 
 @Component({
   selector: "meta-var-memory-modal",
-  imports: [MODULES, AccBlockComponent, variableLongMemoryNameValidatorDirective, LengthValidatorDirective],
+  imports: [MODULES, AccBlockComponent, variableLongMemoryNameValidatorDirective, LengthValidatorDirective, CommonNoDataComponent],
   templateUrl: "./var-memory-modal.component.html",
   styleUrls: ["./var-memory-modal.component.scss"],
   providers: [
@@ -280,7 +281,9 @@ export class VarMemoryModalComponent implements OnInit {
       this.variableMemoryTabs[0].active = false;
       this.variableMemoryTabs[1].active = true;
       this.selectedTabIndex = this.isShowUserVars ? 0 : 1;
-      this.queryMemoryVarList();
+      if(this.isShowUserVars){
+        this.queryMemoryVarList();
+      }
     } else {
       this.selectedTabIndex = 0;
       if (data?.length) {

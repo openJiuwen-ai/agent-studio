@@ -21,6 +21,8 @@ public class ExportResult {
     @JsonProperty("resource_type")
     private String resourceType;
 
+    @JsonProperty("resource_level")
+    private Integer resourceLevel;
 
     @JsonProperty("resource_name")
     private String resourceName;

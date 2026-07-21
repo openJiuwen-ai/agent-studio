@@ -4,9 +4,15 @@
 
 package com.openjiuwen.studio.agent.common.dto.simple;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class SimpleUser {
     private String userId;
 

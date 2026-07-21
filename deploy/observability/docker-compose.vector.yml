@@ -1,0 +1,56 @@
+# L2 跨节点日志聚合 — app 节点 Vector 编排
+# 通过 external 卷只读采集 app 日志，经 HTTPS 写入监控节点。
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: ${DOCKER_LOG_MAX_SIZE:-100m}
+    max-file: ${DOCKER_LOG_MAX_FILES:-5}
+
+services:
+  vector:
+    logging: *default-logging
+    image: ${VECTOR_IMAGE:-timberio/vector:0.55.0-alpine}
+    pull_policy: ${MONITOR_PULL_POLICY:-if_not_present}
+    restart: always
+    command: ["--config", "/etc/vector/vector.yaml"]
+    network_mode: host
+    environment:
+      NODE_NAME: ${NODE_NAME:-node-1}
+      APP_LOG_TIMEZONE: ${APP_LOG_TIMEZONE:-Asia/Shanghai}
+      APP_PROJECT_NAME: ${APP_PROJECT_NAME:-deploy}
+      LOGS_GATEWAY_HOST: ${LOGS_GATEWAY_HOST}
+      LOGS_GATEWAY_HTTPS_PORT: ${LOGS_GATEWAY_HTTPS_PORT:-3100}
+      LOGS_WRITE_USER: ${LOGS_WRITE_USER}
+      LOGS_WRITE_PASSWORD: ${LOGS_WRITE_PASSWORD}
+      VECTOR_BUFFER_MAX_SIZE: ${VECTOR_BUFFER_MAX_SIZE:-1073741824}
+    volumes:
+      - ./config/vector.yaml:/etc/vector/vector.yaml:ro
+      - ./config/gateway-ca.crt:/etc/vector/tls/gateway-ca.crt:ro
+      - vector_data:/var/lib/vector
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - manager_logs:/logs/manager:ro
+      - runtime_logs:/logs/runtime:ro
+      - builder_logs:/logs/builder:ro
+      - console_logs:/logs/console:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8686/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  vector_data:
+  manager_logs:
+    external: true
+    name: ${APP_PROJECT_NAME:-deploy}_manager_logs
+  runtime_logs:
+    external: true
+    name: ${APP_PROJECT_NAME:-deploy}_runtime_logs
+  builder_logs:
+    external: true
+    name: ${APP_PROJECT_NAME:-deploy}_builder_logs
+  console_logs:
+    external: true
+    name: ${APP_PROJECT_NAME:-deploy}_console_logs

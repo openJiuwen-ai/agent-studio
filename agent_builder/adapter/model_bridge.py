@@ -18,9 +18,61 @@ Provides identical classes and functions:
 
 from typing import Optional
 
-from agent_builder.adapter.config_bridge import settings
+from agent_builder.adapter.config_bridge import settings, ModelConfigStrategyType
 from openjiuwen.core.foundation.llm import Model, ModelClientConfig, ModelRequestConfig
 from openjiuwen.core.workflow.components.llm.llm_comp import LLMCompConfig
+
+# 导入即触发 StudioModelClient 注册进 openjiuwen client registry（client_provider="studio"），
+# 使 MODEL_CONFIG_STRATEGY=obs 时 prompt/NL2 可进程内直连真实模型（机制层来自 packages/model_service）。
+import model_service  # noqa: F401
+
+
+def _get_strategy() -> ModelConfigStrategyType:
+    """模型配置来源策略（与 agent_runtime 统一，读 MODEL_CONFIG_STRATEGY 环境变量）。
+
+    - obs（默认）→ client_provider="studio" 进程内直连真实模型（resolver 解析 OBS）。
+    - ir         → client_provider="openai" 走 MODEL_ROUTER_API 网关。
+    - env        → client_provider="openai" 走 IR_LLM_* 环境变量。
+    """
+    return settings.llm.model_config_strategy
+
+
+def _extract_model_service_id(model_info) -> str:
+    """取 modelInfo.model 的首段作为 OBS modelServiceId（对应 ref-commit OBSModelConfigProvider 归一）。"""
+    return (getattr(model_info, "model", "") or "").split("|")[0]
+
+
+def _extract_auth_id(model_info) -> str:
+    """从 modelInfo.headers 提取 authId（兼容下划线 / HTTP 头两种 key 格式）。"""
+    headers = getattr(model_info, "headers", None) or {}
+    return (
+        headers.get("auth_id", "")
+        or headers.get("Auth_id", "")
+        or headers.get("X-Auth-Id", "")
+        or headers.get("x-auth-id", "")
+    )
+
+
+def _build_studio_client_config(model_info) -> ModelClientConfig:
+    """构建 ``client_provider="studio"`` 薄配置：真实连接信息延迟到 invoke 时由 resolver 解析。
+
+    对应 ref-commit ``OBSModelConfigProvider``：api_key/api_base 为占位（BaseModelClient 校验要求非空），
+    解析所需输入放 extra 字段（model_service_id / auth_id / refresh），projectId/workspace_id
+    由 ``StudioModelClient._resolve_inputs`` 从请求头（_request_ctx）取。
+    """
+    base = settings.llm
+    msid = _extract_model_service_id(model_info)
+    auth_id = _extract_auth_id(model_info)
+    return ModelClientConfig(
+        client_provider="studio",
+        api_key="sk-placeholder",
+        api_base="https://studio-placeholder",
+        timeout=base.timeout,
+        verify_ssl=base.ssl_verify,
+        model_service_id=msid,
+        auth_id=auth_id,
+        refresh=False,
+    )
 
 
 def _normalize_api_base(url: str) -> str:
@@ -129,7 +181,17 @@ class Nl2ModelConfigProvider:
 
     @staticmethod
     def get_llm_config(model_info) -> LLMCompConfig:
-        """从 modelInfo 构建 LLM 组件配置"""
+        """从 modelInfo 构建 LLM 组件配置（按 MODEL_CONFIG_STRATEGY 切换，与 runtime 统一）。
+
+        - obs（默认）→ studio 直连（client_provider="studio" 薄配置，resolver 解析 OBS）。
+        - ir → 网关（client_provider="openai" + api_base=MODEL_ROUTER_API + 认证头透传）。
+        - env → 环境变量（client_provider="openai" + IR_LLM_* 连接参数）。
+        """
+        strategy = _get_strategy()
+        if strategy == ModelConfigStrategyType.OBS:
+            return Nl2ModelConfigProvider._build_studio_config(model_info)
+        if strategy == ModelConfigStrategyType.ENV:
+            return Nl2ModelConfigProvider._build_env_config(model_info)
         base = settings.llm
 
         headers = model_info.headers or {}
@@ -167,8 +229,46 @@ class Nl2ModelConfigProvider:
             cache_stream=True,
         )
 
+    @staticmethod
+    def _build_studio_config(model_info) -> LLMCompConfig:
+        """MODEL_CONFIG_STRATEGY=obs：构建 studio 直连配置（对应 ref-commit OBSModelConfigProvider）。"""
+        msid = _extract_model_service_id(model_info)
+        base = settings.llm
+        return LLMCompConfig(
+            model_client_config=_build_studio_client_config(model_info),
+            model_config=ModelRequestConfig(
+                model=msid,
+                temperature=model_info.temperature if model_info.temperature is not None else base.temperature,
+                top_p=model_info.top_p if model_info.top_p is not None else base.top_p,
+            ),
+            cache_stream=True,
+        )
 
-def get_nl2_model(model_info) -> Model:
+    @staticmethod
+    def _build_env_config(model_info) -> LLMCompConfig:
+        """MODEL_CONFIG_STRATEGY=env：从 IR_LLM_* 环境变量取连接参数（对应 runtime EnvVarModelConfigProvider）。"""
+        import os
+        base = settings.llm
+        api_base = os.environ.get("IR_LLM_API_BASE", "https://api.deepseek.com")
+        model_name = (model_info.model or base.model_name) or os.environ.get("IR_LLM_MODEL_NAME", "")
+        return LLMCompConfig(
+            model_client_config=ModelClientConfig(
+                client_provider="openai",
+                api_key=base.api_key,
+                api_base=api_base,
+                timeout=base.timeout,
+                verify_ssl=base.ssl_verify,
+            ),
+            model_config=ModelRequestConfig(
+                model=model_name,
+                temperature=model_info.temperature if model_info.temperature is not None else base.temperature,
+                top_p=model_info.top_p if model_info.top_p is not None else base.top_p,
+            ),
+            cache_stream=True,
+        )
+
+
+async def get_nl2_model(model_info) -> Model:
     """工厂方法：根据 modelInfo 创建 openjiuwen Model 实例
 
     用于 nl_to_agent 模块中 Nl2AgentProcessor 获取模型实例，
@@ -199,7 +299,11 @@ class PromptOptimizeModelProvider:
 
     @staticmethod
     def get_llm_config(model_info) -> LLMCompConfig:
-        """从 modelInfo 构建提示词优化专用的 LLM 组件配置
+        """从 modelInfo 构建提示词优化专用的 LLM 组件配置（按 MODEL_CONFIG_STRATEGY 切换）。
+
+        - obs（默认）→ studio 直连（client_provider="studio" 薄配置）。
+        - ir → 网关（client_provider="openai" + api_base=MODEL_ROUTER_API + 认证头透传）。
+        - env → 环境变量（client_provider="openai" + IR_LLM_* 连接参数）。
 
         Args:
             model_info: LLMModelInfo 实例（agent_builder.prompt.common.config.LLMModelInfo），
@@ -208,6 +312,11 @@ class PromptOptimizeModelProvider:
         Returns:
             LLMCompConfig: LLM 组件配置
         """
+        strategy = _get_strategy()
+        if strategy == ModelConfigStrategyType.OBS:
+            return PromptOptimizeModelProvider._build_studio_config(model_info)
+        if strategy == ModelConfigStrategyType.ENV:
+            return PromptOptimizeModelProvider._build_env_config(model_info)
         base = settings.llm
         headers = model_info.headers or {}
 
@@ -260,12 +369,65 @@ class PromptOptimizeModelProvider:
             cache_stream=True,
         )
 
+    @staticmethod
+    def _build_studio_config(model_info) -> LLMCompConfig:
+        """未配置 MODEL_ROUTER_API 时构建 studio 直连配置（对应 ref-commit OBSModelConfigProvider）。"""
+        msid = _extract_model_service_id(model_info)
+        base = settings.llm
+        temperature = getattr(model_info, "temperature", None)
+        if temperature is None:
+            temperature = base.temperature
+        top_p = getattr(model_info, "top_p", None)
+        if top_p is None:
+            top_p = base.top_p
+        return LLMCompConfig(
+            model_client_config=_build_studio_client_config(model_info),
+            model_config=ModelRequestConfig(
+                model=msid,
+                temperature=temperature,
+                top_p=top_p,
+            ),
+            cache_stream=True,
+        )
 
-def get_prompt_optimize_model(model_info) -> Model:
+    @staticmethod
+    def _build_env_config(model_info) -> LLMCompConfig:
+        """MODEL_CONFIG_STRATEGY=env：从 IR_LLM_* 环境变量取连接参数（对应 runtime EnvVarModelConfigProvider）。"""
+        import os
+        base = settings.llm
+        api_base = os.environ.get("IR_LLM_API_BASE", "https://api.deepseek.com")
+        model_name = getattr(model_info, "model", "") or base.model_name or os.environ.get("IR_LLM_MODEL_NAME", "")
+        temperature = getattr(model_info, "temperature", None)
+        if temperature is None:
+            temperature = base.temperature
+        top_p = getattr(model_info, "top_p", None)
+        if top_p is None:
+            top_p = base.top_p
+        return LLMCompConfig(
+            model_client_config=ModelClientConfig(
+                client_provider="openai",
+                api_key=base.api_key,
+                api_base=api_base,
+                timeout=base.timeout,
+                verify_ssl=base.ssl_verify,
+            ),
+            model_config=ModelRequestConfig(
+                model=model_name,
+                temperature=temperature,
+                top_p=top_p,
+            ),
+            cache_stream=True,
+        )
+
+
+async def get_prompt_optimize_model(model_info) -> Model:
     """工厂方法：为提示词优化特性创建 openjiuwen Model 实例
 
     用于 agent_builder 的 prompt 管理模块（prompt.py / mmapo.py）获取模型实例，
     替代原来通过 LLMServiceManager -> EiCloudLLMService -> OpenAICompatibleService 的调用链。
+
+    按 MODEL_CONFIG_STRATEGY 在 obs（直连 studio）/ ir（网关 openai）/ env（环境变量 openai）
+    三条路径间切换：get_llm_config 已封装该判断，此处仅组装 Model。async 以匹配调用方 await/_run_async。
 
     Args:
         model_info: LLMModelInfo 实例（agent_builder.prompt.common.config.LLMModelInfo），
