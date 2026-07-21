@@ -23,6 +23,8 @@ class EventType:
     FUNCTION_CALL_END = "function_call_end"
     API_EXEC_DATA = "api_exec_data"
     MESSAGE = "message"
+    MESSAGE_END = "message_end"
+    AGENT_INTERRUPTED = "agent_interrupted"
     INTERMEDIATE_MESSAGE = "intermediate_message"
     STATISTIC_DATA = "statistic_data"
     SUMMARY_RESPONSE = "summary_response"
@@ -37,6 +39,7 @@ OUTPUT_TYPE_HANDLERS = {
     "llm_usage": "_handle_llm_usage",
     "answer": "_handle_answer",
     "function_result": "_handle_function_result",
+    "__interaction__": "_handle_interaction",
     "done": "_handle_done",
 }
 
@@ -235,6 +238,58 @@ class ReactStreamDataAdapter:
     def _handle_function_result(self, output: Any) -> List[Dict]:
         """处理函数执行结果（预留，未来可能使用）"""
         return []
+
+    def _handle_interaction(self, output: Any) -> List[Dict]:
+        """将 ReActAgent 的交互中断转换为前端可识别的消息事件。
+
+        原生 Workflow ability 在需要用户输入时输出
+        ``OutputSchema(type="__interaction__")``。其 payload 通常是
+        ``InteractionOutput(id=<component_id>, value=<question>)``。
+        """
+        payload = getattr(output, "payload", None)
+        if isinstance(payload, dict):
+            interaction_id = payload.get("id", "")
+            value = payload.get("value", "")
+        else:
+            interaction_id = getattr(payload, "id", "")
+            value = getattr(payload, "value", "")
+
+        if isinstance(value, dict):
+            answer = (
+                value.get("answer")
+                or value.get("question")
+                or value.get("content")
+                or json.dumps(value, ensure_ascii=False)
+            )
+        elif value is None:
+            answer = ""
+        else:
+            answer = str(value)
+
+        self._final_output = answer
+        data = {
+            "answer": answer,
+            "node_id": interaction_id,
+            "interaction_id": interaction_id,
+            "should_interrupt": True,
+        }
+        return [
+            self._create_event(EventType.MESSAGE, dict(data)),
+            self._create_event(
+                EventType.MESSAGE_END,
+                {**data, "enable_history": True},
+            ),
+            self._create_event(
+                EventType.AGENT_INTERRUPTED,
+                {
+                    "reason": "waiting_user_input",
+                    "state": "interrupted",
+                    "task_id": self._execution_id,
+                    "interaction_id": interaction_id,
+                    "node_id": interaction_id,
+                },
+            ),
+        ]
 
     def _handle_done(self, output: Any) -> List[Dict]:
         """处理 done 事件"""

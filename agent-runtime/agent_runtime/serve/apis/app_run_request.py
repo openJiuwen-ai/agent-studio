@@ -64,6 +64,7 @@ class AgentAppRunRequest(BaseModel):
     """智能体试运行请求"""
 
     query: Optional[str] = Field(default=None)
+    resume_input: Optional[str] = Field(alias="resumeInput", default=None)
     inputs: dict = Field(default_factory=dict)
     long_term_memory: Optional[dict] = Field(alias="long_term_memory", default=None)
     tool_switch_dict: dict = Field(alias="tool_switch_dict", default_factory=dict)

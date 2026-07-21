@@ -48,6 +48,23 @@ class TestAgentThroughEvents:
         assert result is not None
         assert result.event == "workflow_start"
 
+    @staticmethod
+    def test_agent_interrupted_is_forwarded_with_resume_metadata():
+        trace = Trace(handler_type="ReAct", conversation_id="conv-r01")
+        data = {
+            "reason": "waiting_user_input",
+            "state": "interrupted",
+            "interaction_id": "questioner-r01",
+        }
+
+        result = AgentEventsProcessor.process_event(
+            {"event": "agent_interrupted", "data": data, "createdTime": 1000},
+            trace,
+        )
+
+        assert result.event == "agent_interrupted"
+        assert result.data == data
+
 
 class TestProcessStartEvent:
     """Start event processing."""

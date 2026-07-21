@@ -13,7 +13,6 @@ import json
 from typing import AsyncGenerator, Optional, Dict
 
 from agent_runtime.runner.react_stream_data_adapter import ReactStreamDataAdapter
-from agent_runtime.runner.react_workflow_adapter import ReactWorkflowAdapter
 from agent_runtime.runner.react_file_reader_adapter import ReactFileReaderAdapter
 from agent_runtime.schemas.orchestration_mgr import ExecutionRequest
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
@@ -137,6 +136,11 @@ class ReActAgentRunner:
     def __init__(self, api_key: str | None = None, api_base: str | None = None):
         self._api_key = api_key or os.environ.get("API_KEY") or ""
         self._api_base = (api_base or os.environ.get("API_BASE", "https://api.deepseek.com")).rstrip("/")
+
+    @staticmethod
+    def _resolve_user_query(req: ExecutionRequest) -> str:
+        """选择本轮用户输入；恢复输入优先于普通 query。"""
+        return req.resume_input or req.query or "Hello"
 
     async def _load_ir(self, ir_path: str) -> dict:
         """从存储加载 IR 配置"""
@@ -391,7 +395,12 @@ class ReActAgentRunner:
         return tool_ids
 
     async def _register_workflows(self, ir_json: dict, agent: ReActAgent, agent_id: str) -> list[str]:
-        """注册 Workflow 工具"""
+        """注册原生 Workflow ability。
+
+        Workflow 不能包装成普通 Tool，否则其中断状态会被压平成普通工具结果，
+        ReActAgent 无法保存并在下一轮恢复 checkpoint。资源 provider 每次调用都
+        从只读 IR 创建新实例，避免并发请求共享 Workflow 运行态。
+        """
         from jiuwen.serve.controllers.execution.ir_converter import IRConverter
         from openjiuwen.core.runner import Runner
         from openjiuwen.core.workflow import WorkflowCard
@@ -413,9 +422,7 @@ class ReActAgentRunner:
                     workflow_id = str(uuid.uuid4())
 
                 wf_name = workflow.card.name
-                wf_instance = workflow
                 wf_desc = sub_ir.get("workflow", {}).get("description", "")
-                user_fields_keys = [arg.get("name") for arg in wf_conf.get("arguments", [])]
 
                 input_params = {
                     "type": "object",
@@ -434,7 +441,7 @@ class ReActAgentRunner:
                 }
 
                 # 清理旧注册
-                for key in (wf_instance.card.id, wf_name):
+                for key in (workflow.card.id, wf_name):
                     try:
                         Runner.resource_mgr.remove_workflow(workflow_id=key, tag=agent_id)
                         Runner.resource_mgr.remove_tool(tool_id=key, tag=agent_id)
@@ -446,29 +453,22 @@ class ReActAgentRunner:
                     id=wf_name,
                     name=wf_name,
                     description=wf_desc,
+                    input_params=input_params,
                 )
+
+                async def workflow_provider(ir_data=sub_ir):
+                    return await IRConverter.async_ir_to_workflow(ir_data)
+
                 Runner.resource_mgr.add_workflow(
                     card=new_card,
-                    workflow=lambda card=new_card: wf_instance,
+                    workflow=workflow_provider,
                     tag=agent_id,
                 )
 
-                # 注册 Tool 到 resource_mgr
-                try:
-                    wt_instance = ReactWorkflowAdapter(
-                        ir_data=sub_ir,
-                        card_id=wf_instance.card.id,
-                        workflow_name=wf_name,
-                        workflow_desc=wf_desc,
-                        input_params=input_params,
-                        user_fields_keys=user_fields_keys,
-                    )
-                    Runner.resource_mgr.add_tool(tool=wt_instance, tag=agent_id)
-                except Exception as e:
-                    workflow_logger.error(f"Failed to register tool: {e}")
-
-                # 注册到 ability_manager
-                agent.ability_manager.add(wt_instance.card)
+                # 注册 WorkflowCard，进入 AbilityManager 的原生 Workflow 分支。
+                # 该分支负责派生稳定的 Workflow session、传播 INPUT_REQUIRED，
+                # 并在下一轮把用户输入转换成 InteractiveInput 恢复 checkpoint。
+                agent.ability_manager.add(new_card)
                 workflow_ids.append(workflow_id)
             except Exception as e:
                 workflow_logger.error(f"Failed to register workflow {wf_conf.get('name')}: {e}")
@@ -675,7 +675,7 @@ class ReActAgentRunner:
                 workflow_logger.error(f"[run_streaming] Skill download failed: {e}", exc_info=True)
 
         # 获取 query 并检测文件链接
-        query = req.query or "Hello"
+        query = self._resolve_user_query(req)
         has_file_links = self._has_file_links(query)
 
         # 2. 创建 Agent（传入 skill_work_dir 和 has_file_links 以便正确构建 prompt）
@@ -714,7 +714,6 @@ class ReActAgentRunner:
             return
 
         # 构建输入
-        query = req.query or "Hello"
         inputs = {
             "query": query,
             "conversation_id": req.conversation_id,
