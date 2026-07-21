@@ -29,7 +29,7 @@ import com.openjiuwen.studio.agent.foundation.connection.model.PageResult;
 import com.openjiuwen.studio.agent.foundation.connection.model.RetrieveKnowledgeBaseReq;
 import com.openjiuwen.studio.agent.common.dto.knowledge.RetrieveChunkInfo;
 import com.openjiuwen.studio.agent.foundation.connection.ragflow.entity.response.DatasetBasicInfo;
-import com.openjiuwen.studio.agent.foundation.connection.utils.AgentBaseListUtil;
+import com.openjiuwen.studio.agent.foundation.connection.ragflow.entity.response.ListDatasetResponseBody;
 import com.openjiuwen.studio.agent.foundation.connection.utils.ConnectorParamUtil;
 
 import lombok.extern.slf4j.Slf4j;
@@ -58,8 +58,6 @@ public class RagFlowConnector extends AbstractKnowledgeBaseConnector {
 
     private final static String IMAGE_PATH_URI = "/v1/document/image/";
 
-    public static final int QUERY_DATASET_COUNT = 10000;
-
     private final static String PAGE = "page";
 
     public RagFlowConnector(ConnectorClient connectorClient) {
@@ -69,11 +67,13 @@ public class RagFlowConnector extends AbstractKnowledgeBaseConnector {
     @Override
     public PageResult<ExternalKnowledgeBaseInfo> listKnowledgeBase(ConnectorDefinition connectorDefinition, String name,
         Integer offset, Integer limit) {
+        // RagFlow的数据集查询接口支持服务端分页，并返回满足过滤条件的总数total_datasets，此处按offset/limit换算成page/page_size交给服务端分页
+        int pageNum = offset / limit + 1;
+        int pageSize = limit;
         Map<String, Object> queryParam = Maps.newHashMap();
         queryParam.put(RequestParamConstants.NAME, name);
-        // RagFlow的数据集查询接口响应消息中没有总数，所以此处尽量查询出RagFLow中所有知识库，然后在内存中自己分页
-        queryParam.put(PAGE, 1);
-        queryParam.put(RequestParamConstants.PAGE_SIZE, QUERY_DATASET_COUNT);
+        queryParam.put(PAGE, pageNum);
+        queryParam.put(RequestParamConstants.PAGE_SIZE, pageSize);
 
         RequestEntity requestEntity = RequestEntity.builder().requestParams(queryParam).build();
         BasicRequest basicRequest = BasicRequest.builder()
@@ -83,28 +83,26 @@ public class RagFlowConnector extends AbstractKnowledgeBaseConnector {
             .build();
         HttpEntity<Object> request = generateAuthRequest(basicRequest, connectorDefinition);
 
-        RagFlowCommonResponseBody<List<DatasetBasicInfo>> result = JacksonUtils.readValue(
-            JacksonUtils.toJson(this.connectorClient.doRequest(basicRequest, request, RagFlowCommonResponseBody.class)),
-            new TypeReference<>() { });
+        ListDatasetResponseBody result = this.connectorClient.doRequest(basicRequest, request,
+            ListDatasetResponseBody.class);
 
-        if (ResponseConstants.SUCCESS_CODE == result.getCode()) {
-            List<DatasetBasicInfo> dataRes = JacksonUtils.readValue(JacksonUtils.toJson(result.getData()),
-                new TypeReference<List<DatasetBasicInfo>>() { });
-            List<DatasetBasicInfo> data = AgentBaseListUtil.slice(dataRes, offset, limit);
-            PageResult<ExternalKnowledgeBaseInfo> response = new PageResult<>();
-            response.setTotalCount((long) dataRes.size());
-            response.setItems(data.stream().map(item -> {
-                ExternalKnowledgeBaseInfo externalKnowledgeBaseInfo = new ExternalKnowledgeBaseInfo();
-                externalKnowledgeBaseInfo.setKnowledgeBaseId(item.getId());
-                externalKnowledgeBaseInfo.setKnowledgeBaseName(item.getName());
-                externalKnowledgeBaseInfo.setDescription(item.getDescription());
-                return externalKnowledgeBaseInfo;
-            }).toList());
-            return response;
-        } else {
+        if (ResponseConstants.SUCCESS_CODE != result.getCode()) {
             log.error("Call rag flow to list dataset failed. Because of {}", result.getMessage());
             throw new AgentBaseException(ErrorCode.RAG_FLOW_CONNECT_ERROR);
         }
+
+        PageResult<ExternalKnowledgeBaseInfo> response = new PageResult<>();
+        response.setTotalCount(Optional.ofNullable(result.getTotalDatasets()).orElse(0L));
+        List<DatasetBasicInfo> dataRes = Optional.ofNullable(result.getData())
+            .orElse(Collections.<DatasetBasicInfo>emptyList());
+        response.setItems(dataRes.stream().map(item -> {
+            ExternalKnowledgeBaseInfo externalKnowledgeBaseInfo = new ExternalKnowledgeBaseInfo();
+            externalKnowledgeBaseInfo.setKnowledgeBaseId(item.getId());
+            externalKnowledgeBaseInfo.setKnowledgeBaseName(item.getName());
+            externalKnowledgeBaseInfo.setDescription(item.getDescription());
+            return externalKnowledgeBaseInfo;
+        }).toList());
+        return response;
     }
 
     @Override
