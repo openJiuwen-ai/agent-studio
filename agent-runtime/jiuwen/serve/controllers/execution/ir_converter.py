@@ -791,6 +791,24 @@ class _RoutedIntentDetection(IntentDetection):
                 graph.register_branch_targets(node_id, all_targets)
 
 
+def _resolve_intent_fields(
+    current_ir_data: Dict[str, Any],
+    parent_intent: Optional[Dict[str, Any]],
+) -> tuple[str, str]:
+    """R-04: 父级 per-reference intent 覆盖,应用到 per-config metadata(不写缓存 IR 对象)。
+
+    非空才覆盖(``or`` 短路),语义等价于旧实现的
+    ``if child_intent.get("name"): ...`` / ``if child_intent.get("description"): ...``。
+    parent_intent 非 dict 或字段为空时,回退子 IR 原值。
+    """
+    override = parent_intent if isinstance(parent_intent, dict) else {}
+    intent_name = override.get("name") or current_ir_data.get("intent_name", "")
+    intent_description = override.get("description") or current_ir_data.get(
+        "intent_description", ""
+    )
+    return intent_name, intent_description
+
+
 class IRConverter:
     """IR转换工具类。
 
@@ -1039,6 +1057,7 @@ class IRConverter:
             current_ir_data: Dict[str, Any],
             parent_metadata: Optional[AgentMetaData],
             parent_description: Optional[str] = None,
+            parent_intent: Optional[Dict[str, Any]] = None,
         ) -> AgentConfig:
             """for each agent, return its child AgentConfig"""
             try:
@@ -1050,13 +1069,17 @@ class IRConverter:
                         error_msg=f"Agent_ir validate failed, root_case={format_pydantic_validation_error_message(e)}"
                     ),
                 ) from e
+            # R-04: intent 覆盖写到 per-config metadata,不写缓存 IR 对象(避免污染 cache_ir_queue)
+            _intent_name, _intent_description = _resolve_intent_fields(
+                current_ir_data, parent_intent
+            )
             current_metadata = AgentMetaData(
                 id=current_ir_data.get("agentId"),
                 name=current_ir_data.get("agentName"),
                 description=parent_description
                 or current_ir_data.get("description", ""),
-                intent_name=current_ir_data.get("intent_name", ""),
-                intent_description=current_ir_data.get("intent_description", ""),
+                intent_name=_intent_name,
+                intent_description=_intent_description,
                 ir_path=current_ir_data.get("ir_path"),
                 mode=current_ir_data.get("configs", {}).get("mode", "Controller"),
             )
@@ -1071,19 +1094,13 @@ class IRConverter:
                     # 支持从父Agent修改子Agent描述
                     parent_description = child.get("description", "")
                     child_ir_data = await async_ir_load(child.get("ir_path"))
-                    # 如果子agent配置中有intent字段，使用它，否则保持原有的intent
-                    if "intent" in child:
-                        child_intent = child.get("intent")
-                        if isinstance(child_intent, dict):
-                            if child_intent.get("name"):
-                                child_ir_data["intent_name"] = child_intent.get("name")
-                            if child_intent.get("description"):
-                                child_ir_data["intent_description"] = child_intent.get(
-                                    "description"
-                                )
-
+                    # R-04: intent 覆盖通过参数下传到子的 current_metadata,不再原地写 child_ir_data
+                    child_intent = child.get("intent") if isinstance(child.get("intent"), dict) else None
                     child_config = await _recursive_create(
-                        child_ir_data, current_metadata, parent_description
+                        child_ir_data,
+                        current_metadata,
+                        parent_description,
+                        parent_intent=child_intent,
                     )
                     child_config.metadata.ir_path = child.get("ir_path")
                     child_config.metadata.mode = child.get(
