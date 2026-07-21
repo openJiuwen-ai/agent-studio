@@ -4,19 +4,21 @@
 
 package com.openjiuwen.studio.prompt.engineering.utils;
 
-import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.EN_LANGUAGE;
+import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.CN_LANGUAGE;
 import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.X_AUTH_TOKEN;
 import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.X_LANGUAGE;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Locale;
 import java.util.Objects;
 
 
@@ -64,10 +66,14 @@ public class HttpUtil {
     public static String getLanguage() {
         RequestAttributes servletRequestAttributes = RequestContextHolder.getRequestAttributes();
         if (servletRequestAttributes == null) {
-            return EN_LANGUAGE;
+            return CN_LANGUAGE;
         }
         HttpServletRequest request = ((ServletRequestAttributes) Objects.requireNonNull(
             servletRequestAttributes)).getRequest();
-        return request.getHeader(X_LANGUAGE);
+        String language = request.getHeader(X_LANGUAGE);
+        if (StringUtils.isNotBlank(language)) {
+            return language.trim().toLowerCase(Locale.ROOT);
+        }
+        return CN_LANGUAGE;
     }
 }

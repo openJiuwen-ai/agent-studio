@@ -113,6 +113,10 @@ public class AgentExportService {
         ExportResourceRsp exportRsp;
         // 兼容前端两种传参：resource_versions（含版本）或 resource_ids（不含版本）。
         // 优先用 resource_versions；为空时由 resource_ids 兜底构建（version 留空，后续转 latest）。
+        if (CollectionUtils.isEmpty(body.getResourceVersions()) && CollectionUtils.isEmpty(body.getResourceIds())) {
+            log.error("resource_versions and resource_ids cannot both be empty when exporting resources");
+            throw new AgentStudioException(StudioError.EXPORT_RESOURCE_PARAMS_EMPTY);
+        }
         if (CollectionUtils.isEmpty(body.getResourceVersions())) {
             List<ExportResourceVersion> versions = body.getResourceIds().stream()
                 .map(id -> new ExportResourceVersion().setResourceId(id))
@@ -141,8 +145,8 @@ public class AgentExportService {
                 exportRsp = exportWorkflow(projectId, workspaceId, body);
                 break;
             default:
-                log.error("resource type:{} not exists", body.getResourceType());
-                throw new AgentStudioException(StudioError.ERROR_REFRESH_ENVIRONMENT);
+                log.error("resource type:{} not supported for export", body.getResourceType());
+                throw new AgentStudioException(StudioError.EXPORT_RESOURCE_TYPE_NOT_SUPPORTED, body.getResourceType());
 
         }
         return exportRsp;

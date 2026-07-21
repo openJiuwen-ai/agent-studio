@@ -49,6 +49,7 @@
         <commons.collections.version>4.5.0-M1</commons.collections.version>
         <quartz-springboot.version>3.5.15</quartz-springboot.version>
         <poi.version>5.4.0</poi.version>
+        <commons-io.version>2.18.0</commons-io.version>
         <swagger-parser.version>2.1.24</swagger-parser.version>
         <swagger-core.version>2.2.25</swagger-core.version>
         <jaxb.version>2.3.9</jaxb.version>
@@ -251,6 +252,11 @@
                 <version>${io-netty-version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>${commons-io.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.poi</groupId>

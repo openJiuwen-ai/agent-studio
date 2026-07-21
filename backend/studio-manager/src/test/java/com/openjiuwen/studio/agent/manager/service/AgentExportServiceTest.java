@@ -6,6 +6,7 @@ package com.openjiuwen.studio.agent.manager.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -14,6 +15,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
+import com.openjiuwen.studio.agent.common.enums.StudioError;
+import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestHeaderHolderUtils;
 import com.openjiuwen.studio.agent.manager.constant.Constants;
@@ -201,6 +204,29 @@ public class AgentExportServiceTest extends BaseTest {
             body);
         assertNotNull(exportMergeRsp);
         assertNotNull(exportMergeRsp.getExportResult());
+    }
+
+    @Test
+    void testExportResourceParamsBothEmpty() {
+        ExportResourceParams body = new ExportResourceParams();
+        body.setResourceType("agent");
+        AgentStudioException exception = assertThrows(AgentStudioException.class,
+            () -> agentExportService.exportResource(Constants.TEST_PROJECT_ID, Constants.TEST_WORKSPACE_ID, body));
+        assertEquals(StudioError.EXPORT_RESOURCE_PARAMS_EMPTY, exception.getErrorCode());
+    }
+
+    @Test
+    void testExportResourceTypeNotSupported() {
+        ExportResourceParams body = new ExportResourceParams();
+        body.setResourceType("unsupported_type");
+        List<ExportResourceVersion> versions = new ArrayList<>();
+        ExportResourceVersion version = new ExportResourceVersion();
+        version.setResourceId("test-id");
+        versions.add(version);
+        body.setResourceVersions(versions);
+        AgentStudioException exception = assertThrows(AgentStudioException.class,
+            () -> agentExportService.exportResource(Constants.TEST_PROJECT_ID, Constants.TEST_WORKSPACE_ID, body));
+        assertEquals(StudioError.EXPORT_RESOURCE_TYPE_NOT_SUPPORTED, exception.getErrorCode());
     }
 
 }

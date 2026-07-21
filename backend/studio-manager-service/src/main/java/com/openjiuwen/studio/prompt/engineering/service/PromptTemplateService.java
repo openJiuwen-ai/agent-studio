@@ -463,14 +463,14 @@ public class PromptTemplateService implements IPromptLibraryService {
         XSSFRow headRow = sheet.createRow(CommonConstant.NUM_ZERO);
         XSSFRow firstRow = sheet.createRow(NUM_ONE);
         for (int i = 0; i < TemplateImportEnum.values().length; i++) {
-            String column = null;
-            String sampleValue = null;
-            if (HttpUtil.getLanguage().equals(CN_LANGUAGE)) {
-                column = TemplateImportEnum.values()[i].getColumn();
-                sampleValue = TemplateImportEnum.values()[i].getSampleValue();
-            } else if (HttpUtil.getLanguage().equals(EN_LANGUAGE)) {
+            String column;
+            String sampleValue;
+            if (EN_LANGUAGE.equals(HttpUtil.getLanguage())) {
                 column = TemplateImportEnum.values()[i].getColumnEn();
                 sampleValue = TemplateImportEnum.values()[i].getSampleValueEn();
+            } else {
+                column = TemplateImportEnum.values()[i].getColumn();
+                sampleValue = TemplateImportEnum.values()[i].getSampleValue();
             }
             XSSFCell headCell = headRow.createCell(i);
             headCell.setCellType(CellType.STRING);
@@ -651,8 +651,8 @@ public class PromptTemplateService implements IPromptLibraryService {
         List<String> message;
         try (InputStream in = file.getInputStream()) {
             message = processExcel(in, userInfo, projectId, workspaceId, true);
-        } catch (IOException e) {
-            log.error("Failed to upload file [{}], error: {}", file.getOriginalFilename(), e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to upload file [{}]", file.getOriginalFilename(), e);
             throw new AgentStudioException(StudioError.UPLOAD_FILE_FAILED);
         }
         return message;
@@ -673,8 +673,8 @@ public class PromptTemplateService implements IPromptLibraryService {
         List<String> message;
         try (InputStream in = file.getInputStream()) {
             message = processExcel(in, userInfo, projectId, workspaceId, false);
-        } catch (IOException e) {
-            log.error("Failed to upload file [{}], error: {}", file.getOriginalFilename(), e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to upload file [{}]", file.getOriginalFilename(), e);
             throw new AgentStudioException(StudioError.UPLOAD_FILE_FAILED);
         }
         return message;
@@ -766,11 +766,11 @@ public class PromptTemplateService implements IPromptLibraryService {
         try {
             for (TemplateImportEnum item : TemplateImportEnum.values()) {
                 int index = item.getIndex();
-                String expectedColumn = null;
-                if (HttpUtil.getLanguage().equals(CN_LANGUAGE)) {
-                    expectedColumn = item.getColumn();
-                } else if (HttpUtil.getLanguage().equals(EN_LANGUAGE)) {
+                String expectedColumn;
+                if (EN_LANGUAGE.equals(HttpUtil.getLanguage())) {
                     expectedColumn = item.getColumnEn();
+                } else {
+                    expectedColumn = item.getColumn();
                 }
 
                 String actualColumn = headerRow.get(index);

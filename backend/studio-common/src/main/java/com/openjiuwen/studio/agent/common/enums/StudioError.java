@@ -968,7 +968,7 @@ public enum StudioError {
     /**
      * workflow不存在
      */
-    WORKFLOW_NOT_EXIST(INTERNAL_SERVER_ERROR, WORKFLOW, "1004"),
+    WORKFLOW_NOT_EXIST(NOT_FOUND, WORKFLOW, "1004"),
 
     /**
      * workflow信息校验失败
@@ -4601,6 +4601,16 @@ public enum StudioError {
     EXPORT_RESOURCE_NOT_EXISTS(BAD_REQUEST, EXPORT, "1001"),
     EXPORT_RESOURCE_COMMON_ERROR(BAD_REQUEST, EXPORT, "1002"),
     EXPORT_PRESET_RESOURCE_ERROR(BAD_REQUEST, EXPORT, "1003"),
+
+    /**
+     * 导出资源时resource_versions和resource_ids不能同时为空
+     */
+    EXPORT_RESOURCE_PARAMS_EMPTY(BAD_REQUEST, EXPORT, "1004"),
+
+    /**
+     * 导出资源类型不支持
+     */
+    EXPORT_RESOURCE_TYPE_NOT_SUPPORTED(BAD_REQUEST, EXPORT, "1005"),
 
     /**
      * ==============================资产广场-应用模板==============================

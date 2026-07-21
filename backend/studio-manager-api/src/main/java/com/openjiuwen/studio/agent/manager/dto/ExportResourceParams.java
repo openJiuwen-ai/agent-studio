@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -41,6 +42,7 @@ public class ExportResourceParams implements Serializable {
     private List<ExportResourceVersion> resourceVersions = null;
 
     @JsonProperty("resource_type")
+    @NotBlank
     private String resourceType = null;
 
     @JsonProperty("mode")
