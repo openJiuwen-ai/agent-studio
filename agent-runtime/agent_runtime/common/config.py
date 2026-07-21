@@ -437,6 +437,18 @@ class DataBaseSettings(BaseSettings):
         return _decrypt(v)
 
 
+class ConversationVariableSettings(BaseSettings):
+    """会话变量存储配置。"""
+
+    ttl_seconds: int = Field(
+        default=259200, validation_alias="CONVERSATION_VARIABLE_STORE_TIME"
+    )
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
 class Settings:
     server = ServerSettings()
     redis = RedisSettings()
@@ -453,5 +465,6 @@ class Settings:
     otel = OtelSettings()
     code_execution = CodeExecutionSettings()
     db_config = DataBaseSettings()
+    conversation_variable = ConversationVariableSettings()
 
 settings = Settings()

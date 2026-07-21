@@ -30,6 +30,7 @@ from copy import deepcopy
 from enum import Enum
 from typing import Any
 
+from agent_runtime.common.config import settings
 from agent_runtime.common.redis_manager import get_redis_client
 from agent_runtime.common.session_state_access import get_state_info
 from jiuwen.extension.workflow_node.utils import get_workflow_param
@@ -51,6 +52,8 @@ ASSIGNMENT_PERMANENT = "permanent"
 
 # Redis存储相关常量
 REDIS_GLOBAL_VALS_NAME = "global.vals"  # Redis全局值存储键名前缀
+# 会话变量过期时间（秒），默认3天，通过 CONVERSATION_VARIABLE_STORE_TIME 环境变量配置
+_DEFAULT_CONVERSATION_VARIABLE_TTL = settings.conversation_variable.ttl_seconds
 
 
 class DataType(Enum):
@@ -368,7 +371,8 @@ class Start(WorkflowComponent):
                 # 合并数据
                 new_memory_vars = {**old_values, **new_memory_vars}
             await redis_client.set(
-                store_key, json.dumps(new_memory_vars, ensure_ascii=False)
+                store_key, json.dumps(new_memory_vars, ensure_ascii=False),
+                ex=_DEFAULT_CONVERSATION_VARIABLE_TTL,
             )
         except Exception as e:
             workflow_logger.error(

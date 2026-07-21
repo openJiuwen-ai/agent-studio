@@ -20,6 +20,7 @@
 
 import json
 
+from agent_runtime.common.config import settings
 from agent_runtime.common.redis_manager import get_redis_client
 from jiuwen.extension.workflow_node.utils import get_workflow_param
 from openjiuwen.core.common.exception.codes import StatusCode
@@ -37,6 +38,8 @@ from openjiuwen.core.session.utils import is_ref_path
 
 # Redis存储相关常量
 REDIS_GLOBAL_VALS_NAME = "global.vals"  # Redis全局值存储键名前缀
+# 会话变量过期时间（秒），默认3天，通过 CONVERSATION_VARIABLE_STORE_TIME 环境变量配置
+_DEFAULT_CONVERSATION_VARIABLE_TTL = settings.conversation_variable.ttl_seconds
 # ${MEMORY_VARIABLE.xxx} 引用前缀
 GLOBAL_REF_PREFIX = "MEMORY_VARIABLE."
 # 会话变量的 io_state 路径前缀
@@ -247,7 +250,8 @@ class LoopSetVariable(LoopSetVariableComponent):
 
             # 写入 Redis
             await redis_client.set(
-                store_key, json.dumps(merged_data, ensure_ascii=False)
+                store_key, json.dumps(merged_data, ensure_ascii=False),
+                ex=_DEFAULT_CONVERSATION_VARIABLE_TTL,
             )
         except Exception as e:
             workflow_logger.error(
