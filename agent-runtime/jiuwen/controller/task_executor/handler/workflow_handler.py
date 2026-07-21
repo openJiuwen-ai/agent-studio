@@ -1243,7 +1243,7 @@ class WorkflowHandler(BaseHandler):
             )
             yield MessageConverter.create_workflow_completion_message(
                 workflow_context=workflow_context,
-                exec_res={"answer": "".join(workflow_status.get("final_answer", []))},
+                exec_res={"answer": "".join(str(x) for x in workflow_status.get("final_answer", []))},
             )
 
         if workflow_status["questioner_interrupted"]:
