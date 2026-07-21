@@ -218,6 +218,7 @@ public class ModelAdapter extends ResourceAdapter {
                 handleException(result, e);
             } catch (Exception e) {
                 log.warn("Failed to import model. modelId:{}", model.getId(), e);
+                handleException(result, new AgentStudioException(StudioError.WORKFLOW_FLOW_RESOURCE_IMPORT_FAILED, e));
             }
         } else {
             if (!Strings.CS.equals(model.getId(), modelBase.getId())) {

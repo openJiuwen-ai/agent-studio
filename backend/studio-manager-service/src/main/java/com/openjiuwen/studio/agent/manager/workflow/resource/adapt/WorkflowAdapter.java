@@ -334,12 +334,13 @@ public class WorkflowAdapter extends ResourceAdapter {
 
     private void insertWorkflow(WorkflowEntity metadata, ReleaseVersion releaseVersion, ImportResourceResult result) {
         updatePath(metadata);
-        result.setAddTag(true);
         metadata.setStatus(releaseVersion == null ? AgentStatus.DRAFT.toString() : AgentStatus.PUBLISHED.toString());
         workflowMapper.createWorkflowEntity(metadata);
 
         // 创建版本数据
         handleReleaseVersion(metadata, releaseVersion, result);
+        // 标记首次导入：放在所有操作成功之后，避免中途异常时 addTag=true 导致 FAILED 结果仍触发草稿 DSL 上传
+        result.setAddTag(true);
     }
 
     private void updateWorkflow(WorkflowEntity metadata, ReleaseVersion releaseVersion, ImportResourceResult result) {
