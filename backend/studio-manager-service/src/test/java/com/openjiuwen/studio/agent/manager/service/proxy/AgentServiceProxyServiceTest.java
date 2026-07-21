@@ -16,8 +16,12 @@ import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.FreeModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.RouterStrategyMapper;
+import com.openjiuwen.studio.agent.manager.obs.MgObsService;
+import com.openjiuwen.studio.agent.manager.rce.client.AgentBuilderClient;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 
+import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
+import com.openjiuwen.studio.agent.manager.service.debugging.ControllerDebuggingMgmtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +48,9 @@ class AgentServiceProxyServiceTest {
     private AgentRuntimeClient runtimeClient;
 
     @Mock
+    private AgentBuilderClient builderClient;
+
+    @Mock
     private RedisClient redisClient;
 
     @Mock
@@ -67,12 +74,21 @@ class AgentServiceProxyServiceTest {
     @Mock
     private ToolMapper toolMapper;
 
+    @Mock
+    private AgentRuntimeService agentRuntimeService;
+
+    @Mock
+    private ControllerDebuggingMgmtService controllerDebuggingMgmtService;
+
+    @Mock
+    private MgObsService mgObsService;
+
     private AgentServiceProxyService proxyService;
 
     @BeforeEach
     void setUp() {
-        proxyService = new AgentServiceProxyService(runtimeClient, redisClient, agentMapper, workflowMapper,
-            modelServiceMapper, okHttpClientUtils, routerStrategyMapper, freeModelServiceMapper, toolMapper);
+        proxyService = new AgentServiceProxyService(runtimeClient, builderClient, redisClient, agentMapper, workflowMapper,
+            modelServiceMapper, okHttpClientUtils, routerStrategyMapper, freeModelServiceMapper, toolMapper, agentRuntimeService, controllerDebuggingMgmtService, mgObsService);
         ReflectionTestUtils.setField(proxyService, "runtimeEndpoint", "http://runtime:8080");
         ReflectionTestUtils.setField(proxyService, "envType", "hc");
         ReflectionTestUtils.setField(proxyService, "opSvcProjectId", "op-svc-project");

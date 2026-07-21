@@ -12,6 +12,7 @@ import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.common.dto.md.ChatCompletionRequest;
 import com.openjiuwen.studio.agent.manager.entity.md.ProviderAuthData;
 import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthDataMapper;
+import com.openjiuwen.studio.agent.manager.rce.client.AgentBuilderClient;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.rce.models.AskModelReq;
 import com.openjiuwen.studio.agent.manager.rce.models.CodeGenerateResultVo;
@@ -52,6 +53,9 @@ public class JiuWenService {
     private AgentRuntimeClient runtimeClient;
 
     @Autowired
+    private AgentBuilderClient builderClient;
+
+    @Autowired
     private ProviderAuthDataMapper authDataMapper;
 
     @Autowired
@@ -88,7 +92,7 @@ public class JiuWenService {
             }
         }
 
-        ResponseEntity<JSONObject> response = runtimeClient.askModel(RequestContextUtils.getRequestAuthToken(),
+        ResponseEntity<JSONObject> response = builderClient.askModel(RequestContextUtils.getRequestAuthToken(),
             auth == null ? "" : auth.getId(), request);
         String content = response.getBody()
             .getJSONArray(CommonConstant.CHOICES)

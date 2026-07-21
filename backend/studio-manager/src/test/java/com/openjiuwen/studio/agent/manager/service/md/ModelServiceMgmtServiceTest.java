@@ -25,6 +25,7 @@ import com.openjiuwen.studio.agent.manager.dto.ModelServiceRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelStatusReq;
 import com.openjiuwen.studio.agent.common.entity.RouterStrategyEntity;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
+import com.openjiuwen.studio.agent.manager.rce.client.AgentBuilderClient;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.utils.BaseTest;
 import com.openjiuwen.studio.prompt.engineering.utils.HttpUtil;
@@ -61,6 +62,9 @@ public class ModelServiceMgmtServiceTest extends BaseTest {
 
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     private AgentRuntimeClient runtimeClient;
+
+    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
+    private AgentBuilderClient builderClient;
 
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     private ModelLicenseCtrlService licenseCtrlService;
@@ -207,7 +211,7 @@ public class ModelServiceMgmtServiceTest extends BaseTest {
             .setIsSupportStream(true);
 
         try {
-            Mockito.when(runtimeClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
+            Mockito.when(builderClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
                     Mockito.any(ModelServiceCheckReq.class)))
                 .thenReturn(ResponseEntity.ok(new ModelServiceCheckRsp().setSuccess(false)));
             modelServiceMgmtService.createModelService(TEST_PROJECT_ID, "default", true, req);
@@ -216,7 +220,7 @@ public class ModelServiceMgmtServiceTest extends BaseTest {
         }
 
         try {
-            Mockito.when(runtimeClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
+            Mockito.when(builderClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
                     Mockito.any(ModelServiceCheckReq.class)))
                 .thenReturn(ResponseEntity.ok(
                     new ModelServiceCheckRsp().setSuccess(false).setStatusCode(404).setDetail("invalid model")));
@@ -226,7 +230,7 @@ public class ModelServiceMgmtServiceTest extends BaseTest {
         }
 
         try {
-            Mockito.when(runtimeClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
+            Mockito.when(builderClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
                     Mockito.any(ModelServiceCheckReq.class)))
                 .thenReturn(ResponseEntity.ok(
                     new ModelServiceCheckRsp().setSuccess(false).setStatusCode(401).setDetail("auth not ava.")));
@@ -236,7 +240,7 @@ public class ModelServiceMgmtServiceTest extends BaseTest {
         }
 
         try {
-            Mockito.when(runtimeClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
+            Mockito.when(builderClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
                     Mockito.any(ModelServiceCheckReq.class)))
                 .thenReturn(ResponseEntity.ok(
                     new ModelServiceCheckRsp().setSuccess(false).setStatusCode(401).setDetail("demo")));
@@ -246,7 +250,7 @@ public class ModelServiceMgmtServiceTest extends BaseTest {
         }
 
         try {
-            Mockito.when(runtimeClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
+            Mockito.when(builderClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
                     Mockito.any(ModelServiceCheckReq.class)))
                 .thenReturn(ResponseEntity.ok(
                     new ModelServiceCheckRsp().setSuccess(false).setStatusCode(404).setDetail("demo")));
@@ -255,7 +259,7 @@ public class ModelServiceMgmtServiceTest extends BaseTest {
             Assertions.assertEquals(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE, e.getErrorCode());
         }
 
-        Mockito.when(runtimeClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
+        Mockito.when(builderClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
                 Mockito.any(ModelServiceCheckReq.class)))
             .thenReturn(ResponseEntity.ok(new ModelServiceCheckRsp().setSuccess(true)));
 
@@ -266,7 +270,7 @@ public class ModelServiceMgmtServiceTest extends BaseTest {
         modelServiceMgmtService.updateModelService(TEST_PROJECT_ID, "default", true, "m1", req);
 
         try {
-            Mockito.when(runtimeClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
+            Mockito.when(builderClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
                     Mockito.any(ModelServiceCheckReq.class)))
                 .thenReturn(ResponseEntity.ok(
                     new ModelServiceCheckRsp().setSuccess(false).setStatusCode(401).setDetail("not have access")));

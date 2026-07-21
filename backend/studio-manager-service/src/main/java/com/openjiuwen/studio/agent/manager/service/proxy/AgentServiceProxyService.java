@@ -66,6 +66,7 @@ import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionBr
 import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionDetailModel;
 import com.openjiuwen.studio.agent.manager.model.debugging.ControllerExecutionInvokeModel;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
+import com.openjiuwen.studio.agent.manager.rce.client.AgentBuilderClient;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.debugging.ControllerDebuggingMgmtService;
@@ -106,6 +107,8 @@ public class AgentServiceProxyService {
     private static final String REQUEST_ID = "request-id";
 
     private final AgentRuntimeClient runtimeClient;
+
+    private final AgentBuilderClient builderClient;
 
     private final RedisClient redisClient;
 
@@ -202,12 +205,13 @@ public class AgentServiceProxyService {
         return RequestContextUtils.getRequestAuthToken();
     }
 
-    public AgentServiceProxyService(AgentRuntimeClient runtimeClient, RedisClient redisClient, AgentMapper agentMapper,
+    public AgentServiceProxyService(AgentRuntimeClient runtimeClient, AgentBuilderClient agentBuilderClient, RedisClient redisClient, AgentMapper agentMapper,
         WorkflowMapper workflowMapper, ModelServiceMapper modelServiceMapper, OkHttpClientUtils okHttpClientUtils,
         RouterStrategyMapper routerStrategyMapper, FreeModelServiceMapper freeModelServiceMapper,
         ToolMapper toolMapper, AgentRuntimeService agentRuntimeService,
         ControllerDebuggingMgmtService controllerDebuggingMgmtService, MgObsService mgObsService) {
         this.runtimeClient = runtimeClient;
+        this.builderClient = agentBuilderClient;
         this.redisClient = redisClient;
         this.agentMapper = agentMapper;
         this.workflowMapper = workflowMapper;
@@ -307,7 +311,7 @@ public class AgentServiceProxyService {
         String projectId) {
         String modelId = request.getModel();
         checkModelPermission(projectId, workspaceId, modelId);
-        return runtimeClient.rerank(getToken(), projectId, workspaceId, request, refresh);
+        return builderClient.rerank(getToken(), projectId, workspaceId, request, refresh);
     }
 
     public Object textEmbeddings(HttpHeaders headers, String workspaceId, EmbeddingRequest request, Boolean refresh,
@@ -315,7 +319,7 @@ public class AgentServiceProxyService {
 
         String modelId = request.getModel();
         checkModelPermission(projectId, workspaceId, modelId);
-        return runtimeClient.textEmbeddings(getToken(), projectId, workspaceId, request, refresh);
+        return builderClient.textEmbeddings(getToken(), projectId, workspaceId, request, refresh);
     }
 
     public Object chatCompletions(HttpHeaders headers, String workspaceId, ChatCompletionRequest request,
@@ -329,7 +333,7 @@ public class AgentServiceProxyService {
 
             return stream(url, headers, JsonUtils.encode(request));
         }
-        return runtimeClient.chatCompletions(getToken(), projectId, workspaceId, request, refresh);
+        return builderClient.chatCompletions(getToken(), projectId, workspaceId, request, refresh);
     }
 
     public ResponseEntity<AutoAddResultJsonObject> additionalQuestions(String projectId, String agentId,

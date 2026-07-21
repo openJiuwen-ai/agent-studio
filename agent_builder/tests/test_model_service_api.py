@@ -10,8 +10,10 @@ Covers:
 """
 
 import asyncio
+import json
 import types
 
+import httpx
 import pytest
 
 from agent_builder.adapter import model_bridge
@@ -43,6 +45,7 @@ def test_model_service_facade_routes_registered():
     assert "/v1/agent-builder/chat/completions" in routes
     assert "/v1/agent-builder/embeddings" in routes
     assert "/v1/agent-builder/rerank" in routes
+    assert "/v1/{project_id}/model-service/status/check" in routes
 
 
 # ----------------------------- conditional routing -----------------------------
@@ -236,3 +239,163 @@ def test_rerank_raises_on_upstream_error(monkeypatch):
     with pytest.raises(ModelServiceError):
         asyncio.run(dispatch.rerank(model, auth, req))
     assert fake.closed
+
+
+# ----------------------------- status check -----------------------------
+
+
+def test_build_check_invoke_body_per_model_type():
+    from agent_builder.serve.apis.model_service_api import _build_check_invoke_body
+
+    chat = _build_check_invoke_body("LLM", "m1")
+    assert chat == {"model": "m1", "stream": False,
+                    "messages": [{"role": "user", "content": "你好"}]}
+    # IMAGE-TO-TEXT 走与 LLM 相同的 chat 探针
+    assert _build_check_invoke_body("image-to-text", "m1") == chat
+
+    emb = _build_check_invoke_body("TEXT-EMBEDDING", "m1")
+    assert emb == {"model": "m1", "input": "你好"}
+
+    rerank = _build_check_invoke_body("RERANK", "m1")
+    assert rerank == {"model": "m1", "query": "a", "documents": ["a", "b"]}
+
+    # 不支持的 model_type → None（对应 Java default 分支）
+    assert _build_check_invoke_body("TEXT-TO-IMAGE", "m1") is None
+
+
+def test_check_auth_headers_api_key_uses_api_key_field():
+    from agent_builder.serve.apis.model_service_api import _check_auth_headers
+
+    headers = _check_auth_headers("API_KEY", {"API Key": "sk-real"})
+    assert headers["Authorization"] == "Bearer sk-real"
+    assert headers["Content-Type"] == "application/json"
+
+
+def test_check_auth_headers_custom_apikey_strips_cust_prefix():
+    from agent_builder.serve.apis.model_service_api import _check_auth_headers
+
+    headers = _check_auth_headers("CUSTOM_APIKEY", {
+        "Cust-Token": "tok", "X-Custom": "v", "Cust-UserId": "u"
+    })
+    assert headers["token"] == "tok"      # cust- 前缀剥离 + 小写
+    assert headers["userid"] == "u"
+    assert headers["x-custom"] == "v"     # 非 cust-token/userid 仅小写
+    assert "Authorization" not in headers
+
+
+def test_check_auth_headers_no_auth_adds_no_authorization():
+    from agent_builder.serve.apis.model_service_api import _check_auth_headers
+
+    headers = _check_auth_headers("NO_AUTH", {})
+    assert "Authorization" not in headers
+    assert headers["Content-Type"] == "application/json"
+
+
+def _check_req(model_type="LLM", auth_type="API_KEY", **overrides):
+    base = {
+        "model_type": model_type,
+        "api_url": "http://up/v1/chat/completions",
+        "auth_type": auth_type,
+        "auth_info": {"API Key": "sk-test"},
+        "model_name": "m1",
+        "interface_protocol": "openai",
+    }
+    base.update(overrides)
+    from agent_builder.serve.apis.model_service_api import ModelServiceCheckReq
+    return ModelServiceCheckReq(**base)
+
+
+class _CheckResp:
+    def __init__(self, status, text="err"):
+        self.status_code = status
+        self.text = text
+
+
+class _CheckClient:
+    def __init__(self, status, text="err"):
+        self.resp = _CheckResp(status, text)
+        self.closed = False
+        self.posted = None
+
+    async def post(self, url, **kwargs):
+        self.posted = (url, kwargs)
+        return self.resp
+
+    async def aclose(self):
+        self.closed = True
+
+
+def _patch_httpx(monkeypatch, client):
+    from model_service import dispatch
+    monkeypatch.setattr(dispatch, "build_httpx_client", lambda *a, **kw: client)
+
+
+def test_status_check_success_returns_200(monkeypatch):
+    from agent_builder.serve.apis.model_service_api import model_service_status_check
+
+    fake = _CheckClient(200)
+    _patch_httpx(monkeypatch, fake)
+    rsp = asyncio.run(model_service_status_check("proj", _check_req()))
+    body = json.loads(rsp.body)
+    assert body["success"] is True
+    assert body["status_code"] == 200
+    assert fake.closed
+    # 探针体带最小 chat 请求
+    posted_body = fake.posted[1]["json"]
+    assert posted_body["messages"][0]["content"] == "你好"
+    # API_KEY → Bearer
+    assert fake.posted[1]["headers"]["Authorization"] == "Bearer sk-test"
+
+
+def test_status_check_400_treated_as_success(monkeypatch):
+    from agent_builder.serve.apis.model_service_api import model_service_status_check
+
+    fake = _CheckClient(400, "bad request")
+    _patch_httpx(monkeypatch, fake)
+    rsp = asyncio.run(model_service_status_check("proj", _check_req()))
+    body = json.loads(rsp.body)
+    assert body["success"] is True      # 400 → 端点可达即通过
+    assert body["status_code"] == 400
+    assert body["reason"] == "bad request"
+
+
+def test_status_check_401_is_failure(monkeypatch):
+    from agent_builder.serve.apis.model_service_api import model_service_status_check
+
+    fake = _CheckClient(401, "unauthorized")
+    _patch_httpx(monkeypatch, fake)
+    rsp = asyncio.run(model_service_status_check("proj", _check_req()))
+    body = json.loads(rsp.body)
+    assert body["success"] is False
+    assert body["status_code"] == 401
+    assert body["reason"] == "unauthorized"
+
+
+def test_status_check_network_error_returns_500(monkeypatch):
+    from agent_builder.serve.apis.model_service_api import model_service_status_check
+
+    class _BoomClient(_CheckClient):
+        async def post(self, url, **kwargs):
+            raise httpx.ConnectError("boom")
+
+    fake = _BoomClient(200)
+    _patch_httpx(monkeypatch, fake)
+    rsp = asyncio.run(model_service_status_check("proj", _check_req()))
+    body = json.loads(rsp.body)
+    assert body["success"] is False
+    assert body["status_code"] == 500
+
+
+def test_status_check_unsupported_model_type_short_circuits(monkeypatch):
+    from agent_builder.serve.apis.model_service_api import model_service_status_check
+
+    fake = _CheckClient(200)
+    _patch_httpx(monkeypatch, fake)
+    rsp = asyncio.run(model_service_status_check(
+        "proj", _check_req(model_type="TEXT-TO-IMAGE")
+    ))
+    body = json.loads(rsp.body)
+    assert body["success"] is True
+    assert body["reason"] == "model type is not support to check."
+    # 未发起任何上游调用
+    assert fake.posted is None

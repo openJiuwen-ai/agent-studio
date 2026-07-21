@@ -175,7 +175,7 @@ services:
       # Schema 模式（仅 GaussDB 生效）：设置后连接以该 schema 作为默认 search_path；为空则用数据库默认
       STORE_DB_SCHEMA: ${STORE_DB_SCHEMA:-}
       STORE_DB_SSLMODE: ${STORE_DB_SSLMODE:-disable}
-      EXECUTION_STATE_STORAGE_MEDIUM: ${EXECUTION_STATE_STORAGE_MEDIUM:-}
+      EXECUTION_STATE_STORAGE_MEDIUM: ${EXECUTION_STATE_STORAGE_MEDIUM:-redis}
       # 日志详细模式，设为true时显示完整错误信息
       LOG_VERBOSE: ${LOG_VERBOSE:-true}
       INSIGHT_EI_DEBUG_INFO_ENABLE: ${INSIGHT_EI_DEBUG_INFO_ENABLE:-}

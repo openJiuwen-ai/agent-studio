@@ -4,7 +4,6 @@
 
 package com.openjiuwen.studio.agent.manager.rce.client;
 
-import com.alibaba.fastjson2.JSONObject;
 import com.openjiuwen.studio.agent.common.dto.BatchDeleteUserVariableMemoryResponseBody;
 import com.openjiuwen.studio.agent.common.dto.agent.Feedback;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
@@ -14,19 +13,13 @@ import com.openjiuwen.studio.agent.common.dto.knowledge.ListUserVariableMemoryRe
 import com.openjiuwen.studio.agent.common.dto.mcp.McpCallToolResp;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationReq;
 import com.openjiuwen.studio.agent.common.dto.mcp.McpValidationResp;
-import com.openjiuwen.studio.agent.common.dto.md.ChatCompletionRequest;
-import com.openjiuwen.studio.agent.common.dto.md.ModelServiceCheckReq;
-import com.openjiuwen.studio.agent.common.dto.md.ModelServiceCheckRsp;
 import com.openjiuwen.studio.agent.common.dto.run.*;
 import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.common.entity.Text2AudioReq;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.*;
 import com.openjiuwen.studio.agent.manager.dto.runtime.Audio2TextReq;
-import com.openjiuwen.studio.agent.manager.dto.runtime.EmbeddingRequest;
-import com.openjiuwen.studio.agent.manager.dto.runtime.RankDocumentsRequest;
 import com.openjiuwen.studio.agent.manager.dto.runtime.StsTextResp;
-import com.openjiuwen.studio.agent.manager.rce.models.AskModelReq;
 import com.openjiuwen.studio.agent.manager.rce.models.McpCallToolRequest;
 import com.openjiuwen.studio.prompt.engineering.dto.IndustryVo;
 import io.swagger.annotations.ApiParam;
@@ -85,18 +78,6 @@ public interface AgentRuntimeClient {
         @PathVariable(value = "project_id") String projectId, @RequestBody McpServerReq body);
 
     /**
-     * 运行模型调用接口
-     *
-     * @param authToken   String
-     * @param askModelReq AskModelReq
-     * @return 响应体
-     */
-    @PostMapping(path = "/v1/agent-builder/chat/completions", consumes = MediaType.APPLICATION_JSON_VALUE,
-        produces = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<JSONObject> askModel(@RequestHeader("X-Auth-Token") String authToken,
-        @RequestHeader(value = "X-Auth-Id", required = false) String authId, @RequestBody AskModelReq askModelReq);
-
-    /**
      * 运行 mcp 服务指定工具
      *
      * @param authToken 认证 token
@@ -107,11 +88,6 @@ public interface AgentRuntimeClient {
     @PostMapping("/v1/{project_id}/mcp-servers/tools/run")
     ResponseEntity<McpCallToolResp> callMcpServerTool(@RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
         @PathVariable(value = "project_id") String projectId, @RequestBody McpCallToolRequest body);
-
-    @PostMapping("/v1/{project_id}/model-service/status/check")
-    ResponseEntity<ModelServiceCheckRsp> modelServiceAvailableCheck(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable(value = "project_id") String projectId, @RequestBody ModelServiceCheckReq request);
 
     /**
      * 运行 agent，带会话 id
@@ -291,34 +267,6 @@ public interface AgentRuntimeClient {
         @PathVariable("project_id") String projectId,
         @RequestBody @NotNull @Valid McpValidationReq body, @RequestParam("workspqce_id") String workspaceId);
 
-    @PostMapping("/v1/agent-builder/rerank")
-    Object rerank(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @RequestParam("project_id") String projectId,
-        @RequestParam("workspace_id") String workspaceId, @RequestBody @Valid RankDocumentsRequest request,
-        @RequestParam("refresh") Boolean refresh);
-
-    @PostMapping("/v1/agent-builder/embeddings")
-    Object textEmbeddings(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @RequestParam("project_id") String projectId,
-        @RequestParam("workspace_id") String workspaceId, @RequestBody @Valid EmbeddingRequest request,
-        @RequestParam("refresh") Boolean refresh);
-
-    @PostMapping("/v1/agent-builder/chat/completions")
-    Object chatCompletions(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @RequestParam("project_id") String projectId,
-        @RequestParam("workspace_id") String workspaceId, @RequestBody ChatCompletionRequest request,
-        @RequestParam("refresh") boolean refresh);
-
-    @PostMapping("/v1/agent-builder/chat/completions")
-    Flux<Object> chatCompletionsStream(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @RequestParam("project_id") String projectId,
-        @RequestParam("workspace_id") String workspaceId, @RequestBody ChatCompletionRequest request,
-        @RequestParam("refresh") boolean refresh);
-
     @PostMapping("/v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions")
     ResponseEntity<AutoAddResultJsonObject> additionalQuestions(
         @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
@@ -368,22 +316,6 @@ public interface AgentRuntimeClient {
         @PathVariable("project_id") String projectId,
         @PathVariable("workflow_id") String workflowId, @PathVariable("conversation_id") String conversationId,
         @RequestParam("workspace_id") String workspaceId);
-
-    @GetMapping("/v1/{project_id}/controller/{agent_id}/conversations/{conversation_id}/executions")
-    ResponseEntity<Object> listControllerExecutions(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
-        @PathVariable("conversation_id") String conversationId,
-        @RequestParam("workspace_id") String workspaceId,
-        @SpringQueryMap ListControllerExecutionsQo body);
-
-    @GetMapping("/v1/{project_id}/controller/{agent_id}/executions/{execution_id}")
-    ResponseEntity<Object> getControllerExecutionDetail(
-        @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
-        @PathVariable("project_id") String projectId, @PathVariable("agent_id") String agentId,
-        @PathVariable("execution_id") String executionId,
-        @RequestParam("workspace_id") String workspaceId,
-        @SpringQueryMap GetControllerExecutionDetailQo body);
 
     @PostMapping("/v1/workflows/chat/{short_code}/conversations/{conversation_id}")
     ResponseEntity<Object> runWebWorkflow(

@@ -24,6 +24,7 @@ import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthDataMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.RouterStrategyMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
+import com.openjiuwen.studio.agent.manager.rce.client.AgentBuilderClient;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 
@@ -96,6 +97,9 @@ public class ModelServiceManager {
 
     @Autowired
     private AgentRuntimeClient runtimeClient;
+
+    @Autowired
+    private AgentBuilderClient builderClient;
 
     @Autowired
     private ProviderAuthDataMapper authDataMapper;
@@ -381,7 +385,7 @@ public class ModelServiceManager {
 
         ModelServiceCheckRsp checkRsp;
         try {
-            checkRsp = runtimeClient.modelServiceAvailableCheck(RequestContextUtils.getRequestAuthToken(), projectId, req)
+            checkRsp = builderClient.modelServiceAvailableCheck(RequestContextUtils.getRequestAuthToken(), projectId, req)
                     .getBody();
         } catch (Exception e) {
             log.error("Call model service check fail. modelName:{}, msg: {}", modelName, e.getMessage());

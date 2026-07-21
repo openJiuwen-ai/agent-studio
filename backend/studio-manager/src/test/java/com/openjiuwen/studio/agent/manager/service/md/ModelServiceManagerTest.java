@@ -26,6 +26,7 @@ import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthDataMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.RouterStrategyMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
+import com.openjiuwen.studio.agent.manager.rce.client.AgentBuilderClient;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.manager.utils.BaseTest;
 import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
@@ -97,6 +98,9 @@ public class ModelServiceManagerTest extends BaseTest {
 
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     private AgentRuntimeClient runtimeClient;
+
+    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
+    private AgentBuilderClient builderClient;
 
     @Mock(answer = Answers.RETURNS_DEEP_STUBS)
     private RedisClient redisClient;
@@ -297,14 +301,14 @@ public class ModelServiceManagerTest extends BaseTest {
 
     @Test
     public void checkProviderAuthTest() {
-        Mockito.when(runtimeClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
+        Mockito.when(builderClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
                 Mockito.any(ModelServiceCheckReq.class)))
             .thenReturn(ResponseEntity.ok(new ModelServiceCheckRsp().setSuccess(true)));
 
         modelServiceManager.checkProviderAuth("test_project_id", "default", "NO_AUTH", "{}", "100", true);
         modelServiceManager.checkProviderAuth("test_project_id", "default", "NO_AUTH", "{}", "nn", false);
 
-        Mockito.when(runtimeClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
+        Mockito.when(builderClient.modelServiceAvailableCheck(Mockito.anyString(), Mockito.anyString(),
                 Mockito.any(ModelServiceCheckReq.class)))
             .thenReturn(ResponseEntity.ok(new ModelServiceCheckRsp().setSuccess(false).setReason("ModelArts.81004")));
         modelServiceManager.checkProviderAuth("test_project_id", "default", "NO_AUTH", "{}", "100", true);
@@ -324,7 +328,7 @@ public class ModelServiceManagerTest extends BaseTest {
     public void checkProviderAuthTest2() {
         ModelServiceManager service = new ModelServiceManager();
         ModelServiceMapper mapper = Mockito.mock(ModelServiceMapper.class);
-        AgentRuntimeClient client = Mockito.mock(AgentRuntimeClient.class);
+        AgentBuilderClient client = Mockito.mock(AgentBuilderClient.class);
         ReflectionTestUtils.setField(service, "modelServiceMapper", mapper);
         ReflectionTestUtils.setField(service, "runtimeClient", client);
 
@@ -365,7 +369,7 @@ public class ModelServiceManagerTest extends BaseTest {
         String authInfoJson = "{\"username\":\"user123\",\"password\":\"pass123\"}";
 
         // 模拟runtimeClient返回成功响应
-        Mockito.when(runtimeClient.modelServiceAvailableCheck(any(), any(), any()))
+        Mockito.when(builderClient.modelServiceAvailableCheck(any(), any(), any()))
             .thenReturn(ResponseEntity.ok(new ModelServiceCheckRsp().setSuccess(true)));
 
 
@@ -378,7 +382,7 @@ public class ModelServiceManagerTest extends BaseTest {
                 authType, authInfoJson, false);
 
             // 验证请求是否正确构建
-            verify(runtimeClient).modelServiceAvailableCheck(any(), any(), any());
+            verify(builderClient).modelServiceAvailableCheck(any(), any(), any());
         }
     }
 
@@ -399,7 +403,7 @@ public class ModelServiceManagerTest extends BaseTest {
         // 模拟成功响应
         ModelServiceCheckRsp mockRsp = new ModelServiceCheckRsp();
         mockRsp.setSuccess(true);
-        Mockito.when(runtimeClient.modelServiceAvailableCheck(any(), any(), any()))
+        Mockito.when(builderClient.modelServiceAvailableCheck(any(), any(), any()))
             .thenReturn(ResponseEntity.ok(new ModelServiceCheckRsp().setSuccess(true)));
 
         try (MockedStatic<CryptoUtils> mockedSccCryptoUtils = Mockito.mockStatic(CryptoUtils.class)) {
@@ -411,7 +415,7 @@ public class ModelServiceManagerTest extends BaseTest {
                 authType, authInfoMap, false);
 
             // 验证请求构建
-            verify(runtimeClient).modelServiceAvailableCheck(any(), any(), any());
+            verify(builderClient).modelServiceAvailableCheck(any(), any(), any());
         }
     }
 
@@ -430,7 +434,7 @@ public class ModelServiceManagerTest extends BaseTest {
         authInfoMap.put("password", "pass123");
 
         // 模拟成功响应
-        Mockito.when(runtimeClient.modelServiceAvailableCheck(any(), any(), any()))
+        Mockito.when(builderClient.modelServiceAvailableCheck(any(), any(), any()))
             .thenReturn(ResponseEntity.ok(new ModelServiceCheckRsp().setSuccess(true)));
 
         try (MockedStatic<CryptoUtils> mockedSccCryptoUtils = Mockito.mockStatic(CryptoUtils.class)) {
@@ -442,7 +446,7 @@ public class ModelServiceManagerTest extends BaseTest {
                 authType, authInfoMap, false);
 
             // 验证请求构建，authInfo未设置
-            verify(runtimeClient).modelServiceAvailableCheck(any(), any(), any());
+            verify(builderClient).modelServiceAvailableCheck(any(), any(), any());
         }
     }
 
@@ -459,7 +463,7 @@ public class ModelServiceManagerTest extends BaseTest {
         String authInfo = "{}";
 
         // 模拟失败响应
-        Mockito.when(runtimeClient.modelServiceAvailableCheck(any(), any(), any()))
+        Mockito.when(builderClient.modelServiceAvailableCheck(any(), any(), any()))
             .thenReturn(ResponseEntity.ok(new ModelServiceCheckRsp().setSuccess(false)));
 
         // 预期抛出异常

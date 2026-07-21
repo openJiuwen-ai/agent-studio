@@ -8,6 +8,8 @@
 - POST /v1/agent-builder/chat/completions  — 对应 Java ``chatCompletions``（支持流式/非流式 + ROUTER failover）
 - POST /v1/agent-builder/embeddings        — 对应 Java ``textEmbeddings``
 - POST /v1/agent-builder/rerank             — 对应 Java ``rerank``
+- POST /v1/{project_id}/model-service/status/check — 对应 Java ``ModelServiceController.modelServiceStatusCheck``
+  （连通性探针：请求体直传待测模型配置，不走 OBS 策略解析）
 
 实现要点（与 Java ``RuntimeModelServiceManager`` / 各 ``Maas*RequestAdaptor`` 对齐）：
 - model 字段是 modelServiceId（UUID），可能带 ``prefix|`` 签名前缀，取 ``split('|')[0]`` 作为 OBS key
@@ -20,7 +22,7 @@
 - rerank 响应按 ``index`` 升序排序后截断到 ``top_n``（对应 Java ``MaasRerankRequestAdaptor.resBodyConvert``）。
 """
 
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import httpx
 import logging
@@ -57,6 +59,31 @@ class RankDocumentsRequest(BaseModel):
     query: str
     docs: List[str]
     top_n: Optional[int] = Field(default=None, ge=1, le=512)
+
+
+class ModelServiceCheckReq(BaseModel):
+    """对应 Java ``ModelServiceCheckReq``（``@JsonNaming`` snake_case）。
+
+    与 chat/embed/rerank facade 的关键区别：请求体直接携带待测模型配置
+    （apiUrl/authType/authInfo/modelName/interfaceProtocol），**不走 OBS 策略解析**，
+    对应 Java ``createModelServiceDetail`` 由 req 直接构造 ``ModelServiceDetail``。
+    """
+
+    model_type: str
+    api_url: str
+    auth_type: str
+    auth_info: Dict[str, str]
+    model_name: str
+    interface_protocol: str
+
+
+class ModelServiceCheckRsp(BaseModel):
+    """对应 Java ``ModelServiceCheckRsp``（snake_case）。"""
+
+    success: bool
+    reason: Optional[str] = None
+    detail: Optional[str] = None
+    status_code: int = 0
 
 
 # ----------------------------- 工具 -----------------------------
@@ -100,6 +127,49 @@ def _error_response(exc: Exception) -> JSONResponse:
     logger.warning("model-service facade error: code=%s msg=%s", code, msg)
     status = 404 if code == "MD_MODEL_SERVICE_NOT_PUBLISH" else 400
     return JSONResponse(status_code=status, content={"error": {"code": code, "message": msg}})
+
+
+def _check_auth_headers(auth_type: str, auth_info: Optional[Dict[str, str]]) -> dict:
+    """鉴权头（对应 Java ``AuthAdapterFactory`` 三种 adapter，使用请求体原始 auth_info）。
+
+    与 OBS 路径的 ``_auth_headers`` 区别：status check 的 auth_info 由调用方直传，
+    - ``API_KEY`` 取 ``"API Key"`` 键（Java ``ApiKeyAuthInfo`` 的 ``@JsonProperty("API Key")``），
+      不走 OBS resolver 的 ``api_key`` 归一。
+    - ``CUSTOM_APIKEY``：auth_info 各项作为自定义头，``cust-token``/``cust-userid`` 剥离
+      ``cust-`` 前缀并小写（对应 Java ``CustomApiKeyAuthAdapter.customHeadersReplace``）。
+    - ``NO_AUTH`` / 其它：不加任何鉴权头（对应 Java ``NoAuthAdapter``）。
+    """
+    headers = {"Content-Type": "application/json"}
+    atype = (auth_type or "").upper()
+    if atype == "API_KEY":
+        api_key = (auth_info or {}).get("API Key", "")
+        headers["Authorization"] = f"Bearer {api_key}"
+    elif atype == "CUSTOM_APIKEY":
+        for k, v in (auth_info or {}).items():
+            lk = k.lower()
+            real = lk[5:] if lk in ("cust-token", "cust-userid") else lk
+            headers[real] = v
+    return headers
+
+
+def _build_check_invoke_body(model_type: str, model_name: str) -> Optional[dict]:
+    """按 model_type 构造最小探针请求体（对应 Java ``createModelInvokeBase``）。
+
+    返回 None 表示该 model_type 不支持 check（对应 Java ``default`` 分支 →
+    "model type is not support to check."）。
+    """
+    mt = (model_type or "").upper()
+    if mt in ("IMAGE-TO-TEXT", "LLM"):
+        return {
+            "model": model_name,
+            "stream": False,
+            "messages": [{"role": "user", "content": "你好"}],
+        }
+    if mt == "TEXT-EMBEDDING":
+        return {"model": model_name, "input": "你好"}
+    if mt == "RERANK":
+        return {"model": model_name, "query": "a", "documents": ["a", "b"]}
+    return None
 
 
 # ----------------------------- chat -----------------------------
@@ -262,3 +332,75 @@ async def rerank(
         return JSONResponse(content=data)
     except resolver.ModelServiceError as exc:
         return _error_response(exc)
+
+
+# ----------------------------- status check -----------------------------
+
+
+@model_service_router.post("/v1/{project_id}/model-service/status/check")
+async def model_service_status_check(
+    project_id: str,
+    body: ModelServiceCheckReq,
+):
+    """模型服务连通性探针 — 对应 Java ``ModelServiceController.modelServiceStatusCheck``。
+
+    与 chat/embed/rerank facade 的区别：不走 OBS 策略解析，请求体直接携带待测模型的
+    apiUrl/authType/authInfo/modelName/interfaceProtocol，构造探针请求直连上游，按上游
+    响应码判定 ``success``（对应 Java ``commonInvoke`` + 异常映射）：
+
+    - 2xx → success=true, status_code=200（Java 成功分支硬编码 200）
+    - 400 → success=true, status_code=400, reason=上游错误体（端点可达即视为通过）
+    - 其它 4xx/5xx → success=false, status_code=上游码, reason=上游错误体
+    - 协议/鉴权异常（``ModelServiceError``，对应 Java ``AgentStudioException``）→
+      success=false, status_code=500, reason=msg
+    - 网络/超时/URL 非法（对应 Java ``Exception`` 分支）→ success=false, status_code=500
+    """
+    probe = _build_check_invoke_body(body.model_type, body.model_name)
+    if probe is None:
+        logger.warning("Model type is not support to check. type=%s", body.model_type)
+        return JSONResponse(content=ModelServiceCheckRsp(
+            success=True, reason="model type is not support to check."
+        ).model_dump())
+
+    # 复用 dispatch 的连接参数（timeout/verify_ssl）与协议归一；auth 头按请求体原值构造
+    # （对应 Java ``createModelServiceDetail`` + ``AuthAdapterFactory``）。
+    model = resolver.ModelServiceBase(
+        id="",
+        model_name=body.model_name,
+        api_url=body.api_url,
+        provider_id="",
+        interface_protocol=dispatch.normalize_protocol(body.interface_protocol),
+        project_id=project_id,
+        workspace_id="",
+        auth_id="",
+    )
+    auth = resolver.ProviderAuth(auth_id="", auth_type=body.auth_type, auth_info=body.auth_info)
+
+    try:
+        conn = dispatch.get_chat_connection(model, auth)
+        url = body.api_url  # 对应 Java ``model.getApiUrl()`` verbatim，不追加 path
+        client = dispatch.build_httpx_client(url, conn.verify_ssl)
+        headers = _check_auth_headers(body.auth_type, body.auth_info)
+        try:
+            resp = await client.post(url, json=probe, headers=headers, timeout=conn.timeout)
+            status = resp.status_code
+            if status < 300:
+                return JSONResponse(content=ModelServiceCheckRsp(
+                    success=True, status_code=200
+                ).model_dump())
+            return JSONResponse(content=ModelServiceCheckRsp(
+                success=(status == 400), status_code=status, reason=resp.text
+            ).model_dump())
+        finally:
+            await client.aclose()
+    except resolver.ModelServiceError as exc:
+        # PROTOCOL_NOT_SUPPORTED 等（对应 Java factory 不支持协议 → AgentStudioException）
+        logger.warning("Model service check failed. code=%s msg=%s", exc.code, exc.msg)
+        return JSONResponse(content=ModelServiceCheckRsp(
+            success=False, status_code=500, reason=exc.msg or exc.code
+        ).model_dump())
+    except Exception:  # noqa: BLE001  网络/超时/URL 非法（对应 Java Exception 分支）
+        logger.warning("Model api url is invalid. url=%s", body.api_url, exc_info=True)
+        return JSONResponse(content=ModelServiceCheckRsp(
+            success=False, status_code=500
+        ).model_dump())
