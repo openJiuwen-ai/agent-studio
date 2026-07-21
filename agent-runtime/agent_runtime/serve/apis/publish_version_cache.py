@@ -104,7 +104,11 @@ class PublishVersionCache:
                 return None
 
             data = raw.decode("utf-8") if isinstance(raw, bytes) else raw
-            metadata = AgentMetadata.model_validate(json.loads(data))
+            parsed = json.loads(data)
+            # Redis 中可能双重编码：外层 JSON string 包裹内层 JSON object
+            if isinstance(parsed, str):
+                parsed = json.loads(parsed)
+            metadata = AgentMetadata.model_validate(parsed)
             workflow_logger.debug(
                 "Publish metadata loaded from Redis: agent_id=%s, version_id=%s",
                 agent_id,
@@ -134,7 +138,10 @@ class PublishVersionCache:
             if isinstance(content, bytes):
                 content = content.decode("utf-8")
 
-            metadata = AgentMetadata.model_validate(json.loads(content))
+            parsed = json.loads(content)
+            if isinstance(parsed, str):
+                parsed = json.loads(parsed)
+            metadata = AgentMetadata.model_validate(parsed)
             workflow_logger.debug(
                 "Publish metadata loaded from OBS: agent_id=%s, version_id=%s",
                 agent_id,
