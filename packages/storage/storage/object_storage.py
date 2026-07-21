@@ -459,6 +459,42 @@ class LocalStorageProvider(ObjectStorageProvider):
             workflow_logger.error(f"File read failed: {file_path}, {e}", exc_info=True)
             raise StorageReadError(f"File read failed: {file_path}, {e}") from e
 
+    async def list_keys(self, prefix: str) -> list[str]:
+        """列出本地目录下匹配前缀的文件 key
+
+        Args:
+            prefix: 对象 key 前缀（如 "ir/xxx/"）
+
+        Returns:
+            list[str]: 匹配的相对 key 列表（相对于 base_path/bucket）
+
+        Raises:
+            StorageReadError: 目录不存在或读取失败
+        """
+        search_dir = self._resolve(prefix)
+        base_dir = self._resolve("")
+        if not os.path.isdir(search_dir):
+            if not os.path.exists(search_dir):
+                return []
+            search_dir = os.path.dirname(search_dir)
+        try:
+            loop = asyncio.get_running_loop()
+            keys = await loop.run_in_executor(None, self._list_keys_sync, search_dir, base_dir, prefix)
+            return keys
+        except Exception as e:
+            workflow_logger.error(f"Local list_keys failed: prefix={prefix}, {e}", exc_info=True)
+            raise StorageReadError(f"Local list_keys failed: prefix={prefix}, {e}") from e
+
+    def _list_keys_sync(self, search_dir: str, base_dir: str, prefix: str) -> list[str]:
+        keys = []
+        for root, _dirs, files in os.walk(search_dir):
+            for fname in files:
+                full = os.path.join(root, fname)
+                rel = os.path.relpath(full, base_dir).replace(os.sep, "/")
+                if rel.startswith(prefix):
+                    keys.append(rel)
+        return sorted(keys)
+
 
 def _load_custom_provider(module_path: str, class_name: str) -> ObjectStorageProvider:
     """通过 importlib 动态加载自定义存储实现

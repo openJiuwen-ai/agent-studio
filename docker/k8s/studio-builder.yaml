@@ -96,6 +96,16 @@ spec:
               value: ''
             - name: DATASOURCE_OBS_SK
               value: ''
+            - name: STORAGE_TYPE
+              value: 'OBS'
+            - name: STORAGE_CUSTOM_MODULE
+              value: ''
+            - name: STORAGE_CUSTOM_CLASS
+              value: ''
+            - name: STORAGE_LOCAL_BASE_PATH
+              value: ''
+            - name: STORAGE_LOCAL_BUCKET
+              value: ''
             - name: DATASOURCE_OBS_ENABLE_SSL
               value: 'false'
             - name: MODEL_CONFIG_STRATEGY
