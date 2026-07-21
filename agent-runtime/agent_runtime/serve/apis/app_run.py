@@ -29,6 +29,10 @@ from agent_runtime.serve.apis.run_check import (
     check_before_workflow_run,
     check_before_agent_run,
 )
+from agent_runtime.common.env_variables_loader import (
+    load_environment_variables,
+    _SECRET_ENV_KEYS_KEY,
+)
 from agent_runtime.event_handler.event_handler import EventHandler
 from agent_runtime.event_handler.base.conversation import (
     ConversationManager,
@@ -95,6 +99,7 @@ def build_agent_ir_path(agent_id: str, version: Optional[str]) -> str:
 def build_req_json_from_workflow(
     body: WorkflowAppRunRequest,
     exec_ctx: ExecutionContext,
+    env_vars: dict = None,
 ) -> dict:
     """WorkflowAppRunRequest → ExecutionRequest dict."""
     global_vars = {**body.inputs}
@@ -102,14 +107,22 @@ def build_req_json_from_workflow(
         global_vars.update(body.memory_inputs)
     global_vars.pop(_USER_MSG_FIELD, None)
 
+    # 环境变量：env_vars（从 Redis 按 environment_id 加载）优先，否则用 body.environment
+    environment_variables = env_vars or body.environment
+    secret_env_keys = []
+    if env_vars and _SECRET_ENV_KEYS_KEY in env_vars:
+        secret_env_keys = env_vars.pop(_SECRET_ENV_KEYS_KEY)
+
     params = {
         "globalVariables": global_vars,
-        "environmentVariables": body.environment,
+        "environmentVariables": environment_variables,
         "conversationHistory": exec_ctx.conversation_history,
         "pluginConfigs": [pc.model_dump(by_alias=True) for pc in (body.plugin_configs or [])],
         "enableHistory": body.enable_history,
         # "long_term_memory"
     }
+    if secret_env_keys:
+        params["secretEnvKeys"] = secret_env_keys
 
     return {
         "conversationId": exec_ctx.conversation_id,
@@ -125,9 +138,16 @@ def build_req_json_from_workflow(
 def build_req_json_from_agent(
     body: AgentAppRunRequest,
     exec_ctx: ExecutionContext,
+    env_vars: dict = None,
 ) -> dict:
     """AgentAppRunRequest → ExecutionRequest dict."""
     global_vars = {k: v for k, v in body.inputs.items() if k not in _AGENT_SYSTEM_INPUTS}
+
+    secret_env_keys = []
+    environment_variables = env_vars or {}
+    if env_vars and _SECRET_ENV_KEYS_KEY in env_vars:
+        secret_env_keys = env_vars.pop(_SECRET_ENV_KEYS_KEY)
+
     params = {
         "globalVariables": global_vars,
         "conversationHistory": exec_ctx.conversation_history,
@@ -136,6 +156,10 @@ def build_req_json_from_agent(
         "enableHistory": body.enable_history,
         # "long_term_memory"
     }
+    if environment_variables:
+        params["environmentVariables"] = environment_variables
+    if secret_env_keys:
+        params["secretEnvKeys"] = secret_env_keys
 
     return {
         "conversationId": exec_ctx.conversation_id,
@@ -295,7 +319,12 @@ async def _execute_workflow_run(
         dialogue_count=dialogue_count,
         user_id=user_id,
     )
-    req_json = build_req_json_from_workflow(body, exec_ctx)
+
+    # 根据 environment_id 从 Redis 加载环境变量
+    env_vars = await load_environment_variables(
+        ctx.environment_id, ctx.workspace_id,
+    )
+    req_json = build_req_json_from_workflow(body, exec_ctx, env_vars=env_vars)
 
     response = await ir_execute(req_json, request)
 
@@ -316,6 +345,8 @@ async def run_workflow_app(
     body: WorkflowAppRunRequest,
     request: Request,
     version: Optional[str] = None,
+    environment_id: Optional[str] = None,
+    workspace_id: Optional[str] = None,
 ):
     """工作流试运行接口"""
     # 从路径参数提取上下文
@@ -325,6 +356,8 @@ async def run_workflow_app(
         workflow_id=path_params["workflow_id"],
         conversation_id=path_params["conversation_id"],
         version=version,
+        environment_id=environment_id,
+        workspace_id=workspace_id,
     )
     return await _execute_workflow_run(ctx, body, request)
 
@@ -401,7 +434,12 @@ async def _execute_agent_run(
         dialogue_count=dialogue_count,
         user_id=user_id,
     )
-    req_json = build_req_json_from_agent(body, exec_ctx)
+
+    # 根据 environment_id 从 Redis 加载环境变量
+    env_vars = await load_environment_variables(
+        ctx.environment_id, ctx.workspace_id,
+    )
+    req_json = build_req_json_from_agent(body, exec_ctx, env_vars=env_vars)
 
     response = await ir_execute(req_json, request)
 
@@ -428,6 +466,8 @@ async def run_agent_app(
     body: AgentAppRunRequest,
     request: Request,
     version: Optional[str] = None,
+    environment_id: Optional[str] = None,
+    workspace_id: Optional[str] = None,
 ):
     """智能体试运行接口"""
     # 从路径参数提取上下文
@@ -437,6 +477,8 @@ async def run_agent_app(
         agent_id=path_params["agent_id"],
         conversation_id=path_params["conversation_id"],
         version=version,
+        environment_id=environment_id,
+        workspace_id=workspace_id,
     )
     return await _execute_agent_run(ctx, body, request)
 

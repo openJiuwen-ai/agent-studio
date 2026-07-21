@@ -18,6 +18,8 @@ class WorkflowRunContext:
     workflow_id: str
     conversation_id: str
     version: Optional[str]
+    environment_id: Optional[str] = None
+    workspace_id: Optional[str] = None
 
 
 @dataclass
@@ -27,6 +29,8 @@ class AgentRunContext:
     agent_id: str
     conversation_id: str
     version: Optional[str]
+    environment_id: Optional[str] = None
+    workspace_id: Optional[str] = None
 
 
 @dataclass
