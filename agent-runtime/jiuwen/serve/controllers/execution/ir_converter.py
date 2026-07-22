@@ -700,6 +700,25 @@ def _apply_global_var_mapping_to_schema(schema: dict | list, mappings: dict) -> 
     return schema
 
 
+def _extract_source_component_ids(
+    schema: dict, component_by_id: dict[str, Any]
+) -> set[str]:
+    """Extract source component IDs from reference paths in a schema.
+
+    Parses the schema for reference patterns like ${node_id.field} and returns
+    the set of source component IDs that exist in component_by_id.
+    Skips special references (query, sys, global, etc.).
+    """
+    source_ids: set[str] = set()
+    for ref_path in _iter_reference_paths(schema):
+        source_id = ref_path.split(".", 1)[0]
+        if not source_id or source_id in _SPECIAL_REF_ROOTS:
+            continue
+        if source_id in component_by_id:
+            source_ids.add(source_id)
+    return source_ids
+
+
 class _LoopPassThroughComponent(WorkflowComponent):
     """空操作组件（对应官方文档的 EmptyNode），用作 break 条件路由流的循环体末端节点。
     无论 break 还是 continue 路径，迭代结束后都经过此节点。"""
@@ -723,15 +742,6 @@ class _ParallelTransformLaneDoneComponent(WorkflowComponent):
     ) -> AsyncIterator[Any]:
         async for chunk in _iter_parallel_stream_inputs(inputs):
             yield chunk
-
-
-class _EndStreamLaneComponent(WorkflowComponent):
-    """Convert one completed control lane into a single stream frame for End."""
-
-    async def stream(
-        self, inputs: Any, session: Any, context: Any
-    ) -> AsyncIterator[Any]:
-        yield inputs if inputs is not None else {}
 
 
 async def _iter_parallel_stream_inputs(inputs: Any) -> AsyncIterator[Any]:
@@ -1576,6 +1586,7 @@ class IRConverter:
             component_by_id[done_node_id] = lane_done
         end_node_ids = {p["node_id"] for p in pending_end_nodes}
         stream_connection_targets: set[str] = set()
+        batch_connection_targets: set[str] = set()
         deferred_connections: list[tuple[str, str, bool]] = []
         branch_connections: list[tuple[str, str, str]] = []
         existing_connections: set[tuple[str, str]] = set()
@@ -1597,6 +1608,9 @@ class IRConverter:
             target = (
                 parallel_join_plan.rewrite_target(source, target, branch_id) or target
             )
+            # Branch connections (default/non-default) are batch paths
+            if target in end_node_ids:
+                batch_connection_targets.add(target)
             branch_connections.append((source, target, branch_id))
 
         IRConverter._add_branch_connections_with_default_last(
@@ -1631,6 +1645,8 @@ class IRConverter:
             if is_stream:
                 stream_connection_targets.add(target)
             if target in end_node_ids:
+                if not is_stream:
+                    batch_connection_targets.add(target)
                 deferred_connections.append((source, target, is_stream))
             elif is_stream:
                 workflow.add_stream_connection(source, target)
@@ -1681,6 +1697,7 @@ class IRConverter:
             )
             _parallel_join_has_stream_lane[join_spec.join_target] = has_stream_lane
             if join_spec.join_target in end_node_ids:
+                batch_connection_targets.add(join_spec.join_target)
                 if has_stream_lane:
                     stream_connection_targets.add(join_spec.join_target)
             if has_stream_lane:
@@ -1689,50 +1706,14 @@ class IRConverter:
                         for terminal_source, _ in lane.terminals:
                             _parallel_stream_source_to_done[terminal_source] = lane.done_node
 
-        control_adjacency = _build_control_adjacency(connections)
-        handled_end_connections: set[tuple[str, str]] = set()
         for pending in pending_end_nodes:
             node_id = pending["node_id"]
             end = pending["end"]
             inputs_schema = pending["inputs_schema"]
             is_stream_out = pending["is_stream_out"]
-            if not is_stream_out:
-                workflow.set_end_comp(node_id, end, inputs_schema=inputs_schema)
-                continue
-            predecessors = {
-                source
-                for source, target, _ in deferred_connections
-                if target == node_id
-            }
-            input_plan = _plan_end_stream_inputs(
-                inputs_schema,
-                node_id,
-                predecessors,
-                ir_stream_source_ids,
-                control_adjacency,
+            batch_schema, stream_schema = _split_inputs_schema_by_source(
+                inputs_schema, ir_stream_source_ids
             )
-            batch_schema = input_plan.batch_schema
-            stream_schema = input_plan.stream_schema
-            planned_stream_edges: list[tuple[str, str]] = []
-
-            for predecessor, lane_schema in input_plan.lane_schemas.items():
-                lane_id = f"__end_stream_lane__{node_id}__{predecessor}"
-                lane = _EndStreamLaneComponent()
-                workflow.add_workflow_comp(
-                    lane_id,
-                    lane,
-                    inputs_schema=lane_schema,
-                    comp_ability=[ComponentAbility.STREAM],
-                )
-                component_by_id[lane_id] = lane
-                workflow.add_connection(predecessor, lane_id)
-                planned_stream_edges.append((lane_id, node_id))
-                handled_end_connections.add((predecessor, node_id))
-
-            for source in input_plan.direct_stream_sources:
-                planned_stream_edges.append((source, node_id))
-                handled_end_connections.add((source, node_id))
-
             # Parallel join stream producer is _parallel_done, not the original source;
             # rewrite refs so StreamProcessor can resolve values by producer_id.
             if stream_schema and _parallel_stream_source_to_done:
@@ -1742,12 +1723,8 @@ class IRConverter:
             # Determine incoming edge types for this End node.
             # batch_schema may contain special refs (_env, _request, query, etc.) and
             # literal values in addition to component refs; all need the INVOKE path.
-            has_stream = node_id in stream_connection_targets or bool(stream_schema)
-            # A regular predecessor can be a control/barrier edge only.  End's
-            # batch data ability must come from fields that are actually read by
-            # its input schema; otherwise an unrelated Message -> End edge creates
-            # an empty batch path and incorrectly enables mix rendering.
-            has_batch = bool(batch_schema)
+            has_stream = node_id in stream_connection_targets or stream_schema
+            has_batch = node_id in batch_connection_targets or bool(batch_schema)
 
             if hasattr(end, "set_expect_mix"):
                 end.set_expect_mix(has_batch and has_stream)
@@ -1762,21 +1739,15 @@ class IRConverter:
             elif has_batch:
                 set_end_kwargs["inputs_schema"] = inputs_schema
             elif has_stream:
-                set_end_kwargs["stream_inputs_schema"] = (
-                    stream_schema if stream_schema else inputs_schema
-                )
+                set_end_kwargs["stream_inputs_schema"] = inputs_schema
             else:
                 set_end_kwargs["inputs_schema"] = inputs_schema
             if is_stream_out:
                 set_end_kwargs["response_mode"] = "streaming"
 
             workflow.set_end_comp(node_id, end, **set_end_kwargs)
-            for source, target in planned_stream_edges:
-                workflow.add_stream_connection(source, target)
 
         for source, target, is_stream in deferred_connections:
-            if (source, target) in handled_end_connections:
-                continue
             existing_connections.add((source, target))
             if is_stream:
                 workflow.add_stream_connection(source, target)
@@ -1803,6 +1774,55 @@ class IRConverter:
                         workflow.add_connection(invoke_done_nodes, join_spec.join_target)
                 else:
                     workflow.add_connection(lane_done_nodes, join_spec.join_target)
+
+        # Add missing connections based on schema references.
+        # Strategy:
+        # - Auto-complete stream edges only when target supports stream input.
+        # - Auto-complete batch edges for mix-mode targets (Message/End/Card/...)
+        #   when schema references a stream source. Aggregate reads all $ref fields
+        #   from io_state (incl. stream LLM via get_stream_output) and must not get
+        #   extra batch triggers here. Do NOT auto-add batch edges to pure-batch
+        #   nodes like Code — that bypasses intermediate nodes and can schedule them
+        #   before the stream producer finishes.
+        all_target_ids: set[str] = set()
+        for connection in connections:
+            s = ((connection.get("source") or {}).get("componentId") or "").strip()
+            t = ((connection.get("target") or {}).get("componentId") or "").strip()
+            bid = ((connection.get("source") or {}).get("branchId") or "").strip()
+            if s and t and not bid:
+                all_target_ids.add(t)
+
+        for target_id in all_target_ids:
+            target_node = node_by_id.get(target_id)
+            if not target_node:
+                continue
+            schema = _convert_schema(target_node.get("inputs") or {})
+            schema_source_ids = _extract_source_component_ids(schema, component_by_id)
+            # Target participates in mix mode if its schema references any stream source
+            has_stream_ref = any(
+                sid in ir_stream_source_ids for sid in schema_source_ids
+            )
+            target_type = target_node.get("type", "")
+            for source_id in schema_source_ids:
+                if source_id == target_id:
+                    continue
+                if (source_id, target_id) in existing_connections:
+                    continue
+                is_stream = source_id in ir_stream_source_ids
+                if (
+                    is_stream
+                    and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
+                    and target_type not in IRConverter._AGGREGATE_TYPES
+                ):
+                    workflow.add_stream_connection(source_id, target_id)
+                    existing_connections.add((source_id, target_id))
+                elif (
+                    has_stream_ref
+                    and target_type in IRConverter._STREAM_INPUT_CAPABLE_TARGET_TYPES
+                    and target_type not in IRConverter._AGGREGATE_TYPES
+                ):
+                    workflow.add_connection(source_id, target_id)
+                    existing_connections.add((source_id, target_id))
 
         performance_logger.info(
             f"ir_build_total|{round((_time.perf_counter() - t_total) * 1000)}"
@@ -3726,7 +3746,7 @@ def _normalize_list(value: Any) -> list:
 
 
 def _extract_ref_source_id(value: Any) -> str | None:
-    """Extract a component ID from a ref such as ${node.userFields.output}."""
+    """Extract source component ID from a variable reference like ${node_llm.userFields.raw_output}."""
     if (
         not isinstance(value, str)
         or not value.startswith("${")
@@ -3739,119 +3759,36 @@ def _extract_ref_source_id(value: Any) -> str | None:
     return inner.split(".")[0]
 
 
-class _EndStreamInputPlan(NamedTuple):
-    batch_schema: dict | None
-    stream_schema: dict | None
-    lane_schemas: dict[str, dict]
-    direct_stream_sources: set[str]
+def _split_inputs_schema_by_source(
+    schema: dict, stream_source_ids: set[str]
+) -> tuple[dict | None, dict | None]:
+    """Split input schema into batch and stream parts based on referenced source component type.
 
+    Leaf fields referencing stream source components go to stream_schema.
+    Others go to batch_schema.  This avoids duplicate keys between
+    inputs_schema and stream_inputs_schema validation.
 
-def _set_schema_path(target: dict, path: tuple[str, ...], value: Any) -> None:
-    current = target
-    for part in path[:-1]:
-        current = current.setdefault(part, {})
-    current[path[-1]] = value
-
-
-def _iter_schema_leaves(value: Any, path: tuple[str, ...] = ()):
-    if isinstance(value, dict):
-        for key, item in value.items():
-            yield from _iter_schema_leaves(item, (*path, key))
-        return
-    if path:
-        yield path, value
-
-
-def _build_control_adjacency(connections: list[dict]) -> dict[str, set[str]]:
-    """Build reachability from explicit IR edges, including branch routes."""
-    adjacency: dict[str, set[str]] = defaultdict(set)
-    for connection in connections:
-        source = ((connection.get("source") or {}).get("componentId") or "").strip()
-        target = ((connection.get("target") or {}).get("componentId") or "").strip()
-        if not source or not target:
-            continue
-        if source.endswith("_input") or target.endswith("_output"):
-            continue
-        adjacency[source].add(target)
-    return adjacency
-
-
-def _control_distance(
-    adjacency: dict[str, set[str]], source: str, target: str
-) -> int | None:
-    if source == target:
-        return 0
-    visited = {source}
-    frontier = [(source, 0)]
-    while frontier:
-        current, distance = frontier.pop(0)
-        for following in adjacency.get(current, set()):
-            if following == target:
-                return distance + 1
-            if following not in visited:
-                visited.add(following)
-                frontier.append((following, distance + 1))
-    return None
-
-
-def _plan_end_stream_inputs(
-    schema: dict,
-    end_node_id: str,
-    predecessors: set[str],
-    stream_source_ids: set[str],
-    adjacency: dict[str, set[str]],
-) -> _EndStreamInputPlan:
-    """Route End data through its explicit incoming control lanes.
-
-    A direct native stream producer stays connected to End.  Every indirect or
-    batch producer is sampled after its explicit predecessor and converted to a
-    one-frame stream, so branch choice and stream synchronization remain engine
-    concerns instead of component-local timing guesses.
+    Returns (batch_schema_or_None, stream_schema_or_None).
     """
     batch_schema: dict = {}
     stream_schema: dict = {}
-    lane_schemas: dict[str, dict] = defaultdict(dict)
-    direct_stream_sources: set[str] = set()
-    assignments: list[tuple[tuple[str, ...], Any, str, str]] = []
-
-    for path, value in _iter_schema_leaves(schema):
-        source_id = _extract_ref_source_id(value)
-        candidates: list[tuple[int, str]] = []
-        if source_id:
-            for predecessor in predecessors:
-                distance = _control_distance(adjacency, source_id, predecessor)
-                if distance is not None:
-                    candidates.append((distance, predecessor))
-
-        if not candidates:
-            _set_schema_path(batch_schema, path, value)
+    for category, fields in schema.items():
+        if not isinstance(fields, dict):
+            batch_schema[category] = fields
             continue
-
-        _, predecessor = min(candidates, key=lambda item: (item[0], item[1]))
-        assignments.append((path, value, source_id, predecessor))
-
-    native_stream_predecessors = {
-        predecessor
-        for _, _, source_id, predecessor in assignments
-        if predecessor == source_id and source_id in stream_source_ids
-    }
-    for path, value, _source_id, predecessor in assignments:
-        if predecessor in native_stream_predecessors:
-            _set_schema_path(stream_schema, path, value)
-            direct_stream_sources.add(predecessor)
-            continue
-
-        lane_id = f"__end_stream_lane__{end_node_id}__{predecessor}"
-        _set_schema_path(lane_schemas[predecessor], path, value)
-        lane_ref = "${" + lane_id + "." + ".".join(path) + "}"
-        _set_schema_path(stream_schema, path, lane_ref)
-
-    return _EndStreamInputPlan(
-        batch_schema or None,
-        stream_schema or None,
-        dict(lane_schemas),
-        direct_stream_sources,
-    )
+        batch_fields: dict = {}
+        stream_fields: dict = {}
+        for field_name, value in fields.items():
+            source_id = _extract_ref_source_id(value)
+            if source_id is not None and source_id in stream_source_ids:
+                stream_fields[field_name] = value
+            else:
+                batch_fields[field_name] = value
+        if batch_fields:
+            batch_schema[category] = batch_fields
+        if stream_fields:
+            stream_schema[category] = stream_fields
+    return (batch_schema or None), (stream_schema or None)
 
 
 def _rewrite_stream_schema_refs(
