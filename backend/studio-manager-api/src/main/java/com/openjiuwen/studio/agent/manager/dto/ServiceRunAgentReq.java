@@ -8,7 +8,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import org.hibernate.validator.constraints.Length;
@@ -31,7 +30,6 @@ public class ServiceRunAgentReq implements Serializable {
 
     @JsonProperty("query")
     @Length(max = 1000000)
-    @NotBlank
     private String query = null;
 
     @JsonProperty("inputs")
