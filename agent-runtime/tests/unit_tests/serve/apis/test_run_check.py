@@ -507,3 +507,23 @@ class TestCheckBeforeAgentRun:
             ))
             assert result is not None
             assert result.status_code == 403
+
+    @staticmethod
+    @pytest.mark.asyncio
+    async def test_empty_query_returns_400():
+        with patch(
+            "agent_runtime.serve.apis.orchestration.async_ir_load",
+            new_callable=AsyncMock,
+        ) as mock_load:
+            mock_load.return_value = {"metadata": {"projectId": "proj-1"}}
+            result = await check_before_agent_run(RunCheckContext(
+                query=None,
+                project_id="proj-1",
+                ir_path="ir/path.json",
+                body_version=None,
+                has_published_version=False,
+            ))
+            assert result is not None
+            assert result.status_code == 400
+            body = result.body.decode()
+            assert _CODE_METHOD_ARGUMENT in body

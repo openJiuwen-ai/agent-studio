@@ -212,6 +212,11 @@ async def check_before_agent_run(ctx: RunCheckContext) -> Optional[JSONResponse]
     if err:
         return err
 
+    # 校验2: agent query必填
+    if _is_empty_query(ctx.query):
+        workflow_logger.error("Agent query param is empty: %s", ctx.query)
+        return _build_error_response(400, _CODE_METHOD_ARGUMENT, language)
+
     # 校验3/4需要读取IR metadata，合并为一次加载
     metadata = await _load_ir_metadata(ctx.ir_path)
 
