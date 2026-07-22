@@ -74,9 +74,15 @@ class EventHandler:
         version_id = getattr(request.state, "version_id", "")
         is_debug = request.headers.get("x-invoke-mode", "").lower() == "debug"
         language = request.headers.get("x-language", "en-us")
-        # Extract instance_id from ir_path (filename without extension)
-        filename = ir_path.rsplit("/", 1)[-1] if "/" in ir_path else ir_path
-        instance_id = filename.removesuffix(".json")
+        # instance_id 使用 agent_id 或 workflow_id（与读取路径一致），不从 IR 路径文件名提取
+        instance_id = (
+            request.path_params.get("agent_id")
+            or request.path_params.get("workflow_id")
+        )
+        if not instance_id:
+            raise ValueError(
+                "Missing required path param: agent_id or workflow_id"
+            )
 
         self.trace = Trace(
             handler_type=handler_type,

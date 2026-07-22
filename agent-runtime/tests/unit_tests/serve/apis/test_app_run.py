@@ -267,6 +267,27 @@ class TestBuildReqJsonFromAgent:
         assert gv["customKey"] == "customVal"
 
     @staticmethod
+    def test_controller_params_passed_to_params():
+        body = AgentAppRunRequest(inputs={
+            "query": "hello",
+            "workflowSequence": ["wf1", "wf2"],
+            "activeWorkflows": ["wf3"],
+            "intent": "greet",
+        })
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
+        assert result["params"]["intent"] == "greet"
+        assert result["params"]["workflowSequence"] == ["wf1", "wf2"]
+        assert result["params"]["activeWorkflows"] == ["wf3"]
+
+    @staticmethod
+    def test_controller_params_not_set_when_missing():
+        body = AgentAppRunRequest(inputs={"query": "hello"})
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
+        assert "intent" not in result["params"]
+        assert "workflowSequence" not in result["params"]
+        assert "activeWorkflows" not in result["params"]
+
+    @staticmethod
     def test_agent_query_from_body_or_inputs():
         body = AgentAppRunRequest(query="body query", inputs={"query": "inputs query"})
         result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
