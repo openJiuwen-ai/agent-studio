@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.runtime.service.md.adapter.req;
 
 import com.openjiuwen.studio.agent.common.dto.md.ChatCompletionRequest;
+import com.openjiuwen.studio.agent.runtime.dto.md.RankDocumentsRequest;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,6 +28,11 @@ public class QwenRequestAdapter extends AbstractRequestAdapter {
 
     @Override
     public Object requestBodyConvert(Map<String, String> headers, Object body, boolean stream) {
+        // rerank 请求委托给 MaasRerankRequestAdaptor 统一处理 (docs -> documents), 与 chat 逻辑互不影响
+        if (body instanceof RankDocumentsRequest) {
+            return MaasRerankRequestAdaptor.convertRerankRequestBody(body);
+        }
+
         if (!stream) {
             return body;
         }
