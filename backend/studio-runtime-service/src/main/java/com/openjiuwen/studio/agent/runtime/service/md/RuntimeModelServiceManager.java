@@ -24,6 +24,7 @@ import com.openjiuwen.studio.agent.common.dto.md.ModelInvokeBase;
 import com.openjiuwen.studio.agent.runtime.dto.md.ModelServiceDetail;
 import com.openjiuwen.studio.agent.runtime.dto.md.ModelStrategy;
 import com.openjiuwen.studio.agent.runtime.dto.md.RankDocumentsRequest;
+import com.openjiuwen.studio.agent.runtime.service.md.adapter.req.MaasRerankRequestAdaptor;
 import com.openjiuwen.studio.agent.runtime.dto.md.VideoGenerationReq;
 import com.openjiuwen.studio.agent.runtime.entity.md.ModelServiceBase;
 import com.openjiuwen.studio.agent.runtime.enums.ModelStrategyEnum;
@@ -153,7 +154,9 @@ public class RuntimeModelServiceManager {
 
         try {
             request.setModel(detail.getModel().getModelName());
-            Object body = adapter.requestBodyConvert(originHeaders, request, false);
+            Object body = request instanceof RankDocumentsRequest
+                ? MaasRerankRequestAdaptor.convertRerankRequestBody(request)
+                : adapter.requestBodyConvert(originHeaders, request, false);
 
             Map<String, String> headers = initRequestHeader(originHeaders);
 

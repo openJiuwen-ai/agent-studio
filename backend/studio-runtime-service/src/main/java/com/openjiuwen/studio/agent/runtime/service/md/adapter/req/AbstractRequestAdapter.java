@@ -62,10 +62,6 @@ public abstract class AbstractRequestAdapter implements RequestAdapter {
 
     @Override
     public Object requestBodyConvert(Map<String, String> headers, Object body, boolean stream) {
-        // rerank 请求统一委托给 MaasRerankRequestAdaptor 处理 (docs -> documents), 与 chat 逻辑互不影响
-        if (body instanceof RankDocumentsRequest) {
-            return MaasRerankRequestAdaptor.convertRerankRequestBody(body);
-        }
         if (body instanceof ChatCompletionRequest chat) {
             chat.setThinking(null);
         }
