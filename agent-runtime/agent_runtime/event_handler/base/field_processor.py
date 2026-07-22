@@ -119,6 +119,8 @@ class FieldDataProcessor:
             error_reason=error_reason,
             error_suggestion=error_suggestion,
             error_code=error_code,
+            workflow_id=trace.workflow_id,
+            workflow_name=trace.workflow_name,
         )
         create_time = trace.end_time
         if create_time is None:

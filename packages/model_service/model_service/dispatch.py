@@ -171,6 +171,7 @@ async def rerank(model, auth, request) -> dict:
         "model": conn.model_name,
         "query": request.query,
         "documents": list(request.docs or []),
+        "return_documents": True,
     }
     try:
         resp = await client.post(

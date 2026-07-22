@@ -91,6 +91,8 @@ class Trace:
     block: bool = False
     execution_id: Optional[str] = None
     pre_event: Optional[str] = None
+    workflow_id: Optional[str] = None
+    workflow_name: Optional[str] = None
 
     def overall_time(self) -> float:
         if self.end_time is None:

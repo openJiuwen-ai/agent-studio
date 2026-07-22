@@ -117,6 +117,8 @@ class BaseEventsProcessor(ABC):
         trace.end_time = full_data.get("createdTime")
         data = full_data.get("data", {})
         code = data.get("code", 999999)
+        trace.workflow_id = data.get("workflow_id")
+        trace.workflow_name = data.get("workflow_name")
         error_code, error_msg, error_reason, error_suggestion = (
             ErrorContextBuilder.get_language_context(trace.language, code))
         error_data_field = ErrorEventDataField(
@@ -126,6 +128,8 @@ class BaseEventsProcessor(ABC):
             error_reason=error_reason,
             error_suggestion=error_suggestion,
             error_code=error_code,
+            workflow_id=data.get("workflow_id"),
+            workflow_name=data.get("workflow_name"),
         )
         error_field = EventField(
             event=ConversationEvent.ERROR.value,

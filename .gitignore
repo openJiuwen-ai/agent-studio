@@ -61,6 +61,7 @@ env/
 .venv/
 venv/
 __pycache__/
+.worktrees/
 
 ### Docker build context artifacts ###
 ### 以下为 build.sh / 准备脚本拷贝进 docker/studio-*/ 的构建产物，不应入库

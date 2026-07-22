@@ -2470,7 +2470,11 @@ public class AgentManagementService implements IAgentManagementService {
         }
         if (Objects.requireNonNull(agentType) == AgentType.CONTROLLER) {
             String controllerJson = mgObsService.downloadObsFile(releaseVersion.getDslPath());
-            return agent.convertToDto(JSONObject.parseObject(controllerJson, ControllerVO.class));
+            ControllerVO releasedController = JSONObject.parseObject(controllerJson, ControllerVO.class);
+            AgentInfo agentInfo = agent.convertToDto(releasedController);
+            agentInfo.setName(releasedController.getName());
+            agentInfo.setDescription(releasedController.getDescription());
+            return agentInfo;
         }
         String agentDslJson = mgObsService.downloadObsFile(releaseVersion.getDslPath());
         return JSON.parseObject(agentDslJson, AgentInfo.class)

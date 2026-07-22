@@ -160,6 +160,16 @@ def build_req_json_from_agent(
         params["environmentVariables"] = environment_variables
     if secret_env_keys:
         params["secretEnvKeys"] = secret_env_keys
+    # Controller 参数：从 inputs 中提取，单独写入 params
+    intent = body.inputs.get("intent")
+    if intent is not None:
+        params["intent"] = str(intent)
+    workflow_sequence = body.inputs.get("workflowSequence")
+    if workflow_sequence is not None:
+        params["workflowSequence"] = workflow_sequence
+    active_workflows = body.inputs.get("activeWorkflows")
+    if active_workflows is not None:
+        params["activeWorkflows"] = active_workflows
 
     return {
         "conversationId": exec_ctx.conversation_id,

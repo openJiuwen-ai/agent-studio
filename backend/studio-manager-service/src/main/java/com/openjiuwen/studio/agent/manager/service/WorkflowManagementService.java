@@ -1911,6 +1911,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             workflowCommonService.getWorkflowByWorkspaceAndOpProject(projectId, workspaceId, workflowId);
         String workflowJson = obsService.downloadObsFile(releaseVersion.getDslPath());
         WorkflowInfo workflowInfo = convertEntityToInfo(workflowEntities, workflowJson);
+        WorkflowVO releasedWorkflow = JsonUtils.json2ObjQuietly(workflowJson, WorkflowVO.class);
+        workflowInfo.setName(releasedWorkflow.getName());
+        workflowInfo.setDescription(releasedWorkflow.getDescription());
 
         workflowInfo.setRefWorkflows(new ArrayList<>()).setTriggerList(workflowEntities.getTriggerList());
         return workflowInfo;

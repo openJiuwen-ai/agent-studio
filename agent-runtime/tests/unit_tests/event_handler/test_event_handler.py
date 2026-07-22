@@ -114,7 +114,7 @@ class TestInitTrace:
     def test_init_trace_from_request():
         handler = EventHandler()
         request = MagicMock(spec=Request)
-        request.path_params = {"conversation_id": "conv-123"}
+        request.path_params = {"conversation_id": "conv-123", "workflow_id": "wf-1"}
         request.state = MagicMock(user_id="user-1", version_id="v1")
         request.headers = {"x-invoke-mode": "debug", "x-language": "zh-cn"}
 
@@ -125,14 +125,14 @@ class TestInitTrace:
         assert handler.trace.version_id == "v1"
         assert handler.trace.is_debug is True
         assert handler.trace.language == "zh-cn"
-        assert handler.trace.instance_id == "wf-1_v1"
+        assert handler.trace.instance_id == "wf-1"
         assert handler.trace.handler_type == "workflow"
 
     @staticmethod
     def test_init_trace_non_debug():
         handler = EventHandler()
         request = MagicMock(spec=Request)
-        request.path_params = {"conversation_id": "conv-1"}
+        request.path_params = {"conversation_id": "conv-1", "agent_id": "a1"}
         request.state = MagicMock(user_id="", version_id="")
         request.headers = {"x-invoke-mode": "normal"}
 
@@ -145,13 +145,36 @@ class TestInitTrace:
     def test_init_trace_default_language():
         handler = EventHandler()
         request = MagicMock(spec=Request)
-        request.path_params = {"conversation_id": "conv-1"}
+        request.path_params = {"conversation_id": "conv-1", "workflow_id": "wf-1"}
         request.state = MagicMock(user_id="", version_id="")
         request.headers = {}
 
         handler.init_trace("workflow", request, "ir/path.json")
 
         assert handler.trace.language == "en-us"
+
+    @staticmethod
+    def test_init_trace_missing_instance_id_raises():
+        handler = EventHandler()
+        request = MagicMock(spec=Request)
+        request.path_params = {"conversation_id": "conv-1"}
+        request.state = MagicMock(user_id="", version_id="")
+        request.headers = {}
+
+        with pytest.raises(ValueError, match="agent_id or workflow_id"):
+            handler.init_trace("workflow", request, "ir/path.json")
+
+    @staticmethod
+    def test_init_trace_agent_id_preferred():
+        handler = EventHandler()
+        request = MagicMock(spec=Request)
+        request.path_params = {"conversation_id": "conv-1", "agent_id": "agent-x"}
+        request.state = MagicMock(user_id="u1", version_id="v2")
+        request.headers = {}
+
+        handler.init_trace("ReAct", request, "agent/ir/agent-x/agent-x_v2.json")
+
+        assert handler.trace.instance_id == "agent-x"
 
 
 class TestGenerateOutputData:
@@ -212,7 +235,7 @@ class TestGetNonStreamResult:
     async def test_returns_json_response():
         handler = EventHandler()
         request = MagicMock(spec=Request)
-        request.path_params = {"conversation_id": "conv-1"}
+        request.path_params = {"conversation_id": "conv-1", "workflow_id": "wf-1"}
         request.state = MagicMock(user_id="user-1", version_id="")
         request.headers = {"x-invoke-mode": "normal", "x-language": "en-us"}
         handler.init_trace("workflow", request, "wf/ir/wf-1/wf-1.json")
@@ -229,7 +252,7 @@ class TestGetNonStreamResult:
     async def test_excludes_none_fields():
         handler = EventHandler()
         request = MagicMock(spec=Request)
-        request.path_params = {"conversation_id": "conv-1"}
+        request.path_params = {"conversation_id": "conv-1", "workflow_id": "wf-1"}
         request.state = MagicMock(user_id="", version_id="")
         request.headers = {}
         handler.init_trace("workflow", request, "wf/ir/wf-1/wf-1.json")
@@ -247,7 +270,7 @@ class TestGetNonStreamResult:
     async def test_processes_sse_events():
         handler = EventHandler()
         request = MagicMock(spec=Request)
-        request.path_params = {"conversation_id": "conv-1"}
+        request.path_params = {"conversation_id": "conv-1", "workflow_id": "wf-1"}
         request.state = MagicMock(user_id="", version_id="")
         request.headers = {}
         handler.init_trace("workflow", request, "wf/ir/wf-1/wf-1.json")
@@ -279,7 +302,7 @@ class TestGetStreamResult:
     async def test_returns_streaming_response():
         handler = EventHandler()
         request = MagicMock(spec=Request)
-        request.path_params = {"conversation_id": "conv-1"}
+        request.path_params = {"conversation_id": "conv-1", "workflow_id": "wf-1"}
         request.state = MagicMock(user_id="", version_id="")
         request.headers = {}
         handler.init_trace("workflow", request, "wf/ir/wf-1/wf-1.json")
@@ -308,7 +331,7 @@ class TestEncapsulateStreamResponse:
         mock_response.body_iterator = mock_body()
 
         request = MagicMock(spec=Request)
-        request.path_params = {"conversation_id": "conv-1"}
+        request.path_params = {"conversation_id": "conv-1", "workflow_id": "wf-1"}
         request.state = MagicMock(user_id="", version_id="")
         request.headers = {}
 
@@ -333,7 +356,7 @@ class TestEncapsulateNonStreamResponse:
         mock_response.body_iterator = mock_body()
 
         request = MagicMock(spec=Request)
-        request.path_params = {"conversation_id": "conv-1"}
+        request.path_params = {"conversation_id": "conv-1", "workflow_id": "wf-1"}
         request.state = MagicMock(user_id="", version_id="")
         request.headers = {}
 

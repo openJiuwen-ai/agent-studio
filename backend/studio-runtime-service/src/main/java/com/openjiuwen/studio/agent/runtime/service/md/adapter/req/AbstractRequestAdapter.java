@@ -13,6 +13,7 @@ import com.alibaba.fastjson.JSONObject;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.dto.md.ChatCompletionRequest;
+import com.openjiuwen.studio.agent.runtime.dto.md.RankDocumentsRequest;
 import com.openjiuwen.studio.agent.runtime.enums.ModelRespContentType;
 import com.openjiuwen.studio.agent.runtime.exception.OpenAiHttpException;
 import com.openjiuwen.studio.agent.runtime.http.HttpResponse;
@@ -314,6 +315,11 @@ public abstract class AbstractRequestAdapter implements RequestAdapter {
 
     @Override
     public JSONObject resBodyConvert(String url, HttpResponse<String> response, Object request) {
+        // rerank 响应结构不同于 chat, 需要单独处理: 按 index 排序 + topN 截断
+        // 复用 MaasRerankRequestAdaptor 的静态方法, 保证 rerank 逻辑只有一份实现
+        if (request instanceof RankDocumentsRequest rankReq) {
+            return MaasRerankRequestAdaptor.convertRerankResponseBody(url, response, rankReq.getTopN());
+        }
         return resBodyConvert(url, response);
     }
 
