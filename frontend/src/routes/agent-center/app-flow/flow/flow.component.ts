@@ -3534,6 +3534,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       memory: this.workflowDetail.workflow_details?.configs?.memory || [],
       environment,
       request: requestVariables?.[0]?.children || [],
+      nodesList: this.workflowDetail.workflow_details.nodes
     });
   }
 
@@ -4175,7 +4176,6 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       } catch {
       }
-
       return [...envArr, ...memosArr, ...data, ...systemArr];
     }
 

@@ -2002,7 +2002,7 @@ export const FlowUtils = {
 
   // 判断引用参数是否存在
   handelNodeRefChange(data: any, inputs = []) {
-    const { outputsMap, memory, environment, request} = data;
+    const { outputsMap, memory, environment, request, nodesList} = data;
     if (!outputsMap) {
       return;
     } else {
@@ -2055,6 +2055,12 @@ export const FlowUtils = {
               }
             } else {
               v.refWithout = true;
+            }
+
+            const nodeFind = nodesList.find(findNode => findNode.id === v.value?.content?.ref_node_id);
+            // 引用循环节点index
+            if (nodeFind && ref_var_name === 'index' && nodeFind.type === 'Loop') {
+              v.refWithout = false;
             }
           }
         } else {
