@@ -615,10 +615,13 @@ export class DynamicNodeParamsComponent {
       inputItem.uploadData.progress = 'loading';
       inputItem.isEmpty = false;
       this.fileLoading = true;
-
+      let postIsImg = false;
+      if (['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(fileExtension)) {
+        postIsImg = true;
+      }
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('is_image', JSON.stringify(isImage));
+      formData.append('is_image', JSON.stringify(postIsImg));
       this.appAgentServe
         .uploadFile(formData)
         .then((res: any) => {
