@@ -1181,7 +1181,7 @@ class PlanExecuteMode(BaseMode):
                 if args_query:
                     self._current_query = args_query
                 async for stream_data in self._execute_workflow_tool(
-                    workflow_context, tool_call_id, step
+                    workflow_context, tool_call_id, step, arguments
                 ):
                     yield stream_data
             else:
@@ -1257,7 +1257,7 @@ class PlanExecuteMode(BaseMode):
             )
 
     async def _execute_workflow_tool(
-        self, workflow_context, tool_call_id: str, step: PlanStep
+        self, workflow_context, tool_call_id: str, step: PlanStep, arguments: dict = None
     ) -> AsyncGenerator:
         """
         执行工作流工具
@@ -1266,12 +1266,13 @@ class PlanExecuteMode(BaseMode):
             workflow_context: 工作流上下文
             tool_call_id: 工具调用ID
             step: 当前步骤（用于工作流中断时持久化 interrupted_workflow_name）
+            arguments: 完整的工具调用参数（包含 query 及其他业务字段）
 
         Yields:
             StreamData: 工作流执行的流式事件
         """
         task_execution = self.task_dispatcher.dispatch(
-            self._create_workflow_task(workflow_context, tool_call_id)
+            self._create_workflow_task(workflow_context, tool_call_id, arguments)
         )
 
         async for result in self.task_executor.stream_execute(task_execution):
@@ -1374,7 +1375,7 @@ class PlanExecuteMode(BaseMode):
             name, workflow_type=WorkflowType.GENERAL
         )
 
-    def _create_workflow_task(self, workflow_context, tool_call_id: str) -> Task:
+    def _create_workflow_task(self, workflow_context, tool_call_id: str, arguments: dict = None) -> Task:
         """创建工作流执行任务"""
         task_unique_id = f"{self.task_id}_workflow_{workflow_context.workflow_id}_{uuid.uuid4().hex[:8]}"
         workflow_req_params = (
@@ -1402,6 +1403,7 @@ class PlanExecuteMode(BaseMode):
 
         input_data = {
             "query": self._current_query,
+            "arguments": arguments or {},
             WorkflowConstants.WORKFLOW_REQ_PARAMS_KEY: workflow_req_params,
             "tool_call_id": tool_call_id,
             "conversation_id": self._conversation_id,
