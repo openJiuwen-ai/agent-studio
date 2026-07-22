@@ -236,6 +236,9 @@ public class WorkspaceService implements IWorkspaceService {
         resourceName = ""
     )
     public String deleteWorkspace(String projectId, DeleteWorkspaceReq deleteWorkspaceReq) {
+        if (deleteWorkspaceReq == null) {
+            throw new AgentStudioException(StudioError.PARAMS_IS_REQUIRED);
+        }
         WorkspaceMemberInfo workspaceMemberInfo = workspaceMemberService.queryWorkspaceMemberDetail(projectId,
             RequestContextUtils.getRequestUserId(), deleteWorkspaceReq.getId());
 

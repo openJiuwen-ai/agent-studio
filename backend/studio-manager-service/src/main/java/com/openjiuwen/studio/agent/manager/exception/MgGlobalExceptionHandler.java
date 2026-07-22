@@ -147,8 +147,7 @@ public class MgGlobalExceptionHandler {
         log.error("exception: {}", exception.getMessage());
         ErrorRsp errorRsp = new ErrorRsp().setErrorCode(String.valueOf(StudioError.STATIC_RESOURCE_NOT_EXIST.getCode()))
             .setErrorMsg(exception.getMessage());
-        return new ResponseEntity<>(errorRsp, ResponseModel.num2HttpStatus(
-            Integer.toString(StudioError.STATIC_RESOURCE_NOT_EXIST.getHttpStatus().ordinal())));
+        return new ResponseEntity<>(errorRsp, StudioError.STATIC_RESOURCE_NOT_EXIST.getHttpStatus());
     }
 
     /**
@@ -165,7 +164,7 @@ public class MgGlobalExceptionHandler {
                 String.valueOf(StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT.getCode()))
             .setErrorMsg(i18nUtil.getMessage(StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT));
         return new ResponseEntity<>(errorRsp,
-            ResponseModel.num2HttpStatus(String.valueOf(StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT.getHttpStatus())));
+            StudioError.STREAM_INTERFACE_EXECUTE_TIMEOUT.getHttpStatus());
     }
 
     /**
@@ -206,8 +205,7 @@ public class MgGlobalExceptionHandler {
         log.error("NotReadableException: {}", exception.getMessage());
         ErrorRsp errorRsp = new ErrorRsp().setErrorCode(StudioError.METHOD_ARGUMENT_NOT_VALID.getFullCode())
             .setErrorMsg(i18nUtil.getMessage(StudioError.METHOD_ARGUMENT_NOT_VALID));
-        return new ResponseEntity<>(errorRsp, ResponseModel.num2HttpStatus(
-            Integer.toString(StudioError.METHOD_ARGUMENT_NOT_VALID.getHttpStatus().ordinal())));
+        return new ResponseEntity<>(errorRsp, StudioError.METHOD_ARGUMENT_NOT_VALID.getHttpStatus());
     }
 
     /**
