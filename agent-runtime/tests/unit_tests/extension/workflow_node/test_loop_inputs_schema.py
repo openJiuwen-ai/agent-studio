@@ -117,8 +117,7 @@ async def test_num_loop_inputs_schema():
 
 
 async def test_array_loop_inputs_schema_preserves_ref():
-    """arrayLoop: loop_type="array"，loop_array 以 arrLoopVar.item 为键，
-    ${...} 引用原样保留（由 core 在运行时按 parent_id 作用域解析，不在注册时解析）。"""
+    """arrayLoop: loop_array 以 arrLoopVar.item 为键，${...} 引用原样保留供 core 运行时解析。"""
     arr_ref = "${node_code_1.userFields.key0}"
     inputs_schema = await _capture_loop_inputs_schema(
         _build_loop_node(loop_type="arrayLoop", arr_var=arr_ref)
