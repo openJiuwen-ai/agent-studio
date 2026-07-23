@@ -41,7 +41,9 @@ function Download($url, $sha, $out){
     # curl 比 IWR 快且对大文件/慢连接更稳；IWR 的 -TimeoutSec 会卡断大文件下载（MySQL 250MB ~25min）。
     $curlExe = Join-Path $env:WINDIR 'System32\curl.exe'
     if (Test-Path $curlExe) {
-      & $curlExe -fL --retry 3 --retry-delay 5 --connect-timeout 30 --max-time 2400 -o "$out" "$url"
+      # --ssl-no-revoke：Windows schannel curl 默认查 CRL/OCSP 吊销，目标机连不上吊销服务器时
+      # 抛 CRYPT_E_REVOCATION_OFFLINE (exit 35)。跳过吊销检查仍校验证书链（防 MITM 有效证书）。
+      & $curlExe -fL --ssl-no-revoke --retry 3 --retry-delay 5 --connect-timeout 30 --max-time 2400 -o "$out" "$url"
       if ($LASTEXITCODE -ne 0) { D-Die "下载失败(curl exit=$LASTEXITCODE): $url" }
     } else {
       try { Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing } catch { D-Die "下载失败: $url" }

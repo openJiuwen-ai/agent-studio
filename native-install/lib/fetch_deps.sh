@@ -25,7 +25,9 @@ dl(){
     log "  缓存命中: $(basename "$out")"
   else
     log "  下载: $url"
-    curl -fSL --retry 3 --retry-delay 5 --connect-timeout 30 --max-time 2400 -o "$out" "$url" || die "下载失败: $url"
+    # --ssl-no-revoke：Windows schannel curl 默认查 CRL/OCSP，连不上吊销服务器抛 CRYPT_E_REVOCATION_OFFLINE (exit 35)。
+    # Linux OpenSSL 下为 no-op（默认不查吊销）。跳过吊销仍校验证书链。
+    curl -fSL --ssl-no-revoke --retry 3 --retry-delay 5 --connect-timeout 30 --max-time 2400 -o "$out" "$url" || die "下载失败: $url"
   fi
   if [ -n "$sha" ]; then
     local got; got=$(sha256sum "$out" | awk '{print $1}')
