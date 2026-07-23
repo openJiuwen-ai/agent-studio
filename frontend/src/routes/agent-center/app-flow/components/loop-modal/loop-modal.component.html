@@ -307,6 +307,7 @@
                       [options]="param.refs"
                       [name]="'midParamValue' + i"
                       refSelectedRequire
+                      (select)="treeSelect()"
                       [placeholder]="'select_placeholder' | i18nextEager"
                     ></input-tree-select>
 

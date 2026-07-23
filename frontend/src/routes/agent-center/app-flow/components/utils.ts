@@ -580,6 +580,19 @@ export const NodeUtils = {
     }
   },
 
+  selectTreeNodeInRefsChhangeByValue(param: IWorkflowField) {
+    if (param?.value?.type === 'ref') {
+      const paramContent = param?.value.content as IRefContentType;
+
+      TreeUtil.traverse(param.refs, (node: any) => {
+        if (!node.isTop && node.ref_var_name === paramContent?.ref_var_name && node.ref_node_id === paramContent?.ref_node_id) {
+          node.checked = true;
+          param.value.content = [node];
+        }
+      });
+    }
+  },
+
   reSelectRefWithNewOps(param: IWorkflowField, ops: IParamRef[]) {
     param.refs = cloneDeep(ops);
 

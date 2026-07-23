@@ -1,18 +1,7 @@
-import {
-  Component,
-  EventEmitter,
-  Input,
-  OnInit,
-  Output,
-  ViewChild,
-} from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
 import { NgForm } from '@angular/forms';
 import { I18nNamespace } from '@i18n';
-import {
-  IntegerStrValidatorDirective,
-  NumberStrValidatorDirective,
-  RefSelectedRequireDirective,
-} from '@shared/directives/common-validator.directive';
+import { IntegerStrValidatorDirective, NumberStrValidatorDirective, RefSelectedRequireDirective } from '@shared/directives/common-validator.directive';
 import { NonEmptyValidatorDirective } from '@shared/directives/variable-name-validator.directive';
 import { MODULES } from '@shared/modules';
 import { CommonValidation } from '@shared/validation/commonValidation';
@@ -22,14 +11,7 @@ import { AppFlowService } from '../../app-flow.service';
 import { IRefInfo } from '../../app-flow.types';
 import { WORKFLOW_SVGS } from '../../flow.const';
 import { NodeService } from '../../node.service';
-import type {
-  ILoopNode,
-  IParamRef,
-  IRefContentType,
-  ISetVariableNode,
-  IWorkflowField,
-  IWorkflowFieldType,
-} from '../../node.type';
+import type { ILoopNode, IParamRef, IRefContentType, ISetVariableNode, IWorkflowField, IWorkflowFieldType } from '../../node.type';
 import { AccBlockComponent } from '../acc-block/acc-block.component';
 import { ModalBaseComponent } from '../base/modal-base.component';
 import { NodeUtils } from '../utils';
@@ -72,10 +54,7 @@ const hasEmptyType = ['integer', 'number', 'string', 'boolean', 'object', 'array
     },
   ],
 })
-export class SetVariableModalComponent
-  extends ModalBaseComponent
-  implements OnInit
-{
+export class SetVariableModalComponent extends ModalBaseComponent implements OnInit {
   @Input('names') names: string[];
 
   @Input('nodeInfo') nodeInfo: ISetVariableNode;
@@ -99,9 +78,7 @@ export class SetVariableModalComponent
 
   public refOnlyOptions = [{ label: this.i18n.transform('ref'), value: 'ref' }];
 
-  public commonOperatorOptions = [
-    { label: this.i18n.transform('operator'), value: 'operator' },
-  ];
+  public commonOperatorOptions = [{ label: this.i18n.transform('operator'), value: 'operator' }];
 
   public operatorOptions = [
     {
@@ -133,11 +110,8 @@ export class SetVariableModalComponent
   ];
 
   public getLeftParamsType(param: IWorkflowField) {
-    if (
-      param.value.type === 'ref' &&
-      (param.value.content as IParamRef[]).length
-    ) {
-      const { type } = param.value.content[0] as IParamRef || {};
+    if (param.value.type === 'ref' && (param.value.content as IParamRef[]).length) {
+      const { type } = (param.value.content[0] as IParamRef) || {};
       if (type === 'object' || type.startsWith('array')) {
         return 'complex';
       } else {
@@ -148,16 +122,13 @@ export class SetVariableModalComponent
   }
 
   public isGetLeftType(param: IWorkflowField) {
-    const { type } = param.value.content[0] as IParamRef || {};
+    const { type } = (param.value.content[0] as IParamRef) || {};
     return type;
   }
 
   public getParamType(param: IWorkflowField) {
-    if (
-      param.value.type === 'ref' &&
-      (param.value.content as IParamRef[]).length
-    ) {
-      const { type } = param.value.content[0] as IParamRef || {};
+    if (param.value.type === 'ref' && (param.value.content as IParamRef[]).length) {
+      const { type } = (param.value.content[0] as IParamRef) || {};
       if (type.startsWith('array')) {
         return 'emptyArr';
       } else if (['number', 'integer'].includes(type)) {
@@ -197,7 +168,7 @@ export class SetVariableModalComponent
   updateTimeout: any = null;
 
   get tipVals() {
-    return this.inputParams.map((param) => param.name);
+    return this.inputParams.map(param => param.name);
   }
 
   constructor(
@@ -205,13 +176,13 @@ export class SetVariableModalComponent
     protected override nodeServ: NodeService,
     protected override appFlowServ: AppFlowService,
     private helpCenterService: HelpCenterService,
-    protected commonService: CommonService,
+    protected commonService: CommonService
   ) {
     super(nodeServ, appFlowServ);
     this.nodeServ
       .refInfoUpdate$()
       .pipe(takeUntil(this.destroy$))
-      .subscribe((info) => {
+      .subscribe(info => {
         const new_info = NodeUtils.refInfo2Tree(info);
         this.requestVariables = appFlowServ.requestVariablesFn(new_info);
       });
@@ -223,20 +194,14 @@ export class SetVariableModalComponent
     this.setNodeBase(this.nodeInfo);
     super.ngOnInit();
     this.workflowType = this.appFlowServ.getWorkflowType();
-    this.validationRules.push(
-      CommonValidation.nameUniquenessVerify(
-        this.names,
-        this.i18n.transform('name_uniqueness'),
-        this.nodeInfo.name,
-      ),
-    );
+    this.validationRules.push(CommonValidation.nameUniquenessVerify(this.names, this.i18n.transform('name_uniqueness'), this.nodeInfo.name));
 
     this.graph = this.appFlowServ.getGraph();
     this.loopNodeInfo = this.getParentNodeInfo(this.graph);
 
     const assignmentMemos = (this.appFlowServ.getFlowConfigs()?.memory ?? [])
-      .filter((memo) => memo.storage_method === 'assignment')
-      .map((memo) => {
+      .filter(memo => memo.storage_method === 'assignment')
+      .map(memo => {
         return {
           ...memo,
           name: `memory.${memo.name}`,
@@ -256,7 +221,7 @@ export class SetVariableModalComponent
         ],
         {
           hideArrObjChildren: true,
-        },
+        }
       );
       refs.unshift(...assignmentMemosRefs);
     }
@@ -266,11 +231,11 @@ export class SetVariableModalComponent
     this.leftRefs = refs;
 
     if (parentNode) {
-      this.getLoopInnerNodeRefs(this.loopNodeInfo).subscribe((info) => {
+      this.getLoopInnerNodeRefs(this.loopNodeInfo).subscribe(info => {
         this.onRefUpdate(info);
       });
     } else {
-      this.getSelfRefs().subscribe((info) => {
+      this.getSelfRefs().subscribe(info => {
         this.onRefUpdate(info);
       });
     }
@@ -290,7 +255,7 @@ export class SetVariableModalComponent
     if (this.isInit) {
       this.initParams();
     } else {
-      this.params.forEach((param) => {
+      this.params.forEach(param => {
         const { left, right } = param;
 
         if (right.value.operator) {
@@ -301,7 +266,7 @@ export class SetVariableModalComponent
           right,
           NodeUtils.narrowRefOption(this.rightRefs, {
             type: left.type,
-          }),
+          })
         );
       });
     }
@@ -321,15 +286,16 @@ export class SetVariableModalComponent
         refs: cloneDeep(this.leftRefs),
       };
 
-      NodeUtils.selectTreeNodeInRefsByValue(left);
+      NodeUtils.selectTreeNodeInRefsChhangeByValue(left);
 
       const setting = this.nodeInfo.configs.settings[index];
 
       let queryType = left.type;
       if (queryType.startsWith('array')) {
-        queryType = `${queryType}<${
-          (left.schema as IWorkflowField).type
-        }>` as IWorkflowFieldType;
+        queryType = `${queryType}<${(left.schema as IWorkflowField).type}>` as IWorkflowFieldType;
+        if (left?.value?.content && (left as any)?.schema.type !== left.value.content[0]?.schema.type) {
+          queryType = `${left.type}<${left.value.content[0]?.schema.type}>` as IWorkflowFieldType;
+        }
       }
 
       const right: IWorkflowField = {
@@ -337,15 +303,13 @@ export class SetVariableModalComponent
         refs: cloneDeep(
           NodeUtils.narrowRefOption(this.rightRefs, {
             type: queryType,
-          }),
+          })
         ),
       };
       NodeUtils.selectTreeNodeInRefsByValue(right);
+
       let operatorOpts = this.initOperatorOptions(setting.left.type);
-      let typeOpts =
-        setting.left.type === 'object' || setting.left.type.startsWith('array')
-          ? this.refOnlyOptions
-          : this.sourceOptions;
+      let typeOpts = setting.left.type === 'object' || setting.left.type.startsWith('array') ? this.refOnlyOptions : this.sourceOptions;
       let leftType = setting.left.type.toLowerCase();
       if (leftType === 'array') {
         let typeName = 'type';
@@ -396,10 +360,7 @@ export class SetVariableModalComponent
 
   public onLeftSelect(selectedVal: IParamRef[], param: IVal) {
     param.operatorOpts = this.getOperatorOptions(param);
-    let typeOpts =
-      this.getLeftParamsType(param.left) === 'complex'
-        ? this.refOnlyOptions
-        : this.sourceOptions;
+    let typeOpts = this.getLeftParamsType(param.left) === 'complex' ? this.refOnlyOptions : this.sourceOptions;
     if (hasEmptyType.includes(this.isGetLeftType(param.left).toLowerCase())) {
       param.typeOpts = [...typeOpts, ...this.commonOperatorOptions];
     } else {
@@ -409,20 +370,16 @@ export class SetVariableModalComponent
     param.right.refs = cloneDeep(
       NodeUtils.narrowRefOption(this.rightRefs, {
         type: selectedVal[0].type as IWorkflowFieldType,
-      }),
+      })
     );
     param.right.type = selectedVal[0].type as IWorkflowFieldType;
 
     NodeUtils.selectTreeNodeInRefsByValue(param.right);
 
-    if (
-      this.getLeftParamsType(param.left) === 'complex' &&
-      param.right.value.type === 'literal'
-    ) {
+    if (this.getLeftParamsType(param.left) === 'complex' && param.right.value.type === 'literal') {
       param.right.value.type = 'ref';
       this.onIntegerTypeChange(param);
     }
-
   }
 
   public addParam() {
@@ -451,7 +408,7 @@ export class SetVariableModalComponent
       refs: cloneDeep(
         NodeUtils.narrowRefOption(this.rightRefs, {
           type: left.type,
-        }),
+        })
       ),
     };
     NodeUtils.selectTreeNodeInRefsByValue(right);
@@ -468,9 +425,7 @@ export class SetVariableModalComponent
   }
 
   public onIntegerTypeChange(param: any, event?) {
-    param.right.value.content = NodeUtils.getChangeContent(
-      param.right.value.type,
-    );
+    param.right.value.content = NodeUtils.getChangeContent(param.right.value.type);
     if (param.right.value.type === 'operator') {
       let leftType = this.getParamType(param.left);
       if (leftType === 'emptyNum') {
@@ -486,8 +441,7 @@ export class SetVariableModalComponent
 
   close(): void {}
 
-  validateNode() {
-  }
+  validateNode() {}
 
   getOperatorOptions(param) {
     let leftType = this.getParamType(param.left);
@@ -532,7 +486,7 @@ export class SetVariableModalComponent
       settings: [],
     };
 
-    this.params.forEach((param) => {
+    this.params.forEach(param => {
       const { left, right } = cloneDeep(param);
       const input = NodeUtils.getDtoInput(left);
       input.name = (input.value.content as IRefContentType).ref_var_name?.split('.')?.pop();
@@ -579,7 +533,6 @@ export class SetVariableModalComponent
       this.onSave();
     });
   }
-
 
   private getMetaInfoFromField(param: IWorkflowField) {
     const { type, value, schema } = param;

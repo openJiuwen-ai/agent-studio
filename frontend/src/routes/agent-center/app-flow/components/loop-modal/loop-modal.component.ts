@@ -681,20 +681,29 @@ export class LoopModalComponent extends ModalBaseComponent implements OnInit {
   }
 
   public getMidParams(): IWorkflowField[] {
-    const currentParams = this.nodeInfo.inputs.find(
-      (input) => input.name === 'intermediate_loop_var',
-    );
+    const currentParams = this.nodeInfo.inputs.find(input => input.name === 'intermediate_loop_var');
 
     if (currentParams) {
-      const res = NodeUtils.initInputs(
-        currentParams.schema as IWorkflowField[],
-        this.nameRefOptions,
-      );
-      res?.forEach((resItem) => {
+      const res = NodeUtils.initInputs(currentParams.schema as IWorkflowField[], this.nameRefOptions);
+      let save = false;
+      res?.forEach(resItem => {
+        let paramsType = resItem.type;
+        if (paramsType === 'array') {
+          paramsType = `array<${(resItem as any)?.schema?.type}>` as IWorkflowFieldType;
+        }
         if (resItem?.value?.content[0]) {
+          if (resItem?.value?.content[0]?.type !== paramsType) {
+            save = true;
+          }
           resItem.type = resItem?.value?.content[0]?.type;
         }
       });
+      if (save) {
+        setTimeout(() => {
+          this.changeUpdateTime();
+          this.handelSave();
+        }, 30);
+      }
       return res;
     }
 
