@@ -231,6 +231,7 @@ public class AgentExportService {
             resourceUnit.setResourceId(appId);
             resourceUnit.setResourceType(resourceType);
             resourceUnit.setResourceName(resourceName);
+            resourceUnit.setResourceLevel(1);
             exportResps.add(buildCommonError(List.of(resourceUnit)));
             return true;
         }
