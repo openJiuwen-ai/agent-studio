@@ -1,0 +1,5 @@
+# 构建中间产物与输出
+build/
+dist/
+.cache/
+*.log
