@@ -68,9 +68,7 @@ export const NodeUtils = {
   fieldsRefInputMapper(field: IWorkflowField): IWorkflowField {
     const fieldCopy = cloneDeep(field);
     if (fieldCopy.value.type === 'ref') {
-      fieldCopy.value.content = NodeUtils.refContentStringify(
-        fieldCopy.value.content as IRefContentType,
-      );
+      fieldCopy.value.content = NodeUtils.refContentStringify(fieldCopy.value.content as IRefContentType);
 
       return fieldCopy;
     }
@@ -108,19 +106,9 @@ export const NodeUtils = {
         };
   },
 
-  checkModelExistence(
-    nodeName: string,
-    model_deployment_id: string,
-    models: IModel[],
-  ) {
-    if (
-      model_deployment_id &&
-      models.length > 0 &&
-      !models.map((m) => m.model_deployment_id).includes(model_deployment_id)
-    ) {
-      MessageComponent.showError(
-        i18next.t('checkModel_tip', { node: removeHTMLTag(nodeName) }),
-      );
+  checkModelExistence(nodeName: string, model_deployment_id: string, models: IModel[]) {
+    if (model_deployment_id && models.length > 0 && !models.map(m => m.model_deployment_id).includes(model_deployment_id)) {
+      MessageComponent.showError(i18next.t('checkModel_tip', { node: removeHTMLTag(nodeName) }));
     }
     return null;
   },
@@ -137,24 +125,9 @@ export const NodeUtils = {
     return `${nodeId}.${field.name}.${field.source}`;
   },
 
-  fields2Views(
-    fields: IWorkflowField[],
-    depth = 0,
-    parentType: IWFViewParentType = 'none',
-  ): IWFView[] {
+  fields2Views(fields: IWorkflowField[], depth = 0, parentType: IWFViewParentType = 'none'): IWFView[] {
     const views: IWFView[] = fields.map((field, index) => {
-      const {
-        name,
-        type,
-        description,
-        required,
-        schema,
-        source,
-        value,
-        isDisabled,
-        aging_level,
-        storage_method,
-      } = field;
+      const { name, type, description, required, schema, source, value, isDisabled, aging_level, storage_method } = field;
 
       const view: IWFView = {
         name,
@@ -177,31 +150,19 @@ export const NodeUtils = {
       if (type === 'array') {
         if ((schema as IWorkflowField).type === 'object') {
           view.type = 'array<object>';
-          view.children = this.fields2Views(
-            ((schema as IWorkflowField)?.schema ?? []) as IWorkflowField[],
-            depth + 1,
-            view.type,
-          );
+          view.children = this.fields2Views(((schema as IWorkflowField)?.schema ?? []) as IWorkflowField[], depth + 1, view.type);
           view.expanded = true;
         } else {
           if ((schema as IWorkflowField).type) {
-            view.type = `array<${
-              (schema as IWorkflowField).type
-            }>` as IWorkflowFieldType;
+            view.type = `array<${(schema as IWorkflowField).type}>` as IWorkflowFieldType;
           } else if ((field?.schema as any)?.type) {
-            view.type = `array<${
-              (field?.schema as any)?.type
-            }>` as IWorkflowFieldType;
+            view.type = `array<${(field?.schema as any)?.type}>` as IWorkflowFieldType;
           }
         }
       }
 
       if (type === 'object') {
-        view.children = this.fields2Views(
-          (schema ?? []) as IWorkflowField[],
-          depth + 1,
-          view.type,
-        );
+        view.children = this.fields2Views((schema ?? []) as IWorkflowField[], depth + 1, view.type);
         view.expanded = true;
       }
 
@@ -211,26 +172,9 @@ export const NodeUtils = {
     return views;
   },
 
-  fields2ViewsUnchangeType(
-    fields: IWorkflowField[],
-    depth = 0,
-    parentType: IWFViewParentType = 'none',
-    parentVisibility?: boolean,
-  ): IWFView[] {
-    const views: IWFView[] = fields.map((field) => {
-      const {
-        name,
-        type,
-        description,
-        required,
-        schema,
-        source,
-        value,
-        isDisabled,
-        aging_level,
-        storage_method,
-        visibility,
-      } = field;
+  fields2ViewsUnchangeType(fields: IWorkflowField[], depth = 0, parentType: IWFViewParentType = 'none', parentVisibility?: boolean): IWFView[] {
+    const views: IWFView[] = fields.map(field => {
+      const { name, type, description, required, schema, source, value, isDisabled, aging_level, storage_method, visibility } = field;
 
       const view: IWFView = {
         name,
@@ -254,23 +198,13 @@ export const NodeUtils = {
       //array 不展开
       if (type === 'array' && false) {
         if ((schema as IWorkflowField).type === 'object') {
-          view.children = this.fields2ViewsUnchangeType(
-            ((schema as IWorkflowField)?.schema ?? []) as IWorkflowField[],
-            depth + 1,
-            view.type,
-            visibility,
-          );
+          view.children = this.fields2ViewsUnchangeType(((schema as IWorkflowField)?.schema ?? []) as IWorkflowField[], depth + 1, view.type, visibility);
           view.expanded = true;
         }
       }
 
       if (type === 'object') {
-        view.children = this.fields2ViewsUnchangeType(
-          (schema ?? []) as IWorkflowField[],
-          depth + 1,
-          view.type,
-          visibility,
-        );
+        view.children = this.fields2ViewsUnchangeType((schema ?? []) as IWorkflowField[], depth + 1, view.type, visibility);
         view.isDisabled = true;
         view.expanded = true;
       }
@@ -282,18 +216,8 @@ export const NodeUtils = {
   },
 
   views2Fields(views: IWFView[]): IWorkflowField[] {
-    const fields: IWorkflowField[] = views.map((view) => {
-      const {
-        name,
-        type,
-        description,
-        required,
-        children,
-        source,
-        value,
-        aging_level,
-        storage_method,
-      } = view;
+    const fields: IWorkflowField[] = views.map(view => {
+      const { name, type, description, required, children, source, value, aging_level, storage_method } = view;
       const field: IWorkflowField = {
         name,
         type,
@@ -315,15 +239,18 @@ export const NodeUtils = {
           name: '',
           type: itemType as IWorkflowFieldType,
         };
-        if (itemType === 'object' && children) {
-          (field.schema as IWorkflowField).schema = this.views2Fields(children);
+        if (itemType === 'object') {
+          (field.schema as IWorkflowField).schema = children ? this.views2Fields(children) : [];
         }
       }
-      if (type === 'object' && (view as any).schema) {
-        field.schema = this.views2Fields((view as any).schema);
-      }
-      if (type === 'object' && children) {
-        field.schema = this.views2Fields(children);
+      if (type === 'object') {
+        if ((view as any).schema) {
+          field.schema = this.views2Fields((view as any).schema);
+        } else if (children) {
+          field.schema = this.views2Fields(children);
+        } else {
+          field.schema = [];
+        }
       }
       return field;
     });
@@ -332,7 +259,7 @@ export const NodeUtils = {
   },
 
   multiTypeViews2Fields(views: IWFViewWithMultiType[]): IWorkflowField[] {
-    const fields: IWorkflowField[] = views.map((view) => {
+    const fields: IWorkflowField[] = views.map(view => {
       const { name, description, required, children, source, value } = view;
       const type = view.type.join('/') as IWorkflowFieldType;
       const field: IWorkflowField = {
@@ -357,14 +284,13 @@ export const NodeUtils = {
           type: itemType as IWorkflowFieldType,
         };
 
-        if (itemType === 'object' && children) {
-          (field.schema as IWorkflowField).schema =
-            this.multiTypeViews2Fields(children);
+        if (itemType === 'object') {
+          (field.schema as IWorkflowField).schema = children ? this.multiTypeViews2Fields(children) : [];
         }
       }
 
       if (field.type === 'object') {
-        field.schema = this.multiTypeViews2Fields(children);
+        field.schema = children ? this.multiTypeViews2Fields(children) : [];
       }
 
       return field;
@@ -395,11 +321,7 @@ export const NodeUtils = {
     return typeCopy !== 'object' && !typeCopy.startsWith('array');
   },
 
-  getLayerIndexWidth(
-    param: IWFView,
-    isNormalView = true,
-    configs?: ILayerIndexWidthConfig,
-  ): string {
+  getLayerIndexWidth(param: IWFView, isNormalView = true, configs?: ILayerIndexWidthConfig): string {
     const commonDiff = 24;
     let layer0 = 145;
     let slimLayer0 = 136;
@@ -436,13 +358,9 @@ export const NodeUtils = {
     };
 
     const useMap = isNormalView ? map : slimMap;
-    const useWithChildrenMap = isNormalView
-      ? mapWithChildren
-      : slimMapWithChildren;
+    const useWithChildrenMap = isNormalView ? mapWithChildren : slimMapWithChildren;
 
-    return param?.children
-      ? useWithChildrenMap[param.depth]
-      : useMap[param.depth];
+    return param?.children ? useWithChildrenMap[param.depth] : useMap[param.depth];
   },
 
   onOutputParamTypeChange(param: IWFView) {
@@ -451,11 +369,7 @@ export const NodeUtils = {
       return;
     }
 
-    if (
-      param.type.startsWith('array') &&
-      param.type !== 'array<object>' &&
-      param?.children
-    ) {
+    if (param.type.startsWith('array') && param.type !== 'array<object>' && param?.children) {
       delete param?.children;
     }
 
@@ -498,9 +412,9 @@ export const NodeUtils = {
       refRootArrItem: false,
       disableArrObj: false,
       hideArrObjChildren: false,
-    },
+    }
   ) {
-    const refs: IParamRef[] = fields.map((field) => {
+    const refs: IParamRef[] = fields.map(field => {
       const { name, type, schema, source } = field;
       const names = [...preNames, name];
 
@@ -532,12 +446,7 @@ export const NodeUtils = {
             // 获取对象类型的schema，默认为空数组
             const itemSchema = workflowField.schema ?? [];
 
-            ref.children = this.fields2RefParams(
-              itemSchema as IWorkflowField[],
-              nodeId,
-              names,
-              configs,
-            );
+            ref.children = this.fields2RefParams(itemSchema as IWorkflowField[], nodeId, names, configs);
             ref.expanded = true;
           }
         } else {
@@ -563,12 +472,7 @@ export const NodeUtils = {
 
         // 递归处理子字段
         const childFields = (ref.schema ?? []) as IWorkflowField[];
-        ref.children = this.fields2RefParams(
-          childFields,
-          nodeId,
-          names,
-          configs,
-        );
+        ref.children = this.fields2RefParams(childFields, nodeId, names, configs);
       }
 
       if (configs?.intOnly === true && ref.type !== 'integer') {
@@ -616,10 +520,10 @@ export const NodeUtils = {
       appendName: '',
       refRootArrItem: false,
       arrOnly: false,
-    },
+    }
   ): IParamRef[] {
     const paramRefs: IParamRef[] = [];
-    refInfo.forEach((info) => {
+    refInfo.forEach(info => {
       const { refNodeId, refNodeName, type, outputs } = info;
       let item: IParamRef = {
         ref_node_id: refNodeId,
@@ -647,14 +551,11 @@ export const NodeUtils = {
     return WORKFLOW_SVGS[type];
   },
 
-  attachRefs2Input(
-    inputs: IWorkflowField[],
-    ops: IParamRef[],
-  ): IWorkflowField[] {
-    if(!inputs?.length) {
+  attachRefs2Input(inputs: IWorkflowField[], ops: IParamRef[]): IWorkflowField[] {
+    if (!inputs?.length) {
       return [];
     }
-    return inputs.map((field) => {
+    return inputs.map(field => {
       return {
         ...cloneDeep(field),
         refs: cloneDeep(ops),
@@ -671,11 +572,7 @@ export const NodeUtils = {
       const paramContent = param?.value.content as IRefContentType;
 
       TreeUtil.traverse(param.refs, (node: any) => {
-        if (
-          !node.isTop &&
-          node.ref_var_name === paramContent?.ref_var_name &&
-          node.ref_node_id === paramContent?.ref_node_id
-        ) {
+        if (!node.isTop && node.ref_var_name === paramContent?.ref_var_name && node.ref_node_id === paramContent?.ref_node_id) {
           node.checked = true;
           param.value.content = [node];
         }
@@ -688,17 +585,11 @@ export const NodeUtils = {
 
     // 重新选中引用
     if (param.value.type === 'ref') {
-      const paramContent = Array.isArray(param.value.content)
-        ? (param.value.content[0] as IParamRef)
-        : (param.value.content as IRefContentType);
+      const paramContent = Array.isArray(param.value.content) ? (param.value.content[0] as IParamRef) : (param.value.content as IRefContentType);
 
       let isMatch = false;
       TreeUtil.traverse(param.refs, (node: any) => {
-        if (
-          !node.isTop &&
-          node.ref_var_name === paramContent?.ref_var_name &&
-          node.ref_node_id === paramContent?.ref_node_id
-        ) {
+        if (!node.isTop && node.ref_var_name === paramContent?.ref_var_name && node.ref_node_id === paramContent?.ref_node_id) {
           node.checked = true;
           param.value.content = [node];
           isMatch = true;
@@ -716,7 +607,7 @@ export const NodeUtils = {
   },
 
   reSelectRefsWithNewOps(fields: IWorkflowField[], ops: IParamRef[]) {
-    fields.forEach((param) => {
+    fields.forEach(param => {
       this.reSelectRefWithNewOps(param, ops);
     });
   },
@@ -733,11 +624,7 @@ export const NodeUtils = {
       const paramContent = param.value.content as IRefContentType;
 
       TreeUtil.traverse(param.refs, (node: any) => {
-        if (
-          !node.isTop &&
-          node.ref_var_name === paramContent?.ref_var_name &&
-          node.ref_node_id === paramContent?.ref_node_id
-        ) {
+        if (!node.isTop && node.ref_var_name === paramContent?.ref_var_name && node.ref_node_id === paramContent?.ref_node_id) {
           node.checked = true;
           param.value.content = [node];
         }
@@ -747,12 +634,9 @@ export const NodeUtils = {
     return param;
   },
 
-  getDtoInputs(
-    params: IWorkflowField[],
-    config?: IFieldProcessConfig,
-  ): IWorkflowField[] {
+  getDtoInputs(params: IWorkflowField[], config?: IFieldProcessConfig): IWorkflowField[] {
     const paramCopy = cloneDeep(params);
-    paramCopy.forEach((param) => {
+    paramCopy.forEach(param => {
       this.getDtoInput(param, config);
     });
 
@@ -761,7 +645,7 @@ export const NodeUtils = {
 
   resetSchemaSource(schema: IWorkflowFieldSchema, source: IParamSource) {
     if (Array.isArray(schema)) {
-      schema.forEach((s) => {
+      schema.forEach(s => {
         this.resetSchemaSource(s, source);
       });
     } else {
@@ -779,7 +663,7 @@ export const NodeUtils = {
     param: IWorkflowField,
     config: IFieldProcessConfig = {
       useContentType: true,
-    },
+    }
   ): IWorkflowField {
     if ((param.value.type === 'ref' || param.value.type === 'input_ref') && config.handleRef !== false) {
       const contentArr = (param.value.content as IParamRef[])?.[0];
@@ -810,10 +694,7 @@ export const NodeUtils = {
       }
     }
 
-    if (
-      param.value?.type === 'literal' &&
-      typeof param.value.content === 'string'
-    ) {
+    if (param.value?.type === 'literal' && typeof param.value.content === 'string') {
       param.value.content = removeHTMLTag(param.value.content);
     }
 
@@ -841,13 +722,8 @@ export const NodeUtils = {
     return true;
   },
 
-  getOutputsRefIndex(
-    nodeId: string,
-    fields: IWorkflowField[],
-    pathNameArr: string[] = [],
-    indexArr: IRefIndex[] = [],
-  ): IRefIndex[] {
-    fields?.forEach((field) => {
+  getOutputsRefIndex(nodeId: string, fields: IWorkflowField[], pathNameArr: string[] = [], indexArr: IRefIndex[] = []): IRefIndex[] {
+    fields?.forEach(field => {
       const { name, type } = field;
       const pathNames = [...pathNameArr, name];
 
@@ -864,12 +740,7 @@ export const NodeUtils = {
         pathNames[lastIndex] = `${last}[0]`;
 
         if (arrSchema.type === 'object') {
-          this.getOutputsRefIndex(
-            nodeId,
-            arrSchema.schema as IWorkflowField[],
-            pathNames,
-            indexArr,
-          );
+          this.getOutputsRefIndex(nodeId, arrSchema.schema as IWorkflowField[], pathNames, indexArr);
         } else {
           indexArr.push({
             id: `${nodeId}.${pathNames.join('.')}`,
@@ -883,12 +754,7 @@ export const NodeUtils = {
           schema: cloneDeep(field.schema),
         });
 
-        this.getOutputsRefIndex(
-          nodeId,
-          field.schema as IWorkflowField[],
-          pathNames,
-          indexArr,
-        );
+        this.getOutputsRefIndex(nodeId, field.schema as IWorkflowField[], pathNames, indexArr);
       } else {
         indexArr.push({
           id: `${nodeId}.${pathNames.join('.')}`,
@@ -982,9 +848,7 @@ export const NodeUtils = {
     if (typeArr.length > 1) {
       if (typeArr[0].startsWith('array<file')) {
         const [mainType, subType] = typeArr[0].split('<');
-        return `${capitalize(mainType)}<${capitalize(subType)}/${capitalize(
-          typeArr[1],
-        )}`;
+        return `${capitalize(mainType)}<${capitalize(subType)}/${capitalize(typeArr[1])}`;
       }
       return capitalize(typeArr[1]);
     }
@@ -1017,7 +881,7 @@ export const NodeUtils = {
     query: {
       type: IWorkflowFieldType;
       disabledRefIds?: string[];
-    },
+    }
   ) {
     const ops = cloneDeep(options);
     TreeUtil.traverse(ops, (node: any) => {
@@ -1026,12 +890,7 @@ export const NodeUtils = {
           node.disabled = true;
         }
 
-        if (
-          query?.disabledRefIds &&
-          query.disabledRefIds.includes(
-            `${node.ref_node_id}.${node.ref_var_name}.${node.source}`,
-          )
-        ) {
+        if (query?.disabledRefIds && query.disabledRefIds.includes(`${node.ref_node_id}.${node.ref_var_name}.${node.source}`)) {
           node.disabled = true;
         }
       }
@@ -1043,7 +902,7 @@ export const NodeUtils = {
   traversalNodeSource(nodeData: NodeInfo): NodeInfo {
     const res = nodeData as any;
     if (res?.inputs && res?.inputs.length > 0) {
-      res.inputs = res.inputs.map((item) => {
+      res.inputs = res.inputs.map(item => {
         if (item.source && item?.value?.content?.source === 'environment') {
           item.source = 'environment';
         }
@@ -1078,22 +937,19 @@ export const NodeUtils = {
     });
   },
   validJsonType(inputParams) {
-    return inputParams.some(
-      (obj) =>
-        this.isArrOrObj(obj.type) && obj.value?.content === '' && obj.required,
-    );
+    return inputParams.some(obj => this.isArrOrObj(obj.type) && obj.value?.content === '' && obj.required);
   },
   isArrOrObj(type: string) {
     return type.startsWith('array') || type === 'object';
   },
   getParamExtractionRelationFlow(node: IParamExtractionNode) {
     const result = [];
-    node?.configs?.extension_workflows?.forEach((e) => {
+    node?.configs?.extension_workflows?.forEach(e => {
       result.push(e);
     });
 
-    node?.configs?.domain_objects?.forEach((d) => {
-      d?.processing_workflows?.forEach((p) => {
+    node?.configs?.domain_objects?.forEach(d => {
+      d?.processing_workflows?.forEach(p => {
         result.push(p);
       });
     });
