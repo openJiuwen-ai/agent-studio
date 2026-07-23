@@ -2437,40 +2437,17 @@ class IRConverter:
                 loop_inputs["loop_array"] = {"arrLoopVar.item": node_inputs["arrLoopVar"]}
             if "intermediateLoopVar" in node_inputs:
                 loop_inputs["intermediate_var"] = {"intermediateLoopVar": node_inputs["intermediateLoopVar"]}
-            _loop_inputs_snapshot = loop_inputs
-
-            def _loop_inputs_transformer(state):
-                from openjiuwen.core.session.utils import get_by_schema
-                data = state
-                while not isinstance(data, dict):
-                    getter = getattr(data, 'get_state', None)
-                    if callable(getter):
-                        # 优先走 copied=False 直接拿原始 dict 引用，跳过 deepcopy。
-                        # transformer 内部仅调用 get_by_schema（纯只读，无写入），
-                        # 返回值是新建的 dict/list，不会回写 io_state，因此无需复制。
-                        try:
-                            data = getter(copied=False)
-                        except TypeError:
-                            # 兜底：实现签名不支持 copied 关键字时回退到默认行为
-                            data = getter()
-                    else:
-                        break
-
-                def _resolve(obj):
-                    if isinstance(obj, str) and obj.startswith("$"):
-                        val = get_by_schema(obj, data, is_root=True)
-                        return val if val is not None else obj
-                    if isinstance(obj, dict):
-                        return {k: _resolve(v) for k, v in obj.items()}
-                    return obj
-
-                return _resolve(_loop_inputs_snapshot)
-
+            # 直接以 dict 作为 inputs_schema，交由 core 的标准 get_inputs 解析。
+            # 标准路径走 io_state.get_by_prefix(schema, parent_id)，会按 parent_id
+            # 深入到当前（子）工作流作用域后再解析 ${...} 引用。原先用自定义
+            # callable transformer + get_by_schema(..., is_root=True) 从绝对根解析，
+            # 在子工作流上下文中会绕过 parent_id 作用域，导致循环无法解析到同级
+            # 子节点输出（如代码节点产出的数组），arrLoopVar 落地为字面量字符串而报错。
             _add_workflow_comp_with_exception(
                 workflow,
                 node_id,
                 component,
-                inputs_schema=_loop_inputs_transformer,
+                inputs_schema=loop_inputs,
                 **_comp_reg,
             )
             return component
