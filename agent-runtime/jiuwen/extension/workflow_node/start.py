@@ -479,9 +479,10 @@ class Start(WorkflowComponent):
         envs = get_workflow_param(session, REQUEST_VARIABLES) or {}
         inputs_copy = deepcopy(inputs)
         inputs_copy.pop("sys", None)
-        # 只合并非布尔类型的字段，避免布尔值被字符串覆盖
+        # _REQUEST 仅补充 inputs 中缺失的字段（恢复场景下 inputs 为 InteractiveInput 不含全局变量）；
+        # 不覆盖 inputs 已有的值，避免并行子工作流共享 global_state[_REQUEST] 时数据污染
         for key, value in envs.items():
-            if key not in inputs_copy or not isinstance(inputs_copy[key], bool):
+            if key not in inputs_copy:
                 inputs_copy[key] = value
         # 当前用户输入加入历史
         # deepcopy sys 以避免直接 mutate session 内部状态：get_state_info 返回的是
