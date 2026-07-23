@@ -127,6 +127,16 @@ spec:
             # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
             - name: auth_sso_validate_url
               value: ''
+            # ======== [选填] 知识库模式（CUSTOM 模式对接外部 LakeSearch）========
+            # 知识库来源模式：LakeSearch（默认，内置 LakeSearch 服务）/ CUSTOM（对接外部 LakeSearch）
+            - name: knowledge_source
+              value: 'LakeSearch'
+            # LakeSearch 服务地址：CUSTOM 模式必填，默认空
+            - name: knowledge_lakeSearch_endpoint
+              value: ''
+            # LakeSearch 鉴权方式：basic（默认）/ none（无鉴权，如本地 mock）
+            - name: knowledge_lakeSearch_auth_mode
+              value: 'basic'
           resources:
             limits:
               cpu: '2'
