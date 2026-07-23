@@ -1,0 +1,15 @@
+[project]
+name = "common-utils"
+version = "0.1.0"
+description = "agent-studio 公共工具层（agent-runtime / agent-builder 共享）"
+requires-python = ">=3.11"
+dependencies = [
+    "openjiuwen",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["common_utils*"]

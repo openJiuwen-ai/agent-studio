@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from agent_runtime.common.ir_interfaces import KnowledgeBaseConfigProvider
 from agent_runtime.context.request_context import _request_ctx
 from storage import get_storage_provider
-from agent_runtime.utils.crypto_tool import CryptTool
+from common_utils.crypto_tool import CryptTool
 from openjiuwen.core.common.logging import workflow_logger
 
 

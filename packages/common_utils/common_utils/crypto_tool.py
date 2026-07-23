@@ -1,8 +1,9 @@
 # coding: utf-8
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 
-from openjiuwen.core.common.security.crypt_utils import BaseCrypt, CryptUtils
 from typing import Optional
+
+from openjiuwen.core.common.security.crypt_utils import BaseCrypt, CryptUtils
 
 
 class PlainCrypt(BaseCrypt):
@@ -24,7 +25,7 @@ class CryptTool:
     """加解密管理工具。
 
     使用方式：
-        from agent_runtime.utils.crypto_tool import CryptTool, BaseCrypt
+        from common_utils.crypto_tool import CryptTool, BaseCrypt
 
         class MyAesCrypt(BaseCrypt):
             ...
@@ -33,7 +34,7 @@ class CryptTool:
         CryptTool.register("my_aes", MyAesCrypt())
 
         # 之后全项目直接用 encrypt / decrypt，自动走 MyAesCrypt
-        from agent_runtime.utils.crypto_tool import encrypt, decrypt
+        from common_utils.crypto_tool import encrypt, decrypt
         encrypt("secret")                          # 用默认
         encrypt("secret", crypt_name="my_aes")     # 用指定
 
@@ -61,7 +62,9 @@ class CryptTool:
 
     def decrypt(self, data: str, key: bytes = None, crypt_name: Optional[str] = None) -> str:
         """解密。传入 crypt_name 则用指定实现，否则用默认实现。
-        若解密失败（输入为明文）则返回原文。"""
+
+        若解密失败（输入为明文）则返回原文。
+        """
         if not data:
             return data
         try:

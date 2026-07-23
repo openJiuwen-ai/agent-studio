@@ -18,7 +18,7 @@ from typing import Literal, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from agent_builder.adapter.crypto_bridge import decrypt
+from common_utils.crypto_tool import decrypt
 
 
 def _decrypt(v):

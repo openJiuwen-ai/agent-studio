@@ -3,7 +3,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 #
 # studio-builder 服务进程启动 —— 参考 studio-runtime/script/start_server.sh。
-# 设置 PYTHONPATH（含 ${SERVICE_HOME}/app，使 storage/model_service/agent_builder 可被 import）、
+# 设置 PYTHONPATH（含 ${SERVICE_HOME}/app，使 storage/model_service/common_utils/agent_builder 可被 import）、
 # host、日志目录，后台 nohup 拉起 agent_builder.EIBuilder。
 #
 
@@ -24,7 +24,7 @@ function env_init(){
   mkdir -p ${LOGGING_LOG_PATH}
   chmod -R 700 ${LOGGING_LOG_PATH}
 
-  # builder 入口模块；agent_builder/storage/model_service 经 PYTHONPATH=${SERVICE_HOME}/app 解析
+  # builder 入口模块；agent_builder/storage/model_service/common_utils 经 PYTHONPATH=${SERVICE_HOME}/app 解析
   server_path=${SERVICE_HOME}/app/agent_builder/EIBuilder.py
 
   hosts=`hostname -I`

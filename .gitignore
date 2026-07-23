@@ -75,11 +75,13 @@ docker/studio-runtime/bin/
 docker/studio-runtime/jiuwen/
 docker/studio-runtime/model_service/
 docker/studio-runtime/storage/
+docker/studio-runtime/common_utils/
 docker/studio-runtime/tests/
 docker/studio-runtime/requirements.txt
 docker/studio-builder/agent_builder/
 docker/studio-builder/model_service/
 docker/studio-builder/storage/
+docker/studio-builder/common_utils/
 docker/image/
 docker/AgentBuilder.tar.gz
 docker/.source-build-hash
