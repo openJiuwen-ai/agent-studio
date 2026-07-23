@@ -47,6 +47,9 @@ spec:
             # Redis数据库编号，默认0
             - name: REDIS_DATABASE
               value: '0'
+            # Redis pipeline 事务开关，true 使用标准事务，false 不使用事务
+            - name: REDIS_TRANSACTION_ENABLED
+              value: 'true'
             # ======== [必填] 对象存储 ========
             - name: DATASOURCE_OBS_SERVER
               value: ''

@@ -52,6 +52,9 @@ spec:
             # Redis数据库编号，默认0
             - name: REDIS_DATABASE
               value: '0'
+            # Redis pipeline 事务开关，true 使用标准事务，false 不使用事务
+            - name: REDIS_TRANSACTION_ENABLED
+              value: 'true'
             # ======== [选填] 提示词优化任务持久化存储（不填则仅存内存） ========
             # 数据库类型：mysql 或 gaussdb，默认mysql
             - name: STORE_DB_TYPE
