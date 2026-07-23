@@ -52,6 +52,7 @@ from storage import S3StorageProvider
 from agent_runtime.common import settings
 from agent_runtime.common.checkpointer_config import build_redis_checkpointer_config
 from agent_runtime.common.exception.errors import AgentBuilderError
+from agent_runtime.event_handler.base.mappers import ErrorContextBuilder
 from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
 from agent_runtime.common.logging_context import COMMON_LOG_FORMAT
 from agent_runtime.common.redis_manager import RedisClientManager
@@ -67,6 +68,7 @@ from agent_runtime.serve.apis.conversation_variable_api import conversation_vari
 from agent_runtime.serve.apis.inner_tools import inner_tools_router
 from agent_runtime.serve.apis.release_api import release_api_router
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 # 初始化 prompt 模板
@@ -266,6 +268,31 @@ def instance_app(config: dict | None = None):
 
     for i in apps_map:
         app.include_router(i)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, exc: RequestValidationError):
+        """请求参数校验失败时返回统一格式的错误响应，而非FastAPI默认的detail格式."""
+        errors = exc.errors()
+        detail_parts = []
+        for err in errors:
+            loc = ".".join(str(part) for part in err.get("loc", []))
+            msg = err.get("msg", "")
+            detail_parts.append(f"{loc}: {msg}" if loc else msg)
+        detail_str = "; ".join(detail_parts)
+        logger.warning(f"Request validation error: {detail_str}")
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        error_code, error_msg, error_reason, error_suggestion = (
+            ErrorContextBuilder.get_language_context(language, "02001003")
+        )
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error_code": error_code,
+                "error_msg": error_msg,
+                "error_reason": detail_str,
+                "error_suggestion": error_suggestion,
+            },
+        )
 
     @app.exception_handler(AgentBuilderError)
     async def agent_builder_error_handler(request: Request, exc: AgentBuilderError):

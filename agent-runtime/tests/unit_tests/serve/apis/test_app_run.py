@@ -58,6 +58,8 @@ from agent_runtime.serve.apis.app_run import (
     _extract_instance_id,
     _encapsulate_stream_response,
     _encapsulate_non_stream_response,
+    process_file_urls,
+    _get_url_extension,
 )
 from agent_runtime.serve.apis.app_run_request import (
     WorkflowAppRunRequest,
@@ -439,3 +441,127 @@ class TestNodeExecuteRequest:
         assert len(body.plugin_configs) == 1
         assert body.version == "v2"
         assert body.user_id == "user-1"
+
+
+class TestGetUrlExtension:
+    """URL extension extractor tests."""
+
+    @staticmethod
+    def test_simple_url():
+        assert _get_url_extension("https://example.com/image.jpg") == ".jpg"
+
+    @staticmethod
+    def test_url_with_query_params():
+        assert _get_url_extension(
+            "https://example.com/file.png?AWSAccessKeyId=xxx&Signature=yyy"
+        ) == ".png"
+
+    @staticmethod
+    def test_url_no_extension():
+        assert _get_url_extension("https://example.com/noext") == ""
+
+    @staticmethod
+    def test_uppercase_extension_lowered():
+        assert _get_url_extension("https://example.com/photo.JPG") == ".jpg"
+
+
+class TestProcessFileUrls:
+    """File URL to structured object conversion tests."""
+
+    @staticmethod
+    def test_empty_list():
+        assert process_file_urls([]) == []
+
+    @staticmethod
+    def test_none_equivalent():
+        assert process_file_urls([]) == []
+
+    @staticmethod
+    def test_image_url():
+        url = "https://obs.example.com/file/img.jpg?token=abc"
+        result = process_file_urls([url])
+        assert len(result) == 1
+        assert result[0] == {"type": "image_url", "image_url": {"url": url}}
+
+    @staticmethod
+    def test_video_url():
+        url = "https://obs.example.com/file/clip.mp4?token=abc"
+        result = process_file_urls([url])
+        assert len(result) == 1
+        assert result[0] == {"type": "video_url", "video_url": {"url": url}}
+
+    @staticmethod
+    def test_mixed_image_and_video():
+        img_url = "https://obs.example.com/a.png"
+        vid_url = "https://obs.example.com/b.avi"
+        result = process_file_urls([img_url, vid_url])
+        assert len(result) == 2
+        assert result[0]["type"] == "image_url"
+        assert result[1]["type"] == "video_url"
+
+    @staticmethod
+    def test_unsupported_extension_skipped():
+        url = "https://obs.example.com/file.docx?token=abc"
+        result = process_file_urls([url])
+        assert result == []
+
+    @staticmethod
+    def test_all_image_extensions():
+        for ext in [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".tiff"]:
+            url = f"https://obs.example.com/file{ext}"
+            result = process_file_urls([url])
+            assert len(result) == 1 and result[0]["type"] == "image_url", f"Failed for {ext}"
+
+    @staticmethod
+    def test_all_video_extensions():
+        for ext in [".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv"]:
+            url = f"https://obs.example.com/file{ext}"
+            result = process_file_urls([url])
+            assert len(result) == 1 and result[0]["type"] == "video_url", f"Failed for {ext}"
+
+
+class TestBuildReqJsonFromAgentFiles:
+    """Agent request builder — files conversion tests."""
+
+    @staticmethod
+    def _make_ctx(**overrides):
+        defaults = dict(
+            conversation_id="conv-1", ir_path="ir/path",
+            conversation_history=[], dialogue_count=1, user_id="",
+        )
+        defaults.update(overrides)
+        return ExecutionContext(**defaults)
+
+    @staticmethod
+    def test_files_converted_from_urls():
+        body = AgentAppRunRequest(
+            files=["https://obs.example.com/photo.jpg?token=abc"]
+        )
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgentFiles._make_ctx())
+        files = result["params"]["files"]
+        assert len(files) == 1
+        assert files[0] == {
+            "type": "image_url",
+            "image_url": {"url": "https://obs.example.com/photo.jpg?token=abc"},
+        }
+
+    @staticmethod
+    def test_empty_files_produces_empty_list():
+        body = AgentAppRunRequest(files=[])
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgentFiles._make_ctx())
+        assert result["params"]["files"] == []
+
+    @staticmethod
+    def test_mixed_files_converted():
+        body = AgentAppRunRequest(
+            files=[
+                "https://obs.example.com/img.png",
+                "https://obs.example.com/vid.mp4",
+                "https://obs.example.com/doc.txt",
+            ]
+        )
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgentFiles._make_ctx())
+        files = result["params"]["files"]
+        assert len(files) == 2
+        assert files[0]["type"] == "image_url"
+        assert files[1]["type"] == "video_url"
