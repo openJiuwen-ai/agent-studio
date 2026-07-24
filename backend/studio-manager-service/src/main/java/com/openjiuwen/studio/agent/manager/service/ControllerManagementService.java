@@ -313,7 +313,8 @@ public class ControllerManagementService {
             return;
         }
         ModelConfigVO model = controllerNodeConfigVo.getModel();
-        if (model == null) {
+        if (model == null || model.getModelDeploymentId() == null) {
+            mappingMapper.deleteBatchByAppIdAndResourceType(controllerVo.getId(), ResourceTypeEnum.MODEL.toString());
             return;
         }
         MappingEntity mappingEntity = new MappingEntity();
@@ -1292,6 +1293,7 @@ public class ControllerManagementService {
                 MappingEntity wfMapping = filterResourceAndAddMappings(controllerVo.getId(), controllerVo.getName(),
                     CommonConstant.WORKFLOW_TYPE, tempWfSet, wfNode);
                 if (wfMapping != null) {
+                    wfMapping.setAppType(CommonConstant.CONTROLLER);
                     relateWorkflows.add(wfMapping);
                 }
             });
@@ -1424,6 +1426,7 @@ public class ControllerManagementService {
                     MappingEntity wfMapping = filterResourceAndAddMappings(controllerVo.getId(), controllerVo.getName(),
                             CommonConstant.CONTROLLER_TYPE, tempAgentsSet, agentNode);
                     if (wfMapping != null) {
+                        wfMapping.setAppType(CommonConstant.CONTROLLER);
                         relateAgents.add(wfMapping);
                     }
                 }
@@ -1470,6 +1473,7 @@ public class ControllerManagementService {
                     MappingEntity wfMapping = filterResourceAndAddMappings(controllerVo.getId(), controllerVo.getName(),
                             CommonConstant.AGENT_TYPE, tempAgentsSet, agentNode);
                     if (wfMapping != null) {
+                        wfMapping.setAppType(CommonConstant.CONTROLLER);
                         relateAgents.add(wfMapping);
                     }
                 }
