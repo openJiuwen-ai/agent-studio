@@ -471,6 +471,7 @@ def apply_workflow_sub_stream_patch() -> bool:
     # 不通过 LoopComponent.invoke 传 context（会跟同事的并行数据隔离 fix 冲突），
     # 改为 patch QuestionerDirectReplyHandler._get_latest_chat_history，让 QA 在
     # context=None 时从 session 的 io_state 读 conversationHistory（Start 节点写入的）。
+    # pylint: disable=protected-access
     try:
         from agent_runtime.extension.workflow_node.questioner import QuestionerDirectReplyHandler
         from agent_runtime.common.session_state_access import get_state_info
@@ -497,7 +498,10 @@ def apply_workflow_sub_stream_patch() -> bool:
             # 可能在 io_state.global_variables.sys.conversationHistory（首次执行）
             # 或 io_state.<node_id>.systemFields.sys.conversationHistory（Vertex 输出）
             # 递归扫整棵 io_state 树找 conversationHistory 最可靠
-            if self._config.with_chat_history and (not result or (result and result[-1].role in ["assistant"])):
+            need_fallback = not result or (
+                result and result[-1].role in ["assistant"]
+            )
+            if self._config.with_chat_history and need_fallback:
                 try:
                     session = self._session
                     inner = getattr(session, "_inner", session)
@@ -508,8 +512,10 @@ def apply_workflow_sub_stream_patch() -> bool:
                             conv_history = _find_conversation_history_in_state(io_state)
                             if conv_history:
                                 break
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            workflow_logger.warning(
+                                f"Failed to read io_state from session: {e}"
+                            )
                         inner = inner.parent() if hasattr(inner, "parent") else None
 
                     if conv_history:
@@ -521,8 +527,10 @@ def apply_workflow_sub_stream_patch() -> bool:
                                 result.append(UserMessage(role="user", content=content))
                             else:
                                 result.append(AssistantMessage(role="assistant", content=content))
-                except Exception:
-                    pass
+                except Exception as e:
+                    workflow_logger.warning(
+                        f"Failed to search conversation history from session chain: {e}"
+                    )
 
             # 兜底：当前用户输入
             if not result or result[-1].role in ["assistant"]:

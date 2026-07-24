@@ -2,6 +2,7 @@
 #  -*- coding: UTF-8 -*-
 #  Copyright c) Huawei Technologies Co., Ltd. 2025-2025
 
+# pylint: disable=protected-access
 """验证 loop body 里 QA 能从 session 父链读到 conversationHistory 的修复。
 
 背景: LoopComponent.invoke 没有把 context 传给 loop body 图，
@@ -30,6 +31,12 @@ session 写的）。这样 QA 只读 session 级状态，不走 context 共享�
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+# 触发 agent_runtime.common 子模块挂到 agent_runtime 上，否则
+# unittest.mock.patch("agent_runtime.common.session_state_access.get_state_info")
+# 会因 getattr(agent_runtime, "common") 失败而 AttributeError
+import agent_runtime.common.session_state_access  # noqa: F401
+import jiuwen.extension.patches.workflow_sub_stream_patch  # noqa: F401
 
 pytestmark = pytest.mark.asyncio
 
@@ -116,6 +123,7 @@ class TestQAGetLatestChatHistoryFallback:
 
         # 先 mock get_state_info，再 apply patch（closure 会捕获 mock 版本）
         call_count = [0]
+
         def mock_get_state_info(session, key=None):
             call_count[0] += 1
             if call_count[0] == 1:
@@ -163,6 +171,7 @@ class TestQAGetLatestChatHistoryFallback:
         }
 
         call_count = [0]
+
         def mock_get_state_info(session, key=None):
             call_count[0] += 1
             if call_count[0] == 1:
