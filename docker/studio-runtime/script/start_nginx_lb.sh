@@ -215,13 +215,28 @@ function wait_for_workers() {
 }
 
 function start_nginx_process() {
-  # Stop old nginx if any
+  # Prefer RELOAD over stop+start when nginx is already running.
+  # stop+start releases the listening socket for a moment and races with the
+  # supervisor while[1] loop at the bottom of this script, which would see nginx
+  # "die", call start_nginx_process again, and collide on port 8000. reload
+  # re-reads the config (picking up any new upstream list) without ever
+  # releasing the socket, so port 8000 stays bound and the old supervisor never
+  # sees nginx die. This also makes the script safe to re-run after a code
+  # change (the whole point of restarting here).
   if [[ -f ${NGINX_PID} ]]; then
     OLD_PID=$(cat ${NGINX_PID} 2>/dev/null)
     if [[ -n "${OLD_PID}" ]] && kill -0 ${OLD_PID} 2>/dev/null; then
-      echo "Stopping old nginx (PID ${OLD_PID})..."
-      kill ${OLD_PID}
+      echo "Reloading existing nginx (PID ${OLD_PID})..."
+      if nginx -c ${NGINX_CONF} -s reload 2>/dev/null; then
+        # Keep NGINX_PID pointing at the live master so the while[1] loop
+        # monitors the right PID (the master survives a reload).
+        NGINX_PID=${OLD_PID}
+        return 0
+      fi
+      echo "Reload failed, falling back to stop+start (PID ${OLD_PID})..."
+      kill ${OLD_PID} 2>/dev/null || true
       sleep 2
+      kill -9 ${OLD_PID} 2>/dev/null || true
     fi
   fi
 
@@ -241,8 +256,35 @@ function after_start(){
   nohup bash -c "source ${SCRIPT_DIR}/cron_job.sh && start_cron_job" &
 }
 
+function cleanup_previous() {
+  echo "Cleaning up previous instance before restart..."
+
+  # Stop old watchdog(s). During the restart window workers are briefly down,
+  # and a live watchdog would fire start_server.sh and re-bind occupied worker
+  # ports (8001+) -> "address already in use". watchdog.sh is NOT the
+  # container's PID 1, so killing it is safe. (We must NOT kill the old
+  # start_nginx_lb.sh supervisor loop itself -- it is the container entrypoint's
+  # keep-alive child; killing it would tear down the container. With the
+  # reload-based nginx path above, that loop is now harmless.)
+  pkill -f "watchdog.sh" 2>/dev/null || true
+  # Reset watchdog fail counters so the fresh watchdog doesn't inherit a
+  # near-threshold count from the previous run.
+  rm -f "${WATCHDOG_LOG_DIR:-/opt/cloud/logs/watchdog}"/fail_*.count 2>/dev/null || true
+
+  # Kill ALL old workers globally. The per-port argv grep in start_server.sh is
+  # unreliable: uvicorn/gunicorn re-exec, argv rewrite, or ps truncation can
+  # leave a stale worker holding a port, and the new worker then fails to bind.
+  # This runs BEFORE any new worker is started, so it cannot touch the new ones.
+  pkill -9 -f "EIStart" 2>/dev/null || true
+  sleep 1
+}
+
 function main() {
   chmod 750 ${SERVICE_HOME}
+
+  # 0. Tear down previous workers/watchdog so this re-run doesn't collide with
+  # stale processes on the worker ports. (Nginx is handled by reload above.)
+  cleanup_previous
 
   echo "=========================================="
   echo "Nginx Load Balancing Mode"

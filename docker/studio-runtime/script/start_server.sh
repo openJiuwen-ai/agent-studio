@@ -37,8 +37,8 @@ function env_init(){
 
 function server_start(){
   # 先全部停掉
-  ps -ef | grep EIStart |grep -v grep | awk '{print $2}' | xargs kill -9
-  ps -ef | grep multiprocessing |grep -v grep | awk '{print $2}' | xargs kill -9
+  ps -ef | grep EIStart |grep -v grep | awk '{print $2}' | xargs -r kill -9
+  ps -ef | grep multiprocessing |grep -v grep | awk '{print $2}' | xargs -r kill -9
 
   echo "start to start python server"
 
@@ -55,7 +55,13 @@ function start_all(){
 
 function start_sub_process(){
   server_port=$1
-  ps -ef | grep EIStart | grep -- "--port ${server_port}" |grep -v grep | awk '{print $2}' | xargs kill -9
+  # Free the port by actual listener, not just argv matching. argv grep is the
+  # primary method; fuser is a fallback for when argv was rewritten/truncated
+  # (uvicorn re-exec) so a stale holder doesn't keep the port bound.
+  ps -ef | grep EIStart | grep -- "--port ${server_port}" |grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k ${server_port}/tcp 2>/dev/null || true
+  fi
 
   env_init
 
