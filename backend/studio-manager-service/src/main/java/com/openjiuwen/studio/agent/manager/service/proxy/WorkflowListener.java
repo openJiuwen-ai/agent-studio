@@ -9,6 +9,7 @@ import com.openjiuwen.studio.agent.common.dto.agent.NodeRunInfo;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.SpringBeanUtils;
+import com.openjiuwen.studio.agent.manager.constant.Constant;
 import com.openjiuwen.studio.agent.manager.dto.JiuwenEvent;
 import com.openjiuwen.studio.agent.manager.dto.JiuwenEventData;
 import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowInstanceEntity;
@@ -16,6 +17,7 @@ import com.openjiuwen.studio.agent.manager.entity.insight.WorkflowRunResult;
 import com.openjiuwen.studio.agent.manager.enums.JiuwenEventType;
 import com.openjiuwen.studio.agent.manager.enums.WorkflowRunStatus;
 import com.openjiuwen.studio.agent.manager.model.ExecuteParams;
+import com.openjiuwen.studio.agent.manager.service.AgentRuntimeService;
 import com.openjiuwen.studio.agent.manager.service.JiuwenEventProcessor;
 import com.openjiuwen.studio.agent.manager.service.WorkflowInstanceService;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +44,8 @@ public class WorkflowListener extends BaseEventListener {
 
     private final JiuwenEventProcessor eventProcessor;
 
+    private final AgentRuntimeService agentRuntimeService;
+
     protected final ExecuteParams executeParams;
 
     protected final WorkflowRunResult result;
@@ -63,6 +67,7 @@ public class WorkflowListener extends BaseEventListener {
         super(requestId, headers);
         instanceService = SpringBeanUtils.getBean(WorkflowInstanceService.class);
         eventProcessor = SpringBeanUtils.getBean(JiuwenEventProcessor.class);
+        agentRuntimeService = SpringBeanUtils.getBean(AgentRuntimeService.class);
         this.executeParams = executeParams;
         this.result = result;
         eventNum = 0;
@@ -119,6 +124,10 @@ public class WorkflowListener extends BaseEventListener {
         try {
             eventType = JiuwenEventType.valueOf(event.toUpperCase(Locale.ROOT));
         } catch (Exception e) {
+            // node_wait 事件不在 JiuwenEventType 枚举中，但需要保存 taskId 以支持中断恢复
+            if ("node_wait".equalsIgnoreCase(event)) {
+                saveTaskIdOnInterrupt();
+            }
             log.warn("not support event:{}, passThrough anyway.", event);
             passThrough(eventStr);
             return JiuwenEventType.NOT_EXIST;
@@ -239,6 +248,25 @@ public class WorkflowListener extends BaseEventListener {
             instance.setStatus(WorkflowRunStatus.RUNNING.getStatus().getDesc());
         }
         result.setInstance(instance);
+    }
+
+    /**
+     * 中断时保存 taskId，确保恢复时 queryTaskId 能取到同一 execution_id
+     */
+    private void saveTaskIdOnInterrupt() {
+        try {
+            String taskId = MDC.get(Constant.TASK_ID);
+            if (StringUtils.isEmpty(taskId)) {
+                taskId = executeParams.getExecutionId();
+            }
+            if (!StringUtils.isEmpty(taskId)) {
+                agentRuntimeService.saveTaskId(executeParams.getWorkflowId(), executeParams.getConversationId(), taskId);
+                log.info("Saved taskId on node_wait: workflowId={}, conversationId={}, taskId={}",
+                    executeParams.getWorkflowId(), executeParams.getConversationId(), taskId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to save taskId on interrupt: {}", e.getMessage());
+        }
     }
 
     private void doClose(String eventType) {
