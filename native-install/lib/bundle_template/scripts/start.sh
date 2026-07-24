@@ -87,7 +87,7 @@ else
     --pid-file="$MYSQL_PID" --user="$(whoami)" \
     --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci \
     --local-infile=1 --default-authentication-plugin=mysql_native_password \
-    > "$LOG/mysql.log" 2>&1 &
+    >> "$LOG/mysql.log" 2>&1 &
 fi
 wait_port "$DB_PORT" "MySQL" 60 || die "MySQL 启动失败，见 $LOG/mysql.log"
 # 首启设密码 + 建库
@@ -126,7 +126,7 @@ if [ -f "$MINIO_PID" ] && kill -0 "$(cat "$MINIO_PID")" 2>/dev/null; then
 else
   MINIO_ROOT_USER="${OBS_AK:-minioadmin}" MINIO_ROOT_PASSWORD="${OBS_SK:-minioadmin}" \
     nohup "$MINIO_BIN" server "$DATA/minio" --address ":$MINIO_API_PORT" --console-address ":$MINIO_CONSOLE_PORT" \
-    > "$LOG/minio.log" 2>&1 & echo $! > "$MINIO_PID"
+    >> "$LOG/minio.log" 2>&1 & echo $! > "$MINIO_PID"
 fi
 wait_http "http://127.0.0.1:$MINIO_API_PORT/minio/health/live" "MinIO" 60 || die "MinIO 启动失败，见 $LOG/minio.log"
 "$MC_BIN" alias set local "http://127.0.0.1:$MINIO_API_PORT" "${OBS_AK:-minioadmin}" "${OBS_SK:-minioadmin}" >/dev/null 2>&1
@@ -158,7 +158,7 @@ else
     --spring.config.additional-location="file:$BUNDLE_ROOT/config/" \
     --spring.profiles.active=manager \
     --logging.config="file:$BUNDLE_ROOT/config/log4j2-manager.xml" \
-    > "$LOG/manager.log" 2>&1 & echo $! > "$MGR_PID"
+    >> "$LOG/manager.log" 2>&1 & echo $! > "$MGR_PID"
 fi
 wait_http "http://127.0.0.1:$MANAGER_PORT/health" "studio-manager" 180 || warn "manager 健康检查未通过（可能仍启动中）"
 
@@ -176,7 +176,7 @@ else
     --spring.config.additional-location="file:$BUNDLE_ROOT/config/" \
     --spring.profiles.active=runtime \
     --logging.config="file:$BUNDLE_ROOT/config/log4j2-runtime.xml" \
-    > "$LOG/service.log" 2>&1 & echo $! > "$SVC_PID"
+    >> "$LOG/service.log" 2>&1 & echo $! > "$SVC_PID"
 fi
 wait_http "http://127.0.0.1:$SERVICE_PORT/v1/health" "studio-service" 180 || warn "service 健康检查未通过（可能仍启动中）"
 
@@ -215,7 +215,7 @@ else
   export LOGGING_LOG_PATH="$LOG"; export TGF_LOG_DIR="$LOG"
   export host=127.0.0.1; export PORT="$RUNTIME_PORT"
   nohup "$VENV_PY" -u "$BUNDLE_ROOT/app/agent_runtime/EIStart.py" --host 0.0.0.0 --port "$RUNTIME_PORT" \
-    > "$LOG/runtime.log" 2>&1 & echo $! > "$RT_PID"
+    >> "$LOG/runtime.log" 2>&1 & echo $! > "$RT_PID"
 fi
 wait_http "http://127.0.0.1:$RUNTIME_PORT/v1/health" "studio-runtime" 180 || warn "runtime 健康检查未通过（可能仍启动中）"
 
