@@ -33,6 +33,13 @@ REDIS_SRV="$DEPS/redis-7/redis-server"; REDIS_CLI="$DEPS/redis-7/redis-cli"
 MINIO_BIN="$DEPS/minio/minio"; MC_BIN="$DEPS/minio/mc"
 NGINX_BIN="$DEPS/nginx/sbin/nginx"
 
+# ── 补执行位 ──────────────────────────────────────────────────────────────────
+# 包可能在 Windows 上用 bsdtar 打（Linux 二进制存成 0666 无 x 位），或经 zip/unzip 解压丢 x 位，
+# 直接执行会 permission denied。启动前确保 Linux 二进制与脚本可执行（幂等）。
+chmod +x "$DEPS/jre-17/bin/"* "$DEPS/mysql-8.0/bin/"* "$DEPS/redis-7/"* \
+         "$DEPS/minio/"* "$DEPS/nginx/sbin/"* "$DEPS/python-3.11/bin/"* 2>/dev/null || true
+chmod +x "$BUNDLE_ROOT/scripts/"*.sh "$BUNDLE_ROOT/scripts/runtime_patches.py" 2>/dev/null || true
+
 log(){ echo -e "\033[1;36m[start]\033[0m $*"; }
 warn(){ echo -e "\033[1;33m[warn]\033[0m $*"; }
 die(){ echo -e "\033[1;31m[fatal]\033[0m $*"; exit 1; }
