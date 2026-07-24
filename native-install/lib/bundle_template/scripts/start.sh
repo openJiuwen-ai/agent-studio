@@ -223,9 +223,11 @@ NGINX_PID="$RUN/nginx.pid"
 # 建 temp 目录：nginx 用 -p $BUNDLE_ROOT/ 改了 prefix，temp 路径（client_body_temp 等）落到包内，
 # 缺目录可能致启动失败。对齐 start.ps1 的 New-Item temp。
 mkdir -p "$BUNDLE_ROOT/temp"
-# 由 tmpl 生成最终配置：注入 pid、替换 BUNDLE_ROOT/CONSOLE_PORT
+# 由 tmpl 生成最终配置：注入 pid、user、替换 BUNDLE_ROOT/CONSOLE_PORT
+# user 设为启动用户：worker 默认 nobody 读不到 700 的 /root（index.html Permission denied）。
 {
   echo "pid $NGINX_PID;"
+  echo "user $(id -un);"
   sed -e "s|@@BUNDLE_ROOT@@|$BUNDLE_ROOT|g" -e "s|@@CONSOLE_PORT@@|$CONSOLE_PORT|g" \
     "$BUNDLE_ROOT/config/nginx.conf.tmpl"
 } > "$RUN/nginx.conf"

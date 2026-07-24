@@ -185,14 +185,24 @@ mkdir -p "$WIN/nginx"; cp -f "$CACHE/x-nginx-win"/*/nginx.exe "$WIN/nginx/" 2>/d
 # mime.types（Windows nginx 自带）
 mt=$(find "$CACHE/x-nginx-win" -name mime.types -type f | head -1); [ -n "$mt" ] && cp -f "$mt" "$STAGING/config/mime.types"
 fi
-# Linux：源码编译（免 pcre/zlib，需 gcc/make）
+# Linux：源码编译（带 gzip+rewrite 模块，静态捆绑 pcre2+zlib）
 dl "$NGINX_LINUX_URL" "$NGINX_LINUX_SHA256" "$CACHE/nginx-linux.tar.gz"
 if [ ! -x "$LIN/nginx/sbin/nginx" ]; then
   extract "$CACHE/nginx-linux.tar.gz" "$CACHE/x-nginx-linux"
   src=$(find "$CACHE/x-nginx-linux" -maxdepth 1 -name 'nginx-*' -type d | head -1)
   [ -n "$src" ] || die "nginx 源码目录未找到"
-  log "  编译 nginx（免 pcre/zlib，需 gcc/make）..."
-  ( cd "$src" && ./configure --prefix="$LIN/nginx" --without-http_rewrite_module --without-http_gzip_module --with-cc-opt=-O2 >/dev/null 2>&1 && make -j"$(nproc)" >/dev/null 2>&1 && make install >/dev/null 2>&1 ) || die "nginx 编译失败（确保已装 gcc make）"
+  # nginx.conf 用了 gzip 与 if/rewrite 指令（gzip 模块 + rewrite 模块），须带这两模块编译；
+  # --with-pcre/--with-zlib 把 pcre2/zlib 源码静态编进 nginx，目标机无需 libpcre/libz 运行时依赖。
+  dl "$PCRE2_URL" "$PCRE2_SHA256" "$CACHE/pcre2.tar.gz"
+  dl "$ZLIB_URL"  "$ZLIB_SHA256"  "$CACHE/zlib.tar.gz"
+  extract "$CACHE/pcre2.tar.gz" "$CACHE/x-pcre2"
+  extract "$CACHE/zlib.tar.gz"  "$CACHE/x-zlib"
+  pcre2src=$(find "$CACHE/x-pcre2" -maxdepth 1 -name 'pcre2-*' -type d | head -1)
+  zlibsrc=$(find "$CACHE/x-zlib"  -maxdepth 1 -name 'zlib-*'  -type d | head -1)
+  [ -n "$pcre2src" ] || die "pcre2 源码目录未找到"
+  [ -n "$zlibsrc" ] || die "zlib 源码目录未找到"
+  log "  编译 nginx（带 gzip+rewrite，静态捆绑 pcre2+zlib，需 gcc/make）..."
+  ( cd "$src" && ./configure --prefix="$LIN/nginx" --with-pcre="$pcre2src" --with-zlib="$zlibsrc" --with-cc-opt=-O2 >/dev/null 2>&1 && make -j"$(nproc)" >/dev/null 2>&1 && make install >/dev/null 2>&1 ) || die "nginx 编译失败（确保已装 gcc make）"
 fi
 [ -x "$LIN/nginx/sbin/nginx" ] || die "Linux nginx 缺 nginx"
 # mime.types 回填（Linux 源码版 conf/mime.types）

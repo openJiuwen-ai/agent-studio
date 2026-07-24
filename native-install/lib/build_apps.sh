@@ -81,6 +81,7 @@ log "[4/4] 生成 nginx.conf.tmpl + 复制 init.sql"
 #   /opt/cloud/wiseagent-nginx/logs/ → @@BUNDLE_ROOT@@/logs/
 #   include mime.types → @@BUNDLE_ROOT@@/config/mime.types
 #   listen 80; → listen @@CONSOLE_PORT@@;
+#   worker_processes auto; → worker_processes 1;（单机体验，无需多 worker，auto 在多核机会起 N+1 进程）
 #   events 去掉 use epoll; multi_accept on;（Windows 不支持 epoll）
 SRC_NGINX="$WORKSPACE/deploy/config/nginx.conf"
 [ -f "$SRC_NGINX" ] || die "未找到 $SRC_NGINX"
@@ -91,6 +92,7 @@ sed \
   -e 's|/opt/cloud/wiseagent-nginx/logs|@@BUNDLE_ROOT@@/logs|g' \
   -e 's|include       mime.types;|include @@BUNDLE_ROOT@@/config/mime.types;|' \
   -e 's|listen 80;|listen @@CONSOLE_PORT@@;|' \
+  -e 's|worker_processes auto;|worker_processes 1;|' \
   -e '/use epoll;/d' \
   -e '/multi_accept on;/d' \
   "$SRC_NGINX" > "$STAGING/config/nginx.conf.tmpl"

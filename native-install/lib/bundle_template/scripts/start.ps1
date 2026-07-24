@@ -20,7 +20,12 @@ if (-not (Test-Path $EnvFile)) { Copy-Item (Join-Path $BundleRoot '.env.template
 Get-Content $EnvFile | ForEach-Object {
   $line = $_.Trim()
   if ($line -and -not $line.StartsWith('#') -and $line.Contains('=')) {
-    $kv = $line -split '=',2; Set-Item -Path "Env:$($kv[0].Trim())" -Value $kv[1].Trim()
+    $kv = $line -split '=',2
+    $v = $kv[1].Trim()
+    # .env 值可能被双引号包裹（如 SPRING_DATASOURCE_URL 含 &，bash 侧需引号）。
+    # PS 侧剥掉首尾一对双引号，否则引号会进环境变量值。
+    if ($v -match '^"(.*)"$') { $v = $matches[1] }
+    Set-Item -Path "Env:$($kv[0].Trim())" -Value $v
   }
 }
 # 默认端口

@@ -1,6 +1,6 @@
 ﻿# build.ps1 — openJiuwen AgentStudio 免容器跨平台包构建（Windows 构建机）
 # 用法: .\build.ps1 [-Version <ver>] [-SkipApps] [-SkipDeps] [-SkipWheels]
-# 产物: dist\AgentStudio-native-<ver>.zip  与 .tar.gz
+# 产物: dist\AgentStudio-native-<ver>.zip（Windows + Linux 通用单一交付物）
 param(
   [string]$Version,
   [switch]$SkipApps, [switch]$SkipDeps, [switch]$SkipWheels
@@ -97,19 +97,11 @@ Copy-Item (Join-Path $NativeRoot 'versions.env') (Join-Path $staging 'versions.e
 
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 $pkg = "$name-native-$ver"
-B-Log "  生成 zip（Windows 友好）"
+# 只产 zip（Windows + Linux 通用）：解压后 start.sh 启动前 chmod +x 补 Linux 执行位，
+# 故 zip 不保留 Unix 权限位也无妨。Windows/Linux 系统自带 tar/unzip 均可解 zip。
+B-Log "  生成 zip（Windows + Linux 通用）"
 Compress-Archive -Path (Join-Path $staging '*') -DestinationPath (Join-Path $dist "$pkg.zip") -Force
-B-Log "  生成 tar.gz（Linux 友好）"
-# 用 Windows 自带 bsdtar（System32\tar.exe）：GNU tar 会把 "D:\path" 当成 rsh 的 host:path 而报
-# "Cannot connect to D: resolve failed"。bsdtar 不认该语法，能正确处理带盘符的绝对路径。
-$bsdtar = Join-Path $env:WINDIR 'System32\tar.exe'
-if (-not (Test-Path $bsdtar)) { $bsdtar = 'tar' }   # 兜底：极旧系统退回 PATH 中的 tar
-$tarOut = Join-Path $dist "$pkg.tar.gz"
-$buildDir = Join-Path $NativeRoot 'build'
-& $bsdtar -czf $tarOut -C $buildDir $pkg
-if ($LASTEXITCODE -ne 0) { B-Die "tar.gz 打包失败（exit=$LASTEXITCODE）" }
 
 B-Log "构建完成："
 B-Log "  $(Join-Path $dist "$pkg.zip")"
-B-Log "  $(Join-Path $dist "$pkg.tar.gz")"
 B-Log "拷到目标机解压后，Linux 跑 ./scripts/start.sh；Windows 跑 .\scripts\start.ps1"

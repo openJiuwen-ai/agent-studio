@@ -78,6 +78,7 @@ $t = $t -replace '/opt/cloud/wiseagent-nginx/nginx/dist/hws','@@BUNDLE_ROOT@@/ap
 $t = $t -replace '/opt/cloud/wiseagent-nginx/logs','@@BUNDLE_ROOT@@/logs'
 $t = $t -replace 'include       mime.types;','include @@BUNDLE_ROOT@@/config/mime.types;'
 $t = $t -replace 'listen 80;','listen @@CONSOLE_PORT@@;'
+$t = $t -replace 'worker_processes auto;','worker_processes 1;'
 $t = $t -replace '(?m)^\s*use epoll;\s*$',''
 $t = $t -replace '(?m)^\s*multi_accept on;\s*$',''
 # 无 BOM 写：nginx.conf.tmpl 是数据文件，BOM 会被 start 脚本读进 conf 致 nginx "unknown directive ﻿"。

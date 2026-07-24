@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build.sh — openJiuwen AgentStudio 免容器跨平台包构建（Linux 构建机，产出含 Win+Linux 依赖的单包）
 # 用法: ./build.sh [-v 版本号] [--skip-apps] [--skip-deps] [--skip-wheels]
-# 产物: dist/AgentStudio-native-<ver>.tar.gz  与 .zip
+# 产物: dist/AgentStudio-native-<ver>.zip（Windows + Linux 通用单一交付物）
 set -euo pipefail
 cd "$(dirname "$0")"
 NATIVE_ROOT="$(pwd)"
@@ -94,17 +94,18 @@ cp -f "$NATIVE_ROOT/versions.env" "$STAGING/versions.env"
 
 mkdir -p "$DIST"
 PKG="${NAME}-native-${VER}"
-log "  生成 tar.gz（Linux 友好，保留权限/软链）"
-tar -czf "$DIST/${PKG}.tar.gz" -C "$NATIVE_ROOT/build" "${PKG}"
-log "  生成 zip（Windows 友好）"
-# zip 非必有（Linux 机可能未装）：缺失则告警跳过，tar.gz 已是主交付物。
+# 只产 zip（Windows + Linux 通用）：解压后 start.sh 启动前 chmod +x 补 Linux 执行位，
+# 故 zip 不保留 Unix 权限位也无妨。Windows 自带 bsdtar 可解 zip；Linux 自带 unzip 或 tar。
+log "  生成 zip（Windows + Linux 通用）"
 if command -v zip >/dev/null 2>&1; then
   ( cd "$NATIVE_ROOT/build" && zip -r -q "$DIST/${PKG}.zip" "${PKG}" )
+elif command -v python3 >/dev/null 2>&1; then
+  ( cd "$NATIVE_ROOT/build" && python3 -m zipfile -c "$DIST/${PKG}.zip" "${PKG}" )
+  log "  [info] 无 zip 命令，改用 python3 -m zipfile 生成"
 else
-  log "  [warn] 未装 zip，跳过 .zip 生成（tar.gz 已可用；Windows 系统自带 tar 可解压 .tar.gz）"
+  die "生成 zip 失败：需 zip 命令（apt install zip）或 python3"
 fi
 
 log "构建完成："
-log "  $DIST/${PKG}.tar.gz"
 log "  $DIST/${PKG}.zip"
 log "拷到目标机解压后，Linux 跑 ./scripts/start.sh；Windows 跑 .\\scripts\\start.ps1"
