@@ -15,4 +15,4 @@ _REPO_ROOT = os.path.abspath(
 )
 _COMMON_UTILS = os.path.join(_REPO_ROOT, "packages", "common_utils")
 if os.path.isdir(_COMMON_UTILS) and _COMMON_UTILS not in sys.path:
-    sys.path.insert(0, _COMMON_UTILS)
+    sys.path.append(_COMMON_UTILS)
