@@ -16,7 +16,7 @@ redis==4.5.5
 APScheduler==3.11.0
 aiohttp==3.14.1
 celery==5.5.3
-mcp==1.21.2rc0+h0.cbu.mo.102.5.r1
+mcp==1.27.1
 uvicorn==0.34.0
 fastapi==0.115.7
 hw_security_pystssdk==1.1.15.105
