@@ -25,7 +25,7 @@ class ServerSettings(BaseSettings):
     tls_key_path: str = Field(default="", validation_alias="TLS_CERT_KEY_PATH")
     tls_key_password: str = Field(default="", validation_alias="TLS_CERT_KEY_PASSWD")
     tls_ciphers: str = Field(default="TLSv1.2 TLSv1.3", validation_alias="TLS_CIPHERS")
-    # Uvicorn worker 数量。未设置时由 _get_workers() 回退到 CPU 核心数 + 1
+    # Uvicorn worker 数量。未设置时由 _get_workers() 回退到 cgroup 感知的容器 CPU 核数 + 1
     workers: Optional[int] = Field(default=None, validation_alias="GUNICORN_WORK_NUM")
     # Nginx 负载均衡模式。启用时 uvicorn 以单 worker 运行，由 Nginx 做负载均衡
     nginx_load_balancing: bool = Field(default=False, validation_alias="NGINX_LOAD_BALANCING")

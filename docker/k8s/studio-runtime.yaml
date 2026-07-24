@@ -199,7 +199,7 @@ spec:
             # ======== [选填] Nginx 负载均衡（默认关闭） ========
             # 启用后 Worker 以单进程模式运行，由 Nginx 做负载均衡
             - name: NGINX_LOAD_BALANCING
-              value: 'false'
+              value: 'true'
             # 负载均衡策略：least_conn（默认，推荐SSE场景）/ round_robin / ip_hash
             - name: LB_STRATEGY
               value: 'least_conn'
