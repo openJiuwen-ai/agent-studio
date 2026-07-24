@@ -188,6 +188,9 @@ extract_rpm "libaio" "$LIBAIO_URL" "$LIBAIO_SHA256" \
   "libaio.so.1.0.1:libaio.so.1"
 extract_rpm "numactl-libs" "$NUMACTL_LIBS_URL" "$NUMACTL_LIBS_SHA256" \
   "libnuma.so.1.0.0:libnuma.so.1"
+# Remi redis 链 libssl.so.10/libcrypto.so.10（OpenSSL 1.0），EulerOS 2.0 缺，从 centos7 updates 补。
+extract_rpm "openssl-libs" "$OPENSSL_LIBS_URL" "$OPENSSL_LIBS_SHA256" \
+  "libssl.so.1.0.2k:libssl.so.10" "libcrypto.so.1.0.2k:libcrypto.so.10"
 log "  → $(ls "$LIN/lib" 2>/dev/null | tr '\n' ' ')"
 fi
 

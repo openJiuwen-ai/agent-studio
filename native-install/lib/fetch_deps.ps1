@@ -157,6 +157,10 @@ Extract-CompatLib "libaio"       $env:LIBAIO_URL       $env:LIBAIO_SHA256
 Copy-So ".cache\x-libaio"       "libaio.so.1.0.1"    "libaio.so.1"
 Extract-CompatLib "numactl-libs" $env:NUMACTL_LIBS_URL $env:NUMACTL_LIBS_SHA256
 Copy-So ".cache\x-numactl-libs" "libnuma.so.1.0.0"  "libnuma.so.1"
+# Remi redis 链 libssl.so.10/libcrypto.so.10（OpenSSL 1.0），EulerOS 2.0 缺，从 centos7 updates 补。
+Extract-CompatLib "openssl-libs" $env:OPENSSL_LIBS_URL $env:OPENSSL_LIBS_SHA256
+Copy-So ".cache\x-openssl-libs" "libssl.so.1.0.2k"    "libssl.so.10"
+Copy-So ".cache\x-openssl-libs" "libcrypto.so.1.0.2k" "libcrypto.so.10"
 
 # ── MinIO + mc ───────────────────────────────────────────────────────────────
 D-Log "MinIO + mc"
