@@ -13,4 +13,5 @@ if (-not (Test-Path $file)) {
   exit 1
 }
 Write-Host "→ Get-Content -Wait $file   (Ctrl+C 退出)"
-Get-Content $file -Wait -Tail 100
+# 日志是 UTF-8（含中文），PS5.1 默认 ANSI 解码会乱码，显式 UTF8。
+Get-Content $file -Wait -Tail 100 -Encoding UTF8

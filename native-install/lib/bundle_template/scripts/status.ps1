@@ -5,7 +5,7 @@ $BundleRoot = (Resolve-Path (Join-Path $ScriptDir '..')).Path; Set-Location $Bun
 $Run = Join-Path $BundleRoot 'run'
 $EnvFile = Join-Path $BundleRoot '.env'
 if (Test-Path $EnvFile) {
-  Get-Content $EnvFile | ForEach-Object { $l=$_.Trim(); if ($l -and -not $l.StartsWith('#') -and $l.Contains('=')) { $kv=$l -split '=',2; Set-Item "Env:$($kv[0].Trim())" $kv[1].Trim() } }
+  Get-Content $EnvFile -Encoding UTF8 | ForEach-Object { $l=$_.Trim(); if ($l -and -not $l.StartsWith('#') -and $l.Contains('=')) { $kv=$l -split '=',2; Set-Item "Env:$($kv[0].Trim())" $kv[1].Trim() } }
 }
 if (-not $env:CONSOLE_PORT){$env:CONSOLE_PORT='80'};if(-not $env:DB_PORT){$env:DB_PORT='3306'};if(-not $env:REDIS_EXTERNAL_PORT){$env:REDIS_EXTERNAL_PORT='6379'}
 if(-not $env:MINIO_API_PORT){$env:MINIO_API_PORT='9000'};if(-not $env:MANAGER_PORT){$env:MANAGER_PORT='31111'};if(-not $env:SERVICE_PORT){$env:SERVICE_PORT='31113'};if(-not $env:RUNTIME_PORT){$env:RUNTIME_PORT='31014'}

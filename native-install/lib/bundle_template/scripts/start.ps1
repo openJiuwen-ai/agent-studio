@@ -17,7 +17,11 @@ function W-Die($m){ Write-Host "[fatal] $m" -ForegroundColor Red; exit 1 }
 # ── 加载 .env ────────────────────────────────────────────────────────────────
 $EnvFile = Join-Path $BundleRoot '.env'
 if (-not (Test-Path $EnvFile)) { Copy-Item (Join-Path $BundleRoot '.env.template') $EnvFile; W-Log "已从 .env.template 创建 .env" }
-Get-Content $EnvFile | ForEach-Object {
+# .env 是无 BOM 的 UTF-8 文件且含中文注释。PS5.1 的 Get-Content 默认按 ANSI/GBK 解码，
+# 中文多字节序列里若有字节撞上 0x0A 会被当换行 → 错行/吞行（实测 SPRING_DATASOURCE_URL
+# 整行被吞进注释 → 变量丢失 → manager 报 ${spring_datasource_url} 占位符未解析而崩）。
+# 必须显式 -Encoding UTF8。同 [[native-install-container-free]] versions.env 那条坑。
+Get-Content $EnvFile -Encoding UTF8 | ForEach-Object {
   $line = $_.Trim()
   if ($line -and -not $line.StartsWith('#') -and $line.Contains('=')) {
     $kv = $line -split '=',2
@@ -109,7 +113,7 @@ GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 "@
   $sql | & $MysqlCli --socket=$MysqlSock -uroot 2>$null
-  Get-Content (Join-Path $BundleRoot 'config\init.sql') | & $MysqlCli --socket=$MysqlSock -uroot "-p$pass" 2>$null
+  Get-Content (Join-Path $BundleRoot 'config\init.sql') -Encoding UTF8 | & $MysqlCli --socket=$MysqlSock -uroot "-p$pass" 2>$null
   New-Item -ItemType File -Path $initFlag | Out-Null
 }
 W-Log "MySQL 就绪"
