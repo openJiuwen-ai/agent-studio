@@ -83,17 +83,14 @@
     <app-new-common-no-data-with-btn
     [type]="searchNameIsEmpty ? 'noData' : 'filterNoData'"
     [tutorialType]="'mcp'"
-    [noDataBtnStr]="'create_mcp'|i18nextEager"
     (clear)="handleClickClearSearchWithCustom()"
   />
   </div>
 
   <div class="no-data-container" *ngIf="activeTab === 'inner'">
     <app-new-common-no-data-with-btn
-    [type]="searchNameIsEmpty ? 'btn_list' : 'filterNoData'"
+    [type]="searchNameIsEmpty ? 'noData' : 'filterNoData'"
     [tutorialType]="'mcp'"
-    [btn_list]="create_items"
-    [noDataBtnStr]="'create_mcp' | i18nextEager"
     (clear)="handleClickClearSearchWithInner()"
   />
   </div>
