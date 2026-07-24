@@ -703,7 +703,11 @@ public class AgentServiceProxyService {
      */
     public Object workflowStream(String url, HttpHeaders headers, String bodyJson, WorkflowRunResult result,
         ExecuteParams executeParams) {
-        String taskId = executeParams.getExecutionId();
+        // 恢复场景：从 Redis 查询上一次中断时保存的 taskId，保持 execution_id 一致
+        String taskId = agentRuntimeService.queryTaskId(executeParams.getWorkflowId(), executeParams.getConversationId());
+        if (StringUtils.isEmpty(taskId)) {
+            taskId = executeParams.getExecutionId();
+        }
         if (StringUtils.isEmpty(taskId)) {
             taskId = headers.getFirst("X-Execution-Id");
         }
