@@ -3392,8 +3392,9 @@ public class AgentManagementService implements IAgentManagementService {
     }
 
     @Override
-    public ExportResourceRsp exportResource(String projectId, String workspaceId, ExportResourceParams body) {
-        return agentExportService.exportResource(projectId, workspaceId, body);
+    public ExportResourceRsp exportResource(String projectId, String workspaceId, String accept,
+        ExportResourceParams body) {
+        return agentExportService.exportResource(projectId, workspaceId, accept, body);
     }
 
     /**

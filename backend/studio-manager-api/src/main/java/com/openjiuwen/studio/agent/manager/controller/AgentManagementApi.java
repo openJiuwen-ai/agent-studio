@@ -60,6 +60,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -337,6 +338,8 @@ import java.util.Map;
         @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]+$") @Size(min = 1, max = 64)
         @ApiParam(value = "项目空间ID。", required = true) @RequestParam(value = "workspace_id", required = true)
         String workspaceId,
+        @ApiParam(value = "application/json 为非流式，text/event-stream 为流式")
+        @RequestHeader(value = "Accept", required = false) String accept,
         @NotNull @ApiParam(value = "导出参数设置。", required = true) @Valid @RequestBody ExportResourceParams body);
 
     @ApiOperation(value = "导出插件", nickname = "exportTools", notes = "导出插件。", response = Resource.class,
@@ -497,7 +500,9 @@ import java.util.Map;
         @Parameter(in = ParameterIn.DEFAULT, description = "", required = true, schema = @Schema())
         @RequestParam(value = "import_tools", required = false) String importTools,
         @Parameter(in = ParameterIn.DEFAULT, description = "", required = true, schema = @Schema())
-        @RequestParam(value = "import_workflows", required = false) String importWorkflows);
+        @RequestParam(value = "import_workflows", required = false) String importWorkflows,
+        @Parameter(in = ParameterIn.DEFAULT, description = "模式:STRICT-严格模式/SPACIOUS-宽松模式", required = false, schema = @Schema())
+        @RequestParam(value = "mode", required = false) String mode);
 
     @ApiOperation(value = "导入插件", nickname = "importTools", notes = "导入插件。", response = ImportRsp.class,
         tags = {"AgentManagement"})

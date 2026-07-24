@@ -13,7 +13,6 @@ import com.openjiuwen.studio.agent.manager.dto.AgentVersionListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ApplicationListReq;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddResultJsonObject;
 import com.openjiuwen.studio.agent.manager.dto.AutoAddStudioResourceRequestBody;
-import com.openjiuwen.studio.agent.manager.enums.ExportModeEnum;
 import com.openjiuwen.studio.agent.manager.dto.CommonDeleteRsp;
 import com.openjiuwen.studio.agent.manager.dto.CreateAgentReq;
 import com.openjiuwen.studio.agent.manager.dto.CreateChannelReq;
@@ -138,9 +137,9 @@ public class AgentManagementApiController implements AgentManagementApi {
     }
 
     @Override
-    public ResponseEntity<ExportResourceRsp> exportResource(String projectId, String workspaceId,
+    public ResponseEntity<ExportResourceRsp> exportResource(String projectId, String workspaceId, String accept,
         ExportResourceParams body) {
-        return ResponseModel.success(agentManagementService.exportResource(projectId, workspaceId, body));
+        return ResponseModel.success(agentManagementService.exportResource(projectId, workspaceId, accept, body));
     }
 
     @Override
@@ -191,10 +190,10 @@ public class AgentManagementApiController implements AgentManagementApi {
 
     @Override
     public ResponseEntity<ImportRsp> importAgents(String workspaceId, String projectId, MultipartFile file,
-        String importAgents, String importTools, String importWorkflows) {
+        String importAgents, String importTools, String importWorkflows, String mode) {
         return ResponseModel.success(
             agentManagementService.importAgents(workspaceId, projectId, file, importAgents, importTools,
-                importWorkflows, ExportModeEnum.STRICT.getCode()));
+                importWorkflows, mode));
     }
 
     @Override

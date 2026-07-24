@@ -4,10 +4,14 @@
 package com.openjiuwen.studio.agent.manager.service;
 
 import com.openjiuwen.studio.agent.manager.dto.ListAppRelationsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListDependencyQo;
 import com.openjiuwen.studio.agent.manager.dto.ListResourceRelationsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListResourcesRelationsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.RelationList;
+import com.openjiuwen.studio.agent.manager.dto.ResourceDependencyResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ResourceMappingList;
+import com.openjiuwen.studio.agent.manager.dto.ResourceVersionResponseBody;
 
 /**
  * RelationManagement service
@@ -41,4 +45,23 @@ public interface IRelationManagementService {
      * @param listResourcesRelationsQo listResourcesRelationsQo
      */
     ResourceMappingList listResourcesRelations(String projectId, ListResourcesRelationsQo listResourcesRelationsQo);
+
+    /**
+     * listDependency
+     *
+     * @param projectId projectId
+     * @param resourceId resourceId
+     * @param listDependencyQo listDependencyQo
+     */
+    ResourceDependencyResponseBody listDependency(String projectId, String resourceId,
+        ListDependencyQo listDependencyQo);
+
+    /**
+     * listVersions
+     *
+     * @param projectId projectId
+     * @param resourceId resourceId
+     * @param listVersionsQo listVersionsQo
+     */
+    ResourceVersionResponseBody listVersions(String projectId, String resourceId, ListVersionsQo listVersionsQo);
 }

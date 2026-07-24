@@ -512,7 +512,7 @@ public class AgentImportService {
             if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
                 uploadControllerDsl(importInfo, appId, null);
             } else {
-                uploadWorkflowDsl(importInfo, appId, appId, null);
+                uploadWorkflowDsl(importInfo, appId, appId, appVersion);
             }
             insertMapping(l1Mappings, spaciousInfoMap, appId, null);
         }
@@ -1154,6 +1154,8 @@ public class AgentImportService {
     private void uploadWorkflowDsl(ImportInfo importInfo, String id, String objectKey, String versionId) {
         try {
             WorkflowVO workflowVO = JsonUtils.objectToClassType(importInfo.getDsl(), WorkflowVO.class);
+            workflowVO.setId(id);
+            verifyingAndReplaceWorkflowResourceInfo(workflowVO);
             mgObsService.uploadObsFile(id, objectKey, CommonConstant.WORKFLOW,
                 JSON.toJSONString(workflowVO, JSONWriter.Feature.WriteMapNullValue), CommonConstant.Workflow.FLOW);
             WorkflowEntity workflowEntity = workflowMapper.getWorkflowById(id);

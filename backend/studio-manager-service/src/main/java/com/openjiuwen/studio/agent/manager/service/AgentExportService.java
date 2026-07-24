@@ -10,6 +10,19 @@ import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+
+import jakarta.servlet.http.HttpServletResponse;
+
+import org.jetbrains.annotations.Nullable;
+import org.springframework.http.MediaType;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.ExportResourceParams;
 import com.openjiuwen.studio.agent.manager.dto.ExportResourceVersion;
@@ -109,7 +122,8 @@ public class AgentExportService {
     @Autowired
     private I18nUtil i18nUtil;
 
-    public ExportResourceRsp exportResource(String projectId, String workspaceId, ExportResourceParams body) {
+    public ExportResourceRsp exportResource(String projectId, String workspaceId, String accept,
+        ExportResourceParams body) {
         ExportResourceRsp exportRsp;
         // 兼容前端两种传参：resource_versions（含版本）或 resource_ids（不含版本）。
         // 优先用 resource_versions；为空时由 resource_ids 兜底构建（version 留空，后续转 latest）。
@@ -139,10 +153,10 @@ public class AgentExportService {
         body.setResourceType(resourceTypeEnum.toString());
         switch (resourceTypeEnum) {
             case AGENT, CONTROLLER:
-                exportRsp = exportAgents(projectId, workspaceId, body);
+                exportRsp = exportAgents(projectId, workspaceId, accept, body);
                 break;
             case WORKFLOW:
-                exportRsp = exportWorkflow(projectId, workspaceId, body);
+                exportRsp = exportWorkflow(projectId, workspaceId, accept, body);
                 break;
             default:
                 log.error("resource type:{} not supported for export", body.getResourceType());
@@ -152,7 +166,8 @@ public class AgentExportService {
         return exportRsp;
     }
 
-    private ExportResourceRsp exportWorkflow(String projectId, String workspaceId, ExportResourceParams body) {
+    private ExportResourceRsp exportWorkflow(String projectId, String workspaceId, String accept,
+        ExportResourceParams body) {
         List<String> workflowIds = body.getResourceIds();
         log.debug("Processing {} workflows: {}", workflowIds.size(), workflowIds);
         validExportWorkflows(projectId, workspaceId, workflowIds);
@@ -167,17 +182,17 @@ public class AgentExportService {
                     ? Constants.LATEST_PUBLISH_VERSION : exportResourceVersion.getResourceVersion();
                 log.debug("Processing workflow ID: {} version:{}", workflowId, versionId);
                 WorkflowEntity currentWorkflow = workflowMapper.getWorkflowById(workflowId);
+                // 版本存在性校验（latest 跳过；具体版本不存在则记录失败项并跳过），SPACIOUS 和 strict 模式均执行
+                if (validReleaseVersion(workflowId, versionId, currentWorkflow.getName(), body.getResourceType(),
+                    exportResps)) {
+                    continue;
+                }
                 List<ExportResourceUnit> exportResourceUnits;
                 if (ExportModeEnum.SPACIOUS.getCode().equals(body.getMode())) {
                     // SPACIOUS 模式：仅导出父工作流自身资源（不递归展开子资源）
                     exportResourceUnits = getSpaciousExportResourceUnits(projectId, workspaceId, body,
-                        workflowId, Constants.LATEST_PUBLISH_VERSION, currentWorkflow.getName());
+                        workflowId, versionId, currentWorkflow.getName());
                 } else {
-                    // strict 模式：指定版本时校验版本存在性：不存在则记录失败项并跳过该资源（对齐旧版 lumina validResource）
-                    if (validReleaseVersion(workflowId, versionId, currentWorkflow.getName(), body.getResourceType(),
-                        exportResps)) {
-                        continue;
-                    }
                     // 获取该版本下所有资源（versionId=latest 查草稿 mapping，具体 versionId 查版本 mapping）
                     List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(workflowId,
                         versionId, null, null);
@@ -191,7 +206,7 @@ public class AgentExportService {
                         subExportResources);
                     // 添加当前节点（透传 versionId，使 ExportResourceUnit.resourceVersion 携带具体版本）
                     exportResourceUnits.add(
-                        addCurrentResource(workflowId, currentWorkflow.getName(), body.getResourceType(), versionId,
+                        addCurrentResource(workflowId, versionId, currentWorkflow.getName(), body.getResourceType(),
                             subExportResources, modelProviders));
                 }
                 for (ResourceTypeEnum resourceTypeEnum : EXPORT_RESOURCE_TYPE_LIST) {
@@ -202,7 +217,10 @@ public class AgentExportService {
                 }
             }
 
-            String exportFilePath = buildExportFile(exportResps, body);
+            String exportFilePath = getExportFilePath(accept, body, exportResps);
+            if (exportFilePath == null) {
+                return null;
+            }
             ExportResourceRsp exportResourceRsp = new ExportResourceRsp();
             exportResourceRsp.setExportResult(getExportResults(exportResps));
             exportResourceRsp.setDownloadUrl(exportFilePath);
@@ -231,7 +249,6 @@ public class AgentExportService {
             resourceUnit.setResourceId(appId);
             resourceUnit.setResourceType(resourceType);
             resourceUnit.setResourceName(resourceName);
-            resourceUnit.setResourceLevel(1);
             exportResps.add(buildCommonError(List.of(resourceUnit)));
             return true;
         }
@@ -274,13 +291,13 @@ public class AgentExportService {
         return subExportResources;
     }
 
-    private ExportResourceUnit addCurrentResource(String resourceId, String resourceName, String resourceType, String versionId,
+    private ExportResourceUnit addCurrentResource(String resourceId, String resourceVersion, String resourceName, String resourceType,
         List<MappingEntity> subExportResources, List<ModelExportEntity> modelProviders) {
         ExportResourceUnit currentResource = new ExportResourceUnit();
         currentResource.setResourceId(resourceId);
+        currentResource.setResourceVersion(resourceVersion);
         currentResource.setResourceType(resourceType);
         currentResource.setResourceName(resourceName);
-        currentResource.setResourceVersion(versionId);
         currentResource.setResourceLevel(1);
         Set<String> l2ResourceIds = subExportResources.stream()
             .map(MappingEntity::getResourceId)
@@ -337,8 +354,38 @@ public class AgentExportService {
         return level1Results;
     }
 
-    private String buildExportFile(List<ExportResp> exportResps, ExportResourceParams resourceParams) throws JsonProcessingException {
-        StringBuilder tempJson = new StringBuilder();
+    private @Nullable String getExportFilePath(String accept, ExportResourceParams body, List<ExportResp> exportResps)
+        throws JsonProcessingException {
+        ByteArrayInputStream exportFileStream = buildExportFile(exportResps, body);
+        if (Strings.CI.startsWith(accept, MediaType.APPLICATION_OCTET_STREAM_VALUE)) {
+            HttpServletResponse response = Optional.ofNullable(
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes())
+                .map(ServletRequestAttributes::getResponse).orElse(null);
+            if (response != null) {
+                String fileName = getFileName(body);
+                response.setContentType("application/octet-stream;charset=utf-8");
+                String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+                response.setHeader("Content-Disposition",
+                    "attachment;filename=" + encodedFileName + ";filename*=utf-8''" + encodedFileName);
+                try (OutputStream outputStream = response.getOutputStream()) {
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = exportFileStream.read(buffer)) != -1) {
+                        outputStream.write(buffer, 0, bytesRead);
+                        outputStream.flush();
+                    }
+                } catch (IOException e) {
+                    log.error("export stream write failed", e);
+                    throw new AgentStudioException(StudioError.WORKFLOW_EXPORT_FILE);
+                }
+                return null;
+            }
+        }
+        return uploadOBS(body, exportFileStream);
+    }
+
+    private ByteArrayInputStream buildExportFile(List<ExportResp> exportResps, ExportResourceParams resourceParams)
+        throws JsonProcessingException {
         List<ExportInfo> exportInfos = exportResps.stream()
             .map(ExportResp::getExportInfos)
             .filter(CollectionUtils::isNotEmpty)
@@ -361,10 +408,15 @@ public class AgentExportService {
                     return p1;
                 }))
             .values());
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
         for (ExportInfo exportInfo : exportInfos) {
-            tempJson.append(jacksonObjectMapper.writeValueAsString(exportInfo)).append("\n");
+            baos.writeBytes(jacksonObjectMapper.writeValueAsBytes(exportInfo));
+            baos.writeBytes("\n".getBytes(StandardCharsets.UTF_8));
         }
+        return new ByteArrayInputStream(baos.toByteArray());
+    }
 
+    private String uploadOBS(ExportResourceParams resourceParams, ByteArrayInputStream inputStream) {
         String fileName = getFileName(resourceParams);
         String todayStr = DatetimeUtils.dateFormat(new Date(), DatetimeUtils.DATE_FORMAT);
         String resourceType = Strings.CS.equals(resourceParams.getResourceType(),
@@ -374,10 +426,10 @@ public class AgentExportService {
         String obsKey = String.format("%s/%s/%s/%s.jsonl", CommonConstant.EXPORT, resourceType, todayStr, fileName);
         log.info("upload export to obs:{}", obsKey);
         if (Strings.CI.equals(envType, CommonConstant.EnvType.HC)) {
-            String obsFileKey = obsService.uploadStagingBucket(obsKey, tempJson.toString(), 30);
+            String obsFileKey = obsService.uploadStreamStagingBucket(obsKey, inputStream, 30);
             return obsService.getTemporaryGetRsp(true, obsFileKey, 3600);
         }
-        String obsFileKey = obsService.uploadObsFile(obsKey, tempJson.toString(), 30);
+        String obsFileKey = obsService.uploadObsFile(obsKey, inputStream, 30);
         return obsService.getTemporaryGetRsp(false, obsFileKey, 3600);
     }
 
@@ -507,7 +559,8 @@ public class AgentExportService {
         }
     }
 
-    private ExportResourceRsp exportAgents(String projectId, String workspaceId, ExportResourceParams body) {
+    private ExportResourceRsp exportAgents(String projectId, String workspaceId, String accept,
+        ExportResourceParams body) {
         List<String> agentIds = body.getResourceIds();
         validAgent(projectId, workspaceId, agentIds);
         List<ExportResp> exportResps = new ArrayList<>();
@@ -519,17 +572,17 @@ public class AgentExportService {
                     ? Constants.LATEST_PUBLISH_VERSION : exportResourceVersion.getResourceVersion();
                 log.info("parse Processing:{} version:{}", agentId, versionId);
                 Agent currentAgent = agentMapper.selectById(agentId);
+                // 版本存在性校验（latest 跳过；具体版本不存在则记录失败项并跳过），SPACIOUS 和 strict 模式均执行
+                if (validReleaseVersion(agentId, versionId, currentAgent.getName(), body.getResourceType(),
+                    exportResps)) {
+                    continue;
+                }
                 List<ExportResourceUnit> exportResourceUnits;
                 if (ExportModeEnum.SPACIOUS.getCode().equals(body.getMode())) {
                     // SPACIOUS 模式：仅导出父智能体自身资源（不递归展开子资源）
                     exportResourceUnits = getSpaciousExportResourceUnits(projectId, workspaceId, body,
-                        agentId, Constants.LATEST_PUBLISH_VERSION, currentAgent.getName());
+                        agentId, versionId, currentAgent.getName());
                 } else {
-                    // strict 模式：指定版本时校验版本存在性：不存在则记录失败项并跳过该资源（对齐旧版 lumina validResource）
-                    if (validReleaseVersion(agentId, versionId, currentAgent.getName(), body.getResourceType(),
-                        exportResps)) {
-                        continue;
-                    }
                     // 获取该版本下所有资源（versionId=latest 查草稿 mapping，具体 versionId 查版本 mapping）
                     List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(agentId,
                         versionId, null, null);
@@ -540,7 +593,7 @@ public class AgentExportService {
                     exportResourceUnits = convertMapping2ExportParam(subExportResources);
                     // 模型供应商查询
                     List<ModelExportEntity> modelProviders = getModelProviders(projectId, workspaceId, subExportResources);
-                    exportResourceUnits.add(addCurrentResource(agentId, currentAgent.getName(), body.getResourceType(), versionId,
+                    exportResourceUnits.add(addCurrentResource(agentId, versionId, currentAgent.getName(), body.getResourceType(),
                         subExportResources, modelProviders));
                 }
                 for (ResourceTypeEnum resourceTypeEnum : EXPORT_RESOURCE_TYPE_LIST) {
@@ -550,7 +603,10 @@ public class AgentExportService {
                     }
                 }
             }
-            String exportFilePath = buildExportFile(exportResps, body);
+            String exportFilePath = getExportFilePath(accept, body, exportResps);
+            if (exportFilePath == null) {
+                return null;
+            }
             ExportResourceRsp exportResourceRsp = new ExportResourceRsp();
             exportResourceRsp.setExportResult(getExportResults(exportResps));
             exportResourceRsp.setDownloadUrl(exportFilePath);
@@ -614,8 +670,8 @@ public class AgentExportService {
         }
 
         List<ExportResourceUnit> exportResourceUnits = new ArrayList<>();
-        ExportResourceUnit currentResource = addCurrentResource(appId, appName, body.getResourceType(),
-            Constants.LATEST_PUBLISH_VERSION, mappingEntities, null);
+        ExportResourceUnit currentResource = addCurrentResource(appId, appVersion, appName, body.getResourceType(),
+            mappingEntities, null);
         currentResource.setL1Mappings(mappingEntities);
         exportResourceUnits.add(currentResource);
         return exportResourceUnits;

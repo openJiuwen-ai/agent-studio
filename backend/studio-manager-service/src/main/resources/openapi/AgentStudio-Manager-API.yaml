@@ -630,6 +630,186 @@ paths:
         needCbcCheck: false
         model: v3
         authContextInitializerName: defaultIamAuthContextInitializer
+  /v1/{project_id}/agent-manager/resource/{app_id}/dependency:
+    get:
+      x-request-examples-description-1: 查询智能体依赖的子资源
+      x-request-examples-text-1:
+        method: GET
+        url: https://{endpoint}/v1/{project_id}/agent-manager/resource/{app_id}/dependency?workspace_id={workspace_id}
+        headers:
+          Content-Type: application/json
+          cookie: AGENT_SID=testUser|0
+        body:
+          agent_ids:
+            - 973db573-e42d-49a4-87ad-f1f6f3076d15
+      x-request-examples-1:
+        method: POST
+        url: https://{endpoint}/v1/{project_id}/agent-manager/resource/{app_id}/dependency?workspace_id={workspace_id}
+        headers:
+          Content-Type: application/json
+          cookie: AGENT_SID=testUser|0
+        body:
+          agent_ids:
+            - 973db573-e42d-49a4-87ad-f1f6f3076d15
+      tags:
+        - RelationManagement
+      summary: 查询资源依赖的子资源
+      description: 查询资源依赖的子资源。
+      operationId: ListDependency
+      produces:
+        - application/json
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          type: string
+          maxLength: 64
+          description: 项目ID。
+          pattern: ^[a-zA-Z0-9_-]+$
+        - name: workspace_id
+          in: query
+          required: true
+          type: string
+          description: 项目空间ID。
+          pattern: ^[a-zA-Z0-9_()\-]+$
+          maxLength: 64
+          minLength: 1
+        - name: app_id
+          in: path
+          required: true
+          type: string
+          pattern: ^[a-zA-Z0-9_-]+$
+          maxLength: 64
+          description: 资源ID。
+        - name: version_id
+          in: query
+          required: false
+          type: string
+          pattern: ^[a-zA-Z0-9_-]+$
+          maxLength: 64
+          description: 版本id。
+      responses:
+        '200':
+          description: 导出的文件。
+          schema:
+            $ref: '#/definitions/ResourceDependencyResponseBody'
+        '400':
+          description: Bad Request 请求错误。
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+        '403':
+          description: Forbidden 没有操作权限。
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+        '404':
+          description: Not Found 找不到资源。
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+        '500':
+          description: Internal Server Error 服务内部错误。
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+      x-order: 4
+      x-open-api: 'true'
+      x-open-region-cloud: stand_a
+      x-iam-auth-meta-anno:
+        abacAction: ''
+        authLevel: PROJECT
+        needAbacCheck: false
+        needRbacCheck: false
+        needCbcCheck: false
+        model: v3
+        authContextInitializerName: defaultIamAuthContextInitializer
+  /v1/{project_id}/agent-manager/resource/{app_id}/versions:
+    get:
+      x-request-examples-description-1: 查询资源可用的版本
+      x-request-examples-text-1:
+        method: GET
+        url: https://{endpoint}/v1/{project_id}/agent-manager/resource/{app_id}/dependency?workspace_id={workspace_id}
+        headers:
+          Content-Type: application/json
+          cookie: AGENT_SID=testUser|0
+        body:
+          agent_ids:
+            - 973db573-e42d-49a4-87ad-f1f6f3076d15
+      x-request-examples-1:
+        method: POST
+        url: https://{endpoint}/v1/{project_id}/agent-manager/resource/{app_id}/dependency?workspace_id={workspace_id}
+        headers:
+          Content-Type: application/json
+          cookie: AGENT_SID=testUser|0
+        body:
+          agent_ids:
+            - 973db573-e42d-49a4-87ad-f1f6f3076f3076d15
+      tags:
+        - RelationManagement
+      summary: 查询资源可用的版本
+      description: 查询资源可用的版本。
+      operationId: ListVersions
+      produces:
+        - application/json
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          type: string
+          maxLength: 64
+          description: 项目ID。
+          pattern: ^[a-zA-Z0-9_-]+$
+        - name: app_id
+          in: path
+          required: true
+          type: string
+          pattern: ^[a-zA-Z0-9_-]+$
+          maxLength: 64
+          description: 资源ID。
+        - name: workspace_id
+          in: query
+          required: true
+          type: string
+          description: 项目空间ID。
+          pattern: ^[a-zA-Z0-9_()\-]+$
+          maxLength: 64
+          minLength: 1
+        - name: resource_type
+          in: query
+          required: true
+          type: string
+          pattern: ^[a-zA-Z0-9_-]+$
+          maxLength: 64
+          description: 资源类型：workflow/agent/controller。
+      responses:
+        '200':
+          description: 版本信息。
+          schema:
+            $ref: '#/definitions/ResourceVersionResponseBody'
+        '400':
+          description: Bad Request 请求错误。
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+        '403':
+          description: Forbidden 没有操作权限。
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+        '404':
+          description: Not Found 找不到资源。
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+        '500':
+          description: Internal Server Error 服务内部错误。
+          schema:
+            $ref: 'AgentStudio-Manager-API.yaml#/definitions/ErrorRsp'
+      x-order: 4
+      x-open-api: 'true'
+      x-open-region-cloud: stand_a
+      x-iam-auth-meta-anno:
+        abacAction: ''
+        authLevel: PROJECT
+        needAbacCheck: false
+        needRbacCheck: false
+        needCbcCheck: false
+        model: v3
+        authContextInitializerName: defaultIamAuthContextInitializer
   /v1/{project_id}/agent-manager/relation/apps/{app_id}:
     get:
       tags:
@@ -1638,6 +1818,42 @@ definitions:
         type: string
         description: 版本说明。
         maxLength: 1024
+  ResourceVersionResponseBody:
+    type: object
+    description: 资源可用版本信息返回。
+    properties:
+      versions:
+        type: array
+        items:
+          $ref: '#/definitions/VersionInfo'
+  ResourceDependencyResponseBody:
+    type: object
+    description: agent依赖资源rsp。
+    properties:
+      dependencies:
+        type: array
+        items:
+          $ref: '#/definitions/ResourceDependency'
+        description: 导出资源id。
+  ResourceDependency:
+    type: object
+    description: agent依赖资源。
+    properties:
+      resource_id:
+        type: string
+        description: 资源id。
+      resource_name:
+        type: string
+        description: 资源名称。
+      resource_version:
+        type: string
+        description: 资源版本。
+      resource_type:
+        type: string
+        description: 资源类型。
+      parent_id:
+        type: string
+        description: 父级资源id，多个父级仅展示一个。
   VersionInfo:
     type: object
     description: 应用版本信息。

@@ -4,10 +4,14 @@
 package com.openjiuwen.studio.agent.manager.controller;
 
 import com.openjiuwen.studio.agent.manager.dto.ListAppRelationsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListDependencyQo;
 import com.openjiuwen.studio.agent.manager.dto.ListResourceRelationsQo;
 import com.openjiuwen.studio.agent.manager.dto.ListResourcesRelationsQo;
+import com.openjiuwen.studio.agent.manager.dto.ListVersionsQo;
 import com.openjiuwen.studio.agent.manager.dto.RelationList;
+import com.openjiuwen.studio.agent.manager.dto.ResourceDependencyResponseBody;
 import com.openjiuwen.studio.agent.manager.dto.ResourceMappingList;
+import com.openjiuwen.studio.agent.manager.dto.ResourceVersionResponseBody;
 import com.openjiuwen.studio.agent.manager.service.IRelationManagementService;
 import com.openjiuwen.studio.agent.common.utils.ResponseModel;
 
@@ -46,5 +50,20 @@ public class RelationManagementApiController implements RelationManagementApi {
         ListResourcesRelationsQo listResourcesRelationsQo) {
         return ResponseModel.success(
             relationManagementService.listResourcesRelations(projectId, listResourcesRelationsQo));
+    }
+
+    @Override
+    public ResponseEntity<ResourceDependencyResponseBody> listDependency(String projectId, String appId,
+        String workspaceId, String versionId) {
+        ListDependencyQo listDependencyQo = new ListDependencyQo().setWorkspaceId(workspaceId)
+            .setVersionId(versionId);
+        return ResponseModel.success(relationManagementService.listDependency(projectId, appId, listDependencyQo));
+    }
+
+    @Override
+    public ResponseEntity<ResourceVersionResponseBody> listVersions(String projectId, String appId, String workspaceId,
+        String resourceType) {
+        ListVersionsQo listVersionsQo = new ListVersionsQo().setWorkspaceId(workspaceId).setResourceType(resourceType);
+        return ResponseModel.success(relationManagementService.listVersions(projectId, appId, listVersionsQo));
     }
 }

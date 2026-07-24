@@ -966,6 +966,15 @@ paths:
           pattern: ^[a-zA-Z0-9_()\-]+$
           maxLength: 64
           minLength: 1
+        - name: Accept
+          in: header
+          required: false
+          type: string
+          description: "application/json 为非流式，text/event-stream 为流式"
+          enum:
+            - application/json
+            - text/event-stream
+          default: application/json
         - name: export_params
           in: body
           required: true
@@ -977,6 +986,9 @@ paths:
           description: 导出的文件。
           schema:
             $ref: '#/definitions/ExportResourceRsp'
+          x-stream-response:
+            contentType: text/event-stream
+            description: 以SSE流式返回导出数据
           examples:
             application/octet-stream: 导出的agent-xxx.jsonl文件
         '400':
@@ -998,6 +1010,14 @@ paths:
       x-order: 4
       x-open-api: 'true'
       x-open-region-cloud: stand_a
+      x-iam-auth-meta-anno:
+        abacAction: ''
+        authLevel: PROJECT
+        needAbacCheck: false
+        needRbacCheck: false
+        needCbcCheck: false
+        model: v3
+        authContextInitializerName: defaultIamAuthContextInitializer
 
   /v1/{project_id}/agent-manager/agents/{agent_id}/versions:
     post:
@@ -4730,7 +4750,8 @@ definitions:
     type: object
     description: 导出相关参数。
     required:
-      - resource_ids
+      - resource_versions
+      - resource_type
     properties:
       resource_ids:
         type: array
@@ -4753,7 +4774,6 @@ definitions:
     description: 导出相关参数。
     required:
       - resource_id
-      - resource_version
     properties:
       resource_id:
         type: string
@@ -4761,6 +4781,21 @@ definitions:
       resource_version:
         type: string
         description: 资源版本
+      child_nodes:
+        type: array
+        items:
+          $ref: '#/definitions/ExportChildResource'
+        description: 导出资源id。
+  ExportChildResource:
+    type: object
+    description: 导出子资源信息。
+    properties:
+      resource_id:
+        type: string
+        description: 资源id。
+      resource_type:
+        type: string
+        description: 资源类型：agent/controller/workflow。
   ExportParams:
     type: object
     description: 导出相关参数。

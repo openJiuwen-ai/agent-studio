@@ -7,11 +7,14 @@ package com.openjiuwen.studio.agent.manager.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import io.swagger.annotations.ApiModel;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
 import org.springframework.validation.annotation.Validated;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -31,6 +34,10 @@ public class ExportResourceVersion implements Serializable {
     @JsonProperty("resource_version")
     private String resourceVersion = null;
 
+    @JsonProperty("child_nodes")
+    @Valid
+    private List<ExportChildResource> childNodes = null;
+
     public String getResourceId() {
         return resourceId;
     }
@@ -49,6 +56,15 @@ public class ExportResourceVersion implements Serializable {
         return this;
     }
 
+    public List<ExportChildResource> getChildNodes() {
+        return childNodes;
+    }
+
+    public ExportResourceVersion setChildNodes(List<ExportChildResource> childNodes) {
+        this.childNodes = childNodes;
+        return this;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
@@ -56,6 +72,7 @@ public class ExportResourceVersion implements Serializable {
 
         sb.append("    resourceId: ").append(toIndentedString(resourceId)).append("\n");
         sb.append("    resourceVersion: ").append(toIndentedString(resourceVersion)).append("\n");
+        sb.append("    childNodes: ").append(toIndentedString(childNodes)).append("\n");
         sb.append("}");
         return sb.toString();
     }
@@ -69,13 +86,14 @@ public class ExportResourceVersion implements Serializable {
             return false;
         }
         ExportResourceVersion exportResourceVersion = (ExportResourceVersion) o;
-        return Objects.equals(this.resourceId, exportResourceVersion.resourceId) && Objects.equals(this.resourceVersion,
-            exportResourceVersion.resourceVersion);
+        return Objects.equals(this.resourceId, exportResourceVersion.resourceId)
+            && Objects.equals(this.resourceVersion, exportResourceVersion.resourceVersion)
+            && Objects.equals(this.childNodes, exportResourceVersion.childNodes);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(resourceId, resourceVersion);
+        return Objects.hash(resourceId, resourceVersion, childNodes);
     }
 
     /**
