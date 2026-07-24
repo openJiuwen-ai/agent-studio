@@ -72,6 +72,9 @@ jobs:
           rm -rf docker/studio-runtime/storage
           test -d packages/storage/storage
           cp -rf packages/storage/storage docker/studio-runtime/storage
+          rm -rf docker/studio-runtime/common_utils
+          test -d packages/common_utils/common_utils
+          cp -rf packages/common_utils/common_utils docker/studio-runtime/common_utils
           rm -rf docker/studio-runtime/tests
           cp -rf agent-runtime/tests docker/studio-runtime/tests
           cp -f agent-runtime/requirements.txt docker/studio-runtime/requirements.txt
@@ -80,10 +83,11 @@ jobs:
 
       - name: Prepare studio-builder artifacts
         run: |
-          rm -rf docker/studio-builder/agent_builder docker/studio-builder/model_service docker/studio-builder/storage
+          rm -rf docker/studio-builder/agent_builder docker/studio-builder/model_service docker/studio-builder/storage docker/studio-builder/common_utils
           cp -rf agent_builder docker/studio-builder/agent_builder
           cp -rf packages/model_service/model_service docker/studio-builder/model_service
           cp -rf packages/storage/storage docker/studio-builder/storage
+          cp -rf packages/common_utils/common_utils docker/studio-builder/common_utils
 
       - name: Use official package repositories in CI
         shell: bash

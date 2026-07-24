@@ -38,6 +38,7 @@ dependencies = [
     "pyahocorasick>=2.2.0",
     "model-service",
     "storage",
+    "common-utils",
 ]
 
 [project.optional-dependencies]
@@ -77,3 +78,4 @@ default = true
 # 机制层共享包（monorepo 同仓，runtime/agent-builder 都依赖）。path 相对于本 pyproject。
 model-service = { path = "../packages/model_service", editable = true }
 storage = { path = "../packages/storage", editable = true }
+common-utils = { path = "../packages/common_utils", editable = true }

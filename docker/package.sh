@@ -117,6 +117,10 @@ function runtime_copy() {
   rm -rf ${RUNTIME_TARGET_PATH}/storage
   cp -rf ${WORKSPACE}/packages/storage/storage ${RUNTIME_TARGET_PATH}/storage
 
+  # 对象存储共享包（packages/common_utils）：同 model_service，靠 PYTHONPATH=app 导入
+  rm -rf ${RUNTIME_TARGET_PATH}/common_utils
+  cp -rf ${WORKSPACE}/packages/common_utils/common_utils ${RUNTIME_TARGET_PATH}/common_utils
+
   rm -rf ${RUNTIME_TARGET_PATH}/bin
   cp -rf ${RUNTIME_TARGET_PATH}/script ${RUNTIME_TARGET_PATH}/bin
 
@@ -170,6 +174,9 @@ function clean() {
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/storage" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/storage
+  fi
+  if [ -d "${WORKSPACE}/docker/studio-runtime/common_utils" ]; then
+    rm -rf ${WORKSPACE}/docker/studio-runtime/common_utils
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/bin" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/bin

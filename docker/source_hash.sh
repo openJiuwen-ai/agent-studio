@@ -9,7 +9,7 @@ fi
 
 cd "${WORKSPACE}"
 SOURCE_PATHS=(
-  backend frontend agent-runtime agent_builder packages/model_service packages/storage
+  backend frontend agent-runtime agent_builder packages/model_service packages/storage packages/common_utils
   docker/package.sh docker/source_hash.sh
   docker/studio-manager docker/studio-console docker/studio-runtime docker/studio-builder
 )

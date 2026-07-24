@@ -479,9 +479,12 @@ class Start(WorkflowComponent):
         envs = get_workflow_param(session, REQUEST_VARIABLES) or {}
         inputs_copy = deepcopy(inputs)
         inputs_copy.pop("sys", None)
-        # 只合并非布尔类型的字段，避免布尔值被字符串覆盖
+        # _REQUEST 补充 inputs 中缺失或值为 null 的字段（openjiuwen schema 解析会给未赋值的
+        # 用户字段填充 null，需要用 _REQUEST 中的实际值覆盖）；
+        # 不覆盖已有非空值（避免并行相同子工作流共享 global_state[_REQUEST] 时数据污染）；
+        # 布尔类型字段特殊处理：False 是有效值不应被覆盖
         for key, value in envs.items():
-            if key not in inputs_copy or not isinstance(inputs_copy[key], bool):
+            if key not in inputs_copy or inputs_copy[key] is None:
                 inputs_copy[key] = value
         # 当前用户输入加入历史
         # deepcopy sys 以避免直接 mutate session 内部状态：get_state_info 返回的是

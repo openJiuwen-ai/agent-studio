@@ -138,17 +138,19 @@ build_and_save_images() {
     log_info "[4/5] 构建 studio-builder 镜像..."
     rm -rf "${DOCKER_DIR}/studio-builder/agent_builder" \
            "${DOCKER_DIR}/studio-builder/model_service" \
-           "${DOCKER_DIR}/studio-builder/storage"
+           "${DOCKER_DIR}/studio-builder/storage"\
+           "${DOCKER_DIR}/studio-builder/common_utils"
     cp -rf "${PROJECT_DIR}/agent_builder" "${DOCKER_DIR}/studio-builder/agent_builder"
     cp -rf "${PROJECT_DIR}/packages/model_service/model_service" "${DOCKER_DIR}/studio-builder/model_service"
     cp -rf "${PROJECT_DIR}/packages/storage/storage" "${DOCKER_DIR}/studio-builder/storage"
+    cp -rf "${PROJECT_DIR}/packages/common_utils/common_utils" "${DOCKER_DIR}/studio-builder/common_utils"
     cd "${DOCKER_DIR}/studio-builder"
     if ! docker build --build-arg BASE_IMAGE="${BASE_IMAGE_PYTHON}" \
         -t "studio-builder:${IMAGE_TAG}" .; then
-        rm -rf agent_builder model_service storage
+        rm -rf agent_builder model_service storage common_utils
         return 1
     fi
-    rm -rf agent_builder model_service storage
+    rm -rf agent_builder model_service storage common_utils
 
     log_info "[5/5] 构建内置 VictoriaLogs 数据源的 Grafana 镜像..."
     local grafana_image="openjiuwen/grafana-victorialogs:11.3.0-0.29.0"

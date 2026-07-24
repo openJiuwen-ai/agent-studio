@@ -45,6 +45,7 @@ COPY agent_runtime/ $SERVICE_HOME/app/agent_runtime/
 COPY jiuwen/ $SERVICE_HOME/app/jiuwen/
 COPY model_service/ $SERVICE_HOME/app/model_service/
 COPY storage/ $SERVICE_HOME/app/storage/
+COPY common_utils/ $SERVICE_HOME/app/common_utils/
 COPY tests/ $SERVICE_HOME/app/tests/
 COPY bin/ $SERVICE_HOME/bin/
 

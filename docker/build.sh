@@ -205,12 +205,14 @@ function copy_builder_sources() {
   fi
   echo "[BUILD] 复制 agent_builder 到构建上下文: ${STAGE_BUILDER}"
   cp -r ${WORKSPACE}/agent_builder "${STAGE_BUILDER}/"
-  # 共享包 model_service / storage（agent_builder 运行时 import）：与 runtime 一致，靠
+  # 共享包 model_service / storage / common_utils（agent_builder 运行时 import）：与 runtime 一致，靠
   # PYTHONPATH=app（builder CMD `cd app`）导入，非 pip 安装。
   echo "[BUILD] 复制 model_service 到构建上下文: ${STAGE_BUILDER}"
   cp -r ${WORKSPACE}/packages/model_service/model_service "${STAGE_BUILDER}/model_service"
   echo "[BUILD] 复制 storage 到构建上下文: ${STAGE_BUILDER}"
   cp -r ${WORKSPACE}/packages/storage/storage "${STAGE_BUILDER}/storage"
+  echo "[BUILD] 复制 common_utils 到构建上下文: ${STAGE_BUILDER}"
+  cp -r ${WORKSPACE}/packages/common_utils/common_utils "${STAGE_BUILDER}/common_utils"
   # 清理不需要的文件以减小构建上下文
   rm -rf ${STAGE_BUILDER}/agent_builder/.git ${STAGE_BUILDER}/agent_builder/tests \
          ${STAGE_BUILDER}/agent_builder/docs ${STAGE_BUILDER}/agent_builder/.venv \
@@ -223,7 +225,7 @@ function copy_builder_sources() {
 # 构建完成后清理 builder 构建上下文中的临时源码（保留已提交的 Dockerfile）
 function cleanup_builder_sources() {
   local STAGE_BUILDER=${DOCKER_DIR}/studio-builder
-  for sub in agent_builder model_service storage; do
+  for sub in agent_builder model_service storage common_utils; do
     if [ -d "${STAGE_BUILDER}/${sub}" ]; then
       echo "[BUILD] 清理构建上下文中的 ${sub}: ${STAGE_BUILDER}/${sub}"
       rm -rf "${STAGE_BUILDER}/${sub}"

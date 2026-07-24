@@ -122,10 +122,11 @@ class ReActAgentRunner:
     def _build_file_links_prompt(self) -> str:
         """构建文件链接提示词"""
         return (
-            "\n\n## 文件读取指令（重要）\n"
-            "用户提供了文件链接（如 .docx, .txt, .pdf 等格式）。\n"
-            "可以使用预置的 read_file_from_url 工具来读取文件内容，"
-            "当工具返回文件内容后，基于内容回复用户。\n"
+            "\n\n## 文件读取指令\n"
+            "用户提供了文件链接（如 .docx, .txt, .pdf 等格式），"
+            "用户有获取文件内容相关需求，可以使用预置的 read_file_from_url 工具来读取文件内容。\n"
+            "请注意：如果其他工具具备解析文件内容的能力，应优先使用其他工具，"
+            "read_file_from_url 为兜底工具，当其他工具无法处理文件内容或者处理失败时才能使用。\n"
         )
 
     def _build_skills_prompt(self, ir_json: dict, skill_work_dir: str = "") -> str:

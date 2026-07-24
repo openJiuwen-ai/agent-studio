@@ -36,6 +36,7 @@ COPY agent_builder/ $SERVICE_HOME/app/agent_builder/
 # 共享包 model_service / storage：agent_builder 运行时 import，靠 PYTHONPATH=${SERVICE_HOME}/app 解析
 COPY model_service/ $SERVICE_HOME/app/model_service/
 COPY storage/ $SERVICE_HOME/app/storage/
+COPY common_utils/ $SERVICE_HOME/app/common_utils/
 
 # 启动脚本（init.sh / start.sh / start_server.sh）—— 参考 studio-runtime 启动模式
 COPY script/ $SERVICE_HOME/script/

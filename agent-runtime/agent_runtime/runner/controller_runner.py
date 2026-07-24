@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 import uuid
+from collections.abc import Mapping
 from typing import AsyncGenerator, Any
 
 from agent_runtime.observability import setup_otel_tracer
@@ -25,6 +27,26 @@ from jiuwen.serve.controllers.execution.utils import (
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.common.logging import performance_logger
 from openjiuwen.core.session.agent import Session, create_agent_session
+
+
+def _parse_controller_stream_chunk(chunk) -> dict | None:
+    """把 run_streaming 的 chunk 规范化为 dict。
+
+    Controller 正常流产出 SSE bytes("data: {...}\\n\\n");错误流(adapt_error)产出 dict。
+    严格 UTF-8 解码——本进程自生成流,坏帧应抛错由调用方逐帧记录,不静默丢字节。
+    """
+    if isinstance(chunk, (bytes, bytearray)):
+        chunk = bytes(chunk).decode("utf-8")
+    if isinstance(chunk, str):
+        if not chunk.startswith("data: "):
+            return None
+        try:
+            chunk = json.loads(chunk[6:].strip())
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(chunk, Mapping):
+        return None
+    return dict(chunk)
 
 
 class ControllerRunner:
@@ -279,20 +301,34 @@ class ControllerRunner:
     async def run_blocking(self, req: ExecutionRequest) -> str:
         """Execute Controller mode IR and return complete result.
 
-        Collects all message events and concatenates them.
+        run_streaming 正常流产 SSE bytes、错误流产 dict;_parse_controller_stream_chunk
+        统一成 dict。裁决:完整终态(workflow_end/message_end)优先,delta(message)仅兜底,
+        保证答案恰好一份(不重复、不空)。
         """
-        result_parts = []
+        message_parts: list[str] = []
+        message_end_answer = ""
+        workflow_end_answer = ""
         async for chunk in self.run_streaming(req):
             if chunk is None:
                 continue
             try:
-                event = chunk.get("event", "")
-                data = chunk.get("data", {})
+                payload = _parse_controller_stream_chunk(chunk)
+                if payload is None:
+                    continue
+                event = payload.get("event", "")
+                data = payload.get("data") or {}
                 answer = data.get("answer", "") or data.get("output", "")
-                if event == "message" and answer:
-                    result_parts.append(str(answer))
+                if not answer:
+                    continue
+                if event == "message":
+                    message_parts.append(str(answer))
+                elif event == "message_end":
+                    message_end_answer = str(answer)
+                elif event == "workflow_end":
+                    workflow_end_answer = str(answer)
+                # done / 其他事件:忽略
             except Exception as e:
                 workflow_logger.error(
                     f"Agent group blocking failed with exception: {e}", exc_info=True
                 )
-        return "".join(result_parts)
+        return workflow_end_answer or message_end_answer or "".join(message_parts)

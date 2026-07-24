@@ -50,9 +50,45 @@ _USER_MSG_FIELD = "query"
 # 从inputs中排除的系统字段
 _AGENT_SYSTEM_INPUTS = {_USER_MSG_FIELD, "workflowSequence", "activeWorkflows", "intent"}
 
+# 文件URL后缀分类
+_IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".tiff"})
+_VIDEO_EXTENSIONS = frozenset({".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv"})
+
 app_run_app = APIRouter(tags=["app_run"])
 
 _conv_manager = ConversationManager()
+
+
+def _get_url_extension(url: str) -> str:
+    """从URL中提取文件后缀（去除查询参数后取路径最后一段的后缀）."""
+    clean_path = url.split("?")[0]
+    filename = clean_path.rsplit("/", 1)[-1]
+    dot_idx = filename.rfind(".")
+    if dot_idx >= 0:
+        return filename[dot_idx:].lower()
+    return ""
+
+
+def process_file_urls(file_urls: list[str]) -> list[dict]:
+    """将文件URL字符串列表转换为多模态结构化对象列表.
+
+    对齐Java AgentRuntimeService.extractUrlFromQuery逻辑：
+    - 图片URL → {"type": "image_url", "image_url": {"url": "..."}}
+    - 视频URL → {"type": "video_url", "video_url": {"url": "..."}}
+    - 其他URL忽略
+    """
+    if not file_urls:
+        return []
+    media_objs = []
+    for url in file_urls:
+        ext = _get_url_extension(url)
+        if ext in _IMAGE_EXTENSIONS:
+            media_objs.append({"type": "image_url", "image_url": {"url": url}})
+        elif ext in _VIDEO_EXTENSIONS:
+            media_objs.append({"type": "video_url", "video_url": {"url": url}})
+        else:
+            workflow_logger.warning(f"Unsupported file URL extension: {ext}, url: {url}")
+    return media_objs
 
 
 async def _load_conversation_data(
@@ -152,7 +188,7 @@ def build_req_json_from_agent(
         "globalVariables": global_vars,
         "conversationHistory": exec_ctx.conversation_history,
         "toolSwitchDict": body.tool_switch_dict,
-        "files": body.files,
+        "files": process_file_urls(body.files),
         "enableHistory": body.enable_history,
         # "long_term_memory"
     }

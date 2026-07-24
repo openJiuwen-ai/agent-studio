@@ -14,6 +14,14 @@ from redis.asyncio.cluster import RedisCluster, ClusterNode
 from redis.asyncio.sentinel import Sentinel
 
 
+class _NonTransactionRedis(Redis):
+    """单机/哨兵模式 Redis 包装类：pipeline() 默认 transaction=False。
+    """
+
+    def pipeline(self, transaction: bool = False, shard_hint: Optional[str] = None):
+        return super().pipeline(transaction=transaction, shard_hint=shard_hint)
+
+
 class RedisClientManager:
     """异步 Redis 客户端管理器（进程单例）。"""
 
@@ -91,7 +99,8 @@ class RedisClientManager:
         if self._settings.ssl_enabled:
             connection_kwargs["ssl"] = self._create_ssl_context()
 
-        return Redis(**connection_kwargs)
+        redis_cls = Redis if self._settings.redis_transaction_enabled else _NonTransactionRedis
+        return redis_cls(**connection_kwargs)
 
     def _create_cluster_client(self) -> RedisCluster:
         """创建集群模式的异步 Redis 客户端。"""
@@ -141,9 +150,10 @@ class RedisClientManager:
             socket_timeout=self._settings.socket_timeout,
             socket_connect_timeout=self._settings.socket_connect_timeout,
         )
+        redis_cls = Redis if self._settings.redis_transaction_enabled else _NonTransactionRedis
         return sentinel.master_for(
             self._settings.sentinel_master,
-            Redis,
+            redis_cls,
             password=self._settings.password,
             max_connections=self._settings.max_connections,
             ssl=self._create_ssl_context() if self._settings.ssl_enabled else None,

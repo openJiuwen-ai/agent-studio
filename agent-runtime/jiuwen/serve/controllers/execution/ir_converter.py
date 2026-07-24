@@ -791,6 +791,24 @@ class _RoutedIntentDetection(IntentDetection):
                 graph.register_branch_targets(node_id, all_targets)
 
 
+def _resolve_intent_fields(
+    current_ir_data: Dict[str, Any],
+    parent_intent: Optional[Dict[str, Any]],
+) -> tuple[str, str]:
+    """R-04: 父级 per-reference intent 覆盖,应用到 per-config metadata(不写缓存 IR 对象)。
+
+    非空才覆盖(``or`` 短路),语义等价于旧实现的
+    ``if child_intent.get("name"): ...`` / ``if child_intent.get("description"): ...``。
+    parent_intent 非 dict 或字段为空时,回退子 IR 原值。
+    """
+    override = parent_intent if isinstance(parent_intent, dict) else {}
+    intent_name = override.get("name") or current_ir_data.get("intent_name", "")
+    intent_description = override.get("description") or current_ir_data.get(
+        "intent_description", ""
+    )
+    return intent_name, intent_description
+
+
 class IRConverter:
     """IR转换工具类。
 
@@ -1039,6 +1057,7 @@ class IRConverter:
             current_ir_data: Dict[str, Any],
             parent_metadata: Optional[AgentMetaData],
             parent_description: Optional[str] = None,
+            parent_intent: Optional[Dict[str, Any]] = None,
         ) -> AgentConfig:
             """for each agent, return its child AgentConfig"""
             try:
@@ -1050,13 +1069,17 @@ class IRConverter:
                         error_msg=f"Agent_ir validate failed, root_case={format_pydantic_validation_error_message(e)}"
                     ),
                 ) from e
+            # R-04: intent 覆盖写到 per-config metadata,不写缓存 IR 对象(避免污染 cache_ir_queue)
+            _intent_name, _intent_description = _resolve_intent_fields(
+                current_ir_data, parent_intent
+            )
             current_metadata = AgentMetaData(
                 id=current_ir_data.get("agentId"),
                 name=current_ir_data.get("agentName"),
                 description=parent_description
                 or current_ir_data.get("description", ""),
-                intent_name=current_ir_data.get("intent_name", ""),
-                intent_description=current_ir_data.get("intent_description", ""),
+                intent_name=_intent_name,
+                intent_description=_intent_description,
                 ir_path=current_ir_data.get("ir_path"),
                 mode=current_ir_data.get("configs", {}).get("mode", "Controller"),
             )
@@ -1071,19 +1094,13 @@ class IRConverter:
                     # 支持从父Agent修改子Agent描述
                     parent_description = child.get("description", "")
                     child_ir_data = await async_ir_load(child.get("ir_path"))
-                    # 如果子agent配置中有intent字段，使用它，否则保持原有的intent
-                    if "intent" in child:
-                        child_intent = child.get("intent")
-                        if isinstance(child_intent, dict):
-                            if child_intent.get("name"):
-                                child_ir_data["intent_name"] = child_intent.get("name")
-                            if child_intent.get("description"):
-                                child_ir_data["intent_description"] = child_intent.get(
-                                    "description"
-                                )
-
+                    # R-04: intent 覆盖通过参数下传到子的 current_metadata,不再原地写 child_ir_data
+                    child_intent = child.get("intent") if isinstance(child.get("intent"), dict) else None
                     child_config = await _recursive_create(
-                        child_ir_data, current_metadata, parent_description
+                        child_ir_data,
+                        current_metadata,
+                        parent_description,
+                        parent_intent=child_intent,
                     )
                     child_config.metadata.ir_path = child.get("ir_path")
                     child_config.metadata.mode = child.get(
@@ -2478,40 +2495,17 @@ class IRConverter:
                 loop_inputs["loop_array"] = {"arrLoopVar.item": node_inputs["arrLoopVar"]}
             if "intermediateLoopVar" in node_inputs:
                 loop_inputs["intermediate_var"] = {"intermediateLoopVar": node_inputs["intermediateLoopVar"]}
-            _loop_inputs_snapshot = loop_inputs
-
-            def _loop_inputs_transformer(state):
-                from openjiuwen.core.session.utils import get_by_schema
-                data = state
-                while not isinstance(data, dict):
-                    getter = getattr(data, 'get_state', None)
-                    if callable(getter):
-                        # 优先走 copied=False 直接拿原始 dict 引用，跳过 deepcopy。
-                        # transformer 内部仅调用 get_by_schema（纯只读，无写入），
-                        # 返回值是新建的 dict/list，不会回写 io_state，因此无需复制。
-                        try:
-                            data = getter(copied=False)
-                        except TypeError:
-                            # 兜底：实现签名不支持 copied 关键字时回退到默认行为
-                            data = getter()
-                    else:
-                        break
-
-                def _resolve(obj):
-                    if isinstance(obj, str) and obj.startswith("$"):
-                        val = get_by_schema(obj, data, is_root=True)
-                        return val if val is not None else obj
-                    if isinstance(obj, dict):
-                        return {k: _resolve(v) for k, v in obj.items()}
-                    return obj
-
-                return _resolve(_loop_inputs_snapshot)
-
+            # 直接以 dict 作为 inputs_schema，交由 core 的标准 get_inputs 解析。
+            # 标准路径走 io_state.get_by_prefix(schema, parent_id)，会按 parent_id
+            # 深入到当前（子）工作流作用域后再解析 ${...} 引用。原先用自定义
+            # callable transformer + get_by_schema(..., is_root=True) 从绝对根解析，
+            # 在子工作流上下文中会绕过 parent_id 作用域，导致循环无法解析到同级
+            # 子节点输出（如代码节点产出的数组），arrLoopVar 落地为字面量字符串而报错。
             _add_workflow_comp_with_exception(
                 workflow,
                 node_id,
                 component,
-                inputs_schema=_loop_inputs_transformer,
+                inputs_schema=loop_inputs,
                 **_comp_reg,
             )
             return component

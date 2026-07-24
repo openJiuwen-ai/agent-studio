@@ -14,8 +14,13 @@ projectId 取自请求头（``authz.extract_project_id``），不放 config。
 
 from __future__ import annotations
 
+import json
+import logging
+import re
 import time
 from dataclasses import dataclass
+from typing import Any
+from urllib.parse import urlparse
 
 from openai import AsyncOpenAI
 
@@ -25,6 +30,8 @@ from openjiuwen.core.runner.callback.events import LLMCallEvents
 
 from . import authz, dispatch, policy, resolver
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class _ResolveInputs:
@@ -33,6 +40,130 @@ class _ResolveInputs:
     workspace_id: str
     project_id: str
     refresh: bool
+
+
+@dataclass
+class _VerbatimCall:
+    """``_invoke_verbatim`` 的单次调用入参集合（G.FNM.03：参数过多且相关，具名封装）。"""
+
+    params: dict
+    stream: bool
+    input_kwargs: dict
+    output_parser: Any
+    timeout: Any
+
+
+# 非 OpenAI（非常规路径）端点判定与响应适配，供 ``StudioModelClient._invoke_verbatim`` 使用。
+
+
+_OPENAI_VERSION_BASE_RE = re.compile(r"^/v\d+$")
+
+
+def _is_verbatim_endpoint(api_url: str) -> bool:
+    """判断 ``api_url`` 是否为「非 OpenAI 兼容」的 verbatim 端点。
+
+    OpenAI SDK 调 ``chat.completions.create`` 时必在 ``base_url`` 后拼
+    ``/chat/completions``；对只认 verbatim 路径的 mock / 自定义 HTTP 端点会 404 →
+    ``NotFoundError``。判定走 URL path 形状（与 ``dispatch._normalize_api_base`` 同源约定）：
+
+    - 末尾 ``/chat/completions``（完整 OpenAI 端点，SDK 重组装）→ False
+    - 路径为空 / 根（裸 host base，SDK 拼）→ False
+    - 路径形如 ``/v1`` ``/v2``（版本 base，SDK 拼）→ False
+    - 其余（mock 非常规路径，如 ``/xxx/yyy``）→ True（走 httpx verbatim 直发）
+    """
+    path = urlparse((api_url or "").strip()).path.rstrip("/")
+    if not path:
+        return False
+    if path.endswith("/chat/completions"):
+        return False
+    if _OPENAI_VERSION_BASE_RE.match(path):
+        return False
+    return True
+
+
+def _build_verbatim_body(params: dict) -> dict:
+    """由 ``_build_request_params`` 的 OpenAI 格式参数构造 httpx JSON body。
+
+    剔除 SDK 专用的传输层键（``extra_headers`` / ``custom_headers`` / ``tracer_*``），
+    把 ``extra_body`` 合并进 body 顶层（对齐 OpenAI SDK ``create()`` 的 ``extra_body`` 语义）。
+    """
+    body: dict = {}
+    for key, value in params.items():
+        if key.startswith("tracer_"):
+            continue
+        if key in ("extra_headers", "custom_headers"):
+            continue
+        body[key] = value
+    extra_body = body.pop("extra_body", None)
+    if isinstance(extra_body, dict):
+        body.update(extra_body)
+    return body
+
+
+def _build_verbatim_headers(conn, params: dict) -> dict:
+    """verbatim 分支鉴权头（对齐 agent_builder facade ``_auth_headers``）。
+
+    ``API_KEY`` → ``Authorization: Bearer <api_key>``；``CUSTOM_APIKEY`` → ``auth_info`` 各项。
+    再叠加 ``params`` 中携带的请求级 ``extra_headers`` / ``custom_headers``。
+    """
+    headers = {"Content-Type": "application/json"}
+    if conn.custom_headers:
+        headers.update(conn.custom_headers)
+    else:
+        headers["Authorization"] = f"Bearer {conn.api_key}"
+    extra_headers = params.get("extra_headers")
+    if isinstance(extra_headers, dict):
+        headers.update(extra_headers)
+    custom_headers = params.get("custom_headers")
+    if isinstance(custom_headers, dict):
+        headers.update(custom_headers)
+    return headers
+
+
+class _AttrDict:
+    """把 httpx 返回的 OpenAI 格式 JSON dict 递归包成属性访问对象。
+
+    使其能被 ``OpenAIModelClient._parse_response`` / ``_parse_stream_chunk`` 当作 SDK
+    响应对象消费（它们按 ``response.choices[0].message`` / ``chunk.choices`` 等属性方式读取）。
+    缺省行为对齐 SDK pydantic 模型：未出现的字段按 ``None`` 返回（``hasattr`` 恒真，真值由
+    ``and`` 守卫），从而与父类解析逻辑无缝兼容。
+    """
+
+    __slots__ = ("_d",)
+
+    def __init__(self, d: dict):
+        object.__setattr__(self, "_d", d)
+
+    def __getattr__(self, name):
+        if name == "_d":                       # 避免构造期 slot 未就绪时的递归
+            raise AttributeError(name)
+        d = self._d
+        return _wrap(d[name]) if isinstance(d, dict) and name in d else None
+
+    def __bool__(self):
+        return bool(self._d)
+
+    def __getitem__(self, key):
+        return _wrap(self._d[key])
+
+    def __iter__(self):
+        return iter(self._d)
+
+    def __len__(self):
+        return len(self._d)
+
+    def model_dump(self):
+        """对齐 pydantic ``model_dump``，供 ``_normalize_logprobs`` 取回原始 dict。"""
+        return self._d
+
+
+def _wrap(value: Any) -> Any:
+    """递归把 dict → ``_AttrDict``、list → 元素逐个包装，标量原样返回。"""
+    if isinstance(value, dict):
+        return _AttrDict(value)
+    if isinstance(value, list):
+        return [_wrap(item) for item in value]
+    return value
 
 
 class StudioModelClient(OpenAIModelClient):
@@ -146,6 +277,8 @@ class StudioModelClient(OpenAIModelClient):
         会失效，故在此手动补回。同时把 ``frequency_penalty`` / ``presence_penalty`` / ``stop``
         等超参随 ``LLM_INPUT`` 传递（对应 issue #1198）。
 
+        - ``_is_verbatim_endpoint(api_url)`` 为真（非 OpenAI 非常规路径端点）时转入
+          ``_invoke_verbatim``：httpx 直发 ``api_url``，避免 SDK 强拼 ``/chat/completions`` 404。
         - stream=False：返回 AssistantMessage。
         - stream=True：返回解析后的 chunk 异步迭代器；连接错误在 await create() 时抛出（可 failover），
           流中途错误在 ``_parsed`` 内触发 ``LLM_CALL_ERROR``。
@@ -176,6 +309,14 @@ class StudioModelClient(OpenAIModelClient):
             temperature=params.get("temperature"), top_p=params.get("top_p"),
             max_tokens=params.get("max_tokens"), **_extra_event_kwargs,
         )
+
+        # 非 OpenAI（非常规路径）端点：OpenAI SDK 会强拼 /chat/completions 导致 404，
+        # 改走 httpx verbatim 直发 detail.model.api_url，复用父类 _parse_response / _parse_stream_chunk。
+        if _is_verbatim_endpoint(detail.model.api_url):
+            return await self._invoke_verbatim(
+                detail, conn,
+                _VerbatimCall(params, stream, _input_kwargs, output_parser, timeout),
+            )
 
         client = AsyncOpenAI(
             api_key=conn.api_key,
@@ -245,6 +386,126 @@ class StudioModelClient(OpenAIModelClient):
         except Exception as e:
             # 覆盖非流 create/parse 失败与流 create 失败；流中途错误已在 _parsed 内触发。
             await client.close()
+            await trigger(LLMCallEvents.LLM_CALL_ERROR, is_stream=stream,
+                          model_name=_model_name, model_provider=_provider, error=e)
+            raise
+
+    async def _invoke_verbatim(self, detail, conn, call):
+        """非 OpenAI 端点的 verbatim httpx 直发分支（复用父类响应解析）。
+
+        ``_invoke_one_model`` 在 ``_is_verbatim_endpoint(detail.model.api_url)`` 为真时转入本分支：
+        用 httpx 直接 POST 到 ``detail.model.api_url``（**不拼** ``/chat/completions``），请求体取
+        ``_build_request_params`` 的 OpenAI 格式参数（``_build_verbatim_body``），鉴权头取
+        ``_build_verbatim_headers``；响应 JSON 经 ``_wrap`` 包成属性访问对象后复用
+        ``_parse_response`` / ``_parse_stream_chunk`` 解析。CALL 级事件触发与 SDK 分支一致。
+
+        - stream=False：返回 AssistantMessage；非 2xx 抛 ``MD_INVOKE_MODEL_SERVICE_FAIL``。
+        - stream=True：返回解析后的 chunk 异步迭代器（SSE ``data:`` 行逐帧解析）；连接 /
+          状态码错误在 send 时抛出（可 failover），流中途错误在 ``_parsed`` 内触发 ``LLM_CALL_ERROR``。
+        """
+        params = call.params
+        stream = call.stream
+        input_kwargs = call.input_kwargs
+        output_parser = call.output_parser
+        timeout = call.timeout
+        url = detail.model.api_url
+        _model_name = input_kwargs["model_name"]
+        _provider = input_kwargs["model_provider"]
+        client = dispatch.build_httpx_client(
+            url, conn.verify_ssl, self.model_client_config.ssl_cert)
+
+        try:
+            if stream:
+                # 对齐父类 stream 分支：补 include_usage。
+                stream_options = params.get("stream_options")
+                if isinstance(stream_options, dict):
+                    stream_options.setdefault("include_usage", True)
+                elif stream_options is None:
+                    params["stream_options"] = {"include_usage": True}
+
+                headers = _build_verbatim_headers(conn, params)
+                body = _build_verbatim_body(params)
+                await trigger(LLMCallEvents.LLM_INPUT, is_stream=True,
+                              **input_kwargs, params=params)
+                req = client.build_request(
+                    "POST", url, json=body, headers=headers,
+                    timeout=timeout if timeout is not None else conn.timeout,
+                )
+                resp = await client.send(req, stream=True)
+                if resp.status_code >= 300:
+                    text = (await resp.aread()).decode("utf-8", "ignore")
+                    await resp.aclose()
+                    raise resolver.ModelServiceError(
+                        "MD_INVOKE_MODEL_SERVICE_FAIL",
+                        f"upstream {url} returned {resp.status_code}: {text}",
+                    )
+
+                async def _parsed():
+                    final_message = None
+                    try:
+                        async for line in resp.aiter_lines():
+                            if not line or not line.startswith("data:"):
+                                continue
+                            data_str = line[5:].strip()
+                            if not data_str or data_str == "[DONE]":
+                                continue
+                            try:
+                                chunk_dict = json.loads(data_str)
+                            except json.JSONDecodeError:
+                                # 单帧畸形数据不应中断整条 SSE 流，降级到 debug 并跳过该帧。
+                                logger.debug("skip malformed SSE data chunk: %r",
+                                             data_str[:120])
+                                continue
+                            parsed = self._parse_stream_chunk(_wrap(chunk_dict))
+                            if parsed:
+                                final_message = (
+                                    parsed if final_message is None
+                                    else final_message + parsed
+                                )
+                                yield parsed
+                    except Exception as e:
+                        await trigger(LLMCallEvents.LLM_CALL_ERROR, is_stream=True,
+                                      model_name=_model_name, model_provider=_provider,
+                                      error=e)
+                        raise
+                    else:
+                        if final_message is not None:
+                            await trigger(LLMCallEvents.LLM_OUTPUT, is_stream=True,
+                                          model_name=_model_name, model_provider=_provider,
+                                          response=final_message.content,
+                                          usage=final_message.usage_metadata,
+                                          tool_calls=final_message.tool_calls)
+                    finally:
+                        await resp.aclose()
+                        await client.aclose()
+                return _parsed()
+
+            # 非流：httpx POST → 解析 JSON → _parse_response。
+            headers = _build_verbatim_headers(conn, params)
+            body = _build_verbatim_body(params)
+            await trigger(LLMCallEvents.LLM_INPUT, is_stream=False,
+                          **input_kwargs, params=params)
+            resp = await client.post(
+                url, json=body, headers=headers,
+                timeout=timeout if timeout is not None else conn.timeout,
+            )
+            if resp.status_code >= 300:
+                raise resolver.ModelServiceError(
+                    "MD_INVOKE_MODEL_SERVICE_FAIL",
+                    f"upstream {url} returned {resp.status_code}: {resp.text}",
+                )
+            data = resp.json()
+            assistant_message = await self._parse_response(_wrap(data), output_parser)
+            await client.aclose()
+            await trigger(LLMCallEvents.LLM_OUTPUT, is_stream=False,
+                          model_name=_model_name, model_provider=_provider,
+                          response=assistant_message.content,
+                          usage=assistant_message.usage_metadata,
+                          tool_calls=assistant_message.tool_calls)
+            return assistant_message
+        except Exception as e:
+            # 覆盖非流 post/parse/状态码失败与流 send/状态码失败；流中途错误已在 _parsed 内触发。
+            await client.aclose()
             await trigger(LLMCallEvents.LLM_CALL_ERROR, is_stream=stream,
                           model_name=_model_name, model_provider=_provider, error=e)
             raise

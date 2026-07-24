@@ -7,7 +7,7 @@ from typing import Literal, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from agent_runtime.utils.crypto_tool import decrypt
+from common_utils.crypto_tool import decrypt
 
 
 def _decrypt(v):
@@ -25,7 +25,7 @@ class ServerSettings(BaseSettings):
     tls_key_path: str = Field(default="", validation_alias="TLS_CERT_KEY_PATH")
     tls_key_password: str = Field(default="", validation_alias="TLS_CERT_KEY_PASSWD")
     tls_ciphers: str = Field(default="TLSv1.2 TLSv1.3", validation_alias="TLS_CIPHERS")
-    # Uvicorn worker 数量。未设置时由 _get_workers() 回退到 CPU 核心数 + 1
+    # Uvicorn worker 数量。未设置时由 _get_workers() 回退到 cgroup 感知的容器 CPU 核数 + 1
     workers: Optional[int] = Field(default=None, validation_alias="GUNICORN_WORK_NUM")
     # Nginx 负载均衡模式。启用时 uvicorn 以单 worker 运行，由 Nginx 做负载均衡
     nginx_load_balancing: bool = Field(default=False, validation_alias="NGINX_LOAD_BALANCING")
@@ -78,6 +78,10 @@ class RedisSettings(BaseSettings):
     port: int = Field(default=6379, validation_alias="REDIS_PORT")
     db: int = Field(default=0, validation_alias="REDIS_DATABASE")
     password: Optional[str] = Field(default=None, validation_alias="REDIS_PASSWORD")
+    # 是否启用redis事务
+    redis_transaction_enabled: bool = Field(
+        default=True, validation_alias="REDIS_TRANSACTION_ENABLED"
+    )
 
     # 集群模式配置
     cluster_nodes: str = Field(default="", validation_alias="REDIS_CLUSTER_NODES")

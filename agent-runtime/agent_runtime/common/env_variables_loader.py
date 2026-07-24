@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from openjiuwen.core.common.logging import workflow_logger
 
 from agent_runtime.common.redis_manager import get_redis_client
-from agent_runtime.utils.crypto_tool import decrypt
+from common_utils.crypto_tool import decrypt
 
 
 # Redis key: environment:{envId}:workspaceId:{wsId}

@@ -129,9 +129,18 @@ class TestAgentAppRunRequest:
 
     @staticmethod
     def test_files():
-        req = AgentAppRunRequest(files=[{"name": "file.txt", "type": "text"}])
+        req = AgentAppRunRequest(files=["https://example.com/img.jpg"])
         assert len(req.files) == 1
-        assert req.files[0]["name"] == "file.txt"
+        assert req.files[0] == "https://example.com/img.jpg"
+
+    @staticmethod
+    def test_files_accepts_string_list():
+        urls = [
+            "https://example.com/a.jpg",
+            "https://example.com/b.mp4",
+        ]
+        req = AgentAppRunRequest(files=urls)
+        assert req.files == urls
 
     @staticmethod
     def test_model_deployment_id():

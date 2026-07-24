@@ -72,7 +72,7 @@ class AgentAppRunRequest(BaseModel):
     )
     enable_history: bool = Field(alias="enable_history", default=True)
     histories: list[ConversationHistoryMessage] = Field(default_factory=list)
-    files: list[dict] = Field(default_factory=list)
+    files: list[str] = Field(default_factory=list)
     agent_type: str = Field(alias="agent_type", default="auto")
     version: Optional[Union[str, int]] = None
     user_id: Optional[str] = Field(alias="userId", default=None)

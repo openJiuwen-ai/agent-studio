@@ -1604,7 +1604,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
      */
     private List<ExternalKnowledgeBaseInfo> queryAllExternalKnowledgeBases(ConnectorDefinition connectorDefinition) {
         int offset = 0;
-        int limit = 200;
+        int limit = 100;
         PageResult<ExternalKnowledgeBaseInfo> pageResult = knowledgeBaseConnectorContext.listKnowledgeBase(null, offset,
             limit, connectorDefinition, RequestContextUtils.getRequestAuthToken());
         List<ExternalKnowledgeBaseInfo> allKnowledgeBase = new ArrayList<>(pageResult.getItems());
