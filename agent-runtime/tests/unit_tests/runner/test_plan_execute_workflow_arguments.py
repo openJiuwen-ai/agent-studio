@@ -30,10 +30,12 @@ class TestCreateWorkflowTaskArguments:
 
             mode = PlanExecuteMode()
             mode.task_id = "task-001"
+            # pylint: disable=protected-access
             mode._current_query = "hello"
             mode._conversation_id = "conv-001"
             mode._runtime_context = {}
             mode._workflow_req_params = {}
+            # pylint: enable=protected-access
             mode.context_manager = MagicMock()
             mode.context_manager.get_global_variables.return_value = {}
             return mode
@@ -44,7 +46,7 @@ class TestCreateWorkflowTaskArguments:
         workflow_context = MagicMock()
         workflow_context.workflow_id = "wf-001"
 
-        task = mode._create_workflow_task(
+        task = mode._create_workflow_task(  # pylint: disable=protected-access
             workflow_context, "tool-call-1", {"query": "hello", "order_id": "3049", "city": "sh"}
         )
 
@@ -59,7 +61,7 @@ class TestCreateWorkflowTaskArguments:
         workflow_context = MagicMock()
         workflow_context.workflow_id = "wf-002"
 
-        task = mode._create_workflow_task(workflow_context, "tool-call-2", None)
+        task = mode._create_workflow_task(workflow_context, "tool-call-2", None)  # pylint: disable=protected-access
 
         assert "arguments" in task.input_data
         assert task.input_data["arguments"] == {}
@@ -71,14 +73,16 @@ class TestCreateWorkflowTaskArguments:
         workflow_context.workflow_id = "wf-003"
 
         args = {"query": "q", "a": 1, "b": "text", "c": [1, 2, 3]}
-        task = mode._create_workflow_task(workflow_context, "tool-call-3", args)
+        task = mode._create_workflow_task(workflow_context, "tool-call-3", args)  # pylint: disable=protected-access
 
         assert task.input_data["arguments"] == args
 
 
 class TestWorkflowHandlerArgumentsInjection:
-    """WorkflowHandler.stream_handle_workflow_from_plan_execute should inject
-    non-query arguments into global_variables."""
+    """
+    WorkflowHandler.stream_handle_workflow_from_plan_execute should inject
+    non-query arguments into global_variables.
+    """
 
     @staticmethod
     def test_arguments_injected_into_global_variables():
@@ -111,7 +115,7 @@ class TestWorkflowHandlerArgumentsInjection:
             return
             yield  # make it an async generator
 
-        handler._stream_execute_workflow = empty_gen
+        handler._stream_execute_workflow = empty_gen  # pylint: disable=protected-access
 
         import asyncio
 
@@ -157,7 +161,7 @@ class TestWorkflowHandlerArgumentsInjection:
             return
             yield
 
-        handler._stream_execute_workflow = empty_gen
+        handler._stream_execute_workflow = empty_gen  # pylint: disable=protected-access
 
         import asyncio
 
