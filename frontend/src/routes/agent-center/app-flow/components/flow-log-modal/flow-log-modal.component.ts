@@ -1,11 +1,4 @@
-import {
-  ChangeDetectorRef,
-  Component,
-  EventEmitter,
-  Input,
-  Output,
-  SimpleChanges,
-} from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, Output, SimpleChanges, inject } from '@angular/core';
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { I18nNamespace } from '@i18n';
@@ -32,13 +25,7 @@ import { AssetErrorIconComponent } from '@shared/components/assets/asset-error-i
 import { AssetGenerateLoadingIconComponent } from '@shared/components/assets/asset-generate-loading-icon/asset-generate-loading-icon.component';
 import { NoDataIconComponent } from '@shared/components/no-data-icon/no-data-icon.component';
 import { isNil, isEmpty, isArray, cloneDeep, isString } from 'lodash';
-import {
-  addConversationCount,
-  ALL,
-  format2ConvTime,
-  format2ExecTime,
-  getTimeByDate,
-} from '../../utils/log-utils';
+import { addConversationCount, ALL, format2ConvTime, format2ExecTime, getTimeByDate } from '../../utils/log-utils';
 import { ParamExtractionLogComponent } from '@routes/agent-center/app-flow/components/flow-log-modal/param-extraction-log/param-extraction-log.component';
 import { Graph, Node, NodeProperties } from '@antv/x6';
 import { FlowUtils } from '@routes/agent-center/app-flow/utils/flow-utils';
@@ -48,6 +35,7 @@ import { NzBreadCrumbModule } from 'ng-zorro-antd/breadcrumb';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzTabsModule } from 'ng-zorro-antd/tabs';
 import { NzCollapseModule } from 'ng-zorro-antd/collapse';
+import { NzDrawerRef, NZ_DRAWER_DATA } from 'ng-zorro-antd/drawer';
 
 export const LIMIT_COUNT = 500; // 目前保存的历史会话不超过100
 
@@ -173,9 +161,9 @@ export class FlowLogModalComponent {
     public cdr: ChangeDetectorRef,
     public i18n: I18NextEagerPipe,
     public flowRepoServe: AppFlowRepoService,
-    public flowServe: AppFlowService,
+    public flowServe: AppFlowService
   ) {
-    this.route.queryParams.subscribe((params) => {
+    this.route.queryParams.subscribe(params => {
       this.workflow_id = params.id || this.inputWorkflowId;
     });
     this.initializeDates();
@@ -190,7 +178,7 @@ export class FlowLogModalComponent {
     this.flowServe
       .tokenDataUpdate$()
       .pipe(takeUntil(this.destroy$))
-      .subscribe((tokenObj) => {
+      .subscribe(tokenObj => {
         this.hasUpdate = true;
         setTimeout(() => {
           this.getPageData();
@@ -199,6 +187,9 @@ export class FlowLogModalComponent {
   }
 
   getPageData() {
+    if (!this.showLogDrawer) {
+      return;
+    }
     if (!this.isReq && this.workflow_id) {
       this.isReq = true;
       this.getConversations()
@@ -249,7 +240,7 @@ export class FlowLogModalComponent {
         limit: LIMIT_COUNT,
         offset: 0,
       })
-      .then((result) => {
+      .then(result => {
         this.conversationList = result.conversation_infos;
         this.cdr.markForCheck();
       })
@@ -264,7 +255,7 @@ export class FlowLogModalComponent {
     if (conversation_id) {
       this.flowRepoServe
         .getExecList(this.workflow_id, conversation_id)
-        .then((result) => {
+        .then(result => {
           this.executionList = result.execution_infos;
           this.cdr.markForCheck();
         })
@@ -279,7 +270,6 @@ export class FlowLogModalComponent {
   }
 
   public changeConvSelected() {
-    console.log(this.conversationSelected)
     const { conversation_id } = this.conversationSelected;
     this.getExecutions(conversation_id);
   }
@@ -387,7 +377,7 @@ export class FlowLogModalComponent {
 
   /** 通过uuid字段值，过滤提问器展示的某一次QA对应的输入和输出 */
   public getMessagesByUuid(msg: any[], uuid: string) {
-    return msg.filter((item) => item.uuid === uuid);
+    return msg.filter(item => item.uuid === uuid);
   }
 
   public getNodeStatus(node_status: string) {
@@ -430,9 +420,7 @@ export class FlowLogModalComponent {
     this.nodeIdClicked = uuid;
     this.flowServe?.setNodeIdClicked(uuid);
     // 点击时序图上的某个节点后，展示该节点对应的输入输出，默认展开
-    const nodeClicked = this.callChainInfo.list.find(
-      (item) => item.node_uuid === uuid,
-    );
+    const nodeClicked = this.callChainInfo.list.find(item => item.node_uuid === uuid);
     if (nodeClicked) {
       nodeClicked.collapsed = false;
     }
@@ -486,14 +474,11 @@ export class FlowLogModalComponent {
       return;
     }
     try {
-      const res = await this.flowRepoServe.getConversationList(
-        this.workflow_id,
-        {
-          ...params,
-          limit: LIMIT_COUNT,
-          offset: 0,
-        },
-      );
+      const res = await this.flowRepoServe.getConversationList(this.workflow_id, {
+        ...params,
+        limit: LIMIT_COUNT,
+        offset: 0,
+      });
       this.conversationList = res?.conversation_infos;
       if (this.conversationList.length > 0) {
         this.conversationSelected = this.conversationList[0];
@@ -521,19 +506,12 @@ export class FlowLogModalComponent {
   /** 获取execution list */
   protected async getExecutions(conversation_id: string) {
     try {
-      const res = await this.flowRepoServe.getExecList(
-        this.workflow_id,
-        conversation_id,
-      );
+      const res = await this.flowRepoServe.getExecList(this.workflow_id, conversation_id);
       this.executionList = res?.execution_infos;
       if (this.executionList.length > 0) {
         this.executionSelected = this.executionList[0];
         const { conversation_id, execution_id } = this.executionList[0] || {};
-        this.getSingleExecDetail(
-          this.workflow_id,
-          conversation_id,
-          execution_id,
-        );
+        this.getSingleExecDetail(this.workflow_id, conversation_id, execution_id);
       } else {
         this.executionSelected = {};
       }
@@ -545,51 +523,39 @@ export class FlowLogModalComponent {
   }
 
   /** 根据executionId，查询节点的调用详情 */
-  protected getSingleExecDetail(
-    workflowId: string,
-    conversationId: string,
-    executionId: string,
-  ) {
-    this.flowRepoServe
-      .getSingleExecInfo(workflowId, executionId)
-      .then((result: any) => {
-        // 通过增加node_uuid字段，保证点击时序图上的某个节点，可以展开对应的调用链信息
-        result.event_list.forEach((item) => {
-          item.node_uuid = uuidV4();
-        });
-
-        this.result = result;
-        this.callChainInfo.list = this.convertToTableData(
-          this.result?.event_list,
-        ).filter((item) => !item.parent_node_id);
-        this.crumb = [
-          {
-            label: this.i18n.transform('parent'),
-            id: '',
-          },
-        ];
-        this.timelineData = this.convertToTimelineData(this.result.event_list);
-        this.timelineData.childInvokes = this.timelineData.childInvokes.filter(
-          (item) => !item.parent_node_id,
-        );
-
-        const { status, outputs, error_info } = result;
-        this.updateWorkflowDebugInfo(result);
-        let temp_name = '';
-        this?.updateWorkflowStatus(status);
-        if (status === 'succeeded') {
-          this.workflowDebugInfo.result = outputs?.responseContent;
-        } else {
-          this.workflowDebugInfo.result = error_info;
-        }
-        this.cdr.markForCheck();
+  protected getSingleExecDetail(workflowId: string, conversationId: string, executionId: string) {
+    this.flowRepoServe.getSingleExecInfo(workflowId, executionId).then((result: any) => {
+      // 通过增加node_uuid字段，保证点击时序图上的某个节点，可以展开对应的调用链信息
+      result.event_list.forEach(item => {
+        item.node_uuid = uuidV4();
       });
+
+      this.result = result;
+      this.callChainInfo.list = this.convertToTableData(this.result?.event_list).filter(item => !item.parent_node_id);
+      this.crumb = [
+        {
+          label: this.i18n.transform('parent'),
+          id: '',
+        },
+      ];
+      this.timelineData = this.convertToTimelineData(this.result.event_list);
+      this.timelineData.childInvokes = this.timelineData.childInvokes.filter(item => !item.parent_node_id);
+
+      const { status, outputs, error_info } = result;
+      this.updateWorkflowDebugInfo(result);
+      let temp_name = '';
+      this?.updateWorkflowStatus(status);
+      if (status === 'succeeded') {
+        this.workflowDebugInfo.result = outputs?.responseContent;
+      } else {
+        this.workflowDebugInfo.result = error_info;
+      }
+      this.cdr.markForCheck();
+    });
   }
 
   getChildWorkflow(workflow) {
-    const list = this.result.event_list.filter(
-      (item) => item.parent_node_id === workflow?.node_id,
-    );
+    const list = this.result.event_list.filter(item => item.parent_node_id === workflow?.node_id);
     this.callChainInfo.list = this.convertToTableData(list);
     this.timelineData = this?.convertToTimelineData(list);
     this.crumb.push({
@@ -600,25 +566,17 @@ export class FlowLogModalComponent {
 
   onSelectWorkflow(curmbItem) {
     if (curmbItem.id) {
-      const list = this.result.event_list.filter(
-        (item) => item.parent_node_id === curmbItem?.id,
-      );
+      const list = this.result.event_list.filter(item => item.parent_node_id === curmbItem?.id);
       this.callChainInfo.list = this.convertToTableData(list);
       this.timelineData = this.convertToTimelineData(list);
       const parent_node_id = this.callChainInfo?.list[0]?.parent_node_id;
-      const level = this.crumb.findIndex((item) => item.id === parent_node_id);
+      const level = this.crumb.findIndex(item => item.id === parent_node_id);
       this.crumb = this.crumb.slice(0, level + 1);
     } else {
-      this.callChainInfo.list = this?.convertToTableData(
-        this.result.event_list,
-      );
-      this.callChainInfo.list = this.callChainInfo?.list.filter(
-        (item) => !item.parent_node_id,
-      );
+      this.callChainInfo.list = this?.convertToTableData(this.result.event_list);
+      this.callChainInfo.list = this.callChainInfo?.list.filter(item => !item.parent_node_id);
       this.timelineData = this?.convertToTimelineData(this.result.event_list);
-      this.timelineData.childInvokes = this.timelineData?.childInvokes.filter(
-        (item) => !item.parent_node_id,
-      );
+      this.timelineData.childInvokes = this.timelineData?.childInvokes.filter(item => !item.parent_node_id);
       this.crumb = this.crumb.slice(0, 1);
     }
   }
@@ -640,7 +598,7 @@ export class FlowLogModalComponent {
         {
           title: this.i18n.transform('running_time_label'),
           content: flowCommonLogic?.calcElapsedTime(start_time, end_time),
-        },
+        }
       );
     }
   }
@@ -648,9 +606,7 @@ export class FlowLogModalComponent {
   /** 更新工作流运行结果的状态和描述 */
   protected updateWorkflowStatus(status: string) {
     const isQuestionWait = this.callChainInfo?.list.find(
-      (item) =>
-        (item.node_type === 'Questioner' || item.node_type === 'Agent') &&
-        item.node_status === 'waiting',
+      item => (item.node_type === 'Questioner' || item.node_type === 'Agent') && item.node_status === 'waiting'
     );
 
     if (isQuestionWait) {
@@ -659,9 +615,7 @@ export class FlowLogModalComponent {
       this.workflowDebugInfo.status = status;
     }
 
-    this.workflowDebugInfo.status_desc = flowCommonLogic?.getWorkflowStatusDesc(
-      this.workflowDebugInfo.status,
-    );
+    this.workflowDebugInfo.status_desc = flowCommonLogic?.getWorkflowStatusDesc(this.workflowDebugInfo.status);
     this.cdr.markForCheck();
   }
 
@@ -672,32 +626,23 @@ export class FlowLogModalComponent {
     }
     const eventListCopy = cloneDeep(event_list);
 
-    const startList = eventListCopy.filter(
-      (item) => item?.node_status === 'node_started',
-    );
+    const startList = eventListCopy.filter(item => item?.node_status === 'node_started');
 
     // 存储node_status等于node_wait并且node_type等于LLM对应的node_id list
     const llmNodeIds = eventListCopy
-      .filter((item) => {
+      .filter(item => {
         return item.node_status === 'node_wait' && item?.node_type === 'LLM';
       })
-      .map((item) => item.node_id);
+      .map(item => item.node_id);
 
     const tableData = startList
-      .map((item) => {
-        const { node, additionalInfo } = this?.findMatchingEndNode(
-          eventListCopy,
-          item,
-        );
+      .map(item => {
+        const { node, additionalInfo } = this?.findMatchingEndNode(eventListCopy, item);
         if (!node) return null;
 
         // 优先匹配node_finished对象中的status.desc值，若没有则更新为"运行成功"
         if (llmNodeIds.includes(node.node_id)) {
-          const hasFinishedNode = eventListCopy.some(
-            (el) =>
-              el.node_id === node?.node_id &&
-              el?.node_status === 'node_finished',
-          );
+          const hasFinishedNode = eventListCopy.some(el => el.node_id === node?.node_id && el?.node_status === 'node_finished');
           if (!hasFinishedNode) {
             node.status.desc = 'succeeded';
           }
@@ -709,28 +654,48 @@ export class FlowLogModalComponent {
         } else {
           tableItem = this.createTableItem(node);
         }
-        if (
-          tableItem?.node_type === 'Questioner' ||
-          tableItem?.node_type === 'Agent'
-        ) {
+        if (tableItem?.node_type === 'Questioner' || tableItem?.node_type === 'Agent') {
           if (additionalInfo) {
             this.processQuestionerNode(tableItem, node, additionalInfo);
           } else {
             this?.processQuestionerNode(tableItem, node);
           }
         }
-        if (
-          tableItem?.node_type === 'ParamExtraction' ||
-          tableItem?.node_type === 'ParamOutput'
-        ) {
+        if (tableItem?.node_type === 'ParamExtraction' || tableItem?.node_type === 'ParamOutput') {
           this?.processParamExtractionNode(tableItem, node);
         }
         tableItem.error_message = this.handelErrorMsg(tableItem.error_message);
 
+        if (tableItem) {
+          tableItem = this.addTableItemAttr(tableItem);
+        }
         return tableItem;
       })
-      .filter((item) => item !== null);
+      .filter(item => item !== null);
     return tableData;
+  }
+
+  addTableItemAttr(tableItem) {
+    tableItem.isQuestionNode = this.isQuestionNode(tableItem?.node_type);
+    tableItem.isLLMNode = this.isLLMNode(tableItem?.node_type);
+    tableItem.nodeSrc = this.getNodeStatus(tableItem?.node_status);
+    tableItem.isParamExtractionNode = this.isParamExtractionNode(tableItem?.node_type);
+    tableItem.isIOEmpty = this.isIOEmpty(tableItem?.outputs);
+    tableItem.messagesByUuid = this.getMessagesByUuid(tableItem.messages, tableItem.roundSelected?.uuid);
+    if (tableItem.messagesByUuid.length && tableItem.messagesByUuid[0]) {
+      tableItem.messagesByUuid[0].isIOEmpty = this.isIOEmpty(tableItem.messagesByUuid[0]);
+      if (Object.keys(tableItem.messagesByUuid[0]).length > 0) {
+        tableItem.messagesByUuid[0].removeUuid = this.removeUuid(tableItem.messagesByUuid[0]);
+      }
+    }
+    if (tableItem.messagesByUuid.length && tableItem.messagesByUuid[1]) {
+      tableItem.messagesByUuid[1].isIOEmpty = this.isIOEmpty(tableItem.messagesByUuid[1]);
+      if (Object.keys(tableItem.messagesByUuid[0]).length > 0) {
+        tableItem.messagesByUuid[1].removeUuid = this.removeUuid(tableItem.messagesByUuid[1]);
+      }
+    }
+    tableItem.nodeIcon = this.getNodeIcon(tableItem?.node_type);
+    return tableItem;
   }
 
   /** 将接口返回的调用详情数据，组装成时序图数据 */
@@ -746,15 +711,10 @@ export class FlowLogModalComponent {
       startTime: '',
     };
 
-    const startList = eventListCopy.filter(
-      (item) => item.node_status === 'node_started',
-    );
+    const startList = eventListCopy.filter(item => item.node_status === 'node_started');
 
-    timelineData.childInvokes = startList.map((item) => {
-      const { node, additionalInfo } = this.findMatchingEndNode(
-        eventListCopy,
-        item,
-      );
+    timelineData.childInvokes = startList.map(item => {
+      const { node, additionalInfo } = this.findMatchingEndNode(eventListCopy, item);
 
       const baseData = {
         invokeId: this.result.execution_id,
@@ -784,10 +744,7 @@ export class FlowLogModalComponent {
 
     if (timelineData?.childInvokes.length > 0) {
       timelineData.startTime = timelineData.childInvokes[0].startTime;
-      timelineData.endTime =
-        timelineData.childInvokes[
-          timelineData?.childInvokes.length - 1
-        ].endTime;
+      timelineData.endTime = timelineData.childInvokes[timelineData?.childInvokes.length - 1].endTime;
     }
     return timelineData;
   }
@@ -800,12 +757,7 @@ export class FlowLogModalComponent {
     const { node_id, node_type, parent_node_id, start_time } = start || {};
 
     // 同样的node_id对应的node_finished可能出现多次(循环+子工作流节点)。通过found等于true，标识已经匹配到该次输出
-    const finishes = event_list.filter(
-      (item) =>
-        item.node_id === node_id &&
-        item.parent_node_id === parent_node_id &&
-        item.node_status === 'node_finished',
-    );
+    const finishes = event_list.filter(item => item.node_id === node_id && item.parent_node_id === parent_node_id && item.node_status === 'node_finished');
     let finish: any = {};
 
     for (const f of finishes) {
@@ -841,10 +793,7 @@ export class FlowLogModalComponent {
     let additionalInfo = finish;
 
     if (node_type === 'Questioner' || node_type === 'Agent') {
-      if (
-        finish.node_id &&
-        (!finish.messages || finish.messages.length === 0)
-      ) {
+      if (finish.node_id && (!finish.messages || finish.messages.length === 0)) {
         return {
           node: this.getMaxMessagesNode(event_list, node_id) || finish,
           additionalInfo,
@@ -874,34 +823,20 @@ export class FlowLogModalComponent {
     }
   }
 
-  protected getMaxMessagesNode(
-    event_list: any[],
-    node_id: string,
-    node_type?: string,
-  ): any {
-    const waitList = event_list.filter(
-      (item) => item?.node_id === node_id && item?.node_status === 'node_wait',
-    );
+  protected getMaxMessagesNode(event_list: any[], node_id: string, node_type?: string): any {
+    const waitList = event_list.filter(item => item?.node_id === node_id && item?.node_status === 'node_wait');
 
     if (node_type === 'LLM') {
       return waitList[waitList.length - 1];
     }
-    return waitList.reduce(
-      (maxNode, curNode) =>
-        (curNode?.messages?.length || 0) > (maxNode?.messages?.length || 0)
-          ? curNode
-          : maxNode,
-      null,
-    );
+    return waitList.reduce((maxNode, curNode) => ((curNode?.messages?.length || 0) > (maxNode?.messages?.length || 0) ? curNode : maxNode), null);
   }
 
   private handelErrorMsg(errorString): string {
     try {
       const jsonStart = errorString.indexOf('{');
       const jsonEnd = errorString.lastIndexOf('}');
-      const jsonString = errorString
-        .substring(jsonStart, jsonEnd + 1)
-        .replace(/\t/g, '');
+      const jsonString = errorString.substring(jsonStart, jsonEnd + 1).replace(/\t/g, '');
       return JSON.parse(jsonString);
     } catch {
       return errorString;
@@ -922,23 +857,13 @@ export class FlowLogModalComponent {
   }
 
   protected createTableItem(nodeData: any): any {
-    const {
-      outputs,
-      start_time,
-      end_time,
-      error_message,
-      prefill_time,
-      startup_time,
-    } = nodeData;
+    const { outputs, start_time, end_time, error_message, prefill_time, startup_time } = nodeData;
 
     const elapsed_time = flowCommonLogic?.calcElapsedTime(start_time, end_time);
 
     let first_token_time;
     if (!isNil(prefill_time) && !isNil(startup_time)) {
-      first_token_time = flowCommonLogic?.calcElapsedTime(
-        startup_time,
-        prefill_time,
-      );
+      first_token_time = flowCommonLogic?.calcElapsedTime(startup_time, prefill_time);
     }
 
     let updatedOutputs;
@@ -962,7 +887,7 @@ export class FlowLogModalComponent {
       collapsed = false;
     }
 
-    return {
+    const res = this.addTableItemAttr({
       ...nodeData,
       collapsed,
       node_status,
@@ -970,7 +895,9 @@ export class FlowLogModalComponent {
       outputs: updatedOutputs,
       messages: nodeData.messages || [],
       first_token_time,
-    };
+    });
+
+    return res;
   }
 
   protected createTableItemError(nodeData: any, additionalInfo: any): any {
@@ -980,13 +907,10 @@ export class FlowLogModalComponent {
 
     let first_token_time;
     if (!isNil(prefill_time) && !isNil(startup_time)) {
-      first_token_time = flowCommonLogic?.calcElapsedTime(
-        startup_time,
-        prefill_time,
-      );
+      first_token_time = flowCommonLogic?.calcElapsedTime(startup_time, prefill_time);
     }
 
-    return {
+    const res = this.addTableItemAttr({
       ...nodeData,
       collapsed: true,
       node_status: additionalInfo.status.desc,
@@ -994,14 +918,12 @@ export class FlowLogModalComponent {
       first_token_time,
       elapsed_time,
       start_time,
-    };
+    });
+
+    return res;
   }
 
-  protected processQuestionerNode(
-    callItem: any,
-    node: any,
-    additionalInfo?: any,
-  ) {
+  protected processQuestionerNode(callItem: any, node: any, additionalInfo?: any) {
     const { node_status } = node;
     if (node_status === 'node_finished') {
       this?.addFinalAnsToMsg(node, node);
@@ -1032,9 +954,7 @@ export class FlowLogModalComponent {
       return msg;
     });
 
-    callItem.questionerRounds = node?.messages.filter(
-      (message) => message.role === 'user',
-    );
+    callItem.questionerRounds = node?.messages.filter(message => message.role === 'user');
     if (callItem?.questionerRounds.length > 0) {
       callItem.roundSelected = callItem?.questionerRounds[0];
     }
@@ -1047,9 +967,7 @@ export class FlowLogModalComponent {
    * @protected
    */
   protected processParamExtractionNode(callItem: any, node: any) {
-    const cell: Node = this.graph?.getCellById(
-      node.node_id,
-    ) as Node<NodeProperties>;
+    const cell: Node = this.graph?.getCellById(node.node_id) as Node<NodeProperties>;
     if (cell) {
       const nodeInfo = FlowUtils.getNodeDSLFromRaw(cell);
       callItem.nodeInfo = nodeInfo;
@@ -1066,9 +984,7 @@ export class FlowLogModalComponent {
   }
 
   protected addFinalAnsToMsg(node: any, source: any): void {
-    const finalAnswer = source?.error_message
-      ? { error_message: source?.error_message }
-      : source.outputs;
+    const finalAnswer = source?.error_message ? { error_message: source?.error_message } : source.outputs;
 
     // 确保 messages 字段存在
     if (!node.messages) {
@@ -1091,7 +1007,7 @@ export class FlowLogModalComponent {
 
   /** 调用链表格中所有节点恢复成收起状态 */
   protected resetCollapsedState() {
-    this.callChainInfo?.list.forEach((item) => {
+    this.callChainInfo?.list.forEach(item => {
       item.collapsed = true;
     });
   }
@@ -1100,9 +1016,7 @@ export class FlowLogModalComponent {
     const dates = new Array(7).fill(0).map((item, i) => {
       let date = new Date();
       date.setDate(date?.getDate() - i);
-      const formattedDate = `${date.getFullYear()}-${String(
-        date.getMonth() + 1,
-      ).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
       return {
         value: formattedDate,
         label: formattedDate,
@@ -1110,10 +1024,7 @@ export class FlowLogModalComponent {
       };
     });
 
-    this.dates = [
-      { value: this.ALL_ITEM, label: this.i18n.transform('all') },
-      ...dates,
-    ];
+    this.dates = [{ value: this.ALL_ITEM, label: this.i18n.transform('all') }, ...dates];
   }
 
   protected handleAllDate(): void {

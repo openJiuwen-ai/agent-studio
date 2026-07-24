@@ -200,7 +200,7 @@
                     <nz-icon nzType="right" nzTheme="outline" />
                   </span>
                 </div>
-                <div class="deep-seek-area" [ngStyle]="{ display: item.collapsed ? 'none' : 'block' }">
+                <div class="deep-seek-area" *ngIf="!item.collapsed">
                   <div class="deep-seek-text mt-[12px]">
                     {{ item.thinkValue }}
                   </div>
@@ -406,7 +406,7 @@
       />
     </div>
   </div>
-  <div class="call-node-IO" [ngStyle]="{ display: callItem.collapsed ? 'none' : 'block' }">
+  <div class="call-node-IO" *ngIf="!callItem.collapsed">
     <div
       class="crumb"
       *ngIf="callItem?.node_type === 'Workflow'"
@@ -415,7 +415,7 @@
       <nz-icon class="mr-1" nzType="export" nzTheme="outline"></nz-icon>
       <span>{{ 'view_sub_workflow_call_chain' | i18nextEager }}</span>
     </div>
-    <div *ngIf="!isIOEmpty(callItem.inputs); else noInputs" class="mb-[12px]">
+    <div *ngIf="!callItem.isIOEmpty; else noInputs" class="mb-[12px]">
       <div class="node-inputs-area">
         <span class="color-[#191919]">{{ 'input' | i18nextEager }}</span>
         <asset-copy-icon
@@ -432,7 +432,7 @@
         <json-viewer [jsonData]="callItem.inputs"></json-viewer>
       </div>
     </div>
-    <div *ngIf="!isIOEmpty(callItem.outputs); else noOutputs">
+    <div *ngIf="!callItem.isIOEmpty; else noOutputs">
       <div class="node-inputs-area">
         <span class="color-[#191919]">{{ 'output' | i18nextEager }}</span>
         <asset-copy-icon
