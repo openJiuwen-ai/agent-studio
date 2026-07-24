@@ -31,7 +31,7 @@ from enum import Enum
 from typing import Any
 
 from agent_runtime.common.config import settings
-from agent_runtime.common.redis_manager import get_redis_client
+from common_utils.redis_manager import get_redis_client
 from agent_runtime.common.session_state_access import get_state_info
 from jiuwen.extension.workflow_node.utils import get_workflow_param
 from jiuwen.orchestration.flow.constant import REQUEST_VARIABLES

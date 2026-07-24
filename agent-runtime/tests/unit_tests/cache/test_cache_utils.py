@@ -20,7 +20,7 @@ def _patch_redis_modules():
 
     The vendored ``open_utils`` now obtains both sync and async Redis clients
     through the single ``get_redis_client`` helper (imported from
-    ``agent_runtime.common.redis_manager``); the old separate
+    ``common_utils.redis_manager``); the old separate
     ``get_redis_instance`` / ``get_async_redis_instance`` symbols no longer
     exist. Individual tests still override ``CacheUtils._redis_cache`` /
     ``_async_redis_cache`` directly via the ``cache_utils`` fixture, so the

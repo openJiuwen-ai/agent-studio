@@ -106,7 +106,7 @@ async def get_conversation_variables(
     redis_key = _build_redis_key(agent_id, conversation_id)
 
     try:
-        from agent_runtime.common.redis_manager import get_redis_client
+        from common_utils.redis_manager import get_redis_client
 
         redis_client = get_redis_client()
         raw = await redis_client.get(redis_key)
@@ -151,7 +151,7 @@ async def update_conversation_variable(
     redis_key = _build_redis_key(agent_id, conversation_id)
 
     try:
-        from agent_runtime.common.redis_manager import get_redis_client
+        from common_utils.redis_manager import get_redis_client
 
         redis_client = get_redis_client()
         raw = await redis_client.get(redis_key)

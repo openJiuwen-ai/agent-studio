@@ -59,62 +59,6 @@ class ServerSettings(BaseSettings):
         return _decrypt(v)
 
 
-class RedisMode(Enum):
-    """Redis 连接模式。"""
-
-    SINGLE = "single"
-    CLUSTER = "cluster"
-    SENTINEL = "sentinel"
-
-
-class RedisSettings(BaseSettings):
-    """Redis 配置。环境变量前缀统一为 REDIS_。"""
-
-    # 模式配置
-    mode: RedisMode = Field(default=RedisMode.SINGLE, validation_alias="REDIS_MODE")
-
-    # 单机/哨兵模式配置
-    host: str = Field(default="127.0.0.1", validation_alias="REDIS_HOST")
-    port: int = Field(default=6379, validation_alias="REDIS_PORT")
-    db: int = Field(default=0, validation_alias="REDIS_DATABASE")
-    password: Optional[str] = Field(default=None, validation_alias="REDIS_PASSWORD")
-    # 是否启用redis事务
-    redis_transaction_enabled: bool = Field(
-        default=True, validation_alias="REDIS_TRANSACTION_ENABLED"
-    )
-
-    # 集群模式配置
-    cluster_nodes: str = Field(default="", validation_alias="REDIS_CLUSTER_NODES")
-
-    # 哨兵模式配置
-    sentinel_master: str = Field(
-        default="mymaster", validation_alias="REDIS_SENTINEL_MASTER"
-    )
-    sentinel_nodes: str = Field(default="", validation_alias="REDIS_SENTINEL_NODES")
-
-    # 连接池配置
-    max_connections: int = Field(default=50, validation_alias="REDIS_MAX_CONNECTIONS")
-    socket_timeout: int = Field(default=5, validation_alias="REDIS_SOCKET_TIMEOUT")
-    socket_connect_timeout: int = Field(
-        default=5, validation_alias="REDIS_SOCKET_CONNECT_TIMEOUT"
-    )
-
-    # SSL 配置（建议直接使用默认值就可以）
-    ssl_enabled: bool = Field(default=False, validation_alias="REDIS_SSL_ENABLED")
-    ssl_ca_cert: str = Field(default="", validation_alias="REDIS_SSL_CA_CERT")
-    ssl_cert_file: str = Field(default="", validation_alias="REDIS_SSL_CERT_FILE")
-    ssl_key_file: str = Field(default="", validation_alias="REDIS_SSL_KEY_FILE")
-
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
-
-    @field_validator("password", mode="after")
-    @classmethod
-    def _decrypt_password(cls, v):
-        return _decrypt(v)
-
-
 class ModelConfigStrategyType(str, Enum):
     """模型配置来源策略"""
     ENV = "env"
@@ -455,7 +399,6 @@ class ConversationVariableSettings(BaseSettings):
 
 class Settings:
     server = ServerSettings()
-    redis = RedisSettings()
     llm = LLMSettings()
     object_storage = ObjectStorageSettings()
     health_check = HealthCheckSettings()

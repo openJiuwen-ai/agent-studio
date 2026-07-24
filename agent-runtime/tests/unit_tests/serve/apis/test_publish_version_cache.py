@@ -75,10 +75,10 @@ class TestPublishVersionCacheGetMetadata:
         mock_manager.is_initialized = True
 
         with patch(
-            "agent_runtime.common.redis_manager.RedisClientManager.get_instance",
+            "common_utils.redis_manager.RedisClientManager.get_instance",
             return_value=mock_manager,
         ), patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ):
             result = await PublishVersionCache.get_publish_metadata("wf-123")
@@ -94,7 +94,7 @@ class TestPublishVersionCacheGetMetadata:
         mock_manager.is_initialized = False
 
         with patch(
-            "agent_runtime.common.redis_manager.RedisClientManager.get_instance",
+            "common_utils.redis_manager.RedisClientManager.get_instance",
             return_value=mock_manager,
         ), patch(
             "jiuwen.common.store.async_obs.AsyncOBSUtil.get_content",
@@ -116,10 +116,10 @@ class TestPublishVersionCacheGetMetadata:
         mock_manager.is_initialized = True
 
         with patch(
-            "agent_runtime.common.redis_manager.RedisClientManager.get_instance",
+            "common_utils.redis_manager.RedisClientManager.get_instance",
             return_value=mock_manager,
         ), patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
             "jiuwen.common.store.async_obs.AsyncOBSUtil.get_content",
@@ -142,10 +142,10 @@ class TestPublishVersionCacheGetMetadata:
         mock_manager.is_initialized = True
 
         with patch(
-            "agent_runtime.common.redis_manager.RedisClientManager.get_instance",
+            "common_utils.redis_manager.RedisClientManager.get_instance",
             return_value=mock_manager,
         ), patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
             "jiuwen.common.store.async_obs.AsyncOBSUtil.get_content",
@@ -167,10 +167,10 @@ class TestPublishVersionCacheGetMetadata:
         mock_manager.is_initialized = True
 
         with patch(
-            "agent_runtime.common.redis_manager.RedisClientManager.get_instance",
+            "common_utils.redis_manager.RedisClientManager.get_instance",
             return_value=mock_manager,
         ), patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
             "jiuwen.common.store.async_obs.AsyncOBSUtil.get_content",

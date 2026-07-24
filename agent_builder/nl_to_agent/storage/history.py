@@ -2,121 +2,14 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 # N2L临时九问补丁，若jiuwen已更新该代码，则删除
 import json
-import ssl
-from typing import List, Union
+from typing import List
 
-import redis
-from redis.cluster import RedisCluster, ClusterNode
-
-from agent_builder.adapter.config_bridge import RedisMode, settings as global_settings
+from common_utils.common_config import RedisSettings
+from common_utils.redis_manager import RedisClientManager, get_redis_client
 from agent_builder.adapter.logger_rt_bridge import logger as rt_logger
 from agent_builder.adapter.singleton import Singleton
 
 from .base import BaseConversationMemory
-
-
-def _create_ssl_context(redis_settings) -> ssl.SSLContext:
-    ctx = ssl.create_default_context()
-    if redis_settings.ssl_ca_cert:
-        ctx.load_verify_locations(redis_settings.ssl_ca_cert)
-    if redis_settings.ssl_cert_file and redis_settings.ssl_key_file:
-        ctx.load_cert_chain(
-            redis_settings.ssl_cert_file,
-            redis_settings.ssl_key_file,
-        )
-    return ctx
-
-
-def _create_sync_single_client(redis_settings) -> redis.Redis:
-    connection_kwargs = {
-        "host": redis_settings.host,
-        "port": redis_settings.port,
-        "db": redis_settings.db,
-        "decode_responses": False,
-    }
-    if redis_settings.password:
-        connection_kwargs["password"] = redis_settings.password
-    if redis_settings.ssl_enabled:
-        connection_kwargs["ssl"] = _create_ssl_context(redis_settings)
-    return redis.Redis(**connection_kwargs)
-
-
-def _create_sync_cluster_client(redis_settings) -> RedisCluster:
-    nodes = []
-    for node_str in redis_settings.cluster_nodes.split(","):
-        node_str = node_str.strip()
-        if not node_str:
-            continue
-        if ":" in node_str:
-            host, port = node_str.split(":", 1)
-            node = ClusterNode(host=host, port=int(port))
-        else:
-            node = ClusterNode(host=node_str, port=6379)
-        nodes.append(node)
-    if not nodes:
-        raise ValueError("REDIS_CLUSTER_NODES not configured")
-    return RedisCluster(
-        startup_nodes=nodes,
-        password=redis_settings.password,
-        decode_responses=False,
-    )
-
-
-def _create_sync_sentinel_client(redis_settings) -> redis.Redis:
-    from redis.sentinel import Sentinel
-
-    sentinel_nodes = []
-    for node_str in redis_settings.sentinel_nodes.split(","):
-        node_str = node_str.strip()
-        if not node_str:
-            continue
-        if ":" in node_str:
-            host, port = node_str.split(":", 1)
-            sentinel_nodes.append((host, int(port)))
-        else:
-            sentinel_nodes.append((node_str, 26379))
-    if not sentinel_nodes:
-        raise ValueError("REDIS_SENTINEL_NODES not configured")
-    sentinel = Sentinel(sentinel_nodes)
-    return sentinel.master_for(
-        redis_settings.sentinel_master,
-        redis.Redis,
-        password=redis_settings.password,
-        decode_responses=False,
-    )
-
-
-def _create_sync_redis_client() -> Union[redis.Redis, RedisCluster]:
-    """使用 agent_runtime 的 Redis 配置创建同步 Redis 客户端"""
-    redis_settings = global_settings.redis
-    if not redis_settings.host and not redis_settings.cluster_nodes:
-        raise RuntimeError(
-            "Redis not configured in agent_runtime settings, "
-            "please check REDIS_HOST / REDIS_CLUSTER_NODES"
-        )
-    mode = redis_settings.mode
-    if mode == RedisMode.CLUSTER:
-        client = _create_sync_cluster_client(redis_settings)
-        rt_logger.info(
-            "creating sync Redis cluster client: nodes=%s",
-            redis_settings.cluster_nodes,
-        )
-    elif mode == RedisMode.SENTINEL:
-        client = _create_sync_sentinel_client(redis_settings)
-        rt_logger.info(
-            "creating sync Redis sentinel client: master=%s, nodes=%s",
-            redis_settings.sentinel_master,
-            redis_settings.sentinel_nodes,
-        )
-    else:
-        client = _create_sync_single_client(redis_settings)
-        rt_logger.info(
-            "creating sync Redis client: host=%s:%s, db=%s",
-            redis_settings.host,
-            redis_settings.port,
-            redis_settings.db,
-        )
-    return client
 
 
 class HistoryStorage(metaclass=Singleton):
@@ -168,13 +61,12 @@ class AsyncHistoryStorage(metaclass=Singleton):
 
     async def _get_async_redis_client(self):
         if AsyncHistoryStorage._async_redis_client is None:
-            from agent_builder.adapter.redis_bridge import get_redis_client
             AsyncHistoryStorage._async_redis_client = get_redis_client()
         return AsyncHistoryStorage._async_redis_client
 
     async def add(self, key: str, value: dict) -> bool:
         redis_client = await self._get_async_redis_client()
-        ttl = global_settings.redis.datasource_ttl_seconds
+        ttl = RedisSettings().datasource_ttl_seconds
         await redis_client.rpush(key, json.dumps(value, ensure_ascii=False))
         await redis_client.expire(key, ttl)
         return True
@@ -198,7 +90,7 @@ class AsyncHistoryStorage(metaclass=Singleton):
 class SessionStorage(metaclass=Singleton):
     """同步会话状态存储：封装 agent/resource/plugin_dict/workflow_dict 4 个键的 get/set/delete。
 
-    使用 agent_runtime 的 Redis 配置，支持单机/集群/哨兵三种模式。
+    使用 RedisClientManager 管理的同步 Redis 客户端，支持单机/集群/哨兵三种模式。
     """
 
     _initialized = False
@@ -218,7 +110,9 @@ class SessionStorage(metaclass=Singleton):
     @staticmethod
     def _get_sync_redis_client():
         if SessionStorage._sync_redis_client is None:
-            SessionStorage._sync_redis_client = _create_sync_redis_client()
+            SessionStorage._sync_redis_client = (
+                RedisClientManager.get_instance().get_sync_client()
+            )
         return SessionStorage._sync_redis_client
 
     @staticmethod
@@ -256,7 +150,7 @@ class SessionStorage(metaclass=Singleton):
     ) -> bool:
         """保存会话状态。"""
         redis_client = SessionStorage._get_sync_redis_client()
-        ttl = global_settings.redis.datasource_ttl_seconds
+        ttl = RedisSettings().datasource_ttl_seconds
         redis_client.set(f"agent:{task_id}", state, ex=ttl)
         redis_client.set(
             f"resource:{task_id}", json.dumps(resource_config), ex=ttl
@@ -304,7 +198,6 @@ class AsyncSessionStorage(metaclass=Singleton):
     @staticmethod
     async def _get_async_redis_client():
         if AsyncSessionStorage._async_redis_client is None:
-            from agent_builder.adapter.redis_bridge import get_redis_client
             AsyncSessionStorage._async_redis_client = get_redis_client()
         return AsyncSessionStorage._async_redis_client
 
@@ -343,7 +236,7 @@ class AsyncSessionStorage(metaclass=Singleton):
     ) -> bool:
         """保存会话状态。"""
         redis_client = await AsyncSessionStorage._get_async_redis_client()
-        ttl = global_settings.redis.datasource_ttl_seconds
+        ttl = RedisSettings().datasource_ttl_seconds
         await redis_client.set(f"agent:{task_id}", state, ex=ttl)
         await redis_client.set(
             f"resource:{task_id}", json.dumps(resource_config), ex=ttl
@@ -370,14 +263,14 @@ class AsyncSessionStorage(metaclass=Singleton):
 class ImRedisConversation(BaseConversationMemory):
     """
     history conversation memory in redis
-    使用 agent_runtime 的 Redis 配置，与 agent_runtime 其他接口保持一致
+    使用 RedisClientManager 管理的同步 Redis 客户端，与 agent_runtime 其他接口保持一致
     """
 
     def __init__(self):
-        self.redis_db = _create_sync_redis_client()
+        self.redis_db = RedisClientManager.get_instance().get_sync_client()
 
     def add(self, key: object, value: object) -> bool:
-        ttl = global_settings.redis.datasource_ttl_seconds
+        ttl = RedisSettings().datasource_ttl_seconds
         self.redis_db.rpush(key, json.dumps(value, ensure_ascii=False))
         self.redis_db.expire(key, ttl)
         return True

@@ -21,7 +21,7 @@
 import json
 
 from agent_runtime.common.config import settings
-from agent_runtime.common.redis_manager import get_redis_client
+from common_utils.redis_manager import get_redis_client
 from jiuwen.extension.workflow_node.utils import get_workflow_param
 from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error

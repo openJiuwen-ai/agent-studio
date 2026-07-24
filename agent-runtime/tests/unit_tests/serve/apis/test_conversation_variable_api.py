@@ -115,7 +115,7 @@ class TestGetConversationVariables:
         mock_client.get = AsyncMock(return_value=raw)
 
         with patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api._request_ctx"
@@ -141,7 +141,7 @@ class TestGetConversationVariables:
         mock_client.get = AsyncMock(return_value=None)
 
         with patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api._request_ctx"
@@ -167,7 +167,7 @@ class TestGetConversationVariables:
         mock_client.get = AsyncMock(return_value=raw)
 
         with patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api.ErrorContextBuilder"
@@ -202,7 +202,7 @@ class TestUpdateConversationVariable:
         mock_client.set = AsyncMock()
 
         with patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api._request_ctx"
@@ -238,7 +238,7 @@ class TestUpdateConversationVariable:
         mock_client.set = AsyncMock()
 
         with patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api._request_ctx"
@@ -267,7 +267,7 @@ class TestUpdateConversationVariable:
         mock_client.get = AsyncMock(return_value=None)
 
         with patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
             "agent_runtime.serve.apis.conversation_variable_api.ErrorContextBuilder"

@@ -55,7 +55,7 @@ from agent_runtime.common.exception.errors import AgentBuilderError
 from agent_runtime.event_handler.base.mappers import ErrorContextBuilder
 from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
 from agent_runtime.common.logging_context import COMMON_LOG_FORMAT
-from agent_runtime.common.redis_manager import RedisClientManager
+from common_utils.redis_manager import RedisClientManager
 from agent_runtime.context.middleware import RequestContextMiddleware
 from agent_runtime.observability import setup_otel_tracer
 from agent_runtime.memory.adapter.ltm_manager import init_ltm

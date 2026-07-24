@@ -5,6 +5,9 @@ description = "agent-studio 公共工具层（agent-runtime / agent-builder 共�
 requires-python = ">=3.11"
 dependencies = [
     "openjiuwen",
+    "redis>=5.0.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
 ]
 
 [build-system]

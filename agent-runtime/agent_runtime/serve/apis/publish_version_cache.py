@@ -87,7 +87,7 @@ class PublishVersionCache:
     async def _read_from_redis(cls, agent_id: str) -> Optional[AgentMetadata]:
         """从 Redis 读取发布版本元数据。"""
         try:
-            from agent_runtime.common.redis_manager import (
+            from common_utils.redis_manager import (
                 get_redis_client,
                 RedisClientManager,
             )
@@ -164,7 +164,7 @@ class PublishVersionCache:
     ) -> None:
         """将发布版本元数据写入 Redis 缓存。"""
         try:
-            from agent_runtime.common.redis_manager import (
+            from common_utils.redis_manager import (
                 get_redis_client,
                 RedisClientManager,
             )

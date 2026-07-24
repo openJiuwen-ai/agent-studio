@@ -4,7 +4,7 @@
 
 from typing import Any, Dict, Optional
 
-from agent_runtime.common.redis_manager import get_redis_client
+from common_utils.redis_manager import get_redis_client
 from openjiuwen.core.session.checkpointer.checkpointer import CheckpointerConfig
 
 
