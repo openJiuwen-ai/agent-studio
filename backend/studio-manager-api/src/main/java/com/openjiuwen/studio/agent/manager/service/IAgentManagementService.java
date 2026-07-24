@@ -179,9 +179,10 @@ public interface IAgentManagementService {
      *
      * @param projectId projectId
      * @param workspaceId workspaceId
+     * @param accept accept
      * @param body body
      */
-    ExportResourceRsp exportResource(String projectId, String workspaceId, ExportResourceParams body);
+    ExportResourceRsp exportResource(String projectId, String workspaceId, String accept, ExportResourceParams body);
 
     /**
      * exportTools

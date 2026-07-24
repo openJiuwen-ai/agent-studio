@@ -546,6 +546,17 @@ class WorkflowHandler(BaseHandler):
             workflow_req_params, workflow_context, use_all_history=True
         )
 
+        # 把完整的工具参数注入 global_variables
+        arguments = task.input_data.get("arguments", {})
+        if arguments and isinstance(arguments, dict):
+            global_variables = workflow_req_params.get("global_variables", {})
+            if not isinstance(global_variables, dict):
+                global_variables = {}
+            for key, value in arguments.items():
+                if key != "query":
+                    global_variables[key] = value
+            workflow_req_params["global_variables"] = global_variables
+
         final_answer = None
         async for exe_res in self._stream_execute_workflow(
             task, workflow_context, workflow_req_params, from_pe=True

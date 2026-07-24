@@ -387,7 +387,9 @@ import org.springframework.web.multipart.MultipartFile;
         @Parameter(in = ParameterIn.DEFAULT, description = "", required = true, schema = @Schema())
         @RequestParam(value = "import_workflows", required = false) String importWorkflows,
         @Parameter(in = ParameterIn.DEFAULT, description = "", required = true, schema = @Schema())
-        @RequestParam(value = "import_tools", required = false) String importTools);
+        @RequestParam(value = "import_tools", required = false) String importTools,
+        @Parameter(in = ParameterIn.DEFAULT, description = "模式:STRICT-严格模式/SPACIOUS-宽松模式", required = false, schema = @Schema())
+        @RequestParam(value = "mode", required = false) String mode);
 
     @ApiOperation(value = "查询workflow版本通道列表", nickname = "listWorkflowChannels",
         notes = "查询workflow版本通道列表。", response = VersionChannelListRsp.class, tags = {"WorkflowManagement"})
