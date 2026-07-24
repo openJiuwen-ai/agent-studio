@@ -27,6 +27,10 @@ MANAGER_PORT="${MANAGER_PORT:-31111}"; SERVICE_PORT="${SERVICE_PORT:-31113}"; RU
 DEPS="$BUNDLE_ROOT/deps/linux"
 export JAVA_HOME="$DEPS/jre-17"
 export PATH="$JAVA_HOME/bin:$DEPS/mysql-8.0/bin:$DEPS/redis-7:$DEPS/minio:$DEPS/nginx/sbin:$PATH"
+# MySQL 客户端需 libncurses.so.5/libtinfo.so.5、mysqld 需 libaio.so.1/libnuma.so.1。
+# 目标 RHEL 系通常自带；缺则用包内 glibc2.17 兼容库（deps/linux/lib）兜底。放 PATH 之后，
+# 不覆盖系统库（同 ABI 无害），仅补缺。
+[ -d "$DEPS/lib" ] && export LD_LIBRARY_PATH="$DEPS/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 PYTHON_BIN="$DEPS/python-3.11/bin/python3"
 MYSQLD="$DEPS/mysql-8.0/bin/mysqld"; MYSQL_CLI="$DEPS/mysql-8.0/bin/mysql"
 REDIS_SRV="$DEPS/redis-7/redis-server"; REDIS_CLI="$DEPS/redis-7/redis-cli"

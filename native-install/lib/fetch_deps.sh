@@ -127,18 +127,69 @@ rsf=$(find "$CACHE/x-redis-win" -name redis-server.exe -type f | head -1)
 cp -rf "$(dirname "$rsf")"/. "$WIN/redis-7/"
 [ -x "$WIN/redis-7/redis-server.exe" ] || die "Windows Redis 缺 redis-server.exe"
 fi
-# Linux：源码编译（无运行时依赖）
-dl "$REDIS_LINUX_URL" "$REDIS_LINUX_SHA256" "$CACHE/redis-linux.tar.gz"
+# Linux：Remi el7 预编译 RPM（glibc 2.17，目标 RHEL 系开箱即用）——不再源码编译。
+# Windows 构建机由 fetch_deps.ps1 用 bsdtar 直接提取此 RPM，故 WSL（LCO=1）路径跳过；
+# Linux 构建机（build.sh 全量，LCO=0）才走此块。
+if [ "$LCO" -eq 0 ]; then
+dl "$REDIS_LINUX_URL" "$REDIS_LINUX_SHA256" "$CACHE/redis-linux.rpm"
 if [ ! -x "$LIN/redis-7/redis-server" ]; then
-  extract "$CACHE/redis-linux.tar.gz" "$CACHE/x-redis-linux"
-  src=$(find "$CACHE/x-redis-linux" -maxdepth 1 -name 'redis-*' -type d | head -1)
-  [ -n "$src" ] || die "Redis 源码目录未找到"
-  log "  编译 Redis（需 gcc/make）..."
-  ( cd "$src" && make -j"$(nproc)" BUILD_TLS=no MALLOC=libc >/dev/null 2>&1 ) || die "Redis 编译失败（确保已装 gcc make）"
-  mkdir -p "$LIN/redis-7"; cp -f "$src/src/redis-server" "$src/src/redis-cli" "$LIN/redis-7/"
-  chmod +x "$LIN/redis-7"/*
+  rm -rf "$CACHE/x-redis-linux"; mkdir -p "$CACHE/x-redis-linux"
+  # RPM 是 cpio 归档：bsdtar（libarchive）可直接解，否则 rpm2cpio|cpio。
+  if command -v bsdtar >/dev/null 2>&1; then
+    bsdtar -xf "$CACHE/redis-linux.rpm" -C "$CACHE/x-redis-linux" 2>/dev/null
+  elif command -v rpm2cpio >/dev/null 2>&1 && command -v cpio >/dev/null 2>&1; then
+    (cd "$CACHE/x-redis-linux" && rpm2cpio "$CACHE/redis-linux.rpm" | cpio -idm 2>/dev/null)
+  else
+    die "解 Redis RPM 需 bsdtar（apt install libarchive-tools）或 rpm2cpio+cpio"
+  fi
+  mkdir -p "$LIN/redis-7"
+  rs=$(find "$CACHE/x-redis-linux" -name redis-server -type f | head -1)
+  rc=$(find "$CACHE/x-redis-linux" -name redis-cli -type f | head -1)
+  [ -n "$rs" ] || die "Redis RPM 未找到 redis-server"
+  cp -f "$rs" "$LIN/redis-7/redis-server"; [ -n "$rc" ] && cp -f "$rc" "$LIN/redis-7/redis-cli"
+  chmod +x "$LIN/redis-7"/* 2>/dev/null || true
 fi
 [ -x "$LIN/redis-7/redis-server" ] || die "Linux Redis 缺 redis-server"
+fi
+
+###############################################################################
+# Linux 兼容库（centos7 vault，glibc 2.17）—— MySQL/Redis 缺库兜底
+###############################################################################
+# bundle 进 deps/linux/lib/，start/stop 脚本设 LD_LIBRARY_PATH 指向。目标 RHEL 系自带
+# 这些库时 LD_LIBRARY_PATH 优先用 bundle 版也无害（同 glibc2.17 ABI）。
+if [ "$LCO" -eq 0 ]; then
+log "Linux 兼容库 (ncurses/libaio/numa)"
+mkdir -p "$LIN/lib"
+# 解 RPM：bsdtar（libarchive）可直接解 cpio，否则 rpm2cpio|cpio。
+extract_rpm(){ # <name> <url> <sha> <so_real>...  —— 把 RPM 内 <so_real> 拷成 soname 到 $LIN/lib
+  local name="$1" url="$2" sha="$3"; shift 3
+  dl "$url" "$sha" "$CACHE/$name.rpm"
+  rm -rf "$CACHE/x-$name"; mkdir -p "$CACHE/x-$name"
+  if command -v bsdtar >/dev/null 2>&1; then
+    bsdtar -xf "$CACHE/$name.rpm" -C "$CACHE/x-$name" 2>/dev/null
+  elif command -v rpm2cpio >/dev/null 2>&1 && command -v cpio >/dev/null 2>&1; then
+    (cd "$CACHE/x-$name" && rpm2cpio "$CACHE/$name.rpm" | cpio -idm 2>/dev/null)
+  else
+    die "解 $name RPM 需 bsdtar（apt install libarchive-tools）或 rpm2cpio+cpio"
+  fi
+  # 拷真实文件改名为 soname（ldd 按 soname 查 libncurses.so.5，而非带版本号的 .5.9）。
+  # 入参 "<real>:<soname>"，real 为 RPM 内相对路径基名（find 定位），soname 为目标名。
+  local pair real soname f
+  for pair in "$@"; do
+    real="${pair%%:*}"; soname="${pair##*:}"
+    f=$(find "$CACHE/x-$name" -type f -name "$real" | head -1)
+    [ -n "$f" ] || { warn_once "  $name 未找到 $real（跳过）"; continue; }
+    cp -f "$f" "$LIN/lib/$soname"
+  done
+}
+extract_rpm "ncurses-libs" "$NCURSES_LIBS_URL" "$NCURSES_LIBS_SHA256" \
+  "libncurses.so.5.9:libncurses.so.5" "libtinfo.so.5.9:libtinfo.so.5"
+extract_rpm "libaio" "$LIBAIO_URL" "$LIBAIO_SHA256" \
+  "libaio.so.1.0.1:libaio.so.1"
+extract_rpm "numactl-libs" "$NUMACTL_LIBS_URL" "$NUMACTL_LIBS_SHA256" \
+  "libnuma.so.1.0.0:libnuma.so.1"
+log "  → $(ls "$LIN/lib" 2>/dev/null | tr '\n' ' ')"
+fi
 
 ###############################################################################
 # MinIO + mc

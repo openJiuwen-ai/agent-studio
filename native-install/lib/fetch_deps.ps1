@@ -1,7 +1,8 @@
 ﻿# fetch_deps.ps1 — 按 versions.env 下载 Windows+Linux x64 原生依赖到 bundle_template/deps
-# Windows 构建机：所有“预编译”依赖（JRE/MySQL/MinIO/mc/Python，两平台）可直接下载；
-#   Linux 的 redis 与 nginx 需从源码编译——本脚本优先用 WSL 调用 fetch_deps.sh 完成编译，
-#   无 WSL 则跳过并明确告警（请在 Linux 上跑 build.sh 或用 wsl 补齐 deps/linux/redis-7 与 deps/linux/nginx）。
+# Windows 构建机：两平台"预编译"依赖（JRE/MySQL/MinIO/mc/Python，含 Redis Remi el7 RPM 与
+#   ncurses/libaio/numa 兼容库）均用 Windows 自带 bsdtar 直接下载解压，无需 WSL。
+#   仅 Linux nginx 无官方预编译二进制，需从源码编译——本脚本优先用 WSL 调 fetch_deps.sh 完成，
+#   无 WSL 则跳过并明确告警（请在 Linux 上跑 build.sh 或用 wsl 补齐 deps/linux/nginx）。
 param(
   [string]$VersionsFile,
   [Parameter(Mandatory=$true)][string]$Staging,
@@ -118,6 +119,45 @@ if (-not (Test-Path "$Win\redis-7\redis-cli.exe")) {
   if ($rc) { Copy-Item $rc.FullName "$Win\redis-7\redis-cli.exe" -Force }
 }
 
+# Linux：Remi el7 预编译 RPM（glibc 2.17，目标 RHEL 系开箱即用）——不再经 WSL 编译。
+# 用 Windows 自带 bsdtar（System32\tar.exe，libarchive）直接解 RPM（cpio 归档），免 WSL。
+Download $env:REDIS_LINUX_URL $env:REDIS_LINUX_SHA256 "$Cache\redis-linux.rpm"
+$xRedis = "$Cache\x-redis-linux"
+if (Test-Path $xRedis) { Remove-Item $xRedis -Recurse -Force }; New-Item -ItemType Directory -Force -Path $xRedis | Out-Null
+$bsdtar = Join-Path $env:WINDIR 'System32\tar.exe'; if (-not (Test-Path $bsdtar)) { $bsdtar = 'tar' }
+& $bsdtar -xf "$Cache\redis-linux.rpm" -C $xRedis
+if ($LASTEXITCODE -ne 0) { D-Die "解 Redis RPM 失败: redis-linux.rpm（需 bsdtar）" }
+New-Item -ItemType Directory -Force -Path "$Lin\redis-7" | Out-Null
+$rsrv = Get-ChildItem $xRedis -Recurse -Filter 'redis-server' -File | Select-Object -First 1
+if (-not $rsrv) { D-Die "redis-linux.rpm 未找到 redis-server" }
+Copy-Item $rsrv.FullName "$Lin\redis-7\redis-server" -Force
+$rcli = Get-ChildItem $xRedis -Recurse -Filter 'redis-cli' -File | Select-Object -First 1
+if ($rcli) { Copy-Item $rcli.FullName "$Lin\redis-7\redis-cli" -Force }
+
+# Linux 兼容库（centos7 vault，glibc 2.17）—— MySQL 客户端 libncurses/libtinfo、mysqld
+# libaio/libnuma 缺库兜底。bundle 进 deps/linux/lib/，start/stop 脚本设 LD_LIBRARY_PATH。
+D-Log "Linux 兼容库 (ncurses/libaio/numa)"
+New-Item -ItemType Directory -Force -Path "$Lin\lib" | Out-Null
+function Extract-CompatLib($name,$url,$sha){
+  Download $url $sha "$Cache\$name.rpm"
+  $x = "$Cache\x-$name"; if (Test-Path $x) { Remove-Item $x -Recurse -Force }; New-Item -ItemType Directory -Force -Path $x | Out-Null
+  $t = Join-Path $env:WINDIR 'System32\tar.exe'; if (-not (Test-Path $t)) { $t = 'tar' }
+  & $t -xf "$Cache\$name.rpm" -C $x; if ($LASTEXITCODE -ne 0) { D-Die "解 $name RPM 失败（需 bsdtar）" }
+}
+# 把 RPM 内真实文件 real 改名拷成 soname 到 $Lin\lib（ldd 按 soname libncurses.so.5 查）。
+# -not LinkType 排除软链（libaio.so.1 是指向 .1.0.1 的软链，直接拷会 dangling）。
+function Copy-So($x,$real,$soname){
+  $f = Get-ChildItem $x -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $real -and -not $_.LinkType } | Select-Object -First 1
+  if ($f) { Copy-Item $f.FullName "$Lin\lib\$soname" -Force } else { D-Warn "  未找到 $real（跳过）" }
+}
+Extract-CompatLib "ncurses-libs" $env:NCURSES_LIBS_URL $env:NCURSES_LIBS_SHA256
+Copy-So ".cache\x-ncurses-libs" "libncurses.so.5.9" "libncurses.so.5"
+Copy-So ".cache\x-ncurses-libs" "libtinfo.so.5.9"  "libtinfo.so.5"
+Extract-CompatLib "libaio"       $env:LIBAIO_URL       $env:LIBAIO_SHA256
+Copy-So ".cache\x-libaio"       "libaio.so.1.0.1"    "libaio.so.1"
+Extract-CompatLib "numactl-libs" $env:NUMACTL_LIBS_URL $env:NUMACTL_LIBS_SHA256
+Copy-So ".cache\x-numactl-libs" "libnuma.so.1.0.0"  "libnuma.so.1"
+
 # ── MinIO + mc ───────────────────────────────────────────────────────────────
 D-Log "MinIO + mc"
 New-Item -ItemType Directory -Force -Path "$Win\minio","$Lin\minio" | Out-Null
@@ -148,14 +188,13 @@ PlaceBin "$Cache\x-nginx-win" "nginx.exe" "$Win\nginx"
 $mt = Get-ChildItem "$Cache\x-nginx-win" -Recurse -Filter 'mime.types' | Select-Object -First 1
 if ($mt) { Copy-Item $mt.FullName "$Staging\config\mime.types" -Force }
 
-# ── Linux redis/nginx 编译（需 Linux 工具链）──────────────────────────────
-# Windows 构建机经 WSL 调 fetch_deps.sh 补 Linux redis/nginx。但很多 Windows 机只有
-# docker-desktop 极简 WSL 发行版（无 gcc/make），编译必败——此时告警跳过、不致命，
-# 让构建继续产出包（Windows 侧全齐；Linux 侧 redis/nginx 缺，需在 Linux 机跑 build.sh 补）。
-D-Log "Linux redis + nginx 编译"
-$needRedis = -not (Test-Path "$Lin\redis-7\redis-server")
+# ── Linux nginx 编译（需 Linux 工具链）──────────────────────────────────────
+# Windows 构建机经 WSL 调 fetch_deps.sh 补 Linux nginx（redis 已由上方预编译 RPM 就位）。
+# 但很多 Windows 机只有 docker-desktop 极简 WSL 发行版（无 gcc/make），编译必败——此时告警
+# 跳过、不致命，让构建继续产出包（Windows 侧全齐；Linux 侧 nginx 缺，需在 Linux 机跑 build.sh 补）。
+D-Log "Linux nginx 编译"
 $needNginx = -not (Test-Path "$Lin\nginx\sbin\nginx")
-if ($needRedis -or $needNginx) {
+if ($needNginx) {
   $wsl = Get-Command wsl.exe -ErrorAction SilentlyContinue
   $compiled = $false
   if ($wsl) {
@@ -178,7 +217,7 @@ if ($needRedis -or $needNginx) {
         if ($g -and $g.ToString().Trim() -ne '') { $wslDistro = $d; break }
       }
       if ($wslDistro) {
-        D-Log "  通过 WSL($wslDistro) 调用 fetch_deps.sh 完成 Linux redis/nginx 编译..."
+        D-Log "  通过 WSL($wslDistro) 调用 fetch_deps.sh 完成 Linux nginx 编译..."
         try {
           # fetch_deps.sh 与本 ps1 同目录（lib/）；versions.env 在 native-install 根。
           $libDir = $PSScriptRoot
@@ -193,16 +232,16 @@ if ($needRedis -or $needNginx) {
           if ($LASTEXITCODE -eq 0) { $compiled = $true } else { D-Warn "fetch_deps.sh 退出码 $LASTEXITCODE" }
         } catch { D-Warn "WSL 调用异常：$($_.Exception.Message)" }
       } else {
-        D-Warn "WSL 各发行版均无 gcc（需在 Ubuntu WSL 内 apt install -y build-essential），跳过 Linux redis/nginx 编译。"
+        D-Warn "WSL 各发行版均无 gcc（需在 Ubuntu WSL 内 apt install -y build-essential），跳过 Linux nginx 编译。"
       }
     } finally {
       $ErrorActionPreference = $prevEAP
     }
   } else {
-    D-Warn "无 WSL：跳过 Linux redis/nginx 编译。"
+    D-Warn "无 WSL：跳过 Linux nginx 编译。"
   }
   if (-not $compiled) {
-    D-Warn "Linux redis/nginx 未就绪。请在 Linux 主机跑 build.sh 补齐 deps/linux/redis-7 与 deps/linux/nginx 后再分发，或装 Ubuntu WSL 发行版后重跑。"
+    D-Warn "Linux nginx 未就绪。请在 Linux 主机跑 build.sh 补齐 deps/linux/nginx 后再分发，或装 Ubuntu WSL 发行版后重跑。"
   }
 }
 

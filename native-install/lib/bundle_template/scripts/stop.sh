@@ -27,6 +27,8 @@ kill_pid(){ # <pidfile> <name> [signal]
 
 DEPS="$BUNDLE_ROOT/deps/linux"
 export PATH="$DEPS/mysql-8.0/bin:$DEPS/redis-7:$DEPS/nginx/sbin:$PATH"
+# mysqladmin 等 client 需 libncurses/libtinfo；与 start.sh 同源兜底（见该文件注释）。
+[ -d "$DEPS/lib" ] && export LD_LIBRARY_PATH="$DEPS/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 log "停止 console (nginx)..."
 NGINX_BIN="$DEPS/nginx/sbin/nginx"
