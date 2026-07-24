@@ -99,9 +99,25 @@ New-Item -ItemType Directory -Force -Path $dist | Out-Null
 $pkg = "$name-native-$ver"
 # 只产 zip（Windows + Linux 通用）：解压后 start.sh 启动前 chmod +x 补 Linux 执行位，
 # 故 zip 不保留 Unix 权限位也无妨。Windows/Linux 系统自带 tar/unzip 均可解 zip。
-B-Log "  生成 zip（Windows + Linux 通用）"
-Compress-Archive -Path (Join-Path $staging '*') -DestinationPath (Join-Path $dist "$pkg.zip") -Force
-
+# 必须用 Python zipfile 生成，**不可用 Compress-Archive**：后者写入的 zip 条目用反斜杠
+# 作路径分隔（Windows 习惯），Linux unzip 把反斜杠当文件名字面字符 → 解不出目录树、解压失败。
+B-Log "  生成 zip（Windows + Linux 通用，Python zipfile 正斜杠路径）"
+$zipPath = Join-Path $dist "$pkg.zip"
+$py = @"
+import zipfile, os
+staging = r"$staging"
+out = r"$zipPath"
+n = 0
+with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as z:
+    for root, dirs, files in os.walk(staging):
+        for f in files:
+            full = os.path.join(root, f)
+            arc = os.path.relpath(full, staging).replace(os.sep, '/')
+            z.write(full, arc)
+            n += 1
+print('wrote %d entries' % n)
+"@
+$py | py -3 -
 B-Log "构建完成："
-B-Log "  $(Join-Path $dist "$pkg.zip")"
+B-Log "  $zipPath"
 B-Log "拷到目标机解压后，Linux 跑 ./scripts/start.sh；Windows 跑 .\scripts\start.ps1"
