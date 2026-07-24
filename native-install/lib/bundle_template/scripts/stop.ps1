@@ -35,6 +35,14 @@ function Stop-BundlePython($label){
   foreach($pr in $ps){ try { Stop-Process -Id $pr.Id -Force -ErrorAction SilentlyContinue } catch {} }
   if($ps.Count -gt 0){ W-Log "  清理 $label 残留 python $($ps.Count) 个（含 multiprocessing worker）" }
 }
+# 按进程镜像路径杀本包 nginx 的兜底。旧版 start.ps1 前台启动 nginx + stop 失败后
+# Remove-Item 了 pid 文件，会留下无 pid 文件的孤儿 nginx（-s stop 与 Stop-PidFile 都
+# 读 pid 文件、命中不了）。按 nginx.exe 路径在本包下杀，兜底清孤儿，不波及系统其它 nginx。
+function Stop-BundleNginx{
+  $ps = Get-Process nginx -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$BundleRoot\*" }
+  foreach($pr in $ps){ try { Stop-Process -Id $pr.Id -Force -ErrorAction SilentlyContinue } catch {} }
+  if($ps.Count -gt 0){ W-Log "  清理残留 nginx $($ps.Count) 个（无 pid 文件的孤儿 master/worker）" }
+}
 
 W-Log "停止 console (nginx)..."
 $NginxBin = Join-Path $Deps 'nginx\nginx.exe'
@@ -45,6 +53,7 @@ $NginxConfFw = (Join-Path $Run 'nginx.conf') -replace '\\','/'
 $NginxPrefixFw = "$BundleRoot" -replace '\\','/'
 & $NginxBin -s stop -c $NginxConfFw -p "$NginxPrefixFw/" 2>$null
 Stop-PidFile (Join-Path $Run 'nginx.pid') 'nginx'
+Stop-BundleNginx   # 兜底清无 pid 文件的孤儿 nginx
 
 W-Log "停止 studio-runtime..."; Stop-PidFile (Join-Path $Run 'runtime.pid') 'runtime'; Stop-BundlePython 'runtime'
 W-Log "停止 studio-service..."; Stop-PidFile (Join-Path $Run 'service.pid') 'service'
