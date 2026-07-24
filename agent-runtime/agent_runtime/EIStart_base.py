@@ -26,7 +26,8 @@ def _cgroup_cpu_count() -> int:
                 quota, period = int(parts[0]), int(parts[1])
                 if quota > 0 and period > 0:
                     return _ceil_div(quota, period)
-    except (FileNotFoundError, ValueError, OSError):
+    # OSError 已覆盖 FileNotFoundError；ValueError 处理内容非整数的解析失败。
+    except (ValueError, OSError):
         pass
 
     # cgroup v1: cpu.cfs_quota_us / cpu.cfs_period_us，quota 为 -1 表示无限制。
@@ -36,7 +37,7 @@ def _cgroup_cpu_count() -> int:
             quota, period = int(fq.read().strip()), int(fp.read().strip())
             if quota > 0 and period > 0:
                 return _ceil_div(quota, period)
-    except (FileNotFoundError, ValueError, OSError):
+    except (ValueError, OSError):
         pass
 
     # 退回 affinity（≈ nproc），再退回 cpu_count。

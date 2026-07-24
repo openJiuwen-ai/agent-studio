@@ -142,6 +142,7 @@ class _FakeResp:
         self._payload = payload
         self.text = (text if text is not None
                      else (json.dumps(payload) if payload is not None else ""))
+        self._lines = ()
 
     def json(self):
         return self._payload

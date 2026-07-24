@@ -15,6 +15,7 @@ projectId 取自请求头（``authz.extract_project_id``），不放 config。
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -29,6 +30,8 @@ from openjiuwen.core.runner.callback.events import LLMCallEvents
 
 from . import authz, dispatch, policy, resolver
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class _ResolveInputs:
@@ -37,6 +40,17 @@ class _ResolveInputs:
     workspace_id: str
     project_id: str
     refresh: bool
+
+
+@dataclass
+class _VerbatimCall:
+    """``_invoke_verbatim`` 的单次调用入参集合（G.FNM.03：参数过多且相关，具名封装）。"""
+
+    params: dict
+    stream: bool
+    input_kwargs: dict
+    output_parser: Any
+    timeout: Any
 
 
 # 非 OpenAI（非常规路径）端点判定与响应适配，供 ``StudioModelClient._invoke_verbatim`` 使用。
@@ -300,7 +314,8 @@ class StudioModelClient(OpenAIModelClient):
         # 改走 httpx verbatim 直发 detail.model.api_url，复用父类 _parse_response / _parse_stream_chunk。
         if _is_verbatim_endpoint(detail.model.api_url):
             return await self._invoke_verbatim(
-                detail, conn, params, stream, _input_kwargs, output_parser, timeout,
+                detail, conn,
+                _VerbatimCall(params, stream, _input_kwargs, output_parser, timeout),
             )
 
         client = AsyncOpenAI(
@@ -375,8 +390,7 @@ class StudioModelClient(OpenAIModelClient):
                           model_name=_model_name, model_provider=_provider, error=e)
             raise
 
-    async def _invoke_verbatim(self, detail, conn, params, stream, input_kwargs,
-                               output_parser, timeout):
+    async def _invoke_verbatim(self, detail, conn, call):
         """非 OpenAI 端点的 verbatim httpx 直发分支（复用父类响应解析）。
 
         ``_invoke_one_model`` 在 ``_is_verbatim_endpoint(detail.model.api_url)`` 为真时转入本分支：
@@ -389,6 +403,11 @@ class StudioModelClient(OpenAIModelClient):
         - stream=True：返回解析后的 chunk 异步迭代器（SSE ``data:`` 行逐帧解析）；连接 /
           状态码错误在 send 时抛出（可 failover），流中途错误在 ``_parsed`` 内触发 ``LLM_CALL_ERROR``。
         """
+        params = call.params
+        stream = call.stream
+        input_kwargs = call.input_kwargs
+        output_parser = call.output_parser
+        timeout = call.timeout
         url = detail.model.api_url
         _model_name = input_kwargs["model_name"]
         _provider = input_kwargs["model_provider"]
@@ -432,7 +451,10 @@ class StudioModelClient(OpenAIModelClient):
                                 continue
                             try:
                                 chunk_dict = json.loads(data_str)
-                            except Exception:
+                            except json.JSONDecodeError:
+                                # 单帧畸形数据不应中断整条 SSE 流，降级到 debug 并跳过该帧。
+                                logger.debug("skip malformed SSE data chunk: %r",
+                                             data_str[:120])
                                 continue
                             parsed = self._parse_stream_chunk(_wrap(chunk_dict))
                             if parsed:
