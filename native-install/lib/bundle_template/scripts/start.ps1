@@ -228,11 +228,19 @@ $tmpl = [System.IO.File]::ReadAllText((Join-Path $BundleRoot 'config\nginx.conf.
 $rootFw = $BundleRoot -replace '\\','/'
 $conf = "pid $($NginxPid -replace '\\','/');`n" + ($tmpl -replace '@@BUNDLE_ROOT@@', $rootFw -replace '@@CONSOLE_PORT@@', $env:CONSOLE_PORT)
 [System.IO.File]::WriteAllText((Join-Path $Run 'nginx.conf'), $conf, (New-Object System.Text.UTF8Encoding $false))
+$NginxConfFw = (Join-Path $Run 'nginx.conf') -replace '\\','/'
+$NginxPrefixFw = "$rootFw/"
 if (Is-PidAlive $NginxPid) {
   W-Log "  nginx 已在运行，重载配置"
-  & $NginxBin -s reload -c (Join-Path $Run 'nginx.conf') -p "$BundleRoot\" 2>$null
+  & $NginxBin -s reload -c $NginxConfFw -p $NginxPrefixFw 2>$null
 } else {
-  & $NginxBin -c (Join-Path $Run 'nginx.conf') -p "$BundleRoot\" 2>&1 | Out-Host
+  # Windows 的 nginx.exe 默认前台运行（不像 Linux 会 daemonize），不能用同步 & 启动：
+  # 会阻塞 start.ps1 致后续访问 URL 不显示，且 nginx 成本控制台子进程、窗口关闭即死、
+  # stop.ps1 查不到（报"未运行"）。改用 Start-Process 后台拉起为独立进程，nginx 自己
+  # 按 conf 的 pid 指令写 run/nginx.pid 供 stop.ps1 读取与停止。路径用正斜杠（-c/-p
+  # 命令行参数虽 Windows fopen 接受反斜杠，但统一正斜杠避免 nginx 内部解析歧义）。
+  Start-Process -FilePath $NginxBin -ArgumentList @('-c',$NginxConfFw,'-p',$NginxPrefixFw) -WindowStyle Hidden -PassThru | Out-Null
+  Start-Sleep -Seconds 1
 }
 Wait-Http "http://127.0.0.1:$($env:CONSOLE_PORT)/openjiuwen/" 'console' 60 | Out-Null
 

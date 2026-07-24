@@ -38,7 +38,12 @@ function Stop-BundlePython($label){
 
 W-Log "停止 console (nginx)..."
 $NginxBin = Join-Path $Deps 'nginx\nginx.exe'
-& $NginxBin -s stop -c (Join-Path $Run 'nginx.conf') -p "$BundleRoot\" 2>$null
+# -c/-p 用正斜杠路径（与 start.ps1 一致；nginx 读 conf 的 pid 指令定位 master pid 发信号）。
+# start.ps1 现在用 Start-Process 后台拉 nginx 为独立进程并写 run/nginx.pid，故 -s stop 能命中；
+# Stop-PidFile 的 taskkill /T 再兜底杀 master+worker。
+$NginxConfFw = (Join-Path $Run 'nginx.conf') -replace '\\','/'
+$NginxPrefixFw = "$BundleRoot" -replace '\\','/'
+& $NginxBin -s stop -c $NginxConfFw -p "$NginxPrefixFw/" 2>$null
 Stop-PidFile (Join-Path $Run 'nginx.pid') 'nginx'
 
 W-Log "停止 studio-runtime..."; Stop-PidFile (Join-Path $Run 'runtime.pid') 'runtime'; Stop-BundlePython 'runtime'
