@@ -36,4 +36,4 @@ foreach ($s in $services) {
   Write-Host (Row $s.n $proc $health $(if($p){"pid=$p"}else{'no-pid'})) -ForegroundColor $color
 }
 Write-Host ""
-Write-Host "控制台: http://localhost:$($env:CONSOLE_PORT)/openjiuwen/   登录 agent/agent"
+Write-Host "控制台: http://localhost:$($env:CONSOLE_PORT)/openjiuwen/"

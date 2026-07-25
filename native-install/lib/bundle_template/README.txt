@@ -33,7 +33,7 @@ openJiuwen AgentStudio — 原生（免容器）运行包
   Linux:    ./scripts/start.sh
   Windows:  powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1
 
-启动完成后访问：http://localhost/openjiuwen/   默认账号 agent / agent
+启动完成后访问：http://localhost/openjiuwen/   （无需登录）
 
 端口（改 .env 后重启）
   80   控制台(console/nginx)   3306 MySQL   6379 Redis

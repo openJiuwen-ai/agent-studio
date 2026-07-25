@@ -251,7 +251,6 @@ Write-Host "================================================================" -F
 Write-Host "  openJiuwen AgentStudio 已启动" -ForegroundColor Green
 Write-Host "================================================================" -ForegroundColor Green
 Write-Host "  控制台 :  $consoleUrl"
-Write-Host "  登录   :  agent / agent"
 Write-Host "  状态   :  .\scripts\status.ps1"
 Write-Host "  停止   :  .\scripts\stop.ps1"
 Write-Host "  日志   :  .\scripts\logs.ps1 [manager|service|runtime|mysql|redis|minio|nginx]"
@@ -259,4 +258,4 @@ Write-Host "================================================================" -F
 Start-Process $consoleUrl
 # URL 作为脚本最后一行输出，确保执行结束时它就在光标正上方
 Write-Host ""
-Write-Host ">>> 控制台地址: $consoleUrl   (登录: agent / agent) <<<" -ForegroundColor Cyan
+Write-Host ">>> 控制台地址: $consoleUrl <<<" -ForegroundColor Cyan

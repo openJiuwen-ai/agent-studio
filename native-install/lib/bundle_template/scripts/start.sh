@@ -258,11 +258,10 @@ echo "================================================================"
 echo "  openJiuwen AgentStudio 已启动"
 echo "================================================================"
 echo "  控制台 :  $CONSOLE_URL"
-echo "  登录   :  agent / agent"
 echo "  状态   :  ./scripts/status.sh"
 echo "  停止   :  ./scripts/stop.sh"
 echo "  日志   :  ./scripts/logs.sh [manager|service|runtime|mysql|redis|minio|nginx]"
 echo "================================================================"
 # URL 作为脚本最后一行输出，确保执行结束时它就在光标正上方
 echo
-echo ">>> 控制台地址: $CONSOLE_URL   (登录: agent / agent) <<<"
+echo ">>> 控制台地址: $CONSOLE_URL <<<"

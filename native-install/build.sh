@@ -110,7 +110,7 @@ for PLAT in $TARGETS; do
     echo "启动："
     echo "  Windows: powershell -ExecutionPolicy Bypass -File .\\scripts\\start.ps1"
     echo "  Linux:   ./scripts/start.sh"
-    echo "控制台: http://localhost/openjiuwen/  登录 agent/agent"
+    echo "控制台: http://localhost/openjiuwen/"
   } > "$STAGING/MANIFEST.txt"
   log "  生成 $PLATNAME zip（选择性排除对端依赖 + MySQL 冗余 + 对端 wheel）"
   mkdir -p "$DIST"

@@ -29,4 +29,4 @@ for s in "mysql:$RUN/mysqld.pid:tcp:$DB_PORT" \
     "$(if [ $hs = ok ]; then ok; else no; fi)" "$(pid_state "$pf")"
 done
 echo
-echo "控制台: http://localhost:$CONSOLE_PORT/openjiuwen/   登录 agent/agent"
+echo "控制台: http://localhost:$CONSOLE_PORT/openjiuwen/"

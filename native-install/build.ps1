@@ -100,7 +100,7 @@ built:   $buildTime
 启动：
   Windows: powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1
   Linux:   ./scripts/start.sh
-控制台: http://localhost/openjiuwen/  登录 agent/agent
+控制台: http://localhost/openjiuwen/
 "@
 Copy-Item (Join-Path $NativeRoot 'versions.env') (Join-Path $staging 'versions.env') -Force
 

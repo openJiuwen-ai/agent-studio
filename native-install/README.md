@@ -67,7 +67,7 @@ Linux 的 redis/nginx 需 Linux 工具链编译——`fetch_deps.ps1` 会优先�
 # Windows（建议以管理员运行，否则控制台改用 8080）
 powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1
 ```
-启动后访问 `http://localhost/openjiuwen/`，登录 `agent` / `agent`。
+启动后访问 `http://localhost/openjiuwen/`（无需登录）。
 
 管理：`stop.sh/.ps1` 停止、`status.sh/.ps1` 状态、`logs.sh/.ps1 [服务名]` 日志。
 
