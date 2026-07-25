@@ -1,8 +1,11 @@
 ﻿# build.ps1 — openJiuwen AgentStudio 免容器跨平台包构建（Windows 构建机）
-# 用法: .\build.ps1 [-Version <ver>] [-SkipApps] [-SkipDeps] [-SkipWheels]
-# 产物: dist\AgentStudio-native-<ver>.zip（Windows + Linux 通用单一交付物）
+# 用法: .\build.ps1 [-Version <ver>] [-Platform <win|linux>] [-SkipApps] [-SkipDeps] [-SkipWheels]
+#   -Platform：只打指定平台 zip（win 或 linux）；不传则两个都打。
+#   Phase A/B/C 不受 -Platform 影响（仍组装完整跨平台 staging），仅 Phase D 按此决定打几个。
+# 产物: dist\AgentStudio-native-<ver>-<windows|linux>.zip
 param(
   [string]$Version,
+  [ValidatePattern('^(win|linux)?$')][string]$Platform,
   [switch]$SkipApps, [switch]$SkipDeps, [switch]$SkipWheels
 )
 $ErrorActionPreference = "Stop"
@@ -71,12 +74,19 @@ if (-not $SkipWheels) {
 B-Log "Phase D — 写 MANIFEST + 打包"
 $git = "unknown"; try { $git = (git -C $Workspace rev-parse --short HEAD 2>$null) } catch {}
 $buildTime = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
-$manifest = @"
-openJiuwen AgentStudio — 原生（免容器）运行包
+$platLabel = @{ win = 'Windows x64'; linux = 'Linux x64 (glibc 2.17+)' }
+# 决定打哪些平台：$Platform 为空=两个；否则仅指定平台
+if ($Platform) { $targets = @($Platform) } else { $targets = @('win','linux') }
+# MANIFEST 按平台写一份临时模板（每个包用自己的）；versions.env 两包都要
+$manifestBase = @"
+openJiuwen AgentStudio — 原生（免容器）运行包 [@PLAT@ 专用]
 name:    $name
 version: $ver
 git:     $git
 built:   $buildTime
+平台:    @PLATLABEL@
+本包仅含本平台原生依赖（对端平台依赖已剔除；MySQL 调试符号 .pdb/.lib 与 mecab
+遗留日文编码字典已剔除以瘦身；deps/wheels 仅含本平台 wheel）。
 
 组件产物（从源码构建）:
   studio-manager.jar  <- backend/studio-manager (profile=manager)
@@ -88,36 +98,32 @@ built:   $buildTime
   JRE=$($env:JRE17_VERSION)  MySQL=$($env:MYSQL_VERSION)  Redis=$($env:REDIS_VERSION)  Python=$($env:PYTHON_VERSION)  nginx=$($env:NGINX_VERSION)
 
 启动：
-  Linux:   ./scripts/start.sh
   Windows: powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1
+  Linux:   ./scripts/start.sh
 控制台: http://localhost/openjiuwen/  登录 agent/agent
 "@
-Set-Content -Path (Join-Path $staging 'MANIFEST.txt') -Value $manifest -Encoding UTF8
 Copy-Item (Join-Path $NativeRoot 'versions.env') (Join-Path $staging 'versions.env') -Force
 
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
-$pkg = "$name-native-$ver"
-# 只产 zip（Windows + Linux 通用）：解压后 start.sh 启动前 chmod +x 补 Linux 执行位，
-# 故 zip 不保留 Unix 权限位也无妨。Windows/Linux 系统自带 tar/unzip 均可解 zip。
-# 必须用 Python zipfile 生成，**不可用 Compress-Archive**：后者写入的 zip 条目用反斜杠
-# 作路径分隔（Windows 习惯），Linux unzip 把反斜杠当文件名字面字符 → 解不出目录树、解压失败。
-B-Log "  生成 zip（Windows + Linux 通用，Python zipfile 正斜杠路径）"
-$zipPath = Join-Path $dist "$pkg.zip"
-$py = @"
-import zipfile, os
-staging = r"$staging"
-out = r"$zipPath"
-n = 0
-with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as z:
-    for root, dirs, files in os.walk(staging):
-        for f in files:
-            full = os.path.join(root, f)
-            arc = os.path.relpath(full, staging).replace(os.sep, '/')
-            z.write(full, arc)
-            n += 1
-print('wrote %d entries' % n)
-"@
-$py | py -3 -
+$zipper = Join-Path $NativeRoot 'lib\zip_platform.py'
+# 必须用 Python zipfile（不可用 Compress-Archive）：后者写的 zip 条目用反斜杠作路径
+# 分隔，Linux unzip 把反斜杠当文件名字面字符 → 解不出目录树。助手用正斜杠 arcname
+# + ZIP_DEFLATED，并按平台排除对端依赖/MySQL 冗余/对端 wheel。
+foreach ($plat in $targets) {
+  $platName = if ($plat -eq 'win') { 'windows' } else { 'linux' }
+  # 该包的 MANIFEST（占位替换）
+  $m = $manifestBase -replace '@PLAT@', $platName -replace '@PLATLABEL@', $platLabel[$plat]
+  Set-Content -Path (Join-Path $staging 'MANIFEST.txt') -Value $m -Encoding UTF8
+  $zipPath = Join-Path $dist "$name-native-$ver-$platName.zip"
+  B-Log "  生成 $platName zip（选择性排除对端依赖 + MySQL 冗余 + 对端 wheel）"
+  & py -3 $zipper "$staging" "$zipPath" $plat
+  if ($LASTEXITCODE -ne 0) { B-Die "生成 $platName zip 失败" }
+}
 B-Log "构建完成："
-B-Log "  $zipPath"
+foreach ($plat in $targets) {
+  $platName = if ($plat -eq 'win') { 'windows' } else { 'linux' }
+  $zp = Join-Path $dist "$name-native-$ver-$platName.zip"
+  $sz = if (Test-Path $zp) { "{0:N1} MB" -f ((Get-Item $zp).Length/1MB) } else { '缺失' }
+  B-Log "  $zp  ($sz)"
+}
 B-Log "拷到目标机解压后，Linux 跑 ./scripts/start.sh；Windows 跑 .\scripts\start.ps1"

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# build.sh — openJiuwen AgentStudio 免容器跨平台包构建（Linux 构建机，产出含 Win+Linux 依赖的单包）
-# 用法: ./build.sh [-v 版本号] [--skip-apps] [--skip-deps] [--skip-wheels]
-# 产物: dist/AgentStudio-native-<ver>.zip（Windows + Linux 通用单一交付物）
+# build.sh — openJiuwen AgentStudio 免容器跨平台包构建（Linux 构建机）
+# 用法: ./build.sh [-v 版本号] [--platform win|linux] [--skip-apps] [--skip-deps] [--skip-wheels]
+#   --platform：只打指定平台 zip（win 或 linux）；不传则两个都打。
+#   Phase A/B/C 不受 --platform 影响（仍组装完整跨平台 staging），仅 Phase D 按此决定打几个。
+# 产物: dist/AgentStudio-native-<ver>-<windows|linux>.zip
 set -euo pipefail
 cd "$(dirname "$0")"
 NATIVE_ROOT="$(pwd)"
@@ -12,14 +14,20 @@ VER="${BUNDLE_VERSION:-1.0.0}"; NAME="${BUNDLE_NAME:-AgentStudio}"
 STAGING="$NATIVE_ROOT/build/${NAME}-native-${VER}"
 DIST="$NATIVE_ROOT/dist"
 
-SKIP_APPS=0; SKIP_DEPS=0; SKIP_WHEELS=0
+SKIP_APPS=0; SKIP_DEPS=0; SKIP_WHEELS=0; PLATFORM=""
 while [ $# -gt 0 ]; do case "$1" in
   -v) VER="$2"; shift 2;;
+  --platform) PLATFORM="$2"; shift 2;;
   --skip-apps) SKIP_APPS=1; shift;;
   --skip-deps) SKIP_DEPS=1; shift;;
   --skip-wheels) SKIP_WHEELS=1; shift;;
   *) echo "未知参数: $1"; exit 2;;
 esac; done
+case "$PLATFORM" in
+  "") : ;; # 空=两个都打
+  win|linux) : ;;
+  *) echo "--platform 仅支持 win 或 linux，得到: $PLATFORM"; exit 2;;
+esac
 
 log(){ echo -e "\033[1;36m[build]\033[0m $*"; }
 die(){ echo -e "\033[1;31m[build fatal]\033[0m $*"; exit 1; }
@@ -69,43 +77,50 @@ fi
 log "Phase D — 写 MANIFEST + 打包"
 GIT_COMMIT="$(cd "$WORKSPACE" && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-{
-  echo "openJiuwen AgentStudio — 原生（免容器）运行包"
-  echo "name:    $NAME"
-  echo "version: $VER"
-  echo "git:     $GIT_COMMIT"
-  echo "built:   $BUILD_TIME"
-  echo
-  echo "组件产物（从源码构建）:"
-  echo "  studio-manager.jar  <- backend/studio-manager (profile=manager)"
-  echo "  studio-service.jar  <- backend/studio-runtime (profile=runtime, 重命名)"
-  echo "  frontend/dist/hws   <- frontend (pnpm build)"
-  echo "  agent_runtime/ ...  <- agent-runtime + agent_builder 源码"
-  echo
-  echo "原生依赖版本（详见 versions.env）:"
-  echo "  JRE=${JRE17_VERSION}  MySQL=${MYSQL_VERSION}  Redis=${REDIS_VERSION}  Python=${PYTHON_VERSION}  nginx=${NGINX_VERSION}"
-  echo
-  echo "启动："
-  echo "  Linux:   ./scripts/start.sh"
-  echo "  Windows: powershell -ExecutionPolicy Bypass -File .\\scripts\\start.ps1"
-  echo "控制台: http://localhost/openjiuwen/  登录 agent/agent"
-} > "$STAGING/MANIFEST.txt"
 cp -f "$NATIVE_ROOT/versions.env" "$STAGING/versions.env"
-
-mkdir -p "$DIST"
-PKG="${NAME}-native-${VER}"
-# 只产 zip（Windows + Linux 通用）：解压后 start.sh 启动前 chmod +x 补 Linux 执行位，
-# 故 zip 不保留 Unix 权限位也无妨。Windows 自带 bsdtar 可解 zip；Linux 自带 unzip 或 tar。
-log "  生成 zip（Windows + Linux 通用）"
-if command -v zip >/dev/null 2>&1; then
-  ( cd "$NATIVE_ROOT/build" && zip -r -q "$DIST/${PKG}.zip" "${PKG}" )
-elif command -v python3 >/dev/null 2>&1; then
-  ( cd "$NATIVE_ROOT/build" && python3 -m zipfile -c "$DIST/${PKG}.zip" "${PKG}" )
-  log "  [info] 无 zip 命令，改用 python3 -m zipfile 生成"
-else
-  die "生成 zip 失败：需 zip 命令（apt install zip）或 python3"
-fi
+# 决定打哪些平台：PLATFORM 空=两个；否则仅指定平台
+if [ -n "$PLATFORM" ]; then TARGETS="$PLATFORM"; else TARGETS="win linux"; fi
+ZIPPER="$NATIVE_ROOT/lib/zip_platform.py"
+PY=python3
+command -v python3 >/dev/null 2>&1 || PY=python
+for PLAT in $TARGETS; do
+  case "$PLAT" in
+    win) PLATNAME=windows; PLATLABEL="Windows x64" ;;
+    linux) PLATNAME=linux; PLATLABEL="Linux x64 (glibc 2.17+)" ;;
+  esac
+  {
+    echo "openJiuwen AgentStudio — 原生（免容器）运行包 [$PLATNAME 专用]"
+    echo "name:    $NAME"
+    echo "version: $VER"
+    echo "git:     $GIT_COMMIT"
+    echo "built:   $BUILD_TIME"
+    echo "平台:    $PLATLABEL"
+    echo "本包仅含本平台原生依赖（对端平台依赖已剔除；MySQL 调试符号 .pdb/.lib 与"
+    echo "mecab 遗留日文编码字典已剔除以瘦身；deps/wheels 仅含本平台 wheel）。"
+    echo
+    echo "组件产物（从源码构建）:"
+    echo "  studio-manager.jar  <- backend/studio-manager (profile=manager)"
+    echo "  studio-service.jar  <- backend/studio-runtime (profile=runtime, 重命名)"
+    echo "  frontend/dist/hws   <- frontend (pnpm build)"
+    echo "  agent_runtime/ ...  <- agent-runtime + agent_builder 源码"
+    echo
+    echo "原生依赖版本（详见 versions.env）:"
+    echo "  JRE=${JRE17_VERSION}  MySQL=${MYSQL_VERSION}  Redis=${REDIS_VERSION}  Python=${PYTHON_VERSION}  nginx=${NGINX_VERSION}"
+    echo
+    echo "启动："
+    echo "  Windows: powershell -ExecutionPolicy Bypass -File .\\scripts\\start.ps1"
+    echo "  Linux:   ./scripts/start.sh"
+    echo "控制台: http://localhost/openjiuwen/  登录 agent/agent"
+  } > "$STAGING/MANIFEST.txt"
+  log "  生成 $PLATNAME zip（选择性排除对端依赖 + MySQL 冗余 + 对端 wheel）"
+  mkdir -p "$DIST"
+  "$PY" "$ZIPPER" "$STAGING" "$DIST/${NAME}-native-${VER}-${PLATNAME}.zip" "$PLAT"
+done
 
 log "构建完成："
-log "  $DIST/${PKG}.zip"
+for PLAT in $TARGETS; do
+  case "$PLAT" in win) PLATNAME=windows;; linux) PLATNAME=linux;; esac
+  ZP="$DIST/${NAME}-native-${VER}-${PLATNAME}.zip"
+  if [ -f "$ZP" ]; then log "  $ZP  ($(du -h "$ZP" | cut -f1))"; else log "  $ZP  缺失"; fi
+done
 log "拷到目标机解压后，Linux 跑 ./scripts/start.sh；Windows 跑 .\\scripts\\start.ps1"
