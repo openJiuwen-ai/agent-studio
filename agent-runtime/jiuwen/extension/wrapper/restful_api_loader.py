@@ -133,9 +133,11 @@ def convert_ir_to_card(ir_data: dict) -> RestfulApiCardNew:
 
     timeout = float(os.getenv("PLUGIN_REQUEST_TIMEOUT_KEY", REQUEST_TIME_OUT))
 
+    # 优先使用 name 作为 id，避免同一插件组下不同接口 id 重复导致注册被覆盖
+    plugin_name = ir_data.get("name", "")
     card = RestfulApiCardNew(
-        id=ir_data.get("id", ir_data.get("name", "")),
-        name=ir_data.get("name"),
+        id=plugin_name or ir_data.get("id", ""),
+        name=plugin_name,
         description=ir_data.get("description", ""),
         params=params,
         path=url,
