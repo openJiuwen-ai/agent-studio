@@ -127,10 +127,11 @@ class PublishVersionCache:
     async def _read_from_obs(cls, agent_id: str) -> Optional[AgentMetadata]:
         """从 OBS 读取发布版本元数据。"""
         try:
-            from jiuwen.common.store.async_obs import AsyncOBSUtil
+            from storage import get_storage_provider
 
+            provider = get_storage_provider()
             obs_key = cls._build_obs_key(agent_id)
-            content = await AsyncOBSUtil.get_content(obs_key)
+            content = await provider.get_content(obs_key)
 
             if not content:
                 return None
