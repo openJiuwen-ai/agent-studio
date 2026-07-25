@@ -17,6 +17,12 @@ def kept_for_platform(rel, platform):
     if top in ('build', 'dist', '.cache'):
         return False
 
+    # 运行时生成的目录——干净安装包不得携带已用状态（如目标机首启前的 venv、
+    # mysql/redis/minio 数据、服务日志、pid/temp）。start 脚本会 mkdir -p 重建它们。
+    # 防御性排除：即便在用过的 staging 上打包也不会把 venv/data/logs 打进包。
+    if top in ('run', 'data', 'logs', 'temp'):
+        return False
+
     # 前端 sourcemap（*.map）—— prod 运行时无用，浏览器 devtools 调试用，瘦身去之
     fname = parts[-1] if parts else ''
     if fname.endswith('.map') and 'frontend' in parts:
