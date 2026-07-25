@@ -13,7 +13,7 @@ if(-not $env:MINIO_API_PORT){$env:MINIO_API_PORT='9000'};if(-not $env:MANAGER_PO
 function IsAlive($pf){ if (Test-Path $pf) { $p=[int](Get-Content $pf -Raw); try { Get-Process -Id $p -ErrorAction Stop | Out-Null; return $p } catch { return $null } }; return $null }
 function PortOk($port){ try { $c=New-Object System.Net.Sockets.TcpClient; $c.Connect('127.0.0.1',[int]$port); $c.Close(); return $true } catch { return $false } }
 function HttpOk($url){ try { $r=Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 3; return ($r.StatusCode -lt 500) } catch { return $false } }
-function Row($n,$proc,$health,$pid){ "{0,-12} {1,-12} {2,-12} {3}" -f $n,$proc,$health,$pid }
+function Row($n,$proc,$health,$pidv){ "{0,-12} {1,-12} {2,-12} {3}" -f $n,$proc,$health,$pidv }
 
 Write-Host ("{0,-12} {1,-12} {2,-12} {3}" -f 'SERVICE','PROC','HEALTH','PID')
 $services = @(
