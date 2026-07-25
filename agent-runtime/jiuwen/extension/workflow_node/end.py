@@ -5,7 +5,6 @@ from enum import Enum
 from typing import Any, Optional, Union, AsyncGenerator
 
 from agent_runtime.common.session_state_access import get_state_info
-from jiuwen.extension.workflow_node.utils import get_workflow_param
 from openjiuwen.core.common.logging import workflow_logger, LogEventType
 from openjiuwen.core.context_engine import ModelContext
 from openjiuwen.core.graph.executable import Input, Output
@@ -450,6 +449,8 @@ class End(BaseEnd):
             - is_renderer=True：调用方继续执行渲染
             - is_renderer=False：另一方已完成渲染，调用方应 return/return None
         """
+        if self._mix_render_complete:
+            return inputs, outputs, False
         if not self._mix:
             return inputs, outputs, True
 
@@ -490,16 +491,9 @@ class End(BaseEnd):
             # 批路径已 push，直接合并渲染
             pass  # 跳到下面的渲染逻辑
         else:
-            # 等待批路径 push
-            async with self._mix_condition:
-                if not self._mix_batch_pushed:
-                    try:
-                        await asyncio.wait_for(self._mix_condition.wait(), timeout=3.0)
-                    except asyncio.TimeoutError:
-                        pass
-            if not self._mix_batch_pushed:
-                # 超时：批路径未到达，流路径独自渲染
-                pass  # 跳到下面的渲染逻辑
+            # 不等 batch push — batch 值已从 state 注入 inputs（由 End.transform
+            # 在调用 _mix_coordinate 前从 session.state() 解析），直接渲染。
+            pass  # 跳到下面的渲染逻辑
 
         # 流路径渲染
         merged_inputs, merged_outputs = self._merge_mix_data()
@@ -519,23 +513,16 @@ class End(BaseEnd):
         流路径（key='stream'）：替换为逐帧回放式 generator（保留流式输出）
         """
         for k, v in list(inputs.items()):
-            if isinstance(v, AsyncGenerator):
+            if not isinstance(v, AsyncGenerator):
+                continue
+            if key == "batch":
                 frames = []
                 async for item in v:
                     frames.append(item)
-
-                if key == "batch":
-                    inputs[k] = "".join(frames)
-                else:
-
-                    def _make_replay(captured_frames):
-                        async def _replay():
-                            for item in captured_frames:
-                                yield item
-
-                        return _replay
-
-                    inputs[k] = _make_replay(frames)()
+                inputs[k] = "".join(frames)
+            # stream path: keep live AsyncGenerator; super().transform() -> render_stream
+            # drains it per-token. pre-consume would buffer the whole stream then
+            # burst-replay (fake streaming).
         return inputs
 
     def _merge_mix_data(self) -> tuple[dict, dict]:
@@ -1191,6 +1178,34 @@ class End(BaseEnd):
                 outputs[k[len(OUTPUT_PREFIX):]] = ""
             _declared_output_names = [k[len(OUTPUT_PREFIX):] for k in _gen_output_keys]
             _remove_output_data(inputs)
+
+        # 从 state 解析 batch 字段（上游非流式节点已写入 state），注入 inputs。
+        # 避免 _mix_coordinate 流路径等待 batch push（Pregel super-step barrier 导致
+        # batch 路径延迟到 LLM 完成才 push）。
+        if self._mix and self._user_fields_inputs:
+            _batch_schema = {}
+            for _f in self._user_fields_inputs:
+                _fid = _f.get("id")
+                _fval = _f.get("value", "")
+                if _fid and _fval.startswith("${") and _fid not in inputs:
+                    _batch_schema[_fid] = _fval
+            if _batch_schema:
+                # batch_schema 形如 {"aaa": "${node_xxx.userFields.key0}"}
+                # 用 get_state_info 按 io_state 点分路径读取上游节点输出；
+                # 它内部处理了 Session/NodeSession 差异（Session 类本身没有 state()）。
+                for _fid, _ref in _batch_schema.items():
+                    if not (isinstance(_ref, str) and _ref.startswith("${") and _ref.endswith("}")):
+                        continue
+                    _val = get_state_info(session, f"io_state.{_ref[2:-1]}")
+                    if _val is not None:
+                        inputs[_fid] = _val
+            # 兜底：state 读取失败（StreamActor 跨 Task，code 的 state 不可见）时，
+            # 把缺失的 batch 字段设为空串，防止 _render_stream 对 None 值等 5s 超时。
+            # message_end 仍会从 origin_answer 带完整内容。
+            for _f in self._user_fields_inputs:
+                _fid = _f.get("id")
+                if _fid and _f.get("value", "").startswith("${") and _fid not in inputs:
+                    inputs[_fid] = ""
 
         # mix 模式协调
         inputs, outputs, _mix_i_am_renderer = await self._mix_coordinate(
