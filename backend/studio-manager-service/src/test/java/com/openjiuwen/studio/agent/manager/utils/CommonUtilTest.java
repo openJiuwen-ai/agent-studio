@@ -297,9 +297,33 @@ class CommonUtilTest {
     @Test
     void testParseUrlFromMcpConfig_WithUrl() {
         com.alibaba.fastjson2.JSONObject config = new com.alibaba.fastjson2.JSONObject();
-        config.put("url", "http://example.com");
+        config.put("url", "http://example.com/path");
         String result = CommonUtil.parseUrlFromMcpConfig(config, 0);
-        assertEquals("http://example.com", result);
+        assertEquals("http://example.com/path", result);
+    }
+
+    @Test
+    void testParseUrlFromMcpConfig_UrlWithOnlyIpPort() {
+        com.alibaba.fastjson2.JSONObject config = new com.alibaba.fastjson2.JSONObject();
+        config.put("url", "http://10.0.0.1:8080");
+        String result = CommonUtil.parseUrlFromMcpConfig(config, 0);
+        assertEquals("http://10.0.0.1:8080/mcp", result);
+    }
+
+    @Test
+    void testParseUrlFromMcpConfig_UrlWithOnlyIpPortAndQuery() {
+        com.alibaba.fastjson2.JSONObject config = new com.alibaba.fastjson2.JSONObject();
+        config.put("url", "http://10.0.0.1:8080?token=abc");
+        String result = CommonUtil.parseUrlFromMcpConfig(config, 0);
+        assertEquals("http://10.0.0.1:8080/mcp?token=abc", result);
+    }
+
+    @Test
+    void testParseUrlFromMcpConfig_UrlWithCustomPath() {
+        com.alibaba.fastjson2.JSONObject config = new com.alibaba.fastjson2.JSONObject();
+        config.put("url", "http://10.0.0.1:8080/custom/path?token=abc");
+        String result = CommonUtil.parseUrlFromMcpConfig(config, 0);
+        assertEquals("http://10.0.0.1:8080/custom/path?token=abc", result);
     }
 
     @Test

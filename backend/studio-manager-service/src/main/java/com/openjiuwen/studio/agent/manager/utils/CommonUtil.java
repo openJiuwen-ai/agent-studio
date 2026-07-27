@@ -286,7 +286,7 @@ public class CommonUtil {
         }
         for (String key : config.keySet()) {
             if (Strings.CI.equals(key, "url")) {
-                return config.getString(key);
+                return appendMcpPathIfNeeded(config.getString(key));
             }
             if (config.get(key) instanceof com.alibaba.fastjson2.JSONObject) {
                 String result = parseUrlFromMcpConfig(config.getJSONObject(key), ++count);
@@ -296,6 +296,34 @@ public class CommonUtil {
             }
         }
         return null;
+    }
+
+    private static String appendMcpPathIfNeeded(String url) {
+        if (url == null || url.isEmpty()) {
+            return url;
+        }
+        try {
+            java.net.URI uri = new java.net.URI(url);
+            String path = uri.getPath();
+            if (path == null || path.isEmpty() || "/".equals(path)) {
+                String newPath = "/mcp";
+                String query = uri.getQuery();
+                String fragment = uri.getFragment();
+                java.net.URI newUri = new java.net.URI(
+                        uri.getScheme(),
+                        uri.getUserInfo(),
+                        uri.getHost(),
+                        uri.getPort(),
+                        newPath,
+                        query,
+                        fragment
+                );
+                return newUri.toString();
+            }
+        } catch (java.net.URISyntaxException e) {
+            return url;
+        }
+        return url;
     }
 
     public static String getRawQueryString(String urlString) {
