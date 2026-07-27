@@ -75,7 +75,7 @@
         <org.opengauss.version>5.0.0-og</org.opengauss.version>
         <bcprov-jdk18on.version>1.84</bcprov-jdk18on.version>
         <kotlin.version>2.0.21</kotlin.version>
-        <avro.version>1.12.2</avro.version>
+        <avro.version>1.12.1</avro.version>
         <commons-lang3.version>3.18.0</commons-lang3.version>
         <httpclient5.version>5.4.4</httpclient5.version>
         <httpcore5.version>5.3</httpcore5.version>
