@@ -30,6 +30,14 @@ def _create_ssl_context(redis_settings) -> ssl.SSLContext:
     return ctx
 
 
+class _NonTransactionSyncRedis(redis.Redis):
+    """单机/哨兵模式同步 Redis 包装类：pipeline() 默认 transaction=False。
+    """
+
+    def pipeline(self, transaction: bool = False, shard_hint=None):
+        return super().pipeline(transaction=transaction, shard_hint=shard_hint)
+
+
 def _create_sync_single_client(redis_settings) -> redis.Redis:
     connection_kwargs = {
         "host": redis_settings.host,
@@ -41,7 +49,8 @@ def _create_sync_single_client(redis_settings) -> redis.Redis:
         connection_kwargs["password"] = redis_settings.password
     if redis_settings.ssl_enabled:
         connection_kwargs["ssl"] = _create_ssl_context(redis_settings)
-    return redis.Redis(**connection_kwargs)
+    redis_cls = redis.Redis if redis_settings.redis_transaction_enabled else _NonTransactionSyncRedis
+    return redis_cls(**connection_kwargs)
 
 
 def _create_sync_cluster_client(redis_settings) -> RedisCluster:
@@ -81,9 +90,10 @@ def _create_sync_sentinel_client(redis_settings) -> redis.Redis:
     if not sentinel_nodes:
         raise ValueError("REDIS_SENTINEL_NODES not configured")
     sentinel = Sentinel(sentinel_nodes)
+    redis_cls = redis.Redis if redis_settings.redis_transaction_enabled else _NonTransactionSyncRedis
     return sentinel.master_for(
         redis_settings.sentinel_master,
-        redis.Redis,
+        redis_cls,
         password=redis_settings.password,
         decode_responses=False,
     )

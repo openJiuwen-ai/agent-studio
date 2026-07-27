@@ -81,6 +81,10 @@ class RedisSettings(BaseSettings):
     port: int = Field(default=6379, validation_alias="REDIS_PORT")
     db: int = Field(default=0, validation_alias="REDIS_DATABASE")
     password: Optional[str] = Field(default=None, validation_alias="REDIS_PASSWORD")
+    # 是否启用redis事务
+    redis_transaction_enabled: bool = Field(
+        default=True, validation_alias="REDIS_TRANSACTION_ENABLED"
+    )
     cluster_nodes: str = Field(default="", validation_alias="REDIS_CLUSTER_NODES")
     sentinel_master: str = Field(
         default="mymaster", validation_alias="REDIS_SENTINEL_MASTER"
