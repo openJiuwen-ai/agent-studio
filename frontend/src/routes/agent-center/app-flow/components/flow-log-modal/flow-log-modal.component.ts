@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, EventEmitter, Input, Output, SimpleChanges, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, Output, SimpleChanges, inject, ElementRef, ViewChild } from '@angular/core';
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { I18nNamespace } from '@i18n';
@@ -36,6 +36,7 @@ import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzTabsModule } from 'ng-zorro-antd/tabs';
 import { NzCollapseModule } from 'ng-zorro-antd/collapse';
 import { NzDrawerRef, NZ_DRAWER_DATA } from 'ng-zorro-antd/drawer';
+import { ScrollingModule } from '@angular/cdk/scrolling';
 
 export const LIMIT_COUNT = 500; // 目前保存的历史会话不超过100
 
@@ -74,6 +75,7 @@ export interface IConversationRequest {
     NzIconModule,
     NzTabsModule,
     NzCollapseModule,
+    ScrollingModule,
   ],
   providers: [
     {
@@ -154,6 +156,16 @@ export class FlowLogModalComponent {
 
   isReq = false;
   hasUpdate = false;
+
+  @ViewChild('mainLogDomRef') mainLogDomRef: ElementRef;
+
+  get getDomHeight() {
+    let res = 0;
+    if (this.mainLogDomRef?.nativeElement) {
+      res = this.mainLogDomRef.nativeElement.getBoundingClientRect().height - 105;
+    }
+    return `${res}px`;
+  }
 
   constructor(
     public route: ActivatedRoute,
@@ -673,6 +685,10 @@ export class FlowLogModalComponent {
       })
       .filter(item => item !== null);
     return tableData;
+  }
+
+  trackById(index: number, user: any): number {
+    return index;
   }
 
   addTableItemAttr(tableItem) {

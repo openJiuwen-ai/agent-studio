@@ -209,6 +209,49 @@ async def ir_execute(req_json: dict, request: Request):
         )
 
 
+def _stream_event_of(chunk) -> str:
+    """识别 SSE chunk 的事件类型，供 stream_response 拦截终态 done(R-20)。
+
+    接受 bytes(SSE 'data: {...}\\n\\n')与 dict(错误流 / 其他 runner)；其他类型或
+    解码/解析失败返回 ''(保守不识别 → 该帧按普通帧透传，最坏退化为现状行为)。
+    仅读取 event 字段，不重写 chunk。
+    """
+    if isinstance(chunk, dict):
+        return chunk.get("event", "")
+    if isinstance(chunk, (bytes, bytearray)):
+        try:
+            text = bytes(chunk).decode("utf-8")
+        except UnicodeDecodeError:
+            return ""
+        if not text.startswith("data: "):
+            return ""
+        try:
+            payload = json.loads(text[6:].strip())
+        except json.JSONDecodeError:
+            return ""
+        return payload.get("event", "") if isinstance(payload, dict) else ""
+    return ""
+
+
+def _serialize_stream_chunk(chunk):
+    """保持 bytes/bytearray 原样输出，dict 序列化为 SSE 帧；不重写非 done 的普通帧。"""
+    if isinstance(chunk, (bytes, bytearray)):
+        return bytes(chunk)
+    return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+
+
+def _fallback_terminal_done(execution_id: str) -> str:
+    """runner 未发送 done 时构造的兜底终态事件(空 data)。"""
+    done_payload = {
+        "event": "done",
+        "data": {},
+        "index": 0,
+        "executionId": execution_id,
+        "createdTime": int(time.time()),
+    }
+    return f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
+
+
 async def stream_response(req: ExecutionRequest, execution_id: str, runner, moderation_engine=None):
     """
     透传 OutputSchema 格式
@@ -216,9 +259,16 @@ async def stream_response(req: ExecutionRequest, execution_id: str, runner, mode
 
     审核层：在 dict 层插入 apply_stream_moderation()，对 message/message_end 事件的
     think/answer 做内容审核。事件包装层（未来）将作为另一个 generator wrapper 插入。
+
+    终态 done 幂等(R-20，策略 A)：Controller 的 run_streaming 正常流产 SSE bytes，且自发一个
+    带答案的 done#1(位于 task_end 之前，非末尾)。本方法吸收 runner 的 done，延迟到整个流结束
+    时发送唯一一个 done，保证"唯一 + 末尾"。必须原样保留 runner done 的 payload——studio-runtime
+    的 processOnControllerDoneMessage 消费 done.data.answer 写入会话消息(getMessages →
+    updateConversation)，清空会导致本轮助手答案不入会话历史、第二轮上下文缺失；故仅当 runner
+    未发 done 时才构造空兜底。
     """
     execution_id = execution_id or str(uuid.uuid4())
-    last_event = ""
+    pending_done = None  # 暂存 runner 自发的首个 done(Controller done#1 / 异常 except done)
 
     raw_gen = runner.run_streaming(req, execution_id)
     moderated_gen = apply_stream_moderation(raw_gen, moderation_engine) if moderation_engine else raw_gen
@@ -226,24 +276,19 @@ async def stream_response(req: ExecutionRequest, execution_id: str, runner, mode
     async for chunk in moderated_gen:
         if chunk is None:
             continue
-        if isinstance(chunk, bytes):
-            yield chunk
-        else:
-            yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-            if isinstance(chunk, dict):
-                last_event = chunk.get("event", "")
+        if _stream_event_of(chunk) == "done":
+            # 拦截 runner 的 done，延迟到流末尾发送(出现多个 done 时保留第一个)
+            if pending_done is None:
+                pending_done = chunk
+            continue
+        # 非 done 事件原样透传：bytes/bytearray 不重写，dict 序列化
+        yield _serialize_stream_chunk(chunk)
 
-    # 兜底 done：runner 仅在异常处理中自行发送 done（见 workflow_runner.py except 块），
-    # 正常完成时 runner 不发 done，由这里补发。
-    if last_event != "done":
-        done_payload = {
-            "event": "done",
-            "data": {},
-            "index": 0,
-            "executionId": execution_id,
-            "createdTime": int(time.time()),
-        }
-        yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
+    # 流末尾：发送唯一一个终态 done —— 有 runner done 则原样保留其 payload，否则空兜底
+    if pending_done is not None:
+        yield _serialize_stream_chunk(pending_done)
+    else:
+        yield _fallback_terminal_done(execution_id)
 
 
 @execution_app.post("/v1/orchestration/ir/component/{component_id}/execute")

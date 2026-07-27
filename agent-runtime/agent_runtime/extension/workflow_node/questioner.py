@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from agent_runtime.common.redis_manager import QuestionerTraceStore
+from common_utils.redis_manager import get_redis_client
 from agent_runtime.common.session_state_access import (
     dump_state_info,
     get_state_info,
@@ -88,6 +88,158 @@ USER_FIELDS = "userFields"
 USER_CONFIRM_INFO = ["%确认%", "确认", "没错", "正确"]
 # 用户退出关键词
 USER_BREAK_INFO = ["%跳出%", "结束", "意图结束", "跳出", "退出"]
+
+
+class QuestionerTraceStore:
+    """Questioner 节点 trace 数据的 Redis 存储管理，用于工作流中断恢复时保持 on_invoke_data"""
+
+    KEY_PREFIX = "agentBuilder:questioner:trace"
+    DEFAULT_TTL = 86400  # 24小时
+
+    @classmethod
+    def _build_key(cls, session_id: str, component_id: str) -> str:
+        """构建 Redis key: session_id + component_id"""
+        return f"{cls.KEY_PREFIX}:{session_id}:{component_id}"
+
+    @classmethod
+    async def append(
+        cls, session_id: str, component_id: str, trace_data: dict, ttl: int = None
+    ) -> bool:
+        """追加 trace 数据到 Redis 列表
+
+        Args:
+            session_id: 会话 ID
+            component_id: 组件 ID
+            trace_data: trace 数据字典
+            ttl: 过期时间（秒），默认 24 小时
+
+        Returns:
+            bool: 是否保存成功
+        """
+        try:
+            redis_client = get_redis_client()
+            key = cls._build_key(session_id, component_id)
+            trace_json = json.dumps(trace_data, ensure_ascii=False)
+            expire = ttl if ttl is not None else cls.DEFAULT_TTL
+
+            # 使用 RPUSH 追加到列表
+            await redis_client.rpush(key, trace_json)
+            # 设置过期时间
+            await redis_client.expire(key, expire)
+
+            workflow_logger.debug("Appended trace data: key={}, data={}", key, trace_data)
+            return True
+        except Exception as e:
+            workflow_logger.warning("Failed to append trace data to Redis: {}", e)
+            return False
+
+    @classmethod
+    async def get_all(cls, session_id: str, component_id: str) -> list[dict]:
+        """获取指定 session 和 component 的所有 trace 数据
+
+        Args:
+            session_id: 会话 ID
+            component_id: 组件 ID
+
+        Returns:
+            list[dict]: trace 数据列表，失败时返回空列表
+        """
+        try:
+            redis_client = get_redis_client()
+            key = cls._build_key(session_id, component_id)
+            result = await redis_client.lrange(key, 0, -1)
+
+            trace_list = []
+            for item in result:
+                if isinstance(item, bytes):
+                    item = item.decode("utf-8")
+                trace_list.append(json.loads(item))
+
+            workflow_logger.debug("Retrieved trace data: key={}, count={}", key, len(trace_list))
+            return trace_list
+        except Exception as e:
+            workflow_logger.warning("Failed to get trace data from Redis: {}", e)
+            return []
+
+    @classmethod
+    async def delete(cls, session_id: str, component_id: str) -> bool:
+        """删除指定 session 和 component 的所有 trace 数据
+
+        Args:
+            session_id: 会话 ID
+            component_id: 组件 ID
+
+        Returns:
+            bool: 是否删除成功
+        """
+        try:
+            redis_client = get_redis_client()
+            key = cls._build_key(session_id, component_id)
+            await redis_client.delete(key)
+            workflow_logger.debug("Deleted trace data: key={}", key)
+            return True
+        except Exception as e:
+            workflow_logger.warning("Failed to delete trace data from Redis: {}", e)
+            return False
+
+    @classmethod
+    async def recover_to_session(
+        cls, session_id: str, component_id: str, session
+    ) -> bool:
+        """将 Redis 中保存的 trace 数据恢复到 session 的 tracer
+
+        Args:
+            session_id: 会话 ID
+            component_id: 组件 ID
+            session: openjiuwen.core.session.node.Session 实例
+
+        Returns:
+            bool: 是否恢复成功
+        """
+        try:
+            trace_list = await cls.get_all(session_id, component_id)
+            if not trace_list:
+                workflow_logger.debug(
+                    "No trace data to recover: session_id={}, component_id={}",
+                    session_id,
+                    component_id,
+                )
+                return True
+
+            # 批量恢复：直接操作 span 的 on_invoke_data，不逐条触发事件
+            tracer = session._inner.tracer()
+            if tracer is None:
+                return True
+
+            from openjiuwen.core.session.tracer.handler import TracerHandlerName
+
+            invoke_id = session._inner.executable_id()
+            parent_id = session._inner.parent_id()
+            handler_class_name = (
+                TracerHandlerName.TRACER_WORKFLOW.value + "." + parent_id
+                if parent_id != ""
+                else TracerHandlerName.TRACER_WORKFLOW.value
+            )
+            handler = tracer._handlers.get(handler_class_name)
+            if handler is None:
+                handler = tracer._handlers.get(TracerHandlerName.TRACER_WORKFLOW.value)
+
+            if handler:
+                span = handler._span_manager.get_span(invoke_id)
+                if span:
+                    if not isinstance(span.on_invoke_data, list):
+                        span.on_invoke_data = []
+                    # 批量 extend 所有历史数据
+                    span.on_invoke_data.extend(trace_list)
+                    # 只发送一次事件
+                    import asyncio
+
+                    asyncio.create_task(handler._send_data(span))
+            return True
+        except Exception as e:
+            workflow_logger.warning("Failed to recover trace data to session: {}", e)
+            return False
+
 
 QUESTIONER_SYSTEM_TEMPLATE_ZH = """\
 你是一个信息收集助手，你需要根据指定的参数收集用户的信息，然后提交到系统。

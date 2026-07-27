@@ -205,11 +205,20 @@ class EventHandler:
             workflow_logger.error("encapsulate non stream response failed.")
             workflow_logger.error("".join(traceback.format_exception(e)))
 
+        # 对齐旧 Java runAgent：始终输出 end_time。事件流未显式设置时兜底取当前时间。
+        if self.trace.end_time is None:
+            self.trace.end_time = int(time.time() * 1000)
+
         non_stream_output = {}
         trace_attr = vars(self.trace)
         for key, value in trace_attr.items():
             if value is not None:
                 non_stream_output[key] = value
+        # 对齐旧 Java WorkflowRunRsp @Builder.Default：outputs/node_info/events
+        # 即使未被事件流填充也要输出 {}、[]，避免被 exclude_none 丢弃导致字段缺失。
+        non_stream_output.setdefault("outputs", {})
+        non_stream_output.setdefault("node_info", [])
+        non_stream_output.setdefault("events", [])
         response = NonStreamingResponse.model_construct(**non_stream_output)
         return JSONResponse(content=response.model_dump(exclude_none=True, by_alias=True))
 

@@ -13,7 +13,7 @@
       </span>
     </div>
   </div>
-  <div class="content">
+  <div class="content"  #mainLogDomRef>
     <nz-tabset id="task-run-tabs" [(nzSelectedIndex)]="selectedTabIndex">
       <nz-tab
         class="h-full"
@@ -308,7 +308,7 @@
               (handleClick)="onNodeClicked($event)"
             ></time-line>
             <ng-container *ngIf="chartViewMode === 'sequence' && nodeIdClicked">
-              <ng-container *ngFor="let callItem of callChainInfo.list">
+              <ng-container *ngFor="let callItem of callChainInfo.list; trackBy: trackById">
                 <ng-container *ngIf="callItem.node_id === nodeIdClicked">
                   <div
                     class="sequence-item-wrapper flex flex-col gap-[16px] bg-[#fafafa]"
@@ -344,25 +344,17 @@
               *ngIf="chartViewMode === 'list' && callChainInfo.list.length"
               class="call-chains-container"
             >
+            <cdk-virtual-scroll-viewport itemSize="43" [style]="{ height: getDomHeight }">
               <div
                 *ngFor="let callItem of callChainInfo.list"
                 class="call-item-wrapper flex flex-col gap-[16px] bg-[#fafafa]"
-                [style.display]="
-                  callItem.parent_node_id === curNodeId ? 'block' : 'none'
-                "
+                [style.display]="callItem.parent_node_id === curNodeId ? 'block' : 'none'"
               >
-                <div
-                  *ngIf="callItem.parent_node_id === curNodeId"
-                  class="call-item-wrapper flex flex-col gap-[16px] bg-[#fafafa]"
-                >
-                  <ng-container
-                    *ngTemplateOutlet="
-                      callItemTemplate;
-                      context: { $implicit: callItem }
-                    "
-                  ></ng-container>
+                <div *ngIf="callItem.parent_node_id === curNodeId" class="call-item-wrapper flex flex-col gap-[16px] bg-[#fafafa]">
+                  <ng-container *ngTemplateOutlet="callItemTemplate; context: { $implicit: callItem }"></ng-container>
                 </div>
               </div>
+            </cdk-virtual-scroll-viewport>
             </div>
           </div>
         </ng-template>

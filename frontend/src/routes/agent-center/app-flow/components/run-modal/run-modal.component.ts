@@ -54,6 +54,7 @@ import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzBreadCrumbModule } from 'ng-zorro-antd/breadcrumb';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
+import { ScrollingModule } from '@angular/cdk/scrolling';
 
 @Component({
   selector: 'flow-run-modal',
@@ -83,6 +84,7 @@ import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
     NzInputModule,
     NzBreadCrumbModule,
     NzToolTipModule,
+    ScrollingModule,
   ],
   providers: [
     {
@@ -160,6 +162,16 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
   };
 
   private version: number = 0;
+
+  @ViewChild('mainLogDomRef') mainLogDomRef: ElementRef;
+
+  get getDomHeight() {
+    let res = 0;
+    if (this.mainLogDomRef?.nativeElement) {
+      res = this.mainLogDomRef.nativeElement.getBoundingClientRect().height - 120;
+    }
+    return `${res}px`;
+  }
 
   constructor(
     protected override appFlowServe: AppFlowService,
@@ -583,6 +595,10 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
   addCallItemAttr(callItem) {
     callItem.isIOEmpty = this.isIOEmpty(callItem.inputs);
     return callItem;
+  }
+
+  trackById(index: number, user: any): number {
+    return index;
   }
 
   /** 遇到event_type等于'node_finished'的流式块，更新调用节点信息 */

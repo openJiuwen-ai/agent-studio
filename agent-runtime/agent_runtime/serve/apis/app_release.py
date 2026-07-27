@@ -75,7 +75,7 @@ class AppRelease:
             ReleaseInfo 实例；查询失败时返回 JSONResponse 错误响应。
 
         """
-        from agent_runtime.common.redis_manager import get_redis_client
+        from common_utils.redis_manager import get_redis_client
 
         release_key = _RELEASE_WEB_REL_KEY % short_code
         redis_client = get_redis_client()

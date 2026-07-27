@@ -25,7 +25,7 @@ DEFAULT_TTL = 86400
 def _get_redis_client():
     """获取 Redis 客户端，不可用则返回 None."""
     try:
-        from agent_runtime.common.redis_manager import RedisClientManager
+        from common_utils.redis_manager import RedisClientManager
         mgr = RedisClientManager.get_instance()
         if mgr.is_initialized:
             return mgr.get_client()

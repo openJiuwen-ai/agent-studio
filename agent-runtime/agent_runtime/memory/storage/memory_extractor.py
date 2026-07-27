@@ -140,7 +140,7 @@ class UserProfileMemoryExtractor:
 
     def __init__(self):
         if not self._initialized:
-            from agent_runtime.common.redis_manager import RedisClientManager
+            from common_utils.redis_manager import RedisClientManager
 
             self._redis_client = RedisClientManager.get_instance().get_client()
             self._initialized = True

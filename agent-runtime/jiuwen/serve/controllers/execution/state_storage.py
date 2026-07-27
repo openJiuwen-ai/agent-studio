@@ -4,7 +4,7 @@
 import threading
 from abc import ABC, abstractmethod
 
-from agent_runtime.common.redis_manager import get_redis_client
+from common_utils.redis_manager import get_redis_client
 from jiuwen.common.store.redis import get_redis_instance
 
 

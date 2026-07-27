@@ -70,7 +70,7 @@ class TestCreateReleaseInfo:
         with (
             _patch_request_ctx("domain-1"),
             patch(
-                "agent_runtime.common.redis_manager.get_redis_client",
+                "common_utils.redis_manager.get_redis_client",
                 return_value=mock_redis,
             ),
         ):
@@ -134,7 +134,7 @@ class TestCreateReleaseInfo:
         with (
             _patch_request_ctx("domain-1"),
             patch(
-                "agent_runtime.common.redis_manager.get_redis_client",
+                "common_utils.redis_manager.get_redis_client",
                 return_value=mock_redis,
             ),
         ):
@@ -160,7 +160,7 @@ class TestCreateReleaseInfo:
         with (
             _patch_request_ctx("domain-1"),
             patch(
-                "agent_runtime.common.redis_manager.get_redis_client",
+                "common_utils.redis_manager.get_redis_client",
                 return_value=mock_redis,
             ),
         ):
@@ -188,7 +188,7 @@ class TestCreateReleaseInfo:
         with (
             _patch_request_ctx("auth-domain-xyz"),
             patch(
-                "agent_runtime.common.redis_manager.get_redis_client",
+                "common_utils.redis_manager.get_redis_client",
                 return_value=mock_redis,
             ),
         ):
@@ -214,7 +214,7 @@ class TestCreateReleaseInfo:
         with (
             _patch_request_ctx(None),
             patch(
-                "agent_runtime.common.redis_manager.get_redis_client",
+                "common_utils.redis_manager.get_redis_client",
                 return_value=mock_redis,
             ),
         ):
@@ -236,7 +236,7 @@ class TestDeleteReleaseInfo:
         """正常删除 Redis key 返回 200."""
         mock_redis = AsyncMock()
         with patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_redis,
         ):
             result = await delete_release_info(
@@ -254,7 +254,7 @@ class TestDeleteReleaseInfo:
         mock_redis = AsyncMock()
         mock_redis.delete.side_effect = ConnectionError("Redis down")
         with patch(
-            "agent_runtime.common.redis_manager.get_redis_client",
+            "common_utils.redis_manager.get_redis_client",
             return_value=mock_redis,
         ):
             result = await delete_release_info(

@@ -3,7 +3,7 @@
 """
 Config bridge: full replica of agent_runtime.common.config.
 
-Provides identical classes: ServerSettings, RedisMode, RedisSettings, LLMSettings,
+Provides identical classes: ServerSettings, LLMSettings,
 ObjectStorageSettings, HealthCheckSettings, SecuritySandboxSettings, WorkflowLogSettings,
 OtelSettings, CacheSettings, SkillStorageSettings, OpenSearchSettings, MemorySettings,
 CheckpointerSettings, CodeExecutionSettings, DataBaseSettings, Settings, settings.
@@ -62,52 +62,6 @@ class ServerSettings(BaseSettings):
     @field_validator("tls_key_password", mode="after")
     @classmethod
     def _decrypt_tls_key_password(cls, v):
-        return _decrypt(v)
-
-
-class RedisMode(Enum):
-    """Redis 连接模式。"""
-
-    SINGLE = "single"
-    CLUSTER = "cluster"
-    SENTINEL = "sentinel"
-
-
-class RedisSettings(BaseSettings):
-    """Redis 配置。环境变量前缀统一为 REDIS_。"""
-
-    mode: RedisMode = Field(default=RedisMode.SINGLE, validation_alias="REDIS_MODE")
-    host: str = Field(default="127.0.0.1", validation_alias="REDIS_HOST")
-    port: int = Field(default=6379, validation_alias="REDIS_PORT")
-    db: int = Field(default=0, validation_alias="REDIS_DATABASE")
-    password: Optional[str] = Field(default=None, validation_alias="REDIS_PASSWORD")
-    cluster_nodes: str = Field(default="", validation_alias="REDIS_CLUSTER_NODES")
-    sentinel_master: str = Field(
-        default="mymaster", validation_alias="REDIS_SENTINEL_MASTER"
-    )
-    sentinel_nodes: str = Field(default="", validation_alias="REDIS_SENTINEL_NODES")
-    max_connections: int = Field(default=50, validation_alias="REDIS_MAX_CONNECTIONS")
-    socket_timeout: int = Field(default=5, validation_alias="REDIS_SOCKET_TIMEOUT")
-    socket_connect_timeout: int = Field(
-        default=5, validation_alias="REDIS_SOCKET_CONNECT_TIMEOUT"
-    )
-    ssl_enabled: bool = Field(default=False, validation_alias="REDIS_SSL_ENABLED")
-    ssl_ca_cert: str = Field(default="", validation_alias="REDIS_SSL_CA_CERT")
-    ssl_cert_file: str = Field(default="", validation_alias="REDIS_SSL_CERT_FILE")
-    ssl_key_file: str = Field(default="", validation_alias="REDIS_SSL_KEY_FILE")
-    # Redis 写入 TTL（秒）：用于会话状态、对话历史等业务的过期兜底，防止 key 永久驻留。
-    # 与 agent_runtime 侧 jiuwen RedisUtils.set 的 REDIS_TTL 跨进程约定保持同名。
-    datasource_ttl_seconds: int = Field(
-        default=3 * 24 * 60 * 60, validation_alias="REDIS_TTL"
-    )
-
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
-
-    @field_validator("password", mode="after")
-    @classmethod
-    def _decrypt_password(cls, v):
         return _decrypt(v)
 
 
@@ -401,7 +355,6 @@ class DataBaseSettings(BaseSettings):
 
 class Settings:
     server = ServerSettings()
-    redis = RedisSettings()
     llm = LLMSettings()
     object_storage = ObjectStorageSettings()
     health_check = HealthCheckSettings()

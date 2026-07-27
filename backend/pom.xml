@@ -35,6 +35,7 @@
         <annotation-api.version>3.0.0</annotation-api.version>
         <h2.version>2.2.224</h2.version>
         <plexus-archiver.version>4.11.0</plexus-archiver.version>
+        <log4j2.version>2.25.4</log4j2.version>
         <mariadb-java-client.version>3.5.6</mariadb-java-client.version>
         <swaggerV2.version>1.6.14</swaggerV2.version>
         <springdoc-openapi.version>2.8.8</springdoc-openapi.version>
@@ -146,6 +147,17 @@
                 <artifactId>commons-lang3</artifactId>
                 <version>${commons-lang3.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>32.1.3-jre</version>
+            </dependency>
+
+            <dependency>
+                <groupId>commons-fileupload</groupId>
+                <artifactId>commons-fileupload</artifactId>
+                <version>1.6.0</version>
+            </dependency>
 
             <!-- 统一 httpclient5 版本 -->
             <dependency>
@@ -241,9 +253,9 @@
             <dependency>
                 <groupId>org.eclipse.jetty</groupId>
                 <artifactId>jetty-bom</artifactId>
-                <version>11.0.15</version>
+                <version>11.0.24</version>
                 <type>pom</type>
-                <scope>test</scope>
+                <scope>import</scope>
             </dependency>
 
             <dependency>

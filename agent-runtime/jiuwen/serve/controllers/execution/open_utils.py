@@ -15,7 +15,7 @@ import time
 from typing import Any, Optional
 
 from cachetools import LRUCache
-from agent_runtime.common.redis_manager import get_redis_client
+from common_utils.redis_manager import get_redis_client
 
 from storage import get_storage_provider
 from agent_runtime.common.config import settings

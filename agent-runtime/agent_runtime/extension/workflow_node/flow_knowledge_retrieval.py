@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import AsyncIterator, Dict, List, Optional, Union
 
 from agent_runtime.common.kb_config_providers import OBSKnowledgeBaseConfigProvider
-from agent_runtime.common.redis_manager import get_redis_client
+from common_utils.redis_manager import get_redis_client
 from agent_runtime.extension.workflow_node.kb_adapter.base import KBSearchResult, KBServiceAdapter
 from agent_runtime.extension.workflow_node.kb_adapter.factory import KBAdapterFactory
 from openjiuwen.core.common.constants.constant import USER_FIELDS

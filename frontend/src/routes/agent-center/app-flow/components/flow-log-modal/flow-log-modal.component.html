@@ -71,7 +71,7 @@
       </div>
     </div>
   </div>
-  <div class="main-log">
+  <div class="main-log" #mainLogDomRef>
     <nz-tabset class="log-tabs" [nzSelectedIndex]="selectedIndex" (nzSelectedIndexChange)="selectedIndex = $event">
       <nz-tab class="exec-result-tab h-full" [nzTitle]="tabs[0].title">
         <div *ngIf="workflowDebugInfo.list.length === 0 && !workflowDebugInfo?.status; else runResultTmpl" class="empty-run-result">
@@ -172,11 +172,13 @@
           </ng-container>
           <ng-container *ngIf="executionList.length && chartViewMode === 'list'">
             <div *ngIf="callChainInfo.list.length" class="call-chains-container">
-              <div *ngFor="let callItem of callChainInfo.list" class="call-item-wrapper flex flex-col gap-[16px] bg-[#fafafa]">
-                <div class="call-item-wrapper flex flex-col bg-[#fafafa]" [ngClass]="{ 'gap-[16px]': !callItem?.exceptionChildren }">
-                  <ng-container *ngTemplateOutlet="callItemTemplate; context: { $implicit: callItem }"> </ng-container>
+              <cdk-virtual-scroll-viewport itemSize="43" [style]="{ height: getDomHeight }">
+                <div *cdkVirtualFor="let callItem of callChainInfo.list; trackBy: trackById" class="call-item-wrapper flex flex-col gap-[16px] bg-[#fafafa]">
+                  <div class="call-item-wrapper flex flex-col bg-[#fafafa]" [ngClass]="{ 'gap-[16px]': !callItem?.exceptionChildren }">
+                    <ng-container *ngTemplateOutlet="callItemTemplate; context: { $implicit: callItem }"> </ng-container>
+                  </div>
                 </div>
-              </div>
+              </cdk-virtual-scroll-viewport>
             </div>
           </ng-container>
         </div>

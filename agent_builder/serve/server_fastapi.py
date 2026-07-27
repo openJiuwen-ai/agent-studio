@@ -39,7 +39,7 @@ async def _ping_redis() -> None:
     settings; this only validates config at boot. Warn-and-continue on failure.
     """
     try:
-        from agent_builder.adapter.redis_bridge import RedisClientManager
+        from common_utils.redis_manager import RedisClientManager
 
         mgr = RedisClientManager.get_instance()
         mgr.init()
@@ -85,7 +85,7 @@ async def _init_s3_storage() -> None:
 def _register_model_service_ports() -> None:
     """注入 model_service 所需的 storage / llm settings / request-headers，使其
     不依赖 agent_runtime（agent_builder 用自有 bridge + 共享 storage 包）。cache 不注入
-    （跳过 L2，resolver 每次直读 OBS；如需缓存可后续接 redis_bridge 实现的 CacheQueue）。"""
+    （跳过 L2，resolver 每次直读 OBS；如需缓存可后续接 common_utils.redis_manager 实现的 CacheQueue）。"""
     import storage
     from model_service import ports
     from agent_builder.adapter.config_bridge import settings

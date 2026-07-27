@@ -14,7 +14,7 @@ Value: JSON 序列化的 Conversation { messageList: [{role, content, createTime
 import json
 import logging
 
-from agent_runtime.common.redis_manager import get_redis_client
+from common_utils.redis_manager import get_redis_client
 from agent_runtime.context.request_context import _request_ctx
 
 logger = logging.getLogger(__name__)

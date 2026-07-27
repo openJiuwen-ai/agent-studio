@@ -56,8 +56,16 @@ class NodeMessage:
     node_type: Optional[str] = None
     node_name: Optional[str] = None
 
+    # 对齐旧 Java NodeMessage 的 @JsonProperty 序列化键名（camelCase），
+    # 使非流式响应 messages 字段与旧 studio-service 输出一致。
+    _CAMEL_KEYS = {"node_id": "nodeId", "node_type": "nodeType", "node_name": "nodeName"}
+
     def to_dict(self) -> dict:
-        return {k: v for k, v in self.__dict__.items() if v is not None}
+        return {
+            self._CAMEL_KEYS.get(k, k): v
+            for k, v in self.__dict__.items()
+            if v is not None
+        }
 
 
 @dataclass

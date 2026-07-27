@@ -64,7 +64,7 @@ async def create_release_info(
 
     # 3. 写入 Redis
     try:
-        from agent_runtime.common.redis_manager import get_redis_client
+        from common_utils.redis_manager import get_redis_client
 
         redis_client = get_redis_client()
         release_data = body.model_dump_json(by_alias=True, exclude_none=True)
@@ -98,7 +98,7 @@ async def delete_release_info(
 
     # 2. 从 Redis 删除
     try:
-        from agent_runtime.common.redis_manager import get_redis_client
+        from common_utils.redis_manager import get_redis_client
 
         redis_client = get_redis_client()
         await redis_client.delete(release_key)
