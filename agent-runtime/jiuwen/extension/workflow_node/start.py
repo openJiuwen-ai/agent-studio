@@ -237,9 +237,13 @@ class Start(WorkflowComponent):
             for item in data:
                 result.update(Start._extract_assignment_values(item, time_type))
         elif isinstance(data, dict):
+            aging_level = data.get("aging_level")
+            # 兼容：permanent 视同 session 处理
+            if aging_level == ASSIGNMENT_PERMANENT:
+                aging_level = ASSIGNMENT_SESSION
             if (
                 data.get("storage_method") == ASSIGNMENT
-                and data.get("aging_level") == time_type
+                and aging_level == time_type
             ):
                 if "schema" not in data:
                     # 基本类型处理，需要根据 type 进行类型转换
