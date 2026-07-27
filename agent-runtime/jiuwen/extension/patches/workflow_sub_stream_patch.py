@@ -435,6 +435,25 @@ async def _patched_sub_invoke(
         await asyncio.shield(self._internal.reset())
 
 
+def _find_conversation_history_in_state(state_root):
+    """递归扫 io_state 树找 conversationHistory（list 类型，含 role/content 的 dict）。"""
+    if isinstance(state_root, dict):
+        for key, value in state_root.items():
+            if key == "conversationHistory" and isinstance(value, list) and value:
+                return value
+            if isinstance(value, dict):
+                found = _find_conversation_history_in_state(value)
+                if found:
+                    return found
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        found = _find_conversation_history_in_state(item)
+                        if found:
+                            return found
+    return None
+
+
 def apply_workflow_sub_stream_patch() -> bool:
     """Monkey-patch Workflow sub-stream helpers and CompiledGraph._invoke once per process."""
     global _PATCH_APPLIED
@@ -447,5 +466,83 @@ def apply_workflow_sub_stream_patch() -> bool:
     CompiledGraph._invoke = _patched_compiled_invoke
     Workflow._sub_stream = _patched_sub_stream
     Workflow._sub_invoke = _patched_sub_invoke
+
+    # 修复：loop body 里 QA 拿不到对话历史导致 LLM 提取不到字段。
+    # 不通过 LoopComponent.invoke 传 context（会跟同事的并行数据隔离 fix 冲突），
+    # 改为 patch QuestionerDirectReplyHandler._get_latest_chat_history，让 QA 在
+    # context=None 时从 session 的 io_state 读 conversationHistory（Start 节点写入的）。
+    # pylint: disable=protected-access
+    try:
+        from agent_runtime.extension.workflow_node.questioner import QuestionerDirectReplyHandler
+        from agent_runtime.common.session_state_access import get_state_info
+        from openjiuwen.core.foundation.llm import UserMessage, AssistantMessage
+
+        async def _patched_get_chat_history(self, context):
+            result = list()
+            if self._config.with_chat_history and context is not None:
+                dialogue_round = (
+                    self._config.chat_history_max_rounds
+                    if self._config.chat_history_max_rounds > 0
+                    else None
+                )
+                context_window = await context.get_context_window(
+                    dialogue_round=dialogue_round
+                )
+                if context_window is not None:
+                    result = context_window.get_messages()
+
+            # context=None 或读不到时，沿 session 父链找 conversationHistory
+            # 仅在 with_chat_history=True 时触发——with_chat_history=False 的 QA
+            # 故意不要历史，不应注入 session 里的 conversationHistory
+            # Start 节点的输出里 conversationHistory 路径不固定——
+            # 可能在 io_state.global_variables.sys.conversationHistory（首次执行）
+            # 或 io_state.<node_id>.systemFields.sys.conversationHistory（Vertex 输出）
+            # 递归扫整棵 io_state 树找 conversationHistory 最可靠
+            need_fallback = not result or (
+                result and result[-1].role in ["assistant"]
+            )
+            if self._config.with_chat_history and need_fallback:
+                try:
+                    session = self._session
+                    inner = getattr(session, "_inner", session)
+                    conv_history = None
+                    while inner is not None:
+                        try:
+                            io_state = get_state_info(inner, "io_state") or {}
+                            conv_history = _find_conversation_history_in_state(io_state)
+                            if conv_history:
+                                break
+                        except Exception as e:
+                            workflow_logger.warning(
+                                f"Failed to read io_state from session: {e}"
+                            )
+                        inner = inner.parent() if hasattr(inner, "parent") else None
+
+                    if conv_history:
+                        result = []
+                        for msg in conv_history:
+                            role = msg.get("role", "user")
+                            content = msg.get("content", "")
+                            if role == "user":
+                                result.append(UserMessage(role="user", content=content))
+                            else:
+                                result.append(AssistantMessage(role="assistant", content=content))
+                except Exception as e:
+                    workflow_logger.warning(
+                        f"Failed to search conversation history from session chain: {e}"
+                    )
+
+            # 兜底：当前用户输入
+            if not result or result[-1].role in ["assistant"]:
+                content = self._query
+                if isinstance(content, dict):
+                    content = [content]
+                result.append(UserMessage(role="user", content=content))
+            return result
+
+        QuestionerDirectReplyHandler._get_latest_chat_history = _patched_get_chat_history
+    except Exception as e:
+        workflow_logger.warning(f"Failed to patch QuestionerDirectReplyHandler._get_latest_chat_history: {e}")
+
     _PATCH_APPLIED = True
     return True
