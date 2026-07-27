@@ -474,6 +474,10 @@ export class AddPublisherComponent implements OnInit {
     }
     if (auth === 'CUSTOM_APIKEY') {
       this.resetControl();
+      // 显式清除 apikey 的 required 校验器并立即刷新状态
+      // setValidators([]) 在某些场景下未生效，使用 clearValidators 确保
+      this.myForm.controls[mapKeys.apikey]?.clearValidators();
+      this.myForm.controls[mapKeys.apikey]?.updateValueAndValidity({ onlySelf: true });
     }
     if (auth === 'CUSTOM_IAM') {
       this.resetControl();
@@ -501,6 +505,8 @@ export class AddPublisherComponent implements OnInit {
       this.myForm.controls[mapKeys.iamEnterprise].setValidators([Validators.required]);
       this.myForm.controls[mapKeys.scenarioUuid].setValidators([Validators.required]);
     }
+    // 修复：setValidators 后刷新表单状态，避免 myForm.status 残留旧值导致 checkGroup 误判
+    this.myForm.updateValueAndValidity();
   }
 
   public changeApi(): void {

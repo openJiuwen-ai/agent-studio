@@ -127,13 +127,11 @@ public interface FileStore {
         if (keys == null || keys.isEmpty()) {
             return true;
         }
+        int slash = prefix.indexOf('/');
+        String namespace = slash > 0 ? prefix.substring(0, slash) : prefix;
         boolean allDeleted = true;
         for (String key : keys) {
-            String fullPath = prefix;
-            if (!prefix.endsWith("/")) {
-                fullPath = prefix + "/";
-            }
-            if (!delete(fullPath + key)) {
+            if (!delete(namespace + "/" + key)) {
                 allDeleted = false;
             }
         }

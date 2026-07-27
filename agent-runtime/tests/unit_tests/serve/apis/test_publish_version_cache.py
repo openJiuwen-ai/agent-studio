@@ -15,6 +15,13 @@ from agent_runtime.serve.apis.publish_version_cache import (
 )
 
 
+def _mock_storage_provider(content):
+    """构造 storage provider mock，get_content 返回 content."""
+    mock_provider = MagicMock()
+    mock_provider.get_content = AsyncMock(return_value=content)
+    return mock_provider
+
+
 class TestAgentMetadata:
     """AgentMetadata model tests."""
 
@@ -74,16 +81,23 @@ class TestPublishVersionCacheGetMetadata:
         mock_manager = MagicMock()
         mock_manager.is_initialized = True
 
+        mock_provider = _mock_storage_provider(None)
+
         with patch(
             "common_utils.redis_manager.RedisClientManager.get_instance",
             return_value=mock_manager,
         ), patch(
             "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
+        ), patch(
+            "storage.get_storage_provider",
+            return_value=mock_provider,
         ):
             result = await PublishVersionCache.get_publish_metadata("wf-123")
             assert result is not None
             assert result.version_id == "v1"
+            # Redis 命中时不应调用 OBS
+            mock_provider.get_content.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_redis_not_initialized_falls_to_obs(self):
@@ -93,13 +107,14 @@ class TestPublishVersionCacheGetMetadata:
         mock_manager = MagicMock()
         mock_manager.is_initialized = False
 
+        mock_provider = _mock_storage_provider(content)
+
         with patch(
             "common_utils.redis_manager.RedisClientManager.get_instance",
             return_value=mock_manager,
         ), patch(
-            "jiuwen.common.store.async_obs.AsyncOBSUtil.get_content",
-            new_callable=AsyncMock,
-            return_value=content,
+            "storage.get_storage_provider",
+            return_value=mock_provider,
         ):
             result = await PublishVersionCache.get_publish_metadata("wf-123")
             assert result is not None
@@ -115,6 +130,8 @@ class TestPublishVersionCacheGetMetadata:
         mock_manager = MagicMock()
         mock_manager.is_initialized = True
 
+        mock_provider = _mock_storage_provider(content)
+
         with patch(
             "common_utils.redis_manager.RedisClientManager.get_instance",
             return_value=mock_manager,
@@ -122,9 +139,8 @@ class TestPublishVersionCacheGetMetadata:
             "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
-            "jiuwen.common.store.async_obs.AsyncOBSUtil.get_content",
-            new_callable=AsyncMock,
-            return_value=content,
+            "storage.get_storage_provider",
+            return_value=mock_provider,
         ):
             result = await PublishVersionCache.get_publish_metadata("wf-123")
             assert result is not None
@@ -141,6 +157,8 @@ class TestPublishVersionCacheGetMetadata:
         mock_manager = MagicMock()
         mock_manager.is_initialized = True
 
+        mock_provider = _mock_storage_provider(content)
+
         with patch(
             "common_utils.redis_manager.RedisClientManager.get_instance",
             return_value=mock_manager,
@@ -148,9 +166,8 @@ class TestPublishVersionCacheGetMetadata:
             "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
-            "jiuwen.common.store.async_obs.AsyncOBSUtil.get_content",
-            new_callable=AsyncMock,
-            return_value=content,
+            "storage.get_storage_provider",
+            return_value=mock_provider,
         ):
             result = await PublishVersionCache.get_publish_metadata("wf-123")
             assert result.version_id == "v2"
@@ -166,6 +183,8 @@ class TestPublishVersionCacheGetMetadata:
         mock_manager = MagicMock()
         mock_manager.is_initialized = True
 
+        mock_provider = _mock_storage_provider(None)
+
         with patch(
             "common_utils.redis_manager.RedisClientManager.get_instance",
             return_value=mock_manager,
@@ -173,9 +192,8 @@ class TestPublishVersionCacheGetMetadata:
             "common_utils.redis_manager.get_redis_client",
             return_value=mock_client,
         ), patch(
-            "jiuwen.common.store.async_obs.AsyncOBSUtil.get_content",
-            new_callable=AsyncMock,
-            return_value=None,
+            "storage.get_storage_provider",
+            return_value=mock_provider,
         ):
             result = await PublishVersionCache.get_publish_metadata("wf-123")
             assert result is None

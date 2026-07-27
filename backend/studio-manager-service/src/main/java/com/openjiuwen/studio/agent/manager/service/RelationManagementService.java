@@ -214,6 +214,19 @@ public class RelationManagementService implements IRelationManagementService {
     @Autowired
     private KnowledgeBaseServiceImpl knowledgeBaseService;
 
+    /**
+     * 生成去重的key，用于根据 appId、appVersion、resourceId、resourceVersion 进行去重
+     * appVersion 和 resourceVersion 可能为空，需要使用空字符串处理
+     *
+     * @param entity MappingEntity 实体
+     * @return 去重key
+     */
+    private String getDeduplicationKey(MappingEntity entity) {
+        return entity.getAppId() + "|" + (entity.getAppVersion() == null ? "" : entity.getAppVersion())
+                + "|" + entity.getResourceId() + "|"
+                + (entity.getResourceVersion() == null ? "" : entity.getResourceVersion());
+    }
+
     private @NotNull List<Relation> buildRelationsFromMapping(List<MappingEntity> mappingEntities,
         Map<String, String> workspaceInfoMap) {
         return mappingEntities.stream().map(entity -> {
@@ -2031,6 +2044,20 @@ public class RelationManagementService implements IRelationManagementService {
                     listResourceRelationsQo.getAppType(), listResourceRelationsQo.getReferenceType());
 
             log.info("Selected {} mapping entities from database.", mappingEntities.size());
+
+            // 根据 app_id、app_version、resource_id、resource_version 进行去重
+            // app_version 和 resource_version 可能为空，需要使用空字符串处理
+            log.info("Deduplicating mapping entities by appId, appVersion, resourceId, resourceVersion.");
+            mappingEntities = mappingEntities.stream()
+                    .collect(Collectors.toMap(
+                            this::getDeduplicationKey,
+                            entity -> entity,
+                            (v1, v2) -> v1
+                    ))
+                    .values()
+                    .stream()
+                    .toList();
+            log.info("Mapping entities after deduplication: {}.", mappingEntities.size());
 
             // 提取 workspaceId 列表
             List<String> workspaceIdList = mappingEntities.stream()

@@ -132,23 +132,26 @@ class TestConvertIrToCard:
         with pytest.raises(Exception):
             convert_ir_to_card(ir_data)
 
-    def test_missing_id_raises(self):
-        ir_data = _make_valid_ir_data()
-        del ir_data["id"]
-        with pytest.raises(Exception):
-            convert_ir_to_card(ir_data)
+    def test_id_uses_name_not_ir_id(self):
+        ir_data = _make_valid_ir_data(id="different_id")
+        card = convert_ir_to_card(ir_data)
+        assert card.id == "test_api"
 
     def test_invalid_url_raises(self):
         ir_data = _make_valid_ir_data(url="ftp://invalid.com")
         with pytest.raises(Exception):
             convert_ir_to_card(ir_data)
 
-    def test_id_defaults_to_name(self):
+    def test_id_uses_name_over_ir_id(self):
         ir_data = _make_valid_ir_data()
-        ir_data.pop("id")
-        ir_data["id"] = ""
-        with pytest.raises(Exception):
-            convert_ir_to_card(ir_data)
+        card = convert_ir_to_card(ir_data)
+        assert card.id == "test_api"
+
+    def test_id_falls_back_to_ir_id_when_name_same_as_id(self):
+        """当 name 与 id 相同时，card.id 等于 name（即等于 ir id）"""
+        ir_data = _make_valid_ir_data(name="my_plugin", id="my_plugin")
+        card = convert_ir_to_card(ir_data)
+        assert card.id == "my_plugin"
 
     def test_method_defaults_to_post(self):
         ir_data = _make_valid_ir_data(method="GET")
