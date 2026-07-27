@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, AsyncIterator, Optional
 
+from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.context_engine import ModelContext
 from openjiuwen.core.graph.base import CONFIG_KEY, INPUTS_KEY
 from openjiuwen.core.graph.executable import Input, Output
@@ -41,8 +42,82 @@ from jiuwen.extension.patches.aggregate_upstream_resolver import (
 )
 
 _DEFAULT_SUB_STREAM_RECEIVE_TIMEOUT = 30
+_CHECKPOINT_SCOPE_SEPARATOR = "|"
 
 _PATCH_APPLIED = False
+
+
+def _validated_scope_part(name: str, value: str) -> str:
+    if not isinstance(value, str) or not value or _CHECKPOINT_SCOPE_SEPARATOR in value:
+        raise ValueError(
+            f"Invalid checkpoint scope {name}: expected a non-empty string "
+            f"without '{_CHECKPOINT_SCOPE_SEPARATOR}'"
+        )
+    return value
+
+
+def _checkpoint_scope_id(session) -> str:
+    workflow_id = session.workflow_id()
+    if not isinstance(session, SubWorkflowSession):
+        return workflow_id
+
+    main_workflow_id = session.main_workflow_id()
+    executable_id = session.executable_id()
+    try:
+        checkpoint_scope = _CHECKPOINT_SCOPE_SEPARATOR.join(
+            (
+                _validated_scope_part("main_workflow_id", main_workflow_id),
+                _validated_scope_part("executable_id", executable_id),
+                _validated_scope_part("sub_workflow_id", workflow_id),
+            )
+        )
+    except ValueError:
+        workflow_logger.error(
+            "Invalid subworkflow checkpoint scope: "
+            f"session_id={session.session_id()}, "
+            f"main_workflow_id={main_workflow_id}, "
+            f"executable_id={executable_id}, "
+            f"sub_workflow_id={workflow_id}"
+        )
+        raise
+
+    workflow_logger.debug(
+        "Resolved subworkflow checkpoint scope",
+        extra={
+            "session_id": session.session_id(),
+            "workflow_id": workflow_id,
+            "checkpoint_scope": checkpoint_scope,
+        },
+    )
+    return checkpoint_scope
+
+
+class _CheckpointScopedSessionView(SubWorkflowSession):
+    """Type-compatible read-through view with a scoped checkpoint workflow ID.
+
+    The native WorkflowStorage path uses ``isinstance(session, NodeSession)`` to
+    retain the parent executable path for node-targeted interactive inputs. This
+    view deliberately skips ``SubWorkflowSession.__init__`` and delegates every
+    missing attribute to the original session, so it neither creates nor copies
+    mutable session state while preserving native NodeSession type semantics.
+    """
+
+    def __init__(self, session, checkpoint_scope: str):
+        self._checkpoint_session_target = session
+        self._checkpoint_scope = checkpoint_scope
+
+    def workflow_id(self) -> str:
+        return self._checkpoint_scope
+
+    def __getattr__(self, name: str):
+        return getattr(self._checkpoint_session_target, name)
+
+
+def _checkpoint_session(session) -> tuple[object, str]:
+    checkpoint_scope = _checkpoint_scope_id(session)
+    if checkpoint_scope == session.workflow_id():
+        return session, checkpoint_scope
+    return _CheckpointScopedSessionView(session, checkpoint_scope), checkpoint_scope
 
 
 def _bounded_stream_timeout(session) -> float:
@@ -65,19 +140,20 @@ async def _patched_compiled_invoke(self, inputs, session, config=None):
     """CompiledGraph._invoke that returns pregel.run() result (upstream omits return)."""
     is_main = False
     session_id = session.session_id()
-    workflow_id = session.workflow_id()
+    checkpoint_session, checkpoint_scope = _checkpoint_session(session)
+    checkpointer = getattr(self, "_checkpointer")
 
     if config is None:
         is_main = True
         config = PregelConfig(
             session_id=session_id,
-            ns=workflow_id,
+            ns=checkpoint_scope,
             recursion_limit=MAX_RECURSIVE_LIMIT,
         )
 
     try:
         if is_main:
-            await self._checkpointer.pre_workflow_execute(session, inputs)
+            await checkpointer.pre_workflow_execute(checkpoint_session, inputs)
         if isinstance(session, SubWorkflowSession):
             _prepare_sub_workflow_aggregate_io("compiled_invoke", session, inputs)
             # 子工作流恢复场景：确保 raw_inputs 写入 workflow_state，使 QA 能读到用户回复。
@@ -100,7 +176,9 @@ async def _patched_compiled_invoke(self, inputs, session, config=None):
             exception = e
 
         if is_main:
-            await self._checkpointer.post_workflow_execute(session, result, exception)
+            await checkpointer.post_workflow_execute(
+                checkpoint_session, result, exception
+            )
         elif exception is not None:
             raise exception
 
@@ -109,7 +187,9 @@ async def _patched_compiled_invoke(self, inputs, session, config=None):
         return result
     except asyncio.CancelledError:
         if is_main:
-            await self._checkpointer.post_workflow_execute(session, {}, None)
+            await checkpointer.post_workflow_execute(
+                checkpoint_session, {}, None
+            )
         raise
 
 
