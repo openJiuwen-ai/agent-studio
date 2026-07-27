@@ -68,6 +68,11 @@ export class PluginVersionComponent {
     this.getPluginVersionList();
   }
 
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
   getPluginVersionList(isDelete = false) {
     this.isLoading = true;
     this.agentRepoServe
