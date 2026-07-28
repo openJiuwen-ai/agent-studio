@@ -305,8 +305,9 @@ def _convert_global_variable_refs_in_ir(ir_data: dict) -> dict:
 
         _cow_configs_field(("branches",), _convert_refs_in_schema, component, state)
         _cow_configs_field(("io_configs", "inputs_schema"), _convert_refs_in_schema, component, state)
+        _cow_configs_field(("io_configs", "outputs_schema"), _convert_refs_in_schema, component, state)
 
-        # Legacy inputs live directly under component (not under configs)
+        # Legacy inputs/outputs live directly under component (not under configs)
         inputs_orig = component.get("inputs", {})
         if inputs_orig:
             converted_inputs = _convert_refs_in_schema(inputs_orig)
@@ -314,6 +315,19 @@ def _convert_global_variable_refs_in_ir(ir_data: dict) -> dict:
                 if state["comp"] is component:
                     state["comp"] = dict(component)
                 state["comp"]["inputs"] = converted_inputs
+
+        # End 节点的 outputs.userFields 会被 IR converter 以 ``#end_`` 前缀并入
+        # inputs_schema；若此处的 ``${node_start.memory.xxx}`` 不转换，运行期 End
+        # 的输出字段会从 io_state (node_start 的陈旧输出) 解析，而非从被
+        # SetVariable 更新过的 global_state 解析，导致同一记忆变量输入有值、
+        # 输出无值。
+        outputs_orig = component.get("outputs", {})
+        if outputs_orig:
+            converted_outputs = _convert_refs_in_schema(outputs_orig)
+            if converted_outputs is not outputs_orig:
+                if state["comp"] is component:
+                    state["comp"] = dict(component)
+                state["comp"]["outputs"] = converted_outputs
 
         if state["comp"] is not component:
             new_components[i] = state["comp"]
