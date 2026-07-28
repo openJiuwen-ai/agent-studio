@@ -26,13 +26,14 @@ class TestConvertIrToServerConfig:
         ir_config = {
             "url": "https://example.com/mcp",
             "name": "test_server",
+            "id": "abc123",
             "type": "sse",
             "headers": {},
         }
         config = convert_ir_to_server_config(ir_config)
         assert isinstance(config, McpServerConfig)
         assert config.server_path == "https://example.com/mcp"
-        assert config.server_name == "test_server"
+        assert config.server_name == "abc123"
         assert config.server_id == "test_server"
         assert config.client_type == "sse_new"
 
@@ -180,6 +181,7 @@ class TestConvertIrToServerConfig:
         ir_config = {
             "url": "https://example.com/mcp",
             "name": "full_server",
+            "id": "id_full",
             "type": "streamable_http",
             "headers": {"X-Auth": "token"},
             "auth": {"scope": "USER"},
@@ -189,7 +191,7 @@ class TestConvertIrToServerConfig:
         }
         config = convert_ir_to_server_config(ir_config)
         assert config.server_path == "https://example.com/mcp"
-        assert config.server_name == "full_server"
+        assert config.server_name == "id_full"
         assert config.server_id == "full_server"
         assert config.client_type == "streamable_http_new"
         assert config.auth_headers == {"X-Auth": "token"}
