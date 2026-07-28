@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable
+import json
 import httpx
 from httpx import HTTPStatusError
 from fastapi import APIRouter, Depends, status, HTTPException, Query
@@ -309,6 +310,39 @@ def _build_q_request(
     return headers, {"q": query, **sanitize_provider_test_extension(extension)}
 
 
+def _build_petal_request(
+    api_key: str,
+    query: str,
+    extension: dict[str, Any],
+) -> tuple[dict[str, str], dict[str, Any]]:
+    """Match Deep Research's Petal header and payload conventions."""
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    credential = api_key.strip()
+    if credential.startswith("{") and credential.endswith("}"):
+        try:
+            configured_headers = json.loads(credential)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Petal authorization JSON") from exc
+        authorization = configured_headers.get("Authorization") if isinstance(configured_headers, dict) else None
+        if not isinstance(authorization, str) or not authorization.startswith("Basic"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Petal authorization JSON must contain a Basic Authorization header",
+            )
+        if not all(isinstance(key, str) and isinstance(value, str) for key, value in configured_headers.items()):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Petal authorization headers must be strings")
+        headers.update(configured_headers)
+    else:
+        headers["Authorization"] = credential if credential.startswith("Bearer") else f"Bearer {credential}"
+
+    options = sanitize_provider_test_extension(extension)
+    return headers, {
+        "query": query,
+        "content": bool(options.get("content", True)),
+        "freshness": options.get("freshness", "noLimit"),
+    }
+
+
 def _build_tavily_request(
     api_key: str,
     query: str,
@@ -402,7 +436,8 @@ SEARCH_PROVIDER_TEST_ADAPTERS: dict[str, SearchProviderTestAdapter] = {
         "xunfei", "https://api.xunfei.cn", _build_q_request, lambda payload: _search_results_from_keys(payload, ("data", "results", "items")),
     ),
     "petal": SearchProviderTestAdapter(
-        "petal", "https://api.petal.dev", _build_q_request, lambda payload: _search_results_from_keys(payload, ("data", "results", "items")),
+        "petal", "https://api.petal.dev", _build_petal_request,
+        lambda payload: _search_results_from_keys(payload, ("web_pages", "data", "results", "items")),
     ),
     "tavily": SearchProviderTestAdapter(
         "tavily", "https://api.tavily.com", _build_tavily_request, lambda payload: _search_results_from_keys(payload, ("results",)),
