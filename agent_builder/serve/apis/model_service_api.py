@@ -18,7 +18,8 @@
   上游请求体的 ``model`` 用解析出的真实 ``model_name`` 覆写。
 - 上游 URL 取 ``detail.model.api_url`` verbatim（对应 Java ``model.getApiUrl()``，adapter 不追加 path）。
 - 鉴权：``API_KEY`` → ``Authorization: Bearer <api_key>``；``CUSTOM_APIKEY`` → ``auth_info`` 各项作自定义头。
-- chat 上游请求体去掉 ``refresh``、置 ``thinking=null``（对应 Java ``OpenApiRequestAdapter``）。
+- chat 上游请求体去掉 ``refresh``；``thinking`` 字段按客户端传入透传（不再置 ``null``，
+  否则会丢弃前端的关闭思考开关、导致关闭思考模式不生效）。
 - rerank 响应按 ``index`` 升序排序后截断到 ``top_n``（对应 Java ``MaasRerankRequestAdaptor.resBodyConvert``）。
 """
 
@@ -201,6 +202,20 @@ def _build_check_invoke_body(model_type: str, model_name: str) -> Optional[dict]
     return None
 
 
+def _build_chat_upstream_body(body: dict, model_name: str, is_stream: bool) -> dict:
+    """构造 chat 上游请求体（对应 Java ``OpenApiRequestAdapter``）。
+
+    去掉 ``refresh``；``model``/``stream`` 用本地解析值覆写。``thinking`` 字段按客户端
+    传入透传（``{"type": "disabled" | "enabled"}``）——历史上置 ``null`` 会丢弃前端的
+    关闭思考开关，导致「关闭思考模式」不生效（上游回退到默认，对 Qwen3 等即思考开启）。
+    与 IR 运行时路径（``model_providers`` / ``model_bridge`` 经 ``extra_body`` 透传 ``thinking``）
+    保持一致。
+    """
+    up_body = {**body, "model": model_name, "stream": is_stream}
+    up_body.pop("refresh", None)
+    return up_body
+
+
 # ----------------------------- chat -----------------------------
 
 
@@ -236,9 +251,7 @@ async def chat_completions(
             url = detail.model.api_url
             client = dispatch.build_httpx_client(url, conn.verify_ssl)
             headers = _auth_headers(conn)
-            up_body = {**body, "model": conn.model_name, "stream": is_stream}
-            up_body.pop("refresh", None)
-            up_body["thinking"] = None
+            up_body = _build_chat_upstream_body(body, conn.model_name, is_stream)
             if not is_stream:
                 try:
                     resp = await client.post(
