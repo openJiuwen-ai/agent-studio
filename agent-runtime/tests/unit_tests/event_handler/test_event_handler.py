@@ -159,10 +159,25 @@ class TestInitTrace:
         request = MagicMock(spec=Request)
         request.path_params = {"conversation_id": "conv-1"}
         request.state = MagicMock(user_id="", version_id="")
+        # Ensure getattr(request.state, "instance_id", "") returns ""
+        del request.state.instance_id
         request.headers = {}
 
         with pytest.raises(ValueError, match="agent_id or workflow_id"):
             handler.init_trace("workflow", request, "ir/path.json")
+
+    @staticmethod
+    def test_init_trace_fallback_to_request_state_instance_id():
+        handler = EventHandler()
+        request = MagicMock(spec=Request)
+        # Web run path: short_code in path_params, no agent_id/workflow_id
+        request.path_params = {"conversation_id": "conv-1", "short_code": "EdlN4z9G"}
+        request.state = MagicMock(user_id="", version_id="", instance_id="wf-from-release")
+        request.headers = {}
+
+        handler.init_trace("workflow", request, "ir/path.json")
+
+        assert handler.trace.instance_id == "wf-from-release"
 
     @staticmethod
     def test_init_trace_agent_id_preferred():
