@@ -59,11 +59,11 @@
         <jose4j.version>0.9.6</jose4j.version>
         <redisson.version>3.39.0</redisson.version>
         <mcp.sdk.version>0.16.0</mcp.sdk.version>
-        <tomcat-embed-core.version>10.1.56</tomcat-embed-core.version>
+        <tomcat-embed-core.version>10.1.57</tomcat-embed-core.version>
         <hadoop.version>3.4.2</hadoop.version>
         <http.version>4.5.14</http.version>
         <org.jetbrains.version>26.0.1</org.jetbrains.version>
-        <io-netty-version>4.1.133.Final</io-netty-version>
+        <io-netty-version>4.1.136.Final</io-netty-version>
         <vpc-version>3.1.163</vpc-version>
         <swr-version>3.1.151</swr-version>
         <elb-version>3.1.125</elb-version>
@@ -74,7 +74,8 @@
         <hibernate-validator.version>8.0.2.Final</hibernate-validator.version>
         <org.opengauss.version>5.0.0-og</org.opengauss.version>
         <bcprov-jdk18on.version>1.84</bcprov-jdk18on.version>
-        <avro.version>1.11.4</avro.version>
+        <kotlin.version>2.0.21</kotlin.version>
+        <avro.version>1.12.1</avro.version>
         <commons-lang3.version>3.18.0</commons-lang3.version>
         <httpclient5.version>5.4.4</httpclient5.version>
         <httpcore5.version>5.3</httpcore5.version>
@@ -92,7 +93,7 @@
         <dependency>
             <artifactId>jackson-databind</artifactId>
             <groupId>com.fasterxml.jackson.core</groupId>
-            <version>2.22.0</version>
+            <version>2.22.1</version>
         </dependency>
         <dependency>
             <artifactId>jackson-annotations</artifactId>
@@ -181,6 +182,36 @@
                 <version>${bcprov-jdk18on.version}</version>
             </dependency>
             <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcpkix-jdk18on</artifactId>
+                <version>${bcprov-jdk18on.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcutil-jdk18on</artifactId>
+                <version>${bcprov-jdk18on.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-stdlib</artifactId>
+                <version>${kotlin.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-stdlib-jdk8</artifactId>
+                <version>${kotlin.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-stdlib-jdk7</artifactId>
+                <version>${kotlin.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-stdlib-common</artifactId>
+                <version>${kotlin.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-common</artifactId>
                 <version>${hadoop.version}</version>
@@ -227,11 +258,26 @@
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-handler</artifactId>
-                <version>4.1.135.Final</version>
+                <version>${io-netty-version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.tomcat.embed</groupId>
                 <artifactId>tomcat-embed-core</artifactId>
+                <version>${tomcat-embed-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat</groupId>
+                <artifactId>tomcat-annotations-api</artifactId>
+                <version>${tomcat-embed-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-websocket</artifactId>
+                <version>${tomcat-embed-core.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-el</artifactId>
                 <version>${tomcat-embed-core.version}</version>
             </dependency>
             <dependency>

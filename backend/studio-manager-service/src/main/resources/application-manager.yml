@@ -675,7 +675,7 @@ front-page:
   # lakesearch_faq_enable: 知识库faq功能开关，默认打开
   default-configs: ${front-page_default-configs:{"knowledge_repo_url":"","son_workflow_level_limit":true,"stream_interval_timeout":900000,"stream_first_chunk_timeout":900000,"opsvc_project_id":"opsvc_project_mock","runtime_api_endpoint_prefix":"","lakesearch_faq_enable":true}}
   configs: ${front-page_configs:{}}
-  block-nodes: ${front_page_block_nodes:Sql,DataQuery,Agent}
+  block-nodes: ${front_page_block_nodes:Sql,DataQuery,Agent,Http}
   code_env_options: ${code_env_options:["sandbox","local"]}
   # exec_env和enable_sandbox没有值时，exec_env取值，默认取sandbox
   code_def_env: ${code_def_env:sandbox}

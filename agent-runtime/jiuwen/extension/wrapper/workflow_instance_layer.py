@@ -4,12 +4,24 @@
 """Legacy jiuwen workflow instance surface built on top of WorkflowWrapper."""
 
 from types import SimpleNamespace
-from typing import Any, AsyncGenerator, Union
+from typing import Any, AsyncGenerator, NamedTuple, Union
 
 from jiuwen.controller.common.message import Message
 from jiuwen.extension.wrapper.message_converter import WorkflowMessageConverter
 from jiuwen.extension.wrapper.workflow_wrapper import WorkflowWrapper
 from jiuwen.orchestration.flow.stream.base import StreamData
+
+
+class _AstreamArgs(NamedTuple):
+    """Normalized arguments for WorkflowWrapper.astream()."""
+
+    query: Any
+    params: dict
+    workflow_id: str
+    agent_id: str
+    session_id: str
+    context: Any
+    workflow_name: str
 
 
 class _RuntimeContext(dict):
@@ -44,6 +56,7 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
     def __init__(
         self,
         workflow_id: str = None,
+        workflow_name: str = "",
         description: str = "",
         params: dict = None,
         agent_id: str = "",
@@ -53,6 +66,7 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
     ):
         super().__init__(node_name_type_map=node_name_type_map)
         self.workflow_id = workflow_id
+        self.workflow_name = workflow_name
         self.description = description
         self.params = params or {}
         self.agent_id = agent_id or ""
@@ -64,17 +78,16 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
         self, *args, **kwargs
     ) -> AsyncGenerator[Union[Message, StreamData], None]:
         """Normalize legacy calls and delegate execution to the original WorkflowWrapper."""
-        query, params, workflow_id, agent_id, session_id, context = (
-            self._normalize_astream_args(args, kwargs)
-        )
-        context = self._build_context(params, context)
+        args_tuple = self._normalize_astream_args(args, kwargs)
+        context = self._build_context(args_tuple.params, args_tuple.context)
         return super().astream(
-            query=query,
-            params=params,
-            workflow_id=workflow_id,
-            agent_id=agent_id,
-            session_id=session_id,
+            query=args_tuple.query,
+            params=args_tuple.params,
+            workflow_id=args_tuple.workflow_id,
+            agent_id=args_tuple.agent_id,
+            session_id=args_tuple.session_id,
             context=context,
+            workflow_name=args_tuple.workflow_name,
         )
 
     def set_runtime_context(self, key: str, value: Any = None) -> None:
@@ -109,7 +122,7 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
 
     def _normalize_astream_args(
         self, args: tuple, kwargs: dict
-    ) -> tuple[Any, dict, str, str, str, Any]:
+    ) -> _AstreamArgs:
         data = dict(kwargs)
         query = data.pop("query", None)
         params = data.pop("params", None)
@@ -122,6 +135,7 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
             query = data.pop("inputs")
 
         workflow_id = data.pop("workflow_id", None) or self.workflow_id
+        workflow_name = data.pop("workflow_name", None) or self.workflow_name
         agent_id = data.pop("agent_id", None) or self.agent_id
         session_id = data.pop("session_id", None) or self.session_id
         context = data.pop("context", None) or self._context
@@ -134,7 +148,15 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
         if isinstance(self.params, dict):
             params.setdefault("is_debug", self.params.get("is_debug"))
 
-        return query, params, workflow_id, agent_id, session_id, context
+        return _AstreamArgs(
+            query=query,
+            params=params,
+            workflow_id=workflow_id,
+            agent_id=agent_id,
+            session_id=session_id,
+            context=context,
+            workflow_name=workflow_name,
+        )
 
     def _build_context(self, params: dict, context=None):
         if context is not None:
