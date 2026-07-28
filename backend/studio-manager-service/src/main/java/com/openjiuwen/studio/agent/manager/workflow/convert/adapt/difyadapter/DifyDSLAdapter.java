@@ -34,10 +34,12 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -63,11 +65,12 @@ public class DifyDSLAdapter implements AdapterService {
 
     protected final List<NodeConverter> nodeConverters;
 
-    // 递归深度上限（防止恶意嵌套）
     private static final int MAX_RECURSION_DEPTH = 1000;
 
-    // 换行符常量（适配不同系统）
     private static final String LINE_SEPARATOR = "\n";
+
+    @Value("${front-page.block-nodes:}")
+    private String blockNodes;
 
     @Autowired
     private WorkflowValidationService workflowValidationService;
@@ -77,6 +80,13 @@ public class DifyDSLAdapter implements AdapterService {
     }
 
     protected NodeConverter getNodeDataConverter(NodeType nodeType) {
+        Set<String> blockNodeSet = Arrays.stream(StringUtils.split(blockNodes, ",")).collect(Collectors.toSet());
+        if (!blockNodeSet.isEmpty() && nodeType != null && blockNodeSet.contains(nodeType.getType())) {
+            return nodeConverters.stream()
+                    .filter(converter -> converter.supportNodeType(NodeType.EMPTY))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("invalid node type: " + NodeType.EMPTY));
+        }
         return nodeConverters.stream()
                 .filter(converter -> converter.supportNodeType(nodeType))
                 .findFirst()
