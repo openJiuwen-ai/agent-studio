@@ -1717,6 +1717,12 @@ class IRConverter:
         deferred_connections: list[tuple[str, str, bool]] = []
         branch_connections: list[tuple[str, str, str]] = []
         existing_connections: set[tuple[str, str]] = set()
+        # Track _parallel_done nodes that receive incoming edges from
+        # rewrite_target in both Phase 1 and Phase 2, so that orphaned
+        # done nodes (caused by terminal_to_done key overwrites across
+        # parallel groups sharing the same join target) can be filtered
+        # out during parallel join wiring.
+        active_done_nodes: set[str] = set()
 
         # Phase 1: wire branch routes before BranchComponent/IntentDetection join the
         # graph so add_workflow_comp → register_branch_targets sees populated routers.
@@ -1732,9 +1738,10 @@ class IRConverter:
                 continue
             if not branch_id or "@@" in branch_id:
                 continue
-            target = (
-                parallel_join_plan.rewrite_target(source, target, branch_id) or target
-            )
+            rewritten = parallel_join_plan.rewrite_target(source, target, branch_id)
+            if rewritten:
+                active_done_nodes.add(rewritten)
+                target = rewritten
             # Branch connections (default/non-default) are batch paths
             if target in end_node_ids:
                 batch_connection_targets.add(target)
@@ -1767,6 +1774,7 @@ class IRConverter:
             rewritten_target = parallel_join_plan.rewrite_target(source, target)
             if rewritten_target:
                 existing_connections.add((source, target))
+                active_done_nodes.add(rewritten_target)
                 # Mixed-lane sentinel: reroute non-stream terminal -> sentinel
                 # -> lane-done. The terminal->sentinel edge is batch (the
                 # terminal is non-stream); the sentinel->lane-done edge is
@@ -1887,6 +1895,13 @@ class IRConverter:
             if is_stream_out:
                 set_end_kwargs["response_mode"] = "streaming"
 
+            # Parallel-join End nodes must wait for all branches regardless of
+            # comp_ability.  set_end_comp derives wait_for_all from COLLECT/TRANSFORM
+            # ability, which is absent for batch-only End nodes.  Supplying an empty
+            # stream_inputs_schema triggers COLLECT ability so wait_for_all=True.
+            if parallel_join_nodes and node_id in parallel_join_nodes:
+                if "stream_inputs_schema" not in set_end_kwargs:
+                    set_end_kwargs["stream_inputs_schema"] = {}
             workflow.set_end_comp(node_id, end, **set_end_kwargs)
 
         for source, target, is_stream in deferred_connections:
@@ -1895,8 +1910,15 @@ class IRConverter:
                 workflow.add_stream_connection(source, target)
             else:
                 workflow.add_connection(source, target)
+        # When two parallel groups share the same join target and terminals,
+        # terminal_to_done entries from the second group overwrite the first,
+        # leaving some _parallel_done nodes with no incoming edges (orphaned).
+        # With wait_for_all=True, orphaned done nodes in BarrierChannel cause
+        # deadlock.  Filter them out using active_done_nodes tracked during
+        # Phase 1 and Phase 2 rewrite_target calls.
         for join_spec in parallel_join_plan.joins.values():
-            lane_done_nodes = [lane.done_node for lane in join_spec.lanes]
+            lane_done_nodes = [lane.done_node for lane in join_spec.lanes
+                               if lane.done_node in active_done_nodes]
             if len(lane_done_nodes) >= 2:
                 has_stream_lane = _parallel_join_has_stream_lane.get(
                     join_spec.join_target, False
@@ -1916,6 +1938,8 @@ class IRConverter:
                         workflow.add_connection(invoke_done_nodes, join_spec.join_target)
                 else:
                     workflow.add_connection(lane_done_nodes, join_spec.join_target)
+            elif len(lane_done_nodes) == 1:
+                workflow.add_connection(lane_done_nodes[0], join_spec.join_target)
 
         # Add missing connections based on schema references.
         # Strategy:
