@@ -510,13 +510,15 @@ public class AgentImportService {
             insertMapping(l1Mappings, spaciousInfoMap, appId, appVersion);
         }
         // 草稿态导入：先删除旧的草稿态mapping，再重新上传DSL和插入mapping，确保子工作流版本引用为最新
-        mappingMapper.deleteBatchByAppId(appId, null, false);
-        if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
-            uploadControllerDsl(importInfo, appId, null);
-        } else {
-            uploadWorkflowDsl(importInfo, appId, appId, appVersion);
+        else {
+            mappingMapper.deleteBatchByAppId(appId, null, false);
+            if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
+                uploadControllerDsl(importInfo, appId, null);
+            } else {
+                uploadWorkflowDsl(importInfo, appId, appId, appVersion);
+            }
+            insertMapping(l1Mappings, spaciousInfoMap, appId, null);
         }
-        insertMapping(l1Mappings, spaciousInfoMap, appId, null);
 
     }
 
@@ -1148,6 +1150,37 @@ public class AgentImportService {
                         uploadControllerDsl(resourceMap.get(result.getId()), id, null);
                     }
                 }
+            }
+        });
+
+        // 宽松模式先导入父资源（controller/workflow）时，子工作流尚不存在，mapping 写的是子工作流
+        // 的旧 resource_id（=trace_id）且 valid=false。后续严格模式导入子工作流后，需要把这些 mapping 的
+        // resource_id 更新为新 ID 并置 valid=true，否则 retrieveAgent 查不到子工作流关联（"工作流不存在"）。
+        // 严格模式自身 handleMapping 已用新 ID 插入 mapping，selectByResourceId(旧ID) 查不到记录，不受影响。
+        resultList.forEach(result -> {
+            if (!Boolean.TRUE.equals(result.getAddTag()) || StringUtils.isEmpty(result.getNewId())
+                || Strings.CS.equals(result.getNewId(), result.getId())) {
+                return;
+            }
+            if (!Strings.CS.equalsAny(result.getType(), ResourceTypeEnum.WORKFLOW.toString(),
+                ResourceTypeEnum.CONTROLLER.toString())) {
+                return;
+            }
+            List<MappingEntity> staleMappings = mappingMapper.selectByResourceId(result.getId());
+            if (CollectionUtils.isEmpty(staleMappings)) {
+                return;
+            }
+            for (MappingEntity mapping : staleMappings) {
+                if (mapping.isValid()) {
+                    continue;
+                }
+                MappingEntity update = new MappingEntity();
+                update.setMappingId(mapping.getMappingId());
+                update.setResourceId(result.getNewId());
+                update.setResourceName(
+                    StringUtils.isNotEmpty(result.getNewName()) ? result.getNewName() : result.getName());
+                update.setValid(true);
+                mappingMapper.updateById(update);
             }
         });
     }
