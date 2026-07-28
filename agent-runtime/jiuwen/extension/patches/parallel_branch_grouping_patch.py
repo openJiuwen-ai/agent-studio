@@ -33,6 +33,13 @@ the fix. The installed ``openjiuwen`` is a non-editable 0.1.16, so a source
 edit in ``agent-core/`` would not reach the running service -- hence this
 runtime monkey-patch.
 """
+# pylint: disable=protected-access
+#   This module monkey-patches ``PregelGraph._resolve_barrier_groups`` and must
+#   reach into protected graph internals (``_forward_reachable``,
+#   ``_build_branch_parent``, ``_branch_root``). The patched function runs bound
+#   to a ``PregelGraph`` instance, so the access is intra-class -- the flag is a
+#   false positive of the module-scope definition.
+
 from __future__ import annotations
 
 from collections import defaultdict

@@ -16,6 +16,8 @@ actually:
 The LLM model is stubbed so the build never touches a model service; we only
 inspect the built ``WorkflowSpec`` / ``stream_edges``.
 """
+# pylint: disable=protected-access
+#   White-box tests inspect ``workflow._internal`` / ``_workflow_spec``.
 import pytest
 
 pytest.importorskip("openjiuwen.core.workflow.workflow_config")
@@ -152,7 +154,7 @@ def _spec(workflow):
 
 
 @pytest.mark.asyncio
-async def test_mixed_lane_inserts_sentinel_components_and_stream_edge(monkeypatch):
+async def test_mixed_lane_inserts_sentinel_components_and_stream_edge(monkeypatch):  # noqa: G.CMT.03
     """Building a mixed-lane IR must insert a sentinel STREAM component per
     non-stream terminal and wire sentinel -> lane-done as a stream edge."""
     # Stub model creation so the build never touches a model service.
@@ -195,7 +197,7 @@ async def test_mixed_lane_inserts_sentinel_components_and_stream_edge(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_pure_stream_lane_has_no_sentinel(monkeypatch):
+async def test_pure_stream_lane_has_no_sentinel(monkeypatch):  # noqa: G.CMT.03
     """A lane whose terminals are all streaming (no non-stream sibling) must
     NOT get a sentinel -- it is not mixed."""
     monkeypatch.setattr(IRConverter, "_create_llm_model",
