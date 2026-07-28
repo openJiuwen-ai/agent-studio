@@ -19,7 +19,7 @@ def allow_provider_urls(monkeypatch):
     ("provider", "response_payload", "expected_header", "expected_body_key"),
     [
         ("xunfei", {"data": [{"title": "result"}]}, ("Authorization", "Bearer search-key"), "q"),
-        ("petal", {"results": [{"title": "result"}]}, ("Authorization", "Bearer search-key"), "q"),
+        ("petal", {"web_pages": [{"title": "result"}]}, ("Authorization", "Bearer search-key"), "query"),
         ("tavily", {"results": [{"title": "result"}]}, None, "query"),
         ("google", {"organic": [{"title": "result"}]}, ("X-API-KEY", "search-key"), "q"),
         ("jina", {"data": [{"title": "result"}]}, ("Authorization", "Bearer search-key"), "q"),
@@ -60,6 +60,35 @@ async def test_search_adapters_translate_and_normalize_each_supported_provider(
     elif expected_header:
         assert captured["headers"][expected_header[0]] == expected_header[1]
     assert results
+
+
+@pytest.mark.asyncio
+async def test_petal_sends_json_encoded_basic_authorization_directly(monkeypatch):
+    captured = {}
+
+    async def fake_post(endpoint, headers, request_body):
+        captured.update(endpoint=endpoint, headers=headers, body=request_body)
+        return httpx.Response(200, json={"web_pages": []})
+
+    monkeypatch.setattr(deepsearch_router, "_post_generic_provider_test", fake_post)
+
+    await deepsearch_router.perform_web_search_provider_test(
+        provider_name="petal",
+        api_key='{"Authorization":"Basic test-key"}',
+        search_url="https://search.example.test/custom",
+        extension={"max_results": 5, "headers": {"unsafe": "value"}},
+        query="actual query",
+    )
+
+    assert captured == {
+        "endpoint": "https://search.example.test/custom",
+        "headers": {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": "Basic test-key",
+        },
+        "body": {"query": "actual query", "content": True, "freshness": "noLimit"},
+    }
 
 
 @pytest.mark.asyncio
