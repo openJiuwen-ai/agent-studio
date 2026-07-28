@@ -159,6 +159,7 @@ class WorkflowHandler(BaseHandler):
 
                 return OpenJiuWenWorkflowInstanceLayer(
                     workflow_id=workflow_context.workflow_id,
+                    workflow_name=workflow_context.workflow_name,
                     description=workflow_context.description,
                     params=params,
                     agent_id=agent_id,
@@ -1196,9 +1197,10 @@ class WorkflowHandler(BaseHandler):
                         workflow_status,
                         from_pe=from_pe,
                     )
-                # 流式输出添加workflow_id字段
+                # 流式输出添加workflow_id和workflow_name字段
                 if output.data:
                     output.data["workflow_id"] = workflow_context.workflow_id
+                    output.data["workflow_name"] = workflow_context.workflow_name
                 # 转发所有输出
                 yield output
 

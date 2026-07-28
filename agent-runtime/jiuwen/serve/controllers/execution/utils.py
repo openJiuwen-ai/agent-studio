@@ -438,6 +438,7 @@ async def _execute_workflow(req: ExecutionRequest, execution_data: ExecutionData
 
         wf_wrapper = OpenJiuWenWorkflowInstanceLayer(
             workflow_id=card.id,
+            workflow_name=card.name,
             description=card.description,
             params=params,
             agent_id=card.id,
