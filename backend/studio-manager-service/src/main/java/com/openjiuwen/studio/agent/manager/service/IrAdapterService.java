@@ -23,6 +23,7 @@ import static com.openjiuwen.studio.agent.manager.constant.CommonConstant.TOOL;
 import static com.openjiuwen.studio.agent.manager.constant.CommonConstant.WORKFLOW;
 import static com.openjiuwen.studio.agent.manager.constant.CommonConstant.Workflow.MODEL;
 import static com.openjiuwen.studio.agent.manager.utils.CommonUtil.parseMcpConfigHeaderInfo;
+import static com.openjiuwen.studio.agent.agentbase.converter.KbConnectionConverter.DEFAULT_CONNECTION_ID;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
@@ -1521,6 +1522,7 @@ public class IrAdapterService {
             knowledgeRepoEntity.setProjectId(projectId);
             knowledgeRepoEntity.setType(KnowledgeBaseListItem.TypeEnum.INTERNAL.toString());
             knowledgeRepoEntity.setSource(KnowledgeSourceEnum.CUSTOM.toString());
+            knowledgeRepoEntity.setConnectionId(DEFAULT_CONNECTION_ID);
             knowledgeRepoEntities.add(knowledgeRepoEntity);
 
         });
