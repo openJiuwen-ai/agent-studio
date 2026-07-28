@@ -59,7 +59,7 @@ def _groups_containing(groups, producer_id):
     return [grp for grp in groups if producer_id in grp]
 
 
-def test_parallel_siblings_not_merged_into_or_group():  # noqa: G.CMT.03
+def test_parallel_siblings_not_merged_into_or_group():
     """node_llm and 大模型_2 (both behind 判断-if, co-execute) must land in
     SEPARATE groups so neither truncates the other."""
     from jiuwen.extension.patches.parallel_branch_grouping_patch import (
@@ -82,7 +82,7 @@ def test_parallel_siblings_not_merged_into_or_group():  # noqa: G.CMT.03
     assert len(done_groups) == 1 and done_groups[0] == {"done_1"}
 
 
-def test_exclusive_branch_preserves_or_group():  # noqa: G.CMT.03
+def test_exclusive_branch_preserves_or_group():
     """sentinel (判断_1-if) and 大模型_1 (判断_1-default) are behind DIFFERENT
     exclusive conditions -> must stay merged into one OR-group (the sentinel
     fix for 112052 depends on this)."""
