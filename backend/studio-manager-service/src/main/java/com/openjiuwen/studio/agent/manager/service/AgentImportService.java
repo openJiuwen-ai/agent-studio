@@ -362,23 +362,27 @@ public class AgentImportService {
                     continue;
                 }
                 String dslJson = JSON.toJSONString(importInfo.getDsl());
-                if (!Strings.CI.contains(dslJson, LATEST_PARAM)) {
-                    continue;
-                }
                 // 最新版本的信息构造
                 List<SpaciousInfo> spaciousInfoList = getSpaciousInfos(projectId, workspaceId, l1Mappings);
 
-                if (Strings.CS.equals(importInfo.getResourceType(), ResourceTypeEnum.WORKFLOW.toString())) {
-                    WorkflowVO workflowVO = JSONObject.parseObject(dslJson, WorkflowVO.class);
-                    handleSpaciousWorkflowDsl(workflowVO, spaciousInfoList);
-                    importInfo.setDsl(workflowVO);
-                } else if (Strings.CS.equals(importInfo.getResourceType(), ResourceTypeEnum.CONTROLLER.toString())) {
-                    ControllerVO controllerVO = JSONObject.parseObject(dslJson, ControllerVO.class);
-                    handleSpaciousControllerWorkflow(importInfo, controllerVO, spaciousInfoList);
-                    handleSpaciousSubController(controllerVO, spaciousInfoList);
-                    importInfo.setDsl(controllerVO);
-                } else {
-                    continue;
+                // 仅当 DSL 含 {{latest}} 占位符时才做版本替换；无论是否含占位符，
+                // 都必须继续走 handleSpaciousMappingAndDsl 上传草稿 DSL 并插入 mapping，
+                // 否则 t_agent/t_workflow 里的 dsl_path 指向的 OBS 文件不会存在，
+                // 后续 retrieveAgent 下载会 404（错误码 openjiuwen.02001004）。
+                if (Strings.CI.contains(dslJson, LATEST_PARAM)) {
+                    if (Strings.CS.equals(importInfo.getResourceType(), ResourceTypeEnum.WORKFLOW.toString())) {
+                        WorkflowVO workflowVO = JSONObject.parseObject(dslJson, WorkflowVO.class);
+                        handleSpaciousWorkflowDsl(workflowVO, spaciousInfoList);
+                        importInfo.setDsl(workflowVO);
+                    } else if (Strings.CS.equals(importInfo.getResourceType(),
+                        ResourceTypeEnum.CONTROLLER.toString())) {
+                        ControllerVO controllerVO = JSONObject.parseObject(dslJson, ControllerVO.class);
+                        handleSpaciousControllerWorkflow(importInfo, controllerVO, spaciousInfoList);
+                        handleSpaciousSubController(controllerVO, spaciousInfoList);
+                        importInfo.setDsl(controllerVO);
+                    } else {
+                        continue;
+                    }
                 }
                 handleSpaciousMappingAndDsl(importInfo, spaciousInfoList, result);
             } catch (AgentStudioException e) {
@@ -505,17 +509,14 @@ public class AgentImportService {
             }
             insertMapping(l1Mappings, spaciousInfoMap, appId, appVersion);
         }
-        // 检查mapping表是否存在草稿
-        List<MappingEntity> draftMappings = mappingMapper.selectByAppIdAndAppVersion(appId, Constants.LATEST_PUBLISH_VERSION, null, null);
-        if (CollectionUtils.isEmpty(draftMappings)) {
-
-            if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
-                uploadControllerDsl(importInfo, appId, null);
-            } else {
-                uploadWorkflowDsl(importInfo, appId, appId, appVersion);
-            }
-            insertMapping(l1Mappings, spaciousInfoMap, appId, null);
+        // 草稿态导入：先删除旧的草稿态mapping，再重新上传DSL和插入mapping，确保子工作流版本引用为最新
+        mappingMapper.deleteBatchByAppId(appId, null, false);
+        if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
+            uploadControllerDsl(importInfo, appId, null);
+        } else {
+            uploadWorkflowDsl(importInfo, appId, appId, appVersion);
         }
+        insertMapping(l1Mappings, spaciousInfoMap, appId, null);
 
     }
 
