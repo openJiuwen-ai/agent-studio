@@ -19,9 +19,6 @@
         <module>studio-manager</module>
         <module>studio-manager-api</module>
         <module>studio-manager-service</module>
-        <module>studio-runtime</module>
-        <module>studio-runtime-api</module>
-        <module>studio-runtime-service</module>
     </modules>
 
     <properties>
