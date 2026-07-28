@@ -8,6 +8,9 @@ import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.redis.RedisLock;
 import com.openjiuwen.studio.agent.common.redis.config.RedisClientConfig;
 
+import com.fasterxml.jackson.core.StreamReadConstraints;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.resolver.dns.DefaultDnsCache;
 import io.netty.resolver.dns.DefaultDnsCnameCache;
@@ -57,7 +60,10 @@ public class RedisClientRedisson implements RedisClient {
 
     public RedisClientRedisson(RedisClientConfig redisClientConfig) {
         Config config = new Config();
-        config.setCodec(new JsonJacksonCodec());
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.getFactory().setStreamReadConstraints(
+            StreamReadConstraints.builder().maxStringLength(redisClientConfig.getJsonMaxStringLength()).build());
+        config.setCodec(new JsonJacksonCodec(objectMapper));
         // 禁用 DNS 解析
         config.setAddressResolverGroupFactory((dataChannel, socketChannel, provider) -> {
             DnsNameResolverBuilder dnsResolverBuilder = new DnsNameResolverBuilder();

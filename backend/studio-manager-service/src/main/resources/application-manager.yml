@@ -186,6 +186,7 @@ redis:
   client-type: ${redis_client_type:redisson}
   enable-log: ${redis_enable_log:false}
   max-debug-msg-size: ${redis_max_debug_msg_size:10000}
+  max-string-length: ${redis_max_string_length:20000000}
 
 # health check
 management:

@@ -81,6 +81,8 @@ services:
       studio_operationLog_switch: ${STUDIO_OPERATION_LOG_SWITCH:-false}
       # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
       auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
+      # redis json序列化最大长度
+      redis_max_string_length: ${REDIS_MAX_STRING_LENGTH:-20000000}
     networks:
       - default
 
