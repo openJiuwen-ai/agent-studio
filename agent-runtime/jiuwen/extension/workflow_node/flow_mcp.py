@@ -383,7 +383,6 @@ class FlowMcp(WorkflowComponent):
                 wrapped_item = {
                     "type": "text",
                     "text": json.dumps(output_data, ensure_ascii=False),
-                    "data": output_data,
                 }
                 return {"content": [wrapped_item], "isError": False}
             return output_data
