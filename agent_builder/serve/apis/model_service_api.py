@@ -18,7 +18,8 @@
   上游请求体的 ``model`` 用解析出的真实 ``model_name`` 覆写。
 - 上游 URL 取 ``detail.model.api_url`` verbatim（对应 Java ``model.getApiUrl()``，adapter 不追加 path）。
 - 鉴权：``API_KEY`` → ``Authorization: Bearer <api_key>``；``CUSTOM_APIKEY`` → ``auth_info`` 各项作自定义头。
-- chat 上游请求体去掉 ``refresh``、置 ``thinking=null``（对应 Java ``OpenApiRequestAdapter``）。
+- chat 上游请求体去掉 ``refresh``；``thinking`` 字段按客户端传入透传（不再置 ``null``，
+  否则会丢弃前端的关闭思考开关、导致关闭思考模式不生效）。
 - rerank 响应按 ``index`` 升序排序后截断到 ``top_n``（对应 Java ``MaasRerankRequestAdaptor.resBodyConvert``）。
 """
 
@@ -34,6 +35,12 @@ from pydantic import BaseModel, Field
 # 并复用 resolver / policy / dispatch 机制层。
 import model_service  # noqa: F401
 from model_service import dispatch, policy, resolver
+
+from agent_builder.common.exception.model_codes import (
+    INVOKE_MODEL_SERVICE_FAIL,
+    MODEL_SERVICE_NOT_PUBLISH,
+    get_model_error_spec,
+)
 
 model_service_router = APIRouter(tags=["model-service"])
 
@@ -121,12 +128,35 @@ def _auth_headers(conn) -> dict:
     return headers
 
 
+# 上游模型调用失败的对齐契约（移植自 Java ``GlobalExceptionHandler`` + i18n
+# ``studio-messages_zh_CN.properties``）由 ``model_codes.MODEL_ERROR_SPECS`` 登记表驱动：
+# error_code/error_msg/error_reason/error_suggestion + details[]，透传上游真实 status。
+# 新增/调整 MD_* 错误码响应契约一律改 ``model_codes.py``，勿在此手搓封包。
+
+
 def _error_response(exc: Exception) -> JSONResponse:
     code = getattr(exc, "code", "INTERNAL_ERROR")
     msg = getattr(exc, "msg", str(exc))
     logger.warning("model-service facade error: code=%s msg=%s", code, msg)
-    status = 404 if code == "MD_MODEL_SERVICE_NOT_PUBLISH" else 400
-    return JSONResponse(status_code=status, content={"error": {"code": code, "message": msg}})
+    spec = get_model_error_spec(code)
+    if spec.full_code:
+        # 旧 Java ErrorRsp 契约：error_code/error_msg/error_reason/error_suggestion + details?。
+        upstream_status = getattr(exc, "upstream_status", None)
+        upstream_body = getattr(exc, "upstream_body", None)
+        content = {
+            "error_code": spec.full_code,
+            "error_msg": spec.error_msg,
+            "error_reason": spec.error_reason,
+            "error_suggestion": spec.error_suggestion,
+        }
+        if spec.with_details and upstream_body:
+            content["details"] = [{"error_msg": upstream_body}]
+        status = upstream_status if (spec.use_upstream_status and upstream_status) else spec.http_status
+        return JSONResponse(status_code=status, content=content)
+    return JSONResponse(
+        status_code=spec.http_status,
+        content={"error": {"code": code, "message": msg}},
+    )
 
 
 def _check_auth_headers(auth_type: str, auth_info: Optional[Dict[str, str]]) -> dict:
@@ -172,6 +202,20 @@ def _build_check_invoke_body(model_type: str, model_name: str) -> Optional[dict]
     return None
 
 
+def _build_chat_upstream_body(body: dict, model_name: str, is_stream: bool) -> dict:
+    """构造 chat 上游请求体（对应 Java ``OpenApiRequestAdapter``）。
+
+    去掉 ``refresh``；``model``/``stream`` 用本地解析值覆写。``thinking`` 字段按客户端
+    传入透传（``{"type": "disabled" | "enabled"}``）——历史上置 ``null`` 会丢弃前端的
+    关闭思考开关，导致「关闭思考模式」不生效（上游回退到默认，对 Qwen3 等即思考开启）。
+    与 IR 运行时路径（``model_providers`` / ``model_bridge`` 经 ``extra_body`` 透传 ``thinking``）
+    保持一致。
+    """
+    up_body = {**body, "model": model_name, "stream": is_stream}
+    up_body.pop("refresh", None)
+    return up_body
+
+
 # ----------------------------- chat -----------------------------
 
 
@@ -199,7 +243,7 @@ async def chat_completions(
         )
         if strategy is None:
             raise resolver.ModelServiceError(
-                "MD_MODEL_SERVICE_NOT_PUBLISH", f"model service not found: {msid}"
+                MODEL_SERVICE_NOT_PUBLISH, f"model service not found: {msid}"
             )
 
         async def invoke_one(detail, is_stream):
@@ -207,9 +251,7 @@ async def chat_completions(
             url = detail.model.api_url
             client = dispatch.build_httpx_client(url, conn.verify_ssl)
             headers = _auth_headers(conn)
-            up_body = {**body, "model": conn.model_name, "stream": is_stream}
-            up_body.pop("refresh", None)
-            up_body["thinking"] = None
+            up_body = _build_chat_upstream_body(body, conn.model_name, is_stream)
             if not is_stream:
                 try:
                     resp = await client.post(
@@ -217,8 +259,10 @@ async def chat_completions(
                     )
                     if resp.status_code >= 300:
                         raise resolver.ModelServiceError(
-                            "MD_INVOKE_MODEL_SERVICE_FAIL",
+                            INVOKE_MODEL_SERVICE_FAIL,
                             f"upstream {url} returned {resp.status_code}: {resp.text}",
+                            upstream_status=resp.status_code,
+                            upstream_body=resp.text,
                         )
                     return resp.json()
                 finally:
@@ -237,8 +281,10 @@ async def chat_completions(
                 await resp.aclose()
                 await client.aclose()
                 raise resolver.ModelServiceError(
-                    "MD_INVOKE_MODEL_SERVICE_FAIL",
+                    INVOKE_MODEL_SERVICE_FAIL,
                     f"upstream {url} returned {resp.status_code}: {text}",
+                    upstream_status=resp.status_code,
+                    upstream_body=text,
                 )
 
             async def _relay():
@@ -281,7 +327,7 @@ async def text_embeddings(
         )
         if strategy is None:
             raise resolver.ModelServiceError(
-                "MD_MODEL_SERVICE_NOT_PUBLISH", f"model service not found: {msid}"
+                MODEL_SERVICE_NOT_PUBLISH, f"model service not found: {msid}"
             )
         # embed 仅支持 MODEL 策略（对应 Java commonInvoke 断言 type==MODEL）
         detail = strategy.models[0]
@@ -294,8 +340,10 @@ async def text_embeddings(
             resp = await client.post(url, json=up_body, headers=headers, timeout=conn.timeout)
             if resp.status_code >= 300:
                 raise resolver.ModelServiceError(
-                    "MD_INVOKE_MODEL_SERVICE_FAIL",
+                    INVOKE_MODEL_SERVICE_FAIL,
                     f"upstream {url} returned {resp.status_code}: {resp.text}",
+                    upstream_status=resp.status_code,
+                    upstream_body=resp.text,
                 )
             return JSONResponse(content=resp.json())
         finally:
@@ -325,7 +373,7 @@ async def rerank(
         )
         if strategy is None:
             raise resolver.ModelServiceError(
-                "MD_MODEL_SERVICE_NOT_PUBLISH", f"model service not found: {msid}"
+                MODEL_SERVICE_NOT_PUBLISH, f"model service not found: {msid}"
             )
         detail = strategy.models[0]
         data = await dispatch.rerank(detail.model, detail.auth, body)

@@ -22,16 +22,15 @@
         <nz-select
           class="version-select"
           *ngIf="visionsOptions.length"
-          [nzOptions]="visionsOptions"
           nzBorderless
           nzPopupClassName="version-select-panel"
           [(ngModel)]="visionSelected"
           (ngModelChange)="visionSelectedChange($event)"
           [nzPlaceHolder]="'select_placeholder'|i18nextEager"
-          nzValueMember="version_id"
-          nzLabelMember="version_name"
           nzId="myselect"
-        ></nz-select>
+        >
+        <nz-option *ngFor="let opt of visionsOptions" [nzValue]="opt.version_id" [nzLabel]="opt.version_name"></nz-option>
+      </nz-select>
         <nz-tag
           *ngIf="shareTag"
           nzSize="small"

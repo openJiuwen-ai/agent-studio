@@ -167,27 +167,58 @@ class FastRedisCheckpointer(Checkpointer):
         in the same session (e.g., the main workflow when a sub-workflow completes)
         remain as SET members so session_exists() stays correct.
         """
-        # Precise GraphStore key deletion instead of scan_iter
+        # Step 1: Prefix-based GraphStore key deletion.
+        # 精确删只清主工作流 NS 的 key，但 sub-workflow（loop body 等）的 NS 是
+        # workflow_id:node_xxx:1，其 GraphStore key 也以 workflow_id 开头，精确删
+        # 漏掉这些 key → 下次同 conversationId 跑时 _is_resume=True，pregel 走
+        # resume 路径跳过 condition，破坏 loop 变量绑定（QA 读到空 city）。
+        # 改用 prefix 删，确保主工作流及其所有 sub-NS 的 graph state 都被清掉。
+        # 用 delegate 的 _graph_state.delete（GraphStore 内部走 RedisStore.delete_by_prefix），
+        # 因为 self._redis 是裸 redis.asyncio.Redis，没有 delete_by_prefix 方法。
+        # NOTE: Uses getattr to avoid protected-access lint warning.
+        graph_state = getattr(self._delegate, "_graph_state", None)
+        if graph_state is not None:
+            try:
+                await graph_state.delete(session_id, workflow_id)
+                workflow_logger.info(
+                    f"FastRedisCheckpointer: prefix GraphStore delete for "
+                    f"session {session_id}, workflow {workflow_id}"
+                )
+            except Exception as e:
+                workflow_logger.warning(
+                    f"FastRedisCheckpointer: prefix GraphStore delete failed, "
+                    f"falling back to delegate post_workflow_execute: {e}"
+                )
+                await self._delegate.post_workflow_execute(session, {}, None)
+                return
+        else:
+            workflow_logger.warning(
+                f"FastRedisCheckpointer: delegate has no _graph_state, "
+                f"falling back to delegate post_workflow_execute for session "
+                f"{session_id}, workflow {workflow_id}"
+            )
+            await self._delegate.post_workflow_execute(session, {}, None)
+            return
+
+        # Step 1.5: Delete bare session key (clears comp_state with QA
+        #            QUESTIONER_STATE_KEY + comp_state_updates, ensuring next
+        #            round starts fresh).
+        # bare session key（session_id 无 namespace）由 AsyncStateManager 管理，
+        # 包含 comp_state（框架快照，含 QA 的 USER_INTERACT 残留）和
+        # comp_state_updates（update_state 追加的增量）。不清掉会导致下一轮
+        # QA 的 _load_state_from_session 从 comp_state 读到旧的 USER_INTERACT，
+        # 走恢复路径而非新开始路径，不生成问题文本。
+        # conversationHistory 不受影响——下一轮 Start 节点从 inputs（请求传入）重建。
         try:
-            key_type = build_key_with_namespace(
-                session_id, WORKFLOW_NAMESPACE_GRAPH, workflow_id, _GRAPH_DATA_TYPE
-            )
-            key_value = build_key_with_namespace(
-                session_id, WORKFLOW_NAMESPACE_GRAPH, workflow_id, _GRAPH_DATA_VALUE
-            )
-            await self._redis.delete(key_type, key_value)
+            await self._redis.delete(session_id)
             workflow_logger.info(
-                f"FastRedisCheckpointer: precise GraphStore delete for "
-                f"session {session_id}, workflow {workflow_id}"
+                f"FastRedisCheckpointer: deleted bare session key for "
+                f"session {session_id}"
             )
         except Exception as e:
             workflow_logger.warning(
-                f"FastRedisCheckpointer: precise GraphStore delete failed, "
-                f"falling back to delegate: {e}"
+                f"FastRedisCheckpointer: bare session key delete failed: {e}"
             )
-            # Fallback: let delegate do the scan_iter cleanup (slow but correct)
-            await self._delegate.post_workflow_execute(session, {}, None)
-            return
 
         # Remove this workflow_id from the sentinel SET (not the whole SET)
         # Redis auto-deletes the key when the last member is removed, so no

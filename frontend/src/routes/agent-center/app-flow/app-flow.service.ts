@@ -2844,6 +2844,9 @@ export class AppFlowService {
           targetCell,
           sourcePort,
         }) {
+          if (!sourceView) {
+            return false;
+          }
           const graph = sourceView.graph as Graph;
           // 禁止节点连接到自己
           if (sourceCell && targetCell && sourceCell.id === targetCell.id) {

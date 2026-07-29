@@ -345,6 +345,7 @@ async def _execute_workflow_run(
     version_id = resolved_version or ""
     request.state.user_id = user_id
     request.state.version_id = version_id
+    request.state.instance_id = instance_id
 
     # body已携带会话历史时跳过Redis加载
     if body.messages:
@@ -460,6 +461,7 @@ async def _execute_agent_run(
     version_id = resolved_version or ""
     request.state.user_id = user_id
     request.state.version_id = version_id
+    request.state.instance_id = instance_id
 
     # body已携带会话历史时跳过Redis加载
     if body.histories:
@@ -549,6 +551,7 @@ async def _execute_node_run(
     version_id = ""
     request.state.user_id = user_id
     request.state.version_id = version_id
+    request.state.instance_id = instance_id
 
     # 加载会话历史
     conversation_history, dialogue_count = await _load_conversation_data(

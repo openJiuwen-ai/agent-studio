@@ -759,6 +759,7 @@ export class FlowLogModalComponent {
     this.curInvodeId = this.result.execution_id;
 
     if (timelineData?.childInvokes.length > 0) {
+      timelineData.childInvokes = timelineData.childInvokes.filter(item => item.endTime && item.startTime);
       timelineData.startTime = timelineData.childInvokes[0].startTime;
       timelineData.endTime = timelineData.childInvokes[timelineData?.childInvokes.length - 1].endTime;
     }

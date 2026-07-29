@@ -318,7 +318,7 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
             params.add(new KnowledgeBaseConnectionParam("project_id", lakeSearchProjectId));
         }
         if (StringUtils.isNotEmpty(lakeSearchApplicationId)) {
-            params.add(new KnowledgeBaseConnectionParam("application_id", lakeSearchApplicationId));
+            params.add(new KnowledgeBaseConnectionParam("app_id", lakeSearchApplicationId));
         }
         if (StringUtils.isNotEmpty(authMode)) {
             params.add(new KnowledgeBaseConnectionParam(AUTH_MODE, authMode));

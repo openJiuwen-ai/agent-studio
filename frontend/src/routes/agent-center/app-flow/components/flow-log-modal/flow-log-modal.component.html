@@ -261,7 +261,7 @@
             <asset-copy-success-icon *ngIf="callItem.inputsCopyIcon" class="cursor-pointer"></asset-copy-success-icon>
           </div>
         </div>
-        <div class="json-wrap" [hidden]="callItem?.inputsCollapsed">
+        <div class="json-wrap" *ngIf="!callItem?.inputsCollapsed">
           <json-viewer [jsonData]="callItem.inputs"></json-viewer>
         </div>
       </div>
@@ -276,7 +276,7 @@
             <asset-copy-success-icon *ngIf="callItem.outputsCopyIcon" class="cursor-pointer"></asset-copy-success-icon>
           </div>
         </div>
-        <div class="json-wrap" [hidden]="callItem?.outputsCollapsed">
+        <div class="json-wrap" *ngIf="!callItem?.outputsCollapsed">
           <json-viewer [jsonData]="callItem.outputs"></json-viewer>
         </div>
       </div>
@@ -349,7 +349,7 @@
             <asset-copy-success-icon *ngIf="callItem.inputsCopyIcon" class="cursor-pointer"></asset-copy-success-icon>
           </div>
         </div>
-        <div class="json-wrap" [hidden]="callItem?.inputsCollapsed">
+        <div class="json-wrap" *ngIf="!callItem?.inputsCollapsed">
           <json-viewer [jsonData]="callItem.inputs"></json-viewer>
         </div>
       </div>

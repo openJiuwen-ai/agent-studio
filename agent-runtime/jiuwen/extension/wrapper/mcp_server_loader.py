@@ -99,6 +99,16 @@ def convert_ir_to_server_config(ir_config: Dict[str, Any], **kwargs) -> McpServe
     auth_headers = extend_heads(auth_headers, ir_config, **kwargs)
     server_name = ir_config.get("name", "")
 
+    # OpenAI-compatible APIs require function.name to match ^[a-zA-Z0-9_-]+$.
+    # AbilityManager.list_tool_info generates tool names as f"mcp_{server_name}_{tool_name}",
+    # so server_name must only contain ASCII alphanumeric, underscore, or hyphen.
+    # Use the IR id (UUID) as server_name to guarantee compliance; keep the
+    # original name as server_id for internal indexing and logging.
+    server_id = server_name
+    mcp_ir_id = ir_config.get("id", "")
+    if mcp_ir_id:
+        server_name = mcp_ir_id
+
     params = {
         "auth": ir_config.get(AUTH, {}),
         "plugin_dependency": ir_config.get("plugin_dependency", {}),
@@ -118,7 +128,7 @@ def convert_ir_to_server_config(ir_config: Dict[str, Any], **kwargs) -> McpServe
         client_type = transport_type
 
     config = McpServerConfig(
-        server_id=server_name,
+        server_id=server_id,
         server_name=server_name,
         server_path=ir_config.get("url", ""),
         client_type=client_type,
