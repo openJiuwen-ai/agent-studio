@@ -159,6 +159,24 @@ def _error_response(exc: Exception) -> JSONResponse:
     )
 
 
+def _upstream_transport_error(url: str, exc: httpx.HTTPError) -> resolver.ModelServiceError:
+    """把 httpx 传输异常（DNS/连接/超时等，无上游响应）转成 ``ModelServiceError``。
+
+    MODEL 策略下 ``policy.invoke_with_strategy`` 不 catch，裸 httpx 异常会逃逸到 FastAPI
+    默认 500（``{error:{code:"internal_error",message:"Internal server error"}}``），页面
+    看不到原因。此处统一转成 ``MD_INVOKE_MODEL_SERVICE_FAIL``，经 ``_error_response`` 走
+    ``openjiuwen.02501049`` 契约，把异常文本放进 ``details[0].error_msg`` 让前端可见。
+    无上游响应故 ``upstream_status`` 留空（退回 spec.http_status）。ROUTER 策略下
+    ``policy`` 已用 ``except Exception`` 兜底重试，本转换不影响其 failover 行为。
+    """
+    detail = f"upstream {url} request failed: {exc}"
+    return resolver.ModelServiceError(
+        INVOKE_MODEL_SERVICE_FAIL,
+        detail,
+        upstream_body=detail,
+    )
+
+
 def _check_auth_headers(auth_type: str, auth_info: Optional[Dict[str, str]]) -> dict:
     """鉴权头（对应 Java ``AuthAdapterFactory`` 三种 adapter，使用请求体原始 auth_info）。
 
@@ -265,6 +283,8 @@ async def chat_completions(
                             upstream_body=resp.text,
                         )
                     return resp.json()
+                except httpx.HTTPError as exc:
+                    raise _upstream_transport_error(url, exc) from exc
                 finally:
                     await client.aclose()
             # 流式：连接错误在 send 时抛出（可被 policy failover）；流中途错误不重试。
@@ -273,6 +293,9 @@ async def chat_completions(
             )
             try:
                 resp = await client.send(req, stream=True)
+            except httpx.HTTPError as exc:
+                await client.aclose()
+                raise _upstream_transport_error(url, exc) from exc
             except Exception:
                 await client.aclose()
                 raise
@@ -346,6 +369,8 @@ async def text_embeddings(
                     upstream_body=resp.text,
                 )
             return JSONResponse(content=resp.json())
+        except httpx.HTTPError as exc:
+            raise _upstream_transport_error(url, exc) from exc
         finally:
             await client.aclose()
     except resolver.ModelServiceError as exc:
@@ -367,6 +392,7 @@ async def rerank(
         request, body.model, refresh, None
     )
     workspace = workspace_id or workspace
+    url = ""  # dispatch.rerank 抛 httpx 时用于错误信息；httpx 仅可能发生在下方赋值之后
     try:
         strategy = await resolver.resolve_strategy(
             msid, project_id, workspace, auth_id, refresh=rf
@@ -376,10 +402,14 @@ async def rerank(
                 MODEL_SERVICE_NOT_PUBLISH, f"model service not found: {msid}"
             )
         detail = strategy.models[0]
+        url = detail.model.api_url
         data = await dispatch.rerank(detail.model, detail.auth, body)
         return JSONResponse(content=data)
     except resolver.ModelServiceError as exc:
         return _error_response(exc)
+    except httpx.HTTPError as exc:
+        logger.warning("model-service rerank upstream transport error: %s", exc)
+        return _error_response(_upstream_transport_error(url, exc))
 
 
 # ----------------------------- status check -----------------------------
