@@ -163,10 +163,19 @@ class McpToolWrapper:
         """
         转换返回格式
 
-        MCPTool 返回: {"result": xxx}
+        MCPTool 返回: {"result": CallToolResult}
         转换为: {"errCode": 0, "errMessage": "success", "data": xxx}
+
+        CallToolResult 包含 content (list) 和 structuredContent (dict) 两种输出形式，
+        优先使用 structuredContent，fallback 到 content。
         """
-        data = result.get("result")
+        call_result = result.get("result")
+        if hasattr(call_result, "structuredContent") and call_result.structuredContent:
+            data = call_result.structuredContent
+        elif hasattr(call_result, "content"):
+            data = call_result.content
+        else:
+            data = call_result
         return {
             constant.ERR_CODE: 0,
             constant.ERR_MESSAGE: "success",
