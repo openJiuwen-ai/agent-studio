@@ -472,6 +472,81 @@ class PluginBaseImplTest extends BaseTest {
         assertEquals("string", items.getType());
     }
 
+    /**
+     * 验证 OpenAPI 导入时 parameter.in 小写值正确映射为运行时要求的大写 location。
+     * <p>
+     * OpenAPI 3.0 规范中 in 值为小写 (query/header/path)，
+     * 运行时 ParamLocation 枚举要求首字母大写 (Query/Headers/Path)。
+     *
+     * @see <a href="https://spec.openapis.org/oas/v3.0.3#parameter-object">OpenAPI 3.0 Parameter Object</a>
+     */
+    @Test
+    void testTransformOpenAPI2Plugin_parameterLocationMapping() {
+        // Arrange
+        OpenAPI openAPI = new OpenAPI();
+        openAPI.setInfo(new Info().title("Location Test API").description("Test location mapping"));
+
+        Server server = new Server();
+        server.setUrl("https://api.example.com/v1");
+        openAPI.setServers(List.of(server));
+
+        Paths paths = new Paths();
+        PathItem pathItem = new PathItem();
+        Operation getOp = new Operation();
+        getOp.setOperationId("testEndpoint");
+        getOp.setDescription("Test endpoint with various parameter locations");
+
+        // 使用 OpenAPI 标准小写值: query, header, path
+        getOp.setParameters(List.of(
+            new Parameter().name("search").in("query").required(false)
+                .schema(new Schema<String>().type("string")),
+            new Parameter().name("x-api-key").in("header").required(false)
+                .schema(new Schema<String>().type("string")),
+            new Parameter().name("id").in("path").required(true)
+                .schema(new Schema<String>().type("string"))
+        ));
+
+        pathItem.setGet(getOp);
+        paths.put("/items/{id}", pathItem);
+        openAPI.setPaths(paths);
+
+        // Act
+        PluginDTO pluginDTO = pluginBaseImpl.transformOpenAPI2Plugin(openAPI);
+
+        // Assert
+        assertNotNull(pluginDTO);
+        List<ToolInputSchema> inputSchemas = pluginDTO.getToolInputSchemaList();
+        assertNotNull(inputSchemas);
+        assertEquals(1, inputSchemas.size());
+
+        // inputSchema 是 JSON 字符串，解析后验证 location 映射
+        String inputSchemaJson = inputSchemas.get(0).getInputSchema();
+        assertNotNull(inputSchemaJson);
+
+        Map<String, Object> schemaMap = JsonUtils.json2ObjQuietly(inputSchemaJson, Map.class);
+        assertNotNull(schemaMap);
+        Map<String, Object> properties = (Map<String, Object>) schemaMap.get("properties");
+        assertNotNull(properties);
+
+        // query → Query
+        Map<String, Object> queryParam = (Map<String, Object>) properties.get("search");
+        assertNotNull(queryParam, "query parameter 'search' should exist");
+        assertEquals("Query", queryParam.get("location"),
+            "OpenAPI 'query' should map to 'Query'");
+
+        // header → Headers
+        Map<String, Object> headerParam = (Map<String, Object>) properties.get("x-api-key");
+        assertNotNull(headerParam, "header parameter 'x-api-key' should exist");
+        assertEquals("Headers", headerParam.get("location"),
+            "OpenAPI 'header' should map to 'Headers'");
+
+        // path → Path
+        Map<String, Object> pathParam = (Map<String, Object>) properties.get("id");
+        assertNotNull(pathParam, "path parameter 'id' should exist");
+        assertEquals("Path", pathParam.get("location"),
+            "OpenAPI 'path' should map to 'Path'");
+    }
+
 
 
     @Test

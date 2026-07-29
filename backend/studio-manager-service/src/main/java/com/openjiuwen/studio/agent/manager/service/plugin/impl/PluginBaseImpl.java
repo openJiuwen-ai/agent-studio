@@ -919,8 +919,16 @@ public class PluginBaseImpl implements IPluginBase {
         parameters.forEach(parameter -> {
             SchemaConfig property = new SchemaConfig();
             property.setDescription(parameter.getDescription());
-            property.setType(parameter.getSchema().getType());
-            property.setLocation(parameter.getIn());
+            property.setType(parameter.getSchema() != null ? parameter.getSchema().getType() : null);
+            // OpenAPI 规范 in 值为小写 (query/header/path)，运行时要求首字母大写 (Query/Headers/Path)
+            String rawIn = parameter.getIn();
+            String mappedLocation = switch (rawIn != null ? rawIn : "") {
+                case "query" -> "Query";
+                case "header" -> "Headers";
+                case "path" -> "Path";
+                default -> "Body";
+            };
+            property.setLocation(mappedLocation);
             schemaConfig.getProperties().put(parameter.getName(), property);
         });
         return true;
