@@ -272,6 +272,8 @@ public class ControllerAdapter extends ResourceAdapter {
         agentMapper.insert(agent);
 
         handleReleaseVersion(agent, importInfo.getReleaseVersion());
+        // 标记首次导入：放在所有操作成功之后，避免中途异常时 addTag=true 导致 FAILED 结果仍触发草稿 DSL 上传
+        result.setAddTag(true);
     }
 
     private void handleReleaseVersion(Agent agent, ReleaseVersion releaseVersion) {

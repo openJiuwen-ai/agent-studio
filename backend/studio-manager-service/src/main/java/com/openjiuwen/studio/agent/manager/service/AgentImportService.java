@@ -1132,7 +1132,12 @@ public class AgentImportService {
                     }
                 }
                 case AGENT -> {
-                    uploadAgentDsl(resourceMap.get(result.getId()), id, id);
+                    // 草稿 DSL 上传：与 workflow/controller 一致，仅首次导入或草稿态导入时上传。
+                    // agent 通用模式草稿走 buildComplexAgentInfo 从 DB 重建（不读 OBS 草稿文件），
+                    // 但为一致性与防御（避免 OBS 草稿文件被版本快照覆盖），同样加 addTag 守卫。
+                    if (Boolean.TRUE.equals(result.getAddTag()) || StringUtils.isEmpty(versionId)) {
+                        uploadAgentDsl(resourceMap.get(result.getId()), id, id);
+                    }
                     if (StringUtils.isNotEmpty(versionId)) {
                         ImportInfo versionedInfo = versionedResourceMap.get(result.getId() + "|" + result.getVersion());
                         uploadAgentDsl(
