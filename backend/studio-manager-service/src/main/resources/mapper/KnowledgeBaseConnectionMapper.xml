@@ -71,7 +71,7 @@
             <if test="connection.icon != null and connection.icon != ''">
                 icon = #{connection.icon},
             </if>
-            <if test="connection.description != null and connection.description != ''">
+            <if test="connection.description != null">
                 description = #{connection.description},
             </if>
             <if test="connection.params != null and connection.params != ''">
