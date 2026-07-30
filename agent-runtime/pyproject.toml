@@ -16,7 +16,7 @@ dependencies = [
     "requests",
     "urllib3",
     "pymysql",
-    "psycopg2-binary",
+    "psycopg2>=2.9.12",
     "py-opengauss",
     "redis>=5.0.0",
     "sqlalchemy>=2.0.0",

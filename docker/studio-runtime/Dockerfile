@@ -10,19 +10,20 @@ ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib64
 
 WORKDIR $SERVICE_HOME
 
-# 安装运行时依赖（不含编译工具链）
+# 安装运行时依赖（含 psycopg2 源码编译工具链）
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
       sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources; \
     elif [ -f /etc/apt/sources.list ]; then \
       sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
     fi \
-    && apt-get update && apt-get install -y curl tar unzip net-tools wget iptables cron libpq-dev vim procps gawk hostname sed coreutils findutils bash nginx antiword \
+    && apt-get update && apt-get install -y curl tar unzip net-tools wget iptables cron libpq-dev procps gawk hostname sed coreutils findutils bash nginx antiword gcc python3-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 先复制 requirements.txt，单独安装依赖以利用 Docker 层缓存
 COPY requirements.txt $SERVICE_HOME/app/
 RUN pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
     && pip3 config set global.trusted-host mirrors.aliyun.com \
+    && pip3 install --upgrade pip \
     && pip3 install -r $SERVICE_HOME/app/requirements.txt \
     && rm -rf ${PACKAGES_HOME}/future/backports/test
 
