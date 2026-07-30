@@ -468,7 +468,6 @@ export class PromptOptimizeTaskDetailComponent {
       };
     }
     const drawerRef = this.nzDrawerService.create({
-      nzTitle: 'promptSaveModal',
       nzContent: PromptSaveComponent,
       nzWidth: '700px',
       nzData: {
