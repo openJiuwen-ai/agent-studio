@@ -60,7 +60,7 @@ export class UseCasesAssessDetailComponent {
     },
     {
       title: this.i18n.transform('evaluation_data'),
-      width:'265px'
+      width:'230px'
     },
     {
       title: this.i18n.transform('system_response'),

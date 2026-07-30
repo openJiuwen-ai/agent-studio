@@ -1,7 +1,7 @@
-<div class="halfmodal-header">
+<div class="com-drawer-title">
   {{ 'evaluation_dataset_detail'|i18nextEager }}
 </div>
-<div class="halfmodal-body">
+<div class="com-drawer-content">
   <nz-table
     [nzData]="srcData.data"
     style="height: 100%;"
@@ -22,7 +22,7 @@
     <tbody>
       <tr *ngFor="let row of displayedData">
         <td nz-ellipsis>{{ row.order }}</td>
-        <td nz-ellipsis>{{ row.variable }}</td>
+        <td nz-ellipsis><div style="max-width: 230px;">{{ row.variable }}</div></td>
         <td *ngIf="ptType==='multi'">
           <nz-upload
             [nzDisabled]="true"
@@ -38,5 +38,5 @@
     </tbody>
   </nz-table>
 </div>
-<div class="halfmodal-footer">
+<div class="com-drawer-footer">
 </div>
