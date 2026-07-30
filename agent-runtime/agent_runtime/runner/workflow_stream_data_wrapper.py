@@ -983,8 +983,14 @@ class WorkflowStreamDataWrapper:
         if component_type_mapped == "Code":
             meta_data = {"function_log": ""}
 
-        parent_node_id = payload.get("parentNodeId", "")
-        parent_node_id = parent_node_id.rsplit(".", 1)[-1]
+        parent_node_path = payload.get("parentNodeId", "")
+        parent_node_ids = [node_id for node_id in parent_node_path.split(".") if node_id]
+        # The engine includes the loop id at the end of the parent path for loop
+        # body nodes. Keep parentNodeId compatible with the legacy contract:
+        # it identifies the containing workflow, while loopNodeId identifies the loop.
+        if loop_node_id and parent_node_ids and parent_node_ids[-1] == loop_node_id:
+            parent_node_ids.pop()
+        parent_node_id = parent_node_ids[-1] if parent_node_ids else ""
 
         _node_sf = self._node_secret_fields.get(payload.get("componentId", ""), {})
 
@@ -1011,11 +1017,11 @@ class WorkflowStreamDataWrapper:
             "invokeId": payload.get("invokeId"),
             "parentInvokeId": payload.get("parentInvokeId"),
             "traceId": payload.get("traceId", ""),
-            "loopNodeId": payload.get("loopNodeId"),
-            "loopIndex": payload.get("loopIndex"),
+            "loopNodeId": loop_node_id,
+            "loopIndex": loop_index,
             "innerError": inner_error,
             "memory": memory,
-            "parentNodeId": parent_node_id if not payload.get("loopNodeId") else None,
+            "parentNodeId": parent_node_id,
         }
 
         if (data["startTime"] and data["endTime"]) and (data["startTime"] > data["endTime"]):

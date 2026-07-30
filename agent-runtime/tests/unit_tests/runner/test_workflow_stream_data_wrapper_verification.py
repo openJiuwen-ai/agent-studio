@@ -434,6 +434,54 @@ class TestSchemaConversionDuplication:
 
 
 # =====================================================================
+# Regression: nested workflow loop trace metadata
+# =====================================================================
+
+class TestNestedWorkflowLoopTraceMetadata:
+    """Preserve the legacy hierarchy contract for nodes inside a loop body."""
+
+    @staticmethod
+    def _make_wrapper():
+        return WorkflowStreamDataWrapper(
+            execution_id="test-exec-loop",
+            is_debug=True,
+            conversation_id="test-conv-loop",
+            node_id_to_name={},
+        )
+
+    async def test_loop_body_node_keeps_workflow_parent_and_loop_metadata(self):
+        from openjiuwen.core.session.stream.base import TraceSchema
+
+        wrapper = self._make_wrapper()
+        loop_id = "node_loop"
+        workflow_node_id = "node_sub"
+
+        body_chunk = TraceSchema(
+            type="tracer_workflow",
+            payload={
+                "traceId": "trace-body",
+                "workflowId": "sub-workflow",
+                "componentId": "node_llm",
+                "componentName": "大模型",
+                "componentType": "LLMChain",
+                "invokeId": f"{workflow_node_id}.{loop_id}.node_llm",
+                "parentInvokeId": "engine-parent-invoke",
+                "parentNodeId": f"{workflow_node_id}.{loop_id}",
+                "loopNodeId": loop_id,
+                "loopIndex": 0,
+                "status": "start",
+            },
+        )
+
+        result = wrapper._convert_trace_schema_to_stream_data(body_chunk)
+
+        assert result["data"]["parentNodeId"] == workflow_node_id
+        assert result["data"]["loopNodeId"] == loop_id
+        assert result["data"]["loopIndex"] == 1
+        assert result["data"]["parentInvokeId"] == "engine-parent-invoke"
+
+
+# =====================================================================
 # P1-3: ContextVar 跨 Task 数据传递 — 耦合性风险验证
 # =====================================================================
 

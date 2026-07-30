@@ -176,6 +176,30 @@ class TestProcessWorkflowNodeMessage:
         assert len(trace.node_info) == 1
 
     @staticmethod
+    def test_preserves_parent_and_loop_metadata():
+        trace = Trace(handler_type="Workflow", is_debug=True)
+        full_data = {
+            "event": "workflow_node_message",
+            "data": {
+                "status": "start",
+                "componentId": "node_llm",
+                "componentName": "大模型",
+                "componentType": "LLMChain",
+                "parentNodeId": "node_sub",
+                "loopNodeId": "node_loop",
+                "loopIndex": 1,
+            },
+            "createdTime": 1000,
+        }
+
+        result = BaseEventsProcessor.process_workflow_node_message(full_data, trace)
+        node_data = result[0]["data"]
+
+        assert node_data["parent_node_id"] == "node_sub"
+        assert node_data["loop_node_id"] == "node_loop"
+        assert node_data["loop_index"] == 1
+
+    @staticmethod
     def test_error_status():
         trace = Trace(handler_type="Workflow")
         full_data = {

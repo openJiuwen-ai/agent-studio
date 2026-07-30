@@ -73,6 +73,8 @@ class WorkflowNodeMessageDataField(BaseModel):
     parent_node_id: Optional[str] = Field(default=None)
     node_status: Optional[str] = Field(default=None)
     parent_workflow_id: Optional[str] = Field(default="")
+    loop_index: Optional[int] = Field(default=None)
+    loop_node_id: Optional[str] = Field(default=None)
     status: Optional[dict] = Field(default=None)
     node_name: Optional[str] = Field(default=None)
     node_type: Optional[str] = Field(default=None)

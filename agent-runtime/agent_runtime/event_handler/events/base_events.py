@@ -256,6 +256,8 @@ class BaseEventsProcessor(ABC):
             parent_node_id=data.get("parentNodeId"),
             node_status=node_status,
             parent_workflow_id=data.get("agentParentInvokeId"),
+            loop_index=data.get("loopIndex"),
+            loop_node_id=data.get("loopNodeId"),
             status=status,
             node_name=data.get("componentName"),
             node_type=node_type,
