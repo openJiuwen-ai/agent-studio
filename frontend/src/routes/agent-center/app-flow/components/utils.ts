@@ -449,6 +449,9 @@ export const NodeUtils = {
             ref.children = this.fields2RefParams(itemSchema as IWorkflowField[], nodeId, names, configs);
             ref.expanded = true;
           }
+          if (!(ref.schema as any).schema) {
+            (ref.schema as any).schema = [];
+          }
         } else {
           // 处理基础类型的数组
           const itemType = workflowField?.type ?? 'unknown';
