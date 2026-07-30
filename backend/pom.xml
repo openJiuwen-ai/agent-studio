@@ -27,7 +27,7 @@
         <devspore.version>2.1.19-RELEASE</devspore.version>
         <revision>0.0.1</revision>
         <webflux-ui.version>1.6.9</webflux-ui.version>
-        <fastjson2.version>2.0.51</fastjson2.version>
+        <fastjson2.version>2.0.63</fastjson2.version>
         <okhttp-sse.version>4.12.0</okhttp-sse.version>
         <annotation-api.version>3.0.0</annotation-api.version>
         <h2.version>2.2.224</h2.version>
