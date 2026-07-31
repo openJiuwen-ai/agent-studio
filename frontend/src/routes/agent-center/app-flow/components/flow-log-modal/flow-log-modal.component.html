@@ -250,7 +250,7 @@
     </div>
 
     <div *ngIf="!callItem?.isQuestionNode && !callItem?.isParamExtractionNode" class="flex-gap-center">
-      <div *ngIf="!callItem.isIOEmpty; else noInputs" class="cell-bg-border">
+      <div *ngIf="!callItem.isIOEmptyInputs; else noInputs" class="cell-bg-border">
         <div class="node-inputs-area">
           <div class="flex-inline-center" (click)="changeInputCollapsedState(callItem)">
             <span class="text-[#191919]">{{ 'input' | i18nextEager }}</span>
@@ -265,7 +265,7 @@
           <json-viewer [jsonData]="callItem.inputs"></json-viewer>
         </div>
       </div>
-      <div *ngIf="!callItem.isIOEmpty; else noOutputs" class="cell-bg-border">
+      <div *ngIf="!callItem.isIOEmptyOutputs; else noOutputs" class="cell-bg-border">
         <div class="node-inputs-area">
           <div class="flex-inline-center" (click)="changeOutputsCollapsedState(callItem)">
             <span class="text-[#191919]">{{ 'output' | i18nextEager }}</span>
@@ -339,7 +339,7 @@
         nzKey="uuid"
       >
       </nz-select>
-      <div *ngIf="!callItem.isIOEmpty; else noInputs" class="cell-bg-border">
+      <div *ngIf="!callItem.isIOEmptyInputs; else noInputs" class="cell-bg-border">
         <div class="node-inputs-area">
           <div class="flex-inline-center">
             <span class="text-[#191919]">{{ 'input_params' | i18nextEager }}</span>

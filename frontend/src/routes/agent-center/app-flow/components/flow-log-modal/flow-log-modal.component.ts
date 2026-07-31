@@ -696,7 +696,8 @@ export class FlowLogModalComponent {
     tableItem.isLLMNode = this.isLLMNode(tableItem?.node_type);
     tableItem.nodeSrc = this.getNodeStatus(tableItem?.node_status);
     tableItem.isParamExtractionNode = this.isParamExtractionNode(tableItem?.node_type);
-    tableItem.isIOEmpty = this.isIOEmpty(tableItem?.outputs);
+    tableItem.isIOEmptyOutputs = this.isIOEmpty(tableItem?.outputs);
+    tableItem.isIOEmptyInputs = this.isIOEmpty(tableItem?.inputs);
     tableItem.messagesByUuid = this.getMessagesByUuid(tableItem.messages, tableItem.roundSelected?.uuid);
     if (tableItem.messagesByUuid.length && tableItem.messagesByUuid[0]) {
       tableItem.messagesByUuid[0].isIOEmpty = this.isIOEmpty(tableItem.messagesByUuid[0]);
