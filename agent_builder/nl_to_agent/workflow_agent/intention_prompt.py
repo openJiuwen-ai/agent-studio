@@ -49,6 +49,8 @@ REFINE_INTENTION_PROMPT = """
 """
 
 PLAN_INTENTION_PROMPT = """
+`#system#`
+
 你是一个专业的任务分类专家，请根据用户与你之间的对话历史，判断用户是否提供了具体的流程。
 
 请严格遵循如下规则：
@@ -70,6 +72,8 @@ PLAN_INTENTION_PROMPT = """
 {
   "provide_process": false
 }
+
+`#user#`
 
 ## 当前对话历史以及用户输入如下：
 {{dig_history}}
