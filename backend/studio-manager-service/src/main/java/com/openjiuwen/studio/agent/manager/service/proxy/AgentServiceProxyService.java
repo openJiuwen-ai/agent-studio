@@ -182,6 +182,9 @@ public class AgentServiceProxyService {
     @Value("${file.readonly.enable:false}")
     private boolean fileReadOnly;
 
+    @Value("${workflow.sse-timeout-milliseconds}")
+    private long workflowSseTimeoutMilliSec;
+
     private Set<String> allowedIconType = new HashSet<>();
 
     private Set<String> allowedImgType = new HashSet<>();
@@ -602,7 +605,7 @@ public class AgentServiceProxyService {
     }
 
     public Object stream(String url, HttpHeaders headers, String bodyJson) {
-        return stream(url, headers, bodyJson, 900000L);
+        return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec);
     }
 
     public Object stream(String url, HttpHeaders headers, String bodyJson, Long timeout) {
@@ -689,12 +692,12 @@ public class AgentServiceProxyService {
 
         if (Constant.AppType.CONTROLLER.equals(executeParams.getExecuteType())) {
             ControllerAgentListener listener = new ControllerAgentListener(MDC.get(REQUEST_ID), executeParams, headers);
-            return stream(url, headers, bodyJson, 900000L, listener);
+            return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec, listener);
         } else if (Constant.AppType.AGENT.equals(executeParams.getExecuteType())) {
             LLMAgentListener listener = new LLMAgentListener(MDC.get(REQUEST_ID), executeParams, headers);
-            return stream(url, headers, bodyJson, 900000L, listener);
+            return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec, listener);
         } else {
-            return stream(url, headers, bodyJson, 900000L, new BaseEventListener(MDC.get(REQUEST_ID), headers));
+            return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec, new BaseEventListener(MDC.get(REQUEST_ID), headers));
         }
     }
 
@@ -722,7 +725,7 @@ public class AgentServiceProxyService {
         executeParams.setExecutionId(taskId);
 
         WorkflowListener listener = new WorkflowListener(MDC.get(REQUEST_ID), executeParams, result, headers);
-        return stream(url, headers, bodyJson, 900000L, listener);
+        return stream(url, headers, bodyJson, workflowSseTimeoutMilliSec, listener);
     }
 
     @OperationLog(
