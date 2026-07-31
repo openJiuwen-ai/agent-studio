@@ -630,6 +630,7 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
       node.inputs = inputs;
       node.outputs = outputs;
     }
+    node.isIOEmpty = this.isIOEmpty(inputs);
   }
 
   /** 遇到event_type等于'node_finished'的流式块，组装成时序图数据 */

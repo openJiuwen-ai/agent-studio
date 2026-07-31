@@ -538,7 +538,7 @@ export class FlowLogModalComponent {
   protected getSingleExecDetail(workflowId: string, conversationId: string, executionId: string) {
     this.flowRepoServe.getSingleExecInfo(workflowId, executionId).then((result: any) => {
       // 通过增加node_uuid字段，保证点击时序图上的某个节点，可以展开对应的调用链信息
-      result.event_list.forEach(item => {
+      (result.event_list || []).forEach(item => {
         item.node_uuid = uuidV4();
       });
 
