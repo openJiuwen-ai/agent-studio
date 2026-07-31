@@ -15,11 +15,6 @@ WORKDIR $SERVICE_HOME
 # 基础镜像已包含 apt 系统依赖和 pip Python 依赖，此处只需复制应用代码
 # 注：agent_builder 已从 studio-runtime 镜像剥离，独立构建为 studio-builder 镜像
 
-# 从本地源码安装 openjiuwen（每次构建都安装最新代码，不缓存在基础镜像中）
-COPY agent-core/ $SERVICE_HOME/app/agent-core/
-RUN pip3 install $SERVICE_HOME/app/agent-core/ \
-    && rm -rf $SERVICE_HOME/app/agent-core/
-
 COPY agent_runtime/ $SERVICE_HOME/app/agent_runtime/
 COPY jiuwen/ $SERVICE_HOME/app/jiuwen/
 COPY model_service/ $SERVICE_HOME/app/model_service/

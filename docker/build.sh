@@ -61,9 +61,7 @@ function main() {
   log "[2/6] studio-console 镜像构建完成"
 
   log "[3/6] 构建 studio-runtime 镜像"
-  copy_agent_core
   docker_build_runtime
-  cleanup_agent_core
   log "[3/6] studio-runtime 镜像构建完成"
 
   log "[4/6] 构建 studio-builder 镜像"
@@ -81,33 +79,6 @@ function main() {
   write_build_info
 
   log "Docker 镜像构建全部完成"
-}
-
-# 将 agent-core（openjiuwen 本地源码）复制到 studio-runtime 构建上下文
-# 构建完成后由 cleanup_agent_core 清理
-function copy_agent_core() {
-  local AGENT_CORE_SRC=${WORKSPACE}/agent-core
-  local AGENT_CORE_DST=${DOCKER_DIR}/studio-runtime/agent-core
-  if [ ! -d "${AGENT_CORE_SRC}" ]; then
-    echo "[ERROR] agent-core 目录不存在: ${AGENT_CORE_SRC}"
-    echo "[ERROR] 请先 git clone agent-core 到项目根目录"
-    exit 1
-  fi
-  echo "[BUILD] 复制 agent-core 到构建上下文: ${AGENT_CORE_DST}"
-  cp -r ${AGENT_CORE_SRC} ${AGENT_CORE_DST}
-  # 清理不需要的文件以减小构建上下文
-  rm -rf ${AGENT_CORE_DST}/.git ${AGENT_CORE_DST}/tests ${AGENT_CORE_DST}/docs \
-         ${AGENT_CORE_DST}/.venv ${AGENT_CORE_DST}/__pycache__ \
-         ${AGENT_CORE_DST}/.pytest_cache ${AGENT_CORE_DST}/report
-}
-
-# 构建完成后清理 agent-core 临时目录
-function cleanup_agent_core() {
-  local AGENT_CORE_DST=${DOCKER_DIR}/studio-runtime/agent-core
-  if [ -d "${AGENT_CORE_DST}" ]; then
-    echo "[BUILD] 清理构建上下文中的 agent-core: ${AGENT_CORE_DST}"
-    rm -rf ${AGENT_CORE_DST}
-  fi
 }
 
 function usage() {
