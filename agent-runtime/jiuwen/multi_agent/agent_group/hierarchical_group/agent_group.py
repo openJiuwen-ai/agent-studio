@@ -27,10 +27,11 @@ from jiuwen.serve.controllers.execution.utils import AgentIrUtils
 class HierarchicalAgentGroup(BaseAgentGroup):
     """层次化智能体组 - 支持多层控制器的Agent系统"""
 
-    def __init__(self, config: AgentGroupConfig) -> None:
+    def __init__(self, config: AgentGroupConfig, conversation_id: str = "") -> None:
         super().__init__(config)
         # 获取所有agent对应task_id，用于删除template
         self.task_ids: Dict[str, str] = {}
+        self._conversation_id = conversation_id
         self._get_task_ids(config)
 
     async def start(self, state: Optional[AgentGroupState] = None) -> None:
@@ -48,7 +49,7 @@ class HierarchicalAgentGroup(BaseAgentGroup):
             logger.info(f"Starting AgentGroup {self.config.group_id}")
 
             if self.runner is None:
-                self.runner = StandaloneRunner()
+                self.runner = StandaloneRunner(self._conversation_id)
             # 初始化所有Agent
             await self._register_agents()
 

@@ -81,6 +81,7 @@ from jiuwen.serve.controllers.execution.manager import AsyncStateManager
 from jiuwen.serve.controllers.execution.open_utils import (
     async_ir_load,
     deserialize_object,
+    cache_agent_config,
     cache_agent_queue,
     cache_agent_group_queue,
 )
@@ -1316,17 +1317,79 @@ class IRConverter:
     async def create_or_restore_agent(agent_config, conversation_id):
         """
         Create a new agent or restore from saved state.
+
+        两层缓存设计：
+        - cache_agent_config (key=ir_path)：AgentConfig 单例，跨会话共享引用
+        - cache_agent_queue (key=f"{conversation_id}:{ir_path}")：会话级 Agent 实例，跨会话隔离
         """
         cache_enabled = (
             str(os.environ.get(AGENT_CACHE_ENABLE_KEY, "false")).lower() == "true"
             and agent_config.is_published
         )
+        # 防御：conversation_id 为空时退化为按 ir_path 共享，会触发 R07 串会话，强制关闭实例缓存
+        if cache_enabled and not conversation_id:
+            logger.warning(
+                "agent cache enabled but conversation_id is empty, "
+                "skip L1 instance cache to avoid cross-session leak, "
+                "ir_path=%s",
+                agent_config.ir_path,
+                simple_log=(
+                    "agent cache enabled but conversation_id is empty, "
+                    "skip L1 instance cache, ir_path=%s"
+                ),
+            )
+            cache_enabled = False
+        logger.debug(
+            "agent cache check: cache_enabled=%s, env=%s=%s, "
+            "is_published=%s, ir_path=%s, conversation_id=%s",
+            cache_enabled, AGENT_CACHE_ENABLE_KEY,
+            os.environ.get(AGENT_CACHE_ENABLE_KEY, '<unset>'),
+            agent_config.is_published, agent_config.ir_path, conversation_id,
+            simple_log=(
+                "agent cache check: cache_enabled=%s, env=%s, "
+                "is_published=%s, ir_path=%s, conversation_id=%s"
+            ),
+        )
+
+        # 二级缓存：AgentConfig 单例（跨会话共享，key=ir_path）
+        if cache_enabled:
+            cached_config = await timed_cache_op(
+                "Agent config retrieval",
+                cache_agent_config.aget(agent_config.ir_path),
+                agent_config.ir_path,
+            )
+            if cached_config is not None:
+                agent_config = cached_config
+                logger.debug(
+                    "agent_config cache hit: ir_path=%s",
+                    agent_config.ir_path,
+                    simple_log="agent_config cache hit: ir_path=%s",
+                )
+            else:
+                await timed_cache_op(
+                    "Caching agent config",
+                    cache_agent_config.aput(agent_config.ir_path, agent_config),
+                    agent_config.ir_path,
+                )
+                logger.debug(
+                    "agent_config cache miss+put: ir_path=%s",
+                    agent_config.ir_path,
+                    simple_log="agent_config cache miss+put: ir_path=%s",
+                )
+
+        # 一级缓存：会话级 Agent 实例（key 含 conversation_id 实现跨会话隔离）
+        agent_session_key = f"{conversation_id}:{agent_config.ir_path}"
         agent = None
         if cache_enabled:
             agent = await timed_cache_op(
                 "Agent instance retrieval",
-                cache_agent_queue.aget(agent_config.ir_path),
-                agent_config.ir_path,
+                cache_agent_queue.aget(agent_session_key),
+                agent_session_key,
+            )
+            logger.debug(
+                "agent cache %s: session_key=%s",
+                'hit' if agent is not None else 'miss', agent_session_key,
+                simple_log="agent cache %s: session_key=%s",
             )
 
         if agent is None:
@@ -1334,8 +1397,8 @@ class IRConverter:
             if cache_enabled:
                 await timed_cache_op(
                     "Caching agent instance",
-                    cache_agent_queue.aput(agent_config.ir_path, agent),
-                    agent_config.ir_path,
+                    cache_agent_queue.aput(agent_session_key, agent),
+                    agent_session_key,
                 )
 
         serialized_data = await AsyncStateManager().get_state(conversation_id)
@@ -1476,7 +1539,7 @@ class IRConverter:
         Returns:
 
         """
-        agent_group = HierarchicalAgentGroup(agent_group_config)
+        agent_group = HierarchicalAgentGroup(agent_group_config, conversation_id)
         serialized_data = await AsyncStateManager().get_state(conversation_id)
         if not serialized_data:
             await agent_group.start()
