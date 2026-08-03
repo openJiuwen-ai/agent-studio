@@ -124,7 +124,7 @@ class MemberInstanceManager:
                             cached_config.parent_agent_metadata is not None,
                             simple_log=(
                                 "L2_HIT audit: cached_task_id=%s, "
-                                "conversation_id=%s, ir_path=%s"
+                                "conversation_id=%s, ir_path=%s, has_parent_meta=%s"
                             ),
                         )
                         config = cached_config

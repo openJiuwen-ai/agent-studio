@@ -1125,6 +1125,8 @@ class IRConverter:
             agent_id=agent_id_in_config,
             skill_dir=skill_dir,
             skill_info=skill_info,
+            ir_path=ir_data.get("ir_path"),
+            is_published=ir_data.get("is_published", False),
         )
 
     @staticmethod

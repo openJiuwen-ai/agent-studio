@@ -87,8 +87,8 @@ class CacheUtils:
                 self.memory_cache.currsize, self.memory_cache.maxsize,
                 self.should_serialize,
                 simple_log=(
-                    "L1_MEM_PUT_OK: cache_name=%s, key=%s, "
-                    "value_id=%s, will_serialize=%s"
+                    "L1_MEM_PUT_OK: cache_name=%s, key=%s, value_type=%s, "
+                    "value_id=%s, size=%s/%s, will_serialize=%s"
                 ),
             )
             if self.should_serialize:
@@ -134,7 +134,7 @@ class CacheUtils:
                 self.memory_cache.currsize, self.memory_cache.maxsize
             )
         except Exception as e:
-            logger.error(f"cache pop error, exception {e}", exc_info=True)
+            logger.error(f"cache put error, exception {e}", exc_info=True)
 
     async def aget(self, key: str, should_refresh_ttl: bool = False) -> Any:
         """根据key读元素，顺序memory->redis"""
@@ -146,7 +146,7 @@ class CacheUtils:
                     "L1_MEM_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s",
                     self.cache_name, unique_key, type(value).__name__, id(value),
                     simple_log=(
-                        "L1_MEM_HIT: cache_name=%s, key=%s, value_id=%s"
+                        "L1_MEM_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s"
                     ),
                 )
                 self._update_memory_cache(unique_key, value)
@@ -235,7 +235,7 @@ class CacheUtils:
             self.cache_name, key, type(value).__name__, id(value),
             before_size, self.memory_cache.maxsize,
             simple_log=(
-                "MEM_PUT: cache_name=%s, key=%s, value_type=%s, value_id=%s, before_size=%s"
+                "MEM_PUT: cache_name=%s, key=%s, value_type=%s, value_id=%s, before_size=%s/%s"
             ),
         )
         expire_time = (
@@ -249,7 +249,7 @@ class CacheUtils:
             self.cache_name, key, id(value),
             self.memory_cache.currsize, self.memory_cache.maxsize,
             simple_log=(
-                "MEM_PUT_DONE: cache_name=%s, key=%s, value_id=%s, after_size=%s"
+                "MEM_PUT_DONE: cache_name=%s, key=%s, value_id=%s, after_size=%s/%s"
             ),
         )
 
@@ -270,7 +270,7 @@ class CacheUtils:
                 "MEM_GET_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s, reason=no_expire",
                 self.cache_name, key, type(data).__name__, id(data),
                 simple_log=(
-                    "MEM_GET_HIT: cache_name=%s, key=%s, value_id=%s, reason=no_expire"
+                    "MEM_GET_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s, reason=no_expire"
                 ),
             )
             return data
@@ -279,7 +279,7 @@ class CacheUtils:
             logger.debug(
                 "MEM_GET_MISS: cache_name=%s, key=%s, reason=expired, expire_time=%s",
                 self.cache_name, key, cached_value.get('expire_time'),
-                simple_log="MEM_GET_MISS: cache_name=%s, key=%s, reason=expired",
+                simple_log="MEM_GET_MISS: cache_name=%s, key=%s, reason=expired, expire_time=%s",
             )
             return None
         data = cached_value["data"]
@@ -287,7 +287,7 @@ class CacheUtils:
             "MEM_GET_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s",
             self.cache_name, key, type(data).__name__, id(data),
             simple_log=(
-                "MEM_GET_HIT: cache_name=%s, key=%s, value_id=%s"
+                "MEM_GET_HIT: cache_name=%s, key=%s, value_type=%s, value_id=%s"
             ),
         )
         return data
