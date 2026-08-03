@@ -103,7 +103,7 @@ class MemberInstanceManager:
                     os.environ.get(AGENT_CACHE_ENABLE_KEY, '<unset>'),
                     config.is_published, member_id, config.ir_path, self._conversation_id,
                     simple_log=(
-                        "sub_agent cache check: cache_enabled=%s, env=%s, "
+                        "sub_agent cache check: cache_enabled=%s, env=%s=%s, "
                         "is_published=%s, member_id=%s, ir_path=%s, conversation_id=%s"
                     ),
                 )
