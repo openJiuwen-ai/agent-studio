@@ -1,0 +1,14 @@
+# -*- coding: utf-8 -*-
+[project]
+name = "customer-header"
+version = "0.1.0"
+description = "agent-studio 客户 Header 改写规则引擎共享层（agent_runtime / agent_builder / model_service 共用）"
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["customer_header*"]

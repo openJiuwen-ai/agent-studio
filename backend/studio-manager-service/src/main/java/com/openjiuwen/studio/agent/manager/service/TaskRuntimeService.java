@@ -7,6 +7,14 @@ package com.openjiuwen.studio.agent.manager.service;
 import com.alibaba.fastjson2.JSON;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.alibaba.fastjson2.JSONObject;
+import com.openjiuwen.studio.agent.common.customerheader.AsyncTaskContextSnapshot;
+import com.openjiuwen.studio.agent.common.customerheader.CapturedCustomerHeaders;
+import com.openjiuwen.studio.agent.common.customerheader.ExecutionIdentityContext;
+import com.openjiuwen.studio.agent.common.customerheader.InvalidPlatformTokenException;
+import com.openjiuwen.studio.agent.common.customerheader.PlatformAuthProtocolException;
+import com.openjiuwen.studio.agent.common.customerheader.PlatformAuthServiceUnavailableException;
+import com.openjiuwen.studio.agent.common.customerheader.PlatformPrincipal;
+import com.openjiuwen.studio.agent.common.customerheader.PlatformPrincipalResolver;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
 import com.openjiuwen.studio.agent.common.dto.agent.Status;
 import com.openjiuwen.studio.agent.common.dto.run.TaskStatus;
@@ -67,11 +75,6 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Service
 public class TaskRuntimeService {
-    /**
-     * redis存header key
-     */
-    private static final String REDIS_HEADER_KEY = "agent:runtime:async:header:%s";
-
     /**
      * redis存header key
      */
@@ -143,6 +146,12 @@ public class TaskRuntimeService {
     @Autowired
     private AgentServiceProxyService agentServiceProxyService;
 
+    @Autowired
+    private AsyncTaskContextSnapshotStore snapshotStore;
+
+    @Autowired
+    private PlatformPrincipalResolver platformPrincipalResolver;
+
     @Value("${agent_runtime_endpoint:}")
     private String runtimeEndpoint;
 
@@ -210,6 +219,8 @@ public class TaskRuntimeService {
                 // 如当前任务仍在执行，需取消任务
                 expireIds.forEach(this::cancelTask);
                 asyncTaskMapper.deleteByIds(expireIds);
+                // 过期清理同步删 Redis 单信封快照（生命周期）
+                expireIds.forEach(snapshotStore::delete);
             } else {
                 log.warn("failed to get clear lock");
             }
@@ -255,22 +266,20 @@ public class TaskRuntimeService {
         });
     }
 
-    private ExecuteParams buildExecuteParams(TaskEntity entity) {
-        // 从redis读取用户header，并新增透传超时header
-        String headerStr = redisClient.get(String.format(REDIS_HEADER_KEY, entity.getId()));
+    private ExecuteParams buildExecuteParams(TaskEntity entity, AsyncTaskContextSnapshot snapshot) {
+        // 透传超时 header + 平台 X-Auth-Token（来自快照真实平台 Token，经 resolveOrThrow 重新解析过）
         HttpHeaders httpHeaders = new HttpHeaders();
         Integer timeout = entity.getTimeout() != null ? entity.getTimeout() : DEFAULT_TIMEOUT_MILLISECONDS;
-        if (!StringUtils.isEmpty(headerStr)) {
-            Map<String, String> headers = JsonUtils.json2Obj(headerStr, new TypeReference<>() { });
-            if (headers != null) {
-                headers.put(KEEP_ALIVE, String.format(TIMEOUT_VALUE, timeout));
-                headers.forEach(httpHeaders::add);
-            }
-        } else {
-            httpHeaders.add(KEEP_ALIVE, String.format(TIMEOUT_VALUE, timeout));
-        }
+        httpHeaders.add(KEEP_ALIVE, String.format(TIMEOUT_VALUE, timeout));
         // 异步任务以debug模式运行，确保runtime发送WORKFLOW_NODE_MESSAGE事件（包含节点执行详情）
         httpHeaders.set("X-Invoke-Mode", "debug");
+        String platformToken = snapshot.identity() != null ? snapshot.identity().platformToken() : null;
+        if (StringUtils.isNotEmpty(platformToken)) {
+            httpHeaders.set("X-Auth-Token", platformToken);
+        }
+        // 客户 header 由 executeWorkflow 中 setCustomerHeaders 写入 ThreadLocal，
+        // 经 stream 的 applyOutboundHeaders（AGENT_RUNTIME_INBOUND boundary）投影，不放入 httpHeaders
+        String effectiveUserId = snapshot.identity() != null ? snapshot.identity().effectiveUserId() : null;
         // 根据是否发布决定appVersion是发布态或编辑态时间
         Long version = null;
         String releaseVersion = null;
@@ -295,8 +304,8 @@ public class TaskRuntimeService {
                 .conversationId(entity.getConversationId())
                 .version(version)
                 .releasedVersion(releaseVersion)
-                .userId(entity.getUserId())
-                .inputsUserId(entity.getUserId())
+                .userId(effectiveUserId)          //  从快照 effectiveUserId（cust-userid 或平台回退），不从 taskEntity.getUserId
+                .inputsUserId(effectiveUserId)    //  同上
                 .httpHeaders(httpHeaders)
                 .asyncTaskParamHolder(new AsyncTaskParamHolder(true, timeout))
                 .build();
@@ -320,41 +329,82 @@ public class TaskRuntimeService {
         }
     }
 
-    private void executeWorkflow(TaskEntity taskEntity) {
-        // 工作流开始运行
-        ExecuteParams executeParams = buildExecuteParams(taskEntity);
-        try {
-            if ("simple".equals(envType)) {
-                String authToken = taskEntity.getUserId() + "|" + taskEntity.getProjectId();
-                RequestContextUtils.setRequestAuthTokenAndUserId(authToken, taskEntity.getProjectId(),
-                        taskEntity.getUserId());
-            } else {
-                String authToken = "";
-                RequestContextUtils.setRequestAuthTokenAndUserId(authToken, taskEntity.getProjectId(),
-                        taskEntity.getUserId());
-            }
-        } catch (Exception e) {
-            log.error("Call get-agency-token api exception.", e);
+    /**
+     * 标记任务失败并持久化— 快照缺失/Resolver 失败/执行异常的统一兜底。
+     * 日志/message 不含平台 Token。
+     *
+     * @param taskEntity 任务实体（会被设置 FAILED 状态 + message）
+     * @param message   失败描述
+     */
+    private void markTaskFailed(TaskEntity taskEntity, String message) {
+        if (taskEntity.getStartTime() == null) {
             taskEntity.setStartTime(new Date(System.currentTimeMillis()));
-            taskEntity.setStatus(TaskStatus.FAILED.getValue());
-            taskEntity.setMessage(i18nUtil.getMessage(StudioError.ASYNC_TASK_ACCOUNT_FAILED));
-            asyncTaskMapper.updateByPrimaryKey(taskEntity);
+        }
+        taskEntity.setUpdateTime(new Date(System.currentTimeMillis()));
+        taskEntity.setStatus(TaskStatus.FAILED.getValue());
+        taskEntity.setMessage(message);
+        asyncTaskMapper.updateByPrimaryKey(taskEntity);
+    }
+
+    private void executeWorkflow(TaskEntity taskEntity) {
+        // 加载单信封快照（platformToken + effectiveUserId + 客户 header）
+        AsyncTaskContextSnapshot snapshot = snapshotStore.load(taskEntity.getId());
+        if (snapshot == null || snapshot.identity() == null) {
+            log.error("[customer-header] Async task {} context snapshot missing or schema mismatch", taskEntity.getId());
+            markTaskFailed(taskEntity, i18nUtil.getMessage(StudioError.ASYNC_TASK_EXECUTE_FAILED,
+                "async context snapshot missing or schema mismatch"));
             return;
         }
-
-        // 更新状态为执行中
-        Date startTime = new Date(System.currentTimeMillis());
-        taskEntity.setStartTime(startTime);
-        taskEntity.setUpdateTime(startTime);
-        taskEntity.setStatus(TaskStatus.RUNNING.getValue());
-        asyncTaskMapper.updateByPrimaryKey(taskEntity);
-
-        // 透传参数绑定连接池，便于取消任务时手动释放连接池
-        taskEventSource.put(taskEntity.getId(), executeParams.getAsyncTaskParamHolder());
+        // 经 PlatformPrincipalResolver 重新解析平台 Token（不拼 taskEntity.userId|projectId）
+        final PlatformPrincipal principal;
+        try {
+            principal = platformPrincipalResolver.resolveOrThrow(snapshot.identity().platformToken());
+        } catch (InvalidPlatformTokenException e) {
+            log.error("[customer-header] Async task {} platform token invalid/expired", taskEntity.getId());
+            markTaskFailed(taskEntity, i18nUtil.getMessage(StudioError.ASYNC_TASK_ACCOUNT_FAILED));
+            return;
+        } catch (PlatformAuthServiceUnavailableException e) {
+            log.error("[customer-header] Async task {} platform auth service unavailable", taskEntity.getId());
+            markTaskFailed(taskEntity, i18nUtil.getMessage(StudioError.ASYNC_TASK_EXECUTE_FAILED,
+                "platform auth service unavailable, manual resume required"));
+            return;
+        } catch (PlatformAuthProtocolException e) {
+            log.error("[customer-header] Async task {} platform auth protocol error", taskEntity.getId());
+            markTaskFailed(taskEntity, i18nUtil.getMessage(StudioError.ASYNC_TASK_ACCOUNT_FAILED));
+            return;
+        }
+        String effectiveUserId = snapshot.identity().effectiveUserId();
+        if (StringUtils.isEmpty(effectiveUserId)) {
+            // 回退平台 userId
+            effectiveUserId = principal.userId();
+        }
 
         WorkflowRunResult result = null;
         AsyncWorkflowListener listener = null;
         try {
+            // 重建执行身份上下文 + 客户 header（供 stream 的 applyOutboundHeaders 经 ThreadLocal 读取）
+            RequestContextUtils.setIdentityContext(new ExecutionIdentityContext(principal, effectiveUserId));
+            // IAM 上下文（平台视图，供非执行模块 getRequestAuthToken/getRequestUserId 读取）
+            RequestContextUtils.setRequestAuthTokenAndUserId(snapshot.identity().platformToken(),
+                taskEntity.getProjectId(), principal.userId());
+            if (snapshot.execution() != null && snapshot.execution().customerHeaders() != null) {
+                RequestContextUtils.setCustomerHeaders(
+                    CapturedCustomerHeaders.from(snapshot.execution().customerHeaders()));
+            }
+
+            // 工作流开始运行：buildExecuteParams 从快照 effectiveUserId（不从 taskEntity.getUserId）
+            ExecuteParams executeParams = buildExecuteParams(taskEntity, snapshot);
+
+            // 更新状态为执行中
+            Date startTime = new Date(System.currentTimeMillis());
+            taskEntity.setStartTime(startTime);
+            taskEntity.setUpdateTime(startTime);
+            taskEntity.setStatus(TaskStatus.RUNNING.getValue());
+            asyncTaskMapper.updateByPrimaryKey(taskEntity);
+
+            // 透传参数绑定连接池，便于取消任务时手动释放连接池
+            taskEventSource.put(taskEntity.getId(), executeParams.getAsyncTaskParamHolder());
+
             // 通过流式通道调用runtime，AsyncWorkflowListener在manager侧保存调试记录并捕获消息内容
             listener = createAsyncListener(executeParams);
             result = callWorkflowViaStream(executeParams, listener);
@@ -395,13 +445,16 @@ public class TaskRuntimeService {
             taskEntity.setMessage(
                     StrUtils.truncateText(i18nUtil.getMessage(StudioError.ASYNC_TASK_EXECUTE_FAILED, e.getMessage()),
                             MAX_ERROR_MESSAGE_SIZE));
+        } finally {
+            // 如不是用户取消导致的失败，刷新状态
+            if (taskFutures.get(taskEntity.getId()) != null) {
+                asyncTaskMapper.updateByPrimaryKey(taskEntity);
+            }
+            // 任务执行结果记录到会话历史（上下文仍在，可读 userId/token）
+            saveConversationHistory(taskEntity, result, listener);
+            // 请求/异常/线程复用后清理上下文（ThreadLocal 身份 + 客户 header + 投影追踪）
+            RequestContextUtils.remove();
         }
-        // 如不是用户取消导致的失败，刷新状态
-        if (taskFutures.get(taskEntity.getId()) != null) {
-            asyncTaskMapper.updateByPrimaryKey(taskEntity);
-        }
-        // 任务执行结果记录到会话历史
-        saveConversationHistory(taskEntity, result, listener);
     }
 
     /**
@@ -471,14 +524,14 @@ public class TaskRuntimeService {
      */
     private AsyncWorkflowListener createAsyncListener(ExecuteParams executeParams) {
         WorkflowRunResult result = initWorkflowRunResult(executeParams);
-        // requestId在异步线程中可能为null，WorkflowListener.processStart()会fallback到executionId
+        // requestId在异步线程中可能为null，WorkflowListener.processStart会fallback到executionId
         String requestId = org.slf4j.MDC.get("request-id");
         return new AsyncWorkflowListener(requestId, executeParams, result, executeParams.getHttpHeaders());
     }
 
     /**
      * 通过流式通道调用runtime工作流。
-     * 复用AgentServiceProxyService的stream()方法 + AsyncWorkflowListener，
+     * 复用AgentServiceProxyService的stream方法 + AsyncWorkflowListener，
      * AsyncWorkflowListener负责解析SSE事件并保存调试记录（insight）到Redis。
      *
      * @param executeParams 执行参数
@@ -501,7 +554,7 @@ public class TaskRuntimeService {
         org.slf4j.MDC.put(Constant.TASK_ID, executeParams.getExecutionId());
         executeParams.getHttpHeaders().set("X-Execution-Id", executeParams.getExecutionId());
 
-        // 4. 调用stream()发起SSE请求，AsyncWorkflowListener自动处理事件并保存调试记录
+        // 4. 调用stream发起SSE请求，AsyncWorkflowListener自动处理事件并保存调试记录
         agentServiceProxyService.stream(url, executeParams.getHttpHeaders(),
                 JsonUtils.toJson(reqBody), 900000L, listener);
 

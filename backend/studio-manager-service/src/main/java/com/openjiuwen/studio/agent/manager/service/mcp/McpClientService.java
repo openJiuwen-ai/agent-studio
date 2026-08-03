@@ -161,6 +161,9 @@ public class McpClientService {
             });
         }
 
+        // 调测出站前剥 cust- 前缀（与 LakeSearch  agent-runtime inject_customer_headers_to_mcp 同构）
+        McpCustomerHeaderProjection.renameOutboundCustomerHeaders(safeHeaders, mcpServiceName);
+
         // A. 添加所有用户自定义 Header (使用 forEach 替代 for loop)
         if (!safeHeaders.isEmpty()) {
             log.info("Adding custom headers to request.");

@@ -6,11 +6,19 @@
 请求级上下文 — 透传 HTTP 请求头和请求级参数到深层调用栈
 
 使用 contextvars 实现协程安全的请求作用域存储。
+
+改造：
+- customer_headers: 客户 header 分仓（cust-*，不含 x-auth-token）
+- platform_headers: 平台 header 分仓（X-Auth-Token 等）
+- platform_user_id: 独立保留平台 userId（Memory 用）
+- headers: 兼容字段，不含 customer_headers（防扩散到非目标调用）
 """
 
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
+
+from customer_header.types import HeaderValue
 
 
 @dataclass
@@ -28,6 +36,14 @@ class RequestContext:
     current_secret_field_names: dict = field(default_factory=dict)
     # 内容审核引擎实例（由请求入口设置，供审核节点读取）
     moderation_engine: Any = None
+
+    # ── 新增：客户 Header 分仓（provenance） ──
+    # 客户 header（cust-userid、cust-token），白名单捕获，不含 x-auth-token
+    customer_headers: Mapping[str, HeaderValue] = field(default_factory=dict)
+    # 平台 header（X-Auth-Token 等），独立分仓
+    platform_headers: dict = field(default_factory=dict)
+    # 平台 userId（独立保留，Memory 用，不被 cust-userid 覆盖）
+    platform_user_id: str = ""
 
 
 _request_ctx: ContextVar[RequestContext] = ContextVar(

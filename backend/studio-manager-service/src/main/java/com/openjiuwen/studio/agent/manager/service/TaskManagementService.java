@@ -6,6 +6,9 @@ package com.openjiuwen.studio.agent.manager.service;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.github.pagehelper.PageInfo;
+import com.openjiuwen.studio.agent.common.customerheader.AsyncExecutionSnapshot;
+import com.openjiuwen.studio.agent.common.customerheader.AsyncIdentitySnapshot;
+import com.openjiuwen.studio.agent.common.customerheader.CapturedCustomerHeaders;
 import com.openjiuwen.studio.agent.common.dto.agent.Message;
 import com.openjiuwen.studio.agent.common.dto.run.*;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
@@ -18,26 +21,14 @@ import com.openjiuwen.studio.agent.manager.dto.ConversationParams;
 import com.openjiuwen.studio.agent.manager.entity.TaskEntity;
 import com.openjiuwen.studio.agent.manager.enums.MessageRole;
 import com.openjiuwen.studio.agent.manager.mapper.AsyncTaskMapper;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * 任务管理面service
@@ -46,11 +37,6 @@ import java.util.UUID;
 @Slf4j
 @Service
 public class TaskManagementService implements ITaskManagementService {
-    /**
-     * redis存header key
-     */
-    private static final String REDIS_HEADER_KEY = "agent:runtime:async:header:%s";
-
     @Autowired
     AsyncTaskMapper asyncTaskMapper;
 
@@ -62,6 +48,9 @@ public class TaskManagementService implements ITaskManagementService {
 
     @Autowired
     ConversationHistoryService conversationHistoryService;
+
+    @Autowired
+    AsyncTaskContextSnapshotStore snapshotStore;
 
     /**
      * 异步任务超期时间，建议调试记录超期时间保持一致
@@ -111,9 +100,14 @@ public class TaskManagementService implements ITaskManagementService {
         String conversationId = UUID.randomUUID().toString();
         Date currentTime = new Date(System.currentTimeMillis());
 
-        // 任务header存入redis
-        redisClient.set(String.format(REDIS_HEADER_KEY, taskId), JSONObject.toJSONString(getNonSensitiveHeader()),
-                Duration.ofDays(taskAsyncExpireDays));
+        // 单信封快照先写（platformToken + effectiveUserId + 客户 header），DB 后插；DB 失败删快照
+        AsyncIdentitySnapshot identity = new AsyncIdentitySnapshot(
+            RequestContextUtils.getPlatformAuthToken(),
+            RequestContextUtils.getEffectiveExecutionUserId());
+        CapturedCustomerHeaders captured = RequestContextUtils.getCustomerHeaders();
+        AsyncExecutionSnapshot execution = new AsyncExecutionSnapshot(
+            captured != null ? captured.asMap() : java.util.Collections.emptyMap());
+        snapshotStore.save(taskId, identity, execution);
 
         if (body.getInputs() != null) {
             setUserQueryToHistory(workflowId, conversationId, currentTime, JSONObject.toJSONString(body.getInputs()),
@@ -143,27 +137,14 @@ public class TaskManagementService implements ITaskManagementService {
                 .createTime(currentTime)
                 .updateTime(currentTime)
                 .build();
-        asyncTaskMapper.createEntity(taskEntity);
-        return convertEntityToRsp(taskEntity);
-    }
-
-    private Map<String, String> getNonSensitiveHeader() {
-        Map<String, String> headers = new HashMap<>();
-        ServletRequestAttributes servletRequestAttributes
-                = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (servletRequestAttributes != null) {
-            HttpServletRequest request = servletRequestAttributes.getRequest();
-            Enumeration<String> headerNames = request.getHeaderNames();
-
-            // 遍历并过滤非敏感header存redis
-            while (headerNames.hasMoreElements()) {
-                String headerName = headerNames.nextElement();
-                String headerValue = request.getHeader(headerName);
-                // Include all headers for async task execution
-                headers.put(headerName, headerValue);
-            }
+        try {
+            asyncTaskMapper.createEntity(taskEntity);
+        } catch (Exception e) {
+            // DB 插入失败：删 Redis 快照（补偿，防快照残留）
+            snapshotStore.delete(taskId);
+            throw e;
         }
-        return headers;
+        return convertEntityToRsp(taskEntity);
     }
 
     @Override
@@ -172,6 +153,8 @@ public class TaskManagementService implements ITaskManagementService {
         CommonDeleteRsp commonDeleteRsp = new CommonDeleteRsp().setId(taskId);
         if (!StringUtils.isEmpty(taskEntity.getId())) {
             asyncTaskMapper.deleteByIds(Collections.singletonList(taskId));
+            // 删任务同步删 Redis 单信封快照（生命周期）
+            snapshotStore.delete(taskId);
         }
         return commonDeleteRsp;
     }
@@ -199,9 +182,8 @@ public class TaskManagementService implements ITaskManagementService {
     @Override
     public TaskRsp resumeTask(String projectId, String workflowId, String taskId, String workspaceId,
                               ResumeTaskReq body) {
-        // 任务header存入redis
-        redisClient.set(String.format(REDIS_HEADER_KEY, taskId), JSONObject.toJSONString(getNonSensitiveHeader()),
-                Duration.ofDays(taskAsyncExpireDays));
+        // -3.6：resume 保持创建者身份，不重写快照（如未来要求恢复操作者接管，
+        // 须原子更新 platformToken+effectiveUserId+customerHeaders 三类并记审计，不能只改 header）
 
         TaskEntity taskEntity = getTaskEntityById(projectId, workflowId, taskId, workspaceId);
         if (StringUtils.isEmpty(taskEntity.getId())) {

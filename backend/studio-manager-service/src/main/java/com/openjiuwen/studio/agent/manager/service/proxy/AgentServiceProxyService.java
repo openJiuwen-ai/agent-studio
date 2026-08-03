@@ -612,11 +612,8 @@ public class AgentServiceProxyService {
         RequestBody body = RequestBody.create(bodyJson, MediaType.parse("application/json; charset=utf-8"));
 
         Request.Builder builder = new Request.Builder();
-        headers.forEach((key, value) -> {
-            if (value != null && !value.isEmpty()) {
-                builder.addHeader(key, String.join(",", value));
-            }
-        });
+        // 经 InternalRequestHeaderFactory 构造出站 header（平台可信生成覆盖客户同名）
+        applyOutboundHeaders(builder, headers);
 
         Request request = builder.url(url).post(body).build();
         EventSource.Factory factory = EventSources.createFactory(okHttpClientUtils.getHttpClient());
@@ -642,15 +639,55 @@ public class AgentServiceProxyService {
         return sseEmitter;
     }
 
+    /**
+     * 构造 OkHttp 出站 header— 经 InternalRequestHeaderFactory 合并
+     *
+     * <p>出站 header = 平台可信生成（来自入站 HttpHeaders）+ 客户 passthrough（来自 ThreadLocal 捕获），
+     * 平台生成值覆盖客户同名（规则2，防客户 header 注入平台协议 header）。
+     * 使用 OkHttp {@code header(name, value)}（set）语义保证覆盖。
+     * Profile 未启用 simple 模式时保持原行为：直接透传入站 header（业务语义不变）。
+     *
+     * @param builder OkHttp Request.Builder
+     * @param headers 入站平台 HttpHeaders
+     */
+    private void applyOutboundHeaders(Request.Builder builder, HttpHeaders headers) {
+        com.openjiuwen.studio.agent.common.customerheader.CapturedCustomerHeaders captured =
+            RequestContextUtils.getCustomerHeaders();
+        com.openjiuwen.studio.agent.common.customerheader.CustomerHeaderProfile profile =
+            SpringBeanUtils.getBean(com.openjiuwen.studio.agent.common.customerheader.CustomerHeaderProfile.class);
+
+        // generated = 平台可信生成 header（lower-case key，来自入站 HttpHeaders）
+        java.util.Map<String, String> generated = new java.util.LinkedHashMap<>();
+        if (headers != null) {
+            headers.forEach((key, value) -> {
+                if (value != null && !value.isEmpty()) {
+                    generated.put(key.toLowerCase(), String.join(",", value));
+                }
+            });
+        }
+
+        if (profile != null && profile.isEnabledInSimpleMode() && captured != null && !captured.isEmpty()) {
+            // Profile 启用 simple 模式：经 factory 合并客户 passthrough + 平台生成（平台覆盖客户同名）
+            com.openjiuwen.studio.agent.common.customerheader.InternalRequestHeaderFactory factory =
+                new com.openjiuwen.studio.agent.common.customerheader.InternalRequestHeaderFactory(
+                    new com.openjiuwen.studio.agent.common.customerheader.HeaderProjectionEngine(profile));
+            java.util.Map<String, String> outbound = factory.build(
+                com.openjiuwen.studio.agent.common.customerheader.InternalTarget.AGENT_RUNTIME_INBOUND,
+                captured, generated);
+            outbound.forEach((k, v) -> builder.header(k, v));
+            log.info("[customer-header] Outbound headers via factory: target=AGENT_RUNTIME_INBOUND, keys={}", outbound.keySet());
+        } else {
+            // Profile 未启用：保持原行为，直接透传入站 header（业务语义不变）
+            generated.forEach((k, v) -> builder.header(k, v));
+        }
+    }
+
     public Object stream(String url, HttpHeaders headers, String bodyJson, Long timeout, BaseEventListener listener) {
         RequestBody body = RequestBody.create(bodyJson, MediaType.parse("application/json; charset=utf-8"));
 
         Request.Builder builder = new Request.Builder();
-        headers.forEach((key, value) -> {
-            if (value != null && !value.isEmpty()) {
-                builder.addHeader(key, String.join(",", value));
-            }
-        });
+        // 经 InternalRequestHeaderFactory 构造出站 header（平台可信生成覆盖客户同名）
+        applyOutboundHeaders(builder, headers);
 
         Request request = builder.url(url).post(body).build();
         EventSource.Factory factory = EventSources.createFactory(okHttpClientUtils.getHttpClient());

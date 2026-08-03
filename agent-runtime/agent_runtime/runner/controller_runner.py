@@ -135,7 +135,16 @@ class ControllerRunner:
         # 3. Create Agent Group instance
         try:
             t_agent_group = time.perf_counter()
-            agent_group = await IRConverter.ir_to_agent_group(ir_json, session_id)
+            # 显式传 cust_headers/project_id 到 agent group 构建链
+            from agent_runtime.context.request_context import _request_ctx
+            _ctx = _request_ctx.get()
+            _cust_headers = _ctx.customer_headers if _ctx else {}
+            _project_id = _ctx.project_id if _ctx else ""
+            agent_group = await IRConverter.ir_to_agent_group(
+                ir_json, session_id,
+                cust_headers=_cust_headers,
+                project_id=_project_id,
+            )
             performance_logger.info(f"ir_to_agent_group|{round((time.perf_counter() - t_agent_group) * 1000)}")
         except Exception as e:
             workflow_logger.error(

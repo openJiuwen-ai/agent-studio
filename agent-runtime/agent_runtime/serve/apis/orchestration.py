@@ -15,6 +15,7 @@ from agent_runtime.common.ir_interfaces import (
     StorageConfigError,
     StorageReadError,
 )
+from agent_runtime.context.request_context import _request_ctx
 from agent_runtime.runner.controller_runner import ControllerRunner
 from agent_runtime.runner.react_agent_runner import ReActAgentRunner
 from agent_runtime.runner.workflow_runner import WorkflowRunner, ModelConfigStrategy
@@ -37,6 +38,8 @@ from agent_runtime.moderation.stream_moderation import (
     block_event_generator,
     init_moderation_from_ir,
 )
+from customer_header.engine import RESERVED_BLACKLIST
+from customer_header.profile import get_profile
 from storage import get_storage_provider
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
@@ -48,6 +51,61 @@ from openjiuwen.core.common.logging import workflow_logger
 from pydantic import ValidationError
 # 注：N2L chat 端点已随 agent_builder 抽离到 studio-builder 镜像（agent_builder/serve/apis/n2l_api.py），
 # runtime 不再 import agent_builder.nl_to_agent.nl2（避免 runtime→agent_builder 耦合）。
+
+#  全局安全修复：body header 默认不参与可信构造
+# 保留/客户 header 出现在 body → 400（拒绝，非忽略）
+_BODY_RESERVED_HEADERS = RESERVED_BLACKLIST | {
+    "x-auth-token", "authorization", "cust-userid", "cust-token",
+    "x-execution-id", "x-request-id", "x-invoke-mode", "x-workspace-id",
+    "x-owner-project-id", "x-auth-id", "x-deployment-id",
+}
+
+
+def _build_runtime_execution_headers(
+    platform_headers: dict,
+    customer_headers: dict,
+    body_headers: dict | None = None,
+    reject_reserved_body_headers: bool = True,
+) -> dict:
+    """构建运行时执行 header — 禁止 body 覆盖服务器认证/平台协议 Header
+
+     全局安全修复：body header 默认不参与可信构造。
+    保留/客户 header 出现在 body → 400（拒绝，非忽略）。
+
+    Args:
+        platform_headers: 平台 header（X-Auth-Token 等，服务器生成）
+        customer_headers: 客户 header（cust-*，入站白名单捕获）
+        body_headers: body 中的 header（不可信，默认拒绝保留/客户 header）
+        reject_reserved_body_headers: 是否拒绝 body 中的保留/客户 header
+
+    Returns:
+        合并后的执行 header 字典
+
+    Raises:
+        ValueError: body 包含保留/客户 header 时
+    """
+    result: dict[str, str] = {}
+
+    # 放入平台 header
+    for key, value in (platform_headers or {}).items():
+        if value:
+            result[key.lower()] = value
+
+    # 放入客户 header（cust-*，来自入站白名单）
+    for hv in (customer_headers or {}).values():
+        if hv.value:
+            result[hv.normalized_name] = hv.value
+
+    # 检查 body header 是否包含保留/客户 header
+    if body_headers and reject_reserved_body_headers:
+        for key in body_headers:
+            if key.lower() in _BODY_RESERVED_HEADERS:
+                raise ValueError(
+                    f"Body header '{key}' is reserved/customer header, "
+                    f"not allowed in request body"
+                )
+
+    return result
 
 
 execution_app = APIRouter(tags=["execution_app"])
@@ -142,7 +200,25 @@ async def ir_execute(req_json: dict, request: Request):
 
     try:
         req = ExecutionRequest.model_validate(req_json)
-        req.headers = {**request.headers, **req.headers}
+        #  全局安全修复：禁止 body 覆盖服务器认证/平台协议 Header
+        # 保留/客户 header 出现在 body → 400
+        request_ctx = _request_ctx.get()
+        try:
+            req.headers = _build_runtime_execution_headers(
+                platform_headers=request_ctx.platform_headers,
+                customer_headers=request_ctx.customer_headers,
+                body_headers=req.headers,
+                reject_reserved_body_headers=True,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "reserved_header_in_body", "details": str(e)},
+            )
+        # Profile 启用时服务器覆盖 effective userId 和 platform_user_id（防 body 伪造）
+        profile = get_profile()
+        if profile.is_enabled_in_simple_mode():
+            req.user_id = request_ctx.user_id
         req.params = prepare_params(req)
         req.params.global_variables = {
             "sys": {
@@ -293,9 +369,27 @@ async def stream_response(req: ExecutionRequest, execution_id: str, runner, mode
 
 @execution_app.post("/v1/orchestration/ir/component/{component_id}/execute")
 async def component_debug_execute(component_id: str, req_json: dict, request: Request):
-    """单组件调试端点"""
+    """单组件调试端点（：与普通执行一致 — body 安全 + effective userId 服务器覆盖）"""
     try:
         req = ComponentDebugRequest.model_validate(req_json)
+        # 禁止 body 覆盖服务器认证/平台协议 Header（与 ir_execute 同规则）
+        request_ctx = _request_ctx.get()
+        try:
+            req.headers = _build_runtime_execution_headers(
+                platform_headers=request_ctx.platform_headers,
+                customer_headers=request_ctx.customer_headers,
+                body_headers=req.headers,
+                reject_reserved_body_headers=True,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "reserved_header_in_body", "details": str(e)},
+            )
+        # Profile 启用时服务器覆盖 effective userId（防 body 伪造）
+        profile = get_profile()
+        if profile.is_enabled_in_simple_mode():
+            req.user_id = request_ctx.user_id
         req.params = prepare_params(req)
         req.params.global_variables = {
             "sys": {

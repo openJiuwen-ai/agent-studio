@@ -116,6 +116,93 @@ apps_map = [
 ]
 
 
+def _load_customer_header_profile() -> None:
+    """加载客户 Header 配置（docker-compose 注入环境变量）
+
+    runtime 是纯 pydantic-settings（env/.env），无 YAML；
+    通过 docker-compose 环境变量 CUSTOMER_HEADER_ENABLED 控制是否启用客户 Header 引擎。
+    也可通过 CUSTOMER_HEADER_YAML_PATH 指定完整 YAML 配置文件（覆盖 env 简化版）。
+    默认 enabled=false（ 向后兼容）。
+    """
+    from customer_header.profile import CustomerHeaderProfile, set_profile
+
+    # 优先从 YAML 文件加载完整配置（可选）
+    yaml_path = os.environ.get("CUSTOMER_HEADER_YAML_PATH", "")
+    if yaml_path and os.path.isfile(yaml_path):
+        logger.info(f"[customer-header] CUSTOMER_HEADER_YAML_PATH is active, loading from yaml file: {yaml_path}")
+        try:
+            profile = CustomerHeaderProfile.from_yaml(yaml_path)
+            # env 覆盖文件 enabled（部署级开关权威，与 Java Spring env 绑定一致）
+            env_enabled = os.environ.get("CUSTOMER_HEADER_ENABLED")
+            if env_enabled is not None:
+                profile = profile.model_copy(update={"enabled": env_enabled.lower() == "true"})
+            set_profile(profile)
+            logger.info(
+                f"[customer-header] Customer header profile loaded from YAML: {yaml_path}, "
+                f"enabled={profile.is_enabled_in_simple_mode()}"
+            )
+            return
+        except Exception as e:
+            logger.warning(f"[customer-header] Failed to load customer header profile from {yaml_path}: {e}")
+
+    # 从 docker-compose 注入的环境变量构建（简化版，核心字段）
+    # 环境变量名与 docker-compose.yml 中 studio-runtime.environment 一致
+    enabled = os.environ.get("CUSTOMER_HEADER_ENABLED", "false").lower() == "true"
+    if enabled:
+        profile = CustomerHeaderProfile.model_validate({
+            "enabled": True,
+            "environment": "simple",
+            "capture": {"customer-allow": ["cust-userid", "cust-token"]},
+            "boundary": {
+                "agent-runtime-inbound": {
+                    "customer-passthrough": ["cust-userid", "cust-token"]
+                }
+            },
+            "targets": {
+                "RUNTIME_LLM_CHAT": {
+                    "mappings": [
+                        {"from": "cust-userid", "to": "userid"},
+                        {"from": "cust-token", "to": "token"}
+                    ]
+                },
+                "RUNTIME_MCP_CALL": {
+                    "mappings": [
+                        {"from": "cust-userid", "to": "userid"},
+                        {"from": "cust-token", "to": "token"}
+                    ]
+                },
+                "RUNTIME_KB_CALL": {
+                    "mappings": [
+                        {"from": "cust-userid", "to": "userid"},
+                        {"from": "cust-token", "to": "token"}
+                    ]
+                }
+            }
+        })
+        set_profile(profile)
+        logger.info("[customer-header] Customer header profile loaded from env, enabled=True")
+    else:
+        set_profile(CustomerHeaderProfile())
+        logger.info("[customer-header] Customer header profile disabled (default)")
+
+
+def _register_customer_header_provider() -> None:
+    """注册独立 customer Header provider 到 model_service ports
+
+    runtime 宿主在启动时注册，使 model_service.client._invoke_one_model
+    能通过 ports.get_request_customer_headers() 获取当前请求的客户 Header。
+    """
+    from model_service import ports
+    from agent_runtime.context.request_context import _request_ctx
+
+    def _get_customer_headers():
+        ctx = _request_ctx.get()
+        return ctx.customer_headers if ctx else {}
+
+    ports.set_request_customer_headers(_get_customer_headers)
+    logger.info("[customer-header] Customer header provider registered to model_service ports")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
     """define startup and shutdown logic here"""
@@ -147,6 +234,10 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
 
     # 注册 LLM 调用日志回调 — 打印模型请求体和响应内容
     register_llm_call_logging_callbacks()
+
+    # 加载客户 Header Profile 配置 + 注册 customer Header provider
+    _load_customer_header_profile()
+    _register_customer_header_provider()
 
     # 初始化 Redis 客户端
     redis_mgr = RedisClientManager.get_instance()
@@ -199,7 +290,7 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
         logger.warning(f"S3 async storage client initialization failed (non-critical): {e}")
 
     # 注册 flow_code 专用的 SysOperation（local mode）
-    # 注意：当 LOCAL_CODE_EXEC_MODE=inprocess（默认）时，代码节点使用进程内 exec() 执行，
+    # 注意：当 LOCAL_CODE_EXEC_MODE=inprocess（默认）时，代码节点使用进程内 exec 执行，
     # 不依赖此 sys_operation。仅 LOCAL_CODE_EXEC_MODE=subprocess 时才会使用。
     sys_op_id = "flow_code_sys_op"
     if Runner.resource_mgr.get_sys_operation(sys_op_id) is None:

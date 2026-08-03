@@ -139,18 +139,20 @@ build_and_save_images() {
     rm -rf "${DOCKER_DIR}/studio-builder/agent_builder" \
            "${DOCKER_DIR}/studio-builder/model_service" \
            "${DOCKER_DIR}/studio-builder/storage"\
-           "${DOCKER_DIR}/studio-builder/common_utils"
+           "${DOCKER_DIR}/studio-builder/common_utils" \
+           "${DOCKER_DIR}/studio-builder/customer_header"
     cp -rf "${PROJECT_DIR}/agent_builder" "${DOCKER_DIR}/studio-builder/agent_builder"
     cp -rf "${PROJECT_DIR}/packages/model_service/model_service" "${DOCKER_DIR}/studio-builder/model_service"
     cp -rf "${PROJECT_DIR}/packages/storage/storage" "${DOCKER_DIR}/studio-builder/storage"
     cp -rf "${PROJECT_DIR}/packages/common_utils/common_utils" "${DOCKER_DIR}/studio-builder/common_utils"
+    cp -rf "${PROJECT_DIR}/packages/customer_header/customer_header" "${DOCKER_DIR}/studio-builder/customer_header"
     cd "${DOCKER_DIR}/studio-builder"
     if ! docker build --build-arg BASE_IMAGE="${BASE_IMAGE_PYTHON}" \
         -t "studio-builder:${IMAGE_TAG}" .; then
-        rm -rf agent_builder model_service storage common_utils
+        rm -rf agent_builder model_service storage common_utils customer_header
         return 1
     fi
-    rm -rf agent_builder model_service storage common_utils
+    rm -rf agent_builder model_service storage common_utils customer_header
 
     log_info "[5/5] 构建内置 VictoriaLogs 数据源的 Grafana 镜像..."
     local grafana_image="openjiuwen/grafana-victorialogs:11.3.0-0.29.0"
@@ -226,6 +228,9 @@ copy_configs() {
     # nginx.conf
     mkdir -p "${OUTPUT_DIR}/config"
     cp "${DEPLOY_DIR}/config/nginx.conf" "${OUTPUT_DIR}/config/"
+
+    # customer-header.yml
+    cp "${DEPLOY_DIR}/config/customer-header.yml" "${OUTPUT_DIR}/config/"
 
     # L1 日志聚合配置
     cp "${DEPLOY_DIR}/config/vector.yaml" "${OUTPUT_DIR}/config/"

@@ -1127,10 +1127,14 @@ class IRConverter:
         )
 
     @staticmethod
-    async def create_all_agents_config_list(root_ir_data, conversation_id):
+    async def create_all_agents_config_list(root_ir_data, conversation_id, cust_headers=None, project_id=""):
         """
         Create All agents config: List[AgentConfig]
+
+        cust_headers 和 project_id 从请求上下文传入，不再硬编码为空。
         """
+        if cust_headers is None:
+            cust_headers = {}
         all_configs: List[AgentConfig] = []
         agent_info_map: Dict[str, Dict[str, Any]] = {}
 
@@ -1201,8 +1205,8 @@ class IRConverter:
             if model_configs:
                 llm = await IRConverter._create_llm_model(
                     model_configs,
-                    cust_headers={},
-                    project_id="",
+                    cust_headers=cust_headers,
+                    project_id=project_id,
                     identifiers=_LLMModelIdentifiers(
                         task_id=task_id,
                         conversation_id=conversation_id,
@@ -1240,9 +1244,11 @@ class IRConverter:
         return all_configs, agent_info_map
 
     @staticmethod
-    async def create_agent_group_config(root_ir_data, conversation_id):
+    async def create_agent_group_config(root_ir_data, conversation_id, cust_headers=None, project_id=""):
         """
         Create agent group configuration from root IR data with cache
+
+        cust_headers 和 project_id 从请求上下文传入。
         """
         # 首先尝试从缓存获取
         cache_key = root_ir_data.get("ir_path", "")
@@ -1268,7 +1274,7 @@ class IRConverter:
             )
 
         agents_all, agent_info_map = await IRConverter.create_all_agents_config_list(
-            root_ir_data, conversation_id
+            root_ir_data, conversation_id, cust_headers=cust_headers, project_id=project_id
         )
         max_agent_calls = root_ir_data.get("max_agent_calls", 10)
         if (
@@ -1453,7 +1459,11 @@ class IRConverter:
         (
             agent_group_config,
             agent_info_map,
-        ) = await IRConverter.create_agent_group_config(root_ir_data, conversation_id)
+        ) = await IRConverter.create_agent_group_config(
+            root_ir_data, conversation_id,
+            cust_headers=kwargs.get("cust_headers"),
+            project_id=kwargs.get("project_id", ""),
+        )
         agent_group = await IRConverter.create_or_restore_agent_group(
             agent_group_config, conversation_id
         )

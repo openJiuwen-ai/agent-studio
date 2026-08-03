@@ -7,15 +7,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+
+import com.openjiuwen.studio.agent.common.customerheader.CustomerHeaderProfile;
+import com.openjiuwen.studio.agent.common.customerheader.PlatformPrincipalResolver;
 
 public class FilterConfigTest {
 
     private FilterConfig filterConfig;
+    private PlatformPrincipalResolver mockResolver;
+    private CustomerHeaderProfile mockProfile;
 
     @BeforeEach
     void setUp() {
         filterConfig = new FilterConfig();
+        mockResolver = Mockito.mock(PlatformPrincipalResolver.class);
+        mockProfile = new CustomerHeaderProfile();
     }
 
     @Test
@@ -42,7 +50,8 @@ public class FilterConfigTest {
 
     @Test
     void testSimpleUserContextFilter_ReturnsRegistrationBean() {
-        FilterRegistrationBean<SimpleUserContextFilter> result = filterConfig.simpleUserContextFilter();
+        FilterRegistrationBean<SimpleUserContextFilter> result = filterConfig.simpleUserContextFilter(
+            mockResolver, mockProfile);
 
         assertNotNull(result);
         assertNotNull(result.getFilter());
@@ -54,7 +63,8 @@ public class FilterConfigTest {
     @Test
     void testSimpleAuthFilter_OrderLessThanUserContextFilter() {
         FilterRegistrationBean<SimpleAuthFilter> authFilter = filterConfig.simpleAuthFilter();
-        FilterRegistrationBean<SimpleUserContextFilter> userContextFilter = filterConfig.simpleUserContextFilter();
+        FilterRegistrationBean<SimpleUserContextFilter> userContextFilter = filterConfig.simpleUserContextFilter(
+            mockResolver, mockProfile);
 
         assertTrue(authFilter.getOrder() < userContextFilter.getOrder());
     }
@@ -62,7 +72,8 @@ public class FilterConfigTest {
     @Test
     void testSidToTokenFilter_OrderLessThanUserContextFilter() {
         FilterRegistrationBean<SidToTokenFilter> sidFilter = filterConfig.filter();
-        FilterRegistrationBean<SimpleUserContextFilter> userContextFilter = filterConfig.simpleUserContextFilter();
+        FilterRegistrationBean<SimpleUserContextFilter> userContextFilter = filterConfig.simpleUserContextFilter(
+            mockResolver, mockProfile);
 
         assertTrue(sidFilter.getOrder() < userContextFilter.getOrder());
     }

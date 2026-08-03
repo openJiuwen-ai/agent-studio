@@ -867,3 +867,10 @@ task:
     max-execute-milliseconds: ${task_async_max_execute_milliseconds:172800000}
     execute-lock-key: ${task_async_execute_lock_key:async_execute_lock}
     clear-lock-key: ${task_async_clear_lock_key:async_clear_lock}
+
+# 客户 Header 改写规则引擎配置（设计  主方案：共享配置源）
+# 本块已外移到 deploy/config/customer-header.yml（studio-manager / studio-runtime / studio-builder
+# 三服务共享，文件内标注每项的「读取方」微服务）。
+# 部署时由 docker-compose 挂载该文件并通过 SPRING_CONFIG_IMPORT 导入（见 deploy/docker-compose.yml）。
+# 部署级开关：env CUSTOMER_HEADER_ENABLED（覆盖文件值，权威优先）。
+# 本地开发若需启用：设置 SPRING_CONFIG_IMPORT=optional:file:./deploy/config/customer-header.yml。

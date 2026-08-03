@@ -146,7 +146,7 @@ async def embed(model, auth, request) -> object:
         await client.close()
 
 
-async def rerank(model, auth, request) -> dict:
+async def rerank(model, auth, request, projected_headers: Optional[dict] = None) -> dict:
     """rerank 入口，供 agent-builder ``/v1/agent-builder/rerank`` facade 调用。
 
     移植自 Java ``MaasRerankRequestAdaptor`` + ``AbstractRequestAdapter.resBodyConvert``：
@@ -155,6 +155,8 @@ async def rerank(model, auth, request) -> dict:
     - POST 到 ``model.api_url``（verbatim，``get_chat_connection`` 已做 ``/chat/completions`` 兜底裁剪，
       rerank URL 无此后缀故为 no-op）。
     - 鉴权：``API_KEY`` → ``Authorization: Bearer <api_key>``；``CUSTOM_APIKEY`` → ``auth_info`` 各项作为自定义头。
+    - ``projected_headers`` 为 facade 预投影的 customer rename（``cust→userid/token``，设计 
+      显式传入，dispatch 不依赖宿主请求上下文）；静态认证优先，customer 仅补未冲突项。
     - 响应后处理：``results`` 按 ``index`` 升序排序（null 置后），截断到 ``top_n``，其余字段原样保留。
     """
     conn = get_chat_connection(model, auth)
@@ -166,6 +168,12 @@ async def rerank(model, auth, request) -> dict:
     else:
         # API_KEY：标准 Bearer 鉴权
         headers["Authorization"] = f"Bearer {conn.api_key}"
+    #  合并 customer rename（cust→userid/token），静态优先（防覆盖 Authorization/Content-Type）
+    if projected_headers:
+        existing_lower = {k.lower() for k in headers}
+        for key, value in projected_headers.items():
+            if key.lower() not in existing_lower:
+                headers[key] = value
 
     body = {
         "model": conn.model_name,

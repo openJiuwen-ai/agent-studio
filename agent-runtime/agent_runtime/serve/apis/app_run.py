@@ -548,7 +548,12 @@ async def _execute_node_run(
     workflow_logger.debug(f"Built IR path: {ir_path}")
 
     instance_id = ctx.workflow_id
-    user_id = body.user_id or _request_ctx.get().user_id
+    # Profile 启用时使用 ctx.user_id（effective userId，不让 body 优先）
+    from customer_header.profile import get_profile
+    if get_profile().is_enabled_in_simple_mode():
+        user_id = _request_ctx.get().user_id
+    else:
+        user_id = body.user_id or _request_ctx.get().user_id
     version_id = ""
     request.state.user_id = user_id
     request.state.version_id = version_id

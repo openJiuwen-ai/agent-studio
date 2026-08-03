@@ -149,6 +149,8 @@ services:
     volumes:
       # 日志聚合：暴露 Java 日志供 Vector 采集（可选，见 ./deploy.sh logging）
       - manager_logs:/opt/cloud/studio-manager/logs
+      # 客户 Header 共享配置：由 SPRING_CONFIG_IMPORT 导入，@ConfigurationProperties 绑定
+      - ./config/customer-header.yml:/opt/cloud/studio-manager/config/customer-header.yml:ro
     environment:
       spring_datasource_url: ${SPRING_DATASOURCE_URL:-}
       spring_datasource_username: ${SPRING_DATASOURCE_USERNAME:-}
@@ -185,6 +187,10 @@ services:
       knowledge_lakeSearch_auth_mode: ${KNOWLEDGE_LAKESEARCH_AUTH_MODE:-basic}
       # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
       auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
+      # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true
+      customer_header_enabled: ${CUSTOMER_HEADER_ENABLED:-false}
+      # 导入共享 customer-header.yml（customer-header 配置已外移到 deploy/config/）
+      spring_config_import: optional:file:/opt/cloud/studio-manager/config/customer-header.yml
     depends_on:
       mysql:
         condition: service_healthy
@@ -212,6 +218,8 @@ services:
     volumes:
       # 日志聚合：暴露 Python/NGINX 日志供 Vector 采集（可选，见 ./deploy.sh logging）
       - runtime_logs:/opt/cloud/logs
+      # 客户 Header 共享配置：由 CUSTOMER_HEADER_YAML_PATH 加载（serve/server.py from_yaml）
+      - ./config/customer-header.yml:/opt/cloud/agent-runtime/config/customer-header.yml:ro
     environment:
       REDIS_HOST: ${REDIS_HOST:-}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
@@ -278,6 +286,10 @@ services:
       STORE_DB_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-123456}
       STORE_DB_DATABASE: ${STORE_DB_DATABASE:-agent-builder}
       STORE_DB_SSLMODE: ${STORE_DB_SSLMODE:-disable}
+      # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true
+      CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
+      # 加载共享 customer-header.yml（env CUSTOMER_HEADER_ENABLED 覆盖文件值，权威优先）
+      CUSTOMER_HEADER_YAML_PATH: /opt/cloud/agent-runtime/config/customer-header.yml
     depends_on:
       redis:
         condition: service_healthy
@@ -304,6 +316,8 @@ services:
       - "${BUILDER_PORT:-31015}:31015"
     volumes:
       - builder_logs:/opt/cloud/logs
+      # 客户 Header 共享配置： 待实现；request_context_bridge 将按此路径加载
+      - ./config/customer-header.yml:/opt/cloud/agent-builder/config/customer-header.yml:ro
     environment:
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 31015
@@ -334,6 +348,10 @@ services:
       LOGGING_LOG_PATH: /opt/cloud/logs/agent-builder
       LOG_VERBOSE: ${LOG_VERBOSE:-true}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true（前置）
+      CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
+      # 加载共享 customer-header.yml（待实现；env 覆盖文件 enabled，权威优先）
+      CUSTOMER_HEADER_YAML_PATH: /opt/cloud/agent-builder/config/customer-header.yml
     depends_on:
       mysql:
         condition: service_healthy

@@ -4,8 +4,10 @@
 
 package com.openjiuwen.studio.agent.common.filter.simple;
 
+import com.openjiuwen.studio.agent.common.customerheader.CustomerHeaderProfile;
+import com.openjiuwen.studio.agent.common.customerheader.PlatformPrincipalResolver;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -41,10 +43,13 @@ public class FilterConfig {
     }
 
     @Bean
-    public FilterRegistrationBean<SimpleUserContextFilter> simpleUserContextFilter() {
+    public FilterRegistrationBean<SimpleUserContextFilter> simpleUserContextFilter(
+            PlatformPrincipalResolver platformPrincipalResolver,
+            CustomerHeaderProfile customerHeaderProfile) {
         FilterRegistrationBean<SimpleUserContextFilter> filterRegistrationBean =
             new FilterRegistrationBean<SimpleUserContextFilter>();
-        filterRegistrationBean.setFilter(new SimpleUserContextFilter());
+        filterRegistrationBean.setFilter(
+            new SimpleUserContextFilter(platformPrincipalResolver, customerHeaderProfile));
         filterRegistrationBean.addUrlPatterns("/*");
         filterRegistrationBean.setOrder(Integer.MIN_VALUE + 1); // 在SidToTokenFilter之后执行
         return filterRegistrationBean;

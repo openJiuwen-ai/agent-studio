@@ -255,6 +255,8 @@ function copy_builder_sources() {
   cp -r ${WORKSPACE}/packages/storage/storage "${STAGE_BUILDER}/storage"
   echo "[BUILD] 复制 common_utils 到构建上下文: ${STAGE_BUILDER}"
   cp -r ${WORKSPACE}/packages/common_utils/common_utils "${STAGE_BUILDER}/common_utils"
+  echo "[BUILD] 复制 customer_header 到构建上下文: ${STAGE_BUILDER}"
+  cp -r ${WORKSPACE}/packages/customer_header/customer_header "${STAGE_BUILDER}/customer_header"
   # 清理不需要的文件以减小构建上下文
   rm -rf ${STAGE_BUILDER}/agent_builder/.git ${STAGE_BUILDER}/agent_builder/tests \
          ${STAGE_BUILDER}/agent_builder/docs ${STAGE_BUILDER}/agent_builder/.venv \
@@ -267,7 +269,7 @@ function copy_builder_sources() {
 # 构建完成后清理 builder 构建上下文中的临时源码（保留已提交的 Dockerfile）
 function cleanup_builder_sources() {
   local STAGE_BUILDER=${DOCKER_DIR}/studio-builder
-  for sub in agent_builder model_service storage common_utils; do
+  for sub in agent_builder model_service storage common_utils customer_header; do
     if [ -d "${STAGE_BUILDER}/${sub}" ]; then
       echo "[BUILD] 清理构建上下文中的 ${sub}: ${STAGE_BUILDER}/${sub}"
       rm -rf "${STAGE_BUILDER}/${sub}"

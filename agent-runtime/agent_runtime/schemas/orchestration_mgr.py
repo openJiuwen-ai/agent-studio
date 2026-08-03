@@ -110,6 +110,8 @@ class ConversationHistoryMessage(BaseModel):
 class ExecutionRequest(BaseModel):
     conversation_id: str = Field(min_length=1, alias="conversationId")
     user_id: str = Field(default="anonymous", alias="userId")
+    # 平台 userId 独立保留（Memory 用，不被 cust-userid 覆盖）
+    platform_user_id: str = Field(default="", alias="platformUserId")
     ir_path: str = Field(default="__mvp_mock__", alias="irPath")
     params: ExecutionParams = Field(default_factory=ExecutionParams)
     headers: Optional[dict] = Field(default={})

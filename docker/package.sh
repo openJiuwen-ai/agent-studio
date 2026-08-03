@@ -121,6 +121,9 @@ function runtime_copy() {
   rm -rf ${RUNTIME_TARGET_PATH}/common_utils
   cp -rf ${WORKSPACE}/packages/common_utils/common_utils ${RUNTIME_TARGET_PATH}/common_utils
 
+  rm -rf ${RUNTIME_TARGET_PATH}/customer_header
+  cp -rf ${WORKSPACE}/packages/customer_header/customer_header ${RUNTIME_TARGET_PATH}/customer_header
+
   rm -rf ${RUNTIME_TARGET_PATH}/bin
   cp -rf ${RUNTIME_TARGET_PATH}/script ${RUNTIME_TARGET_PATH}/bin
 
@@ -177,6 +180,9 @@ function clean() {
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/common_utils" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/common_utils
+  fi
+  if [ -d "${WORKSPACE}/docker/studio-runtime/customer_header" ]; then
+    rm -rf ${WORKSPACE}/docker/studio-runtime/customer_header
   fi
   if [ -d "${WORKSPACE}/docker/studio-runtime/bin" ]; then
     rm -rf ${WORKSPACE}/docker/studio-runtime/bin

@@ -177,8 +177,10 @@ class _FakeClient:
     def __init__(self, payload, status=200):
         self.resp = _FakeResp(payload, status)
         self.closed = False
+        self.posted_headers = None
 
     async def post(self, url, **kwargs):
+        self.posted_headers = kwargs.get("headers")
         return self.resp
 
     async def aclose(self):
@@ -334,6 +336,170 @@ def test_check_auth_headers_no_auth_adds_no_authorization():
     headers = _check_auth_headers("NO_AUTH", {})
     assert "Authorization" not in headers
     assert headers["Content-Type"] == "application/json"
+
+
+def test_build_chat_headers_renames_cust_to_userid_token():
+    """ BUILDER_LLM_CHAT rename — cust-userid/cust-token → userid/token，静态认证保留。"""
+    from customer_header.profile import CustomerHeaderProfile, set_profile
+    from customer_header.types import HeaderValue
+    from model_service import ports
+    from agent_builder.adapter.request_context_bridge import (
+        get_request_customer_headers, _request_ctx, RequestContext,
+    )
+    from agent_builder.serve.apis.model_service_api import _build_chat_headers
+
+    set_profile(CustomerHeaderProfile.model_validate({
+        "enabled": True,
+        "environment": "simple",
+        "boundary": {"agent-builder-inbound": {"customer-passthrough": ["cust-userid", "cust-token"]}},
+        "targets": {"BUILDER_LLM_CHAT": {"mappings": [
+            {"from": "cust-userid", "to": "userid"},
+            {"from": "cust-token", "to": "token"}]}},
+    }))
+    ports.set_request_customer_headers(get_request_customer_headers)
+
+    captured = {
+        "cust-userid": HeaderValue.customer_captured("cust-userid", "test-user-42"),
+        "cust-token": HeaderValue.customer_captured("cust-token", "test-tok"),
+    }
+    token = _request_ctx.set(RequestContext(customer_headers=captured))
+    try:
+        class _Conn:
+            custom_headers = None
+            api_key = "sk-model"
+
+        class _Auth:
+            auth_type = "API_KEY"
+        headers = _build_chat_headers(_Conn(), _Auth())
+    finally:
+        _request_ctx.reset(token)
+        set_profile(CustomerHeaderProfile)  # 复位，避免污染其它测试
+
+    # 静态认证保留（未被投影黑名单误删）
+    assert headers["Authorization"] == "Bearer sk-model"
+    assert headers["Content-Type"] == "application/json"
+    #  rename：cust-* → userid/token
+    assert headers["userid"] == "test-user-42"
+    assert headers["token"] == "test-tok"
+    # cust-* 原名不应再出现（已 rename）
+    assert "cust-userid" not in headers
+    assert "cust-token" not in headers
+
+
+def test_build_chat_headers_profile_off_keeps_static_only():
+    """ Profile 未启用时不 rename，仅静态认证，业务语义不变。"""
+    from customer_header.profile import CustomerHeaderProfile, set_profile
+    from customer_header.types import HeaderValue
+    from model_service import ports
+    from agent_builder.adapter.request_context_bridge import (
+        get_request_customer_headers, _request_ctx, RequestContext,
+    )
+    from agent_builder.serve.apis.model_service_api import _build_chat_headers
+
+    set_profile(CustomerHeaderProfile)  # disabled
+    ports.set_request_customer_headers(get_request_customer_headers)
+
+    captured = {"cust-userid": HeaderValue.customer_captured("cust-userid", "x")}
+    token = _request_ctx.set(RequestContext(customer_headers=captured))
+    try:
+        class _Conn:
+            custom_headers = None
+            api_key = "sk-model"
+
+        class _Auth:
+            auth_type = "API_KEY"
+        headers = _build_chat_headers(_Conn(), _Auth())
+    finally:
+        _request_ctx.reset(token)
+
+    assert headers["Authorization"] == "Bearer sk-model"
+    assert "userid" not in headers
+    assert "token" not in headers
+
+
+def test_build_model_headers_embed_target_renames_cust():
+    """ BUILDER_MODEL_EMBEDDING rename — cust-* → userid/token（embed 内联 httpx 调用点）。"""
+    from customer_header.profile import CustomerHeaderProfile, set_profile
+    from customer_header.target import InternalTarget
+    from customer_header.types import HeaderValue
+    from model_service import ports
+    from agent_builder.adapter.request_context_bridge import (
+        get_request_customer_headers, _request_ctx, RequestContext,
+    )
+    from agent_builder.serve.apis.model_service_api import _build_model_headers
+
+    set_profile(CustomerHeaderProfile.model_validate({
+        "enabled": True,
+        "environment": "simple",
+        "targets": {"BUILDER_MODEL_EMBEDDING": {"mappings": [
+            {"from": "cust-userid", "to": "userid"},
+            {"from": "cust-token", "to": "token"}]}},
+    }))
+    ports.set_request_customer_headers(get_request_customer_headers)
+
+    captured = {
+        "cust-userid": HeaderValue.customer_captured("cust-userid", "emb-user"),
+        "cust-token": HeaderValue.customer_captured("cust-token", "emb-tok"),
+    }
+    token = _request_ctx.set(RequestContext(customer_headers=captured))
+    try:
+        class _Conn:
+            custom_headers = None
+            api_key = "sk-emb"
+
+        class _Auth:
+            auth_type = "API_KEY"
+        headers = _build_model_headers(_Conn(), _Auth(), InternalTarget.BUILDER_MODEL_EMBEDDING)
+    finally:
+        _request_ctx.reset(token)
+        set_profile(CustomerHeaderProfile)  # 复位
+
+    assert headers["Authorization"] == "Bearer sk-emb"
+    assert headers["Content-Type"] == "application/json"
+    assert headers["userid"] == "emb-user"
+    assert headers["token"] == "emb-tok"
+    assert "cust-userid" not in headers
+
+
+def test_rerank_merges_projected_customer_headers(monkeypatch):
+    """ dispatch.rerank(..., projected_headers=...) 把 cust→userid/token 合并进上游请求头。"""
+    from model_service import dispatch
+
+    model, auth = _make_model_auth  # auth_type=API_KEY → Bearer sk-test
+    payload = {"results": [{"index": 0, "document": {"text": "a"}, "relevance_score": 0.9}]}
+    fake = _FakeClient(payload)
+    monkeypatch.setattr(dispatch, "build_httpx_client", lambda *a, **kw: fake)
+    req = types.SimpleNamespace(query="q", docs=["a"], top_n=1)
+
+    projected = {"userid": "rnk-user", "token": "rnk-tok"}
+    asyncio.run(dispatch.rerank(model, auth, req, projected_headers=projected))
+
+    posted = {k.lower(): v for k, v in (fake.posted_headers or {}).items()}
+    # 静态认证保留
+    assert posted["authorization"] == "Bearer sk-test"
+    assert posted["content-type"] == "application/json"
+    #  customer rename 合并（静态优先，未冲突项补入）
+    assert posted["userid"] == "rnk-user"
+    assert posted["token"] == "rnk-tok"
+    assert fake.closed
+
+
+def test_rerank_without_projected_headers_keeps_static_only(monkeypatch):
+    """ dispatch.rerank 无 projected_headers 时仅静态认证（向后兼容，旧调用方不受影响）。"""
+    from model_service import dispatch
+
+    model, auth = _make_model_auth()
+    payload = {"results": [{"index": 0, "document": {"text": "a"}, "relevance_score": 0.9}]}
+    fake = _FakeClient(payload)
+    monkeypatch.setattr(dispatch, "build_httpx_client", lambda *a, **kw: fake)
+    req = types.SimpleNamespace(query="q", docs=["a"], top_n=1)
+
+    asyncio.run(dispatch.rerank(model, auth, req))  # no projected_headers → 旧签名
+
+    posted = {k.lower(): v for k, v in (fake.posted_headers or {}).items()}
+    assert posted["authorization"] == "Bearer sk-test"
+    assert "userid" not in posted
+    assert "token" not in posted
 
 
 def _check_req(model_type="LLM", auth_type="API_KEY", **overrides):

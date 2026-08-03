@@ -53,8 +53,17 @@ class ReactWorkflowAdapter(Tool):
         session_id = kwargs.get("session_id", str(uuid.uuid4()))
         session = create_workflow_session(session_id=session_id)
         wf_inputs = self._convert_inputs(inputs)
-        # R-02: per-call 新建 workflow 实例 → 各自独立 _session/_graph → 并发 stream() 不竞写
-        wf_instance = await IRConverter.async_ir_to_workflow(self._ir_data)
+        # R-02: per-call 新建 workflow 实例 → 各自独立 _session/_graph → 并发 stream 不竞写
+        # 每次 invoke 取当前调用上下文的 customer headers（禁止固化首请求 Header）
+        from agent_runtime.context.request_context import _request_ctx
+        _ctx = _request_ctx.get()
+        _cust_headers = _ctx.customer_headers if _ctx else {}
+        _project_id = _ctx.project_id if _ctx else ""
+        wf_instance = await IRConverter.async_ir_to_workflow(
+            self._ir_data,
+            cust_headers=_cust_headers,
+            project_id=_project_id,
+        )
 
         final_answer = None
         fallback_result = None

@@ -24,6 +24,7 @@ from urllib.parse import urlparse
 
 from openai import AsyncOpenAI
 
+from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm.model_clients.openai_model_client import OpenAIModelClient
 from openjiuwen.core.runner.callback import trigger
 from openjiuwen.core.runner.callback.events import LLMCallEvents
@@ -238,7 +239,7 @@ class StudioModelClient(OpenAIModelClient):
                                              f"model service not found: {inputs.model_service_id}")
         audit = self._new_audit(strategy, inputs, stream=True)
         start = time.monotonic()
-        # invoke_with_strategy 返回解析后的 chunk 异步迭代器；连接级错误在 await create() 时抛出，
+        # invoke_with_strategy 返回解析后的 chunk 异步迭代器；连接级错误在 await create 时抛出，
         # 可被 policy 循环 failover；流中途错误不重试（与 Java 一致）。
         chunk_iter = await policy.invoke_with_strategy(
             strategy,
@@ -288,8 +289,28 @@ class StudioModelClient(OpenAIModelClient):
             messages=messages, tools=tools, temperature=temperature, top_p=top_p,
             model=conn.model_name, stop=stop, max_tokens=max_tokens, stream=stream, **kwargs,
         )
-        if conn.custom_headers:
-            params["extra_headers"] = conn.custom_headers
+        # 从独立 customer Header provider 取值并执行 RUNTIME_LLM_CHAT 投影
+        # 不得从兼容 ctx.headers 取 customer 值（该字段不含 customer_headers）
+        from customer_header.engine import resolve_outbound_headers
+        from customer_header.target import InternalTarget
+        from model_service import ports as _ports
+        captured = _ports.get_request_customer_headers()
+        auth_type = getattr(detail.auth, "auth_type", "") or ""
+        projected = resolve_outbound_headers(
+            target=InternalTarget.RUNTIME_LLM_CHAT,
+            auth_type=auth_type,
+            config_headers=conn.custom_headers,
+            captured_headers=captured,
+        )
+        # projected 已含静态认证（config_headers 经投影）+ 客户 rename；
+        # 不得回退 raw conn.custom_headers（会绕过投影/发原始 cust-*）
+        if projected:
+            params["extra_headers"] = projected
+        workflow_logger.info(
+            f"[customer-header] LLM customer header rename: target=RUNTIME_LLM_CHAT, auth_type={auth_type}, "
+            f"captured_keys={list(captured.keys()) if captured else []}, "
+            f"projected_keys={list(projected.keys()) if projected else []}"
+        )
         # return_token_ids 需放入 body 供 vLLM（对应父类处理）。
         if "return_token_ids" in params:
             extra_body = dict(params.get("extra_body") or {})

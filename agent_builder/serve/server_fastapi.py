@@ -89,13 +89,103 @@ def _register_model_service_ports() -> None:
     import storage
     from model_service import ports
     from agent_builder.adapter.config_bridge import settings
-    from agent_builder.adapter.request_context_bridge import get_request_headers
+    from agent_builder.adapter.request_context_bridge import (
+        get_request_headers, get_request_customer_headers,
+    )
 
     ports.set_storage_provider(storage.get_storage_provider)
     ports.set_llm_settings(lambda: settings.llm)
     ports.set_request_headers(get_request_headers)
+    # 注册独立 customer Header provider（强类型，不退化为无 provenance 的 dict）
+    ports.set_request_customer_headers(get_request_customer_headers)
     ports.set_cache_queues(None, None)
-    logger.info("model_service ports registered (storage/llm/request-headers; cache disabled)")
+    logger.info("[customer-header] model_service ports registered (storage/llm/request-headers/customer-headers; cache disabled)")
+
+
+def _load_customer_header_profile() -> None:
+    """加载客户 Header 配置（与 agent_runtime serve/server.py 同范式）。
+
+    优先从 ``CUSTOMER_HEADER_YAML_PATH`` 加载共享 YAML（设计 ）；env
+    ``CUSTOMER_HEADER_ENABLED`` 覆盖文件 enabled（权威优先，与 Java Spring env 绑定一致）。
+    无 YAML 时按 env 简化版构建（builder 侧 BUILDER_LLM_CHAT）。
+    默认 enabled=false（ 向后兼容）。
+    """
+    import os
+    from customer_header.profile import CustomerHeaderProfile, set_profile
+
+    yaml_path = os.environ.get("CUSTOMER_HEADER_YAML_PATH", "")
+    if yaml_path and os.path.isfile(yaml_path):
+        try:
+            profile = CustomerHeaderProfile.from_yaml(yaml_path)
+            env_enabled = os.environ.get("CUSTOMER_HEADER_ENABLED")
+            if env_enabled is not None:
+                profile = profile.model_copy(update={"enabled": env_enabled.lower() == "true"})
+            set_profile(profile)
+            logger.info(
+                f"[customer-header] Customer header profile loaded from YAML: {yaml_path}, "
+                f"enabled={profile.is_enabled_in_simple_mode()}"
+            )
+            return
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[customer-header] Failed to load customer header profile from {yaml_path}: {e}")
+
+    enabled = os.environ.get("CUSTOMER_HEADER_ENABLED", "false").lower() == "true"
+    if enabled:
+        profile = CustomerHeaderProfile.model_validate({
+            "enabled": True,
+            "environment": "simple",
+            "capture": {"customer-allow": ["cust-userid", "cust-token"]},
+            "boundary": {
+                "agent-builder-inbound": {
+                    "customer-passthrough": ["cust-userid", "cust-token"]
+                }
+            },
+            "targets": {
+                "BUILDER_LLM_CHAT": {
+                    "mappings": [
+                        {"from": "cust-userid", "to": "userid"},
+                        {"from": "cust-token", "to": "token"}
+                    ]
+                }
+            }
+        })
+        set_profile(profile)
+        logger.info("[customer-header] Customer header profile loaded from env, enabled=True")
+    else:
+        set_profile(CustomerHeaderProfile())
+        logger.info("[customer-header] Customer header profile disabled (default)")
+
+
+def _capture_customer_headers(request: Request) -> dict:
+    """按 Profile 白名单捕获客户 header（cust-*，不含 x-auth-token provenance 分仓）。
+
+    读取 ``boundary.agent-builder-inbound.customer-passthrough`` 白名单（设计 ）；
+    Profile 未启用时返回空 dict（ 业务语义不变）。
+    """
+    try:
+        from customer_header.profile import get_profile
+        from customer_header.target import InternalTarget
+        from customer_header.types import HeaderValue
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"[customer-header] customer_header package unavailable, skip capture: {e}")
+        return {}
+
+    profile = get_profile()
+    if not profile.is_enabled_in_simple_mode():
+        return {}
+    allow_list = profile.get_boundary_passthrough(InternalTarget.AGENT_BUILDER_INBOUND)
+
+    result: dict = {}
+    for name in allow_list:
+        value = request.headers.get(name) or request.headers.get(name.lower())
+        if value:
+            hv = HeaderValue.customer_captured(name, value)
+            result[hv.normalized_name] = hv
+    logger.info(
+        f"[customer-header] Inbound customer header capture: target=AGENT_BUILDER_INBOUND, "
+        f"allow_list={allow_list}, captured_keys={list(result.keys())}"
+    )
+    return result
 
 
 @asynccontextmanager
@@ -108,6 +198,7 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
     await _init_prompt_store()
     await _ping_redis()
     await _init_s3_storage()
+    _load_customer_header_profile()
     _register_model_service_ports()
     try:
         yield
@@ -152,7 +243,10 @@ def instance_app() -> FastAPI:
                 "X-Auth-Id": _h("X-Auth-Id"),
                 "X-Auth-Token": _h("X-Auth-Token"),
                 "X-Deployment-Id": _h("X-Deployment-Id"),
-            }
+            },
+            # 按 boundary.agent-builder-inbound.customer-passthrough 白名单捕获 cust-*
+            # （不含 x-auth-token，平台认证 header 独立分仓）。供 invoke_one 做 BUILDER_LLM_CHAT rename。
+            customer_headers=_capture_customer_headers(request),
         )
         token = _request_ctx.set(ctx)
         try:
