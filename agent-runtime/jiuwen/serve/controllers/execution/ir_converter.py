@@ -1346,7 +1346,7 @@ class IRConverter:
             os.environ.get(AGENT_CACHE_ENABLE_KEY, '<unset>'),
             agent_config.is_published, agent_config.ir_path, conversation_id,
             simple_log=(
-                "agent cache check: cache_enabled=%s, env=%s, "
+                "agent cache check: cache_enabled=%s, env=%s=%s, "
                 "is_published=%s, ir_path=%s, conversation_id=%s"
             ),
         )
