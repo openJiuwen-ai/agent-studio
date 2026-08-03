@@ -33,6 +33,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openjiuwen.studio.agent.agentbase.service.KnowledgeBaseServiceImpl;
 import com.openjiuwen.studio.agent.common.constant.Constants;
+import com.openjiuwen.studio.agent.common.customerheader.CustomerHeaderProfile;
 import com.openjiuwen.studio.agent.common.dto.auth.AuthInfo;
 import com.openjiuwen.studio.agent.common.enums.CredentialType;
 import com.openjiuwen.studio.agent.common.enums.KnowledgeSourceEnum;
@@ -495,6 +496,9 @@ public class IrAdapterService {
 
     @Value("${agent-builder.agent-manager.domain:}")
     private String managerEndpoint;
+
+    @Autowired
+    private CustomerHeaderProfile customerHeaderProfile;
 
     @Autowired
     private MappingMapper mappingMapper;
@@ -3107,7 +3111,13 @@ public class IrAdapterService {
     }
 
     /**
-     * 获取知识库插件的鉴权信息
+     * 获取知识库插件的鉴权信息（IR auth_keys 确定性声明）
+     *
+     * <p>Profile 启用（simple 模式）时，auth_keys 由 Profile 的 IR_AUTH_KEYS forward-list
+     * 确定性声明（cust-userid/cust-token/X-Auth-Token 三个 header 名，不存值），不读当次发布请求。
+     * 这是相对老“按请求存在性写入”的迁移变化（非完全等价，设计）。
+     *
+     * <p>Profile 未启用时保持原有业务语义：CUSTOM 源按请求存在性声明 cust-*、始终声明 X-Auth-Token。
      *
      * @return 鉴权信息IR
      */
@@ -3116,8 +3126,30 @@ public class IrAdapterService {
         authUserConfig.setScope(AuthInfo.ScopeEnum.USER.toString());
         AuthUserConfig.Info authInfo = new AuthUserConfig.Info();
         authInfo.setDomain(HEADERS);
+        authInfo.setAuthKeys(resolveRetrievalAuthKeys());
+        authUserConfig.setSource(authInfo);
+        authUserConfig.setTarget(authInfo);
+        return authUserConfig;
+    }
+
+    /**
+     * 解析知识库检索 auth_keys
+     *
+     * <p>Profile 启用且 IR_AUTH_KEYS forward-list 非空 → 确定性返回 forward-list（不读当次请求）；
+     * 否则回退原 per-request 行为（业务语义不变）。
+     *
+     * @return auth_keys header 名列表
+     */
+    private List<String> resolveRetrievalAuthKeys() {
         List<String> params = new ArrayList<>();
-        if (KnowledgeSourceEnum.CUSTOM.toString().equalsIgnoreCase(knowledgeSource)) {
+        if (customerHeaderProfile != null && customerHeaderProfile.isEnabled()) {
+            // 配置启用时：使用 capture keys + X-Auth-Token
+            String[] captureKeys = customerHeaderProfile.getCaptureAllowList();
+            for (String key : captureKeys) {
+                params.add(key);
+            }
+        } else if (KnowledgeSourceEnum.CUSTOM.toString().equalsIgnoreCase(knowledgeSource)) {
+            // 向后兼容：Profile 未启用时，保持原有 CUSTOM 模式
             HttpHeaders header = RequestContextUtils.getHeader();
             if (!CollectionUtils.isEmpty(header.get(Constants.CustomModel.CUSTOM_USER_ID))) {
                 params.add(CommonConstant.CustomModel.CUSTOM_USER_ID);
@@ -3127,10 +3159,7 @@ public class IrAdapterService {
             }
         }
         params.add(CommonConstant.X_AUTH_TOKEN);
-        authInfo.setAuthKeys(params);
-        authUserConfig.setSource(authInfo);
-        authUserConfig.setTarget(authInfo);
-        return authUserConfig;
+        return params;
     }
 
     // 解析复杂节点
