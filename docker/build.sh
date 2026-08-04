@@ -11,7 +11,7 @@ set -xe
 BASE_IMAGE_JAVA="eclipse-temurin:17-jre"
 # java基础镜像 (公共标准镜像，yum-based，for runtime)
 # nginx基础镜像
-BASE_IMAGE_NGINX="nginx:1.27"
+BASE_IMAGE_NGINX="nginx:1.28"
 # python基础镜像 (预编译Python 3.11)
 BASE_IMAGE_PYTHON="python:3.11-slim"
 # 镜像名
