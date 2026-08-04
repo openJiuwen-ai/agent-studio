@@ -340,8 +340,9 @@ cache_agent_queue = CacheUtils(
     cache_name="agent",
     redis_ttl=settings.cache.cache_ttl_seconds,
 )
-# 系统级 AgentConfig 单例缓存：key=ir_path，跨会话共享引用
-# 配置层不可变，Agent 实例从中组装，避免重复 IR 反序列化与配置重建
+# 会话级 AgentConfig 缓存：key=f"{conversation_id}:{ir_path}"
+# AgentConfig 内含会话绑定字段（task_id、model/plugins 层 session_id），
+# 不得跨会话共享，否则会造成会话标识串线（R07-0804）
 cache_agent_config = CacheUtils(
     capacity=settings.cache.max_agent_cache_num,
     should_serialize=True,

@@ -1320,9 +1320,9 @@ class IRConverter:
         """
         Create a new agent or restore from saved state.
 
-        两层缓存设计：
-        - cache_agent_config (key=ir_path)：AgentConfig 单例，跨会话共享引用
-        - cache_agent_queue (key=f"{conversation_id}:{ir_path}")：会话级 Agent 实例，跨会话隔离
+        两层缓存设计（key 均含 conversation_id，跨会话隔离）：
+        - cache_agent_config (key=f"{conversation_id}:{ir_path}")：会话级 AgentConfig 缓存
+        - cache_agent_queue (key=f"{conversation_id}:{ir_path}")：会话级 Agent 实例
         """
         cache_enabled = (
             str(os.environ.get(AGENT_CACHE_ENABLE_KEY, "false")).lower() == "true"
@@ -1353,34 +1353,37 @@ class IRConverter:
             ),
         )
 
-        # 二级缓存：AgentConfig 单例（跨会话共享，key=ir_path）
+        # 会话级缓存 key（含 conversation_id）：AgentConfig 内含会话绑定字段
+        # （task_id、model/plugins 层 session_id），不得跨会话共享
+        agent_session_key = f"{conversation_id}:{agent_config.ir_path}"
+
+        # 二级缓存：会话级 AgentConfig 缓存（key=f"{conversation_id}:{ir_path}"）
         if cache_enabled:
             cached_config = await timed_cache_op(
                 "Agent config retrieval",
-                cache_agent_config.aget(agent_config.ir_path),
-                agent_config.ir_path,
+                cache_agent_config.aget(agent_session_key),
+                agent_session_key,
             )
             if cached_config is not None:
                 agent_config = cached_config
                 logger.debug(
-                    "agent_config cache hit: ir_path=%s",
-                    agent_config.ir_path,
-                    simple_log="agent_config cache hit: ir_path=%s",
+                    "agent_config cache hit: session_key=%s",
+                    agent_session_key,
+                    simple_log="agent_config cache hit: session_key=%s",
                 )
             else:
                 await timed_cache_op(
                     "Caching agent config",
-                    cache_agent_config.aput(agent_config.ir_path, agent_config),
-                    agent_config.ir_path,
+                    cache_agent_config.aput(agent_session_key, agent_config),
+                    agent_session_key,
                 )
                 logger.debug(
-                    "agent_config cache miss+put: ir_path=%s",
-                    agent_config.ir_path,
-                    simple_log="agent_config cache miss+put: ir_path=%s",
+                    "agent_config cache miss+put: session_key=%s",
+                    agent_session_key,
+                    simple_log="agent_config cache miss+put: session_key=%s",
                 )
 
         # 一级缓存：会话级 Agent 实例（key 含 conversation_id 实现跨会话隔离）
-        agent_session_key = f"{conversation_id}:{agent_config.ir_path}"
         agent = None
         if cache_enabled:
             agent = await timed_cache_op(

@@ -108,12 +108,16 @@ class MemberInstanceManager:
                     ),
                 )
 
-                # 二级缓存：AgentConfig 单例（跨会话共享，key=ir_path）
+                # 会话级缓存 key（含 conversation_id）：AgentConfig 内含会话绑定字段
+                # （task_id、model/plugins 层 session_id），不得跨会话共享
+                agent_session_key = f"{self._conversation_id}:{config.ir_path}"
+
+                # 二级缓存：会话级 AgentConfig 缓存（key=f"{conversation_id}:{ir_path}"）
                 if cache_enabled:
                     cached_config = await timed_cache_op(
                         "Sub-agent config retrieval",
-                        cache_agent_config.aget(config.ir_path),
-                        config.ir_path,
+                        cache_agent_config.aget(agent_session_key),
+                        agent_session_key,
                     )
                     if cached_config is not None:
                         logger.debug(
@@ -136,8 +140,8 @@ class MemberInstanceManager:
                     else:
                         await timed_cache_op(
                             "Caching sub-agent config",
-                            cache_agent_config.aput(config.ir_path, config),
-                            config.ir_path,
+                            cache_agent_config.aput(agent_session_key, config),
+                            agent_session_key,
                         )
                         logger.debug(
                             "sub_agent config cache miss+put: member_id=%s, ir_path=%s",
@@ -147,7 +151,6 @@ class MemberInstanceManager:
 
                 # 一级缓存：会话级 Agent 实例
                 # key=f"{conversation_id}:{ir_path}" 实现 B/A 会话隔离
-                agent_session_key = f"{self._conversation_id}:{config.ir_path}"
                 agent_instance = None
                 if cache_enabled:
                     agent_instance = await timed_cache_op(
