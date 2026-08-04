@@ -609,9 +609,9 @@ class ControllerPlanner(TaskPlanner):
 
             if (
                 detected_intent_name
-                in self.intention_detect_module.agent_name_2_category_map
+                in self.intention_detect_module.category_2_child_id_map
             ):
-                logger.info(f"Detected agent handoff name: {detected_intent_name}")
+                logger.info(f"Detected agent handoff: {detected_intent_name}")
                 return self._get_handle_handoff_agent_intent(
                     detected_intent_name, message
                 )
@@ -750,22 +750,25 @@ class ControllerPlanner(TaskPlanner):
             return message.content.get("workflow_type") == WorkflowType.START
         return False
 
-    def _get_handle_handoff_agent_intent(self, detected_intent_name, message):
-        """处理agent handoff意图
+    def _get_handle_handoff_agent_intent(self, detected_intent_class, message):
+        """处理agent handoff意图(A.1:按 child.id 路由,不经 name first-match)
 
         Args:
-            detected_intent_name: 检测到的agent handoff意图名称
+            detected_intent_class: 检测到的agent handoff意图 category(分类N,每 child 唯一)
             message: 消息对象
 
         Returns:
             处理结果，可能是任务或None
         """
-        logger.info(f"Processing agent handoff intent: {detected_intent_name}")
+        logger.info(f"Processing agent handoff intent: {detected_intent_class}")
 
-        # 从配置中找到对应的子agent配置
-        if self.plan_config.child_agents_metadata:
+        # A.1(C-09): category → child.id(唯一),按 id 定位 child,允许同名子成员
+        child_id = self.intention_detect_module.category_2_child_id_map.get(
+            detected_intent_class
+        )
+        if child_id and self.plan_config.child_agents_metadata:
             for child_agent in self.plan_config.child_agents_metadata:
-                if child_agent.name == detected_intent_name:
+                if child_agent.id == child_id:
                     logger.info(f"Found child agent config: {child_agent}")
 
                     # 创建agent handoff任务
@@ -774,7 +777,9 @@ class ControllerPlanner(TaskPlanner):
                         child_agent, task_id
                     )
 
-        logger.warning(f"Child agent {detected_intent_name} not found in configuration")
+        logger.warning(
+            f"Child agent for intent class {detected_intent_class} not found in configuration"
+        )
         return None
 
     def _has_pe_agent(self) -> bool:

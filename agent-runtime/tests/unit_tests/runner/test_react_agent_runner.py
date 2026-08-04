@@ -9,7 +9,13 @@ ReActAgentRunner 单元测试
 - register_skill_tools 正确注册 read_file/execute_code/execute_cmd 到 ability_manager
 """
 
-from unittest.mock import MagicMock, patch
+# pylint: disable=no-self-use
+
+import inspect
+import sys
+import types
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -219,6 +225,119 @@ class TestRegisterSkillTools:
         register_skill_tools(agent, agent_id, "")
 
         assert agent.ability_manager.add.call_count == 3
+
+
+class TestResolveUserQuery:
+    """恢复请求可以只提供 resumeInput。"""
+
+    def test_resume_input_takes_precedence(self):
+        req = SimpleNamespace(query="旧 query", resume_input="APPROVE")
+
+        assert ReActAgentRunner._resolve_user_query(req) == "APPROVE"
+
+    def test_query_is_used_for_normal_invocation(self):
+        req = SimpleNamespace(query="普通问题", resume_input=None)
+
+        assert ReActAgentRunner._resolve_user_query(req) == "普通问题"
+
+    def test_default_is_used_only_when_both_inputs_are_empty(self):
+        req = SimpleNamespace(query="", resume_input=None)
+
+        assert ReActAgentRunner._resolve_user_query(req) == "Hello"
+
+
+class TestRegisterWorkflows:
+    """ReAct Workflow 必须走框架原生 ability 协议。"""
+
+    @pytest.mark.asyncio
+    async def test_registers_native_workflow_with_per_call_provider(self):
+        from openjiuwen.core.runner import Runner
+        from openjiuwen.core.workflow import WorkflowCard
+
+        runner = ReActAgentRunner(api_key="test")
+        agent = MagicMock()
+        resource_mgr = MagicMock()
+        metadata_workflow = SimpleNamespace(
+            card=SimpleNamespace(id="internal-workflow-id", name="approval_workflow")
+        )
+        first_call_workflow = object()
+        second_call_workflow = object()
+        sub_ir = {
+            "workflow": {
+                "id": "internal-workflow-id",
+                "description": "interactive approval",
+            }
+        }
+        ir_json = {
+            "configs": {
+                "workflows": [
+                    {
+                        "ir_path": "approval.json",
+                        "name": "workflow-config-id",
+                        "arguments": [
+                            {
+                                "name": "query",
+                                "type": "string",
+                                "description": "user query",
+                                "required": True,
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+
+        converter = AsyncMock(
+            side_effect=[metadata_workflow, first_call_workflow, second_call_workflow]
+        )
+        converter_module = types.ModuleType(
+            "jiuwen.serve.controllers.execution.ir_converter"
+        )
+        converter_module.IRConverter = SimpleNamespace(
+            async_ir_to_workflow=converter
+        )
+        with patch(
+            "agent_runtime.runner.react_agent_runner.async_ir_load",
+            new=AsyncMock(return_value=sub_ir),
+        ), patch.dict(
+            sys.modules,
+            {"jiuwen.serve.controllers.execution.ir_converter": converter_module},
+        ), patch.object(
+            Runner, "resource_mgr", resource_mgr
+        ):
+            workflow_ids = await runner._register_workflows(
+                ir_json, agent, agent_id="agent-1"
+            )
+
+            registered_card = resource_mgr.add_workflow.call_args.kwargs["card"]
+            provider = resource_mgr.add_workflow.call_args.kwargs["workflow"]
+            built_first = await provider()
+            built_second = await provider()
+
+        assert workflow_ids == ["workflow-config-id"]
+        assert isinstance(registered_card, WorkflowCard)
+        assert registered_card.name == "approval_workflow"
+        assert registered_card.input_params == {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "user query",
+                }
+            },
+            "required": ["query"],
+        }
+        agent.ability_manager.add.assert_called_once_with(registered_card)
+
+        # 原生 Workflow 分支会把 interaction 保留为 INPUT_REQUIRED；不能再注册
+        # ReactWorkflowAdapter 的 ToolCard，否则下一轮无法恢复 checkpoint。
+        resource_mgr.add_tool.assert_not_called()
+
+        # provider 每次重建实例，保留 R-02 的并发隔离保证。
+        assert inspect.iscoroutinefunction(provider)
+        assert built_first is first_call_workflow
+        assert built_second is second_call_workflow
+        assert built_first is not built_second
 
 
 if __name__ == "__main__":

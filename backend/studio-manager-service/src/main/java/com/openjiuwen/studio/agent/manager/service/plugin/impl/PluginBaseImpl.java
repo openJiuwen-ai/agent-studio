@@ -929,6 +929,9 @@ public class PluginBaseImpl implements IPluginBase {
                 default -> "Body";
             };
             property.setLocation(mappedLocation);
+            if (parameter.getSchema() != null && parameter.getSchema().getDefault() != null) {
+                property.setDefaultValue(String.valueOf(parameter.getSchema().getDefault()));
+            }
             schemaConfig.getProperties().put(parameter.getName(), property);
         });
         return true;

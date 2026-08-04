@@ -213,6 +213,7 @@ def build_req_json_from_agent(
         "irPath": exec_ctx.ir_path,
         "params": params,
         "query": body.query or body.inputs.get(_USER_MSG_FIELD, ""),
+        "resumeInput": body.resume_input,
         "responseMode": "streaming",
         "dialogueCount": exec_ctx.dialogue_count,
     }
@@ -444,7 +445,7 @@ async def _execute_agent_run(
     workflow_logger.debug(f"Built IR path: {ir_path}")
 
     # 运行前校验
-    query = body.query or body.inputs.get("query", "")
+    query = body.resume_input or body.query or body.inputs.get("query", "")
     err = await check_before_agent_run(RunCheckContext(
         query=query,
         project_id=ctx.project_id,
