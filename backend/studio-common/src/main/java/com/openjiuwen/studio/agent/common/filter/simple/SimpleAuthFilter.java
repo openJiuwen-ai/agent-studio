@@ -43,8 +43,16 @@ public class SimpleAuthFilter implements Filter {
         }
 
         String existToken = ServletUtils.getAgentSid(httpRequest);
+        // 外部调用无cookie时，回退到X-Auth-Token header
+        if (StringUtils.isEmpty(existToken)) {
+            existToken = httpRequest.getHeader(SimpleConstants.X_AUTH_TOKEN);
+        }
         // 如果从url参数或者header参数取到用户信息，则设置到cookie
         String token = SimpleAuthUtils.paramToToken(httpRequest, existToken);
+        // paramToToken在existToken非空且无X-USER-ID时返回空，需用existToken兜底
+        if (StringUtils.isEmpty(token) && !StringUtils.isEmpty(existToken)) {
+            token = existToken;
+        }
 
         // 如果不为空则设置到attribute和cookie；否则不设置
         if (!StringUtils.isEmpty(token)) {
