@@ -10,21 +10,24 @@ ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib64
 
 WORKDIR $SERVICE_HOME
 
-# 安装运行时依赖（含 psycopg2 源码编译工具链）
+# 安装运行时系统依赖
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
       sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources; \
     elif [ -f /etc/apt/sources.list ]; then \
       sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
     fi \
-    && apt-get update && apt-get install -y curl tar unzip net-tools wget iptables cron libpq-dev procps gawk hostname sed coreutils findutils bash nginx antiword gcc python3-dev \
+    && apt-get update && apt-get install -y curl tar unzip net-tools wget iptables cron libpq-dev procps gawk hostname sed coreutils findutils bash nginx antiword \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# 先复制 requirements.txt，单独安装依赖以利用 Docker 层缓存
+# 安装 Python 依赖（临时安装编译工具链，编译完成后卸载）
 COPY requirements.txt $SERVICE_HOME/app/
-RUN pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
+RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev \
+    && pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
     && pip3 config set global.trusted-host mirrors.aliyun.com \
     && pip3 install --upgrade pip \
     && pip3 install -r $SERVICE_HOME/app/requirements.txt \
+    && apt-get remove -y gcc python3-dev && apt-get autoremove -y \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && rm -rf ${PACKAGES_HOME}/future/backports/test
 
 # 再复制应用代码（变更频率高，放在依赖安装之后）
