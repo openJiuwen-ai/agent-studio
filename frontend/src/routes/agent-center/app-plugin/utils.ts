@@ -470,6 +470,16 @@ export const reqSchema2Field = (schema: IReqSchema): IWorkflowField[] => {
     if (type === undefined || type === null || type === '') {
       type = 'string';
     }
+    // number/integer 类型：确保 content 是正确的数字类型或 null
+    let content: any = defaultValue || '';
+    if (type === 'number' || type === 'integer') {
+      if (defaultValue === null || defaultValue === undefined || defaultValue === '') {
+        content = null; // 无有效默认值时置 null，运行时跳过该参数
+      } else {
+        content = Number(defaultValue); // 字符串数字转为真数字
+      }
+    }
+
     const field: IWorkflowField = {
       name: key,
       required: schema.required?.includes(key),
@@ -477,7 +487,7 @@ export const reqSchema2Field = (schema: IReqSchema): IWorkflowField[] => {
       type: type as IWorkflowFieldType,
       value: {
         type: 'literal',
-        content: defaultValue || '',
+        content,
         hint: '',
       },
       source: 'user',
