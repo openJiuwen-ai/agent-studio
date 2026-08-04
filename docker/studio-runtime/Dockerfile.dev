@@ -12,7 +12,7 @@ ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib64
 
 WORKDIR $SERVICE_HOME
 
-# 安装运行时依赖（不含编译工具链）
+# 安装运行时依赖（含编译工具链，用于 psycopg2 源码编译）
 RUN mirror=mirrors.aliyun.com; \
     new_src=/etc/apt/sources.list.d/debian.sources; \
     old_src=/etc/apt/sources.list; \
@@ -22,7 +22,7 @@ RUN mirror=mirrors.aliyun.com; \
       sed -i "s|deb.debian.org|${mirror}|g" "$old_src"; \
     fi \
     && apt-get update \
-    && apt-get install -y bash coreutils findutils sed gawk hostname procps vim curl wget tar unzip net-tools iptables cron libpq-dev \
+    && apt-get install -y bash coreutils findutils sed gawk hostname procps curl wget tar unzip net-tools iptables cron libpq-dev gcc python3-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && echo 'alias ll="ls -alF"' >> /etc/bash.bashrc
 
@@ -30,6 +30,7 @@ RUN mirror=mirrors.aliyun.com; \
 COPY requirements.txt $SERVICE_HOME/app/
 RUN pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
     && pip3 config set global.trusted-host mirrors.aliyun.com \
+    && pip3 install --upgrade pip \
     && pip3 install -r $SERVICE_HOME/app/requirements.txt \
     && rm -rf ${PACKAGES_HOME}/future/backports/test
 
