@@ -1,28 +1,23 @@
-<div class="drawer-header">
-  <div style="height: 24px">
-    {{ 'add_sub_controller'| i18nextEager }}
-  </div>
+<div class="com-drawer-title">
+  {{ 'add_sub_controller' | i18nextEager }}
 </div>
-<div class="drawer-body" style="overflow: scroll; margin-top: 16px !important;">
+<div class="com-drawer-content">
   <nz-tabs class="w-full" id="app-center-tabs" [(nzSelectedIndex)]="activeTabIndex" (nzSelectedIndexChange)="onTabIndexChange($event)">
-    <nz-tab class=" text-[14px]" *ngFor="let tab of agentTabs" [nzTitle]="tab.title">
-    </nz-tab>
+    <nz-tab class="text-[14px]" *ngFor="let tab of agentTabs" [nzTitle]="tab.title"> </nz-tab>
   </nz-tabs>
 
-  <nz-alert *ngIf="isSingleAgent" nzType="info" class="!w-full mt-[16px]">
-    {{ 'sub_agent_only_tip' | i18nextEager}}
-  </nz-alert>
+  <nz-alert *ngIf="isSingleAgent" nzType="info" class="mt-[16px]" [nzMessage]="'sub_agent_only_tip' | i18nextEager"> </nz-alert>
 
   <div class="flex w-full items-center gap-2 mt-[16px]">
-    <div
-      *ngIf="!isSingleAgent"
-      class="flex-grow-0 flex-shrink-0 flex"
-    >
-      <button *ngFor="let space of agentSpaceType"
+    <div *ngIf="!isSingleAgent" class="flex-grow-0 flex-shrink-0 flex">
+      <button
+        *ngFor="let space of agentSpaceType"
         nz-button
         [nzType]="agentSpace?.id === space.id ? 'primary' : 'default'"
         (click)="agentSpace = space; onSpaceChange()"
-      >{{ space.text }}</button>
+      >
+        {{ space.text }}
+      </button>
     </div>
     <input
       class="!w-full agent-searchbox"
@@ -31,45 +26,28 @@
       [(ngModel)]="shareSearchKey"
       (keyup.enter)="refreshList(true)"
     />
-    <button
-      class="h-8 w-8 flex-grow-0 flex-shrink-0"
-      (click)="refreshList(true)"
-      nz-button
-      nzType="default"
-    >
+    <button class="h-8 w-8 flex-grow-0 flex-shrink-0" (click)="refreshList(true)" nz-button nzType="default">
       <span nz-icon nzType="search"></span>
     </button>
-    <button
-      class="h-8 w-8 flex-grow-0 flex-shrink-0"
-      (click)="refreshList()"
-      nz-button
-      nzType="default"
-      nz-tooltip [nzTooltipTitle]="'refresh'|i18nextEager"
-    >
+    <button class="h-8 w-8 flex-grow-0 flex-shrink-0" (click)="refreshList()" nz-button nzType="default" nz-tooltip [nzTooltipTitle]="'refresh' | i18nextEager">
       <span nz-icon nzType="reload"></span>
     </button>
   </div>
 
-  <nz-spin
-    *ngIf="isLoading"
-    nzSimple
-    class="flex h-[calc(100%-40px)] w-full items-center justify-center"
-  ></nz-spin>
+  <nz-spin *ngIf="isLoading" nzSimple class="flex h-[calc(100%-40px)] w-full items-center justify-center"></nz-spin>
 
-  <div
-    *ngIf="!isLoading"
-    class="mt-[16px] flex flex-col gap-[24px]" [class]="!agents.length ? 'no-data-page' : ''"
-  >
+  <div *ngIf="!isLoading" class="mt-[16px] flex flex-col gap-[24px]" [class]="!agents.length ? 'no-data-page' : ''">
     <div *ngIf="agents.length" class="cards-wrapper">
-      <div class="card" [class.card-active]="agent.checked" *ngFor="let agent of agents"
-           nz-tooltip [nzTooltipTitle]="agent.tip"
-           (click)="onCardClick(agent, $event)">
+      <div
+        class="card"
+        [class.card-active]="agent.checked"
+        *ngFor="let agent of agents"
+        nz-tooltip
+        [nzTooltipTitle]="agent.tip"
+        (click)="onCardClick(agent, $event)"
+      >
         <div class="flex-content gap-[16px] h-[44px]">
-          <img
-            class="img-border"
-            [src]="agent.avatar"
-            alt="api"
-          />
+          <img class="img-border" [src]="agent.avatar" alt="api" />
           <div class="w-[calc(100%-112px)]">
             <div class="flex flex-col gap-[4px]">
               <div
@@ -80,46 +58,41 @@
                 {{ agent.name }}
               </div>
               <div *ngFor="let tag of agent.tags">
-                <nz-tag class="!rounded-[4px] py-[1px] pl-[2px] pr-[4px]" >
-                  <span>{{tag}}</span>
+                <nz-tag class="!rounded-[4px] py-[1px] pl-[2px] pr-[4px]">
+                  <span>{{ tag }}</span>
                 </nz-tag>
               </div>
               <div *ngIf="!showTags" class="w-[220px]">
                 <p class="text-[#808080] overflow-hidden text-ellipsis whitespace-nowrap" [title]="agent.description">
-                  {{agent.description}}
+                  {{ agent.description }}
                 </p>
               </div>
             </div>
           </div>
           <div class="right-area" (click)="$event.stopPropagation()">
-            <label
-              nz-checkbox
-              [disabled]="isSingleAgent ? false : agent.disable"
-              [(ngModel)]="agent.checked"
-              (ngModelChange)="onCardSelected(agent)"
-            ></label>
+            <label nz-checkbox [disabled]="isSingleAgent ? false : agent.disable" [(ngModel)]="agent.checked" (ngModelChange)="onCardSelected(agent)"></label>
           </div>
         </div>
 
         <div *ngIf="showTags || isShareSpace" class="text-[#808080] mt-[12px]">
           <div *ngIf="showTags" class="h-[18px] w-[220px]">
-            <p class="w-full overflow-hidden text-ellipsis whitespace-nowrap" [title]="agent.description">{{agent.description}}</p>
+            <p class="w-full overflow-hidden text-ellipsis whitespace-nowrap" [title]="agent.description">{{ agent.description }}</p>
           </div>
           <div *ngIf="isShareSpace" class="flex items-center">
             <span nz-icon nzType="user" class="mr-1 !text-[16px]"></span>
             <span class="max-w-[50px] overflow-hidden text-ellipsis whitespace-nowrap">
-             {{agent.workspace_name || agent.workspace_id}}
+              {{ agent.workspace_name || agent.workspace_id }}
             </span>
             <span *ngIf="agent.version_info_list?.length" class="pl-2 pr-2">|</span>
             <div *ngIf="agent.version_info_list && agent.version_info_list.length" class="version-info-list-div">
-              {{'version_name'|i18nextEager}}:
+              {{ 'version_name' | i18nextEager }}:
               <nz-select
                 nzBorderless
                 class="!max-w-[130px]"
-                [ngClass]="{'!max-w-[94px]': !isZH}"
+                [ngClass]="{ '!max-w-[94px]': !isZH }"
                 [nzAllowClear]="true"
                 [(ngModel)]="agent.version_id"
-                [nzPlaceHolder]="'select_placeholder'|i18nextEager"
+                [nzPlaceHolder]="'select_placeholder' | i18nextEager"
                 nzValue="version_id"
                 nzLabel="version_name"
               >
@@ -131,45 +104,24 @@
       </div>
     </div>
 
-    <div
-      *ngIf="!agents.length"
-      class="flex w-full h-full items-center justify-center"
-    >
-      <app-new-common-no-data-with-btn
-      [type]="'noData'"
-      [firstLineData]="'no_data' | i18nextEager"
-      [noDataBtnStr]="''"
-    />
+    <div *ngIf="!agents.length" class="flex w-full h-full items-center justify-center">
+      <app-new-common-no-data-with-btn [type]="'noData'" [firstLineData]="'no_data' | i18nextEager" [noDataBtnStr]="''" />
     </div>
   </div>
 
   <div class="flex items-center justify-between text-[14px]" *ngIf="agents.length">
     <div class="page-div">
-      <div class="page-div-span"> {{ ('count_num' | i18nextEager)+totalNumber }}</div>
-      <div> {{ ('select_num' | i18nextEager)+(agentSelected.length || 0)}}</div>
+      <div class="page-div-span">{{ ('count_num' | i18nextEager) + totalNumber }}</div>
+      <div>{{ ('select_num' | i18nextEager) + (agentSelected.length || 0) }}</div>
     </div>
-    <nz-pagination
-      class="!w-fit"
-      [(nzPageIndex)]="currentPage"
-      [nzTotal]="totalNumber"
-      nzSize="small"
-      (nzPageIndexChange)="refreshList()"
-    ></nz-pagination>
+    <nz-pagination class="!w-fit" [(nzPageIndex)]="currentPage" [nzTotal]="totalNumber" nzSize="small" (nzPageIndexChange)="refreshList()"></nz-pagination>
   </div>
 </div>
-<div class="drawer-footer flex justify-end mt-4">
-  <ng-container>
-    <button nz-button id="cancel" (click)="dismiss()">
-      {{ 'cancel' | i18nextEager }}
-    </button>
-    <button
-      nz-button
-      style="margin-left: 8px"
-      nzType="primary"
-      (click)="submit();close()"
-      [disabled]="!agents.length"
-    >
-      {{ 'ok' | i18nextEager }}
-    </button>
-  </ng-container>
+<div class="com-drawer-footer">
+  <button nz-button id="cancel" (click)="dismiss()">
+    {{ 'cancel' | i18nextEager }}
+  </button>
+  <button nz-button style="margin-left: 8px" nzType="primary" (click)="submit(); close()" [disabled]="!agents.length">
+    {{ 'ok' | i18nextEager }}
+  </button>
 </div>

@@ -588,6 +588,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       active: false,
       disabled: !this.historyVersionList.length,
       tips: '',
+      show: this.configServ.getConfigs()?.studio_btn_show,
     },
   ];
   public curActiveConfigTabId = this.configHeaderTabs[0].id;

@@ -58,6 +58,7 @@ export class FlowDetailHeaderComponent {
 
   public type = '';
   experienceCreation = false;
+  studioBtnShow = true;
   constructor(
     private nzModal: NzModalService,
     private cdr: ChangeDetectorRef,
@@ -68,6 +69,7 @@ export class FlowDetailHeaderComponent {
     private appFlowServe: AppFlowService,
     private commonService: CommonService
   ) {
+    this.studioBtnShow = this.configServ.getConfigs()?.studio_btn_show;
     this.route.queryParams.subscribe(params => {
       const { type, from } = params;
       this.type = type ?? '';

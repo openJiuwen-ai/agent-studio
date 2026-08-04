@@ -1,25 +1,26 @@
-::ng-deep .diff-modal {
-  width: 100vw !important;
-  max-width: 1000px !important;
+.header {
+  display: flex;
+}
 
-  .header {
-    line-height: 28px;
-    font-size: 18px;
-    display: flex;
-    align-items: center;
+.header-title {
+  margin-right: 8px;
+}
 
-    .tag {
-      font-size: 12px;
-      line-height: 18px;
+.diff-wrapper {
+  display: flex;
+  flex-direction: column;
+}
 
-      ti-tag {
-        margin-right: 4px;
-      }
-    }
-  }
+.diff-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
 
-  .footer {
-    padding: 0;
-    height: 24px;
-  }
+.version-select {
+  width: 240px;
+}
+
+.select-div {
+  width: 50%;
 }

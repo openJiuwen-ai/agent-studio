@@ -63,10 +63,12 @@ export class PluginNodeComponent extends NodeBaseComponent {
     this.setNodeBase(this.nodeInfo);
     super.ngOnInit();
 
-    this.actions.unshift({
-      id: 'detail',
-      label: this.i18n.transform('plugin_details'),
-    });
+    if (this.configServ.getConfigs()?.studio_btn_show) {
+      this.actions.unshift({
+        id: 'detail',
+        label: this.i18n.transform('plugin_details'),
+      });
+    }
 
     this.appFlowServ.setApiOriginInfo({
       id: this.nodeInfo.configs.id,

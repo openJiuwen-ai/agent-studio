@@ -52,6 +52,7 @@ export interface IAgentConfigs {
   asset_app_free_trial_quota_limit?:number;//体验额度
   hmac_auth_enabled?:boolean;//hmac 认证
   [key: string]: any;
+  studio_btn_show?: boolean;
 }
 
 export interface MaxReplySetting {
@@ -73,6 +74,7 @@ export class AgentConfigService {
   }
 
   public setConfigs(configs: IAgentConfigs) {
+    configs.studio_btn_show = true;
     this.configs$.next(configs);
   }
   data$ = this.configs$.asObservable();

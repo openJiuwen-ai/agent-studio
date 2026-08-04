@@ -154,7 +154,6 @@ export class AddMultipleAgentModalComponent implements OnInit {
       this.initMultiAgentList();
     },
   };
-
   constructor(
     private appFlowRepoServe: AppFlowRepoService,
     private i18n: I18NextEagerPipe,
@@ -164,6 +163,10 @@ export class AddMultipleAgentModalComponent implements OnInit {
   ) {}
 
   ngOnInit() {
+    this.agentTabs = this.agentTabs.filter(item => this.configServ.getConfigs()?.studio_btn_show || item.id !== ApplicationType.SINGLE_AGENT);
+    this.agentTabs[0].active = true;
+    this.activeTabId = this.agentTabs[0].id;
+
     if (!this.isShowSingleEnter()) {
       this.agentTabs = this.agentTabs.filter(
         (item) => item.id !== ApplicationType.SINGLE_AGENT,
