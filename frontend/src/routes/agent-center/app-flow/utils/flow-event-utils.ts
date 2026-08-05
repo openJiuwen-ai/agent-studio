@@ -1,6 +1,5 @@
 import { FlowComponent } from '@routes/agent-center/app-flow/flow/flow.component';
 import {
-  EHalfmodalType,
   IConnection,
   IEdgeType,
   Position,
@@ -23,12 +22,39 @@ import {
 } from '@routes/agent-center/app-flow/utils/flow-utils';
 import { CommonUtils } from 'src/utils/common.util';
 import { DagreLayout } from '@antv/layout';
+import { shouldInvalidatePendingOpen, shouldSkipScheduleForOpenNode } from './pending-open-node.util';
 
 export const FlowEventUtils = {
   addGraphEventListeners(flowComponent: FlowComponent) {
     let ctrlPressed = false;
     let dragRemoveEdge = null;
     let nodeClick = false;
+    // 最近一次“开始防抖周期”所点击的节点 id。仅在 nodeClick 防抖窗口内有效，
+    // 用于判断快速二次点击是否切换到了不同节点；切换到不同节点时需令此前为
+    // 旧节点排队的延迟打开任务失效，并为最新节点重新排队打开。同节点连击
+    // 不失效、不重新排队，保留“单击当前节点 250ms 后打开”的正常行为。
+    let lastClickedNodeId: string | undefined;
+    // nodeClick 防抖窗口的 timer 句柄。每次“会进入调度”的有效点击（首次点击
+    // 或切换到不同节点）都重置该 timer，使快速连击期间 lastClickedNodeId 始终
+    // 指向最新点击节点；同节点连击直接 return 不重置。窗口结束后清空状态，
+    // 使下一次点击被视为首次点击。
+    let nodeClickTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // 重置 node:click 防抖窗口的局部状态：清掉待触发的 timer 句柄并把
+    // nodeClick / lastClickedNodeId 复位为“未进入防抖”，使下一次 node:click 被视为
+    // 首次点击。timer 回调本身只复位这三个闭包局部变量、不触碰 graph/DOM，故组件
+    // 销毁后即便有未触发的 300ms timer 残留，回调执行也是无害的；本函数同时作为
+    // addGraphEventListeners 的返回值，供组件 ngOnDestroy 显式清理，避免销毁时
+    // 残留 timer。edge:click / blank:click 也会调用它，使 A→edge/blank→A 中最新
+    // A 不被“同节点连击”规则误判跳过（旧 A 调度已被失效，最新 A 需重新排队）。
+    const resetNodeClickDebounce = () => {
+      if (nodeClickTimer) {
+        clearTimeout(nodeClickTimer);
+        nodeClickTimer = null;
+      }
+      nodeClick = false;
+      lastClickedNodeId = undefined;
+    };
 
     flowComponent.graph.on('render:done', (data: any) => {
       // 画布渲染完成，重新设置连接桩样式
@@ -62,28 +88,66 @@ export const FlowEventUtils = {
         //点击连接桩不打开侧边栏
         return;
       }
-      if (nodeClick) {
-        return;
-      }
-      nodeClick = true
-      setTimeout(() => {
-        nodeClick = false
-      }, 300)
-
+      const clickedNodeId = data?.node?.id;
       const clickedNode = data?.node;
+      // 防抖窗口（nodeClick===true）内的二次点击：
+      // - 切换到不同节点：令旧节点延迟打开失效，并继续向下为新节点重新排队
+      //   打开（不直接 return），避免 A→B→A 时旧 A 被取消后 B / 最新 A 都
+      //   不打开。A→B→A 最终只打开最新 A，不打开旧 A / B。
+      // - 同节点连击：保留首次点击已排队的延迟打开，直接 return，避免反复
+      //   刷新 250ms 计时导致单击后迟迟打不开。是否失效的判定抽出为纯函数
+      //   以便单测（见 pending-open-node.util）。
+      if (nodeClick) {
+        if (
+          shouldInvalidatePendingOpen({
+            isDebouncing: nodeClick,
+            clickedNodeId,
+            lastClickedNodeId,
+          })
+        ) {
+          flowComponent.invalidatePendingOpenNode();
+        }
+        if (clickedNodeId === lastClickedNodeId) {
+          // 同节点连击：不重新排队，保留旧调度的 250ms 延迟打开。
+          return;
+        }
+        // 切换到不同节点：继续向下为新节点重新排队打开。
+      }
+
+      // 首次点击 或 切换到不同节点：进入/刷新 300ms 防抖窗口，记录最新点击
+      // 节点。重置 timer 使快速连击期间 lastClickedNodeId 始终指向最新节点。
+      if (nodeClickTimer) {
+        clearTimeout(nodeClickTimer);
+      }
+      nodeClick = true;
+      lastClickedNodeId = clickedNodeId;
+      nodeClickTimer = setTimeout(() => {
+        resetNodeClickDebounce();
+      }, 300);
+
       if (clickedNode) {
         flowComponent.bringNodeToFront(flowComponent.graph, clickedNode);
       }
-      if(flowComponent.halfModalNodeId === clickedNode.id){
+      // 只有当前节点配置抽屉确实仍打开且当前节点仍是该已打开节点时才允许跳过；
+      // 抽屉已被 closeNodeConfigDrawer 关闭 / 正在切换时（showNodeConfigDrawer
+      // 同步置 false，但 halfModalNodeId 可能要等 afterClose 才清空）不应跳过，
+      // 否则快速 A→B→A 时最新 A 会被旧 halfModalNodeId 误判跳过，最终无节点打开。
+      // 判定抽出为纯函数以便单测（见 pending-open-node.util）。
+      if (
+        shouldSkipScheduleForOpenNode({
+          clickedNodeId,
+          halfModalNodeId: flowComponent.halfModalNodeId,
+          showNodeConfigDrawer: flowComponent.showNodeConfigDrawer,
+        })
+      ) {
         return;
       }
       const nodeInfo = FlowUtils.getNodeDSLFromRaw(data?.node);
       if (nodeInfo) {
         flowComponent.closeNodeConfigDrawer()
-        setTimeout(() => {
-          flowComponent.openNodeModal(nodeInfo);
-          flowComponent.appFlowServ.setNodeClicked(EHalfmodalType.NODE_CONFIG);
-        }, 250);
+        // 通过令牌化的延迟调度打开配置面板：切换节点/空白点击/删除节点/销毁
+        // 都会令此前的待打开任务失效，避免删除后仍打开已删除节点。
+        flowComponent.scheduleOpenNodeModal(nodeInfo);
       }
     });
 
@@ -666,6 +730,13 @@ export const FlowEventUtils = {
       if (flowComponent.selectedEdgeId) {
         flowComponent.bringEdgeBack();
       }
+      // 点击边也会关闭节点抽屉：令已排队的延迟打开任务失效，避免节点点击
+      // 后 250ms 内点边、旧节点面板仍在 250ms 后弹出。同时重置 node:click 防抖
+      // 窗口的局部状态，使随后的 node:click 被视为首次点击而非“同节点连击”，
+      // 否则 A→edge→A 时旧 A 调度已被失效、最新 A 又被同节点 return 跳过，
+      // 最终无节点打开。
+      flowComponent.invalidatePendingOpenNode();
+      resetNodeClickDebounce();
       flowComponent.closeNodeConfigDrawer();
       flowComponent.nodeServ.setCurrSelectedNode('');
       cell.setAttrs(
@@ -702,6 +773,11 @@ export const FlowEventUtils = {
     });
 
     flowComponent.graph.on('blank:click', () => {
+      // 空白点击令待打开节点失效，避免点击空白后仍弹出此前节点的配置面板。
+      // 同步重置 node:click 防抖窗口局部状态，使随后 node:click 视为首次点击
+      // （A→blank→A 不应因 lastClickedNodeId 仍为 A 而被同节点 return 跳过）。
+      flowComponent.invalidatePendingOpenNode();
+      resetNodeClickDebounce();
       if (flowComponent.type !== 'multi') {
         flowComponent.closeNodeConfigDrawer();
       }
@@ -870,6 +946,10 @@ export const FlowEventUtils = {
       flowComponent.selectionTip.count = ids.length;
       flowComponent.appFlowServ.setNodeIdSelected(ids);
     });
+
+    // 返回防抖状态清理函数，供组件 ngOnDestroy 调用，避免销毁时残留 300ms
+    // node:click 防抖 timer。
+    return resetNodeClickDebounce;
   },
   //获取连接桩相关连线
   getPortEdges(graph: Graph, node: Node, portId: string): Edge[] {
