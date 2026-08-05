@@ -4,19 +4,20 @@
  * 运行方式（项目内已安装 ts-node，无需引入大规模测试基础设施）：
  *   cd frontend
  *   pnpm exec ts-node --compiler-options '{"module":"commonjs","moduleResolution":"node"}' \
- *     src/routes/agent-center/app-flow/utils/editable-target.util.test.ts
+ *     src/test/agent-center/app-flow/utils/editable-target.util.test.ts
  *
  * 说明：项目的 Karma 配置 (src/test/karma.conf.js) 是空壳且本环境无 Chrome，
  * 无法可靠运行 Angular/X6 组件级测试；故对纯函数 isEditableTarget 抽离出
  * DOM 无关的核心 isEditableElement，用 duck-typed 对象在纯 Node 环境下覆盖
  * input/textarea/select/contenteditable/Monaco/画布/抽屉非编辑区域等场景。
+ * 测试代码集中置于 src/test/ 下，与源码分离；通过相对路径回引 routes 源文件。
  */
 import assert from 'node:assert/strict';
 import {
   isEditableElement,
   isEditableTarget,
   EditableElementLike,
-} from './editable-target.util';
+} from '../../../../routes/agent-center/app-flow/utils/editable-target.util';
 
 let passed = 0;
 let failed = 0;
