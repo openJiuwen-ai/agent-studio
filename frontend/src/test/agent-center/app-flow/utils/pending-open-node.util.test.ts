@@ -4,17 +4,18 @@
  * 运行方式（项目内已安装 ts-node，无需引入大规模测试基础设施）：
  *   cd frontend
  *   pnpm exec ts-node --compiler-options '{"module":"commonjs","moduleResolution":"node"}' \
- *     src/routes/agent-center/app-flow/utils/pending-open-node.util.test.ts
+ *     src/test/agent-center/app-flow/utils/pending-open-node.util.test.ts
  *
  * 说明：与 editable-target.util.test.ts 一致，对从 node:click 防抖/延迟打开逻辑
  * 中抽出的纯判定核心做覆盖。无需 Karma/Chrome/Angular/X6 组件环境。
+ * 测试代码集中置于 src/test/ 下，与源码分离；通过相对路径回引 routes 源文件。
  */
 import assert from 'node:assert/strict';
 import {
   shouldClearHalfModalOnClose,
   shouldInvalidatePendingOpen,
   shouldSkipScheduleForOpenNode,
-} from './pending-open-node.util';
+} from '../../../../routes/agent-center/app-flow/utils/pending-open-node.util';
 
 let passed = 0;
 let failed = 0;
