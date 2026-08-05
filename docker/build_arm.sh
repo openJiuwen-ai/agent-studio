@@ -15,7 +15,7 @@ set -xe
 # java基础镜像 (Debian-based, for manager)
 BASE_IMAGE_JAVA="eclipse-temurin:17-jre"
 # nginx基础镜像
-BASE_IMAGE_NGINX="nginx:1.27"
+BASE_IMAGE_NGINX="nginx:1.28"
 # python基础镜像 (预编译Python 3.11)
 BASE_IMAGE_PYTHON="python:3.11-slim"
 GRAFANA_ARM_IMAGE="openjiuwen/grafana-victorialogs:11.3.0-0.29.0-arm64"

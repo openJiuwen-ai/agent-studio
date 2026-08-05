@@ -112,3 +112,26 @@
     }
   }
 }
+
+.plugin-desc-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+}
+
+.plugin-name-single-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+::ng-deep {
+  .plugin-tooltip-overlay {
+    max-width: 400px;
+  }
+}

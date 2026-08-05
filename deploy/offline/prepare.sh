@@ -70,7 +70,7 @@ build_and_save_images() {
 
     # 构建基础镜像配置
     local BASE_IMAGE_JAVA="eclipse-temurin:17-jre"
-    local BASE_IMAGE_NGINX="nginx:1.27"
+    local BASE_IMAGE_NGINX="nginx:1.28"
     local BASE_IMAGE_PYTHON="python:3.11-slim"
 
     # ---- 拉取基础镜像 ----

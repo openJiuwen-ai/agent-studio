@@ -65,12 +65,12 @@
           <form #inputForm="ngForm">
             <ng-container *ngFor="let param of inputParams; index as i">
               <div class="mt-2 flex" *ngIf="param.location === 'Headers'">
-                <div class="mr-1 flex h-[28px] w-[25%] items-center text-label">
+                <div class="mr-1 flex h-[28px] w-[25%] items-center gap-1 text-label">
                   <div class="flex max-w-[calc(100%-20px)] items-center">
-                    <span nz-tooltip [nzTooltipTitle]="param.name">
+                    <span nz-tooltip [nzTooltipTitle]="param.name" class="truncate min-w-0">
                       {{ param.name }}
                     </span>
-                    <span *ngIf="!param.required" class="w-12 shrink-0">{{ 'optional' | i18nextEager }}</span>
+                    <span *ngIf="!param.required" class="shrink-0 whitespace-nowrap">{{ 'optional' | i18nextEager }}</span>
                   </div>
                   <span
                     nz-icon
@@ -217,12 +217,12 @@
           <form #inputFormContent="ngForm">
             <ng-container *ngFor="let param of inputParams; index as i">
               <div class="mt-2 flex" *ngIf="param.location !== 'Headers'">
-                <div class="mr-1 flex h-[28px] w-[25%] items-center text-label">
+                <div class="mr-1 flex h-[28px] w-[25%] items-center gap-1 text-label">
                   <div class="flex max-w-[calc(100%-20px)] items-center">
-                    <span nz-tooltip [nzTooltipTitle]="param.name">
+                    <span nz-tooltip [nzTooltipTitle]="param.name" class="truncate min-w-0">
                       {{ param.name }}
                     </span>
-                    <span *ngIf="!param.required" class="w-12 shrink-0">{{ 'optional' | i18nextEager }}</span>
+                    <span *ngIf="!param.required" class="shrink-0 whitespace-nowrap">{{ 'optional' | i18nextEager }}</span>
                   </div>
                   <span
                     nz-icon
