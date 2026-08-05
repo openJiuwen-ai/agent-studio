@@ -15,6 +15,8 @@ import { NzSpinModule } from 'ng-zorro-antd/spin';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { NZ_DRAWER_DATA, NzDrawerRef } from 'ng-zorro-antd/drawer';
 import { NzMessageService } from 'ng-zorro-antd/message';
+import { Subject, takeUntil } from 'rxjs';
+
 @Component({
   selector: 'meta-plugin-version',
   templateUrl: './plugin-version.component.html',
@@ -40,6 +42,9 @@ export class PluginVersionComponent {
 
   public selectedTab = -1;
 
+  private destroy$ = new Subject<void>();
+
+  selectVersionInfo = null;
   constructor(
     private i18n: I18NextEagerPipe,
     private deleteRefsServe: DeleteRefsService,
@@ -49,19 +54,34 @@ export class PluginVersionComponent {
     private message: NzMessageService,
     @Inject(NZ_DRAWER_DATA) public nzData: any,
     private cdr: ChangeDetectorRef
-  ) {}
+  ) {
+    this.agentDataServe
+      .getPreviewVersion()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(versionInfo => {
+        this.selectVersionInfo = versionInfo;
+      });
+  }
 
   ngOnInit(): void {
     this.tool_id = this.nzData.tool_id;
     this.getPluginVersionList();
   }
 
-  getPluginVersionList() {
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  getPluginVersionList(isDelete = false) {
     this.isLoading = true;
     this.agentRepoServe
       .getPluginVersionList(this.tool_id)
       .then(res => {
         this.publishedCards = res.version_list;
+        if (isDelete && !this.selectVersionInfo?.version_id) {
+          this.agentDataServe.setPreviewVersion(undefined);
+        }
       })
       .finally(() => {
         this.isLoading = false;
@@ -101,7 +121,7 @@ export class PluginVersionComponent {
       .then(() => {
         this.isLoading = false;
         this.publishedCards = this.publishedCards.filter(item => item.version_id !== version_id);
-        this.getPluginVersionList();
+        this.getPluginVersionList(true);
         MessageComponent.showSuccess(this.i18n.transform('version_deleted_successfully'), 3000);
       })
       .finally(() => {

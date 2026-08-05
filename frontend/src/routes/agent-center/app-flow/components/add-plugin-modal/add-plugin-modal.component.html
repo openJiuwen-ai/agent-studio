@@ -57,13 +57,13 @@
                   <div class="w-[calc(100%-160px)]">
                     <div class="flex items-center gap-[8px]">
                       <div
-                        nz-ellipsis
-                        class="max-w-[calc(100%-114px)] text-sm font-bold text-label"
+                        nz-tooltip [nzTooltipTitle]="getPluginName(plugin)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                        class="plugin-name-single-line text-sm font-bold text-label"
                       >
                         {{ getPluginName(plugin) }}
                       </div>
                       <div>
-                        <nz-tag *ngIf="plugin?.quotaTag" 
+                        <nz-tag *ngIf="plugin?.quotaTag"
                                 nz-tooltip nzTooltipPlacement="bottomLeft" [nzTooltipTitle]="plugin.quotaTag.tip"
                                 class="!rounded-[4px] py-[1px] pl-[2px] pr-[4px]"  [style.color]="plugin.quotaTag.color" [style.background-color]="plugin.quotaTag.bgColor" size="small">
                           {{plugin.quotaTag.text}}
@@ -113,8 +113,8 @@
                       </div>
                     </div>
                     <div
-                      nz-ellipsis
-                      class="mt-[4px] break-words text-desc"
+                      nz-tooltip [nzTooltipTitle]="plugin.plugin_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                      class="mt-[4px] plugin-desc-clamp"
                     >
                       {{ plugin.plugin_desc }}
                     </div>
@@ -220,15 +220,15 @@
                   <div class="w-[calc(100%-160px)]">
                     <div class="flex items-center gap-[8px]">
                       <div
-                        nz-ellipsis
-                        class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                        nz-tooltip [nzTooltipTitle]="getPluginName(plugin)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                        class="plugin-name-single-line text-sm font-bold text-label"
                       >
                         {{ getPluginName(plugin) }}
                       </div>
                     </div>
                     <div
-                      nz-ellipsis
-                      class="mt-[4px] break-words text-desc"
+                      nz-tooltip [nzTooltipTitle]="plugin.plugin_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                      class="mt-[4px] plugin-desc-clamp"
                     >
                       {{ plugin.plugin_desc }}
                     </div>
@@ -328,14 +328,16 @@
                 <div class="w-[calc(100%-160px)]">
                   <div class="flex items-center gap-[8px]">
                     <div
-                      nz-ellipsis
-                      class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                      nz-tooltip [nzTooltipTitle]="getPluginName(plugin)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                      class="plugin-name-single-line text-sm font-bold text-label"
                     >
                       {{ getPluginName(plugin) }}
                     </div>
                   </div>
                   <div >
-                    <span class="w-full mt-1 text-[#808080]" nz-ellipsis>
+                    <span class="w-full mt-1 text-[#808080] plugin-desc-clamp"
+                          nz-tooltip [nzTooltipTitle]="plugin.plugin_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                    >
                       {{plugin.plugin_desc}}
                     </span>
                   </div>

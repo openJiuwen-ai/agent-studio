@@ -128,6 +128,33 @@ def test_convert_global_var_refs_end_user_fields():
     )
 
 
+def test_convert_global_var_refs_end_output_user_fields():
+    """End 节点 outputs.userFields 中的 memory 引用也应被转换。
+
+    IR converter 把 End 的 outputs.userFields 以 ``#end_`` 前缀并入 inputs_schema，
+    若 outputs 中的 ``${node_start.memory.xxx}`` 未转换，运行期会从 io_state
+    (node_start 的旧输出) 解析而非从 global_state (被 SetVariable 更新) 解析，
+    导致同一记忆变量在 End 的输入有值、输出却拿到陈旧默认值。
+    """
+    ir_data = {
+        "components": [
+            {"id": "node_start", "type": "jiuwen.start"},
+            {
+                "id": "node_end",
+                "type": "jiuwen.end",
+                "outputs": {"userFields": {"aaa1": "${node_start.memory.aaa}"}},
+            },
+        ]
+    }
+
+    converted = _convert_global_variable_refs_in_ir(ir_data)
+
+    assert (
+        converted["components"][1]["outputs"]["userFields"]["aaa1"]
+        == "${MEMORY_VARIABLE.aaa}"
+    )
+
+
 def test_convert_global_var_refs_branch_bool_expression():
     ir_data = _branch_with_expr("(${node_start.memory.is_valid} == '1')")
 

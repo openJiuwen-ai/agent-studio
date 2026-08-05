@@ -227,6 +227,14 @@ class TestBuildReqJsonFromAgent:
         assert result["query"] == ""
 
     @staticmethod
+    def test_resume_input_is_forwarded_without_query():
+        body = AgentAppRunRequest.model_validate({"resumeInput": "APPROVE"})
+        result = build_req_json_from_agent(body, TestBuildReqJsonFromAgent._make_ctx())
+
+        assert result["query"] == ""
+        assert result["resumeInput"] == "APPROVE"
+
+    @staticmethod
     def test_conversation_history_from_ctx():
         body = AgentAppRunRequest()
         ctx = TestBuildReqJsonFromAgent._make_ctx(

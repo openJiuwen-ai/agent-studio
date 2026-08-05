@@ -12,10 +12,29 @@ _session/_graph。
 """
 
 import asyncio
+import sys
+import types
 from dataclasses import dataclass, field
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+class _FakeIRConverter:
+    """测试替身，避免加载 IRConverter 的可选检索/数据库依赖。"""
+
+    @staticmethod
+    async def async_ir_to_workflow(_ir_data):
+        raise NotImplementedError
+
+
+@pytest.fixture
+def ir_converter_cls():
+    module_name = "jiuwen.serve.controllers.execution.ir_converter"
+    converter_module = types.ModuleType(module_name)
+    converter_module.IRConverter = _FakeIRConverter
+    with patch.dict(sys.modules, {module_name: converter_module}):
+        yield _FakeIRConverter
 
 
 @dataclass
@@ -53,10 +72,11 @@ class TestReactWorkflowAdapterConcurrency:
     """R-02: 同一 adapter 的并发 invoke() 必须使用各自独立的 workflow 实例。"""
 
     @pytest.mark.asyncio
-    async def test_concurrent_invokes_build_separate_instances_and_do_not_cross(self):
+    async def test_concurrent_invokes_build_separate_instances_and_do_not_cross(
+        self, ir_converter_cls
+    ):
         """并发两调用各自构建独立 workflow 实例,输出不串线。"""
         from agent_runtime.runner.react_workflow_adapter import ReactWorkflowAdapter
-        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
 
         created: list = []
         entered = 0
@@ -74,18 +94,19 @@ class TestReactWorkflowAdapterConcurrency:
             await gate.wait()
             return wf
 
-        adapter = ReactWorkflowAdapter(
-            ir_data={"workflowId": "w-r02"},
-            card_id="card-r02",
-            workflow_name="R02_ROOT_WORKFLOW",
-            workflow_desc="R02 echo workflow",
-            input_params={},
-            user_fields_keys=[],
-        )
+        with pytest.warns(DeprecationWarning, match="native WorkflowCard"):
+            adapter = ReactWorkflowAdapter(
+                ir_data={"workflowId": "w-r02"},
+                card_id="card-r02",
+                workflow_name="R02_ROOT_WORKFLOW",
+                workflow_desc="R02 echo workflow",
+                input_params={},
+                user_fields_keys=[],
+            )
 
         with patch("openjiuwen.core.workflow.create_workflow_session",
                    return_value=MagicMock()), \
-             patch.object(IRConverter, "async_ir_to_workflow", fake_async_ir_to_workflow):
+             patch.object(ir_converter_cls, "async_ir_to_workflow", fake_async_ir_to_workflow):
             results = await asyncio.gather(
                 adapter.invoke({"query": "R02_SESSION_A"}),
                 adapter.invoke({"query": "R02_SESSION_B"}),
@@ -104,56 +125,56 @@ class TestReactWorkflowAdapterConcurrency:
         assert queries_seen == {"R02_SESSION_A", "R02_SESSION_B"}
 
     @pytest.mark.asyncio
-    async def test_invoke_uses_ir_data_not_shared_instance(self):
+    async def test_invoke_uses_ir_data_not_shared_instance(self, ir_converter_cls):
         """invoke 每次都调 async_ir_to_workflow(self._ir_data),不持有共享实例。"""
         from agent_runtime.runner.react_workflow_adapter import ReactWorkflowAdapter
-        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
 
         async def fake_async_ir_to_workflow(ir_data, **kwargs):
             assert ir_data == {"workflowId": "w-r02"}  # 传的是只读 ir_data
             wf = _FakeWorkflow()
             return wf
 
-        adapter = ReactWorkflowAdapter(
-            ir_data={"workflowId": "w-r02"},
-            card_id="card-r02",
-            workflow_name="wf",
-            workflow_desc="d",
-            input_params={},
-            user_fields_keys=[],
-        )
+        with pytest.warns(DeprecationWarning, match="native WorkflowCard"):
+            adapter = ReactWorkflowAdapter(
+                ir_data={"workflowId": "w-r02"},
+                card_id="card-r02",
+                workflow_name="wf",
+                workflow_desc="d",
+                input_params={},
+                user_fields_keys=[],
+            )
 
         # adapter 实例上不应残留任何共享 workflow 实例属性
         assert not hasattr(adapter, "_workflow_instance")
 
         with patch("openjiuwen.core.workflow.create_workflow_session",
                    return_value=MagicMock()), \
-             patch.object(IRConverter, "async_ir_to_workflow", fake_async_ir_to_workflow):
+             patch.object(ir_converter_cls, "async_ir_to_workflow", fake_async_ir_to_workflow):
             result = await adapter.invoke({"query": "X"})
 
         assert result == {"answer": "OK:X"}
 
     @pytest.mark.asyncio
-    async def test_failure_in_one_call_does_not_pollute_the_other(self):
+    async def test_failure_in_one_call_does_not_pollute_the_other(self, ir_converter_cls):
         """§9.3 异常隔离:一个调用 stream 抛错,不影响另一并发调用(独立实例+session)。"""
         from agent_runtime.runner.react_workflow_adapter import ReactWorkflowAdapter
-        from jiuwen.serve.controllers.execution.ir_converter import IRConverter
 
         async def fake_async_ir_to_workflow(ir_data, **kwargs):
             return _FakeWorkflowMaybeFail()
 
-        adapter = ReactWorkflowAdapter(
-            ir_data={"workflowId": "w-r02"},
-            card_id="card-r02",
-            workflow_name="wf",
-            workflow_desc="d",
-            input_params={},
-            user_fields_keys=[],
-        )
+        with pytest.warns(DeprecationWarning, match="native WorkflowCard"):
+            adapter = ReactWorkflowAdapter(
+                ir_data={"workflowId": "w-r02"},
+                card_id="card-r02",
+                workflow_name="wf",
+                workflow_desc="d",
+                input_params={},
+                user_fields_keys=[],
+            )
 
         with patch("openjiuwen.core.workflow.create_workflow_session",
                    return_value=MagicMock()), \
-             patch.object(IRConverter, "async_ir_to_workflow", fake_async_ir_to_workflow):
+             patch.object(ir_converter_cls, "async_ir_to_workflow", fake_async_ir_to_workflow):
             results = await asyncio.gather(
                 adapter.invoke({"query": "FAIL"}),
                 adapter.invoke({"query": "OK"}),

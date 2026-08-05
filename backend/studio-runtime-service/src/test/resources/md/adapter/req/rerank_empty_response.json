@@ -1,8 +1,0 @@
-{
-  "id": "test-id-003",
-  "model": "rerank-v1",
-  "rerank_usage": {
-    "total_tokens": 0
-  },
-  "results": []
-}

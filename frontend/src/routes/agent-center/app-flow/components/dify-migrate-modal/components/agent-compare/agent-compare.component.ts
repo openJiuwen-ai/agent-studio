@@ -46,7 +46,7 @@ export class AgentCompareComponent {
   ) { }
 
   ngOnInit(): void {
-    this.oldModelName = this.node.configs.model.model_name;
+    this.oldModelName = this.node?.configs?.model?.model_name || '';
   }
 
   public updateModel(model:any){

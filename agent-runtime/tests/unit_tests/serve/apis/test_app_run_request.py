@@ -72,6 +72,7 @@ class TestAgentAppRunRequest:
     def test_defaults():
         req = AgentAppRunRequest()
         assert req.query is None
+        assert req.resume_input is None
         assert req.inputs == {}
         assert req.tool_switch_dict == {}
         assert req.histories == []
@@ -89,6 +90,11 @@ class TestAgentAppRunRequest:
     def test_query_with_value():
         req = AgentAppRunRequest(query="test question")
         assert req.query == "test question"
+
+    @staticmethod
+    def test_resume_input_alias():
+        req = AgentAppRunRequest.model_validate({"resumeInput": "APPROVE"})
+        assert req.resume_input == "APPROVE"
 
     @staticmethod
     def test_query_alias():

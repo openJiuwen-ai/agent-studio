@@ -58,6 +58,8 @@ public class RagFlowConnector extends AbstractKnowledgeBaseConnector {
 
     private final static String IMAGE_PATH_URI = "/v1/document/image/";
 
+    private final static int RAG_FLOW_MAX_PAGE_SIZE = 100;
+
     private final static String PAGE = "page";
 
     public RagFlowConnector(ConnectorClient connectorClient) {
@@ -69,7 +71,7 @@ public class RagFlowConnector extends AbstractKnowledgeBaseConnector {
         Integer offset, Integer limit) {
         // RagFlow的数据集查询接口支持服务端分页，并返回满足过滤条件的总数total_datasets，此处按offset/limit换算成page/page_size交给服务端分页
         int pageNum = offset / limit + 1;
-        int pageSize = limit;
+        int pageSize = Math.min(limit, RAG_FLOW_MAX_PAGE_SIZE);
         Map<String, Object> queryParam = Maps.newHashMap();
         queryParam.put(RequestParamConstants.NAME, name);
         queryParam.put(PAGE, pageNum);
@@ -112,7 +114,7 @@ public class RagFlowConnector extends AbstractKnowledgeBaseConnector {
         retrieveChunksRequestBody.setQuestion(request.getQuery());
         retrieveChunksRequestBody.setDatasetIds(request.getKnowledgeBaseIds());
         int pageNum = offset / limit + 1;
-        int pageSize = limit;
+        int pageSize = Math.min(limit, RAG_FLOW_MAX_PAGE_SIZE);
         retrieveChunksRequestBody.setPage(pageNum);
         retrieveChunksRequestBody.setPageSize(pageSize);
         RequestEntity requestEntity = RequestEntity.builder()

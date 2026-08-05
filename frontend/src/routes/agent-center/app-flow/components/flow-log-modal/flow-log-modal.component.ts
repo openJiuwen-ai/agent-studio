@@ -538,7 +538,7 @@ export class FlowLogModalComponent {
   protected getSingleExecDetail(workflowId: string, conversationId: string, executionId: string) {
     this.flowRepoServe.getSingleExecInfo(workflowId, executionId).then((result: any) => {
       // 通过增加node_uuid字段，保证点击时序图上的某个节点，可以展开对应的调用链信息
-      result.event_list.forEach(item => {
+      (result.event_list || []).forEach(item => {
         item.node_uuid = uuidV4();
       });
 
@@ -696,7 +696,8 @@ export class FlowLogModalComponent {
     tableItem.isLLMNode = this.isLLMNode(tableItem?.node_type);
     tableItem.nodeSrc = this.getNodeStatus(tableItem?.node_status);
     tableItem.isParamExtractionNode = this.isParamExtractionNode(tableItem?.node_type);
-    tableItem.isIOEmpty = this.isIOEmpty(tableItem?.outputs);
+    tableItem.isIOEmptyOutputs = this.isIOEmpty(tableItem?.outputs);
+    tableItem.isIOEmptyInputs = this.isIOEmpty(tableItem?.inputs);
     tableItem.messagesByUuid = this.getMessagesByUuid(tableItem.messages, tableItem.roundSelected?.uuid);
     if (tableItem.messagesByUuid.length && tableItem.messagesByUuid[0]) {
       tableItem.messagesByUuid[0].isIOEmpty = this.isIOEmpty(tableItem.messagesByUuid[0]);
@@ -759,6 +760,7 @@ export class FlowLogModalComponent {
     this.curInvodeId = this.result.execution_id;
 
     if (timelineData?.childInvokes.length > 0) {
+      timelineData.childInvokes = timelineData.childInvokes.filter(item => item.endTime && item.startTime);
       timelineData.startTime = timelineData.childInvokes[0].startTime;
       timelineData.endTime = timelineData.childInvokes[timelineData?.childInvokes.length - 1].endTime;
     }

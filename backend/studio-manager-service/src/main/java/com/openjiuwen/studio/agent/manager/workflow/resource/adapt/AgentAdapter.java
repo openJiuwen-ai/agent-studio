@@ -262,6 +262,8 @@ public class AgentAdapter extends ResourceAdapter {
         agent.setIrPath(agentCommonService.getAgentObsPath(agent.getAgentId(), CommonConstant.Workflow.IR));
         agentMapper.insert(agent);
         handleReleaseVersion(agent, importInfo.getReleaseVersion(), result);
+        // 标记首次导入：与 WorkflowAdapter/ControllerAdapter 一致，放在操作成功后
+        result.setAddTag(true);
     }
 
     private void handleReleaseVersion(Agent agent, ReleaseVersion releaseVersion, ImportResourceResult result) {

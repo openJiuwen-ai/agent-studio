@@ -8,6 +8,7 @@ import com.openjiuwen.studio.agent.agentbase.entity.KbConnectionRouterEntity;
 
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -20,8 +21,10 @@ public class AverageRouterStrategy implements KbRouterStrategy {
 
     @Override
     public String findConnectionId(List<KbConnectionRouterEntity> kbConnectionRouterEntities) {
-        kbConnectionRouterEntities.sort(Comparator.comparing(KbConnectionRouterEntity::getUsageRatio));
-        return Optional.ofNullable(kbConnectionRouterEntities.get(0).getKnowledgeBaseConnectionId()).orElse("");
+        // 入参 List 可能来自缓存（被多线程共享），此处拷贝后再排序，避免 ConcurrentModificationException
+        List<KbConnectionRouterEntity> sortedEntities = new ArrayList<>(kbConnectionRouterEntities);
+        sortedEntities.sort(Comparator.comparing(KbConnectionRouterEntity::getUsageRatio));
+        return Optional.ofNullable(sortedEntities.get(0).getKnowledgeBaseConnectionId()).orElse("");
     }
 
 }

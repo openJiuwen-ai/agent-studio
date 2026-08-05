@@ -75,9 +75,11 @@ class EventHandler:
         is_debug = request.headers.get("x-invoke-mode", "").lower() == "debug"
         language = request.headers.get("x-language", "en-us")
         # instance_id 使用 agent_id 或 workflow_id（与读取路径一致），不从 IR 路径文件名提取
+        # 网页发布接口路径参数是 short_code，此时从 request.state 获取真实 id
         instance_id = (
             request.path_params.get("agent_id")
             or request.path_params.get("workflow_id")
+            or getattr(request.state, "instance_id", "")
         )
         if not instance_id:
             raise ValueError(

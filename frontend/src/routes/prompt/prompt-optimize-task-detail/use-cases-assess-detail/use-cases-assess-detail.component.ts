@@ -1,9 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  ChangeDetectorRef,
-  Component,
-  Input, ViewEncapsulation,
-} from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, ViewEncapsulation } from '@angular/core';
 import { MODULES } from '@shared/modules';
 import { ReactiveFormsModule } from '@angular/forms';
 import { NzTableModule } from 'ng-zorro-antd/table';
@@ -56,11 +51,11 @@ export class UseCasesAssessDetailComponent {
   columns: Array<{ title: string; width?: string; sortKey?: string; compareFn?: (a: any, b: any, sortKey: string) => number }> = [
     {
       title: this.i18n.transform('base_number'),
-      width:'60px',
+      width: '60px',
     },
     {
       title: this.i18n.transform('evaluation_data'),
-      width:'265px'
+      width: '230px',
     },
     {
       title: this.i18n.transform('system_response'),
@@ -70,7 +65,7 @@ export class UseCasesAssessDetailComponent {
     },
     {
       title: this.i18n.transform('answer_score'),
-      width:'100px',
+      width: '100px',
       sortKey: 'score',
       compareFn: (a: any, b: any, sortKey: string): number => {
         return a[sortKey] - b[sortKey];
@@ -84,19 +79,19 @@ export class UseCasesAssessDetailComponent {
   constructor(
     private promptOptimizeService: PromptOptimizeService,
     private cdr: ChangeDetectorRef,
-    private i18n: I18NextEagerPipe,
+    private i18n: I18NextEagerPipe
   ) {}
 
   ngOnInit() {
     if (this.ptType === 'multi') {
-      this.columns =  [
+      this.columns = [
         {
           title: this.i18n.transform('base_number'),
-          width:'60px',
+          width: '60px',
         },
         {
           title: this.i18n.transform('evaluation_data'),
-          width:'265px'
+          width: '265px',
         },
         {
           title: this.i18n.transform('image'),
@@ -109,7 +104,7 @@ export class UseCasesAssessDetailComponent {
         },
         {
           title: this.i18n.transform('answer_score'),
-          width:'100px',
+          width: '100px',
           sortKey: 'score',
           compareFn: (a: any, b: any, sortKey: string): number => {
             return a[sortKey] - b[sortKey];
@@ -122,29 +117,34 @@ export class UseCasesAssessDetailComponent {
     }
   }
 
+  pageChange(): void {
+    this.displayedData = this.srcData.data.slice(
+      (this.pageInfo.currentPage - 1) * this.pageInfo.pageSize.size,
+      this.pageInfo.currentPage * this.pageInfo.pageSize.size
+    );
+  }
+
   public getDetail() {
-    this.promptOptimizeService
-      .listEvalDetail(this.taskId, this.iterNum)
-      .then((res) => {
-        this.srcData.data = res.data.map((item) => {
-          const images = [];
-          const useCase = JSON.parse(item.variable);
-          for (let variable of this.variables) {
-            if (variable.type === 'multi') {
-              images.push({
-                name: '',
-                previewUrl: useCase[variable.value],
-              });
-            }
+    this.promptOptimizeService.listEvalDetail(this.taskId, this.iterNum).then(res => {
+      this.srcData.data = res.data.map(item => {
+        const images = [];
+        const useCase = JSON.parse(item.variable);
+        for (let variable of this.variables) {
+          if (variable.type === 'multi') {
+            images.push({
+              name: '',
+              previewUrl: useCase[variable.value],
+            });
           }
-          return {
-            ...item,
-            images
-          };
-        });
-        this.displayedData = this.srcData.data;
-        this.pageInfo.total = res.data.length;
-        this.cdr.detectChanges();
+        }
+        return {
+          ...item,
+          images,
+        };
       });
+      this.pageInfo.total = res.data.length;
+      this.pageChange();
+      this.cdr.detectChanges();
+    });
   }
 }

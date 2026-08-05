@@ -114,6 +114,8 @@ class IntentionDetectModule:
         self.intent_id_to_function_map = {}
         self.category_2_agent_name_map = {}
         self.agent_name_2_category_map = {}
+        self.category_2_child_id_map = {}
+        self.intent_id_to_child_category_map = {}
         self.workflow_handler = None
 
         self.enable_multi_layer_detection = False
@@ -577,9 +579,7 @@ class IntentionDetectModule:
         if len(matched_intents) == 1:
             # 仅匹配到一条，返回对应的工作流名称
             matched_intent = matched_intents[0]
-            matched_workflow_name = self.intent_id_to_function_map.get(
-                matched_intent["id"]
-            )
+            matched_workflow_name = self._resolve_route_key(matched_intent["id"])
             logger.info(
                 f"task_id: {task_id}|使用指定意图: '{specified_intent}' 唯一匹配到描述 '{matched_intent['description']}' "
                 f"-> {matched_workflow_name}",
@@ -741,8 +741,10 @@ class IntentionDetectModule:
                 f"task_id {task_id}| Detected workflow intent: {intent_function}",
                 simple_log=f"task_id {task_id}| Detected workflow intent",
             )
-        elif self.category_2_agent_name_map.get(intent_class, None):
-            intent_function = self.category_2_agent_name_map.get(intent_class)
+        elif self.category_2_child_id_map.get(intent_class, None):
+            # A.1(C-09): 返回 category(每 child 唯一),由 controller_planner 按 child.id 路由,
+            # 不返回 child.name,避免重名时塌成同一 name
+            intent_function = intent_class
             logger.info(
                 f"task_id {task_id}| Detected agent intent: {intent_function}",
                 simple_log=f"task_id {task_id}| Detected agent intent",
@@ -1188,7 +1190,7 @@ class IntentionDetectModule:
                 intent_id_str = str(intent_id)
 
                 # 通过映射获取 intent_function
-                intent_function = self.intent_id_to_function_map.get(intent_id_str)
+                intent_function = self._resolve_route_key(intent_id_str)
 
                 if intent_function:
                     logger.info(
@@ -1234,6 +1236,8 @@ class IntentionDetectModule:
         self.intent_id_to_function_map = {}
         self.category_2_agent_name_map = {}
         self.agent_name_2_category_map = {}
+        self.category_2_child_id_map = {}
+        self.intent_id_to_child_category_map = {}
 
         # 初始化意图列表
         intents = []
@@ -1410,6 +1414,12 @@ class IntentionDetectModule:
                 # 使用子agent的名称作为意图函数名
                 self.category_2_agent_name_map[category_id] = child_agent.name
                 self.agent_name_2_category_map[child_agent.name] = category_id
+                # A.1(C-09): category → child.id(唯一),供 controller_planner 按 id 路由,
+                # 不经 name first-match,允许同名子成员
+                self.category_2_child_id_map[category_id] = child_agent.id
+                # A.1: intent_id → category(唯一)
+                # 供非 LLM 识别入口(多级/工作流式/指定/_map)返回 category
+                self.intent_id_to_child_category_map[intent_id] = category_id
                 self.intent_id_to_function_map[intent_id] = child_agent.name
 
                 category_index += 1
@@ -1419,11 +1429,23 @@ class IntentionDetectModule:
                     simple_log="Added child agent intent",
                 )
 
+    def _resolve_route_key(self, intent_id):
+        """A.1:统一 route key 解析,供所有识别入口返回,controller_planner 按 category 路由。
+
+        AGENT 意图 → category(每 child 唯一,重名可区分);
+        workflow/global 意图 → name(不变)。
+        不动 intent_id_to_function_map 的 name 值(候选标签/LLM 输入仍用 name)。
+        """
+        key = intent_id if isinstance(intent_id, str) else str(intent_id)
+        if key in self.intent_id_to_child_category_map:
+            return self.intent_id_to_child_category_map[key]
+        return self.intent_id_to_function_map.get(key)
+
     def _map_intent_id_to_function(self, intent_id: str, task_id: str) -> str:
-        """将意图ID映射到实际的意图函数名"""
+        """将意图ID映射到实际的意图函数 route key(A.1:AGENT→category,workflow/global→name)"""
         try:
-            if intent_id in self.intent_id_to_function_map:
-                intent_function = self.intent_id_to_function_map[intent_id]
+            intent_function = self._resolve_route_key(intent_id)
+            if intent_function:
                 logger.info(
                     f"task_id {task_id}| Mapped intent_id {intent_id} to function: {intent_function}",
                     simple_log=f"task_id {task_id}| Mapped intent_id to function",
@@ -1469,9 +1491,25 @@ class IntentionDetectModule:
     async def _detect_with_multi_layer_intent_detection(
         self, task_id, active_workflows, global_only
     ):
+        """多级意图识别。
+
+        A.1(C-09):multi-layer 用 name-keyed 字典(valid_intents),effective intent name
+        重复时会在 matcher 前塌成一条、再按字典位置反推 intent_id → 错路由。检测到
+        effective intent name 重复时回退细粒度 LLM(用 description 区分、返回 category),
+        不约束用户内容(用户可自行用 intent_name 区分以走原 multi-layer)。
         """
-        多级意图识别
-        """
+        intents = self._build_intent_mappings_and_list(active_workflows, global_only)
+        names = [i.get("name") for i in intents if i.get("name")]
+        if len(names) != len(set(names)):
+            logger.info(
+                f"task_id {task_id}| Multi-layer fallback to fine-grained LLM: "
+                f"duplicate effective intent names, name-keyed dict would collapse",
+                simple_log="multi-layer fallback to llm on dup intent name",
+            )
+            return await self._detect_intent_with_llm(
+                active_workflows, task_id, global_only=global_only
+            )
+
         multi_layer_id_input = self._prepare_multi_layer_id_input(
             active_workflows, global_only
         )
@@ -1482,7 +1520,7 @@ class IntentionDetectModule:
             simple_log="succeed to get multilayer result",
         )
         if result.is_matched:
-            intent_function = self.intent_id_to_function_map.get(result.intent_id)
+            intent_function = self._resolve_route_key(result.intent_id)
             logger.info(
                 f"task_id {task_id}| Multi-layer intent detection matched intent : {intent_function}"
             )

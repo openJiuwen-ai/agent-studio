@@ -361,12 +361,9 @@ public class AgentImportService {
                 if (CollectionUtils.isEmpty(l1Mappings)) {
                     continue;
                 }
-                String dslJson = JSON.toJSONString(importInfo.getDsl());
-                if (!Strings.CI.contains(dslJson, LATEST_PARAM)) {
-                    continue;
-                }
                 // 最新版本的信息构造
                 List<SpaciousInfo> spaciousInfoList = getSpaciousInfos(projectId, workspaceId, l1Mappings);
+                String dslJson = JSON.toJSONString(importInfo.getDsl());
 
                 if (Strings.CS.equals(importInfo.getResourceType(), ResourceTypeEnum.WORKFLOW.toString())) {
                     WorkflowVO workflowVO = JSONObject.parseObject(dslJson, WorkflowVO.class);
@@ -505,17 +502,15 @@ public class AgentImportService {
             }
             insertMapping(l1Mappings, spaciousInfoMap, appId, appVersion);
         }
-        // 检查mapping表是否存在草稿
-        List<MappingEntity> draftMappings = mappingMapper.selectByAppIdAndAppVersion(appId, Constants.LATEST_PUBLISH_VERSION, null, null);
-        if (CollectionUtils.isEmpty(draftMappings)) {
-
-            if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
-                uploadControllerDsl(importInfo, appId, null);
-            } else {
-                uploadWorkflowDsl(importInfo, appId, appId, appVersion);
-            }
-            insertMapping(l1Mappings, spaciousInfoMap, appId, null);
+        // 草稿态：先删除旧草稿态mapping，再重新上传替换后的草稿DSL和插入新草稿态mapping，
+        // 确保草稿DSL中子流节点version_id已被替换，mapping表指向目标空间子资源最新版本
+        mappingMapper.deleteBatchByAppId(appId, null, false);
+        if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
+            uploadControllerDsl(importInfo, appId, null);
+        } else {
+            uploadWorkflowDsl(importInfo, appId, appId, null);
         }
+        insertMapping(l1Mappings, spaciousInfoMap, appId, null);
 
     }
 
@@ -1129,7 +1124,12 @@ public class AgentImportService {
                     }
                 }
                 case AGENT -> {
-                    uploadAgentDsl(resourceMap.get(result.getId()), id, id);
+                    // 草稿 DSL 上传：与 workflow/controller 一致，仅首次导入或草稿态导入时上传。
+                    // agent 通用模式草稿走 buildComplexAgentInfo 从 DB 重建（不读 OBS 草稿文件），
+                    // 但为一致性与防御（避免 OBS 草稿文件被版本快照覆盖），同样加 addTag 守卫。
+                    if (Boolean.TRUE.equals(result.getAddTag()) || StringUtils.isEmpty(versionId)) {
+                        uploadAgentDsl(resourceMap.get(result.getId()), id, id);
+                    }
                     if (StringUtils.isNotEmpty(versionId)) {
                         ImportInfo versionedInfo = versionedResourceMap.get(result.getId() + "|" + result.getVersion());
                         uploadAgentDsl(
@@ -1147,6 +1147,37 @@ public class AgentImportService {
                         uploadControllerDsl(resourceMap.get(result.getId()), id, null);
                     }
                 }
+            }
+        });
+
+        // 宽松模式先导入父资源（controller/workflow）时，子工作流尚不存在，mapping 写的是子工作流
+        // 的旧 resource_id（=trace_id）且 valid=false。后续严格模式导入子工作流后，需要把这些 mapping 的
+        // resource_id 更新为新 ID 并置 valid=true，否则 retrieveAgent 查不到子工作流关联（"工作流不存在"）。
+        // 严格模式自身 handleMapping 已用新 ID 插入 mapping，selectByResourceId(旧ID) 查不到记录，不受影响。
+        resultList.forEach(result -> {
+            if (!Boolean.TRUE.equals(result.getAddTag()) || StringUtils.isEmpty(result.getNewId())
+                || Strings.CS.equals(result.getNewId(), result.getId())) {
+                return;
+            }
+            if (!Strings.CS.equalsAny(result.getType(), ResourceTypeEnum.WORKFLOW.toString(),
+                ResourceTypeEnum.CONTROLLER.toString())) {
+                return;
+            }
+            List<MappingEntity> staleMappings = mappingMapper.selectByResourceId(result.getId());
+            if (CollectionUtils.isEmpty(staleMappings)) {
+                return;
+            }
+            for (MappingEntity mapping : staleMappings) {
+                if (mapping.isValid()) {
+                    continue;
+                }
+                MappingEntity update = new MappingEntity();
+                update.setMappingId(mapping.getMappingId());
+                update.setResourceId(result.getNewId());
+                update.setResourceName(
+                    StringUtils.isNotEmpty(result.getNewName()) ? result.getNewName() : result.getName());
+                update.setValid(true);
+                mappingMapper.updateById(update);
             }
         });
     }

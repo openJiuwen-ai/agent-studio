@@ -263,6 +263,51 @@ def test_build_check_invoke_body_per_model_type():
     assert _build_check_invoke_body("TEXT-TO-IMAGE", "m1") is None
 
 
+def test_build_chat_upstream_body_preserves_thinking_disabled():
+    """关闭思考模式必须透传到上游 —— 旧实现强制置 thinking=null，开关失效。"""
+    from agent_builder.serve.apis.model_service_api import _build_chat_upstream_body
+
+    body = {
+        "model": "82a4e632-8df7-46cf-8f5e-4c0205a0087a",
+        "stream": True,
+        "messages": [{"role": "user", "content": "你好"}],
+        "max_tokens": 2048,
+        "temperature": 0.5,
+        "top_p": 0.5,
+        "refresh": True,
+        "thinking": {"type": "disabled"},
+    }
+    up_body = _build_chat_upstream_body(body, "real-model", True)
+
+    # refresh 必须被剔除；model/stream 用本地解析值覆写；thinking 按客户端透传
+    assert "refresh" not in up_body
+    assert up_body["model"] == "real-model"
+    assert up_body["stream"] is True
+    assert up_body["thinking"] == {"type": "disabled"}
+
+
+def test_build_chat_upstream_body_preserves_thinking_enabled():
+    from agent_builder.serve.apis.model_service_api import _build_chat_upstream_body
+
+    up_body = _build_chat_upstream_body(
+        {"model": "x", "thinking": {"type": "enabled"}, "refresh": False},
+        "real-model", False,
+    )
+    assert up_body["thinking"] == {"type": "enabled"}
+    assert up_body["stream"] is False
+    assert "refresh" not in up_body
+
+
+def test_build_chat_upstream_body_no_thinking_leaves_absent():
+    """客户端未传 thinking 时不应注入 thinking=null（让上游走默认）。"""
+    from agent_builder.serve.apis.model_service_api import _build_chat_upstream_body
+
+    up_body = _build_chat_upstream_body(
+        {"model": "x", "messages": []}, "real-model", True,
+    )
+    assert "thinking" not in up_body
+
+
 def test_check_auth_headers_api_key_uses_api_key_field():
     from agent_builder.serve.apis.model_service_api import _check_auth_headers
 

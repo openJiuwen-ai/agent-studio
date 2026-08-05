@@ -46,6 +46,9 @@ from jiuwen.extension.workflow_node.end import End
 from jiuwen.extension.workflow_node.exception_handler import (
     register_error_recovery_handler,
 )
+from jiuwen.extension.patches.parallel_branch_grouping_patch import (
+    apply_parallel_branch_grouping_patch,
+)
 from jiuwen.extension.workflow_node.flow_agent import FlowAgent, FlowAgentConfig
 from jiuwen.extension.workflow_node.flow_aggregate import Aggregate
 from jiuwen.extension.workflow_node.flow_api import FlowApi
@@ -105,6 +108,8 @@ apply_loop_state_cleanup_patch()
 from jiuwen.extension.workflow_node.utils import WorkflowMetadata
 
 from jiuwen.serve.controllers.execution.ir_parallel_utils import (
+    ParallelJoinPlan,
+    _sanitize_node_id,
     build_parallel_join_plan,
     collect_parallel_join_nodes,
 )
@@ -305,8 +310,9 @@ def _convert_global_variable_refs_in_ir(ir_data: dict) -> dict:
 
         _cow_configs_field(("branches",), _convert_refs_in_schema, component, state)
         _cow_configs_field(("io_configs", "inputs_schema"), _convert_refs_in_schema, component, state)
+        _cow_configs_field(("io_configs", "outputs_schema"), _convert_refs_in_schema, component, state)
 
-        # Legacy inputs live directly under component (not under configs)
+        # Legacy inputs/outputs live directly under component (not under configs)
         inputs_orig = component.get("inputs", {})
         if inputs_orig:
             converted_inputs = _convert_refs_in_schema(inputs_orig)
@@ -314,6 +320,19 @@ def _convert_global_variable_refs_in_ir(ir_data: dict) -> dict:
                 if state["comp"] is component:
                     state["comp"] = dict(component)
                 state["comp"]["inputs"] = converted_inputs
+
+        # End 节点的 outputs.userFields 会被 IR converter 以 ``#end_`` 前缀并入
+        # inputs_schema；若此处的 ``${node_start.memory.xxx}`` 不转换，运行期 End
+        # 的输出字段会从 io_state (node_start 的陈旧输出) 解析，而非从被
+        # SetVariable 更新过的 global_state 解析，导致同一记忆变量输入有值、
+        # 输出无值。
+        outputs_orig = component.get("outputs", {})
+        if outputs_orig:
+            converted_outputs = _convert_refs_in_schema(outputs_orig)
+            if converted_outputs is not outputs_orig:
+                if state["comp"] is component:
+                    state["comp"] = dict(component)
+                state["comp"]["outputs"] = converted_outputs
 
         if state["comp"] is not component:
             new_components[i] = state["comp"]
@@ -761,6 +780,68 @@ async def _iter_parallel_stream_inputs(inputs: Any) -> AsyncIterator[Any]:
         return
     if inputs is not None:
         yield inputs
+
+
+class _LaneSentinelComponent(WorkflowComponent):
+    """Stream-producer sentinel for a mixed parallel lane's non-stream terminal.
+
+    A "mixed" parallel lane has both a streaming terminal (LLM) and a
+    non-streaming terminal (e.g. Code) behind a conditional branch. The
+    lane-done is wired as TRANSFORM and expects stream data from the streaming
+    sibling; if the non-stream branch executes at runtime, the streaming
+    sibling never produces and the lane-done raises 112052 ("no stream data in").
+
+    This sentinel sits between the non-stream terminal and the lane-done. When
+    the non-stream branch fires, the sentinel is scheduled and emits a single
+    stream frame, which satisfies the lane-done's CNF OR-group ``{LLM, sentinel}``
+    so its ``stream_call`` runs (no 112052) and the not-executed LLM sibling's
+    queue is closed via the group machinery (no hang). The sentinel's frame is
+    keyed by its own id, so the lane-done's schema (which references the LLM)
+    does not route it -- the LLM field resolves to empty, matching the fact
+    that the LLM branch did not execute.
+    """
+
+    async def stream(self, inputs: Any, session: Any, context: Any) -> AsyncIterator[Any]:
+        # One empty data frame: its first_frame=True arrival starts the
+        # lane-done's stream_call task; the END frame emitted right after
+        # satisfies the OR-group. Value is irrelevant (not routed by schema).
+        yield ""
+
+
+def _detect_mixed_lane_sentinels(
+    plan: ParallelJoinPlan,
+    parallel_stream_done_inputs: dict[str, dict],
+    ir_stream_source_ids: set[str],
+) -> dict[str, str]:
+    """Detect non-stream terminals on mixed parallel lanes and map each to a
+    sentinel node id.
+
+    A lane is "mixed" when its ``done_node`` is in ``parallel_stream_done_inputs``
+    (i.e. it has a streaming terminal, so it is wired as a TRANSFORM lane-done
+    that expects stream data) but it ALSO has at least one non-stream terminal
+    (a terminal source not in ``ir_stream_source_ids``). When the non-stream
+    branch executes, the streaming sibling never produces -> 112052.
+
+    Returns ``{non_stream_terminal_id: sentinel_id}`` for each non-stream
+    terminal of a mixed lane. Pure-stream lanes (all terminals stream) and
+    pure-batch lanes (done_node not in ``parallel_stream_done_inputs``) get no
+    sentinel.
+    """
+    sentinels: dict[str, str] = {}
+    for join_spec in plan.joins.values():
+        for lane in join_spec.lanes:
+            if lane.done_node not in parallel_stream_done_inputs:
+                # Pure batch lane -> InvokeLaneDone, no stream gate, no sentinel.
+                continue
+            done_key = _sanitize_node_id(lane.done_node)
+            for terminal_source, _ in lane.terminals:
+                if terminal_source in ir_stream_source_ids:
+                    continue  # streaming terminal -> the real producer, no sentinel
+                if terminal_source in sentinels:
+                    continue  # already assigned (e.g. same terminal via two branch ids)
+                term_key = _sanitize_node_id(terminal_source)
+                sentinels[terminal_source] = f"_lane_sentinel__{done_key}__{term_key}"
+    return sentinels
 
 
 class _RoutedIntentDetection(IntentDetection):
@@ -1463,6 +1544,7 @@ class IRConverter:
             raise ValueError("ir_data must be a dict")
 
         register_error_recovery_handler()
+        apply_parallel_branch_grouping_patch()
 
         card = WorkflowCard(
             id=ir_data.get("workflowId") or ir_data.get("agentId") or "",
@@ -1553,6 +1635,16 @@ class IRConverter:
                     "userFields": {"stream": "${" + source + "}"}
                 }
 
+        # Mixed-lane sentinels: a lane with BOTH a streaming terminal (LLM)
+        # and a non-stream terminal (e.g. Code) behind a conditional branch is
+        # wired as TRANSFORM (expects stream data from the LLM). When the
+        # non-stream branch executes, the LLM never produces -> 112052. Insert
+        # a sentinel on each non-stream terminal so the lane-done's CNF OR-group
+        # {LLM, sentinel} is satisfied by whichever branch fires.
+        lane_sentinels: dict[str, str] = _detect_mixed_lane_sentinels(
+            parallel_join_plan, parallel_stream_done_inputs, ir_stream_source_ids
+        )
+
         # Pre-collect all loop body component IDs so that root-level connection
         # processing can skip inter-body connections (they belong to LoopGroup, not main workflow).
         _loop_body_ids: set[str] = set()
@@ -1601,12 +1693,36 @@ class IRConverter:
                 lane_done = _ParallelInvokeLaneDoneComponent()
                 workflow.add_workflow_comp(done_node_id, lane_done, inputs_schema={})
             component_by_id[done_node_id] = lane_done
+
+        # Register mixed-lane sentinel components. Each sentinel sits between a
+        # non-stream terminal and its lane-done: terminal -> sentinel (batch),
+        # sentinel -> lane-done (stream). The sentinel is a STREAM producer so
+        # the lane-done's stream_source_groups picks it up and the CNF resolver
+        # merges it with the LLM sibling into an OR-group.
+        sentinel_done_targets: dict[str, str] = {}
+        for terminal_source, sentinel_id in lane_sentinels.items():
+            sentinel = _LaneSentinelComponent()
+            workflow.add_workflow_comp(sentinel_id, sentinel, comp_ability=[ComponentAbility.STREAM])
+            component_by_id[sentinel_id] = sentinel
+            # Resolve this terminal's lane-done (the done_node the terminal
+            # originally flows into) so phase-2 can wire sentinel -> done_node.
+            for _join in parallel_join_plan.joins.values():
+                for _lane in _join.lanes:
+                    if any(t == terminal_source for t, _ in _lane.terminals):
+                        sentinel_done_targets[sentinel_id] = _lane.done_node
+                        break
         end_node_ids = {p["node_id"] for p in pending_end_nodes}
         stream_connection_targets: set[str] = set()
         batch_connection_targets: set[str] = set()
         deferred_connections: list[tuple[str, str, bool]] = []
         branch_connections: list[tuple[str, str, str]] = []
         existing_connections: set[tuple[str, str]] = set()
+        # Track _parallel_done nodes that receive incoming edges from
+        # rewrite_target in both Phase 1 and Phase 2, so that orphaned
+        # done nodes (caused by terminal_to_done key overwrites across
+        # parallel groups sharing the same join target) can be filtered
+        # out during parallel join wiring.
+        active_done_nodes: set[str] = set()
 
         # Phase 1: wire branch routes before BranchComponent/IntentDetection join the
         # graph so add_workflow_comp → register_branch_targets sees populated routers.
@@ -1622,9 +1738,10 @@ class IRConverter:
                 continue
             if not branch_id or "@@" in branch_id:
                 continue
-            target = (
-                parallel_join_plan.rewrite_target(source, target, branch_id) or target
-            )
+            rewritten = parallel_join_plan.rewrite_target(source, target, branch_id)
+            if rewritten:
+                active_done_nodes.add(rewritten)
+                target = rewritten
             # Branch connections (default/non-default) are batch paths
             if target in end_node_ids:
                 batch_connection_targets.add(target)
@@ -1657,6 +1774,22 @@ class IRConverter:
             rewritten_target = parallel_join_plan.rewrite_target(source, target)
             if rewritten_target:
                 existing_connections.add((source, target))
+                active_done_nodes.add(rewritten_target)
+                # Mixed-lane sentinel: reroute non-stream terminal -> sentinel
+                # -> lane-done. The terminal->sentinel edge is batch (the
+                # terminal is non-stream); the sentinel->lane-done edge is
+                # stream so the lane-done's stream_source_groups picks up the
+                # sentinel and the CNF resolver merges {LLM, sentinel} into an
+                # OR-group satisfied by whichever branch fires.
+                if source in lane_sentinels:
+                    sentinel_id = lane_sentinels[source]
+                    if (source, sentinel_id) not in existing_connections:
+                        workflow.add_connection(source, sentinel_id)
+                        existing_connections.add((source, sentinel_id))
+                    if (sentinel_id, rewritten_target) not in existing_connections:
+                        workflow.add_stream_connection(sentinel_id, rewritten_target)
+                        existing_connections.add((sentinel_id, rewritten_target))
+                    continue
                 target = rewritten_target
             existing_connections.add((source, target))
             if is_stream:
@@ -1762,6 +1895,13 @@ class IRConverter:
             if is_stream_out:
                 set_end_kwargs["response_mode"] = "streaming"
 
+            # Parallel-join End nodes must wait for all branches regardless of
+            # comp_ability.  set_end_comp derives wait_for_all from COLLECT/TRANSFORM
+            # ability, which is absent for batch-only End nodes.  Supplying an empty
+            # stream_inputs_schema triggers COLLECT ability so wait_for_all=True.
+            if parallel_join_nodes and node_id in parallel_join_nodes:
+                if "stream_inputs_schema" not in set_end_kwargs:
+                    set_end_kwargs["stream_inputs_schema"] = {}
             workflow.set_end_comp(node_id, end, **set_end_kwargs)
 
         for source, target, is_stream in deferred_connections:
@@ -1770,8 +1910,15 @@ class IRConverter:
                 workflow.add_stream_connection(source, target)
             else:
                 workflow.add_connection(source, target)
+        # When two parallel groups share the same join target and terminals,
+        # terminal_to_done entries from the second group overwrite the first,
+        # leaving some _parallel_done nodes with no incoming edges (orphaned).
+        # With wait_for_all=True, orphaned done nodes in BarrierChannel cause
+        # deadlock.  Filter them out using active_done_nodes tracked during
+        # Phase 1 and Phase 2 rewrite_target calls.
         for join_spec in parallel_join_plan.joins.values():
-            lane_done_nodes = [lane.done_node for lane in join_spec.lanes]
+            lane_done_nodes = [lane.done_node for lane in join_spec.lanes
+                               if lane.done_node in active_done_nodes]
             if len(lane_done_nodes) >= 2:
                 has_stream_lane = _parallel_join_has_stream_lane.get(
                     join_spec.join_target, False
@@ -1791,6 +1938,8 @@ class IRConverter:
                         workflow.add_connection(invoke_done_nodes, join_spec.join_target)
                 else:
                     workflow.add_connection(lane_done_nodes, join_spec.join_target)
+            elif len(lane_done_nodes) == 1:
+                workflow.add_connection(lane_done_nodes[0], join_spec.join_target)
 
         # Add missing connections based on schema references.
         # Strategy:

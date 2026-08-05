@@ -535,12 +535,14 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
     });
 
     inputs.forEach((input) => {
-      const isTrue = input.value.type === 'literal' &&
-        ['number', 'integer'].includes(input.type) &&
-        typeof input.value.content !== 'number' &&
-        input.value.content !== '';
-      if (isTrue) {
-        input.value.content = Number(input.value.content);
+      if (input.value.type === 'literal' && ['number', 'integer'].includes(input.type)) {
+        if (typeof input.value.content !== 'number') {
+          if (input.value.content === '' || input.value.content == null) {
+            input.value.content = null; // 空值置 null，运行时跳过该参数
+          } else {
+            input.value.content = Number(input.value.content);
+          }
+        }
       }
       if (input.options) {
         delete input.options;

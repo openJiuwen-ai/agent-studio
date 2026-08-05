@@ -4,6 +4,7 @@ ReActAgent Workflow Adapter — 将 Workflow 适配为 ReActAgent 可调用的 T
 """
 
 import uuid
+import warnings
 from typing import List
 
 from openjiuwen.core.foundation.tool import Tool, ToolCard
@@ -12,7 +13,11 @@ from datetime import datetime
 
 
 class ReactWorkflowAdapter(Tool):
-    """包装工作流为 Tool，供 ReActAgent 调用"""
+    """已废弃：旧版 Workflow-to-Tool 兼容适配器。
+
+    新代码应向 ReActAgent 的 ability_manager 直接注册 WorkflowCard，以保留
+    Workflow 的中断和恢复语义。本类暂时保留，避免破坏已有外部导入。
+    """
 
     def __init__(
         self,
@@ -23,6 +28,12 @@ class ReactWorkflowAdapter(Tool):
         input_params: dict,
         user_fields_keys: List[str],
     ):
+        warnings.warn(
+            "ReactWorkflowAdapter is deprecated; register a native WorkflowCard "
+            "with ReActAgent instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         card = ToolCard(
             id=card_id,
             name=workflow_name,

@@ -593,7 +593,8 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
   }
 
   addCallItemAttr(callItem) {
-    callItem.isIOEmpty = this.isIOEmpty(callItem.inputs);
+    callItem.isIOEmptyInputs = this.isIOEmpty(callItem.inputs);
+    callItem.isIOEmptyOutputs = this.isIOEmpty(callItem.outputs);
     return callItem;
   }
 
@@ -630,6 +631,8 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
       node.inputs = inputs;
       node.outputs = outputs;
     }
+    node.isIOEmptyInputs = this.isIOEmpty(inputs);
+    node.isIOEmptyOutputs = this.isIOEmpty(outputs);
   }
 
   /** 遇到event_type等于'node_finished'的流式块，组装成时序图数据 */

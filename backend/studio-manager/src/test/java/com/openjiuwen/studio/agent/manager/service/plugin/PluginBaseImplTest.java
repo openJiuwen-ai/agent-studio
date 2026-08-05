@@ -472,6 +472,175 @@ class PluginBaseImplTest extends BaseTest {
         assertEquals("string", items.getType());
     }
 
+    /**
+     * 验证 OpenAPI 导入时 parameter.in 小写值正确映射为运行时要求的大写 location。
+     * <p>
+     * OpenAPI 3.0 规范中 in 值为小写 (query/header/path)，
+     * 运行时 ParamLocation 枚举要求首字母大写 (Query/Headers/Path)。
+     *
+     * @see <a href="https://spec.openapis.org/oas/v3.0.3#parameter-object">OpenAPI 3.0 Parameter Object</a>
+     */
+    @Test
+    void testTransformOpenAPI2Plugin_parameterLocationMapping() {
+        // Arrange
+        OpenAPI openAPI = new OpenAPI();
+        openAPI.setInfo(new Info().title("Location Test API").description("Test location mapping"));
+
+        Server server = new Server();
+        server.setUrl("https://api.example.com/v1");
+        openAPI.setServers(List.of(server));
+
+        Paths paths = new Paths();
+        PathItem pathItem = new PathItem();
+        Operation getOp = new Operation();
+        getOp.setOperationId("testEndpoint");
+        getOp.setDescription("Test endpoint with various parameter locations");
+
+        // 使用 OpenAPI 标准小写值: query, header, path
+        getOp.setParameters(List.of(
+            new Parameter().name("search").in("query").required(false)
+                .schema(new Schema<String>().type("string")),
+            new Parameter().name("x-api-key").in("header").required(false)
+                .schema(new Schema<String>().type("string")),
+            new Parameter().name("id").in("path").required(true)
+                .schema(new Schema<String>().type("string"))
+        ));
+
+        pathItem.setGet(getOp);
+        paths.put("/items/{id}", pathItem);
+        openAPI.setPaths(paths);
+
+        // Act
+        PluginDTO pluginDTO = pluginBaseImpl.transformOpenAPI2Plugin(openAPI);
+
+        // Assert
+        assertNotNull(pluginDTO);
+        List<ToolInputSchema> inputSchemas = pluginDTO.getToolInputSchemaList();
+        assertNotNull(inputSchemas);
+        assertEquals(1, inputSchemas.size());
+
+        // inputSchema 是 JSON 字符串，解析后验证 location 映射
+        String inputSchemaJson = inputSchemas.get(0).getInputSchema();
+        assertNotNull(inputSchemaJson);
+
+        Map<String, Object> schemaMap = JsonUtils.json2ObjQuietly(inputSchemaJson, Map.class);
+        assertNotNull(schemaMap);
+        Map<String, Object> properties = (Map<String, Object>) schemaMap.get("properties");
+        assertNotNull(properties);
+
+        // query → Query
+        Map<String, Object> queryParam = (Map<String, Object>) properties.get("search");
+        assertNotNull(queryParam, "query parameter 'search' should exist");
+        assertEquals("Query", queryParam.get("location"),
+            "OpenAPI 'query' should map to 'Query'");
+
+        // header → Headers
+        Map<String, Object> headerParam = (Map<String, Object>) properties.get("x-api-key");
+        assertNotNull(headerParam, "header parameter 'x-api-key' should exist");
+        assertEquals("Headers", headerParam.get("location"),
+            "OpenAPI 'header' should map to 'Headers'");
+
+        // path → Path
+        Map<String, Object> pathParam = (Map<String, Object>) properties.get("id");
+        assertNotNull(pathParam, "path parameter 'id' should exist");
+        assertEquals("Path", pathParam.get("location"),
+            "OpenAPI 'path' should map to 'Path'");
+    }
+
+    /**
+     * 验证 OpenAPI 导入时 parameter.schema.default 值被正确读取并存入 input_schema。
+     * <p>
+     * OpenAPI 3.0 中参数的 schema 可包含 default 字段，
+     * parseParameters() 应将其读取并存入 SchemaConfig.defaultValue。
+     */
+    @Test
+    void testTransformOpenAPI2Plugin_parameterDefaultValue() {
+        // Arrange
+        OpenAPI openAPI = new OpenAPI();
+        openAPI.setInfo(new Info().title("Default Value Test API").description("Test default value reading"));
+
+        Server server = new Server();
+        server.setUrl("https://api.example.com/v1");
+        openAPI.setServers(List.of(server));
+
+        Paths paths = new Paths();
+        PathItem pathItem = new PathItem();
+        Operation getOp = new Operation();
+        getOp.setOperationId("testEndpoint");
+        getOp.setDescription("Test endpoint with default values");
+
+        // number 参数带 default 10.0
+        Schema<Number> delaySchema = new Schema<>();
+        delaySchema.setType("number");
+        delaySchema.setDefault(10.0);
+
+        // integer 参数带 default 500
+        Schema<Integer> statusSchema = new Schema<>();
+        statusSchema.setType("integer");
+        statusSchema.setDefault(500);
+
+        // string 参数带 default
+        Schema<String> msgSchema = new Schema<>();
+        msgSchema.setType("string");
+        msgSchema.setDefault("hello");
+
+        // 无 default 的参数
+        Schema<String> noDefaultSchema = new Schema<>();
+        noDefaultSchema.setType("string");
+
+        getOp.setParameters(List.of(
+            new Parameter().name("delay").in("query").required(false).schema(delaySchema),
+            new Parameter().name("status_code").in("query").required(false).schema(statusSchema),
+            new Parameter().name("message").in("query").required(false).schema(msgSchema),
+            new Parameter().name("tag").in("query").required(false).schema(noDefaultSchema)
+        ));
+
+        pathItem.setGet(getOp);
+        paths.put("/test", pathItem);
+        openAPI.setPaths(paths);
+
+        // Act
+        PluginDTO pluginDTO = pluginBaseImpl.transformOpenAPI2Plugin(openAPI);
+
+        // Assert
+        assertNotNull(pluginDTO);
+        List<ToolInputSchema> inputSchemas = pluginDTO.getToolInputSchemaList();
+        assertNotNull(inputSchemas);
+        assertEquals(1, inputSchemas.size());
+
+        String inputSchemaJson = inputSchemas.get(0).getInputSchema();
+        assertNotNull(inputSchemaJson);
+
+        Map<String, Object> schemaMap = JsonUtils.json2ObjQuietly(inputSchemaJson, Map.class);
+        assertNotNull(schemaMap);
+        Map<String, Object> properties = (Map<String, Object>) schemaMap.get("properties");
+        assertNotNull(properties);
+
+        // number default: 10.0
+        Map<String, Object> delayParam = (Map<String, Object>) properties.get("delay");
+        assertNotNull(delayParam, "parameter 'delay' should exist");
+        assertEquals("10.0", delayParam.get("default"),
+            "number parameter default should be '10.0'");
+
+        // integer default: 500
+        Map<String, Object> statusParam = (Map<String, Object>) properties.get("status_code");
+        assertNotNull(statusParam, "parameter 'status_code' should exist");
+        assertEquals("500", statusParam.get("default"),
+            "integer parameter default should be '500'");
+
+        // string default: hello
+        Map<String, Object> msgParam = (Map<String, Object>) properties.get("message");
+        assertNotNull(msgParam, "parameter 'message' should exist");
+        assertEquals("hello", msgParam.get("default"),
+            "string parameter default should be 'hello'");
+
+        // no default: should be null
+        Map<String, Object> tagParam = (Map<String, Object>) properties.get("tag");
+        assertNotNull(tagParam, "parameter 'tag' should exist");
+        assertNull(tagParam.get("default"),
+            "parameter without default should have null default");
+    }
+
 
 
     @Test

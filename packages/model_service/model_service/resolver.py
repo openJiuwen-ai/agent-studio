@@ -32,11 +32,20 @@ _logger = logging.getLogger("model_service.resolver")
 
 
 class ModelServiceError(Exception):
-    """模型服务粗粒度异常，code 复用 Java ``StudioError`` 名串。"""
+    """模型服务粗粒度异常，code 复用 Java ``StudioError`` 名串。
 
-    def __init__(self, code: str, msg: str = ""):
+    ``upstream_status`` / ``upstream_body`` 仅在 ``MD_INVOKE_MODEL_SERVICE_FAIL`` 等
+    上游调用失败场景携带，用于在 facade 层无损重建旧 Java ``ErrorRsp`` 契约
+    （透传上游真实 status、原始 body 进 ``details[0].error_msg``）。
+    """
+
+    def __init__(self, code: str, msg: str = "", *,
+                 upstream_status: Optional[int] = None,
+                 upstream_body: Optional[str] = None):
         self.code = code
         self.msg = msg
+        self.upstream_status = upstream_status
+        self.upstream_body = upstream_body
         super().__init__(f"[{code}] {msg}")
 
 

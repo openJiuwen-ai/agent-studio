@@ -407,7 +407,7 @@
       <nz-icon class="mr-1" nzType="export" nzTheme="outline"></nz-icon>
       <span>{{ 'view_sub_workflow_call_chain' | i18nextEager }}</span>
     </div>
-    <div *ngIf="!callItem.isIOEmpty; else noInputs" class="mb-[12px]">
+    <div *ngIf="!callItem.isIOEmptyInputs; else noInputs" class="mb-[12px]">
       <div class="node-inputs-area">
         <span class="color-[#191919]">{{ 'input' | i18nextEager }}</span>
         <asset-copy-icon
@@ -424,7 +424,7 @@
         <json-viewer [jsonData]="callItem.inputs"></json-viewer>
       </div>
     </div>
-    <div *ngIf="!callItem.isIOEmpty; else noOutputs">
+    <div *ngIf="!callItem.isIOEmptyOutputs; else noOutputs">
       <div class="node-inputs-area">
         <span class="color-[#191919]">{{ 'output' | i18nextEager }}</span>
         <asset-copy-icon

@@ -12,7 +12,7 @@ redis==6.4.0
 PyYAML==6.0.3
 lxml==6.1.0
 websockets==15.0.1
-mcp==1.27.1
+mcp==1.28.1
 spiffworkflow==2.0.1
 pydantic-core==2.46.3
 elasticsearch==8.19.3

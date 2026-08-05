@@ -17,6 +17,7 @@ FlowMcp - MCP 调用组件
 import asyncio
 from builtins import ExceptionGroup
 from enum import Enum
+import json
 
 from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.extension.workflow_node.utils import JiuWenBaseException, get_workflow_param
@@ -374,6 +375,16 @@ class FlowMcp(WorkflowComponent):
                 for item in output_data
             ]
         elif isinstance(output_data, dict):
+            try:
+                output_ids = {item.get("id") for item in self._conf.get("userFields", {}).get("outputs", [])}
+            except Exception:
+                output_ids = set()
+            if "content" in output_ids and "content" not in output_data:
+                wrapped_item = {
+                    "type": "text",
+                    "text": json.dumps(output_data, ensure_ascii=False),
+                }
+                return {"content": [wrapped_item], "isError": False}
             return output_data
         else:
             raise _build_flow_mcp_error(
@@ -389,10 +400,19 @@ class FlowMcp(WorkflowComponent):
     def _convert_mcp_result(self, result: dict) -> dict:
         """将 MCPTool 返回格式转换为 McpAPI 返回格式
 
-        MCPTool 返回: {"result": xxx}
+        MCPTool 返回: {"result": CallToolResult}
         McpAPI 返回: {"errCode": 0, "errMessage": "success", "data": xxx}
+
+        CallToolResult 包含 content (list) 和 structuredContent (dict) 两种输出形式，
+        优先使用 structuredContent，fallback 到 content。
         """
-        data = result.get("result")
+        call_result = result.get("result")
+        if hasattr(call_result, "structuredContent") and call_result.structuredContent:
+            data = call_result.structuredContent
+        elif hasattr(call_result, "content"):
+            data = call_result.content
+        else:
+            data = call_result
         return {
             constant.ERR_CODE: 0,
             constant.ERR_MESSAGE: "success",

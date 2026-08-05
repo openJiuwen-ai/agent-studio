@@ -135,6 +135,7 @@
                   <div class="w-[70%]">
                     <ng-container *ngIf="param.value.type === 'literal'">
                       <input
+                        nz-input
                         class="combo-select-right"
                         *ngIf="param.type === 'string'"
                         style="width: 100%"
@@ -171,7 +172,9 @@
                         (ngModelChange)="onSave()"
                       >
                       </nz-select>
-
+                      <div *ngIf="inputForm?.controls['inputFormValueBool' + i]?.invalid && (inputForm?.controls['inputFormValueBool' + i]?.dirty || inputForm?.controls['inputFormValueBool' + i]?.touched)" class="error-tip">
+                        {{inputForm?.controls['inputFormValueBool' + i]?.errors?.serviceName?.tiErrorMessage}}
+                      </div>
                       <input
                         *ngIf="param.type === 'number'"
                         class="combo-select-right"
@@ -221,12 +224,13 @@
                       [name]="'inputFormValue' + i"
                       refSelectedRequire
                       [tiValidation]="{ type: 'changeAlert' }"
-                      [errorMessageWrapper]="valueWrapper"
                       [placeholder]="'select_placeholder' | i18nextEager"
                       (select)="treeSelect()"
                     ></input-tree-select>
 
-                    <div class="w-full" #valueWrapper></div>
+                    <div *ngIf="inputForm?.controls['inputFormValue' + i]?.invalid && (inputForm?.controls['inputFormValue' + i]?.dirty || inputForm?.controls['inputFormValue' + i]?.touched)" class="error-tip">
+                      {{inputForm?.controls['inputFormValue' + i]?.errors?.serviceName?.tiErrorMessage}}
+                    </div>
                   </div>
                 </div>
               </div>

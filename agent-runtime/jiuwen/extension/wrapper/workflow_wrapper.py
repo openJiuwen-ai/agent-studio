@@ -101,6 +101,7 @@ class WorkflowWrapper:
         agent_id: str = None,
         session_id: str = None,
         context=None,
+        workflow_name: str = "",
     ) -> AsyncGenerator[Union[Message, StreamData], None]:
         """流式执行工作流，等价于旧 ControllerWorkflow.astream(inputs, params)。
 
@@ -111,6 +112,7 @@ class WorkflowWrapper:
             agent_id: 智能体 ID
             session_id: 会话 ID
             context: ModelContext（agent-core 上下文）
+            workflow_name: 工作流名称，用于 WORKFLOW_START 等事件
 
         Yields:
             StreamData 对象（Questioner 中断时不 yield Message，由 Handler 检测 should_interrupt 生成）；
@@ -212,7 +214,7 @@ class WorkflowWrapper:
                     yield StreamData(
                         code=StreamCode.WORKFLOW_START.value,
                         msg=StreamDataMsg.SUCCESS.value,
-                        data={"workflow_id": workflow_id},
+                        data={"workflow_id": workflow_id, "workflow_name": workflow_name},
                         execution_id=session_id or "",
                     )
                     workflow_started = True

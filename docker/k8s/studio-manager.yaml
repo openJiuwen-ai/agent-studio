@@ -137,6 +137,8 @@ spec:
             # LakeSearch 鉴权方式：basic（默认）/ none（无鉴权，如本地 mock）
             - name: knowledge_lakeSearch_auth_mode
               value: 'basic'
+            - name: redis_max_string_length
+              value: '20000000'
           resources:
             limits:
               cpu: '2'

@@ -41,4 +41,7 @@ public class RedisClientConfig {
 
     @Value("${redis.cluster_node_list}")
     private String clusterNodeList;
+
+    @Value("${redis.max-string-length}")
+    private int jsonMaxStringLength;
 }

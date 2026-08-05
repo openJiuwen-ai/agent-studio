@@ -26,12 +26,6 @@ RUN pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
     && pip3 install -r $SERVICE_HOME/app/requirements.txt \
     && rm -rf ${PACKAGES_HOME}/future/backports/test
 
-# 从本地源码安装 openjiuwen（替代 PyPI 版本，使用最新 Git 代码）
-# 完整安装 agent-core 及其所有依赖
-COPY agent-core/ $SERVICE_HOME/app/agent-core/
-RUN pip3 install $SERVICE_HOME/app/agent-core/ \
-    && rm -rf $SERVICE_HOME/app/agent-core/
-
 # 再复制应用代码（变更频率高，放在依赖安装之后）
 # 注：agent_builder 已从 studio-runtime 镜像剥离，独立构建为 studio-builder 镜像
 COPY agent_runtime/ $SERVICE_HOME/app/agent_runtime/

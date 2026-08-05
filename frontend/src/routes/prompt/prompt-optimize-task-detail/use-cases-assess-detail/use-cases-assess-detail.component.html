@@ -1,16 +1,12 @@
-<div class="halfmodal-header">
-  {{ 'evaluation_dataset_detail'|i18nextEager }}
+<div class="com-drawer-title">
+  {{ 'evaluation_dataset_detail' | i18nextEager }}
 </div>
-<div class="halfmodal-body">
-  <nz-table
-    [nzData]="srcData.data"
-    style="height: 100%;"
-    [nzBordered]="true"
-  >
+<div class="com-drawer-content">
+  <nz-table nzShowSizeChanger [nzData]="displayedData" [nzFrontPagination]="false" [nzBordered]="true">
     <thead>
       <tr>
         <th *ngFor="let column of columns" [style.width]="column.width">
-          <ng-container *ngIf="column.sortKey;else noSortKey">
+          <ng-container *ngIf="column.sortKey; else noSortKey">
             {{ column.title }}
           </ng-container>
           <ng-template #noSortKey>
@@ -22,13 +18,11 @@
     <tbody>
       <tr *ngFor="let row of displayedData">
         <td nz-ellipsis>{{ row.order }}</td>
-        <td nz-ellipsis>{{ row.variable }}</td>
-        <td *ngIf="ptType==='multi'">
-          <nz-upload
-            [nzDisabled]="true"
-            [nzFileList]="row.images"
-            [nzLimit]="row.images.length"
-          ></nz-upload>
+        <td nz-ellipsis>
+          <div style="max-width: 230px">{{ row.variable }}</div>
+        </td>
+        <td *ngIf="ptType === 'multi'">
+          <nz-upload [nzDisabled]="true" [nzFileList]="row.images" [nzLimit]="row.images.length"></nz-upload>
         </td>
         <td nz-ellipsis>{{ row.predict }}</td>
         <td nz-ellipsis>{{ row.label }}</td>
@@ -37,6 +31,16 @@
       </tr>
     </tbody>
   </nz-table>
+
+  <nz-pagination
+    [(nzPageIndex)]="pageInfo.currentPage"
+    [nzTotal]="pageInfo.total"
+    [(nzPageSize)]="pageInfo.pageSize.size"
+    [nzPageSizeOptions]="pageInfo.pageSize.options"
+    nzAlign="end"
+    [nzShowSizeChanger]="true"
+    (nzPageIndexChange)="pageChange()"
+    (nzPageSizeChange)="pageChange()"
+  />
 </div>
-<div class="halfmodal-footer">
-</div>
+<div class="com-drawer-footer"></div>

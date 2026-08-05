@@ -213,6 +213,7 @@ def build_req_json_from_agent(
         "irPath": exec_ctx.ir_path,
         "params": params,
         "query": body.query or body.inputs.get(_USER_MSG_FIELD, ""),
+        "resumeInput": body.resume_input,
         "responseMode": "streaming",
         "dialogueCount": exec_ctx.dialogue_count,
     }
@@ -345,6 +346,7 @@ async def _execute_workflow_run(
     version_id = resolved_version or ""
     request.state.user_id = user_id
     request.state.version_id = version_id
+    request.state.instance_id = instance_id
 
     # body已携带会话历史时跳过Redis加载
     if body.messages:
@@ -443,7 +445,7 @@ async def _execute_agent_run(
     workflow_logger.debug(f"Built IR path: {ir_path}")
 
     # 运行前校验
-    query = body.query or body.inputs.get("query", "")
+    query = body.resume_input or body.query or body.inputs.get("query", "")
     err = await check_before_agent_run(RunCheckContext(
         query=query,
         project_id=ctx.project_id,
@@ -460,6 +462,7 @@ async def _execute_agent_run(
     version_id = resolved_version or ""
     request.state.user_id = user_id
     request.state.version_id = version_id
+    request.state.instance_id = instance_id
 
     # body已携带会话历史时跳过Redis加载
     if body.histories:
@@ -549,6 +552,7 @@ async def _execute_node_run(
     version_id = ""
     request.state.user_id = user_id
     request.state.version_id = version_id
+    request.state.instance_id = instance_id
 
     # 加载会话历史
     conversation_history, dialogue_count = await _load_conversation_data(

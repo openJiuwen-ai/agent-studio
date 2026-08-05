@@ -185,10 +185,24 @@ class OBSKnowledgeBaseConfigProvider(KnowledgeBaseConfigProvider):
         # 2. 从知识库文件加载知识库引用配置（获取 externalId）
         knowledge_bases: List[KBReferenceConfig] = []
         kb_ids = configs.get("knowledgeBaseIds", [])
+        is_custom = (connection and connection.knowledge_source == "CUSTOM") if connection else False
         for kb_id in kb_ids:
             kb_ref = await self._load_kb_reference(kb_id)
             if kb_ref is not None:
                 knowledge_bases.append(kb_ref)
+            elif is_custom:
+                # CUSTOM 模式：知识库不在本地 DB，OBS 无 reference 文件，
+                # 直接用 KB ID 作为 external_id（CUSTOM 知识库的 ID 就是 LakeSearch 侧的 repo_id）
+                knowledge_bases.append(
+                    KBReferenceConfig(
+                        knowledge_base_id=kb_id,
+                        external_id=kb_id,
+                        connection_id=connection_id,
+                    )
+                )
+                workflow_logger.info(
+                    f"CUSTOM mode: using kb_id as external_id: kb_id={kb_id}"
+                )
             else:
                 workflow_logger.warning(
                     f"Failed to load KB reference from OBS: kb_id={kb_id}"
