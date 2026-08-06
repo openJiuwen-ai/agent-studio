@@ -498,6 +498,73 @@ class AsyncRedisUtils:
         """
         return self._redis
 
+    @redis_call_handler.handle
+    async def get_by_prefix(self, prefix: str) -> dict:
+        """
+        按前缀获取所有匹配的键值对（使用SCAN游标遍历，非阻塞）。
+        """
+        try:
+            result = {}
+            pattern = f"{prefix}*"
+            async for key in self._redis.scan_iter(match=pattern):
+                value = await self._redis.get(key)
+                if value is not None:
+                    key_str = key.decode("utf-8") if isinstance(key, bytes) else key
+                    value_str = (
+                        value.decode("utf-8") if isinstance(value, bytes) else value
+                    )
+                    result[key_str] = value_str
+            return result
+        except Exception as e:
+            logger.error(f"Error getting elements by prefix: {prefix}, error: {e}")
+            raise JiuWenBaseException(
+                StatusCode.REDIS_GET_ELEMENT_FAILED.code,
+                StatusCode.REDIS_GET_ELEMENT_FAILED.errmsg,
+            ) from e
+
+    @redis_call_handler.handle
+    async def delete_by_prefix(self, prefix: str, batch_size: int = 500) -> int:
+        """
+        按前缀删除所有匹配的键（SCAN游标遍历 + 分批DEL，非阻塞）。
+        """
+        try:
+            pattern = f"{prefix}*"
+            return await self._delete_by_pattern(pattern, batch_size)
+        except Exception as e:
+            logger.error(f"Error deleting elements by prefix: {prefix}, error: {e}")
+            raise JiuWenBaseException(
+                StatusCode.REDIS_DELETE_ELEMENT_FAILED.code,
+                StatusCode.REDIS_DELETE_ELEMENT_FAILED.errmsg,
+            ) from e
+
+    @redis_call_handler.handle
+    async def delete_by_pattern(self, pattern: str, batch_size: int = 500) -> int:
+        """
+        按glob匹配模式删除所有匹配的键（SCAN游标遍历 + 分批DEL，非阻塞）。
+        """
+        try:
+            return await self._delete_by_pattern(pattern, batch_size)
+        except Exception as e:
+            logger.error(f"Error deleting elements by pattern: {pattern}, error: {e}")
+            raise JiuWenBaseException(
+                StatusCode.REDIS_DELETE_ELEMENT_FAILED.code,
+                StatusCode.REDIS_DELETE_ELEMENT_FAILED.errmsg,
+            ) from e
+
+    async def _delete_by_pattern(self, pattern: str, batch_size: int) -> int:
+        total_deleted = 0
+        cursor = 0
+        while True:
+            cursor, keys = await self._redis.scan(
+                cursor=cursor, match=pattern, count=batch_size
+            )
+            if keys:
+                deleted = await self._redis.delete(*keys)
+                total_deleted += deleted
+            if cursor == 0:
+                break
+        return total_deleted
+
     def _process_key(self, key: str):
         """
         为Redis key添加前缀

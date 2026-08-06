@@ -154,10 +154,11 @@ class TestPostWorkflowExecute:
     # ── Normal completion path ──────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_normal_completion_prefix_delete_graph_state(
+    async def test_normal_completion_precise_delete_graph_state(
         self, checkpointer, mock_delegate, mock_redis
     ):
-        """Normal completion: GraphStore.delete called with prefix (clears main + loop + loop body)."""
+        """Normal completion: precisely deletes recorded graph keys — no full-keyspace scan_iter."""
+        mock_redis.smembers = AsyncMock(return_value={b"k1", b"k2"})
         mock_redis.delete = AsyncMock(return_value=1)
         mock_redis.srem = AsyncMock(return_value=1)
         mock_session = self._make_session()
@@ -165,15 +166,24 @@ class TestPostWorkflowExecute:
         result = {}  # No TASK_STATUS_INTERRUPT → normal completion
         await checkpointer.post_workflow_execute(mock_session, result, None)
 
-        # GraphStore.delete called with (session_id, workflow_id) — prefix delete
+        # Recorded graph keys deleted precisely (no GraphStore.delete / delete_by_prefix scan_iter)
+        key_delete_calls = [
+            c[0] for c in mock_redis.delete.call_args_list if len(c[0]) == 2
+        ]
+        assert key_delete_calls, "expected a 2-key precise delete call"
+        assert set(key_delete_calls[0]) == {"k1", "k2"}
+        # graph_keys tracking SET itself deleted
+        mock_redis.delete.assert_any_call("agentBuilder:graph_keys:sess-1")
+        # GraphStore.delete (full-keyspace scan) NOT called
         gs = self._get_graph_state(mock_delegate)
-        gs.delete.assert_awaited_once_with("sess-1", "wf-1")
+        gs.delete.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_normal_completion_deletes_bare_session_key(
         self, checkpointer, mock_delegate, mock_redis
     ):
         """Normal completion: bare session key (session_id) deleted to clear comp_state."""
+        mock_redis.smembers = AsyncMock(return_value=set())
         mock_redis.delete = AsyncMock(return_value=1)
         mock_redis.srem = AsyncMock(return_value=1)
         mock_session = self._make_session()
@@ -190,6 +200,7 @@ class TestPostWorkflowExecute:
         self, checkpointer, mock_delegate, mock_redis
     ):
         """Normal completion: SREM workflow_id from sentinel SET."""
+        mock_redis.smembers = AsyncMock(return_value=set())
         mock_redis.delete = AsyncMock(return_value=1)
         mock_redis.srem = AsyncMock(return_value=1)
         mock_session = self._make_session()
@@ -206,6 +217,7 @@ class TestPostWorkflowExecute:
         self, checkpointer, mock_delegate, mock_redis
     ):
         """Normal completion: workflow_storage.clear delegated."""
+        mock_redis.smembers = AsyncMock(return_value=set())
         mock_redis.delete = AsyncMock(return_value=1)
         mock_redis.srem = AsyncMock(return_value=1)
         mock_session = self._make_session()
@@ -220,6 +232,7 @@ class TestPostWorkflowExecute:
         self, checkpointer, mock_delegate, mock_redis
     ):
         """Normal completion: delegate.post_workflow_execute NOT called (we handle cleanup)."""
+        mock_redis.smembers = AsyncMock(return_value=set())
         mock_redis.delete = AsyncMock(return_value=1)
         mock_redis.srem = AsyncMock(return_value=1)
         mock_session = self._make_session()
@@ -232,10 +245,11 @@ class TestPostWorkflowExecute:
     # ── Exception path ─────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_exception_path_prefix_delete_and_bare_key(
+    async def test_exception_path_precise_delete_and_bare_key(
         self, checkpointer, mock_delegate, mock_redis
     ):
-        """Exception path: same cleanup as normal completion (prefix delete + bare key delete)."""
+        """Exception path: same cleanup as normal completion (precise delete + bare key delete)."""
+        mock_redis.smembers = AsyncMock(return_value={b"ek1"})
         mock_redis.delete = AsyncMock(return_value=1)
         mock_redis.srem = AsyncMock(return_value=1)
         mock_session = self._make_session()
@@ -246,9 +260,10 @@ class TestPostWorkflowExecute:
         # Delegate NOT called
         mock_delegate.post_workflow_execute.assert_not_called()
 
-        # GraphStore prefix delete
+        # Precise delete of recorded graph key (no GraphStore.delete / scan_iter)
+        mock_redis.delete.assert_any_call("ek1")
         gs = self._get_graph_state(mock_delegate)
-        gs.delete.assert_awaited_once_with("sess-1", "wf-1")
+        gs.delete.assert_not_called()
 
         # Bare session key deleted
         delete_calls = [c[0][0] for c in mock_redis.delete.call_args_list if c[0]]
@@ -264,6 +279,7 @@ class TestPostWorkflowExecute:
         self, checkpointer, mock_delegate, mock_redis
     ):
         """WorkflowAbortException clears checkpoint like normal completion."""
+        mock_redis.smembers = AsyncMock(return_value=set())
         mock_redis.delete = AsyncMock(return_value=1)
         mock_redis.srem = AsyncMock(return_value=1)
         mock_session = self._make_session()
@@ -280,7 +296,7 @@ class TestPostWorkflowExecute:
 
         mock_delegate.post_workflow_execute.assert_not_called()
         gs = self._get_graph_state(mock_delegate)
-        gs.delete.assert_awaited_once_with("sess-1", "wf-1")
+        gs.delete.assert_not_called()
 
     # ── Interrupt path ─────────────────────────────────────────
 
@@ -303,42 +319,27 @@ class TestPostWorkflowExecute:
     # ── Fallback paths ─────────────────────────────────────────
 
     @pytest.mark.asyncio
-    async def test_graph_state_delete_failure_falls_back_to_delegate(
+    async def test_graph_key_tracking_failure_falls_back_to_delegate(
         self, checkpointer, mock_delegate, mock_redis
     ):
-        """GraphStore.delete failure → fallback to delegate post_workflow_execute."""
-        mock_redis.srem = AsyncMock(return_value=1)
-        gs = self._get_graph_state(mock_delegate)
-        gs.delete = AsyncMock(side_effect=Exception("GraphStore delete error"))
+        """Tracking SET smembers/delete failure → fallback to delegate post_workflow_execute."""
+        mock_redis.smembers = AsyncMock(side_effect=Exception("Redis smembers error"))
         mock_session = self._make_session()
         result = {}
 
         await checkpointer.post_workflow_execute(mock_session, result, None)
 
-        # Delegate called as fallback
+        # Delegate called as fallback (precise delete failed)
         mock_delegate.post_workflow_execute.assert_awaited_once()
-        # SREM and bare key delete NOT called (we returned early)
+        # SREM/delete NOT reached (we returned early)
         mock_redis.srem.assert_not_called()
-        mock_redis.delete.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_no_graph_state_falls_back_to_delegate(
-        self, checkpointer, mock_delegate, mock_redis
-    ):
-        """If delegate has no _graph_state → fallback to delegate."""
-        delattr(mock_delegate, "_graph_state")
-        mock_session = self._make_session()
-        result = {}
-
-        await checkpointer.post_workflow_execute(mock_session, result, None)
-
-        mock_delegate.post_workflow_execute.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_workflow_storage_clear_failure_falls_back_to_delegate(
         self, checkpointer, mock_delegate, mock_redis
     ):
         """workflow_storage.clear() failure → fallback to delegate."""
+        mock_redis.smembers = AsyncMock(return_value=set())
         mock_redis.delete = AsyncMock(return_value=1)
         mock_redis.srem = AsyncMock(return_value=1)
         getattr(mock_delegate, "_workflow_storage").clear = AsyncMock(
@@ -355,6 +356,7 @@ class TestPostWorkflowExecute:
         self, checkpointer, mock_delegate, mock_redis
     ):
         """If delegate has no _workflow_storage → fallback to delegate."""
+        mock_redis.smembers = AsyncMock(return_value=set())
         mock_redis.delete = AsyncMock(return_value=1)
         mock_redis.srem = AsyncMock(return_value=1)
         delattr(mock_delegate, "_workflow_storage")
@@ -371,6 +373,7 @@ class TestPostWorkflowExecute:
         self, checkpointer, mock_delegate, mock_redis
     ):
         """Sub-workflow normal completion only SREMs its own workflow_id."""
+        mock_redis.smembers = AsyncMock(return_value=set())
         mock_redis.delete = AsyncMock(return_value=1)
         mock_redis.srem = AsyncMock(return_value=1)
         sub_session = self._make_session(session_id="sess-1", workflow_id="sub-wf")
@@ -391,16 +394,23 @@ class TestPostWorkflowExecute:
         self, checkpointer, mock_delegate, mock_redis
     ):
         """Bare session key delete failure does NOT block SREM or workflow_storage.clear."""
-        mock_redis.delete = AsyncMock(side_effect=Exception("bare key delete error"))
+        mock_redis.smembers = AsyncMock(return_value=set())
+
+        def fake_delete(*args):
+            if len(args) == 1 and args[0] == "sess-1":
+                raise Exception("bare key delete error")
+            return 1
+
+        mock_redis.delete = AsyncMock(side_effect=fake_delete)
         mock_redis.srem = AsyncMock(return_value=1)
         mock_session = self._make_session()
         result = {}
 
         await checkpointer.post_workflow_execute(mock_session, result, None)
 
-        # GraphStore prefix delete still called
+        # Precise graph key delete still called (tracking SET + fallback main keys)
         gs = self._get_graph_state(mock_delegate)
-        gs.delete.assert_awaited_once()
+        gs.delete.assert_not_called()
         # SREM still called (not blocked by bare key failure)
         mock_redis.srem.assert_awaited_once()
         # workflow_storage.clear still called
@@ -458,10 +468,13 @@ class TestDelegatePassthrough:
         mock_redis.delete.assert_not_called()
 
     @staticmethod
-    def test_graph_store(checkpointer, mock_delegate):
-        mock_delegate.graph_store.return_value = "mock_graph_store"
+    def test_graph_store_returns_tracking_wrapper(checkpointer, mock_delegate):
+        """graph_store() returns a _TrackingGraphStore wrapping the delegate graph store."""
+        from agent_runtime.runner.fast_redis_checkpointer import _TrackingGraphStore
+        mock_delegate.graph_store.return_value = "delegate_graph_store"
         result = checkpointer.graph_store()
-        assert result == "mock_graph_store"
+        assert isinstance(result, _TrackingGraphStore)
+        assert result._delegate == "delegate_graph_store"
         mock_delegate.graph_store.assert_called_once()
 
 
