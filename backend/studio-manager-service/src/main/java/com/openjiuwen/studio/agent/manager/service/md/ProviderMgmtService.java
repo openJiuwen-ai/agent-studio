@@ -167,8 +167,8 @@ public class ProviderMgmtService implements IProviderMgmtService {
             throw new AgentStudioException(StudioError.UNEXPECTED_ERROR);
         }
 
+        String authId = UUID.randomUUID().toString();
         try {
-            String authId = UUID.randomUUID().toString();
             ProviderAuthData config = new ProviderAuthData().setId(authId)
                 .setProviderId(id)
                 .setAuthMetadataId(metaId)
@@ -186,6 +186,7 @@ public class ProviderMgmtService implements IProviderMgmtService {
         } catch (Exception e) {
             userModelServiceProviderMapper.deleteById(id);
             metadataMapper.deleteById(metaId);
+            authMapper.deleteById(authId);
             if (e instanceof AgentStudioException) {
                 throw (AgentStudioException) e;
             }
@@ -649,6 +650,7 @@ public class ProviderMgmtService implements IProviderMgmtService {
         } catch (Exception e) {
             userModelServiceProviderMapper.deleteById(modelServiceProvider.getId());
             metadataMapper.deleteById(providerAuthMetadata.getId());
+            authMapper.deleteById(providerAuthData.getId());
             log.error("Insert auth config exception.", e);
             throw new AgentStudioException(StudioError.UNEXPECTED_ERROR);
         }
