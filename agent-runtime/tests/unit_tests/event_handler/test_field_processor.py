@@ -288,3 +288,79 @@ class TestGenerateMemoryHistoryMessages:
         trace.conversation_info["messages"] = [{"role": "tool", "content": "x"}]
         result = FieldDataProcessor.generate_memory_history_messages(trace)
         assert result[0]["role"] == "assistant"
+
+    @staticmethod
+    def test_non_string_content_converted_to_string():
+        """非字符串类型的 content 会被转换为字符串，确保 Pydantic 验证通过。"""
+        trace = Trace()
+        trace.conversation_info["messages"] = [
+            {"role": "assistant", "content": True},  # bool
+            {"role": "assistant", "content": 123},  # int
+            {"role": "assistant", "content": 45.67},  # float
+            {"role": "assistant", "content": None},  # None
+        ]
+        result = FieldDataProcessor.generate_memory_history_messages(trace)
+        assert len(result) == 4
+        assert result[0]["content"] == "True"
+        assert result[1]["content"] == "123"
+        assert result[2]["content"] == "45.67"
+        assert result[3]["content"] == ""
+
+    @staticmethod
+    def test_dict_content_converted_to_json_string():
+        """dict 类型的 content 会被转换为标准 JSON 字符串（双引号）。"""
+        trace = Trace()
+        trace.conversation_info["messages"] = [
+            {"role": "assistant", "content": {"name": "张三", "age": 25}},
+        ]
+        result = FieldDataProcessor.generate_memory_history_messages(trace)
+        assert len(result) == 1
+        content = result[0]["content"]
+        assert isinstance(content, str)
+        # 验证是标准 JSON 格式（双引号）
+        parsed = json.loads(content)
+        assert parsed == {"name": "张三", "age": 25}
+
+    @staticmethod
+    def test_list_content_converted_to_json_string():
+        """list 类型的 content 会被转换为标准 JSON 字符串（双引号）。"""
+        trace = Trace()
+        trace.conversation_info["messages"] = [
+            {"role": "assistant", "content": [1, 2, 3]},
+        ]
+        result = FieldDataProcessor.generate_memory_history_messages(trace)
+        assert len(result) == 1
+        content = result[0]["content"]
+        assert isinstance(content, str)
+        # 验证是标准 JSON 格式
+        parsed = json.loads(content)
+        assert parsed == [1, 2, 3]
+
+    @staticmethod
+    def test_nested_dict_list_converted_to_json():
+        """嵌套的 dict/list 也会被正确转换为 JSON 字符串。"""
+        trace = Trace()
+        trace.conversation_info["messages"] = [
+            {"role": "assistant", "content": {
+                "users": [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}],
+                "count": 2,
+            }},
+        ]
+        result = FieldDataProcessor.generate_memory_history_messages(trace)
+        assert len(result) == 1
+        content = result[0]["content"]
+        assert isinstance(content, str)
+        # 验证可以解析回原始结构
+        parsed = json.loads(content)
+        assert parsed["users"][0]["name"] == "Alice"
+        assert parsed["count"] == 2
+
+    @staticmethod
+    def test_string_content_unchanged():
+        """字符串类型的 content 保持不变。"""
+        trace = Trace()
+        trace.conversation_info["messages"] = [
+            {"role": "assistant", "content": "hello world"},
+        ]
+        result = FieldDataProcessor.generate_memory_history_messages(trace)
+        assert result[0]["content"] == "hello world"
