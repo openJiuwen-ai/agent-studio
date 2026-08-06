@@ -540,7 +540,7 @@ export class LLMModalComponent extends ModalBaseComponent implements OnInit, OnD
 
   getVisionNameRefOptions() {
     const visionNameRefOptions = [];
-    const visionParmaTypes = ['array<file/image>', 'array<file/video>', 'array<string>'];
+    const visionParmaTypes = ['array<file/image>', 'array<file/video>', 'array<string>', 'file/image'];
     this.nameRefOptions.forEach(o => {
       const target = cloneDeep(o);
       if (target.type !== 'System') {
@@ -830,8 +830,8 @@ export class LLMModalComponent extends ModalBaseComponent implements OnInit, OnD
         const index = i.name.split('_vision_')[1] ?? '1';
         if (schema?.type === 'file/video') {
           i.name = `_video_vision_${index}`;
-        } else if (schema?.type === 'file/image' || schema?.type === 'string') {
-          // 字符串数组默认为图片地址
+        } else if (schema?.type === 'file/image' || schema?.type === 'string' || i.type === 'file/image') {
+          // 字符串数组默认为图片地址；单个 file/image 经 getDtoInput 后 schema 被删除，用 i.type 兜底
           i.name = `_image_vision_${index}`;
         }
         vision.push(i.name);
