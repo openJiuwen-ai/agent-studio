@@ -30,6 +30,7 @@ import { MessageComponent } from '@shared/services/cfdata.service';
 import { v4 as uuidV4 } from 'uuid';
 import { AppAgentRepoService } from '@services/agent-center/app-agent-repo.service';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
+import { formatUploadSizeMb } from '@routes/agent-center/utils';
 import { VoiceService } from '@services/voice.service';
 import { cdnAssetUrl } from 'src/single-spa/assets-url';
 import { AiAnswerListService } from '@routes/agent-center/app-agent/components/chat-item/ai-answer.component.service';
@@ -372,14 +373,15 @@ export class SenderComponent implements OnDestroy {
     const validFiles: FileItem[] = fileArray.flatMap((file) => {
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
       const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg'].includes(ext);
-      const limit = isImage ? 1024 * 1024 * 5 : 1024 * 1024 * 60;
+      const limit = isImage ? 5 * 1024 * 1024 : this.configServ.getFileMaxSizeKb() * 1024;
 
       if (file.size > limit) {
         MessageComponent.showWarn(
           this.i18n.transform(
             isImage
               ? 'image_size_cannot_exceed_5mb'
-              : 'file_size_cannot_exceed_128mb',
+              : 'file_size_cannot_exceed',
+            isImage ? undefined : { size: formatUploadSizeMb(this.configServ.getFileMaxSizeKb()) },
           ),
         );
         return [];

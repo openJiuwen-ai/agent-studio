@@ -795,7 +795,10 @@ public class AgentServiceProxyService {
             log.error(
                     "The total size of the upload files exceeds the limit. fileSize:{}, currentSize:{}, maxUploadTotalSize:{}",
                     file.getSize(), currentSize, maxUploadTotalSize);
-            throw new AgentStudioException(StudioError.FILE_SIZE_EXCEED_LIMIT);
+            String maxSizeReadable = String.valueOf(maxUploadTotalSize / KB);
+            long hours = timeScopeUploadTotalSize / 3600;
+            String timeWindowReadable = String.valueOf(hours > 0 ? hours : timeScopeUploadTotalSize);
+            throw new AgentStudioException(StudioError.FILE_SIZE_EXCEED_LIMIT, maxSizeReadable, timeWindowReadable);
         }
     }
 
@@ -830,7 +833,7 @@ public class AgentServiceProxyService {
         FileCheckWrapper fileCheckWrapper = buildFileCheckWrapper(type);
         // 校验文件大小
         if (file.getSize() > fileCheckWrapper.getSize() * KB) {
-            log.error("The avatar file size exceeds the limit: {}KB", iconMaxSize);
+            log.error("The file size exceeds the limit: {}KB", fileCheckWrapper.getSize());
             throw new AgentStudioException(StudioError.PICTURE_FILE_SIZE_EXCEED_LIMIT);
         }
 

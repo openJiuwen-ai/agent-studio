@@ -1211,6 +1211,7 @@
   "image_size_cannot_exceed_5mb": "图片大小不能超过5MB",
   "file_size_cannot_exceed_128mb": "文件大小不能超过60MB",
   "file_size_cannot_exceed_128": "文件大小不能超过128MB",
+  "file_size_cannot_exceed": "文件大小不能超过{{size}}MB",
   "enable_service_first": "请先开通MCP服务",
   "import_to_plugin": "导入至插件",
   "export_content": "导出内容",

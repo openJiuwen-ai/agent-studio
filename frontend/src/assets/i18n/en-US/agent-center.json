@@ -1194,6 +1194,7 @@
   "image_size_cannot_exceed_5mb": "The image size cannot exceed 5MB",
   "file_size_cannot_exceed_128mb": "The file size cannot exceed 60MB",
   "file_size_cannot_exceed_128": "The file size cannot exceed 128MB",
+  "file_size_cannot_exceed": "The file size cannot exceed {{size}} MB",
   "enable_service_first": "please enable the MCP service first",
   "import_to_plugin": "Import to plugin",
   "export_content": "Export Content",
