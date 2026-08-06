@@ -2463,7 +2463,7 @@
   "tuningpanelcomponent_88": "调用失败",
   "tuningpanelcomponent_89": "url中{{uuid}}是随机生成的字符串，在使用时可以替换为别的字符串。替换的字符串长度为1~32，仅支持小写英文字母、数字和中划线",
   "tuningpanelcomponent_90": "Path中{{uuid}}是随机生成的字符串，在使用时可以替换为别的字符串。替换的字符串长度为1~32，仅支持小写英文字母、数字和中划线",
-  "plugin_host_error": "服务域名中的变量名只能为大小写英文数字，下划线，中划线，路径不能包含/及域名外的其他特殊字符",
+  "plugin_host_error": "服务域名中的变量名只能为大小写英文数字，下划线，中划线，冒号，路径不能包含/及域名外的其他特殊字符",
   "plugin_baseURL_error": "基准URL中的变量名只能为大小写英文，下划线，中划线，路径以/开头或者为空",
   "plugin_tool_path_error": "工具path路径以/开头或者为空",
   "deep_research_chat": {

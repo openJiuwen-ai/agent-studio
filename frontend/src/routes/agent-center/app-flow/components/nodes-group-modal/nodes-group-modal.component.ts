@@ -100,6 +100,7 @@ export class NodesGroupModalComponent implements OnChanges, OnInit {
       nodes: [
         { data: this.appFlowServ.getInitLLMChainNodeData() },
         { data: this.appFlowServ.getInitChildFlowData() },
+        { data: this.appFlowServ.getInitAgentNodeData() },
       ],
     },
     {

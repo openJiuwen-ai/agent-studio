@@ -110,8 +110,11 @@
               </nz-form-item>
               <nz-form-item>
                 <nz-form-label [nzSpan]="24">
-                  <div class="text-label flex justify-between items-center">
-                    <p>{{createPluginFormLabel.host }}</p>
+                  <div class="text-label flex justify-between items-center gap-2">
+                    <span>{{createPluginFormLabel.host }}</span>
+                    <span nz-tooltip [nzTooltipTitle]="'填写域名、IP地址、ip地址和端口号，例如：www.demo.com、127.0.0.1、127.0.0.1:8080'" class="cursor-pointer">
+                      <nz-icon nzType="question-circle" nzTheme="outline" />
+                    </span>
                     <button nz-button nzType="default" nzSize="small" (click)="showInserter()" (mousedown)="$event.preventDefault()">
                       <img [src]="changeUrl('assets/prompt/insert_variable.svg')" alt="" class="h-4 w-4" />
                     </button>
@@ -135,8 +138,11 @@
               </nz-form-item>
               <nz-form-item>
                 <nz-form-label [nzSpan]="24">
-                  <div class="text-label flex justify-between items-center">
-                    <p>{{createPluginFormLabel.baseURL }}</p>
+                  <div class="text-label flex justify-between items-center gap-2">
+                    <span>{{createPluginFormLabel.baseURL }}</span>
+                    <span nz-tooltip [nzTooltipTitle]="'排除协议、域名、ip地、端口号后剩余部分，例如：http://www.demo.com/example1/example2基准url为/example1/example2'" class="cursor-pointer">
+                      <nz-icon nzType="question-circle" nzTheme="outline" />
+                    </span>
                     <button nz-button nzType="default" nzSize="small" (click)="showInserterBase()" (mousedown)="$event.preventDefault()">
                       <img [src]="changeUrl('assets/prompt/insert_variable.svg')" alt="" class="h-4 w-4" />
                     </button>

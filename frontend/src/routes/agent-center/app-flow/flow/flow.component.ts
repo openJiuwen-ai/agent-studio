@@ -79,6 +79,7 @@ import {
 import { AddChildFlowModalComponent } from '../components/add-child-flow-modal/add-child-flow-modal.component';
 import { AddMCPServiceModalComponent } from '../components/add-mcp-service-modal/add-mcp-service-modal.component';
 import { AddPluginModalComponent } from '../components/add-plugin-modal/add-plugin-modal.component';
+import { AgentModalComponent } from '../components/agent-modal/agent-modal.component';
 import { AggregationModalComponent } from '../components/aggregation-modal/aggregation-modal.component';
 import { BranchModalComponent } from '../components/branch-modal/branch-modal.component';
 import { ChildFlowModalComponent } from '../components/child-flow-modal/child-flow-modal.component';
@@ -233,6 +234,7 @@ const NodeMap = {
   Loop: LoopModalComponent,
   SetVariable: SetVariableModalComponent,
   IntentDetectionContainer: IntentContainerModalComponent,
+  Agent: AgentModalComponent,
   Controller: ControllerModalComponent,
   SubController: ControllerModalComponent,
   QA: QAModalComponent,

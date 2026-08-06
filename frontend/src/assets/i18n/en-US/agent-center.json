@@ -2437,7 +2437,7 @@
   "tuningpanelcomponent_88": "Call failed",
   "tuningpanelcomponent_89": "In the URL, {{uuid}} is a randomly generated string that can be replaced with other strings during use. The replacement string must be 1 to 32 characters long and only support lowercase English letters, numbers, and hyphens.",
   "tuningpanelcomponent_90": "In the path, {{uuid}} is a randomly generated string that can be replaced with another string during use. The replacement string must be 1 to 32 characters long and can only contain lowercase English letters, numbers, and hyphens.",
-  "plugin_host_error": "The variable name in the service domain name can only contain uppercase and lowercase English letters, numbers, underscores, and hyphens. The path cannot include '/' or any other special characters outside the domain name.",
+  "plugin_host_error": "The variable name in the service domain name can only contain uppercase and lowercase English letters, numbers, underscores, and hyphens, and colon. The path cannot include '/' or any other special characters outside the domain name.",
   "plugin_baseURL_error": "The variable name in the base URL can only contain uppercase and lowercase English letters, underscores, and hyphens. The path must start with '/' or be empty.",
   "plugin_tool_path_error": "The tool path must start with '/' or be empty.",
   "deep_research_chat": {
