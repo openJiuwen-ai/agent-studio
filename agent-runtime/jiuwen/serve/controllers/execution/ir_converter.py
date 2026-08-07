@@ -1545,6 +1545,10 @@ class IRConverter:
 
         register_error_recovery_handler()
         apply_parallel_branch_grouping_patch()
+        from jiuwen.extension.patches.nested_branch_barrier_patch import (
+            apply_nested_branch_barrier_patch,
+        )
+        apply_nested_branch_barrier_patch()
 
         card = WorkflowCard(
             id=ir_data.get("workflowId") or ir_data.get("agentId") or "",
