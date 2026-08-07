@@ -140,7 +140,7 @@
                 <nz-form-label [nzSpan]="24">
                   <div class="text-label flex justify-between items-center gap-2">
                     <span>{{createPluginFormLabel.baseURL }}</span>
-                    <span nz-tooltip [nzTooltipTitle]="'排除协议、域名、ip地、端口号后剩余部分，例如：http://www.demo.com/example1/example2基准url为/example1/example2'" class="cursor-pointer">
+                    <span nz-tooltip [nzTooltipTitle]="'排除协议、域名、ip地、端口号、工具路径后剩余部分，例如：http://www.demo.com/example1/example2基准url为/example1/example2'" class="cursor-pointer">
                       <nz-icon nzType="question-circle" nzTheme="outline" />
                     </span>
                     <button nz-button nzType="default" nzSize="small" (click)="showInserterBase()" (mousedown)="$event.preventDefault()">
