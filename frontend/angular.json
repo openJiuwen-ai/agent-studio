@@ -56,7 +56,8 @@
             },
             "index": ".staging/index.html",
             "polyfills": [
-              "zone.js"
+              "zone.js",
+              "src/polyfills-compat.ts"
             ],
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
