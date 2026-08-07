@@ -134,6 +134,8 @@ class FlowApi(WorkflowComponent):
         self._api: Optional[RestfulApiToolNew] = None
         self._outputs: List[dict] = []
         self._user_fields: Optional[dict] = None
+        # 缓存流式末帧输出，供 get_stream_output 写入 io_state
+        self._final_stream_output: Optional[dict] = None
 
         # 如果构造时提供了 conf，直接初始化
         if conf:
@@ -687,6 +689,8 @@ class FlowApi(WorkflowComponent):
             output.get("id"): final_output_dict["final_output"]
             for output in output_definition_list
         }
+        # 缓存末帧输出，供 get_stream_output 写入 io_state
+        self._final_stream_output = formatted_res
         yield {USER_FIELDS: formatted_res, "__stream_metadata__": finish_meta}
 
     def _get_outputs_list_from_conf(self) -> List[dict]:
@@ -696,6 +700,19 @@ class FlowApi(WorkflowComponent):
             List[dict]: 输出定义列表
         """
         return self._conf.get(USER_FIELDS, {}).get("outputs") or []
+
+    def get_stream_output(self) -> Optional[dict]:
+        """流式结束后将最终输出写入 io_state，供非流式下游节点引用。
+
+        Vertex._post_stream 流结束后会检查组件是否有此方法，
+        有则把返回值通过 set_outputs 写入 io_state。
+
+        Returns:
+            dict: {USER_FIELDS: {output_id: value}}，或 None
+        """
+        if self._final_stream_output is None:
+            return None
+        return {USER_FIELDS: self._final_stream_output}
 
     # 插件节点中自定义认证header相关的逻辑需要修改
     def get_auth_token(self) -> dict | None:

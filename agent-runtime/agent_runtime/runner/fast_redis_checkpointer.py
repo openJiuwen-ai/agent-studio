@@ -33,56 +33,10 @@ _GRAPH_DATA_VALUE = "checkpoint_data_value"
 # session_exists() at O(1) (SCARD) and allows per-workflow add/remove
 # (SADD/SREM) without scan_iter.
 _SENTINEL_PREFIX = "agentBuilder:session_exists:"
-# 记录某个 session 下实际写入的 graph key 的 SET。
-# post_workflow_execute 时 SMEMBERS + DEL 精确删除，避免 GraphStore.delete()
-# 走 delete_by_prefix 的全库 scan_iter（O(N)，N=全库 key 数）。
-# 成员 = 完整 graph key（session_id:workflow-graph:<ns>:checkpoint_data_{type,value}）。
-_GRAPH_KEYS_PREFIX = "agentBuilder:graph_keys:"
 
 
 def _sentinel_key(session_id: str) -> str:
     return f"{_SENTINEL_PREFIX}{session_id}"
-
-
-def _graph_keys_key(session_id: str) -> str:
-    return f"{_GRAPH_KEYS_PREFIX}{session_id}"
-
-
-class _TrackingGraphStore:
-    """GraphStore 包装器：save 时把实际写入的 graph key 记录到哨兵 SET。
-
-    这样 post_workflow_execute 能拿到本次执行精确写入的 key（主 workflow 与
-    sub-workflow/loop body 的 ns 都覆盖），用 DEL 精确清理，无需全库 scan_iter。
-    """
-
-    def __init__(self, delegate, redis, ttl_seconds: int):
-        self._delegate = delegate
-        self._redis = redis
-        self._ttl_seconds = ttl_seconds
-
-    async def get(self, session_id: str, ns: str):
-        return await self._delegate.get(session_id, ns)
-
-    async def save(self, session_id: str, ns: str, state):
-        # 先记录精确 key，再 delegate 保存。即使后续 save 失败，记录的多余 key
-        # 在删除时也无害（DEL 不存在的 key 返回 0）。
-        try:
-            key_set = _graph_keys_key(session_id)
-            for suffix in (_GRAPH_DATA_TYPE, _GRAPH_DATA_VALUE):
-                key = build_key_with_namespace(
-                    session_id, WORKFLOW_NAMESPACE_GRAPH, ns, suffix
-                )
-                await self._redis.sadd(key_set, key)
-            await self._redis.expire(key_set, self._ttl_seconds)
-        except Exception as e:
-            workflow_logger.warning(
-                f"TrackingGraphStore: record graph key failed for "
-                f"session {session_id}, ns {ns}: {e}"
-            )
-        return await self._delegate.save(session_id, ns, state)
-
-    async def delete(self, session_id: str, ns=None):
-        return await self._delegate.delete(session_id, ns)
 
 
 class FastRedisCheckpointer(Checkpointer):
@@ -213,44 +167,38 @@ class FastRedisCheckpointer(Checkpointer):
         in the same session (e.g., the main workflow when a sub-workflow completes)
         remain as SET members so session_exists() stays correct.
         """
-        # Step 1: 精确删除本次执行写入的所有 graph key（不再全库 scan_iter）。
-        # 每次 graph save 都通过 _TrackingGraphStore 把实际 key 记录到
-        # agentBuilder:graph_keys:<session_id> 哨兵 SET，这里 SMEMBERS + DEL。
-        # 主 workflow 和 sub-workflow（loop body 等）的 ns 都被覆盖，无需
-        # GraphStore.delete() 的 delete_by_prefix 全库扫描。
-        key_set = _graph_keys_key(session_id)
-        try:
-            keys = await self._redis.smembers(key_set)
-            key_list = [k.decode("utf-8") if isinstance(k, bytes) else k for k in keys]
-            if key_list:
-                await self._redis.delete(*key_list)
-            await self._redis.delete(key_set)
-            workflow_logger.info(
-                f"FastRedisCheckpointer: precise graph key delete for "
-                f"session {session_id}, workflow {workflow_id}, keys={len(key_list)}"
-            )
-        except Exception as e:
+        # Step 1: Prefix-based GraphStore key deletion.
+        # 精确删只清主工作流 NS 的 key，但 sub-workflow（loop body 等）的 NS 是
+        # workflow_id:node_xxx:1，其 GraphStore key 也以 workflow_id 开头，精确删
+        # 漏掉这些 key → 下次同 conversationId 跑时 _is_resume=True，pregel 走
+        # resume 路径跳过 condition，破坏 loop 变量绑定（QA 读到空 city）。
+        # 改用 prefix 删，确保主工作流及其所有 sub-NS 的 graph state 都被清掉。
+        # 用 delegate 的 _graph_state.delete（GraphStore 内部走 RedisStore.delete_by_prefix），
+        # 因为 self._redis 是裸 redis.asyncio.Redis，没有 delete_by_prefix 方法。
+        # NOTE: Uses getattr to avoid protected-access lint warning.
+        graph_state = getattr(self._delegate, "_graph_state", None)
+        if graph_state is not None:
+            try:
+                await graph_state.delete(session_id, workflow_id)
+                workflow_logger.info(
+                    f"FastRedisCheckpointer: prefix GraphStore delete for "
+                    f"session {session_id}, workflow {workflow_id}"
+                )
+            except Exception as e:
+                workflow_logger.warning(
+                    f"FastRedisCheckpointer: prefix GraphStore delete failed, "
+                    f"falling back to delegate post_workflow_execute: {e}"
+                )
+                await self._delegate.post_workflow_execute(session, {}, None)
+                return
+        else:
             workflow_logger.warning(
-                f"FastRedisCheckpointer: precise graph key delete failed, "
-                f"falling back to delegate post_workflow_execute: {e}"
+                f"FastRedisCheckpointer: delegate has no _graph_state, "
+                f"falling back to delegate post_workflow_execute for session "
+                f"{session_id}, workflow {workflow_id}"
             )
             await self._delegate.post_workflow_execute(session, {}, None)
             return
-
-        # Step 1.25: 兜底删除主 workflow 的 2 个 graph key。
-        # 若上行哨兵 SET 未记录到（例如旧版本遗留的 key，或 save 路径未经过包装），
-        # 仍精确构造主 workflow 的 key 删除，保证清理干净。O(2)，非全库扫描。
-        for suffix in (_GRAPH_DATA_TYPE, _GRAPH_DATA_VALUE):
-            key = build_key_with_namespace(
-                session_id, WORKFLOW_NAMESPACE_GRAPH, workflow_id, suffix
-            )
-            try:
-                await self._redis.delete(key)
-            except Exception as e:
-                workflow_logger.warning(
-                    f"FastRedisCheckpointer: fallback graph key delete failed for "
-                    f"session {session_id}, workflow {workflow_id}: {e}"
-                )
 
         # Step 1.5: Delete bare session key (clears comp_state with QA
         #            QUESTIONER_STATE_KEY + comp_state_updates, ensuring next
@@ -336,8 +284,4 @@ class FastRedisCheckpointer(Checkpointer):
         await self._delegate.release(session_id, agent_id)
 
     def graph_store(self):
-        # 返回跟踪包装：pregel 每次 graph save 都会经过它，把实际写入的 key
-        # 记录到哨兵 SET，供 post_workflow_execute 精确删除（替代全库 scan_iter）。
-        return _TrackingGraphStore(
-            self._delegate.graph_store(), self._redis, self._ttl_seconds
-        )
+        return self._delegate.graph_store()

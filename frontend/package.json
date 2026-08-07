@@ -67,7 +67,7 @@
     "zone.js": "~0.15.1"
   },
   "devDependencies": {
-    "@angular/build": "^20.3.13",
+    "@angular/build": "20.3.32",
     "@angular/cli": "20.3.13",
     "@angular/compiler-cli": "20.3.17",
     "@types/jasmine": "^5.1.4",
@@ -78,6 +78,7 @@
     "@types/node": "^18.13.0",
     "@types/uuid": "^9.0.7",
     "autoprefixer": "^10.4.13",
+    "core-js": "^3.49.0",
     "dotenv": "^16.0.3",
     "eslint": "9.39.2",
     "eslint-config-airbnb-base": "^15.0.0",
