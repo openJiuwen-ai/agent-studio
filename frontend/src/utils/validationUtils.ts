@@ -107,7 +107,7 @@ export const validateHttpUrl = (url: string): { isValid: boolean; error: string 
   if (!trimmedUrl.startsWith('http://') && !trimmedUrl.startsWith('https://')) {
     return {
       isValid: false,
-      error: '服务地址必须以http://',
+      error: '服务地址必须以http://或https://开头',
     }
   }
 
