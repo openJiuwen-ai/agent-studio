@@ -7,7 +7,7 @@ RUN npm install && npm run build
 
 
 # Stage 2: Final image - Only copy necessary files from builder stage
-FROM nginx:alpine
+FROM nginx:1.28-alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY frontend/nginx.conf /etc/nginx/nginx.conf

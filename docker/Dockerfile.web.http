@@ -18,7 +18,7 @@ RUN sed -i "s/VITE_ENABLE_NEW_AUTH: import.meta.env.VITE_ENABLE_NEW_AUTH === 'Tr
 RUN npm install && npm run build
 
 # Production stage
-FROM nginx:alpine
+FROM nginx:1.28-alpine
 
 # Copy built application
 COPY --from=builder /app/dist /usr/share/nginx/html
