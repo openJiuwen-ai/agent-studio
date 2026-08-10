@@ -74,6 +74,9 @@ export class InputNodeParamsComponent {
       if (item.type === 'array' && item?.actualType?.includes('file')) {
         item.type = `array<${item.actualType}>`;
       }
+      if (item.type === 'string' && item?.actualType?.includes('file')) {
+        item.type = item.actualType;
+      }
     });
     if (changes.inputList) {
       const inputNodeParams = cloneDeep(changes.inputList.currentValue);
