@@ -53,9 +53,14 @@ def end_convert(node: Node) -> dsl.Component:
                 response_template="",
             )
         else:
+            # A plugin node may emit a non-string payload (dict / list / number).
+            # Normalize it to a string so the End node's response_template stays
+            # serializable and the second dialogue round loads correctly (#1282).
+            raw_content = content.content
+            response_template = raw_content if isinstance(raw_content, str) else str(raw_content or "")
             configs = dsl.EndConfig(
                 stream_output=inputs.streaming,
-                response_template=content.content,
+                response_template=response_template,
             )
 
         end_node = dsl.Component(

@@ -87,7 +87,10 @@ class LoopParam(BaseType):
 
 
 class Content(BaseType):
-    content: Optional[str] = Field("", alias="content")
+    # ``content`` may carry a non-string payload (dict / list / number) when a
+    # plugin node feeds the End node directly; consumers normalize it to a
+    # string, so keep the field permissive (#1282).
+    content: Optional[Any] = Field("", alias="content")
     streaming: Optional[bool] = Field(False, alias="streaming")
 
 
