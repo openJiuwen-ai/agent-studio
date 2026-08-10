@@ -3004,9 +3004,19 @@
   "retry": "Retry",
   "select_version": "Select version",
   "raw_order_noise": "Raw DSL text comparison — node/edge/comment order changes may produce non-business diffs",
+  "normalized_order_hint": "Non-semantic node/edge/comment collection order is ignored; business-array order, layout coordinates, and real config changes are still shown",
   "dsl_too_large": "File too large; visual comparison is not supported",
   "same_version_hint": "Comparing identical version",
   "no_published_versions": "No published versions",
   "empty_dsl": "No DSL content",
-  "showing_previous_version": "Currently showing version {{name}}"
+  "showing_previous_version": "Currently showing version {{name}}",
+  "copy": "Copy",
+  "copied": "Copied",
+  "copy_version_text": "Copy this version's text",
+  "fullscreen": "Fullscreen",
+  "exit_fullscreen": "Exit fullscreen",
+  "wordwrap": "Word wrap",
+  "nowrap": "No wrap",
+  "previous_diff": "Previous",
+  "next_diff": "Next"
 }

@@ -1,3 +1,4 @@
+import { ElementRef } from '@angular/core';
 import { DiffVersionModalComponent } from '../../shared/components/release-history-halfmodal/diff-version-modal/diff-version-modal.component';
 
 // Unit 3 spec：Monaco 单 Model 更新路径 + 资源释放。
@@ -46,7 +47,7 @@ describe('DiffVersionModal Unit 3 — Monaco 单 Model 更新 + 资源释放', (
     const i18n: any = { transform: (k: string) => k };
     const cdr: any = { detectChanges: () => {} };
     const ngZone: any = { run: (fn: Function) => fn() };
-    comp = new DiffVersionModalComponent(agentRepo, flowRepo, i18n, cdr, ngZone);
+    comp = new DiffVersionModalComponent(agentRepo, flowRepo, i18n, cdr, ngZone, new ElementRef(document.createElement('div')));
     originalModel = mockModel('old-o');
     modifiedModel = mockModel('old-m');
   });

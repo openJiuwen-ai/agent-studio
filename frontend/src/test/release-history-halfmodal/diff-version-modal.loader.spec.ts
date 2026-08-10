@@ -1,3 +1,4 @@
+import { ElementRef } from '@angular/core';
 import { DiffVersionModalComponent } from '../../shared/components/release-history-halfmodal/diff-version-modal/diff-version-modal.component';
 
 // Unit 2 spec：类型分派取数 + 边界兜底 + 不吞错。
@@ -19,7 +20,7 @@ describe('DiffVersionModal Unit 2 — 类型分派/取数/边界', () => {
     const i18n: any = { transform: (k: string) => k };
     const cdr: any = { detectChanges: () => {} };
     const ngZone: any = { run: (fn: Function) => fn() };
-    comp = new DiffVersionModalComponent(agentRepo, flowRepo, i18n, cdr, ngZone);
+    comp = new DiffVersionModalComponent(agentRepo, flowRepo, i18n, cdr, ngZone, new ElementRef(document.createElement('div')));
   });
 
   describe('projectDsl (纯函数投影)', () => {

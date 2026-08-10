@@ -1,3 +1,4 @@
+import { ElementRef } from '@angular/core';
 import { DiffVersionModalComponent } from '../../shared/components/release-history-halfmodal/diff-version-modal/diff-version-modal.component';
 
 // Unit 4 spec：每侧异步治理 + commitIfCurrent + per-side tooLarge + 移除 Mask。
@@ -50,7 +51,7 @@ describe('DiffVersionModal Unit 4 — 每侧异步治理 + commitIfCurrent + per
     const i18n: any = { transform: (k: string) => k };
     const cdr: any = { detectChanges: () => {} };
     const ngZone: any = { run: (fn: Function) => fn() };
-    comp = new DiffVersionModalComponent(agentRepo, flowRepo, i18n, cdr, ngZone);
+    comp = new DiffVersionModalComponent(agentRepo, flowRepo, i18n, cdr, ngZone, new ElementRef(document.createElement('div')));
     comp.type = 'workflow';
     comp.app_id = 'app1';
     // 大阈值：正常测试不触发 tooLarge；tooLarge 专项测试自行调小

@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, Input, NgZone, OnDestroy } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, Input, NgZone, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MonacoEditorModule } from '@materia-ui/ngx-monaco-editor';
@@ -9,6 +9,7 @@ import { AppAgentRepoService } from '@services/agent-center/app-agent-repo.servi
 import { AppFlowRepoService } from '@services/agent-center/app-flow-repo.service';
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
+import { serializeGraphDslForDiff } from './normalize-graph-dsl-for-diff';
 
 @Component({
   selector: 'diff-version-modal',
@@ -36,6 +37,17 @@ export class DiffVersionModalComponent implements OnDestroy {
 
   originalValue = '';
   modifiedValue = '';
+
+  // 复制按钮反馈（点击后短暂显示"已复制"）
+  copiedOriginal = false;
+  copiedModified = false;
+
+  // 全屏：把 NzModal 撑满视口（操作 .ant-modal-wrap/.ant-modal/.ant-modal-content 内联样式）
+  fullscreen = false;
+  private fsSaved: { wrapPad?: string; modalTop?: string; modalWidth?: string; modalMaxWidth?: string; modalPadBottom?: string; contentHeight?: string } = {};
+
+  // 自动换行：单行超过显示宽度时自动拆分到多行（Monaco wordWrap 选项切换）
+  wordWrap: 'off' | 'bounded' = 'off';
 
   // Unit 3：Monaco 单 Model 更新路径 + 资源释放
   private diffEditor?: any;
@@ -80,7 +92,8 @@ export class DiffVersionModalComponent implements OnDestroy {
     private appFlowRepoServ: AppFlowRepoService,
     private i18n: I18NextEagerPipe,
     private cdr: ChangeDetectorRef,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    private el: ElementRef<HTMLElement>
   ) {}
 
   async ngOnInit() {
@@ -183,6 +196,191 @@ export class DiffVersionModalComponent implements OnDestroy {
     return this.loadSide('modified', this.rightSelectedId);
   }
 
+  /** 编辑器高度：全屏时填满视口（减去标题+工具栏+banner），否则用按内容算的 height。 */
+  get editorHeight(): number {
+    if (this.fullscreen) {
+      return Math.max((document.documentElement.clientHeight || 600) - 150, 240);
+    }
+    return this.height;
+  }
+
+  /** 切换全屏：操作 NzModal 的 .ant-modal-wrap/.ant-modal/.ant-modal-content 内联样式铺满视口。 */
+  toggleFullscreen() {
+    this.fullscreen = !this.fullscreen;
+    const host = this.el?.nativeElement;
+    const wrap = host?.closest('.ant-modal-wrap') as HTMLElement | null;
+    const modal = host?.closest('.ant-modal') as HTMLElement | null;
+    const content = modal?.querySelector('.ant-modal-content') as HTMLElement | null;
+    if (this.fullscreen) {
+      this.fsSaved = {
+        wrapPad: wrap?.style.padding,
+        modalTop: modal?.style.top,
+        modalWidth: modal?.style.width,
+        modalMaxWidth: modal?.style.maxWidth,
+        modalPadBottom: modal?.style.paddingBottom,
+        contentHeight: content?.style.height,
+      };
+      if (wrap) wrap.style.padding = '0';
+      if (modal) {
+        modal.style.top = '0';
+        modal.style.width = '100vw';
+        modal.style.maxWidth = 'none';
+        modal.style.paddingBottom = '0';
+      }
+      if (content) content.style.height = '100vh';
+    } else {
+      if (wrap) wrap.style.padding = this.fsSaved.wrapPad ?? '';
+      if (modal) {
+        modal.style.top = this.fsSaved.modalTop ?? '';
+        modal.style.width = this.fsSaved.modalWidth ?? '';
+        modal.style.maxWidth = this.fsSaved.modalMaxWidth ?? '';
+        modal.style.paddingBottom = this.fsSaved.modalPadBottom ?? '';
+      }
+      if (content) content.style.height = this.fsSaved.contentHeight ?? '';
+    }
+    this.cdr.detectChanges();
+  }
+
+  /** 切换自动换行：单行超过显示宽度时自动拆分到多行（Monaco wordWrap: 'bounded'）。 */
+  toggleWordWrap() {
+    this.wordWrap = this.wordWrap === 'bounded' ? 'off' : 'bounded';
+    this.diffEditor?.updateOptions?.({ wordWrap: this.wordWrap });
+    this.cdr.detectChanges();
+  }
+
+  /** 跳转到上一个差异块：根据 getLineChanges + revealLineInCenter 实现，到底后回到最后一个。 */
+  previousDiff() {
+    const changes = this.diffEditor?.getLineChanges?.() ?? [];
+    if (!changes.length) return;
+    const modifiedEditor = this.diffEditor?.getModifiedEditor?.();
+    const originalEditor = this.diffEditor?.getOriginalEditor?.();
+    if (!modifiedEditor) return;
+    const visibleRange = modifiedEditor.getVisibleRanges?.()?.[0];
+    const currentLine = visibleRange?.startLineNumber ?? 1;
+    let targetChange: any = null;
+    for (let i = changes.length - 1; i >= 0; i--) {
+      const line = changes[i].modifiedStartLineNumber || changes[i].originalStartLineNumber;
+      if (line && line < currentLine) {
+        targetChange = changes[i];
+        break;
+      }
+    }
+    if (!targetChange) targetChange = changes[changes.length - 1]; // 到头则绕回最后一个
+    if (targetChange) {
+      if (targetChange.modifiedStartLineNumber > 0) {
+        modifiedEditor.revealLineInCenter(targetChange.modifiedStartLineNumber);
+      }
+      if (originalEditor && targetChange.originalStartLineNumber > 0) {
+        originalEditor.revealLineInCenter(targetChange.originalStartLineNumber);
+      }
+    }
+    this.focusModified();
+  }
+
+  /** 跳转到下一个差异块：以视口底行为基准,找下一个差异(避免与 revealLineInCenter 的居中行为打转)。到底后绕回第一个。 */
+  nextDiff() {
+    const changes = this.diffEditor?.getLineChanges?.() ?? [];
+    if (!changes.length) return;
+    const modifiedEditor = this.diffEditor?.getModifiedEditor?.();
+    const originalEditor = this.diffEditor?.getOriginalEditor?.();
+    if (!modifiedEditor) return;
+    const visibleRange = modifiedEditor.getVisibleRanges?.()?.[0];
+    // 用视口底行当基准:revealLineInCenter 把目标放中央,底行会越过目标往下走,
+    // 用底行做"已越过"判断,保证每次点击都前进
+    const refLine = visibleRange?.endLineNumber ?? visibleRange?.startLineNumber ?? 1;
+    let targetChange: any = null;
+    for (const c of changes) {
+      const line = c.modifiedStartLineNumber || c.originalStartLineNumber;
+      if (line && line > refLine) {
+        targetChange = c;
+        break;
+      }
+    }
+    if (!targetChange && changes.length > 0) targetChange = changes[0]; // 到头则绕回第一个
+    if (targetChange) {
+      if (targetChange.modifiedStartLineNumber > 0) {
+        modifiedEditor.revealLineInCenter(targetChange.modifiedStartLineNumber);
+      }
+      if (originalEditor && targetChange.originalStartLineNumber > 0) {
+        originalEditor.revealLineInCenter(targetChange.originalStartLineNumber);
+      }
+    }
+    this.focusModified();
+  }
+
+  /** 跳转后把焦点设到 modified 编辑器（避免焦点停在不可见元素）。 */
+  private focusModified() {
+    try {
+      this.diffEditor?.getModifiedEditor?.()?.focus?.();
+    } catch {
+      // 忽略
+    }
+  }
+
+  /** 复制左侧（original）版本文本到剪贴板。 */
+  copyOriginal() {
+    const ok = this.copyText(this.originalValue);
+    this.flashCopied('original', ok);
+  }
+
+  /** 复制右侧（modified）版本文本到剪贴板。 */
+  copyModified() {
+    const ok = this.copyText(this.modifiedValue);
+    this.flashCopied('modified', ok);
+  }
+
+  /**
+   * 复制文本到剪贴板。优先 clipboard API（需 secure context），
+   * 否则走 execCommand('copy') 兜底（本环境为 http://100.90.140.57:4200 非 secure context，execCommand 是主路径）。
+   */
+  private copyText(text: string): boolean {
+    try {
+      if (navigator?.clipboard?.writeText && (window as any).isSecureContext) {
+        navigator.clipboard.writeText(text).catch(() => this.legacyCopy(text));
+        return true;
+      }
+    } catch {
+      // 落到 legacy
+    }
+    return this.legacyCopy(text);
+  }
+
+  private legacyCopy(text: string): boolean {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    let ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      ok = false;
+    }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  private flashCopied(side: 'original' | 'modified', ok: boolean) {
+    if (side === 'original') {
+      this.copiedOriginal = ok;
+    } else {
+      this.copiedModified = ok;
+    }
+    this.cdr.detectChanges();
+    setTimeout(() => {
+      if (side === 'original') {
+        this.copiedOriginal = false;
+      } else {
+        this.copiedModified = false;
+      }
+      this.safeDetect();
+    }, 1500);
+  }
+
   /**
    * 每侧异步治理：所有状态提交（成功/失败/超限/loading 结束）都过 commitIfCurrent 守卫，
    * 旧请求不得覆盖新选择。失败保留上次成功 value/sourceText；大 DSL 按侧 tooLarge，全局 dslTooLarge 派生。
@@ -201,7 +399,7 @@ export class DiffVersionModalComponent implements OnDestroy {
 
     try {
       const dsl = await this.loadVersion(this.type, this.app_id, versionId);
-      const text = JSON.stringify(dsl, null, 2);
+      const text = serializeGraphDslForDiff(dsl);
       // 先用局部变量计算，不污染共享状态；过期响应在下面 return，不写 state
       const tooLarge = new Blob([text]).size > this.largeDslBytesThreshold;
       if (!commitIfCurrent()) {
