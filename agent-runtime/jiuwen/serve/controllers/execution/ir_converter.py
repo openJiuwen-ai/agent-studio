@@ -1270,10 +1270,7 @@ class IRConverter:
         agents_all, agent_info_map = await IRConverter.create_all_agents_config_list(
             root_ir_data, conversation_id
         )
-        configs = root_ir_data.get("configs", {})
-        max_agent_calls = configs.get("maxIteration")
-        if max_agent_calls is None:
-            max_agent_calls = root_ir_data.get("max_agent_calls", 10)
+        max_agent_calls = root_ir_data.get("max_agent_calls", 10)
         if (
             not isinstance(max_agent_calls, int)
             or isinstance(max_agent_calls, bool)

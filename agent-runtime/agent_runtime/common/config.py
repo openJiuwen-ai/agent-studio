@@ -179,6 +179,22 @@ class WorkflowLogSettings(BaseSettings):
     )
 
 
+class LlmCallLoggingSettings(BaseSettings):
+    """Model call logging configuration.
+
+    Controls whether the model-call detail callbacks (request/response/usage/
+    latency/tool_calls) are registered. Error callback is always registered
+    regardless of this switch. Defaults to off; set MODEL_CALL_LOGGING_ENABLED=true
+    to enable detail logging (still subject to the WORKFLOW_LOG_LEVEL <= INFO gate).
+    """
+
+    enabled: bool = Field(default=False, validation_alias="MODEL_CALL_LOGGING_ENABLED")
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
 class OtelSettings(BaseSettings):
     """OpenTelemetry tracer configuration.
 
@@ -404,6 +420,7 @@ class Settings:
     health_check = HealthCheckSettings()
     security_sandbox = SecuritySandboxSettings()
     workflow_log = WorkflowLogSettings()
+    llm_call_logging = LlmCallLoggingSettings()
     cache = CacheSettings()
     skill_storage = SkillStorageSettings()
     opensearch = OpenSearchSettings()
