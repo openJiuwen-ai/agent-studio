@@ -1,0 +1,68 @@
+{
+  "name": "智能体助手",
+  "description": "智能体助手",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgNTYgjlDMTQuMTMgMS4yNTQ1NyAxNC41NTQ1IDAuODMyMzMzIDE0LjY5OTMgMC4yOTc4NDlaIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDEpIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHRyYW5zZm9ybT0ibWF0cml4KDEsMCwwLC0xLDE2LjgyNjgsMzYuMDg1KSIgLz4NCgk8L2c+DQo8L3N2Zz4NCg==",
+  "instructions": "aaaaaa",
+  "prologue": "fafsgc",
+  "type": "agent",
+  "status": "published",
+  "creator": "agent_builder",
+  "agent_id": "b51efca2-1cd4-47c6-9f72-58732ec08235",
+  "project_id": "b691749589164e26a276ad287100cc79",
+  "workspace_id": "default",
+  "model_deployment_id": "44ce26c6-fe23-4c5b-bb95-d94de6cb46d6",
+  "model_name": "gzk策略",
+  "model_config": {
+    "top_p": 1.0,
+    "temperature": 0.0,
+    "history_size": 20,
+    "output_format": "text",
+    "enable_thinking": true
+  },
+  "model_type": "LLM",
+  "plan_qa_independent": false,
+  "suggest_queries": [],
+  "additional_questions_config": {
+    "enable": true,
+    "rounds": 1,
+    "prompt": "- 问题应该与你最后一轮的回复紧密相关\n- 问题不要与上文已经提问或者回答过的内容重复\n- 每句话只包含一个问题，但也可以不是问句而是一句指令\n- 推荐你有能力回答的问题"
+  },
+  "voice_interaction": {
+    "language": "chinese",
+    "timbre": "huaxiaohe",
+    "domain": "common"
+  },
+  "content_review": {
+    "enabled": true,
+    "filter": {
+      "keywords": ""
+    },
+    "replace": [],
+    "reply": []
+  },
+  "sub_type": "common",
+  "creator_id": "6f80301edacc43728bf47b6a6484d512",
+  "workflow_switch_enabled": false,
+  "scheduling_mode": "ReAct",
+  "updated_on": 1770280860315,
+  "is_share": 0,
+  "service_name": "gzk策略",
+  "tools": [],
+  "workflows": [
+    {
+      "workflow_id": "263950a7-c666-41c6-bb00-7c0ee480b5f3",
+      "workflow_name": "wwl_test",
+      "code": "wwl_test",
+      "workflow_icon": "data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwNC43NDUsMjU0Ljc0NSwxKSIgLz4NCgkJCTxyZWN0IGlkPSLnn6nlvaIiIHdpZHRoPSI3LjAwMDY5NTcxIiBoZWlnaHQ9IjQuNjY3MTI5NTIiIHg9IjE3Ljk5ODY3MjUiIHk9IjMyLjA4MzEyOTkiIHJ4PSIxLjc1MDE3NDUyIiBmaWxsPSJyZ2JhKDI1NSwyNTQuNzQ1LDI1NC43NDUsMSkiIC8+DQoJCTwvZz4NCgk8L2c+DQo8L3N2Zz4NCg==",
+      "workflow_parameter": "[{\"default\":\"\",\"description\":\"用户输入\",\"name\":\"query\",\"required\":false,\"type\":\"string\",\"value\":{\"content\":\"\",\"type\":\"literal\"},\"visibility\":true}]",
+      "desc": "aaaa",
+      "last_version_id": "1769571660089",
+      "last_version_name": "v20260128114057"
+    }
+  ],
+  "mcp_servers": [],
+  "knowledge_repos": [],
+  "create_time": 1770190266000,
+  "update_time": 1770280860315,
+  "publish_time": 1770190602000
+}

@@ -32,8 +32,22 @@ describe('DiffVersionModal Unit 2 — 类型分派/取数/边界', () => {
       expect((comp as any).projectDsl('multi', { details: { b: 2 } })).toEqual({ b: 2 });
     });
 
-    it('agent → 抛"不支持"', () => {
-      expect(() => (comp as any).projectDsl('agent', { anything: 1 })).toThrowError(/不支持|unsupported/i);
+    it('agent common → 投影（删元数据黑名单 + 归一 sub_type）', () => {
+      const dsl = (comp as any).projectDsl('agent', {
+        sub_type: 'common', name: 'x', agent_id: 'a1', create_time: '2026-08-10',
+      });
+      expect(dsl.name).toBe('x');
+      expect(dsl.sub_type).toBe('common');
+      expect(dsl.agent_id).toBeUndefined();
+      expect(dsl.create_time).toBeUndefined();
+    });
+
+    it('agent deepresearch → 抛"暂不支持"', () => {
+      expect(() => (comp as any).projectDsl('agent', { sub_type: 'deepresearch' })).toThrowError(/暂不支持/);
+    });
+
+    it('agent 未知 sub_type → 抛"不支持的智能体子类型"', () => {
+      expect(() => (comp as any).projectDsl('agent', { sub_type: 'foo' })).toThrowError(/不支持的智能体子类型|unsupported/i);
     });
 
     it('workflow 字段缺失 → 抛错(不返 {})', () => {
@@ -78,13 +92,31 @@ describe('DiffVersionModal Unit 2 — 类型分派/取数/边界', () => {
       expect(dsl).toEqual({ n: 2 });
     });
 
-    it('agent → 抛"不支持"且不发网络请求', async () => {
-      await expectAsync((comp as any).loadVersion('agent', 'app1', 'latest')).toBeRejectedWithError(
-        /不支持|unsupported/i,
+    it('agent latest → 调 fetchAgentDetail(app_id) 且投影删元数据', async () => {
+      agentRepo.fetchAgentDetail.and.returnValue(
+        Promise.resolve({ sub_type: 'common', name: 'x', agent_id: 'a1', create_time: '2026-08-10' }),
       );
+      const dsl = await (comp as any).loadVersion('agent', 'app1', 'latest');
+      expect(agentRepo.fetchAgentDetail).toHaveBeenCalledWith('app1');
       expect(agentRepo.getMultiAgent).not.toHaveBeenCalled();
-      expect(agentRepo.rollbackAgentVersion).not.toHaveBeenCalled();
-      expect(flowRepo.getFlow).not.toHaveBeenCalled();
+      expect(dsl.name).toBe('x');
+      expect(dsl.agent_id).toBeUndefined();
+      expect(dsl.create_time).toBeUndefined();
+    });
+
+    it('agent 版本 → 调 rollbackAgentVersion(app_id, versionId)', async () => {
+      agentRepo.rollbackAgentVersion.and.returnValue(
+        Promise.resolve({ sub_type: 'planexecute', name: 'y', scenes: [{ id: 's1' }] }),
+      );
+      const dsl = await (comp as any).loadVersion('agent', 'app1', 'v3');
+      expect(agentRepo.rollbackAgentVersion).toHaveBeenCalledWith('app1', 'v3');
+      expect(dsl.sub_type).toBe('planexecute');
+      expect(dsl.scenes).toEqual([{ id: 's1' }]);
+    });
+
+    it('agent deepresearch → 抛"暂不支持"（projectDsl 阶段拒绝）', async () => {
+      agentRepo.fetchAgentDetail.and.returnValue(Promise.resolve({ sub_type: 'deepresearch' }));
+      await expectAsync((comp as any).loadVersion('agent', 'app1', 'latest')).toBeRejectedWithError(/暂不支持/);
     });
 
     it('workflow 版本端返回无 workflow_details → 抛错(不返 {})', async () => {

@@ -3005,6 +3005,7 @@
   "select_version": "Select version",
   "raw_order_noise": "Raw DSL text comparison — node/edge/comment order changes may produce non-business diffs",
   "normalized_order_hint": "Non-semantic node/edge/comment collection order is ignored; business-array order, layout coordinates, and real config changes are still shown",
+  "normalized_order_hint_agent": "Non-semantic object-key order and reference-set order is ignored; business-array order and real config changes are still shown",
   "dsl_too_large": "File too large; visual comparison is not supported",
   "same_version_hint": "Comparing identical version",
   "no_published_versions": "No published versions",

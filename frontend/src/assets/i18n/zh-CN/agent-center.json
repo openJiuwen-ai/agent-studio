@@ -3027,6 +3027,7 @@
   "select_version": "选择版本",
   "raw_order_noise": "当前为原始 DSL 文本对比，节点/边/评论顺序变化可能产生非业务差异",
   "normalized_order_hint": "已忽略无业务语义的节点、边和评论集合顺序；业务数组顺序、布局坐标和真实配置变化仍会展示",
+  "normalized_order_hint_agent": "已忽略无业务语义的对象键顺序和引用集合顺序；业务数组顺序和真实配置变化仍会展示",
   "dsl_too_large": "文件过大，暂不支持可视化对比",
   "same_version_hint": "同版本对比",
   "no_published_versions": "暂无发布版本",

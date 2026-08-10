@@ -10,6 +10,7 @@ import { AppFlowRepoService } from '@services/agent-center/app-flow-repo.service
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { serializeGraphDslForDiff } from './normalize-graph-dsl-for-diff';
+import { extractSingleAgentDsl, normalizeSingleAgentDslForDiff } from './single-agent-dsl-for-diff';
 
 @Component({
   selector: 'diff-version-modal',
@@ -167,9 +168,17 @@ export class DiffVersionModalComponent implements OnDestroy {
   ngOnDestroy() {
     this.destroyed = true;
     this.diffUpdateDisposable?.dispose?.();
-    // 防御式：不依赖 Materia child 是否先销毁 editor——先 isDisposed 守卫再 setModel(null)
-    if (this.diffEditor && !this.diffEditor.isDisposed?.()) {
-      this.diffEditor.setModel?.(null);
+    // Angular 销毁顺序：子组件（Materia MonacoDiffEditorComponent）先 destroy → editor.dispose()
+    // → InstantiationService disposed；父组件 ngOnDestroy 后调 setModel(null) 会抛
+    // "InstantiationService has been disposed"。isDisposed 守卫与 InstantiationService disposed
+    // 不同步（方法可能不存在/返回 false），用 try-catch 容错，避免 destroy 抛错中断 cleanUpView
+    // 导致 modal DOM 残留空框闪现。两 Model 由下方 dispose 单独释放，setModel 失败不影响泄漏防护。
+    try {
+      if (this.diffEditor && !this.diffEditor.isDisposed?.()) {
+        this.diffEditor.setModel?.(null);
+      }
+    } catch {
+      // editor 已被 Materia 子组件 dispose，setModel 抛错忽略；Model 仍由下方 dispose 释放
     }
     this.originalModel?.dispose?.();
     this.modifiedModel?.dispose?.();
@@ -399,7 +408,7 @@ export class DiffVersionModalComponent implements OnDestroy {
 
     try {
       const dsl = await this.loadVersion(this.type, this.app_id, versionId);
-      const text = serializeGraphDslForDiff(dsl);
+      const text = this.serializeForDiff(this.type, dsl);
       // 先用局部变量计算，不污染共享状态；过期响应在下面 return，不写 state
       const tooLarge = new Blob([text]).size > this.largeDslBytesThreshold;
       if (!commitIfCurrent()) {
@@ -429,6 +438,14 @@ export class DiffVersionModalComponent implements OnDestroy {
     }
   }
 
+  /** 按类型选序列化器：workflow/multi 用图 DSL 规范化，agent 用单智能体规范化（dsl 已是 extractSingleAgentDsl 投影结果，此处只 normalize+stringify）。 */
+  private serializeForDiff(type: string, dsl: unknown): string {
+    if (type === 'agent') {
+      return JSON.stringify(normalizeSingleAgentDslForDiff(dsl), null, 2);
+    }
+    return serializeGraphDslForDiff(dsl);
+  }
+
   /** 纯投影：按资源类型从响应提取可比较 DSL。字段缺失抛错，不返 {}。 */
   projectDsl(type: string, response: any): unknown {
     if (type === 'workflow') {
@@ -445,7 +462,12 @@ export class DiffVersionModalComponent implements OnDestroy {
       }
       return dsl;
     }
-    throw new Error('unsupported in phase 1: ' + type);
+    if (type === 'agent') {
+      // 阶段三：单智能体投影 = AgentInfo 整对象 − 元数据黑名单 + sub_type 归一/准入。
+      // deepresearch 在此抛 per-side error；空响应也抛错不伪装成功。
+      return extractSingleAgentDsl(response);
+    }
+    throw new Error('unsupported: ' + type);
   }
 
   /** 类型分派取数：agent 直接抛"不支持"且不发网络请求；workflow/multi 按 latest/版本 调对应接口再投影。 */
@@ -464,8 +486,17 @@ export class DiffVersionModalComponent implements OnDestroy {
           : await this.agentRepoServe.rollbackAgentVersion(appId, versionId);
       return this.projectDsl('multi', value);
     }
-    // agent 及未知类型：阶段一显式拒绝，不误入 multi 的 details 提取
-    throw new Error('unsupported in phase 1: ' + type);
+    if (type === 'agent') {
+      // 阶段三：单智能体 latest 用 fetchAgentDetail（与 getMultiAgent 同 URL /agents/{id}，语义更正确）；
+      // 版本侧用 rollbackAgentVersion GET，不执行恢复写入。
+      const value =
+        versionId === 'latest'
+          ? await this.agentRepoServe.fetchAgentDetail(appId)
+          : await this.agentRepoServe.rollbackAgentVersion(appId, versionId);
+      return this.projectDsl('agent', value);
+    }
+    // 未知类型：显式拒绝，不误入其它提取逻辑
+    throw new Error('unsupported: ' + type);
   }
 
   /** 边界兜底：leftIndex/rightIndex 越界或 options 为空时回退 'latest'，避免弹窗初始化崩。 */

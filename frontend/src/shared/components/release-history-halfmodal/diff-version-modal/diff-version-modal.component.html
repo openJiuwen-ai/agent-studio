@@ -100,7 +100,7 @@
       </div>
       <span class="same-version-hint" *ngIf="isSameVersion">{{ 'same_version_hint' | i18nextEager }}</span>
     </div>
-    <div class="noise-banner">{{ 'normalized_order_hint' | i18nextEager }}</div>
+    <div class="noise-banner">{{ (type === 'agent' ? 'normalized_order_hint_agent' : 'normalized_order_hint') | i18nextEager }}</div>
     <div class="editor-area" [attr.aria-busy]="originalState.loading || modifiedState.loading">
       <ngx-monaco-diff-editor
         [style]="{ width: '100%', height: editorHeight + 'px' }"

@@ -135,6 +135,20 @@ describe('DiffVersionModal Unit 3 — Monaco 单 Model 更新 + 资源释放', (
     expect(modifiedModel.dispose).toHaveBeenCalled();
   });
 
+  it('ngOnDestroy：setModel 抛错（InstantiationService 已 dispose 但 isDisposed 不同步）→ try-catch 容错不中断 destroy，两 Model 仍 dispose', () => {
+    // 复现真实时序：Materia child 已 dispose editor（InstantiationService disposed），
+    // 但 isDisposed 守卫返回 false（与 InstantiationService disposed 不同步）→ setModel(null) 抛错。
+    // 修复前：抛错中断 cleanUpView → modal DOM 残留空框闪现。
+    const editor = mockEditor({ original: originalModel, modified: modifiedModel });
+    editor.isDisposed.and.returnValue(false);
+    editor.setModel.and.throwError(new Error('InstantiationService has been disposed'));
+    (comp as any).onDiffInit(editor);
+    expect(() => (comp as any).ngOnDestroy()).not.toThrow();
+    expect(editor.setModel).toHaveBeenCalledWith(null); // 防御式仍尝试调
+    expect(originalModel.dispose).toHaveBeenCalled();
+    expect(modifiedModel.dispose).toHaveBeenCalled();
+  });
+
   it('ngOnDestroy 后晚到 applyValues → 不改 Model（destroyed 守卫）', () => {
     const editor = mockEditor({ original: originalModel, modified: modifiedModel });
     (comp as any).onDiffInit(editor);
