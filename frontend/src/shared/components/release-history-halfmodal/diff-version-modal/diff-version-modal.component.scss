@@ -24,3 +24,73 @@
 .select-div {
   width: 50%;
 }
+
+.side-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  min-height: 20px;
+}
+
+.side-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #d4380d;
+  font-size: 12px;
+}
+
+.showing-previous {
+  color: #8c8c8c;
+}
+
+.retry-link {
+  color: #1476ff;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+
+.same-version-hint {
+  align-self: center;
+  padding: 2px 8px;
+  background: #e6f4ff;
+  border-radius: 2px;
+  color: #0958d9;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.noise-banner {
+  padding: 6px 12px;
+  margin-bottom: 8px;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 4px;
+  color: #874d00;
+  font-size: 12px;
+}
+
+.editor-area {
+  position: relative;
+}
+
+/* Materia diff 组件未给 :host 设 display，Angular 自定义元素 host 默认 inline 会忽略 [style] 的 width/height，
+   导致 .editor-container height:100% = 0、编辑器绝对定位填充 0 高度 → 活着但不可见。强制 block 让 [style] 高度生效。 */
+.editor-area ngx-monaco-diff-editor {
+  display: block;
+}
+
+.dsl-too-large-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(250, 250, 250, 0.95);
+  color: #8c8c8c;
+  font-size: 14px;
+}

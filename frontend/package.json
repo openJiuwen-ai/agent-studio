@@ -15,7 +15,7 @@
     "build": "ng build",
     "lint:es": "pnpm exec eslint --fix --cache --cache-location ./.cache/eslint/ --cache-strategy content ./",
     "lint:style": "pnpm exec stylelint --fix --cache --cache-location ./.cache/stylelint/ --cache-strategy content \"**/*.{scss,html}\"",
-    "test": "jest"
+    "test": "ng test --watch=false"
   },
   "dependencies": {
     "@angular/animations": "20.3.25",

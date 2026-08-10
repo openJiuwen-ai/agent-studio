@@ -2999,5 +2999,14 @@
   "stream_transform_5": "Enter the field to be aggregated, including the original field and path, for example, raw_output.",
   "export_downLoad_tip": "If the download fails, click the button to copy the download link and download the file manually",
   "copy_downLoad_url": "Copy Download Link",
-  "create-app-name": "Display name"
+  "create-app-name": "Display name",
+  "version_load_failed": "Version data failed to load",
+  "retry": "Retry",
+  "select_version": "Select version",
+  "raw_order_noise": "Raw DSL text comparison — node/edge/comment order changes may produce non-business diffs",
+  "dsl_too_large": "File too large; visual comparison is not supported",
+  "same_version_hint": "Comparing identical version",
+  "no_published_versions": "No published versions",
+  "empty_dsl": "No DSL content",
+  "showing_previous_version": "Currently showing version {{name}}"
 }

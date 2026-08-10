@@ -3021,5 +3021,14 @@
   "stream_transform_5": "请输入需要聚合的字段，需要填写原始字段及路径，如raw_output",
   "export_downLoad_tip": "若下载未成功，请点击复制下载链接按钮进行手动下载",
   "copy_downLoad_url": "复制下载链接",
-  "create-app-name": "展示名称"
+  "create-app-name": "展示名称",
+  "version_load_failed": "版本数据加载失败",
+  "retry": "重试",
+  "select_version": "选择版本",
+  "raw_order_noise": "当前为原始 DSL 文本对比，节点/边/评论顺序变化可能产生非业务差异",
+  "dsl_too_large": "文件过大，暂不支持可视化对比",
+  "same_version_hint": "同版本对比",
+  "no_published_versions": "暂无发布版本",
+  "empty_dsl": "无 DSL 内容",
+  "showing_previous_version": "当前仍显示版本 {{name}}"
 }

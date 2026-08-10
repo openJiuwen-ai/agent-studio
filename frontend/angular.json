@@ -138,6 +138,7 @@
             "main": "src/test/test.ts",
             "tsConfig": "src/test/tsconfig.spec.json",
             "karmaConfig": "src/test/karma.conf.js",
+            "include": ["src/test/**/*.spec.ts"],
             "assets": [
               "src/favicon.ico",
               "src/assets"
