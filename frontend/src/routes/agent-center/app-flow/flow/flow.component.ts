@@ -4939,8 +4939,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         ) {
           field.type = index.type;
 
+          // 视觉字段（标量与数组）都需按媒体类型同步命名与 configs.vision；
+          // 不能仅在 array/object 时调用，否则标量 file/image↔file/video 切换会漏同步。
+          this.changeLLMVisionName(field, index, node);
+
           if (['array', 'object'].includes(field.type)) {
-            this.changeLLMVisionName(field, index, node);
             field.schema = index.schema;
           } else if (field?.schema) {
             delete field.schema;
@@ -4971,25 +4974,35 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!node?.configs?.vision) {
       return;
     }
-    const type = newRef.schema?.type;
-    if (field.name.startsWith('_image_vision_') && type === 'file/video') {
-      const originIndex =
-        node.configs.vision.findIndex((v) => {
-          return v === field.name;
-        }) ?? 0;
-      field.name = field.name.replace('_image_', '_video_');
-      node.configs.vision[originIndex] = field.name;
-    } else if (
-      field.name.startsWith('_video_vision_') &&
-      type === 'file/image'
-    ) {
-      const originIndex =
-        node.configs.vision.findIndex((v) => {
-          return v === field.name;
-        }) ?? 0;
-      field.name = field.name.replace('_video_', '_image_');
-      node.configs.vision[originIndex] = field.name;
+    // 数组 schema 子类型优先，否则标量 newRef.type（标量引用经 getDtoInput 后 schema 被删除）
+    const refType = newRef.schema?.type ?? newRef.type;
+    // file/video -> 视频；file/image 或数组元素 string -> 图片
+    const isVideo = refType === 'file/video';
+    const isImage = refType === 'file/image' || refType === 'string';
+    if (!isVideo && !isImage) {
+      return;
     }
+
+    const currentIsImage = field.name.startsWith('_image_vision_');
+    const currentIsVideo = field.name.startsWith('_video_vision_');
+    if (!currentIsImage && !currentIsVideo) {
+      return;
+    }
+    // 媒体类型未变化 -> 无需重命名
+    if ((isVideo && currentIsVideo) || (isImage && currentIsImage)) {
+      return;
+    }
+
+    // 精确定位旧字段名；找不到时安全 no-op，不得写入 configs.vision[-1]
+    const originIndex = node.configs.vision.findIndex((v) => v === field.name);
+    if (originIndex === -1) {
+      return;
+    }
+
+    field.name = isVideo
+      ? field.name.replace('_image_', '_video_')
+      : field.name.replace('_video_', '_image_');
+    node.configs.vision[originIndex] = field.name;
   }
 
   /**
