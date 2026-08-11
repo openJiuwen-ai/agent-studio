@@ -1359,7 +1359,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         if (!ref?.nodeData) {
           return;
         }
-        let {nodeData = {}, nodeInfo = {}} = ref || {};
+        let {nodeData = {}} = ref || {};
 
         // 保存
         this.exceptionBranchHandler(nodeData);
@@ -1431,7 +1431,14 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         if (nodeData?.id === 'node_start') {
           this.isStartNodeBtnClicked = true;
         }
-        this.checkRefChangeAndUpdateNode(nodeInfo, nodeData);
+        // 保存事件只携带 nodeData，旧节点快照需从当前 graph 按 nodeData.id 读取并深拷贝，
+        // 作为 checkRefChangeAndUpdateNode 的 oldNodeData；旧节点不存在（新增节点）时传
+        // {} 哨兵安全跳过差异检查（其内部 getOutputsRefIndex 对空 outputs 返回 []，不报错也不误更新）。
+        const graphOldNode = this.getNodeInfoById(nodeData.id);
+        const oldNodeData: NodeInfo = graphOldNode
+          ? cloneDeep(graphOldNode)
+          : ({} as NodeInfo);
+        this.checkRefChangeAndUpdateNode(oldNodeData, nodeData);
 
         // 更新画布上的node
         if (nodeData?.type === 'SubController') {

@@ -243,6 +243,157 @@ for (const [label, field, newRef, node] of noopCases) {
   }
 }
 
+// ---- C. 保存订阅入口契约（根因回归） ------------------------------------
+// 根因：start-modal.handelSave 只发布 { nodeData }，无旧节点快照；flow.component.ts
+// 保存订阅把不存在的 ref.nodeInfo 默认成 {} 传给 checkRefChangeAndUpdateNode，
+// 致 oldRefs=[] -> updatedRefs=[] -> updateRefType/fixRefTypeOutdate/changeLLMVisionName
+// 全部不执行，开始节点图片/视频切换后 LLM 的 _image_vision_N / _video_vision_N 与
+// configs.vision 不同步。
+// 修复契约：保存订阅在调用 checkRefChangeAndUpdateNode 前，按 nodeData.id 从当前
+// graph 读取旧节点并深拷贝作为 oldNodeData；旧节点不存在时安全跳过差异检查。
+function matchBrace(src, openIdx) {
+  let depth = 0;
+  for (let i = openIdx; i < src.length; i++) {
+    const c = src[i];
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) return i; }
+  }
+  return -1;
+}
+
+function extractSaveSubscriptionBody() {
+  const start = SRC.indexOf('nodeSaveMonitor$()');
+  if (start === -1) return '';
+  const sub = SRC.indexOf('.subscribe(', start);
+  if (sub === -1) return '';
+  const arrow = SRC.indexOf('=>', sub);
+  if (arrow === -1) return '';
+  const openBrace = SRC.indexOf('{', arrow);
+  if (openBrace === -1) return '';
+  const closeBrace = matchBrace(SRC, openBrace);
+  if (closeBrace === -1) return '';
+  return SRC.slice(openBrace, closeBrace + 1);
+}
+
+const saveSubBody = extractSaveSubscriptionBody();
+if (!saveSubBody) {
+  failures.push('未能在源码中提取 nodeSaveMonitor$ 订阅体（保存订阅入口契约无法校验）');
+}
+
+if (saveSubBody) {
+  // C1. 必须按 nodeData.id 从当前 graph 读取旧节点（getNodeInfoById 或 getCellById 链）
+  if (!/getNodeInfoById\(\s*nodeData\.id\s*\)/.test(saveSubBody)
+      && !/getCellById\(\s*nodeData\.id\s*\)/.test(saveSubBody)) {
+    failures.push(
+      '保存订阅未按 nodeData.id 从 graph 读取旧节点 -> oldNodeData 恒为 {} -> updateRefType 不执行',
+    );
+  }
+  // C2. 必须深拷贝旧节点，避免 graph 内引用被后续 updateNodeData 副作用篡改
+  if (!/cloneDeep\(/.test(saveSubBody)) {
+    failures.push('保存订阅未对旧节点深拷贝 -> oldNodeData 可能与 graph 共享引用被篡改');
+  }
+  // C3. 不得再把事件载荷里恒为 {} 的 nodeInfo 直接作为 oldNodeData 传入
+  //     修复前：this.checkRefChangeAndUpdateNode(nodeInfo, nodeData);
+  if (/this\.checkRefChangeAndUpdateNode\(\s*nodeInfo\s*,\s*nodeData\s*\)/.test(saveSubBody)) {
+    failures.push(
+      '保存订阅仍把 nodeInfo(事件载荷默认 {}) 作为 oldNodeData 传给 checkRefChangeAndUpdateNode',
+    );
+  }
+  // C4. 旧节点不存在时安全跳过：cloneDeep 读取结果须兜底为 {}（不可为 null，否则
+  //     checkRefChangeAndUpdateNode 内 (oldNodeData as HasOutputsNode).outputs 对 null 抛错）。
+  //     接受三元 else 形式 `? cloneDeep(...) : ({} as NodeInfo)` 或空值合并 `cloneDeep(...) ?? ({} as ...)`。
+  const safeFallback =
+    /\?\s*cloneDeep\([^)]*\)\s*:\s*\(?\{\s*\}(?:\s+as\s+\w+)?\s*\)?/.test(saveSubBody) ||
+    /cloneDeep\([^)]*\)\s*\?\?\s*\(?\{\s*\}(?:\s+as\s+\w+)?\s*\)?/.test(saveSubBody);
+  if (!safeFallback) {
+    failures.push('保存订阅未对旧节点缺失做 {} 兜底 -> 新增节点场景 oldNodeData 可能为 null');
+  }
+}
+
+// ---- D. 保存入口 -> 引用同步 端到端纯逻辑回放（时序契约） ----------------
+// 复刻 保存订阅 -> checkRefChangeAndUpdateNode(oldNodeData, nodeData)
+//   -> getOutputsRefIndex(old) vs getOutputsRefIndex(new) -> updatedRefs
+//   -> updateRefType -> fixRefTypeOutdate -> changeLLMVisionName 的数据流，
+// 验证：旧节点取自 graph（修复）时 updatedRefs 非空且重命名触发；
+//       旧节点取自事件载荷 {}（缺陷）时 updatedRefs 为空、不触发（即 bug 现场）。
+function cloneDeepRepl(x) {
+  return JSON.parse(JSON.stringify(x));
+}
+
+function getOutputsRefIndexRepl(nodeId, fields, acc = []) {
+  (fields || []).forEach((f) => {
+    const p = f.name;
+    if (f.type === 'array' || f.type === 'object') {
+      acc.push({ id: `${nodeId}.${p}`, type: f.type, schema: f.schema });
+    } else {
+      acc.push({ id: `${nodeId}.${p}`, type: f.type });
+    }
+  });
+  return acc;
+}
+
+function replaySaveEntry(oldNodeData, nodeData, llm) {
+  const oldRefs = getOutputsRefIndexRepl(nodeData.id, oldNodeData.outputs);
+  const currRefs = getOutputsRefIndexRepl(nodeData.id, nodeData.outputs);
+  const updatedRefs = currRefs.filter((r) => {
+    const o = oldRefs.find((x) => x.id === r.id);
+    return !!o && !(o.type === r.type);
+  });
+  if (!updatedRefs.length) {
+    return { invoked: false, updatedRefs };
+  }
+  const field = llm.inputs[0];
+  return { invoked: changeLLMVisionName(field, updatedRefs[0], llm), updatedRefs };
+}
+
+const startId = 'node_start';
+const startOldImg = {
+  id: startId,
+  type: 'Start',
+  outputs: [{ name: '_image_vision_1', type: 'file/image' }],
+};
+const startNewVid = {
+  id: startId,
+  type: 'Start',
+  outputs: [{ name: '_image_vision_1', type: 'file/video' }],
+};
+const llmImg = {
+  type: 'LLM',
+  configs: { vision: ['_image_vision_1'] },
+  inputs: [{
+    name: '_image_vision_1',
+    value: {
+      type: 'ref',
+      content: { node_id: startId, field_name: ['_image_vision_1'] },
+    },
+  }],
+};
+
+// 修复契约：旧节点取自 graph 深拷贝（旧节点存在）-> updatedRefs 非空 -> 重命名触发
+const ok = replaySaveEntry(cloneDeepRepl(startOldImg), startNewVid, cloneDeepRepl(llmImg));
+if (!ok.invoked || !ok.invoked.changed) {
+  failures.push(
+    '回放(旧节点取自graph)：期望触发 changeLLMVisionName，但 changed=false；updatedRefs='
+    + JSON.stringify(ok.updatedRefs),
+  );
+} else if (ok.invoked.after !== '_video_vision_1') {
+  failures.push(
+    '回放(旧节点取自graph)：重命名后字段名期望 _video_vision_1，实际 ' + ok.invoked.after,
+  );
+}
+
+// 缺陷现场：旧节点取自事件载荷 {} -> oldRefs 空 -> updatedRefs 空 -> 不触发（证明根因）
+const bug = replaySaveEntry({}, startNewVid, cloneDeepRepl(llmImg));
+if (bug.invoked !== false) {
+  failures.push('回放(旧节点取自{} )：旧节点为空时不应触发重命名（updatedRefs 应为空）');
+}
+if (bug.updatedRefs.length !== 0) {
+  failures.push(
+    '回放(旧节点取自{} )：旧节点为空时 updatedRefs 应为空，实际 '
+    + JSON.stringify(bug.updatedRefs),
+  );
+}
+
 if (failures.length) {
   console.error('FAIL（' + failures.length + ' 项）：');
   failures.forEach(f => console.error('  - ' + f));
@@ -250,5 +401,6 @@ if (failures.length) {
 }
 
 console.log(
-  'PASS：changeLLMVisionName 标量兜底 + findIndex=-1 安全 no-op；fixRefTypeOutdate 标量也同步；四种切换/未变化/缺失/边界 no-op 全部一致',
+  'PASS：changeLLMVisionName 标量兜底 + findIndex=-1 安全 no-op；fixRefTypeOutdate 标量也同步；'
+  + '四种切换/未变化/缺失/边界 no-op 全部一致；保存订阅入口按 nodeData.id 从 graph 深拷贝旧节点并 {} 兜底',
 );
