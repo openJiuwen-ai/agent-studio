@@ -161,19 +161,19 @@ def _load_customer_header_profile() -> None:
             "targets": {
                 "RUNTIME_LLM_CHAT": {
                     "mappings": [
-                        {"from": "cust-userid", "to": "userid"},
+                        {"from": "cust-userid", "to": "userId"},
                         {"from": "cust-token", "to": "token"}
                     ]
                 },
                 "RUNTIME_MCP_CALL": {
                     "mappings": [
-                        {"from": "cust-userid", "to": "userid"},
+                        {"from": "cust-userid", "to": "userId"},
                         {"from": "cust-token", "to": "token"}
                     ]
                 },
                 "RUNTIME_KB_CALL": {
                     "mappings": [
-                        {"from": "cust-userid", "to": "userid"},
+                        {"from": "cust-userid", "to": "userId"},
                         {"from": "cust-token", "to": "token"}
                     ]
                 }

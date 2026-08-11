@@ -1,125 +1,94 @@
 # ============================================================================
-# 客户 Header 改写规则引擎 — 共享配置（单一只读配置源）
+# 客户 Header 改写规则引擎 — 三服务共享配置
 # ----------------------------------------------------------------------------
-# 本文件是三个微服务共享的唯一 customer-header 配置源。各服务按下面标注的
-# 「读取方」读取自己需要的部分；不读对方专属项（运行时不会出错，只是不消费）。
+# studio-manager / studio-runtime / studio-builder 共用本文件作为唯一配置源，
+# 各服务只读取自己需要的部分。完整用法见 customer-header-deploy-guide.md。
 #
-#   studio-manager  通过 SPRING_CONFIG_IMPORT 导入（@ConfigurationProperties(prefix=customer-header)）
-#   studio-runtime  通过 CUSTOMER_HEADER_YAML_PATH 加载（serve/server.py from_yaml）
-#   studio-builder  通过 CUSTOMER_HEADER_YAML_PATH 加载（request_context_bridge； 待实现）
+# 启用：建议通过 .env 设置 CUSTOMER_HEADER_ENABLED=true，优先级高于本文件。
+#       enabled 默认 false（向后兼容：不启用时业务语义不变）。
 #
-# 部署级开关（env 覆盖本文件，权威优先）：
-#   CUSTOMER_HEADER_ENABLED  覆盖 enabled（默认 false →  向后兼容，业务语义不变）
-#
-# 原则：boundary 由 Java factory 做 customer-passthrough（原样转发 cust-*）；
-# 下游 rename 由各下游服务自己的 HeaderProjectionEngine 做（同进程 Java / 跨进程 Python）。
-# 因此本文件中 targets.* 的 mappings 只被「标注的读取方」消费，manager 仅在调测出站（不经 runtime 时）读 RUNTIME_MCP_CALL。
+# 改写链路：manager 在 boundary 原样透传 cust-*；下游各服务按 targets.* 自行改名。
 # ============================================================================
 customer-header:
-  # 读取方: 全部三服务（实际由 env CUSTOMER_HEADER_ENABLED 覆盖；文件默认 false 防误启）
+  # 总开关。生产环境用 .env 的 CUSTOMER_HEADER_ENABLED 覆盖，不要直接改这里。
   enabled: false
-  # 读取方: studio-manager / studio-runtime / studio-builder（仅 simple 模式启用身份替代）
+  # 运行环境，目前仅 simple 模式启用身份替代。
   environment: simple
 
-  # ── 身份（effective userId）──────────────────────────────────
-  # 读取方: studio-manager（SimpleUserContextFilter getUserIdHeader，M8）
-  #         studio-runtime（middleware 覆盖 ctx.user_id 端到端）
-  #         studio-builder（入站 前置，待实现）
+  # 客户身份 Header 的原始来源名（客户传入时用的名字）。
+  # fallback: iam —— 客户未传时回退到平台自身鉴权主体。
   identity:
     user-id-header: cust-userid
     token-header: cust-token
     fallback: iam
 
-  # ── 入站捕获白名单（不含 x-auth-token，属 AUTHENTICATED_PRINCIPAL）──
-  # 读取方: studio-manager（Filter 捕获）、studio-runtime（middleware 捕获）
+  # 入站捕获白名单：只有此处的 cust-* 会被各服务捕获并参与后续改写。
+  # x-auth-token 不在此处，它属于平台鉴权主体，单独处理。
   capture:
     customer-allow: [cust-userid, cust-token]
 
-  # ── boundary 透传名单（manager→下游 原样转发 cust-*，不改名）──
-  # 读取方: studio-manager（InternalRequestHeaderFactory / CustomerHeaderFeignInterceptor .passthrough）
-  #         studio-builder（入站捕获按 agent-builder-inbound 待实现）
+  # boundary 透传：manager 调下游时原样转发下列 cust-*（不改名），由下游再 rename。
   boundary:
-    agent-runtime-inbound:           # 透传到 studio-runtime
+    agent-runtime-inbound:           # → studio-runtime
       customer-passthrough: [cust-userid, cust-token]
-    agent-builder-inbound:           # 透传到 studio-builder
+    agent-builder-inbound:           # → studio-builder
       customer-passthrough: [cust-userid, cust-token]
 
-  # ── 下游 Target 投影（rename / forward-list）──────────────────
-  # 每个 target 只被标注的读取方消费；manager 读 LAKESEARCH + IR_AUTH_KEYS + RUNTIME_MCP_CALL（调测出站）。
+  # 下游改写规则。每个 target 对应一类出站调用。
+  # mappings: from（原始 cust-*，不区分大小写）→ to（下游期望名，保留大小写）。
   targets:
-    # ——  知识库 LakeSearch 改名（Java 同进程引擎）—————————————
-    # 读取方: studio-manager（LakeSearchService HeaderProjectionEngine.project）
+    # 知识库 LakeSearch（studio-manager，Java 同进程引擎）
     LAKESEARCH:
       mappings:
         - { from: cust-userid, to: userid }
         - { from: cust-token, to: token }
 
-    # ——  IR auth_keys 确定性声明（forward-list，只声明名字不存值）——
-    # 读取方: studio-manager（IrAdapterService.getRetrievalAuth → getIrAuthKeysForwardList）
-    # X-Auth-Token 仅声明名字；值运行时来自 platform principal（不在本文件）
+    # IR 检索认证：forward-list 只声明需转发的 Header 名，值运行时来自平台 principal
+    # （X-Auth-Token 仅声明名字，不在此存值）。
     IR_AUTH_KEYS:
       forward-list: [cust-userid, cust-token, X-Auth-Token]
 
-    # ——  runtime LLM Chat 改名（跨进程 Python 引擎，核心只 rename）——
-    # 读取方: studio-runtime（model_service/client.py resolve_outbound_headers(RUNTIME_LLM_CHAT)）
-    RUNTIME_LLM_CHAT:
+    # 以下各 target 结构同构：剥 cust- 前缀，改写为下游期望名。
+    RUNTIME_LLM_CHAT:                # studio-runtime：LLM 调用
       mappings:
         - { from: cust-userid, to: userId }
         - { from: cust-token, to: token }
 
-    # —— runtime MCP 外部服务调用改名（同构，剥 auth_keys 的 cust- 前缀 + captured 覆盖）——
-    # 读取方: studio-runtime（MCP client _prepare_request_params resolve_outbound_headers(RUNTIME_MCP_CALL)）
-    #        studio-manager（McpClientService 调测出站——调测不经 runtime，由 manager 自身剥前缀；McpCustomerHeaderProjection.renameOutboundCustomerHeaders HeaderProjectionEngine.project(RUNTIME_MCP_CALL)）
-    RUNTIME_MCP_CALL:
+    RUNTIME_MCP_CALL:                # studio-runtime：MCP 外部服务调用（studio-manager 调测出站亦用此规则）
       mappings:
         - { from: cust-userid, to: userId }
         - { from: cust-token, to: token }
 
-    # —— runtime 知识库检索改名（同构，剥 cust- 前缀 + captured 覆盖）——
-    # 读取方: studio-runtime（kb_adapter/* resolve_outbound_headers(RUNTIME_KB_CALL)）
-    RUNTIME_KB_CALL:
+    RUNTIME_KB_CALL:                 # studio-runtime：知识库检索
       mappings:
         - { from: cust-userid, to: userId }
         - { from: cust-token, to: token }
 
-    # ——  runtime Search 改名（待实现）—————————————————————————
-    # 读取方: studio-runtime（未实现；新平台未发现独立 runtime Search 路径）
-    RUNTIME_SEARCH:
+    RUNTIME_SEARCH:                  # studio-runtime：Search（待实现，占位）
       mappings:
         - { from: cust-userid, to: userId }
         - { from: cust-token, to: token }
 
-    # ——  builder Chat 改名（已实现）——————————————————————————
-    # 读取方: studio-builder（model_service_api.py invoke_one → _build_chat_headers resolve_outbound_headers）
-    BUILDER_LLM_CHAT:
+    BUILDER_LLM_CHAT:                # studio-builder：Chat 调测
       mappings:
         - { from: cust-userid, to: userId }
         - { from: cust-token, to: token }
 
-    # ——  builder Embedding 改名（已实现）———————————————————
-    # 读取方: studio-builder（model_service_api.py text_embeddings → _build_model_headers BUILDER_MODEL_EMBEDDING）
-    BUILDER_MODEL_EMBEDDING:
+    BUILDER_MODEL_EMBEDDING:          # studio-builder：Embedding 调测
       mappings:
         - { from: cust-userid, to: userId }
         - { from: cust-token, to: token }
 
-    # ——  builder Rerank 改名（已实现）——————————————————————
-    # 读取方: studio-builder（model_service_api.py rerank → _project_customer_headers + dispatch.rerank(projected_headers=) BUILDER_MODEL_RERANK）
-    BUILDER_MODEL_RERANK:
+    BUILDER_MODEL_RERANK:             # studio-builder：Rerank 调测
       mappings:
         - { from: cust-userid, to: userId }
         - { from: cust-token, to: token }
 
-    # ——  CUSTOM_APIKEY 探针改名（rename 已通；归一/覆盖由 resolve_outbound_headers 处理）——
-    # 读取方: studio-builder（model_service_api.py MODEL_AUTH_CHECK）
-    # 注： 归一（剥 cust- 前缀）+ request-over-config 由 resolve_outbound_headers(auth_type=CUSTOM_APIKEY) 处理；
-    #     custom-apikey 块（enabled-targets/allow-headers 精细化门控）为可选 P1 增强
+    # 模型认证探针：rename 规则同上；归一（剥前缀）与 request-over-config 由运行时处理。
     MODEL_AUTH_CHECK:
       mappings:
         - { from: cust-userid, to: userId }
         - { from: cust-token, to: token }
 
-  # ──  长期记忆适配（gated，本期不实施，代码侧尚未读取）─────────
-  # 读取方: studio-runtime（middleware Memory 双 ID 选择； 适配开关待实现）
-  # 当前 CustomerHeaderProfile schema 未建模 optional-integrations 字段，故仅作占位说明：
-  # optional-integrations.long-term-memory-header-adaptation.enabled = false（本期 false）
+  # 占位：长期记忆 Header 适配，本期不实施（schema 未建模、代码尚未读取）。
+  # 预留 optional-integrations.long-term-memory-header-adaptation.enabled = false。

@@ -99,7 +99,7 @@ def _register_model_service_ports() -> None:
     # 注册独立 customer Header provider（强类型，不退化为无 provenance 的 dict）
     ports.set_request_customer_headers(get_request_customer_headers)
     ports.set_cache_queues(None, None)
-    logger.info("[customer-header] model_service ports registered (storage/llm/request-headers/customer-headers; cache disabled)")
+    logger.info("[customer-header] model_service ports registered (storage/llm/request-headers/customer-headers)")
 
 
 def _load_customer_header_profile() -> None:
@@ -143,7 +143,7 @@ def _load_customer_header_profile() -> None:
             "targets": {
                 "BUILDER_LLM_CHAT": {
                     "mappings": [
-                        {"from": "cust-userid", "to": "userid"},
+                        {"from": "cust-userid", "to": "userId"},
                         {"from": "cust-token", "to": "token"}
                     ]
                 }
