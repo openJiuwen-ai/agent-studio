@@ -34,7 +34,9 @@ echo ">>> Agent:     $AGENT_ID"
 echo ">>> AuthToken: $AUTH_TOKEN"
 echo ""
 
-JSON_BODY=$(printf '{"inputs": {"query": "%s"}}' "${QUERY//\"/\\\"}")
+QUERY_ESC="${QUERY//\\/\\\\}"
+QUERY_ESC="${QUERY_ESC//\"/\\\"}"
+JSON_BODY=$(printf '{"inputs": {"query": "%s"}}' "$QUERY_ESC")
 
 curl -sSf -N "${ENDPOINT}/v1/${PROJECT_ID}/agents/${AGENT_ID}/conversations/${CONVERSATION_ID}" \
   -H "Content-Type: application/json" \
