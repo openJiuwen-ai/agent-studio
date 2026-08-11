@@ -206,7 +206,7 @@ def create_shengjin_youli_workflow(is_streaming: bool = True) -> tuple[Workflow,
 
     # 7. 配置成功结束（消息节点）
     message_conf_success = {
-        "template": "#BDD#,#GD#/感谢您的支持，请留意查收95588短信并登录中国银行APP参与活动，祝您生活愉快，再见！",
+        "template": "#BDD#,#GD#/感谢您的支持，请留意查收95588短信并登录银行APP参与活动，祝您生活愉快，再见！",
         "name": "成功结束",
     }
 
@@ -221,7 +221,7 @@ def create_shengjin_youli_workflow(is_streaming: bool = True) -> tuple[Workflow,
 
     # 8. 配置拒绝结束（消息节点）
     message_conf_reject = {
-        "template": "#BDD#,#GD#/好的，如有需要，您可随时登录中国银行APP，关注其他活动。那就先不打扰您了，祝您生活愉快，再见！",
+        "template": "#BDD#,#GD#/好的，如有需要，您可随时登录银行APP，关注其他活动。那就先不打扰您了，祝您生活愉快，再见！",
         "name": "拒绝结束",
     }
 

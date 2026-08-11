@@ -119,7 +119,7 @@ class TestMaskingFormatter:
             r"\d{3}[0-9Xx]"
         )
         result = self._format(
-            "身份证号110108199001011234已验证",
+            "身份证号110108200001010001已验证",
             sensitive_patterns=[id_card_pattern],
         )
         assert result == "身份证号******************已验证"
@@ -131,10 +131,10 @@ class TestMaskingFormatter:
             r"\d{3}[0-9Xx]"
         )
         result = self._format(
-            "node_110108199001011234",
+            "node_110108200001010001",
             sensitive_patterns=[id_card_pattern],
         )
-        assert result == "node_110108199001011234"
+        assert result == "node_110108200001010001"
 
     def test_pattern_email(self):
         result = self._format(

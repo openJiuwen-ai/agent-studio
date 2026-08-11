@@ -9,9 +9,9 @@ data: {"event":"message","data":{"answer":" ##系统插件，发短信##","node_
 
 data: {"event":"message_end","data":{"answer":" ##系统插件，发短信##","node_id":"node_1747293876339","node_name":"发短息","node_type":"jiuwen.message","should_interrupt":false,"enable_history":true,"workflow_id":"875aeb56-1cd4-404c-9ef9-220c073f2e30"},"createdTime":1775874517985,"executionId":"11fdd50a-dd8a-43de-934c-1b2661f80fde","index":0,"isStructMessage":false}
 
-data: {"event":"message","data":{"answer":"#BDD#,#GD#/感谢您的支持，请留意查收95588短信并登录中国银行APP参与活动，祝您生活愉快，再见！","node_id":"node_1747293794534","node_name":"成功结束","node_type":"jiuwen.message","should_interrupt":false,"workflow_id":"875aeb56-1cd4-404c-9ef9-220c073f2e30"},"createdTime":1775874517989,"executionId":"11fdd50a-dd8a-43de-934c-1b2661f80fde","index":0,"isStructMessage":false}
+data: {"event":"message","data":{"answer":"#BDD#,#GD#/感谢您的支持，请留意查收95588短信并登录银行APP参与活动，祝您生活愉快，再见！","node_id":"node_1747293794534","node_name":"成功结束","node_type":"jiuwen.message","should_interrupt":false,"workflow_id":"875aeb56-1cd4-404c-9ef9-220c073f2e30"},"createdTime":1775874517989,"executionId":"11fdd50a-dd8a-43de-934c-1b2661f80fde","index":0,"isStructMessage":false}
 
-data: {"event":"message_end","data":{"answer":"#BDD#,#GD#/感谢您的支持，请留意查收95588短信并登录中国银行APP参与活动，祝您生活愉快，再见！","node_id":"node_1747293794534","node_name":"成功结束","node_type":"jiuwen.message","should_interrupt":false,"enable_history":true,"workflow_id":"875aeb56-1cd4-404c-9ef9-220c073f2e30"},"createdTime":1775874517990,"executionId":"11fdd50a-dd8a-43de-934c-1b2661f80fde","index":0,"isStructMessage":false}
+data: {"event":"message_end","data":{"answer":"#BDD#,#GD#/感谢您的支持，请留意查收95588短信并登录银行APP参与活动，祝您生活愉快，再见！","node_id":"node_1747293794534","node_name":"成功结束","node_type":"jiuwen.message","should_interrupt":false,"enable_history":true,"workflow_id":"875aeb56-1cd4-404c-9ef9-220c073f2e30"},"createdTime":1775874517990,"executionId":"11fdd50a-dd8a-43de-934c-1b2661f80fde","index":0,"isStructMessage":false}
 
 data: {"event":"message","data":{"answer":"##升金结束continue: ","node_id":"node_end","node_name":"结束","node_type":"jiuwen.end","should_interrupt":false,"workflow_id":"875aeb56-1cd4-404c-9ef9-220c073f2e30"},"createdTime":1775874523090,"executionId":"11fdd50a-dd8a-43de-934c-1b2661f80fde","index":0,"isStructMessage":false}
 

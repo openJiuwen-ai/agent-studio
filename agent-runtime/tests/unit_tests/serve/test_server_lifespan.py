@@ -223,7 +223,7 @@ class TestServerLifespanSandboxSysOp:
         mock_resource_mgr.add_sys_operation.return_value = mock_add_result
 
         mock_settings = MagicMock()
-        mock_settings.security_sandbox.server = "http://172.23.10.84:9090"
+        mock_settings.security_sandbox.server = "http://192.0.2.1:9090"
         mock_settings.security_sandbox.sandbox_type = "aio"
         mock_settings.security_sandbox.scope = "system"
         mock_settings.security_sandbox.idle_ttl_seconds = 600
@@ -275,7 +275,7 @@ class TestServerLifespanSandboxSysOp:
         mock_resource_mgr.add_sys_operation.return_value = mock_add_result
 
         mock_settings = MagicMock()
-        mock_settings.security_sandbox.server = "http://172.23.10.84:9090"
+        mock_settings.security_sandbox.server = "http://192.0.2.1:9090"
         mock_settings.security_sandbox.sandbox_type = "aio"
         mock_settings.security_sandbox.scope = "session"
         mock_settings.security_sandbox.idle_ttl_seconds = 600
@@ -332,7 +332,7 @@ class TestServerLifespanSandboxSysOp:
         mock_resource_mgr.add_sys_operation.side_effect = add_sys_op_side_effect
 
         mock_settings = MagicMock()
-        mock_settings.security_sandbox.server = "http://172.23.10.84:9090"
+        mock_settings.security_sandbox.server = "http://192.0.2.1:9090"
         mock_settings.security_sandbox.sandbox_type = "aio"
         mock_settings.security_sandbox.scope = "system"
         mock_settings.security_sandbox.idle_ttl_seconds = 600
