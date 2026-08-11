@@ -34,8 +34,10 @@ echo ">>> Agent:     $AGENT_ID"
 echo ">>> AuthToken: $AUTH_TOKEN"
 echo ""
 
-curl -s -N "${ENDPOINT}/v1/${PROJECT_ID}/agents/${AGENT_ID}/conversations/${CONVERSATION_ID}" \
+JSON_BODY=$(printf '{"inputs": {"query": "%s"}}' "${QUERY//\"/\\\"}")
+
+curl -sSf -N "${ENDPOINT}/v1/${PROJECT_ID}/agents/${AGENT_ID}/conversations/${CONVERSATION_ID}" \
   -H "Content-Type: application/json" \
   -H "X-Auth-Token: ${AUTH_TOKEN}" \
   -H "stream: false" \
-  -d "{\"inputs\": {\"query\": \"${QUERY}\"}}"
+  -d "${JSON_BODY}"
