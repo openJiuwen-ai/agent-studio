@@ -3810,15 +3810,26 @@ def _parse_exception_config(node: dict) -> ExceptionConfig | None:
     if not ep:
         return None
 
-    from jiuwen.orchestration.flow.constant import EXCEPTION_HANDLE_INTERRUPT
+    from jiuwen.orchestration.flow.constant import (
+        DEFAULT_EXECUTION_NODE_TIMEOUT,
+        EXCEPTION_HANDLE_INTERRUPT,
+    )
 
     node_type = node.get("type", "")
     outputs_schema = _convert_schema(node.get("outputs") or {})
 
+    timeout = ep.get("timeout", DEFAULT_EXECUTION_NODE_TIMEOUT)
+    if not isinstance(timeout, (int, float)) or timeout < 0:
+        timeout = DEFAULT_EXECUTION_NODE_TIMEOUT
+
+    retry_times = ep.get("retryTimes", 0)
+    if not isinstance(retry_times, int) or retry_times < 0:
+        retry_times = 0
+
     return ExceptionConfig(
         handle_type=ep.get("handleType", EXCEPTION_HANDLE_INTERRUPT).lower(),
-        timeout=ep.get("timeout", 7200.0),
-        retry_times=ep.get("retryTimes", 0),
+        timeout=timeout,
+        retry_times=retry_times,
         default_outputs=ep.get("defaultOutputs", {}),
         outputs_schema=outputs_schema,
         _node_type=node_type,
