@@ -338,8 +338,7 @@ data:
             # /v1/{project_id}/agents/{agent_id}/conversations/{conversation_id}/additional-questions
         location ~^/v1/.*/agents/.*/conversations/.*/additional-questions {
                 include /home/conf/backend.conf;
-                rewrite ^/v1/([^/]+)/(agents/.*)$ /v1/$1/agent-manager/$2 break;
-                proxy_pass  $server_scheme://$manager_backend:31111;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -350,8 +349,7 @@ data:
             # /v1/{project_id}/agents/{agent_id}/conversations
         location ~^/v1/.*/agents/.*/conversations {
                 include /home/conf/backend.conf;
-                rewrite ^/v1/([^/]+)/(agents/.*)$ /v1/$1/agent-manager/$2 break;
-                proxy_pass  $server_scheme://$manager_backend:31111;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -472,8 +470,7 @@ data:
             # /v1/{project_id}/workflows/{workflow_id}/conversations
         location ~^/v1/.*/workflows/.*/conversations {
                 include /home/conf/backend.conf;
-                rewrite ^/v1/([^/]+)/(workflows/.*)$ /v1/$1/agent-manager/$2 break;
-                proxy_pass  $server_scheme://$manager_backend:31111;
+                proxy_pass  $server_scheme://$runtime_backend:31014;
                 proxy_set_header Host $host;
                 proxy_set_header X-Real-IP $remote_addr;
                 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

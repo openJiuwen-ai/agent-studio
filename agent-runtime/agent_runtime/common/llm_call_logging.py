@@ -10,7 +10,8 @@ LLM 调用日志 — 通过 callback framework 记录模型请求体和响应内
 特点：
 - 自动覆盖所有 ModelClient（OpenAI / SiliconFlow / DeepSeek 等均触发相同事件）
 - 依赖 SDK 公开的 callback 接口，升级更安全
-- 所有日志为 DEBUG 级别，生产环境默认不输出
+- 模型请求体/响应内容/token 用量/延迟/tool_calls 为 INFO 级别，默认输出；错误日志为 ERROR 级别
+- 错误回调无条件注册（始终可见）；input/output 回调仅在 WORKFLOW_LOG_LEVEL ≤ INFO 时注册（WARNING 下零开销）
 
 日志格式示例：
     model call request data: {"model": "xxx", "stream": false, "messages": [...]}
@@ -44,36 +45,61 @@ _LOG_LEVEL_MAP = {
 }
 
 
-def _is_debug_logging_enabled() -> bool:
-    """检查 WORKFLOW_LOG_LEVEL 是否 ≤ DEBUG。
+def _is_llm_call_logging_enabled() -> bool:
+    """检查是否注册 input/output 详情回调（仅控制详情，不含 error）。
 
-    只有 DEBUG 级别下才注册回调，生产环境（默认 INFO）不注册，零开销。
-    每次调用时新建 WorkflowLogSettings 以读取最新环境变量（Settings 单例在 import 时
+    需同时满足两个条件：
+    - MODEL_CALL_LOGGING_ENABLED=true（功能开关，默认关闭）；
+    - WORKFLOW_LOG_LEVEL ≤ INFO（级别门控，WARNING 下省掉 json.dumps 开销）。
+
+    错误回调不受此函数约束，始终注册。
+    每次调用时新建 Settings 实例以读取最新环境变量（Settings 单例在 import 时
     缓存，无法感知运行期环境变量变更）。
     """
-    from agent_runtime.common.config import WorkflowLogSettings
-    _settings = WorkflowLogSettings()
-    configured_level = _LOG_LEVEL_MAP.get(_settings.level.upper(), 20)
-    return configured_level <= _LOG_LEVEL_MAP["DEBUG"]
+    from agent_runtime.common.config import LlmCallLoggingSettings, WorkflowLogSettings
+    if not LlmCallLoggingSettings().enabled:
+        return False
+    configured_level = _LOG_LEVEL_MAP.get(WorkflowLogSettings().level.upper(), 20)
+    return configured_level <= _LOG_LEVEL_MAP["INFO"]
 
 
 def register_llm_call_logging_callbacks() -> None:
     """注册 LLM 调用日志回调。
 
     应在服务启动时调用（server.py lifespan 中）。
-    仅当 WORKFLOW_LOG_LEVEL ≤ DEBUG 时注册，避免生产环境不必要的回调开销。
+
+    注册策略分两档：
+    - LLM_CALL_ERROR：无条件注册。错误回调仅在调用失败时触发，成功路径零开销；
+      错误是低频高重要事件，应始终可见，不受 MODEL_CALL_LOGGING_ENABLED 开关与
+      WORKFLOW_LOG_LEVEL 门控约束。
+    - LLM_INPUT / LLM_OUTPUT：需 MODEL_CALL_LOGGING_ENABLED=true 且
+      WORKFLOW_LOG_LEVEL ≤ INFO 才注册。开关默认关闭；门控用于在 WARNING/ERROR
+      级别下省掉回调体里 json.dumps(完整 messages) 的开销。
+
     重复调用为幂等操作，不会重复注册。
     """
     global _registered
     if _registered:
         return
 
-    # 检查 WORKFLOW_LOG_LEVEL，只有 DEBUG 级别以下才注册回调
-    if not _is_debug_logging_enabled():
+    fw = get_callback_framework()
+
+    # 错误回调无条件注册：低频（仅出错时触发）、高重要，不应受级别门控
+    @fw.on(LLMCallEvents.LLM_CALL_ERROR)
+    async def _log_error(model_name=None, model_provider=None, error=None, **kwargs):
+        """打印模型调用错误"""
+        workflow_logger.error(
+            "model call error, model=%s, provider=%s, is_stream=%s, error=%s",
+            model_name or "unknown",
+            model_provider or "unknown",
+            kwargs.get("is_stream", False),
+            error,
+        )
+
+    # 检查 WORKFLOW_LOG_LEVEL，INFO 及更细级别才注册 input/output 回调
+    if not _is_llm_call_logging_enabled():
         _registered = True  # 标记为"已决定"，后续调用不再重复检查
         return
-
-    fw = get_callback_framework()
 
     @fw.on(LLMCallEvents.LLM_INPUT)
     async def _log_request(model_name=None, model_provider=None, messages=None,
@@ -124,7 +150,7 @@ def register_llm_call_logging_callbacks() -> None:
         except (TypeError, ValueError):
             request_json = str(request_data)
 
-        workflow_logger.debug("model call request data: %s", request_json)
+        workflow_logger.info("model call request data: %s", request_json)
 
     @fw.on(LLMCallEvents.LLM_OUTPUT)
     async def _log_response(model_name=None, model_provider=None, response=None,
@@ -137,15 +163,15 @@ def register_llm_call_logging_callbacks() -> None:
         # response（非流式）或 result（流式），优先 response
         output = response or result
         if output:
-            workflow_logger.debug("model call response data: %s", output)
+            workflow_logger.info("model call response data: %s", output)
         else:
-            workflow_logger.debug("model call response data: ")
+            workflow_logger.info("model call response data: ")
 
         # token usage + cost
         if usage is not None:
             usage_dict = _extract_usage_dict(usage)
             if usage_dict:
-                workflow_logger.debug(
+                workflow_logger.info(
                     "model call token usage: %s",
                     json.dumps(usage_dict, ensure_ascii=False),
                 )
@@ -153,7 +179,7 @@ def register_llm_call_logging_callbacks() -> None:
             latency_dict = _extract_latency_dict(usage, model_name, model_provider,
                                                  kwargs.get("is_stream"))
             if latency_dict:
-                workflow_logger.debug(
+                workflow_logger.info(
                     "model call latency: %s",
                     json.dumps(latency_dict, ensure_ascii=False),
                 )
@@ -170,24 +196,22 @@ def register_llm_call_logging_callbacks() -> None:
                 if arguments:
                     tc_info["arguments"] = arguments
                 tc_list.append(tc_info)
-            workflow_logger.debug(
+            workflow_logger.info(
                 "model call tool_calls: %s",
                 json.dumps(tc_list, ensure_ascii=False),
             )
 
-    @fw.on(LLMCallEvents.LLM_CALL_ERROR)
-    async def _log_error(model_name=None, model_provider=None, error=None, **kwargs):
-        """打印模型调用错误"""
-        workflow_logger.debug(
-            "model call error, model=%s, provider=%s, is_stream=%s, error=%s",
-            model_name or "unknown",
-            model_provider or "unknown",
-            kwargs.get("is_stream", False),
-            error,
-        )
-
     _registered = True
     workflow_logger.debug("LLM call logging callbacks registered via callback framework")
+
+
+def reset_registration_state() -> None:
+    """重置注册标志，使后续 register_llm_call_logging_callbacks() 重新执行注册逻辑。
+
+    供测试在用例间清理模块级注册状态使用；生产代码不应调用。
+    """
+    global _registered
+    _registered = False
 
 
 def _extract_usage_dict(usage) -> dict:

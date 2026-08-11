@@ -167,6 +167,8 @@ services:
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       LOG_MASKED_ENABLED: ${LOG_MASKED_ENABLED:-false}
       LOG_MASKED_PATTERNS: ${LOG_MASKED_PATTERNS:-}
+      # 模型调用详情日志开关（请求体/响应/用量/延迟/tool_calls）；错误日志不受此开关影响
+      MODEL_CALL_LOGGING_ENABLED: ${MODEL_CALL_LOGGING_ENABLED:-false}
       ENABLE_INTENT_WORKFLOW: ${ENABLE_INTENT_WORKFLOW:-true}
       # 提示词优化任务持久化存储
       STORE_DB_TYPE: ${STORE_DB_TYPE:-mysql}

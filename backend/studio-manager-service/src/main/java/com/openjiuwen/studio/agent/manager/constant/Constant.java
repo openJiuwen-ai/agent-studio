@@ -566,11 +566,6 @@ public interface Constant {
      */
     String X_AUTH_TOKEN = "X-Auth-Token";
 
-    /**
-     * 工行自定义用户Id
-     */
-    String ICBC_USER_ID = "cust-userid";
-
     String OWNER_PROJECT_ID = "X-Owner-Project-Id";
 
     /**

@@ -172,6 +172,9 @@ spec:
             # 日志详细模式，设为true时显示完整错误信息
             - name: LOG_VERBOSE
               value: 'true'
+            # 模型调用详情日志开关，true时打印模型请求体/响应内容/token用量/延迟/tool_calls；错误日志不受此开关影响，始终输出
+            - name: MODEL_CALL_LOGGING_ENABLED
+              value: 'false'
             # ======== [选填] 提示词优化任务持久化存储（不填则仅存内存） ========
             # 数据库类型：mysql 或 gaussdb，默认mysql
             - name: STORE_DB_TYPE
