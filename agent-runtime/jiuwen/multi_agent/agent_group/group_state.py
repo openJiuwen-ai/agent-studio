@@ -30,3 +30,4 @@ class AgentGroupState:
         """Save the state of the agent group."""
         self.run_state = await runner.get_state() or RunState()
         self.interrupted_agents = control_agent.interrupted_agents.copy()
+        self.current_agent_calls_count = control_agent.current_agent_calls_count
