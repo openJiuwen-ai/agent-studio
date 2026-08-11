@@ -2136,7 +2136,7 @@ export class AppFlowService {
     };
   }
 
-  /** 问答节点，工行定制节点 */
+  /** 问答节点，定制节点 */
   public getInitQANodeData(): IQANode {
     const id = `node_${Date.now()}`;
 
