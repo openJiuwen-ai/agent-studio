@@ -67,6 +67,7 @@
         [nzAccept]="'.jsonl'"
         [nzShowUploadList]="!!fileInfo"
         (nzChange)="onAddFileSuccess($event)"
+        [(nzFileList)]="uploadFileList"
       >
         <button nz-button>
           <span nz-icon nzType="upload"></span>

@@ -174,6 +174,8 @@ export class ImportModalComponent {
     return this.importToolType === ApplicationType.WORKFLOW;
   }
 
+  uploadFileList = [];
+
   constructor(
     private appFlowRepoServe: AppFlowRepoService,
     private appPluginRepoServe: AppPluginRepoService,
@@ -228,6 +230,11 @@ export class ImportModalComponent {
     if (fileItem.type !== "start") {
       return;
     }
+
+    if (this.uploadFileList.length >= 2) {
+      this.uploadFileList = [this.uploadFileList[1]];
+    }
+
     this.isFileImported = true;
     this.isParseError = false;
     this.isDuplicateContent = false;
