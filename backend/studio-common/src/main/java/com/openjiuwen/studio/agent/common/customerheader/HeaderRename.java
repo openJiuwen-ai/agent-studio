@@ -13,7 +13,7 @@ import java.util.Map;
  * <p>使用示例：
  * <pre>
  * Map<String, String> captured = Map.of("cust-userid", "123456", "cust-token", "xxx");
- * Map<String, String> renamed = HeaderRename.resolve("RUNTIME_LLM_CHAT", captured);
+ * Map<String, String> renamed = HeaderRename.resolve(captured, profile);
  * // 结果: {"userId": "123456", "token": "xxx"}
  * </pre>
  */
@@ -25,12 +25,11 @@ public final class HeaderRename {
     /**
      * 按配置执行 header rename
      *
-     * @param target 调用目标名（如 "RUNTIME_LLM_CHAT"、"LAKESEARCH"）
      * @param captured 请求中捕获的 cust-* headers
      * @param profile 配置
      * @return rename 后的 headers
      */
-    public static Map<String, String> resolve(String target, Map<String, String> captured, CustomerHeaderProfile profile) {
+    public static Map<String, String> resolve(Map<String, String> captured, CustomerHeaderProfile profile) {
         if (!profile.isEnabled() || profile.getMappings().isEmpty()) {
             return Map.of();
         }

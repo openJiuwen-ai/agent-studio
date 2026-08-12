@@ -828,7 +828,7 @@ public class LakeSearchService implements KnowledgeRepoService {
         Map<String, String> captured = RequestContextUtils.getCustomerHeaders();
         CustomerHeaderProfile profile = SpringBeanUtils.getBean(CustomerHeaderProfile.class);
         if (profile != null && profile.isEnabled() && !captured.isEmpty()) {
-            Map<String, String> renamed = HeaderRename.resolve("LAKESEARCH", captured, profile);
+            Map<String, String> renamed = HeaderRename.resolve(captured, profile);
             for (Map.Entry<String, String> entry : renamed.entrySet()) {
                 headers.add(entry.getKey(), entry.getValue());
             }
@@ -841,6 +841,10 @@ public class LakeSearchService implements KnowledgeRepoService {
                 headers.add(CommonConstant.CustomModel.USER_ID, request.getHeader(CommonConstant.CustomModel.CUSTOM_USER_ID));
                 headers.add(CommonConstant.CustomModel.TOKEN, request.getHeader(CommonConstant.CustomModel.CUSTOM_TOKEN));
             }
+        }
+        // 无需认证，直接返回
+        if (RagAuthMode.NONE.toString().equalsIgnoreCase(authMode)) {
+            return headers;
         }
         String lakeSearchAuthorization = lakeSearchConnection.getLsBasicAuth().getLakeSearchAuthorization();
         // Basic认证，获取lakeSearch的authorization，密文

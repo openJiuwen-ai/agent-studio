@@ -62,7 +62,7 @@ public final class McpCustomerHeaderProjection {
 
         Map<String, String> renamed = new LinkedHashMap<>();
         if (profile != null && profile.isEnabled()) {
-            renamed.putAll(HeaderRename.resolve("RUNTIME_MCP_CALL", custHeaders, profile));
+            renamed.putAll(HeaderRename.resolve(custHeaders, profile));
         }
 
         if (renamed.isEmpty()) {
