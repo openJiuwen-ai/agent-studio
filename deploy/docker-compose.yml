@@ -186,8 +186,8 @@ services:
       # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
       auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
       # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true
-      customer_header_enabled: ${CUSTOMER_HEADER_ENABLED:-false}
-      customer_header_mappings: ${CUSTOMER_HEADER_MAPPINGS:-}
+      CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
+      CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}
     depends_on:
       mysql:
         condition: service_healthy
@@ -283,7 +283,7 @@ services:
       STORE_DB_SSLMODE: ${STORE_DB_SSLMODE:-disable}
       # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true
       CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
-      customer_header_mappings: ${CUSTOMER_HEADER_MAPPINGS:-}
+      CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}
     depends_on:
       redis:
         condition: service_healthy
@@ -342,7 +342,7 @@ services:
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true（前置）
       CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
-      customer_header_mappings: ${CUSTOMER_HEADER_MAPPINGS:-}
+      CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}
     depends_on:
       mysql:
         condition: service_healthy
