@@ -1127,10 +1127,14 @@ class IRConverter:
         )
 
     @staticmethod
-    async def create_all_agents_config_list(root_ir_data, conversation_id):
+    async def create_all_agents_config_list(root_ir_data, conversation_id, cust_headers=None, project_id=""):
         """
         Create All agents config: List[AgentConfig]
+
+        cust_headers 和 project_id 从请求上下文传入，不再硬编码为空。
         """
+        if cust_headers is None:
+            cust_headers = {}
         all_configs: List[AgentConfig] = []
         agent_info_map: Dict[str, Dict[str, Any]] = {}
 
@@ -1201,8 +1205,8 @@ class IRConverter:
             if model_configs:
                 llm = await IRConverter._create_llm_model(
                     model_configs,
-                    cust_headers={},
-                    project_id="",
+                    cust_headers=cust_headers,
+                    project_id=project_id,
                     identifiers=_LLMModelIdentifiers(
                         task_id=task_id,
                         conversation_id=conversation_id,
@@ -1240,9 +1244,11 @@ class IRConverter:
         return all_configs, agent_info_map
 
     @staticmethod
-    async def create_agent_group_config(root_ir_data, conversation_id):
+    async def create_agent_group_config(root_ir_data, conversation_id, cust_headers=None, project_id=""):
         """
         Create agent group configuration from root IR data with cache
+
+        cust_headers 和 project_id 从请求上下文传入。
         """
         # 首先尝试从缓存获取
         cache_key = root_ir_data.get("ir_path", "")
@@ -1268,12 +1274,9 @@ class IRConverter:
             )
 
         agents_all, agent_info_map = await IRConverter.create_all_agents_config_list(
-            root_ir_data, conversation_id
+            root_ir_data, conversation_id, cust_headers=cust_headers, project_id=project_id
         )
-        configs = root_ir_data.get("configs", {})
-        max_agent_calls = configs.get("maxIteration")
-        if max_agent_calls is None:
-            max_agent_calls = root_ir_data.get("max_agent_calls", 10)
+        max_agent_calls = root_ir_data.get("max_agent_calls", 10)
         if (
             not isinstance(max_agent_calls, int)
             or isinstance(max_agent_calls, bool)
@@ -1456,7 +1459,11 @@ class IRConverter:
         (
             agent_group_config,
             agent_info_map,
-        ) = await IRConverter.create_agent_group_config(root_ir_data, conversation_id)
+        ) = await IRConverter.create_agent_group_config(
+            root_ir_data, conversation_id,
+            cust_headers=kwargs.get("cust_headers"),
+            project_id=kwargs.get("project_id", ""),
+        )
         agent_group = await IRConverter.create_or_restore_agent_group(
             agent_group_config, conversation_id
         )
@@ -1545,6 +1552,10 @@ class IRConverter:
 
         register_error_recovery_handler()
         apply_parallel_branch_grouping_patch()
+        from jiuwen.extension.patches.nested_branch_barrier_patch import (
+            apply_nested_branch_barrier_patch,
+        )
+        apply_nested_branch_barrier_patch()
 
         card = WorkflowCard(
             id=ir_data.get("workflowId") or ir_data.get("agentId") or "",
@@ -3809,15 +3820,26 @@ def _parse_exception_config(node: dict) -> ExceptionConfig | None:
     if not ep:
         return None
 
-    from jiuwen.orchestration.flow.constant import EXCEPTION_HANDLE_INTERRUPT
+    from jiuwen.orchestration.flow.constant import (
+        DEFAULT_EXECUTION_NODE_TIMEOUT,
+        EXCEPTION_HANDLE_INTERRUPT,
+    )
 
     node_type = node.get("type", "")
     outputs_schema = _convert_schema(node.get("outputs") or {})
 
+    timeout = ep.get("timeout", DEFAULT_EXECUTION_NODE_TIMEOUT)
+    if not isinstance(timeout, (int, float)) or timeout < 0:
+        timeout = DEFAULT_EXECUTION_NODE_TIMEOUT
+
+    retry_times = ep.get("retryTimes", 0)
+    if not isinstance(retry_times, int) or retry_times < 0:
+        retry_times = 0
+
     return ExceptionConfig(
         handle_type=ep.get("handleType", EXCEPTION_HANDLE_INTERRUPT).lower(),
-        timeout=ep.get("timeout", 7200.0),
-        retry_times=ep.get("retryTimes", 0),
+        timeout=timeout,
+        retry_times=retry_times,
         default_outputs=ep.get("defaultOutputs", {}),
         outputs_schema=outputs_schema,
         _node_type=node_type,

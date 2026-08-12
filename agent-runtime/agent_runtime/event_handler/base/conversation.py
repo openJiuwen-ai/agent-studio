@@ -16,6 +16,8 @@ from agent_runtime.event_handler.base.trace import Trace
 
 # 会话历史最大消息数
 MAX_MESSAGE_NUM = int(os.getenv("MAX_MESSAGE_NUM", "100"))
+# 会话历史消息内容最大总字节数
+MAX_MESSAGE_SIZE = int(os.getenv("MAX_MESSAGE_SIZE", "5000000"))
 # Redis key 前缀
 KEY_PREFIX = "agentBuilder:conversation"
 # 默认 TTL 24小时
@@ -51,6 +53,15 @@ def _new_conversation() -> dict:
         "messageList": [],
         "dialogueCount": 1,
     }
+
+
+def _get_trimmed_message_list(message_list: list, offset: int) -> list:
+    """根据offset从尾部截取消息列表，对齐Java getTrimmedMessageList."""
+    if not message_list:
+        return message_list
+    if offset > 0:
+        return message_list[-offset:]
+    return message_list[-1:]
 
 
 class ConversationManager:
@@ -121,38 +132,62 @@ class ConversationManager:
         trace: Trace,
         messages: list,
         dialogue_end: bool = False,
-    ):
-        """追加消息、裁剪、递增dialogueCount、写回Redis."""
+    ) -> list:
+        """追加消息、裁剪、递增dialogueCount、写回Redis，返回裁剪后的messageList."""
         if not messages:
-            return
+            return []
         key = _conversation_key(
             trace.conversation_id, trace.instance_id, trace.user_id, trace.version_id
         )
+        start_time = time.time()
         try:
             redis = _get_redis_client()
             if redis is None:
                 workflow_logger.warning(
                     f"Redis not available, skip update_conversation, key={key}"
                 )
-                return
+                return []
 
             # 加载已有Conversation
             raw = await redis.get(key)
-            if raw is not None:
+            # controller类型或无历史时新建会话，对齐Java executeType==CONTROLLER逻辑
+            if raw is not None and trace.handler_type != "Controller":
                 data = raw.decode("utf-8") if isinstance(raw, bytes) else raw
                 conversation = json.loads(data)
+                message_list = conversation.get("messageList", [])
             else:
                 conversation = _new_conversation()
+                message_list = conversation["messageList"]
 
             # 追加新消息
-            message_list = conversation.get("messageList", [])
             message_list.extend(messages)
 
-            # 超过MAX_MESSAGE_NUM时裁剪保留最新
-            if len(message_list) > MAX_MESSAGE_NUM:
-                message_list = message_list[-MAX_MESSAGE_NUM:]
+            # 超过MAX_MESSAGE_NUM时按条数裁剪保留最新
+            if len(message_list) >= MAX_MESSAGE_NUM:
+                message_list = message_list[-(MAX_MESSAGE_NUM):]
 
-            # 更新lastUpdateTime
+            # 按内容总大小裁剪：从尾部累计content长度，超过MAX_MESSAGE_SIZE则截断
+            size = 0
+            offset = 0
+            for i in range(len(message_list) - 1, -1, -1):
+                msg = message_list[i]
+                if isinstance(msg, dict):
+                    content = str(msg.get("content", ""))
+                    size += len(content)
+                elif hasattr(msg, "content"):
+                    content = str(msg.content) if msg.content else ""
+                    size += len(content)
+
+                if size > MAX_MESSAGE_SIZE:
+                    workflow_logger.warning(
+                        f"Conversation message size exceed limit. size={size} limit={MAX_MESSAGE_SIZE}"
+                    )
+                    break
+                offset += 1
+
+            message_list = _get_trimmed_message_list(message_list, offset)
+
+            # 更新messageList和lastUpdateTime
             conversation["messageList"] = message_list
             conversation["lastUpdateTime"] = int(time.time() * 1000)
 
@@ -162,8 +197,16 @@ class ConversationManager:
 
             # 写回Redis并设置TTL
             await redis.set(key, json.dumps(conversation, ensure_ascii=False), ex=DEFAULT_TTL)
-        except Exception as e:
-            workflow_logger.error(
-                f"update_conversation failed, key={key}"
+            workflow_logger.info(
+                f"update: conversationId={trace.conversation_id}, messagesSize={len(message_list)}"
             )
+            return message_list
+        except Exception as e:
+            workflow_logger.error(f"update_conversation failed, key={key}")
             workflow_logger.error("".join(traceback.format_exception(e)))
+            return []
+        finally:
+            cost_ms = int((time.time() - start_time) * 1000)
+            workflow_logger.info(
+                f"update conversation cost {cost_ms}ms, conversation id: {trace.conversation_id}"
+            )

@@ -1119,7 +1119,7 @@ stream: true
 3. 单击已发布的单智能体应用、工作流应用或多智能体应用卡片，进入编辑页面，选择「渠道管理」
 4. 在「调用方式」区域，单击「查看API」
 5. 在「API详情」页面，「请求结构」区域查看 project_id，V1 后面的字符串为 project_id
-![img.png](images/getProjectId.png)
+![img.png](../../images/getProjectId.png)
 ---
 
 ### 6.4 获取工作区 ID

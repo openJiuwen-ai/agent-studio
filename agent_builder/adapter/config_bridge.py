@@ -15,10 +15,11 @@ keeping the same env var names as agent_runtime.
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from common_utils.crypto_tool import decrypt
+from common_utils.password_provider import get_password_provider
 
 
 def _decrypt(v):
@@ -333,6 +334,15 @@ class CodeExecutionSettings(BaseSettings):
 
 
 class DataBaseSettings(BaseSettings):
+    password_provider_type: str = Field(
+        default="DEFAULT", validation_alias="DATASOURCE_PASSWORD_PROVIDER_TYPE"
+    )
+    password_provider_module: str = Field(
+        default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_MODULE"
+    )
+    password_provider_class: str = Field(
+        default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_CLASS"
+    )
     db_type: Literal["mysql", "gaussdb"] = Field(
         default="mysql", validation_alias="STORE_DB_TYPE"
     )
@@ -347,10 +357,18 @@ class DataBaseSettings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    @field_validator("password", mode="after")
-    @classmethod
-    def _decrypt_password(cls, v):
-        return _decrypt(v)
+    @model_validator(mode="after")
+    def _resolve_password(self):
+        if self.password_provider_type == "CUSTOM":
+            provider = get_password_provider(
+                custom_module=self.password_provider_module,
+                custom_class=self.password_provider_class,
+            )
+            self.password = provider.get_password(self.password)
+        elif self.password:
+            provider = get_password_provider()
+            self.password = provider.get_password(self.password)
+        return self
 
 
 class Settings:

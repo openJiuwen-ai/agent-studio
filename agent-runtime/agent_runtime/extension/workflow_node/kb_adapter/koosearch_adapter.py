@@ -10,6 +10,7 @@ import aiohttp
 from openjiuwen.core.common.logging import workflow_logger
 
 from .base import DatasetSearchRequest, KBSearchResult, KBServiceAdapter
+from .customer_header_inject import inject_customer_headers_to_kb
 
 
 # 搜索模式映射
@@ -50,6 +51,9 @@ class KooSearchAdapter(KBServiceAdapter):
             "Content-Type": "application/json",
             "X-Apig-AppCode": app_code,
         }
+
+        # 客户 Header 改写（同构，剥 cust- 前缀 + captured 覆盖）
+        inject_customer_headers_to_kb(headers)
 
         # 收集所有知识库的 external_id
         dataset_ids = []

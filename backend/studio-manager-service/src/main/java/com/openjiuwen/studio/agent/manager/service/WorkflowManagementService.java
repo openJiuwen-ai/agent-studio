@@ -1912,7 +1912,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         String workflowJson = obsService.downloadObsFile(releaseVersion.getDslPath());
         WorkflowInfo workflowInfo = convertEntityToInfo(workflowEntities, workflowJson);
         WorkflowVO releasedWorkflow = JsonUtils.json2ObjQuietly(workflowJson, WorkflowVO.class);
-        workflowInfo.setName(releasedWorkflow.getName());
+        // 顶层 name 取工作流实体的显示名（convertEntityToInfo 已设置），不可用 DSL 的 name 覆盖：
+        // 前端保存时会把 workflow_details.name 写成 code（拼音标识符，供运行时使用），覆盖后会导致
+        // 父工作流引用子流时节点名显示成拼音（如"测试"->"ceshi"）。description 按版本冻结仍需保留。
         workflowInfo.setDescription(releasedWorkflow.getDescription());
 
         workflowInfo.setRefWorkflows(new ArrayList<>()).setTriggerList(workflowEntities.getTriggerList());

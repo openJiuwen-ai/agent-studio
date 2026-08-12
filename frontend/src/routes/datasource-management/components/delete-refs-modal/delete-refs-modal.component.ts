@@ -84,7 +84,7 @@ export class DeleteRefsModalComponent {
   }
 
   public onConfirm() {
-    if (this.deleteVal === 'DELETE' || this.srcData.data.length === 0) {
+    if (this.deleteVal.toUpperCase() === 'DELETE' || this.srcData.data.length === 0) {
       this.close();
       this.confirm.emit();
     } else {

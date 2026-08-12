@@ -1,4 +1,4 @@
-# openJiuwen AgentStudio Docker Compose 部署编排
+﻿# openJiuwen AgentStudio Docker Compose 部署编排
 # 在线/离线统一编排：默认 8 个服务（4 基础设施 + 4 应用），另有 3 个可选日志服务
 # 在线部署：IMAGE_SOURCE=ghcr/dockerhub，脚本自动 pull 镜像
 # 离线部署：IMAGE_SOURCE=offline，脚本自动 docker load 镜像
@@ -189,6 +189,11 @@ services:
       agent_max_upload_file_size: ${AGENT_MAX_UPLOAD_FILE_SIZE:-131072}
       # 用户上传文件累计大小上限（单位 KB，默认 204800 即 200MB）
       max_upload_total_size: ${MAX_UPLOAD_TOTAL_SIZE:-204800}
+      # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true
+      CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
+      CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}
+      # redis json序列化最大长度
+      redis_max_string_length: ${REDIS_MAX_STRING_LENGTH:-20000000}
     depends_on:
       mysql:
         condition: service_healthy
@@ -282,6 +287,9 @@ services:
       STORE_DB_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-123456}
       STORE_DB_DATABASE: ${STORE_DB_DATABASE:-agent-builder}
       STORE_DB_SSLMODE: ${STORE_DB_SSLMODE:-disable}
+      # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true
+      CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
+      CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}
     depends_on:
       redis:
         condition: service_healthy
@@ -338,6 +346,9 @@ services:
       LOGGING_LOG_PATH: /opt/cloud/logs/agent-builder
       LOG_VERBOSE: ${LOG_VERBOSE:-true}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true（前置）
+      CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
+      CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}
     depends_on:
       mysql:
         condition: service_healthy

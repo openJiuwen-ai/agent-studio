@@ -1448,7 +1448,7 @@
   "exception_handling": "Exception Handling",
   "exception_handling_tip": "You can handle node exceptions (such as timeout and calling failure), including timeouts, retries, and exception handling.\nStop process: If a node is abnormal, the process stops.\nReturn the specified content: If a node is abnormal, the process does not stop. You can return to the specified content to continue the process.\nExecute exception process: If a node is abnormal, the process does not stop, and an exception process node is added. You need to configure the branch process.",
   "visual_comprehension_input": "Visual Comprehension Input",
-  "visual_comprehension_input_tip": "Only references of the Array<File/Image>, Array<File/Video>, or Array<String> types can be selected. The Array<String> type only supports image URLs.",
+  "visual_comprehension_input_tip": "Only references of the File/Image, File/Video, Array<File/Image>, Array<File/Video>, or Array<String> types can be selected. The Array<String> type only supports image URLs.",
   "visual_comprehension_input_tip2": "Please select",
   "Agent": "Agents",
   "ImageError": "Only Support PNG、SVG、JPEG、JPG.",
@@ -2438,7 +2438,7 @@
   "tuningpanelcomponent_88": "Call failed",
   "tuningpanelcomponent_89": "In the URL, {{uuid}} is a randomly generated string that can be replaced with other strings during use. The replacement string must be 1 to 32 characters long and only support lowercase English letters, numbers, and hyphens.",
   "tuningpanelcomponent_90": "In the path, {{uuid}} is a randomly generated string that can be replaced with another string during use. The replacement string must be 1 to 32 characters long and can only contain lowercase English letters, numbers, and hyphens.",
-  "plugin_host_error": "The variable name in the service domain name can only contain uppercase and lowercase English letters, numbers, underscores, and hyphens. The path cannot include '/' or any other special characters outside the domain name.",
+  "plugin_host_error": "The variable name in the service domain name can only contain uppercase and lowercase English letters, numbers, underscores, and hyphens, and colon. The path cannot include '/' or any other special characters outside the domain name.",
   "plugin_baseURL_error": "The variable name in the base URL can only contain uppercase and lowercase English letters, underscores, and hyphens. The path must start with '/' or be empty.",
   "plugin_tool_path_error": "The tool path must start with '/' or be empty.",
   "deep_research_chat": {

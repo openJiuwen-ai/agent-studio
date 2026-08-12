@@ -892,23 +892,36 @@ docs模块存放项目的各类技术文档，为开发者提供详细的使用�
 
 ```
 docs/
-├── images/                             # 文档图片资源
+├── README.md                            # 文档导航入口
+├── images/                              # 文档图片资源
 │   └── (各种截图和示意图)
-├── API参考.md                           # API接口参考文档
-├── 安装部署指南.md                       # 安装部署指南
-├── LICENSE                             # 许可协议文档
-├── 项目架构.md                           # 项目架构说明文档
-└── 用户指南.md                           # 用户使用指南
+├── zh/                                  # 中文文档（权威源）
+│   ├── SUMMARY.md                       # 中文文档目录索引
+│   ├── tutorial/                        # 教程（数字前缀编号）
+│   │   ├── 01-quick-start.md
+│   │   └── 02-user-guide.md
+│   ├── how-to/                          # 操作指南
+│   │   ├── deploy-service.md
+│   │   ├── upgrade-from-beta4.md
+│   │   ├── development-guide.md
+│   │   ├── asset-plaza-preset.md
+│   │   ├── configure-opentelemetry.md
+│   │   └── troubleshooting.md
+│   ├── reference/                       # 参考文档
+│   │   └── rest-api.md
+│   └── explanation/                     # 解释文档
+│       └── architecture-overview.md
+└── en/                                  # 英文文档（跟随）
 ```
 
 ## 4.2 文档功能说明
 
-| 文件名 | 功能说明 |
+| 文件 | 功能说明 |
 |--------|----------|
-| **API参考.md** | API接口参考文档，详细描述所有REST API的请求/响应格式、参数说明、错误码等 |
-| **安装部署指南.md** | 详细的安装部署步骤，包括环境准备、Docker部署配置、数据库初始化等 |
-| **项目架构.md** | 项目整体架构说明，包括技术选型、模块划分、系统设计等 |
-| **用户指南.md** | 用户使用指南，详细介绍平台各项功能的使用方法 |
+| **reference/rest-api.md** | API 接口参考文档，详细描述所有 REST API 的请求/响应格式、参数说明、错误码等 |
+| **how-to/deploy-service.md** | 详细的安装部署步骤，包括环境准备、Docker 部署配置、数据库初始化等 |
+| **explanation/architecture-overview.md** | 项目整体架构说明，包括技术选型、模块划分、系统设计等 |
+| **tutorial/02-user-guide.md** | 用户使用指南，详细介绍平台各项功能的使用方法 |
 
 ---
 
