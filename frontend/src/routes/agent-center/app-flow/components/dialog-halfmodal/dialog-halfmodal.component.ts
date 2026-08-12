@@ -142,6 +142,8 @@ export class DialogHalfmodalComponent
 
   @Output('clickErrorInfo') clickErrorInfo = new EventEmitter<void>();
 
+  @Output() conversationIdChange = new EventEmitter<string>();
+
   @ViewChild('dynamicNodeParams')
   override dynamicNodeParams!: DynamicNodeParamsComponent;
 
@@ -561,6 +563,7 @@ export class DialogHalfmodalComponent
     this.chatLoop = []; // 置空页面主体的多轮对话
     this.appFlowServe.setTokenData({}); // 置空画布对应节点的运行状态
     this.conversationId = uuidV4();
+    this.conversationIdChange.emit(this.conversationId);
     this.appFlowServe?.setAnswerInputForm(this.fb.group({}));
     this.testStatusObj.show = false;
     this.testStatusObj.status = '';
