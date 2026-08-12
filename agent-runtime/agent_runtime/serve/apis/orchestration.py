@@ -15,6 +15,7 @@ from agent_runtime.common.ir_interfaces import (
     StorageConfigError,
     StorageReadError,
 )
+from agent_runtime.context.request_context import _request_ctx
 from agent_runtime.runner.controller_runner import ControllerRunner
 from agent_runtime.runner.react_agent_runner import ReActAgentRunner
 from agent_runtime.runner.workflow_runner import WorkflowRunner, ModelConfigStrategy
@@ -37,6 +38,8 @@ from agent_runtime.moderation.stream_moderation import (
     block_event_generator,
     init_moderation_from_ir,
 )
+from common_utils.customer_header import get_config
+
 from storage import get_storage_provider
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
@@ -48,6 +51,24 @@ from openjiuwen.core.common.logging import workflow_logger
 from pydantic import ValidationError
 # 注：N2L chat 端点已随 agent_builder 抽离到 studio-builder 镜像（agent_builder/serve/apis/n2l_api.py），
 # runtime 不再 import agent_builder.nl_to_agent.nl2（避免 runtime→agent_builder 耦合）。
+
+
+#  全局安全修复：body header 默认不参与可信构造
+# 保留/客户 header 出现在 body → 400（拒绝，非忽略）
+def _build_runtime_execution_headers(
+    platform_headers: dict,
+    customer_headers: dict,
+) -> dict:
+    """构建运行时执行 header — 平台 header + 客户 header 合并"""
+    result = {}
+    for key, value in (platform_headers or {}).items():
+        if value:
+            result[key.lower()] = value
+    for key, value in (customer_headers or {}).items():
+        if value:
+            result[key.lower()] = value
+    return result
+
 
 
 execution_app = APIRouter(tags=["execution_app"])
@@ -142,7 +163,23 @@ async def ir_execute(req_json: dict, request: Request):
 
     try:
         req = ExecutionRequest.model_validate(req_json)
-        req.headers = {**request.headers, **req.headers}
+        #  全局安全修复：禁止 body 覆盖服务器认证/平台协议 Header
+        # 保留/客户 header 出现在 body → 400
+        request_ctx = _request_ctx.get()
+        try:
+            req.headers = _build_runtime_execution_headers(
+                platform_headers=request_ctx.platform_headers,
+                customer_headers=request_ctx.customer_headers,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "reserved_header_in_body", "details": str(e)},
+            )
+        # Profile 启用时服务器覆盖 effective userId（防 body 伪造）
+        cfg = get_config()
+        if cfg.enabled:
+            req.user_id = request_ctx.user_id
         req.params = prepare_params(req)
         req.params.global_variables = {
             "sys": {
@@ -293,9 +330,25 @@ async def stream_response(req: ExecutionRequest, execution_id: str, runner, mode
 
 @execution_app.post("/v1/orchestration/ir/component/{component_id}/execute")
 async def component_debug_execute(component_id: str, req_json: dict, request: Request):
-    """单组件调试端点"""
+    """单组件调试端点（：与普通执行一致 — body 安全 + effective userId 服务器覆盖）"""
     try:
         req = ComponentDebugRequest.model_validate(req_json)
+        # 禁止 body 覆盖服务器认证/平台协议 Header（与 ir_execute 同规则）
+        request_ctx = _request_ctx.get()
+        try:
+            req.headers = _build_runtime_execution_headers(
+                platform_headers=request_ctx.platform_headers,
+                customer_headers=request_ctx.customer_headers,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "reserved_header_in_body", "details": str(e)},
+            )
+        # Profile 启用时服务器覆盖 effective userId（防 body 伪造）
+        cfg = get_config()
+        if cfg.enabled:
+            req.user_id = request_ctx.user_id
         req.params = prepare_params(req)
         req.params.global_variables = {
             "sys": {
@@ -516,4 +569,6 @@ async def _handle_additional_questions(
             status_code=500,
             content={"error": "internal_error", "details": str(e)},
         )
+
+
 

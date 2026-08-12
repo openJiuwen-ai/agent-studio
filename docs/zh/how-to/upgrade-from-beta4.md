@@ -1,6 +1,6 @@
 # Beta5 升级部署指南
 
-> 本文面向从 Beta4 及更早版本升级到 **Beta5** 的部署场景，重点说明本版本的**架构整改**与**环境变量变化**。新增部署可参考 [`安装部署指南.md`](../安装部署指南.md)，本文不再重复通用步骤。
+> 本文面向从 Beta4 及更早版本升级到 **Beta5** 的部署场景，重点说明本版本的**架构整改**与**环境变量变化**。新增部署可参考 [安装部署指南](./deploy-service.md)，本文不再重复通用步骤。
 >
 > 环境变量以源码 `docker/k8s/` 目录下的 YAML 为准（`studio-manager.yaml`、`studio-builder.yaml`、`studio-runtime.yaml`、`studio-console.yaml`）。
 
@@ -106,7 +106,7 @@ console 容器本身无新增环境变量，但其 nginx 上游（`backend.conf`
 | `manager_backend` | `studio-manager` | `studio-manager`（不变） |
 | `service_backend` | `studio-service:31113` | **需移除** |
 
-> 不要把旧 `$service_backend:31113` location 机械改成 Runtime。Beta5 标准路由中，`/v1/agent-builder/chat/completions`、`/v1/agent-builder/embeddings`、`/v1/agent-builder/rerank` 直达 Builder，/v1/.*/agents/.*/conversations/.*/additional-questions、/v1/.*/agents/.*/conversations和/v1/.*/workflows/.*/conversations直达studio-runtime,其余 `/v1`、`/v2` 请求默认进入 Manager，再由 Manager 按业务语义调用 Runtime 或 Builder。升级时应整体替换为发版包 `docker/compose/config/nginx.conf`（K8s 场景使用 `studio-console.yaml` 中对应配置），不要手工维护旧路由清单。
+> 不要把旧 `$service_backend:31113` location 机械改成 Runtime。Beta5 标准路由中，`/v1/agent-builder/chat/completions`、`/v1/agent-builder/embeddings`、`/v1/agent-builder/rerank` 直达 Builder，`/v1/.*/agents/.*/conversations/.*/additional-questions`、`/v1/.*/agents/.*/conversations` 和 `/v1/.*/workflows/.*/conversations` 直达 studio-runtime，其余 `/v1`、`/v2` 请求默认进入 Manager，再由 Manager 按业务语义调用 Runtime 或 Builder。升级时应整体替换为发版包 `docker/compose/config/nginx.conf`（K8s 场景使用 `studio-console.yaml` 中对应配置），不要手工维护旧路由清单。
 
 ---
 

@@ -332,7 +332,12 @@
       </meta-acc-block>
       <div class="cutline"></div>
 
-      <meta-acc-block class="block" title="{{ 'termination_conditions' | i18nextEager }}" tip="{{ 'termination_conditions_tip' | i18nextEager }}">
+      <meta-acc-block
+        class="block"
+        title="{{ 'termination_conditions' | i18nextEager }}"
+        tip="{{ 'termination_conditions_tip' | i18nextEager }}"
+        [open]="true"
+      >
         <ng-template #content>
           <div class="mt-4">
             <div>{{ 'maximum_iteration_round' | i18nextEager }}</div>
@@ -358,39 +363,6 @@
                 (ngModelChange)="onSave()"
               ></nz-input-number>
               {{ 'times' | i18nextEager }}
-            </div>
-          </div>
-          <div class="cutline"></div>
-          <div class="mt-4">
-            <div>{{ 'plugin_execution_successful' | i18nextEager }}</div>
-            <div class="mt-2 flex items-center">
-              <nz-switch class="mr-2" [(ngModel)]="break_plugin" (ngModelChange)="treeSelect()"></nz-switch>
-              {{ break_plugin ? ('opened' | i18nextEager) : ('closed' | i18nextEager) }}
-            </div>
-            <div *ngIf="break_plugin" class="mt-2 text-[#808080]">
-              {{ 'break_plugin_tip' | i18nextEager }}
-            </div>
-            <nz-select
-              *ngIf="break_plugin"
-              class="mt-[12px] !w-full"
-              [(ngModel)]="break_plugin_ids"
-              nzMode="multiple"
-              (ngModelChange)="onSave()"
-              [compareWith]="comparePlugin"
-              [nzPlaceHolder]="'please_select_a_plugin' | i18nextEager"
-            >
-              <nz-option *ngFor="let item of myPlugins" [nzValue]="item.id" [nzLabel]="item.name" [nzDisabled]="item.deleted"></nz-option>
-            </nz-select>
-          </div>
-          <div class="cutline"></div>
-          <div class="mt-4">
-            <div>{{ 'identified_user_has_exit_intention' | i18nextEager }}</div>
-            <div class="mt-2 flex items-center">
-              <nz-switch class="mr-2" (ngModelChange)="treeSelect()" [(ngModel)]="nodeInfo.configs.enable_intent_break"></nz-switch>
-              {{ nodeInfo.configs.enable_intent_break ? ('opened' | i18nextEager) : ('closed' | i18nextEager) }}
-            </div>
-            <div class="mt-2 text-[#808080]">
-              {{ 'has_exit_intention_that_can_terminate' | i18nextEager }}
             </div>
           </div>
         </ng-template>

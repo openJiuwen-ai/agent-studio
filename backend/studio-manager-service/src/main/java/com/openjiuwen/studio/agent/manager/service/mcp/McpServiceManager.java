@@ -1374,6 +1374,9 @@ public class McpServiceManager implements IMcpServiceManagerService {
         // 若存在Oauth鉴权，交换token
         mcpUrl = mcpBase.exchangeTokenByAuth(serviceEntity.getAuthInfo(), headerInfo, mcpUrl);
 
+        // 自定义 apikey 鉴权：出站前对 cust-* 做配置驱动 rename（cust-token→token, cust-userid→userId）
+        McpCustomerHeaderProjection.renameOutboundCustomerHeaders(headerInfo, serviceEntity.getName());
+
         log.info("Calling MCP service tool. Service name: {}, Tool name: {}", serviceEntity.getName(), testInfo.getToolName());
         McpSchema.CallToolResult callToolResult = mcpClientService.callMcpServiceTool(
             serviceEntity.getName(), testInfo.getToolName(), mcpUrl, testInfo.getParams(), serviceEntity.getOrgType(), headerInfo);
@@ -1982,6 +1985,9 @@ public class McpServiceManager implements IMcpServiceManagerService {
         mcpUrl = mcpBase.exchangeTokenByAuth(serviceEntity.getAuthInfo(), headerInfo, mcpUrl);
         log.info("Final URL for tools (Masked): {}", CommonUtil.maskUrlCredentials(mcpUrl));
 
+        // 自定义 apikey 鉴权：出站前对 cust-* 做配置驱动 rename（cust-token→token, cust-userid→userId）
+        McpCustomerHeaderProjection.renameOutboundCustomerHeaders(headerInfo, serviceEntity.getName());
+
         boolean isDirectConnectSuccess = true;
         // 进入主重试循环 (SDK调用)
         long startTime = System.currentTimeMillis();
@@ -2529,6 +2535,9 @@ public class McpServiceManager implements IMcpServiceManagerService {
             log.info("Parsing headers from server config.");
             headerInfo = CommonUtil.parseMcpConfigHeaderInfo(encryptionAdapter.decrypt(serviceEntity.getServerConfig()));
         }
+
+        // 自定义 apikey 鉴权：出站前对 cust-* 做配置驱动 rename（cust-token→token, cust-userid→userId）
+        McpCustomerHeaderProjection.renameOutboundCustomerHeaders(headerInfo, serviceEntity.getName());
 
         List<McpSchema.Tool> toolList = mcpClientService.getMcpServiceToolList(serviceEntity.getName(), mcpUrl,
             serviceEntity.getOrgType(), headerInfo);

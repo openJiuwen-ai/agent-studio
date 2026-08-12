@@ -474,7 +474,15 @@ class Start(WorkflowComponent):
         }
         if not inputs:
             return default_maps
-        return default_maps | inputs
+        # 合并默认值与输入：对有默认值的字段，None 不覆盖默认值
+        # 背景：控制器调用子工作流时，openjiuwen schema 解析会给未赋值的用户字段填充 None，
+        # 直接用 default_maps | inputs 会导致 None 覆盖默认值
+        result = dict(default_maps)
+        for key, value in inputs.items():
+            if key in default_maps and value is None:
+                continue
+            result[key] = value
+        return result
 
     @staticmethod
     def _assemble_output(inputs: dict, session: Session) -> dict:

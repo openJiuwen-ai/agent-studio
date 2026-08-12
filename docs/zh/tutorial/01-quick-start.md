@@ -559,6 +559,6 @@ bash deploy/deploy.sh stop
 ## 十、进一步阅读
 
 - [源码编译构建指导](../docker/源码编译构建指导.md)
-- [安装部署指南](./安装部署指南.md)
+- [安装部署指南](../how-to/deploy-service.md)
 - [可观测性说明](../deploy/config/observability-readme.md)
-- [开发扩展指南](./开发指南.md)
+- [开发扩展指南](../how-to/development-guide.md)

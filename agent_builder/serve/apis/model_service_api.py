@@ -35,7 +35,8 @@ from pydantic import BaseModel, Field
 # 并复用 resolver / policy / dispatch 机制层。
 import model_service  # noqa: F401
 from model_service import dispatch, policy, resolver
-
+from model_service.ports import get_request_customer_headers
+from common_utils.customer_header import resolve, get_capture_keys, get_config
 from agent_builder.common.exception.model_codes import (
     INVOKE_MODEL_SERVICE_FAIL,
     MODEL_SERVICE_NOT_PUBLISH,
@@ -119,13 +120,78 @@ def _resolve_request_ctx(request: Request, body_model: str, refresh_query: Optio
 
 
 def _auth_headers(conn) -> dict:
-    """鉴权头：API_KEY → Bearer；CUSTOM_APIKEY → auth_info 各项（对应 Java AuthAdapterFactory）。"""
+    """鉴权头：API_KEY → Bearer；CUSTOM_APIKEY → auth_info 各项（对应 Java AuthAdapterFactory）。
+
+    CUSTOM_APIKEY 模式下 auth_info 含 capture_keys 时，通过 resolve 剥前缀（配置驱动）。
+    """
     headers = {"Content-Type": "application/json"}
     if conn.custom_headers:
-        headers.update(conn.custom_headers)
+        cfg = get_config()
+        cap_lower = [k.lower() for k in get_capture_keys()] if cfg.enabled else []
+        to_rename = {}
+        to_pass = {}
+        for k, v in conn.custom_headers.items():
+            if k.lower() in cap_lower:
+                to_rename[k] = v
+            else:
+                to_pass[k] = v
+        headers.update(to_pass)
+        if to_rename:
+            renamed = resolve(to_rename)
+            if renamed:
+                headers.update(renamed)
+            else:
+                headers.update(to_rename)
     else:
         headers["Authorization"] = f"Bearer {conn.api_key}"
     return headers
+
+
+def _project_customer_headers(target, conn=None) -> dict:
+    """返回 customer rename 后的 header（不含静态 Bearer）。
+
+    优先用上游 captured；无 captured 时（页面试运行）用 conn 静态值做 rename。
+    """
+    captured = get_request_customer_headers()
+    if captured:
+        projected = resolve(captured)
+        if projected:
+            logger.info(
+                f"[customer-header] Builder customer header rename: target={target}, "
+                f"captured_keys={list(captured.keys())}, projected_keys={list(projected.keys())}"
+            )
+            return projected
+    # 页面试运行 fallback：用 conn 静态值做 rename
+    if conn and getattr(conn, "custom_headers", None):
+        cfg = get_config()
+        cap_lower = [k.lower() for k in get_capture_keys()] if cfg.enabled else []
+        to_rename = {k: v for k, v in conn.custom_headers.items() if k.lower() in cap_lower}
+        if to_rename:
+            projected = resolve(to_rename)
+            if projected:
+                logger.info(
+                    f"[customer-header] Builder static rename: target={target}, "
+                    f"static_keys={list(to_rename.keys())}, projected_keys={list(projected.keys())}"
+                )
+                return projected
+    return {}
+
+
+def _merge_customer(headers: dict, projected: dict) -> dict:
+    """将 customer rename 结果合并进 headers，上游 captured 覆盖静态认证"""
+    headers.update(projected)
+    return headers
+
+
+def _build_model_headers(conn, auth, target) -> dict:
+    """构建模型上游 header = 静态认证（已 rename） + 上游 captured rename（覆盖）"""
+    headers = _auth_headers(conn)
+    return _merge_customer(headers, _project_customer_headers(target, conn))
+
+
+def _build_chat_headers(conn, auth) -> dict:
+    """构建 chat 调用 header"""
+    return _build_model_headers(conn, auth, "BUILDER_LLM_CHAT")
 
 
 # 上游模型调用失败的对齐契约（移植自 Java ``GlobalExceptionHandler`` + i18n
@@ -268,7 +334,7 @@ async def chat_completions(
             conn = dispatch.get_chat_connection(detail.model, detail.auth)
             url = detail.model.api_url
             client = dispatch.build_httpx_client(url, conn.verify_ssl)
-            headers = _auth_headers(conn)
+            headers = _build_chat_headers(conn, detail.auth)
             up_body = _build_chat_upstream_body(body, conn.model_name, is_stream)
             if not is_stream:
                 try:
@@ -357,7 +423,7 @@ async def text_embeddings(
         conn = dispatch.get_chat_connection(detail.model, detail.auth)
         url = detail.model.api_url
         client = dispatch.build_httpx_client(url, conn.verify_ssl)
-        headers = _auth_headers(conn)
+        headers = _build_model_headers(conn, detail.auth, "BUILDER_MODEL_EMBEDDING")
         up_body = {"model": conn.model_name, "input": body.input}
         try:
             resp = await client.post(url, json=up_body, headers=headers, timeout=conn.timeout)
@@ -403,7 +469,11 @@ async def rerank(
             )
         detail = strategy.models[0]
         url = detail.model.api_url
-        data = await dispatch.rerank(detail.model, detail.auth, body)
+        #  把 customer rename（cust→userid/token）作为 projected_headers 显式传给 dispatch.rerank
+        # （dispatch 是共享包、不依赖宿主请求上下文，按设计  由 facade 投影后显式传入）
+        conn = dispatch.get_chat_connection(detail.model, detail.auth)
+        projected = _project_customer_headers("BUILDER_MODEL_RERANK", conn)
+        data = await dispatch.rerank(detail.model, detail.auth, body, projected_headers=projected)
         return JSONResponse(content=data)
     except resolver.ModelServiceError as exc:
         return _error_response(exc)
@@ -456,7 +526,7 @@ async def model_service_status_check(
 
     try:
         conn = dispatch.get_chat_connection(model, auth)
-        url = body.api_url  # 对应 Java ``model.getApiUrl()`` verbatim，不追加 path
+        url = body.api_url  # 对应 Java ``model.getApiUrl`` verbatim，不追加 path
         client = dispatch.build_httpx_client(url, conn.verify_ssl)
         headers = _check_auth_headers(body.auth_type, body.auth_info)
         try:
@@ -482,3 +552,5 @@ async def model_service_status_check(
         return JSONResponse(content=ModelServiceCheckRsp(
             success=False, status_code=500
         ).model_dump())
+
+

@@ -142,10 +142,6 @@ export class AgentModalComponent extends ModalBaseComponent implements OnInit, O
 
   public myPlugins = [];
 
-  public break_plugin = true;
-
-  public break_plugin_ids = [];
-
   public prompt = '';
 
   public scales = [1, 5, 10, 15, 20];
@@ -197,8 +193,6 @@ export class AgentModalComponent extends ModalBaseComponent implements OnInit, O
     this.setNodeBase(this.nodeInfo);
     super.ngOnInit();
     this.validationRules.push(CommonValidation.nameUniquenessVerify(this.names, this.i18n.transform('name_uniqueness'), this.nodeInfo.name));
-    this.break_plugin = Boolean(this.nodeInfo.configs.break_plugin_ids?.length);
-    this.break_plugin_ids = this.nodeInfo.configs.break_plugin_ids;
     this.myPlugins = this.nodeInfo.configs.plugins;
     this.getPluginList();
     this.selectedModelSubscription = this.agentFormGroup.get('model').valueChanges.subscribe(value => {
@@ -300,8 +294,6 @@ export class AgentModalComponent extends ModalBaseComponent implements OnInit, O
 
   compareType = (a: any, b: any): boolean => a === b;
 
-  comparePlugin = (a: any, b: any): boolean => (a && b ? a.id === b.id : a === b);
-
   getInputNames(index: number): {
     existingValues: string[];
     forbiddenValues: string[];
@@ -327,13 +319,8 @@ export class AgentModalComponent extends ModalBaseComponent implements OnInit, O
     this.onSave();
   }
 
-  public deletePlugin(item, index: number): void {
+  public deletePlugin(_item, index: number): void {
     this.myPlugins.splice(index, 1);
-    const idx = this.break_plugin_ids?.indexOf(item.id);
-    if (idx > -1) {
-      this.break_plugin_ids.splice(idx, 1);
-      this.break_plugin_ids = [...this.break_plugin_ids];
-    }
     this.onSave();
   }
 
@@ -597,6 +584,11 @@ export class AgentModalComponent extends ModalBaseComponent implements OnInit, O
       }),
     }));
 
+    // 兼容旧草稿：保存时清理已下线的终止条件，避免继续写回后端。
+    const agentConfigs = { ...this.nodeInfo.configs } as any;
+    delete agentConfigs.break_plugin_ids;
+    delete agentConfigs.enable_intent_break;
+
     const nodeData: IAgentRepo = {
       id: this.nodeInfo.id,
       name: this.nodeInfo.name,
@@ -604,7 +596,7 @@ export class AgentModalComponent extends ModalBaseComponent implements OnInit, O
       inputs: NodeUtils.getDtoInputs(this.inputParams),
       outputs: this.nodeInfo.outputs,
       configs: {
-        ...this.nodeInfo.configs,
+        ...agentConfigs,
         model: {
           model_name: selectedModel?.model_name ?? '',
           model_type: selectedModel?.model_type ?? '',
@@ -615,7 +607,6 @@ export class AgentModalComponent extends ModalBaseComponent implements OnInit, O
         max_tokens: Number(this.modelParams.max_tokens),
         plugins,
         system_prompt: this.prompt,
-        break_plugin_ids: this.break_plugin ? this.break_plugin_ids : [],
       },
     };
     this.appFlowServ.setNodeSaveMonitor({

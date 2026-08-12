@@ -594,14 +594,14 @@ export class DynamicNodeParamsComponent {
         return;
       }
       const fileExtension = file.name.split('.').pop().toLowerCase();
-      const isImage = checkFileTypeAndSize(
+      const valid = checkFileTypeAndSize(
         fileExtension,
         file.size,
         this.i18n,
-        this.configServ,
+        this.configServ.getFileMaxSizeKb(),
       );
 
-      if (!isImage) {
+      if (!valid) {
         return;
       }
 
@@ -663,9 +663,9 @@ export class DynamicNodeParamsComponent {
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
           extension,
         );
-        const validationError = validateFileSize(file, isImage);
+        const validationError = validateFileSize(file, isImage, 5 * 1024, this.configServ.getFileMaxSizeKb());
         if (validationError) {
-          MessageComponent.showWarn(this.i18n.transform(validationError));
+          MessageComponent.showWarn(this.i18n.transform(validationError.key, validationError.params));
           continue;
         }
         const fileItem = createFileItem(file);

@@ -74,7 +74,7 @@ import { NzCollapseModule } from 'ng-zorro-antd/collapse';
   ],
 })
 export class FlowAsyncLogComponent extends FlowLogModalComponent {
-  @Input() conversationId: string = '';
+  @Input() override conversationId: string = '';
 
   @Input() execListInput: any = [];
 
@@ -90,7 +90,7 @@ export class FlowAsyncLogComponent extends FlowLogModalComponent {
 
   selectDateObj: { value: string; label: string; startTime?: number; endTime?: number; totalCount?: number; successCount?: number; failCount?: number; disabled?: boolean } = null;
 
-  ngOnChanges(changes: SimpleChanges) {
+  override ngOnChanges(changes: SimpleChanges) {
     if (!this.dates) {
       this.initializeDates();
     }

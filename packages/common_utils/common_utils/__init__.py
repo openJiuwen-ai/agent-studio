@@ -16,6 +16,11 @@ from .crypto_tool import (
     encrypt,
     decrypt,
 )
+from .password_provider import (
+    DataSourcePasswordProvider,
+    DefaultDataSourcePasswordProvider,
+    get_password_provider
+)
 from .common_config import RedisMode, RedisSettings
 from .redis_manager import (
     RedisClientManager,
@@ -31,6 +36,10 @@ __all__ = [
     "PlainCrypt",
     "encrypt",
     "decrypt",
+    # password provider
+    "DataSourcePasswordProvider",
+    "DefaultDataSourcePasswordProvider",
+    "get_password_provider",
     # common_config
     "RedisMode",
     "RedisSettings",

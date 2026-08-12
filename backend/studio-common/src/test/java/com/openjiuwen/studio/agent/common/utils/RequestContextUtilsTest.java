@@ -116,19 +116,4 @@ class RequestContextUtilsTest {
         RequestContextUtils.remove();
         assertThrows(RuntimeException.class, RequestContextUtils::getRequestIamCtx);
     }
-
-    @Test
-    void testGetRequestUserIdCompatibleCustom_WithHeaders() {
-        RequestContextUtils.setContext("token", "project", "domain");
-        Map<String, String> headers = new HashMap<>();
-        headers.put("cust-userid", "custom-user");
-        RequestContextUtils.setHeaders(headers);
-        assertEquals("custom-user", RequestContextUtils.getRequestUserIdCompatibleCustom());
-    }
-
-    @Test
-    void testGetRequestUserIdCompatibleCustom_WithoutHeaders() {
-        RequestContextUtils.setRequestAuthTokenAndUserId("token", "project", "user-1");
-        assertEquals("user-1", RequestContextUtils.getRequestUserIdCompatibleCustom());
-    }
 }

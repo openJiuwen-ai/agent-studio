@@ -455,7 +455,7 @@
       [isShow]="showRunModal"
       [fromComponent]="type"
       [graph]="graph"
-      [conversationId]="conversationId"
+      [(conversationId)]="conversationId"
       [currWorkflow]="workflowDetail"
       [versionName]="versionName"
       [environment_id]="workflowDetail?.workflow_details?.configs?.environment
@@ -526,6 +526,7 @@
       [openNodeId]="showLogOpenNodeId"
       [workflowDetail]="showLogWorkflowDetail"
       [showLogDrawer]="showLogDrawer"
+      [conversationId]="logConversationId"
       (close)="showLogDrawer = false"
     ></controller-log-modal>
     } @else {
@@ -535,6 +536,7 @@
       [graph]="showLogGraph"
       [openNodeId]="showLogOpenNodeId"
       [showLogDrawer]="showLogDrawer"
+      [conversationId]="logConversationId"
       (close)="showLogDrawer = false"
     ></flow-log-modal>
     }
@@ -595,7 +597,7 @@
   <div class="nodes-selection-tip-panel tool-bar-item flex items-center gap-1" *ngIf="selectionTip.show" [ngStyle]="{
       top: (125 - elementTop) + 'px',
     }">
-    <p class="w-[100px]">{{ 'selection_tip' |i18nextEager :{count: selectionTip.count} }}</p>
+    <span class="w-[100px]">{{ 'selection_tip' |i18nextEager :{count: selectionTip.count} }}</span>
     <div class="nodes-selection-tip-panel-line"></div>
     <div class="flex nodes-selection-tip-panel-op gap-1">
       <div class="op-icon cursor-pointer p-1" (click)="selectionCopy()">

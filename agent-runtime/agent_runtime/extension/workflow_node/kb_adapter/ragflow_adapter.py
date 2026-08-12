@@ -10,6 +10,7 @@ import aiohttp
 from openjiuwen.core.common.logging import workflow_logger
 
 from .base import DatasetSearchRequest, KBSearchResult, KBServiceAdapter
+from .customer_header_inject import inject_customer_headers_to_kb
 
 
 class RagFlowAdapter(KBServiceAdapter):
@@ -42,6 +43,9 @@ class RagFlowAdapter(KBServiceAdapter):
             "Content-Type": "application/json",
             "Authorization": f"Bearer {authorization}",
         }
+
+        # 客户 Header 改写（同构，剥 cust- 前缀 + captured 覆盖）
+        inject_customer_headers_to_kb(headers)
 
         # 收集所有知识库的 dataset_id（external_id）
         dataset_ids = []

@@ -57,7 +57,7 @@
               <span>{{'releasehistoryhalfmodalcomponent_79'| i18nextEager}}{{ card.creator }}</span>
             </div>
             <div class="action flex">
-              <a *ngIf="selectedTab !== i && type === 'workflow' && false" class="mr-[8px] cursor-pointer text-[#1476FF]" (click)="showDiff($event, i)">{{ 'version_diff' | i18nextEager }}</a>
+              <a *ngIf="selectedTab !== i && type === 'workflow'" class="mr-[8px] cursor-pointer text-[#1476FF]" (click)="showDiff($event, i)">{{ 'version_diff' | i18nextEager }}</a>
               <a class="mr-[8px] cursor-pointer text-[#1476FF]" (click)="restoreVersion(card.version_id)">{{ 'version_restored' | i18nextEager }}</a>
               <a class="cursor-pointer text-[#1476FF]" (click)="openDeleteVersionModal(card.version_id)">{{ 'delete' | i18nextEager }}</a>
             </div>

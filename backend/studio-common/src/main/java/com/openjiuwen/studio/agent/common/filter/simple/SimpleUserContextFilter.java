@@ -7,6 +7,7 @@ package com.openjiuwen.studio.agent.common.filter.simple;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openjiuwen.studio.agent.common.constant.SimpleConstants;
 import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
+import com.openjiuwen.studio.agent.common.customerheader.CustomerHeaderProfile;
 import com.openjiuwen.studio.agent.common.utils.OkHttpClientUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.SpringBeanUtils;
@@ -27,6 +28,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -75,6 +78,9 @@ public class SimpleUserContextFilter implements Filter {
             RequestContextUtils.setContext(simpleUser);
         }
 
+        // 捕获客户 header（cust-*）到 ThreadLocal，供下游 rename 使用
+        captureCustomerHeaders(httpRequest);
+
         chain.doFilter(request, response);
     }
 
@@ -105,5 +111,19 @@ public class SimpleUserContextFilter implements Filter {
 
     @Override
     public void destroy() {
+    }
+
+    private void captureCustomerHeaders(HttpServletRequest request) {
+        CustomerHeaderProfile profile = SpringBeanUtils.getBean(CustomerHeaderProfile.class);
+        if (profile == null || !profile.isEnabled()) return;
+        String[] allowList = profile.getCaptureAllowList();
+        Map<String, String> captured = new HashMap<>();
+        for (String name : allowList) {
+            String value = request.getHeader(name);
+            if (StringUtils.isNotEmpty(value)) {
+                captured.put(name.toLowerCase(), value);
+            }
+        }
+        RequestContextUtils.setCustomerHeaders(captured);
     }
 }
