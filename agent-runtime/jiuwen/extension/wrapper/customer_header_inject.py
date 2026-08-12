@@ -4,7 +4,7 @@
 参考 common_utils.customer_header.resolve() 的统一 rename 逻辑。
 MCP auth_keys 配置的 target_name（cust-token/cust-userid）经
 RequestParamsCreator._add_auth_params 注入 request_params.headers；
-此处使用 resolve("RUNTIME_MCP_CALL", cust_headers) 做 rename（剥 cust- 前缀），
+此处使用 resolve(cust_headers) 做 rename（剥 cust- 前缀），
 不透传上游 captured，使外部 MCP server 收到 token/userid。
 """
 
@@ -18,7 +18,7 @@ def inject_customer_headers_to_mcp(request_params) -> None:
     在 _prepare_request_params / McpAPI.ainvoke / McpServer.list_tools 的 header 组装
     末尾调用（auth_hook 之后，出站之前）：
     - 过滤 request_params.headers 中的 cust-*（auth_keys 注入的静态配置）
-    - resolve("RUNTIME_MCP_CALL", cust_headers) 执行 rename
+    - resolve(cust_headers) 执行 rename
     - 删原 cust-*，update 剥前缀后的 token/userid
 
     无 cust-* 时直接返回（无 auth_keys 的 MCP 调用不受影响）。
@@ -35,7 +35,7 @@ def inject_customer_headers_to_mcp(request_params) -> None:
     if not cust_headers:
         return
 
-    projected = resolve("RUNTIME_MCP_CALL", cust_headers)
+    projected = resolve(cust_headers)
     logger.info(
         f"[customer-header] MCP customer header rename: static_cust_keys={list(cust_headers.keys())}, "
         f"projected_keys={list(projected.keys())}"

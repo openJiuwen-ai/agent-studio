@@ -137,7 +137,7 @@ def _auth_headers(conn) -> dict:
                 to_pass[k] = v
         headers.update(to_pass)
         if to_rename:
-            renamed = resolve("BUILDER_AUTH_STATIC", to_rename)
+            renamed = resolve(to_rename)
             if renamed:
                 headers.update(renamed)
             else:
@@ -154,7 +154,7 @@ def _project_customer_headers(target, conn=None) -> dict:
     """
     captured = get_request_customer_headers()
     if captured:
-        projected = resolve(target, captured)
+        projected = resolve(captured)
         if projected:
             logger.info(
                 f"[customer-header] Builder customer header rename: target={target}, "
@@ -167,7 +167,7 @@ def _project_customer_headers(target, conn=None) -> dict:
         cap_lower = [k.lower() for k in get_capture_keys()] if cfg.enabled else []
         to_rename = {k: v for k, v in conn.custom_headers.items() if k.lower() in cap_lower}
         if to_rename:
-            projected = resolve(target, to_rename)
+            projected = resolve(to_rename)
             if projected:
                 logger.info(
                     f"[customer-header] Builder static rename: target={target}, "

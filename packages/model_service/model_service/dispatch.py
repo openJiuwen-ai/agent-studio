@@ -12,6 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from common_utils.customer_header import get_config, get_capture_keys, resolve
+
 from .resolver import InterfaceProtocol, ModelServiceBase, ModelServiceError, ProviderAuth
 
 # OBS 原始 interfaceProtocol 字符串 → 两值归一。当前仅 OPENAI；ANTHROPIC 预留。
@@ -174,7 +176,7 @@ async def rerank(model, auth, request, projected_headers: Optional[dict] = None)
                 to_pass[k] = v
         headers.update(to_pass)
         if to_rename:
-            renamed = resolve("BUILDER_MODEL_RERANK", to_rename)
+            renamed = resolve(to_rename)
             if renamed:
                 headers.update(renamed)
             else:

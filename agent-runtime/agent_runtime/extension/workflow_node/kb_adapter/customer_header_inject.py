@@ -33,13 +33,14 @@ def inject_customer_headers_to_kb(headers: Dict[str, Any]) -> None:
         from agent_runtime.context.request_context import _request_ctx
         ctx = _request_ctx.get()
         captured = ctx.customer_headers if ctx else {}
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[customer-header] KB captured-header lookup failed, skip inject: {e}")
         captured = {}
 
     if not captured:
         return
 
-    projected = resolve("RUNTIME_KB_CALL", captured)
+    projected = resolve(captured)
     if projected:
         headers.update(projected)
         logger.info(

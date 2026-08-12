@@ -14,19 +14,10 @@ from pydantic import BaseModel, Field
 
 # ── 配置 Schema ──
 
-class TargetOverride(BaseModel):
-    """Target 级别的 mapping override"""
-    mappings: dict[str, str] = Field(default_factory=dict)
-    forward_list: list[str] = Field(default_factory=list, alias="forward-list")
-
-    model_config = {"populate_by_name": True}
-
-
 class CustomerHeaderConfig(BaseModel):
     """客户 Header 配置 — 从环境变量加载"""
     enabled: bool = False
     mappings: dict[str, str] = Field(default_factory=dict)
-    targets: dict[str, TargetOverride] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
 
@@ -76,11 +67,10 @@ def load_from_env() -> CustomerHeaderConfig:
 
 # ── rename 核心逻辑 ──
 
-def resolve(target: str, captured: dict[str, str]) -> dict[str, str]:
+def resolve(captured: dict[str, str]) -> dict[str, str]:
     """按配置执行 header rename: captured[from_key] → result[to_key]
 
     Args:
-        target: 调用目标名（如 "RUNTIME_LLM_CHAT"、"LAKESEARCH"）
         captured: 请求中捕获的 cust-* headers（原始名 → 值）
 
     Returns:
@@ -90,13 +80,8 @@ def resolve(target: str, captured: dict[str, str]) -> dict[str, str]:
     if not cfg.enabled or not cfg.mappings:
         return {}
 
-    # 合并：default mappings + target override
-    merged = {**cfg.mappings}
-    if target in cfg.targets and cfg.targets[target].mappings:
-        merged.update(cfg.targets[target].mappings)
-
     result = {}
-    for from_key, to_key in merged.items():
+    for from_key, to_key in cfg.mappings.items():
         value = captured.get(from_key) or captured.get(from_key.lower())
         if value:
             result[to_key] = value

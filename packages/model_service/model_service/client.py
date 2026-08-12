@@ -122,7 +122,7 @@ def _build_verbatim_headers(conn, params: dict) -> dict:
                 to_pass[k] = v
         headers.update(to_pass)
         if to_rename:
-            renamed = resolve("RUNTIME_LLM_CHAT", to_rename)
+            renamed = resolve(to_rename)
             if renamed:
                 headers.update(renamed)
             else:
@@ -311,17 +311,30 @@ class StudioModelClient(OpenAIModelClient):
         # 从请求上下文获取 customer headers 并执行 rename
         from model_service import ports as _ports
         captured = _ports.get_request_customer_headers()
-        projected = resolve("RUNTIME_LLM_CHAT", captured)
+        projected = resolve(captured)
         if projected:
             params["extra_headers"] = projected
         elif conn.custom_headers:
             # 页面试运行（无上游 captured）：用模型配置静态值做 rename
+            # 非 capture 键（含 CUSTOM_APIKEY 鉴权头）一律透传；功能禁用（_cap 为空）时等价于
+            # 旧的全量透传 params["extra_headers"] = conn.custom_headers，保证向后兼容。
             _cap = [k.lower() for k in get_capture_keys()] if get_config().enabled else []
-            to_rename = {k: v for k, v in conn.custom_headers.items() if k.lower() in _cap}
+            to_rename = {}
+            to_pass = {}
+            for k, v in conn.custom_headers.items():
+                if k.lower() in _cap:
+                    to_rename[k] = v
+                else:
+                    to_pass[k] = v
+            extra = dict(to_pass)
             if to_rename:
-                renamed = resolve("RUNTIME_LLM_CHAT", to_rename)
+                renamed = resolve(to_rename)
                 if renamed:
-                    params["extra_headers"] = renamed
+                    extra.update(renamed)
+                else:
+                    extra.update(to_rename)
+            if extra:
+                params["extra_headers"] = extra
         workflow_logger.info(
             f"[customer-header] LLM customer header rename: target=RUNTIME_LLM_CHAT, "
             f"captured_keys={list(captured.keys()) if captured else []}, "
