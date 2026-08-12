@@ -65,7 +65,7 @@ openJiuwen Studio为开发者搭建了可视化低码开发Agent和工作流的�
 
 # 🤝 **贡献指南**
 
-欢迎提交 Issue 和 Pull Request！
+欢迎提交 Issue 和 Pull Request！具体贡献流程请参考 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ---
 
