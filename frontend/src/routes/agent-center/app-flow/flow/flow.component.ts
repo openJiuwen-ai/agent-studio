@@ -162,7 +162,12 @@ import {
 } from '../node.type';
 import { FlowUtils, TargetMarker } from '../utils/flow-utils';
 import { isEditableTarget } from '../utils/editable-target.util';
-import { shouldClearHalfModalOnClose } from '../utils/pending-open-node.util';
+import {
+  shouldClearHalfModalOnClose,
+  planNewNodeActivation,
+  pickLastCreatedNode,
+  shouldProceedAfterWorkflowConfirm,
+} from '../utils/pending-open-node.util';
 import { IAppRefList } from '@routes/agent-center/types/common.types';
 import { getMaxReplySetting } from '@routes/agent-center/utils';
 import { ModelManagementService } from '@services/repositories/model-management-new';
@@ -249,6 +254,13 @@ const NodeMap = {
 export interface ICreateNodeConfig {
   isUpdateFlowData?: boolean;
   ignoreLoopEmbedding?: boolean;
+  /**
+   * 新增节点成功后是否自动选中该节点并打开其配置抽屉。默认 false，仅由
+   * onDropNode / onInsertBetweenNode / onInsertRightNode / onCreateNewNode
+   * 等用户新增入口开启，避免模板加载、复制、替换、历史回放等内部建图流程
+   * 触发选中/打开。Comment 等无配置抽屉类型仅选中、不打开抽屉。
+   */
+  activateAfterCreate?: boolean;
 }
 
 export interface IUpdateFlowConfig {
@@ -1525,7 +1537,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           label: this.i18n.transform('ok'),
           type: 'primary',
           onClick: () => {
-            this.addAllToolsByPluginId(pluginId);
+            this.addAllToolsByPluginId(pluginId, true);
             modalRef.destroy();
           },
         },
@@ -1598,19 +1610,28 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   /**
    * 根据插件id，添加插件下的所有工具
    * @param pluginId
+   * @param activateAfterCreate 批量新增完成后是否只激活最后一个实际创建的节点
+   *   （选中 + 打开配置抽屉）。默认 false，仅由用户新增入口 afterCreatePlugin 开启，
+   *   保护其他 public 调用方与模板加载/复制/替换/历史回放等内部建图流程不触发选中。
    */
-  public addAllToolsByPluginId(pluginId: string) {
+  public addAllToolsByPluginId(pluginId: string, activateAfterCreate = false) {
     if (!pluginId) {
       return;
     }
     this.appPluginRepoServ.getPluginById(pluginId).then((res) => {
       const plugin = res.data;
+      const createdNodes: Node[] = [];
       plugin?.request_info?.tool_info?.forEach((tool) => {
         const toolNodeInfo = this.buildToolNodeInfo(plugin, tool);
         const apiNodeData = this.appFlowServ.plugin2ApiNode(toolNodeInfo);
-        this.addActionNode(apiNodeData);
+        createdNodes.push(this.addActionNode(apiNodeData));
         this.debounceSetMiniMap();
       });
+      // 批量结束只激活最后一个实际创建的非空 Node，不为每项打开抽屉；
+      // activateAfterCreate=false 时 pickLastCreatedNode 返回 null，activateNewNode 整体跳过。
+      this.activateNewNode(
+        pickLastCreatedNode(createdNodes, activateAfterCreate),
+      );
       this.updateFlowData({
         successCb: () => {
           this.appFlowServ.setRefreshFlag(true);
@@ -2687,7 +2708,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         nzMaskClosable: false,
       });
     } else {
-      this.createNode(params);
+      this.createNode(params, {activateAfterCreate: true});
     }
   }
 
@@ -2806,9 +2827,12 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
             this.appFlowServ
               .getInitDataAcquisitionData(mcpServices.mcps[0])
               .then((apiNodeData) => {
-                this.addActionNode(apiNodeData);
+                const addedNode = this.addActionNode(apiNodeData);
 
                 this.debounceSetMiniMap();
+                if (configs.activateAfterCreate) {
+                  this.activateNewNode(addedNode);
+                }
                 this.updateFlowData();
               });
           }
@@ -2819,9 +2843,12 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     if (params.isAction && params.type === 'Plugin') {
       this.useAddPluginModal((plugin: IPlugin) => {
         const apiNodeData = this.appFlowServ.plugin2ApiNode(plugin);
-        this.addActionNode(apiNodeData);
+        const addedNode = this.addActionNode(apiNodeData);
 
         this.debounceSetMiniMap();
+        if (configs.activateAfterCreate) {
+          this.activateNewNode(addedNode);
+        }
         this.updateFlowData({
           successCb: () => {
             let list = this.workflowDetail.workflow_details.nodes.filter(
@@ -2852,9 +2879,12 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
             ...apiNodeData.configs,
             ...config,
           };
-          this.addActionNode(apiNodeData);
+          const addedNode = this.addActionNode(apiNodeData);
 
           this.debounceSetMiniMap();
+          if (configs.activateAfterCreate) {
+            this.activateNewNode(addedNode);
+          }
           this.updateFlowData({
             successCb: () => {
               MessageComponent.showSuccess(
@@ -2877,9 +2907,12 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           const apiNodeData = await this.appFlowServ.getInitMcpNodeData(
             mcpService,
           );
-          this.addActionNode(apiNodeData);
+          const addedNode = this.addActionNode(apiNodeData);
 
           this.debounceSetMiniMap();
+          if (configs.activateAfterCreate) {
+            this.activateNewNode(addedNode);
+          }
           this.updateFlowData({
             successCb: () => {
               MessageComponent.showSuccess(
@@ -2897,9 +2930,12 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
             mcpService,
             params.type,
           );
-          this.addActionNode(apiNodeData);
+          const addedNode = this.addActionNode(apiNodeData);
 
           this.debounceSetMiniMap();
+          if (configs.activateAfterCreate) {
+            this.activateNewNode(addedNode);
+          }
           this.updateFlowData({
             successCb: () => {
               MessageComponent.showSuccess(
@@ -2972,9 +3008,12 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     if (params.type === 'Comment') {
-      this.graph.addNode(
+      const commentNode = this.graph.addNode(
         FlowUtils.initCommentNode(params, this.graph, params.type),
       );
+      if (configs.activateAfterCreate) {
+        this.activateNewNode(commentNode);
+      }
       this.updateFlowData();
       return null;
     }
@@ -3010,6 +3049,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     this.graph.stopBatch('customAddNode');
     this.debounceSetMiniMap();
+    if (configs.activateAfterCreate) {
+      this.activateNewNode(addedNode);
+    }
     if (configs.isUpdateFlowData) {
       this.updateFlowData();
     }
@@ -3273,6 +3315,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           {
             ignoreLoopEmbedding: true,
             isUpdateFlowData: false,
+            activateAfterCreate: true,
           },
         );
 
@@ -3390,6 +3433,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           {
             ignoreLoopEmbedding: true,
             isUpdateFlowData: false,
+            activateAfterCreate: true,
           },
         );
 
@@ -3455,6 +3499,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           {
             ignoreLoopEmbedding: true,
             isUpdateFlowData: false,
+            activateAfterCreate: true,
           },
         );
         this.hiddenAddNodePanel();
@@ -5277,6 +5322,52 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     this.openNodeModalToken++;
   }
 
+  /**
+   * 用户新增节点成功后的统一激活入口：将该节点设为唯一 X6 选中与 NodeService
+   * 当前节点，并按其类型决定是否调度打开右侧配置抽屉。
+   *
+   * 固定顺序（复用既有机制，不复制异步调度逻辑）：
+   *   1. 从实际 graph.addNode 返回的 Node 重新提取 DSL（异步选择资源完成后，
+   *      以实际节点为激活对象，而非选择弹窗前的临时参数）；
+   *   2. planNewNodeActivation 决定 {select, openDrawer}（Comment 等无配置抽屉
+   *      类型仅选中、不打开抽屉）；
+   *   3. invalidatePendingOpenNode() 令此前排队的延迟打开失效（覆盖连续新增、
+   *      此前点击排队等场景；Comment 不调度时也需取消旧任务）；
+   *   4. closeNodeConfigDrawer() 关闭旧抽屉并触发其关闭动画；
+   *   5. select：graph.resetSelection(newNode) 清空旧 X6 多选并唯一选中新节点；
+   *         nodeServ.setCurrSelectedNode(newNode.id) 驱动卡片高亮与单节点删除；
+   *   6. openDrawer：scheduleOpenNodeModal(nodeInfo)，250ms 后仅最新 token 且节点
+   *      仍存在时才 openNodeModal——天然实现“连续新增最终展示最后一个”，并被
+   *      edge/blank/删除/销毁经 invalidatePendingOpenNode 打断。
+   *
+   * 既有守卫不变：openNodeModal 继续校验 fromShare / 节点存在 / saveStatus loading /
+   * Mcp.valid；只读、分享、保存中、失效 MCP 节点遵守其既有不可打开规则。
+   * Loop：仅传入循环父节点（createNode 返回的 addedNode），其自动生成的 IO 子节点
+   * 不进入激活。Comment：hasConfigComponent=false，仅 select、不 openDrawer。
+   */
+  private activateNewNode(newNode: Node | null | undefined): void {
+    if (!newNode) {
+      return;
+    }
+    const nodeInfo = FlowUtils.getNodeDSLFromRaw(newNode);
+    if (!nodeInfo?.id) {
+      return;
+    }
+    const plan = planNewNodeActivation({
+      nodeInfo,
+      hasConfigComponent: !!NodeMap[nodeInfo.type as keyof typeof NodeMap],
+    });
+    this.invalidatePendingOpenNode();
+    this.closeNodeConfigDrawer();
+    if (plan.select) {
+      this.graph?.resetSelection(newNode);
+      this.nodeServ.setCurrSelectedNode(newNode.id);
+    }
+    if (plan.openDrawer) {
+      this.scheduleOpenNodeModal(nodeInfo);
+    }
+  }
+
   openNodeModal(nodeInfo: any, exict: Array<any> = []): void {
     const newexict = [...exict, 'checkErrorWorkflowHalfModalRef'];
     if (this.route.snapshot.queryParams.fromShare === 'true') {
@@ -6043,9 +6134,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     this.graph.options.interacting = !isReadonly;
   }
 
-  private addActionNode(node: IPluginNode | IFlowNode | IMcpNode) {
+  private addActionNode(node: IPluginNode | IFlowNode | IMcpNode): Node {
     const {x, y} = FlowUtils.getNodePosByAddFromBar(this.graph, node.type);
-    this.graph.addNode(
+    return this.graph.addNode(
       FlowUtils.initNode(
         {
           ...node,
@@ -6145,23 +6236,30 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       title: this.i18n.transform('configtoolscomponent_45'),
       context: tip,
     });
-    modalRef.afterClose.subscribe(() => {
-      if (info.multiFlowType) {
-        const multiNode = this.workflowDetail.workflow_details.nodes.find(
-          (node: any) => {
-            return node.type === 'Controller';
-          },
-        );
-        const node = this.graph.getCellById(multiNode.id);
-        this.graph.trigger('node:click', {node: node});
-      } else {
-        this.handleWorkflow(info);
+    modalRef.afterClose.subscribe((result) => {
+      // 确认弹窗取消（result=false）或 X 关闭（result=undefined）时不新建/激活
+      // 子工作流节点、不改变已有选择；仅确认成功（result===true，经
+      // shouldProceedAfterWorkflowConfirm 判定）才创建并激活。修复取消仍错误
+      // 调用 handleWorkflow(info,true) 破坏原选择的 Review-2 P1。localStorage
+      // 清理始终执行，保留原有清理语义。
+      if (shouldProceedAfterWorkflowConfirm(result)) {
+        if (info.multiFlowType) {
+          const multiNode = this.workflowDetail.workflow_details.nodes.find(
+            (node: any) => {
+              return node.type === 'Controller';
+            },
+          );
+          const node = this.graph.getCellById(multiNode.id);
+          this.graph.trigger('node:click', {node: node});
+        } else {
+          this.handleWorkflow(info, true);
+        }
       }
       localStorage.removeItem('multiFlowTypeInfo');
     });
   }
 
-  async handleWorkflow(info) {
+  async handleWorkflow(info, activateAfterCreate = false) {
     const flow = await this.appFlowRepoServ.getFlowVersionInfo(
       info.id,
       info.version,
@@ -6200,7 +6298,13 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           ...apiNodeData.configs,
           ...config,
         };
-        this.addActionNode(apiNodeData);
+        // 用户新增子工作流节点：经 pickLastCreatedNode 统一机制决定是否激活；
+        // activateAfterCreate=false 时返回 null，activateNewNode 整体跳过，
+        // 保护模板加载/复制/替换/历史回放等非用户新增调用。
+        const addedNode = this.addActionNode(apiNodeData);
+        this.activateNewNode(
+          pickLastCreatedNode([addedNode], activateAfterCreate),
+        );
       });
   }
 
