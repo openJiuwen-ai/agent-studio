@@ -21,6 +21,7 @@ from .ports import (
     set_storage_provider, get_storage_provider,
     set_llm_settings, get_llm_settings,
     set_request_headers, get_request_headers,
+    set_request_customer_headers, get_request_customer_headers,
     set_cache_queues, get_model_cache, get_auth_cache,
 )
 
@@ -41,5 +42,6 @@ __all__ = [
     "set_storage_provider", "get_storage_provider",
     "set_llm_settings", "get_llm_settings",
     "set_request_headers", "get_request_headers",
+    "set_request_customer_headers", "get_request_customer_headers",
     "set_cache_queues", "get_model_cache", "get_auth_cache",
 ]

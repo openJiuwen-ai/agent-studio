@@ -89,13 +89,54 @@ def _register_model_service_ports() -> None:
     import storage
     from model_service import ports
     from agent_builder.adapter.config_bridge import settings
-    from agent_builder.adapter.request_context_bridge import get_request_headers
+    from agent_builder.adapter.request_context_bridge import (
+        get_request_headers, get_request_customer_headers,
+    )
 
     ports.set_storage_provider(storage.get_storage_provider)
     ports.set_llm_settings(lambda: settings.llm)
     ports.set_request_headers(get_request_headers)
+    # 注册独立 customer Header provider（强类型，不退化为无 provenance 的 dict）
+    ports.set_request_customer_headers(get_request_customer_headers)
     ports.set_cache_queues(None, None)
-    logger.info("model_service ports registered (storage/llm/request-headers; cache disabled)")
+    logger.info("[customer-header] model_service ports registered (storage/llm/request-headers/customer-headers)")
+
+
+def _load_customer_header_profile() -> None:
+    """从环境变量加载客户 Header 配置"""
+    from common_utils.customer_header import load_from_env, set_config
+    cfg = load_from_env()
+    set_config(cfg)
+    logger.info(f"[customer-header] Config loaded from env, enabled={cfg.enabled}, mappings={list(cfg.mappings)}")
+
+
+def _capture_customer_headers(request: Request) -> dict:
+    """按配置白名单捕获客户 header（cust-*，不含 x-auth-token）。
+
+    Profile 未启用时返回空 dict。
+    """
+    try:
+        from common_utils.customer_header import get_capture_keys, get_config
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"[customer-header] customer_header package unavailable, skip capture: {e}")
+        return {}
+
+    cfg = get_config()
+    if not cfg.enabled:
+        return {}
+    capture_keys = get_capture_keys()
+
+    result: dict = {}
+    for name in capture_keys:
+        value = request.headers.get(name) or request.headers.get(name.lower())
+        if value:
+            result[name] = value
+    if result:
+        logger.info(
+            f"[customer-header] Inbound customer header capture: "
+            f"captured_keys={list(result.keys())}"
+        )
+    return result
 
 
 @asynccontextmanager
@@ -108,6 +149,7 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
     await _init_prompt_store()
     await _ping_redis()
     await _init_s3_storage()
+    _load_customer_header_profile()
     _register_model_service_ports()
     try:
         yield
@@ -152,7 +194,10 @@ def instance_app() -> FastAPI:
                 "X-Auth-Id": _h("X-Auth-Id"),
                 "X-Auth-Token": _h("X-Auth-Token"),
                 "X-Deployment-Id": _h("X-Deployment-Id"),
-            }
+            },
+            # 按 boundary.agent-builder-inbound.customer-passthrough 白名单捕获 cust-*
+            # （不含 x-auth-token，平台认证 header 独立分仓）。供 invoke_one 做 BUILDER_LLM_CHAT rename。
+            customer_headers=_capture_customer_headers(request),
         )
         token = _request_ctx.set(ctx)
         try:

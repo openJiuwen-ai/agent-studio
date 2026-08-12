@@ -13,6 +13,7 @@ import aiohttp
 from openjiuwen.core.common.logging import workflow_logger
 
 from .base import KBSearchResult, KBServiceAdapter
+from .customer_header_inject import inject_customer_headers_to_kb
 
 _EXCLUDED_METADATA_KEYS = frozenset({
     "content", "text", "score",
@@ -79,6 +80,9 @@ class LakeSearchAdapter(KBServiceAdapter):
             else:
                 headers["Authorization"] = authorization
 
+        # 客户 Header 改写（同构，剥 cust- 前缀 + captured 覆盖）
+        inject_customer_headers_to_kb(headers)
+
         # project_id / app_id 必须由 OBS 连接配置提供，缺失直接报错，不兜底
         project_id = extra_params.get("project_id", "")
         app_id = extra_params.get("app_id", "")
@@ -104,7 +108,7 @@ class LakeSearchAdapter(KBServiceAdapter):
             return []
 
         # 对齐 Java 端逻辑：用 repo_id + extra_repo_ids 在单次 HTTP 请求中检索多个知识库
-        # Java: SearchTextReq.builder().repoId(first).extraRepoIds(rest).build()
+        # Java: SearchTextReq.builder.repoId(first).extraRepoIds(rest).build
         request = LakeSearchRequest(
             endpoint=endpoint,
             project_id=project_id,
@@ -170,7 +174,7 @@ class LakeSearchAdapter(KBServiceAdapter):
             "scope": scope,
         }
         # 多知识库时设置 extra_repo_ids（对齐 Java LakeSearchService：排除主 repo，主 repo 已在 repo_id 中）
-        # Java: .extraRepoIds(knowledgeRepos.stream().filter(item -> !item.equals(knowledgeRepoId)).toList())
+        # Java: .extraRepoIds(knowledgeRepos.stream.filter(item -> !item.equals(knowledgeRepoId)).toList)
         if len(repo_ids) > 1:
             body["extra_repo_ids"] = repo_ids[1:]
 

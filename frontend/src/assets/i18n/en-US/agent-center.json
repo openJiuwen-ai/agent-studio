@@ -1447,7 +1447,7 @@
   "exception_handling": "Exception Handling",
   "exception_handling_tip": "You can handle node exceptions (such as timeout and calling failure), including timeouts, retries, and exception handling.\nStop process: If a node is abnormal, the process stops.\nReturn the specified content: If a node is abnormal, the process does not stop. You can return to the specified content to continue the process.\nExecute exception process: If a node is abnormal, the process does not stop, and an exception process node is added. You need to configure the branch process.",
   "visual_comprehension_input": "Visual Comprehension Input",
-  "visual_comprehension_input_tip": "Only references of the Array<File/Image>, Array<File/Video>, or Array<String> types can be selected. The Array<String> type only supports image URLs.",
+  "visual_comprehension_input_tip": "Only references of the File/Image, File/Video, Array<File/Image>, Array<File/Video>, or Array<String> types can be selected. The Array<String> type only supports image URLs.",
   "visual_comprehension_input_tip2": "Please select",
   "Agent": "Agents",
   "ImageError": "Only Support PNG、SVG、JPEG、JPG.",
