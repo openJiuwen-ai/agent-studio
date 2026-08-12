@@ -105,6 +105,7 @@ export class ExportHalfModalComponent implements OnInit {
   isAllChecked = false;
   public selectedRows: any[] = [];
   public setOfCheckedId = new Set<any>();
+  public checkedDataMap = new Map<any, any>();
 
   constructor(
     private i18n: I18NextEagerPipe,
@@ -264,8 +265,7 @@ export class ExportHalfModalComponent implements OnInit {
         this.listOfData = res.data;
         this.total = res.total;
         this.loading = false;
-        this.selectedRows = [];
-        this.setOfCheckedId.clear();
+        this.refreshCheckedStatus();
         this.cdr.detectChanges();
       },
       error: () => {
@@ -279,18 +279,21 @@ export class ExportHalfModalComponent implements OnInit {
 
   public onSearch(): void {
     this.pageIndex = 1;
+    this.clearSelection();
     this.loadData();
   }
 
   public onClear(): void {
     this.searchValue = '';
     this.pageIndex = 1;
+    this.clearSelection();
     this.loadData();
   }
 
   public onRefresh(): void {
     this.searchValue = '';
     this.pageIndex = 1;
+    this.clearSelection();
     this.loadData();
   }
 
@@ -315,28 +318,38 @@ export class ExportHalfModalComponent implements OnInit {
     this.loadData();
   }
 
-  public updateCheckedSet(id: any, checked: boolean): void {
-    if (checked) {
-      this.setOfCheckedId.add(id);
-    } else {
-      this.setOfCheckedId.delete(id);
-    }
+  public clearSelection(): void {
+    this.setOfCheckedId.clear();
+    this.checkedDataMap.clear();
+    this.selectedRows = [];
+    this.isAllChecked = false;
   }
 
-  public onItemChecked(id: any, checked: boolean): void {
-    this.updateCheckedSet(id, checked);
-    this.selectedRows = this.listOfData.filter(item => this.setOfCheckedId.has(item[this.selectedType.rowKey]));
+  public updateCheckedSet(id: any, data: any, checked: boolean): void {
+    if (checked) {
+      this.setOfCheckedId.add(id);
+      if (data) {
+        this.checkedDataMap.set(id, data);
+      }
+    } else {
+      this.setOfCheckedId.delete(id);
+      this.checkedDataMap.delete(id);
+    }
+    this.selectedRows = Array.from(this.checkedDataMap.values());
+  }
+
+  public onItemChecked(id: any, data: any, checked: boolean): void {
+    this.updateCheckedSet(id, data, checked);
     this.refreshCheckedStatus();
   }
 
   public onAllChecked(checked: boolean): void {
-    this.listOfData.forEach(item => this.updateCheckedSet(item[this.selectedType.rowKey], checked));
-    this.selectedRows = checked ? [...this.listOfData] : [];
+    this.listOfData.forEach(item => this.updateCheckedSet(item[this.selectedType.rowKey], item, checked));
     this.refreshCheckedStatus();
   }
 
   public refreshCheckedStatus(): void {
-    this.isAllChecked = this.listOfData.every(item => this.setOfCheckedId.has(item[this.selectedType.rowKey]));
+    this.isAllChecked = this.listOfData.length > 0 && this.listOfData.every(item => this.setOfCheckedId.has(item[this.selectedType.rowKey]));
   }
 
   public dismiss() {
