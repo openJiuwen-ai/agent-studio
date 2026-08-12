@@ -105,6 +105,12 @@ spec:
               value: ''
             - name: STORAGE_CUSTOM_CLASS
               value: ''
+            - name: DATASOURCE_PASSWORD_PROVIDER_TYPE
+              value: 'DEFAULT'
+            - name: DATASOURCE_PASSWORD_PROVIDER_MODULE
+              value: ''
+            - name: DATASOURCE_PASSWORD_PROVIDER_CLASS
+              value: ''
             - name: STORAGE_LOCAL_BASE_PATH
               value: ''
             - name: STORAGE_LOCAL_BUCKET

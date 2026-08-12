@@ -116,6 +116,26 @@ apps_map = [
 ]
 
 
+def _load_customer_header_profile() -> None:
+    """从环境变量加载客户 Header 配置"""
+    from common_utils.customer_header import load_from_env, set_config
+    cfg = load_from_env()
+    set_config(cfg)
+    logger.info(f"[customer-header] Config loaded from env, enabled={cfg.enabled}, mappings={list(cfg.mappings)}")
+
+
+def _register_customer_header_provider() -> None:
+    """注册 customer Header provider 到 model_service ports"""
+    from model_service import ports
+    from agent_runtime.context.request_context import _request_ctx
+
+    def _get_customer_headers():
+        ctx = _request_ctx.get()
+        return ctx.customer_headers if ctx else {}
+
+    ports.set_request_customer_headers(_get_customer_headers)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
     """define startup and shutdown logic here"""
@@ -147,6 +167,10 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
 
     # 注册 LLM 调用日志回调 — 打印模型请求体和响应内容
     register_llm_call_logging_callbacks()
+
+    # 加载客户 Header Profile 配置 + 注册 customer Header provider
+    _load_customer_header_profile()
+    _register_customer_header_provider()
 
     # 初始化 Redis 客户端
     redis_mgr = RedisClientManager.get_instance()

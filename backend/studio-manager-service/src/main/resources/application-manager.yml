@@ -14,6 +14,10 @@ spring:
     username: ${spring_datasource_username}
     password: ${spring_datasource_password}
     driver-class-name: ${spring_datasource_driver_class_name:org.mariadb.jdbc.Driver}
+    password-provider:
+      type: ${datasource_password_provider_type:DEFAULT}
+      custom-class: ${datasource_password_provider_custom_class:}
+      custom-classpath: ${datasource_password_provider_custom_classpath:}
   jpa:
     #    hibernate:
     #      ddl-auto: update

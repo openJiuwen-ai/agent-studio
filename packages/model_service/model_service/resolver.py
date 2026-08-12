@@ -372,7 +372,8 @@ def _auth_from_data(auth_data: dict) -> Optional[ProviderAuth]:
     （ref-commit 测试 fixture 格式）两种，避免与 OBS 真实数据格式漂移。
 
     - ``API_KEY``：取 ``auth_info["API Key"]`` 作为 api_key。
-    - ``CUSTOM_APIKEY``：``auth_info`` 各项作为自定义 header，``cust-`` 前缀剥离。
+    - ``CUSTOM_APIKEY``：``auth_info`` 各项作为自定义 header，**原样保留键**（含 ``cust-`` 前缀）；
+      ``cust-`` 前缀剥离 + request-over-config 由调用点 ``resolve_outbound_headers`` 处理，非此处。
     """
     def _get(snake: str, camel: str):
         return auth_data.get(snake) if auth_data.get(snake) is not None else auth_data.get(camel)
