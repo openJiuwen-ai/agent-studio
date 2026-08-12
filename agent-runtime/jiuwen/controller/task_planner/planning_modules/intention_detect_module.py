@@ -131,19 +131,50 @@ class IntentionDetectModule:
                     plan_config.user_prompt
                 )
 
-    @staticmethod
-    def _handle_latest_intent(task_id):
+    def _handle_latest_intent(self, task_id):
         """处理LATEST意图的逻辑
+
+        LATEST 语义：沿用上一次的意图/中断工作流，跳过新一轮意图识别。
+        优先级：
+          1. 中断任务栈中的工作流（由 invoke 的 latest_intent 参数传入，
+             本方法无法直接访问 task_queue，交由 invoke 的 L336-342 处理）
+          2. 会话历史中上一条 user 消息的意图（get_second_latest_user_intent）
+
+        注意：
+          - 不能用 context_manager.get_latest_intent()，因为当前轮报文已被
+            add_user_message 加入 _msgs[-1]，其 intent 为空；必须用
+            get_second_latest_user_intent() 取上一条 user 消息的意图。
+          - 上一轮意图为"意图不明"等无效值时不应沿用，返回 None 以回落到
+            LLM 意图识别（与修复前行为保持一致）。
 
         Args:
             task_id: 任务ID
 
         Returns:
-            str or None: 最新工作流名称，如果无法确定则返回None
+            str or None: 上一次的意图/工作流名称，如果无法确定或无效则返回None
         """
         logger.info(
             f"task_id: {task_id}| handle LATEST intent, use interrupted task if there is any"
         )
+
+        # 返回会话历史中上一条 user 消息的意图
+        history_intent = self.context_manager.get_second_latest_user_intent()
+        if history_intent and history_intent not in (
+            "分类1",
+            "分类0",
+            "意图不明",
+        ):
+            logger.info(
+                f"task_id: {task_id}| LATEST resolved from history: {history_intent}",
+                simple_log=f"task_id: {task_id}| LATEST from history",
+            )
+            return history_intent
+
+        logger.info(
+            f"task_id: {task_id}| LATEST has no valid prior intent, will fall back to detection",
+            simple_log=f"task_id: {task_id}| LATEST no valid prior intent",
+        )
+        return None
 
     @staticmethod
     def _detect_intent_with_api_method(task_id: str):
