@@ -4,7 +4,7 @@
 
 package com.openjiuwen.studio.agent.common.config;
 
-import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
+import com.openjiuwen.studio.agent.common.datasource.DataSourcePasswordProvider;
 
 import com.zaxxer.hikari.HikariDataSource;
 
@@ -18,7 +18,7 @@ import org.springframework.context.annotation.Primary;
 import javax.sql.DataSource;
 
 /**
- * 数据源配置，对数据库密码进行解密
+ * 数据源配置，通过 {@link DataSourcePasswordProvider} 获取数据库密码。
  */
 @Slf4j
 @Configuration
@@ -26,15 +26,19 @@ public class DataSourceConfig {
 
     @Bean
     @Primary
-    public DataSource dataSource(DataSourceProperties properties, CryptoUtils cryptoUtils) {
+    public DataSource dataSource(DataSourceProperties properties,
+        DataSourcePasswordProvider passwordProvider) {
         HikariDataSource dataSource = properties.initializeDataSourceBuilder()
                 .type(HikariDataSource.class)
                 .build();
         String originalPassword = dataSource.getPassword();
         if (originalPassword != null && !originalPassword.isEmpty()) {
-            String decryptedPassword = cryptoUtils.decrypt(originalPassword);
-            dataSource.setPassword(decryptedPassword);
-            log.info("DataSource password decrypted successfully");
+            String resolvedPassword = passwordProvider.getPassword(originalPassword);
+            if (resolvedPassword == null) {
+                log.warn("DataSourcePasswordProvider returned null, falling back to original password");
+                resolvedPassword = originalPassword;
+            }
+            dataSource.setPassword(resolvedPassword);
         }
         return dataSource;
     }

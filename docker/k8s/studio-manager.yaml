@@ -113,6 +113,12 @@ spec:
               value: ''
             - name: STORAGE_CUSTOM_CLASSPATH
               value: ''
+            - name: datasource_password_provider_type
+              value: 'DEFAULT'
+            - name: datasource_password_provider_custom_class
+              value: ''
+            - name: datasource_password_provider_custom_classpath
+              value: ''
             - name: storage_local_base_path
               value: ''
             - name: storage_local_bucket
