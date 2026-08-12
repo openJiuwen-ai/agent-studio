@@ -7,7 +7,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.4.0",
-    "pydantic-settings~=2.13.1",
+    "pydantic-settings~=2.14.2",
     "openjiuwen[sandbox] @ git+https://gitcode.com/openJiuwen/agent-core.git@develop",
     "boto3",
     "aioboto3",
