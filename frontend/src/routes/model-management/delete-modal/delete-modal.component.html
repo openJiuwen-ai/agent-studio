@@ -1,6 +1,6 @@
 <div class="modal-container pb-2 pt-2">
   <div class="flex items-center mb-6">
-    <span nz-icon nzType="exclamation-circle" nzTheme="fill" style="color: #faad14; font-size: 22px;" class="mr-2"></span>
+    <span nz-icon nzType="exclamation-circle" nzTheme="fill" style="color: #faad14; font-size: 22px" class="mr-2"></span>
     <span class="text-[16px] font-semibold text-[#191919]">{{ title }}</span>
   </div>
 
@@ -11,32 +11,13 @@
     <span class="input-link" (click)="configWord = 'DELETE'">{{ 'one_click_input' | i18nextEager }}</span>
   </div>
 
-  <input
-    nz-input
-    class="w-full h-[32px] mb-8"
-    type="text"
-    [(ngModel)]="configWord"
-    [placeholder]="confirmText"
-  />
-
-  <div class="flex justify-end gap-3" style="margin-top: 16px;">
-    <button
-      nz-button
-      nzType="default"
-      class="min-w-[72px]"
-      (click)="dismiss()"
-    >
-      {{ 'cancel' | i18nextEager }}
-    </button>
-    <button
-      nz-button
-      nzType="primary"
-      class="min-w-[72px]"
-      (click)="delete()"
-      [disabled]="configWord !== confirmText"
-      [nzLoading]="loading"
-    >
-      {{ 'ok' | i18nextEager }}
-    </button>
-  </div>
+  <input nz-input class="w-full h-[32px] mb-8" type="text" [(ngModel)]="configWord" [placeholder]="confirmText" />
+</div>
+<div *nzModalFooter>
+  <button nz-button nzType="default" class="min-w-[72px]" (click)="dismiss()">
+    {{ 'cancel' | i18nextEager }}
+  </button>
+  <button nz-button nzType="primary" class="min-w-[72px]" (click)="delete()" [disabled]="configWord !== confirmText" [nzLoading]="loading">
+    {{ 'ok' | i18nextEager }}
+  </button>
 </div>

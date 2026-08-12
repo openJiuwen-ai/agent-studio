@@ -1467,7 +1467,7 @@
   "exception_handling": "异常处理",
   "exception_handling_tip": "支持对节点的异常（如超时、调用失败等情况）进行处理，包括超时、重试、异常处理方式\n中断流程：节点发生异常后，直接中断流程。\n返回设定内容：节点发生异常后，流程不会中断，用户可以返回设定内容，让流程继续走下去。\n执行异常流程：节点发生异常后，流程不会中断，并且新增异常流程节点，用户需要配置分支流程。",
   "visual_comprehension_input": "视觉理解输入",
-  "visual_comprehension_input_tip": "仅可选择Array<File/Image>,Array<File/Video>,Array<String>类型的引用。Array<String>类型仅支持图片地址。",
+  "visual_comprehension_input_tip": "可选择 File/Image、File/Video、Array<File/Image>、Array<File/Video>、Array<String> 类型的引用；Array<String> 类型仅支持图片地址。",
   "visual_comprehension_input_tip2": "请选择",
   "Agent": "智能体",
   "ImageError": "仅支持png、svg、jpg、jpeg的图片格式",
