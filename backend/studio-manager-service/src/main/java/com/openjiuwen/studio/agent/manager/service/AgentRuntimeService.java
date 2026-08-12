@@ -485,6 +485,17 @@ public class AgentRuntimeService {
     }
 
     /**
+     * Delete taskId from Redis after workflow completes, to prevent reuse by next execution.
+     */
+    public void deleteTaskId(String agentId, String conversationId) {
+        try {
+            redisClient.delete("task_id:" + agentId + ":" + conversationId);
+        } catch (Exception e) {
+            log.warn("Failed to delete taskId: {}", e.getMessage());
+        }
+    }
+
+    /**
      * 清理Agent执行记录
      */
     public void clearAgentExecutionRecords(String userId, List<ExecutionQuery> needDeleteInfos) {
