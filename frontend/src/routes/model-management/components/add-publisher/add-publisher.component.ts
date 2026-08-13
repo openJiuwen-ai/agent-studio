@@ -136,6 +136,7 @@ export class AddPublisherComponent implements OnInit {
   collapsed = false;
 
   apiKeyAuthArgs = [{ target_name: '', auth_key: '' }];
+  customApikeySubmitted = false;
 
   verifyMethods = [
     { label: this.i18n.transform('verify_methods.iam_username_and_password'), id: 'iam' },
@@ -410,6 +411,7 @@ export class AddPublisherComponent implements OnInit {
   }
 
   createPublisher() {
+    this.customApikeySubmitted = true;
     const isMainValid = this.checkGroup(this.myForm);
     const isCustomValid = this.myForm.value.auth_type === 'CUSTOM_APIKEY' ? this.checkGroup(this.authkeyForm?.form) : true;
 
