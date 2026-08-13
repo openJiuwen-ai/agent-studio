@@ -890,6 +890,64 @@ def _resolve_intent_fields(
     return intent_name, intent_description
 
 
+async def _convert_llm_react_node(configs: dict, node_id: str):
+    """把旧版 jiuwen.LLMReAct 节点 IR 转成 FlowAgent。
+
+    映射 camelCase configs → FlowAgentConfig + tools + Model，复用现有 FlowAgent
+    执行能力。maxIteration 表示允许执行的最大工具调用轮次。
+
+    Args:
+        configs: LLMReAct 节点的 configs（含 systemPrompt/model/plugins/maxIteration/...）。
+        node_id: 节点 id，作为 resource_mgr tag。
+
+    Returns:
+        FlowAgent 实例。
+    """
+    from agent_runtime.common.model_adapters import adapt_react_agent_config
+    from jiuwen.extension.wrapper.restful_api_loader import load_restful_api_from_ir
+    from openjiuwen.core.foundation.llm import Model as SDKModel
+    from openjiuwen.core.runner import Runner
+
+    # ① model 配置：adapter + provider + Model（对齐 llm_chain 范式）
+    provider = _get_model_config_provider()
+    adapted_conf = adapt_react_agent_config(configs)
+    llm_comp_config = await provider.get_llm_config(adapted_conf)
+    model = SDKModel(
+        model_client_config=llm_comp_config.model_client_config,
+        model_config=llm_comp_config.model_config,
+    )
+
+    # ② plugins[] → List[Tool]
+    tools = []
+    for plugin_conf in configs.get("plugins", []) or []:
+        try:
+            tool_id = load_restful_api_from_ir(plugin_conf, tag=node_id)
+            tool = Runner.resource_mgr.get_tool(tool_id, tag=node_id)
+            if tool is not None:
+                tools.append(tool)
+        except Exception as e:
+            logger.error(
+                f"Failed to load plugin {plugin_conf.get('name', '')} for node {node_id}: {e}"
+            )
+
+    # ③ 映射 camelCase → FlowAgentConfig
+    max_iteration = configs.get("maxIteration", 9)
+    flow_agent_config = FlowAgentConfig(
+        system_prompt=configs.get("systemPrompt", ""),
+        max_iteration=max_iteration,
+        llm_config={},  # model 走 set_llm 注入，llm_config 留空
+        plugins=configs.get("plugins", []) or [],
+    )
+
+    # ④ 构造 FlowAgent（FlowAgent/FlowAgentConfig 顶部已 import，用裸名）
+    agent = FlowAgent(
+        config=flow_agent_config,
+        tools=tools,
+        model=model,
+    )
+    return agent
+
+
 class IRConverter:
     """IR转换工具类。
 
@@ -1127,10 +1185,14 @@ class IRConverter:
         )
 
     @staticmethod
-    async def create_all_agents_config_list(root_ir_data, conversation_id):
+    async def create_all_agents_config_list(root_ir_data, conversation_id, cust_headers=None, project_id=""):
         """
         Create All agents config: List[AgentConfig]
+
+        cust_headers 和 project_id 从请求上下文传入，不再硬编码为空。
         """
+        if cust_headers is None:
+            cust_headers = {}
         all_configs: List[AgentConfig] = []
         agent_info_map: Dict[str, Dict[str, Any]] = {}
 
@@ -1201,8 +1263,8 @@ class IRConverter:
             if model_configs:
                 llm = await IRConverter._create_llm_model(
                     model_configs,
-                    cust_headers={},
-                    project_id="",
+                    cust_headers=cust_headers,
+                    project_id=project_id,
                     identifiers=_LLMModelIdentifiers(
                         task_id=task_id,
                         conversation_id=conversation_id,
@@ -1240,9 +1302,11 @@ class IRConverter:
         return all_configs, agent_info_map
 
     @staticmethod
-    async def create_agent_group_config(root_ir_data, conversation_id):
+    async def create_agent_group_config(root_ir_data, conversation_id, cust_headers=None, project_id=""):
         """
         Create agent group configuration from root IR data with cache
+
+        cust_headers 和 project_id 从请求上下文传入。
         """
         # 首先尝试从缓存获取
         cache_key = root_ir_data.get("ir_path", "")
@@ -1268,12 +1332,9 @@ class IRConverter:
             )
 
         agents_all, agent_info_map = await IRConverter.create_all_agents_config_list(
-            root_ir_data, conversation_id
+            root_ir_data, conversation_id, cust_headers=cust_headers, project_id=project_id
         )
-        configs = root_ir_data.get("configs", {})
-        max_agent_calls = configs.get("maxIteration")
-        if max_agent_calls is None:
-            max_agent_calls = root_ir_data.get("max_agent_calls", 10)
+        max_agent_calls = root_ir_data.get("max_agent_calls", 10)
         if (
             not isinstance(max_agent_calls, int)
             or isinstance(max_agent_calls, bool)
@@ -1456,7 +1517,11 @@ class IRConverter:
         (
             agent_group_config,
             agent_info_map,
-        ) = await IRConverter.create_agent_group_config(root_ir_data, conversation_id)
+        ) = await IRConverter.create_agent_group_config(
+            root_ir_data, conversation_id,
+            cust_headers=kwargs.get("cust_headers"),
+            project_id=kwargs.get("project_id", ""),
+        )
         agent_group = await IRConverter.create_or_restore_agent_group(
             agent_group_config, conversation_id
         )
@@ -1545,6 +1610,10 @@ class IRConverter:
 
         register_error_recovery_handler()
         apply_parallel_branch_grouping_patch()
+        from jiuwen.extension.patches.nested_branch_barrier_patch import (
+            apply_nested_branch_barrier_patch,
+        )
+        apply_nested_branch_barrier_patch()
 
         card = WorkflowCard(
             id=ir_data.get("workflowId") or ir_data.get("agentId") or "",
@@ -2159,6 +2228,10 @@ class IRConverter:
                 node_type,
                 configs,
             )
+
+        if node_type == "jiuwen.LLMReAct":
+            component = await _convert_llm_react_node(configs, node_id)
+            return component, node_type, configs
 
         if node_type in {"jiuwen.subWorkflow", "jiuwen.workflowComposite"}:
             return SubWorkflow({**configs, "node_id": node_id}), node_type, configs
@@ -3809,15 +3882,26 @@ def _parse_exception_config(node: dict) -> ExceptionConfig | None:
     if not ep:
         return None
 
-    from jiuwen.orchestration.flow.constant import EXCEPTION_HANDLE_INTERRUPT
+    from jiuwen.orchestration.flow.constant import (
+        DEFAULT_EXECUTION_NODE_TIMEOUT,
+        EXCEPTION_HANDLE_INTERRUPT,
+    )
 
     node_type = node.get("type", "")
     outputs_schema = _convert_schema(node.get("outputs") or {})
 
+    timeout = ep.get("timeout", DEFAULT_EXECUTION_NODE_TIMEOUT)
+    if not isinstance(timeout, (int, float)) or timeout < 0:
+        timeout = DEFAULT_EXECUTION_NODE_TIMEOUT
+
+    retry_times = ep.get("retryTimes", 0)
+    if not isinstance(retry_times, int) or retry_times < 0:
+        retry_times = 0
+
     return ExceptionConfig(
         handle_type=ep.get("handleType", EXCEPTION_HANDLE_INTERRUPT).lower(),
-        timeout=ep.get("timeout", 7200.0),
-        retry_times=ep.get("retryTimes", 0),
+        timeout=timeout,
+        retry_times=retry_times,
         default_outputs=ep.get("defaultOutputs", {}),
         outputs_schema=outputs_schema,
         _node_type=node_type,

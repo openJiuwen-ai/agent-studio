@@ -29,6 +29,7 @@ import { NonEmptyValidatorDirective } from '@shared/directives/variable-name-val
 import { NodeUtils } from '@routes/agent-center/app-flow/components/utils';
 import { MonacoEditorModule } from '@materia-ui/ngx-monaco-editor';
 import { SetDefaultTipComponent } from '@routes/agent-center/app-flow/components/set-default-tip/set-default-tip.component';
+import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 import * as nodeType from '@routes/agent-center/app-flow/node.type';
 import { InputTreeSelect } from '@routes/agent-center/app-flow/components/input-tree-select/input-tree-select';
 
@@ -84,8 +85,9 @@ export class SetValueTipComponent
     public override cdr: ChangeDetectorRef,
     public override i18n: I18NextEagerPipe,
     public override repoServ: AppAgentRepoService,
+    configServ: AgentConfigService,
   ) {
-    super(cdr, i18n, repoServ);
+    super(cdr, i18n, repoServ, configServ);
   }
 
   override ngOnInit(): void {

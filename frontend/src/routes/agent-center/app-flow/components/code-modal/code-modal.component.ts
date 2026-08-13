@@ -286,11 +286,13 @@ export class CodeModalComponent extends ModalBaseComponent implements OnInit {
       this.selectedExecutionMethod = this.selectedExecutionMethod ? this.selectedExecutionMethod : this.radioList[0].value;
     }
     if (this.radioList && this.radioList.length > 0) {
+      this.radioList = this.radioList.filter(e => this.configServ.getConfigs()?.studio_btn_show || e.value !== 'local');
       const hasItem = this.radioList.find(item => item.value === this.selectedExecutionMethod);
       if (!hasItem) {
         this.selectedExecutionMethod = this.radioList[0].value;
       }
     }
+
     this.radioList.forEach(item => {
       if (item.value === 'sandbox') {
         this.radioList_tip.push(this.i18n.transform('codemodalcomponent_283'));
@@ -344,7 +346,7 @@ export class CodeModalComponent extends ModalBaseComponent implements OnInit {
     }
   }
 
-  refreshingDta (){
+  refreshingDta() {
     this.outputParams = [...this.outputParams];
   }
 

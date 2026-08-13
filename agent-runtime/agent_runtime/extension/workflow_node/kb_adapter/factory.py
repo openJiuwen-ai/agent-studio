@@ -12,6 +12,7 @@ from .base import KBServiceAdapter
 from .general_kb_adapter import GeneralKBAdapter
 from .koosearch_adapter import KooSearchAdapter
 from .lakesearch_adapter import LakeSearchAdapter
+from .openjiuwen_adapter import OpenJiuwenKBAdapter
 from .ragflow_adapter import RagFlowAdapter
 
 
@@ -19,6 +20,7 @@ from .ragflow_adapter import RagFlowAdapter
 # connectorType 来自 OBS 连接文件的 connectorId 字段。
 # 大小写变体在 create() 方法中做大小写不敏感匹配。
 # Custom 本质上是 LakeSearch，通过环境变量读取后转换成 API 端点。
+# OpenJiuwen 使用 openjiuwen 本地 RAG pipeline（Milvus + Embedding API）。
 _ADAPTER_REGISTRY: Dict[str, Type[KBServiceAdapter]] = {
     "LakeSearch": LakeSearchAdapter,
     "LakeSearchInside": LakeSearchAdapter,
@@ -27,6 +29,7 @@ _ADAPTER_REGISTRY: Dict[str, Type[KBServiceAdapter]] = {
     "Ragflow": RagFlowAdapter,
     "General": GeneralKBAdapter,
     "Custom": LakeSearchAdapter,
+    "OpenJiuwen": OpenJiuwenKBAdapter,
 }
 
 

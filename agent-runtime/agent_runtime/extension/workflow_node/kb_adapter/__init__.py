@@ -14,6 +14,7 @@ from .factory import KBAdapterFactory
 from .general_kb_adapter import GeneralKBAdapter
 from .koosearch_adapter import KooSearchAdapter
 from .lakesearch_adapter import LakeSearchAdapter
+from .openjiuwen_adapter import OpenJiuwenKBAdapter
 from .ragflow_adapter import RagFlowAdapter
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "GeneralKBAdapter",
     "KooSearchAdapter",
     "LakeSearchAdapter",
+    "OpenJiuwenKBAdapter",
     "RagFlowAdapter",
     "KBAdapterFactory",
 ]

@@ -71,8 +71,6 @@ public class AgentNodeConverter extends AbstractSDSLNodeConverter {
         configs.put(CommonConstant.DIFY.TEMPERATURE, 0);
         configs.put(CommonConstant.DIFY.SYSTEM_PROMPT, "");
         configs.put(CommonConstant.Workflow.PLUGINS, new ArrayList<>());
-        configs.put(CommonConstant.Workflow.BREAK_PLUGIN_IDS, new ArrayList<>());
-        configs.put(CommonConstant.DIFY.ENABLE_INTENT_BREAK, false);
         return configs;
     }
 }

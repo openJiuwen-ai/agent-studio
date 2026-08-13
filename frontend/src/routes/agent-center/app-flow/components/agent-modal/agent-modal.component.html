@@ -1,0 +1,379 @@
+<div class="flex h-full w-full flex-col" (keydown)="handleKeyDown($event)">
+  <div class="mb-[16px] block">
+    <div class="flex w-[calc(100%-38px)] items-center justify-between">
+      <div class="flex items-center gap-[8px]">
+        <img class="model-config-icon" [src]="type2Img(nodeInfo.type)" alt="message-node" />
+        <edit-name [(name)]="nodeInfo.name" (onBlurConfirm)="updateName()"></edit-name>
+      </div>
+
+      <div class="flex items-center gap-[16px]" *ngIf="!isFlowReadonly">
+        <div (click)="onClickTest()" class="single-test-icon-modal" nz-tooltip [nzTooltipTitle]="'single-test' | i18nextEager"></div>
+        <div class="cursor-pointer" nz-tooltip [nzTooltipTitle]="'icon-more' | i18nextEager">
+          <button
+            nz-dropdown
+            nzTrigger="click"
+            [nzDropdownMenu]="actionsMenu"
+            nzPlacement="bottomRight"
+            class="pw-three-dots-more-modal flex items-center justify-center !border-none !bg-transparent"
+            type="button"
+          >
+            <span nz-icon nzType="ellipsis" nzTheme="outline"></span>
+          </button>
+          <nz-dropdown-menu #actionsMenu="nzDropdownMenu">
+            <ul nz-menu>
+              <li nz-menu-item *ngFor="let item of actions" (click)="onClickAction(item)">
+                <span>{{ item.label }}</span>
+              </li>
+            </ul>
+          </nz-dropdown-menu>
+        </div>
+        <div class="h-[16px] w-[1px] bg-[#dbdbdb]"></div>
+      </div>
+    </div>
+    <node-description [nodeInfo]="nodeInfo" (descriptionChange)="updateView()"></node-description>
+
+    <div class="relative right-[20px] mt-[16px] h-[1px] w-[calc(100%+40px)] bg-[#f0f0f0]"></div>
+  </div>
+
+  <div id="flow-code-modal-body" class="relative h-full w-full overflow-auto flex-1 pr-[16px]">
+    <div class="flex h-full w-full flex-col">
+      <!-- 模型配置表格 -->
+      <meta-acc-block [title]="'model_configuration' | i18nextEager" [isNewStyle]="true">
+        <ng-template #right>
+          <div class="flex cursor-pointer items-center gap-[8px]">
+            <img
+              nz-tooltip
+              #modelSettingsRef="nzTooltip"
+              [nzTooltipOverlayStyle]="{ 'max-width': '500px' }"
+              nzTooltipPlacement="bottomRight"
+              [nzTooltipTitle]="modelSettingsTpl"
+              [src]="changeUrl('assets/agent-center/flow/model-settings.svg')"
+              (click)="onShowModelSetTip()"
+            />
+            <ng-template #modelSettingsTpl>
+              <model-settings
+                [param]="modelSetTipCtx.param"
+                [selectedModel]="modelSetTipCtx.selectedModel"
+                (updatedParam)="modelSetTipCtx.outputs.updatedParam($event)"
+              ></model-settings>
+            </ng-template>
+          </div>
+        </ng-template>
+        <ng-template #content>
+          <form [formGroup]="agentFormGroup">
+            <div class="mt-4">
+              <llm-select [selectedModel]="agentFormGroup.controls.model.value" [panelWidth]="'justified'" (update)="updateModel($event)"></llm-select>
+            </div>
+          </form>
+        </ng-template>
+      </meta-acc-block>
+      <div class="cutline"></div>
+
+      <!-- 出入参配置表格 -->
+      <meta-acc-block class="block" [title]="'input_params' | i18nextEager">
+        <ng-template #content>
+          <div class="mt-2 flex items-center gap-1">
+            <div class="w-1/3 text-label">
+              {{ 'param_name' | i18nextEager }}
+            </div>
+            <div class="flex w-2/3 items-center gap-2 text-label">
+              <div class="flex h-fit w-[calc(100%-16px)] items-center">
+                <div class="w-[35%]">{{ 'type' | i18nextEager }}</div>
+                <div class="w-[65%]">{{ 'value' | i18nextEager }}</div>
+              </div>
+              <div class="h-full w-[16px]"></div>
+            </div>
+          </div>
+
+          <form #inputForm="ngForm">
+            <div *ngFor="let param of inputParams; index as i" class="mt-2 flex gap-1">
+              <div class="w-1/3">
+                <input
+                  style="width: 100%"
+                  type="text"
+                  [name]="'inputFormName' + i"
+                  nz-input
+                  [maxlength]="paramNameMaxLen"
+                  [title]="param.name"
+                  [(ngModel)]="param.name"
+                  (input)="onNameChange()"
+                  (ngModelChange)="changeUpdateTime()"
+                  (blur)="inputOnSave()"
+                  [placeholder]="'input_placeholder' | i18nextEager"
+                  [valueValidityValidator]="getInputNames(i)"
+                  [class.input-error]="
+                    inputForm?.controls['inputFormName' + i]?.invalid &&
+                    (inputForm?.controls['inputFormName' + i]?.dirty || inputForm?.controls['inputFormName' + i]?.touched)
+                  "
+                />
+                <div
+                  *ngIf="
+                    inputForm?.controls['inputFormName' + i]?.invalid &&
+                    (inputForm?.controls['inputFormName' + i]?.dirty || inputForm?.controls['inputFormName' + i]?.touched)
+                  "
+                  class="error-tip"
+                >
+                  {{ inputForm?.controls['inputFormName' + i]?.errors?.serviceName?.tiErrorMessage }}
+                </div>
+              </div>
+
+              <div class="flex w-2/3 gap-[8px]">
+                <div class="flex h-fit w-[calc(100%-16px)] items-center gap-2">
+                  <div class="flex w-full">
+                    <div class="w-[35%]">
+                      <nz-select
+                        class="combo-select-left"
+                        style="width: 100%"
+                        [name]="'inputFormType' + i"
+                        [nzOptions]="inputSourceOptions"
+                        [compareWith]="compareType"
+                        [(ngModel)]="param.value.type"
+                        (ngModelChange)="onInputValueTypeChange(param)"
+                      ></nz-select>
+                    </div>
+
+                    <div class="w-[65%]">
+                      <input
+                        class="combo-select-right"
+                        *ngIf="param.value.type === 'literal'"
+                        style="width: 100%"
+                        [name]="'inputFormValue' + i"
+                        nonEmptyValidator
+                        nz-input
+                        type="text"
+                        [placeholder]="'input_placeholder' | i18nextEager"
+                        [(ngModel)]="param.value.content"
+                        [title]="param.value.content"
+                        (ngModelChange)="changeUpdateTime()"
+                        (blur)="inputOnSave()"
+                        [class.input-error]="
+                          inputForm?.controls['inputFormValue' + i]?.invalid &&
+                          (inputForm?.controls['inputFormValue' + i]?.dirty || inputForm?.controls['inputFormValue' + i]?.touched)
+                        "
+                      />
+
+                      <input-tree-select
+                        *ngIf="param.value.type === 'ref'"
+                        style="width: 100%"
+                        [(ngModel)]="param.value.content"
+                        [options]="param.refs"
+                        [name]="'inputFormValue' + i"
+                        refSelectedRequire
+                        [placeholder]="'select_placeholder' | i18nextEager"
+                        (select)="treeSelect()"
+                      ></input-tree-select>
+
+                      <div
+                        *ngIf="
+                          inputForm?.controls['inputFormValue' + i]?.invalid &&
+                          (inputForm?.controls['inputFormValue' + i]?.dirty || inputForm?.controls['inputFormValue' + i]?.touched)
+                        "
+                        class="error-tip"
+                      >
+                        {{ inputForm?.controls['inputFormValue' + i]?.errors?.serviceName?.tiErrorMessage }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <span
+                  (click)="deleteInputParam(i)"
+                  class="cursor-pointer !text-[16px]"
+                  style="padding-top: 8px"
+                  nz-icon
+                  nzType="delete"
+                  nzTheme="outline"
+                ></span>
+              </div>
+            </div>
+          </form>
+        </ng-template>
+
+        <ng-template #right>
+          <div class="flex items-center justify-center">
+            <button
+              (click)="addInputParam()"
+              class="w-fit"
+              nz-tooltip
+              [nzTooltipTitle]="'add_params' | i18nextEager"
+              [disabled]="isReachedParamLimit(inputParams)"
+              nz-button
+              nzType="text"
+            >
+              <span class="header-button-icon" nz-icon nzType="plus" nzTheme="outline"></span>
+            </button>
+          </div>
+        </ng-template>
+      </meta-acc-block>
+      <div class="cutline"></div>
+
+      <meta-acc-block class="block" title="{{ 'plugin' | i18nextEager }}">
+        <ng-template #right>
+          <div class="flex items-center justify-center">
+            <button
+              (click)="addPlugin()"
+              class="w-fit"
+              nz-tooltip
+              [nzTooltipTitle]="'add_plugins' | i18nextEager"
+              [disabled]="isReachedParamLimit(inputParams)"
+              nz-button
+              nzType="text"
+            >
+              <span class="header-button-icon" nz-icon nzType="plus" nzTheme="outline"></span>
+            </button>
+          </div>
+        </ng-template>
+        <ng-template #content>
+          <nz-spin [nzSpinning]="pluginsLoading">
+            <div class="mt-2 flex flex-wrap gap-2">
+              <div class="plugin-item" *ngFor="let item of myPlugins; index as i" [ngClass]="{ deleted: item.deleted }">
+                <div class="flex w-[90%] items-center">
+                  <img class="plugin-icon" [src]="item.icon" />
+                  <div class="w-[90%]">
+                    <div class="name font-bold">
+                      {{ item.name }}
+                      <span
+                        *ngIf="item.deleted"
+                        nz-icon
+                        nzType="info-circle"
+                        nzTheme="outline"
+                        class="text-[#f23030]"
+                        nz-tooltip
+                        [nzTooltipTitle]="'plugin_not_exist_can_delete' | i18nextEager"
+                      ></span>
+                    </div>
+                    <div class="w-full truncate text-[#808080]">
+                      {{ item?.description || '--' }}
+                    </div>
+                  </div>
+                </div>
+                <span
+                  nz-icon
+                  nzType="minus"
+                  nzTheme="outline"
+                  class="delete-icon"
+                  nz-tooltip
+                  [nzTooltipTitle]="'delete' | i18nextEager"
+                  (click)="deletePlugin(item, i)"
+                ></span>
+              </div>
+            </div>
+          </nz-spin>
+        </ng-template>
+      </meta-acc-block>
+      <div class="cutline"></div>
+
+      <!-- 模型配置 -->
+      <meta-acc-block class="block" [title]="'prompt_config' | i18nextEager">
+        <ng-template #content>
+          <div class="agent-modal-block mt-2">
+            <div>
+              <div class="mb-2 flex justify-between">
+                <div>
+                  {{ 'agentmodalcomponent_258' | i18nextEager }}
+                </div>
+                <div class="flex items-center gap-2">
+                  <div
+                    (click)="onIntelligentAdd()"
+                    class="intelligent-add-border"
+                    [ngClass]="{
+                      disabled: !prompt,
+                      enabled: prompt,
+                    }"
+                    nz-tooltip
+                    [nzTooltipTitle]="(prompt ? 'intelligent_prompt' : '') | i18nextEager"
+                    nzTooltipPlacement="top"
+                  >
+                    <ng-container *ngIf="prompt; else disabledIconTmpl">
+                      <asset-intelligent-add></asset-intelligent-add>
+                    </ng-container>
+                    <ng-template #disabledIconTmpl>
+                      <asset-intelligent-add-disabled></asset-intelligent-add-disabled>
+                    </ng-template>
+                  </div>
+                  <div
+                    nz-tooltip
+                    [nzTooltipTitle]="'citation_template' | i18nextEager"
+                    (click)="openRefModal()"
+                    class="icon-border"
+                    style="padding: 0; border: none"
+                  >
+                    <div class="ref-tmpl-icon"></div>
+                  </div>
+                  <div nz-tooltip [nzTooltipTitle]="'ref_args' | i18nextEager" (click)="agentDataServe.showVarList(showVarListSubject$)" class="icon-border">
+                    <div class="ref-args-icon" (mousedown)="$event.preventDefault()" (click)="agentDataServe.showVarList(showVarListSubject$)"></div>
+                  </div>
+                  <div [class]="prompt?.length > 0 ? 'save-tmp-link' : 'save-tmp-link-disabled'" (click)="showSaveTmplModal()">
+                    <button
+                      nz-tooltip
+                      [nzTooltipTitle]="'save_tmp' | i18nextEager"
+                      [disabled]="!(prompt?.length > 0)"
+                      nz-button
+                      nzType="text"
+                      class="!border-none"
+                      style="justify-items: center"
+                    >
+                      <img [src]="changeUrl(!(prompt?.length > 0) ? 'assets/prompt/prompt-save-disabled.svg' : 'assets/prompt/prompt-save.svg')" alt="" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <meta-cmd-textarea
+                class="block w-full relative"
+                [(ngModel)]="prompt"
+                [variants]="tipVals"
+                (ngModelChange)="changeUpdateTime()"
+                (blur)="inputOnSave()"
+                [variantsTrigger]="showVarListSubject$.asObservable()"
+                [placeholder]="'agentmodalcomponent_259' | i18nextEager"
+              />
+            </div>
+          </div>
+        </ng-template>
+      </meta-acc-block>
+      <div class="cutline"></div>
+
+      <meta-acc-block
+        class="block"
+        title="{{ 'termination_conditions' | i18nextEager }}"
+        tip="{{ 'termination_conditions_tip' | i18nextEager }}"
+        [open]="true"
+      >
+        <ng-template #content>
+          <div class="mt-4">
+            <div>{{ 'maximum_iteration_round' | i18nextEager }}</div>
+            <div class="mt-2 text-[#808080]">
+              {{ 'maximum_iteration_round_tip' | i18nextEager }}
+            </div>
+            <div class="flex flex-1 items-center justify-between gap-4 pb-2">
+              <nz-slider
+                class="!my-[22px] flex-1"
+                [(ngModel)]="nodeInfo.configs.max_iteration"
+                [nzMin]="1"
+                [nzMax]="20"
+                [nzMarks]="sliderMarks"
+                (nzOnAfterChange)="onSave()"
+              >
+              </nz-slider>
+              <nz-input-number
+                class="w-[72px]"
+                [nzMin]="1"
+                [nzMax]="20"
+                [nzPrecision]="0"
+                [(ngModel)]="nodeInfo.configs.max_iteration"
+                (ngModelChange)="onSave()"
+              ></nz-input-number>
+              {{ 'times' | i18nextEager }}
+            </div>
+          </div>
+        </ng-template>
+      </meta-acc-block>
+      <div class="cutline"></div>
+
+      <meta-acc-block class="block" [title]="'output_params' | i18nextEager">
+        <ng-template #content>
+          <readonly-params-tree [params]="nodeInfo.outputs" />
+        </ng-template>
+      </meta-acc-block>
+    </div>
+  </div>
+</div>

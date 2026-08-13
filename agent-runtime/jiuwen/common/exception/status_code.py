@@ -131,7 +131,7 @@ class StatusCode(Enum):
         "The Redis service does not exist or the connection is abnormal.",
     )
     REDIS_SERVICE_INIT_FAILED = (
-        100101,
+        100115,
         "An error occurred during Redis connection initialization.",
     )
     REDIS_INSERT_ELEMENTS_FAILED = (

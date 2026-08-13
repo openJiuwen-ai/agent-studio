@@ -267,11 +267,9 @@ export class ReleaseHistoryHalfmodalComponent {
     e.stopPropagation();
     e.preventDefault();
     const modalRef = this.nzModal.create({
-      nzTitle: '',
       nzContent: DiffVersionModalComponent,
-      nzWidth: 900,
+      nzWidth: 1100,
       nzFooter: null,
-      nzClosable: false,
     });
     const instance = modalRef.getContentComponent();
     instance.app_id = this.app_id;

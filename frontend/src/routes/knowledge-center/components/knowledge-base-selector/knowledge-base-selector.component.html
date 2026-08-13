@@ -27,7 +27,7 @@
       </nz-tabs>
     </div>
     <div class="kb-selector-operation-container"
-         *ngIf="currentSpaceType === 'currentSpace' && kbAbilitiesService.isPermitCreateKB">
+         *ngIf="currentSpaceType === 'currentSpace' && kbAbilitiesService.isPermitCreateKB && studioBtnShow">
       <button nz-button [disabled]="kbAbilitiesService.isResourceDisabled" (click)="createKB.emit()">{{ 'create_kb' | i18nextEager }}</button>
     </div>
 
@@ -76,7 +76,7 @@
         <div class="no-data-icon"></div>
         <span class="no-data-title mt-[8px]">{{ 'no_knowledge_base_resources'|i18nextEager }}</span>
         <span class="no-data-desc mt-[4px]" *ngIf="kbAbilitiesService.isPermitCreateKB">{{ 'no_data_available_create_knowledge_base'|i18nextEager }}</span>
-        <button *ngIf="kbAbilitiesService.isPermitCreateKB" nz-button (click)="createKB.emit()" class="mt-[16px]">{{ 'create_kb' | i18nextEager }}</button>
+        <button *ngIf="kbAbilitiesService.isPermitCreateKB && studioBtnShow" nz-button (click)="createKB.emit()" class="mt-[16px]">{{ 'create_kb' | i18nextEager }}</button>
       </div>
 
       <nz-pagination

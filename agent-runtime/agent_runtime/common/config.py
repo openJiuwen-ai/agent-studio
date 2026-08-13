@@ -4,10 +4,11 @@
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from common_utils.crypto_tool import decrypt
+from common_utils.password_provider import get_password_provider
 
 
 def _decrypt(v):
@@ -173,6 +174,22 @@ class WorkflowLogSettings(BaseSettings):
     level: str = Field(default="WARNING", validation_alias="WORKFLOW_LOG_LEVEL")
     graph_level: str = Field(default="WARNING", validation_alias="GRAPH_LOG_LEVEL")
     llm_level: str = Field(default="WARNING", validation_alias="LLM_LOG_LEVEL")
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
+class LlmCallLoggingSettings(BaseSettings):
+    """Model call logging configuration.
+
+    Controls whether the model-call detail callbacks (request/response/usage/
+    latency/tool_calls) are registered. Error callback is always registered
+    regardless of this switch. Defaults to off; set MODEL_CALL_LOGGING_ENABLED=true
+    to enable detail logging (still subject to the WORKFLOW_LOG_LEVEL <= INFO gate).
+    """
+
+    enabled: bool = Field(default=False, validation_alias="MODEL_CALL_LOGGING_ENABLED")
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -365,6 +382,15 @@ class CodeExecutionSettings(BaseSettings):
     )
 
 class DataBaseSettings(BaseSettings):
+    password_provider_type: str = Field(
+        default="DEFAULT", validation_alias="DATASOURCE_PASSWORD_PROVIDER_TYPE"
+    )
+    password_provider_module: str = Field(
+        default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_MODULE"
+    )
+    password_provider_class: str = Field(
+        default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_CLASS"
+    )
     db_type: Literal["mysql", "gaussdb"] = Field(
         default="mysql", validation_alias="STORE_DB_TYPE"
     )
@@ -379,10 +405,18 @@ class DataBaseSettings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    @field_validator("password", mode="after")
-    @classmethod
-    def _decrypt_password(cls, v):
-        return _decrypt(v)
+    @model_validator(mode="after")
+    def _resolve_password(self):
+        if self.password_provider_type == "CUSTOM":
+            provider = get_password_provider(
+                custom_module=self.password_provider_module,
+                custom_class=self.password_provider_class,
+            )
+            self.password = provider.get_password(self.password)
+        elif self.password:
+            provider = get_password_provider()
+            self.password = provider.get_password(self.password)
+        return self
 
 
 class ConversationVariableSettings(BaseSettings):
@@ -397,6 +431,36 @@ class ConversationVariableSettings(BaseSettings):
     )
 
 
+class OpenJiuwenKBSettings(BaseSettings):
+    """openjiuwen 知识库配置。"""
+
+    store_provider: str = Field(
+        default="milvus", validation_alias="OPENJIUWEN_STORE_PROVIDER"
+    )
+    distance_metric: str = Field(
+        default="cosine", validation_alias="OPENJIUWEN_DISTANCE_METRIC"
+    )
+    chunk_size: int = Field(default=512, validation_alias="OPENJIUWEN_CHUNK_SIZE")
+    chunk_overlap: int = Field(
+        default=50, validation_alias="OPENJIUWEN_CHUNK_OVERLAP"
+    )
+    milvus_uri: str = Field(
+        default="./data/milvus_kb.db", validation_alias="OPENJIUWEN_MILVUS_URI"
+    )
+    milvus_token: str = Field(default="", validation_alias="OPENJIUWEN_MILVUS_TOKEN")
+    milvus_database: str = Field(
+        default="default", validation_alias="OPENJIUWEN_MILVUS_DATABASE"
+    )
+    chroma_path: str = Field(
+        default="./chroma_data", validation_alias="OPENJIUWEN_CHROMA_PATH"
+    )
+    pg_uri: str = Field(default="", validation_alias="OPENJIUWEN_PG_URI")
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
 class Settings:
     server = ServerSettings()
     llm = LLMSettings()
@@ -404,6 +468,7 @@ class Settings:
     health_check = HealthCheckSettings()
     security_sandbox = SecuritySandboxSettings()
     workflow_log = WorkflowLogSettings()
+    llm_call_logging = LlmCallLoggingSettings()
     cache = CacheSettings()
     skill_storage = SkillStorageSettings()
     opensearch = OpenSearchSettings()
@@ -413,5 +478,6 @@ class Settings:
     code_execution = CodeExecutionSettings()
     db_config = DataBaseSettings()
     conversation_variable = ConversationVariableSettings()
+    openjiuwen_kb = OpenJiuwenKBSettings()
 
 settings = Settings()

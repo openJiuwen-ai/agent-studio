@@ -7,7 +7,7 @@
         id
         , name, type, repo_type, status, icon, knowledge_base_connection_id, external_id, description, create_time,
         update_time, project_id, domain_id,domain_name,created_user_id, created_user_name, last_update_user_id,
-        last_update_user_name, share_scope, workspace_id
+        last_update_user_name, share_scope, workspace_id, embedding_model_service_id, rerank_model_service_id
     </sql>
 
     <sql id="kb_Base_Column_List">
@@ -18,7 +18,7 @@
         kb.description, kb.create_time,
         kb.update_time, kb.project_id, kb.domain_id,kb.domain_name,kb.created_user_id, kb.created_user_name,
         kb.last_update_user_id,
-        kb.last_update_user_name, kb.share_scope, kb.workspace_id
+        kb.last_update_user_name, kb.share_scope, kb.workspace_id, kb.embedding_model_service_id, kb.rerank_model_service_id
     </sql>
 
     <select id="queryKnowledgeBaseList" resultType="com.openjiuwen.studio.agent.agentbase.entity.KnowledgeBaseEntity">
@@ -154,7 +154,8 @@
                                       create_time, update_time,
                                       project_id, domain_id, domain_name, created_user_id, created_user_name,
                                       last_update_user_id,
-                                      last_update_user_name, workspace_id, copy_source_id)
+                                      last_update_user_name, workspace_id, copy_source_id,
+                                      embedding_model_service_id, rerank_model_service_id)
         VALUES (#{id},
                 #{name},
                 #{type},
@@ -173,7 +174,9 @@
                 #{lastUpdateUserId},
                 #{lastUpdateUserName},
                 #{workspaceId},
-                #{copySourceId})
+                #{copySourceId},
+                #{embeddingModelServiceId},
+                #{rerankModelServiceId})
     </insert>
 
     <update id="updateKnowledgeBase" parameterType="com.openjiuwen.studio.agent.agentbase.entity.KnowledgeBaseEntity">
@@ -211,6 +214,12 @@
             </if>
             <if test="knowledgeBase.repoType != null and knowledgeBase.repoType != ''">
                 repo_type = #{knowledgeBase.repoType},
+            </if>
+            <if test="knowledgeBase.embeddingModelServiceId != null">
+                embedding_model_service_id = #{knowledgeBase.embeddingModelServiceId},
+            </if>
+            <if test="knowledgeBase.rerankModelServiceId != null">
+                rerank_model_service_id = #{knowledgeBase.rerankModelServiceId},
             </if>
         </set>
         WHERE id = #{knowledgeBase.id} and project_id = #{project_id}
@@ -250,7 +259,9 @@
         last_update_user_name,
         t_kb_connection_router.tenant_type AS knowledgeBaseTenantType,
         t_knowledge_base.share_scope,
-        t_knowledge_base.workspace_id
+        t_knowledge_base.workspace_id,
+        t_knowledge_base.embedding_model_service_id AS embeddingModelServiceId,
+        t_knowledge_base.rerank_model_service_id AS rerankModelServiceId
         FROM t_knowledge_base
         LEFT JOIN t_kb_connection_router ON t_knowledge_base.knowledge_base_connection_id =
         t_kb_connection_router.knowledge_base_connection_id
@@ -346,7 +357,8 @@
         external_id,
         create_time, update_time,
         project_id, domain_id,domain_name,created_user_id, created_user_name, last_update_user_id,
-        last_update_user_name, workspace_id, copy_source_id)
+        last_update_user_name, workspace_id, copy_source_id,
+        embedding_model_service_id, rerank_model_service_id)
         VALUES
         <foreach collection="knowledgeBaseList" item="item" separator=",">
             (#{item.id},
@@ -367,7 +379,9 @@
             #{item.lastUpdateUserId},
             #{item.lastUpdateUserName},
             #{item.workspaceId},
-            #{item.copySourceId})
+            #{item.copySourceId},
+            #{item.embeddingModelServiceId},
+            #{item.rerankModelServiceId})
         </foreach>
     </insert>
 

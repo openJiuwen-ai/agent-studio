@@ -217,7 +217,16 @@ class WorkflowRunner:
 
         t_convert_start = time.perf_counter()
         try:
-            workflow = await self._ir_converter.async_ir_to_workflow(ir_json)
+            # 显式传 cust_headers/project_id 到 workflow 构建链
+            from agent_runtime.context.request_context import _request_ctx
+            _ctx = _request_ctx.get()
+            _cust_headers = _ctx.customer_headers if _ctx else {}
+            _project_id = _ctx.project_id if _ctx else ""
+            workflow = await self._ir_converter.async_ir_to_workflow(
+                ir_json,
+                cust_headers=_cust_headers,
+                project_id=_project_id,
+            )
             performance_logger.info(
                 f"ir_convert|{round((time.perf_counter() - t_convert_start) * 1000)}"
             )
@@ -624,7 +633,7 @@ class WorkflowRunner:
             yield event
 
     def _build_global_state_params(self, params: dict, node_defs: dict) -> dict:
-        """构建需要通过 inputs → commit_user_inputs() 写入 global_state 的参数。
+        """构建需要通过 inputs → commit_user_inputs 写入 global_state 的参数。
 
         这些参数同时存在于 envs（由 _build_envs 生成），但 envs 不被 checkpoint 保存。
         通过 commit_user_inputs() 写入 global_state 后，checkpoint 会保存这些值，

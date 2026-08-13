@@ -1,17 +1,41 @@
-<div>
+<div *nzModalTitle>
   <div class="header">
-    {{ 'version_diff' | i18nextEager }}
-    <div class="tag ml-[12px]">
-      <nz-tag [nzColor]="'green'">{{ '+' + lineAdd }}</nz-tag>
-      <nz-tag [nzColor]="'red'">{{ '-' + lineDel }}</nz-tag>
-    </div>
+    <span class="header-title"> {{ 'version_diff' | i18nextEager }}</span>
+    <nz-tag [nzColor]="'green'">{{ '+' + lineAdd }}</nz-tag>
+    <nz-tag [nzColor]="'red'">{{ '-' + lineDel }}</nz-tag>
   </div>
 </div>
 <div>
-  <div *ngIf="false">
-    <div
-      class="ti-diff-editor"
-    ></div>
+  <div class="diff-wrapper">
+    <div class="diff-toolbar">
+      <div class="select-div ml-[40px]">
+        <nz-select
+          class="version-select"
+          [(ngModel)]="leftSelectedId"
+          (ngModelChange)="changeLeft($event)"
+          nzPlaceHolder="{{ 'select_version' | i18nextEager }}"
+        >
+          <nz-option *ngFor="let opt of leftOptions" [nzValue]="opt.id" [nzLabel]="opt.label"></nz-option>
+        </nz-select>
+      </div>
+      <div class="select-div">
+        <nz-select
+          class="version-select"
+          [(ngModel)]="rightSelectedId"
+          (ngModelChange)="changeRight($event)"
+          nzPlaceHolder="{{ 'select_version' | i18nextEager }}"
+        >
+          <nz-option *ngFor="let opt of rightOptions" [nzValue]="opt.id" [nzLabel]="opt.label"></nz-option>
+        </nz-select>
+      </div>
+    </div>
+    <ngx-monaco-diff-editor
+      [style]="{ width: '100%', height: height + 'px' }"
+      [options]="diffOptions"
+      [original]="originalValue"
+      [modified]="modifiedValue"
+      (init)="onDiffInit($event)"
+    ></ngx-monaco-diff-editor>
   </div>
 </div>
-<div class="footer" style="margin-top: 16px"></div>
+<div *nzModalFooter></div>

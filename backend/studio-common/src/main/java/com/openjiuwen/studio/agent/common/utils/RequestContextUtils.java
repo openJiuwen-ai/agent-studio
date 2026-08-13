@@ -20,6 +20,7 @@ import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -32,6 +33,9 @@ public class RequestContextUtils {
     private static final ThreadLocal<SimpleUser> THREAD_LOCAL_IAM_CTX = new ThreadLocal<>();
 
     private static final ThreadLocal<Map<String, String>> THREAD_LOCAL_HEADER = new ThreadLocal<>();
+
+    /** 捕获的客户 header（白名单 cust-*） */
+    private static final ThreadLocal<Map<String, String>> THREAD_LOCAL_CUSTOMER_HEADERS = new ThreadLocal<>();
 
     /**
      * 获取当前请求的token
@@ -101,6 +105,7 @@ public class RequestContextUtils {
     public static void remove() {
         THREAD_LOCAL_IAM_CTX.remove();
         THREAD_LOCAL_HEADER.remove();
+        THREAD_LOCAL_CUSTOMER_HEADERS.remove();
     }
 
     /**
@@ -218,6 +223,13 @@ public class RequestContextUtils {
         if (StringUtils.isNotEmpty(userId)) {
             headers.add(Constants.CustomModel.CUSTOM_USER_ID, userId);
         }
+        // 从 ThreadLocal 透传捕获的客户 header（配置启用时）
+        Map<String, String> capturedHeaders = THREAD_LOCAL_CUSTOMER_HEADERS.get();
+        if (capturedHeaders != null && !capturedHeaders.isEmpty()) {
+            for (Map.Entry<String, String> entry : capturedHeaders.entrySet()) {
+                headers.add(entry.getKey(), entry.getValue());
+            }
+        }
         return headers;
     }
 
@@ -263,5 +275,14 @@ public class RequestContextUtils {
             return headers.get(Constants.CustomModel.CUSTOM_USER_ID);
         }
         return getRequestUserId();
+
+    }
+    public static void setCustomerHeaders(Map<String, String> customerHeaders) {
+        THREAD_LOCAL_CUSTOMER_HEADERS.set(customerHeaders);
+    }
+
+    public static Map<String, String> getCustomerHeaders() {
+        Map<String, String> headers = THREAD_LOCAL_CUSTOMER_HEADERS.get();
+        return headers != null ? headers : new HashMap<>();
     }
 }

@@ -8,22 +8,18 @@ export interface ITabHeader {
   active: boolean;
   disabled?: boolean;
   tips?: string;
+  show?: boolean;
 }
 
 @Component({
   selector: 'tabs-header',
   template: `
-    <nz-tabs
-      id="cmp-tabs-header"
-      [nzSelectedIndex]="selectedIndex"
-      (nzSelectedIndexChange)="onSelectedIndexChange($event)"
-    >
-      <nz-tab
-        *ngFor="let tab of tabs"
-        [nzTitle]="tab.title"
-        [nzDisabled]="tab?.disabled"
-      >
-      </nz-tab>
+    <nz-tabs id="cmp-tabs-header" [nzSelectedIndex]="selectedIndex" (nzSelectedIndexChange)="onSelectedIndexChange($event)">
+      @for (tab of tabs; track tab.id) {
+        @if (tab.show !== false) {
+          <nz-tab [nzTitle]="tab.title" [nzDisabled]="tab?.disabled"> </nz-tab>
+        }
+      }
     </nz-tabs>
   `,
   styles: [

@@ -10,6 +10,7 @@ import { DeleteRefsService } from '@shared/services/delete-refs.service';
 import { AuthModalComponent } from '@routes/model-management/components/auth-modal/auth-modal.component';
 import { DeleteModalComponent } from '@routes/model-management/delete-modal/delete-modal.component';
 import { ModelRouterStrategiesService } from '@services/repositories/model-router-strategies';
+import { getNewServiceKeyList } from '../router-policy-detail/router-common';
 import { Router } from '@angular/router';
 import { NewCommonNoDataWithBtnComponent } from "@shared/components/new-common-no-data-with-btn/new-common-no-data-with-btn.component";
 import { CommonService } from '@services/common.service';
@@ -225,6 +226,8 @@ export class ModelRouteComponent implements OnInit {
             item.last_updated_date,
           );
           item.strategy_description = item.strategy_description || '-';
+          const _service_key_list = getNewServiceKeyList(item.service_list);
+          item.service_key_list = _service_key_list.join(' | ') || '-';
         }
         this.srcData.data = result;
         this.totalNumber = res.total;

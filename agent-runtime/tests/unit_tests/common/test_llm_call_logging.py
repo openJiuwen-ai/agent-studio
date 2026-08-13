@@ -13,17 +13,18 @@ from openjiuwen.core.runner.callback.utils import get_callback_framework
 
 @pytest.fixture(autouse=True)
 def _reset_registration(monkeypatch):
-    """每个测试前重置注册状态，设置 DEBUG 级别，并清理已注册的回调"""
-    import agent_runtime.common.llm_call_logging as _mod
-    _mod._registered = False
-    # 默认设置 WORKFLOW_LOG_LEVEL=DEBUG，让注册生效
+    """每个测试前重置注册状态，开启开关并设 DEBUG 级别，并清理已注册的回调"""
+    from agent_runtime.common.llm_call_logging import reset_registration_state
+    reset_registration_state()
+    # 默认开启 model-call 日志开关并设 DEBUG 级别，让详情注册生效
+    monkeypatch.setenv("MODEL_CALL_LOGGING_ENABLED", "true")
     monkeypatch.setenv("WORKFLOW_LOG_LEVEL", "DEBUG")
     yield
     # 清理：移除测试中注册的回调
     fw = get_callback_framework()
     for event in (LLMCallEvents.LLM_INPUT, LLMCallEvents.LLM_OUTPUT, LLMCallEvents.LLM_CALL_ERROR):
         fw.callbacks.pop(event, None)
-    _mod._registered = False
+    reset_registration_state()
 
 
 def test_register_adds_callbacks():
@@ -44,24 +45,67 @@ def test_register_adds_callbacks():
     assert len(fw.callbacks[LLMCallEvents.LLM_CALL_ERROR]) >= 1
 
 
-def test_register_skipped_when_info_level(monkeypatch):
-    """验证 WORKFLOW_LOG_LEVEL=INFO 时不注册回调，零开销"""
-    from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
+def test_register_at_info_level(monkeypatch):
+    """验证开关开启 + WORKFLOW_LOG_LEVEL=INFO 时注册详情回调"""
+    from agent_runtime.common.llm_call_logging import (
+        register_llm_call_logging_callbacks, reset_registration_state,
+    )
 
+    monkeypatch.setenv("MODEL_CALL_LOGGING_ENABLED", "true")
     monkeypatch.setenv("WORKFLOW_LOG_LEVEL", "INFO")
-    # 重置 _registered 因为 fixture 设置了 DEBUG
-    import agent_runtime.common.llm_call_logging as _mod
-    _mod._registered = False
+    reset_registration_state()
 
     register_llm_call_logging_callbacks()
 
     fw = get_callback_framework()
-    # 不应注册任何回调
+    assert LLMCallEvents.LLM_INPUT in fw.callbacks
+    assert LLMCallEvents.LLM_OUTPUT in fw.callbacks
+    assert LLMCallEvents.LLM_CALL_ERROR in fw.callbacks
+
+
+def test_register_skipped_when_warning_level(monkeypatch):
+    """验证开关开启 + WARNING 时：input/output 不注册（零开销），error 仍注册"""
+    from agent_runtime.common.llm_call_logging import (
+        register_llm_call_logging_callbacks, reset_registration_state,
+    )
+
+    monkeypatch.setenv("MODEL_CALL_LOGGING_ENABLED", "true")
+    monkeypatch.setenv("WORKFLOW_LOG_LEVEL", "WARNING")
+    reset_registration_state()
+
+    register_llm_call_logging_callbacks()
+
+    fw = get_callback_framework()
+    # input/output 受门控，WARNING 下不注册
     assert LLMCallEvents.LLM_INPUT not in fw.callbacks
     assert LLMCallEvents.LLM_OUTPUT not in fw.callbacks
-    assert LLMCallEvents.LLM_CALL_ERROR not in fw.callbacks
-    # _registered 应为 True（幂等：后续调用不再重复检查）
-    assert _mod._registered is True
+    # error 无条件注册，错误始终可见
+    assert LLMCallEvents.LLM_CALL_ERROR in fw.callbacks
+    # 幂等：再次调用不应重复注册（注册标志已置位，跳过后续检查）
+    error_count = len(fw.callbacks[LLMCallEvents.LLM_CALL_ERROR])
+    register_llm_call_logging_callbacks()
+    assert len(fw.callbacks[LLMCallEvents.LLM_CALL_ERROR]) == error_count
+
+
+def test_register_skipped_when_disabled(monkeypatch):
+    """验证开关默认关闭（MODEL_CALL_LOGGING_ENABLED 未设）时：详情不注册，error 仍注册"""
+    from agent_runtime.common.llm_call_logging import (
+        register_llm_call_logging_callbacks, reset_registration_state,
+    )
+
+    # 不设 MODEL_CALL_LOGGING_ENABLED，取默认 false；级别设 DEBUG 也无济于事
+    monkeypatch.delenv("MODEL_CALL_LOGGING_ENABLED", raising=False)
+    monkeypatch.setenv("WORKFLOW_LOG_LEVEL", "DEBUG")
+    reset_registration_state()
+
+    register_llm_call_logging_callbacks()
+
+    fw = get_callback_framework()
+    # 开关关闭，详情回调不注册（与级别无关）
+    assert LLMCallEvents.LLM_INPUT not in fw.callbacks
+    assert LLMCallEvents.LLM_OUTPUT not in fw.callbacks
+    # error 无条件注册，不受开关影响
+    assert LLMCallEvents.LLM_CALL_ERROR in fw.callbacks
 
 
 def test_register_idempotent():
@@ -99,7 +143,7 @@ async def test_input_callback_logs_request(caplog):
             is_stream=False,
         )
 
-    info_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO]
     request_logs = [r for r in info_records if "model call request data" in r.message]
     assert len(request_logs) >= 1
 
@@ -129,7 +173,7 @@ async def test_input_callback_stream_flag(caplog):
             is_stream=True,
         )
 
-    info_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO]
     request_logs = [r for r in info_records if "model call request data" in r.message]
     assert len(request_logs) >= 1
     assert '"stream": true' in request_logs[0].message
@@ -156,7 +200,7 @@ async def test_output_callback_logs_response(caplog):
             is_stream=False,
         )
 
-    info_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO]
     response_logs = [r for r in info_records if "model call response data" in r.message]
     assert len(response_logs) >= 1
     assert "好的，已收到您的指令。" in response_logs[0].message
@@ -192,7 +236,7 @@ async def test_output_callback_logs_usage_and_cost(caplog):
             tool_calls=None,
         )
 
-    info_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO]
     usage_logs = [r for r in info_records if "model call token usage" in r.message]
     latency_logs = [r for r in info_records if "model call latency" in r.message]
 
@@ -245,7 +289,7 @@ async def test_output_callback_logs_latency(caplog):
             is_stream=True,
         )
 
-    info_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO]
     latency_logs = [r for r in info_records if "model call latency" in r.message]
     assert len(latency_logs) >= 1
     latency_msg = latency_logs[0].message
@@ -284,7 +328,7 @@ async def test_output_callback_logs_tool_calls(caplog):
             tool_calls=tool_calls,
         )
 
-    info_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO]
     tc_logs = [r for r in info_records if "model call tool_calls" in r.message]
     assert len(tc_logs) >= 1
     tc_msg = tc_logs[0].message
@@ -310,7 +354,7 @@ async def test_output_callback_logs_streaming_result(caplog):
             is_stream=True,
         )
 
-    info_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO]
     response_logs = [r for r in info_records if "model call response data" in r.message]
     assert len(response_logs) >= 1
     assert "流式响应内容" in response_logs[0].message
@@ -333,7 +377,7 @@ async def test_output_callback_prefers_response_over_result(caplog):
             result="流式响应",
         )
 
-    info_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO]
     response_logs = [r for r in info_records if "model call response data" in r.message]
     assert len(response_logs) >= 1
     # response 优先
@@ -360,7 +404,7 @@ async def test_error_callback_logs_error(caplog):
             is_stream=True,
         )
 
-    error_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
     error_logs = [r for r in error_records if "model call error" in r.message]
     assert len(error_logs) >= 1
     error_msg = error_logs[0].message
@@ -387,7 +431,7 @@ async def test_output_callback_empty_response(caplog):
             tool_calls=None,
         )
 
-    info_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO]
     response_logs = [r for r in info_records if "model call response data" in r.message]
     assert len(response_logs) >= 1
     # 空响应打印 "model call response data: "
@@ -420,7 +464,7 @@ async def test_usage_zero_cost_not_logged(caplog):
             tool_calls=None,
         )
 
-    info_records = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO]
     usage_logs = [r for r in info_records if "model call token usage" in r.message]
     assert len(usage_logs) >= 1
     usage_msg = usage_logs[0].message

@@ -478,6 +478,17 @@ export class AgentDataService {
     return this.isClickInsight$.asObservable();
   }
 
+  /** 记录当前调试会话的conversation_id */
+  private currentConversationId = '';
+
+  public setCurrentConversationId(id: string): void {
+    this.currentConversationId = id;
+  }
+
+  public getCurrentConversationId(): string {
+    return this.currentConversationId;
+  }
+
   /** 记录发布的版本名称 */
   public setPreviewVersion(versionInfo: {
     version_id: string;

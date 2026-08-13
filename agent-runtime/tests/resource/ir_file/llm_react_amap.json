@@ -1,0 +1,18 @@
+{
+  "configs": {
+    "model": {"modelName": "maas-deeseek-v32|maas-deeseek-v32", "extension": {"authId": "aid", "deploymentId": "maas-deeseek-v32"}, "hyperParameters": {"temperature": 0.5, "max_tokens": 4096, "top_p": 0.5}, "modelType": "LLM"},
+    "content_review": {"enabled": true, "filter": {"keywords": ""}, "replace": [], "reply": []}
+  },
+  "components": [
+    {"id": "node_start", "name": "开始", "type": "jiuwen.start", "configs": {"userFields": {"inputs": [], "outputs": []}, "systemFields": {"inputs": [{"id": "query", "type": "string", "required": true}], "outputs": []}}, "inputs": {"userFields": {}, "systemFields": {"query": "", "sys": {}}}, "outputs": {"userFields": {}, "systemFields": {"query": "", "sys": {}}}},
+    {"id": "node_agent", "name": "Agent", "type": "jiuwen.LLMReAct", "configs": {"systemPrompt": "{{user_query}}", "model": {"modelName": "maas-deeseek-v32|x", "extension": {"authId": "aid"}, "hyperParameters": {"temperature": 0.5}, "modelType": "LLM"}, "plugins": [{"name": "Gaud_Map", "id": "preset_Gaud_Map", "url": "https://restapi.amap.com/v3/geocode/geo", "method": "GET", "auth": {"query": {"key": ""}, "scope": "SERVICE", "crypt_method": "ei"}, "arguments": [{"name": "address", "method": "Query", "type": "string", "required": true}], "response": [], "pluginDependency": {"paramsWrapper": {"outputList": false, "inputList": false}}}], "maxIteration": 9}, "inputs": {"userFields": {"user_query": "${node_start.systemFields.query}"}}, "outputs": {"userFields": {"output": ""}}},
+    {"id": "node_end", "name": "结束", "type": "jiuwen.end", "configs": {"responseMode": "directResponse", "responseTemplate": "{{result}}", "userFields": {"inputs": [{"id": "result", "type": "string"}], "outputs": []}, "isStreamOut": true, "enable_history": true, "isStructMessage": false}, "inputs": {"userFields": {"result": "${node_agent.userFields.output}"}}}
+  ],
+  "connections": [
+    {"source": {"componentId": "node_start"}, "target": {"componentId": "node_agent"}},
+    {"source": {"componentId": "node_agent"}, "target": {"componentId": "node_end"}}
+  ],
+  "schemaVersion": "0.6.0",
+  "workflowVersion": "0.6.0",
+  "workflowId": "llm_react_amap_fixture"
+}

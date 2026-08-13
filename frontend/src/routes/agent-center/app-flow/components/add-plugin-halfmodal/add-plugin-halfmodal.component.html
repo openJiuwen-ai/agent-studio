@@ -1,0 +1,18 @@
+<div class="com-drawer-title">
+  <span>{{ 'add_plugins' | i18nextEager }}</span>
+</div>
+<div class="com-drawer-content">
+  <add-plugins
+    [plugins]="selectedPlugins"
+    [usedFrom]="'flow'"
+    [agentNode]="agentNode"
+    (pluginAdded)="handlePluginAdded($event)"
+    (pluginReduced)="handlePluginReduced($event)"
+  ></add-plugins>
+</div>
+<div class="com-drawer-footer">
+  <button nz-button nzType="default" (click)="dismiss()">{{ 'cancel' | i18nextEager }}</button>
+  <button nz-button nzType="primary" (click)="close()" [disabled]="isDisabledPlugin()">
+    {{ 'ok' | i18nextEager }}
+  </button>
+</div>

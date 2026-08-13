@@ -34,7 +34,7 @@
   >
     <thead>
       <tr>
-        <th [nzChecked]="isAllChecked" [nzWidth]="'50px'" (nzCheckedChange)="onAllChecked($event)"></th>
+        <th [(nzChecked)]="isAllChecked" [nzWidth]="'50px'" (nzCheckedChange)="onAllChecked($event)"></th>
         <th *ngFor="let column of listOfColumns" [nzWidth]="column.width ? column.width + 'px' : null">
           {{ column.title }}
         </th>
@@ -42,7 +42,7 @@
     </thead>
     <tbody>
       <tr *ngFor="let data of remoteTable.data">
-        <td [nzChecked]="setOfCheckedId.has(data[selectedType.rowKey])" (nzCheckedChange)="onItemChecked(data[selectedType.rowKey], $event)"></td>
+        <td [nzChecked]="setOfCheckedId.has(data[selectedType.rowKey])" (nzCheckedChange)="onItemChecked(data[selectedType.rowKey], data, $event)"></td>
         <td *ngFor="let column of listOfColumns" [nz-tooltip]="data[column.dataIndex]">
           {{ data[column.dataIndex] }}
         </td>

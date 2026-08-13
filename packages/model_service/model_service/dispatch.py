@@ -12,6 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from common_utils.customer_header import get_config, get_capture_keys, resolve
+
 from .resolver import InterfaceProtocol, ModelServiceBase, ModelServiceError, ProviderAuth
 
 # OBS 原始 interfaceProtocol 字符串 → 两值归一。当前仅 OPENAI；ANTHROPIC 预留。
@@ -146,7 +148,7 @@ async def embed(model, auth, request) -> object:
         await client.close()
 
 
-async def rerank(model, auth, request) -> dict:
+async def rerank(model, auth, request, projected_headers: Optional[dict] = None) -> dict:
     """rerank 入口，供 agent-builder ``/v1/agent-builder/rerank`` facade 调用。
 
     移植自 Java ``MaasRerankRequestAdaptor`` + ``AbstractRequestAdapter.resBodyConvert``：
@@ -155,17 +157,37 @@ async def rerank(model, auth, request) -> dict:
     - POST 到 ``model.api_url``（verbatim，``get_chat_connection`` 已做 ``/chat/completions`` 兜底裁剪，
       rerank URL 无此后缀故为 no-op）。
     - 鉴权：``API_KEY`` → ``Authorization: Bearer <api_key>``；``CUSTOM_APIKEY`` → ``auth_info`` 各项作为自定义头。
+    - ``projected_headers`` 为 facade 预投影的 customer rename（``cust→userid/token``，设计 
+      显式传入，dispatch 不依赖宿主请求上下文）；静态认证优先，customer 仅补未冲突项。
     - 响应后处理：``results`` 按 ``index`` 升序排序（null 置后），截断到 ``top_n``，其余字段原样保留。
     """
     conn = get_chat_connection(model, auth)
     client = build_httpx_client(conn.api_base, conn.verify_ssl)
     headers = {"Content-Type": "application/json"}
     if conn.custom_headers:
-        # CUSTOM_APIKEY：auth_info 各项作为自定义请求头（对应 Java CustomApiKeyAuthAdapter）
-        headers.update(conn.custom_headers)
+        cfg = get_config()
+        cap_lower = [k.lower() for k in get_capture_keys()] if cfg.enabled else []
+        to_rename = {}
+        to_pass = {}
+        for k, v in conn.custom_headers.items():
+            if k.lower() in cap_lower:
+                to_rename[k] = v
+            else:
+                to_pass[k] = v
+        headers.update(to_pass)
+        if to_rename:
+            renamed = resolve(to_rename)
+            if renamed:
+                headers.update(renamed)
+            else:
+                headers.update(to_rename)
     else:
-        # API_KEY：标准 Bearer 鉴权
         headers["Authorization"] = f"Bearer {conn.api_key}"
+    #  合并 customer rename（cust→userid/token），静态优先（防覆盖 Authorization/Content-Type）
+    if projected_headers:
+        headers.update(projected_headers)
+
+
 
     body = {
         "model": conn.model_name,
