@@ -306,11 +306,13 @@ export class AddPluginModalComponent implements OnInit {
         const result = { ...pluginVersion, last_version_id, request_info: pluginVersion.request_info };
         this.pluginChange.emit(result);
         this.outputs?.pluginChange?.(result);
+        this.drawerRef.close();
       });
     } else {
       const result = { ...plugin, request_info: plugin.request_info };
       this.pluginChange.emit(result);
       this.outputs?.pluginChange?.(result);
+      this.drawerRef.close();
     }
   }
 
@@ -344,6 +346,7 @@ export class AddPluginModalComponent implements OnInit {
         const result = { ...toolInfo, last_version_id, request_info: plugin.request_info };
         this.pluginChange.emit(result);
         this.outputs?.pluginChange?.(result);
+        this.drawerRef.close();
       });
     } else {
       const toolInfo = {
@@ -359,6 +362,7 @@ export class AddPluginModalComponent implements OnInit {
       const result = { ...toolInfo, request_info: plugin.request_info };
       this.pluginChange.emit(result);
       this.outputs?.pluginChange?.(result);
+      this.drawerRef.close();
     }
   }
 

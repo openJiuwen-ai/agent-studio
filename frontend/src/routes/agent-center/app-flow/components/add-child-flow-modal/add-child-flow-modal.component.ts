@@ -320,6 +320,7 @@ export class AddChildFlowModalComponent implements OnInit {
         if (this.outputs && this.outputs.workflowChange) {
           this.outputs.workflowChange(result);
         }
+        this.drawerRef.close();
         this.cdr.markForCheck();
         this.cdr.detectChanges();
       });
