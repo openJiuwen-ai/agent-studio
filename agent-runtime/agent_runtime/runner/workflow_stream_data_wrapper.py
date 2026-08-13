@@ -1015,7 +1015,7 @@ class WorkflowStreamDataWrapper:
             "loopIndex": payload.get("loopIndex"),
             "innerError": inner_error,
             "memory": memory,
-            "parentNodeId": parent_node_id if not payload.get("loopNodeId") else None,
+            "parentNodeId": parent_node_id or None,
         }
 
         if (data["startTime"] and data["endTime"]) and (data["startTime"] > data["endTime"]):
