@@ -4,6 +4,7 @@ import json
 from agent_runtime.common import kb_config_providers
 from agent_runtime.common.kb_config_providers import (
     KBConnectionConfig,
+    KBReferenceConfig,
     OBSKnowledgeBaseConfigProvider,
 )
 from agent_runtime.context.request_context import RequestContext, _request_ctx
@@ -296,3 +297,112 @@ def test_parse_connection_invalid_model_config_json_falls_back_to_empty():
         }
     )
     assert conn.model_config == {}
+
+
+# ---------------------------------------------------------------------------
+# get_kb_config — CUSTOM 模式 KB reference 回退测试
+# ---------------------------------------------------------------------------
+
+
+def _make_ir_node(connection_id="conn-1", kb_ids=None):
+    """构造最小化 ir_node dict。"""
+    return {
+        "configs": {
+            "connectionId": connection_id,
+            "knowledgeBaseIds": kb_ids or [],
+        }
+    }
+
+
+def test_custom_mode_kb_fallback_uses_kb_id_as_external_id(monkeypatch):
+    """CUSTOM 模式下 OBS 无 reference 文件时，用 kb_id 作为 external_id。"""
+    import asyncio
+
+    provider = OBSKnowledgeBaseConfigProvider()
+
+    async def fake_load_connection(cid):
+        return KBConnectionConfig(
+            connection_id=cid,
+            connector_type="LakeSearchInside",
+            knowledge_source="CUSTOM",
+            endpoint="http://lakesearch",
+        )
+
+    async def fake_load_kb_reference(kb_id):
+        return None  # OBS 无 reference 文件
+
+    monkeypatch.setattr(provider, "_load_connection_config", fake_load_connection)
+    monkeypatch.setattr(provider, "_load_kb_reference", fake_load_kb_reference)
+    monkeypatch.setattr(provider, "_merge_auth_headers", lambda conn: None)
+
+    ir_node = _make_ir_node(kb_ids=["kb-001", "kb-002"])
+    result = asyncio.run(provider.get_kb_config(ir_node))
+
+    kbs = result["knowledge_bases"]
+    assert len(kbs) == 2
+    assert kbs[0]["knowledge_base_id"] == "kb-001"
+    assert kbs[0]["external_id"] == "kb-001"
+    assert kbs[0]["connection_id"] == "conn-1"
+    assert kbs[1]["knowledge_base_id"] == "kb-002"
+    assert kbs[1]["external_id"] == "kb-002"
+
+
+def test_non_custom_mode_kb_missing_no_fallback(monkeypatch):
+    """非 CUSTOM 模式下 OBS 无 reference 文件时，不生成 KB reference（保持原行为）。"""
+    import asyncio
+
+    provider = OBSKnowledgeBaseConfigProvider()
+
+    async def fake_load_connection(cid):
+        return KBConnectionConfig(
+            connection_id=cid,
+            connector_type="LakeSearch",
+            knowledge_source="LakeSearch",  # 非 CUSTOM
+        )
+
+    async def fake_load_kb_reference(kb_id):
+        return None
+
+    monkeypatch.setattr(provider, "_load_connection_config", fake_load_connection)
+    monkeypatch.setattr(provider, "_load_kb_reference", fake_load_kb_reference)
+    monkeypatch.setattr(provider, "_merge_auth_headers", lambda conn: None)
+
+    ir_node = _make_ir_node(kb_ids=["kb-001"])
+    result = asyncio.run(provider.get_kb_config(ir_node))
+
+    assert len(result["knowledge_bases"]) == 0
+
+
+def test_custom_mode_kb_ref_exists_uses_ref(monkeypatch):
+    """CUSTOM 模式下 OBS 有 reference 文件时，使用 reference 而非回退逻辑。"""
+    import asyncio
+
+    provider = OBSKnowledgeBaseConfigProvider()
+
+    async def fake_load_connection(cid):
+        return KBConnectionConfig(
+            connection_id=cid,
+            connector_type="LakeSearchInside",
+            knowledge_source="CUSTOM",
+        )
+
+    async def fake_load_kb_reference(kb_id):
+        return KBReferenceConfig(
+            knowledge_base_id=kb_id,
+            external_id="obs-external-id-123",
+            connection_id="conn-1",
+            knowledge_base_name="MyKB",
+        )
+
+    monkeypatch.setattr(provider, "_load_connection_config", fake_load_connection)
+    monkeypatch.setattr(provider, "_load_kb_reference", fake_load_kb_reference)
+    monkeypatch.setattr(provider, "_merge_auth_headers", lambda conn: None)
+
+    ir_node = _make_ir_node(kb_ids=["kb-001"])
+    result = asyncio.run(provider.get_kb_config(ir_node))
+
+    kbs = result["knowledge_bases"]
+    assert len(kbs) == 1
+    # 使用 OBS reference 中的 external_id，而非 kb_id
+    assert kbs[0]["external_id"] == "obs-external-id-123"
+    assert kbs[0]["knowledge_base_name"] == "MyKB"
