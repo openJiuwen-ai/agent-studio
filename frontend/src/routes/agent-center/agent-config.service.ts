@@ -75,7 +75,9 @@ export class AgentConfigService {
   }
 
   public setConfigs(configs: IAgentConfigs) {
-    configs.studio_btn_show = true;
+    if (configs.studio_btn_show === undefined || configs.studio_btn_show === null) {
+      configs.studio_btn_show = true;
+    }
     this.configs$.next(configs);
   }
   data$ = this.configs$.asObservable();
