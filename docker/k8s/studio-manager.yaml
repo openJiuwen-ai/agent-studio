@@ -145,6 +145,12 @@ spec:
               value: 'basic'
             - name: redis_max_string_length
               value: '20000000'
+            # 非图片文件上传大小上限（单位 KB，默认 131072 即 128MB）
+            - name: agent_max_upload_file_size
+              value: '131072'
+            # 用户上传文件累计大小上限（单位 KB，默认 204800 即 200MB，按用户 24 小时窗口累计）
+            - name: max_upload_total_size
+              value: '204800'
           resources:
             limits:
               cpu: '2'
