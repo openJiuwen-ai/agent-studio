@@ -256,6 +256,9 @@ public class CommonManagementService implements ICommonManagementService {
     @Value("${front-page.runtime-host}")
     private String runtimeHost;
 
+    @Value("${front-page.studio-btn-show:true}")
+    private boolean studioBtnShow;
+
     @Value("${common_region_id:}")
     private String regionId;
 
@@ -402,6 +405,8 @@ public class CommonManagementService implements ICommonManagementService {
 
         // 非图片文件上传大小上限（单位 KB），供前端聊天附件上传入口统一校验
         defConfigJsonObject.put("file_max_size_kb", fileMaxSize);
+
+        defConfigJsonObject.put("studio_btn_show", studioBtnShow);
 
         if (StringUtils.isNotEmpty(runtimeHost)) {
             String runtimeApiEndpointPrefix = String.format(runtimeHost,

@@ -99,6 +99,9 @@ spec:
             # 运行时agent/workflow地址前缀（IP:Port格式），用于前端拼接API调用地址
             - name: front_page_runtime_host
               value: ''
+            # Studio按钮显示开关，默认true
+            - name: studio_btn_show
+              value: 'true'
             # 寻址方式：path（路径风格，默认）或 virtual（虚拟托管风格）
             - name: DATASOURCE_OBS_PATH_STYLE
               value: 'path'

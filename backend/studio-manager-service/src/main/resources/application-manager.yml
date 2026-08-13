@@ -687,6 +687,7 @@ front-page:
   code_def_env: ${code_def_env:sandbox}
   selected_resource_ids: ${selected_resource_ids:}
   runtime-host: ${front_page_runtime_host:}
+  studio-btn-show: ${studio_btn_show:true}
 # ========== 前端配置 ==========
 
 

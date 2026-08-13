@@ -78,6 +78,7 @@ services:
       knowledge_lakeSearch_auth_mode: ${KNOWLEDGE_LAKESEARCH_AUTH_MODE:-basic}
       # 运行时API地址前缀（IP:Port格式），用于前端拼接API调用地址
       front_page_runtime_host: ${FRONT_PAGE_RUNTIME_HOST:-}
+      studio_btn_show: ${STUDIO_BTN_SHOW:-true}
       system_crypt_name: ${SYSTEM_CRYPT_NAME:-}
       enable_tool_url_check: ${ENABLE_TOOL_URL_CHECK:-true}
       # 是否启用资源管理的操作日志
