@@ -89,8 +89,8 @@
 
     <nz-form-item *ngIf="myForm.value.auth_type === API_KEY">
       <nz-form-label nzRequired>{{ 'api_key_input' | i18nextEager }}</nz-form-label>
-      <nz-form-control [nzErrorTip]="'Required'">
-        <input nz-input type="password" formControlName="apikey" class="w-full" />
+      <nz-form-control [nzErrorTip]="'api_key_input' | i18nextEager">
+        <input nz-input type="password" formControlName="apikey" class="w-full" autocomplete="new-password" />
         <div [innerHTML]="'api_auth_tip' | i18nextEager" class="mt-1 text-xs text-gray-500"></div>
       </nz-form-control>
     </nz-form-item>
@@ -135,7 +135,7 @@
           <div class="w-1/2 text-sm text-gray-600 font-medium"><span class="text-red-500 mr-1">*</span>{{ 'param_value' | i18nextEager }}</div>
         </div>
         <form #authkeyForm="ngForm">
-          <div class="flex gap-2 items-center mb-3" *ngFor="let param of apiKeyAuthArgs; index as i">
+          <div class="flex gap-2 items-start mb-3" *ngFor="let param of apiKeyAuthArgs; index as i">
             <div class="w-1/2">
               <input
                 nz-input
@@ -145,7 +145,13 @@
                 required
                 [(ngModel)]="param.target_name"
                 [placeholder]="'input_placeholder' | i18nextEager"
+                #nameModel="ngModel"
+                autocomplete="off"
+                [ngClass]="{ 'ant-input-status-error': customApikeySubmitted && nameModel.invalid }"
               />
+              <div *ngIf="customApikeySubmitted && nameModel.invalid" class="text-red-500 text-xs mt-1">
+                {{ 'pls_enter' | i18nextEager }}{{ 'param_name' | i18nextEager }}
+              </div>
             </div>
             <div class="w-1/2">
               <input
@@ -156,10 +162,16 @@
                 required
                 [(ngModel)]="param.auth_key"
                 [placeholder]="'input_placeholder' | i18nextEager"
+                #valModel="ngModel"
+                autocomplete="new-password"
+                [ngClass]="{ 'ant-input-status-error': customApikeySubmitted && valModel.invalid }"
               />
+              <div *ngIf="customApikeySubmitted && valModel.invalid" class="text-red-500 text-xs mt-1">
+                {{ 'pls_enter' | i18nextEager }}{{ 'param_value' | i18nextEager }}
+              </div>
             </div>
-            <nz-icon *ngIf="i > 0" nzType="delete" nzTheme="outline" class="cursor-pointer text-gray-400 hover:text-red-500" (click)="deleteArgs(i)"></nz-icon>
-            <div *ngIf="i === 0" class="w-3.5"></div>
+            <nz-icon *ngIf="i > 0" nzType="delete" nzTheme="outline" class="cursor-pointer text-gray-400 hover:text-red-500 mt-2" (click)="deleteArgs(i)"></nz-icon>
+            <div *ngIf="i === 0" class="w-3.5 mt-2"></div>
           </div>
         </form>
       </div>
