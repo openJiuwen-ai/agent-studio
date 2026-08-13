@@ -104,8 +104,15 @@ export class CreateModelRouteComponent implements OnInit, OnDestroy {
         this.validateName(),
       ]),
       model_service_list: this.fb.array([]),
-      strategy_timeout: new FormControl(10000),
-      strategy_retry_count: new FormControl(0),
+      strategy_timeout: new FormControl(10000, [
+        Validators.required,
+        Validators.min(1000),
+        Validators.max(1000000),
+      ]),
+      strategy_retry_count: new FormControl(0, [
+        Validators.min(0),
+        Validators.max(100),
+      ]),
       strategy_description: new FormControl(''),
     });
   }

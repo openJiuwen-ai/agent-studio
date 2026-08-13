@@ -70,7 +70,7 @@
               <nz-form-control>
                 <div class="flex model-item-content">
                   <nz-input-number formControlName="strategy_timeout" id="policy-timeout"
-                                   [nzMin]="0" [(ngModel)]="strategy_spinner_Value"
+                                   [nzMin]="1000" [nzMax]="1000000" [(ngModel)]="strategy_spinner_Value"
                                    class="model-item-content-left w-full"></nz-input-number>
                   <span class="model-item-content-right">ms</span>
                 </div>
@@ -87,7 +87,7 @@
               <nz-form-control>
                 <div class="flex model-item-content">
                   <nz-input-number class="model-item-content-left w-full" id="model-retry-times"
-                                   [nzMin]="0" formControlName="strategy_retry_count"></nz-input-number>
+                                   [nzMin]="0" [nzMax]="100" formControlName="strategy_retry_count"></nz-input-number>
                   <span class="model-item-content-right">{{ 'times'|i18nextEager }}</span>
                 </div>
               </nz-form-control>
