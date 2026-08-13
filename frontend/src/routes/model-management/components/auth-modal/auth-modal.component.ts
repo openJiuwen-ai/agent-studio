@@ -43,7 +43,6 @@ export class AuthModalComponent implements OnInit {
 
   @Input() provider_info: ProviderInfo;
 
-  confirmText = 'DELETE';
   loading = false;
   authsInfo: any = {
     'API Key': '',
@@ -132,7 +131,25 @@ export class AuthModalComponent implements OnInit {
       return;
     }
     if (this.authsInfo.auth_id) {
-      this.delete();
+      const modal = this.modalService.create({
+        nzContent: DeleteModalComponent,
+        nzWidth: '500px',
+        nzFooter: null,
+        nzData: {
+          context: {
+            id: this.authsInfo.auth_id,
+            title: this.i18n.transform('remove_auth'),
+            tip: this.i18n.transform('confirm_remove_auth'),
+            fnName: 'deleteProviderAuths',
+            close: () => {
+              this.message.success(this.i18n.transform('remove_success'));
+              this.close();
+              modal.close();
+            },
+          },
+        } as any,
+      });
+      this.loading = false;
       return;
     } else {
       let params = {
@@ -149,26 +166,6 @@ export class AuthModalComponent implements OnInit {
           this.message.error(this.i18n.transform('auth_config_failed'));
         }).finally(() => {this.loading = false});
     }
-  }
-
-  public deleteModal(item: any) {
-    const modal = this.modalService.create({
-      nzContent: DeleteModalComponent,
-      nzClassName: 'tp-modal-sm-index',
-      nzData: {
-        id: item.id,
-        title: this.i18n.transform('remove_auth'),
-        tip: this.i18n.transform('confirm_remove_auth'),
-        fnName: 'deleteProviderAuths',
-      }
-    });
-
-    modal.afterClose.subscribe((result) => {
-      if (result) {
-        this.close();
-        this.message.success(this.i18n.transform('remove_success'));
-      }
-    });
   }
 
   delete() {
