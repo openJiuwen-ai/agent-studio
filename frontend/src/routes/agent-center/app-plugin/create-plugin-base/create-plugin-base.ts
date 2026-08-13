@@ -542,17 +542,9 @@ export class CreatePluginBaseComponent implements OnInit {
     }
   }
 
-  checkFormDom(form, cName) {
-    form.controls[cName].markAsDirty();
-    form.controls[cName].updateValueAndValidity({ onlySelf: false });
-  }
-
   public btnDisabledFunc(step: number): boolean {
-    //待优化
     const form = this.groupFormControl.controls;
     if (step === 0) {
-      this.checkFormDom(this.groupFormControl, 'pluginZhName');
-      this.checkFormDom(this.groupFormControl, 'pluginDescription');
       if (form.pluginZhName.errors || form.pluginName.errors || form.pluginDescription.errors) {
         return true;
       }
@@ -621,16 +613,6 @@ export class CreatePluginBaseComponent implements OnInit {
       }
       if (form.baseURL.value.includes('\n')) {
         form.baseURL.setValue(form.baseURL.value.replaceAll('\n', ''));
-      }
-      if (form.host.errors) {
-        this.hostError = form.host.errors.serviceName?.tiErrorMessage ?? 'Error';
-      } else {
-        this.hostError = '';
-      }
-      if (form.baseURL.errors) {
-        this.baseURLError = form.baseURL.errors.serviceName?.tiErrorMessage ?? 'Error';
-      } else {
-        this.baseURLError = '';
       }
     }
     this.step += 1;
