@@ -163,6 +163,7 @@ import {
 import { FlowUtils, TargetMarker } from '../utils/flow-utils';
 import { isEditableTarget } from '../utils/editable-target.util';
 import { shouldClearHalfModalOnClose } from '../utils/pending-open-node.util';
+import { withDrawerAutoClose } from '../utils/drawer-auto-close.util';
 import { IAppRefList } from '@routes/agent-center/types/common.types';
 import { getMaxReplySetting } from '@routes/agent-center/utils';
 import { ModelManagementService } from '@services/repositories/model-management-new';
@@ -4540,11 +4541,16 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       },
     );
     this.appFlowServ.setPluginList(addedPluginList);
-    this.pluginCallback = callback;
+    // 闭包保存“本次”创建的 drawerRef：outputs 必须先于 create() 传入
+    // nzContentParams、而 ref 由 create() 返回，故用 getter 延迟读取局部
+    // let drawerRef；选择成功后关闭本次实例，不依赖会被后续打开覆盖的 this.pluginModalRef。
+    let drawerRef: NzDrawerRef | undefined;
+    const onSelect = withDrawerAutoClose(callback, () => drawerRef);
+    this.pluginCallback = onSelect;
     const outputs = {
-      pluginChange: callback,
+      pluginChange: onSelect,
     };
-    this.pluginModalRef = this.nzDrawerService.create({
+    drawerRef = this.nzDrawerService.create({
       nzTitle: this.i18n.transform('addpluginmodalcomponent_252'),
       nzContent: AddPluginModalComponent,
       nzPlacement: 'right',
@@ -4557,6 +4563,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         outputs,
       },
     });
+    this.pluginModalRef = drawerRef;
   }
 
   private useAddFlowModal(
@@ -4568,11 +4575,14 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       config: any;
     }) => void,
   ) {
-    this.childFlowCallback = callback;
+    // 闭包保存“本次”创建的 drawerRef（见 useAddPluginModal 注释）。
+    let drawerRef: NzDrawerRef | undefined;
+    const onSelect = withDrawerAutoClose(callback, () => drawerRef);
+    this.childFlowCallback = onSelect;
     const outputs = {
-      workflowChange: callback,
+      workflowChange: onSelect,
     };
-    this.childFlowModalRef = this.nzDrawerService.create({
+    drawerRef = this.nzDrawerService.create({
       nzTitle: '',
       nzContent: AddChildFlowModalComponent,
       nzPlacement: 'right',
@@ -4590,20 +4600,25 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         workflowSelectedLimit: 1,
       },
     });
+    this.childFlowModalRef = drawerRef;
   }
 
   private useAddMcpModal(
     callback: (mcpService: IMCPService) => void,
     type: string,
   ) {
-    this.mcpServiceCallback = callback;
+    // 闭包保存“本次”创建的 drawerRef（见 useAddPluginModal 注释）；
+    // MCP 回调为异步，withDrawerAutoClose 会 await 异步初始化/节点创建完成后再 close。
+    let drawerRef: NzDrawerRef | undefined;
+    const onSelect = withDrawerAutoClose(callback, () => drawerRef);
+    this.mcpServiceCallback = onSelect;
     const outputs = {
-      mcpServiceChange: callback,
+      mcpServiceChange: onSelect,
       createMcpRes: (data: any) => {
         this.createMcpResEmit(data);
       },
     };
-    this.mcpModalRef = this.nzDrawerService.create({
+    drawerRef = this.nzDrawerService.create({
       nzTitle: '',
       nzContent: AddMCPServiceModalComponent,
       nzPlacement: 'right',
@@ -4617,6 +4632,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         outputs,
       },
     });
+    this.mcpModalRef = drawerRef;
   }
 
   get halfModalWidth() {
