@@ -232,13 +232,6 @@ export class ModalManagementDetailComponent {
 
   public openTopPublisherHalfModel(provider?) {
     const drawer = this.nzDrawerService.create({
-      nzTitle: provider
-        ? this.i18n.transform('edit-model-publisher', {
-            ns: I18nNamespace.MODEL_ACCESS,
-          })
-        : this.i18n.transform('add-model-publisher', {
-            ns: I18nNamespace.MODEL_ACCESS,
-          }),
       nzContent: AddPublisherComponent,
       nzWidth: '700px',
       nzPlacement: 'right',
@@ -404,6 +397,18 @@ export class ModalManagementDetailComponent {
       this.basicData = res;
       this.itemsTab1[0].disabled = this.basicData[mapKeys.authConfigs][0].auth_type === 'NO_AUTH';
       this.itemsTab2[0].disabled = this.basicData[mapKeys.authConfigs][0].auth_type === 'NO_AUTH';
+      // 同步按钮标签，与 getTopPublisherListFn 保持一致
+      if (this.basicData.auth_config_status === 'available') {
+        this.itemsTab1[0].label = this.i18n.transform('clear_auth');
+        this.itemsTab1[0].icon = cdnAssetUrl('assets/model/new_delete.svg');
+        this.itemsTab2[0].label = this.i18n.transform('clear_auth');
+        this.itemsTab2[0].icon = cdnAssetUrl('assets/model/new_delete.svg');
+      } else {
+        this.itemsTab1[0].label = this.i18n.transform('auth_configuration');
+        this.itemsTab1[0].icon = cdnAssetUrl('assets/model/new_setting.svg');
+        this.itemsTab2[0].label = this.i18n.transform('auth_configuration');
+        this.itemsTab2[0].icon = cdnAssetUrl('assets/model/new_setting.svg');
+      }
       if (this.basicData.id.startsWith('cdi-') || !this.basicData?.created_by_user) {
         this.itemsTab2.forEach((item, index) => {
           item.disabled = !(index === 0 && !this.basicData?.created_by_user);
@@ -596,13 +601,6 @@ export class ModalManagementDetailComponent {
 
   openPublisherHalfModel(provider?) {
     const drawer = this.nzDrawerService.create({
-      nzTitle: provider
-        ? this.i18n.transform('edit-model-publisher', {
-            ns: I18nNamespace.MODEL_ACCESS,
-          })
-        : this.i18n.transform('add-model-publisher', {
-            ns: I18nNamespace.MODEL_ACCESS,
-          }),
       nzContent: AddPublisherComponent,
       nzWidth: '700px',
       nzPlacement: 'right',
