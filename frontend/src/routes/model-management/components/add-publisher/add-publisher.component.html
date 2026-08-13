@@ -52,7 +52,7 @@
     <nz-form-item>
       <nz-form-label nzRequired>{{ 'publisher_name_en' | i18nextEager }}</nz-form-label>
       <nz-form-control [nzErrorTip]="enNameErrorTpl">
-        <input nz-input formControlName="provider_name_en" class="w-full" />
+        <input nz-input formControlName="provider_name_en" class="w-full" autocomplete="off" />
         <p class="name-rule text-xs text-gray-500 mt-1">{{ 'validation-name-tip' | i18nextEager }}</p>
         <ng-template #enNameErrorTpl let-control>
           <ng-container
@@ -90,7 +90,7 @@
     <nz-form-item *ngIf="myForm.value.auth_type === API_KEY">
       <nz-form-label nzRequired>{{ 'api_key_input' | i18nextEager }}</nz-form-label>
       <nz-form-control [nzErrorTip]="'Required'">
-        <input nz-input type="password" formControlName="apikey" class="w-full" />
+        <input nz-input type="password" formControlName="apikey" class="w-full" autocomplete="new-password" />
         <div [innerHTML]="'api_auth_tip' | i18nextEager" class="mt-1 text-xs text-gray-500"></div>
       </nz-form-control>
     </nz-form-item>

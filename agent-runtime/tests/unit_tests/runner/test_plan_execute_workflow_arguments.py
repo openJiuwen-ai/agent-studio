@@ -176,3 +176,107 @@ class TestWorkflowHandlerArgumentsInjection:
         # global_variables 应只有原有值，没有新注入
         called_params = handler.prepare_workflow_params.return_value
         assert called_params["global_variables"] == original_gv
+
+
+class TestGenerateFinalStatusMessageTypeProtection:
+    """_generate_final_status_message 中 str(x) 防御性类型转换的 UT.
+
+    PR #1641: "".join(workflow_status.get("final_answer", [])) 假设列表元素
+    全为字符串，加了 str(x) 保护。此测试验证各种非字符串类型能被正确转换，
+    不会抛出 TypeError。
+    """
+
+    @staticmethod
+    def _make_handler():
+        """构造最小化 WorkflowHandler，跳过 __init__."""
+        from jiuwen.controller.task_executor.handler.workflow_handler import (
+            WorkflowHandler,
+        )
+
+        handler = WorkflowHandler.__new__(WorkflowHandler)
+        handler.context_manager = MagicMock()
+        handler.task_id = "test-task-id"
+        return handler
+
+    @staticmethod
+    def _make_workflow_context():
+        """构造最小化 WorkflowContext."""
+        from jiuwen.controller.context_manager.workflow_context import WorkflowContext
+        from jiuwen.controller.common.enum import WorkflowType
+
+        return WorkflowContext(
+            workflow_id="wf-test",
+            workflow_name="test-workflow",
+            description="test",
+            type=WorkflowType.GENERAL,
+        )
+
+    @pytest.mark.parametrize(
+        "final_answer, expected",
+        [
+            pytest.param(["hello", " world"], "hello world", id="normal-strings"),
+            pytest.param(["count:", 42], "count:42", id="int-mixed"),
+            pytest.param(["data:", {"k": "v"}], "data:{'k': 'v'}", id="dict-mixed"),
+            pytest.param(["items:", [1, 2]], "items:[1, 2]", id="list-mixed"),
+            pytest.param(["a", None, "b"], "aNoneb", id="none-element"),
+            pytest.param([], "", id="empty-list"),
+        ],
+    )
+    def test_final_answer_type_protection(self, final_answer, expected):
+        """final_answer 列表中混入非字符串类型时，str(x) 应正确转换."""
+        import asyncio
+        from jiuwen.controller.common.message import Message
+        from jiuwen.controller.common.message_type import MessageType
+
+        handler = self._make_handler()
+        wf_ctx = self._make_workflow_context()
+        workflow_status = {
+            "workflow_end": True,
+            "questioner_interrupted": False,
+            "final_answer": final_answer,
+        }
+
+        async def run():
+            results = []
+            async for item in handler._generate_final_status_message(  # pylint: disable=protected-access
+                wf_ctx, None, workflow_status
+            ):
+                results.append(item)
+            return results
+
+        results = asyncio.run(run())
+
+        assert len(results) == 1
+        assert isinstance(results[0], Message)
+        assert results[0].message_type == MessageType.WORKFLOW_COMPLETION
+        assert results[0].content["exec_res"]["answer"] == expected
+
+        handler.context_manager.update_workflow_status.assert_called_once()
+        handler.context_manager.set_workflow_state.assert_called_once()
+
+    def test_final_answer_missing_key(self):
+        """workflow_status 中没有 final_answer key 时，.get 默认返回空列表."""
+        import asyncio
+        from jiuwen.controller.common.message import Message
+
+        handler = self._make_handler()
+        wf_ctx = self._make_workflow_context()
+        workflow_status = {
+            "workflow_end": True,
+            "questioner_interrupted": False,
+            # 没有 final_answer key
+        }
+
+        async def run():
+            results = []
+            async for item in handler._generate_final_status_message(  # pylint: disable=protected-access
+                wf_ctx, None, workflow_status
+            ):
+                results.append(item)
+            return results
+
+        results = asyncio.run(run())
+
+        assert len(results) == 1
+        assert isinstance(results[0], Message)
+        assert results[0].content["exec_res"]["answer"] == ""
