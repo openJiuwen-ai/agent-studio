@@ -286,3 +286,7 @@ CREATE TABLE t_knowledge_test_record
   CHARACTER SET = utf8mb4
   COLLATE = utf8mb4_general_ci COMMENT = '知识库命中测试记录表'
   ROW_FORMAT = Dynamic;
+
+ALTER TABLE t_knowledge_base
+    ADD COLUMN embedding_model_service_id varchar(64) NULL DEFAULT NULL COMMENT 'Embedding模型服务ID',
+    ADD COLUMN rerank_model_service_id varchar(80) NULL DEFAULT NULL COMMENT 'Rerank模型服务ID';

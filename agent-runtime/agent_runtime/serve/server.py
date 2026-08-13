@@ -67,6 +67,7 @@ from agent_runtime.serve.apis.user_variable_api import user_variable_router
 from agent_runtime.serve.apis.conversation_variable_api import conversation_variable_router
 from agent_runtime.serve.apis.inner_tools import inner_tools_router
 from agent_runtime.serve.apis.release_api import release_api_router
+from agent_runtime.serve.apis.openjiuwen_kb_api import openjiuwen_kb_router
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -112,7 +113,7 @@ logger.info("Registered workflow component: jiuwen.code")
 apps_map = [
     execution_app, app_run_app, web_run_app, user_variable_router,
     conversation_variable_router, memory_internal_router, inner_tools_router,
-    release_api_router,
+    release_api_router, openjiuwen_kb_router,
 ]
 
 

@@ -51,6 +51,7 @@ export interface IAgentConfigs {
   display_show_model_status?:boolean; //展示模型状态
   asset_app_free_trial_quota_limit?:number;//体验额度
   hmac_auth_enabled?:boolean;//hmac 认证
+  file_max_size_kb?:number;//非图片文件上传大小上限（单位 KB），后端 system/settings 下发
   [key: string]: any;
   studio_btn_show?: boolean;
 }
@@ -139,5 +140,16 @@ export class AgentConfigService {
   public isSupportMemoryInSingleAgent() {
     const { memory_repo_enable } = this.getConfigs();
     return !!memory_repo_enable;
+  }
+
+  /** 非图片文件上传大小上限默认值（单位 KB），配置缺失或非法时回退为 128MB */
+  public static readonly DEFAULT_FILE_MAX_SIZE_KB = 128 * 1024;
+
+  /** 获取非图片文件上传大小上限（单位 KB），配置缺失或非法时回退默认 128MB */
+  public getFileMaxSizeKb(): number {
+    const value = Number(this.getConfigs().file_max_size_kb);
+    return Number.isFinite(value) && value > 0
+      ? Math.floor(value)
+      : AgentConfigService.DEFAULT_FILE_MAX_SIZE_KB;
   }
 }

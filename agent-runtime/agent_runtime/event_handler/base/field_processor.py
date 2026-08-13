@@ -164,6 +164,12 @@ class FieldDataProcessor:
             content = msg.get("content", "")
             if content is None:
                 content = ""
+            elif not isinstance(content, str):
+                # 对 dict/list 使用标准 JSON 格式，其他类型用 str()
+                if isinstance(content, (dict, list)):
+                    content = json.dumps(content, ensure_ascii=False)
+                else:
+                    content = str(content)
             # 与已前置的 user query 去重：若 conversation_info 里有相同 query 且带 agent_id，
             # 用其 agent_id 覆盖前置的（保留正确的 member agent_id），跳过重复
             is_dup_user_query = role == "user" and content == query

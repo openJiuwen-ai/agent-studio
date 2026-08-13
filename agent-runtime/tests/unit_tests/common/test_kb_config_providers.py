@@ -1,4 +1,6 @@
 # pylint: disable=protected-access  # 单元测试需直接验证内部方法行为
+import json
+
 from agent_runtime.common import kb_config_providers
 from agent_runtime.common.kb_config_providers import (
     KBConnectionConfig,
@@ -209,3 +211,88 @@ def test_merge_auth_headers_custom_fills_user_token():
         assert conn.authorization == "user-login-token"
     finally:
         _request_ctx.reset(token)
+
+
+# ---------------------------------------------------------------------------
+# model_config / reranker_config 解析测试
+# ---------------------------------------------------------------------------
+
+
+def test_parse_connection_extracts_model_config():
+    """openjiuwen 连接文件中 model_config 以 JSON 字符串存储在 params 里。"""
+    provider = OBSKnowledgeBaseConfigProvider()
+    model_cfg = {"model_service_id": "svc-123", "workspace_id": "ws-1"}
+    conn = provider._parse_connection(
+        {
+            "connectionId": "conn-1",
+            "connectorId": "OpenJiuwen",
+            "params": [
+                {"code": "model_config", "value": json.dumps(model_cfg)},
+            ],
+        }
+    )
+    assert conn.model_config == model_cfg
+    assert conn.connector_type == "OpenJiuwen"
+
+
+def test_parse_connection_extracts_reranker_config():
+    """reranker_config 以 JSON 字符串存储在 params 里。"""
+    provider = OBSKnowledgeBaseConfigProvider()
+    reranker_cfg = {"model_service_id": "rerank-456", "workspace_id": "ws-1"}
+    conn = provider._parse_connection(
+        {
+            "connectionId": "conn-1",
+            "connectorId": "OpenJiuwen",
+            "params": [
+                {"code": "model_config", "value": json.dumps({"model_service_id": "svc-123"})},
+                {"code": "reranker_config", "value": json.dumps(reranker_cfg)},
+            ],
+        }
+    )
+    assert conn.reranker_config == reranker_cfg
+
+
+def test_parse_connection_reranker_config_empty_when_absent():
+    """没有 reranker_config param 时，reranker_config 为空 dict。"""
+    provider = OBSKnowledgeBaseConfigProvider()
+    conn = provider._parse_connection(
+        {
+            "connectionId": "conn-1",
+            "connectorId": "OpenJiuwen",
+            "params": [
+                {"code": "model_config", "value": json.dumps({"model_service_id": "svc-123"})},
+            ],
+        }
+    )
+    assert conn.reranker_config == {}
+
+
+def test_parse_connection_invalid_reranker_config_json_falls_back_to_empty():
+    """reranker_config JSON 解析失败时，reranker_config 为空 dict（不抛异常）。"""
+    provider = OBSKnowledgeBaseConfigProvider()
+    conn = provider._parse_connection(
+        {
+            "connectionId": "conn-1",
+            "connectorId": "OpenJiuwen",
+            "params": [
+                {"code": "model_config", "value": json.dumps({"model_service_id": "svc-123"})},
+                {"code": "reranker_config", "value": "not-valid-json"},
+            ],
+        }
+    )
+    assert conn.reranker_config == {}
+
+
+def test_parse_connection_invalid_model_config_json_falls_back_to_empty():
+    """model_config JSON 解析失败时，model_config 为空 dict（不抛异常）。"""
+    provider = OBSKnowledgeBaseConfigProvider()
+    conn = provider._parse_connection(
+        {
+            "connectionId": "conn-1",
+            "connectorId": "OpenJiuwen",
+            "params": [
+                {"code": "model_config", "value": "broken"},
+            ],
+        }
+    )
+    assert conn.model_config == {}

@@ -17,6 +17,7 @@ import os
 from typing import List
 
 from jiuwen.common.exception.status_code import StatusCode
+from jiuwen.common.types import ValueTypeEnum
 from jiuwen.common.utils.utils import convert_camel_to_snake, format_exception_reason
 from jiuwen.extension.wrapper.restful_api_new import (
     RestfulApiCardNew,
@@ -74,6 +75,60 @@ def load_restful_api_from_ir(ir_data: dict, tag: str | None = None) -> str:
     if "resource already exist" in err_msg:
         return tool.id
     raise err
+
+
+_PARAM_LOC_HEADERS = "Headers"
+
+
+def _build_input_params_schema(params: List[Param]) -> dict:
+    """从 Param 列表合成 OpenAI function 的 ``parameters`` JSON schema。
+
+    ReAct Agent 调 LLM 时，工具 schema 取自 ``card.input_params``（见
+    ``openjiuwen.core.foundation.tool.base.ToolCard.tool_info``）。旧版 IR 只把
+    ``arguments`` 反序列化成 ``params``（Param 列表）塞进 card，却没合成
+    ``input_params``，导致传给 LLM 的 ``parameters`` 为 ``{}``，DeepSeek/OpenAI
+    会以 ``schema must be a JSON Schema of 'type: "object"'`` 报 400。
+
+    只暴露 LLM 应填的语义参数（Query/Body/Path）；``Headers`` 类参数（如
+    ``Content-Type``）属于请求配置，由 ``headers`` / Headers-Param 通道处理，
+    不应让 LLM 决定，故排除。
+    """
+    properties: dict = {}
+    required: list = []
+    for p in params:
+        if (
+            getattr(p, "method", "Body") == _PARAM_LOC_HEADERS
+            or not getattr(p, "visible", True)
+        ):
+            continue
+
+        param_type = getattr(p, "type", None) or "string"
+        if ValueTypeEnum.is_nested_array(param_type):
+            _, item_type = ValueTypeEnum.split_nested_type(param_type)
+            item_schema = {"type": item_type.value}
+            if item_type == ValueTypeEnum.OBJECT:
+                nested_schema = _build_input_params_schema(getattr(p, "schema", []))
+                item_schema["properties"] = nested_schema["properties"]
+                if nested_schema.get("required"):
+                    item_schema["required"] = nested_schema["required"]
+            property_schema = {"type": "array", "items": item_schema}
+        elif ValueTypeEnum.is_object(param_type):
+            nested_schema = _build_input_params_schema(getattr(p, "schema", []))
+            property_schema = nested_schema
+        else:
+            property_schema = {"type": param_type}
+
+        property_schema["description"] = getattr(p, "description", "") or ""
+        default_value = getattr(p, "default_value", None)
+        if default_value is not None:
+            property_schema["default"] = default_value
+        properties[p.name] = property_schema
+        if getattr(p, "required", False):
+            required.append(p.name)
+    schema: dict = {"type": "object", "properties": properties}
+    if required:
+        schema["required"] = required
+    return schema
 
 
 def convert_ir_to_card(ir_data: dict) -> RestfulApiCardNew:
@@ -140,6 +195,7 @@ def convert_ir_to_card(ir_data: dict) -> RestfulApiCardNew:
         name=plugin_name,
         description=ir_data.get("description", ""),
         params=params,
+        input_params=_build_input_params_schema(params),
         path=url,
         headers=headers,
         method=ir_data.get("method", "POST"),

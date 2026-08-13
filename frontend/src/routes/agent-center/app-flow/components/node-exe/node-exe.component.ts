@@ -76,6 +76,7 @@ import {
 } from 'src/pipes/upload-file.pipe';
 import { CommonUtils } from 'src/utils/common.util';
 import { checkFileTypeAndSize } from '@routes/agent-center/utils';
+import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 
 type PlainType = string | number | boolean | Record<string, any>;
 
@@ -351,6 +352,7 @@ export class NodeExeComponent implements OnChanges {
     private appPluginRepoServ: AppPluginRepoService,
     private i18n: I18NextEagerPipe,
     private nzMessage: NzMessageService,
+    private configServ: AgentConfigService,
   ) {}
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -804,7 +806,18 @@ export class NodeExeComponent implements OnChanges {
       }
 
       const fileExtension = file.name.split('.').pop().toLowerCase();
-      const isImage = checkFileTypeAndSize(fileExtension, file.size, this.i18n);
+      const valid = checkFileTypeAndSize(
+        fileExtension,
+        file.size,
+        this.i18n,
+        this.configServ.getFileMaxSizeKb(),
+      );
+
+      if (!valid) {
+        return;
+      }
+
+      const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(fileExtension);
 
       inputItem.uploadData = {
         name: file.name,
@@ -848,9 +861,9 @@ export class NodeExeComponent implements OnChanges {
         const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(
           extension,
         );
-        const validationError = validateFileSize(file, isImage);
+        const validationError = validateFileSize(file, isImage, 5 * 1024, this.configServ.getFileMaxSizeKb());
         if (validationError) {
-          this.nzMessage.warning(this.i18n.transform(validationError));
+          this.nzMessage.warning(this.i18n.transform(validationError.key, validationError.params));
           continue;
         }
         const fileItem = createFileItem(file);

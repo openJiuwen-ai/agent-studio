@@ -18,6 +18,7 @@ import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.common.entity.Text2AudioReq;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.*;
+import com.openjiuwen.studio.agent.manager.dto.openjiuwen.*;
 import com.openjiuwen.studio.agent.manager.dto.runtime.Audio2TextReq;
 import com.openjiuwen.studio.agent.manager.dto.runtime.StsTextResp;
 import com.openjiuwen.studio.agent.manager.rce.models.McpCallToolRequest;
@@ -374,4 +375,37 @@ public interface AgentRuntimeClient {
         @PathVariable("memory_repo_id") String memoryRepoId,
         @PathVariable("user_id") String userId,
         @RequestBody java.util.Map<String, Object> body);
+
+    /**
+     * 创建 openjiuwen 知识库。
+     */
+    @PostMapping(value = "/internal/v1/kb/create")
+    ResponseEntity<OpenJiuwenKBResponse> createOpenJiuwenKB(@RequestBody OpenJiuwenCreateKBReq body);
+
+    /**
+     * 上传文档到 openjiuwen 知识库（multipart 文件流方式）。
+     */
+    @PostMapping(value = "/internal/v1/kb/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    ResponseEntity<OpenJiuwenUploadResp> uploadOpenJiuwenKBFile(
+        @RequestPart("kb_id") String kbId,
+        @RequestPart("file") MultipartFile file,
+        @RequestPart("model_config_json") String modelConfig);
+
+    /**
+     * 检索 openjiuwen 知识库。
+     */
+    @PostMapping(value = "/internal/v1/kb/search")
+    ResponseEntity<OpenJiuwenSearchResp> searchOpenJiuwenKB(@RequestBody OpenJiuwenSearchReq body);
+
+    /**
+     * 删除 openjiuwen 知识库。
+     */
+    @DeleteMapping(value = "/internal/v1/kb/delete")
+    ResponseEntity<OpenJiuwenKBResponse> deleteOpenJiuwenKB(@RequestBody OpenJiuwenDeleteKBReq body);
+
+    /**
+     * 列出 openjiwen 知识库存在状态。
+     */
+    @GetMapping(value = "/internal/v1/kb/list")
+    ResponseEntity<Object> listOpenJiuwenKBs(@RequestParam("kb_ids") String kbIds);
 }

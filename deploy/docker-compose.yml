@@ -185,6 +185,10 @@ services:
       knowledge_lakeSearch_auth_mode: ${KNOWLEDGE_LAKESEARCH_AUTH_MODE:-basic}
       # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
       auth_sso_validate_url: ${AUTH_SSO_VALIDATE_URL:-}
+      # 非图片文件上传大小上限（单位 KB，默认 131072 即 128MB）
+      agent_max_upload_file_size: ${AGENT_MAX_UPLOAD_FILE_SIZE:-131072}
+      # 用户上传文件累计大小上限（单位 KB，默认 204800 即 200MB）
+      max_upload_total_size: ${MAX_UPLOAD_TOTAL_SIZE:-204800}
       # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true
       CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
       CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}

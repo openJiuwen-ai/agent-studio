@@ -2089,7 +2089,7 @@ export class AppFlowService {
       ],
       configs: {
         system_prompt: '',
-        max_iteration: 9, // 退出最大迭代次数
+        max_iteration: 9, // 最大工具调用轮次
         temperature: 0.5,
         model: {
           model_name: '',
@@ -2099,8 +2099,6 @@ export class AppFlowService {
         },
         top_p: 0.5,
         max_tokens: null,
-        break_plugin_ids: [],
-        enable_intent_break: true,
         plugins: [],
         isDefaultName: true,
       },

@@ -40,17 +40,7 @@ public class AgentNodeAdapter extends AbstractIRNodeAdapter {
     private static final String ID = "id";
 
     /**
-     * 允许意图退出
-     */
-    private static final String ENABLE_INTENT_BREAK = "enable_intent_break";
-
-    /**
-     * 跳出插件id
-     */
-    private static final String BREAK_PLUGIN_IDS = "break_plugin_ids";
-
-    /**
-     * 跳出最大迭代轮次
+     * 最大工具调用轮次
      */
     private static final String MAX_ITERATION = "max_iteration";
 
@@ -58,12 +48,7 @@ public class AgentNodeAdapter extends AbstractIRNodeAdapter {
     public Map<String, Object> adaptConfig(WorkflowNodeVO workflowNodeVo) {
         Map<String, Object> configs = new HashMap<>();
         Map<String, Object> nodeConfigs = workflowNodeVo.getConfigs();
-        configs.put(IRUtils.adaptKey(ENABLE_INTENT_BREAK),
-            nodeConfigs.get(ENABLE_INTENT_BREAK) != null ? nodeConfigs.get(ENABLE_INTENT_BREAK) : false);
-        configs.put(IRUtils.adaptKey(BREAK_PLUGIN_IDS),
-            nodeConfigs.get(BREAK_PLUGIN_IDS) != null ? nodeConfigs.get(BREAK_PLUGIN_IDS) : new ArrayList<>());
-
-        // 最大迭代次数，默认值为1
+        // 最大工具调用轮次，默认值为1
         configs.put(IRUtils.adaptKey(MAX_ITERATION),
             nodeConfigs.get(MAX_ITERATION) != null ? nodeConfigs.get(MAX_ITERATION) : 1);
         adaptModel(configs, nodeConfigs);

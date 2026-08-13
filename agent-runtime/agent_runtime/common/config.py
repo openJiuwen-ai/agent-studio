@@ -431,6 +431,36 @@ class ConversationVariableSettings(BaseSettings):
     )
 
 
+class OpenJiuwenKBSettings(BaseSettings):
+    """openjiuwen 知识库配置。"""
+
+    store_provider: str = Field(
+        default="milvus", validation_alias="OPENJIUWEN_STORE_PROVIDER"
+    )
+    distance_metric: str = Field(
+        default="cosine", validation_alias="OPENJIUWEN_DISTANCE_METRIC"
+    )
+    chunk_size: int = Field(default=512, validation_alias="OPENJIUWEN_CHUNK_SIZE")
+    chunk_overlap: int = Field(
+        default=50, validation_alias="OPENJIUWEN_CHUNK_OVERLAP"
+    )
+    milvus_uri: str = Field(
+        default="./data/milvus_kb.db", validation_alias="OPENJIUWEN_MILVUS_URI"
+    )
+    milvus_token: str = Field(default="", validation_alias="OPENJIUWEN_MILVUS_TOKEN")
+    milvus_database: str = Field(
+        default="default", validation_alias="OPENJIUWEN_MILVUS_DATABASE"
+    )
+    chroma_path: str = Field(
+        default="./chroma_data", validation_alias="OPENJIUWEN_CHROMA_PATH"
+    )
+    pg_uri: str = Field(default="", validation_alias="OPENJIUWEN_PG_URI")
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
 class Settings:
     server = ServerSettings()
     llm = LLMSettings()
@@ -448,5 +478,6 @@ class Settings:
     code_execution = CodeExecutionSettings()
     db_config = DataBaseSettings()
     conversation_variable = ConversationVariableSettings()
+    openjiuwen_kb = OpenJiuwenKBSettings()
 
 settings = Settings()

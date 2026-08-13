@@ -1116,12 +1116,10 @@ export interface IHttpRepo extends INodeBase {
 export interface IAgentConfig {
   model: ILLMConfig;
   system_prompt: string;
-  max_iteration: number; // 退出最大迭代次数
+  max_iteration: number; // 最大工具调用轮次
   temperature: number;
   top_p: number;
   max_tokens: number;
-  break_plugin_ids: Array<string>;
-  enable_intent_break: boolean;
   plugins: {
     id: string;
     name: string;

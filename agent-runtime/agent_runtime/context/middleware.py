@@ -49,6 +49,8 @@ def _capture_platform_headers(request: Request) -> dict:
     """捕获平台 header（X-Auth-Token 等）"""
     return {
         "X-Auth-Token": request.headers.get("x-auth-token", ""),
+        "X-Execution-Id": request.headers.get("x-execution-id", ""),
+        "X-Invoke-Mode": request.headers.get("x-invoke-mode", ""),
         "Cookie": request.headers.get("cookie", ""),
         "x-language": request.headers.get("x-language", ""),
         "accept-language": request.headers.get("accept-language", ""),

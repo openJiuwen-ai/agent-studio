@@ -400,6 +400,9 @@ public class CommonManagementService implements ICommonManagementService {
 
         defConfigJsonObject.put("license-default-display-time", licenseDefaultDisplayTime);
 
+        // 非图片文件上传大小上限（单位 KB），供前端聊天附件上传入口统一校验
+        defConfigJsonObject.put("file_max_size_kb", fileMaxSize);
+
         if (StringUtils.isNotEmpty(runtimeHost)) {
             String runtimeApiEndpointPrefix = String.format(runtimeHost,
                 RequestContextUtils.getRequestUserDomainId(), regionId);
