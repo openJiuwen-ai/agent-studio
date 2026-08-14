@@ -1,4 +1,4 @@
-import { Component, Output, EventEmitter, ViewChild, ElementRef, Input } from '@angular/core';
+import { Component, Output, EventEmitter, ViewChild, ElementRef, Input, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MODULES } from '@shared/modules';
 import { I18nNamespace } from '@i18n';
@@ -8,6 +8,7 @@ import { cdnAssetUrl } from 'src/single-spa/assets-url';
 import { MessageComponent } from '@shared/services/cfdata.service';
 import { IntentPackageService } from '../../intent-package.service';
 import { agentCommonLogic } from '@routes/agent-center/app-agent/common-logic-agent';
+import { NzModalRef, NZ_MODAL_DATA } from 'ng-zorro-antd/modal';
 @Component({
   selector: 'import-intent-modal',
   templateUrl: './import-intent.component.html',
@@ -35,12 +36,40 @@ export class ImportIntentModalComponent {
   constructor(
     private readonly i18n: I18NextEagerPipe,
     private readonly api: IntentPackageService,
-    private commonLogic: agentCommonLogic
+    private commonLogic: agentCommonLogic,
+    @Optional() private modalRef: NzModalRef,
+    @Optional() @Inject(NZ_MODAL_DATA) private nzData: any
   ) {}
 
   public changeUrl = cdnAssetUrl;
 
   public uplaodFile: any = {};
+
+  /**
+   * 统一取 intentId：兼容 @Input() 直接绑定（模板中静态使用）
+   * 和 nzModalService.create 传入 nzData.context.intentId 两种调用方式。
+   */
+  private get modalContext(): { intentId?: string; intentName?: string; outputs?: { refreshTable?: (ids?: string[]) => void } } {
+    return this.nzData?.context ?? {};
+  }
+
+  private get effectiveIntentId(): string {
+    return this.intentId ?? this.modalContext.intentId ?? '';
+  }
+
+  private get effectiveIntentName(): string {
+    return this.intentName ?? this.modalContext.intentName ?? '';
+  }
+
+  /**
+   * 关闭弹窗：取消按钮、导入成功后、X 按钮（由 nz-modal 内部调用）都走这里。
+   * 必须销毁 NzModalRef，否则点取消弹窗无反应。
+   */
+  public dismiss() {
+    if (this.modalRef) {
+      this.modalRef.destroy();
+    }
+  }
 
   downTemplate(): void {
     this.api.downloadTemlate().then(res => {
@@ -86,16 +115,16 @@ export class ImportIntentModalComponent {
     const formData = new FormData();
     formData.append('file', this.uplaodFile.file);
     this.api
-      .uploadIntent(this.intentId, this.intentName, formData)
+      .uploadIntent(this.effectiveIntentId, this.effectiveIntentName, formData)
       .then((res: any) => {
         if (res.success) {
           this.dismiss();
           MessageComponent.showSuccess(this.i18n.transform('upload_success'), 3000);
+          // 兼容两种调用方式：模板 @Output 绑定 + nzModalService.create 的 nzData.context.outputs
           this.refreshTable.emit(res.intent_ids);
+          this.modalContext.outputs?.refreshTable?.(res.intent_ids);
         }
       })
       .finally(() => {});
   }
-
-  public dismiss() {}
 }
