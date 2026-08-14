@@ -3,7 +3,7 @@
     <div class="relative h-[96%] w-full flex" >
       <nz-tabset id="flow-add-tool-modal" class="h-full w-full" [nzAnimated]="false"  [(nzSelectedIndex)]="tabSelectIndex">
         <div *ngIf="currTab === tabs[0].id" class="add-button">
-          <button type="button" (click)="showAddPluginModal()" nz-button nzType="primary" class="!rounded-button">
+          <button type="button" (click)="showAddPluginModal()" nz-button nzType="primary" class="!rounded-button" [disabled]="isShowCreatePluginModal">
             {{ 'create_plugin' | i18nextEager }}
           </button>
         </div>
@@ -154,6 +154,7 @@
                         nz-tooltip nzTooltipPlacement="left"
                         nz-button
                         nzType="default"
+                        [disabled]="isAddingTool"
                       >
                         {{ 'addpluginmodalcomponent_255' | i18nextEager }}{{tool.ref_num!==0?'('+tool.ref_num+')':''}}
                       </button>
@@ -267,7 +268,7 @@
                       <button
                         [nz-tooltip]="plugin.last_version_id || useUnpublishedPlugin ? '' : 'addpluginmodalcomponent_249' | i18nextEager"
                         (click)="addTool($event, plugin,tool)"
-                        [disabled]="!plugin?.last_version_id && !useUnpublishedPlugin"
+                        [disabled]="!plugin?.last_version_id && !useUnpublishedPlugin || isAddingTool"
                         nz-tooltip nzTooltipPlacement="left"
                         nz-button
                         nzType="default"
@@ -405,6 +406,7 @@
                       nz-tooltip nzTooltipPlacement="left"
                       nz-button
                       nzType="default"
+                      [disabled]="isAddingTool"
                     >
                       {{'add'|i18nextEager}}{{tool.ref_num ?'('+tool.ref_num+')':''}}
                     </button>

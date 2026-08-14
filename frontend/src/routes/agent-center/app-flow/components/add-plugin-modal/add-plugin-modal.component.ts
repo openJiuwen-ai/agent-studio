@@ -50,6 +50,8 @@ export class AddPluginModalComponent implements OnInit {
   @Output('pluginChange') pluginChange = new EventEmitter<IPlugin>();
   readonly drawerRef = inject(NzDrawerRef);
   public controller = new AbortController();
+  public isShowCreatePluginModal = false;
+  public isAddingTool = false;
   public changeUrl = cdnAssetUrl;
   public tabs = [
     {
@@ -316,35 +318,46 @@ export class AddPluginModalComponent implements OnInit {
 
   public addTool(e: Event, plugin, tool) {
     e.stopPropagation();
+    if (this.isAddingTool) {
+      return;
+    }
     if (this.tabSelectIndex === 1 && !plugin.last_version_id && !this.useUnpublishedPlugin) {
       return;
     }
+    this.isAddingTool = true;
     const { plugin_id, last_version_id } = plugin;
 
     const key = `${plugin.plugin_id}#${tool.tool_id}`;
     this.refMap.set(key, (this.refMap.get(key) ?? 0) + 1);
     if (last_version_id) {
-      this.appFlowRepoServe.getPluginVersionInfo(plugin_id, last_version_id).then(res => {
-        const pluginVersion = res.data;
-        let toolList = pluginVersion.intf_type.find(toolIntfType => toolIntfType.tool_id === tool.tool_id);
-        if (!toolList) {
-          MessageComponent.showError(this.i18n.transform('addpluginmodalcomponent_260'));
-          return;
-        }
-        tool.ref_num++;
-        const toolInfo = {
-          ...tool,
-          plugin_chinese_name: plugin.plugin_chinese_name,
-          id: pluginVersion.plugin_id,
-          intf_type: pluginVersion.intf_type.find(toolIntfType => toolIntfType.tool_id === tool.tool_id).intf_type,
-          input_schema: pluginVersion.input_schema.find(toolInputSchema => toolInputSchema.tool_id === tool.tool_id).input_schema,
-          output_schema: pluginVersion.output_schema.find(toolOutputSchema => toolOutputSchema.tool_id === tool.tool_id).output_schema,
-          type: pluginVersion.type,
-        };
-        const result = { ...toolInfo, last_version_id, request_info: plugin.request_info };
-        this.pluginChange.emit(result);
-        this.outputs?.pluginChange?.(result);
-      });
+      this.appFlowRepoServe
+        .getPluginVersionInfo(plugin_id, last_version_id)
+        .then(res => {
+          const pluginVersion = res.data;
+          let toolList = pluginVersion.intf_type.find(toolIntfType => toolIntfType.tool_id === tool.tool_id);
+          if (!toolList) {
+            this.isAddingTool = false;
+            MessageComponent.showError(this.i18n.transform('addpluginmodalcomponent_260'));
+            return;
+          }
+          tool.ref_num++;
+          const toolInfo = {
+            ...tool,
+            plugin_chinese_name: plugin.plugin_chinese_name,
+            id: pluginVersion.plugin_id,
+            intf_type: pluginVersion.intf_type.find(toolIntfType => toolIntfType.tool_id === tool.tool_id).intf_type,
+            input_schema: pluginVersion.input_schema.find(toolInputSchema => toolInputSchema.tool_id === tool.tool_id).input_schema,
+            output_schema: pluginVersion.output_schema.find(toolOutputSchema => toolOutputSchema.tool_id === tool.tool_id).output_schema,
+            type: pluginVersion.type,
+          };
+          const result = { ...toolInfo, last_version_id, request_info: plugin.request_info };
+          this.pluginChange.emit(result);
+          this.outputs?.pluginChange?.(result);
+          this.drawerRef.close();
+        })
+        .catch(() => {
+          this.isAddingTool = false;
+        });
     } else {
       const toolInfo = {
         ...tool,
@@ -359,6 +372,7 @@ export class AddPluginModalComponent implements OnInit {
       const result = { ...toolInfo, request_info: plugin.request_info };
       this.pluginChange.emit(result);
       this.outputs?.pluginChange?.(result);
+      this.drawerRef.close();
     }
   }
 
@@ -385,6 +399,10 @@ export class AddPluginModalComponent implements OnInit {
   }
 
   public showAddPluginModal() {
+    if (this.isShowCreatePluginModal) {
+      return;
+    }
+    this.isShowCreatePluginModal = true;
     const modalContainer = document.querySelector('#addPluginModalComponent > div');
     const thisNzModal: any = this.modalService.create({
       nzWidth: '1000px',
@@ -397,11 +415,13 @@ export class AddPluginModalComponent implements OnInit {
     const instance = thisNzModal.getContentComponent();
     instance.usedFrom = 'flow';
     instance.confirm.subscribe(() => {
-      MessageComponent.showSuccess(this.i18n.transform('addpluginmodalcomponent_257'));
       this.drawerRef.close();
       if (this.currTab === 'custom') {
         this.initApiList();
       }
+    });
+    thisNzModal.afterClose.subscribe(() => {
+      this.isShowCreatePluginModal = false;
     });
   }
 
