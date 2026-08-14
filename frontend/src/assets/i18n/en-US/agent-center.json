@@ -1921,7 +1921,7 @@
   "submit_requirement": "Submit Requirement",
   "share_your_idea_create_personalized_app": "Share Your Thoughts, and create something uniquely yours instantly",
   "addchildflowmodalcomponent_243": "Create Workflow",
-  "addchildflowmodalcomponent_245": "Add workflows to execute fixed business processes. Up to 5 workflows supported.",
+  "addchildflowmodalcomponent_245": "Add a workflow to execute a fixed business process. Up to 1 workflow supported.",
   "addmcpservicemodalcomponent_246": "Confirm to add the created MCP to the agent?",
   "addpluginmodalcomponent_249": "This plugin is not published yet. It can only be added to workflows after publication.",
   "addpluginmodalcomponent_252": "Add Plugin Tool",

@@ -1947,7 +1947,7 @@
   "submit_requirement": "提交需求",
   "share_your_idea_create_personalized_app": "说出你的创意，即刻创建专属你的",
   "addchildflowmodalcomponent_243": "创建工作流",
-  "addchildflowmodalcomponent_245": "添加工作流使应用执行固定的业务流程，最多支持添加5个工作流",
+  "addchildflowmodalcomponent_245": "添加工作流使应用执行固定的业务流程，最多支持添加1个工作流",
   "addmcpservicemodalcomponent_246": "确认把创建的MCP添加到智能体吗？",
   "addpluginmodalcomponent_249": "该插件未发布，发布后才能添加至工作流",
   "addpluginmodalcomponent_252": "添加插件工具",
