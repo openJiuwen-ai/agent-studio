@@ -194,7 +194,7 @@ export class ExceptionHandlingComponent implements OnInit, OnDestroy {
       this.demoCode = JSON.stringify(
         {
           content: [{ type: 'text', text: '' }],
-          isError: false,
+          isError: true,
         },
         null,
         2,
