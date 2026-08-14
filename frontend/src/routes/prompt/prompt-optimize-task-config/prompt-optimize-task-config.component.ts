@@ -185,10 +185,13 @@ export class PromptOptimizeTaskConfigComponent {
 
   public variant: 'compact' | 'simple' | '常规' = 'compact';
 
+  private taskNameErrorShown: 'required' | 'maxlength' | null = null;
+
   public get footerDisabled(): string {
     if (this.activeStep === 0) {
-      if (!this.basicInfoForm.controls.taskName.valid) {
-        return this.i18n.transform('prompt_optimize_task_config_1');
+      const taskNameError = this.getTaskNameError();
+      if (taskNameError) {
+        return this.getTaskNameErrorMessage(taskNameError);
       }
       if (!this.basicInfoForm.controls.desc.valid) {
         return this.i18n.transform('prompt_optimize_task_config_2');
@@ -211,6 +214,23 @@ export class PromptOptimizeTaskConfigComponent {
     } else {
       return '';
     }
+  }
+
+  private getTaskNameError(): 'required' | 'maxlength' | null {
+    const taskNameControl = this.basicInfoForm.controls.taskName;
+    if (taskNameControl.hasError('required')) {
+      return 'required';
+    }
+    if (taskNameControl.hasError('maxlength')) {
+      return 'maxlength';
+    }
+    return null;
+  }
+
+  private getTaskNameErrorMessage(error: 'required' | 'maxlength'): string {
+    const messageKey =
+      error === 'required' ? 'prompt_optimize_task_config_1' : 'prompt_optimize_task_config_name_max_length';
+    return this.i18n.transform(messageKey);
   }
 
   public get promptMaxLength() {
@@ -769,6 +789,16 @@ export class PromptOptimizeTaskConfigComponent {
   }
 
   private async saveDraft() {
+    const taskNameError = this.getTaskNameError();
+    if (taskNameError) {
+      if (this.taskNameErrorShown !== taskNameError) {
+        MessageComponent.showError(this.getTaskNameErrorMessage(taskNameError));
+        this.taskNameErrorShown = taskNameError;
+      }
+      return;
+    }
+    this.taskNameErrorShown = null;
+
     const draft = this.buildDraftData();
     if (this.taskId) {
       const res = await this.promptOptimizeService.updateDraft(this.taskId, draft);
