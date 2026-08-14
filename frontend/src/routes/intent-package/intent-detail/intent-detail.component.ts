@@ -535,15 +535,13 @@ export class IntentDetailComponent implements OnInit, OnDestroy {
       nzClassName: 'import-intent-modal',
       nzFooter: null,
       nzData: {
-        context: {
-          intentId: this.intentPackageId,
-          intentName: this.form.value.name,
-          outputs: {
-            refreshTable: (intentIds) => {
-              this.loadIntent(intentIds?.[0] || '');
-            },
+        intentId: this.intentPackageId,
+        intentName: this.form.value.name,
+        outputs: {
+          refreshTable: (intentIds) => {
+            this.loadIntent(intentIds?.[0] || '');
           },
-        }
+        },
       },
     });
   }
