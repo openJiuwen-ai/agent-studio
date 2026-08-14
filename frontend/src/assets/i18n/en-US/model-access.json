@@ -151,7 +151,7 @@
   "confirm_remove_auth": "Confirm removal of authentication?",
   "remove_success": "Removed successfully",
   "model_service_icon": "Model Service Icon",
-  "image_size_100k_max_format_jpg_png": "Image must be ≤100 KB and in JPG or PNG format",
+  "image_size_100k_max_format_jpg_png": "Image must be ≤100 KB and in JPG, JPEG, or PNG format",
   "model_name_for_api_call_tip": "If connecting a self-hosted model service, this model name will be used as the 'model' field in API request bodies.",
   "click": "Click",
   "view_protocol_details": "View Protocol Details",
