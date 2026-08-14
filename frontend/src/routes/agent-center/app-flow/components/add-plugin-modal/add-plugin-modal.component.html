@@ -50,19 +50,19 @@
                    class="card-wrapper">
                 <div class="card" (click)="isShow=(isShow===plugin.plugin_id?'':plugin.plugin_id)">
                   <img
-                    class="h-[40px] w-[40px]"
+                    class="h-[40px] w-[40px] flex-shrink-0"
                     [src]="getCardIcon(plugin)"
                     alt="api"
                   />
-                  <div class="w-[calc(100%-160px)]">
-                    <div class="flex items-center gap-[8px]">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-[8px] overflow-hidden">
                       <div
-                        nz-ellipsis
-                        class="max-w-[calc(100%-114px)] text-sm font-bold text-label"
+                        class="min-w-0 flex-1 truncate text-sm font-bold text-label"
+                        [title]="getPluginName(plugin)"
                       >
                         {{ getPluginName(plugin) }}
                       </div>
-                      <div>
+                      <div class="flex-shrink-0">
                         <nz-tag *ngIf="plugin?.quotaTag" 
                                 nz-tooltip nzTooltipPlacement="bottomLeft" [nzTooltipTitle]="plugin.quotaTag.tip"
                                 class="!rounded-[4px] py-[1px] pl-[2px] pr-[4px]"  [style.color]="plugin.quotaTag.color" [style.background-color]="plugin.quotaTag.bgColor" size="small">
@@ -113,13 +113,13 @@
                       </div>
                     </div>
                     <div
-                      nz-ellipsis
-                      class="mt-[4px] break-words text-desc"
+                      class="mt-[4px] line-clamp-2 text-desc"
+                      [title]="plugin.plugin_desc"
                     >
                       {{ plugin.plugin_desc }}
                     </div>
                   </div>
-                  <ng-container>
+                  <ng-container class="flex-shrink-0">
                     <div class="tool-num">{{getToolNumOfPlugin(plugin)}}{{ 'addpluginscomponent_25' | i18nextEager }}</div>
                     <img *ngIf="isShow!==plugin.plugin_id"
                          class="h-4 w-4"
@@ -133,18 +133,18 @@
                 <div *ngIf="isShow===plugin.plugin_id">
                   <div>
                     <div class="sub-card sub-card-hover" *ngFor="let tool of plugin.request_info.tool_info">
-                      <div class="w-[calc(100%-160px)]">
+                      <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-[8px]">
                           <div
-                            nz-ellipsis
-                            class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                            class="min-w-0 flex-1 truncate text-sm font-bold text-label"
+                            [title]="getToolName(tool)"
                           >
                             {{ getToolName(tool) }}
                           </div>
                         </div>
                         <div
-                          nz-ellipsis
-                          class="mt-[4px] break-words text-desc"
+                          class="mt-[4px] line-clamp-2 text-desc"
+                          [title]="tool.tool_desc"
                         >
                           {{ tool.tool_desc }}
                         </div>
@@ -213,27 +213,27 @@
                   class="card-wrapper">
                 <div class="card" (click)="isShow=(isShow===plugin.plugin_id?'':plugin.plugin_id)">
                   <img
-                    class="h-[40px] w-[40px]"
+                    class="h-[40px] w-[40px] flex-shrink-0"
                     [src]="getCardIcon(plugin)"
                     alt="api"
                   />
-                  <div class="w-[calc(100%-160px)]">
+                  <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-[8px]">
                       <div
-                        nz-ellipsis
-                        class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                        class="min-w-0 flex-1 truncate text-sm font-bold text-label"
+                        [title]="getPluginName(plugin)"
                       >
                         {{ getPluginName(plugin) }}
                       </div>
                     </div>
                     <div
-                      nz-ellipsis
-                      class="mt-[4px] break-words text-desc"
+                      class="mt-[4px] line-clamp-2 text-desc"
+                      [title]="plugin.plugin_desc"
                     >
                       {{ plugin.plugin_desc }}
                     </div>
                   </div>
-                  <ng-container >
+                  <ng-container class="flex-shrink-0">
                     <div class="tool-num">{{getToolNumOfPlugin(plugin)}}{{ 'addpluginscomponent_25' | i18nextEager }}</div>
                     <img *ngIf="isShow!==plugin.plugin_id"
                         class="h-4 w-4"
@@ -248,18 +248,18 @@
                 <div *ngIf="isShow===plugin.plugin_id">
                   <div>
                     <div class="sub-card" [ngClass]="{'sub-card-hover': plugin.last_version_id}" *ngFor="let tool of plugin.request_info.tool_info" >
-                      <div class="w-[calc(100%-160px)]">
+                      <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-[8px]">
                           <div
-                            nz-ellipsis
-                            class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                            class="min-w-0 flex-1 truncate text-sm font-bold text-label"
+                            [title]="getToolName(tool)"
                           >
                             {{ getToolName(tool) }}
                           </div>
                         </div>
                         <div
-                          nz-ellipsis
-                          class="mt-[4px] break-words text-desc"
+                          class="mt-[4px] line-clamp-2 text-desc"
+                          [title]="tool.tool_desc"
                         >
                           {{ tool.tool_desc }}
                         </div>
@@ -321,21 +321,21 @@
                  class="card-wrapper">
               <div class="card" (click)="getShareTool(plugin)">
                 <img
-                  class="h-[40px] w-[40px]"
+                  class="h-[40px] w-[40px] flex-shrink-0"
                   [src]="getCardIcon(plugin)"
                   alt="api"
                 />
-                <div class="w-[calc(100%-160px)]">
+                <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-[8px]">
                     <div
-                      nz-ellipsis
-                      class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                      class="min-w-0 flex-1 truncate text-sm font-bold text-label"
+                      [title]="getPluginName(plugin)"
                     >
                       {{ getPluginName(plugin) }}
                     </div>
                   </div>
                   <div >
-                    <span class="w-full mt-1 text-[#808080]" nz-ellipsis>
+                    <span class="w-full mt-1 text-[#808080] line-clamp-2" [title]="plugin.plugin_desc">
                       {{plugin.plugin_desc}}
                     </span>
                   </div>
@@ -360,7 +360,7 @@
                       </div>
                     </div>
                 </div>
-                <ng-container >
+                <ng-container class="flex-shrink-0">
                   <div class="tool-num"></div>
                   <img *ngIf="isShow!==plugin.plugin_id"
                        class="h-4 w-4"
@@ -379,18 +379,18 @@
               <div *ngIf="isShow===plugin.plugin_id && plugin.toolIsReady">
                 <div>
                   <div class="sub-card sub-card-hover" *ngFor="let tool of plugin.tool_info">
-                    <div class="w-[calc(100%-160px)]">
+                    <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-[8px]">
                         <div
-                          nz-ellipsis
-                          class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                          class="min-w-0 flex-1 truncate text-sm font-bold text-label"
+                          [title]="getToolName(tool)"
                         >
                           {{ getToolName(tool) }}
                         </div>
                       </div>
                       <div
-                        nz-ellipsis
-                        class="mt-[4px] break-words text-desc"
+                        class="mt-[4px] line-clamp-2 text-desc"
+                        [title]="tool.tool_desc"
                       >
                         {{ tool.tool_desc }}
                       </div>
