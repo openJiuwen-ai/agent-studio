@@ -71,13 +71,21 @@ export class AddPluginModalComponent implements OnInit {
     },
   ];
   protected readonly PluginCredentialStatus = PluginCredentialStatus;
-  public searchItemsForPlugin = [
+  public searchItemsForInner = [
     { label: this.i18n.transform('plugin_name'), field: 'tool_chinese_name' },
     { label: this.i18n.transform('plugin_en_name'), field: 'name' },
     { label: this.i18n.transform('plugin_description'), field: 'tool_desc' },
   ];
-  public searchTagsPlugin: ISearchTag[] = [];
-  public searchFieldPlugin: string = 'tool_chinese_name';
+  public searchTagsInner: ISearchTag[] = [];
+  public searchFieldInner: string = 'tool_chinese_name';
+
+  public searchItemsForCustom = [
+    { label: this.i18n.transform('plugin_name'), field: 'tool_chinese_name' },
+    { label: this.i18n.transform('plugin_en_name'), field: 'name' },
+    { label: this.i18n.transform('plugin_description'), field: 'tool_desc' },
+  ];
+  public searchTagsCustom: ISearchTag[] = [];
+  public searchFieldCustom: string = 'tool_chinese_name';
 
   public searchItemsForShare = [
     { label: this.i18n.transform('name'), field: 'resourceName' },
@@ -104,8 +112,10 @@ export class AddPluginModalComponent implements OnInit {
   get searchNameIsEmpty(): boolean {
     if (this.currTab === 'share') {
       return this.searchTagsShare.length === 0;
+    } else if (this.currTab === 'inner') {
+      return this.searchTagsInner.length === 0;
     }
-    return this.searchTagsPlugin.length === 0;
+    return this.searchTagsCustom.length === 0;
   }
   public pluginLabels = [
     {
@@ -247,7 +257,8 @@ export class AddPluginModalComponent implements OnInit {
           offset: !isChangeTab ? ((this.currentPage || 1) - 1) * this.pageSize : 0,
           limit: this.pageSize,
         };
-        this.searchTagsPlugin.forEach(tag => {
+        const activeSearchTags = this.currTab === 'inner' ? this.searchTagsInner : this.searchTagsCustom;
+        activeSearchTags.forEach(tag => {
           params[tag.field] = tag.value;
         });
         if (this.currTab !== 'custom') {
@@ -453,8 +464,10 @@ export class AddPluginModalComponent implements OnInit {
   handleClickClearSearch() {
     if (this.currTab === 'share') {
       this.searchTagsShare = [];
+    } else if (this.currTab === 'inner') {
+      this.searchTagsInner = [];
     } else {
-      this.searchTagsPlugin = [];
+      this.searchTagsCustom = [];
     }
     this.currentPage = 1;
     this.initApiList();

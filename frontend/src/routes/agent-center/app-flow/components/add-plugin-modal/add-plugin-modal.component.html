@@ -20,9 +20,9 @@
             </nz-tabset>
           <div class="flex w-full items-center gap-2">
             <multi-field-search
-              [searchItems]="searchItemsForPlugin"
-              [(searchTags)]="searchTagsPlugin"
-              [(searchField)]="searchFieldPlugin"
+              [searchItems]="searchItemsForInner"
+              [(searchTags)]="searchTagsInner"
+              [(searchField)]="searchFieldInner"
               (searchChange)="initApiList('search')"
               class="flex-1"
             ></multi-field-search>
@@ -184,9 +184,9 @@
         >
            <div class="flex w-full items-center gap-2">
             <multi-field-search
-              [searchItems]="searchItemsForPlugin"
-              [(searchTags)]="searchTagsPlugin"
-              [(searchField)]="searchFieldPlugin"
+              [searchItems]="searchItemsForCustom"
+              [(searchTags)]="searchTagsCustom"
+              [(searchField)]="searchFieldCustom"
               (searchChange)="initApiList('search')"
               class="flex-1"
             ></multi-field-search>
