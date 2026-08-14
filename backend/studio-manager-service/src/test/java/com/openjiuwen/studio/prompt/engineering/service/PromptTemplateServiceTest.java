@@ -20,6 +20,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.prompt.engineering.dto.ManualPePromptTemplateDto;
@@ -36,6 +37,7 @@ import com.openjiuwen.studio.prompt.engineering.mapper.PeTagMapper;
 import com.openjiuwen.studio.prompt.engineering.mapper.PeTaskMapper;
 import com.openjiuwen.studio.prompt.engineering.utils.ExcelI18nHandler;
 
+import com.alibaba.excel.EasyExcel;
 import cn.afterturn.easypoi.handler.inter.II18nHandler;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -50,8 +52,10 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.context.MessageSource;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -207,6 +211,41 @@ class PromptTemplateServiceTest {
 
         assertThrows(AgentStudioException.class,
             () -> promptTemplateService.downloadPromptTemplateV2(projectId, workspaceId, templateIds));
+    }
+
+    @Test
+    void testImportPromptTemplateV2_RowCountExceedsLimit() {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        List<List<String>> head = List.of(
+            List.of("模板名称"),
+            List.of("模板内容"),
+            List.of("模板描述"),
+            List.of("标签"),
+            List.of("行业"),
+            List.of("变量")
+        );
+        List<List<String>> rows = new ArrayList<>();
+        for (int index = 0; index < 101; index++) {
+            rows.add(List.of("模板" + index, "内容" + index, "描述", "", "", ""));
+        }
+        EasyExcel.write(outputStream).head(head).sheet().doWrite(rows);
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "templates.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            outputStream.toByteArray()
+        );
+
+        SimpleUser userInfo = new SimpleUser();
+        userInfo.setUserName("testUser");
+        try (MockedStatic<RequestContextUtils> mocked = mockStatic(RequestContextUtils.class)) {
+            mocked.when(RequestContextUtils::getRequestUser).thenReturn(userInfo);
+
+            AgentStudioException exception = assertThrows(AgentStudioException.class,
+                () -> promptTemplateService.importPromptTemplateV2("workspace1", "project1", file));
+
+            assertEquals(StudioError.PROMPT_TEMPLATE_IMPORT_NUM_EXCEED, exception.getErrorCode());
+        }
     }
 
     // ========== createPromptTemplate ==========

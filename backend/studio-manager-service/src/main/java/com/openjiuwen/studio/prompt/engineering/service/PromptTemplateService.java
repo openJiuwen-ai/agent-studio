@@ -651,6 +651,8 @@ public class PromptTemplateService implements IPromptLibraryService {
         List<String> message;
         try (InputStream in = file.getInputStream()) {
             message = processExcel(in, userInfo, projectId, workspaceId, true);
+        } catch (AgentStudioException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to upload file [{}]", file.getOriginalFilename(), e);
             throw new AgentStudioException(StudioError.UPLOAD_FILE_FAILED);
@@ -673,6 +675,8 @@ public class PromptTemplateService implements IPromptLibraryService {
         List<String> message;
         try (InputStream in = file.getInputStream()) {
             message = processExcel(in, userInfo, projectId, workspaceId, false);
+        } catch (AgentStudioException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to upload file [{}]", file.getOriginalFilename(), e);
             throw new AgentStudioException(StudioError.UPLOAD_FILE_FAILED);
