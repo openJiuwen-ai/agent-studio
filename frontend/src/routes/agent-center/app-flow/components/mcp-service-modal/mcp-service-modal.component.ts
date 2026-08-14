@@ -42,6 +42,7 @@ import { HelpCenterService } from '@services/help-center.service';
 import { CommonService } from '@services/common.service';
 import { NonEmptyValidatorDirective } from '@shared/directives/variable-name-validator.directive';
 import { NzSelectModule } from 'ng-zorro-antd/select';
+import { ExceptionHandlingComponent } from '../exception-handling/exception-handling.component';
 
 enum mapKeys {
   task_operators_console = 'task_operators_console',
@@ -67,6 +68,7 @@ enum mapKeys {
     InputTreeSelect,
     NonEmptyValidatorDirective,
     NzSelectModule,
+    ExceptionHandlingComponent,
   ],
   providers: [
     {
@@ -85,6 +87,8 @@ export class MCPServiceModalComponent
   @Output('confirm') confirm = new EventEmitter<any>();
 
   @ViewChild('inputForm') inputForm: NgForm;
+
+  @ViewChild('exceptionHandling') exceptionHandling: ExceptionHandlingComponent;
 
   public icon = WORKFLOW_SVGS.Mcp;
 
@@ -354,6 +358,17 @@ export class MCPServiceModalComponent
         input.value.content = '[]';
       }
     });
+
+    // 异常处理：default_outputs 从编辑器字符串转为对象，后端需要 Map 类型
+    const ep = this.nodeInfo.configs?.exception_process;
+    if (ep?.default_outputs && typeof ep.default_outputs === 'string') {
+      try {
+        ep.default_outputs = JSON.parse(ep.default_outputs);
+      } catch {
+        ep.default_outputs = {};
+      }
+    }
+
     this.appFlowServ.setNodeSaveMonitor({
       nodeData: {
         ...this.nodeInfo,
