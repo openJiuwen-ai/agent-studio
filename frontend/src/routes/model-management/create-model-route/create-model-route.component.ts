@@ -74,6 +74,7 @@ export class CreateModelRouteComponent implements OnInit, OnDestroy {
   public isLoading = false;
   btnLoading = false;
   myForm: FormGroup;
+  readonly maxStrategyDescriptionLength = 100;
 
   public modelOptions: IModel[] = [];
 
@@ -106,7 +107,9 @@ export class CreateModelRouteComponent implements OnInit, OnDestroy {
       model_service_list: this.fb.array([]),
       strategy_timeout: new FormControl(10000),
       strategy_retry_count: new FormControl(0),
-      strategy_description: new FormControl(''),
+      strategy_description: new FormControl('', [
+        Validators.maxLength(this.maxStrategyDescriptionLength),
+      ]),
     });
   }
 

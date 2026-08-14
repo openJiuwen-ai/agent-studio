@@ -96,8 +96,10 @@
             <nz-form-item>
               <nz-form-label>{{ 'policy_des' | i18nextEager }}</nz-form-label>
               <nz-form-control>
-                <textarea nz-input maxlength="100" formControlName="strategy_description"
-                          class="!w-full min-h-[80px]" [placeholder]="'pls_enter' | i18nextEager"></textarea>
+                <nz-textarea-count [nzMaxCharacterCount]="maxStrategyDescriptionLength" class="block w-full">
+                  <textarea nz-input [maxLength]="maxStrategyDescriptionLength" formControlName="strategy_description"
+                            class="!w-full min-h-[80px]" [placeholder]="'pls_enter' | i18nextEager"></textarea>
+                </nz-textarea-count>
               </nz-form-control>
             </nz-form-item>
 
