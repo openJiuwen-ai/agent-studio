@@ -144,7 +144,25 @@ export class AuthModalComponent implements OnInit {
 
     if (this.authType === 'CUSTOM_APIKEY') {
       if (this.authsInfo.auth_id) {
-        this.delete();
+        const modal = this.modalService.create({
+          nzContent: DeleteModalComponent,
+          nzWidth: '500px',
+          nzFooter: null,
+          nzData: {
+            context: {
+              id: this.authsInfo.auth_id,
+              title: this.i18n.transform('remove_auth'),
+              tip: this.i18n.transform('confirm_remove_auth'),
+              fnName: 'deleteProviderAuths',
+              close: () => {
+                this.message.success(this.i18n.transform('remove_success'));
+                this.close();
+                modal.close();
+              },
+            },
+          } as any,
+        });
+        this.loading = false;
         return;
       }
       checkAuth = this.apiKeyAuthArgs.every(
@@ -189,7 +207,25 @@ export class AuthModalComponent implements OnInit {
       return;
     }
     if (this.authsInfo.auth_id) {
-      this.delete();
+      const modal = this.modalService.create({
+        nzContent: DeleteModalComponent,
+        nzWidth: '500px',
+        nzFooter: null,
+        nzData: {
+          context: {
+            id: this.authsInfo.auth_id,
+            title: this.i18n.transform('remove_auth'),
+            tip: this.i18n.transform('confirm_remove_auth'),
+            fnName: 'deleteProviderAuths',
+            close: () => {
+              this.message.success(this.i18n.transform('remove_success'));
+              this.close();
+              modal.close();
+            },
+          },
+        } as any,
+      });
+      this.loading = false;
       return;
     } else {
       let params = {
