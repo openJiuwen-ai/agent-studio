@@ -761,7 +761,11 @@ export class ImportModalComponent {
     if (childItem.prohibited) {
       return typeMap.prohibited;
     } else {
-      if (childItem.import_description) {
+      if (this.isOldImport && this.importToolType === ApplicationType.PLUGIN) {
+        // 旧格式插件没有 import_description。status=true 表示同一资源已存在，
+        // 后端会覆盖更新；status=false 才是新增，不能再展示成“资源已存在并跳过”。
+        return childItem.status ? typeMap.updateResource : typeMap.newResource;
+      } else if (childItem.import_description) {
         return typeMap[childItem.import_description];
       } else { // 旧版本导入文件
         return typeMap[childItem.status ? "resourceExists" : "oldUpdateResource"];

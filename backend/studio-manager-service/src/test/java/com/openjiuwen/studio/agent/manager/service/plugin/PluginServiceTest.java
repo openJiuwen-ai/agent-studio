@@ -14,6 +14,7 @@ import com.openjiuwen.studio.agent.common.redis.RedisLock;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
+import com.openjiuwen.studio.agent.manager.bo.WfImportDataWrapper;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.BaseResp;
 import com.openjiuwen.studio.agent.manager.dto.BatchCreatePluginToolReq;
@@ -23,6 +24,7 @@ import com.openjiuwen.studio.agent.manager.dto.CreatePluginToolReq;
 import com.openjiuwen.studio.agent.manager.dto.CreatePluginToolRsp;
 import com.openjiuwen.studio.agent.manager.dto.CreateVersionReq;
 import com.openjiuwen.studio.agent.manager.dto.GetPluginVersionQo;
+import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModifyPluginReq;
 import com.openjiuwen.studio.agent.manager.dto.ModifyPluginRsp;
 import com.openjiuwen.studio.agent.manager.dto.ParsePluginReq;
@@ -868,5 +870,26 @@ class PluginServiceTest {
         BaseResp result = pluginService.updatePluginVersionByVersionId(projectId, pluginId, versionId, workspaceId);
 
         assertEquals(200, result.getCode());
+    }
+
+    @Test
+    void testBuildImportRspDistinguishesImportedUpdatedAndFailedPlugins() {
+        WfImportDataWrapper wrapper = new WfImportDataWrapper();
+
+        pluginService.recordImportResult(wrapper, "new-plugin", "new-plugin", false, true);
+        pluginService.recordImportResult(wrapper, "existing-plugin", "existing-plugin", true, true);
+        pluginService.recordImportResult(wrapper, "failed-plugin", "failed-plugin", false, false);
+
+        ImportRsp response = new ImportRsp();
+        pluginService.buildImportRsp(response, wrapper);
+
+        assertEquals(2, response.getSucceedLen());
+        assertEquals(1, response.getImportedLen());
+        assertEquals(1, response.getUpdatedLen());
+        assertEquals(0, response.getSkippedLen());
+        assertEquals(1, response.getFailedLen());
+        assertEquals(3, response.getCount());
+        assertEquals(List.of("new-plugin", "existing-plugin"), response.getSucceedIds());
+        assertEquals(List.of("failed-plugin"), response.getFailedIds());
     }
 }
