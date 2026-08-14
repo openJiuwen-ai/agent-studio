@@ -80,6 +80,8 @@
           <readonly-params-tree [params]="outputParams"/>
         </ng-template>
       </meta-acc-block>
+
+      <exception-handling #exceptionHandling [nodeInfo]="nodeInfo" (changeValue)="onSave()"></exception-handling>
     </div>
   </div>
 </div>
