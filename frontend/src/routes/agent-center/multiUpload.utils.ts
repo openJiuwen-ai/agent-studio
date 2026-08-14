@@ -57,6 +57,7 @@ export async function uploadFile(
   file: File,
   isImage: boolean,
   fileItem: FileItem,
+  onError?: () => void,
 ): Promise<void> {
   const formData = new FormData();
   formData.append('file', file);
@@ -68,5 +69,6 @@ export async function uploadFile(
     fileItem.url = res.url;
   } catch (error) {
     fileItem.progress = 'failed';
+    onError?.();
   }
 }
