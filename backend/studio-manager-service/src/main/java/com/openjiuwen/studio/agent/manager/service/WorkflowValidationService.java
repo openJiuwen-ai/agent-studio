@@ -738,7 +738,8 @@ public class WorkflowValidationService {
                     if (!McpJsonUtils.isValidJson(templeteStr)) {
                         errors.add(new WorkflowValidationVOErrors().setId(node.getId())
                             .setType(node.getType())
-                            .setReason(i18nUtil.getMessage("workflow.validate.exception")));
+                            .setReason(i18nUtil.getMessage(StudioError.WORKFLOW_TEMPLATE_INVALID_JSON,
+                                node.getNodeInfo().getName())));
                     }
                 }
             }
