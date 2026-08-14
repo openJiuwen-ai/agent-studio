@@ -61,7 +61,16 @@
         [minlength]="1"
         [maxlength]="33"
         [formControl]="form.controls.name"
+        [class.input-error]="form.controls.name.invalid && (form.controls.name.dirty || form.controls.name.touched)"
       />
+      <div
+        class="error-tip"
+        *ngIf="form.controls.name.invalid && (form.controls.name.dirty || form.controls.name.touched)"
+      >
+        {{ form.controls.name.hasError('required')
+          ? ('input_cannot_be_empty' | i18nextEager)
+          : ('variable_validator9' | i18nextEager) }}
+      </div>
       <div class="flex items-center justify-between mt-[16px]">
         <div class="text-[14px] text-[#191919]">
           {{ 'intent_management' | i18nextEager }}
@@ -147,7 +156,7 @@
           <form nz-form nzLayout="vertical" [formGroup]="intentForm">
             <nz-form-item>
               <nz-form-label>{{ 'intent_name' | i18nextEager }}</nz-form-label>
-              <nz-form-control>
+              <nz-form-control [nzErrorTip]="intentNameErrorTpl">
                 <input
                   nz-input
                   class="mt-[8px] w-[100%]"
@@ -156,6 +165,10 @@
                   [maxlength]="64"
                   formControlName="name"
                 />
+                <ng-template #intentNameErrorTpl let-control>
+                  <ng-container *ngIf="control.hasError('required')">{{ 'input_cannot_be_empty' | i18nextEager }}</ng-container>
+                  <ng-container *ngIf="control.hasError('pattern')">{{ 'variable_validator9' | i18nextEager }}</ng-container>
+                </ng-template>
               </nz-form-control>
             </nz-form-item>
           </form>

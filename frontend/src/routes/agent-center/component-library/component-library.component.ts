@@ -130,6 +130,9 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
   public alertText = '';
   public totalCardNumber = 0;
 
+  // 改变每页条数时，ng-zorro 会同步夹页并触发一次 nzPageIndexChange，与本次重查重复，用此 flag 屏蔽
+  private _sizeChangeSuppressClamp = false;
+
   public open = false;
   public warnOpen = false;
   public warnAlertText = '';
@@ -427,6 +430,28 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
       }
       this.commonService.FurionReportCustomTime();
     }
+  }
+
+  public onCardPageIndexChange(page: number): void {
+    this.currentCardPage = page;
+    // ng-zorro 改变每页条数时会同步夹页并触发 nzPageIndexChange，该次与改 size 的请求重复，跳过
+    if (this._sizeChangeSuppressClamp) {
+      return;
+    }
+    this.getCardData();
+  }
+
+  public onCardPageSizeChange(size: number): void {
+    this.cardPageSize.size = size;
+    // 改每页条数应回到第 1 页，避免用旧页码 × 新 size 算出越界 offset（如第2页 offset=(2-1)*24=24）
+    this.currentCardPage = 1;
+    this._sizeChangeSuppressClamp = true;
+    // flag 仅在当前同步周期有效：夹页的 nzPageIndexChange 会同步紧随其后触发并被屏蔽；
+    // 若页码本就有效未触发夹页，则由下一微任务清除，避免误屏蔽后续真实翻页
+    Promise.resolve().then(() => {
+      this._sizeChangeSuppressClamp = false;
+    });
+    this.getCardData();
   }
 
   public copyUrl() {

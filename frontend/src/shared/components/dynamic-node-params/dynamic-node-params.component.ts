@@ -264,6 +264,12 @@ export class DynamicNodeParamsComponent {
   }
 
   public handleUserInput(control_name: string, isValidate: boolean) {
+    // 用户输入时重置错误标志，立即清除错误提示
+    const inputItem = this.inputList?.find(item => item.name === control_name);
+    if (inputItem) {
+      inputItem.isEmpty = false;
+      inputItem.isError = false;
+    }
     // 启用校验
     const control = this.parameterFromGroup.get([`${control_name}`]);
     if (control) {
