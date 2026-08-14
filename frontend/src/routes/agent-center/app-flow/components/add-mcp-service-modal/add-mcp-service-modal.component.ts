@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnInit, Output, TemplateRef } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, TemplateRef, inject } from '@angular/core';
 import { FormBuilder } from '@angular/forms';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { I18nNamespace } from '@i18n';
@@ -16,6 +16,7 @@ import {
 } from '@routes/agent-center/app-agent/components/add-mcp-servers/add-mcp-servers.component';
 import { AgentDataService } from '@services/agent-center/agent-data.service';
 import { MasOperatorService } from '@services/mas-operator.service';
+import { NzDrawerRef } from 'ng-zorro-antd/drawer';
 
 @Component({
   selector: 'meta-add-mcp-service-modal',
@@ -38,6 +39,7 @@ export class AddMCPServiceModalComponent implements OnInit {
 
   @Input() type = '';
   @Input() mcpCreateSub;
+  readonly drawerRef = inject(NzDrawerRef);
 
   public controller = new AbortController();
   public tabs = [
@@ -178,6 +180,7 @@ export class AddMCPServiceModalComponent implements OnInit {
         const result = { ...mcpService, mcpInfo };
         this.mcpServiceChange.emit(result);
         this.outputs?.mcpServiceChange?.(result);
+        this.drawerRef.close();
       }
     } finally {
       this.clicked = false;
