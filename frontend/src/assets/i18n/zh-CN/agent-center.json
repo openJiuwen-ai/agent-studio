@@ -659,6 +659,7 @@
   "application_delete_content": "此操作将清空该应用下的所有版本信息和发布渠道。",
   "imported_succeeded_count_content": "已成功导入{{succeed_len}}条数据，{{failed_len}}条失败数据",
   "imported_failed_count_content": "{{failed_len}}条数据导入失败，{{succeed_len}}条数据导入成功，失败数据请检查无误后重新导入",
+  "plugin_import_result_content": "插件导入完成：新增{{imported_len}}条，更新{{updated_len}}条，跳过{{skipped_len}}条，失败{{failed_len}}条",
   "lack_plugin_msg": "导入数据中缺失{{lackCount}}个预置插件，可能导致无法使用，请联系管理员协助添加。缺失预置插件：{{names}}",
   "key_value_need_reconfigured": "{{type}}：{{names}}中包含密钥鉴权信息，密钥值需要重新配置",
   "personal_plugin": "我的插件",

@@ -204,9 +204,30 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
       .importResUpdate$()
       .pipe(takeUntil(this.destroy$))
       .subscribe((result: any) => {
-        const { succeed_len, failed_len, inner_plugins_msg, isShow, auth_plugins_msg, auth_mcps_msg } = result;
+        const {
+          succeed_len,
+          failed_len,
+          imported_len,
+          updated_len,
+          skipped_len,
+          inner_plugins_msg,
+          isShow,
+          importType,
+          auth_plugins_msg,
+          auth_mcps_msg,
+        } = result;
         if (isShow === 'success') {
-          if (succeed_len >= 0 && failed_len === 0) {
+          const hasDetailedCounts = importType === 'plugin' && [imported_len, updated_len, skipped_len]
+            .some((count) => typeof count === 'number');
+          if (hasDetailedCounts) {
+            this.alertType = failed_len > 0 ? 'error' : 'success';
+            this.alertText = this.getPluginImportResultMsg(
+              imported_len ?? 0,
+              updated_len ?? 0,
+              skipped_len ?? 0,
+              failed_len ?? 0,
+            );
+          } else if (succeed_len > 0 && failed_len === 0) {
             this.alertType = 'success';
             this.alertText = this.getSuccessMsg(succeed_len, failed_len);
           } else if (failed_len > 0) {
@@ -649,6 +670,20 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
   private getSuccessMsg(succeed_len: number, failed_len: number) {
     return this.i18n.transform('imported_succeeded_count_content', {
       succeed_len,
+      failed_len,
+    });
+  }
+
+  private getPluginImportResultMsg(
+    imported_len: number,
+    updated_len: number,
+    skipped_len: number,
+    failed_len: number,
+  ) {
+    return this.i18n.transform('plugin_import_result_content', {
+      imported_len,
+      updated_len,
+      skipped_len,
       failed_len,
     });
   }
