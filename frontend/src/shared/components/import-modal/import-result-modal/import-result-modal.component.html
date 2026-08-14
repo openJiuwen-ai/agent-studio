@@ -90,9 +90,9 @@
               </td>
             </ng-container>
           </tr>
-          <tr *ngIf="row.showDetails && row.dependencies?.length">
+          <tr *ngIf="row.showDetails && row.dependencies?.length" class="expand-detail-row">
             <td></td>
-            <td colspan="3">
+            <td colspan="4">
               <div class="ti3-table-detail-container">
                 <div class="sub-detail-container">
                   <div class="child-list">
@@ -104,17 +104,17 @@
                         <div class="child-wrapper">
                           <div class="dependency-info-child"
                           >
-                            <div class="child-col" [ngStyle]="{'width':columns[0]?.width}">
-                              <div style="min-width: 20px">{{ childItem.name }}</div>
-                              <div class="dependency-tag ml-[16px]">
+                            <div class="child-col flex-shrink-0" [ngStyle]="{'width':columns[0]?.width}">
+                              <div class="min-w-0 flex-1 truncate" nz-tooltip [nzTooltipTitle]="childItem.name">{{ childItem.name }}</div>
+                              <div class="dependency-tag flex-shrink-0 ml-[16px]">
                                 {{ getTypeName(childItem.type) }}
                               </div>
-                              <div *ngIf="childItem.config_display" class="no-certification-tag ml-[8px]">
+                              <div *ngIf="childItem.config_display" class="no-certification-tag flex-shrink-0 ml-[8px]">
                                 {{ 'no_auth_config' | i18nextEager }}
                               </div>
                             </div>
                             <div class="child-col flex-shrink-0" [ngStyle]="{'width':columns[1]?.width}">
-                              {{ childItem.resource_desc }}
+                              <div class="min-w-0 flex-1 truncate" nz-tooltip [nzTooltipTitle]="childItem.resource_desc">{{ childItem.resource_desc }}</div>
                             </div>
                             <div *ngIf="columns[2]?.key" class="child-col flex-shrink-0" [ngStyle]="{'width':columns[2]?.width}">
                                 <span class="flex align-center status-font">
