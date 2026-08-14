@@ -11,7 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.metadata.data.ReadCellData;
-import com.alibaba.excel.read.metadata.holder.ReadRowHolder;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.prompt.engineering.entity.TemplateOneRow;
 import com.openjiuwen.studio.prompt.engineering.enums.TemplateImportEnum;
@@ -39,9 +39,6 @@ class DynamicExcelListenerTest {
     private AnalysisContext analysisContext;
 
     @Mock
-    private ReadRowHolder readRowHolder;
-
-    @Mock
     private ReadCellData<?> readCellData; // 仅声明，不在setUp中stub
 
     private Map<Integer, String> mockRowData;
@@ -59,7 +56,6 @@ class DynamicExcelListenerTest {
         mockRowData.put(TemplateImportEnum.INDUSTRY.getIndex(), "测试行业");
         mockRowData.put(TemplateImportEnum.VARIABLE.getIndex(), "测试变量");
 
-        when(analysisContext.readRowHolder()).thenReturn(readRowHolder);
     }
 
     /**
@@ -76,9 +72,6 @@ class DynamicExcelListenerTest {
         when(readCellData.getStringValue()).thenReturn("任意值"); // 表头值不影响数据解析
         mockHeadMap.put(0, readCellData);
         listener.invokeHead(mockHeadMap, analysisContext);
-
-        // 模拟行索引
-        when(readRowHolder.getRowIndex()).thenReturn(1);
 
         // 执行数据解析
         listener.invoke(mockRowData, analysisContext);
@@ -104,13 +97,16 @@ class DynamicExcelListenerTest {
         mockHeadMap.put(0, readCellData);
         listener.invokeHead(mockHeadMap, analysisContext);
 
-        // 模拟行索引99 → 实际行号101（超限）
-        when(readRowHolder.getRowIndex()).thenReturn(99);
-
-        AgentStudioException exception = assertThrows(AgentStudioException.class, () -> {
+        // 前100条数据均允许导入
+        for (int index = 0; index < 100; index++) {
             listener.invoke(mockRowData, analysisContext);
-        });
+        }
+        assertEquals(100, listener.getRowDataList().size());
 
+        // 第101条数据触发模板导入条数超限错误
+        AgentStudioException exception = assertThrows(AgentStudioException.class,
+            () -> listener.invoke(mockRowData, analysisContext));
+        assertEquals(StudioError.PROMPT_TEMPLATE_IMPORT_NUM_EXCEED, exception.getErrorCode());
     }
 
     /**
@@ -129,9 +125,6 @@ class DynamicExcelListenerTest {
         rowWithNull.put(TemplateImportEnum.TEMPLATE_NAME.getIndex(), "测试模板");
         rowWithNull.put(TemplateImportEnum.CONTENT.getIndex(), null);
         rowWithNull.put(TemplateImportEnum.DESCRIPTION.getIndex(), "");
-
-        // 模拟行索引
-        when(readRowHolder.getRowIndex()).thenReturn(1);
 
         listener.invoke(rowWithNull, analysisContext);
 

@@ -24,7 +24,7 @@
             <ng-container *ngIf="control.hasError('nameChAllow')">
               {{ 'variable_validator6e' | i18nextEager }}
             </ng-container>
-            <ng-container *ngIf="control.hasError('required')">
+            <ng-container *ngIf="control.hasError('required') && !control.hasError('nameChAllow')">
               {{ 'variable_validator6' | i18nextEager }}
             </ng-container>
           </ng-template>

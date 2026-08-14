@@ -6,7 +6,43 @@
 
 <div>
   <nz-alert nzType="info" style="width: 100%; font-size: 12px" class="mb-[24px]" [nzMessage]="'auth_tip.tip_5'| i18nextEager"></nz-alert>
-  <ng-container *ngFor="let item of authsList">
+
+  <ng-container *ngIf="authType === 'CUSTOM_APIKEY' && !authsInfo.auth_id">
+    <div class="flex items-center gap-2 mb-2 w-[calc(100%-30px)]">
+      <div class="w-1/2 text-sm text-gray-600 font-medium"><span class="text-red-500 mr-1">*</span>{{ 'param_name' | i18nextEager }}</div>
+      <div class="w-1/2 text-sm text-gray-600 font-medium"><span class="text-red-500 mr-1">*</span>{{ 'param_value' | i18nextEager }}</div>
+    </div>
+    <div class="flex gap-2 items-start mb-3" *ngFor="let param of apiKeyAuthArgs; index as i">
+      <div class="w-1/2">
+        <input
+          nz-input
+          type="text"
+          maxlength="100"
+          [(ngModel)]="param.target_name"
+          [placeholder]="'pls_enter' | i18nextEager"
+          autocomplete="off"
+        />
+      </div>
+      <div class="w-1/2">
+        <input
+          nz-input
+          type="password"
+          maxlength="20000"
+          [(ngModel)]="param.auth_key"
+          [placeholder]="'pls_enter' | i18nextEager"
+          autocomplete="new-password"
+        />
+      </div>
+      <nz-icon *ngIf="i > 0" nzType="delete" nzTheme="outline" class="cursor-pointer text-gray-400 hover:text-red-500 mt-2" (click)="deleteArgs(i)"></nz-icon>
+      <div *ngIf="i === 0" class="w-3.5 mt-2"></div>
+    </div>
+    <button nz-button nzType="text" nz-tooltip [nzTooltipTitle]="'add_params' | i18nextEager" (click)="addArgs()">
+      <nz-icon nzType="plus-circle" nzTheme="outline" class="text-blue-600 text-lg" />
+    </button>
+  </ng-container>
+
+  <ng-container *ngIf="!(authType === 'CUSTOM_APIKEY' && !authsInfo.auth_id)">
+    <ng-container *ngFor="let item of authsList">
     <div style="margin: 8px 0 5px 0">
       <span style="color: red;margin-right: 5px">*</span>
       <label class="text-sm">{{item.labelName}}</label>
@@ -15,6 +51,7 @@
       <input nz-input [(ngModel)]="authsInfo[item.key]" />
     </nz-input-password>
     <input class="w-full" *ngIf="!item['hide']" [readonly]="" nz-input [(ngModel)]="authsInfo[item.key]"/>
+    </ng-container>
   </ng-container>
 </div>
 

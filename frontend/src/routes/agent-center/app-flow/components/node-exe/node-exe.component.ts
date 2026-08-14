@@ -223,6 +223,8 @@ export class NodeExeComponent implements OnChanges {
 
   @ViewChild('chatContainerRef') chatContainerRef!: ElementRef<HTMLDivElement>;
 
+  @ViewChild('resultScrollRef') resultScrollRef?: ElementRef<HTMLDivElement>;
+
   @ViewChildren('exeEditor') editors: QueryList<any>;
 
   @ViewChildren('fileInput') fileInputs: QueryList<any>;
@@ -636,6 +638,7 @@ export class NodeExeComponent implements OnChanges {
                 this.runInfo = { answer: '' };
               }
               this.runInfo.answer = (this.runInfo.answer || '') + text;
+              this.scrollAnswerToBottom();
 
               if (exeResult.data.is_finished) {
                 this.lastChat.answer.loading = false;
@@ -971,6 +974,15 @@ export class NodeExeComponent implements OnChanges {
     setTimeout(() => {
       this.chatContainerRef.nativeElement.scrollTop =
         this.chatContainerRef.nativeElement.scrollHeight;
+    }, 0);
+  }
+
+  private scrollAnswerToBottom() {
+    setTimeout(() => {
+      if (this.resultScrollRef?.nativeElement) {
+        this.resultScrollRef.nativeElement.scrollTop =
+          this.resultScrollRef.nativeElement.scrollHeight;
+      }
     }, 0);
   }
 

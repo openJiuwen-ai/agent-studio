@@ -677,10 +677,18 @@ export class PromptTemplateComponent implements OnInit, OnDestroy {
       this.importTemplate();
     }
     if (e === 'createTask') {
+      this.tabSelectedIndex = 1;
+      this.subTabs.forEach((item, index) => {
+        item.active = index === 1;
+      });
       this.buttonGroupSelected = this.subTabs[1].id;
       this.promptOptimizeList.handleGuideClick('createTask');
     }
     if (e === 'taskList') {
+      this.tabSelectedIndex = 1;
+      this.subTabs.forEach((item, index) => {
+        item.active = index === 1;
+      });
       this.buttonGroupSelected = this.subTabs[1].id;
       this.promptOptimizeList.handleGuideClick('taskList');
     }

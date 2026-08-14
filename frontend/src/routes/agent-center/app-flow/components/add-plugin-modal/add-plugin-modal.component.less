@@ -50,6 +50,12 @@
     }
   }
 
+  .card.share-card {
+    height: auto;
+    min-height: 90px;
+    align-items: flex-start;
+  }
+
   .sub-card {
     display: flex;
     flex-direction: row;
@@ -102,7 +108,42 @@
 
 .version-info-list-div {
   display: flex;
+  flex: 1;
   align-items: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.share-version-select {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.share-card-content {
+  width: calc(100% - 160px);
+  min-width: 0;
+}
+
+.share-plugin-meta {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  line-height: 32px;
+  white-space: nowrap;
+}
+
+.share-workspace-name {
+  max-width: 130px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-meta-separator {
+  flex: none;
+  padding: 0 8px;
 }
 
 .version-info-list-div  {

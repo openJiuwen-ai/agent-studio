@@ -321,6 +321,20 @@ export class LLMSelectComponent implements OnDestroy {
     //模型调测 需要返回模型对象 & index
     //路由策略需要加index
 
+    // 先设置选中模型的图标信息
+    if (this.serviceMap[modelId]) {
+      const model = this.serviceMap[modelId];
+      this.selectedModelInfo = {
+        logo: model.logo || '',
+        service_name: model.service_name || '',
+      };
+    } else {
+      this.selectedModelInfo = {
+        logo: '',
+        service_name: '',
+      };
+    }
+
     if (this.modelType) {
       this.update.emit({
         modelInfo: this.serviceMap[modelId],
@@ -334,10 +348,7 @@ export class LLMSelectComponent implements OnDestroy {
       });
     }
 
-    this.selectedModelInfo = {
-      logo: this.serviceMap[modelId].logo,
-      service_name: this.serviceMap[modelId].service_name,
-    }
+    this.cdr.detectChanges();
   }
 
   onBeforeSearch(searchWord: string) {
