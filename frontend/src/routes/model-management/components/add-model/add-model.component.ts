@@ -295,11 +295,12 @@ export class AddModelComponent implements OnInit {
 
   handleAutoInfo() {
     const value = this.myForm.getRawValue();
+    const showTags = value.model_type === 'LLM' || value.model_type === 'IMAGE-TO-TEXT';
     const params: any = {
       provider_id: this.provider_id,
       api_url: value.api_url,
       interface_protocol: value.interface_protocol,
-      is_support_function: this.modelInfo.is_support_function,
+      is_support_function: showTags ? this.modelInfo.is_support_function : false,
       is_support_stream: value.is_support_stream !== 'false',
       model_description: value.model_description,
       model_name: value.model_name,
@@ -308,11 +309,11 @@ export class AddModelComponent implements OnInit {
       model_id: this.model_id,
       model_tags: this.modelTags?.map(item => item.label)?.join(','),
       throttling_policy: value.throttling_policy === 'none' ? '' : value.throttling_policy,
-      is_network: this.modelInfo.is_network,
+      is_network: showTags ? this.modelInfo.is_network : false,
       logo: value.logo,
-      is_reasoning: this.modelInfo.is_reasoning,
+      is_reasoning: showTags ? this.modelInfo.is_reasoning : false,
       is_public: value.is_public,
-      is_support_close_reasoning: this.modelInfo.is_reasoning && value.is_support_close_reasoning,
+      is_support_close_reasoning: showTags && this.modelInfo.is_reasoning && value.is_support_close_reasoning,
     };
     return params;
   }

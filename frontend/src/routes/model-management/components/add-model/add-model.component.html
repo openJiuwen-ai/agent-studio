@@ -121,7 +121,7 @@
         </nz-form-control>
       </nz-form-item>
 
-      <nz-form-item *ngIf="modelInfo['is_reasoning']">
+      <nz-form-item *ngIf="modelInfo['is_reasoning'] && (myForm.controls['model_type'].value === 'LLM' || myForm.controls['model_type'].value === 'IMAGE-TO-TEXT')">
         <nz-form-label>{{ 'is_support_close_reasoning'|i18nextEager }}</nz-form-label>
         <nz-form-control>
           <nz-switch formControlName="is_support_close_reasoning" class="mr-2"></nz-switch>
