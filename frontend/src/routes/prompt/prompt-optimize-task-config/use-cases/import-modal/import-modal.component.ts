@@ -107,7 +107,8 @@ export class ImportModalComponent {
         new Blob([res], {
           type: 'application/zip',
         }),
-        `${this.commonLogic.getFormattedDateTime()}.zip`
+        'template.zip',
+        true
       );
     });
   }
