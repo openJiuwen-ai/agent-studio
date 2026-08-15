@@ -142,9 +142,9 @@ spec:
             - name: MEMORY_LLM_API_KEY
               value: ''
             # ======== [选填] 其他配置 ========
-            # Uvicorn worker 数量，未设置时默认 CPU 核心数 + 1
+            # Uvicorn worker 数量，未设置时默认 1
             - name: GUNICORN_WORK_NUM
-              value: ''
+              value: '1'
             - name: PORT
               value: '31014'
             - name: PLUGIN_SSL_API_CERT

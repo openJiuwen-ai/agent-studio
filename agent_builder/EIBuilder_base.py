@@ -2,22 +2,16 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """uvicorn launcher for the agent_builder service (mirrors EIStart_base)."""
 
-import os
-
 import uvicorn
 
 from agent_builder.adapter.config_bridge import settings
 
 
 def _get_workers() -> int:
-    """计算 uvicorn worker 数量。优先 GUNICORN_WORK_NUM；未设置回退 CPU+1；
-    nginx 负载均衡时强制 1。"""
+    """返回 uvicorn worker 数量；nginx 负载均衡时强制单 worker。"""
     if getattr(settings.server, "nginx_load_balancing", False):
         return 1
-    configured = getattr(settings.server, "workers", None)
-    if configured is not None:
-        return configured
-    return (os.cpu_count() or 1) + 1
+    return settings.server.workers
 
 
 def get_ssl_cert_config() -> dict:

@@ -125,8 +125,8 @@ services:
       STORAGE_LOCAL_BUCKET: ${STORAGE_LOCAL_BUCKET:-}
       # 对象存储寻址方式：path（路径风格，默认）或 virtual（虚拟托管风格）
       DATASOURCE_OBS_PATH_STYLE: ${DATASOURCE_OBS_PATH_STYLE:-path}
-      # Uvicorn worker 数量，未设置时默认 CPU 核心数 + 1
-      GUNICORN_WORK_NUM: ${GUNICORN_WORK_NUM:-}
+      # Uvicorn worker 数量，未设置时默认 1
+      GUNICORN_WORK_NUM: ${GUNICORN_WORK_NUM:-1}
       # 模型路由接口地址，HTTPS启动需要改成https
       # 模型配置来源策略：env/ir/obs（默认 obs：OBS 直连，绕过模型路由）
       MODEL_CONFIG_STRATEGY: ${MODEL_CONFIG_STRATEGY:-obs}

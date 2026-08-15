@@ -91,7 +91,7 @@ function watchdog() {
     # LB_WORKER_NUM is exported by start_nginx_lb.sh (the real nginx-upstream
     # worker count). GUNICORN_WORK_NUM is overridden to 1 there to force
     # single-process uvicorn, so it must NOT be used as the port count here.
-    WORKER_NUM=${LB_WORKER_NUM:-${GUNICORN_WORK_NUM:-4}}
+    WORKER_NUM=${LB_WORKER_NUM:-${GUNICORN_WORK_NUM:-1}}
     echo "Watchdog: monitoring ${WORKER_NUM} workers (ports $((SERVER_PORT+1)) to $((SERVER_PORT+WORKER_NUM)))"
     while [ 1 ]; do
       sleep ${PERIOD_SECONDS}
