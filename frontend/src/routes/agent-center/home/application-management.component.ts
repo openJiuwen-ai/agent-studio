@@ -458,7 +458,8 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
   ngOnInit() {
     let curHashFlag = this.prev.previousUrl !== this.prev.currentUrl;
     let previousUrl = this.prev.previousUrl;
-    if (curHashFlag && (previousUrl.includes("agent-center/single") || previousUrl.includes("agent-center/workflow") || previousUrl.includes("agent-center/multi") || previousUrl.includes("agent-center/high"))) {
+    const isFromAgentCenterTab = curHashFlag && (previousUrl.includes("agent-center/single") || previousUrl.includes("agent-center/workflow") || previousUrl.includes("agent-center/multi") || previousUrl.includes("agent-center/high"));
+    if (isFromAgentCenterTab) {
       StorageService.delSessionStorage("JIUWEN_SEARCH_PARAMS");
     }
 
@@ -476,8 +477,50 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
     }
     let index = this.getIndexOfTab();
     this.tabs[index].active = true;
-    this.handleTabChange(index);
+    // 从详情页返回时恢复搜索条件，从其它 agent-center tab 切换时则重置
+    if (!isFromAgentCenterTab && curHashFlag) {
+      this.restoreSearchState(index);
+    } else {
+      this.handleTabChange(index);
+    }
     this.getLicenseRueryFn().then();
+  }
+
+  /** 保存当前搜索条件到 sessionStorage，在离开列表页时调用 */
+  private saveSearchParamsToStorage(): void {
+    StorageService.setSessionStorage("JIUWEN_SEARCH_PARAMS", {
+      searchTags: this.searchTags,
+      searchField: this.searchField,
+      currentCardPage: this.currentCardPage,
+      hasSearched: this.hasSearched
+    });
+  }
+
+  /** 从 sessionStorage 恢复搜索条件（从详情页返回时调用） */
+  private restoreSearchState(index: number): void {
+    const savedParams = StorageService.getSessionStorage("JIUWEN_SEARCH_PARAMS");
+    if (!savedParams) {
+      this.handleTabChange(index);
+      return;
+    }
+    try {
+      const params = JSON.parse(savedParams);
+      this.tabs.forEach((itm, idx) => {
+        itm.active = idx === index;
+      });
+      this.open = false;
+      this.warnOpen = false;
+      this.currActivedTab = index;
+      this.totalCardNumber = 0;
+      this.initSearchItems(index);
+      this.searchTags = params.searchTags || [];
+      this.searchField = params.searchField || "name";
+      this.currentCardPage = params.currentCardPage || 1;
+      this.hasSearched = params.hasSearched || false;
+      this.getCardData();
+    } catch {
+      this.handleTabChange(index);
+    }
   }
 
   getIndexOfTab() {
@@ -490,6 +533,7 @@ export class ApplicationManagementComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.saveSearchParamsToStorage();
     this.sidebarVisibilityServ.setSidebarsVisibilityByState("destroy");
     this.destroy$.next();
     this.destroy$.complete();
