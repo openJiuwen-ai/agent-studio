@@ -1,4 +1,4 @@
-import { Component, Output, EventEmitter, ViewChild, ElementRef, Input } from '@angular/core';
+import { Component, Output, EventEmitter, ViewChild, ElementRef, Input, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MODULES } from '@shared/modules';
 import { I18nNamespace } from '@i18n';
@@ -8,6 +8,7 @@ import { cdnAssetUrl } from 'src/single-spa/assets-url';
 import { MessageComponent } from '@shared/services/cfdata.service';
 import { IntentPackageService } from '../../intent-package.service';
 import { agentCommonLogic } from '@routes/agent-center/app-agent/common-logic-agent';
+import { NzModalRef, NZ_MODAL_DATA } from 'ng-zorro-antd/modal';
 @Component({
   selector: 'import-intent-modal',
   templateUrl: './import-intent.component.html',
@@ -27,20 +28,42 @@ export class ImportIntentModalComponent {
   @ViewChild('fileInput') fileInput: ElementRef<HTMLInputElement>;
 
   @Input() intentId: string;
-
   @Input() intentName: string;
-
-  @Output() refreshTable = new EventEmitter<void>();
+  @Output() refreshTable = new EventEmitter<string[] | void>();
 
   constructor(
     private readonly i18n: I18NextEagerPipe,
     private readonly api: IntentPackageService,
-    private commonLogic: agentCommonLogic
+    private commonLogic: agentCommonLogic,
+    @Optional() private modalRef: NzModalRef,
+    @Optional() @Inject(NZ_MODAL_DATA) private nzData: any,
   ) {}
 
   public changeUrl = cdnAssetUrl;
 
   public uplaodFile: any = {};
+
+  /**
+   * nzData shape on studio-2.0-dev: { intentId, intentName, outputs: { refreshTable } }
+   * nzData shape on studio-2.0:    { context: { intentId, intentName, outputs: { refreshTable } } }
+   * Support both for branch compatibility, plus @Input() template usage.
+   */
+  private get modalContext(): {
+    intentId?: string;
+    intentName?: string;
+    outputs?: { refreshTable?: (ids?: string[]) => void };
+  } {
+    if (!this.nzData) return {};
+    return this.nzData.context ?? this.nzData;
+  }
+
+  private get effectiveIntentId(): string {
+    return this.intentId ?? this.modalContext.intentId ?? '';
+  }
+
+  private get effectiveIntentName(): string {
+    return this.intentName ?? this.modalContext.intentName ?? '';
+  }
 
   downTemplate(): void {
     this.api.downloadTemlate().then(res => {
@@ -80,22 +103,24 @@ export class ImportIntentModalComponent {
     if (!this.uplaodFile.file) {
       return;
     }
-    const options: any = {
-      target: this.importRef?.nativeElement,
-    };
     const formData = new FormData();
     formData.append('file', this.uplaodFile.file);
     this.api
-      .uploadIntent(this.intentId, this.intentName, formData)
+      .uploadIntent(this.effectiveIntentId, this.effectiveIntentName, formData)
       .then((res: any) => {
         if (res.success) {
           this.dismiss();
           MessageComponent.showSuccess(this.i18n.transform('upload_success'), 3000);
           this.refreshTable.emit(res.intent_ids);
+          this.modalContext.outputs?.refreshTable?.(res.intent_ids);
         }
       })
       .finally(() => {});
   }
 
-  public dismiss() {}
+  dismiss() {
+    if (this.modalRef) {
+      this.modalRef.destroy();
+    }
+  }
 }

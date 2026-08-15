@@ -702,17 +702,23 @@ export class CreatePluginBaseComponent implements OnInit {
       if (this.usedFrom === 'flow') {
         from_id = this.route.snapshot.queryParams.id;
         agent_node = this.agentNode;
-      } else if (this.usedFrom === 'agent') {
-        from_id = this.route.snapshot.queryParams.agentId;
+        await this.router.navigate(['/home/agent-center/app-flow/flow'], {
+          queryParams: { id: from_id },
+          state: { currentModal: 'plugin', new_plugin_id: res.tool_id },
+        });
+      } else {
+        if (this.usedFrom === 'agent') {
+          from_id = this.route.snapshot.queryParams.agentId;
+        }
+        await this.router.navigate(['/home/agent-center/custom-plugin/detail'], {
+          queryParams: {
+            id: res.tool_id,
+            from: this.usedFrom,
+            from_id,
+            agent_node,
+          },
+        });
       }
-      await this.router.navigate(['/home/agent-center/custom-plugin/detail'], {
-        queryParams: {
-          id: res.tool_id,
-          from: this.usedFrom,
-          from_id,
-          agent_node,
-        },
-      });
       if (!this.isImport) {
         MessageComponent.showSuccess(this.i18n.transform('addpluginmodalcomponent_257'));
       } else if (isCreateToolsSuccess) {

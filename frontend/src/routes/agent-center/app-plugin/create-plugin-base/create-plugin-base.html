@@ -181,7 +181,7 @@
                         <div class="w-[96px] text-label">{{ 'type' | i18nextEager }}</div>
                         <div class="text-label" style="width: 284px">{{ 'description' | i18nextEager }}</div>
                       </div>
-                      <nz-tree id="cp-res-tree" [nzData]="patchArgs" nzShowLine>
+                      <nz-tree id="cp-res-tree" [nzData]="patchArgs" nzShowLine [nzShowExpand]="false">
                         <ng-template #nzTreeTemplate let-node let-origin="origin" let-i="index">
                           <div class="mt-[8px] flex gap-2 leading-none">
                             <div class="w-[240px]">

@@ -1,4 +1,4 @@
-import { Component, Output, EventEmitter, ViewChild, ElementRef, Optional } from '@angular/core';
+import { Component, ViewChild, ElementRef, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MODULES } from '@shared/modules';
 import { I18nNamespace } from '@i18n';
@@ -9,7 +9,7 @@ import { IntentPackageService } from '../../intent-package.service';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzSpinModule } from 'ng-zorro-antd/spin';
-import { NzModalRef } from 'ng-zorro-antd/modal';
+import { NzModalRef, NZ_MODAL_DATA } from 'ng-zorro-antd/modal';
 import { NzMessageService } from 'ng-zorro-antd/message';
 import { agentCommonLogic } from '@routes/agent-center/app-agent/common-logic-agent';
 @Component({
@@ -29,8 +29,6 @@ export class ImportPackageModalComponent {
   @ViewChild('importRef') importRef: ElementRef<HTMLInputElement>;
   @ViewChild('fileInput') fileInput: ElementRef<HTMLInputElement>;
 
-  @Output() refreshTable = new EventEmitter<void>();
-
   public changeUrl = cdnAssetUrl;
   public uplaodFile: any = {};
   public isLoading = false;
@@ -39,8 +37,9 @@ export class ImportPackageModalComponent {
     private readonly intentPackageServ: IntentPackageService,
     private readonly i18n: I18NextEagerPipe,
     private message: NzMessageService,
-    @Optional() private modalRef: NzModalRef,
-    private commonLogic: agentCommonLogic
+    private modalRef: NzModalRef,
+    private commonLogic: agentCommonLogic,
+    @Inject(NZ_MODAL_DATA) public nzData: any,
   ) {}
 
   downloadTemplate(): void {
@@ -96,7 +95,9 @@ export class ImportPackageModalComponent {
         if (res.success) {
           this.dismiss();
           this.message.success(this.i18n.transform('upload_success'));
-          this.refreshTable.emit();
+          if (this.nzData?.outputs?.refreshTable) {
+            this.nzData.outputs.refreshTable();
+          }
         }
       })
       .finally(() => {
@@ -105,8 +106,6 @@ export class ImportPackageModalComponent {
   }
 
   public dismiss() {
-    if (this.modalRef) {
-      this.modalRef.destroy();
-    }
+    this.modalRef.close();
   }
 }

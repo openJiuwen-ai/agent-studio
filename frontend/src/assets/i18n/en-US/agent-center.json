@@ -654,6 +654,7 @@
   "application_delete_content": "This operation will clear all version information and publishing channels under the application.",
   "imported_succeeded_count_content": "{{succeed_len}} records successfully imported, {{failed_len}} records failed",
   "imported_failed_count_content": "{{failed_len}} records failed to be imported. {{succeed_len}} records were successfully imported. Check the failed records and import them again.",
+  "plugin_import_result_content": "Plugin import completed: {{imported_len}} added, {{updated_len}} updated, {{skipped_len}} skipped, {{failed_len}} failed",
   "lack_plugin_msg": "{{lackCount}} preset plug-ins are missing in the imported data and may be unavailable. Contact the administrator to add them. Missing preset plug-in: {{names}}",
   "key_value_need_reconfigured": "{{type}}: ${names} contains key authentication information. The key value needs to be reconfigured.",
   "personal_plugin": "My Plug-ins",

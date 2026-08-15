@@ -163,7 +163,7 @@
   "confirm_remove_auth": "确认移除鉴权？",
   "remove_success": "移除成功",
   "model_service_icon":"模型服务图标",
-  "image_size_100k_max_format_jpg_png": "图片要求大小100K以内，格式为jpg、png",
+  "image_size_100k_max_format_jpg_png": "图片要求大小100K以内，格式为jpg、jpeg、png",
   "model_name_for_api_call_tip": "如果要接入自建的模型服务，该模型名称将用于接口调用请求体的model字段",
   "click": "点击",
   "view_protocol_details": "查看协议详情",

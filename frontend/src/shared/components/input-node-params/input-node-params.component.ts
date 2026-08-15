@@ -162,7 +162,7 @@ export class InputNodeParamsComponent {
     });
   }
 
-  public onUploadFile(e: Event, inputItem: InputParamConfig, uploadType = 'multi') {
+  public async onUploadFile(e: Event, inputItem: InputParamConfig, uploadType = 'multi'): Promise<void> {
     const input = e.target as HTMLInputElement;
     if (uploadType === 'single') {
       const file: File = input.files[0];
@@ -211,7 +211,8 @@ export class InputNodeParamsComponent {
           );
         })
         .catch(() => {
-          inputItem.uploadData.progress = 'failed';
+          inputItem.uploadData = null;
+          inputItem.file = undefined;
           this.fileUploadStatus.emit('failed');
           this.parameterFromGroup.controls[inputItem.uniqueId].setValue('');
         });
@@ -245,7 +246,10 @@ export class InputNodeParamsComponent {
         }
         const fileItem = createFileItem(file);
         inputItem.uploadDatas.push(fileItem);
-        uploadFile(this.appAgentServe, file, isImage, fileItem);
+        await new Promise(resolve => setTimeout(resolve));
+        await uploadFile(this.appAgentServe, file, isImage, fileItem, () => {
+          inputItem.uploadDatas = inputItem.uploadDatas.filter((f) => f.fileId !== fileItem.fileId);
+        });
       }
       this.parameterFromGroup.controls[inputItem.uniqueId].setValue(
         inputItem.uploadDatas,

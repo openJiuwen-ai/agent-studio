@@ -719,16 +719,19 @@ public class PluginService implements IPluginService {
                     continue;
                 }
 
+                // 插件以 traceId 标识同一资源。已存在时导入会执行覆盖更新，需要与新增导入分别计数。
+                boolean pluginExists = isPluginExist(projectId, workspaceId, plugin.getMetadata());
+
                 // id冲突，则随机生成一个uuid
                 checkAndUpdateUuid(workspaceId, projectId, pluginId, plugin);
 
                 // 导入插件逻辑
-                if (importPluginsHandler(projectId, workspaceId, plugin.getMetadata(),
-                    wfImportDataWrapper.getPluginsOfAuth())) {
-                    wfImportDataWrapper.getSucceedIds().add(plugin.getMetadata().getPluginId());
-                } else {
+                boolean succeeded = importPluginsHandler(projectId, workspaceId, plugin.getMetadata(),
+                    wfImportDataWrapper.getPluginsOfAuth());
+                recordImportResult(wfImportDataWrapper, pluginId, plugin.getMetadata().getPluginId(), pluginExists,
+                    succeeded);
+                if (!succeeded) {
                     log.error("Failed to import tool:{}", plugin);
-                    wfImportDataWrapper.getFailedIds().add(pluginId);
                 }
             }
             buildImportRsp(importRsp, wfImportDataWrapper);
@@ -835,11 +838,29 @@ public class PluginService implements IPluginService {
         }
     }
 
-    private void buildImportRsp(ImportRsp importRsp, WfImportDataWrapper wfImportDataWrapper) {
+    void recordImportResult(WfImportDataWrapper wrapper, String originalPluginId, String resultPluginId,
+        boolean pluginExists, boolean succeeded) {
+        if (!succeeded) {
+            wrapper.getFailedIds().add(originalPluginId);
+            return;
+        }
+        wrapper.getSucceedIds().add(resultPluginId);
+        if (pluginExists) {
+            wrapper.getUpdatedIds().add(resultPluginId);
+        } else {
+            wrapper.getImportedIds().add(resultPluginId);
+        }
+    }
+
+    void buildImportRsp(ImportRsp importRsp, WfImportDataWrapper wfImportDataWrapper) {
         importRsp.setSucceedIds(wfImportDataWrapper.getSucceedIds());
         importRsp.setFailedIds(wfImportDataWrapper.getFailedIds());
         importRsp.setSucceedLen(wfImportDataWrapper.getSucceedIds().size());
         importRsp.setFailedLen(wfImportDataWrapper.getFailedIds().size());
+        importRsp.setImportedLen(wfImportDataWrapper.getImportedIds().size());
+        importRsp.setUpdatedLen(wfImportDataWrapper.getUpdatedIds().size());
+        importRsp.setSkippedLen(wfImportDataWrapper.getSkippedIds().size());
+        importRsp.setCount(importRsp.getSucceedLen() + importRsp.getFailedLen() + importRsp.getSkippedLen());
         importRsp.setAuthPluginsMsg(new ArrayList<>(wfImportDataWrapper.getPluginsOfAuth()));
         importRsp.setInnerPluginsMsg(new ArrayList<>(wfImportDataWrapper.getInnerPluginsMsg()));
         importRsp.setAuthMcpsMsg(new ArrayList<>(wfImportDataWrapper.getMcpsOfAuth()));

@@ -264,6 +264,12 @@ export class DynamicNodeParamsComponent {
   }
 
   public handleUserInput(control_name: string, isValidate: boolean) {
+    // 用户输入时重置错误标志，立即清除错误提示
+    const inputItem = this.inputList?.find(item => item.name === control_name);
+    if (inputItem) {
+      inputItem.isEmpty = false;
+      inputItem.isError = false;
+    }
     // 启用校验
     const control = this.parameterFromGroup.get([`${control_name}`]);
     if (control) {
@@ -586,7 +592,7 @@ export class DynamicNodeParamsComponent {
     return type === 'object' || type.startsWith('array');
   }
 
-  public onUploadFile(e: Event, inputItem, uploadType = 'multi'): void {
+  public async onUploadFile(e: Event, inputItem, uploadType = 'multi'): Promise<void> {
     const input = e.target as HTMLInputElement;
     if (uploadType === 'single') {
       const file: File = input.files[0];
@@ -633,7 +639,8 @@ export class DynamicNodeParamsComponent {
           this.appFlowServe.setFileList(inputItem);
         })
         .catch(() => {
-          inputItem.uploadData.progress = 'failed';
+          inputItem.uploadData = null;
+          inputItem.file = null;
           this.fileLoading = false;
           this.parameterFromGroup.controls[inputItem.name].setValue('');
         });
@@ -670,7 +677,10 @@ export class DynamicNodeParamsComponent {
         }
         const fileItem = createFileItem(file);
         inputItem.uploadDatas.push(fileItem);
-        uploadFile(this.appAgentServe, file, isImage, fileItem);
+        await new Promise(resolve => setTimeout(resolve));
+        await uploadFile(this.appAgentServe, file, isImage, fileItem, () => {
+          inputItem.uploadDatas = inputItem.uploadDatas.filter((f) => f.fileId !== fileItem.fileId);
+        });
       }
       this.parameterFromGroup.controls[inputItem.name].setValue(
         inputItem.uploadDatas,

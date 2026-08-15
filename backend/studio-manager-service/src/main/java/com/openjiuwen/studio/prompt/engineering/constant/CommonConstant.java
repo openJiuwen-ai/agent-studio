@@ -214,6 +214,11 @@ public final class CommonConstant {
     public static final String TAG_NOT_FOUND = "excel.tag.not.found";
 
     /**
+     * 提示信息：必填项为空
+     */
+    public static final String REQUIRED_FIELD_MISSING = "excel.prompt.required.field.missing";
+
+    /**
      * 查询订单信息URL
      */
     public static final String RESOURCES_ORDERS_URL = "%s/v1/%s/agentBuilder/operation/resources/orders";

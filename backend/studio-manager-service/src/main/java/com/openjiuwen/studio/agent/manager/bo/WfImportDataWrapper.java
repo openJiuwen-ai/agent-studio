@@ -34,6 +34,12 @@ public class WfImportDataWrapper {
 
     private List<String> failedIds = new ArrayList<>();
 
+    private List<String> importedIds = new ArrayList<>();
+
+    private List<String> updatedIds = new ArrayList<>();
+
+    private List<String> skippedIds = new ArrayList<>();
+
     /**
      * 待导入工作流列表
      */

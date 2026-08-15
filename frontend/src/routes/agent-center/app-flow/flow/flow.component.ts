@@ -2070,13 +2070,19 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       });
       modalRef.afterClose.subscribe((result) => {
         if (result) {
-          nodeInfo.name = removeHTMLTag(result);
-          if (node?.data?.ngArguments?.nodeInfo) {
-            node.data.ngArguments.nodeInfo.name = nodeInfo.name;
-            node.data.ngArguments.nodeInfo.configs.isDefaultName = false;
-          }
-          this.appFlowServ.setNodeNameChange({id: nodeInfo.id, name: nodeInfo.name});
-          this.updateFlowData();
+          this.ngZone.run(() => {
+            nodeInfo.name = removeHTMLTag(result);
+            if (node?.data?.ngArguments?.nodeInfo) {
+              node.data.ngArguments.nodeInfo.name = nodeInfo.name;
+              node.data.ngArguments.nodeInfo.configs.isDefaultName = false;
+            }
+            if (this.nodeConfigNodeInfo && this.nodeConfigNodeInfo.id === nodeInfo.id) {
+              this.nodeConfigNodeInfo.name = nodeInfo.name;
+            }
+            this.appFlowServ.setNodeNameChange({id: nodeInfo.id, name: nodeInfo.name});
+            this.updateFlowData();
+            this.cdr.detectChanges();
+          });
         }
       });
     }

@@ -8,18 +8,21 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.REQUIRED_FIELD_MISSING;
 import static org.mockito.Answers.RETURNS_DEEP_STUBS;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.openjiuwen.studio.agent.common.dto.simple.SimpleUser;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.prompt.engineering.dto.ManualPePromptTemplateDto;
@@ -36,12 +39,16 @@ import com.openjiuwen.studio.prompt.engineering.mapper.PeTagMapper;
 import com.openjiuwen.studio.prompt.engineering.mapper.PeTaskMapper;
 import com.openjiuwen.studio.prompt.engineering.utils.ExcelI18nHandler;
 
+import com.alibaba.excel.EasyExcel;
 import cn.afterturn.easypoi.handler.inter.II18nHandler;
 import jakarta.servlet.http.HttpServletResponse;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.apache.poi.xssf.usermodel.XSSFRow;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -50,12 +57,17 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.context.MessageSource;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * PromptTemplateService 单元测试
@@ -207,6 +219,41 @@ class PromptTemplateServiceTest {
 
         assertThrows(AgentStudioException.class,
             () -> promptTemplateService.downloadPromptTemplateV2(projectId, workspaceId, templateIds));
+    }
+
+    @Test
+    void testImportPromptTemplateV2_RowCountExceedsLimit() {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        List<List<String>> head = List.of(
+            List.of("模板名称"),
+            List.of("模板内容"),
+            List.of("模板描述"),
+            List.of("标签"),
+            List.of("行业"),
+            List.of("变量")
+        );
+        List<List<String>> rows = new ArrayList<>();
+        for (int index = 0; index < 101; index++) {
+            rows.add(List.of("模板" + index, "内容" + index, "描述", "", "", ""));
+        }
+        EasyExcel.write(outputStream).head(head).sheet().doWrite(rows);
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "templates.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            outputStream.toByteArray()
+        );
+
+        SimpleUser userInfo = new SimpleUser();
+        userInfo.setUserName("testUser");
+        try (MockedStatic<RequestContextUtils> mocked = mockStatic(RequestContextUtils.class)) {
+            mocked.when(RequestContextUtils::getRequestUser).thenReturn(userInfo);
+
+            AgentStudioException exception = assertThrows(AgentStudioException.class,
+                () -> promptTemplateService.importPromptTemplateV2("workspace1", "project1", file));
+
+            assertEquals(StudioError.PROMPT_TEMPLATE_IMPORT_NUM_EXCEED, exception.getErrorCode());
+        }
     }
 
     // ========== createPromptTemplate ==========
@@ -887,6 +934,101 @@ class PromptTemplateServiceTest {
 
             boolean result = promptTemplateService.checkAuth("project1", "workspace1");
             assertFalse(result);
+        }
+    }
+
+    // ========== importPromptTemplateV2（修复：导入失败提示不明确） ==========
+
+    @Test
+    void testImportV2_HeaderMismatch_ThrowsExcelHeaderError() throws IOException {
+        // 表头与模板不一致：应抛出 EXCEL_HEADER_ERROR，而不是被统一包装成 UPLOAD_FILE_FAILED
+        byte[] content = buildExcelBytes(List.of("错误表头", "模板内容", "描述", "标签", "行业", "变量"),
+            List.of(List.of("名称A", "内容A", "", "", "金融", "")));
+        MockMultipartFile file = new MockMultipartFile("file", "header_mismatch.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", content);
+
+        SimpleUser userInfo = new SimpleUser();
+        userInfo.setUserName("test");
+        userInfo.setDomainName("normal_domain");
+        try (MockedStatic<RequestContextUtils> mocked = mockStatic(RequestContextUtils.class, RETURNS_DEEP_STUBS)) {
+            mocked.when(RequestContextUtils::getRequestUser).thenReturn(userInfo);
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> promptTemplateService.importPromptTemplateV2("workspace1", "project1", file));
+            assertEquals(StudioError.EXCEL_HEADER_ERROR, ex.getErrorCode());
+        }
+    }
+
+    @Test
+    void testImportV2_EmptyTemplateName_ReturnsRequiredFieldMessage() throws IOException {
+        // 必填项"模板名称"为空：应返回明确的必填提示，而不是抛 NPE 后被包装成 UPLOAD_FILE_FAILED
+        byte[] content = buildExcelBytes(List.of("模板名称", "模板内容", "描述", "标签", "行业", "变量"),
+            List.of(Arrays.asList(null, "内容A", null, null, "金融", null)));
+        MockMultipartFile file = new MockMultipartFile("file", "empty_template_name.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", content);
+
+        when(messageSource.getMessage(anyString(), any(), any(Locale.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+        Industry industry = mock(Industry.class);
+        when(industry.getName()).thenReturn("金融");
+        when(industry.getId()).thenReturn("industry-1");
+        when(industryMapper.queryAll()).thenReturn(List.of(industry));
+        when(tagMapper.queryAll()).thenReturn(Collections.emptyList());
+        when(pePromptTemplateMapper.countPresetTemplateByProjectId("project1", "workspace1")).thenReturn(0);
+
+        SimpleUser userInfo = new SimpleUser();
+        userInfo.setUserName("test");
+        userInfo.setDomainName("normal_domain");
+        try (MockedStatic<RequestContextUtils> mocked = mockStatic(RequestContextUtils.class, RETURNS_DEEP_STUBS)) {
+            mocked.when(RequestContextUtils::getRequestUser).thenReturn(userInfo);
+
+            List<String> messages = promptTemplateService.importPromptTemplateV2("workspace1", "project1", file);
+
+            assertEquals(1, messages.size());
+            assertTrue(messages.get(0).contains(REQUIRED_FIELD_MISSING));
+        }
+    }
+
+    @Test
+    void testImportV2_CorruptedFile_ThrowsExcelHeaderError() {
+        // 损坏文件解析后表头为空，DynamicExcelListener 抛出 EXCEL_HEADER_ERROR（业务异常），
+        // 修复后该异常被原样透传，前端可得到明确的表头错误提示，而不再被包装成 UPLOAD_FILE_FAILED
+        MockMultipartFile file = new MockMultipartFile("file", "corrupt.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new byte[] {0, 1, 2, 3});
+
+        SimpleUser userInfo = new SimpleUser();
+        userInfo.setUserName("test");
+        userInfo.setDomainName("normal_domain");
+        try (MockedStatic<RequestContextUtils> mocked = mockStatic(RequestContextUtils.class, RETURNS_DEEP_STUBS)) {
+            mocked.when(RequestContextUtils::getRequestUser).thenReturn(userInfo);
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> promptTemplateService.importPromptTemplateV2("workspace1", "project1", file));
+            assertEquals(StudioError.EXCEL_HEADER_ERROR, ex.getErrorCode());
+        }
+    }
+
+    /**
+     * 构造内存中的 xlsx 文件字节，表头固定为第一行；值为 null 的单元格不写入（模拟空单元格）
+     */
+    private byte[] buildExcelBytes(List<String> header, List<List<String>> rows) throws IOException {
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            XSSFSheet sheet = workbook.createSheet("Sheet1");
+            XSSFRow headerRow = sheet.createRow(0);
+            for (int i = 0; i < header.size(); i++) {
+                headerRow.createCell(i).setCellValue(header.get(i));
+            }
+            for (int r = 0; r < rows.size(); r++) {
+                XSSFRow row = sheet.createRow(r + 1);
+                List<String> values = rows.get(r);
+                for (int c = 0; c < values.size(); c++) {
+                    if (values.get(c) != null) {
+                        row.createCell(c).setCellValue(values.get(c));
+                    }
+                }
+            }
+            workbook.write(out);
+            return out.toByteArray();
         }
     }
 }

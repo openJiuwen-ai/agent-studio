@@ -223,6 +223,8 @@ export class NodeExeComponent implements OnChanges {
 
   @ViewChild('chatContainerRef') chatContainerRef!: ElementRef<HTMLDivElement>;
 
+  @ViewChild('resultScrollRef') resultScrollRef?: ElementRef<HTMLDivElement>;
+
   @ViewChildren('exeEditor') editors: QueryList<any>;
 
   @ViewChildren('fileInput') fileInputs: QueryList<any>;
@@ -636,6 +638,7 @@ export class NodeExeComponent implements OnChanges {
                 this.runInfo = { answer: '' };
               }
               this.runInfo.answer = (this.runInfo.answer || '') + text;
+              this.scrollAnswerToBottom();
 
               if (exeResult.data.is_finished) {
                 this.lastChat.answer.loading = false;
@@ -793,11 +796,11 @@ export class NodeExeComponent implements OnChanges {
     this.appFlowServe.setTokenData({});
   }
 
-  public onUploadFile(
+  public async onUploadFile(
     e: Event,
     inputItem: IExeField,
     uploadType = 'multi',
-  ): void {
+  ): Promise<void> {
     const input = e.target as HTMLInputElement;
     if (uploadType === 'single') {
       const file: File = input.files[0];
@@ -837,7 +840,9 @@ export class NodeExeComponent implements OnChanges {
           this.cdr.detectChanges();
         })
         .catch(() => {
-          inputItem.uploadData.progress = 'failed';
+          inputItem.uploadData = null;
+          inputItem.file = undefined;
+          this.cdr.detectChanges();
         });
     } else {
       const len = input?.files?.length;
@@ -870,7 +875,11 @@ export class NodeExeComponent implements OnChanges {
         inputItem.uploadDatas.push(fileItem);
         this.cdr.detectChanges();
         this.isUploading = true;
-        uploadFile(this.repoServ, file, isImage, fileItem).finally(() => {
+        await new Promise(resolve => setTimeout(resolve));
+        uploadFile(this.repoServ, file, isImage, fileItem, () => {
+          inputItem.uploadDatas = inputItem.uploadDatas.filter((f) => f.fileId !== fileItem.fileId);
+          this.cdr.detectChanges();
+        }).finally(() => {
           this.cdr.detectChanges();
           this.isUploading = false;
         });
@@ -971,6 +980,15 @@ export class NodeExeComponent implements OnChanges {
     setTimeout(() => {
       this.chatContainerRef.nativeElement.scrollTop =
         this.chatContainerRef.nativeElement.scrollHeight;
+    }, 0);
+  }
+
+  private scrollAnswerToBottom() {
+    setTimeout(() => {
+      if (this.resultScrollRef?.nativeElement) {
+        this.resultScrollRef.nativeElement.scrollTop =
+          this.resultScrollRef.nativeElement.scrollHeight;
+      }
     }, 0);
   }
 

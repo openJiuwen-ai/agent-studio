@@ -524,6 +524,7 @@ export class IntentDetailComponent implements OnInit, OnDestroy {
           if (inputElement) inputElement.focus();
         }
       }
+      this.message.error(this.i18n.transform('form_verify_fail_tips'));
       return false;
     }
     return true;
@@ -535,15 +536,13 @@ export class IntentDetailComponent implements OnInit, OnDestroy {
       nzClassName: 'import-intent-modal',
       nzFooter: null,
       nzData: {
-        context: {
-          intentId: this.intentPackageId,
-          intentName: this.form.value.name,
-          outputs: {
-            refreshTable: (intentIds) => {
-              this.loadIntent(intentIds?.[0] || '');
-            },
+        intentId: this.intentPackageId,
+        intentName: this.form.value.name,
+        outputs: {
+          refreshTable: (intentIds) => {
+            this.loadIntent(intentIds?.[0] || '');
           },
-        }
+        },
       },
     });
   }

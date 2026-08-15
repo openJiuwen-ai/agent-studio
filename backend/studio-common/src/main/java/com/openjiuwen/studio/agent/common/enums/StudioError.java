@@ -108,7 +108,7 @@ public enum StudioError {
     USER_WORKSPACE_PERMISSION_INVALID(BAD_REQUEST, COMMON, "1012"),
 
     /**
-     * 文件大小超过系统限制,头像文件大小超出限制：200KB
+     * 文件大小超过系统限制
      */
     PICTURE_FILE_SIZE_EXCEED_LIMIT(BAD_REQUEST, COMMON, "1013"),
 
@@ -1413,6 +1413,11 @@ public enum StudioError {
      * 不支持导入的资源
      */
     UNSUPPORTED_RESOURCE_IMPORT(BAD_REQUEST, WORKFLOW, "1097"),
+
+    /**
+     * 异常节点template字段非JSON格式字符串，节点名称：{0}
+     */
+    WORKFLOW_TEMPLATE_INVALID_JSON(BAD_REQUEST, WORKFLOW, "1098"),
 
     /*
      * ============================== 多智能体相关错误码 ==============================
@@ -3755,6 +3760,11 @@ public enum StudioError {
     IMPORT_DATA_EMPTY(BAD_REQUEST, PE, "1196"),
 
     /**
+     * 提示词模板导入数据超过100条
+     */
+    PROMPT_TEMPLATE_IMPORT_NUM_EXCEED(BAD_REQUEST, PE, "1197"),
+
+    /**
      * ============================== 团队空间 ==============================
      */
     /**
@@ -4755,4 +4765,3 @@ public enum StudioError {
         }
     }
 }
-

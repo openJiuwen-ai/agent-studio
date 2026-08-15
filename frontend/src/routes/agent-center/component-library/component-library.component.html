@@ -126,13 +126,13 @@
         <nz-pagination
           style="margin-bottom: 8px"
           *ngIf="cards.length && !isLoading"
-          [(nzPageIndex)]="currentCardPage"
+          [nzPageIndex]="currentCardPage"
           [nzTotal]="totalCardNumber"
-          [(nzPageSize)]="cardPageSize.size"
+          [nzPageSize]="cardPageSize.size"
           [nzPageSizeOptions]="cardPageSize.options"
           nzShowSizeChanger
-          (nzPageIndexChange)="getCardData()"
-          (nzPageSizeChange)="getCardData()"
+          (nzPageIndexChange)="onCardPageIndexChange($event)"
+          (nzPageSizeChange)="onCardPageSizeChange($event)"
         />
       </div>
     </div>
