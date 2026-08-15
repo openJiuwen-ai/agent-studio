@@ -92,6 +92,17 @@
         </if>
     </select>
 
+    <select id="queryByModelName" resultType="com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase">
+        select *
+        from t_model_service
+        where PROJECT_ID = #{projectId}
+          and WORKSPACE_ID = #{workspaceId}
+          and MODEL_NAME = #{name}
+        <if test="providerId != null and providerId != ''">
+            and PROVIDER_ID = #{providerId}
+        </if>
+    </select>
+
     <select id="countByModelName" resultType="Integer">
         select count(1)
         from t_model_service

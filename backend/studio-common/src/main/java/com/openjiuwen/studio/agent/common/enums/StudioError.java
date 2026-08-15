@@ -1725,6 +1725,11 @@ public enum StudioError {
     MODEL_NAME_REPEATED(BAD_REQUEST, Module.MODEL, "1003"),
 
     /**
+     * 模型名称重复
+     */
+    MODEL_NAME_ALREADY_EXIST(BAD_REQUEST, Module.MODEL, "1074"),
+
+    /**
      * 路由策略名称重复
      */
     ROUTER_STRATEGY_NAME_REPEATED(BAD_REQUEST, Module.MODEL, "1004"),
