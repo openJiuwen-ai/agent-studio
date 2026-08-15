@@ -154,6 +154,9 @@ spec:
             # 用户上传文件累计大小上限（单位 KB，默认 204800 即 200MB，按用户 24 小时窗口累计）
             - name: max_upload_total_size
               value: '204800'
+            # 引用未发布插件：默认关闭，置 true 时允许引用未发布的插件
+            - name: plugin_publish_choice
+              value: 'false'
           resources:
             limits:
               cpu: '2'
