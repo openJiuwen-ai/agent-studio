@@ -760,6 +760,60 @@ class PluginServiceTest {
     }
 
     @Test
+    void testRetrievePlugin_ToolDependencyDedupByApp() {
+        // 工具引用数口径：与引用插件列表一致（valid=1/同工作空间由SQL保证），
+        // 同一工作流重复版本(相同appId)只计一次，且按工具粒度分开统计
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setWorkspaceId("ws-1");
+
+        PluginDTO pluginDTO = new PluginDTO();
+        pluginDTO.setPluginId("p-1");
+        pluginDTO.setToolRequestInfo(ToolRequestInfo.builder()
+            .basicInfo(BasicInfo.builder().host("host").protocol("https").build())
+            .toolsInfoList(new ArrayList<>(List.of(
+                ToolInfo.builder().toolId("t-1").build(),
+                ToolInfo.builder().toolId("t-2").build())))
+            .build());
+
+        when(pluginMapper.selectByPrimaryKeyAndWorkspaceAndCredential("p-1", null, "ws-1")).thenReturn(pluginEntity);
+        when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
+
+        // 工具t-1被wf-1(重复2个版本/节点)、wf-2引用；工具t-2仅被wf-3引用
+        MappingEntity wf1a = new MappingEntity();
+        wf1a.setResourceId("p-1#t-1");
+        wf1a.setAppId("wf-1");
+        MappingEntity wf1b = new MappingEntity();
+        wf1b.setResourceId("p-1#t-1");
+        wf1b.setAppId("wf-1");
+        MappingEntity wf2 = new MappingEntity();
+        wf2.setResourceId("p-1#t-1");
+        wf2.setAppId("wf-2");
+        MappingEntity wf3 = new MappingEntity();
+        wf3.setResourceId("p-1#t-2");
+        wf3.setAppId("wf-3");
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("p-1"), isNull(), eq("ws-1"), eq("workflow"), isNull()))
+            .thenReturn(List.of(wf1a, wf1b, wf2, wf3));
+
+        MappingEntity ag1 = new MappingEntity();
+        ag1.setResourceId("p-1#t-1");
+        ag1.setAppId("ag-1");
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("p-1"), isNull(), eq("ws-1"), eq("agent"), isNull()))
+            .thenReturn(List.of(ag1));
+
+        BaseResp resp = pluginService.retrievePlugin("proj-1", "p-1", "ws-1");
+
+        assertEquals(200, resp.getCode());
+        PluginDTO data = (PluginDTO) resp.getData();
+        assertEquals(2, data.getToolDependencyList().size());
+        assertEquals(2, data.getToolDependencyList().get(0).getDependencyOnWorkflow());
+        assertEquals(1, data.getToolDependencyList().get(0).getDependencyOnAgent());
+        assertEquals(1, data.getToolDependencyList().get(1).getDependencyOnWorkflow());
+        assertEquals(0, data.getToolDependencyList().get(1).getDependencyOnAgent());
+    }
+
+    @Test
     void testBatchCreateTool_PluginNotExist() {
         CreatePluginToolReq toolReq = new CreatePluginToolReq();
         toolReq.setPluginId("p-1");
