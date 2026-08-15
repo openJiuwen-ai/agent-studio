@@ -36,7 +36,7 @@ class ServerSettings(BaseSettings):
     tls_key_path: str = Field(default="", validation_alias="TLS_CERT_KEY_PATH")
     tls_key_password: str = Field(default="", validation_alias="TLS_CERT_KEY_PASSWD")
     tls_ciphers: str = Field(default="TLSv1.2 TLSv1.3", validation_alias="TLS_CIPHERS")
-    workers: Optional[int] = Field(default=None, validation_alias="GUNICORN_WORK_NUM")
+    workers: int = Field(default=1, validation_alias="GUNICORN_WORK_NUM")
     nginx_load_balancing: bool = Field(default=False, validation_alias="NGINX_LOAD_BALANCING")
 
     @field_validator("nginx_load_balancing", mode="before")
@@ -48,15 +48,15 @@ class ServerSettings(BaseSettings):
 
     @field_validator("workers", mode="before")
     @classmethod
-    def _empty_str_to_none(cls, v):
+    def _empty_str_to_default(cls, v):
         if v == "":
-            return None
+            return 1
         return v
 
     @field_validator("workers")
     @classmethod
-    def _validate_workers(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v < 1:
+    def _validate_workers(cls, v: int) -> int:
+        if v < 1:
             raise ValueError("GUNICORN_WORK_NUM must be >= 1")
         return v
 
