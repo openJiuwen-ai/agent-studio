@@ -43,6 +43,8 @@ export class ImportIntentModalComponent {
 
   public uplaodFile: any = {};
 
+  public isLoading = false;
+
   /**
    * nzData shape on studio-2.0-dev: { intentId, intentName, outputs: { refreshTable } }
    * nzData shape on studio-2.0:    { context: { intentId, intentName, outputs: { refreshTable } } }
@@ -81,6 +83,13 @@ export class ImportIntentModalComponent {
     this.fileInput.nativeElement.click();
   }
 
+  removeFile(): void {
+    this.uplaodFile = {};
+    if (this.fileInput?.nativeElement) {
+      this.fileInput.nativeElement.value = '';
+    }
+  }
+
   public onUploadFile(e: Event): void {
     const input = e.target as HTMLInputElement;
     const file: File = input.files[0];
@@ -100,9 +109,10 @@ export class ImportIntentModalComponent {
   }
 
   importIntent(): void {
-    if (!this.uplaodFile.file) {
+    if (this.isLoading || !this.uplaodFile.file) {
       return;
     }
+    this.isLoading = true;
     const formData = new FormData();
     formData.append('file', this.uplaodFile.file);
     this.api
@@ -115,7 +125,9 @@ export class ImportIntentModalComponent {
           this.modalContext.outputs?.refreshTable?.(res.intent_ids);
         }
       })
-      .finally(() => {});
+      .finally(() => {
+        this.isLoading = false;
+      });
   }
 
   dismiss() {

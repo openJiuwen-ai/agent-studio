@@ -80,8 +80,15 @@ export class ImportPackageModalComponent {
     }
   }
 
+  public removeFile(): void {
+    this.uplaodFile = {};
+    if (this.fileInput?.nativeElement) {
+      this.fileInput.nativeElement.value = '';
+    }
+  }
+
   public importIntent(): void {
-    if (!this.uplaodFile.file) {
+    if (this.isLoading || !this.uplaodFile.file) {
       return;
     }
 
