@@ -97,6 +97,7 @@ export class PromptOptimizeTaskListComponent {
     },
     {
       title: this.i18n.transform('prompt_status'),
+      width: '150px',
     },
     {
       title: this.i18n.transform('execution_time'),

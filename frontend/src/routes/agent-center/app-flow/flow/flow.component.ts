@@ -601,6 +601,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       id: 'appConfig',
       title: this.i18n.transform('multi_agent_config'),
       active: true,
+      show: this.configServ.getConfigs()?.studio_btn_show,
     },
     {
       id: 'releaseManage',
