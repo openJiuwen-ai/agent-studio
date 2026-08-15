@@ -273,8 +273,9 @@ export class SSE {
     this.progress += data.length;
     data.split(/(\r\n|\r|\n){2}/g).forEach((part) => {
       if (part.trim().length === 0) {
-        this.handleFirstToken(this.parseEventChunk(this.chunk.trim()));
-        this.dispatchEvent(this.parseEventChunk(this.chunk.trim()));
+        const eventChunk = this.parseEventChunk(this.chunk.trim());
+        this.handleFirstToken(eventChunk);
+        this.dispatchEvent(eventChunk);
         this.chunk = '';
       } else {
         this.chunk += part;

@@ -194,6 +194,8 @@ services:
       CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}
       # redis json序列化最大长度
       redis_max_string_length: ${REDIS_MAX_STRING_LENGTH:-20000000}
+      # 引用未发布插件：默认关闭，置 true 时允许引用未发布的插件
+      plugin_publish_choice: ${PLUGIN_PUBLISH_CHOICE:-false}
     depends_on:
       mysql:
         condition: service_healthy

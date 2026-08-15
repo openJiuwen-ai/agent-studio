@@ -138,7 +138,7 @@
         <div class="grid-layout" [style.--item-min-width]="'300px'" [style.--max-cols]="2">
           <div class="info-col">
             <span class="info-title">{{ 'tag'|i18nextEager }}</span>
-            <div class="flex"  *ngIf="infoDetail.is_network || infoDetail.is_support_function || infoDetail.is_reasoning"
+            <div class="flex" style="flex-shrink: 0;" *ngIf="infoDetail.is_network || infoDetail.is_support_function || infoDetail.is_reasoning"
             >
               <div
                 *ngIf="infoDetail.is_support_function"
@@ -191,8 +191,8 @@
         </div>
         <div class="grid-layout" [style.--item-min-width]="'300px'" [style.--max-cols]="1">
           <div class="info-col">
-            <span class="info-title truncate" style="width: 150px" nz-tooltip [nzTooltipTitle]="'model_service_description'|i18nextEager">{{ 'model_service_description'|i18nextEager }}</span>
-            <span style="flex:1" class="info-content-description">{{ infoDetail.model_description|| '-' }}</span>
+            <span class="info-title truncate" style="width: 150px; flex-shrink: 0" nz-tooltip [nzTooltipTitle]="'model_service_description'|i18nextEager">{{ 'model_service_description'|i18nextEager }}</span>
+            <span style="flex:1; min-width: 0" class="info-content-description">{{ infoDetail.model_description|| '-' }}</span>
           </div>
         </div>
       </div>

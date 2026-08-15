@@ -106,6 +106,7 @@
               [(nzFileList)]="fileList"
               [nzBeforeUpload]="beforeUploadImage2Text"
               [nzRemove]="onRemoveItemsNz"
+              [nzPreview]="handlePreview"
               [nzLimit]="5"
               [nzMultiple]="true"
               nzAccept=".png,.jpg,.jpeg"
@@ -249,5 +250,15 @@
         </ng-container>
       </div>
     </div>
+  </div>
+
+  <!-- 图片预览全屏遮罩：点击任何位置都关闭 -->
+  <div
+    *ngIf="previewVisible"
+    class="image-preview-mask"
+    (click)="closePreview()"
+  >
+    <img class="image-preview-img" [src]="previewImageSrc" alt="preview" />
+    <span class="image-preview-close" (click)="closePreview(); $event.stopPropagation()">×</span>
   </div>
 </div>

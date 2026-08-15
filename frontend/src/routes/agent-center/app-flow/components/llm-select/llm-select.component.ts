@@ -220,10 +220,7 @@ export class LLMSelectComponent implements OnDestroy {
     if (changes.selectedModel && changes.selectedModel.currentValue) {
       this.selectedModel = changes.selectedModel.currentValue;
       if(this.serviceMap[this.selectedModel]){
-        this.selectedModelInfo = {
-          logo: this.serviceMap[this.selectedModel].logo,
-          service_name: this.serviceMap[this.selectedModel].service_name,
-        }
+        this.updateSelectedModelInfo(this.serviceMap[this.selectedModel]);
       }
     }
   }
@@ -301,10 +298,7 @@ export class LLMSelectComponent implements OnDestroy {
         });
         this._modelOptions.set(options);
         if(this.selectedModel){
-          this.selectedModelInfo = {
-            logo: this.serviceMap[this.selectedModel].logo,
-            service_name: this.serviceMap[this.selectedModel].service_name,
-          }
+          this.updateSelectedModelInfo(this.serviceMap[this.selectedModel]);
         }
         this.cdr.detectChanges();
       });
@@ -323,11 +317,7 @@ export class LLMSelectComponent implements OnDestroy {
 
     // 先设置选中模型的图标信息
     if (this.serviceMap[modelId]) {
-      const model = this.serviceMap[modelId];
-      this.selectedModelInfo = {
-        logo: model.logo || '',
-        service_name: model.service_name || '',
-      };
+      this.updateSelectedModelInfo(this.serviceMap[modelId]);
     } else {
       this.selectedModelInfo = {
         logo: '',
@@ -354,12 +344,19 @@ export class LLMSelectComponent implements OnDestroy {
   onBeforeSearch(searchWord: string) {
     this.searchValue = searchWord;
     if (searchWord) {
-      this.selectedModelInfo = this.serviceMap[this.selectedModel];
+      this.updateSelectedModelInfo(this.serviceMap[this.selectedModel]);
     }
     this.getModelOptions(searchWord ? {service_name: searchWord} : {});
     if (!searchWord) {
       return;
     }
+  }
+
+  private updateSelectedModelInfo(model?: { logo?: string; service_name?: string }): void {
+    this.selectedModelInfo = {
+      logo: model?.logo || this.image,
+      service_name: model?.service_name || '',
+    };
   }
 
   ngOnDestroy(): void {

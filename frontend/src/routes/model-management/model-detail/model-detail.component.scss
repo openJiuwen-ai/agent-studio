@@ -90,10 +90,19 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .info-content-description {
+    font-size: 14px;
+    line-height: 22px;
+    white-space: break-spaces;
+    word-break: break-word;
+    min-width: 0;
   }
   .info-col{
     margin-bottom: 20px;
     display: flex;
+    overflow: hidden;
   }
 }
 
@@ -106,6 +115,8 @@
   height: 22px;
   border-radius: 4px;
   margin-right: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 

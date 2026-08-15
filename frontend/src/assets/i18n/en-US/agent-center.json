@@ -566,6 +566,7 @@
   "plugin_desc_validation_required": "The plugin description cannot be empty.",
   "plugin_desc_validation_default": "Enter the plugin description.",
   "tool_name_validation_required": "The tool name cannot be empty.",
+      "tool_display_name_validation_required": "The tool display name cannot be empty.",
   "tool_name_validation_formatter": "The English name of the tool must be a combination of letters, digits, and underscores (_).",
   "tool_zh_name_validation_formatter": "Tool Chinese name cannot exceed 64 characters",
   "tool_desc_validation_required": "The tool description cannot be empty.",

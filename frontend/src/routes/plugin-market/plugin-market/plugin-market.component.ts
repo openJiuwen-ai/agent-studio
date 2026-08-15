@@ -675,9 +675,10 @@ export class PluginMarketComponent implements OnInit {
     });
     modalRef.componentInstance.shareData = data;
     modalRef.componentInstance.pageType = SHARE_PAGE.plugin;
-    modalRef.afterClose.subscribe(() => {
-      MessageComponent.showSuccess(this.i18n.transform('app_center_cards_4'), 3000);
-      this.initShareList();
+    modalRef.afterClose.subscribe((result) => {
+      if (result) {
+        this.initShareList();
+      }
     });
   }
 
@@ -698,7 +699,6 @@ export class PluginMarketComponent implements OnInit {
         resource_type: data.resource_type,
       })
       .then(res => {
-        MessageComponent.showSuccess(this.i18n.transform('app_center_cards_4'), 3000);
         this.initShareList();
       });
   }

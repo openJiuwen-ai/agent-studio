@@ -285,6 +285,12 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             log.error("Model service name is already exist. name:{}", body.getServiceName());
             throw new AgentStudioException(StudioError.MODEL_NAME_REPEATED);
         }
+        List<ModelServiceBase> existModelName = modelServiceMapper.queryByModelName(projectId, workspaceId,
+            body.getModelName(), body.getProviderId());
+        if (!existModelName.isEmpty()) {
+            log.error("Model name is already exist. name:{}", body.getModelName());
+            throw new AgentStudioException(StudioError.MODEL_NAME_ALREADY_EXIST);
+        }
         if (body.getModelTags() != null && body.getModelTags().split(",").length > 5) {
             log.error("The number of model_tags exceeds the limit:{}", body.getModelTags());
             throw new AgentStudioException(StudioError.MD_MODEL_TAGS_LIMIT);
@@ -862,6 +868,14 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             if (!existMS.isEmpty()) {
                 log.error("Model service name is already exist. Can not update. name:{}", serviceReq.getServiceName());
                 throw new AgentStudioException(StudioError.MODEL_NAME_REPEATED);
+            }
+        }
+        if (!base.getModelName().equals(serviceReq.getModelName())) {
+            List<ModelServiceBase> existModelName = modelServiceMapper.queryByModelName(projectId, workspaceId,
+                serviceReq.getModelName(), base.getProviderId());
+            if (!existModelName.isEmpty()) {
+                log.error("Model name is already exist. Can not update. name:{}", serviceReq.getModelName());
+                throw new AgentStudioException(StudioError.MODEL_NAME_ALREADY_EXIST);
             }
         }
         if (serviceReq.getModelTags() != null && serviceReq.getModelTags().split(",").length > 5) {
