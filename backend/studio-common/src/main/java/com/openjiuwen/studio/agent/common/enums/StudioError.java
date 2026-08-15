@@ -942,6 +942,11 @@ public enum StudioError {
     MISSING_REQUIRED_INSTRUCTIONS(BAD_REQUEST, AGENT, "1053"),
 
     /**
+     * 智能体复制失败
+     */
+    AGENT_COPY_FAIL(INTERNAL_SERVER_ERROR, AGENT, "1054"),
+
+    /**
      * {{latest}}变量对应的资源不存在替换
      */
     LATEST_REPLACE_NOT_EXISTS(BAD_REQUEST, AGENT, "1056"),
