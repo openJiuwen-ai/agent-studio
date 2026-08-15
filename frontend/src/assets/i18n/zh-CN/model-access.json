@@ -289,6 +289,7 @@
   "embedding_example": "示例1: 那是个快乐的人\n示例2: [\"那是个快乐的人\", \"那是个高兴的人\", \"那是个忧郁的人\"]",
   "upload_image": "上传图片",
   "image_upload_limit_desc": "图片格式需要为png、jpg、jpeg，单张图片不超过4MB，最多上传五张",
+  "image_upload_max_count_exceeded": "最多上传5张图片",
   "prompt_content": "提示语内容",
   "image_info_requirements": "请描述需要知道图片中的什么信息，例如：图片中有什么",
   "text_input": "请输入文本",

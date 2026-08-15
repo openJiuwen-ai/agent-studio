@@ -373,6 +373,10 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   }
 
   beforeUploadImage2Text = (file: NzUploadFile): boolean => {
+    if (this.image2textParam.uploadData.length >= 5) {
+      this.message.error(this.i18n.transform('image_upload_max_count_exceeded'));
+      return false;
+    }
     const isValidType = file.type === 'image/jpeg' || file.type === 'image/png';
     if (!isValidType) {
       this.message.error(this.i18n.transform("unsupported_file_type"));

@@ -1,4 +1,4 @@
-import { Component, ViewChild, ElementRef, Inject } from '@angular/core';
+import { Component, ViewChild, ElementRef, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MODULES } from '@shared/modules';
 import { I18nNamespace } from '@i18n';
@@ -37,9 +37,9 @@ export class ImportPackageModalComponent {
     private readonly intentPackageServ: IntentPackageService,
     private readonly i18n: I18NextEagerPipe,
     private message: NzMessageService,
-    private modalRef: NzModalRef,
+    @Optional() private modalRef: NzModalRef,
     private commonLogic: agentCommonLogic,
-    @Inject(NZ_MODAL_DATA) public nzData: any,
+    @Optional() @Inject(NZ_MODAL_DATA) public nzData: any,
   ) {}
 
   downloadTemplate(): void {
@@ -106,6 +106,8 @@ export class ImportPackageModalComponent {
   }
 
   public dismiss() {
-    this.modalRef.close();
+    if (this.modalRef) {
+      this.modalRef.destroy();
+    }
   }
 }
