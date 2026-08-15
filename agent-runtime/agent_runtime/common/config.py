@@ -461,6 +461,30 @@ class OpenJiuwenKBSettings(BaseSettings):
     )
 
 
+class KnowledgeBaseSettings(BaseSettings):
+    """知识库检索（LakeSearch 等）出站 HTTP 客户端配置。
+
+    KB_SSL_VERIFY 控制知识库检索端点的 TLS 证书校验：
+    - false（默认）：不校验，对齐旧版（旧版 HttpClientUtils.createIgnoreVerifySsl
+      主动不校验），内网自签证书环境可直接连通；
+    - true：恢复校验，适用于端点使用受信任证书的场景。
+    """
+
+    ssl_verify: bool = Field(default=False, validation_alias="KB_SSL_VERIFY")
+
+    @field_validator("ssl_verify", mode="before")
+    @classmethod
+    def _empty_str_to_false(cls, v):
+        """K8s YAML 中空字符串 value: '' 会导致 bool 解析失败，需转为 False。"""
+        if v == "" or v is None:
+            return False
+        return v
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
 class Settings:
     server = ServerSettings()
     llm = LLMSettings()
@@ -479,5 +503,6 @@ class Settings:
     db_config = DataBaseSettings()
     conversation_variable = ConversationVariableSettings()
     openjiuwen_kb = OpenJiuwenKBSettings()
+    kb = KnowledgeBaseSettings()
 
 settings = Settings()

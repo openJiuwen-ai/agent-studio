@@ -57,8 +57,13 @@ class _FakeSession:
     async def __aexit__(self, *a):
         return False
 
-    def post(self, url=None, json=None, headers=None, timeout=None):
-        _FakeSession.last = {"url": url, "json": json, "headers": headers}
+    def post(self, url=None, json=None, headers=None, timeout=None, **kwargs):
+        _FakeSession.last = {
+            "url": url,
+            "json": json,
+            "headers": headers,
+            "ssl": kwargs.get("ssl"),
+        }
         return _FakeResp(self._payload)
 
 
@@ -161,6 +166,44 @@ async def test_lakesearch_single_kb_no_extra_repo_ids(monkeypatch):
     sent = _FakeSession.last
     assert sent["json"]["repo_id"] == "ext-1"
     assert "extra_repo_ids" not in sent["json"]  # 单 KB 不需要 extra_repo_ids
+
+
+async def test_lakesearch_ssl_disabled_by_default(monkeypatch):
+    """KB_SSL_VERIFY 默认 false：对齐旧版，POST 传 ssl=False 跳过证书校验。"""
+    monkeypatch.setattr(lakesearch_adapter.settings.kb, "ssl_verify", False)
+    _patch_session(monkeypatch, lakesearch_adapter, {"doc_list": []})
+    adapter = LakeSearchAdapter()
+    await adapter.search(
+        query="q",
+        connection_config={
+            "endpoint": "http://host",
+            "auth_mode": "BASIC",
+            "authorization": "cred",
+            "extra_params": {"project_id": "p1", "app_id": "a1"},
+        },
+        knowledge_bases=[{"knowledge_base_id": "kb-1", "external_id": "ext-1"}],
+        retrieval_params={"topK": 3},
+    )
+    assert _FakeSession.last["ssl"] is False
+
+
+async def test_lakesearch_ssl_enabled_when_verify_true(monkeypatch):
+    """KB_SSL_VERIFY=true：恢复证书校验，POST 传 ssl=None 走 aiohttp 默认。"""
+    monkeypatch.setattr(lakesearch_adapter.settings.kb, "ssl_verify", True)
+    _patch_session(monkeypatch, lakesearch_adapter, {"doc_list": []})
+    adapter = LakeSearchAdapter()
+    await adapter.search(
+        query="q",
+        connection_config={
+            "endpoint": "http://host",
+            "auth_mode": "BASIC",
+            "authorization": "cred",
+            "extra_params": {"project_id": "p1", "app_id": "a1"},
+        },
+        knowledge_bases=[{"knowledge_base_id": "kb-1", "external_id": "ext-1"}],
+        retrieval_params={"topK": 3},
+    )
+    assert _FakeSession.last["ssl"] is None
 
 
 # --------------------------------------------------------------------------

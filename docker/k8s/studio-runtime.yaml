@@ -119,6 +119,9 @@ spec:
               value: 'false'
             - name: OPENSEARCH_SSL_VERIFY
               value: 'false'
+            # 知识库检索SSL验证（LakeSearch等自签证书端点，默认关闭以对齐旧版）
+            - name: KB_SSL_VERIFY
+              value: 'false'
             # ======== [选填] 记忆库配置（默认关闭） ========
             # 总开关，设为true启用记忆库功能
             - name: MEMORY_ENABLED
