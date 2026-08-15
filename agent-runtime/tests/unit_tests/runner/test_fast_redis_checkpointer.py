@@ -555,7 +555,7 @@ class TestDelegatePassthrough:
         mock_delegate.graph_store.return_value = "mock_graph_store"
         result = checkpointer.graph_store()
         assert isinstance(result, NsIndexingGraphStore)
-        assert result._saver == "mock_graph_store"
+        assert getattr(result, "_saver") is mock_delegate.graph_store.return_value
         mock_delegate.graph_store.assert_called_once()
 
 
