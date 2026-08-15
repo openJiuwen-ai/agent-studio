@@ -326,6 +326,7 @@ public class WorkflowAdapter extends ResourceAdapter {
         workflow.setUpdatedAt(new Date().getTime());
         workflow.setPublishedAt(null);
         workflow.setDeployWfVersion(null);
+        workflow.setLastVersionId(null);
         workflow.setDeleted(0);
         workflow.setTestStatus(null);
 

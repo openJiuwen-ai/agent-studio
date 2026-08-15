@@ -26,14 +26,7 @@
       <nz-form-label [nzRequired]="true" style="width: 90px">{{ 'space_avatar' | i18nextEager }}</nz-form-label>
       <nz-form-control>
         <div class="upload-avatar">
-          <div *ngIf="myForm.value.logo" class="event-log-container">
-            <img alt="" [src]="getIcon(myForm.value.logo)" class="upload-avatar" />
-            <span (click)="editLogo()" class="delete-box">
-              <em class="cloudx cloudx-action-edit"></em>
-            </span>
-          </div>
           <nz-upload
-            *ngIf="!myForm.value.logo"
             [ngClass]="{ 'is-logo-error': logoIsError }"
             nzType="select"
             [nzBeforeUpload]="beforeUpload"
@@ -43,10 +36,20 @@
             [nzShowUploadList]="false"
             nzAccept=".jpg,.jpeg,.png,.gif"
           >
-            <button nz-button type="button">
-              <em nz-icon nzType="upload"></em>
-              {{ '上传' }}
-            </button>
+            <div class="event-log-container" style="width: 64px; height: 64px;">
+              <ng-container *ngIf="myForm.value.logo; else uploadPlaceholder">
+                <img alt="" [src]="getIcon(myForm.value.logo)" class="upload-avatar" />
+                <span class="delete-box">
+                  <em class="cloudx cloudx-action-edit"></em>
+                </span>
+              </ng-container>
+              <ng-template #uploadPlaceholder>
+                <button nz-button type="button">
+                  <em nz-icon nzType="upload"></em>
+                  {{ '上传' }}
+                </button>
+              </ng-template>
+            </div>
           </nz-upload>
         </div>
       </nz-form-control>

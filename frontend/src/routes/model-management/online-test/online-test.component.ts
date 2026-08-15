@@ -319,6 +319,11 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
 
   fileList: NzUploadFile[] = [];
 
+  /** 当前预览的图片 dataURL */
+  previewImageSrc = '';
+  /** 是否显示预览遮罩 */
+  previewVisible = false;
+
   image2textParam: any = {
     uploadData: [],
     content: '',
@@ -373,6 +378,10 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   }
 
   beforeUploadImage2Text = (file: NzUploadFile): boolean => {
+    if (this.image2textParam.uploadData.length >= 5) {
+      this.message.error(this.i18n.transform('image_upload_max_count_exceeded'));
+      return false;
+    }
     const isValidType = file.type === 'image/jpeg' || file.type === 'image/png';
     if (!isValidType) {
       this.message.error(this.i18n.transform("unsupported_file_type"));
@@ -390,6 +399,7 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       const url = reader.result;
       const uuid = uuidV4();
       file.uid = uuid;
+      file.url = url as string;
       this.image2textParam.uploadData.push({
         url,
         type: file.type,
@@ -406,6 +416,19 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       this.image2textParam.uploadData.splice(index, 1);
     }
     return true;
+  };
+
+  handlePreview = (file: NzUploadFile): void => {
+    // 使用组件内置遮罩预览，避免 window.open 被超长 base64 URL 截断
+    const src = file.url || file.thumbUrl;
+    if (src) {
+      this.previewImageSrc = src;
+      this.previewVisible = true;
+    }
+  };
+
+  closePreview = (): void => {
+    this.previewVisible = false;
   };
 
   changeValue(config) {

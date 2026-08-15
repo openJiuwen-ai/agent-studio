@@ -17,7 +17,7 @@
     >
       <thead>
         <tr>
-          <th *ngFor="let column of type != 'system' ? columns : columns.slice(0, 1)">
+          <th *ngFor="let column of columns">
             {{ column.title }}
           </th>
         </tr>
@@ -30,8 +30,8 @@
               {{ row.app_name }}
             </a>
           </td>
-          <td *ngIf="type != 'system'">{{ row.app_version || ('unpublished' | i18nextEager) }}</td>
-          <td *ngIf="type != 'system'">{{ row.resource_version || ('unpublished' | i18nextEager) }}</td>
+          <td>{{ row.app_version || ('unpublished' | i18nextEager) }}</td>
+          <td>{{ row.resource_version || ('unpublished' | i18nextEager) }}</td>
         </tr>
       </tbody>
     </nz-table>

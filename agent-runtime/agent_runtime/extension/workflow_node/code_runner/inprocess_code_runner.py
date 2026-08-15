@@ -5,7 +5,6 @@
 无子进程开销，适用于 exec_env=local 且 LOCAL_CODE_EXEC_MODE=inprocess 的场景。
 """
 
-import asyncio
 import copy
 import threading
 import traceback
@@ -19,7 +18,6 @@ from openjiuwen.core.common.exception.errors import build_error
 class InprocessCodeRunner(CodeRunner):
     """进程内代码执行器 - 使用 exec() 在当前进程内执行代码
 
-    对齐旧版 custom_code.py 的 _execute_code_safely() 实现。
     无子进程开销，适用于 exec_env=local 且 LOCAL_CODE_EXEC_MODE=inprocess 的场景。
     """
 
@@ -64,15 +62,15 @@ class InprocessCodeRunner(CodeRunner):
             BuildError: 返回值非 dict 时抛出
 
         Note:
-            exec() 与 deepcopy 均为同步 CPU 活，丢入线程池让出 event loop，
-            避免 LLM 节点 / IR / 日志等协程被抢占。
-            但线程内 exec 无法被硬中断，timeout 仍不生效 —— 需硬超时请走
+            exec() 与 deepcopy 均为同步 CPU 活，此处直接在 event loop 线程同步执行，
+            会阻塞 event loop, 但可以降低代码节点单次执行延迟
+            同步 exec 无法被硬中断，timeout 仍不生效 —— 需硬超时请走
             subprocess 模式（LocalCodeRunner）。
         """
-        return await asyncio.to_thread(self._exec_sync, user_code, inputs)
+        return self._exec_sync(user_code, inputs)
 
     def _exec_sync(self, user_code: str, inputs: dict) -> dict:
-        """同步执行用户代码（在线程池中调用）"""
+        """同步执行用户代码（由 run() 在 event loop 线程直接同步调用）"""
         # 1. 深拷贝 inputs 防止污染
         inputs = copy.deepcopy(inputs)
 

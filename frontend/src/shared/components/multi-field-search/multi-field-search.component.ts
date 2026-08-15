@@ -85,32 +85,50 @@ export class MultiFieldSearchComponent {
     const opt = item.options?.find(o => o.id === optionId);
     if (!opt) return;
     const existing = this.searchTags.find(t => t.field === this.searchField);
+    // 取消选择：再次点击已选中项 → 移除标签并清空下拉框，搜索框不再显示该项
+    if (existing && existing.id === optionId) {
+      this.searchTags = this.searchTags.filter(t => t !== existing);
+      this.searchInputValue = '';
+      this.emitChange();
+      return;
+    }
     if (existing) {
       existing.value = opt.label;
       existing.id = opt.id;
     } else {
       this.searchTags = [...this.searchTags, { field: this.searchField, value: opt.label, id: opt.id, label: item.label }];
     }
-    this.searchInputValue = '';
+    // 保留下拉框显示当前选中项，便于用户直观看到已选内容
+    this.searchInputValue = optionId;
     this.emitChange();
   }
 
   public removeSearchTag(tag: ISearchTag) {
     this.searchTags = this.searchTags.filter(t => t !== tag);
+    // 移除当前激活字段的标签时，同步清空下拉框显示
+    if (tag.field === this.searchField) {
+      this.searchInputValue = '';
+    }
     this.emitChange();
   }
 
   public clearSearch() {
     this.searchTags = [];
     this.searchInputValue = '';
-    this.searchField = this.searchItems[0]?.field || '';
-    this.searchFieldChange.emit(this.searchField);
+    // 保持当前选中的筛选字段不变，仅清空筛选条件；避免从"标签"清空后跳回"行业"
     this.emitChange();
   }
 
   public onSearchFieldChange(field: string) {
     this.searchField = field;
-    this.searchInputValue = '';
+    // 切换到选项类字段时，恢复该字段已选中的项，使下拉框与已有标签保持一致
+    const item = this.searchItems.find(i => i.field === field);
+    if (item?.options?.length) {
+      const existing = this.searchTags.find(t => t.field === field);
+      this.searchInputValue = existing?.id || '';
+    } else {
+      this.searchInputValue = '';
+    }
     this.searchFieldChange.emit(field);
   }
 

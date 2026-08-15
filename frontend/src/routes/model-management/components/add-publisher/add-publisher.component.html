@@ -7,28 +7,28 @@
     <nz-form-item>
       <nz-form-label>{{ 'publisher_logo' | i18nextEager }}</nz-form-label>
       <nz-form-control>
-        <div *ngIf="myForm.value.logo" class="event-log-container relative w-16 h-16 group">
-          <img alt="" [(src)]="myForm.value.logo" class="w-full h-full object-cover rounded shadow-sm" />
-          <div
-            class="delete-box absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center cursor-pointer rounded"
-            (click)="deleteLogo()"
-          >
-            <nz-icon nzType="edit" class="text-white text-xl"></nz-icon>
-          </div>
-        </div>
-
         <nz-upload
-          *ngIf="!myForm.value.logo"
           class="page-upload w-16 h-16 block"
           [class.border-red-500]="logoIsError"
-          nzType="drag"
           nzAccept=".jpg,.jpeg,.png"
           [nzShowUploadList]="false"
           [nzBeforeUpload]="beforeUploadLogo"
         >
-          <p class="ant-upload-drag-icon m-0 mt-2">
-            <nz-icon nzType="plus" class="text-2xl text-gray-400"></nz-icon>
-          </p>
+          <div class="event-log-container relative w-full h-full group">
+            <ng-container *ngIf="myForm.value.logo; else uploadPlaceholder">
+              <img alt="" [src]="myForm.value.logo" class="w-full h-full object-cover rounded shadow-sm" />
+              <div
+                class="delete-box absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center cursor-pointer rounded"
+              >
+                <nz-icon nzType="edit" class="text-white text-xl"></nz-icon>
+              </div>
+            </ng-container>
+            <ng-template #uploadPlaceholder>
+              <div class="flex items-center justify-center w-full h-full border border-dashed border-[#d9d9d9] rounded cursor-pointer">
+                <nz-icon nzType="plus" class="text-2xl text-gray-400"></nz-icon>
+              </div>
+            </ng-template>
+          </div>
         </nz-upload>
         <div class="text-gray-500 mt-2 text-xs">{{ 'image_size_100k_max_format_jpg_png' | i18nextEager }}</div>
       </nz-form-control>

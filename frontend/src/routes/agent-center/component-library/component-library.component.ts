@@ -31,6 +31,7 @@ import { ExportHalfModalComponent } from '@shared/components/export-half-modal/e
 import { HttpService } from '@services/http.service';
 import { AddMcpThirdPartyModal } from '@routes/agent-center/app-mcp-service/components/add-mcp-third-party-modal/add-mcp-third-party-modal';
 import { NoDataGuideComponentComponent } from '@shared/components/no-data-guide/no-data-guide.component';
+import { MultiFieldSearchComponent, ISearchTag } from '@shared/components/multi-field-search/multi-field-search.component';
 import { DebounceDecorators } from '@shared/decorators/debouncing-throttling.directive';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzDrawerService } from 'ng-zorro-antd/drawer';
@@ -55,6 +56,7 @@ enum mapKeys {
     ComponentCardComponent,
     NewCommonNoDataWithBtnComponent,
     NoDataGuideComponentComponent,
+    MultiFieldSearchComponent,
   ],
   providers: [
     {
@@ -117,6 +119,8 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
   ];
 
   public searchName = '';
+  public searchTags: ISearchTag[] = [];
+  public searchField: string = 'name';
   public currentCardPage = 1;
   public isLoadingCard = false;
   public cards: ITmplCard[] = [];
@@ -354,17 +358,16 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
   }
 
   get searchNameIsEmpty(): boolean {
-    return this.searchName.length === 0;
+    return this.searchTags.length === 0;
   }
 
   @DebounceDecorators()
   handleClickClearSearch(): void {
-    this.searchName = '';
+    this.searchTags = [];
     this.onSearchContentChange();
   }
 
   public onSearchContentChange(): void {
-    StorageService.setSessionStorage('JIUWEN_SEARCH_PARAMS', this.searchName);
     this.currentCardPage = 1;
     this.getCardData();
   }
@@ -412,16 +415,9 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
       }
       const { size } = this.cardPageSize;
 
-      if (this.searchName.length > 0) {
-        if (this.appType === 'Plugin') {
-          params.tool_chinese_name = this.searchName;
-          params.language = 'ZH';
-        }
-        if (this.appType === 'MCP') {
-          params.name = this.searchName;
-          params.language = 'ZH';
-        }
-      }
+      this.searchTags.forEach(tag => {
+        params[tag.field] = tag.value;
+      });
       if (isDisableSearch) {
         MessageComponent.showWarn(this.i18n.transform('componentlibrarycomponent_1176'), 3000);
         return;
@@ -503,7 +499,7 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
       instance.pluginId = data?.tool_id;
       instance.confirm.subscribe(() => {
         if (!data?.tool_id) {
-          this.searchName = '';
+          this.searchTags = [];
           this.currentCardPage = 1;
         }
         this.getCardData().then();
@@ -564,8 +560,9 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
     if (!active) {
       return;
     }
-    this.searchbox?.clear();
+    this.searchTags = [];
     this.searchItems = id === 'mcp' ? this.getMcpSearchItems() : this.getPluginSearchItems();
+    this.searchField = this.searchItems[0]?.field || '';
     this.open = false;
     this.warnOpen = false;
     this.currActivedTab = index;
@@ -587,6 +584,11 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
       {
         label: this.i18n.transform('name'),
         field: 'tool_chinese_name',
+        options: [],
+      },
+      {
+        label: this.i18n.transform('plugin_en_name'),
+        field: 'name',
         options: [],
       },
       {

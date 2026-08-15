@@ -39,6 +39,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.MessageSource;
 import org.springframework.core.io.Resource;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -66,6 +68,16 @@ class ComplexIntentManagementServiceTest {
         ReflectionTestUtils.setField(complexIntentManagementService, "maxComplexIntentImportFileSize", 10);
         ReflectionTestUtils.setField(complexIntentManagementService, "maxComplexIntentImportBranchSize", 200);
         ReflectionTestUtils.setField(complexIntentManagementService, "envType", "SIMPLE");
+    }
+
+    @Test
+    void testImportEntryPointsAreTransactional() throws NoSuchMethodException {
+        assertNotNull(ComplexIntentManagementService.class
+            .getMethod("importIntent", String.class, String.class, MultipartFile.class, String.class)
+            .getAnnotation(Transactional.class));
+        assertNotNull(ComplexIntentManagementService.class
+            .getMethod("importIntentBranch", String.class, String.class, String.class, MultipartFile.class)
+            .getAnnotation(Transactional.class));
     }
 
     @Test
