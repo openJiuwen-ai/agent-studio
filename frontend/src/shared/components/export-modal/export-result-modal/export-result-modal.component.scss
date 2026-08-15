@@ -292,6 +292,14 @@ asset-arrow-icon {
   color: #f13132;
 }
 
+.cell-ellipsis {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  word-break: break-word;
+}
+
 .operate-btn {
   color: rgba(20, 118, 255, 1);
   font-size: 12px;

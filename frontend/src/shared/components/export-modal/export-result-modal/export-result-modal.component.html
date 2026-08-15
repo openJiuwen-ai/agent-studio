@@ -28,7 +28,7 @@
     </nz-alert>
   </div>
   <div class="parse-file">
-    <nz-table [nzData]="srcData" [nzFrontPagination]="false">
+    <nz-table [nzData]="srcData" [nzFrontPagination]="false" [nzTableLayout]="'fixed'">
       <thead>
       <tr>
         <th nzWidth="40px"></th>
@@ -67,7 +67,11 @@
                     }
                   }
                   @default {
-                    <span>{{ row[col.key] }}</span>
+                    <span
+                      class="cell-ellipsis"
+                      nz-tooltip
+                      [nzTooltipTitle]="row[col.key]"
+                    >{{ row[col.key] }}</span>
                   }
                 }
               </td>

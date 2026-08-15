@@ -89,6 +89,7 @@
           [nzFrontPagination]="false"
           *ngIf="isFileImported"
           [nzNoResult]="tableNoData"
+          [nzTableLayout]="'fixed'"
         >
           <thead>
             <tr>
@@ -101,7 +102,13 @@
             <ng-container *ngFor="let row of srcData.data;index as i">
               <tr>
                 <td>{{ row[columns[0].key] }}</td>
-                <td>{{ row[columns[1].key] }}</td>
+                <td>
+                  <span
+                    class="cell-ellipsis"
+                    nz-tooltip
+                    [nzTooltipTitle]="row[columns[1].key]"
+                  >{{ row[columns[1].key] }}</span>
+                </td>
                 <td>
                   <span *ngIf="columns[2].key!=='import_description'">{{ row[columns[2].key] }}</span>
                   <span *ngIf="columns[2].key==='import_description'" [nz-tooltip]="getStatusInfo(row)?.tip" class="flex align-center">
