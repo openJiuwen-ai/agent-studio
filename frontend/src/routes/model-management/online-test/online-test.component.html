@@ -107,11 +107,11 @@
               [nzBeforeUpload]="beforeUploadImage2Text"
               [nzRemove]="onRemoveItemsNz"
               [nzPreview]="handlePreview"
-              [nzLimit]="5"
               [nzMultiple]="true"
               nzAccept=".png,.jpg,.jpeg"
+              [nzShowButton]="image2textParam.uploadData.length + pendingImageCount < 5"
             >
-              <div *ngIf="fileList.length < 5" class="flex flex-col items-center justify-center text-gray-400">
+              <div class="flex flex-col items-center justify-center text-gray-400">
                 <span nz-icon nzType="plus" class="text-[20px]"></span>
               </div>
             </nz-upload>
