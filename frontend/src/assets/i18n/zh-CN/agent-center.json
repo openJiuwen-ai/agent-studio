@@ -570,6 +570,7 @@
   "plugin_desc_validation_required": "插件描述不可为空",
   "plugin_desc_validation_default": "请填写插件描述",
   "tool_name_validation_required": "工具名称不可为空",
+      "tool_display_name_validation_required": "工具展示名称不可为空",
   "tool_name_validation_formatter": "工具英文名称必须为字母、数字、下划线的组合，长度不能超过64个字符",
   "tool_zh_name_validation_formatter": "工具中文名称不能超过64个字符",
   "tool_desc_validation_required": "工具描述不可为空",
