@@ -92,6 +92,13 @@
     text-overflow: ellipsis;
     min-width: 0;
   }
+  .info-content-description {
+    font-size: 14px;
+    line-height: 22px;
+    white-space: break-spaces;
+    word-break: break-word;
+    min-width: 0;
+  }
   .info-col{
     margin-bottom: 20px;
     display: flex;
