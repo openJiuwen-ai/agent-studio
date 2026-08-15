@@ -108,7 +108,7 @@ public enum StudioError {
     USER_WORKSPACE_PERMISSION_INVALID(BAD_REQUEST, COMMON, "1012"),
 
     /**
-     * 文件大小超过系统限制,头像文件大小超出限制：200KB
+     * 文件大小超过系统限制
      */
     PICTURE_FILE_SIZE_EXCEED_LIMIT(BAD_REQUEST, COMMON, "1013"),
 

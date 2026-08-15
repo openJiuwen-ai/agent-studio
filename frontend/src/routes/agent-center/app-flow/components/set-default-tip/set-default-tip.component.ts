@@ -288,7 +288,8 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
         fileItem.url = res.url;
         this.cdr.detectChanges();
       } catch (error) {
-        fileItem.progress = 'failed';
+        this.fileList = this.fileList.filter((f) => f.fileId !== fileItem.fileId);
+        this.cdr.detectChanges();
       }
     } else {
       if (len + this.fileList.length > 10) {
@@ -309,7 +310,12 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
         }
         const fileItem = createFileItem(file);
         this.fileList.push(fileItem);
-        await uploadFile(this.repoServ, file, isImage, fileItem);
+        this.cdr.detectChanges();
+        await new Promise(resolve => setTimeout(resolve));
+        await uploadFile(this.repoServ, file, isImage, fileItem, () => {
+          this.fileList = this.fileList.filter((f) => f.fileId !== fileItem.fileId);
+          this.cdr.detectChanges();
+        });
       }
     }
     this.isUploading = false;

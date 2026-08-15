@@ -1,4 +1,4 @@
-import { Component, ViewChild, ElementRef, Inject } from '@angular/core';
+import { Component, Output, EventEmitter, ViewChild, ElementRef, Input, Optional, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MODULES } from '@shared/modules';
 import { I18nNamespace } from '@i18n';
@@ -27,24 +27,42 @@ export class ImportIntentModalComponent {
 
   @ViewChild('fileInput') fileInput: ElementRef<HTMLInputElement>;
 
+  @Input() intentId: string;
+  @Input() intentName: string;
+  @Output() refreshTable = new EventEmitter<string[] | void>();
+
   constructor(
     private readonly i18n: I18NextEagerPipe,
     private readonly api: IntentPackageService,
     private commonLogic: agentCommonLogic,
-    private modalRef: NzModalRef,
-    @Inject(NZ_MODAL_DATA) public nzData: any,
+    @Optional() private modalRef: NzModalRef,
+    @Optional() @Inject(NZ_MODAL_DATA) private nzData: any,
   ) {}
 
   public changeUrl = cdnAssetUrl;
 
   public uplaodFile: any = {};
 
-  get intentId(): string {
-    return this.nzData?.intentId;
+  /**
+   * nzData shape on studio-2.0-dev: { intentId, intentName, outputs: { refreshTable } }
+   * nzData shape on studio-2.0:    { context: { intentId, intentName, outputs: { refreshTable } } }
+   * Support both for branch compatibility, plus @Input() template usage.
+   */
+  private get modalContext(): {
+    intentId?: string;
+    intentName?: string;
+    outputs?: { refreshTable?: (ids?: string[]) => void };
+  } {
+    if (!this.nzData) return {};
+    return this.nzData.context ?? this.nzData;
   }
 
-  get intentName(): string {
-    return this.nzData?.intentName;
+  private get effectiveIntentId(): string {
+    return this.intentId ?? this.modalContext.intentId ?? '';
+  }
+
+  private get effectiveIntentName(): string {
+    return this.intentName ?? this.modalContext.intentName ?? '';
   }
 
   downTemplate(): void {
@@ -85,26 +103,24 @@ export class ImportIntentModalComponent {
     if (!this.uplaodFile.file) {
       return;
     }
-    const options: any = {
-      target: this.importRef?.nativeElement,
-    };
     const formData = new FormData();
     formData.append('file', this.uplaodFile.file);
     this.api
-      .uploadIntent(this.intentId, this.intentName, formData)
+      .uploadIntent(this.effectiveIntentId, this.effectiveIntentName, formData)
       .then((res: any) => {
         if (res.success) {
           this.dismiss();
           MessageComponent.showSuccess(this.i18n.transform('upload_success'), 3000);
-          if (this.nzData?.outputs?.refreshTable) {
-            this.nzData.outputs.refreshTable(res.intent_ids);
-          }
+          this.refreshTable.emit(res.intent_ids);
+          this.modalContext.outputs?.refreshTable?.(res.intent_ids);
         }
       })
       .finally(() => {});
   }
 
   dismiss() {
-    this.modalRef.close();
+    if (this.modalRef) {
+      this.modalRef.destroy();
+    }
   }
 }

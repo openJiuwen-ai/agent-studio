@@ -20,9 +20,9 @@
             </nz-tabset>
           <div class="flex w-full items-center gap-2">
             <multi-field-search
-              [searchItems]="searchItemsForPlugin"
-              [(searchTags)]="searchTagsPlugin"
-              [(searchField)]="searchFieldPlugin"
+              [searchItems]="searchItemsForInner"
+              [(searchTags)]="searchTagsInner"
+              [(searchField)]="searchFieldInner"
               (searchChange)="initApiList('search')"
               class="flex-1"
             ></multi-field-search>
@@ -136,15 +136,15 @@
                       <div class="w-[calc(100%-160px)]">
                         <div class="flex items-center gap-[8px]">
                           <div
-                            nz-ellipsis
-                            class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                            nz-tooltip [nzTooltipTitle]="getToolName(tool)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                            class="plugin-name-single-line text-sm font-bold text-label"
                           >
                             {{ getToolName(tool) }}
                           </div>
                         </div>
                         <div
-                          nz-ellipsis
-                          class="mt-[4px] break-words text-desc"
+                          nz-tooltip [nzTooltipTitle]="tool.tool_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                          class="mt-[4px] plugin-desc-clamp"
                         >
                           {{ tool.tool_desc }}
                         </div>
@@ -184,9 +184,9 @@
         >
            <div class="flex w-full items-center gap-2">
             <multi-field-search
-              [searchItems]="searchItemsForPlugin"
-              [(searchTags)]="searchTagsPlugin"
-              [(searchField)]="searchFieldPlugin"
+              [searchItems]="searchItemsForCustom"
+              [(searchTags)]="searchTagsCustom"
+              [(searchField)]="searchFieldCustom"
               (searchChange)="initApiList('search')"
               class="flex-1"
             ></multi-field-search>
@@ -252,15 +252,15 @@
                       <div class="w-[calc(100%-160px)]">
                         <div class="flex items-center gap-[8px]">
                           <div
-                            nz-ellipsis
-                            class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                            nz-tooltip [nzTooltipTitle]="getToolName(tool)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                            class="plugin-name-single-line text-sm font-bold text-label"
                           >
                             {{ getToolName(tool) }}
                           </div>
                         </div>
                         <div
-                          nz-ellipsis
-                          class="mt-[4px] break-words text-desc"
+                          nz-tooltip [nzTooltipTitle]="tool.tool_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                          class="mt-[4px] plugin-desc-clamp"
                         >
                           {{ tool.tool_desc }}
                         </div>
@@ -388,15 +388,15 @@
                     <div class="w-[calc(100%-160px)]">
                       <div class="flex items-center gap-[8px]">
                         <div
-                          nz-ellipsis
-                          class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                          nz-tooltip [nzTooltipTitle]="getToolName(tool)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                          class="plugin-name-single-line text-sm font-bold text-label"
                         >
                           {{ getToolName(tool) }}
                         </div>
                       </div>
                       <div
-                        nz-ellipsis
-                        class="mt-[4px] break-words text-desc"
+                        nz-tooltip [nzTooltipTitle]="tool.tool_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                        class="mt-[4px] plugin-desc-clamp"
                       >
                         {{ tool.tool_desc }}
                       </div>

@@ -149,6 +149,12 @@
               (keyup.enter)="onModelTagInputKeyup($event)"
               (blur)="onModelTagInputKeyup($event)"
             />
+            <span
+              *ngIf="myForm.get('modelTagInputValue')?.errors?.maxlength"
+              class="text-red-500 text-xs"
+            >
+              标签长度不能超过10个字符
+            </span>
             <ng-template #addTag>
               <button
                 nz-button

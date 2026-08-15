@@ -15,10 +15,10 @@ import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { InlineSvgComponent } from '../inline-svg.component';
 import {
   catchError,
+  concatMap,
   filter,
   finalize,
   from,
-  mergeMap,
   of,
   Subject,
   takeUntil,
@@ -400,35 +400,39 @@ export class SenderComponent implements OnDestroy {
         },
       ];
     });
-    this.uploadData = validFiles;
-    from(validFiles)
-      .pipe(
-        takeUntil(this.destroy$),
-        mergeMap((item) => {
-          const { file, isImage, controller } = item;
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('is_image', JSON.stringify(isImage));
-          return from(
-            this.appAgentServe.uploadFile(formData, controller.signal),
-          ).pipe(
-            tap((res) => {
-              item.progress = 'succeeded';
-              item.url = res.url;
-            }),
-            catchError(() => {
-              item.progress = 'failed';
-              return of(null);
-            }),
-          );
-        }, 5),
-        finalize(() => {
-          this.uploading = false;
-          input.value = '';
-          this.checkContentWidth();
-        }),
-      )
-      .subscribe();
+    validFiles.forEach((item) => this.uploadData.push(item));
+    this.checkContentWidth();
+    setTimeout(() => {
+      from(validFiles)
+        .pipe(
+          takeUntil(this.destroy$),
+          concatMap((item) => {
+            const { file, isImage, controller } = item;
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('is_image', JSON.stringify(isImage));
+            return from(
+              this.appAgentServe.uploadFile(formData, controller.signal),
+            ).pipe(
+              tap((res) => {
+                item.progress = 'succeeded';
+                item.url = res.url;
+              }),
+              catchError(() => {
+                this.uploadData = this.uploadData.filter((f) => f.fileId !== item.fileId);
+                this.checkContentWidth();
+                return of(null);
+              }),
+            );
+          }),
+          finalize(() => {
+            this.uploading = false;
+            input.value = '';
+            this.checkContentWidth();
+          }),
+        )
+        .subscribe();
+    });
   }
 
   public removeFile(i: number) {
