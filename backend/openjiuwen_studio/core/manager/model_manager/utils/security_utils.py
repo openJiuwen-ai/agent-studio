@@ -75,6 +75,16 @@ class SecurityUtils:
         if self.master_key:
             if len(self.master_key) != 32:
                 raise ValueError('master_key length must be 32 bytes')
+        else:
+            # No AES master key configured: API keys will be stored in plaintext.
+            # This also means a key may be missing/rotated on restart, which makes
+            # previously encrypted values undecryptable. Surface a clear warning
+            # instead of failing silently (issue #1236).
+            logger.warning(
+                "SERVER_AES_MASTER_KEY is not set: API keys will be stored in plaintext. "
+                "Set a fixed 32-byte (base64) key, e.g. `openssl rand -base64 32`, "
+                "and persist it in .env so it stays stable across restarts."
+            )
     
     def get_initialized_master_key(self) -> bytes | None:
         """
@@ -277,10 +287,27 @@ class SecurityUtils:
 
             return plaintext.decode('utf-8')
         except Exception as e:
-            logger.error(f"Failed to retrieve API key, "
-                         f"the ciphertext does not correspond to the correct key: {str(e)}")
-            raise ValueError(f"Failed to retrieve API key, "
-                             f"the ciphertext does not correspond to the correct key: {str(e)}") from e
+            logger.error(
+                f"Failed to retrieve API key, "
+                f"the ciphertext does not correspond to the correct key: {str(e)}"
+            )
+            # MAC check failures are almost always caused by a different AES
+            # master key being used at encrypt vs decrypt time (e.g. a new
+            # random key generated on service restart). Give the user a
+            # actionable hint instead of a raw crypto error (issue #1236).
+            hint = ""
+            if "MAC check failed" in str(e):
+                hint = (
+                    " This usually means the AES master key (SERVER_AES_MASTER_KEY) "
+                    "changed since the value was encrypted — e.g. a new random key "
+                    "was generated on a service restart. Persist a fixed key in .env "
+                    "or re-save the affected secrets."
+                )
+            raise ValueError(
+                f"Failed to retrieve API key, "
+                f"the ciphertext does not correspond to the correct key: {str(e)}"
+                f"{hint}"
+            ) from e
 
     @staticmethod
     def mask_api_key(api_key: str, visible_chars: int = 4) -> str | None:

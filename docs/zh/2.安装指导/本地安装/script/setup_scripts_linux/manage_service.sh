@@ -677,7 +677,7 @@ start_backend() {
     fi
 
     if [ -z "${SERVER_AES_MASTER_KEY_ENV:-}" ]; then
-        log "WARN" "AES key not found, generating temporary key (recommend running full install)"
+        log "WARN" "AES key not found in .env, generating a new one and persisting it"
         if command -v python3.11 &> /dev/null; then
             local AES_SCRIPT="${WORK_HOME}/agent-studio/scripts/build_AES_master_key.sh"
             if [ -f "$AES_SCRIPT" ]; then
@@ -686,6 +686,17 @@ start_backend() {
         fi
         if [ -z "${SERVER_AES_MASTER_KEY_ENV:-}" ]; then
             SERVER_AES_MASTER_KEY_ENV=$(openssl rand -base64 32 2>/dev/null || echo "")
+        fi
+        # Persist the generated key back to .env so restarts reuse the same key.
+        # Without this, every restart generates a new random key and previously
+        # encrypted API keys can no longer be decrypted (issue #1236).
+        if [ -n "${SERVER_AES_MASTER_KEY_ENV:-}" ] && [ -f "$TARGET_ENV_FILE" ]; then
+            if grep -q '^SERVER_AES_MASTER_KEY=' "$TARGET_ENV_FILE"; then
+                sed -i "s|^SERVER_AES_MASTER_KEY=.*|SERVER_AES_MASTER_KEY=${SERVER_AES_MASTER_KEY_ENV}|" "$TARGET_ENV_FILE"
+            else
+                printf '\nSERVER_AES_MASTER_KEY=%s\n' "${SERVER_AES_MASTER_KEY_ENV}" >> "$TARGET_ENV_FILE"
+            fi
+            log "INFO" "Generated and persisted AES key to .env"
         fi
     fi
 

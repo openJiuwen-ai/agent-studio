@@ -800,6 +800,24 @@ function Start-BackendService {
             $Rng.GetBytes($RandomBytes)
             $Rng.Dispose()
             $AESKey = [Convert]::ToBase64String($RandomBytes)
+            # Persist the generated key back to .env so restarts reuse the same key.
+            # Without this, every restart generates a new random key and previously
+            # encrypted API keys can no longer be decrypted (issue #1236).
+            try {
+                $EnvContent = Get-Content $TARGET_ENV_FILE -Raw -Encoding UTF8
+                if ($EnvContent -match '(?m)^\s*SERVER_AES_MASTER_KEY=') {
+                    $EnvContent = $EnvContent -replace '(?m)^\s*SERVER_AES_MASTER_KEY=.*$', ('SERVER_AES_MASTER_KEY=' + $AESKey)
+                } else {
+                    if (-not $EnvContent.EndsWith("`n")) { $EnvContent += "`n" }
+                    $EnvContent += 'SERVER_AES_MASTER_KEY=' + $AESKey + "`n"
+                }
+                $EnvContent = $EnvContent -replace "`r`n", "`n" -replace "`r", "`n"
+                $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+                [System.IO.File]::WriteAllText($TARGET_ENV_FILE, $EnvContent, $utf8NoBom)
+                Write-Log "INFO" "Generated and persisted AES key to .env"
+            } catch {
+                Write-Log "WARN" "Failed to persist AES key to .env: $($_.Exception.Message)"
+            }
         }
     }
 

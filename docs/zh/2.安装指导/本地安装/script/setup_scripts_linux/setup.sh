@@ -448,6 +448,25 @@ log "INFO" "FRONTEND_PORT: $FRONTEND_PORT_ACTUAL, BACKEND_PORT: $BACKEND_PORT_AC
     save_progress "$STEP"
 fi
 
+# ===================== Persist AES key into .env =====================
+# The AES key generated in the config_aes step is exported to the current
+# shell only. If it is not written back to .env, manage_service.sh will
+# generate a *new* random key on every restart, making previously encrypted
+# API keys undecryptable (issue #1236). Persist it here so restarts reuse
+# the same key.
+if [ -n "${SERVER_AES_MASTER_KEY_ENV:-}" ] && [ -f "$TARGET_ENV_FILE" ]; then
+    if grep -q '^SERVER_AES_MASTER_KEY=' "$TARGET_ENV_FILE"; then
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+            sed -i '' "s|^SERVER_AES_MASTER_KEY=.*|SERVER_AES_MASTER_KEY=${SERVER_AES_MASTER_KEY_ENV}|" "$TARGET_ENV_FILE"
+        else
+            sed -i "s|^SERVER_AES_MASTER_KEY=.*|SERVER_AES_MASTER_KEY=${SERVER_AES_MASTER_KEY_ENV}|" "$TARGET_ENV_FILE"
+        fi
+    else
+        printf '\nSERVER_AES_MASTER_KEY=%s\n' "${SERVER_AES_MASTER_KEY_ENV}" >> "$TARGET_ENV_FILE"
+    fi
+    log "SUCCESS" "AES key persisted to .env (SERVER_AES_MASTER_KEY)"
+fi
+
 # ===================== Download Runtime Code =====================
 STEP="fetch_runtime_code"
 if should_skip_step "$STEP" "$LAST_PROGRESS"; then

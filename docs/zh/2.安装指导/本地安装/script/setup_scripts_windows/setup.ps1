@@ -395,6 +395,26 @@ if (Test-SkipStep -CurrentStep $STEP -LastProgress $LAST_PROGRESS) {
     Save-Progress -Step $STEP
 }
 
+# ===================== Persist AES key into .env =====================
+# The AES key generated in the config_aes step is only set in the current
+# process environment. If it is not written back to .env, manage_service.ps1
+# will generate a *new* random key on every restart, making previously
+# encrypted API keys undecryptable (issue #1236). Persist it here so restarts
+# reuse the same key.
+if (-not [string]::IsNullOrEmpty($env:SERVER_AES_MASTER_KEY_ENV) -and (Test-Path $TARGET_ENV_FILE)) {
+    $EnvContent = Get-Content $TARGET_ENV_FILE -Raw -Encoding UTF8
+    if ($EnvContent -match '(?m)^\s*SERVER_AES_MASTER_KEY=') {
+        $EnvContent = $EnvContent -replace '(?m)^\s*SERVER_AES_MASTER_KEY=.*$', ('SERVER_AES_MASTER_KEY=' + $env:SERVER_AES_MASTER_KEY_ENV)
+    } else {
+        if (-not $EnvContent.EndsWith("`n")) { $EnvContent += "`n" }
+        $EnvContent += 'SERVER_AES_MASTER_KEY=' + $env:SERVER_AES_MASTER_KEY_ENV + "`n"
+    }
+    $EnvContent = $EnvContent -replace "`r`n", "`n" -replace "`r", "`n"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($TARGET_ENV_FILE, $EnvContent, $utf8NoBom)
+    Write-Log "SUCCESS" "AES key persisted to .env (SERVER_AES_MASTER_KEY)"
+}
+
 
 
 # ===================== Download Runtime Code =====================

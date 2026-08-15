@@ -5,8 +5,24 @@
 # Or
 #   export SERVER_AES_MASTER_KEY=$(./generate_aes_key.sh)
 
+# Reuse an already-configured key if present (env var or .env file), so that
+# repeated invocations (setup.sh, manage_service.sh) never generate a new key
+# that would invalidate previously encrypted API keys (issue #1236).
+if [ -z "${SERVER_AES_MASTER_KEY_ENV:-}" ]; then
+    SERVER_AES_MASTER_KEY_ENV="${SERVER_AES_MASTER_KEY:-}"
+fi
+if [ -z "${SERVER_AES_MASTER_KEY_ENV:-}" ] && [ -f ".env" ]; then
+    AES_KEY_LINE=$(grep '^SERVER_AES_MASTER_KEY=' ".env" 2>/dev/null | head -n 1)
+    if [ -n "$AES_KEY_LINE" ]; then
+        SERVER_AES_MASTER_KEY_ENV=$(echo "$AES_KEY_LINE" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    fi
+fi
+
 # Generate 32-byte (256-bit) AES key and set as environment variable
-export SERVER_AES_MASTER_KEY_ENV=$(openssl rand -base64 32)
+if [ -z "${SERVER_AES_MASTER_KEY_ENV:-}" ]; then
+    SERVER_AES_MASTER_KEY_ENV=$(openssl rand -base64 32)
+fi
+export SERVER_AES_MASTER_KEY_ENV
 
 # Output the key
 echo "$SERVER_AES_MASTER_KEY_ENV"
