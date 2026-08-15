@@ -32,6 +32,8 @@ export class PluginReferenceComponent {
   @Input() type!: string;
   public isLoading = false;
 
+  private reqSeq = 0;
+
   public btnLoading = false;
 
   public isFromAgentBuilder = false;
@@ -116,18 +118,34 @@ export class PluginReferenceComponent {
   }
 
   getReferenceList() {
+    // 捕获调用时的 app_type 与请求序号，避免慢响应在切 Tab 后回来覆盖/滤空
+    const seq = ++this.reqSeq;
+    const reqType = this.curActiveTabId;
+    // 切 Tab 时立即清空旧数据，避免上一个 Tab 的数据在新 Tab 下短暂显示
+    this.srcData.data = [];
     this.mcpRepoServe
       .getReferenceList(this.tool_id, {
         offset: ((this.currentPage || 1) - 1) * this.pageSize.size,
         limit: this.pageSize.size,
         showlatest: true,
-        app_type: this.curActiveTabId,
+        app_type: reqType,
         resource_type: 'tool',
       })
       .then((res: IMappings) => {
+        if (seq !== this.reqSeq) {
+          return;
+        }
         this.relations = res.relations;
-        this.srcData.data = this.relations.filter(item => item.app_type === this.curActiveTabId);
+        this.srcData.data = this.relations.filter(item => item.app_type === reqType);
         this.totalNumber = res.count;
+      })
+      .catch(() => {
+        if (seq !== this.reqSeq) {
+          return;
+        }
+        this.relations = [];
+        this.srcData.data = [];
+        this.totalNumber = 0;
       });
   }
 
