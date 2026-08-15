@@ -277,6 +277,7 @@
   "embedding_example": "Example 1: That is a happy person\nExample 2: [\"That is a happy person\", \"That is a joyful person\", \"That is a melancholic person\"]",
   "upload_image": "Upload Image",
   "image_upload_limit_desc": "Image format must be PNG, JPG, or JPEG. Single image ≤4 MB. Maximum of 5 images.",
+  "image_upload_max_count_exceeded": "Maximum of 5 images can be uploaded",
   "prompt_content": "Prompt Content",
   "image_info_requirements": "Describe what information you want to extract from the image, e.g., 'What is in the image?'",
   "text_input": "Enter text",
