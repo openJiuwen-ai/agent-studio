@@ -1,11 +1,11 @@
 <div class="com-drawer-title">{{ 'reference_plugins' | i18nextEager }}</div>
 <div class="com-drawer-content">
-  <nz-spin nzSimple [nzSpinning]="isLoading" class="loading-icon"></nz-spin>
-  <div *ngIf="!isLoading">
-    <nz-tabs class="add-mcp-tabs" [(nzSelectedIndex)]="tabSelectIndex" (nzSelectChange)="tabActiveChange($event)">
-      <nz-tab [nzTitle]="tabs[0].title"> </nz-tab>
-      <nz-tab [nzTitle]="tabs[1].title"> </nz-tab>
-    </nz-tabs>
+  <nz-tabs class="add-mcp-tabs" [(nzSelectedIndex)]="tabSelectIndex" (nzSelectChange)="tabActiveChange($event)">
+    <nz-tab [nzTitle]="tabs[0].title"> </nz-tab>
+    <nz-tab [nzTitle]="tabs[1].title"> </nz-tab>
+  </nz-tabs>
+  <!-- 仅刷新表格区域：loading 只覆盖 nz-table，tab 栏始终保持挂载不重建 -->
+  <nz-spin [nzSpinning]="isLoading">
     <nz-table
       [nzData]="srcData.data"
       [(nzPageIndex)]="currentPage"
@@ -35,6 +35,6 @@
         </tr>
       </tbody>
     </nz-table>
-  </div>
+  </nz-spin>
 </div>
 <div class="com-drawer-footer"></div>

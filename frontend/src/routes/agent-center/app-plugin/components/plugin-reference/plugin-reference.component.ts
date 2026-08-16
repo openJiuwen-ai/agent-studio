@@ -1,4 +1,4 @@
-import { Component, ViewChild, Input, inject, Inject, Optional } from '@angular/core';
+import { Component, ViewChild, Input, inject, Inject, Optional, ChangeDetectorRef } from '@angular/core';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzTabsModule } from 'ng-zorro-antd/tabs';
 import { NzEmptyModule } from 'ng-zorro-antd/empty';
@@ -34,6 +34,8 @@ export class PluginReferenceComponent {
   public isLoading = false;
 
   private reqSeq = 0;
+
+  private readonly cdr = inject(ChangeDetectorRef);
 
   public btnLoading = false;
 
@@ -128,6 +130,9 @@ export class PluginReferenceComponent {
     const reqType = this.curActiveTabId;
     // 切 Tab 时立即清空旧数据，避免上一个 Tab 的数据在新 Tab 下短暂显示
     this.srcData.data = [];
+    // 进入加载态：模板依赖 isLoading 切换转圈/内容，避免慢接口期间显示空表格
+    this.isLoading = true;
+    this.cdr.markForCheck();
     this.mcpRepoServe
       .getReferenceList(this.tool_id, {
         offset: ((this.currentPage || 1) - 1) * this.pageSize.size,
@@ -143,6 +148,8 @@ export class PluginReferenceComponent {
         this.relations = res.relations;
         this.srcData.data = this.relations.filter(item => item.app_type === reqType);
         this.totalNumber = res.count;
+        this.isLoading = false;
+        this.cdr.markForCheck();
       })
       .catch(() => {
         if (seq !== this.reqSeq) {
@@ -151,6 +158,8 @@ export class PluginReferenceComponent {
         this.relations = [];
         this.srcData.data = [];
         this.totalNumber = 0;
+        this.isLoading = false;
+        this.cdr.markForCheck();
       });
   }
 
@@ -171,6 +180,9 @@ export class PluginReferenceComponent {
   public tabActiveChange(e: any) {
     const id = this.tabs[e.index]?.id;
     this.curActiveTabId = id;
+    // 切 Tab 回到第 1 页并清零总数，避免沿用旧 Tab 的分页/总数导致新 Tab 空表错位
+    this.currentPage = 1;
+    this.totalNumber = 0;
     this.getReferenceList();
   }
 }
