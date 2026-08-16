@@ -8,10 +8,12 @@
   <nz-spin [nzSpinning]="isLoading">
     <nz-table
       [nzData]="srcData.data"
+      [nzFrontPagination]="false"
       [(nzPageIndex)]="currentPage"
       [nzTotal]="totalNumber"
-      [nzPageSize]="pageSize.size"
+      [(nzPageSize)]="pageSize.size"
       (nzPageIndexChange)="getReferenceList()"
+      (nzPageSizeChange)="onPageSizeChange()"
       [nzShowSizeChanger]="true"
       [nzPageSizeOptions]="pageSize.options"
     >
