@@ -9,7 +9,7 @@
             [ngClass]="{ 'is-logo-error': logoIsError }"
             [nzShowUploadList]="false"
             [nzBeforeUpload]="beforeUpload"
-            nzAccept=".png,.jpg"
+            nzAccept=".png,.jpg,.jpeg"
           >
             <div class="event-log-container" style="width: 64px; height: 64px;">
               <ng-container *ngIf="myForm.value.logo; else uploadPlaceholder">
