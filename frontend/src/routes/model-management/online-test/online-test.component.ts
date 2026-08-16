@@ -319,6 +319,9 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
 
   fileList: NzUploadFile[] = [];
 
+  /** 同步计数器：已通过 beforeUpload 校验但 FileReader.onload 尚未完成的图片数 */
+  pendingImageCount = 0;
+
   /** 当前预览的图片 dataURL */
   previewImageSrc = '';
   /** 是否显示预览遮罩 */
@@ -378,7 +381,7 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   }
 
   beforeUploadImage2Text = (file: NzUploadFile): boolean => {
-    if (this.image2textParam.uploadData.length >= 5) {
+    if (this.image2textParam.uploadData.length + this.pendingImageCount >= 5) {
       this.message.error(this.i18n.transform('image_upload_max_count_exceeded'));
       return false;
     }
@@ -393,9 +396,11 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       return false;
     }
 
+    this.pendingImageCount++;
     const reader = new FileReader();
     reader.readAsDataURL(file as any);
     reader.onload = () => {
+      this.pendingImageCount--;
       const url = reader.result;
       const uuid = uuidV4();
       file.uid = uuid;
@@ -406,6 +411,9 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
         uuid,
       });
       this.fileList = [...this.fileList, file];
+    };
+    reader.onerror = () => {
+      this.pendingImageCount--;
     };
     return false;
   };

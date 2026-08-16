@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 
+from agent_runtime.common.config import settings
 from openjiuwen.core.common.logging import workflow_logger
 
 from .base import KBSearchResult, KBServiceAdapter
@@ -215,12 +216,16 @@ class LakeSearchAdapter(KBServiceAdapter):
                 ) from e
 
         try:
+            # 对齐旧版：LakeSearch 端点常为自签证书，默认关闭 TLS 证书校验
+            # （旧版 HttpClientUtils.createIgnoreVerifySsl 的同等语义）。
+            # KB_SSL_VERIFY=true 时恢复校验（端点使用受信任证书时）。
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     url=url,
                     json=body,
                     headers=headers,
                     timeout=aiohttp.ClientTimeout(total=60),
+                    ssl=None if settings.kb.ssl_verify else False,
                 ) as resp:
                     if not resp.ok:
                         text = await resp.text()

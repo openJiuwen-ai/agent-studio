@@ -1,4 +1,4 @@
-import { Component, ViewChild, Input, inject, Inject } from '@angular/core';
+import { Component, ViewChild, Input, inject, Inject, Optional } from '@angular/core';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzTabsModule } from 'ng-zorro-antd/tabs';
 import { NzEmptyModule } from 'ng-zorro-antd/empty';
@@ -13,6 +13,7 @@ import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { ActivatedRoute } from '@angular/router';
 import { HttpService } from '@services/http.service';
 import { NZ_DRAWER_DATA, NzDrawerRef } from 'ng-zorro-antd/drawer';
+import { NZ_MODAL_DATA } from 'ng-zorro-antd/modal';
 @Component({
   selector: 'meta-plugin-reference',
   templateUrl: './plugin-reference.component.html',
@@ -31,6 +32,8 @@ export class PluginReferenceComponent {
 
   @Input() type!: string;
   public isLoading = false;
+
+  private reqSeq = 0;
 
   public btnLoading = false;
 
@@ -96,11 +99,15 @@ export class PluginReferenceComponent {
     private readonly mcpRepoServe: MCPService,
     private route: ActivatedRoute,
     private readonly http: HttpService,
-    @Inject(NZ_DRAWER_DATA) public nzData: any
+    @Optional() @Inject(NZ_MODAL_DATA) public nzData: any,
+    @Optional() @Inject(NZ_DRAWER_DATA) public drawerData: any
   ) {
-    this.tool_id = this.nzData.tool_id;
-    if (this.nzData.type) {
-      this.type = this.nzData.type;
+    // 兼容 modal（NZ_MODAL_DATA）与 drawer（NZ_DRAWER_DATA）两种打开方式：
+    // plugin-market 走 modal，app-plugin 走 drawer，取先不为空者
+    const data = this.nzData || this.drawerData;
+    this.tool_id = data?.tool_id ?? '';
+    if (data?.type) {
+      this.type = data.type;
     }
     this.route.queryParams.subscribe(params => {
       if (params.from && params.from === 'agentBuilder') {
@@ -116,18 +123,34 @@ export class PluginReferenceComponent {
   }
 
   getReferenceList() {
+    // 捕获调用时的 app_type 与请求序号，避免慢响应在切 Tab 后回来覆盖/滤空
+    const seq = ++this.reqSeq;
+    const reqType = this.curActiveTabId;
+    // 切 Tab 时立即清空旧数据，避免上一个 Tab 的数据在新 Tab 下短暂显示
+    this.srcData.data = [];
     this.mcpRepoServe
       .getReferenceList(this.tool_id, {
         offset: ((this.currentPage || 1) - 1) * this.pageSize.size,
         limit: this.pageSize.size,
         showlatest: true,
-        app_type: this.curActiveTabId,
+        app_type: reqType,
         resource_type: 'tool',
       })
       .then((res: IMappings) => {
+        if (seq !== this.reqSeq) {
+          return;
+        }
         this.relations = res.relations;
-        this.srcData.data = this.relations.filter(item => item.app_type === this.curActiveTabId);
+        this.srcData.data = this.relations.filter(item => item.app_type === reqType);
         this.totalNumber = res.count;
+      })
+      .catch(() => {
+        if (seq !== this.reqSeq) {
+          return;
+        }
+        this.relations = [];
+        this.srcData.data = [];
+        this.totalNumber = 0;
       });
   }
 

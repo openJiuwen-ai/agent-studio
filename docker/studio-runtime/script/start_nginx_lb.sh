@@ -13,34 +13,8 @@ umask 0027
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 NGINX_DIR=$(cd "${SCRIPT_DIR}/../nginx" && pwd)
 
-# Compute the CPU count visible to this container, respecting cgroup CPU limits.
-# K8s cpu request/limit sets a CFS quota but does not change sched_getaffinity,
-# so `nproc` alone returns the HOST cpu count and over-provisions workers
-# (e.g. 64-core node → 65 workers → OOM in a 4Gi pod). The default worker count
-# below is this cgroup-aware cpu count + 1.
-function _cpu_count() {
-  local quota period
-  if [[ -r /sys/fs/cgroup/cpu.max ]]; then            # cgroup v2
-    read -r quota period < /sys/fs/cgroup/cpu.max
-    if [[ "${quota}" =~ ^[0-9]+$ && "${period}" =~ ^[0-9]+$ && "${period}" -gt 0 && "${quota}" -gt 0 ]]; then
-      echo $(( (quota + period - 1) / period ))
-      return
-    fi
-  fi
-  if [[ -r /sys/fs/cgroup/cpu/cpu.cfs_quota_us && -r /sys/fs/cgroup/cpu/cpu.cfs_period_us ]]; then  # cgroup v1
-    quota=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us 2>/dev/null)
-    period=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us 2>/dev/null)
-    if [[ "${quota}" =~ ^[0-9]+$ && "${period}" =~ ^[0-9]+$ && "${period}" -gt 0 && "${quota}" -gt 0 ]]; then
-      echo $(( (quota + period - 1) / period ))
-      return
-    fi
-  fi
-  nproc 2>/dev/null || echo 1                         # fallback: host online cpus
-}
-
 SERVER_PORT=${PORT:-8000}
-DEFAULT_WORKER_NUM=$(( $(_cpu_count) + 1 ))
-WORKER_NUM=${GUNICORN_WORK_NUM:-${DEFAULT_WORKER_NUM}}
+WORKER_NUM=${GUNICORN_WORK_NUM:-1}
 LB_STRATEGY=${LB_STRATEGY:-least_conn}
 LOG_DIR=${NGINX_LOG_DIR:-${LOGGING_LOG_PATH:-/opt/cloud/logs}}
 NGINX_CONF="${LOG_DIR}/nginx.conf"

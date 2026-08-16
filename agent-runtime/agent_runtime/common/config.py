@@ -26,8 +26,8 @@ class ServerSettings(BaseSettings):
     tls_key_path: str = Field(default="", validation_alias="TLS_CERT_KEY_PATH")
     tls_key_password: str = Field(default="", validation_alias="TLS_CERT_KEY_PASSWD")
     tls_ciphers: str = Field(default="TLSv1.2 TLSv1.3", validation_alias="TLS_CIPHERS")
-    # Uvicorn worker 数量。未设置时由 _get_workers() 回退到 cgroup 感知的容器 CPU 核数 + 1
-    workers: Optional[int] = Field(default=None, validation_alias="GUNICORN_WORK_NUM")
+    # Uvicorn worker 数量，未设置时默认 1
+    workers: int = Field(default=1, validation_alias="GUNICORN_WORK_NUM")
     # Nginx 负载均衡模式。启用时 uvicorn 以单 worker 运行，由 Nginx 做负载均衡
     nginx_load_balancing: bool = Field(default=False, validation_alias="NGINX_LOAD_BALANCING")
 
@@ -41,16 +41,16 @@ class ServerSettings(BaseSettings):
 
     @field_validator("workers", mode="before")
     @classmethod
-    def _empty_str_to_none(cls, v):
-        """K8s YAML 中空字符串 value: '' 会导致 Pydantic 类型转换失败，需转为 None。"""
+    def _empty_str_to_default(cls, v):
+        """兼容已有配置中的空字符串，并按默认值 1 处理。"""
         if v == "":
-            return None
+            return 1
         return v
 
     @field_validator("workers")
     @classmethod
-    def _validate_workers(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v < 1:
+    def _validate_workers(cls, v: int) -> int:
+        if v < 1:
             raise ValueError("GUNICORN_WORK_NUM must be >= 1")
         return v
 
@@ -461,6 +461,30 @@ class OpenJiuwenKBSettings(BaseSettings):
     )
 
 
+class KnowledgeBaseSettings(BaseSettings):
+    """知识库检索（LakeSearch 等）出站 HTTP 客户端配置。
+
+    KB_SSL_VERIFY 控制知识库检索端点的 TLS 证书校验：
+    - false（默认）：不校验，对齐旧版（旧版 HttpClientUtils.createIgnoreVerifySsl
+      主动不校验），内网自签证书环境可直接连通；
+    - true：恢复校验，适用于端点使用受信任证书的场景。
+    """
+
+    ssl_verify: bool = Field(default=False, validation_alias="KB_SSL_VERIFY")
+
+    @field_validator("ssl_verify", mode="before")
+    @classmethod
+    def _empty_str_to_false(cls, v):
+        """K8s YAML 中空字符串 value: '' 会导致 bool 解析失败，需转为 False。"""
+        if v == "" or v is None:
+            return False
+        return v
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
 class Settings:
     server = ServerSettings()
     llm = LLMSettings()
@@ -479,5 +503,6 @@ class Settings:
     db_config = DataBaseSettings()
     conversation_variable = ConversationVariableSettings()
     openjiuwen_kb = OpenJiuwenKBSettings()
+    kb = KnowledgeBaseSettings()
 
 settings = Settings()

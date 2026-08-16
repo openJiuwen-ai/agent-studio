@@ -140,6 +140,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -1437,17 +1439,19 @@ public class PluginService implements IPluginService {
         pluginDTO.setToolDependencyList(new ArrayList<>());
 
         // 构建tool_dependency_list字段
+        // 统计口径与引用插件列表(listResourceRelations)保持一致：
+        // 仅统计 valid=1 且应用与当前插件同工作空间的引用，且同一应用(如同一工作流)的重复版本只计一次
+        Map<String, Set<String>> workflowAppIdsByTool = groupReferencedAppIdsByTool(
+            mappingMapper.selectByResourceIdAndVersionId(pluginDTO.getPluginId(), null, workspaceId, "workflow", null));
+        Map<String, Set<String>> agentAppIdsByTool = groupReferencedAppIdsByTool(
+            mappingMapper.selectByResourceIdAndVersionId(pluginDTO.getPluginId(), null, workspaceId, "agent", null));
         for (ToolInfo toolInfo : pluginDTO.getToolRequestInfo().getToolsInfoList()) {
-            List<MappingEntity> mappingEntities = mappingMapper.selectByResourceId(
-                pluginDTO.getPluginId() + "#" + toolInfo.getToolId());
-
+            String toolResourceId = pluginDTO.getPluginId() + "#" + toolInfo.getToolId();
             pluginDTO.getToolDependencyList()
                 .add(ToolDependency.builder()
                     .toolId(toolInfo.getToolId())
-                    .dependencyOnAgent(
-                        mappingEntities.stream().filter(entity -> "agent".equals(entity.getAppType())).count())
-                    .dependencyOnWorkflow(
-                        mappingEntities.stream().filter(entity -> "workflow".equals(entity.getAppType())).count())
+                    .dependencyOnAgent(agentAppIdsByTool.getOrDefault(toolResourceId, Set.of()).size())
+                    .dependencyOnWorkflow(workflowAppIdsByTool.getOrDefault(toolResourceId, Set.of()).size())
                     .build());
         }
         // 内置免费额度插件
@@ -1489,6 +1493,16 @@ public class PluginService implements IPluginService {
             }
         }
         return new BaseResp().setCode(200).setMessage("success").setData(pluginDTO);
+    }
+
+    /**
+     * 将引用映射按工具维度(resource_id，形如 pluginId#toolId)分组，值为去重后的应用id集合。
+     * 同一应用的多个版本/多个节点重复引用只保留一个appId，保证按应用数计数。
+     */
+    private Map<String, Set<String>> groupReferencedAppIdsByTool(List<MappingEntity> mappingEntities) {
+        return mappingEntities.stream()
+            .collect(Collectors.groupingBy(MappingEntity::getResourceId,
+                Collectors.mapping(MappingEntity::getAppId, Collectors.toSet())));
     }
 
     public void updateHost(PluginDTO pluginDTO) {
