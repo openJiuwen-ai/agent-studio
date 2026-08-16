@@ -82,7 +82,7 @@ export class BatchExampleComponent implements OnDestroy {
         control.markAsDirty();
         control.updateValueAndValidity({ onlySelf: true });
       });
-      this.message.success(this.i18n.transform('form_verify_fail_tips'));
+      this.message.warning(this.i18n.transform('form_verify_fail_tips'));
       return false;
     }
     return true;
