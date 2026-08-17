@@ -587,11 +587,6 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
         options: [],
       },
       {
-        label: this.i18n.transform('plugin_en_name'),
-        field: 'name',
-        options: [],
-      },
-      {
         label: this.i18n.transform('plugin_description'),
         field: 'tool_desc',
         options: [],
