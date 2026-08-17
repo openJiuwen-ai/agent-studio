@@ -44,6 +44,9 @@ public class AssetFreeTrialMgmtService {
     @Value("${asset.app.free.trial-quota-limit:10}")
     private int maxFreeTrialTimes;
 
+    @Value("${asset.app.free.trial-quota-check-enabled:false}")
+    private boolean trialQuotaCheckEnabled;
+
     private static final String ASSET_FREE_TRIAL_USAGE_QUOTA_RW_LOCK_FORMAT
         = "agent.manager.asset.app.free.trial.usage.quota.rw.lock.asset_%s.month_%s.domain_%s.lock";
 
@@ -138,6 +141,10 @@ public class AssetFreeTrialMgmtService {
      * @return boolean
      */
     public boolean isInFreeTrial(String assetId, String domainId) {
+        if (!trialQuotaCheckEnabled) {
+            return true;
+        }
+
         if (StringUtils.isAnyBlank(assetId, domainId)) {
             log.info("Not in asset free trial: blank assertId or conversationId.");
             return false;

@@ -309,6 +309,7 @@ asset:
   app:
     free:
       trial-quota-limit: ${asset_app_free_trial_quota_limit:10}
+      trial-quota-check-enabled: ${asset_app_free_trial_quota_check_enabled:false}
   plugin:
     free:
       trial-quota-limit: ${asset_plugin_free_trial_quota_limit:10}
