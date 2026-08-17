@@ -1,4 +1,5 @@
 # coding: utf-8
+# pylint: disable=no-self-use,protected-access
 """ir_converter._parse_exception_config 单元测试 — MCP 异常处理相关。
 
 重点覆盖：

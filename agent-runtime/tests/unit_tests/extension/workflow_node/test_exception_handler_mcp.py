@@ -1,4 +1,5 @@
 # coding: utf-8
+# pylint: disable=no-self-use,protected-access
 """exception_handler.py 单元测试 — MCP 异常处理相关改动。
 
 重点覆盖：
@@ -83,8 +84,10 @@ class TestFormatInnerException:
 
 
 class TestMergeDicts:
-    """_merge_dicts 嵌套在 _handle_default_outputs 内部，
-    通过调用 _handle_default_outputs 间接测试。"""
+    """
+    _merge_dicts 嵌套在 _handle_default_outputs 内部，
+    通过调用 _handle_default_outputs 间接测试。
+    """
 
     def _merge(self, base, default):
         """构造配置 → 调用 _handle_default_outputs → 提取 merge 结果（去掉 isSuccess/errorBody）。"""
