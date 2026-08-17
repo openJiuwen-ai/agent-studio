@@ -34,7 +34,8 @@
             </tr>
           </tbody>
         </nz-table>
-        <div style="margin-top: 24px; display: flex; justify-content: flex-end">
+        <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center">
+          <span>{{ 'total_number_of_records' | i18nextEager }}：{{ totalNumber }}</span>
           <nz-pagination
             [(nzPageIndex)]="currentPage"
             [nzTotal]="totalNumber"
