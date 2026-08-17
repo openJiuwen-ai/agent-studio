@@ -67,6 +67,7 @@ class AssetFreeTrialMgmtServiceTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(assetFreeTrialMgmtService, "maxFreeTrialTimes", TEST_MAX_FREE_TRIAL_QUOTA);
+        ReflectionTestUtils.setField(assetFreeTrialMgmtService, "trialQuotaCheckEnabled", true);
 
         requestContextUtilsMockedStatic = Mockito.mockStatic(RequestContextUtils.class);
         requestContextUtilsMockedStatic.when(RequestContextUtils::getRequestUserDomainId).thenReturn(TEST_DOMAIN_ID);
@@ -198,5 +199,13 @@ class AssetFreeTrialMgmtServiceTest {
 
         assertFalse(assetFreeTrialMgmtService.isInFreeTrial(TEST_ASSET_ID, TEST_CONVERSATION_ID));
         verify(redisClient, times(0)).set(anyString(), anyString(), any());
+    }
+
+    @Test
+    void should_get_true_when_quota_check_disabled() {
+        ReflectionTestUtils.setField(assetFreeTrialMgmtService, "trialQuotaCheckEnabled", false);
+
+        assertTrue(assetFreeTrialMgmtService.isInFreeTrial(TEST_ASSET_ID, TEST_CONVERSATION_ID));
+        verify(redisClient, times(0)).get(anyString());
     }
 }

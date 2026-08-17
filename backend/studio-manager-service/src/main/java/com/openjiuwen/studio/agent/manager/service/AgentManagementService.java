@@ -651,11 +651,16 @@ public class AgentManagementService implements IAgentManagementService {
             throw new AgentStudioException(StudioError.USER_NOT_IN_TARGET_WORKSPACE);
         }
 
-        String exportAgentStr = agentImportExportService.exportAgentStr(projectId, workspaceId, agentId);
+        try {
+            String exportAgentStr = agentImportExportService.exportAgentStr(projectId, workspaceId, agentId);
 
-        List<ImportListInfo> importListInfoList = listImportInfoFromJson(projectId, exportAgentStr);
+            List<ImportListInfo> importListInfoList = listImportInfoFromJson(projectId, exportAgentStr);
 
-        agentImportExportService.importAgentWithStr(projectId, targetWorkspaceId, exportAgentStr, importListInfoList);
+            agentImportExportService.importAgentWithStr(projectId, targetWorkspaceId, exportAgentStr, importListInfoList);
+        } catch (AgentStudioException e) {
+            log.error("Fail to copy agent, agentId: {}", agentId, e);
+            throw new AgentStudioException(StudioError.AGENT_COPY_FAIL);
+        }
 
         // 这里直接返回复制的对象信息，不能查询，避免读未提交
         return newAgent.convertToDto();

@@ -179,8 +179,44 @@ export class ReleaseHistoryHalfmodalComponent {
     );
   }
 
-  public clickCopy(e: Event) {
+  public clickCopy(e: Event, version_id: string) {
     e.stopPropagation();
+    if (!version_id) {
+      return;
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(version_id).then(
+        () => {
+          MessageComponent.showSuccess(
+            this.i18n.transform('copy_success'),
+            3000,
+          );
+        },
+        () => {
+          this.fallbackCopy(version_id);
+        },
+      );
+    } else {
+      this.fallbackCopy(version_id);
+    }
+  }
+
+  private fallbackCopy(text: string) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      MessageComponent.showSuccess(
+        this.i18n.transform('copy_success'),
+        3000,
+      );
+    } finally {
+      document.body.removeChild(textarea);
+    }
   }
 
   private getFlowVersions() {

@@ -890,6 +890,64 @@ def _resolve_intent_fields(
     return intent_name, intent_description
 
 
+async def _convert_llm_react_node(configs: dict, node_id: str):
+    """把旧版 jiuwen.LLMReAct 节点 IR 转成 FlowAgent。
+
+    映射 camelCase configs → FlowAgentConfig + tools + Model，复用现有 FlowAgent
+    执行能力。maxIteration 表示允许执行的最大工具调用轮次。
+
+    Args:
+        configs: LLMReAct 节点的 configs（含 systemPrompt/model/plugins/maxIteration/...）。
+        node_id: 节点 id，作为 resource_mgr tag。
+
+    Returns:
+        FlowAgent 实例。
+    """
+    from agent_runtime.common.model_adapters import adapt_react_agent_config
+    from jiuwen.extension.wrapper.restful_api_loader import load_restful_api_from_ir
+    from openjiuwen.core.foundation.llm import Model as SDKModel
+    from openjiuwen.core.runner import Runner
+
+    # ① model 配置：adapter + provider + Model（对齐 llm_chain 范式）
+    provider = _get_model_config_provider()
+    adapted_conf = adapt_react_agent_config(configs)
+    llm_comp_config = await provider.get_llm_config(adapted_conf)
+    model = SDKModel(
+        model_client_config=llm_comp_config.model_client_config,
+        model_config=llm_comp_config.model_config,
+    )
+
+    # ② plugins[] → List[Tool]
+    tools = []
+    for plugin_conf in configs.get("plugins", []) or []:
+        try:
+            tool_id = load_restful_api_from_ir(plugin_conf, tag=node_id)
+            tool = Runner.resource_mgr.get_tool(tool_id, tag=node_id)
+            if tool is not None:
+                tools.append(tool)
+        except Exception as e:
+            logger.error(
+                f"Failed to load plugin {plugin_conf.get('name', '')} for node {node_id}: {e}"
+            )
+
+    # ③ 映射 camelCase → FlowAgentConfig
+    max_iteration = configs.get("maxIteration", 9)
+    flow_agent_config = FlowAgentConfig(
+        system_prompt=configs.get("systemPrompt", ""),
+        max_iteration=max_iteration,
+        llm_config={},  # model 走 set_llm 注入，llm_config 留空
+        plugins=configs.get("plugins", []) or [],
+    )
+
+    # ④ 构造 FlowAgent（FlowAgent/FlowAgentConfig 顶部已 import，用裸名）
+    agent = FlowAgent(
+        config=flow_agent_config,
+        tools=tools,
+        model=model,
+    )
+    return agent
+
+
 class IRConverter:
     """IR转换工具类。
 
@@ -2170,6 +2228,10 @@ class IRConverter:
                 node_type,
                 configs,
             )
+
+        if node_type == "jiuwen.LLMReAct":
+            component = await _convert_llm_react_node(configs, node_id)
+            return component, node_type, configs
 
         if node_type in {"jiuwen.subWorkflow", "jiuwen.workflowComposite"}:
             return SubWorkflow({**configs, "node_id": node_id}), node_type, configs

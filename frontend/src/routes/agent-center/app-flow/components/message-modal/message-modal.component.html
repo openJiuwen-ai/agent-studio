@@ -183,8 +183,8 @@
         </ng-template>
         <ng-template #right>
           <div class="flex items-center gap-2">
-            <div (click)="agentDataServe.showVarList(showVarListSubject$)" nz-tooltip [nzTooltipTitle]="'ref_args' | i18nextEager" class="icon-border">
-              <div (click)="agentDataServe.showVarList(showVarListSubject$)" (mousedown)="$event.preventDefault()" class="ref-args-icon"></div>
+            <div nz-tooltip [nzTooltipTitle]="'ref_args' | i18nextEager" class="icon-border">
+              <div class="ref-args-icon" (mousedown)="$event.preventDefault()" (click)="onShowVarList($event, showVarListSubject$)"></div>
             </div>
           </div>
         </ng-template>

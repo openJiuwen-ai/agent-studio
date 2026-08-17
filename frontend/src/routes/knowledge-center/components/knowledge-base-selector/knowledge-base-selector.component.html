@@ -79,14 +79,16 @@
         <button *ngIf="kbAbilitiesService.isPermitCreateKB && studioBtnShow" nz-button (click)="createKB.emit()" class="mt-[16px]">{{ 'create_kb' | i18nextEager }}</button>
       </div>
 
-      <nz-pagination
-        *ngIf="!isLoading"
-        [(nzPageIndex)]="pageState.currentPage"
-        [nzTotal]="pageState.totalNumber"
-        [(nzPageSize)]="pageState.pageSize"
-        nzSimple
-        (nzPageIndexChange)="getKBList()"
-      ></nz-pagination>
+      <div *ngIf="!isLoading" style="display: flex; justify-content: space-between; align-items: center">
+        <span>{{ 'total_number_of_records' | i18nextEager }}：{{ pageState.totalNumber }}</span>
+        <nz-pagination
+          [(nzPageIndex)]="pageState.currentPage"
+          [nzTotal]="pageState.totalNumber"
+          [(nzPageSize)]="pageState.pageSize"
+          nzSimple
+          (nzPageIndexChange)="getKBList()"
+        ></nz-pagination>
+      </div>
     </div>
   </div>
 </div>

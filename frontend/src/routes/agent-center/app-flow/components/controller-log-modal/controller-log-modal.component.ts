@@ -208,8 +208,19 @@ export class ControllerLogModalComponent extends FlowLogModalComponent {
       });
       this.conversationList = res.conversation_infos;
       if (this.conversationList.length > 0) {
-        this.conversationSelected = this.conversationList[0];
-        const { conversation_id } = this.conversationList[0] || {};
+        const prevId = this.conversationSelected?.conversation_id;
+        const matched = prevId
+          ? this.conversationList.find((c: any) => c.conversation_id === prevId)
+          : null;
+        if (matched) {
+          this.conversationSelected = matched;
+        } else if (this.conversationId) {
+          const found = this.conversationList.find((c: any) => c.conversation_id === this.conversationId);
+          this.conversationSelected = found || this.conversationList[0];
+        } else {
+          this.conversationSelected = this.conversationList[0];
+        }
+        const { conversation_id } = this.conversationSelected || {};
         this.getExecutions(conversation_id);
       } else {
         this.conversationSelected = {};

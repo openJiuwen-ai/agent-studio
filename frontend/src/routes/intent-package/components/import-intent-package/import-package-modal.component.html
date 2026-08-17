@@ -32,7 +32,7 @@
           accept=".xlsx"
           (change)="onUploadFile($event)"
         />
-        <button nz-button nzType="default" (click)="uploadIntent()">
+        <button nz-button nzType="default" (click)="uploadIntent()" [disabled]="isLoading">
           {{ 'add_file' | i18nextEager }}
         </button>
         <div
@@ -49,6 +49,18 @@
                 uplaodFile.name
               }}</span>
           </span>
+          <button
+            type="button"
+            nz-button
+            nzType="text"
+            class="flex h-[24px] w-[24px] shrink-0 items-center justify-center p-0"
+            [attr.aria-label]="'delete' | i18nextEager"
+            [attr.title]="'delete' | i18nextEager"
+            [disabled]="isLoading"
+            (click)="removeFile()"
+          >
+            <nz-icon nzType="delete" nzTheme="outline" />
+          </button>
         </div>
       </div>
     </div>
@@ -57,7 +69,14 @@
       <button nz-button nzType="default" (click)="dismiss()">
         {{ 'cancel' | i18nextEager }}
       </button>
-      <button nz-button nzType="primary" nzDanger (click)="importIntent()" [disabled]="!uplaodFile.file">
+      <button
+        nz-button
+        nzType="primary"
+        nzDanger
+        [nzLoading]="isLoading"
+        [disabled]="!uplaodFile.file || isLoading"
+        (click)="importIntent()"
+      >
         {{ 'import' | i18nextEager }}
       </button>
     </div>

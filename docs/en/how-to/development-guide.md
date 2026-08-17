@@ -7,6 +7,7 @@ This guide covers the various development and extension capabilities of the agen
 - [Encryption Extension](#encryption-extension)
 - [SSO Remote Auth Configuration](#sso-remote-auth-configuration)
 - [Storage Configuration and Extension](#storage-configuration-and-extension)
+- [Database Password Provider Extension](#database-password-provider-extension)
 
 ---
 
@@ -394,3 +395,162 @@ spec:
 |-----------|-----------|---------------|---------|------------|----------|
 | `storage-data` | `/data/storage` | `/data/storage` | LOCAL mode shared storage | Read/Write | Required for LOCAL mode |
 | `storage-plugins` | `/opt/cloud/storage-plugins` | `/opt/cloud/storage-plugins` | CUSTOM mode plugin JAR / .py | Read-only | Required for CUSTOM mode |
+
+---
+
+## Database Password Provider Extension
+
+This section describes the abstraction layer for database password retrieval in agent-studio, supporting external custom implementations to integrate with KMS, Vault, and other credential management services.
+
+### Feature Overview
+
+agent-studio abstracts database password retrieval into a `DataSourcePasswordProvider` interface, supporting two modes:
+
+- **DEFAULT** (default): Uses the platform's built-in encryption/decryption tools (Java: `CryptoUtils`, Python: `crypto_tool`) to decrypt the ciphertext password in configuration
+- **CUSTOM**: Loads a custom implementation via external JAR (Java) or .py file (Python), enabling integration with KMS, Vault, cloud credential management, and other external services
+
+### DEFAULT Mode (Default)
+
+In DEFAULT mode, the platform uses built-in encryption capabilities to handle database passwords:
+
+- **studio-manager (Java)**: `DefaultDataSourcePasswordProvider` calls `CryptoUtils.decrypt()` to decrypt the `spring.datasource.password` config value
+- **agent-runtime / agent-builder (Python)**: `DefaultDataSourcePasswordProvider` calls `crypto_tool.decrypt()` to decrypt the `STORE_DB_PASSWORD` environment variable value
+
+> DEFAULT mode requires no additional configuration — simply leave `DATASOURCE_PASSWORD_PROVIDER_TYPE` unset or set it to `DEFAULT`.
+
+### CUSTOM Mode
+
+Custom password retrieval implementation, suitable for scenarios requiring integration with KMS, Vault, or other external credential management services.
+
+#### studio-manager Configuration (Java)
+
+| Environment variable | Required | Description |
+|---------------------|----------|-------------|
+| `datasource_password_provider_type` | Yes | Set to `CUSTOM` |
+| `datasource_password_provider_custom_class` | Yes | Implementation class fully qualified name, e.g. `com.example.KmsPasswordProvider` |
+| `datasource_password_provider_custom_classpath` | Yes | External JAR path, e.g. `/opt/cloud/plugins/kms-password-provider.jar` |
+
+**Implementation requirements**:
+1. Implement the `DataSourcePasswordProvider` interface (`com.openjiuwen.studio.agent.common.datasource.DataSourcePasswordProvider`)
+2. Provide a no-arg constructor
+3. JAR must be a fat jar (including all dependencies), or place dependency JARs in the same directory
+
+   ```java
+   public class KmsPasswordProvider implements DataSourcePasswordProvider {
+
+       @Override
+       public String getPassword(String rawPassword) {
+           // rawPassword is the original value from config (may be a ciphertext reference, or empty)
+           // Call KMS/Vault API here to fetch the plaintext password and return it
+           return fetchFromKms(rawPassword);
+       }
+   }
+   ```
+
+#### agent-builder / agent-runtime Configuration (Python)
+
+| Environment variable | Required | Description |
+|---------------------|----------|-------------|
+| `DATASOURCE_PASSWORD_PROVIDER_TYPE` | Yes | Set to `CUSTOM` |
+| `DATASOURCE_PASSWORD_PROVIDER_MODULE` | Yes | Python module path, supports two formats (see below) |
+| `DATASOURCE_PASSWORD_PROVIDER_CLASS` | Yes | Implementation class name, e.g. `KmsPasswordProvider` |
+
+**Implementation requirements**:
+1. Inherit `DataSourcePasswordProvider` (`common_utils.password_provider.DataSourcePasswordProvider`)
+2. Implement abstract method `get_password(self, raw_password: str) -> str`
+3. Provide a no-arg constructor (`__init__` with no required arguments)
+
+   ```python
+   from common_utils.password_provider import DataSourcePasswordProvider
+
+   class KmsPasswordProvider(DataSourcePasswordProvider):
+
+       def get_password(self, raw_password: str) -> str:
+           # raw_password is the original value from environment variable
+           # Call KMS/Vault API here to fetch the plaintext password and return it
+           return self._fetch_from_kms(raw_password)
+   ```
+
+#### CUSTOM Configuration Differences: studio-manager vs agent-builder / agent-runtime
+
+| Dimension | studio-manager (Java) | agent-builder / agent-runtime (Python) |
+|-----------|----------------------|----------------------------------------|
+| Type config | `datasource_password_provider_type=CUSTOM` | `DATASOURCE_PASSWORD_PROVIDER_TYPE=CUSTOM` |
+| Implementation specified | `datasource_password_provider_custom_class` (fully qualified class name) | `DATASOURCE_PASSWORD_PROVIDER_CLASS` (class name) |
+| Load path | `datasource_password_provider_custom_classpath` (JAR file path) | `DATASOURCE_PASSWORD_PROVIDER_MODULE` (.py path or module name) |
+| Load mechanism | `URLClassLoader` + reflection instantiation + Spring DI | `importlib` dynamic import |
+| Spring injection | Supported (`@Autowired` / `@Value` available) | Not supported (use `os.getenv()` to read config) |
+| Dependency management | fat jar or same-directory JAR | pip install or same-directory .py |
+
+> **`DATASOURCE_PASSWORD_PROVIDER_MODULE` supports two formats**:
+> - File path: `/opt/cloud/plugins/custom_password_provider` (`.py` suffix auto-appended)
+> - Module name: `my_package.custom_provider` (must be installed to site-packages)
+
+### Interface Definition
+
+#### Java Interface
+
+```java
+public interface DataSourcePasswordProvider {
+
+    /**
+     * Get the database password (plaintext).
+     *
+     * @param rawPassword the original password from config (may be encrypted ciphertext, or plaintext)
+     * @return the decrypted plaintext password
+     */
+    String getPassword(String rawPassword);
+}
+```
+
+#### Python Abstract Base Class
+
+```python
+from abc import ABC, abstractmethod
+
+class DataSourcePasswordProvider(ABC):
+
+    @abstractmethod
+    def get_password(self, raw_password: str) -> str:
+        """Get the database password (plaintext).
+
+        Args:
+            raw_password: the original password from config (may be encrypted ciphertext, or plaintext)
+
+        Returns:
+            the decrypted plaintext password
+        """
+        ...
+```
+
+### Container Deployment
+
+In CUSTOM mode, external JAR / .py plugin files need to be mounted into the container, similar to CUSTOM mode for storage extension:
+
+- **Java (studio-manager)**: Place JAR in host `/opt/cloud/plugins/`, configure `datasource_password_provider_custom_classpath` as `/opt/cloud/plugins/xxx.jar`
+- **Python (agent-builder / agent-runtime)**: Place .py in host `/opt/cloud/plugins/`, configure `DATASOURCE_PASSWORD_PROVIDER_MODULE` as `/opt/cloud/plugins/xxx`
+
+K8s Deployment mount example:
+
+```yaml
+spec:
+  template:
+    spec:
+      volumes:
+        - name: password-plugins
+          hostPath:
+            path: /opt/cloud/plugins
+            type: DirectoryOrCreate
+      containers:
+        - name: container-studio-manager
+          volumeMounts:
+            - name: password-plugins
+              mountPath: /opt/cloud/plugins
+              readOnly: true
+```
+
+> You can also reuse the `storage-plugins` mount directory from the storage extension and place password provider plugin JARs / .py files alongside storage plugins.
+
+### Rollback and Disable
+
+Set `DATASOURCE_PASSWORD_PROVIDER_TYPE` (Python side) or `datasource_password_provider_type` (Java side) to `DEFAULT`, or clear the environment variable, and restart the service to roll back to the default local decryption mode.

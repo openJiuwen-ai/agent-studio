@@ -127,7 +127,7 @@
 .text-chunk-area {
   max-height: 100%;
   height: fit-content;
-  overflow-y: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 9px;

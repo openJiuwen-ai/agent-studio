@@ -28,7 +28,7 @@
     </nz-alert>
   </div>
   <div class="parse-file">
-    <nz-table [nzData]="srcData" [nzFrontPagination]="false">
+    <nz-table [nzData]="srcData" [nzFrontPagination]="false" [nzTableLayout]="'fixed'">
       <thead>
       <tr>
         <th nzWidth="40px"></th>
@@ -67,14 +67,19 @@
                     }
                   }
                   @default {
-                    <span>{{ row[col.key] }}</span>
+                    <span
+                      class="cell-ellipsis"
+                      nz-tooltip
+                      [nzTooltipTitle]="row[col.key]"
+                    >{{ row[col.key] }}</span>
                   }
                 }
               </td>
             }
           </tr>
-          <tr [nzExpand]="row.showDetails">
-            <td colspan="5">
+          <tr *ngIf="row.showDetails" class="expand-detail-row">
+            <td></td>
+            <td colspan="4">
               <div class="ti3-table-detail-container">
                 <div class="sub-detail-container">
                   <div class="child-list">
@@ -84,14 +89,14 @@
                           <div class="child-rounded-wrapper">
                             <div class="child-wrapper">
                               <div class="dependency-info-child">
-                                <div class="child-col" [ngStyle]="{'width':columns[0]?.width}">
-                                  <div nzEllipsis>{{ childItem.resource_name }}</div>
+                                <div class="child-col flex-shrink-0" [ngStyle]="{'width':columns[0]?.width}">
+                                  <div class="min-w-0 flex-1 truncate" nz-tooltip [nzTooltipTitle]="childItem.resource_name">{{ childItem.resource_name }}</div>
                                   <div class="dependency-tag flex-shrink-0 ml-[16px]">
                                     {{ getTypeName(childItem.resource_type) }}
                                   </div>
                                 </div>
                                 <div class="child-col flex-shrink-0" [ngStyle]="{'width':columns[1]?.width}">
-                                  <div class="w-full" nzEllipsis>{{ childItem.resource_desc }}</div>
+                                  <div class="min-w-0 flex-1 truncate" nz-tooltip [nzTooltipTitle]="childItem.resource_desc">{{ childItem.resource_desc }}</div>
                                 </div>
                                 <div class="child-col flex-shrink-0" [ngStyle]="{'width':columns[2]?.width}">
                                   <span class="flex align-center status-font">

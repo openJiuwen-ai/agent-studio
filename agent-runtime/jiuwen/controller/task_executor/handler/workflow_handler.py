@@ -988,9 +988,25 @@ class WorkflowHandler(BaseHandler):
         self, workflow_context: WorkflowContext, workflow_req_params: dict
     ) -> Generator[Message, None, bool]:
         """处理非顺序执行的工作流，返回是否中断"""
+        # 中断恢复场景：工作流已处于 INTERRUPTED 状态，用户回复是用来推进
+        # 中断节点（如 QA needReply）的，不应再触发参数缺失提问，否则会吞掉
+        # 机机报文回复，导致 QA 下游节点永远拿不到 response。
+        # 注意：必须用 == 比较，不能用 WorkflowStatus.is_interrupted()，
+        # 因为 INTERRUPTED = InterruptedReason（枚举类赋给成员），
+        # is_interrupted 判 isinstance(status, InterruptedReason) 为 False。
+        is_resuming = workflow_context.status == WorkflowStatus.INTERRUPTED
         question, extracted_key_fields_dict = self._handle_missing_params(
             workflow_context
         )
+
+        # 中断恢复时不允许参数缺失提问二次中断，但仍需保留参数提取结果
+        if question and is_resuming:
+            logger.info(
+                f"task_id: {self.task_id}| Workflow {workflow_context.workflow_name} "
+                f"resuming from INTERRUPTED state, suppress missing-params question",
+                simple_log="suppress question on resume",
+            )
+            question = None
 
         if question:
             self.context_manager.add_assistant_message(

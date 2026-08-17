@@ -1,11 +1,11 @@
 <div style="display: flex; flex-flow: wrap">
   <ng-container *ngIf="statusConfigMap[status].isProgressBar; else statusTmpl">
     <div class="w-full">
-      <div class="inline-block w-[calc(100%-27px)]">
+      <div class="inline-block w-[calc(100%-45px)]">
         <nz-progress [nzPercent]="progressRate * 100" [nzShowInfo]="false"> </nz-progress>
       </div>
-      <span *ngIf="statusConfigMap[status].showProgress" class="w-[27px]">{{ (progressRate * 100).toFixed(2) }}%</span>
-      <span *ngIf="!statusConfigMap[status].showProgress" class="w-[27px]">{{ statusConfigMap[status].label }}</span>
+      <div *ngIf="statusConfigMap[status].showProgress" class="w-[45px]" style="display:inline">{{ (progressRate * 100).toFixed(2) }}%</div>
+      <div *ngIf="!statusConfigMap[status].showProgress" class="w-[45px]" style="display:inline">{{ statusConfigMap[status].label }}</div>
     </div>
   </ng-container>
   <ng-template #statusTmpl>

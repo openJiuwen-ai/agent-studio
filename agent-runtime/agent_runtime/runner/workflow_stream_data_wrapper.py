@@ -486,7 +486,7 @@ class WorkflowStreamDataWrapper:
             data = {"answer": str(payload)}
 
         return {
-            "event": "workflow_end",
+            "event": "workflow_finished",
             "data": data,
             "executionId": self._execution_id,
             "index": chunk.index,
@@ -572,7 +572,7 @@ class WorkflowStreamDataWrapper:
                 data[key] = payload[key]
 
         return {
-            "event": "workflow_end",
+            "event": "workflow_finished",
             "data": data,
             "executionId": self._execution_id,
             "index": chunk.index,
@@ -753,7 +753,7 @@ class WorkflowStreamDataWrapper:
                 result_data[key] = data[key]
 
         return {
-            "event": "workflow_end",
+            "event": "workflow_finished",
             "data": result_data,
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
@@ -771,7 +771,7 @@ class WorkflowStreamDataWrapper:
             data["userFields"] = mask_debug_data(data["userFields"], _sf)
 
         return {
-            "event": "workflow_end",
+            "event": "workflow_finished",
             "data": dict(data),
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
@@ -1015,7 +1015,7 @@ class WorkflowStreamDataWrapper:
             "loopIndex": payload.get("loopIndex"),
             "innerError": inner_error,
             "memory": memory,
-            "parentNodeId": parent_node_id if not payload.get("loopNodeId") else None,
+            "parentNodeId": parent_node_id or None,
         }
 
         if (data["startTime"] and data["endTime"]) and (data["startTime"] > data["endTime"]):

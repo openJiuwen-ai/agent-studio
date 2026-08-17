@@ -19,7 +19,7 @@
       </span>
     </div>
 
-    <div class="mt-[26px] h-[calc(100%-32px)]">
+    <div class="mt-[26px] min-h-0 flex-1">
       <nz-alert
         *ngIf="showPreRunCheckInfo"
         nzType="warning"
@@ -37,7 +37,7 @@
 
       <nz-tabset
         [ngStyle]="{
-          display: isShowChat ? 'none' : 'block',
+          display: isShowChat ? 'none' : null,
           height: showPreRunCheckInfo ? 'calc(100% - 58px)' : '100%'
         }"
         nzSize="small"
@@ -95,6 +95,15 @@
                         />
 
                         <div class="w-full" #paramErrwrapper></div>
+                        <div
+                          class="error-tip"
+                          *ngIf="
+                            paramForm?.controls['param' + i]?.invalid &&
+                            (paramForm?.controls['param' + i]?.dirty || paramForm?.controls['param' + i]?.touched)
+                          "
+                        >
+                          {{ paramForm?.controls['param' + i]?.errors?.serviceName?.tiErrorMessage }}
+                        </div>
                       </ng-container>
 
                       <ng-container *ngIf="isInt(param)">
@@ -453,10 +462,10 @@
           class="h-full"
           [nzTitle]="tabs[1].title"
         >
-          <div class="flex h-full w-full flex-col gap-[16px] overflow-y-auto">
+          <div #resultScrollRef class="flex h-full w-full flex-col gap-[16px] overflow-y-auto">
             <div
               *ngIf="isLoading; else notLoading"
-              class="flex w-full"
+              class="flex w-full shrink-0"
             >
               <div class="w-full rounded-[8px] bg-[#fafafa] p-[16px] mt-4">
                 <div class="flex items-center gap-[8px] ">
@@ -485,7 +494,7 @@
 
             <ng-template #notLoading>
               <ng-container *ngIf="runInfo">
-                <div class="mt-4 w-full rounded-[8px] bg-[#fafafa] p-[16px]">
+                <div class="mt-4 w-full shrink-0 rounded-[8px] bg-[#fafafa] p-[16px]">
                   <div class="flex items-center gap-[8px]">
                     <div
                       [ngClass]="{
@@ -573,15 +582,17 @@
                 </div>
                 <div
                   *ngIf="isAnswerValid(runInfo)"
-                  class="flex flex-col gap-[8px] rounded-lg bg-[#fafafa] p-[16px]"
+                  class="flex shrink-0 flex-col gap-[8px] rounded-lg bg-[#fafafa] p-[16px]"
                 >
                   <span class="font-semibold text-[#191919]">{{
                       'output_result' | i18nextEager
                     }}</span>
-                  <span>{{ runInfo.answer }}</span>
+                  <div class="break-words whitespace-pre-wrap">
+                    {{ runInfo.answer }}
+                  </div>
                 </div>
                 <div
-                  class="flex w-full flex-col gap-[16px] rounded-[8px] p-[16px]"
+                  class="flex w-full shrink-0 flex-col gap-[16px] rounded-[8px] p-[16px]"
                   [ngClass]="{
                     'bg-[#fafafa]': runInfo?.inputs || runInfo?.outputs
                   }"
@@ -605,7 +616,7 @@
 
                     <div
                       *ngIf="runInfo?.inputs"
-                      class="max-h-[340px] w-full overflow-auto rounded-[6px] border-[1px] border-solid border-[#d8d8d8]"
+                      class="w-full rounded-[6px] border-[1px] border-solid border-[#d8d8d8]"
                     >
                       <json-viewer [jsonData]="runInfo.inputs"></json-viewer>
                     </div>
@@ -626,7 +637,7 @@
                     </div>
 
                     <div
-                      class="max-h-[340px] w-full overflow-auto rounded-[6px] border-[1px] border-solid border-[#d8d8d8]"
+                      class="w-full rounded-[6px] border-[1px] border-solid border-[#d8d8d8]"
                     >
                       <json-viewer [jsonData]="runInfo.outputs"></json-viewer>
                     </div>

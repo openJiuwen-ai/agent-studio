@@ -7,28 +7,28 @@
     <nz-form-item>
       <nz-form-label>{{ 'publisher_logo' | i18nextEager }}</nz-form-label>
       <nz-form-control>
-        <div *ngIf="myForm.value.logo" class="event-log-container relative w-16 h-16 group">
-          <img alt="" [(src)]="myForm.value.logo" class="w-full h-full object-cover rounded shadow-sm" />
-          <div
-            class="delete-box absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center cursor-pointer rounded"
-            (click)="deleteLogo()"
-          >
-            <nz-icon nzType="edit" class="text-white text-xl"></nz-icon>
-          </div>
-        </div>
-
         <nz-upload
-          *ngIf="!myForm.value.logo"
           class="page-upload w-16 h-16 block"
           [class.border-red-500]="logoIsError"
-          nzType="drag"
           nzAccept=".jpg,.jpeg,.png"
           [nzShowUploadList]="false"
           [nzBeforeUpload]="beforeUploadLogo"
         >
-          <p class="ant-upload-drag-icon m-0 mt-2">
-            <nz-icon nzType="plus" class="text-2xl text-gray-400"></nz-icon>
-          </p>
+          <div class="event-log-container relative w-full h-full group">
+            <ng-container *ngIf="myForm.value.logo; else uploadPlaceholder">
+              <img alt="" [src]="myForm.value.logo" class="w-full h-full object-cover rounded shadow-sm" />
+              <div
+                class="delete-box absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center cursor-pointer rounded"
+              >
+                <nz-icon nzType="edit" class="text-white text-xl"></nz-icon>
+              </div>
+            </ng-container>
+            <ng-template #uploadPlaceholder>
+              <div class="flex items-center justify-center w-full h-full border border-dashed border-[#d9d9d9] rounded cursor-pointer">
+                <nz-icon nzType="plus" class="text-2xl text-gray-400"></nz-icon>
+              </div>
+            </ng-template>
+          </div>
         </nz-upload>
         <div class="text-gray-500 mt-2 text-xs">{{ 'image_size_100k_max_format_jpg_png' | i18nextEager }}</div>
       </nz-form-control>
@@ -52,7 +52,7 @@
     <nz-form-item>
       <nz-form-label nzRequired>{{ 'publisher_name_en' | i18nextEager }}</nz-form-label>
       <nz-form-control [nzErrorTip]="enNameErrorTpl">
-        <input nz-input formControlName="provider_name_en" class="w-full" />
+        <input nz-input formControlName="provider_name_en" class="w-full" autocomplete="off" />
         <p class="name-rule text-xs text-gray-500 mt-1">{{ 'validation-name-tip' | i18nextEager }}</p>
         <ng-template #enNameErrorTpl let-control>
           <ng-container
@@ -89,8 +89,8 @@
 
     <nz-form-item *ngIf="myForm.value.auth_type === API_KEY">
       <nz-form-label nzRequired>{{ 'api_key_input' | i18nextEager }}</nz-form-label>
-      <nz-form-control [nzErrorTip]="'Required'">
-        <input nz-input type="password" formControlName="apikey" class="w-full" />
+      <nz-form-control [nzErrorTip]="'api_key_input' | i18nextEager">
+        <input nz-input type="password" formControlName="apikey" class="w-full" autocomplete="new-password" />
         <div [innerHTML]="'api_auth_tip' | i18nextEager" class="mt-1 text-xs text-gray-500"></div>
       </nz-form-control>
     </nz-form-item>
@@ -135,7 +135,7 @@
           <div class="w-1/2 text-sm text-gray-600 font-medium"><span class="text-red-500 mr-1">*</span>{{ 'param_value' | i18nextEager }}</div>
         </div>
         <form #authkeyForm="ngForm">
-          <div class="flex gap-2 items-center mb-3" *ngFor="let param of apiKeyAuthArgs; index as i">
+          <div class="flex gap-2 items-start mb-3" *ngFor="let param of apiKeyAuthArgs; index as i">
             <div class="w-1/2">
               <input
                 nz-input
@@ -145,7 +145,13 @@
                 required
                 [(ngModel)]="param.target_name"
                 [placeholder]="'input_placeholder' | i18nextEager"
+                #nameModel="ngModel"
+                autocomplete="off"
+                [ngClass]="{ 'ant-input-status-error': customApikeySubmitted && nameModel.invalid }"
               />
+              <div *ngIf="customApikeySubmitted && nameModel.invalid" class="text-red-500 text-xs mt-1">
+                {{ 'pls_enter' | i18nextEager }}{{ 'param_name' | i18nextEager }}
+              </div>
             </div>
             <div class="w-1/2">
               <input
@@ -156,10 +162,16 @@
                 required
                 [(ngModel)]="param.auth_key"
                 [placeholder]="'input_placeholder' | i18nextEager"
+                #valModel="ngModel"
+                autocomplete="new-password"
+                [ngClass]="{ 'ant-input-status-error': customApikeySubmitted && valModel.invalid }"
               />
+              <div *ngIf="customApikeySubmitted && valModel.invalid" class="text-red-500 text-xs mt-1">
+                {{ 'pls_enter' | i18nextEager }}{{ 'param_value' | i18nextEager }}
+              </div>
             </div>
-            <nz-icon *ngIf="i > 0" nzType="delete" nzTheme="outline" class="cursor-pointer text-gray-400 hover:text-red-500" (click)="deleteArgs(i)"></nz-icon>
-            <div *ngIf="i === 0" class="w-3.5"></div>
+            <nz-icon *ngIf="i > 0" nzType="delete" nzTheme="outline" class="cursor-pointer text-gray-400 hover:text-red-500 mt-2" (click)="deleteArgs(i)"></nz-icon>
+            <div *ngIf="i === 0" class="w-3.5 mt-2"></div>
           </div>
         </form>
       </div>

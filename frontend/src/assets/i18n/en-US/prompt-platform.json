@@ -638,6 +638,7 @@
   "agent-select-1": "please select an agent",
   "use_case_1": "not filled",
   "prompt_optimize_task_config_1": "Task name not provided",
+  "prompt_optimize_task_config_name_max_length": "Task name cannot exceed 64 characters",
   "prompt_optimize_task_config_2": "Task description not provided",
   "prompt_optimize_task_config_3": "No application target selected",
   "prompt_optimize_task_config_4": "Prompt not filled",

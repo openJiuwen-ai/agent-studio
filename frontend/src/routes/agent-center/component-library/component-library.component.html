@@ -69,7 +69,13 @@
       <app-no-data-guide [isSmall]="true" [type]="tabs[currActivedTab].id"></app-no-data-guide>
     </div>
     <div class="mb-[24px] flex items-center gap-2" *ngIf="!isShowNoDataGuide && !isFirstLoading">
-      <input nz-input [(ngModel)]="searchName" class="w-[calc(100%-32px)]" (ngModelChange)="onSearchContentChange()" />
+      <multi-field-search
+        [searchItems]="searchItems"
+        [(searchTags)]="searchTags"
+        [(searchField)]="searchField"
+        (searchChange)="onSearchContentChange()"
+        class="flex-1"
+      ></multi-field-search>
       <button nz-button nzType="default" class="h-8 w-8" (click)="getCardData()">
         <span nz-icon nzType="reload"></span>
       </button>
@@ -126,13 +132,13 @@
         <nz-pagination
           style="margin-bottom: 8px"
           *ngIf="cards.length && !isLoading"
-          [(nzPageIndex)]="currentCardPage"
+          [nzPageIndex]="currentCardPage"
           [nzTotal]="totalCardNumber"
-          [(nzPageSize)]="cardPageSize.size"
+          [nzPageSize]="cardPageSize.size"
           [nzPageSizeOptions]="cardPageSize.options"
           nzShowSizeChanger
-          (nzPageIndexChange)="getCardData()"
-          (nzPageSizeChange)="getCardData()"
+          (nzPageIndexChange)="onCardPageIndexChange($event)"
+          (nzPageSizeChange)="onCardPageSizeChange($event)"
         />
       </div>
     </div>

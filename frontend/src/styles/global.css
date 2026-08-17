@@ -116,3 +116,13 @@ tp-layout-content {
 .ant-breadcrumb{
   cursor: pointer !important;
 }
+
+/*
+ * CDK 虚拟滚动 viewport 必须禁用浏览器 scroll anchoring。
+ * CDK 在渲染窗口移动时通过 content-wrapper 的 transform 重定位补偿视觉位置，
+ * 若浏览器 scroll anchoring 再对"上方内容移除"做一次 scrollTop 补偿，
+ * 会形成双重补偿：慢速滚动越过首屏（minBufferPx 边界）后，每滚一格都被拉回（如 nz-select 模型下拉卡在第2页开头）。
+ */
+.cdk-virtual-scroll-viewport {
+  overflow-anchor: none;
+}

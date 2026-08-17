@@ -77,10 +77,6 @@ export class ShareVersionComponent {
         resource_type: this.shareInfo.resource_type,
       }).then((res) => {
         this.isLoading = false;
-        MessageComponent.showSuccess(
-          this.i18n.transform('share-delete-modal-4'),
-          3000,
-        );
         // 返回列表
         this.backHome();
       }).finally(() => {

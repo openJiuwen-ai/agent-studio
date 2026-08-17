@@ -7,6 +7,7 @@
 - [加解密扩展](#加解密扩展)
 - [SSO 远程鉴权配置](#sso-远程鉴权配置)
 - [存储配置与扩展](#存储配置与扩展)
+- [数据库密码获取扩展](#数据库密码获取扩展)
 
 ---
 
@@ -394,3 +395,162 @@ spec:
 |-------|-----------|-----------|------|------|------|
 | `storage-data` | `/data/storage` | `/data/storage` | LOCAL 模式共享存储 | 读写 | LOCAL 模式必需 |
 | `storage-plugins` | `/opt/cloud/storage-plugins` | `/opt/cloud/storage-plugins` | CUSTOM 模式插件 JAR / .py | 只读 | CUSTOM 模式必需 |
+
+---
+
+## 数据库密码获取扩展
+
+本节说明 agent-studio 数据库密码获取的抽象层设计，支持通过外部自定义实现对接 KMS、Vault 等凭据管理服务。
+
+### 功能概述
+
+agent-studio 将数据库密码获取逻辑抽象为 `DataSourcePasswordProvider` 接口，支持两种模式：
+
+- **DEFAULT**（默认）：使用平台内置的加解密工具（Java 侧 `CryptoUtils`，Python 侧 `crypto_tool`）解密配置文件中的密文密码
+- **CUSTOM**：通过外部 JAR（Java）或 .py 文件（Python）加载自定义实现，可对接 KMS、Vault、云凭据管理等外部服务
+
+### DEFAULT 模式（默认）
+
+默认模式下，平台使用内置加解密能力处理数据库密码：
+
+- **studio-manager（Java）**：`DefaultDataSourcePasswordProvider` 调用 `CryptoUtils.decrypt()` 解密 `spring.datasource.password` 配置值
+- **agent-runtime / agent-builder（Python）**：`DefaultDataSourcePasswordProvider` 调用 `crypto_tool.decrypt()` 解密 `STORE_DB_PASSWORD` 环境变量值
+
+> DEFAULT 模式无需额外配置，只要不设置 `DATASOURCE_PASSWORD_PROVIDER_TYPE` 或设为 `DEFAULT` 即可。
+
+### CUSTOM 模式
+
+自定义密码获取实现，适用于需要对接 KMS、Vault 等外部凭据管理服务的场景。
+
+#### studio-manager 配置（Java）
+
+| 环境变量 | 必填 | 说明 |
+|---------|------|------|
+| `datasource_password_provider_type` | 是 | 设为 `CUSTOM` |
+| `datasource_password_provider_custom_class` | 是 | 实现类全限定名，如 `com.example.KmsPasswordProvider` |
+| `datasource_password_provider_custom_classpath` | 是 | 外部 JAR 路径，如 `/opt/cloud/plugins/kms-password-provider.jar` |
+
+**实现要求**：
+1. 实现 `DataSourcePasswordProvider` 接口（`com.openjiuwen.studio.agent.common.datasource.DataSourcePasswordProvider`）
+2. 提供无参构造函数
+3. JAR 必须是 fat jar（包含所有依赖），或把依赖 JAR 放在同一目录
+
+   ```java
+   public class KmsPasswordProvider implements DataSourcePasswordProvider {
+
+       @Override
+       public String getPassword(String rawPassword) {
+           // rawPassword 为配置文件中的原始值（可能为密文引用，也可能为空）
+           // 在此调用 KMS/Vault API 获取明文密码并返回
+           return fetchFromKms(rawPassword);
+       }
+   }
+   ```
+
+#### agent-builder / agent-runtime 配置（Python）
+
+| 环境变量 | 必填 | 说明 |
+|---------|------|------|
+| `DATASOURCE_PASSWORD_PROVIDER_TYPE` | 是 | 设为 `CUSTOM` |
+| `DATASOURCE_PASSWORD_PROVIDER_MODULE` | 是 | Python 模块路径，支持两种格式（见下文） |
+| `DATASOURCE_PASSWORD_PROVIDER_CLASS` | 是 | 实现类名，如 `KmsPasswordProvider` |
+
+**实现要求**：
+1. 继承 `DataSourcePasswordProvider`（`common_utils.password_provider.DataSourcePasswordProvider`）
+2. 实现抽象方法 `get_password(self, raw_password: str) -> str`
+3. 提供无参构造函数（`__init__` 无必需参数）
+
+   ```python
+   from common_utils.password_provider import DataSourcePasswordProvider
+
+   class KmsPasswordProvider(DataSourcePasswordProvider):
+
+       def get_password(self, raw_password: str) -> str:
+           # raw_password 为环境变量中的原始值
+           # 在此调用 KMS/Vault API 获取明文密码并返回
+           return self._fetch_from_kms(raw_password)
+   ```
+
+#### CUSTOM 配置差异：studio-manager vs agent-builder / agent-runtime
+
+| 维度 | studio-manager（Java） | agent-builder / agent-runtime（Python） |
+|------|------------------------|----------------------------------------|
+| 类型配置 | `datasource_password_provider_type=CUSTOM` | `DATASOURCE_PASSWORD_PROVIDER_TYPE=CUSTOM` |
+| 实现指定 | `datasource_password_provider_custom_class`（全限定类名） | `DATASOURCE_PASSWORD_PROVIDER_CLASS`（类名） |
+| 加载路径 | `datasource_password_provider_custom_classpath`（JAR 文件路径） | `DATASOURCE_PASSWORD_PROVIDER_MODULE`（.py 路径或模块名） |
+| 加载机制 | `URLClassLoader` + 反射实例化 + Spring 依赖注入 | `importlib` 动态导入 |
+| Spring 注入 | 支持（`@Autowired` / `@Value` 可用） | 不支持（需用 `os.getenv()` 读配置） |
+| 依赖管理 | fat jar 或同目录 JAR | pip install 或同目录 .py |
+
+> **`DATASOURCE_PASSWORD_PROVIDER_MODULE` 支持两种格式**：
+> - 文件路径：`/opt/cloud/plugins/custom_password_provider`（自动补 `.py` 后缀）
+> - 模块名：`my_package.custom_provider`（需已安装到 site-packages）
+
+### 接口定义
+
+#### Java 接口
+
+```java
+public interface DataSourcePasswordProvider {
+
+    /**
+     * 获取数据库密码（明文）。
+     *
+     * @param rawPassword 配置文件中的原始密码（可能为加密密文，也可能为明文）
+     * @return 解密后的明文密码
+     */
+    String getPassword(String rawPassword);
+}
+```
+
+#### Python 抽象基类
+
+```python
+from abc import ABC, abstractmethod
+
+class DataSourcePasswordProvider(ABC):
+
+    @abstractmethod
+    def get_password(self, raw_password: str) -> str:
+        """获取数据库密码（明文）。
+
+        Args:
+            raw_password: 配置文件中的原始密码（可能为加密密文，也可能为明文）
+
+        Returns:
+            解密后的明文密码
+        """
+        ...
+```
+
+### 容器部署
+
+CUSTOM 模式下外部 JAR / .py 插件文件需挂载到容器内，方式与存储扩展的 CUSTOM 模式一致：
+
+- **Java（studio-manager）**：JAR 放宿主机 `/opt/cloud/plugins/`，`datasource_password_provider_custom_classpath` 配为 `/opt/cloud/plugins/xxx.jar`
+- **Python（agent-builder / agent-runtime）**：.py 放宿主机 `/opt/cloud/plugins/`，`DATASOURCE_PASSWORD_PROVIDER_MODULE` 配为 `/opt/cloud/plugins/xxx`
+
+K8s Deployment 挂载示例：
+
+```yaml
+spec:
+  template:
+    spec:
+      volumes:
+        - name: password-plugins
+          hostPath:
+            path: /opt/cloud/plugins
+            type: DirectoryOrCreate
+      containers:
+        - name: container-studio-manager
+          volumeMounts:
+            - name: password-plugins
+              mountPath: /opt/cloud/plugins
+              readOnly: true
+```
+
+> 也可复用存储扩展的 `storage-plugins` 挂载目录，将密码获取插件 JAR / .py 一并放入。
+
+### 回退与关闭
+
+将 `DATASOURCE_PASSWORD_PROVIDER_TYPE`（Python 侧）或 `datasource_password_provider_type`（Java 侧）设为 `DEFAULT` 或清除该环境变量，重启服务即可回退到默认本地解密模式。

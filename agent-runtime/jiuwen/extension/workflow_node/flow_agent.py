@@ -55,7 +55,7 @@ class FlowAgentConfig(BaseModel):
     Attributes:
         strategy_name: 策略名称（当前仅支持 ReAct）
         strategy_provider: 策略提供者（当前仅支持 JiuWen）
-        max_iteration: 最大迭代次数
+        max_iteration: 最大工具调用轮次
         streaming: 是否流式输出
         with_chat_history: 是否启用对话历史
         chat_history_max_turn: 对话历史轮次（0表示不限制）
@@ -66,7 +66,7 @@ class FlowAgentConfig(BaseModel):
 
     strategy_name: str = Field(default="ReAct", description="策略名称")
     strategy_provider: str = Field(default="JiuWen", description="策略提供者")
-    max_iteration: int = Field(default=9, ge=1, le=100, description="最大迭代次数")
+    max_iteration: int = Field(default=9, ge=1, le=100, description="最大工具调用轮次")
     streaming: bool = Field(default=False, description="是否流式输出")
     with_chat_history: bool = Field(default=True, description="是否启用对话历史")
     chat_history_max_turn: int = Field(default=0, ge=0, description="对话历史轮次")
@@ -100,7 +100,7 @@ class FlowAgentConfig(BaseModel):
                 f"Unsupported strategy provider: {self.strategy_provider}, only JiuWen is supported"
             )
 
-        # 验证最大迭代次数
+        # 验证最大工具调用轮次
         if self.max_iteration < 1:
             workflow_logger.error(
                 "End component stream failed",
@@ -140,16 +140,24 @@ class FlowAgent(WorkflowComponent):
         agent.add_component(graph, "agent_node")
     """
 
-    def __init__(self, config: FlowAgentConfig, tools: Optional[List[Tool]] = None):
+    def __init__(
+        self,
+        config: FlowAgentConfig,
+        tools: Optional[List[Tool]] = None,
+        model: Any = None,
+    ):
         """初始化 FlowAgent
 
         Args:
             config: Agent 配置
             tools: 工具列表（可选）
+            model: 已构造好的 SDK Model 实例（由 ir_converter 通过 provider 加载后传入）；
+                   为 None 时回退到 _build_react_config 自拼逻辑（兼容旧调用方）。
         """
         super().__init__()  # WorkflowComponent 初始化
         self._config = config
         self._tools: List[Tool] = tools or []
+        self._model = model
         self._react_agent = None  # 组合持有 ReActAgent，非继承
         self._initialized = False
 
@@ -157,8 +165,8 @@ class FlowAgent(WorkflowComponent):
     # 初始化与 Agent 创建
     # =========================================================================
 
-    def _ensure_initialized(self) -> None:
-        """确保 Agent 已初始化"""
+    async def _ensure_initialized(self) -> None:
+        """确保 Agent 已初始化（async：register_rail 需要 await）。"""
         if self._initialized:
             return
 
@@ -168,8 +176,19 @@ class FlowAgent(WorkflowComponent):
         # 创建 ReAct Agent
         self._create_react_agent()
 
+        # 注入 model（若上游传入，对齐 llm_chain 范式，保留 model_service 延迟解析）
+        if self._model is not None:
+            self._react_agent.set_llm(self._model)
+            logger.info("FlowAgent injected model via set_llm")
+
         # 注册工具
         self._register_tools()
+
+        # max_iteration 表示工具调用轮次，而不是包含最终回答在内的模型调用次数。
+        from agent_runtime.extension.workflow_node.tool_call_limit_rail import ToolCallLimitRail
+        await self._react_agent.register_rail(
+            ToolCallLimitRail(self._config.max_iteration)
+        )
 
         self._initialized = True
         logger.info(f"FlowAgent initialized with {len(self._tools)} tools")
@@ -233,7 +252,8 @@ class FlowAgent(WorkflowComponent):
             model_provider=model_cfg.get("model_provider", "openai"),
             api_key=model_cfg.get("api_key", ""),
             api_base=model_cfg.get("api_base", ""),
-            max_iterations=self._config.max_iteration,
+            # 最多 X 轮工具调用后，还需保留一次模型调用来生成最终回答。
+            max_iterations=self._config.max_iteration + 1,
             prompt_template=[{"role": "system", "content": self._config.system_prompt}]
             if self._config.system_prompt
             else [],
@@ -249,23 +269,22 @@ class FlowAgent(WorkflowComponent):
 
         for tool in self._tools:
             try:
-                # 1. 添加工具卡片到 ability_manager
+                tool_name = tool.card.name if hasattr(tool, "card") and tool.card else "unknown"
+
+                # 1. 添加工具卡片到 ability_manager（公开 API，带去重）
                 if hasattr(tool, "card") and tool.card:
-                    self._react_agent._ability_manager._tools[tool.card.name] = (
-                        tool.card
-                    )
-                    logger.debug(
-                        f"Added tool card to ability_manager: {tool.card.name}"
-                    )
+                    result = self._react_agent.ability_manager.add(tool.card)
+                    added = getattr(result, "added", True)
+                    if added:
+                        logger.debug(f"Added tool card to ability_manager: {tool_name}")
+                    else:
+                        logger.debug(f"Tool already in ability_manager, skipped: {tool_name}")
 
                 # 2. 注册工具实例到 Runner.resource_mgr
                 from openjiuwen.core.runner import Runner
 
                 Runner.resource_mgr.add_tool(tool)
-                logger.debug(
-                    f"Registered tool with Runner.resource_mgr:\
-                             {tool.card.name if hasattr(tool, 'card') else 'unknown'}"
-                )
+                logger.debug(f"Registered tool with Runner.resource_mgr: {tool_name}")
 
             except Exception as e:
                 logger.error(f"Failed to register tool: {e}")
@@ -304,7 +323,7 @@ class FlowAgent(WorkflowComponent):
         Returns:
             执行结果
         """
-        self._ensure_initialized()
+        await self._ensure_initialized()
 
         try:
             mapped_inputs = self._map_inputs_to_query(inputs)
@@ -318,11 +337,15 @@ class FlowAgent(WorkflowComponent):
                         f"FlowAgent literal_eval failed: {e}",
                         event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
                     )
+            normalized_output = (
+                output
+                if isinstance(output, str)
+                else output.get("data", {}).get("result", "")
+            )
             return {
                 "userFields": {
-                    "output": output
-                    if isinstance(output, str)
-                    else output.get("data", {}).get("result", "")
+                    "output": normalized_output,
+                    "result_type": result.get("result_type", "answer"),
                 }
             }
         except Exception as e:
@@ -345,7 +368,7 @@ class FlowAgent(WorkflowComponent):
         Yields:
             流式输出块
         """
-        self._ensure_initialized()
+        await self._ensure_initialized()
 
         try:
             mapped_inputs = self._map_inputs_to_query(inputs)
@@ -374,7 +397,7 @@ class FlowAgent(WorkflowComponent):
         Returns:
             聚合后的结果
         """
-        self._ensure_initialized()
+        await self._ensure_initialized()
 
         try:
             # 收集流式输入
@@ -413,7 +436,7 @@ class FlowAgent(WorkflowComponent):
         Yields:
             转换后的流式输出
         """
-        self._ensure_initialized()
+        await self._ensure_initialized()
 
         try:
             async for input_chunk in inputs:

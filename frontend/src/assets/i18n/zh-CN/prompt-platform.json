@@ -647,6 +647,7 @@
   "agent-select-1": "请选择智能体",
   "use_case_1": "未填写",
   "prompt_optimize_task_config_1": "未填写任务名称",
+  "prompt_optimize_task_config_name_max_length": "任务名称不能超过64个字符",
   "prompt_optimize_task_config_2": "未填写任务描述",
   "prompt_optimize_task_config_3": "未选择应用对象",
   "prompt_optimize_task_config_4": "未填写提示词",

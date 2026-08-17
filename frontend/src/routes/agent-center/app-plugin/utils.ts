@@ -922,3 +922,129 @@ export function mapTreeAddKeyIndex(tree, start) {
     return item;
   });
 }
+
+export function mapTreeAddKeyAndChildIndex(tree, start) {
+  return (tree || []).map((item, index) => {
+    item.key = `${index}`;
+    if (item?.schema?.length > 0 && item.type === 'object') {
+      item.isObjRoot = true;
+      item.children = mapTreeSchemaIndex(item.schema, `${index}`, item.value.type);
+      item.children = setAllChildrenVal(item.children, item.value);
+    }
+    return item;
+  });
+}
+
+function mapTreeSchemaIndex(schema, start, rootValType) {
+  return (schema || []).map((item, index) => {
+    let newitem: any = {
+      options: [{ label: item.type, value: 'literal' }],
+      key: `${start}_${index}`,
+      type: item.type,
+      isChild: true,
+      name: item.name,
+      rootValType: rootValType,
+      isObjChild: item.type === 'object',
+      value: {
+        content: '',
+        default: '',
+        hint: '',
+        type: 'literal',
+      },
+    };
+
+    if (item?.schema?.length > 0 && item.type === 'object') {
+      newitem.children = mapTreeSchemaIndex(item.schema, `${start}_${index}`, rootValType);
+    }
+    return newitem;
+  });
+}
+
+export function eachChildrenToRootObj(children, value) {
+  let res = {};
+  (children || []).map((item, index) => {
+    if (item?.children?.length > 0 && item.type === 'object') {
+      res[item.name] = eachChildrenToRootObj(item?.children, value);
+    } else {
+      if (item.key === value.key) {
+        if (item.type.startsWith('array')) {
+          try {
+            res[item.name] = JSON.parse(value.value.content);
+          } catch {
+            res[item.name] = null;
+          }
+        } else {
+          res[item.name] = value.value.content;
+        }
+      } else {
+        let itemVal = item.value.content;
+        if (item.type.startsWith('array')) {
+          try {
+            itemVal = JSON.parse(itemVal);
+          } catch {
+            itemVal = null;
+          }
+        }
+        if (item.type === 'object') {
+          try {
+            itemVal = JSON.parse(itemVal);
+          } catch {
+            itemVal = null;
+          }
+        }
+        res[item.name] = itemVal;
+      }
+    }
+  });
+  return res;
+}
+
+export function setAllChildrenVal(children, value) {
+  let obj = {};
+  try {
+    obj = JSON.parse(value.content);
+  } catch {
+    obj = {};
+  }
+  if (value.type !== 'literal') {
+    obj = {};
+  }
+  children = setEachAllChildrenVal(children, obj, value.type);
+  return children;
+}
+
+function setEachAllChildrenVal(children, objVal, rootValType) {
+  if (Object.keys(objVal).length <= 0) {
+    return (children || []).map((item, index) => {
+      item.rootValType = rootValType;
+      item.value.content = '';
+      if (item.children) {
+        item.children = setEachAllChildrenVal(item.children, objVal, rootValType);
+      }
+      return item;
+    });
+  } else {
+    return (children || []).map((item, index) => {
+      item.rootValType = rootValType;
+      if (objVal[item.name] !== null && objVal[item.name] !== undefined) {
+        let newVal = objVal[item.name];
+        if (item.type === 'object') {
+          if (item.children) {
+            item.children = setEachAllChildrenVal(item.children, objVal[item.name], rootValType);
+          }
+        } else {
+          if (item.type.startsWith('array')) {
+            if (newVal) {
+              newVal = JSON.stringify(newVal);
+            } else {
+              newVal = null;
+            }
+          }
+
+          item.value.content = newVal;
+        }
+      }
+      return item;
+    });
+  }
+}

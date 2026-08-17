@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, EventEmitter, Input, Output, SimpleChanges, inject, ElementRef, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, Output, SimpleChanges, OnChanges, inject, ElementRef, ViewChild } from '@angular/core';
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { I18nNamespace } from '@i18n';
@@ -84,7 +84,7 @@ export interface IConversationRequest {
     },
   ],
 })
-export class FlowLogModalComponent {
+export class FlowLogModalComponent implements OnChanges {
   @Input() isShowLog = true;
 
   @Input() graph!: Graph;
@@ -98,6 +98,8 @@ export class FlowLogModalComponent {
   @Output('openNode') openNode = new EventEmitter<any>();
 
   @Input() inputWorkflowId?: string;
+
+  @Input() conversationId = '';
 
   public ALL_ITEM = ALL;
 
@@ -179,6 +181,17 @@ export class FlowLogModalComponent {
       this.workflow_id = params.id || this.inputWorkflowId;
     });
     this.initializeDates();
+  }
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes.showLogDrawer &&
+      changes.showLogDrawer.previousValue === false &&
+      changes.showLogDrawer.currentValue === true) {
+      this.conversationSelected = undefined;
+      this.isReq = false;
+      this.hasUpdate = false;
+      this.getPageData();
+    }
   }
 
   ngAfterViewInit() {
@@ -493,8 +506,19 @@ export class FlowLogModalComponent {
       });
       this.conversationList = res?.conversation_infos;
       if (this.conversationList.length > 0) {
-        this.conversationSelected = this.conversationList[0];
-        const { conversation_id } = this.conversationList[0] || {};
+        const prevId = this.conversationSelected?.conversation_id;
+        const matched = prevId
+          ? this.conversationList.find((c: any) => c.conversation_id === prevId)
+          : null;
+        if (matched) {
+          this.conversationSelected = matched;
+        } else if (this.conversationId) {
+          const found = this.conversationList.find((c: any) => c.conversation_id === this.conversationId);
+          this.conversationSelected = found || this.conversationList[0];
+        } else {
+          this.conversationSelected = this.conversationList[0];
+        }
+        const { conversation_id } = this.conversationSelected || {};
         this.getExecutions(conversation_id);
       } else {
         this.timelineData = {};

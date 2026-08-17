@@ -14,6 +14,10 @@ import { NodeService } from '../../node.service';
 import { NodeBaseComponent } from '../base/node-base.component';
 import { NodeDependencies } from '../modules';
 import { WORKFLOW_SVGS } from '../../flow.const';
+import { Clipboard } from '@angular/cdk/clipboard';
+import { HttpService } from '@services/http.service';
+import { MessageComponent } from '@shared/services/cfdata.service';
+import { URL_FROM_MULTI_AGENT } from '@routes/agent-center/app-agent/agent-bot-page/agent-bot-page.constant';
 
 @Component({
   selector: 'meta-single-agent-node',
@@ -38,12 +42,16 @@ export class SingleAgentNodeComponent
 
   public description = '';
 
+  private workspaceId = '';
+
   constructor(
     protected override appFlowServ: AppFlowService,
     protected override nodeServ: NodeService,
     protected override cdr: ChangeDetectorRef,
     protected override elementRef: ElementRef<HTMLDivElement>,
     private i18n: I18NextEagerPipe,
+    private clipboard: Clipboard,
+    private readonly http: HttpService,
   ) {
     super(nodeServ, appFlowServ, cdr, elementRef);
   }
@@ -56,6 +64,7 @@ export class SingleAgentNodeComponent
   }
 
   override ngOnInit(): void {
+    this.workspaceId = this.http.getWorkspaceId();
     this.setNodeBase(this.nodeInfo);
     super.ngOnInit();
   }
@@ -74,4 +83,35 @@ export class SingleAgentNodeComponent
       label: this.i18n.transform('copy_agent_id'),
     },
   ];
+
+  override onClickAction(action: { id: string }): void {
+    switch (action.id) {
+      case 'detail': {
+        this.onClickAgentDetail();
+        break;
+      }
+      case 'copyId': {
+        this.onCopyAgentId();
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+  }
+
+  private onClickAgentDetail(): void {
+    const config = this.nodeInfo.configs;
+    const prefixUrl = window.location.href?.split('/home')[0];
+    const queryParams = `?agentId=${config.id}&versionId=${config.version_id}&versionName=${config.version_name}&from=${URL_FROM_MULTI_AGENT}&readonly_mode=true&workspace_id=${this.workspaceId}`;
+    const newUrl = `${prefixUrl}/home/agent-center/app-agent/detail${queryParams}`;
+    window.open(newUrl, '_blank');
+  }
+
+  private onCopyAgentId(): void {
+    this.clipboard.copy(this.nodeInfo.configs.id);
+    MessageComponent.showSuccess(
+      this.i18n.transform('copy_single_agent_id_successfully'),
+    );
+  }
 }

@@ -269,8 +269,6 @@ public interface CommonConstant {
 
         String PLUGINS = "plugins";
 
-        String BREAK_PLUGIN_IDS = "break_plugin_ids";
-
         String MODEL = "model";
 
         String ID = "workflow_id";

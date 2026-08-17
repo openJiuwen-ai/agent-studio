@@ -31,8 +31,8 @@ export class ImportTemplateModalComponent {
   public selectedFile: NzUploadFile | null = null;
   public fileList: NzUploadFile[] = [];
   private nativeFile: File | null = null;
-  public maxSize = 10 * 1024 * 1024;
-  public uploadType = ['.xls', '.xlsx'];
+  public readonly maxSize = 20 * 1024 * 1024;
+  public readonly uploadType = ['.xls', '.xlsx'];
   constructor(
     private service: PromptService,
     private readonly i18n: angularI18next.I18NextEagerPipe,
@@ -42,8 +42,23 @@ export class ImportTemplateModalComponent {
   ) {}
 
   beforeUpload = (file: NzUploadFile): boolean => {
+    const nativeFile = ((file as any)._file || file) as File;
+    const fileName = file.name || nativeFile.name || '';
+    const extension = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
+
+    if (!this.uploadType.includes(extension)) {
+      this.message.error(this.i18n.transform('file_wrong_type', { name: fileName }));
+      return false;
+    }
+    if (nativeFile.size > this.maxSize) {
+      this.message.error(
+        this.i18n.transform('file_size_cannot_exceed', { size: this.maxSize / (1024 * 1024) })
+      );
+      return false;
+    }
+
     this.selectedFile = file;
-    this.nativeFile = (file as any)._file || file as any;
+    this.nativeFile = nativeFile;
     this.fileList = [file];
     this.cdr.markForCheck();
     return false;

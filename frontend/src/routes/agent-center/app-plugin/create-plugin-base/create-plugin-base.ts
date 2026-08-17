@@ -542,17 +542,9 @@ export class CreatePluginBaseComponent implements OnInit {
     }
   }
 
-  checkFormDom(form, cName) {
-    form.controls[cName].markAsDirty();
-    form.controls[cName].updateValueAndValidity({ onlySelf: false });
-  }
-
   public btnDisabledFunc(step: number): boolean {
-    //待优化
     const form = this.groupFormControl.controls;
     if (step === 0) {
-      this.checkFormDom(this.groupFormControl, 'pluginZhName');
-      this.checkFormDom(this.groupFormControl, 'pluginDescription');
       if (form.pluginZhName.errors || form.pluginName.errors || form.pluginDescription.errors) {
         return true;
       }
@@ -621,16 +613,6 @@ export class CreatePluginBaseComponent implements OnInit {
       }
       if (form.baseURL.value.includes('\n')) {
         form.baseURL.setValue(form.baseURL.value.replaceAll('\n', ''));
-      }
-      if (form.host.errors) {
-        this.hostError = form.host.errors.serviceName?.tiErrorMessage ?? 'Error';
-      } else {
-        this.hostError = '';
-      }
-      if (form.baseURL.errors) {
-        this.baseURLError = form.baseURL.errors.serviceName?.tiErrorMessage ?? 'Error';
-      } else {
-        this.baseURLError = '';
       }
     }
     this.step += 1;
@@ -720,17 +702,23 @@ export class CreatePluginBaseComponent implements OnInit {
       if (this.usedFrom === 'flow') {
         from_id = this.route.snapshot.queryParams.id;
         agent_node = this.agentNode;
-      } else if (this.usedFrom === 'agent') {
-        from_id = this.route.snapshot.queryParams.agentId;
+        await this.router.navigate(['/home/agent-center/app-flow/flow'], {
+          queryParams: { id: from_id },
+          state: { currentModal: 'plugin', new_plugin_id: res.tool_id },
+        });
+      } else {
+        if (this.usedFrom === 'agent') {
+          from_id = this.route.snapshot.queryParams.agentId;
+        }
+        await this.router.navigate(['/home/agent-center/custom-plugin/detail'], {
+          queryParams: {
+            id: res.tool_id,
+            from: this.usedFrom,
+            from_id,
+            agent_node,
+          },
+        });
       }
-      await this.router.navigate(['/home/agent-center/custom-plugin/detail'], {
-        queryParams: {
-          id: res.tool_id,
-          from: this.usedFrom,
-          from_id,
-          agent_node,
-        },
-      });
       if (!this.isImport) {
         MessageComponent.showSuccess(this.i18n.transform('addpluginmodalcomponent_257'));
       } else if (isCreateToolsSuccess) {

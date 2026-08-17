@@ -235,10 +235,18 @@ export class AddMultipleAgentModalComponent implements OnInit {
       return;
     }
     if (this.isSingleAgent) {
-      if (!agent.checked) {
-        agent.checked = true;
+      if (agent.checked) {
+        // 选中：单选语义，先清掉已选的单智能体再选当前
+        this.onCardSingleSelected(agent);
+      } else {
+        // 取消选中：从已选列表移除，计数归零
+        const index = this.agentSelected.findIndex(
+          (item) => item.id === agent.id,
+        );
+        if (index > -1) {
+          this.agentSelected.splice(index, 1);
+        }
       }
-      this.onCardSingleSelected(agent);
     } else {
       this.onCardMultiSelected(agent);
     }

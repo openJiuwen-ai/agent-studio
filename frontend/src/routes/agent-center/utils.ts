@@ -8,6 +8,12 @@ import { PluginCredentialStatus } from '@enums/agent-center.enum';
 import { IPluginWithTools, PLUGIN_QUOTA } from '@routes/agent-center/app-plugin/app-plugin.interface';
 import { pinyin } from "pinyin-pro";
 
+/** 将 KB 限制值转换为展示用 MB 值。不进位，避免展示值大于真实限制。 */
+export function formatUploadSizeMb(maxSizeKb: number): number | string {
+  const mb = maxSizeKb / 1024;
+  return Number.isInteger(mb) ? mb : Math.floor(mb * 100) / 100;
+}
+
 export const isSystemTypeWithName = (
   param: IWorkflowField,
   name: string,
@@ -32,23 +38,19 @@ export function checkFileTypeAndSize(
   fileExtension: string,
   size: number,
   i18n: I18NextEagerPipe,
-  configServ?: AgentConfigService
+  maxFileSizeKb: number = AgentConfigService.DEFAULT_FILE_MAX_SIZE_KB,
 ) {
   if (['png', 'jpeg', 'gif', 'webp', 'jpg', 'svg'].includes(fileExtension)) {
-    if (size > 1024 * 1024 * 5) {
+    if (size > 5 * 1024 * 1024) {
       MessageComponent.showWarn(i18n.transform('image_size_cannot_exceed_5mb'));
       return false;
     }
 
     return true;
-  } else if (configServ) {
-    if (size > 1024 * 1024 * 128) {
-      MessageComponent.showWarn(i18n.transform('file_size_cannot_exceed_128'));
-      return false;
-    }
-    return true;
-  } else if (size > 1024 * 1024 * 60) {
-    MessageComponent.showWarn(i18n.transform('file_size_cannot_exceed_128mb'));
+  } else if (size > maxFileSizeKb * 1024) {
+    MessageComponent.showWarn(
+      i18n.transform('file_size_cannot_exceed', { size: formatUploadSizeMb(maxFileSizeKb) }),
+    );
     return false;
   } else {
     return true;

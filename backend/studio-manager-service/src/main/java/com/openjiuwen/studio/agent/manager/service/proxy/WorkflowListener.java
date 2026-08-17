@@ -29,6 +29,7 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -170,6 +171,21 @@ public class WorkflowListener extends BaseEventListener {
                 processError(eventData);
             }
             case WORKFLOW_FINISHED -> {
+                // Inject start_time and end_time into the event data for frontend display
+                try {
+                    com.alibaba.fastjson.JSONObject eventJson = com.alibaba.fastjson.JSONObject.parseObject(eventStr);
+                    com.alibaba.fastjson.JSONObject dataJson = eventJson.getJSONObject("data");
+                    if (dataJson != null) {
+                        WorkflowInstanceEntity inst = result.getInstance();
+                        if (inst.getStartTime() > 0) {
+                            dataJson.putIfAbsent("start_time", inst.getStartTime());
+                        }
+                        dataJson.putIfAbsent("end_time", System.currentTimeMillis());
+                        eventStr = eventJson.toJSONString();
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to inject time into workflow_finished event: {}", e.getMessage());
+                }
                 passThrough(eventStr);
                 result.setTaskEnd(true);
                 result.setWorkflowEnd(true);
@@ -179,6 +195,13 @@ public class WorkflowListener extends BaseEventListener {
                     instanceEntity.setStatus(WorkflowRunStatus.SUCCEEDED.getStatus().getDesc());
                 }
                 instanceEntity.setEndTime(System.currentTimeMillis());
+                // Delete taskId from Redis to prevent reuse by next execution in same conversation
+                try {
+                    agentRuntimeService.deleteTaskId(
+                        executeParams.getWorkflowId(), executeParams.getConversationId());
+                } catch (Exception e) {
+                    log.warn("Failed to delete taskId on workflow finish: {}", e.getMessage());
+                }
             }
             case WORKFLOW_NODE_MESSAGE -> {
                 processWorkflowNodeMessage(eventData);
@@ -245,6 +268,14 @@ public class WorkflowListener extends BaseEventListener {
             instanceService.save(instance, executeParams);
         } else if (instanceEntity != null) {
             instanceService.copy(instanceEntity, instance);
+            // If cached instance is in terminal state, clear its event list and reset for new execution
+            String cachedStatus = instanceEntity.getStatus();
+            if (WorkflowRunStatus.SUCCEEDED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)
+                || WorkflowRunStatus.FAILED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)
+                || WorkflowRunStatus.ABORTED.getStatus().getDesc().equalsIgnoreCase(cachedStatus)) {
+                instance.setEventList(new ArrayList<>());
+                instance.setStartTime(System.currentTimeMillis());
+            }
             instance.setStatus(WorkflowRunStatus.RUNNING.getStatus().getDesc());
         }
         result.setInstance(instance);

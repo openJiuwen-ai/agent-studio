@@ -46,6 +46,9 @@
       font-weight: 600;
       line-height: 36px;
       margin-right: 8px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .only-self {

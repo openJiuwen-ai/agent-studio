@@ -1,8 +1,8 @@
 /* eslint-disable eslint-comments/disable-enable-pair */
 /* eslint-disable import/no-cycle */
-import { Injectable, OnInit,
+import { ChangeDetectorRef, Injectable, OnInit,
   Output,
-  EventEmitter, } from '@angular/core';
+  EventEmitter, inject, } from '@angular/core';
 import { Graph } from '@antv/x6';
 import { cloneDeep } from 'lodash';
 import { combineLatest, debounceTime, map, takeUntil } from 'rxjs';
@@ -53,6 +53,8 @@ export abstract class ModalBaseComponent
 
   @Output('editCodeEvent') editCodeEvent = new EventEmitter();
 
+  protected modalCdr = inject(ChangeDetectorRef);
+
   constructor(
     protected override nodeServ: NodeService,
     protected override appFlowServ: AppFlowService,
@@ -67,6 +69,16 @@ export abstract class ModalBaseComponent
       .pipe(takeUntil(this.destroy$))
       .subscribe((stat) => {
         this.isConfirmLoading = stat;
+      });
+
+    this.appFlowServ
+      .nodeNameChange()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((info) => {
+        if (info && info.id === this.nodeBase.id) {
+          this.nodeBase.name = info.name;
+          this.modalCdr.detectChanges();
+        }
       });
 
     this.isNormalView = document.querySelector('body').offsetWidth >= 1920;

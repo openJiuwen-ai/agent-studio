@@ -30,7 +30,8 @@
                 nzType="default"
                 (click)="isShowGuide = !isShowGuide"
               >
-                <span>{{ 'create_guide' | i18nextEager }}</span>
+                <nz-icon [nzType]="isShowGuide ? 'up' : 'down'" nzTheme="outline" />
+                {{ 'create_guide' | i18nextEager }}
               </button>
               <button (click)="importTemplate()" [disabled]="!subscribeBtnStatus" nz-button>
                 {{ 'base_import' | i18nextEager }}

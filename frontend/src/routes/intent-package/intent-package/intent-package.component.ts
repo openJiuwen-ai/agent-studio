@@ -193,7 +193,6 @@ export class IntentPackageComponent implements OnInit, OnDestroy {
 
   searchList() {
     this.currentPage = 1;
-    this.pageSize.size = 10;
     this.getIntentManagementListData();
   }
 

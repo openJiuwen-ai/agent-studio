@@ -31,7 +31,7 @@
         accept=".xlsx"
         (change)="onUploadFile($event)"
       />
-      <button type="button" nz-button (click)="uploadIntent()">
+      <button type="button" nz-button (click)="uploadIntent()" [disabled]="isLoading">
         {{ 'add_file' | i18nextEager }}
       </button>
       <div
@@ -48,15 +48,34 @@
             uplaodFile.name
           }}</span>
         </span>
+        <button
+          type="button"
+          nz-button
+          nzType="text"
+          class="flex h-[24px] w-[24px] shrink-0 items-center justify-center p-0"
+          [attr.aria-label]="'delete' | i18nextEager"
+          [attr.title]="'delete' | i18nextEager"
+          [disabled]="isLoading"
+          (click)="removeFile()"
+        >
+          <nz-icon nzType="delete" nzTheme="outline" />
+        </button>
       </div>
     </div>
   </div>
 
-  <div class="footer" style="margin-top: 16px">
-    <button type="button" nz-button (click)="dismiss()">
+  <div class="footer" style="margin-top: 24px; text-align: right">
+    <button type="button" nz-button (click)="dismiss()" style="margin-right: 12px">
       {{ 'cancel' | i18nextEager }}
     </button>
-    <button type="button" nzType="primary" nz-button (click)="importIntent()">
+    <button
+      type="button"
+      nzType="primary"
+      nz-button
+      [nzLoading]="isLoading"
+      [disabled]="!uplaodFile.file || isLoading"
+      (click)="importIntent()"
+    >
       {{ 'import' | i18nextEager }}
     </button>
   </div>

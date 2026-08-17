@@ -320,8 +320,10 @@ export class AppCenterCardsComponent implements OnInit, OnDestroy {
     });
     modal.componentInstance.shareData = data;
     modal.componentInstance.pageType = SHARE_PAGE.apply;
-    modal.afterClose.subscribe(() => {
-      this.getCardList();
+    modal.afterClose.subscribe((result) => {
+      if (result) {
+        this.getCardList();
+      }
     });
   }
 
@@ -331,10 +333,6 @@ export class AppCenterCardsComponent implements OnInit, OnDestroy {
         resource_type: data.resource_type,
       })
       .then((res) => {
-        MessageComponent.showSuccess(
-          this.i18n.transform('app_center_cards_4'),
-          3000,
-        );
         this.getCardList();
       });
   }
