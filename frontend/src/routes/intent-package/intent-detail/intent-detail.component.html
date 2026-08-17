@@ -18,7 +18,9 @@
           [placeholder]="'input_placeholder' | i18nextEager"
           [minlength]="1"
           [maxlength]="33"
-          [formControl]="form.controls.name"
+          [(ngModel)]="editTitleValue"
+          (ngModelChange)="onEditTitleChange($event)"
+          [class.input-error]="form.controls.name.invalid && form.controls.name.dirty"
         />
 
         <div class="ml-[10px] flex items-center" *ngIf="isEditTitle">
@@ -37,7 +39,7 @@
             nz-button
             nzType="primary"
             nzDanger
-            [disabled]="!form.value.name"
+            [disabled]="form.invalid"
             [nzLoading]="isLoading"
             (click)="savePackageName()"
           >
@@ -45,7 +47,7 @@
           </button>
         </div>
       </div>
-      <div *ngIf="!isEditTitle" (click)="isEditTitle = true">
+      <div *ngIf="!isEditTitle" (click)="startEditTitle()">
         <nz-icon nzType="edit" nzTheme="outline" class="edit-icon" />
       </div>
     </div>
@@ -61,6 +63,7 @@
         [minlength]="1"
         [maxlength]="33"
         [formControl]="form.controls.name"
+        [attr.disabled]="isEditTitle ? 'disabled' : null"
         [class.input-error]="form.controls.name.invalid && (form.controls.name.dirty || form.controls.name.touched)"
       />
       <div
@@ -260,7 +263,7 @@
             type="button"
             nz-button
             nzType="primary"
-            [disabled]="!activeItem.name || !subscribeBtnStatus"
+            [disabled]="intentForm.invalid || form.invalid || !subscribeBtnStatus"
             (click)="saveIntent()"
           >
             {{ 'save' | i18nextEager }}
