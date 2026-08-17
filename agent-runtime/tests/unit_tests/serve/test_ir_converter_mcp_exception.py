@@ -253,7 +253,7 @@ def test_node_type_recorded():
         exception_process=_make_ep(),
     )
     config = _parse_exception_config(node)
-    assert config._node_type == "jiuwen.mcp"
+    assert getattr(config, "_node_type") == "jiuwen.mcp"
 
 
 def test_plugin_node_type_recorded():
@@ -262,4 +262,4 @@ def test_plugin_node_type_recorded():
         exception_process=_make_ep(),
     )
     config = _parse_exception_config(node)
-    assert config._node_type == "jiuwen.plugin"
+    assert getattr(config, "_node_type") == "jiuwen.plugin"
