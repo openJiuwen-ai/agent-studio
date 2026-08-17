@@ -199,31 +199,3 @@ export function pickLastCreatedNode<T>(
   }
   return null;
 }
-
-/**
- * 判断“新增子工作流确认弹窗”的 afterClose 回调是否应继续创建/激活节点。
- *
- * 背景：FlowComponent.addAgent 创建一个确认弹窗（UpdateNodeModalComponent），
- * 用户点 OK 时组件 close()→modalRef.close(true)，点取消时 dismiss()→
- * modalRef.close(false)，点右上角 X（nzClosable:true）触发 destroy→afterClose
- * 以 undefined 触发。原先 afterClose.subscribe(() => {...}) 忽略 result，无论
- * 确认/取消/X 都执行 handleWorkflow(info, true)（或 multiFlowType 的
- * node:click），导致取消操作仍创建并激活新子工作流节点、打开配置抽屉，破坏
- * 用户原有选择。
- *
- * 修复：afterClose 回调以本函数判定是否继续——仅确认（result === true）时才
- * 创建/激活；取消（false）或 X 关闭（undefined）一律不创建、不激活、不改变
- * 已有选择。采用严格 === true 而非 truthy 判定，确保只有显式 OK 信号
- * （close→true）才继续；任何非布尔真值（如 1 / 'true' / 对象）均不继续，避免
- * 将来其他路径误传 truthy 值时错误激活。
- *
- * 抽出纯判定核心，便于在纯 Node 环境覆盖“确认继续 / 取消中止 / X 关闭中止 /
- * 缺省值中止 / 非布尔真值不继续”等分支（项目 Karma 为空壳、无 Chrome，无法跑
- * Angular 组件级测试，故沿用本 util 的纯函数抽离方式）。
- *
- * @param result afterClose 回调收到的弹窗结果（true=确认，false=取消，undefined=X 关闭）。
- * @returns 仅当 result === true 时返回 true（继续创建/激活）；否则 false（中止）。
- */
-export function shouldProceedAfterWorkflowConfirm(result: unknown): boolean {
-  return result === true;
-}

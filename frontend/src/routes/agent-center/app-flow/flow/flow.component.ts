@@ -166,7 +166,6 @@ import {
   shouldClearHalfModalOnClose,
   planNewNodeActivation,
   pickLastCreatedNode,
-  shouldProceedAfterWorkflowConfirm,
 } from '../utils/pending-open-node.util';
 import { withDrawerAutoClose } from '../utils/drawer-auto-close.util';
 import { IAppRefList } from '@routes/agent-center/types/common.types';
@@ -6260,12 +6259,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       context: tip,
     });
     modalRef.afterClose.subscribe((result) => {
-      // 确认弹窗取消（result=false）或 X 关闭（result=undefined）时不新建/激活
-      // 子工作流节点、不改变已有选择；仅确认成功（result===true，经
-      // shouldProceedAfterWorkflowConfirm 判定）才创建并激活。修复取消仍错误
-      // 调用 handleWorkflow(info,true) 破坏原选择的 Review-2 P1。localStorage
-      // 清理始终执行，保留原有清理语义。
-      if (shouldProceedAfterWorkflowConfirm(result)) {
+      // 只有确认弹窗明确返回 true 时才新建/激活子工作流节点；取消返回 false
+      // 或 X 关闭返回 undefined 时不改变已有选择。必须使用严格比较，避免其他
+      // truthy 值误触发创建。localStorage 清理始终执行，保留原有清理语义。
+      if (result === true) {
         if (info.multiFlowType) {
           const multiNode = this.workflowDetail.workflow_details.nodes.find(
             (node: any) => {

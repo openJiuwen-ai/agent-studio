@@ -24,7 +24,6 @@ import {
   planNewNodeActivation,
   pickLastCreatedNode,
   shouldClearHalfModalOnClose,
-  shouldProceedAfterWorkflowConfirm,
 } from '../../../../routes/agent-center/app-flow/utils/pending-open-node.util';
 
 let passed = 0;
@@ -259,7 +258,7 @@ function createFlowState() {
   // —— addAgent 确认弹窗入口镜像 FlowComponent.addAgent 的 afterClose：
   //    用户在“新增子工作流”确认弹窗点 OK（close→true）才创建并激活 Workflow 节点；
   //    点取消（dismiss→false）或 X 关闭（destroy→undefined）则不创建、不激活、
-  //    不改变已有选择。afterClose 回调以 shouldProceedAfterWorkflowConfirm(result)
+  //    不改变已有选择。生产代码在 afterClose 回调中直接使用 result === true
   //    判定是否继续——仅确认（true）时才走 singleAddThenActivate（创建+激活）。
   function confirmThenAddWorkflow(
     result: unknown,
@@ -267,7 +266,7 @@ function createFlowState() {
     activate: boolean,
     plan: Plan = PLAN_CONFIG,
   ) {
-    if (!shouldProceedAfterWorkflowConfirm(result)) {
+    if (result !== true) {
       return; // 取消/X 关闭：不创建、不激活、不改变已有选择
     }
     singleAddThenActivate(nodeId, activate, plan);
@@ -566,30 +565,8 @@ check('handleWorkflow 新增 W 后删除 W：flush 后 openedNodeId=null', () =>
 // handleWorkflow(info, true)（或 multiFlowType 的 node:click），导致取消操作仍
 // 创建并激活新子工作流节点、打开配置抽屉，破坏用户原有选择。
 //
-// 修复：afterClose 回调以 shouldProceedAfterWorkflowConfirm(result) 判定——仅确认
-// （result===true）时才创建/激活；取消（false）或 X 关闭（undefined）一律不创建、
-// 不激活、不改变已有选择。纯决策抽出便于在纯 Node 环境覆盖各 result 分支。
-
-// —— 纯决策 shouldProceedAfterWorkflowConfirm ——
-check('shouldProceedAfterWorkflowConfirm(true)：确认成功 → 继续', () =>
-  assert.equal(shouldProceedAfterWorkflowConfirm(true), true),
-);
-
-check('shouldProceedAfterWorkflowConfirm(false)：取消 → 不继续', () =>
-  assert.equal(shouldProceedAfterWorkflowConfirm(false), false),
-);
-
-check('shouldProceedAfterWorkflowConfirm(undefined)：X 关闭/destroy → 不继续', () =>
-  assert.equal(shouldProceedAfterWorkflowConfirm(undefined), false),
-);
-
-check('shouldProceedAfterWorkflowConfirm(null)：缺省值 → 不继续（防御）', () =>
-  assert.equal(shouldProceedAfterWorkflowConfirm(null), false),
-);
-
-check('shouldProceedAfterWorkflowConfirm(1)：非布尔真值 → 不继续（严格 === true）', () =>
-  assert.equal(shouldProceedAfterWorkflowConfirm(1), false),
-);
+// 修复：afterClose 回调在生产代码中直接使用 result === true 判定——仅确认时
+// 创建/激活；取消（false）或 X 关闭（undefined）一律不创建、不激活、不改变已有选择。
 
 // —— addAgent 确认弹窗入口时序不变量 ——
 //
