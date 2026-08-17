@@ -1,6 +1,8 @@
 # coding: utf-8
 """ir_converter._parse_exception_config 单元测试 — MCP 异常处理相关。
 
+覆盖 _parse_exception_config 中 MCP 节点 outputs_schema 置空、handleType 解析、timeout/retry 边界值等场景。
+
 重点覆盖：
 1. MCP 节点 outputs_schema 置空（Bug #4 修复）
 2. Plugin / Code 等非 MCP 节点走正常 _convert_schema
