@@ -146,7 +146,8 @@ export class PluginReferenceComponent {
           return;
         }
         this.relations = res.relations;
-        this.srcData.data = this.relations.filter(item => item.app_type === reqType);
+        // 后端 selectByResourceIdAndVersionId 已按 app_type 过滤，前端直接使用即可
+        this.srcData.data = this.relations;
         this.totalNumber = res.count;
         this.isLoading = false;
         this.cdr.markForCheck();
@@ -183,6 +184,12 @@ export class PluginReferenceComponent {
     // 切 Tab 回到第 1 页并清零总数，避免沿用旧 Tab 的分页/总数导致新 Tab 空表错位
     this.currentPage = 1;
     this.totalNumber = 0;
+    this.getReferenceList();
+  }
+
+  public onPageSizeChange() {
+    // 切换每页条数后回到第 1 页并重新请求
+    this.currentPage = 1;
     this.getReferenceList();
   }
 }
