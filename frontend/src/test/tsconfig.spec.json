@@ -6,7 +6,8 @@
       "jasmine",
       "node"
     ],
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true
   },
   "files": [
     "test.ts",
@@ -14,6 +15,6 @@
   ],
   "include": [
     "**/*.spec.ts",
-    "**/*.d.ts"
+    "../**/*.d.ts"
   ]
 }
