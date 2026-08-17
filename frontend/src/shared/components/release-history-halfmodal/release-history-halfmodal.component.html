@@ -45,6 +45,14 @@
             </div>
             <div class="flex items-center">
               <span>{{'releasehistoryhalfmodalcomponent_77'| i18nextEager}}{{ card.version_id }}</span>
+              <span
+                class="copy-version-id"
+                nz-tooltip
+                [nzTooltipTitle]="'copy' | i18nextEager"
+                (click)="clickCopy($event, card.version_id)"
+              >
+                <nz-icon nzType="copy" nzTheme="outline"></nz-icon>
+              </span>
             </div>
             <div class="flex items-center">
               <span
