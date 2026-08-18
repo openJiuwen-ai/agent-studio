@@ -1628,8 +1628,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         createdNodes.push(this.addActionNode(apiNodeData));
         this.debounceSetMiniMap();
       });
-      // 批量结束只激活最后一个实际创建的非空 Node，不为每项打开抽屉；
-      // activateAfterCreate=false 时 pickLastCreatedNode 返回 null，activateNewNode 整体跳过。
+      /**
+       * 批量结束只激活最后一个实际创建的非空 Node，不为每项打开抽屉；
+       * activateAfterCreate=false 时 pickLastCreatedNode 返回 null，activateNewNode 整体跳过。
+       */
       this.activateNewNode(
         pickLastCreatedNode(createdNodes, activateAfterCreate),
       );
@@ -6320,9 +6322,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           ...apiNodeData.configs,
           ...config,
         };
-        // 用户新增子工作流节点：经 pickLastCreatedNode 统一机制决定是否激活；
-        // activateAfterCreate=false 时返回 null，activateNewNode 整体跳过，
-        // 保护模板加载/复制/替换/历史回放等非用户新增调用。
+        /**
+         * 用户新增子工作流节点：经 pickLastCreatedNode 统一机制决定是否激活；
+         * activateAfterCreate=false 时返回 null，activateNewNode 整体跳过，
+         * 保护模板加载/复制/替换/历史回放等非用户新增调用。
+         */
         const addedNode = this.addActionNode(apiNodeData);
         this.activateNewNode(
           pickLastCreatedNode([addedNode], activateAfterCreate),
