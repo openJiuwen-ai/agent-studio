@@ -152,7 +152,7 @@ async def rerank(model, auth, request, projected_headers: Optional[dict] = None)
     """rerank 入口，供 agent-builder ``/v1/agent-builder/rerank`` facade 调用。
 
     移植自 Java ``MaasRerankRequestAdaptor`` + ``AbstractRequestAdapter.resBodyConvert``：
-    - 上游请求体：``{model, query, documents}``（``documents`` ← ``request.docs``）；
+    - 上游请求体：``{model, query, documents, texts}``（``documents``/``texts`` ← ``request.docs``，兼容不同上游协议）；
       ``top_n`` 不上传，仅用于响应截断（与 Java 一致）。
     - POST 到 ``model.api_url``（verbatim，``get_chat_connection`` 已做 ``/chat/completions`` 兜底裁剪，
       rerank URL 无此后缀故为 no-op）。
@@ -189,10 +189,12 @@ async def rerank(model, auth, request, projected_headers: Optional[dict] = None)
 
 
 
+    docs = list(request.docs or [])
     body = {
         "model": conn.model_name,
         "query": request.query,
-        "documents": list(request.docs or []),
+        "documents": docs,
+        "texts": docs,
         "return_documents": True,
     }
     try:
