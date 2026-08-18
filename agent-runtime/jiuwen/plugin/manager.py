@@ -17,6 +17,7 @@ from jiuwen.common.configs.env_constants import (
     PLUGIN_STORE_KEY,
 )
 from jiuwen.common.embedding.bert import TextEmbeddingService
+from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 from jiuwen.common.utils.utils import safe_json_loads_raise_exception
 from jiuwen.plugin.common import constant
@@ -126,7 +127,8 @@ class PluginManager:
         elif not isinstance(json_data, list):
             logger.error("json data is not list")
             raise exception.PluginCommonException(
-                message=exception.ExceptionsMessage.TypeError
+                code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+                message=exception.ExceptionsMessage.TypeError,
             )
         else:
             json_list = json_data
@@ -449,7 +451,8 @@ class PluginManager:
         """
         if not isinstance(top_k, int) or not isinstance(query, str):
             raise exception.PluginCommonException(
-                message=exception.ExceptionsMessage.TypeError
+                code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+                message=exception.ExceptionsMessage.TypeError,
             )
         if not query:
             raise exception.PluginCommonException(
@@ -514,7 +517,8 @@ class PluginManager:
         """
         if not isinstance(plugin_name, str) or not isinstance(func_name, str):
             raise exception.PluginCommonException(
-                message=exception.ExceptionsMessage.TypeError
+                code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+                message=exception.ExceptionsMessage.TypeError,
             )
         results = self.plugin_mapper.get_plugin(
             plugin_name=plugin_name,
@@ -561,7 +565,8 @@ class PluginManager:
             isinstance(plugin_id, int) for plugin_id in plugin_ids
         ):
             raise exception.PluginCommonException(
-                message=exception.ExceptionsMessage.TypeError
+                code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+                message=exception.ExceptionsMessage.TypeError,
             )
         result = []
         plugin_list = self.plugin_mapper.get_plugin(id=plugin_ids)
@@ -673,7 +678,8 @@ class PluginManager:
         id_list = []
         if not isinstance(plugin_name, str) or not isinstance(func_name, str):
             raise exception.PluginCommonException(
-                message=exception.ExceptionsMessage.TypeError
+                code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+                message=exception.ExceptionsMessage.TypeError,
             )
         if not self.plugin_mapper.get_plugin(
             plugin_name=plugin_name,
@@ -921,7 +927,8 @@ class PluginManager:
             plugin_list = plugins
         else:
             raise exception.PluginCommonException(
-                message=exception.ExceptionsMessage.TypeError
+                code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+                message=exception.ExceptionsMessage.TypeError,
             )
         processed_plugin_list = []
         for import_item in plugin_list:

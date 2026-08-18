@@ -2,6 +2,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Field data processor — 事件字段转换核心逻辑."""
 
+import html
 import json
 import time
 from typing import Dict, Any, List
@@ -112,6 +113,8 @@ class FieldDataProcessor:
         error_code, error_msg, error_reason, error_suggestion = (
             ErrorContextBuilder.get_language_context(trace.language, code)
         )
+        if error_message and error_message != error_msg:
+            error_msg = f"{error_msg}：{html.escape(error_message)}"
         error_data_field = ErrorEventDataField(
             code=code,
             message=error_message,

@@ -40,6 +40,8 @@ from agent_runtime.event_handler.base.conversation import (
 from agent_runtime.context.request_context import _request_ctx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from jiuwen.common.exception import JiuWenBaseException
+from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.serve.controllers.execution.enum import PlanModeType, IRType
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
 from openjiuwen.core.common.logging import workflow_logger, set_session_id
@@ -497,7 +499,10 @@ async def _execute_agent_run(
         handler_type = await _resolve_handler_type(ir_path)
     except Exception as e:
         workflow_logger.error(f"Failed to resolve handler type from IR: {ir_path}, error: {e}")
-        raise
+        raise JiuWenBaseException(
+            error_code=StatusCode.IR_DATA_JSON_LOAD_FAILED.code,
+            message=f"resolve handler type failed: {e}",
+        ) from e
 
     if stream:
         return await _encapsulate_stream_response(

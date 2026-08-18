@@ -406,8 +406,8 @@ class SubWorkflow(Invokable, InteractiveComponent):
             SubWorkflowConfig.model_validate(self._conf)
         except ValidationError as e:
             raise JiuWenBaseException(
-                error_code=StatusCode.SUB_WORKFLOW_CONFIGURATION_VALIDATION_FAILURE.code,
-                message=StatusCode.SUB_WORKFLOW_CONFIGURATION_VALIDATION_FAILURE.errmsg.format(
+                error_code=StatusCode.SUB_WORKFLOW_CONFIGURATION_VALIDATION_ERROR.code,
+                message=StatusCode.SUB_WORKFLOW_CONFIGURATION_VALIDATION_ERROR.errmsg.format(
                     msg=format_pydantic_validation_error_message(e)
                     if LOG_VERBOSE_MODE
                     else f"{type(e).__name__}"

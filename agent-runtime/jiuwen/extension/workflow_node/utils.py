@@ -475,6 +475,7 @@ class JiuWenBaseException(ExecutionError):
         """
         super().__init__(status=StatusCode.ERROR, msg=message)
         self._error_code = error_code
+        self.code = error_code
         self.message = message
         self.node_id = node_id
         self.node_name = node_name

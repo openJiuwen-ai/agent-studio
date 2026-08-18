@@ -53,6 +53,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -235,6 +236,16 @@ public class JiuWenPromptTaskJob implements Job {
                 log.warn("optimize template delete failed, response code: {}", jIuWenPromptBaseRes.getCode());
                 throw new AgentStudioException(StudioError.OPTIMIZE_TEMPLATE_DELETE_FAILED);
             }
+        } catch (HttpServerErrorException e) {
+            String responseBody = e.getResponseBodyAsString();
+            if (responseBody != null && responseBody.contains("\"code\":102155")) {
+                log.warn("jiuwen optimization job not found, taskId: {}, skip remote delete",
+                    promptTaskDetailVo.getJiuwenTaskId());
+                return;
+            }
+            log.error("jiuwen server returned error, taskId: {}, response: {}",
+                promptTaskDetailVo.getJiuwenTaskId(), responseBody);
+            throw new AgentStudioException(StudioError.DELETE_OPTIMIZATION_TASK, e);
         } catch (ResourceAccessException e) {
             log.error("optimization template service access failed, error: {}", e.getMessage());
             throw new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED);

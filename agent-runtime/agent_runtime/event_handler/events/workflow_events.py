@@ -2,6 +2,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Workflow event processor"""
 
+import html
 import time
 import traceback
 from typing import Dict, Any, List
@@ -166,6 +167,9 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         error_code, error_msg, error_reason, error_suggestion = (
             ErrorContextBuilder.get_language_context(trace.language, code)
         )
+        raw_message = data.get("message")
+        if raw_message and raw_message != error_msg:
+            error_msg = f"{error_msg}：{html.escape(raw_message)}"
         error_data_field = ErrorEventDataField(
             node_id=data.get("node_id"),
             node_name=data.get("node_name"),

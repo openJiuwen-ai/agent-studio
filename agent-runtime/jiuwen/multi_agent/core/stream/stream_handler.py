@@ -8,6 +8,7 @@ from typing import Any, AsyncGenerator
 
 from jiuwen.common.configs.env_constants import STREAM_FRAME_TIMEOUT_KEY
 from jiuwen.common.exception.base import JiuWenBaseException
+from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 
 DEFAULT_STREAM_FRAME_TIMEOUT = 300
@@ -49,11 +50,12 @@ class StreamHandler:
                     await self.stop()
                     break
                 yield msg
-            except asyncio.TimeoutError:
+            except asyncio.TimeoutError as e:
                 logger.error("StreamHandler get stream data time out")
                 raise JiuWenBaseException(
-                    -1, "StreamHandler get stream data time out"
-                ) from asyncio.TimeoutError
+                    StatusCode.EXECUTOR_STREAM_DATA_ERROR.code,
+                    "StreamHandler get stream data time out",
+                ) from e
             except asyncio.CancelledError:
                 logger.warning("StreamHandler is cancelled, stop the stream data queue")
                 await self.stop()

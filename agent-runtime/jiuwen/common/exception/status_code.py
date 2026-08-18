@@ -335,7 +335,7 @@ class StatusCode(Enum):
         "Please input list of RestFulApi or Function. not {}",
     )
     TASK_PARAM_FIELD_NAME_ERROR = (101104, "Found wrong field name: {}")
-    TASK_PLAN_CONFIG_INTI_FAILED = (101105, "Plan config init failed")
+    TASK_PLAN_CONFIG_INIT_FAILED = (101105, "Plan config init failed")
     TASK_MODEL_INIT_FAILED = (101106, "Model init failed")
     TASK_PLUGIN_INIT_FAILED = (101107, "Plugin init failed")
 
@@ -344,7 +344,7 @@ class StatusCode(Enum):
         101_2_00,
         "{len} validation error{s} for {model}:{description}",
     )
-    INVOKABLE_JSON_ROOT_TYPE_ERR = (
+    INVOKABLE_JSON_ROOT_TYPE_ERROR = (
         101_2_01,
         "Component JSON can only be a component list or a single component (root type is list or dict), got {type}.",
     )
@@ -429,7 +429,7 @@ class StatusCode(Enum):
     )
     WORKFLOW_CODE_INVOKE_UNEXPECTED_ERROR = (
         101595,
-        "{error_msg} component execute error, error message={error_msg}",
+        "Code component execute error, error message={error_msg}",
     )
 
     # branch组件 101621-101650
@@ -497,7 +497,7 @@ class StatusCode(Enum):
     )
     WORKFLOW_INTENT_DETECTION_KG_ERROR = (
         101098,
-        "Emmbedding Search failed with error message={error_msg}",
+        "Embedding Search failed with error message={error_msg}",
     )
 
     # questioner组件 101711-101740
@@ -549,7 +549,7 @@ class StatusCode(Enum):
         "workflow id: {workflow_id} based on IR, check if the sub workflow exists",
     )
     SUB_WORKFLOW_INIT_ERROR = (101802, "Sub workflow: {workflow_id} init error")
-    SUB_WORKFLOW_CONFIGURATION_VALIDATION_FAILURE = (
+    SUB_WORKFLOW_CONFIGURATION_VALIDATION_ERROR = (
         101803,
         "Sub workflow component configuration validation failure, msg={msg}",
     )
@@ -769,7 +769,7 @@ class StatusCode(Enum):
 
     # Prompt引擎     102000~102999
     # Prompt 引擎  - 模板管理 102050 - 102080
-    LLM_NO_RET_ERROR = (102001, "LLM service return is None.")
+    LLM_NO_RETURN_ERROR = (102001, "LLM service return is None.")
     HTTP_NET_WORK_ERROR = (102002, "Http request error")
     LLM_FALSE_RESULT_ERROR = (
         102003,
@@ -1152,12 +1152,11 @@ class StatusCode(Enum):
         "Strategy {strategy_name} not found for provider {provider}.",
     )
     BUILTIN_STRATEGY_PATH_NOT_FOUND_ERROR = (109016, "Strategy {path} not found.")
-    AINVOKE_STREATEGY_ERROR = (109017, "Strategy component ainvoke unexpected error")
+    AINVOKE_STRATEGY_ERROR = (109017, "Strategy component ainvoke unexpected error")
     AGENT_MAX_ITERATION_INVALID = (
         109018,
         "Agent config max_iteration must be an integer > 0",
     )
-    PLUGIN_NOT_FOUND_ERROR = (109019, "Plugin url not found")
 
     # 记忆引擎模块 109300~109499
     MEMORY_ENGINE_IR_CONFIG_ERROR = (
