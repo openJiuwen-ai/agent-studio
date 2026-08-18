@@ -42,9 +42,11 @@ function check(name: string, fn: () => void): void {
   }
 }
 
-// ===========================================================================
-// 一、纯决策 planNewNodeActivation
-// ===========================================================================
+/**
+ * ===========================================================================
+ * 一、纯决策 planNewNodeActivation
+ * ===========================================================================
+ */
 
 // —— 有配置组件的普通节点（如 LLM）：选中 + 打开抽屉 ——
 check('LLM 节点（hasConfigComponent=true）：select=true, openDrawer=true', () =>
@@ -106,27 +108,29 @@ check('nodeInfo 为 undefined：不激活', () =>
   ),
 );
 
-// ===========================================================================
-// 二、新增路径时序不变量（复用 token 机制，镜像 activateNewNode 副作用顺序）
-// ===========================================================================
-//
-// 模拟器镜像 FlowComponent.activateNewNode + 既有 scheduleOpenNodeModal /
-// invalidatePendingOpenNode / openNodeModal 守卫的真实行为（仅状态层面，不依赖
-// 真实 X6/Angular）：
-//   activateNewNode(nodeId, plan):
-//     invalidate()         // openNodeModalToken++（取消此前待打开，含 Comment 不调度时也生效）
-//     closeDrawer()        // closeNodeConfigDrawer：关旧抽屉、触发旧 afterClose
-//     if plan.select:      // graph.resetSelection(nodeId) + NodeService.setCurrSelectedNode(nodeId)
-//       selectedId = nodeId; currSelected = nodeId
-//     if plan.openDrawer:  // scheduleOpenNodeModal：++token，250ms 后仅最新 token 且节点仍在才 open
-//       schedule(nodeId)
-//   interrupt():           // edge:click / blank:click：invalidate + closeDrawer + 清空选中
-//   deleteNode(nodeId):    // 删除：移出 graph，invalidate（取消待打开）
-//   flush():               // 推进 250ms：仅当前 token 且节点仍在 graph 时 open
-//
-// 每个 openNodeModal 创建抽屉时自增 halfModalVersion 并捕获 (closingRef, closingVersion)
-// 到 afterClose 闭包；afterClose 仅当实例与版本均一致才清空 halfModalNodeId
-// （复用 shouldClearHalfModalOnClose）。
+/**
+ * ===========================================================================
+ * 二、新增路径时序不变量（复用 token 机制，镜像 activateNewNode 副作用顺序）
+ * ===========================================================================
+ *
+ * 模拟器镜像 FlowComponent.activateNewNode + 既有 scheduleOpenNodeModal /
+ * invalidatePendingOpenNode / openNodeModal 守卫的真实行为（仅状态层面，不依赖
+ * 真实 X6/Angular）：
+ *   activateNewNode(nodeId, plan):
+ *     invalidate()         // openNodeModalToken++（取消此前待打开，含 Comment 不调度时也生效）
+ *     closeDrawer()        // closeNodeConfigDrawer：关旧抽屉、触发旧 afterClose
+ *     if plan.select:      // graph.resetSelection(nodeId) + NodeService.setCurrSelectedNode(nodeId)
+ *       selectedId = nodeId; currSelected = nodeId
+ *     if plan.openDrawer:  // scheduleOpenNodeModal：++token，250ms 后仅最新 token 且节点仍在才 open
+ *       schedule(nodeId)
+ *   interrupt():           // edge:click / blank:click：invalidate + closeDrawer + 清空选中
+ *   deleteNode(nodeId):    // 删除：移出 graph，invalidate（取消待打开）
+ *   flush():               // 推进 250ms：仅当前 token 且节点仍在 graph 时 open
+ *
+ * 每个 openNodeModal 创建抽屉时自增 halfModalVersion 并捕获 (closingRef, closingVersion)
+ * 到 afterClose 闭包；afterClose 仅当实例与版本均一致才清空 halfModalNodeId
+ * （复用 shouldClearHalfModalOnClose）。
+ */
 interface Plan {
   select: boolean;
   openDrawer: boolean;
@@ -224,11 +228,13 @@ function createFlowState() {
     }
   }
 
-  // —— 批量新增入口镜像 FlowComponent.addAllToolsByPluginId：
-  //    forEach 对每个工具调用 addActionNode（返回实际创建 Node），结束后只对
-  //    “最后一个实际创建的非空 Node”经 pickLastCreatedNode 选取后调用一次
-  //    activateNewNode（而非为每项打开抽屉）。activate=false 时不激活任何节点，
-  //    保护非用户主动新增的调用方。
+  /**
+   * —— 批量新增入口镜像 FlowComponent.addAllToolsByPluginId：
+   *    forEach 对每个工具调用 addActionNode（返回实际创建 Node），结束后只对
+   *    “最后一个实际创建的非空 Node”经 pickLastCreatedNode 选取后调用一次
+   *    activateNewNode（而非为每项打开抽屉）。activate=false 时不激活任何节点，
+   *    保护非用户主动新增的调用方。
+   */
   function batchAddThenActivate(
     nodeIds: Array<string>,
     activate: boolean,
@@ -243,9 +249,11 @@ function createFlowState() {
     activateNewNode(pickLastCreatedNode(created, activate), plan);
   }
 
-  // —— handleWorkflow 入口镜像 FlowComponent.handleWorkflow：创建单个 Workflow 节点后，
-  //    经 pickLastCreatedNode([addedNode], activate) 决定是否激活（统一机制）。
-  //    activate=false 时不激活（保护模板加载/复制/替换/历史回放等非用户新增调用）。
+  /**
+   * —— handleWorkflow 入口镜像 FlowComponent.handleWorkflow：创建单个 Workflow 节点后，
+   *    经 pickLastCreatedNode([addedNode], activate) 决定是否激活（统一机制）。
+   *    activate=false 时不激活（保护模板加载/复制/替换/历史回放等非用户新增调用）。
+   */
   function singleAddThenActivate(
     nodeId: string,
     activate: boolean,
@@ -402,9 +410,11 @@ check('A→B：旧 A 抽屉 afterClose 晚到不清空新 B 状态（复用 shou
   );
 });
 
-// —— 已点击排队 A（node:click 路径）后 250ms 内新增 B：A 失效，B 最终打开 ——
-// 镜像 node:click 调度 A → 用户改走“新增”入口加 B：B 的 activateNewNode 调用
-// invalidate() 令 A 的待打开失效，再调度 B。
+/**
+ * —— 已点击排队 A（node:click 路径）后 250ms 内新增 B：A 失效，B 最终打开 ——
+ * 镜像 node:click 调度 A → 用户改走“新增”入口加 B：B 的 activateNewNode 调用
+ * invalidate() 令 A 的待打开失效，再调度 B。
+ */
 check('点击排队 A 后新增 B：A 失效，flush 后 openedNodeId=B', () => {
   const f = createFlowState();
   f.graph.add('A');
@@ -417,19 +427,21 @@ check('点击排队 A 后新增 B：A 失效，flush 后 openedNodeId=B', () => 
   assert.equal(f.state.openedNodeId, 'B');
 });
 
-// ===========================================================================
-// 三、Review-1 P1 入口补强：addAllToolsByPluginId 批量 + handleWorkflow 单新增
-// ===========================================================================
-//
-// 两个入口均绕过 createNode 直接调用 addActionNode，原先返回值被丢弃，故不进入
-// activateNewNode。修复方案：addActionNode 已返回实际创建 Node；这两个入口各自增加
-// 可选 activateAfterCreate 标志（默认 false，保护非用户新增调用方），经统一纯决策
-// pickLastCreatedNode(createdNodes, activate) 选出激活目标后调用一次 activateNewNode。
-//
-// pickLastCreatedNode 语义：仅当激活开关开启时，返回 createdNodes 中最后一个非空
-// 实际创建节点；否则返回 null（不激活任何节点）。批量“添加插件全部工具”据此在
-// forEach 结束后只激活最后一个，而非为每项打开抽屉；handleWorkflow 单新增传
-// [addedNode]，等价于“开启时激活该节点”。泛型 T 避免 util 依赖 X6 Node 类型。
+/**
+ * ===========================================================================
+ * 三、Review-1 P1 入口补强：addAllToolsByPluginId 批量 + handleWorkflow 单新增
+ * ===========================================================================
+ *
+ * 两个入口均绕过 createNode 直接调用 addActionNode，原先返回值被丢弃，故不进入
+ * activateNewNode。修复方案：addActionNode 已返回实际创建 Node；这两个入口各自增加
+ * 可选 activateAfterCreate 标志（默认 false，保护非用户新增调用方），经统一纯决策
+ * pickLastCreatedNode(createdNodes, activate) 选出激活目标后调用一次 activateNewNode。
+ *
+ * pickLastCreatedNode 语义：仅当激活开关开启时，返回 createdNodes 中最后一个非空
+ * 实际创建节点；否则返回 null（不激活任何节点）。批量“添加插件全部工具”据此在
+ * forEach 结束后只激活最后一个，而非为每项打开抽屉；handleWorkflow 单新增传
+ * [addedNode]，等价于“开启时激活该节点”。泛型 T 避免 util 依赖 X6 Node 类型。
+ */
 
 // —— 纯决策 pickLastCreatedNode ——
 check('pickLastCreatedNode([A,B,C], true)：返回最后一个 C', () =>
@@ -472,10 +484,12 @@ check('pickLastCreatedNode([A], false)：单元素 activate=false 返回 null', 
   assert.equal(pickLastCreatedNode(['A'], false), null),
 );
 
-// —— addAllToolsByPluginId 批量入口时序不变量 ——
-//
-// 批量新增 [P1,P2,P3] 且 activate=true：activateNewNode 仅被调用 1 次（非 3 次），
-// 目标为最后一个实际创建节点 P3；flush 后仅 P3 选中、仅 P3 抽屉打开。
+/**
+ * —— addAllToolsByPluginId 批量入口时序不变量 ——
+ *
+ * 批量新增 [P1,P2,P3] 且 activate=true：activateNewNode 仅被调用 1 次（非 3 次），
+ * 目标为最后一个实际创建节点 P3；flush 后仅 P3 选中、仅 P3 抽屉打开。
+ */
 check('批量新增 [P1,P2,P3] activate=true：activateCount=1，flush 后 openedNodeId/selectedId=P3', () => {
   const f = createFlowState();
   f.batchAddThenActivate(['P1', 'P2', 'P3'], true);
@@ -519,10 +533,12 @@ check('批量新增 P3 后 edge/blank 中断：flush 后 openedNodeId=null', () 
   assert.equal(f.state.currSelected, '');
 });
 
-// —— handleWorkflow 单新增入口时序不变量 ——
-//
-// 用户新增 Workflow 节点（activate=true）：activateNewNode 调用 1 次、目标为该节点；
-// flush 后该节点选中并打开配置抽屉（Workflow 在 NodeMap 中 → openDrawer=true）。
+/**
+ * —— handleWorkflow 单新增入口时序不变量 ——
+ *
+ * 用户新增 Workflow 节点（activate=true）：activateNewNode 调用 1 次、目标为该节点；
+ * flush 后该节点选中并打开配置抽屉（Workflow 在 NodeMap 中 → openDrawer=true）。
+ */
 check('handleWorkflow 单新增 W activate=true：activateCount=1，flush 后 openedNodeId/selectedId=W', () => {
   const f = createFlowState();
   f.singleAddThenActivate('W', true);
@@ -534,8 +550,10 @@ check('handleWorkflow 单新增 W activate=true：activateCount=1，flush 后 op
   assert.equal(f.state.showNodeConfigDrawer, true);
 });
 
-// handleWorkflow activate=false（模板加载/复制/替换/历史回放等非用户新增调用）：
-// 完全不激活，保护既有行为。
+/**
+ * handleWorkflow activate=false（模板加载/复制/替换/历史回放等非用户新增调用）：
+ * 完全不激活，保护既有行为。
+ */
 check('handleWorkflow activate=false：activateCount=0，flush 后无选中无抽屉', () => {
   const f = createFlowState();
   f.singleAddThenActivate('W', false);
@@ -556,11 +574,11 @@ check('handleWorkflow 新增 W 后删除 W：flush 后 openedNodeId=null', () =>
   assert.equal(f.state.openedNodeId, null);
 });
 
-// ===========================================================================
-// 四、Review-2 P1：新增 Workflow 确认弹窗取消不触发新增/激活
-// ===========================================================================
-//
 /**
+ * ===========================================================================
+ * 四、Review-2 P1：新增 Workflow 确认弹窗取消不触发新增/激活
+ * ===========================================================================
+ *
  * 背景：addAgent 创建“新增子工作流”确认弹窗（UpdateNodeModalComponent）。用户点
  * OK 时 close()→modalRef.close(true)，点取消时 dismiss()→modalRef.close(false)，
  * 点 X 关闭（nzClosable）触发 destroy→afterClose 以 undefined 触发。原先
@@ -572,9 +590,11 @@ check('handleWorkflow 新增 W 后删除 W：flush 后 openedNodeId=null', () =>
  * 创建/激活；取消（false）或 X 关闭（undefined）一律不创建、不激活、不改变已有选择。
  */
 
-// —— addAgent 确认弹窗入口时序不变量 ——
-//
-// 确认（true）：创建并激活 Workflow 节点，flush 后选中并打开抽屉。
+/**
+ * —— addAgent 确认弹窗入口时序不变量 ——
+ *
+ * 确认（true）：创建并激活 Workflow 节点，flush 后选中并打开抽屉。
+ */
 check('确认弹窗 OK：activateCount=1，flush 后 openedNodeId/selectedId=W', () => {
   const f = createFlowState();
   f.confirmThenAddWorkflow(true, 'W', true);
@@ -600,8 +620,10 @@ check('确认弹窗取消(false)：activateCount=0，无选中无抽屉，W 未�
   assert.equal(f.state.showNodeConfigDrawer, false);
 });
 
-// 关键：取消必须不破坏用户原有选择。已选中并打开 A，再取消新增 W → A 仍选中、
-// A 抽屉仍打开、activateCount 不增、W 未创建（修复前会错误激活 W 并打开其抽屉）。
+/**
+ * 关键：取消必须不破坏用户原有选择。已选中并打开 A，再取消新增 W → A 仍选中、
+ * A 抽屉仍打开、activateCount 不增、W 未创建（修复前会错误激活 W 并打开其抽屉）。
+ */
 check('已选中 A 后取消新增 W：A 选择/抽屉保持不变，W 未创建', () => {
   const f = createFlowState();
   f.graph.add('A');
