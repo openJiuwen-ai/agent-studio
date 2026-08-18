@@ -255,11 +255,13 @@ function createFlowState() {
     activateNewNode(pickLastCreatedNode([nodeId], activate), plan);
   }
 
-  // —— addAgent 确认弹窗入口镜像 FlowComponent.addAgent 的 afterClose：
-  //    用户在“新增子工作流”确认弹窗点 OK（close→true）才创建并激活 Workflow 节点；
-  //    点取消（dismiss→false）或 X 关闭（destroy→undefined）则不创建、不激活、
-  //    不改变已有选择。生产代码在 afterClose 回调中直接使用 result === true
-  //    判定是否继续——仅确认（true）时才走 singleAddThenActivate（创建+激活）。
+  /**
+   * —— addAgent 确认弹窗入口镜像 FlowComponent.addAgent 的 afterClose：
+   * 用户在“新增子工作流”确认弹窗点 OK（close→true）才创建并激活 Workflow 节点；
+   * 点取消（dismiss→false）或 X 关闭（destroy→undefined）则不创建、不激活、
+   * 不改变已有选择。生产代码在 afterClose 回调中直接使用 result === true
+   * 判定是否继续——仅确认（true）时才走 singleAddThenActivate（创建+激活）。
+   */
   function confirmThenAddWorkflow(
     result: unknown,
     nodeId: string,
@@ -558,14 +560,14 @@ check('handleWorkflow 新增 W 后删除 W：flush 后 openedNodeId=null', () =>
 // 四、Review-2 P1：新增 Workflow 确认弹窗取消不触发新增/激活
 // ===========================================================================
 //
-// 背景：addAgent 创建“新增子工作流”确认弹窗（UpdateNodeModalComponent）。用户点
-// OK 时 close()→modalRef.close(true)，点取消时 dismiss()→modalRef.close(false)，
-// 点 X 关闭（nzClosable）触发 destroy→afterClose 以 undefined 触发。原先
-// afterClose.subscribe(() => {...}) 忽略 result，无论确认/取消/X 都调用
-// handleWorkflow(info, true)（或 multiFlowType 的 node:click），导致取消操作仍
-// 创建并激活新子工作流节点、打开配置抽屉，破坏用户原有选择。
-//
 /**
+ * 背景：addAgent 创建“新增子工作流”确认弹窗（UpdateNodeModalComponent）。用户点
+ * OK 时 close()→modalRef.close(true)，点取消时 dismiss()→modalRef.close(false)，
+ * 点 X 关闭（nzClosable）触发 destroy→afterClose 以 undefined 触发。原先
+ * afterClose.subscribe(() => {...}) 忽略 result，无论确认/取消/X 都调用
+ * handleWorkflow(info, true)（或 multiFlowType 的 node:click），导致取消操作仍
+ * 创建并激活新子工作流节点、打开配置抽屉，破坏用户原有选择。
+ *
  * 修复：afterClose 回调在生产代码中直接使用 result === true 判定——仅确认时
  * 创建/激活；取消（false）或 X 关闭（undefined）一律不创建、不激活、不改变已有选择。
  */
