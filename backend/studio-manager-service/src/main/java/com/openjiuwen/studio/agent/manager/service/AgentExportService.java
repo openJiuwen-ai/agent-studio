@@ -32,6 +32,7 @@ import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.ModelExportEntity;
 import com.openjiuwen.studio.agent.manager.entity.ModelStrategyExportEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
+import com.openjiuwen.studio.agent.manager.entity.ShareResourceEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
 import com.openjiuwen.studio.agent.manager.enums.ExportModeEnum;
@@ -40,6 +41,7 @@ import com.openjiuwen.studio.agent.manager.enums.relation.ReferenceTypeEnum;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ShareResourceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceMgmtService;
@@ -103,6 +105,9 @@ public class AgentExportService {
 
     @Autowired
     private AgentMapper agentMapper;
+
+    @Autowired
+    private ShareResourceMapper shareResourceMapper;
 
     @Autowired
     private ReleaseVersionMapper releaseVersionMapper;
@@ -652,7 +657,19 @@ public class AgentExportService {
             Map<String, String> workflowTraceIdMap = workflowEntities.stream()
                 .filter(w -> StringUtils.isNotEmpty(w.getTraceId()))
                 .collect(Collectors.toMap(WorkflowEntity::getId, WorkflowEntity::getTraceId, (v1, v2) -> v1));
-            workflowMappings.forEach(m -> m.setTraceId(workflowTraceIdMap.get(m.getResourceId())));
+            workflowMappings.forEach(m -> {
+                String traceId = workflowTraceIdMap.get(m.getResourceId());
+                // 本地查不到 traceId（共享子工作流在源空间，selectByWorkflowIdList 带 workspace 过滤查不到），
+                // 从 t_share_resource 按 resource_id 补 traceId（共享子资源 mapping.resourceId = 源空间资源id = t_share_resource.resource_id）
+                if (StringUtils.isEmpty(traceId)) {
+                    ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(
+                        m.getResourceId());
+                    if (shareResource != null) {
+                        traceId = shareResource.getTraceId();
+                    }
+                }
+                m.setTraceId(traceId);
+            });
         }
 
         List<MappingEntity> controllerMappings = mappingEntities.stream()
