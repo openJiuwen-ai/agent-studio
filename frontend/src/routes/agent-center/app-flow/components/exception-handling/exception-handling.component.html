@@ -39,7 +39,7 @@
             <nz-input-number
               style="width: 100%"
               [(ngModel)]="exception_process.timeout"
-              (blur)="onTimeoutChange()"
+              (ngModelChange)="onTimeoutChange()"
               [nzPlaceHolder]="'input_placeholder' | i18nextEager"
               [nzMin]="minTimeout"
               [nzMax]="maxTimeout"
@@ -103,7 +103,7 @@
                   [options]="editorOps"
                   name="ignoreMsg"
                   [uri]="editorUri"
-                  (blur)="handelChangeValue()"
+                  (ngModelChange)="handelChangeValue()"
                 ></ngx-monaco-editor>
               </div>
             </div>
