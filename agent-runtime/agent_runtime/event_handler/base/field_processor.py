@@ -117,7 +117,7 @@ class FieldDataProcessor:
             error_msg = f"{error_msg}：{html.escape(error_message)}"
         error_data_field = ErrorEventDataField(
             code=code,
-            message=error_message,
+            message=html.escape(error_message) if error_message else "",
             error_msg=error_msg,
             error_reason=error_reason,
             error_suggestion=error_suggestion,
