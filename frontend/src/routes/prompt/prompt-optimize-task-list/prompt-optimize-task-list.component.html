@@ -5,10 +5,10 @@
       <span class="ml-2" *ngIf="totalNumber">({{ totalNumber }})</span>
     </span>
     <div class="flex gap-[8px]">
-      <button nz-button *ngIf="!isShowNoDataGuide && !isFirstLoading" class="guide-collapse-btn mr-[16px]" (click)="isShowGuide = !isShowGuide">
-        <nz-icon [nzType]="isShowGuide ? 'up' : 'down'" nzTheme="outline" />
+      <div *ngIf="!isShowNoDataGuide && !isFirstLoading" class="guide-collapse-btn flex items-center cursor-pointer" (click)="isShowGuide = !isShowGuide">
+        <span nz-icon [nzType]="isShowGuide ? 'down' : 'up'" class="mr-[4px]"></span>
         {{ 'create_guide' | i18nextEager }}
-      </button>
+      </div>
       <button (click)="toCreateTask()" nzType="primary" [disabled]="!subscribeBtnStatus" nz-button>
         {{ 'promptoptimizetasklist1' | i18nextEager }}
       </button>
