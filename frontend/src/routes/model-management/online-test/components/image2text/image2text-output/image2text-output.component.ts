@@ -248,13 +248,10 @@ export class Image2textOutputComponent {
           this.isLoading = false;
           this.isShowStopIcon = false;
           this.isTimeoutOrError = true;
-          if (error.data) {
-            try {
-              const errInfo = JSON.parse(error?.data);
-              this.message.error(errInfo.error_msg);
-            } catch {
-              this.message.error(this.i18n.transform('NetErrorTips'));
-            }
+          // SSE 基类 dispatchEvent 已对含 error_code 的错误统一弹窗，
+          // 此处仅当无响应体（纯网络层错误）时显示通用错误提示
+          if (!error?.data) {
+            this.message.error(this.i18n.transform('NetErrorTips'));
           }
           this.scrollToBottom();
           this.cdr.markForCheck();
