@@ -357,7 +357,17 @@ class ContextManager(metaclass=Singleton):
             else:
                 detail: JobDetail = self._generate_task_detail_from_store(ctx_id)
                 if detail is None:
-                    continue
+                    # 任务在缓存与持久化中均不存在（已丢失），返回显式 failed 占位项，
+                    # 让调用方能感知并处理，而非静默跳过，避免上游状态永久卡在中间态
+                    logger.warning(
+                        f"task {ctx_id} not found in cache or store, "
+                        f"return failed placeholder instead of skipping."
+                    )
+                    detail = JobDetail(
+                        job_info=JobInfo(id=ctx_id),
+                        status=TaskStatus.TASK_FAILED,
+                        error_msg="task not found in execution engine, may have been cleaned up.",
+                    )
             infos.data.append(detail)
             if detail.status == TaskStatus.TASK_FINISHED:
                 infos.finished_jobs += 1
