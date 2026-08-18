@@ -778,6 +778,7 @@ export interface IMcpNode extends INodeBase {
     dataConfig?: any;
     descriptionText?: string;
     isDefaultName?: boolean;
+    exception_process?: any;
   };
   isAction?: boolean;
 }

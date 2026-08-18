@@ -563,7 +563,7 @@ workflow:
   endpoint-template: /v1/%s/workflows/%s/conversations/:conversation_id
   max-release-version-size: ${workflow_max_release_size:100}
   max-node-num: ${workflow_max_node_num:150}
-  exception-support-nodes: ${workflow_exception_support_nodes:Workflow,LLM,Plugin,Code,IntentDetection,ParamExtraction}
+  exception-support-nodes: ${workflow_exception_support_nodes:Workflow,LLM,Plugin,Code,IntentDetection,ParamExtraction,Mcp}
   parallel:
     interactive-node-count: ${workflow_parallel_interactive_node_count:0}
     interactive-node-type: ${workflow_parallel_interactive_node_type:Agent,Questioner,Input,ParamExtraction}
