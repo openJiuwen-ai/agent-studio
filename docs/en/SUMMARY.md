@@ -12,5 +12,6 @@
   - [Troubleshooting](how-to/troubleshooting.md)
 - [Reference](reference/)
   - [REST API Reference](reference/rest-api.md)
+  - [Error Code Catalog](reference/error-codes.md)
 - [Explanation](explanation/)
   - [Architecture Overview](explanation/architecture-overview.md)

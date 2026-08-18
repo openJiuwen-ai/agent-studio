@@ -12,5 +12,7 @@
   - [运行问题排查](how-to/troubleshooting.md)
 - [参考文档（Reference）](reference/)
   - [REST API 参考](reference/rest-api.md)
+  - [Studio 2.0 可观测性统一协议](reference/observability-contract.md)
+  - [错误码目录](reference/error-codes.md)
 - [解释文档（Explanation）](explanation/)
   - [架构概述](explanation/architecture-overview.md)

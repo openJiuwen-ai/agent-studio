@@ -1,0 +1,77 @@
+name: 错误码治理提示检查
+
+on:
+  push:
+    branches:
+      - studio-2.0-dev
+    paths:
+      - .gitcode/workflows/error-code-governance.yml
+      - backend/**
+      - agent-runtime/**
+      - agent_builder/**
+      - tools/observability/**
+      - docs/zh/reference/error-codes.md
+      - docs/zh/reference/observability-contract.md
+      - docs/en/reference/error-codes.md
+  pull_request:
+    branches:
+      - studio-2.0-dev
+    paths:
+      - .gitcode/workflows/error-code-governance.yml
+      - backend/**
+      - agent-runtime/**
+      - agent_builder/**
+      - tools/observability/**
+      - docs/zh/reference/error-codes.md
+      - docs/zh/reference/observability-contract.md
+      - docs/en/reference/error-codes.md
+  workflow_dispatch:
+
+concurrency:
+  enable: true
+  max: 1
+  exceed-action: QUEUE
+
+permissions:
+  repository: read
+
+jobs:
+  advisory-check:
+    name: Manifest、i18n 与存量增量检查
+    runs-on: [ubuntu-24, x64, slim]
+    steps:
+      - name: 检出代码
+        uses: checkout
+
+      - name: 设置 Python
+        uses: setup-python
+        with:
+          python-version: '3.12'
+
+      - name: 获取 PR 目标分支基线
+        if: ${{ atomgit.base_ref != '' }}
+        run: >-
+          git fetch --no-tags origin
+          "refs/heads/$ATOMGIT_BASE_REF:refs/remotes/origin/$ATOMGIT_BASE_REF"
+          --depth=1
+
+      - name: 防止同批刷新基线绕过新增问题
+        run: python3 tools/observability/scripts/check_baseline_change_policy.py
+
+      - name: 运行治理脚本单元测试
+        run: python3 -m unittest discover -s tools/observability/tests -p 'test_*.py'
+
+      - name: 运行提示式检查
+        run: |
+          python3 tools/observability/scripts/run_error_code_advisory.py \
+            --report-dir .artifacts/error-code-governance \
+            --step-summary "$ATOMGIT_STEP_SUMMARY"
+
+      - name: 上传检查报告
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: upload-artifact
+        with:
+          name: error-code-advisory-report
+          path: .artifacts/error-code-governance
+          retention-days: 14

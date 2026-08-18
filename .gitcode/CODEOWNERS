@@ -1,0 +1,8 @@
+# Observability governance sources require approval from the current repository owner.
+# Before merging into the team repository, reassess whether to add or replace this owner.
+/.gitcode/CODEOWNERS @zhuyechen
+/.gitcode/workflows/error-code-governance.yml @zhuyechen
+/tools/observability/ @zhuyechen
+/docs/zh/reference/observability-contract.md @zhuyechen
+/docs/zh/reference/error-codes.md @zhuyechen
+/docs/en/reference/error-codes.md @zhuyechen

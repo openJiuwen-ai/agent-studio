@@ -35,6 +35,8 @@
 事实性、结构化、可检索的参考材料。
 
 - [REST API 参考](zh/reference/rest-api.md) — API 接口规范与请求响应示例
+- [可观测性统一协议](zh/reference/observability-contract.md) — 三服务关联 ID、日志、错误响应和治理规范
+- [错误码目录](zh/reference/error-codes.md) — 三服务统一错误码、Owner、HTTP 状态与生命周期
 
 ### Explanation 解释文档（我想理解）
 
