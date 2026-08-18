@@ -3888,7 +3888,13 @@ def _parse_exception_config(node: dict) -> ExceptionConfig | None:
     )
 
     node_type = node.get("type", "")
-    outputs_schema = _convert_schema(node.get("outputs") or {})
+    # MCP 节点的 outputs_schema 使用类型描述符（如 {"type": "array"}），
+    # 不适合作为 get_by_schema 的提取模板。置空后 _post_invoke 跳过 schema 提取，
+    # 错误恢复结果（defaultOutputs）直接通过。
+    if node_type in ("jiuwen.mcp", "jiuwen.flowMcp"):
+        outputs_schema = {}
+    else:
+        outputs_schema = _convert_schema(node.get("outputs") or {})
 
     timeout = ep.get("timeout", DEFAULT_EXECUTION_NODE_TIMEOUT)
     if not isinstance(timeout, (int, float)) or timeout < 0:
