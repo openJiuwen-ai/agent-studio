@@ -129,7 +129,8 @@
             ></textarea>
           </div>
           <div class="item">
-            <button nz-button nzType="primary" nzSize="large" (click)="triggerImage2Text()"
+            <button nz-button nzType="primary" nzSize="large" [disabled]="image2textParam.uploadData.length === 0"
+                    (click)="triggerImage2Text()"
                     nz-tooltip [nzTooltipTitle]="Image2TextButtonTip">
               {{ 'generate_image_understanding'|i18nextEager }}
             </button>
