@@ -1554,6 +1554,7 @@ export class ControllerModalComponent
           v.update = this.handleShowUpdatedIcon(v.id, v.version_id);
         });
       }
+      this.cd.markForCheck();
     });
   }
 

@@ -11,6 +11,7 @@ import { I18nNamespace } from '@i18n';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 import { NODE_ACTIONS } from '@routes/agent-center/constants/workflow-common.const';
 import { AppAgentRepoService } from '@services/agent-center/app-agent-repo.service';
+import { takeUntil } from 'rxjs';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { AppFlowService } from '../../app-flow.service';
 import { WORKFLOW_SVGS } from '../../flow.const';
@@ -77,20 +78,42 @@ export class ChildFlowComponent extends NodeBaseComponent {
     this.setNodeBase(this.nodeInfo);
     super.ngOnInit();
 
-    const { ref_workflows } = this.isChildFlowsUpdated || {};
-    this.updateFlowTip = this.i18n.transform('update_flow_tip', {
-      versionName: ref_workflows?.last_version_name,
-    });
+    // 响应式订阅：resNodes 数据到达时重新计算 showUpdatedIcon，避免 ngOnInit 同步读取时数据未到
+    this.appFlowServ
+      .resNodesUpdate()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((childFlowNodes) => {
+        const matchedNode = childFlowNodes.find((n) => n.id === this.nodeBase?.id);
+        if (matchedNode) {
+          this.isChildFlowsUpdated = matchedNode;
+          this.updateFlowTip = this.i18n.transform('update_flow_tip', {
+            versionName: matchedNode.ref_workflows?.last_version_name,
+          });
+          this.processChildFlowUpdate();
+        }
+      });
 
+    // 如果 super.ngOnInit() 中数据已同步到达，也处理一次
+    this.updateFlowTip = this.i18n.transform('update_flow_tip', {
+      versionName: this.isChildFlowsUpdated?.ref_workflows?.last_version_name,
+    });
+    this.processChildFlowUpdate();
+  }
+
+  private async processChildFlowUpdate() {
+    if (this.showUpdatedIcon === 'show' || this.showUpdatedIcon === 'nested') {
+      return; // 已经处理过，不重复请求
+    }
     if (this.isChildFlowsUpdated?.showIcon) {
       const childFlowInfo = await this.appAgentRepoServe.rollbackFlowVersion(
-        ref_workflows?.workflow_id,
-        ref_workflows?.last_version_id,
+        this.isChildFlowsUpdated.ref_workflows?.workflow_id,
+        this.isChildFlowsUpdated.ref_workflows?.last_version_id,
       );
       this.childFlowInfo = childFlowInfo;
 
       if (this.configServ.getConfigs().son_workflow_level_limit === false) {
         this.showUpdatedIcon = 'show';
+        this.cdr.markForCheck();
         return;
       }
 
@@ -101,6 +124,7 @@ export class ChildFlowComponent extends NodeBaseComponent {
       if (childFlowInfo?.ref_workflows && childFlowInfo.ref_workflows.length) {
         this.showUpdatedIcon = 'nested';
       }
+      this.cdr.markForCheck();
     }
   }
 
