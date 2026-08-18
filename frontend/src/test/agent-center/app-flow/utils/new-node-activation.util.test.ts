@@ -565,8 +565,10 @@ check('handleWorkflow 新增 W 后删除 W：flush 后 openedNodeId=null', () =>
 // handleWorkflow(info, true)（或 multiFlowType 的 node:click），导致取消操作仍
 // 创建并激活新子工作流节点、打开配置抽屉，破坏用户原有选择。
 //
-// 修复：afterClose 回调在生产代码中直接使用 result === true 判定——仅确认时
-// 创建/激活；取消（false）或 X 关闭（undefined）一律不创建、不激活、不改变已有选择。
+/**
+ * 修复：afterClose 回调在生产代码中直接使用 result === true 判定——仅确认时
+ * 创建/激活；取消（false）或 X 关闭（undefined）一律不创建、不激活、不改变已有选择。
+ */
 
 // —— addAgent 确认弹窗入口时序不变量 ——
 //

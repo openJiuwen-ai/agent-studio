@@ -6259,9 +6259,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       context: tip,
     });
     modalRef.afterClose.subscribe((result) => {
-      // 只有确认弹窗明确返回 true 时才新建/激活子工作流节点；取消返回 false
-      // 或 X 关闭返回 undefined 时不改变已有选择。必须使用严格比较，避免其他
-      // truthy 值误触发创建。localStorage 清理始终执行，保留原有清理语义。
+      /**
+       * 只有确认弹窗明确返回 true 时才新建/激活子工作流节点；取消返回 false
+       * 或 X 关闭返回 undefined 时不改变已有选择。必须使用严格比较，避免其他
+       * truthy 值误触发创建。localStorage 清理始终执行，保留原有清理语义。
+       */
       if (result === true) {
         if (info.multiFlowType) {
           const multiNode = this.workflowDetail.workflow_details.nodes.find(
