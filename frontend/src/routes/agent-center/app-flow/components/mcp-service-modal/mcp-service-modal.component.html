@@ -68,7 +68,7 @@
       <ng-container [ngTemplateOutlet]="paramList" [ngTemplateOutletContext]="{location: 'Headers', title: 'request_header', params: inputParams}"></ng-container>
       <!-- 出入参配置表格 -->
       <div class="my-[16px] h-[1px] w-full bg-[#f0f0f0]"></div>
-      <ng-container [ngTemplateOutlet]="paramList" [ngTemplateOutletContext]="{location: 'Input', title: 'input_params', params: inputParams}"></ng-container>
+      <ng-container [ngTemplateOutlet]="mcpParamList" [ngTemplateOutletContext]="{location: 'Input', title: 'input_params', params: mcpInputParams}"></ng-container>
 
       <div class="my-[16px] h-[1px] w-full bg-[#f0f0f0]"></div>
 
@@ -128,7 +128,7 @@
                       [name]="'inputFormType' + i"
                       [nzOptions]="param.options"
                       [(ngModel)]="param.value.type"
-                      (ngModelChange)="onInputValueTypeChange(param)"
+                      (ngModelChange)="onInputValueTypeChange(param,false)"
                     ></nz-select>
                   </div>
 
@@ -237,6 +237,172 @@
             </div>
           </div>
         </ng-container>
+      </form>
+    </ng-template>
+  </meta-acc-block>
+</ng-template>
+
+
+<ng-template #mcpParamList let-location="location" let-title="title" let-params="params">
+  <meta-acc-block
+    class="mt-2 block w-full"
+    [title]="title | i18nextEager"
+  >
+    <ng-template #content>
+      <div class="mt-2 flex items-center">
+        <div class="mr-[5px] flex w-[25%] text-label">
+          {{ 'param_name'|i18nextEager }}
+        </div>
+        <div class="mr-[5px] w-[calc(75%-10px)] text-label">
+          {{ 'type' | i18nextEager }}
+        </div>
+      </div>
+
+      <form #inputForm="ngForm">
+        <nz-tree id="node-param-tree" [nzData]="params" nzBlockNode [nzTreeTemplate]="nzTreeTemplate">
+          <ng-template #nzTreeTemplate let-node let-origin="origin">
+            <div
+            class="mt-2 flex"
+          >
+            <div class="mr-1 flex h-[28px] w-[25%] items-center text-label gap-[4px]">
+              <div class="flex max-w-[calc(100%-20px)] items-center">
+                <span tiOverflow>{{ origin.name }}</span>
+                <span *ngIf="!origin.required" class="w-12 shrink-0">{{ 'optional' | i18nextEager }}</span>
+              </div>
+              <nz-icon
+                *ngIf="origin.description"
+                nz-tooltip
+                [nzTooltipTitle]="origin.description"
+                style="font-size: 16px; cursor: pointer; color: #808080"
+                nzType="question-circle" nzTheme="outline"
+              />
+            </div>
+            <div class="flex w-[calc(75%-10px)]">
+              <div class="flex h-fit w-full items-center">
+                <div class="flex w-full">
+                  <div class="w-[30%]">
+                    <nz-select
+                      class="combo-select-left"
+                      style="width: 100%"
+                      [name]="'inputFormType' + origin.key"
+                      [nzOptions]="origin.options"
+                      [(ngModel)]="origin.value.type"
+                      (ngModelChange)="onInputValueTypeChange(origin,true)"
+                    ></nz-select>
+                  </div>
+
+                  <div class="w-[70%]">
+                    <ng-container *ngIf="origin.value.type === 'literal'">
+                      <input
+                        nz-input
+                        class="combo-select-right"
+                        *ngIf="origin.type === 'string'"
+                        style="width: 100%"
+                        type="text"
+                        [name]="'inputFormValueStr' + origin.key"
+                        [nonEmptyValidator]="origin.required"
+                        (ngModelChange)="changeChildVal(origin);changeUpdateTime()"
+                        [disabled]="origin.rootValType === 'ref'"
+                        (blur)="inputOnSave()"
+                        [placeholder]="'input_placeholder' | i18nextEager"
+                        [(ngModel)]="origin.value.content"
+                        [title]="origin.value.content"
+                        [class.input-error]="inputForm?.controls['inputFormValueStr' + origin.key]?.invalid && (inputForm?.controls['inputFormValueStr' + origin.key]?.dirty || inputForm?.controls['inputFormValueStr' + origin.key]?.touched)"
+                      />
+                      <div *ngIf="inputForm?.controls['inputFormValueStr' + origin.key]?.invalid && (inputForm?.controls['inputFormValueStr' + origin.key]?.dirty || inputForm?.controls['inputFormValueStr' + origin.key]?.touched)" class="error-tip">
+                        {{inputForm?.controls['inputFormValueStr' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                      </div>
+
+                      <typed-json-input
+                        *ngIf="isArrOrObj(origin.type)"
+                        [param]="origin"
+                        [isValidated]="isValidated"
+                        (changeValue)="changeChildVal(origin);onSave()"
+                        [disabled]="origin.isObjRoot || origin.rootValType === 'ref' || origin.hasObjChild"
+                      ></typed-json-input>
+
+                      <nz-select
+                        *ngIf="origin.type === 'boolean'"
+                        class="combo-select-right"
+                        style="width: 100%"
+                        [name]="'inputFormValueBool' + origin.key"
+                        [nzOptions]="booleanOps"
+                        [(ngModel)]="origin.value.content"
+                        [nzPlaceHolder]="'select_placeholder' | i18nextEager"
+                        nzAllowClear
+                        (ngModelChange)="changeChildVal(origin); onSave()"
+                        [disabled]="origin.rootValType === 'ref'"
+                      >
+                      </nz-select>
+                      <div *ngIf="inputForm?.controls['inputFormValueBool' + origin.key]?.invalid && (inputForm?.controls['inputFormValueBool' + origin.key]?.dirty || inputForm?.controls['inputFormValueBool' + origin.key]?.touched)" class="error-tip">
+                        {{inputForm?.controls['inputFormValueBool' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                      </div>
+                      <input
+                        *ngIf="origin.type === 'number'"
+                        class="combo-select-right"
+                        [name]="'inputFormValueNum' + origin.key"
+                        style="width: 100%"
+                        [placeholder]="'input_placeholder' | i18nextEager"
+                        type="text"
+                        nz-input
+                        [(ngModel)]="origin.value.content"
+                        [title]="origin.value.content"
+                        nonEmptyValidator
+                        numberStr
+                        (ngModelChange)="changeChildVal(origin);changeUpdateTime()"
+                        [disabled]="origin.rootValType === 'ref'"
+                        (blur)="inputOnSave()"
+                        [class.input-error]="inputForm?.controls['inputFormValueNum' + origin.key]?.invalid && (inputForm?.controls['inputFormValueNum' + origin.key]?.dirty || inputForm?.controls['inputFormValueNum' + origin.key]?.touched)"
+                      />
+                      <div *ngIf="inputForm?.controls['inputFormValueNum' + origin.key]?.invalid && (inputForm?.controls['inputFormValueNum' + origin.key]?.dirty || inputForm?.controls['inputFormValueNum' + origin.key]?.touched)" class="error-tip">
+                        {{inputForm?.controls['inputFormValueNum' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                      </div>
+
+                      <input
+                        *ngIf="origin.type === 'integer'"
+                        class="combo-select-right"
+                        [name]="'inputFormValueInt' + origin.key"
+                        style="width: 100%"
+                        [placeholder]="'input_placeholder' | i18nextEager"
+                        type="text"
+                        nz-input
+                        [(ngModel)]="origin.value.content"
+                        [title]="origin.value.content"
+                        nonEmptyValidator
+                        integerStr
+                        (ngModelChange)="changeChildVal(origin);changeUpdateTime()"
+                        [disabled]="origin.rootValType === 'ref'"
+                        (blur)="inputOnSave()"
+                        [class.input-error]="inputForm?.controls['inputFormValueInt' + origin.key]?.invalid && (inputForm?.controls['inputFormValueInt' + origin.key]?.dirty || inputForm?.controls['inputFormValueInt' + origin.key]?.touched)"
+                      />
+                      <div *ngIf="inputForm?.controls['inputFormValueInt' + origin.key]?.invalid && (inputForm?.controls['inputFormValueInt' + origin.key]?.dirty || inputForm?.controls['inputFormValueInt' + origin.key]?.touched)" class="error-tip">
+                        {{inputForm?.controls['inputFormValueInt' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                      </div>
+                    </ng-container>
+
+                    <input-tree-select
+                      *ngIf="origin.value.type === 'ref'"
+                      style="width: 100%"
+                      [(ngModel)]="origin.value.content"
+                      [options]="origin.refs"
+                      [name]="'inputFormValue' + origin.key"
+                      refSelectedRequire
+                      [tiValidation]="{ type: 'changeAlert' }"
+                      [placeholder]="'select_placeholder' | i18nextEager"
+                      (select)="treeSelect()"
+                    ></input-tree-select>
+
+                    <div *ngIf="inputForm?.controls['inputFormValue' + origin.key]?.invalid && (inputForm?.controls['inputFormValue' + origin.key]?.dirty || inputForm?.controls['inputFormValue' + origin.key]?.touched)" class="error-tip">
+                      {{inputForm?.controls['inputFormValue' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </ng-template>
+        </nz-tree>
+
       </form>
     </ng-template>
   </meta-acc-block>
