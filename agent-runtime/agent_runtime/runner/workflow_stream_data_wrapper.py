@@ -263,6 +263,7 @@ class WorkflowStreamDataWrapper:
         history: list = None,
         query: str = "",
         is_resuming: bool = False,
+        start_time: int = 0,
     ):
         if node_id_to_name is None:
             node_id_to_name = {}
@@ -274,6 +275,7 @@ class WorkflowStreamDataWrapper:
         self._history = history or []
         self._query = query
         self._is_resuming = is_resuming
+        self._start_time = start_time
         # Collect field names that reference encrypted env vars, per node.
         # Flag-based: checks if the referenced env var key is in secretEnvKeys,
         # not value matching. Per-node mapping avoids cross-node field name
@@ -395,6 +397,15 @@ class WorkflowStreamDataWrapper:
 
         if not stream_data:
             return []
+
+        event_type = stream_data.get("event", "")
+        if event_type == "workflow_start":
+            self._start_time = stream_data.get("createdTime", int(time.time() * 1000))
+        elif event_type == "workflow_finished":
+            data = stream_data.get("data")
+            if isinstance(data, dict):
+                data["start_time"] = self._start_time
+                data["end_time"] = stream_data.get("createdTime", int(time.time() * 1000))
 
         return [stream_data]
 
