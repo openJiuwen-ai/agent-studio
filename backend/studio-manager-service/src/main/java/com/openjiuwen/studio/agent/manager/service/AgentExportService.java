@@ -329,9 +329,10 @@ public class AgentExportService {
             .filter(CollectionUtils::isNotEmpty)
             .flatMap(List::stream)
             .toList();
-        // 去重
+        // 去重：同一 resourceId 可能既作为子资源（level=2）又作为主资源（level=1）出现，
+        // 优先保留 level=1 的记录，使导出结果计数与用户实际选中的导出数量一致。
         exportResults = exportResults.stream()
-            .collect(Collectors.toMap(ExportResult::getResourceId, p -> p, (p1, p2) -> p1))
+            .collect(Collectors.toMap(ExportResult::getResourceId, p -> p, AgentExportService::mergeByLevel1))
             .values()
             .stream()
             .toList();
@@ -352,6 +353,20 @@ public class AgentExportService {
             rootResult.setChildResults(childResults);
         }
         return level1Results;
+    }
+
+    private static ExportResult mergeByLevel1(ExportResult p1, ExportResult p2) {
+        if (isLevel1(p1)) {
+            return p1;
+        }
+        if (isLevel1(p2)) {
+            return p2;
+        }
+        return p1;
+    }
+
+    private static boolean isLevel1(ExportResult result) {
+        return result != null && result.getResourceLevel() != null && result.getResourceLevel() == 1;
     }
 
     private @Nullable String getExportFilePath(String accept, ExportResourceParams body, List<ExportResp> exportResps)
