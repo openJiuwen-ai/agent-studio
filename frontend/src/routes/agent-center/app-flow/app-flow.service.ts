@@ -3018,7 +3018,7 @@ export class AppFlowService {
         }
         return true;
       },
-      async: false,
+      async: true,
       virtual: { enabled: false, margin: 200 },
     });
   }
