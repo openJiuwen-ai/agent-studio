@@ -140,8 +140,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -1439,19 +1437,20 @@ public class PluginService implements IPluginService {
         pluginDTO.setToolDependencyList(new ArrayList<>());
 
         // 构建tool_dependency_list字段
-        // 统计口径与引用插件列表(listResourceRelations)保持一致：
-        // 仅统计 valid=1 且应用与当前插件同工作空间的引用，且同一应用(如同一工作流)的重复版本只计一次
-        Map<String, Set<String>> workflowAppIdsByTool = groupReferencedAppIdsByTool(
+        // 统计口径与引用插件列表(listResourceRelations)保持完全一致，仅维度不同：
+        // 此处按工具(pluginId#toolId)分组计数，引用插件列表按插件粒度计数；
+        // 去重键、valid/工作空间/JOIN等筛选条件均与 listResourceRelations 相同。
+        Map<String, Long> workflowCountByTool = countReferencedAppsByTool(
             mappingMapper.selectByResourceIdAndVersionId(pluginDTO.getPluginId(), null, workspaceId, "workflow", null));
-        Map<String, Set<String>> agentAppIdsByTool = groupReferencedAppIdsByTool(
+        Map<String, Long> agentCountByTool = countReferencedAppsByTool(
             mappingMapper.selectByResourceIdAndVersionId(pluginDTO.getPluginId(), null, workspaceId, "agent", null));
         for (ToolInfo toolInfo : pluginDTO.getToolRequestInfo().getToolsInfoList()) {
             String toolResourceId = pluginDTO.getPluginId() + "#" + toolInfo.getToolId();
             pluginDTO.getToolDependencyList()
                 .add(ToolDependency.builder()
                     .toolId(toolInfo.getToolId())
-                    .dependencyOnAgent(agentAppIdsByTool.getOrDefault(toolResourceId, Set.of()).size())
-                    .dependencyOnWorkflow(workflowAppIdsByTool.getOrDefault(toolResourceId, Set.of()).size())
+                    .dependencyOnAgent(agentCountByTool.getOrDefault(toolResourceId, 0L))
+                    .dependencyOnWorkflow(workflowCountByTool.getOrDefault(toolResourceId, 0L))
                     .build());
         }
         // 内置免费额度插件
@@ -1499,10 +1498,43 @@ public class PluginService implements IPluginService {
      * 将引用映射按工具维度(resource_id，形如 pluginId#toolId)分组，值为去重后的应用id集合。
      * 同一应用的多个版本/多个节点重复引用只保留一个appId，保证按应用数计数。
      */
-    private Map<String, Set<String>> groupReferencedAppIdsByTool(List<MappingEntity> mappingEntities) {
+    /**
+     * 按工具维度统计被引用次数。SQL 用 selectByResourceIdAndVersionId（与引用插件列表同一条），
+     * 前缀匹配捞取 pluginId 及 pluginId#* 的全部行（含单后缀 pluginId#toolId 与
+     * 历史脏数据双后缀 pluginId#toolId#toolId）。分组时将 resource_id 规范化为 pluginId#toolId
+     * （取首个 # 后到第二个 # 前的段作为 toolId），使双后缀行也能正确归到对应工具；
+     * 去重键与 RelationManagementService#getDeduplicationKey 完全一致
+     * (appId|appVersion|resourceId|resourceVersion，resourceId 取完整原值)，
+     * 保证与引用插件列表口径相同，仅因按工具分组而维度不同。
+     */
+    private Map<String, Long> countReferencedAppsByTool(List<MappingEntity> mappingEntities) {
         return mappingEntities.stream()
-            .collect(Collectors.groupingBy(MappingEntity::getResourceId,
-                Collectors.mapping(MappingEntity::getAppId, Collectors.toSet())));
+            .collect(Collectors.groupingBy(entity -> normalizeToolResourceId(entity.getResourceId()),
+                Collectors.collectingAndThen(
+                    Collectors.mapping(this::getDeduplicationKey, Collectors.toSet()),
+                    set -> (long) set.size())));
+    }
+
+    /**
+     * 将 resource_id 规范化为 pluginId#toolId。
+     * pluginId#toolId → pluginId#toolId；pluginId#toolId#toolId → pluginId#toolId；
+     * 裸 pluginId（无工具后缀）原样返回。
+     */
+    private String normalizeToolResourceId(String resourceId) {
+        int first = resourceId.indexOf('#');
+        if (first < 0) {
+            return resourceId;
+        }
+        String tail = resourceId.substring(first + 1);
+        int second = tail.indexOf('#');
+        String toolId = second < 0 ? tail : tail.substring(0, second);
+        return resourceId.substring(0, first) + "#" + toolId;
+    }
+
+    private String getDeduplicationKey(MappingEntity entity) {
+        return entity.getAppId() + "|" + (entity.getAppVersion() == null ? "" : entity.getAppVersion())
+            + "|" + entity.getResourceId() + "|"
+            + (entity.getResourceVersion() == null ? "" : entity.getResourceVersion());
     }
 
     public void updateHost(PluginDTO pluginDTO) {
