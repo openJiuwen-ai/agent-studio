@@ -424,10 +424,6 @@ export class CommonValidation {
 
   public static pluginParamBaseUrlVerify(tips: string) {
     return (control: AbstractControl): ValidationErrors | null => {
-      if (control.value.length > 256 || control.value.length < 0) {
-        return { serviceName: { tiErrorMessage: '长度在0~256之间' } };
-      }
-
       return /^\/[A-Za-z0-9_\-{}\/]*$/.test(control.value as string) || (control.value as string) === '' ? null : { serviceName: { tiErrorMessage: tips } };
     };
   }
