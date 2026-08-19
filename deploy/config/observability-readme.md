@@ -25,7 +25,7 @@ app 文件日志 ──命名卷──┐
                        ├─▶ Vector ──push──▶ VictoriaLogs(本地存储) ──▶ Grafana
 Docker 容器标准输出 ───┘
 ```
-五个 app 服务把关键日志写命名卷，Vector 以只读方式 tail，并通过 Elasticsearch Bulk API 写入本机 VictoriaLogs。MySQL、Redis、MinIO、Grafana、VictoriaLogs 等基础设施的标准输出通过 Docker socket 补充采集；Docker 源按 Compose project label 限定范围，并排除已有文件采集的五个 app 容器，避免采集同机无关容器和重复日志。Vector 自身使用 `internal_logs`，避免采集回路。首次启动从文件开头采集，之后依赖持久化 checkpoint 续采；文件源使用内容校验和识别轮转文件，并使用持久化磁盘缓冲。日志栈用 `profiles: ["logging"]` 隔离，默认 `./deploy.sh start` 不启动。
+四个 app 服务把关键日志写命名卷，Vector 以只读方式 tail，并通过 Elasticsearch Bulk API 写入本机 VictoriaLogs。MySQL、Redis、MinIO、Grafana、VictoriaLogs 等基础设施的标准输出通过 Docker socket 补充采集；Docker 源按 Compose project label 限定范围，并排除已有文件采集的四个 app 容器，避免采集同机无关容器和重复日志。Vector 自身使用 `internal_logs`，避免采集回路。首次启动从文件开头采集，之后依赖持久化 checkpoint 续采；文件源使用内容校验和识别轮转文件，并使用持久化磁盘缓冲。日志栈用 `profiles: ["logging"]` 隔离，默认 `./deploy.sh start` 不启动。
 
 > Docker socket 即使只读挂载，也能暴露较多 Docker daemon 元数据和接口能力。仅允许可信的 Vector 镜像及管理员修改其配置。Docker 标准输出源是补充通道；关键业务日志仍以具备 checkpoint、确认和磁盘缓冲的文件链路为准。Docker stdout/stderr 默认按每文件 100 MiB、最多 5 个文件轮转，即每容器本地上限约 500 MiB；只影响 `docker logs` 的本地历史，不会删除已经进入 VictoriaLogs 的日志。
 
