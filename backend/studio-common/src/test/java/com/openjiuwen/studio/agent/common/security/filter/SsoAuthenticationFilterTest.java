@@ -29,6 +29,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.io.PrintWriter;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.Cookie;
@@ -102,7 +103,7 @@ public class SsoAuthenticationFilterTest {
         when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
         when(response.getWriter()).thenReturn(writer);
         SimpleUser userInfo = SimpleUser.builder().userId("user1").userName("testUser").domainId("domain1").projectId("proj1").build();
-        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(userInfo);
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -151,7 +152,7 @@ public class SsoAuthenticationFilterTest {
         when(request.getCookies()).thenReturn(new Cookie[]{otherCookie, authCookie});
 
         SimpleUser userInfo = SimpleUser.builder().userId("user1").userName("testUser").domainId("domain1").projectId("proj1").build();
-        when(ssoAuthenticationService.authenticate("cookie-token")).thenReturn(userInfo);
+        when(ssoAuthenticationService.authenticate("cookie-token")).thenReturn(Optional.of(userInfo));
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -172,7 +173,7 @@ public class SsoAuthenticationFilterTest {
         when(request.getCookies()).thenReturn(new Cookie[0]);
 
         SimpleUser userInfo = SimpleUser.builder().userId("user2").userName("testUser2").domainId("domain2").projectId("proj2").build();
-        when(ssoAuthenticationService.authenticate("header-token")).thenReturn(userInfo);
+        when(ssoAuthenticationService.authenticate("header-token")).thenReturn(Optional.of(userInfo));
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -187,7 +188,7 @@ public class SsoAuthenticationFilterTest {
         when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
 
         SimpleUser userInfo = SimpleUser.builder().userId("user1").userName("testUser").domainId("domain1").projectId("proj1").build();
-        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(userInfo);
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -203,13 +204,13 @@ public class SsoAuthenticationFilterTest {
         assert "valid-token".equals(userInfo.getToken());
     }
 
-    // 场景：鉴权返回null用户信息，返回401
+    // 场景：鉴权返回空用户信息，返回401
     @Test
-    void doFilter_authenticationReturnsNull_shouldReturn401() throws Exception {
+    void doFilter_authenticationReturnsEmpty_shouldReturn401() throws Exception {
         when(request.getRequestURI()).thenReturn("/api/data");
         when(request.getHeader(HEADER_NAME)).thenReturn("invalid-token");
         when(response.getWriter()).thenReturn(writer);
-        when(ssoAuthenticationService.authenticate("invalid-token")).thenReturn(null);
+        when(ssoAuthenticationService.authenticate("invalid-token")).thenReturn(Optional.empty());
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -260,7 +261,7 @@ public class SsoAuthenticationFilterTest {
         when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
 
         SimpleUser userInfo = SimpleUser.builder().userId("user1").userName("testUser").domainId("domain1").projectId("proj1").build();
-        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(userInfo);
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -275,7 +276,7 @@ public class SsoAuthenticationFilterTest {
         when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
 
         SimpleUser userInfo = SimpleUser.builder().userId("user1").userName("testUser").domainId("domain1").projectId("proj1").build();
-        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(userInfo);
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
 
         filter.doFilterInternal(request, response, filterChain);
     }
@@ -290,7 +291,7 @@ public class SsoAuthenticationFilterTest {
         when(request.getCookies()).thenReturn(new Cookie[]{authCookie});
 
         SimpleUser userInfo = SimpleUser.builder().userId("user1").userName("testUser").domainId("domain1").projectId("proj1").build();
-        when(ssoAuthenticationService.authenticate("cookie-token")).thenReturn(userInfo);
+        when(ssoAuthenticationService.authenticate("cookie-token")).thenReturn(Optional.of(userInfo));
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -304,7 +305,7 @@ public class SsoAuthenticationFilterTest {
         when(request.getHeader(HEADER_NAME)).thenReturn("header-token");
 
         SimpleUser userInfo = SimpleUser.builder().userId("user1").userName("testUser").domainId("domain1").projectId("proj1").build();
-        when(ssoAuthenticationService.authenticate("header-token")).thenReturn(userInfo);
+        when(ssoAuthenticationService.authenticate("header-token")).thenReturn(Optional.of(userInfo));
 
         filter.doFilterInternal(request, response, filterChain);
 
@@ -321,7 +322,7 @@ public class SsoAuthenticationFilterTest {
         when(request.getHeader(HEADER_NAME)).thenReturn("valid-token");
 
         SimpleUser userInfo = SimpleUser.builder().userId("user1").userName("testUser").domainId("domain1").projectId("proj1").build();
-        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(userInfo);
+        when(ssoAuthenticationService.authenticate("valid-token")).thenReturn(Optional.of(userInfo));
 
         filter.doFilterInternal(request, response, filterChain);
 

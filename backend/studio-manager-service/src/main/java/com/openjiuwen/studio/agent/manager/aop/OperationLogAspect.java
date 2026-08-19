@@ -27,6 +27,7 @@ import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -66,7 +67,7 @@ public class OperationLogAspect {
 
     @PostConstruct
     private void initSensitiveFieldPattern() {
-        compiledSensitiveFieldPattern = compileSensitiveFieldPattern(sensitiveFieldPattern);
+        compiledSensitiveFieldPattern = compileSensitiveFieldPattern(sensitiveFieldPattern).orElse(null);
     }
 
     @Around("@annotation(operationLog)")
@@ -340,17 +341,17 @@ public class OperationLogAspect {
         return pattern != null && StringUtils.isNotBlank(propertyName) && pattern.matcher(propertyName).matches();
     }
 
-    private Pattern compileSensitiveFieldPattern(String patternRule) {
+    private Optional<Pattern> compileSensitiveFieldPattern(String patternRule) {
         String rule = StringUtils.trimToEmpty(patternRule);
         if (StringUtils.isBlank(rule)) {
-            return null;
+            return Optional.empty();
         }
 
         try {
-            return Pattern.compile(rule);
+            return Optional.of(Pattern.compile(rule));
         } catch (PatternSyntaxException e) {
             LOGGER.warn("Invalid operation log sensitive field pattern: {}", rule, e);
-            return null;
+            return Optional.empty();
         }
     }
 
