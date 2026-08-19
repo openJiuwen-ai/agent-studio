@@ -411,12 +411,12 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         if (KnowledgeSourceEnum.OPENJIUWEN.toString().equalsIgnoreCase(knowledgeRepoEntity.getSource())) {
             if (body.getEmbeddingModel() != null) {
                 String embeddingServiceId = resolveModelServiceId(projectId, workspaceId,
-                    body.getEmbeddingModel().getName());
+                    body.getEmbeddingModel().getName()).orElse(null);
                 knowledgeBaseEntity.setEmbeddingModelServiceId(embeddingServiceId);
             }
             if (body.getRerankModel() != null) {
                 String rerankServiceId = resolveModelServiceId(projectId, workspaceId,
-                    body.getRerankModel().getName());
+                    body.getRerankModel().getName()).orElse(null);
                 knowledgeBaseEntity.setRerankModelServiceId(rerankServiceId);
             }
         }
@@ -1325,16 +1325,16 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
             : mrsEmbeddingModel;
     }
 
-    private String resolveModelServiceId(String projectId, String workspaceId, String modelName) {
+    private Optional<String> resolveModelServiceId(String projectId, String workspaceId, String modelName) {
         if (StringUtils.isEmpty(modelName)) {
-            return null;
+            return Optional.empty();
         }
         List<ModelServiceBase> models = modelServiceMapper.queryByName(projectId, workspaceId, modelName, null);
         if (models == null || models.isEmpty()) {
             log.warn("Model service not found for name: {}", modelName);
-            return null;
+            return Optional.empty();
         }
-        return models.get(0).getId();
+        return Optional.ofNullable(models.get(0).getId());
     }
 
     private String getReRankModel(String source, ModelConf modelConf) {

@@ -27,6 +27,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -99,9 +100,10 @@ public class SsoAuthenticationFilter extends OncePerRequestFilter {
         }
 
         try {
-            SimpleUser userInfo = ssoAuthenticationService.authenticate(accessToken);
+            Optional<SimpleUser> userInfoOpt = ssoAuthenticationService.authenticate(accessToken);
 
-            if (userInfo != null) {
+            if (userInfoOpt.isPresent()) {
+                SimpleUser userInfo = userInfoOpt.get();
                 log.info("SSO authentication successful: userId={}", userInfo.getUserId());
 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
@@ -163,14 +165,14 @@ public class SsoAuthenticationFilter extends OncePerRequestFilter {
     private String getTokenFromCookie(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
-            return null;
+            return "";
         }
         for (Cookie cookie : cookies) {
             if (headerName.equalsIgnoreCase(cookie.getName())) {
                 return cookie.getValue();
             }
         }
-        return null;
+        return "";
     }
 
 }

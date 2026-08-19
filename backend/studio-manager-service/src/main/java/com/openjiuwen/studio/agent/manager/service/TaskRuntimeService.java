@@ -462,7 +462,7 @@ public class TaskRuntimeService {
         if (listener != null && listener.getMessageContent().length() > 0) {
             return listener.getMessageContent().toString();
         }
-        return null;
+        return "";
     }
 
     /**
