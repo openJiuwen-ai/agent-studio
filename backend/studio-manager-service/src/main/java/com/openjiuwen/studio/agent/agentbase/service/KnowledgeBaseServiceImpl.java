@@ -903,6 +903,32 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         showKnowledgeRepoResponseBody.setUpdateTime(knowledgeRepoEntity.getUpdatedOn() != null ? knowledgeRepoEntity.getUpdatedOn().getTime() : null);
         showKnowledgeRepoResponseBody.setWorkspaceId(knowledgeBase.getWorkspaceId());
         showKnowledgeRepoResponseBody.setShareScope(ShowKnowledgeRepoResponseBody.ShareScopeEnum.fromValue(knowledgeBase.getShareScope()));
+        // OpenJiuwen知识库：retrieveKnowledgeRepo 不返回模型信息，从 DB 实体补充模型名称
+        if (KnowledgeSourceEnum.OPENJIUWEN.toString().equalsIgnoreCase(knowledgeRepoEntity.getSource())) {
+            if (StringUtils.isNotEmpty(knowledgeBase.getEmbeddingModelServiceId())) {
+                ModelServiceBase embeddingModel = modelServiceMapper.queryById(
+                    knowledgeBase.getEmbeddingModelServiceId());
+                if (embeddingModel != null) {
+                    showKnowledgeRepoResponseBody.setEmbeddingModel(embeddingModel.getServiceName());
+                }
+            }
+            if (StringUtils.isNotEmpty(knowledgeBase.getRerankModelServiceId())) {
+                ModelServiceBase rerankModel = modelServiceMapper.queryById(
+                    knowledgeBase.getRerankModelServiceId());
+                if (rerankModel != null) {
+                    showKnowledgeRepoResponseBody.setRerankModel(rerankModel.getServiceName());
+                }
+            }
+        }
+        // 补充 source 信息（连接器类型、连接ID等）
+        if (StringUtils.isNotEmpty(knowledgeBase.getKnowledgeBaseConnectionId())) {
+            List<KnowledgeBaseConnection> connections = knowledgeBaseConnectionMapper.batchQueryKnowledgeBaseConnections(
+                Lists.newArrayList(knowledgeBase.getKnowledgeBaseConnectionId()), null);
+            if (CollectionUtils.isNotEmpty(connections)) {
+                showKnowledgeRepoResponseBody.setSource(
+                    convertConnectionToSource(knowledgeBase, connections.get(0)));
+            }
+        }
         showKnowledgeRepoResponseBody.setUpdateUserName(knowledgeBase.getLastUpdateUserName());
         showKnowledgeRepoResponseBody.setStatus(
             Optional.ofNullable(knowledgeRepo.getStatus()).orElse(knowledgeRepoEntity.getStatus()));
@@ -1096,11 +1122,12 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
 
         String newEncryptMetadata = encryptMetadata(body.getMetadata());
         // 自建知识库，需要调用知识库平台接口更新
+        String source = null;
         if (isInternalKnowledgeRepo(knowledgeBase.getType())) {
             final KnowledgeRepoEntity oldKnowledgeRepo = knowledgeRepoMapper.selectByPrimaryKey(knowledgeBaseId,
                 projectId);
             // 如果更新模型不为空，则要判断注册模型
-            String source = oldKnowledgeRepo.getSource();
+            source = oldKnowledgeRepo.getSource();
             if (!Objects.equals(body.getDisplayName(), oldKnowledgeRepo.getDisplayName()) || !Objects.isNull(
                 body.getRerankModel()) || !Objects.isNull(body.getParseConf()) || !Objects.isNull(body.getSplitConf())
                 || !Objects.isNull(body.getRagChunkParserConf())) {
@@ -1151,6 +1178,22 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
             .updateTime(System.currentTimeMillis())
             .build();
         knowledgeBaseMapper.updateKnowledgeBase(projectId, knowledgeBaseEntity);
+
+        // OpenJiuwen知识库：解析 rerank 模型 service_id 并同步到 OBS
+        if (source != null && KnowledgeSourceEnum.OPENJIUWEN.toString().equalsIgnoreCase(source)) {
+            if (body.getRerankModel() != null) {
+                String rerankServiceId = resolveModelServiceId(projectId, workspaceId,
+                    body.getRerankModel().getName());
+                knowledgeBaseEntity.setRerankModelServiceId(rerankServiceId);
+                knowledgeBaseMapper.updateKnowledgeBase(projectId, knowledgeBaseEntity);
+            }
+            // 重新加载完整实体（含 connectionId 等字段），同步到 OBS
+            KnowledgeBaseEntity fullEntity = knowledgeBaseMapper.selectById(projectId, knowledgeBaseId);
+            if (fullEntity != null) {
+                writeKbWithConnectionToObs(fullEntity);
+            }
+        }
+
         return new ModifyKnowledgeRepoResponseBody().setKnowledgeRepoId(knowledgeBaseId);
     }
 
@@ -1228,10 +1271,17 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
                     // 判断是否为默认 LakeSearch 内部连接，需要注入 YAML 配置项
                     boolean isLakeSearchInside = "inside".equals(connectorType)
                         && "LakeSearchInside".equals(connectionEntity.getConnectorId());
-                    if (isLakeSearchInside) {
+                    // OpenJiuwen 连接需要写入 model_config，不能用 writeConnectionToObs 覆盖
+                    boolean isOpenJiuwenInside = "OpenjiuwenInside".equals(connectionEntity.getConnectorId());
+                    // OpenJiuwen 和 LakeSearch 共用同一个 connection_id，通过 embedding_model_service_id 区分
+                    boolean isOpenJiuwenKb = knowledgeBaseEntity.getEmbeddingModelServiceId() != null;
+                    if (isLakeSearchInside && !isOpenJiuwenKb) {
                         kbConnectionStorageService.syncDefaultConnectionToObs(
                             connectionEntity, connectorType, connectorName,
                             lakeSearchProjectId, lakeSearchApplicationId);
+                    } else if (isOpenJiuwenInside || isOpenJiuwenKb) {
+                        kbConnectionStorageService.writeOpenJiuwenConnectionToObs(
+                            connectionId, knowledgeBaseEntity);
                     } else {
                         kbConnectionStorageService.writeConnectionToObs(
                             connectionEntity, connectorType, connectorName);

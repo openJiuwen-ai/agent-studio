@@ -30,6 +30,7 @@ _ADAPTER_REGISTRY: Dict[str, Type[KBServiceAdapter]] = {
     "General": GeneralKBAdapter,
     "Custom": LakeSearchAdapter,
     "OpenJiuwen": OpenJiuwenKBAdapter,
+    "OpenjiuwenInside": OpenJiuwenKBAdapter,
 }
 
 

@@ -62,6 +62,7 @@ public interface KbConnectionConverter {
         KnowledgeBaseConnectionEntity entity = new KnowledgeBaseConnectionEntity();
         long currentTimeMillis = System.currentTimeMillis();
         entity.setConnectorId(body.getConnectorId());
+        entity.setName(body.getConnectorId());
         entity.setParams(body.getParams()
             .stream()
             .map(param -> new KnowledgeBaseConnectionParam(param.getCode(), param.getValue()))

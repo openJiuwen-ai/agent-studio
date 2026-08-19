@@ -9,6 +9,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.openjiuwen.studio.agent.common.dto.knowledge.ParseConf;
 import com.openjiuwen.studio.agent.common.dto.knowledge.SplitConf;
+import com.openjiuwen.studio.agent.manager.dto.ExternalKnowledgeBaseSource;
 
 import io.swagger.annotations.ApiModel;
 import jakarta.validation.Valid;
@@ -127,6 +128,9 @@ public class ShowKnowledgeRepoResponseBody implements Serializable {
 
     @JsonProperty("share_scope")
     private ShareScopeEnum shareScope = ShareScopeEnum.GLOBAL;
+
+    @JsonProperty("source")
+    private ExternalKnowledgeBaseSource source = null;
 
     public String getKnowledgeRepoId() {
         return knowledgeRepoId;
@@ -341,6 +345,15 @@ public class ShowKnowledgeRepoResponseBody implements Serializable {
 
     public ShowKnowledgeRepoResponseBody setShareScope(ShareScopeEnum shareScope) {
         this.shareScope = shareScope;
+        return this;
+    }
+
+    public ExternalKnowledgeBaseSource getSource() {
+        return source;
+    }
+
+    public ShowKnowledgeRepoResponseBody setSource(ExternalKnowledgeBaseSource source) {
+        this.source = source;
         return this;
     }
 
