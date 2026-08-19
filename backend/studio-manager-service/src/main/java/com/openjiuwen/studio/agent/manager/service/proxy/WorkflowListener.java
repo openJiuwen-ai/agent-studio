@@ -92,7 +92,7 @@ public class WorkflowListener extends BaseEventListener {
             } else {
                 log.error("Workflow process failed.");
             }
-            this.errorRsp = createErrorRsp(t, response);
+            this.errorRsp = createErrorRsp(t, response).orElse(null);
             this.openConnect = true;
         } catch (Exception e) {
             log.error("Fail handler response. {}", e.getMessage());

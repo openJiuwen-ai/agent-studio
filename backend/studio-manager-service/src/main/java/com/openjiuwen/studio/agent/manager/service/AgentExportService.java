@@ -64,6 +64,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -158,10 +159,10 @@ public class AgentExportService {
         body.setResourceType(resourceTypeEnum.toString());
         switch (resourceTypeEnum) {
             case AGENT, CONTROLLER:
-                exportRsp = exportAgents(projectId, workspaceId, accept, body);
+                exportRsp = exportAgents(projectId, workspaceId, accept, body).orElse(null);
                 break;
             case WORKFLOW:
-                exportRsp = exportWorkflow(projectId, workspaceId, accept, body);
+                exportRsp = exportWorkflow(projectId, workspaceId, accept, body).orElse(null);
                 break;
             default:
                 log.error("resource type:{} not supported for export", body.getResourceType());
@@ -171,7 +172,7 @@ public class AgentExportService {
         return exportRsp;
     }
 
-    private ExportResourceRsp exportWorkflow(String projectId, String workspaceId, String accept,
+    private Optional<ExportResourceRsp> exportWorkflow(String projectId, String workspaceId, String accept,
         ExportResourceParams body) {
         List<String> workflowIds = body.getResourceIds();
         log.debug("Processing {} workflows: {}", workflowIds.size(), workflowIds);
@@ -224,12 +225,12 @@ public class AgentExportService {
 
             String exportFilePath = getExportFilePath(accept, body, exportResps);
             if (exportFilePath == null) {
-                return null;
+                return Optional.empty();
             }
             ExportResourceRsp exportResourceRsp = new ExportResourceRsp();
             exportResourceRsp.setExportResult(getExportResults(exportResps));
             exportResourceRsp.setDownloadUrl(exportFilePath);
-            return exportResourceRsp;
+            return Optional.of(exportResourceRsp);
         } catch (Exception e) {
             log.error("Failed to export the workflow.", e);
             throw new AgentStudioException(StudioError.WORKFLOW_EXPORT_FILE);
@@ -564,7 +565,7 @@ public class AgentExportService {
         }
     }
 
-    private ExportResourceRsp exportAgents(String projectId, String workspaceId, String accept,
+    private Optional<ExportResourceRsp> exportAgents(String projectId, String workspaceId, String accept,
         ExportResourceParams body) {
         List<String> agentIds = body.getResourceIds();
         validAgent(projectId, workspaceId, agentIds);
@@ -610,12 +611,12 @@ public class AgentExportService {
             }
             String exportFilePath = getExportFilePath(accept, body, exportResps);
             if (exportFilePath == null) {
-                return null;
+                return Optional.empty();
             }
             ExportResourceRsp exportResourceRsp = new ExportResourceRsp();
             exportResourceRsp.setExportResult(getExportResults(exportResps));
             exportResourceRsp.setDownloadUrl(exportFilePath);
-            return exportResourceRsp;
+            return Optional.of(exportResourceRsp);
         } catch (Exception e) {
             log.error("Failed to export the agent.", e);
             throw new AgentStudioException(StudioError.AGENT_EXPORT_FILE);
@@ -644,7 +645,7 @@ public class AgentExportService {
         ExportResourceParams body, String appId, String appVersion, String appName) {
         List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(appId, appVersion, null, null);
         if (CollectionUtils.isEmpty(mappingEntities)) {
-            return null;
+            return Collections.emptyList();
         }
         List<MappingEntity> workflowMappings = mappingEntities.stream()
             .filter(p -> Strings.CS.equals(p.getResourceType(), ResourceTypeEnum.WORKFLOW.toString()))
