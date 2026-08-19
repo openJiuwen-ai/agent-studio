@@ -270,7 +270,7 @@ public class AgentCommonService {
         agent.setIconName(iconName);
         agent.setWorkspaceId(workspaceId);
         agent.setDomainId(RequestContextUtils.getRequestUserDomainId());
-        agent.setDeleted(0);
+        agent.setDeleted(false);
 
         // 检查agent icon
         checkAgentIcon(agent.getIcon());
@@ -557,7 +557,7 @@ public class AgentCommonService {
         HistoryAgentEntity historyAgent = new HistoryAgentEntity();
         BeanUtils.copyProperties(agent, historyAgent);
         historyAgent.setHistoryId(UuidUtils.getUUID());
-        historyAgent.setDeleted(0);
+        historyAgent.setDeleted(false);
         historyAgentMapper.insert(historyAgent);
         agentMapper.deleteByPrimaryKey(agentId, projectId);
     }

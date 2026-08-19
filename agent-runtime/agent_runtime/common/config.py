@@ -381,6 +381,7 @@ class CodeExecutionSettings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
+
 class DataBaseSettings(BaseSettings):
     password_provider_type: str = Field(
         default="DEFAULT", validation_alias="DATASOURCE_PASSWORD_PROVIDER_TYPE"
@@ -391,7 +392,7 @@ class DataBaseSettings(BaseSettings):
     password_provider_class: str = Field(
         default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_CLASS"
     )
-    db_type: Literal["mysql", "gaussdb"] = Field(
+    db_type: Literal["mysql", "gaussdb", "postgresql"] = Field(
         default="mysql", validation_alias="STORE_DB_TYPE"
     )
     host: str = Field(default="", validation_alias="STORE_DB_HOST")
@@ -500,9 +501,9 @@ class Settings:
     checkpointer = CheckpointerSettings()
     otel = OtelSettings()
     code_execution = CodeExecutionSettings()
-    db_config = DataBaseSettings()
     conversation_variable = ConversationVariableSettings()
     openjiuwen_kb = OpenJiuwenKBSettings()
     kb = KnowledgeBaseSettings()
+
 
 settings = Settings()

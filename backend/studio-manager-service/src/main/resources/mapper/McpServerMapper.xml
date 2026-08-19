@@ -20,10 +20,10 @@
         <result column="type" jdbcType="VARCHAR" property="type"/>
         <result column="category" jdbcType="VARCHAR" property="category"/>
         <result column="creator" jdbcType="VARCHAR" property="creator"/>
-        <result column="creator_id" jdbcType="TINYINT" property="creatorId"/>
+        <result column="creator_id" jdbcType="VARCHAR" property="creatorId"/>
         <result column="created_on" jdbcType="TIMESTAMP" property="createTime"/>
         <result column="updated_on" jdbcType="TIMESTAMP" property="updateTime"/>
-        <result column="binding" jdbcType="TINYINT" property="binding" />
+        <result column="binding" jdbcType="BOOLEAN" property="binding" />
         <result column="config_status" jdbcType="VARCHAR" property="configStatus" />
         <association property="configs" javaType="com.openjiuwen.studio.agent.manager.dto.McpServerConfig">
             <id property="id" column="c_id"/>

@@ -38,6 +38,9 @@ class ServerSettings(BaseSettings):
     tls_ciphers: str = Field(default="TLSv1.2 TLSv1.3", validation_alias="TLS_CIPHERS")
     workers: int = Field(default=1, validation_alias="GUNICORN_WORK_NUM")
     nginx_load_balancing: bool = Field(default=False, validation_alias="NGINX_LOAD_BALANCING")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     @field_validator("nginx_load_balancing", mode="before")
     @classmethod
@@ -343,7 +346,7 @@ class DataBaseSettings(BaseSettings):
     password_provider_class: str = Field(
         default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_CLASS"
     )
-    db_type: Literal["mysql", "gaussdb"] = Field(
+    db_type: Literal["mysql", "gaussdb", "postgresql"] = Field(
         default="mysql", validation_alias="STORE_DB_TYPE"
     )
     host: str = Field(default="", validation_alias="STORE_DB_HOST")

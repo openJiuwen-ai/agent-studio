@@ -33,7 +33,7 @@
         workspace_name,
         trace_id,
         version_list,
-        `project_id`,
+        project_id,
         tenant_id,
         creator,
         creator_id,

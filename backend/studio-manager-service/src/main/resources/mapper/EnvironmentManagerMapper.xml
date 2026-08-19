@@ -12,7 +12,7 @@
         <result column="project_id" jdbcType="VARCHAR" property="projectId"/>
         <result column="name" jdbcType="VARCHAR" property="name"/>
         <result column="description" jdbcType="VARCHAR" property="description"/>
-        <result column="is_default" jdbcType="TINYINT" property="isDefault"/>
+        <result column="is_default" jdbcType="BOOLEAN" property="isDefault"/>
         <result column="status" jdbcType="VARCHAR" property="status"/>
         <result column="resources" jdbcType="VARCHAR" property="resources"/>
         <result column="created_on" jdbcType="TIMESTAMP" property="createdOn"/>
@@ -27,7 +27,7 @@
         FROM t_environment_manager_info
         WHERE project_id = #{projectId}
         ORDER BY created_on DESC
-        LIMIT #{pageOffset}, #{pageSize}
+        LIMIT #{pageSize} OFFSET #{pageOffset}
     </select>
 
     <select id="selectAllByStatus" resultMap="BaseResultMap">
@@ -36,7 +36,7 @@
         WHERE project_id = #{projectId}
         AND status = #{status}
         ORDER BY created_on DESC
-        LIMIT #{pageOffset}, #{pageSize}
+        LIMIT #{pageSize} OFFSET #{pageOffset}
     </select>
 
     <select id="findByProjectId" resultMap="BaseResultMap">
@@ -49,14 +49,14 @@
     <select id="findByProjectIdAndIsDefaultTrue" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM t_environment_manager_info
-        WHERE project_id = #{projectId} AND is_default = 1
+        WHERE project_id = #{projectId} AND is_default = true
         ORDER BY created_on DESC
     </select>
 
     <select id="findByProjectIdAndIsDefaultFalseAndStatus" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM t_environment_manager_info
-        WHERE project_id = #{projectId} AND is_default = 0 AND status = #{status}
+        WHERE project_id = #{projectId} AND is_default = false AND status = #{status}
         ORDER BY created_on DESC
     </select>
 
@@ -153,7 +153,7 @@
             AND name LIKE CONCAT('%', #{name}, '%')
         </if>
         ORDER BY created_on DESC
-        LIMIT #{offset}, #{limit}
+        LIMIT #{limit} OFFSET #{offset}
     </select>
 
     <select id="selectByStatusConditionWithPage" resultMap="BaseResultMap">
@@ -161,7 +161,7 @@
         FROM t_environment_manager_info
         WHERE project_id = #{projectId} AND status = #{status}
         ORDER BY created_on DESC
-        LIMIT #{offset}, #{limit}
+        LIMIT #{limit} OFFSET #{offset}
     </select>
 
     <select id="countByCondition" resultType="int">

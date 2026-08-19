@@ -199,7 +199,7 @@
         on a.PROVIDER_ID = s.PROVIDER_ID
         and a.PROJECT_ID = s.PROJECT_ID and a.WORKSPACE_ID = s.WORKSPACE_ID
         where (s.WORKSPACE_ID !=
-        #{condition.workspaceId} and s.WORKSPACE_ID != 'SYSTEM') and (s.PROJECT_ID != 'SYSTEM') and s.IS_PUBLIC = '1'
+        #{condition.workspaceId} and s.WORKSPACE_ID != 'SYSTEM') and (s.PROJECT_ID != 'SYSTEM') and s.IS_PUBLIC = true
         <include refid="conditionSql"></include>
         and a.ID is not null and a.AUTH_INFO is not null
         order by s.MODEL_PRIORITY

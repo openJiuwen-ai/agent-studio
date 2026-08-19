@@ -170,7 +170,7 @@ class ContextManager(metaclass=Singleton):
 
                 if self._store:
                     self.init_store()
-            except Exception as e:
+            except Exception:
                 self._store = None
                 raise
 
@@ -187,7 +187,7 @@ class ContextManager(metaclass=Singleton):
     @staticmethod
     def _create_accesser(store_type: str) -> BaseContextStoreAccesser:
         """Create the appropriate store accesser based on store_type."""
-        if store_type in (TuneConstant.MYSQL_STORAGE, TuneConstant.GAUSSDB_STORAGE):
+        if store_type in (TuneConstant.MYSQL_STORAGE, TuneConstant.GAUSSDB_STORAGE, TuneConstant.POSTGRESQL_STORAGE):
             return DbContextAccesser()
         raise ValueError(f"Unknown store type: {store_type}")
 

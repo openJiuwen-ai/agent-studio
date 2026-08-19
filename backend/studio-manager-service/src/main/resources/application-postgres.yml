@@ -1,0 +1,19 @@
+spring:
+  sql:
+    init:
+      schema-locations:
+        - ${spring_sql_manager_ddl:classpath:sql/ddl_postgres.sql}
+        - ${spring_sql_knowledge_ddl:classpath:sql/knowledge-base/ddl_postgres.sql}
+      mode: always
+      continue-on-error: true
+  quartz:
+    properties:
+      org:
+        quartz:
+          jobStore:
+            driverDelegateClass: ${org_quartz_jobStore_driverDelegateClass:org.quartz.impl.jdbcjobstore.PostgreSQLDelegate}
+
+mybatis-plus:
+  global-config:
+    db-config:
+      db-type: ${mybatis_plus_db_type:postgres}

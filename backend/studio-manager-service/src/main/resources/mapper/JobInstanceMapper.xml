@@ -69,7 +69,7 @@
         </if>
         <if test="name != null and name.length() > 0">
             <bind name="name" value="'%' + name + '%'"/>
-            AND t1.`name` LIKE #{name}
+            AND t1.name LIKE #{name}
         </if>
         ORDER BY t1.updated_on DESC
     </select>

@@ -1302,12 +1302,15 @@ public class PluginBaseImpl implements IPluginBase {
     }
 
     private static boolean strToBool(Object value) {
+        if (value == null) {
+            return false;
+        }
         if ("1".equals(value) || value instanceof Integer && (Integer)value == 1) {
             return true;
         } else if ("0".equals(value) || value instanceof Integer && (Integer)value == 0) {
             return false;
         }
-        throw new IllegalArgumentException("Invalid input");
+        return false;
     }
 
     private List<ToolInputSchema> fillInHeaders(String inputSchema, String requestInfoStr) {

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Database utils — supports MySQL (pymysql) and GaussDB (py_opengauss).
+Database utils — supports MySQL (pymysql), GaussDB (py_opengauss), and PostgreSQL (psycopg2).
 
 Provides DBUtil (connection + execution) and DBTable (CRUD helpers).
-Database type is determined by STORE_DB_TYPE env var: "mysql" or "gaussdb" (default: mysql).
+Database type is determined by STORE_DB_TYPE env var: "mysql", "gaussdb", or "postgresql" (default: mysql).
 Connection params are read from agent_builder.adapter.config_bridge.settings.db_config.
 """
 
@@ -24,6 +24,10 @@ DEFAULT_WR_TIMEOUT: int = 60
 
 def _is_gaussdb() -> bool:
     return settings.db_config.db_type == "gaussdb"
+
+
+def _is_postgresql() -> bool:
+    return settings.db_config.db_type == "postgresql"
 
 
 class DBUtil:
@@ -61,19 +65,34 @@ class DBUtil:
                             hosts = [h.strip() for h in host.split(",") if h.strip()]
                             port_val = port or "5432"
                             host_list = ",".join([f"{h}:{port_val}" for h in hosts])
-                            # 密码不进 URI：py_opengauss.open() 内部用 iri.parse() 不做百分号解码，
-                            # 若用 quote_plus 编码后拼进 URI，含 # @ / ? 等特殊字符的密码会被破坏
-                            # 导致认证失败。改为通过 password 关键字参数直传，规避 URI 编解码问题。
                             iri = f"opengauss://{user}@{host_list}/{database}"
                             if db.sslmode and db.sslmode != "disable":
                                 iri += f"?sslmode={db.sslmode}"
-                            # schema 模式（仅 GaussDB 生效）：通过 search_path 设置默认 schema，
-                            # 之后不带前缀的表名按此路径解析。schema 为空则不传，使用数据库默认。
                             connect_kw = {"password": password}
                             if db.db_schema:
                                 connect_kw["settings"] = {"search_path": db.db_schema}
                             cls._instance = py_opengauss.open(iri, **connect_kw)
                             logger.info(f"GaussDB connected (auto-primary): {host_list}")
+                        elif _is_postgresql():
+                            import psycopg2
+
+                            port_val = port or "5432"
+                            sslmode = db.sslmode if db.sslmode != "disable" else None
+                            conn_kw = {
+                                "host": host,
+                                "port": port_val,
+                                "user": user,
+                                "password": password,
+                                "dbname": database,
+                            }
+                            if "," in host:
+                                conn_kw["target_session_attrs"] = "read-write"
+                            if sslmode:
+                                conn_kw["sslmode"] = sslmode
+                            if db.db_schema:
+                                conn_kw["options"] = f"-c search_path={db.db_schema},public"
+                            cls._instance = psycopg2.connect(**conn_kw)
+                            logger.info(f"PostgreSQL connected: {host}:{port_val}")
                         else:
                             import pymysql
 
@@ -123,6 +142,8 @@ class DBUtil:
     def _do_execute(cls, sql_str, fetch_all, params):
         if _is_gaussdb():
             return cls._do_execute_gaussdb(sql_str, fetch_all, params)
+        elif _is_postgresql():
+            return cls._do_execute_postgresql(sql_str, fetch_all, params)
         else:
             return cls._do_execute_mysql(sql_str, fetch_all, params)
 
@@ -165,6 +186,23 @@ class DBUtil:
             return [tuple(row) for row in rows]
         else:
             return tuple(rows[0])
+
+    @classmethod
+    def _do_execute_postgresql(cls, sql_str, fetch_all, params):
+        cursor = cls._instance.cursor()
+        try:
+            cursor.execute(sql_str, params)
+            cls._instance.commit()
+            if cursor.description is None:
+                cursor.close()
+                return [] if fetch_all else None
+            data = cursor.fetchall() if fetch_all else cursor.fetchone()
+            cursor.close()
+            return data
+        except Exception:
+            cls._instance.rollback()
+            cursor.close()
+            raise
 
     @classmethod
     def reset(cls):
@@ -254,7 +292,11 @@ class DBTable:
             condition_values = tuple(values[f.name] for f in self._fields)
             conflict_cols = ", ".join([self._q(k) for k in self._primary_keys])
             update_cols = ", ".join(
-                [f"{self._q(f.name)} = {self._q(f.name)}" for f in self._fields if f.name not in self._primary_keys]
+                [
+                    f"{self._q(f.name)} = EXCLUDED.{self._q(f.name)}"
+                    for f in self._fields
+                    if f.name not in self._primary_keys
+                ]
             )
             sql = self._dialect.upsert_sql(self._table_name, cols, placeholders, conflict_cols, update_cols)
             DBUtil.execute(sql, params=condition_values)
@@ -328,7 +370,8 @@ class DBTable:
                 condition_keys.append(f"{self._q(key)}=%s")
                 condition_values.append(value)
             conditions_sql = " AND ".join(condition_keys)
-            sql = f"SELECT {target} FROM {self._dialect.quote(self._table_name)} WHERE {conditions_sql}"
+            col = "*" if target == "*" else self._q(target)
+            sql = f"SELECT {col} FROM {self._dialect.quote(self._table_name)} WHERE {conditions_sql}"
             result = DBUtil.execute(sql, params=condition_values, fetch_all=False)
         else:
             conditions_sql = " AND ".join(
@@ -367,7 +410,8 @@ class DBTable:
                 condition_keys.append(f"{self._q(key)}=%s")
                 condition_values.append(value)
             conditions_sql = " AND ".join(condition_keys)
-            sql = f"SELECT {target} FROM {self._dialect.quote(self._table_name)} WHERE {conditions_sql}"
+            col = "*" if target == "*" else self._q(target)
+            sql = f"SELECT {col} FROM {self._dialect.quote(self._table_name)} WHERE {conditions_sql}"
             results = DBUtil.execute(sql, params=condition_values)
         else:
             conditions_sql = " AND ".join(

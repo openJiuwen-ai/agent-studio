@@ -13,7 +13,7 @@
         <result column="mode" jdbcType="VARCHAR" property="mode"/>
         <result column="app_id" jdbcType="VARCHAR" property="appId"/>
         <result column="app_version" jdbcType="VARCHAR" property="appVersion"/>
-        <result column="is_published" jdbcType="TINYINT" property="isPublished"/>
+        <result column="is_published" jdbcType="BOOLEAN" property="isPublished"/>
         <result column="status" jdbcType="VARCHAR" property="status"/>
         <result column="inputs" jdbcType="VARCHAR" property="inputs"/>
         <result column="outputs" jdbcType="VARCHAR" property="outputs"/>
@@ -27,13 +27,13 @@
 
     <sql id="Base_Column_List">
         id,
-        `name`,
+        name,
         conversation_id,
         user_id,
         project_id,
         domain_id,
         workspace_id,
-        `type`,
+        type,
         mode,
         app_id,
         app_version,
@@ -58,7 +58,7 @@
                 #{entity.projectId,jdbcType=VARCHAR}, #{entity.domainId,jdbcType=VARCHAR},
                 #{entity.workspaceId,jdbcType=VARCHAR}, #{entity.type,jdbcType=VARCHAR},
                 #{entity.mode,jdbcType=VARCHAR}, #{entity.appId,jdbcType=VARCHAR},
-                #{entity.appVersion,jdbcType=VARCHAR}, #{entity.isPublished,jdbcType=TINYINT},
+                #{entity.appVersion,jdbcType=VARCHAR}, #{entity.isPublished,jdbcType=BOOLEAN},
                 #{entity.status,jdbcType=VARCHAR}, #{entity.inputs,jdbcType=VARCHAR},
                 #{entity.outputs,jdbcType=VARCHAR}, #{entity.timeout,jdbcType=INTEGER},
                 #{entity.createTime,jdbcType=TIMESTAMP}, #{entity.startTime,jdbcType=TIMESTAMP},
@@ -80,10 +80,10 @@
             and workspace_id=#{entity.workspaceId}
         </if>
         <if test="entity.name != null and entity.name != ''">
-            and `name` like concat('%', #{entity.name,jdbcType=VARCHAR}, '%')
+            and name like concat('%', #{entity.name,jdbcType=VARCHAR}, '%')
         </if>
         <if test="entity.type != null and entity.type != ''">
-            and `type`=#{entity.type}
+            and type=#{entity.type}
         </if>
         <if test="entity.mode != null and entity.mode != ''">
             and mode=#{entity.mode}
@@ -120,7 +120,7 @@
         update t_task
         <set>
             <if test="entity.name != null">
-                `name` = #{entity.name, jdbcType=VARCHAR},
+                name = #{entity.name, jdbcType=VARCHAR},
             </if>
             <if test="entity.status != null">
                 status = #{entity.status, jdbcType=VARCHAR},
@@ -156,7 +156,7 @@
         select
         <include refid="Base_Column_List"/>
         from t_task
-        where status='INIT' and (`type`='chat' or `type`='task')
+        where status='INIT' and (type='chat' or type='task')
         order by create_time asc limit #{limit, jdbcType=INTEGER}
     </select>
     <select id="getExpiredTaskEntity" parameterType="com.openjiuwen.studio.agent.manager.entity.TaskEntity"

@@ -31,7 +31,7 @@
         workspace_name,
         trace_id,
         version_list,
-        `project_id`,
+        project_id,
         tenant_id,
         creator,
         creator_id,
@@ -151,13 +151,13 @@
         update t_share_resource
         <set>
             <if test="versionList != null">
-                `version_list` = #{versionList,jdbcType=VARCHAR},
+                version_list = #{versionList,jdbcType=VARCHAR},
             </if>
             <if test="updaterId != null">
-                `updater_id` = #{updaterId,jdbcType=VARCHAR},
+                updater_id = #{updaterId,jdbcType=VARCHAR},
             </if>
             <if test="updateTime != null">
-                `update_time` = #{updateTime,jdbcType=VARCHAR},
+                update_time = #{updateTime,jdbcType=VARCHAR},
             </if>
         </set>
         where resource_id = #{resourceId,jdbcType=VARCHAR}

@@ -74,7 +74,7 @@ public class Agent {
     private String traceId;
 
     @JsonProperty("deleted")
-    private Integer deleted;
+    private Boolean deleted = false;
 
     /**
      * 项目空间ID
