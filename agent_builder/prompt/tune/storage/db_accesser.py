@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
 """
 agent builder chain Template optimizer
