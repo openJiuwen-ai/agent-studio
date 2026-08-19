@@ -39,6 +39,7 @@ import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.MemoryRepoEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
 import com.openjiuwen.studio.agent.manager.entity.ShareInfo;
+import com.openjiuwen.studio.agent.manager.entity.ShareResourceEntity;
 import com.openjiuwen.studio.agent.manager.entity.SpaciousInfo;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
@@ -51,6 +52,7 @@ import com.openjiuwen.studio.agent.manager.enums.ResourceTypeEnum;
 import com.openjiuwen.studio.agent.manager.enums.controller.AgentNodeType;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ShareResourceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
@@ -88,6 +90,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -131,6 +134,9 @@ public class AgentImportService {
 
     @Autowired
     private ShareResourceManagerService shareResourceManagerService;
+
+    @Autowired
+    private ShareResourceMapper shareResourceMapper;
 
     @Autowired
     private MappingMapper mappingMapper;
@@ -426,6 +432,15 @@ public class AgentImportService {
                         latestVersionId = versions.get(0).getVersionId();
                         latestVersionName = versions.get(0).getVersionName();
                     }
+                } else {
+                    // 宽松导入：本地查不到时，按 traceId 查共享给当前空间的共享资源（含团队共享 'all'），命中取最新版本
+                    SpaciousInfo shareInfo = findSharedSpaciousInfo(projectId, workspaceId,
+                        ResourceTypeEnum.WORKFLOW.toString(), mapping.getTraceId());
+                    if (shareInfo != null) {
+                        targetResourceId = shareInfo.getTargetResourceId();
+                        latestVersionId = shareInfo.getLatestVersionId();
+                        latestVersionName = shareInfo.getLatestVersionName();
+                    }
                 }
             } else if (Strings.CS.equals(mapping.getResourceType(), ResourceTypeEnum.CONTROLLER.toString())) {
                 List<Agent> agents = agentMapper.selectAgentByTraceIdAndWorkspaceId(projectId, workspaceId,
@@ -438,14 +453,27 @@ public class AgentImportService {
                         latestVersionId = versions.get(0).getVersionId();
                         latestVersionName = versions.get(0).getVersionName();
                     }
+                } else {
+                    // 宽松导入：本地查不到时，按 traceId 查共享给当前空间的共享资源（含团队共享 'all'），命中取最新版本
+                    SpaciousInfo shareInfo = findSharedSpaciousInfo(projectId, workspaceId,
+                        ResourceTypeEnum.CONTROLLER.toString(), mapping.getTraceId());
+                    if (shareInfo != null) {
+                        targetResourceId = shareInfo.getTargetResourceId();
+                        latestVersionId = shareInfo.getLatestVersionId();
+                        latestVersionName = shareInfo.getLatestVersionName();
+                    }
                 }
             } else if (Strings.CS.equals(mapping.getResourceType(), ResourceTypeEnum.MODEL.toString())) {
-                // 宽松导入：按模型 identityId 在目标空间匹配等价模型。源空间模型的 mapping.resourceId 即其 id，
-                // 首建模型 id==identityId，可直接作为查询键；导入来的模型 id!=identityId 时查不到则保持原值（不抛异常）。
-                List<ModelServiceBase> models = modelServiceMapper.queryByIdentityId(projectId, workspaceId,
-                    mapping.getResourceId());
-                if (CollectionUtils.isNotEmpty(models)) {
-                    targetResourceId = models.get(0).getId();
+                // 宽松导入：按模型 identityId 在目标空间匹配等价模型。
+                // mapping.resourceId 是源空间模型 id，需先查其 identityId（导入来的模型 id!=identityId），
+                // 再用 identityId 在目标空间 queryByIdentityId 查等价模型。查不到则保持原值（不抛异常）。
+                ModelServiceBase sourceModel = modelServiceMapper.queryById(mapping.getResourceId());
+                if (sourceModel != null && StringUtils.isNotEmpty(sourceModel.getIdentityId())) {
+                    List<ModelServiceBase> models = modelServiceMapper.queryByIdentityId(projectId, workspaceId,
+                        sourceModel.getIdentityId());
+                    if (CollectionUtils.isNotEmpty(models)) {
+                        targetResourceId = models.get(0).getId();
+                    }
                 }
             }
             if (StringUtils.isNotEmpty(targetResourceId)) {
@@ -458,6 +486,41 @@ public class AgentImportService {
             }
         }
         return spaciousInfoList;
+    }
+
+    /**
+     * 宽松导入：本地查不到子资源时，按 traceId 查共享给当前空间的共享资源（含团队共享 'all'）。
+     * 命中则取 version_list 中 versionId 最大的版本（与 selectByAppId 的 order by version_id desc 语义一致）。
+     * 查不到返回 null（保持原值不抛异常）。仅 getSpaciousInfos 宽松导入调用，不影响严格导入。
+     */
+    private SpaciousInfo findSharedSpaciousInfo(String projectId, String workspaceId, String resourceType,
+        String traceId) {
+        if (StringUtils.isEmpty(traceId)) {
+            return null;
+        }
+        List<ShareResourceEntity> shareResources = shareResourceMapper.selectSharedResourceByTraceIdAndAuthWorkspace(
+            projectId, workspaceId, resourceType, traceId);
+        if (CollectionUtils.isEmpty(shareResources)) {
+            return null;
+        }
+        ShareResourceEntity shareResource = shareResources.get(0);
+        SpaciousInfo spaciousInfo = new SpaciousInfo();
+        spaciousInfo.setTargetResourceId(shareResource.getResourceId());
+        spaciousInfo.setOriginalResourceId(shareResource.getResourceId());
+        // 从 version_list 取 versionId 最大的版本（versionId 为毫秒时间戳字符串，等长13位，字符串降序==数值降序）
+        List<ResourceVersionInfo> versionInfos = JsonUtils.json2Array(shareResource.getVersionList(),
+            ResourceVersionInfo.class);
+        if (CollectionUtils.isNotEmpty(versionInfos)) {
+            ResourceVersionInfo latest = versionInfos.stream()
+                .filter(v -> StringUtils.isNotEmpty(v.getVersionId()))
+                .max(Comparator.comparing(ResourceVersionInfo::getVersionId))
+                .orElse(null);
+            if (latest != null) {
+                spaciousInfo.setLatestVersionId(latest.getVersionId());
+                spaciousInfo.setLatestVersionName(latest.getVersionName());
+            }
+        }
+        return spaciousInfo;
     }
 
     private void handleSpaciousWorkflowDsl(WorkflowVO workflowVO, List<SpaciousInfo> spaciousInfoList) {
@@ -2059,16 +2122,30 @@ public class AgentImportService {
         }
         List<WorkflowEntity> targetWorkflows = workflowMapper.selectByTraceId(projectId, workspaceId,
             String.valueOf(idObj));
-        if (CollectionUtils.isEmpty(targetWorkflows)) {
+        if (CollectionUtils.isNotEmpty(targetWorkflows)) {
+            // 本地命中：替换为本地新 id；version_id 为 {{latest}} 时用本地最新版本替换
+            WorkflowEntity targetWf = targetWorkflows.get(0);
+            configs.put("id", targetWf.getId());
+            if (Strings.CS.equals(String.valueOf(configs.get("version_id")), LATEST_PARAM)) {
+                List<ReleaseVersion> versions = releaseVersionMapper.selectByAppId(targetWf.getId());
+                if (CollectionUtils.isNotEmpty(versions)) {
+                    configs.put("version_id", versions.get(0).getVersionId());
+                    configs.put("version_name", versions.get(0).getVersionName());
+                }
+            }
             return;
         }
-        WorkflowEntity targetWf = targetWorkflows.get(0);
-        configs.put("id", targetWf.getId());
-        if (Strings.CS.equals(String.valueOf(configs.get("version_id")), LATEST_PARAM)) {
-            List<ReleaseVersion> versions = releaseVersionMapper.selectByAppId(targetWf.getId());
-            if (CollectionUtils.isNotEmpty(versions)) {
-                configs.put("version_id", versions.get(0).getVersionId());
-                configs.put("version_name", versions.get(0).getVersionName());
+        // 本地查不到：按 id（源空间 workflow id==traceId）查共享给当前空间的共享资源，命中则替换 version_id 为最新版本
+        // 共享工作流为纯引用，id 保持源空间id不变（运行时跨空间解析），仅替换版本为共享资源最新版本
+        SpaciousInfo shareInfo = findSharedSpaciousInfo(projectId, workspaceId,
+            ResourceTypeEnum.WORKFLOW.toString(), String.valueOf(idObj));
+        if (shareInfo != null) {
+            configs.put("id", shareInfo.getTargetResourceId());
+            if (Strings.CS.equals(String.valueOf(configs.get("version_id")), LATEST_PARAM)) {
+                if (StringUtils.isNotEmpty(shareInfo.getLatestVersionId())) {
+                    configs.put("version_id", shareInfo.getLatestVersionId());
+                    configs.put("version_name", shareInfo.getLatestVersionName());
+                }
             }
         }
     }

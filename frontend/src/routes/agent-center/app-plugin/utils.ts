@@ -945,6 +945,7 @@ function mapTreeSchemaIndex(schema, start, rootValType) {
       name: item.name,
       rootValType: rootValType,
       isObjChild: item.type === 'object',
+      hasObjChild: item?.schema?.length > 0 && item.type === 'object',
       value: {
         content: '',
         default: '',
@@ -974,7 +975,17 @@ export function eachChildrenToRootObj(children, value) {
             res[item.name] = null;
           }
         } else {
-          res[item.name] = value.value.content;
+          if (item.type === 'object') {
+            let itemVal = value.value.content;
+            try {
+              itemVal = JSON.parse(itemVal);
+            } catch {
+              itemVal = null;
+            }
+            res[item.name] = itemVal;
+          } else {
+            res[item.name] = value.value.content;
+          }
         }
       } else {
         let itemVal = item.value.content;
@@ -1031,11 +1042,13 @@ function setEachAllChildrenVal(children, objVal, rootValType) {
         if (item.type === 'object') {
           if (item.children) {
             item.children = setEachAllChildrenVal(item.children, objVal[item.name], rootValType);
+          } else if (newVal) {
+            item.value.content = JSON.stringify(newVal, null, 2);
           }
         } else {
           if (item.type.startsWith('array')) {
             if (newVal) {
-              newVal = JSON.stringify(newVal);
+              newVal = JSON.stringify(newVal, null, 2);
             } else {
               newVal = null;
             }

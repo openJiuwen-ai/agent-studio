@@ -334,13 +334,14 @@ class WorkflowRunner:
             "createdTime": int(time.time() * 1000),
         }
 
+        wf_start_time = int(time.time() * 1000)
         if not is_resuming:
             yield {
                 "event": "workflow_start",
                 "data": {},
                 "index": 0,
                 "executionId": exec_id,
-                "createdTime": int(time.time() * 1000),
+                "createdTime": wf_start_time,
             }
 
         # 7. 执行工作流
@@ -362,6 +363,7 @@ class WorkflowRunner:
                 history=req.params.conversation_history,
                 query=req.query or "",
                 is_resuming=is_resuming,
+                start_time=wf_start_time,
             )
 
             t_compile_invoke_start = time.perf_counter()

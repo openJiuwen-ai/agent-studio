@@ -2,7 +2,7 @@
 
 > This guide is for upgrading from **Beta4** and earlier to **Beta5**, focusing on **architecture changes** and **environment variable changes**. For new deployments, refer to [Deployment Guide](./deploy-service.md); this guide does not repeat general steps.
 >
-> Environment variables are authoritative in the source `docker/k8s/` YAML files (`studio-manager.yaml`, `studio-builder.yaml`, `studio-runtime.yaml`, `studio-console.yaml`).
+> Environment variables are authoritative in the source `deploy/k8s/` YAML files (`studio-manager.yaml`, `studio-builder.yaml`, `studio-runtime.yaml`, `studio-console.yaml`).
 
 ---
 
@@ -49,7 +49,7 @@ runtime → service (model routing)   runtime → OBS direct model (default)
 
 ## 2. Environment Variable Changes
 
-> Legend: 🆕 Added · 🗑️ Removed · 🔁 Renamed/changed default. Only **changed items** are listed per service; unlisted variables remain the same as Beta4. See `docker/k8s/<svc>.yaml` for details.
+> Legend: 🆕 Added · 🗑️ Removed · 🔁 Renamed/changed default. Only **changed items** are listed per service; unlisted variables remain the same as Beta4. See `deploy/k8s/<svc>.yaml` for details.
 
 ### 2.1 studio-manager
 
@@ -73,7 +73,7 @@ Model cache, sandbox, OpenSearch, memory store, `STORE_DB_*`, `IR_LLM_API_KEY`, 
 
 ### 2.3 studio-builder (🆕 New service)
 
-Full variables in `docker/k8s/studio-builder.yaml`, grouped as follows:
+Full variables in `deploy/k8s/studio-builder.yaml`, grouped as follows:
 
 | Group | Variables | Description |
 |-------|-----------|-------------|
@@ -106,7 +106,7 @@ The console container itself has no new environment variables, but its nginx ups
 | `manager_backend` | `studio-manager` | `studio-manager` (unchanged) |
 | `service_backend` | `studio-service:31113` | **Must be removed** |
 
-> Do not mechanically change the old `$service_backend:31113` location to Runtime. In Beta5 standard routing, `/v1/agent-builder/chat/completions`, `/v1/agent-builder/embeddings`, `/v1/agent-builder/rerank` go directly to Builder; `/v1/.*/agents/.*/conversations/.*/additional-questions`, `/v1/.*/agents/.*/conversations`, and `/v1/.*/workflows/.*/conversations` go directly to studio-runtime; other `/v1`, `/v2` requests go to Manager by default, which then calls Runtime or Builder based on business semantics. During upgrade, replace entirely with the release package `docker/compose/config/nginx.conf` (for K8s use the corresponding config in `studio-console.yaml`); do not manually maintain the old routing list.
+> Do not mechanically change the old `$service_backend:31113` location to Runtime. In Beta5 standard routing, `/v1/agent-builder/chat/completions`, `/v1/agent-builder/embeddings`, `/v1/agent-builder/rerank` go directly to Builder; `/v1/.*/agents/.*/conversations/.*/additional-questions`, `/v1/.*/agents/.*/conversations`, and `/v1/.*/workflows/.*/conversations` go directly to studio-runtime; other `/v1`, `/v2` requests go to Manager by default, which then calls Runtime or Builder based on business semantics. During upgrade, replace entirely with the release package `deploy/config/nginx-https.conf` (for K8s use the corresponding config in `studio-console.yaml`); do not manually maintain the old routing list.
 
 ---
 
@@ -120,7 +120,7 @@ Delete service → apply builder → rolling update manager/runtime → update c
 ```
 
 ```bash
-cd docker/k8s   # or the k8s/ directory in the deployment package
+cd deploy/k8s   # or the k8s/ directory in the deployment package
 
 # 1) Remove studio-service (no studio-service.yaml in K8s directory; delete old resources directly)
 kubectl delete deployment studio-service -n default

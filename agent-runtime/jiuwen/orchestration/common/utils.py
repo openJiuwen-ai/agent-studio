@@ -127,7 +127,7 @@ async def wait_until_timeout(task, timeout: int, default_result=None):
     except Exception as e:
         raise JiuWenBaseException(
             message=StatusCode.WORKFLOW_EXECUTE_ERROR.errmsg.format(
-                "found unexpected error from wait_until_timeout"
+                f"found unexpected error from wait_until_timeout: {e}"
             ),
             error_code=StatusCode.WORKFLOW_EXECUTE_ERROR.code,
         ) from e

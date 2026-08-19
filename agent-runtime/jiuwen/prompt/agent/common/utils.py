@@ -196,7 +196,7 @@ def _format_json_response(
         raise JiuWenBaseException(
             StatusCode.PROMPT_JSON_SCHEMA_ERROR.code,
             StatusCode.PROMPT_JSON_SCHEMA_ERROR.errmsg.format(
-                error_msg="response_content is not a valid json."
+                error_msg=f"response_content is not a valid json: {e}"
             ),
         ) from e
     json_schema = convert_json_schema(outputs_config_list)
@@ -208,7 +208,7 @@ def _format_json_response(
         raise JiuWenBaseException(
             StatusCode.PROMPT_JSON_SCHEMA_ERROR.code,
             StatusCode.PROMPT_JSON_SCHEMA_ERROR.errmsg.format(
-                error_msg="response_content json schema validation error."
+                error_msg=f"response_content json schema validation error: {e}"
             ),
         ) from e
 

@@ -56,7 +56,7 @@ class RefineParams(Skill):
             return "", extracted_key_fields_dict
         except Exception as e:
             raise JiuWenBaseException(
-                message=StatusCode.CONTROLLER_REFINE_PARAMS_INVOKE_ERROR.errmsg,
+                message=f"{StatusCode.CONTROLLER_REFINE_PARAMS_INVOKE_ERROR.errmsg}: {e}",
                 error_code=StatusCode.CONTROLLER_REFINE_PARAMS_INVOKE_ERROR.code,
             ) from e
 
@@ -103,7 +103,7 @@ class RefineParams(Skill):
             )
         except Exception as e:
             raise JiuWenBaseException(
-                message=StatusCode.CONTROLLER_REFINE_PARAMS_INVOKE_ERROR.errmsg,
+                message=f"{StatusCode.CONTROLLER_REFINE_PARAMS_INVOKE_ERROR.errmsg}: {e}",
                 error_code=StatusCode.CONTROLLER_REFINE_PARAMS_INVOKE_ERROR.code,
             ) from e
         return original_parameters

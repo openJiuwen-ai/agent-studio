@@ -97,18 +97,18 @@
                     (afterInsertVariable)="hideInserter()"
                     (click)="scrollToEditor()"
                     (variablesChange)="updateVariables($event)"
-                    [class]="{ 'h-[530px]': !!basicInfoForm.value.prompt?.trim(), 'h-[402px]': !basicInfoForm.value.prompt?.trim() }"
+                    [class]="{ 'h-[530px]': !basicInfoFormValuePrompt, 'h-[402px]': basicInfoFormValuePrompt }"
                     [initVariables]="initVariableList"
                     [maxLength]="promptMaxLength"
                     [promptType]="basicInfoForm.value.type"
                     [showInserter]="isShowInserter"
-                    [style]="{
-                      height: !basicInfoForm.value.prompt?.trim() ? '390px' : '518px',
+                    [styleObj]="{
+                      height: basicInfoFormValuePrompt ? '390px' : '518px',
                     }"
                     [variables]="variableList"
                     formControlName="prompt"
                   ></meta-prompt-editor>
-                  <div *ngIf="!basicInfoForm.value.prompt?.trim()" class="prompt-example">
+                  <div *ngIf="basicInfoFormValuePrompt" class="prompt-example">
                     <div class="label">{{ 'prompt_example' | i18nextEager }}</div>
                     <div class="content">
                       <ng-container *ngFor="let example of promptExample">

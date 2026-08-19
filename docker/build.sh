@@ -274,7 +274,7 @@ function package() {
   if [ -f "AgentBuilder.tar.gz" ]; then
       rm -f "AgentBuilder.tar.gz"
   fi
-  tar -czvf AgentBuilder.tar.gz ./image ./compose ./k8s
+  tar -czvf AgentBuilder.tar.gz ./image ../deploy
 }
 
 main "$@"

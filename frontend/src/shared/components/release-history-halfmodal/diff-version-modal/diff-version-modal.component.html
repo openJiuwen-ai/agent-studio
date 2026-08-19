@@ -1,41 +1,118 @@
 <div *nzModalTitle>
   <div class="header">
     <span class="header-title"> {{ 'version_diff' | i18nextEager }}</span>
-    <nz-tag [nzColor]="'green'">{{ '+' + lineAdd }}</nz-tag>
-    <nz-tag [nzColor]="'red'">{{ '-' + lineDel }}</nz-tag>
+    <nz-tag [nzColor]="'green'" *ngIf="!hasError">{{ '+' + lineAdd }}</nz-tag>
+    <nz-tag [nzColor]="'red'" *ngIf="!hasError">{{ '-' + lineDel }}</nz-tag>
+    <button
+      type="button"
+      class="action-btn nav-btn"
+      (click)="previousDiff()"
+      [title]="'previous_diff' | i18nextEager"
+    >
+      ◀ {{ 'previous_diff' | i18nextEager }}
+    </button>
+    <button
+      type="button"
+      class="action-btn nav-btn"
+      (click)="nextDiff()"
+      [title]="'next_diff' | i18nextEager"
+    >
+      {{ 'next_diff' | i18nextEager }} ▶
+    </button>
+    <button
+      type="button"
+      class="action-btn wrap-btn"
+      (click)="toggleWordWrap()"
+      [title]="(wordWrap === 'bounded' ? 'nowrap' : 'wordwrap') | i18nextEager"
+    >
+      {{ (wordWrap === 'bounded' ? 'nowrap' : 'wordwrap') | i18nextEager }}
+    </button>
+    <button
+      type="button"
+      class="action-btn fullscreen-btn"
+      (click)="toggleFullscreen()"
+      [title]="(fullscreen ? 'exit_fullscreen' : 'fullscreen') | i18nextEager"
+    >
+      {{ (fullscreen ? 'exit_fullscreen' : 'fullscreen') | i18nextEager }}
+    </button>
   </div>
 </div>
 <div>
   <div class="diff-wrapper">
     <div class="diff-toolbar">
       <div class="select-div ml-[40px]">
-        <nz-select
-          class="version-select"
-          [(ngModel)]="leftSelectedId"
-          (ngModelChange)="changeLeft($event)"
-          nzPlaceHolder="{{ 'select_version' | i18nextEager }}"
-        >
-          <nz-option *ngFor="let opt of leftOptions" [nzValue]="opt.id" [nzLabel]="opt.label"></nz-option>
-        </nz-select>
+        <div class="select-row">
+          <nz-select
+            class="version-select"
+            [(ngModel)]="leftSelectedId"
+            (ngModelChange)="changeLeft($event)"
+            [attr.aria-label]="'original ' + ('version_diff' | i18nextEager)"
+            nzPlaceHolder="{{ 'select_version' | i18nextEager }}"
+          >
+            <nz-option *ngFor="let opt of leftOptions" [nzValue]="opt.id" [nzLabel]="opt.label"></nz-option>
+          </nz-select>
+          <button
+            type="button"
+            class="copy-btn"
+            *ngIf="!dslTooLarge"
+            (click)="copyOriginal()"
+            [title]="'copy_version_text' | i18nextEager"
+          >
+            {{ (copiedOriginal ? 'copied' : 'copy') | i18nextEager }}
+          </button>
+        </div>
+        <div class="side-status" *ngIf="originalState.loading || originalState.error">
+          <nz-spin *ngIf="originalState.loading" nzSimple [nzSize]="'small'"></nz-spin>
+          <div class="side-error" *ngIf="originalState.error" aria-live="polite">
+            <span>{{ 'version_load_failed' | i18nextEager }}<span class="showing-previous" *ngIf="displayedVersionLabel('original')"> · {{ 'showing_previous_version' | i18nextEager: { name: displayedVersionLabel('original') } }}</span></span>
+            <button type="button" class="retry-link" (click)="retryOriginal()">{{ 'retry' | i18nextEager }}</button>
+          </div>
+        </div>
       </div>
       <div class="select-div">
-        <nz-select
-          class="version-select"
-          [(ngModel)]="rightSelectedId"
-          (ngModelChange)="changeRight($event)"
-          nzPlaceHolder="{{ 'select_version' | i18nextEager }}"
-        >
-          <nz-option *ngFor="let opt of rightOptions" [nzValue]="opt.id" [nzLabel]="opt.label"></nz-option>
-        </nz-select>
+        <div class="select-row">
+          <nz-select
+            class="version-select"
+            [(ngModel)]="rightSelectedId"
+            (ngModelChange)="changeRight($event)"
+            [attr.aria-label]="'modified ' + ('version_diff' | i18nextEager)"
+            nzPlaceHolder="{{ 'select_version' | i18nextEager }}"
+          >
+            <nz-option *ngFor="let opt of rightOptions" [nzValue]="opt.id" [nzLabel]="opt.label"></nz-option>
+          </nz-select>
+          <button
+            type="button"
+            class="copy-btn"
+            *ngIf="!dslTooLarge"
+            (click)="copyModified()"
+            [title]="'copy_version_text' | i18nextEager"
+          >
+            {{ (copiedModified ? 'copied' : 'copy') | i18nextEager }}
+          </button>
+        </div>
+        <div class="side-status" *ngIf="modifiedState.loading || modifiedState.error">
+          <nz-spin *ngIf="modifiedState.loading" nzSimple [nzSize]="'small'"></nz-spin>
+          <div class="side-error" *ngIf="modifiedState.error" aria-live="polite">
+            <span>{{ 'version_load_failed' | i18nextEager }}<span class="showing-previous" *ngIf="displayedVersionLabel('modified')"> · {{ 'showing_previous_version' | i18nextEager: { name: displayedVersionLabel('modified') } }}</span></span>
+            <button type="button" class="retry-link" (click)="retryModified()">{{ 'retry' | i18nextEager }}</button>
+          </div>
+        </div>
+      </div>
+      <span class="same-version-hint" *ngIf="isSameVersion">{{ 'same_version_hint' | i18nextEager }}</span>
+    </div>
+    <div class="noise-banner">{{ (type === 'agent' ? 'normalized_order_hint_agent' : 'normalized_order_hint') | i18nextEager }}</div>
+    <div class="editor-area" [attr.aria-busy]="originalState.loading || modifiedState.loading">
+      <ngx-monaco-diff-editor
+        [style]="{ width: '100%', height: editorHeight + 'px' }"
+        [options]="diffOptions"
+        [original]="''"
+        [modified]="''"
+        (init)="onDiffInit($event)"
+      ></ngx-monaco-diff-editor>
+      <div class="dsl-too-large-overlay" *ngIf="dslTooLarge">
+        {{ 'dsl_too_large' | i18nextEager }}
       </div>
     </div>
-    <ngx-monaco-diff-editor
-      [style]="{ width: '100%', height: height + 'px' }"
-      [options]="diffOptions"
-      [original]="originalValue"
-      [modified]="modifiedValue"
-      (init)="onDiffInit($event)"
-    ></ngx-monaco-diff-editor>
   </div>
 </div>
 <div *nzModalFooter></div>

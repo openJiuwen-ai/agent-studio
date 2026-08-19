@@ -80,7 +80,10 @@
       </div>
 
       <div *ngIf="!isLoading" style="display: flex; justify-content: space-between; align-items: center">
-        <span>{{ 'total_number_of_records' | i18nextEager }}：{{ pageState.totalNumber }}</span>
+        <div class="page-div">
+          <div class="page-div-span">{{ 'total_number_of_records' | i18nextEager }}：{{ pageState.totalNumber }}</div>
+          <div class="page-div-select">{{ 'select_num' | i18nextEager }}{{ selectedKbs.length }}</div>
+        </div>
         <nz-pagination
           [(nzPageIndex)]="pageState.currentPage"
           [nzTotal]="pageState.totalNumber"

@@ -176,7 +176,12 @@ export class ImportModalComponent {
 
   uploadFileList = [];
 
-  showUploadList: boolean | NzShowUploadList = false;
+  showUploadList: NzShowUploadList = {
+    showRemoveIcon: false,
+    showPreviewIcon: false,
+    showDownloadIcon: false,
+  };
+
 
   constructor(
     private appFlowRepoServe: AppFlowRepoService,
@@ -225,7 +230,6 @@ export class ImportModalComponent {
   }
 
   public onAddFileSuccess(fileItem: any): void {
-    this.showUploadList = false;
     if (fileItem.type === "removed") {
       this.onRemoveItems(null);
       return;
@@ -239,6 +243,11 @@ export class ImportModalComponent {
     }
 
     if (this.uploadFileList.length >= 1) {
+      this.showUploadList = {
+        showRemoveIcon: false,
+        showPreviewIcon: false,
+        showDownloadIcon: false,
+      };
       setTimeout(() => {
         this.uploadFileList[0].status = 'done';
         this.uploadFileList[0].response = '';
@@ -246,7 +255,7 @@ export class ImportModalComponent {
         this.showUploadList = {
           showRemoveIcon: true,
           showPreviewIcon: false,
-          showDownloadIcon: false
+          showDownloadIcon: false,
         };
         this.cdr.markForCheck();
       }, 50);

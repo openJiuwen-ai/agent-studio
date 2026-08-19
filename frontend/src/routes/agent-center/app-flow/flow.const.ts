@@ -269,7 +269,7 @@ export const WF_MAX_PARAMS_NUM = 100;
 
 export const LAZY_LOAD_LIMIT = 100;
 
-export const EXCEPTION_PORT_NODE = ['Workflow', 'LLM', 'Plugin', 'Code', 'IntentDetection'];
+export const EXCEPTION_PORT_NODE = ['Workflow', 'LLM', 'Plugin', 'Code', 'IntentDetection', 'Mcp'];
 
 export const NODE_TYPE = {
   AGENT: 'agent',

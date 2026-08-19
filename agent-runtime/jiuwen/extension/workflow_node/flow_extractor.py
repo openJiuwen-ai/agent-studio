@@ -143,15 +143,15 @@ class ExtractorStatusCode(Enum):
     """Extractor 组件专用错误码"""
 
     WORKFLOW_INITIAL_CONFIG_ERROR = (
-        101200,
+        101814,
         "extractor config error, reason: {error_msg}",
     )
     PROMPT_ASSEMBLER_TEMPLATE_FORMAT_ERROR = (
-        101201,
+        101815,
         "extractor prompt template format error",
     )
     INVOKE_LLM_FAILED = (
-        101202,
+        101816,
         "extractor invoke llm failed",
     )
 

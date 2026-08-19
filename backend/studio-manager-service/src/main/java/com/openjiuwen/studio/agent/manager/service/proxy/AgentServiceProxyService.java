@@ -23,8 +23,13 @@ import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.common.entity.RouterStrategyEntity;
 import com.openjiuwen.studio.agent.common.entity.Text2AudioReq;
 import com.openjiuwen.studio.agent.common.enums.OperationType;
+import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.common.utils.ErrorInfo;
+import com.openjiuwen.studio.agent.common.utils.I18nUtil;
+
+import feign.FeignException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.*;
 import com.openjiuwen.studio.agent.manager.bo.FileCheckWrapper;
@@ -194,6 +199,9 @@ public class AgentServiceProxyService {
     @Autowired
     private IPlugin iPlugin;
 
+    @Autowired
+    private I18nUtil i18nUtil;
+
     /**
      * 初始化
      */
@@ -336,7 +344,35 @@ public class AgentServiceProxyService {
 
             return stream(url, headers, JsonUtils.encode(request));
         }
-        return builderClient.chatCompletions(getToken(), projectId, workspaceId, request, refresh);
+        try {
+            return builderClient.chatCompletions(getToken(), projectId, workspaceId, request, refresh);
+        } catch (FeignException e) {
+            log.error("Model service call failed via Feign client.", e);
+            try {
+                String body = e.contentUTF8();
+                if (body != null) {
+                    JSONObject errObj = JSONObject.parseObject(body);
+                    if (errObj != null && errObj.containsKey("error_code")) {
+                        ErrorRsp errorRsp = new ErrorRsp()
+                            .setErrorCode(errObj.getString("error_code"))
+                            .setErrorMsg(errObj.getString("error_msg"))
+                            .setErrorReason(errObj.getString("error_reason"))
+                            .setErrorSuggestion(errObj.getString("error_suggestion"));
+                        return ResponseEntity.status(e.status() > 0 ? e.status() : 500).body(errorRsp);
+                    }
+                }
+            } catch (Exception parseEx) {
+                log.warn("Failed to parse Feign error body.", parseEx);
+            }
+            ErrorInfo errorInfo = i18nUtil.getMessage(
+                new AgentStudioException(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE));
+            ErrorRsp errorRsp = new ErrorRsp()
+                .setErrorCode(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode())
+                .setErrorMsg(errorInfo.getMessage())
+                .setErrorReason(errorInfo.getReason())
+                .setErrorSuggestion(errorInfo.getSuggestion());
+            return ResponseEntity.status(500).body(errorRsp);
+        }
     }
 
     public ResponseEntity<AutoAddResultJsonObject> additionalQuestions(String projectId, String agentId,

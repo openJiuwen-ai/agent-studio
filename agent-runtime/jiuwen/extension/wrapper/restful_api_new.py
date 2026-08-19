@@ -175,7 +175,8 @@ class RestfulApiToolNew(Tool):
 
         if self._method not in HTTP_METHOD:
             raise exception.PluginCommonException(
-                message=exception.ExceptionsMessage.HttpMethodError
+                code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+                message=exception.ExceptionsMessage.HttpMethodError,
             )
 
         if self._cert and is_boolean_string(self._cert):
@@ -438,8 +439,14 @@ class RestfulApiToolNew(Tool):
             return self._format_output(
                 error.error_code, error.message, f"{error.message}"
             )
+        if hasattr(error, "error_code") and hasattr(error, "message"):
+            return self._format_output(
+                error.error_code, error.message, f"{error.message}"
+            )
         return self._format_output(
-            StatusCode.PLUGIN_UNEXPECTED_ERROR.code, "plugin request unknown error", ""
+            StatusCode.PLUGIN_UNEXPECTED_ERROR.code,
+            f"plugin request unknown error: {error}",
+            "",
         )
 
     def _create_error_stream_response(self, error: Exception):
@@ -455,19 +462,19 @@ class RestfulApiToolNew(Tool):
         ):
             raise exception.JiuWenBaseException(
                 StatusCode.PLUGIN_REQUEST_TIMEOUT_ERROR.code,
-                StatusCode.PLUGIN_REQUEST_TIMEOUT_ERROR.errmsg,
-            )
+                f"{StatusCode.PLUGIN_REQUEST_TIMEOUT_ERROR.errmsg}: {error}",
+            ) from error
         if isinstance(
             error, (requests.exceptions.ProxyError, aiohttp.ClientProxyConnectionError)
         ):
             raise exception.JiuWenBaseException(
                 StatusCode.PLUGIN_PROXY_CONNECT_ERROR.code,
-                StatusCode.PLUGIN_PROXY_CONNECT_ERROR.errmsg,
-            )
+                f"{StatusCode.PLUGIN_PROXY_CONNECT_ERROR.errmsg}: {error}",
+            ) from error
         raise exception.JiuWenBaseException(
             StatusCode.PLUGIN_UNEXPECTED_ERROR.code,
-            StatusCode.PLUGIN_UNEXPECTED_ERROR.errmsg,
-        )
+            f"{StatusCode.PLUGIN_UNEXPECTED_ERROR.errmsg}: {error}",
+        ) from error
 
     def _format_output(
         self, status_code: int, message: str = None, output: Any = None
@@ -566,8 +573,13 @@ class RestfulApiToolNew(Tool):
                     message="async plugin request time out",
                 )
         except Exception as e:
+            logger.error(f"async post request failed: {e}")
+            if isinstance(e, exception.JiuWenBaseException):
+                err_code = e.error_code
+            else:
+                err_code = StatusCode.PLUGIN_UNEXPECTED_ERROR.code
             return self._format_output(
-                -1,
+                err_code,
                 format_exception_reason(e, reason="Async request processing failed"),
                 {},
             )
@@ -592,7 +604,8 @@ class RestfulApiToolNew(Tool):
             if status_result.get("status") == constant.AsyncPluginStatus.fail.value:
                 error = status_result.get("error")
                 raise exception.PluginCommonException(
-                    message=f"async plugin task failed {error}"
+                    code=StatusCode.PLUGIN_RESPONSE_HTTP_CODE_ERROR,
+                    message=f"async plugin task failed {error}",
                 )
 
         await asyncio.sleep(interval)
@@ -742,7 +755,8 @@ class RestfulApiToolNew(Tool):
         ):
             if not res or not isinstance(res, list):
                 raise exception.PluginCommonException(
-                    message="response is empty or not list when output_list is True"
+                    code=StatusCode.PLUGIN_RESPONSE_FORMAT_ERROR,
+                    message=StatusCode.PLUGIN_RESPONSE_FORMAT_ERROR.errmsg,
                 )
             res = res[0]
 
@@ -785,7 +799,8 @@ class RestfulApiToolNew(Tool):
         ):
             if not res or not isinstance(res, list):
                 raise exception.PluginCommonException(
-                    message="response is empty or not list when output_list is True"
+                    code=StatusCode.PLUGIN_RESPONSE_FORMAT_ERROR,
+                    message=StatusCode.PLUGIN_RESPONSE_FORMAT_ERROR.errmsg,
                 )
             res = res[0]
 

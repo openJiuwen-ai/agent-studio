@@ -83,6 +83,24 @@
         order by update_time desc
     </select>
 
+    <select id="selectSharedResourceByTraceIdAndAuthWorkspace" parameterType="map" resultMap="BaseResultMap">
+        select
+        <include refid="Base_Column_List"/>
+        from t_share_resource
+        where trace_id = #{traceId}
+        and resource_type = #{resourceType}
+        and project_id = #{projectId}
+        and resource_id in
+        (
+        select resource_id
+        from t_share_scope
+        where project_id = #{projectId}
+        and (workspace_id = #{authWorkspaceId} or (workspace_id = 'all'))
+        )
+        and workspace_id != #{authWorkspaceId}
+        order by update_time desc
+    </select>
+
 
     <select id="selectShareResourceByResourceIds" parameterType="java.util.List" resultMap="BaseResultMap">
         select

@@ -28,7 +28,7 @@ def default_model_resolver(model_type, model_name, **kwargs) -> Optional[dict]:
         raise JiuWenBaseException(
             StatusCode.LLM_RESOLVER_DECODER_ERROR.code,
             StatusCode.LLM_RESOLVER_DECODER_ERROR.errmsg.format(
-                error_msg="default_models error: Decoder error"
+                error_msg=f"default_models error: Decoder error: {err}"
             ),
         ) from err
 
@@ -83,7 +83,7 @@ class ModelFactory(metaclass=Singleton):
             raise JiuWenBaseException(
                 StatusCode.LLM_LOAD_ERROR.code,
                 StatusCode.LLM_LOAD_ERROR.errmsg.format(
-                    error_msg="please check model file path."
+                    error_msg=f"please check model file path: {e}"
                 ),
             ) from e
 

@@ -14,6 +14,8 @@ export class RefTypeToTextPipe implements PipeTransform {
         return this.i18n.transform('workflow');
       case 'agent':
         return this.i18n.transform('app');
+      case 'controller':
+        return this.i18n.transform('multiple_agent');
       default:
         return '--';
     }

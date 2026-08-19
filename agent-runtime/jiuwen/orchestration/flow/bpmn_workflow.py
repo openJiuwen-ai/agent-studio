@@ -338,7 +338,7 @@ class BpmnWorkflow(BaseWorkflow):
             err_msg = exception.message
         else:
             err_msg = StatusCode.WORKFLOW_COMPONENT_EXECUTE_ERROR.errmsg.format(
-                invokable.type, StatusCode.WORKFLOW_COMPONENT_EXECUTE_ERROR.code
+                invokable.type, getattr(exception, "message", None) or str(exception)
             )
         return JiuWenBaseException(
             message=err_msg,

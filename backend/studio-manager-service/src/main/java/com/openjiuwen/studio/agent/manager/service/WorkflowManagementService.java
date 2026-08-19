@@ -1259,9 +1259,17 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             workspaceId);
         WorkflowEntity workflowEntity =
             workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
+        // 本地查不到时，校验是否为共享给当前空间的共享资源，命中则跨空间查源空间工作流（读操作支持共享资源查看）
         if (workflowEntity == null) {
-            log.error("workflow does not exist, projectId = {}, agentId = {}", projectId, workflowId);
-            throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+            if (!shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, workflowId)) {
+                log.error("workflow does not exist, projectId = {}, agentId = {}", projectId, workflowId);
+                throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+            }
+            workflowEntity = workflowMapper.getWorkflowById(workflowId);
+            if (workflowEntity == null) {
+                log.error("workflow does not exist, projectId = {}, agentId = {}", projectId, workflowId);
+                throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+            }
         }
         if (Strings.CI.equals(workflowEntity.getVisibility(), VisibilityEnum.USER.getValue())
             && !Strings.CS.equals(workflowEntity.getCreatorId(), RequestContextUtils.getRequestUserId())) {
@@ -2068,9 +2076,25 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             listWorkflowVersionsQo.setWorkspaceId(null);
         }
 
-        checkWorkflowExist(projectId, listWorkflowVersionsQo.getWorkspaceId(), workflowId);
+        // 本地查不到时，校验是否为共享给当前空间的共享资源（读操作支持共享资源查看）
+        if (!checkWorkflowExistOrShared(projectId, listWorkflowVersionsQo.getWorkspaceId(), workflowId)) {
+            throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+        }
 
         return agentCommonService.listVersions(workflowId, releaseMaxSize);
+    }
+
+    /**
+     * 校验工作流存在性：本地查到返回 true；本地查不到则校验是否为共享给当前空间的共享资源（含团队共享 'all'）。
+     * 用于读操作（查看版本列表/详情）识别共享资源，避免共享子资源被误判为不存在。仅读操作调用，写操作不应用。
+     */
+    private boolean checkWorkflowExistOrShared(String projectId, String workspaceId, String workflowId) {
+        WorkflowEntity workflow = workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
+        if (workflow != null) {
+            return true;
+        }
+        // 本地查不到：校验是否为共享给当前空间的共享资源
+        return shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, workflowId);
     }
 
     /**
