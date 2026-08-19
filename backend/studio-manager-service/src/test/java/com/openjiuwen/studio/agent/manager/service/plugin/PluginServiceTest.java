@@ -761,8 +761,11 @@ class PluginServiceTest {
 
     @Test
     void testRetrievePlugin_ToolDependencyDedupByApp() {
-        // 工具引用数口径：与引用插件列表一致（valid=1/同工作空间由SQL保证），
-        // 同一工作流重复版本(相同appId)只计一次，且按工具粒度分开统计
+        // 工具引用数口径：与引用插件列表(listResourceRelations)完全一致，仅按工具粒度分组。
+        // SQL 前缀匹配捞取 pluginId 与 pluginId#* 全部行（含双后缀脏数据）；
+        // 分组时 resource_id 规范化为 pluginId#toolId，使双后缀 pluginId#toolId#toolId 归到对应工具；
+        // 去重键 = appId|appVersion|resourceId|resourceVersion（resourceId 取完整原值，与引用插件列表一致）：
+        // 同一工作流草稿(null)+发布(v1)算 2 条；完全重复行算 1 条。
         PluginEntity pluginEntity = new PluginEntity();
         pluginEntity.setPluginId("p-1");
         pluginEntity.setType(ToolType.CUSTOM.type);
@@ -780,25 +783,18 @@ class PluginServiceTest {
         when(pluginMapper.selectByPrimaryKeyAndWorkspaceAndCredential("p-1", null, "ws-1")).thenReturn(pluginEntity);
         when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
 
-        // 工具t-1被wf-1(重复2个版本/节点)、wf-2引用；工具t-2仅被wf-3引用
-        MappingEntity wf1a = new MappingEntity();
-        wf1a.setResourceId("p-1#t-1");
-        wf1a.setAppId("wf-1");
-        MappingEntity wf1b = new MappingEntity();
-        wf1b.setResourceId("p-1#t-1");
-        wf1b.setAppId("wf-1");
-        MappingEntity wf2 = new MappingEntity();
-        wf2.setResourceId("p-1#t-1");
-        wf2.setAppId("wf-2");
-        MappingEntity wf3 = new MappingEntity();
-        wf3.setResourceId("p-1#t-2");
-        wf3.setAppId("wf-3");
+        // 工具t-1: wf-1草稿(null,双后缀脏数据)+wf-1发布(v1)+wf-2草稿 + wf-1草稿重复行 → 去重后3条
+        // 工具t-2: wf-3草稿(单后缀)+wf-4草稿(双后缀脏数据) → 规范化后都归 t-2，去重2条
+        MappingEntity wf1Draft = mapping("p-1#t-1#t-1", "wf-1", null);
+        MappingEntity wf1Published = mapping("p-1#t-1#t-1", "wf-1", "v1");
+        MappingEntity wf1DraftDup = mapping("p-1#t-1#t-1", "wf-1", null); // 与wf1Draft同key，去重掉
+        MappingEntity wf2 = mapping("p-1#t-1", "wf-2", null);
+        MappingEntity wf3 = mapping("p-1#t-2", "wf-3", null);
+        MappingEntity wf4 = mapping("p-1#t-2#t-2", "wf-4", null);
         when(mappingMapper.selectByResourceIdAndVersionId(eq("p-1"), isNull(), eq("ws-1"), eq("workflow"), isNull()))
-            .thenReturn(List.of(wf1a, wf1b, wf2, wf3));
+            .thenReturn(List.of(wf1Draft, wf1Published, wf1DraftDup, wf2, wf3, wf4));
 
-        MappingEntity ag1 = new MappingEntity();
-        ag1.setResourceId("p-1#t-1");
-        ag1.setAppId("ag-1");
+        MappingEntity ag1 = mapping("p-1#t-1", "ag-1", null);
         when(mappingMapper.selectByResourceIdAndVersionId(eq("p-1"), isNull(), eq("ws-1"), eq("agent"), isNull()))
             .thenReturn(List.of(ag1));
 
@@ -807,10 +803,20 @@ class PluginServiceTest {
         assertEquals(200, resp.getCode());
         PluginDTO data = (PluginDTO) resp.getData();
         assertEquals(2, data.getToolDependencyList().size());
-        assertEquals(2, data.getToolDependencyList().get(0).getDependencyOnWorkflow());
+        // t-1: wf-1(草稿)+wf-1(发布)+wf-2 = 3（双后缀已归一）
+        assertEquals(3, data.getToolDependencyList().get(0).getDependencyOnWorkflow());
         assertEquals(1, data.getToolDependencyList().get(0).getDependencyOnAgent());
-        assertEquals(1, data.getToolDependencyList().get(1).getDependencyOnWorkflow());
+        // t-2: wf-3 + wf-4 = 2（单/双后缀都归 t-2）
+        assertEquals(2, data.getToolDependencyList().get(1).getDependencyOnWorkflow());
         assertEquals(0, data.getToolDependencyList().get(1).getDependencyOnAgent());
+    }
+
+    private static MappingEntity mapping(String resourceId, String appId, String appVersion) {
+        MappingEntity entity = new MappingEntity();
+        entity.setResourceId(resourceId);
+        entity.setAppId(appId);
+        entity.setAppVersion(appVersion);
+        return entity;
     }
 
     @Test
