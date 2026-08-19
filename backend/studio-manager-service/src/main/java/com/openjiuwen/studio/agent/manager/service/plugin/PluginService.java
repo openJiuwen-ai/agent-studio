@@ -1496,17 +1496,36 @@ public class PluginService implements IPluginService {
     }
 
     /**
-     * 按工具维度(resource_id，形如 pluginId#toolId)分组统计被引用次数。
+     * 按工具维度统计被引用次数。SQL 用 selectByResourceIdAndVersionId（与引用插件列表同一条），
+     * 前缀匹配捞取 pluginId 及 pluginId#* 的全部行（含单后缀 pluginId#toolId 与
+     * 历史脏数据双后缀 pluginId#toolId#toolId）。分组时将 resource_id 规范化为 pluginId#toolId
+     * （取首个 # 后到第二个 # 前的段作为 toolId），使双后缀行也能正确归到对应工具；
      * 去重键与 RelationManagementService#getDeduplicationKey 完全一致
-     * (appId|appVersion|resourceId|resourceVersion)，保证与引用插件列表口径相同；
-     * 仅因按工具分组而与插件粒度的列表计数在维度上不同。
+     * (appId|appVersion|resourceId|resourceVersion，resourceId 取完整原值)，
+     * 保证与引用插件列表口径相同，仅因按工具分组而维度不同。
      */
     private Map<String, Long> countReferencedAppsByTool(List<MappingEntity> mappingEntities) {
         return mappingEntities.stream()
-            .collect(Collectors.groupingBy(MappingEntity::getResourceId,
+            .collect(Collectors.groupingBy(entity -> normalizeToolResourceId(entity.getResourceId()),
                 Collectors.collectingAndThen(
                     Collectors.mapping(this::getDeduplicationKey, Collectors.toSet()),
                     set -> (long) set.size())));
+    }
+
+    /**
+     * 将 resource_id 规范化为 pluginId#toolId。
+     * pluginId#toolId → pluginId#toolId；pluginId#toolId#toolId → pluginId#toolId；
+     * 裸 pluginId（无工具后缀）原样返回。
+     */
+    private String normalizeToolResourceId(String resourceId) {
+        int first = resourceId.indexOf('#');
+        if (first < 0) {
+            return resourceId;
+        }
+        String tail = resourceId.substring(first + 1);
+        int second = tail.indexOf('#');
+        String toolId = second < 0 ? tail : tail.substring(0, second);
+        return resourceId.substring(0, first) + "#" + toolId;
     }
 
     private String getDeduplicationKey(MappingEntity entity) {
