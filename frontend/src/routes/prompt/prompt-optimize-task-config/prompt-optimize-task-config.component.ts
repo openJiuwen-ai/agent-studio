@@ -228,8 +228,7 @@ export class PromptOptimizeTaskConfigComponent {
   }
 
   private getTaskNameErrorMessage(error: 'required' | 'maxlength'): string {
-    const messageKey =
-      error === 'required' ? 'prompt_optimize_task_config_1' : 'prompt_optimize_task_config_name_max_length';
+    const messageKey = error === 'required' ? 'prompt_optimize_task_config_1' : 'prompt_optimize_task_config_name_max_length';
     return this.i18n.transform(messageKey);
   }
 
@@ -239,6 +238,11 @@ export class PromptOptimizeTaskConfigComponent {
   isSpinning = false;
 
   private isEdit: boolean = false;
+
+  get basicInfoFormValuePrompt() {
+    return !this.basicInfoForm.value.prompt?.trim();
+  }
+
   constructor(
     private variableService: VariableService,
     private sidebarVisibilityServ: SetSidebarVisibilityService,
@@ -422,12 +426,12 @@ export class PromptOptimizeTaskConfigComponent {
       nzWidth: '700px',
     });
     const instance = thisNzModal.getContentComponent();
-    instance.ensure.subscribe((res) => {
-      if(res){
+    instance.ensure.subscribe(res => {
+      if (res) {
         this.basicInfoForm.controls.type.setValue(value);
         this.modelType = ModelType.LLM;
         this.cdr.markForCheck();
-      }else{
+      } else {
         this.basicInfoForm.controls.type.setValue(this.promptTypeOptions[1].value);
         this.promptTypeSelected = this.promptTypeOptions[1].value;
         this.cdr.markForCheck();
