@@ -43,6 +43,8 @@ class DBUtil:
         if cls._instance is None or reconnect:
             with cls._singleton_lock:
                 if cls._instance is None or reconnect:
+                    # 丢弃旧连接前先 close（G.PRM.03：重连场景下成对释放，避免句柄泄漏）
+                    cls._close_instance_safely()
                     db = settings.db_config
                     host = db.host
                     port = db.port
@@ -205,9 +207,25 @@ class DBUtil:
             raise
 
     @classmethod
+    def _close_instance_safely(cls):
+        """关闭并释放单例连接（如有）；对 None 或已关闭连接安全，不抛异常。
+
+        G.PRM.03：资源的申请与释放需成对使用，包括正常和异常场景——
+        reset/reconnect 丢弃旧连接前必须显式 close，避免连接句柄泄漏。
+        """
+        conn = cls._instance
+        if conn is None:
+            return
+        try:
+            conn.close()
+        except Exception:
+            logger.debug("DB connection close failed on reset/reconnect", exc_info=True)
+
+    @classmethod
     def reset(cls):
         """Reset singleton instance for testing"""
         with cls._singleton_lock:
+            cls._close_instance_safely()
             cls._instance = None
 
 

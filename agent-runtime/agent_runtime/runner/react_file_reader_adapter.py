@@ -124,10 +124,13 @@ class ReactFileReaderAdapter(Tool):
         try:
             import pymupdf
             doc = pymupdf.open(path)
-            text = ''
-            for page in doc:
-                text += page.get_text()
-            return text
+            try:
+                text = ''
+                for page in doc:
+                    text += page.get_text()
+                return text
+            finally:
+                doc.close()
         except ImportError:
             return "[无法读取 pdf 文件，请安装 pymupdf 库]"
 
