@@ -187,7 +187,9 @@ public class LocalFileStoreImpl implements FileStore {
                         fm.setLastModified(Files.getLastModifiedTime(p).toMillis());
                         fm.setDirectory(Files.isDirectory(p));
                         metas.add(fm);
-                    } catch (IOException ignored) {
+                    } catch (IOException e) {
+                        // 单个文件元信息读取失败仅跳过该文件，避免阻塞目录其余文件的收集
+                        log.warn("read file meta failed, skip: {}", p, e);
                     }
                 });
         } catch (IOException e) {

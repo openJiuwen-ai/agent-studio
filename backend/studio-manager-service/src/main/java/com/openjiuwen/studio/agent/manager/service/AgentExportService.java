@@ -363,9 +363,10 @@ public class AgentExportService {
         throws JsonProcessingException {
         ByteArrayInputStream exportFileStream = buildExportFile(exportResps, body);
         if (Strings.CI.startsWith(accept, MediaType.APPLICATION_OCTET_STREAM_VALUE)) {
-            HttpServletResponse response = Optional.ofNullable(
-                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes())
-                .map(ServletRequestAttributes::getResponse).orElse(null);
+            // 非Web线程（异步任务等）取不到Servlet响应对象，走response==null的文件落盘分支
+            HttpServletResponse response = (RequestContextHolder.getRequestAttributes()
+                instanceof ServletRequestAttributes servletAttributes)
+                ? servletAttributes.getResponse() : null;
             if (response != null) {
                 String fileName = getFileName(body);
                 response.setContentType("application/octet-stream;charset=utf-8");
