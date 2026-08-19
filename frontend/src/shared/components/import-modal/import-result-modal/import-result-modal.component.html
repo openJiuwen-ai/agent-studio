@@ -41,10 +41,11 @@
     </div>
     <div class="parse-file">
       <nz-table
+        #importResultTable
         [nzData]="srcData.data"
         [nzTotal]="srcData.data.length"
         [nzShowSizeChanger]="false"
-        [nzFrontPagination]="false"
+        [nzFrontPagination]="true"
       >
         <thead>
         <tr>
@@ -55,7 +56,7 @@
         </tr>
         </thead>
         <tbody>
-        <ng-container *ngFor="let row of srcData.data;index as i">
+        <ng-container *ngFor="let row of importResultTable.data;index as i">
           <tr>
             <td>
                 <span

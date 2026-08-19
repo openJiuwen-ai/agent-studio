@@ -83,10 +83,11 @@
       ></nz-spin>
       <ng-template #parseContentArea>
         <nz-table
+          #importTable
           [nzData]="srcData.data"
           [nzTotal]="srcData.data.length"
           [nzShowSizeChanger]="false"
-          [nzFrontPagination]="false"
+          [nzFrontPagination]="true"
           *ngIf="isFileImported"
           [nzNoResult]="tableNoData"
           [nzTableLayout]="'fixed'"
@@ -99,7 +100,7 @@
             </tr>
           </thead>
           <tbody>
-            <ng-container *ngFor="let row of srcData.data;index as i">
+            <ng-container *ngFor="let row of importTable.data;index as i">
               <tr>
                 <td>{{ row[columns[0].key] }}</td>
                 <td>
