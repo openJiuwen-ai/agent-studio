@@ -306,6 +306,7 @@ export class MCPServiceModalComponent extends ModalBaseComponent implements OnIn
       this.getToolInfo(name);
     }
     this.inputParamsFormatter();
+    this.mcpInputParams = mapTreeAddKeyAndChildIndex(cloneDeep(this.inputParams.filter(item => item.location === 'Input')), 0);
     this.outputParams = resSchemaStrMCPField(item.output);
     this.onSave();
   }
