@@ -63,6 +63,7 @@ _UNSET = object()
 _storage_factory: Optional[Callable[[], StorageProvider]] = None
 _llm_settings_factory: Optional[Callable[[], LLMSettingsLike]] = None
 _request_headers_fn: Optional[Callable[[], dict]] = None
+_env_variables_fn: Optional[Callable[[], dict]] = None
 _model_cache: Any = _UNSET
 _auth_cache: Any = _UNSET
 
@@ -110,6 +111,31 @@ def get_request_headers() -> dict:
         from agent_runtime.context.request_context import _request_ctx
         ctx = _request_ctx.get()
         return ctx.headers if ctx else {}
+    except Exception:
+        return {}
+
+
+def set_env_variables(fn: Optional[Callable[[], dict]]) -> None:
+    """注册环境变量提供者（返回当前请求已加载的 env_vars dict）。
+
+    供 ``StudioModelClient`` 解析 apiUrl 中的 ``${_env.plugin_url_params.VAR}`` 占位符。
+    与 ``set_request_headers`` 同构：agent_runtime 注入其 ``_request_ctx``（由 app_run
+    入口加载 env_vars 后写入），agent_builder 注入其 ``request_context_bridge``。
+    """
+    global _env_variables_fn
+    _env_variables_fn = fn
+
+
+def get_env_variables() -> dict:
+    if _env_variables_fn is not None:
+        try:
+            return _env_variables_fn() or {}
+        except Exception:
+            return {}
+    try:
+        from agent_runtime.context.request_context import _request_ctx
+        ctx = _request_ctx.get()
+        return getattr(ctx, "env_variables", None) or {}
     except Exception:
         return {}
 

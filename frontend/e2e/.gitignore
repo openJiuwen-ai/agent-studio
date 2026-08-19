@@ -1,0 +1,6 @@
+# Playwright 运行产物（勿提交）
+.auth/
+.cache/
+.report/
+test-results/
+playwright-report/

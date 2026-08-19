@@ -35,6 +35,7 @@ import org.apache.commons.lang3.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -199,6 +200,19 @@ public class ModelServiceManager {
         saveModelInfoToObsAndRedis("model", model.getId(), model);
     }
 
+    /**
+     * 导入无冲突路径的落库（保留导入 id）。仅 DB 层 insert，{@code @Transactional} 与 {@link #coverModelService}
+     * 同模式；OBS/Redis 缓存同步由调用方在事务提交后 best-effort 执行。
+     *
+     * <p>不复用 {@link #createModelService}（后者 insert+缓存耦合，缓存写失败会抛异常致响应报 FAILED 但 DB 行已落，
+     * 与 COVER 路径"DB 提交即成功、缓存 best-effort"的语义不对称）。此方法仅供导入路径使用，不影响
+     * {@code createModelService} 的 3 个现有调用方（API 创建/agent 导入等）。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void createModelServiceForImport(ModelServiceBase model) {
+        modelServiceMapper.insert(model);
+    }
+
     public void updateModelService(ModelServiceBase model) {
         modelServiceMapper.updateModelService(model);
         saveModelInfoToObsAndRedis("model", model.getId(), model);
@@ -225,6 +239,44 @@ public class ModelServiceManager {
             obsService.deleteObject(path);
         } catch (Exception e) {
             log.warn("Delete model service config fail. path:{}", path, e);
+        }
+        redisClient.delete(REDIS_PREFIX + id);
+    }
+
+    /**
+     * COVER 策略的事务化落库：软删备份旧记录 + 删旧(existingId) + 插新(newModel, 保留导入 id)。
+     *
+     * <p>仅 DB 层原子；OBS/Redis 缓存同步由调用方在事务提交后 best-effort 执行，避免缓存写失败
+     * 回滚已提交的 DB 事务（OBS/Redis 本就不纳入 DB 事务）。任一 DB 步骤失败 → 全回滚，
+     * 旧记录完好、新记录未建，消除 COVER 的"删后未插"数据丢失中间态。
+     *
+     * @param newModel   导入的新模型（id = 跨环境一致的导入 id）
+     * @param existingId 目标环境同名旧记录的 id（可能与 newModel.id 不同）
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void coverModelService(ModelServiceBase newModel, String existingId) {
+        if (modelSoftDelete) {
+            ModelServiceBase old = modelServiceMapper.queryModelServiceDetail(existingId);
+            if (old != null) {
+                old.setLastUpdatedDate(System.currentTimeMillis());
+                modelServiceMapper.insertBackup(old);
+            }
+        }
+        modelServiceMapper.deleteById(existingId);
+        modelServiceMapper.insert(newModel);
+    }
+
+    /**
+     * 清理模型服务的 OBS/Redis 缓存（仅缓存，不碰 DB）。
+     *
+     * <p>从 {@link #deleteModelService} 抽取缓存删除部分，供 COVER 缓存补偿复用；deleteModelService 行为不变。
+     */
+    public void removeModelCaches(String id) {
+        String path = String.format(MODEL_PATH, id + ".json");
+        try {
+            obsService.deleteObject(path);
+        } catch (Exception e) {
+            log.warn("Delete model service cache fail. path:{}", path, e);
         }
         redisClient.delete(REDIS_PREFIX + id);
     }

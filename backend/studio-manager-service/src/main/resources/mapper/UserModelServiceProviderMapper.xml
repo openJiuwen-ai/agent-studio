@@ -54,6 +54,17 @@
         </foreach>
     </select>
 
+    <!-- 在指定项目+工作空间内按 id 集合查询（workspace-scoped；含 SYSTEM 空间以兼容系统供应商） -->
+    <select id="selectByProjectIdAndWorkspaceId" resultType="com.openjiuwen.studio.agent.manager.entity.md.ModelServiceProvider">
+        SELECT * FROM t_user_model_service_provider
+        WHERE ID IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        AND PROJECT_ID = #{projectId}
+        AND (WORKSPACE_ID = #{workspaceId} OR WORKSPACE_ID = 'SYSTEM')
+    </select>
+
     <!-- 根据PROJECT_ID查询 -->
     <select id="selectByProjectId" resultType="com.openjiuwen.studio.agent.manager.entity.md.ModelServiceProvider">
         SELECT * FROM t_user_model_service_provider WHERE PROJECT_ID = #{projectId}

@@ -368,6 +368,8 @@
         SELECT COUNT(*)
         FROM t_model_service
         WHERE provider_id = #{providerId}
+          AND project_id = #{projectId}
+          AND workspace_id = #{workspaceId}
     </select>
 
     <select id="queryByIdentityId" resultType="com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase">

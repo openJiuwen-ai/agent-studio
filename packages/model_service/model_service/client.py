@@ -40,6 +40,7 @@ class _ResolveInputs:
     workspace_id: str
     project_id: str
     refresh: bool
+    env_vars: dict
 
 
 @dataclass
@@ -185,7 +186,10 @@ class StudioModelClient(OpenAIModelClient):
             (headers.get("X-Workspace-Id") or headers.get("x-workspace-id") or "")
             if headers else ""
         )
-        return _ResolveInputs(model_service_id, auth_id, workspace_id, project_id, refresh)
+        env_vars = _env_variables()
+        return _ResolveInputs(
+            model_service_id, auth_id, workspace_id, project_id, refresh, env_vars,
+        )
 
     # openjiuwen 入口
 
@@ -196,6 +200,7 @@ class StudioModelClient(OpenAIModelClient):
         strategy = await resolver.resolve_strategy(
             inputs.model_service_id, inputs.project_id, inputs.workspace_id, inputs.auth_id,
             refresh=inputs.refresh,
+            env_vars=inputs.env_vars,
         )
         if strategy is None:
             raise resolver.ModelServiceError("MD_MODEL_SERVICE_NOT_PUBLISH",
@@ -232,6 +237,7 @@ class StudioModelClient(OpenAIModelClient):
         strategy = await resolver.resolve_strategy(
             inputs.model_service_id, inputs.project_id, inputs.workspace_id, inputs.auth_id,
             refresh=inputs.refresh,
+            env_vars=inputs.env_vars,
         )
         if strategy is None:
             raise resolver.ModelServiceError("MD_MODEL_SERVICE_NOT_PUBLISH",
@@ -548,3 +554,14 @@ def _request_headers() -> dict:
     """
     from .ports import get_request_headers
     return get_request_headers()
+
+
+def _env_variables() -> dict:
+    """从请求上下文取已加载的环境变量（env_vars）。
+
+    经 ``ports.set_env_variables`` 由宿主注入：env_vars 在请求入口由
+    ``load_environment_variables`` 从 Redis 加载并写入请求上下文。用于解析 apiUrl
+    中的 ``${_env.plugin_url_params.VAR}`` 占位符（跨环境迁移的字面量 apiUrl）。
+    """
+    from .ports import get_env_variables
+    return get_env_variables()

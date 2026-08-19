@@ -8,17 +8,19 @@
 - ``model-auth/auth/{projectId}/{providerId}/{authId}.json`` → ``ProviderAuth``
 - 三层缓存：L1 内存(60s) → L2 Redis → OBS；``refresh=True`` 时旁路缓存直读 OBS 并回填。
 - 平台模型（``project_id`` 属于 ``PLATFORM_PROJECT_IDS``）Redis 无 TTL；其余使用默认 TTL。
-- 加解密预留接口，当前明文直通（见 ``decrypt``）。
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Optional
+
+from .env_resolver import has_env_placeholder, resolve_env_placeholders
 
 # OBS 对象 key 模板（对应 Java ModelStorageService / ModelAuthStorageService 的路径规则）。
 MODEL_PATH = "model-service/ir/%s.json"
@@ -98,9 +100,60 @@ class ModelStrategy:
     strategy_timeout_ms: int = 600_000          # 默认 10min，对应 Java defaultTimeout
 
 
+def _load_aes_gcm_decrypt():
+    """Lazily import AES-GCM decrypt; returns None if pycryptodome is unavailable."""
+    try:
+        from Crypto.Cipher import AES  # type: ignore
+    except Exception:  # pragma: no cover - fallback when crypto dep missing
+        return None
+    return AES
+
+
+def _try_aes_gcm_decrypt(value: str) -> Optional[str]:
+    """Attempt to AES-GCM-decrypt ``value`` using ``SYSTEM_CRYPT_KEY``.
+
+    Mirrors Java ``AesGcmCipher`` wire layout: ``hex(nonce 12B) + hex(ciphertext) + hex(tag 16B)``
+    (i.e. raw = nonce || ct || tag). Used to unwrap at-rest auth values the Java manager encrypted
+    before syncing to OBS; this is NOT the import/export "ENCRYPTED" PoC path (that was removed).
+
+    Returns None if (a) env says NoOp, (b) key not configured, (c) value doesn't look like a hex
+    ciphertext of sufficient length, or (d) tag verification fails — callers treat None as "not
+    ciphertext" and return the original value.
+    """
+    crypt_name = os.environ.get("SYSTEM_CRYPT_NAME", "")
+    if crypt_name and crypt_name.upper() not in ("AES_GCM", "AES-GCM"):
+        return None
+    key_hex = os.environ.get("SYSTEM_CRYPT_KEY", "")
+    if not key_hex:
+        return None
+    if not value or len(value) < 2 * (12 + 16 + 1):  # nonce(12)+tag(16)+>=1B ct
+        return None
+    try:
+        key = bytes.fromhex(key_hex)
+        raw = bytes.fromhex(value)
+    except ValueError:
+        return None
+    nonce, tag, ct = raw[:12], raw[-16:], raw[12:-16]
+    AES_mod = _load_aes_gcm_decrypt()
+    if AES_mod is None:
+        return None
+    try:
+        return AES_mod.new(key, AES_mod.MODE_GCM, nonce=nonce).decrypt_and_verify(ct, tag).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
 def decrypt(value: str) -> str:
-    """加解密预留接口：当前明文直通。接入真实加解密时替换此函数即可。"""
-    return value
+    """Decrypt an at-rest auth value (API key / header).
+
+    Tries AES-GCM first when ``SYSTEM_CRYPT_NAME=AES_GCM`` + ``SYSTEM_CRYPT_KEY`` are set and the
+    value is a hex ciphertext in the Java AesGcmCipher layout. Returns the original string
+    otherwise (plaintext / MASKED placeholder / non-hex values).
+    """
+    if not value:
+        return value
+    plain = _try_aes_gcm_decrypt(value)
+    return plain if plain is not None else value
 
 
 def _is_platform(project_id: str) -> bool:
@@ -130,6 +183,7 @@ async def resolve_strategy(
     auth_id: str,
     *,
     refresh: bool = False,
+    env_vars: Optional[dict] = None,
 ) -> Optional[ModelStrategy]:
     """解析模型服务策略（对应 Java ``ModelStorageService.queryModelStrategy``）。
 
@@ -139,6 +193,9 @@ async def resolve_strategy(
         workspace_id: 工作空间 ID。
         auth_id: auth ID；为空时不解析 auth。
         refresh: 是否旁路缓存、强制读 OBS 并回填。
+        env_vars: 环境变量 dict（``load_environment_variables`` 产出）。``api_url`` 含
+            ``${_env.plugin_url_params.VAR}`` 占位符时用于替换为真实值；``None`` 时跳过
+            解析（向后兼容，等价于历史 verbatim 行为）。
 
     Returns:
         ``ModelStrategy``；OBS 中不存在该对象时返回 None。
@@ -146,20 +203,30 @@ async def resolve_strategy(
     metadata = await _query_model_metadata(model_service_id, refresh)
     if metadata is None:
         return None
-    return await _build_strategy(metadata, project_id, workspace_id, auth_id, refresh)
+    return await _build_strategy(
+        metadata, project_id, workspace_id, auth_id, refresh, env_vars,
+    )
 
 
-async def _build_strategy(metadata, project_id, workspace_id, auth_id, refresh) -> ModelStrategy:
+async def _build_strategy(
+    metadata, project_id, workspace_id, auth_id, refresh, env_vars=None,
+) -> ModelStrategy:
     mtype = metadata.get("type")
     data = metadata.get("data") or {}
     if mtype == "router":
-        return await _build_router_strategy(data, project_id, workspace_id, refresh)
+        return await _build_router_strategy(
+            data, project_id, workspace_id, refresh, env_vars,
+        )
     model = _model_from_data(data)
-    detail = await _build_detail(model, project_id, workspace_id, auth_id, refresh)
+    detail = await _build_detail(
+        model, project_id, workspace_id, auth_id, refresh, env_vars,
+    )
     return ModelStrategy(type=StrategyType.MODEL, name=model.model_name, models=[detail])
 
 
-async def _build_router_strategy(data, project_id, workspace_id, refresh) -> ModelStrategy:
+async def _build_router_strategy(
+    data, project_id, workspace_id, refresh, env_vars=None,
+) -> ModelStrategy:
     """构造 ROUTER 策略（对应 Java ``getRouterStrategy``）。
 
     拆分 ``service_id_list`` / ``auth_id_list``，逐子模型解析，并携带 ``strategy_timeout`` /
@@ -179,7 +246,9 @@ async def _build_router_strategy(data, project_id, workspace_id, refresh) -> Mod
             raise ModelServiceError("MD_MODEL_ROUTER_INVALID", f"router miss model {mid}")
         child_model = _model_from_data(child.get("data") or {})
         aid = auth_ids[min(idx, len(auth_ids) - 1)]
-        details.append(await _build_detail(child_model, project_id, workspace_id, aid, refresh))
+        details.append(await _build_detail(
+            child_model, project_id, workspace_id, aid, refresh, env_vars,
+        ))
 
     return ModelStrategy(
         type=StrategyType.ROUTER,
@@ -190,13 +259,24 @@ async def _build_router_strategy(data, project_id, workspace_id, refresh) -> Mod
     )
 
 
-async def _build_detail(model, project_id, workspace_id, auth_id, refresh) -> ModelServiceDetail:
+async def _build_detail(
+    model, project_id, workspace_id, auth_id, refresh, env_vars=None,
+) -> ModelServiceDetail:
     """构造单模型 detail（对应 Java ``getModelServiceDetail``）。
 
     解析 auth；``available`` 取决于 auth 是否存在（free model 当前恒为 False）。
     authId 为空时回退到 V1 列举（对应 Java ``queryProviderAuth`` → ``queryProviderAuthV1``），
     按 workspace 匹配取 auth，与 Java 网关"不传 authId 也能用"的行为一致。
+
+    api_url 含 ``${_env.plugin_url_params.VAR}`` 占位符时，用 env_vars 替换为真实值
+    （跨环境迁移的字面量 apiUrl 在此解析，与管理侧 ``UrlCheckUtils.validateEnvVarPlaceholders``
+    校验同源）。无占位符或 env_vars 为 None 时跳过、保持 verbatim（向后兼容）。缺变量
+    fail-fast 抛 ``MD_ENV_VAR_UNRESOLVED``（对应 Java ``MODEL_ENV_VAR_UNRESOLVED`` / 1083）。
     """
+    if has_env_placeholder(model.api_url):
+        model = replace(
+            model, api_url=resolve_env_placeholders(model.api_url, env_vars),
+        )
     auth_proj = _auth_project_id(model.project_id, project_id)
     if auth_id:
         auth = await _query_auth(auth_proj, model.provider_id, auth_id, refresh)

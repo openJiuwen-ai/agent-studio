@@ -372,6 +372,8 @@ async def _execute_workflow_run(
     env_vars = await load_environment_variables(
         ctx.environment_id, ctx.workspace_id,
     )
+    # 写入请求上下文，供 StudioModelClient 解析 apiUrl 中的 ${_env.plugin_url_params.VAR} 占位符
+    _request_ctx.get().env_variables = env_vars
     req_json = build_req_json_from_workflow(body, exec_ctx, env_vars=env_vars)
 
     response = await ir_execute(req_json, request)
@@ -488,6 +490,8 @@ async def _execute_agent_run(
     env_vars = await load_environment_variables(
         ctx.environment_id, ctx.workspace_id,
     )
+    # 写入请求上下文，供 StudioModelClient 解析 apiUrl 中的 ${_env.plugin_url_params.VAR} 占位符
+    _request_ctx.get().env_variables = env_vars
     req_json = build_req_json_from_agent(body, exec_ctx, env_vars=env_vars)
 
     response = await ir_execute(req_json, request)

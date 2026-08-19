@@ -21,6 +21,9 @@ class RequestContext:
     """请求级上下文 — 透传到深层调用栈的请求头集合。"""
 
     headers: dict = field(default_factory=dict)
+    # 已加载的环境变量（load_environment_variables 产出；由 populate_request_context
+    # 中间件按 X-Environment-Id 加载写入，供 StudioModelClient 解析 apiUrl 占位符）
+    env_variables: dict = field(default_factory=dict)
 
 
 _request_ctx: ContextVar[RequestContext] = ContextVar(
@@ -35,3 +38,8 @@ def get_request_context() -> RequestContext:
 def get_request_headers() -> dict:
     """请求头 getter，供 model_service ports 注入。"""
     return _request_ctx.get().headers or {}
+
+
+def get_env_variables() -> dict:
+    """环境变量 getter，供 model_service ports 注入（StudioModelClient 解析 apiUrl 占位符）。"""
+    return _request_ctx.get().env_variables or {}

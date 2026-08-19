@@ -110,6 +110,11 @@ public interface CommonConstant {
     String PLUGIN = "Plugin";
 
     /**
+     * 导入类型模型服务（模型导出文件的 import_type 标识，对齐 workflow/agent 小写风格）
+     */
+    String MODEL_SERVICE = "model_service";
+
+    /**
      * 导入类型Environment
      */
     String ENVIRONMENT = "Environment";

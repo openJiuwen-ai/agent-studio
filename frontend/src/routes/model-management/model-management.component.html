@@ -12,6 +12,9 @@
       <button nz-button nzType="primary" (click)="openPublisherHalfModel()" [disabled]="!subscribeBtnStatus">
         {{ 'add_model_publisher' | i18nextEager }}
       </button>
+      <button nz-button nzType="default" (click)="openImportModal()" [disabled]="!subscribeBtnStatus">
+        {{ 'import_models' | i18nextEager }}
+      </button>
     </div>
   </div>
 
@@ -114,6 +117,16 @@
                   (click)="onHoverButtonClick('delete', dataItem, $event)"
                 >
                   <span class="hover-btn-label-text">{{ 'delete' | i18nextEager }}</span>
+                </button>
+                <button
+                  nz-button
+                  nzType="link"
+                  class="card-footer-action-btn"
+                  [disabled]="!subscribeBtnStatus || dataItem.id?.startsWith('cdi-')"
+                  nzSize="small"
+                  (click)="onHoverButtonClick('export', dataItem, $event)"
+                >
+                  <span class="hover-btn-label-text">{{ 'export' | i18nextEager }}</span>
                 </button>
               </div>
             </div>

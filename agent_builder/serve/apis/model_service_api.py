@@ -257,7 +257,8 @@ async def chat_completions(
 
     try:
         strategy = await resolver.resolve_strategy(
-            msid, project_id, workspace, auth_id, refresh=rf
+            msid, project_id, workspace, auth_id, refresh=rf,
+            env_vars=model_service.ports.get_env_variables(),
         )
         if strategy is None:
             raise resolver.ModelServiceError(
@@ -346,7 +347,8 @@ async def text_embeddings(
     workspace = workspace_id or workspace
     try:
         strategy = await resolver.resolve_strategy(
-            msid, project_id, workspace, auth_id, refresh=rf
+            msid, project_id, workspace, auth_id, refresh=rf,
+            env_vars=model_service.ports.get_env_variables(),
         )
         if strategy is None:
             raise resolver.ModelServiceError(
@@ -395,7 +397,8 @@ async def rerank(
     url = ""  # dispatch.rerank 抛 httpx 时用于错误信息；httpx 仅可能发生在下方赋值之后
     try:
         strategy = await resolver.resolve_strategy(
-            msid, project_id, workspace, auth_id, refresh=rf
+            msid, project_id, workspace, auth_id, refresh=rf,
+            env_vars=model_service.ports.get_env_variables(),
         )
         if strategy is None:
             raise resolver.ModelServiceError(

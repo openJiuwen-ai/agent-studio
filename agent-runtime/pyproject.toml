@@ -8,7 +8,7 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.4.0",
     "pydantic-settings~=2.13.1",
-    "openjiuwen[sandbox] @ git+https://gitcode.com/openJiuwen/agent-core.git@develop",
+    "openjiuwen[sandbox]",
     "boto3",
     "aioboto3",
     "aiohttp",
@@ -79,3 +79,5 @@ default = true
 model-service = { path = "../packages/model_service", editable = true }
 storage = { path = "../packages/storage", editable = true }
 common-utils = { path = "../packages/common_utils", editable = true }
+# openjiuwen(agent-core) 指向本地源码，便于本地改动即时生效（替代 git+develop）
+openjiuwen = { path = "../../agent-core", editable = true }

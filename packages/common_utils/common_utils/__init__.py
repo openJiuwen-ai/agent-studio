@@ -22,6 +22,7 @@ from .redis_manager import (
     get_redis_client,
     get_sync_redis_client,
 )
+from .env_variables_loader import load_environment_variables
 
 __all__ = [
     # crypto
@@ -38,4 +39,6 @@ __all__ = [
     "RedisClientManager",
     "get_redis_client",
     "get_sync_redis_client",
+    # env_variables_loader
+    "load_environment_variables",
 ]

@@ -8,7 +8,6 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 
 import org.apache.commons.lang3.StringUtils;
 
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 public class NoOpCipher implements Cipher {

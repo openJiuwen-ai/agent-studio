@@ -77,7 +77,8 @@ public interface ModelServiceMapper {
 
     List<ModelServiceProviderDetail> getLogosAndProviderNamesByProviderIds(Collection<String> providerIds);
 
-    int countByProviderId(String providerId);
+    int countByProviderId(@Param("projectId") String projectId, @Param("workspaceId") String workspaceId,
+        @Param("providerId") String providerId);
 
     List<ModelServiceBase> queryByIdentityId(@Param("projectId") String projectId,
         @Param("workspaceId") String workspaceId, @Param("identityId") String identityId);
