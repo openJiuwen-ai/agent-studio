@@ -587,8 +587,8 @@ class RestFulAPI(Invokable, ABC):
         ):
             if not res or not isinstance(res, list):
                 raise exception.PluginCommonException(
-                    code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
-                    message="response is empty or not list when output_list is True",
+                    code=StatusCode.PLUGIN_RESPONSE_FORMAT_ERROR,
+                    message=StatusCode.PLUGIN_RESPONSE_FORMAT_ERROR.errmsg,
                 )
             res = res[0]
         if (
@@ -630,8 +630,8 @@ class RestFulAPI(Invokable, ABC):
         ):
             if not res or not isinstance(res, list):
                 raise exception.PluginCommonException(
-                    code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
-                    message="response is empty or not list when output_list is True",
+                    code=StatusCode.PLUGIN_RESPONSE_FORMAT_ERROR,
+                    message=StatusCode.PLUGIN_RESPONSE_FORMAT_ERROR.errmsg,
                 )
             res = res[0]
         if (
