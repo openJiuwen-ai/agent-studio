@@ -14,7 +14,11 @@ from agent_runtime.runner.react_file_reader_adapter import ReactFileReaderAdapte
 def _install_fake_pymupdf(doc):
     """注入伪造 pymupdf 模块，其 open() 返回 doc（MagicMock）。"""
     fake = ModuleType("pymupdf")
-    fake.open = lambda path: doc
+
+    def _open(path):
+        return doc
+
+    fake.open = _open
     sys.modules["pymupdf"] = fake
     return fake
 
