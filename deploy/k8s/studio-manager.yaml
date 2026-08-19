@@ -23,17 +23,21 @@ spec:
           image: studio-manager:1.0.0.20260526091153.x86_64
           env:
             # ======== [必填] 数据库 ========
-            # MySQL: jdbc:mariadb://<MYSQL_IP>:3306/<DB_NAME>?allowMultiQueries=true
-            # GaussDB: jdbc:opengauss://<HOST1>:8000,<HOST2>:8000,<HOST3>:8000/<DB_NAME>?targetServerType=master
+            # Manager JDBC URL，单机一个HOST，主备/集群逗号分隔(JDBC自动寻主)：
+            #   MySQL:      jdbc:mariadb://<HOST>:3306[,<HOST>:3306][,<HOST>:3306]/<DB>?allowMultiQueries=true
+            #   GaussDB:    jdbc:opengauss://<HOST>:8000[,<HOST>:8000]/<DB>?currentSchema=<SCHEMA>&targetServerType=master
+            #   PostgreSQL: jdbc:postgresql://<HOST>:5432[,<HOST>:5432]/<DB>?currentSchema=<SCHEMA>&targetServerType=primary
             - name: spring_datasource_url
               value: ''
             - name: spring_datasource_username
               value: ''
             - name: spring_datasource_password
               value: ''
-            # 使用GaussDB时取消注释，URL改为jdbc:opengauss格式
+            # 驱动类名 — GaussDB: com.huawei.opengauss.jdbc.Driver / PostgreSQL: org.postgresql.Driver
             # - name: spring_datasource_driver_class_name
             #   value: 'com.huawei.opengauss.jdbc.Driver'
+            # - name: spring_datasource_driver_class_name
+            #   value: 'org.postgresql.Driver'
             # ======== [必填] Redis ========
             # 单机模式：配置 redis_host、redis_port、redis_password
             # 集群模式：配置 cluster_node_list、redis_password

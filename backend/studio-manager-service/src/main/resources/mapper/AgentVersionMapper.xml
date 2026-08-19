@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.openjiuwen.studio.agent.manager.mapper.AgentVersionMapper">
     <insert id="insert" parameterType="com.openjiuwen.studio.agent.manager.entity.AgentVersion">
-        insert into t_agent_version (version_id, agent_id, project_id, `name`, description, tags, icon,
+        insert into t_agent_version (version_id, agent_id, project_id, name, description, tags, icon,
                                      instructions, trigger_list, prologue, suggest_queries, additional_questions_config,
                                      ir_path, dsl_path, is_online, creator, created_on, updated_on, published_on)
         values (#{versionId,jdbcType=VARCHAR}, #{agentId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR},
@@ -39,7 +39,7 @@
         version_id,
         agent_id,
         project_id,
-        `name`,
+        name,
         description,
         tags,
         icon,

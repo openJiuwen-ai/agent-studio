@@ -27,7 +27,7 @@
         member_name,
         member_source,
         domain_id,
-        `role`,
+        role,
         status,
         creator,
         creator_id,
@@ -102,7 +102,7 @@
     </select>
 
     <insert id="batchInsertWorkspaceMember" parameterType="java.util.List">
-        INSERT INTO t_workspace_member (id, workspace_id, member_id, member_name, member_source, domain_id, `role`, status, creator, creator_id, updater, updater_id, created_on, updated_on)
+        INSERT INTO t_workspace_member (id, workspace_id, member_id, member_name, member_source, domain_id, role, status, creator, creator_id, updater, updater_id, created_on, updated_on)
         VALUES
         <foreach collection="workspaceMemberInfoList" item="member" separator=",">
             (
@@ -113,7 +113,7 @@
         </foreach>
     </insert>
     <insert id="insertWorkspaceMember">
-        INSERT INTO t_workspace_member (id, workspace_id, member_id, member_name, member_source, domain_id, `role`,
+        INSERT INTO t_workspace_member (id, workspace_id, member_id, member_name, member_source, domain_id, role,
                                         status, creator, creator_id, updater, updater_id, created_on, updated_on)
         VALUES (#{workspaceMember.id}, #{workspaceMember.workspaceId}, #{workspaceMember.memberId},
                 #{workspaceMember.memberName},
@@ -124,7 +124,7 @@
 
     <update id="batchDeleteWorkspaceMemberByIds" parameterType="java.util.List">
         UPDATE t_workspace_member
-        SET status = '0',
+        SET status = 0,
         updater = #{updater},
         updater_id = #{updateId},
         updated_on = NOW()
@@ -152,7 +152,7 @@
     <update id="updateMemberRole"
             parameterType="com.openjiuwen.studio.agent.manager.entity.WorkSpaceMemberEntity">
         UPDATE t_workspace_member
-        SET `role`     = #{member.role},
+        SET role     = #{member.role},
             updater    = #{member.updater},
             updater_id = #{member.updaterId},
             updated_on = NOW()

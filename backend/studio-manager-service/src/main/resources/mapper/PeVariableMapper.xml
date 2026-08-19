@@ -63,7 +63,7 @@
     </delete>
 
     <insert id="batchInsertVariable">
-        insert into t_pe_variable(`id`,`name`,`key`,`pe_task_id`,`relation_count`, `create_time`, `workspace_id`)
+        insert into t_pe_variable(id,name,key,pe_task_id,relation_count, create_time, workspace_id)
         values
         <foreach collection="variables" item="item" separator=",">
             (#{item.id,jdbcType=VARCHAR},
@@ -102,7 +102,7 @@
     </update>
 
     <select id="queryVariableKeysByTaskId" resultType="java.lang.String">
-        SELECT `key` from t_pe_variable where pe_task_id = #{taskId} and workspace_id = #{workspaceId}
+        SELECT key from t_pe_variable where pe_task_id = #{taskId} and workspace_id = #{workspaceId}
     </select>
 
     <select id="selectVariablesByIds" resultType="com.openjiuwen.studio.prompt.engineering.entity.PeVariable">

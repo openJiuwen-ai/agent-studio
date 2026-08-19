@@ -56,10 +56,10 @@ spec:
             - name: REDIS_TRANSACTION_ENABLED
               value: 'true'
             # ======== [选填] 提示词优化任务持久化存储（不填则仅存内存） ========
-            # 数据库类型：mysql 或 gaussdb，默认mysql
+            # STORE_DB_TYPE: mysql/gaussdb/postgresql
+            # STORE_DB_HOST: 单机一个IP，主备/集群逗号分隔(GaussDB/PG自动寻主，MySQL仅连首个)
             - name: STORE_DB_TYPE
               value: 'mysql'
-            # MySQL默认端口3306，GaussDB默认端口5432；GaussDB多节点时HOST填多个IP逗号分隔
             - name: STORE_DB_HOST
               value: ''
             - name: STORE_DB_PORT
@@ -70,10 +70,10 @@ spec:
               value: ''
             - name: STORE_DB_DATABASE
               value: 'agent-builder'
-            # Schema 模式（仅GaussDB生效）：设置后连接以该 schema 作为默认 search_path；为空则用数据库默认
+            # GaussDB/PostgreSQL 生效
             - name: STORE_DB_SCHEMA
               value: ''
-            # SSL模式（仅GaussDB生效）：disable（默认）/ require / verify-ca / verify-full
+            # disable/require/verify-ca/verify-full（GaussDB/PostgreSQL 生效）
             - name: STORE_DB_SSLMODE
               value: 'disable'
             # ======== [选填] 日志 ========

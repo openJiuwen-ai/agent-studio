@@ -625,7 +625,7 @@ public class AgentManagementService implements IAgentManagementService {
         newAgent.setSchedulingMode(oldAgent.getSchedulingMode());
         newAgent.setDslPath(oldAgent.getDslPath());
         newAgent.setMemoryConfig(oldAgent.getMemoryConfig());
-        newAgent.setDeleted(0);
+        newAgent.setDeleted(false);
         AgentType agentType = AgentType.naValueOf(oldAgent.getType());
 
         if (workspaceId.equals(targetWorkspaceId)) {

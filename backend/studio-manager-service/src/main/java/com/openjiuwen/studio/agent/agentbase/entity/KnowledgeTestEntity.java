@@ -8,6 +8,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Date;
+
 /**
  * 知识检索实体类
  *
@@ -50,5 +52,5 @@ public class KnowledgeTestEntity {
     /**
      * 创建时间
      */
-    private Long createdOn;
+    private Date createdOn;
 }

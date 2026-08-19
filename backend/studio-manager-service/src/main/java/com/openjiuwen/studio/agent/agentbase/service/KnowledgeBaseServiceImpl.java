@@ -145,6 +145,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -517,8 +518,8 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         knowledgeRepoEntity.setSize(0L);
         knowledgeRepoEntity.setFileNum(0);
         knowledgeRepoEntity.setSource(knowledgeSource);
-        knowledgeRepoEntity.setCreatedOn(System.currentTimeMillis() / 1000);
-        knowledgeRepoEntity.setUpdatedOn(System.currentTimeMillis() / 1000);
+        knowledgeRepoEntity.setCreatedOn(new Date());
+        knowledgeRepoEntity.setUpdatedOn(new Date());
         return knowledgeRepoEntity;
     }
 
@@ -898,8 +899,8 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         if (StringUtils.isNotEmpty(knowledgeRepo.getMetadata())) {
             showKnowledgeRepoResponseBody.setMetadata(displayMetadata(knowledgeRepoEntity.getMetadata()));
         }
-        showKnowledgeRepoResponseBody.setCreateTime(knowledgeRepoEntity.getCreatedOn());
-        showKnowledgeRepoResponseBody.setUpdateTime(knowledgeRepoEntity.getUpdatedOn());
+        showKnowledgeRepoResponseBody.setCreateTime(knowledgeRepoEntity.getCreatedOn() != null ? knowledgeRepoEntity.getCreatedOn().getTime() : null);
+        showKnowledgeRepoResponseBody.setUpdateTime(knowledgeRepoEntity.getUpdatedOn() != null ? knowledgeRepoEntity.getUpdatedOn().getTime() : null);
         showKnowledgeRepoResponseBody.setWorkspaceId(knowledgeBase.getWorkspaceId());
         showKnowledgeRepoResponseBody.setShareScope(ShowKnowledgeRepoResponseBody.ShareScopeEnum.fromValue(knowledgeBase.getShareScope()));
         showKnowledgeRepoResponseBody.setUpdateUserName(knowledgeBase.getLastUpdateUserName());
@@ -1019,7 +1020,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
             newKnowledgeRepo.setDomainId(RequestContextUtils.getRequestUserDomainId());
             newKnowledgeRepo.setStatus(KnowledgeRepoStatus.OPEN.toString());
             newKnowledgeRepo.setProjectId(projectId);
-            newKnowledgeRepo.setUpdatedOn(System.currentTimeMillis() / 1000);
+            newKnowledgeRepo.setUpdatedOn(new Date());
             knowledgeRepoMapper.updateByPrimaryKeySelective(newKnowledgeRepo);
         }
 
@@ -1063,7 +1064,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
             newKnowledgeRepo.setDomainId(RequestContextUtils.getRequestUserDomainId());
             newKnowledgeRepo.setStatus(KnowledgeRepoStatus.CLOSE.toString());
             newKnowledgeRepo.setProjectId(projectId);
-            newKnowledgeRepo.setUpdatedOn(System.currentTimeMillis() / 1000);
+            newKnowledgeRepo.setUpdatedOn(new Date());
             knowledgeRepoMapper.updateByPrimaryKeySelective(newKnowledgeRepo);
         }
 
@@ -1132,7 +1133,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         knowledgeRepo.setMetadata(newEncryptMetadata);
         knowledgeRepo.setDomainId(RequestContextUtils.getRequestUserDomainId());
         knowledgeRepo.setDomainName(RequestContextUtils.getRequestUserDomainName());
-        knowledgeRepo.setUpdatedOn(System.currentTimeMillis() / 1000);
+        knowledgeRepo.setUpdatedOn(new Date());
         if (StringUtils.isBlank(body.getIcon())) {
             knowledgeRepo.setIcon(knowledgeBase.getIcon());
         } else {
@@ -1159,7 +1160,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
             KnowledgeSearchRecord searchRecord = new KnowledgeSearchRecord();
             searchRecord.setId(knowledgeTest.getRecordId());
             searchRecord.setQuery(knowledgeTest.getQuery());
-            searchRecord.setCreateTime(knowledgeTest.getCreatedOn());
+            searchRecord.setCreateTime(knowledgeTest.getCreatedOn() != null ? knowledgeTest.getCreatedOn().getTime() : null);
             searchRecords.add(searchRecord);
         }
         return searchRecords;
@@ -1193,7 +1194,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         knowledgeTest.setProjectId(projectId);
         knowledgeTest.setDomainId(RequestContextUtils.getRequestUserDomainId());
         knowledgeTest.setDomainName(RequestContextUtils.getRequestUserDomainName());
-        knowledgeTest.setCreatedOn(System.currentTimeMillis() / 1000);
+        knowledgeTest.setCreatedOn(new Date());
         knowledgeTestMapper.insert(knowledgeTest);
     }
 

@@ -42,7 +42,7 @@
     </select>
 
     <select id="queryById" resultType="com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase">
-        SELECT PROJECT_ID, WORKSPACE_ID FROM `t_free_model_service` WHERE ID = #{modelId}
+        SELECT PROJECT_ID, WORKSPACE_ID FROM t_free_model_service WHERE ID = #{modelId}
     </select>
 
 </mapper>

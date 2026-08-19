@@ -7,29 +7,29 @@
 <mapper namespace="com.openjiuwen.studio.agent.manager.mapper.ApigApiGroupsMapper">
 
     <sql id="Base_Column_List">
-        `ID`, `NAME`, `DESCRIPTION`, `TENANT_ID`, `CREATED_BY_USER_ID`, `LAST_UPDATED_BY_USER_ID`,
-        `CREATED_DATE`, `LAST_UPDATED_DATE`, `STATUS`
+        ID, NAME, DESCRIPTION, TENANT_ID, CREATED_BY_USER_ID, LAST_UPDATED_BY_USER_ID,
+        CREATED_DATE, LAST_UPDATED_DATE, STATUS
     </sql>
 
     <select id="selectById" resultType="com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigApiGroupsDto">
         select
         <include refid="Base_Column_List"/>
-        from `t_apig_api_groups`
-        where `ID` = #{id} and `status` != 'deleted'
+        from t_apig_api_groups
+        where ID = #{id} and status != 'deleted'
     </select>
 
     <select id="selectByName" resultType="com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigApiGroupsDto">
         select
         <include refid="Base_Column_List"/>
-        from `t_apig_api_groups`
-        where `NAME` = #{name} and `status` != 'deleted'
+        from t_apig_api_groups
+        where NAME = #{name} and status != 'deleted'
     </select>
 
     <insert id="insert" keyProperty="apigApiGroupsDto.id">
-        insert into `t_apig_api_groups` (`ID`, `NAME`,
-                                                          `DESCRIPTION`, `TENANT_ID`, `CREATED_BY_USER_ID`,
-                                                          `LAST_UPDATED_BY_USER_ID`,
-                                                          `CREATED_DATE`, `LAST_UPDATED_DATE`, `STATUS`)
+        insert into t_apig_api_groups (ID, NAME,
+                                                          DESCRIPTION, TENANT_ID, CREATED_BY_USER_ID,
+                                                          LAST_UPDATED_BY_USER_ID,
+                                                          CREATED_DATE, LAST_UPDATED_DATE, STATUS)
         values (#{apigApiGroupsDto.id}, #{apigApiGroupsDto.name},
                 #{apigApiGroupsDto.description},
                 #{apigApiGroupsDto.tenantId}, #{apigApiGroupsDto.createdByUserId},
@@ -39,21 +39,21 @@
     </insert>
 
     <update id="deleteById">
-        update `t_apig_api_groups`
-        set `STATUS`='deleted'
-        where `ID` = #{id}
+        update t_apig_api_groups
+        set STATUS='deleted'
+        where ID = #{id}
     </update>
 
     <update id="deleteByName">
-        update `t_apig_api_groups`
-        set `STATUS`='deleted'
-        where `NAME` = #{name}
+        update t_apig_api_groups
+        set STATUS='deleted'
+        where NAME = #{name}
     </update>
 
     <select id="getNullDeptCodeNum" resultType="Integer">
         select count(1)
         from t_apig_api_groups
-        where `DEPT_CODE` is null
+        where DEPT_CODE is null
           and created_by_user_id is not null;
     </select>
 

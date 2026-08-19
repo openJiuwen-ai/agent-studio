@@ -24,23 +24,23 @@
     </resultMap>
 
     <sql id="baseColumns">
-        `id`,
-        `domain_id`,
-        `version`,
-        `privacy_statement`,
-        `agree_flag`,
-        `created_date`,
-        `created_by_user_id`,
-        `last_updated_date`,
-        `last_updated_by_user_id`
+        id,
+        domain_id,
+        version,
+        privacy_statement,
+        agree_flag,
+        created_date,
+        created_by_user_id,
+        last_updated_date,
+        last_updated_by_user_id
     </sql>
 
     <sql id="defColumns">
-        `id`,
-        `version`,
-        `privacy_statement`,
-        `status`,
-        `created_date`
+        id,
+        version,
+        privacy_statement,
+        status,
+        created_date
     </sql>
 
     <select id="selectByDomainId" resultType="com.openjiuwen.studio.common.service.entity.AgreementEntity">
@@ -68,17 +68,17 @@
     </insert>
 
     <update id="update" parameterType="com.openjiuwen.studio.common.service.entity.AgreementEntity">
-        update `t_common_agreement`
-        set `id`                   = #{entity.id},
-            `domain_id`            = #{entity.domainId},
-            `version`              = #{entity.version},
-            `privacy_statement`    = #{entity.privacyStatement},
-            `agree_flag`           = #{entity.agreeFlag},
-            `created_date`         = #{entity.createdDate},
-            `created_by_user_id`   = #{entity.createdByUserId},
-            `last_updated_date`    = #{entity.lastUpdatedDate},
-            `last_updated_by_user_id` = #{entity.lastUpdatedByUserId}
-        where `domain_id` = #{entity.domainId};
+        update t_common_agreement
+        set id                   = #{entity.id},
+            domain_id            = #{entity.domainId},
+            version              = #{entity.version},
+            privacy_statement    = #{entity.privacyStatement},
+            agree_flag           = #{entity.agreeFlag},
+            created_date         = #{entity.createdDate},
+            created_by_user_id   = #{entity.createdByUserId},
+            last_updated_date    = #{entity.lastUpdatedDate},
+            last_updated_by_user_id = #{entity.lastUpdatedByUserId}
+        where domain_id = #{entity.domainId};
     </update>
 
 

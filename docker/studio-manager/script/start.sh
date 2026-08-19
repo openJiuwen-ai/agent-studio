@@ -4,6 +4,9 @@
 APP_PATH=${APP_PATH:-/opt/cloud/studio-manager}
 MICROSERVICE_NAME="studio-manager"
 ACTIVE_PROFILES='manager'
+if [[ "${spring_datasource_driver_class_name}" == org.postgresql.Driver ]]; then
+    ACTIVE_PROFILES="${ACTIVE_PROFILES},postgres"
+fi
 PERCENT_AGE=${jvm_xmx_percent:-0.6}
 DIRECT_RATIO=${jvm_direct_memory_ratio:-0.2}
 DIRECT_CAP_MB=${jvm_direct_memory_cap_mb:-1024}

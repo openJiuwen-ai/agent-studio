@@ -68,5 +68,5 @@ public class DependencyEntity {
     private int version;
 
     @JsonProperty("deleted")
-    private int deleted;
+    private Boolean deleted = false;
 }

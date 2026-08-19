@@ -24,7 +24,7 @@
         <result property="lastUpdatedDate" column="last_updated_date" jdbcType="TIMESTAMP"/>
         <result property="lastUpdatedByUserId" column="last_updated_by_user_id" jdbcType="VARCHAR"/>
         <result property="tenantId" column="tenant_id" jdbcType="VARCHAR"/>
-        <result property="deleted" column="deleted" jdbcType="TINYINT"/>
+        <result property="deleted" column="deleted" jdbcType="BOOLEAN"/>
         <result property="deptCode" column="dept_code" jdbcType="VARCHAR"/>
         <result property="uniqueCode" column="unique_code" jdbcType="VARCHAR"/>
         <result property="serverId" column="server_id" jdbcType="VARCHAR"/>
@@ -631,7 +631,7 @@
         WHERE trace_id = #{traceId}
           AND workspace_id = #{workspaceId}
           AND project_id = #{projectId}
-          AND deleted = 0
+          AND deleted = false
     </select>
 
     <select id="batchInsert">

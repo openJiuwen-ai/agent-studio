@@ -1799,7 +1799,7 @@ public class AgentImportExportService {
         metadata.setDeployWfVersion(null);
         metadata.setDslPath(dlsPath);
         metadata.setIrPath(irPath);
-        metadata.setDeleted(0);
+        metadata.setDeleted(false);
         metadata.setUpdatedAt(curTime);
         metadata.setTestStatus(null);
 

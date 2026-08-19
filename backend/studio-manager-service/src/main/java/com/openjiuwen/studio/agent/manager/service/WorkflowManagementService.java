@@ -1089,7 +1089,7 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         WorkflowEntity workflowEntity = convertInfoToEntity(workspaceId, body);
         workflowEntity.setCreatorId(RequestContextUtils.getRequestUserId());
         workflowEntity.setUpdaterId(RequestContextUtils.getRequestUserId());
-        workflowEntity.setDeleted(0);
+        workflowEntity.setDeleted(false);
         workflowEntity.setDslPath(flowPath);
         workflowEntity.setTestStatus(0);
         workflowEntity.setAvatar(body.getAvatar());

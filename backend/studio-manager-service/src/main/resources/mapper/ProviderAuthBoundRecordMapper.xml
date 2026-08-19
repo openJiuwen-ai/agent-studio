@@ -5,12 +5,12 @@
 
 <mapper namespace="com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthBoundRecordMapper">
     <sql id="columns">
-      `ID`,
-      `PROVIDER_AUTH_ID`,
-      `DOMAIN_ID`,
-      `PROVIDER_ID`,
-      `CREATED_BY_USER`,
-      `CREATED_DATE`
+      ID,
+      PROVIDER_AUTH_ID,
+      DOMAIN_ID,
+      PROVIDER_ID,
+      CREATED_BY_USER,
+      CREATED_DATE
     </sql>
 
     <resultMap id="providerAuthBoundRecordPo"

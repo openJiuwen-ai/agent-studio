@@ -115,7 +115,7 @@
                 AND tag_id = #{tagId, jdbcType=VARCHAR}
             </if>
             <if test="publishedAsset != null">
-                AND published_asset = #{publishedAsset, jdbcType=VARCHAR}
+                AND published_asset = CONCAT(#{publishedAsset}, '')
             </if>
         </where>
         ORDER BY
@@ -162,7 +162,7 @@
                 AND project_id = #{projectId, jdbcType=VARCHAR}
             </if>
             <if test="publishedAsset != null">
-                AND published_asset = #{publishedAsset, jdbcType=VARCHAR}
+                AND published_asset = CONCAT(#{publishedAsset}, '')
             </if>
         </where>
     </select>

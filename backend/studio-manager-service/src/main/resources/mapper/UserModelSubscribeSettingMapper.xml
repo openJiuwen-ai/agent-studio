@@ -5,12 +5,12 @@
 
 <mapper namespace="com.openjiuwen.studio.agent.manager.mapper.md.UserModelSubscribeSettingsMapper">
     <sql id="columns">
-        `ID`,
-        `DOMAIN_ID`,
-        `PROJECT_ID`,
-        `IS_AUTO_SUBSCRIBE_NEW_MODEL`,
-        `CREATED_DATE`,
-        `LAST_UPDATED_DATE`
+        ID,
+        DOMAIN_ID,
+        PROJECT_ID,
+        IS_AUTO_SUBSCRIBE_NEW_MODEL,
+        CREATED_DATE,
+        LAST_UPDATED_DATE
     </sql>
 
     <resultMap id="userModelSubscribeSettingsPo"
@@ -62,6 +62,6 @@
             LAST_UPDATED_DATE = #{lastUpdatedDate}
         </if>
         WHERE
-            `ID` = #{id}
+            ID = #{id}
     </update>
 </mapper>

@@ -44,6 +44,9 @@ public class SystemConfig {
     @Value("${agent.builder.pool.keep.alive.seconds}")
     private int keepAliveSeconds;
 
+    @Value("${mybatis-plus.global-config.db-config.db-type:mysql}")
+    private String dbType;
+
     @Bean
     public ThreadPoolTaskExecutor myTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -97,7 +100,7 @@ public class SystemConfig {
     public MybatisPlusInterceptor paginationInnerInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
 
-        interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
+        interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.valueOf(dbType.toUpperCase())));
         return interceptor;
     }
 

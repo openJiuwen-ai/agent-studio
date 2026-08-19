@@ -258,7 +258,7 @@ public class AppManagementService implements IAppManagementService {
         newAgent.setWorkspaceId(workspaceId);
         newAgent.setReference(agentInfo.getReference());
         newAgent.setTraceId(newAgentId);
-        newAgent.setDeleted(0);
+        newAgent.setDeleted(false);
 
         if (agentInfo.getContentReview() != null) {
             newAgent.setContentReview(JsonUtils.toJson(agentInfo.getContentReview()));

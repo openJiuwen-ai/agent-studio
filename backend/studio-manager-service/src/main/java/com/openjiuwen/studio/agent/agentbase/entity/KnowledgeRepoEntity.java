@@ -8,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import lombok.Data;
 
+import java.util.Date;
+
 /**
  * 功能描述
  *
@@ -59,10 +61,10 @@ public class KnowledgeRepoEntity {
     private String metadata;
 
     @JsonProperty("created_on")
-    private Long createdOn;
+    private Date createdOn;
 
     @JsonProperty("updated_on")
-    private Long updatedOn;
+    private Date updatedOn;
 
     @JsonProperty("workspace_id")
     private String workspaceId;

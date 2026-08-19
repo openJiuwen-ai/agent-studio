@@ -19,18 +19,18 @@
     </resultMap>
 
     <sql id="baseColumns">
-            `id`,
-            `domain_id`,
-            `main_key_id`,
-            `main_key_alias`,
-            `cipher_text`,
-            `version`,
-            `active`,
-            `latest`,
-            `created_date`,
-            `created_by_user_id`,
-            `last_updated_date`,
-            `last_updated_by_user_id`
+            id,
+            domain_id,
+            main_key_id,
+            main_key_alias,
+            cipher_text,
+            version,
+            active,
+            latest,
+            created_date,
+            created_by_user_id,
+            last_updated_date,
+            last_updated_by_user_id
 
     </sql>
 
