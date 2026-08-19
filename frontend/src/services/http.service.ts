@@ -8,11 +8,11 @@ import { I18nNamespace } from '@i18n';
 import { blockedErrorUrls } from '@shared/config/ConfigUrl';
 import * as I18next from 'angular-i18next';
 import i18next from 'i18next';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, timer } from 'rxjs';
 import { buildErrorMsgStr, ICommonError } from 'src/utils/utils';
 import { environment } from '../environment/environment';
 import { HttpClient, HttpParams, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
-import { catchError, throwError, map } from 'rxjs';
+import { catchError, throwError, map, switchMap, take, filter, defaultIfEmpty } from 'rxjs';
 import { CommonUtils } from "../utils/common.util";
 
 interface IHttpConfig extends HttpConfig {
@@ -20,6 +20,8 @@ interface IHttpConfig extends HttpConfig {
   overrideUrl?: boolean;
   /** 跳过 handleError 里的全局错误 toast，由调用方自行 catch 处理（避免错误提示污染其他页面） */
   cancelGlobalError?: boolean;
+  /** 内部标记：该请求已因 workspace_id 为空重试过一次，防止无限重试 */
+  _workspaceRetried?: boolean;
 }
 
 enum mapKeys {
@@ -145,6 +147,90 @@ export class HttpService {
     return throwError(() => error);
   }
 
+  /**
+   * 针对 `openjiuwen.02001009`（workspace_id 为空）的首屏竞态做静默重试。
+   *
+   * 背景：应用启动早期，workspace_id 尚未写入 storage（CUR_SPACE_OPTIONS/PE_SESSION_KEY），
+   * 部分业务请求会带着空 workspace_id 发出，被后端拦截器挡下报 02001009。
+   * workspace_id 通常在几百毫秒内由初始化链写入，刷新后即正常。
+   *
+   * 处理：检测到该错误码且本次请求未重试过时，轮询 getWorkspaceId() 直至就绪
+   * （最长 5 秒），然后用最新 workspace_id 重发原请求；重发失败则走原错误流程。
+   * 正常运行时 workspace_id 永远非空，此逻辑不会触发，对现有功能零影响。
+   *
+   * 02001009 是后端拦截器在 preHandle 阶段挡掉的，请求未进 controller，重发无副作用。
+   */
+  private retryOnWorkspaceReady<T>(
+    error: HttpErrorResponse,
+    httpConfig: IHttpConfig,
+    retryFn: () => Observable<T>,
+  ): Observable<T> {
+    const errorCode = (error.error?.error_code ?? '').toString().toLowerCase();
+    const isWorkspaceEmptyError = errorCode === 'openjiuwen.02001009';
+    // 仅在首次（未重试）且当前确实没有 workspace_id 时重试，避免无限循环。
+    // 用纯读的 peekWorkspaceId() 判断，避免触发 getWorkspaceId() 内的副作用（confirmFn 跳转等）。
+    if (!isWorkspaceEmptyError || httpConfig._workspaceRetried || this.peekWorkspaceId()) {
+      return this.handleError(error, httpConfig);
+    }
+    httpConfig._workspaceRetried = true;
+    // 轮询 workspace_id：每 100ms 一次，最多 50 次（5 秒）。
+    // filter + take(1) 保证拿到第一个非空值后立即停止轮询并重发一次，
+    // 避免因 timer 持续 emit 反复取消/重发请求。
+    // 用 null 作为哨兵：ready$ 在 5 秒内拿到非空 workspace_id → emit 该 id；
+    // 5 秒内始终为空 → 流自然 complete，需补哨兵以触发兜底分支。
+    // 注意：这里用纯读的 peekWorkspaceId() 轮询，而非带副作用的 getWorkspaceId()
+    // （后者在 userId 不匹配/异常时会清 storage 并路由跳转，轮询多次会反复触发）。
+    // 重发时的 mergeConfig 会调用完整的 getWorkspaceId() 做校验。
+    const ready$ = timer(0, 100).pipe(
+      take(50),
+      map(() => this.peekWorkspaceId()),
+      filter(id => Boolean(id)),
+      take(1),
+      defaultIfEmpty(null),
+    );
+    return ready$.pipe(
+      switchMap(id => (id === null
+        // 5 秒超时仍未就绪：按原错误流程处理（弹 toast / 透传），避免请求无限挂起
+        ? this.handleError(error, httpConfig)
+        // workspace_id 已就绪：重发原请求；重发内部失败会因 _workspaceRetried=true 走原 handleError
+        : retryFn())),
+    );
+  }
+
+  /**
+   * 纯读 workspace_id：只读 URL 参数与 storage，不做 userId 校验、不清 storage、不路由跳转。
+   * 供轮询使用，避免反复触发 getWorkspaceId() 内的副作用（confirmFn 路由跳转等）。
+   * 真正的 userId 校验与跳转交给 mergeConfig 里调用的完整 getWorkspaceId()。
+   */
+  private peekWorkspaceId(): string {
+    try {
+      if (window.location.href && window.location.href.indexOf('from=agentBuilder') !== -1 && window.location.href.indexOf('work_space_id=') !== -1) {
+        const match = window.location.href.match(/work_space_id=([^&]*)/);
+        return match ? match[1] : '';
+      }
+      const match = window.location.href.match(/workspace_id=([^&]*)/);
+      if (match) {
+        return match[1];
+      }
+      const userInfo = StorageService.getLocalStorage(PE_SESSION_KEY);
+      const curSpaceOptionsStr = StorageService.getSessionStorage('CUR_SPACE_OPTIONS');
+      if (curSpaceOptionsStr) {
+        let curSpaceOptions: any = null;
+        try {
+          curSpaceOptions = JSON.parse(curSpaceOptionsStr);
+        } catch {
+          curSpaceOptions = null;
+        }
+        if (curSpaceOptions?.id) {
+          return curSpaceOptions.id;
+        }
+      }
+      return userInfo?.workspaceId || '';
+    } catch {
+      return '';
+    }
+  }
+
   get defaultConfig(): Partial<HttpConfig> {
     return {
       timeout: 900_000,
@@ -252,7 +338,7 @@ export class HttpService {
     }
     const headers = this.buildHeaders();
     return this.httpClient.get<T>(config.url as string, {params, headers}).pipe(
-      catchError((err) => this.handleError(err, httpConfig))
+      catchError((err) => this.retryOnWorkspaceReady(err, httpConfig, () => this.get(httpConfig)))
     ) as Observable<T>;
   }
 
@@ -267,7 +353,7 @@ export class HttpService {
     const headers = this.buildHeaders();
     const body = config.body ?? config.params;
     return this.httpClient.post<T>(config.url as string, body, {params: queryParams, headers}).pipe(
-      catchError((err) => this.handleError(err, httpConfig))
+      catchError((err) => this.retryOnWorkspaceReady(err, httpConfig, () => this.post(httpConfig)))
     ) as Observable<T>;
   }
 
@@ -295,7 +381,7 @@ export class HttpService {
     const headers = this.buildHeaders();
     const body = config.body ?? config.params;
     return this.httpClient.put<T>(config.url as string, body, {params: queryParams, headers}).pipe(
-      catchError((err) => this.handleError(err, httpConfig))
+      catchError((err) => this.retryOnWorkspaceReady(err, httpConfig, () => this.put(httpConfig)))
     ) as Observable<T>;
   }
 
@@ -310,7 +396,7 @@ export class HttpService {
     const headers = this.buildHeaders();
     const body = config.body ?? config.params;
     return this.httpClient.delete<T>(config.url as string, {params, headers, body}).pipe(
-      catchError((err) => this.handleError(err, httpConfig))
+      catchError((err) => this.retryOnWorkspaceReady(err, httpConfig, () => this.delete(httpConfig)))
     ) as Observable<T>;
   }
 
@@ -325,7 +411,7 @@ export class HttpService {
     const headers = this.buildHeaders();
     const body = config.body ?? config.params;
     return this.httpClient.patch<T>(config.url as string, body, {params: queryParams, headers}).pipe(
-      catchError((err) => this.handleError(err, httpConfig))
+      catchError((err) => this.retryOnWorkspaceReady(err, httpConfig, () => this.patch(httpConfig)))
     ) as Observable<T>;
   }
 
