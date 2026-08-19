@@ -69,6 +69,20 @@ public interface ShareResourceMapper {
 
     ShareResourceEntity selectShareResourceEntityByResourceId(@Param("resourceId") String resourceId);
 
+    /**
+     * 宽松模式导入：按 traceId + 资源类型 查询共享给指定工作空间的共享资源（含团队共享 'all'）。
+     * 用于目标空间本地查不到子资源时，按 traceId 跨空间匹配已授权的共享资源。
+     *
+     * @param projectId 项目ID
+     * @param authWorkspaceId 授权工作空间ID（当前导入目标空间）
+     * @param resourceType 资源类型（小写 controller/workflow）
+     * @param traceId 源空间资源traceId
+     * @return 命中的共享资源实体列表，按 update_time 降序
+     */
+    List<ShareResourceEntity> selectSharedResourceByTraceIdAndAuthWorkspace(@Param("projectId") String projectId,
+        @Param("authWorkspaceId") String authWorkspaceId, @Param("resourceType") String resourceType,
+        @Param("traceId") String traceId);
+
     List<ShareResourceEntity> selectSharResourceEntityByWorkspaceId(@Param("projectId") String projectId,
         @Param("workspaceId") String workspaceId, @Param("resourceType") String resourceType,
         @Param("resourceName") String resourceName);
