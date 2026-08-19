@@ -176,24 +176,25 @@ export class HttpService {
     // 轮询 workspace_id：每 100ms 一次，最多 50 次（5 秒）。
     // filter + take(1) 保证拿到第一个非空值后立即停止轮询并重发一次，
     // 避免因 timer 持续 emit 反复取消/重发请求。
-    // 用 null 作为哨兵：ready$ 在 5 秒内拿到非空 workspace_id → emit 该 id；
-    // 5 秒内始终为空 → 流自然 complete，需补哨兵以触发兜底分支。
+    // 用 boolean 信号区分就绪/超时：5 秒内拿到非空 workspace_id → emit true；
+    // 5 秒内始终为空 → 流自然 complete，经 defaultIfEmpty 补 false 触发兜底分支。
     // 注意：这里用纯读的 peekWorkspaceId() 轮询，而非带副作用的 getWorkspaceId()
     // （后者在 userId 不匹配/异常时会清 storage 并路由跳转，轮询多次会反复触发）。
-    // 重发时的 mergeConfig 会调用完整的 getWorkspaceId() 做校验。
+    // 重发时的 mergeConfig 会调用完整的 getWorkspaceId() 取最新值做校验。
     const ready$ = timer(0, 100).pipe(
       take(50),
       map(() => this.peekWorkspaceId()),
       filter(id => Boolean(id)),
       take(1),
-      defaultIfEmpty(null),
+      map(() => true),
+      defaultIfEmpty(false),
     );
     return ready$.pipe(
-      switchMap(id => (id === null
-        // 5 秒超时仍未就绪：按原错误流程处理（弹 toast / 透传），避免请求无限挂起
-        ? this.handleError(error, httpConfig)
+      switchMap(ready => (ready
         // workspace_id 已就绪：重发原请求；重发内部失败会因 _workspaceRetried=true 走原 handleError
-        : retryFn())),
+        ? retryFn()
+        // 5 秒超时仍未就绪：按原错误流程处理（弹 toast / 透传），避免请求无限挂起
+        : this.handleError(error, httpConfig))),
     );
   }
 
