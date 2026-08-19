@@ -1115,6 +1115,7 @@ class StatusCode(Enum):
     PLUGIN_REQUEST_TIMEOUT_ERROR = (105012, "Plugin restful api request timeout error")
     PLUGIN_RESPONSE_TOO_BIG_ERROR = (105013, "Plugin restful api response too big")
     PLUGIN_PROXY_CONNECT_ERROR = (105014, "Plugin restful api proxy connect failed")
+    PLUGIN_RESPONSE_FORMAT_ERROR = (105015, "Plugin response format error")
 
     # 记忆管理        106000~106999
     # 数据增强        107000~107999

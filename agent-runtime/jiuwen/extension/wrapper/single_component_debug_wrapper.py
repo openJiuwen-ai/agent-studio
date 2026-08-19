@@ -11,6 +11,7 @@ from agent_runtime.common.session_state_access import dump_state_info
 from openjiuwen.core.common.logging import workflow_logger
 from jiuwen.common.exception.base import JiuWenBaseException
 from jiuwen.common.exception.status_code import StatusCode
+from jiuwen.extension.workflow_node.utils import JiuWenBaseException as UtilsJiuWenBaseException
 from jiuwen.orchestration.flow.constant import (
     DEFAULT_EXECUTION_NODE_TIMEOUT,
     EXCEPTION_DEFAULT_OUTPUTS,
@@ -837,7 +838,7 @@ class SingleComponentDebugWrapper:
         self, exception: Exception, execution_id: str
     ) -> StreamData:
         """构造错误 StreamData。"""
-        if isinstance(exception, JiuWenBaseException):
+        if isinstance(exception, (JiuWenBaseException, UtilsJiuWenBaseException)):
             error_code = exception.error_code
             message = exception.message
         elif isinstance(exception, asyncio.TimeoutError):
