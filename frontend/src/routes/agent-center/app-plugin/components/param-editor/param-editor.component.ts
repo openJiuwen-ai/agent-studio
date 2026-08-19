@@ -46,6 +46,7 @@ enum fieldTable {
 })
 export class ParamEditorComponent extends PromptEditorComponent {
   @Input('placeholder') placeholder = this.i18n.transform('param-editor-1');
+  @Input() override style: any;
   constructor(
     private readonly i18n: angularI18next.I18NextEagerPipe,
     @Optional() cdr?: ChangeDetectorRef,
