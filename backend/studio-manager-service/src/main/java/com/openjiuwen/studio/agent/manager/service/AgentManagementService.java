@@ -1685,7 +1685,8 @@ public class AgentManagementService implements IAgentManagementService {
         List<ShareResourceEntity> shareWorkflowList = shareResourceMapper.selectShareResourceByResourceIds(pluginsIds);
 
         Map<String, ShareResourceEntity> shareWorkflowMap = shareWorkflowList.stream()
-            .collect(Collectors.toMap(ShareResourceEntity::getResourceId, Function.identity()));
+            .collect(Collectors.toMap(ShareResourceEntity::getResourceId, Function.identity(),
+                (existingValue, newValue) -> existingValue));
         List<MappingEntity> toolReferences = new ArrayList<>();
         for (String id : toolIds) {
             MappingEntity mappingEntity = new MappingEntity();
@@ -1714,7 +1715,8 @@ public class AgentManagementService implements IAgentManagementService {
         List<ShareResourceEntity> shareWorkflowList = shareResourceMapper.selectShareResourceByResourceIds(pluginsIds);
 
         Map<String, ShareResourceEntity> shareWorkflowMap = shareWorkflowList.stream()
-            .collect(Collectors.toMap(ShareResourceEntity::getResourceId, Function.identity()));
+            .collect(Collectors.toMap(ShareResourceEntity::getResourceId, Function.identity(),
+                (existingValue, newValue) -> existingValue));
 
         List<MappingEntity> toolReferences = new ArrayList<>();
         for (AgentToolDetail toolDetail : toolDetails) {
