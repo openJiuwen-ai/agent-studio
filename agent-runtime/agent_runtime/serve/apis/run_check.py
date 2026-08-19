@@ -18,6 +18,9 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from openjiuwen.core.common.logging import workflow_logger
 from agent_runtime.event_handler.base.mappers import ErrorContextBuilder
+from agent_runtime.common.exception.errors import AgentBuilderError
+from jiuwen.common.exception import JiuWenBaseException
+from jiuwen.common.exception.status_code import StatusCode
 
 
 # 错误码key（对齐Java StudioError，用于ErrorContextBuilder查询i18n消息）
@@ -71,7 +74,16 @@ def _build_error_response(
 async def _load_ir_metadata(ir_path: str) -> dict:
     """从IR文件加载metadata字段."""
     from agent_runtime.serve.apis.orchestration import async_ir_load
-    ir_json = await async_ir_load(ir_path)
+    try:
+        ir_json = await async_ir_load(ir_path)
+    except (JiuWenBaseException, AgentBuilderError):
+        raise
+    except Exception as e:
+        workflow_logger.error("Failed to load IR metadata: %s, error: %s", ir_path, e)
+        raise JiuWenBaseException(
+            error_code=StatusCode.IR_DATA_JSON_LOAD_FAILED.code,
+            message=StatusCode.IR_DATA_JSON_LOAD_FAILED.errmsg,
+        ) from e
     return ir_json.get("metadata") or {}
 
 

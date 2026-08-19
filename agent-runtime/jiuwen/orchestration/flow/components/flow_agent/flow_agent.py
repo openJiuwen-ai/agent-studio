@@ -139,8 +139,8 @@ class FlowAgent(Invokable, InteractiveComponent):
                 r = requests.options(url, timeout=10)
                 if r.status_code == 404:
                     raise JiuWenBaseException(
-                        message=StatusCode.PLUGIN_NOT_FOUND_ERROR.errmsg,
-                        error_code=StatusCode.PLUGIN_NOT_FOUND_ERROR.code,
+                        message=StatusCode.PLUGIN_RESPONSE_HTTP_CODE_ERROR.errmsg,
+                        error_code=StatusCode.PLUGIN_RESPONSE_HTTP_CODE_ERROR.code,
                     )
                 # 有url表示此plugin_conf为完整的插件IR信息
                 plugin_instance_list.append(PluginIRConverter.ir_to_plugin(plugin_conf))

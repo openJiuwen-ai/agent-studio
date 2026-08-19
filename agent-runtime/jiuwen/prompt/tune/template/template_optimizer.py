@@ -123,11 +123,11 @@ class TemplateOptimizer(metaclass=Singleton):
         if isinstance(error, JiuWenBaseException):
             raise JiuWenBaseException(
                 status_code.code, status_code.errmsg.format(error_msg=error.message)
-            )
+            ) from error
         raise JiuWenBaseException(
             status_code.code,
-            status_code.errmsg.format(error_msg="=Unexpected exception"),
-        )
+            status_code.errmsg.format(error_msg=str(error)),
+        ) from error
 
     def mutate_template(self, template: str, optimize_info: OptimizeInfo):
         """Mutate original template for new template, increase population diversity"""

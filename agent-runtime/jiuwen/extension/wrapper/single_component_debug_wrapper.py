@@ -849,7 +849,7 @@ class SingleComponentDebugWrapper:
             )
         else:
             error_code = StatusCode.WORKFLOW_COMPONENT_EXECUTE_ERROR.code
-            message = str(exception)
+            message = getattr(exception, "message", None) or str(exception)
         return StreamData(
             code=StreamCode.ERROR.value,
             msg=StreamDataMsg.FAIL.value,

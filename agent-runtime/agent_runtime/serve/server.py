@@ -327,13 +327,17 @@ def instance_app(config: dict | None = None):
             f"AgentBuilderError: {exc}, execution_id={exec_id}, request_id={req_id}",
             exc_info=True,
         )
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        error_code, error_msg, error_reason, error_suggestion = (
+            ErrorContextBuilder.get_language_context(language, str(getattr(exc, "code", 188901)))
+        )
         return JSONResponse(
             status_code=500,
             content={
-                "error": {
-                    "code": getattr(exc, "code", "AgentBuilder_ERROR"),
-                    "message": str(exc),
-                }
+                "error_code": error_code,
+                "error_msg": error_msg,
+                "error_reason": error_reason,
+                "error_suggestion": error_suggestion,
             },
         )
 
@@ -344,17 +348,61 @@ def instance_app(config: dict | None = None):
     @app.exception_handler(StorageReadError)
     async def storage_read_error_handler(request: Request, exc: StorageReadError):
         logger.error(f"StorageReadError: {exc}", exc_info=True)
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        error_code, error_msg, error_reason, error_suggestion = (
+            ErrorContextBuilder.get_language_context(language, str(getattr(exc, "code", 188911)))
+        )
         return JSONResponse(
             status_code=500,
-            content={"error": {"code": getattr(exc, "code", 188911), "message": str(exc)}},
+            content={
+                "error_code": error_code,
+                "error_msg": error_msg,
+                "error_reason": error_reason,
+                "error_suggestion": error_suggestion,
+            },
         )
 
     @app.exception_handler(StorageConfigError)
     async def storage_config_error_handler(request: Request, exc: StorageConfigError):
         logger.error(f"StorageConfigError: {exc}", exc_info=True)
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        error_code, error_msg, error_reason, error_suggestion = (
+            ErrorContextBuilder.get_language_context(language, str(getattr(exc, "code", 188910)))
+        )
         return JSONResponse(
             status_code=500,
-            content={"error": {"code": getattr(exc, "code", 188910), "message": str(exc)}},
+            content={
+                "error_code": error_code,
+                "error_msg": error_msg,
+                "error_reason": error_reason,
+                "error_suggestion": error_suggestion,
+            },
+        )
+
+    from jiuwen.common.exception import JiuWenBaseException
+
+    @app.exception_handler(JiuWenBaseException)
+    async def jiuwen_exception_handler(request: Request, exc: JiuWenBaseException):
+        """框架业务异常 — 透传异常自身携带的 error_code，并通过 i18n 查询对应的错误消息."""
+        exec_id = getattr(request.state, "execution_id", "unknown")
+        req_id = getattr(request.state, "request_id", "unknown")
+        logger.error(
+            f"JiuWenBaseException: [{exc.error_code}] {exc.message}, "
+            f"execution_id={exec_id}, request_id={req_id}",
+            exc_info=True,
+        )
+        language = request.headers.get("x-language", "zh-cn") if request else "zh-cn"
+        error_code, error_msg, error_reason, error_suggestion = (
+            ErrorContextBuilder.get_language_context(language, str(exc.error_code))
+        )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error_code": error_code,
+                "error_msg": error_msg,
+                "error_reason": error_reason,
+                "error_suggestion": error_suggestion,
+            },
         )
 
     @app.exception_handler(Exception)
@@ -368,7 +416,8 @@ def instance_app(config: dict | None = None):
         return JSONResponse(
             status_code=500,
             content={
-                "error": {"code": "internal_error", "message": "Internal server error"}
+                "error_code": "internal_error",
+                "error_msg": "Internal server error",
             },
         )
 
