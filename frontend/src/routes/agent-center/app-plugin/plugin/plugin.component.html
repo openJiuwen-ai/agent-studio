@@ -48,11 +48,11 @@
                 <div nz-tooltip>{{ plugin.plugin_display_name }}</div>
               </div>
 
-              <div class="flex w-1/3 flex-col gap-2">
+              <div class="flex w-1/3 min-w-0 flex-col gap-2">
                 <div class="text-xs text-[#595959]">
                   {{ 'description' | i18nextEager }}
                 </div>
-                <div nz-tooltip>{{ plugin.plugin_desc }}</div>
+                <div nz-tooltip class="break-all">{{ plugin.plugin_desc }}</div>
               </div>
             </div>
           </div>
@@ -90,7 +90,7 @@
                 <div class="text-xs text-[#595959]">
                   {{ 'plugin_url' | i18nextEager }}
                 </div>
-                <div nz-tooltip class="truncate">{{ plugin?.request_info?.basic_info?.path || '-' }}</div>
+                <div nz-tooltip class="break-all">{{ plugin?.request_info?.basic_info?.path || '-' }}</div>
               </div>
             </div>
 
