@@ -72,7 +72,7 @@
           <td nz-ellipsis>{{ task.executionTime | formateTime }}</td>
           <td nz-ellipsis>{{ task.updatedTime | formateTime }}</td>
           <td>
-            @if (operateLoading || task.status === 'pausing') {
+            @if (operatingTaskId === task.id || task.status === 'pausing') {
               <nz-spin [nzSpinning]="true"></nz-spin>
             } @else {
               @for (action of task.actionList; track action) {
