@@ -22,7 +22,7 @@
         <div class="card-set">
           <div class="card-header">{{ item.title }}</div>
           <div class="card-content">{{ item.content }}</div>
-          <div (click)="openDefaultModal($event)" *ngIf="isDoneDefaultConfig && i === 0 && kbAbilitiesService.isPermitKBDefaultConfig()" class="base-config">
+          <div (click)="openDefaultModal($event)" *ngIf="i === 0 && kbAbilitiesService.isPermitKBDefaultConfig()" class="base-config">
             <div class="base-config-icon"></div>
             <div class="base-config-link">{{ 'default_knowledge_base_config' | i18nextEager }}</div>
           </div>

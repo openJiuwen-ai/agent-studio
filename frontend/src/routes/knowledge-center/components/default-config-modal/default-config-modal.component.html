@@ -4,7 +4,24 @@
   </div>
   <div class="drawer-body">
     <form nz-form [formGroup]="form" nzLayout="vertical">
-      <div class="formfield-wrapper">
+      <div class="formfield-wrapper" *ngIf="openjiuwenEnabled">
+        <div class="formfield-title">{{ 'knowledge_base_type'|i18nextEager }}</div>
+        <nz-form-item>
+          <nz-form-label [nzSpan]="24" [nzLg]="24">{{ 'type_selection'|i18nextEager }}</nz-form-label>
+          <nz-form-control>
+            <nz-radio-group
+              [(ngModel)]="kbTypeSelected"
+              [ngModelOptions]="{standalone: true}"
+              (ngModelChange)="changeKbType($event)"
+            >
+              <label nz-radio-button *ngFor="let item of kbTypeList" [nzValue]="item.value">
+                {{ item.label }}
+              </label>
+            </nz-radio-group>
+          </nz-form-control>
+        </nz-form-item>
+      </div>
+      <div class="formfield-wrapper" *ngIf="!isOpenJiuwen">
         <div class="formfield-title">{{ 'authentication_mode'|i18nextEager }}</div>
         <nz-form-item>
           <nz-form-label [nzSpan]="24" [nzLg]="24">{{ 'mode_selection'|i18nextEager }}</nz-form-label>
@@ -21,7 +38,7 @@
           </nz-form-control>
         </nz-form-item>
       </div>
-      <div class="formfield-wrapper">
+      <div class="formfield-wrapper" *ngIf="!isOpenJiuwen">
         <div class="formfield-title">{{ 'connection_info'|i18nextEager }}</div>
         <nz-form-item>
           <nz-form-label [nzSpan]="24" [nzLg]="24">{{ 'service_address'|i18nextEager }}</nz-form-label>
@@ -53,7 +70,7 @@
         </nz-form-item>
       </div>
     </form>
-    <button *ngIf="showAuth" nz-button nzType="default" (click)="testConnection()">
+    <button *ngIf="showAuth && !isOpenJiuwen" nz-button nzType="default" (click)="testConnection()">
       {{ 'test_connection'|i18nextEager }}
     </button>
   </div>

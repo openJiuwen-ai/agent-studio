@@ -124,7 +124,7 @@
     </div>
 
     <!-- 解析配置（非 RAG） -->
-    <div class="mb-6" *ngIf="(showCreateForm || showAdvancedForm) && !isRagFlow" formGroupName="parse_conf">
+    <div class="mb-6" *ngIf="isConfigLoaded && (showCreateForm || showAdvancedForm) && !isRagFlow && !isOpenJiuwen" formGroupName="parse_conf">
       <div class="section-header mb-4 text-[16px] font-bold text-gray-800">
         {{ 'parse_config_optional' | i18nextEager }}
       </div>
@@ -222,7 +222,7 @@
     </div>
 
     <!-- 拆分配置 (非 RAG) -->
-    <div class="mb-6" *ngIf="(showCreateForm || showAdvancedForm) && !isRagFlow" formGroupName="split_conf">
+    <div class="mb-6" *ngIf="isConfigLoaded && (showCreateForm || showAdvancedForm) && !isRagFlow" formGroupName="split_conf">
       <div class="section-header mb-4 text-[16px] font-bold text-gray-800">
         {{ 'split_config_optional' | i18nextEager }}
       </div>
@@ -230,7 +230,7 @@
         <nz-form-label>{{ 'split_mode' | i18nextEager }}</nz-form-label>
         <nz-form-control>
           <nz-radio-group formControlName="split_mode1" nzButtonStyle="solid">
-            <label nz-radio-button *ngFor="let item of splitModeOptions" [nzValue]="item.value">{{ item.text }}</label>
+            <label nz-radio-button *ngFor="let item of filteredSplitModeOptions" [nzValue]="item.value">{{ item.text }}</label>
           </nz-radio-group>
         </nz-form-control>
       </nz-form-item>
