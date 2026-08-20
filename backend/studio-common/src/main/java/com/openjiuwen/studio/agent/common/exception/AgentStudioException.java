@@ -27,7 +27,7 @@ public class AgentStudioException extends RuntimeException {
      * 错误编码中的i18n定义如果包含占位符，传入填充的字符串
      * @see org.springframework.context.MessageSource#getMessage(String, Object[], Locale)
      */
-    private final Object[] args;
+    private final transient Object[] args;
 
     private StudioError errorCode;
 
