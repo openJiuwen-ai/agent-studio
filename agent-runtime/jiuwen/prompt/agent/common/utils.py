@@ -3,7 +3,6 @@
 utils for components
 """
 
-import html
 import json
 import re
 from datetime import datetime, timezone, timedelta
@@ -126,8 +125,12 @@ def format_prompt(
         if data.get("role") == "user":
             last_index = index
     if last_index is not None:
+        # NOTE: 不做 html.escape。此处 content 是渲染后的工作流模板,
+        # 即模型文本 Prompt,HTML 转义会改变语义:其中合法包含 JSON
+        # 示例引号("key": "value")与 "&" 连接符(如 "e5051&n消费卡");
+        # html.escape 会把它们转义成 &quot; / &amp;,破坏格式指令。
         history[last_index]["content"] = output_request.replace(
-            "${query}", html.escape(history[last_index]["content"])
+            "${query}", history[last_index]["content"]
         )
     return history
 
