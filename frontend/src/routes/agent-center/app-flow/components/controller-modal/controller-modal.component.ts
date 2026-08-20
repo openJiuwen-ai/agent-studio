@@ -1235,6 +1235,9 @@ export class ControllerModalComponent
 
   public updateModel(modelInfo: any) {
     this.modelFormGroup.controls.model.setValue(modelInfo.id);
+    this.agentDataServe.setPromptAndModelConfig({
+      modelConfig: modelInfo.modelInfo,
+    });
   }
   /** 处理"保存候选模板作为正式模板"接口中的入参variables */
   public processString(input: string): string {
