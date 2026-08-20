@@ -36,6 +36,7 @@ export class OptimizePromptModalComponent implements OnInit {
     fetching: false,
     optimizeResult: '',
     isLoading: false,
+    hasError: false,
   };
 
   public agentId = '';
@@ -154,6 +155,7 @@ export class OptimizePromptModalComponent implements OnInit {
           }
           if (code !== 0) {
             this.state.isLoading = false;
+            this.state.hasError = true;
             this.state.optimizeResult = message !== '' ? message : this.i18n.transform('NetErrorTips');
           }
         } catch {}
@@ -168,6 +170,7 @@ export class OptimizePromptModalComponent implements OnInit {
       onError: (error: { data: string; status: any }) => {
         this.state.fetching = false;
         this.state.isLoading = false;
+        this.state.hasError = true;
         if (error.data) {
           try {
             const errInfo = JSON.parse(error.data);
@@ -189,6 +192,7 @@ export class OptimizePromptModalComponent implements OnInit {
       onTimeout: () => {
         this.state.fetching = false;
         this.state.isLoading = false;
+        this.state.hasError = true;
         MessageComponent.showError(this.i18n.transform('streaming_timeout'), 3000);
         this.sseInstance?.close();
         /** 如果没有之前的回答 */
