@@ -374,25 +374,26 @@ export class PromptOptimizeTaskConfigComponent {
     }, 1500);
   }
 
-  public handleConfirm() {
+  public async handleConfirm() {
     this.isSpinning = true;
-    this.promptOptimizeService
-      .createTask(this.taskId)
-      .then(res => {
-        MessageComponent.showSuccess(this.i18n.transform('task_create_success'));
-        StorageService.setSessionStorage('activeTab', '1');
-        this.router.navigate(['/home/agent-center/library-home'], {
-          state: {
-            activeTab: 1,
-          },
-          queryParams: {
-            tabId: 'prompt',
-          },
-        });
-      })
-      .finally(() => {
-        this.isSpinning = false;
+    try {
+      // 先持久化表单最新值(如优化最大轮次)再启动:自动保存有1s防抖+异步延迟,
+      // 直接启动会读到DB旧草稿,导致界面改的轮次/参数丢失
+      await this.saveDraft();
+      await this.promptOptimizeService.createTask(this.taskId);
+      MessageComponent.showSuccess(this.i18n.transform('task_create_success'));
+      StorageService.setSessionStorage('activeTab', '1');
+      this.router.navigate(['/home/agent-center/library-home'], {
+        state: {
+          activeTab: 1,
+        },
+        queryParams: {
+          tabId: 'prompt',
+        },
       });
+    } finally {
+      this.isSpinning = false;
+    }
   }
 
   public showInserter() {
