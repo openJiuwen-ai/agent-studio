@@ -156,6 +156,7 @@ export class TextEmbeddingComponent {
         this.scrollToBottom();
       })
       .catch((error) => {
+        if (this.abortController?.signal?.aborted) { return; }
         this.result = this.extractErrorMsg(error);
         this.scrollToBottom();
       })
