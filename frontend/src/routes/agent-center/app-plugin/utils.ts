@@ -117,7 +117,8 @@ export const getInitStrTypeReq = (
     validate_rule: '',
     validate_type: 'CHAR',
     visible: true,
-  };
+    isLeaf: true,
+  } as any;
 };
 
 export const getInitStrTypeRes = (): IResponseArgumentsBase => {
@@ -126,7 +127,8 @@ export const getInitStrTypeRes = (): IResponseArgumentsBase => {
     description: '',
     type: 'string',
     required: true,
-  };
+    isLeaf: true,
+  } as any;
 };
 
 export const schema2View = (
@@ -189,6 +191,11 @@ export const schema2View = (
     if (isObjSchema(property)) {
       item.children = schema2View(property, depth + 1, item.type, ispath);
       item.expanded = true;
+    }
+
+    // 非 object/array<object> 类型设为叶子节点，避免 nz-tree 为简单类型显示展开按钮
+    if (!item.children) {
+      (item as any).isLeaf = true;
     }
 
     if (
@@ -300,6 +307,11 @@ export const resSchema2View = (
     if (isResObjSchema(property)) {
       item.children = resSchema2View(property, depth + 1, item.type);
       item.expanded = true;
+    }
+
+    // 非 object/array<object> 类型设为叶子节点，避免 nz-tree 为简单类型显示展开按钮
+    if (!item.children) {
+      (item as any).isLeaf = true;
     }
 
     view.push(item);
