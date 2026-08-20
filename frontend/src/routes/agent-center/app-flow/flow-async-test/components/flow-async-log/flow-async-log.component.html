@@ -324,6 +324,11 @@
       <span>{{ 'view_sub_workflow_call_chain' | i18nextEager }}</span>
     </div>
 
+    <div class="crumb" *ngIf="hasLoopChildren(callItem)" (click)="getChildLoopNodes(callItem)">
+      <span nz-icon nzType="expand" nzTheme="outline" class="mr-1"></span>
+      <span>{{ 'view_loop_call_chain' | i18nextEager }}</span>
+    </div>
+
     <div *ngIf="!isQuestionNode(callItem?.node_type); else questionerNode">
       <!-- 非提问器节点的输入 -->
       <div *ngIf="!isIOEmpty(callItem.inputs); else noInputs" class="mb-[12px]">
