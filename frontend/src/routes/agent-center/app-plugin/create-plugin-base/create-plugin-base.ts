@@ -1221,10 +1221,11 @@ export class CreatePluginBaseComponent implements OnInit {
         this.baseURLError = '协议+域名+基准URL拼接后长度不能超过256';
       }
     }
-    const hostPatchList = this.groupFormControl.controls.host.value.match(/{[a-zA-Z0-9_-]+}/g) ?? [];
-    let baseUrlPatchList: any = this.groupFormControl.controls.baseURL.value.match(/{[a-zA-Z0-9_-]+}/g) ?? [];
+    const hostPatchList: string[] = this.groupFormControl.controls.host.value.match(/{[a-zA-Z0-9_-]+}/g) ?? [];
+    let baseUrlPatchList: string[] = this.groupFormControl.controls.baseURL.value.match(/{[a-zA-Z0-9_-]+}/g) ?? [];
     baseUrlPatchList = baseUrlPatchList.filter((item, index) => baseUrlPatchList.indexOf(item) === index);
-    const patchList = [...hostPatchList, ...baseUrlPatchList];
+    const dedupHostPatchList = hostPatchList.filter((item, index) => hostPatchList.indexOf(item) === index);
+    const patchList = [...dedupHostPatchList, ...baseUrlPatchList].filter((item, index, arr) => arr.indexOf(item) === index);
     let newPatchArgs: any[] = [];
     if (patchList) {
       patchList.map(item => {
