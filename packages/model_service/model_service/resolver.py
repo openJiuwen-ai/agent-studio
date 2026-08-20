@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass, replace
 from enum import Enum
@@ -112,65 +111,6 @@ class ResolveCtx:
     workspace_id: str
     refresh: bool = False
     env_vars: Optional[dict] = None
-
-
-
-def _load_aes_gcm_decrypt():
-    """Lazily import AES-GCM decrypt; returns None if pycryptodome is unavailable."""
-    try:
-        from Crypto.Cipher import AES  # type: ignore
-    except Exception:  # pragma: no cover - fallback when crypto dep missing
-        return None
-    return AES
-
-
-def _try_aes_gcm_decrypt(value: str) -> Optional[str]:
-    """Attempt to AES-GCM-decrypt ``value`` using ``SYSTEM_CRYPT_KEY``.
-
-    Mirrors Java ``AesGcmCipher`` wire layout: ``hex(nonce 12B) + hex(ciphertext) + hex(tag 16B)``
-    (i.e. raw = nonce || ct || tag). Used to unwrap at-rest auth values the Java manager encrypted
-    before syncing to OBS; this is NOT the import/export "ENCRYPTED" PoC path (that was removed).
-
-    Returns None if (a) env says NoOp, (b) key not configured, (c) value doesn't look like a hex
-    ciphertext of sufficient length, or (d) tag verification fails — callers treat None as "not
-    ciphertext" and return the original value.
-    """
-    crypt_name = os.environ.get("SYSTEM_CRYPT_NAME", "")
-    if crypt_name and crypt_name.upper() not in ("AES_GCM", "AES-GCM"):
-        return None
-    key_hex = os.environ.get("SYSTEM_CRYPT_KEY", "")
-    if not key_hex:
-        return None
-    if not value or len(value) < 2 * (12 + 16 + 1):  # nonce(12)+tag(16)+>=1B ct
-        return None
-    try:
-        key = bytes.fromhex(key_hex)
-        raw = bytes.fromhex(value)
-    except ValueError:
-        return None
-    nonce, tag, ct = raw[:12], raw[-16:], raw[12:-16]
-    aes_gcm = _load_aes_gcm_decrypt()
-    if aes_gcm is None:
-        return None
-    try:
-        return aes_gcm.new(key, aes_gcm.MODE_GCM, nonce=nonce).decrypt_and_verify(ct, tag).decode("utf-8")
-    except ValueError:
-        # UnicodeDecodeError 是 ValueError 子类，并入此类；密钥/nonce/tag 校验失败或
-        # 解密后非合法 UTF-8 均视为"非本布局密文"，返回 None 让调用方回退原值。
-        return None
-
-
-def decrypt(value: str) -> str:
-    """Decrypt an at-rest auth value (API key / header).
-
-    Tries AES-GCM first when ``SYSTEM_CRYPT_NAME=AES_GCM`` + ``SYSTEM_CRYPT_KEY`` are set and the
-    value is a hex ciphertext in the Java AesGcmCipher layout. Returns the original string
-    otherwise (plaintext / MASKED placeholder / non-hex values).
-    """
-    if not value:
-        return value
-    plain = _try_aes_gcm_decrypt(value)
-    return plain if plain is not None else value
 
 
 def _is_platform(project_id: str) -> bool:
@@ -475,9 +415,9 @@ def _auth_from_data(auth_data: dict) -> Optional[ProviderAuth]:
     if auth_type == "API_KEY":
         info = json.loads(raw) if raw else {}
         return ProviderAuth(auth_id=auth_id, auth_type="API_KEY",
-                            auth_info={"api_key": decrypt(info.get("API Key", ""))})
+                            auth_info={"api_key": info.get("API Key", "")})
     if auth_type == "CUSTOM_APIKEY":
         info = json.loads(raw) if raw else {}
         return ProviderAuth(auth_id=auth_id, auth_type="CUSTOM_APIKEY",
-                            auth_info={k: decrypt(v) for k, v in info.items()})
+                            auth_info={k: v for k, v in info.items()})
     return ProviderAuth(auth_id=auth_id, auth_type=auth_type, auth_info={})
