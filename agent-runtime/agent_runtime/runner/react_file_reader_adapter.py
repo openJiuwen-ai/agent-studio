@@ -85,20 +85,20 @@ class ReactFileReaderAdapter(Tool):
                             f.write(chunk)
 
             if is_docx:
-                return self._read_docx(tmp_path)
+                return self.read_docx(tmp_path)
             elif is_pdf:
-                return self._read_pdf(tmp_path)
+                return self.read_pdf(tmp_path)
             elif is_excel:
-                return self._read_excel(tmp_path, is_xlsx=url_lower.endswith('.xlsx'))
+                return self.read_excel(tmp_path, is_xlsx=url_lower.endswith('.xlsx'))
             elif is_csv:
-                return self._read_csv(tmp_path)
+                return self.read_csv(tmp_path)
             else:
-                return self._read_text(tmp_path)
+                return self.read_text(tmp_path)
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
-    def _read_text(self, path: str) -> str:
+    def read_text(self, path: str) -> str:
         """读取纯文本文件"""
         encodings = ['utf-8', 'gbk', 'gb2312', 'gb18030']
         for encoding in encodings:
@@ -110,7 +110,7 @@ class ReactFileReaderAdapter(Tool):
         with open(path, 'r', encoding='utf-8', errors='ignore') as f:
             return f.read()
 
-    def _read_docx(self, path: str) -> str:
+    def read_docx(self, path: str) -> str:
         """读取 docx 文件"""
         try:
             from docx import Document
@@ -119,19 +119,22 @@ class ReactFileReaderAdapter(Tool):
         except ImportError:
             return "[无法读取 docx 文件，请安装 python-docx 库]"
 
-    def _read_pdf(self, path: str) -> str:
+    def read_pdf(self, path: str) -> str:
         """读取 pdf 文件"""
         try:
             import pymupdf
             doc = pymupdf.open(path)
-            text = ''
-            for page in doc:
-                text += page.get_text()
-            return text
+            try:
+                text = ''
+                for page in doc:
+                    text += page.get_text()
+                return text
+            finally:
+                doc.close()
         except ImportError:
             return "[无法读取 pdf 文件，请安装 pymupdf 库]"
 
-    def _read_excel(self, path: str, is_xlsx: bool = True) -> str:
+    def read_excel(self, path: str, is_xlsx: bool = True) -> str:
         """读取 excel 文件"""
         try:
             import pandas as pd
@@ -142,7 +145,7 @@ class ReactFileReaderAdapter(Tool):
         except Exception as e:
             return f"[读取 excel 文件失败: {e}]"
 
-    def _read_csv(self, path: str) -> str:
+    def read_csv(self, path: str) -> str:
         """读取 csv 文件"""
         encodings = ['utf-8', 'gbk', 'gb2312', 'gb18030']
         try:

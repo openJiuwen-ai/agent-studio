@@ -446,7 +446,11 @@ class ReActAgentRunner:
                         Runner.resource_mgr.remove_workflow(workflow_id=key, tag=agent_id)
                         Runner.resource_mgr.remove_tool(tool_id=key, tag=agent_id)
                     except Exception:
-                        pass
+                        # 清理旧注册：未注册或已清理属正常情况，仅 debug 记录，不影响后续注册
+                        workflow_logger.debug(
+                            f"Skip stale workflow/tool cleanup for key={key} (tag={agent_id})",
+                            exc_info=True,
+                        )
 
                 # 注册到 resource_mgr（使用 workflow 方式）
                 new_card = WorkflowCard(
