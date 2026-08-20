@@ -42,8 +42,8 @@ export class ModelAuthModalComponent {
   @Input() id: string = '';
   @Output() saveSuccess = new EventEmitter<any>();
 
-  // API Key/AK/SK/AppCode 合法字符：仅可见 ASCII 可打印字符（0x21-0x7E），禁空格/控制/零宽/非ASCII
-  private apiKeyPattern = /^[!-~]+$/;
+  // API Key/AK/SK/AppCode 合法字符：仅字母、数字及典型凭据标点(-_.+/=)，禁空格/控制/零宽/非ASCII 及 {} : <>
+  private apiKeyPattern = /^[A-Za-z0-9\-_.+/=]+$/;
 
   public radioList: Array<{ label: string; id: string; tip?: string; show?: boolean }> = [
     {

@@ -165,10 +165,10 @@ export class AddPublisherComponent implements OnInit {
 
   private urlPattern = /^https?:\/\/.+/;
 
-  // API Key 合法字符：仅可见 ASCII 可打印字符（0x21-0x7E），不含空格/控制字符/零宽/非ASCII。
-  // 覆盖各厂商格式（dashscope sk-ws-...含 . _ -、OpenAI sk-proj-...、Bearer/JWT 等），
-  // 拦截从富文本/表格复制带入的隐藏字符与首尾空白。
-  private apiKeyPattern = /^[!-~]+$/;
+  // API Key 合法字符：仅字母、数字及典型凭据标点(-_.+/=)，禁空格/控制/零宽/非ASCII 及 {} : <> 等。
+  // 覆盖 dashscope(sk-ws-...含 . _ -)、OpenAI(sk-proj-)、Bearer/JWT(base64 含 = + /)等格式，
+  // 拦截从富文本/表格复制带入的隐藏字符与 JSON 语法字符。
+  private apiKeyPattern = /^[A-Za-z0-9\-_.+/=]+$/;
 
   constructor(
     private i18n: I18NextEagerPipe,

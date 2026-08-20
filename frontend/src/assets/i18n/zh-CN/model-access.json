@@ -190,7 +190,7 @@
   "unsupported_file_type": "文件类型不支持！",
   "unsupported_file_type_1": "文件大小超出限制！",
   "api_key_input": "请输入API key",
-  "api_key_invalid": "API key 含非法字符：仅允许可见英文字符（字母、数字及常见标点），不可含空格、控制字符或隐藏字符，请检查是否从富文本/表格复制带入不可见字符",
+  "api_key_invalid": "API key 含非法字符：仅允许字母、数字及典型凭据标点(-_.+/=)，不可含空格、控制字符、隐藏字符或 {} : <> 等符号",
   "api_auth_tip": "输入的<strong>关键信息</strong> 将进行 <strong>加密保存</strong>，仅用于模型服务的调用。修改后2分钟后生效。",
   "api_auth_tip_1": "输入的<strong>关键信息</strong> 将进行 <strong>加密保存</strong>，仅用于模型服务的调用。",
   "enter_ak": "请输入AK",
