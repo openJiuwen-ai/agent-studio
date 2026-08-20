@@ -50,6 +50,7 @@ import org.quartz.JobExecutionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -401,15 +402,12 @@ public class JiuWenPromptTaskJob implements Job {
             .header(CommonConstant.X_WORKSPACE_ID, workspaceId)
             .bodyValue(body)
             .retrieve()
-            // 处理HTTP非2xx状态码：直接抛异常
             .onStatus(status -> !status.is2xxSuccessful(),
                 response -> response.bodyToMono(String.class).flatMap(errorBody -> {
-                    String errorMsg = String.format("Prompt generate failed:  status=%s, error=%s",
-                        response.statusCode(), errorBody);
-                    log.error(errorMsg);
-                    // 抛出异常，终止流（不返回任何数据）
-                    return Mono.error(
-                        new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED));
+                    AgentStudioException mapped = mapBuilderError(response.statusCode(), errorBody);
+                    log.error("Prompt generate failed: status={}, builderCode={}",
+                        response.statusCode(), mapped.getMessage());
+                    return Mono.error(mapped);
                 }))
             .bodyToFlux(String.class)
             .mapNotNull(chunk -> {
@@ -418,7 +416,10 @@ public class JiuWenPromptTaskJob implements Job {
             })
             .filter(chunk -> chunk != null && !chunk.trim().isEmpty())
             .onErrorResume(Exception.class, e -> {
-                // 直接抛出异常，流终止，不会执行后续的[Done]拼接
+                if (e instanceof AgentStudioException) {
+                    return Flux.error(e);
+                }
+                log.error("Prompt generate transport error: {}", e.getMessage());
                 return Flux.error(new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED));
             });
 
@@ -471,15 +472,12 @@ public class JiuWenPromptTaskJob implements Job {
                 .header(CommonConstant.X_AUTH_TOKEN, token)
                 .bodyValue(body)
                 .retrieve()
-                // 处理HTTP非2xx状态码：直接抛异常
                 .onStatus(status -> !status.is2xxSuccessful(),
                     response -> response.bodyToMono(String.class).flatMap(errorBody -> {
-                        String errorMsg = String.format("Prompt generate failed:  status=%s, error=%s",
-                            response.statusCode(), errorBody);
-                        log.error(errorMsg);
-                        // 抛出异常，终止流（不返回任何数据）
-                        return Mono.error(
-                            new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED));
+                        AgentStudioException mapped = mapBuilderError(response.statusCode(), errorBody);
+                        log.error("Prompt optimize feedback failed: status={}, builderCode={}",
+                            response.statusCode(), mapped.getMessage());
+                        return Mono.error(mapped);
                     }))
                 .bodyToFlux(String.class)
                 .mapNotNull(chunk -> {
@@ -488,7 +486,10 @@ public class JiuWenPromptTaskJob implements Job {
                 })
                 .filter(chunk -> chunk != null && !chunk.trim().isEmpty())
                 .onErrorResume(Exception.class, e -> {
-                    // 直接抛出异常，流终止，不会执行后续的[Done]拼接
+                    if (e instanceof AgentStudioException) {
+                        return Flux.error(e);
+                    }
+                    log.error("Prompt optimize feedback transport error: {}", e.getMessage());
                     return Flux.error(
                         new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED));
                 });
@@ -631,6 +632,69 @@ public class JiuWenPromptTaskJob implements Job {
             log.warn("Failed to enrich model config for model {}: {}", config.getModel(), e.getMessage());
         }
         return config;
+    }
+
+    /**
+     * 把 Builder 非成功响应映射为 Manager 业务异常。只解析可靠的 code 字段，不把 Builder 原始 message
+     * 带回前端。message 字段仅用于内部日志，便于排障。
+     *
+     * 映射策略见"提示词优化-错误码透传修复-整合方案" §7.1：
+     * - 模型类错误码 → CALL_LLM_EXECUTION_ERROR（02701026）
+     * - 模板/编排/未知/损坏 → OPTIMIZATION_TASK_FROM_JIUWEN_SERVICE_ERROR（02701120）
+     * - HTTP 状态 4xx/5xx 但解析不到 code 时，按 5xx 视为服务异常，4xx 视为参数类错误（同归到 LLM 码）
+     */
+    private AgentStudioException mapBuilderError(HttpStatusCode status, String errorBody) {
+        Integer builderCode = parseBuilderCode(errorBody);
+        if (builderCode == null) {
+            log.warn("Builder error body unparseable, status={}, bodyLen={}", status,
+                errorBody == null ? 0 : errorBody.length());
+            return new AgentStudioException(StudioError.OPTIMIZATION_TASK_FROM_JIUWEN_SERVICE_ERROR,
+                "unparseable");
+        }
+        if (isLlmRelatedCode(builderCode)) {
+            return new AgentStudioException(StudioError.CALL_LLM_EXECUTION_ERROR,
+                String.valueOf(builderCode));
+        }
+        return new AgentStudioException(StudioError.OPTIMIZATION_TASK_FROM_JIUWEN_SERVICE_ERROR,
+            String.valueOf(builderCode));
+    }
+
+    private Integer parseBuilderCode(String errorBody) {
+        if (StringUtils.isEmpty(errorBody)) {
+            return null;
+        }
+        try {
+            Map<String, Object> body = JsonUtils.json2ObjQuietly(errorBody, Map.class);
+            if (body == null) {
+                return null;
+            }
+            Object code = body.get("code");
+            if (code instanceof Number) {
+                return ((Number) code).intValue();
+            }
+            if (code instanceof String) {
+                return Integer.parseInt((String) code);
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private boolean isLlmRelatedCode(int code) {
+        // 100002 参数校验失败（modelInfo.api_key/url/model 等模型配置类问题占大多数，归到 LLM 码）
+        if (code == 100002) {
+            return true;
+        }
+        // 100021-100029 LLM 配置/加载/类型/格式/结果类
+        if (code >= 100021 && code <= 100029) {
+            return true;
+        }
+        // 102003/102004/102011/102207 LLM 连接/生成/服务类型
+        if (code == 102003 || code == 102004 || code == 102011 || code == 102207) {
+            return true;
+        }
+        return false;
     }
 
 }
