@@ -524,11 +524,35 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
             }
         }
         // 保留事件原始到达顺序，不按 startTime 排序。
-        // 对话型工作流中结束节点的 stream 路径会提前触发，导致其 startTime 早于拓扑顺序中的后续节点，
-        // 按 startTime 排序会导致调用链顺序错误（如：开始→大模型→结束→大模型_1，预期为开始→大模型→大模型_1→结束）。
-        // 事件由运行时按拓扑顺序发送，原始到达顺序即为正确的执行顺序。
+        // 对话型工作流中结束节点的 stream 路径会提前触发，导致其 node_started 事件可能先于后续节点到达，
+        // 按 startTime 排序或仅保留到达顺序都无法保证结束节点在最后。
+        // 将结束节点事件移到列表末尾，确保调用链中结束节点始终排在最后。
+        nodeRunInfos = reorderEndNodeToEnd(nodeRunInfos);
         processOriginLoopInputs(nodeRunInfos);
         return nodeRunInfos;
+    }
+
+    /**
+     * 将结束节点（End）的事件移到列表末尾，确保调用链中结束节点始终排在最后。
+     * 对话型工作流中结束节点的 stream 路径会提前触发，导致其事件可能先于后续节点到达，
+     * 仅保留到达顺序无法保证结束节点在最后，因此需要显式重排。
+     * 重排后非结束节点保持原始相对顺序，结束节点事件也保持原始相对顺序并统一移到末尾。
+     */
+    private List<NodeRunInfo> reorderEndNodeToEnd(List<NodeRunInfo> nodeRunInfos) {
+        List<NodeRunInfo> endNodeEvents = new ArrayList<>();
+        List<NodeRunInfo> otherEvents = new ArrayList<>();
+        for (NodeRunInfo node : nodeRunInfos) {
+            if (NodeType.END.getEiType().equals(node.getNodeType())) {
+                endNodeEvents.add(node);
+            } else {
+                otherEvents.add(node);
+            }
+        }
+        if (endNodeEvents.isEmpty()) {
+            return nodeRunInfos;
+        }
+        otherEvents.addAll(endNodeEvents);
+        return otherEvents;
     }
 
     private void processOriginLoopInputs(List<NodeRunInfo> nodeRunInfos) {
