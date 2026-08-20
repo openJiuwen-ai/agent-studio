@@ -491,11 +491,10 @@ public class PromptTemplateService implements IPromptLibraryService {
     public String downloadPromptTemplateV2(String projectId, String workspaceId, List<String> templateIds) {
         log.info("Operation started - ProjectId: {}, WorkspaceId: {}, TemplateIds: {}", projectId, workspaceId, templateIds);
 
+        checkDownloadedTemplateNum(templateIds);
+        log.info("Download validation passed, proceeding to export - TemplateIds: {}", templateIds);
 
         try {
-            checkDownloadedTemplateNum(templateIds);
-            log.info("Download validation passed, proceeding to export - TemplateIds: {}", templateIds);
-
             XSSFWorkbook xssfWorkbook = new XSSFWorkbook();
             log.info("Started creating Excel workbook for template download");
 
@@ -556,7 +555,7 @@ public class PromptTemplateService implements IPromptLibraryService {
 
     private void checkDownloadedTemplateNum(List<String> templateIds) {
         // 校验一次性导出是否满足不超过100个提示词
-        if (templateIds.size() >= templateDownloadQuota) {
+        if (templateIds.size() > templateDownloadQuota) {
             throw new AgentStudioException(StudioError.DOWNLOAD_TEMPLATE_EXCEEDS_QUOTA, List.of(templateDownloadQuota
                     .toString()));
         }
