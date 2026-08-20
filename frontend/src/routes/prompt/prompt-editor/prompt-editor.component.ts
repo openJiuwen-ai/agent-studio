@@ -239,6 +239,8 @@ export class PromptEditorComponent {
 
   // 实现[(ngModel)]的相关方法
   writeValue(value: any): void {
+    const editorEl = this.editorContainer.element.nativeElement as HTMLElement;
+    const savedScrollTop = editorEl?.scrollTop || 0;
     this.ngZone.run(() => {
       this.renderer.setProperty(
         this.editorContainer.element.nativeElement,
@@ -252,6 +254,10 @@ export class PromptEditorComponent {
       this.chunks2dom(this.promptChunk);
       setTimeout(() => {
         this.cdr.detectChanges();
+        // 重建 DOM 后恢复滚动位置，避免 ngModel 回写触发的 DOM 重建重置 scrollTop
+        if (editorEl && savedScrollTop > 0) {
+          editorEl.scrollTop = savedScrollTop;
+        }
       });
       value = value.replaceAll(this.CURSOR_MARK,'');
       // 此行代码置后，chunks2dom中的dom更新导致angular更新异常
@@ -287,6 +293,7 @@ export class PromptEditorComponent {
       }
     }
     this.rebuildPrompt();
+    this.scrollCursorToVisible();
   }
 
   public rebuildPrompt() {
@@ -430,6 +437,107 @@ export class PromptEditorComponent {
         }
       }
     }
+    this.scrollCursorToVisible();
+  }
+
+  /**
+   * 将编辑器滚动到光标可见位置
+   * 通过当前 selection 的 range 位置计算 caret 相对于编辑器视区的偏移，
+   * 超出可视区域时调整 scrollTop，避免用户看不到正在输入的内容。
+   * 不插入临时元素，避免影响变量解析与 chunks2dom 重构。
+   * 用 requestAnimationFrame 延迟到浏览器完成布局后再读 rect，避免读到旧值。
+   */
+  private scrollCursorToVisible(): void {
+    // 用 setTimeout(0) 而非 requestAnimationFrame，确保在 Angular 变更检测之后执行
+    setTimeout(() => {
+      const editorElement = this.editorContainer.element
+        .nativeElement as HTMLElement;
+      if (!editorElement) {
+        return;
+      }
+      const selection = document.getSelection();
+      if (!selection || selection.rangeCount === 0) {
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      let caretRect = range.getBoundingClientRect();
+
+      // collapsed range 在部分浏览器下返回 zero-size rect，回退到容器元素位置
+      if (caretRect.top === 0 && caretRect.bottom === 0) {
+        let anchor: Node | null = range.endContainer;
+        if (anchor && anchor.nodeType !== Node.ELEMENT_NODE) {
+          anchor = anchor.parentElement;
+        }
+        if (anchor) {
+          caretRect = (anchor as Element).getBoundingClientRect();
+        }
+      }
+      if (!caretRect) {
+        return;
+      }
+
+      // 从 editor 开始向上遍历所有可滚动祖先（含 editor 自身），
+      // 对每一层判断 caret 是否落在该层可视区域外，超出则滚动。
+      const margin = 20;
+      let container: HTMLElement | null = editorElement;
+      while (container) {
+        // 快速跳过：scrollHeight 不大于 clientHeight 的容器肯定不可滚动，
+        // 无需调 getComputedStyle，避免祖先链上无意义的 style recalc。
+        if (container.scrollHeight <= container.clientHeight + 1) {
+          container = container.parentElement;
+          continue;
+        }
+        const style = getComputedStyle(container);
+        const overflowY = style.overflowY;
+        const scrollable = overflowY === 'auto' || overflowY === 'scroll';
+        if (scrollable) {
+          const containerRect = container.getBoundingClientRect();
+          const relativeTop = caretRect.top - containerRect.top;
+          const relativeBottom = caretRect.bottom - containerRect.top;
+          const clientHeight = container.clientHeight;
+          const viewportTop = margin;
+          const viewportBottom = clientHeight - margin;
+
+          let needsScroll = false;
+          let newScrollTop = container.scrollTop;
+
+          if (relativeBottom > viewportBottom) {
+            newScrollTop =
+              container.scrollTop + (relativeBottom - viewportBottom);
+            needsScroll = true;
+          } else if (relativeTop < viewportTop) {
+            newScrollTop =
+              container.scrollTop + (relativeTop - viewportTop);
+            needsScroll = true;
+          }
+
+          if (needsScroll) {
+            newScrollTop = Math.max(
+              0,
+              Math.min(
+                newScrollTop,
+                container.scrollHeight - container.clientHeight,
+              ),
+            );
+            container.scrollTop = newScrollTop;
+            container.scrollTo({ top: newScrollTop });
+
+            // 滚动后 caret 视口坐标变化，更新以供上层祖先判断
+            caretRect = range.getBoundingClientRect();
+            if (caretRect.top === 0 && caretRect.bottom === 0) {
+              let anchor: Node | null = range.endContainer;
+              if (anchor && anchor.nodeType !== Node.ELEMENT_NODE) {
+                anchor = anchor.parentElement;
+              }
+              if (anchor) {
+                caretRect = (anchor as Element).getBoundingClientRect();
+              }
+            }
+          }
+        }
+        container = container.parentElement;
+      }
+    });
   }
   /**
    * 递归查找包含指定字符的文本节点
@@ -1024,6 +1132,7 @@ export class PromptEditorComponent {
     }
 
     this.rebuildPrompt();
+    this.scrollCursorToVisible();
   };
 
   private mergeLinesByBackspace(curNode, selection) {
