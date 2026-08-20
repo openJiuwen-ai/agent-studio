@@ -122,9 +122,9 @@ def main():
     # --- Read configuration from environment ---
     # PORT is the primary env var in K8s/docker-compose; SERVER_PORT is the pydantic alias
     server_port = get_env_int("PORT", 0) or get_env_int("SERVER_PORT", 8000)
-    worker_num = get_env_int("GUNICORN_WORK_NUM", 0)
+    worker_num = get_env_int("GUNICORN_WORK_NUM", 1)
     if worker_num < 1:
-        worker_num = (os.cpu_count() or 1) + 1
+        worker_num = 1
     lb_strategy = get_env("LB_STRATEGY", "least_conn")
     enable_ssl = get_env("HTTPS") == "true"
     ssl_cert = get_env("TLS_CERT_PATH", "")

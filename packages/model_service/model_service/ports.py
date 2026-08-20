@@ -15,13 +15,14 @@ request-context / cache 由宿主在启动时通过 ``set_*`` 注入：
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, Protocol, runtime_checkable
+from typing import Any, Callable, Mapping, Optional, Protocol, runtime_checkable
 
 # OBS 对象不存在异常，复用共享包 storage 的定义（agent_runtime / agent_builder 共用同一类），
 # 使 model_service resolver 的 ``except StorageNotFoundError`` 与共享 storage provider 抛出的异常一致。
 from storage.exceptions import StorageNotFoundError
 
 
+# customer Header 强类型，引用公共 customer_header 模块（不反向依赖 runtime/宿主）
 @runtime_checkable
 class StorageProvider(Protocol):
     """对象存储提供者协议（agent_runtime / agent_builder 各自实现）。"""
@@ -114,6 +115,36 @@ def get_request_headers() -> dict:
         return {}
 
 
+# ── 独立 customer Header provider（强类型，不退化为无 provenance 的 dict） ──
+
+_customer_headers_fn: Optional[Callable[[], dict[str, str]]] = None
+
+
+def set_request_customer_headers(fn: Optional[Callable[[], dict[str, str]]]) -> None:
+    """注册客户 Header 提供者（返回当前请求的 customer headers dict[str, str]）。
+
+    model_service.ports 只暴露 provider 注册/读取端口，不拥有宿主上下文，
+    也不把强类型值退化为无 provenance 的 dict[str, str]。
+    无请求上下文时返回空 customer headers，不得回退静态认证 Header。
+    """
+    global _customer_headers_fn
+    _customer_headers_fn = fn
+
+
+def get_request_customer_headers() -> dict[str, str]:
+    """获取当前请求的客户 Header（dict[str, str]）。
+
+    无注册或无上下文时返回空 dict（host-free：不回退 agent_runtime 宿主上下文）。
+    """
+    if _customer_headers_fn is not None:
+        try:
+            return _customer_headers_fn() or {}
+        except Exception:
+            return {}
+    # 未注册 → 返回空（不反向 import agent_runtime，不回退静态认证 Header）
+    return {}
+
+
 def set_cache_queues(
     model_cache: Optional[CacheQueueLike] = None,
     auth_cache: Optional[CacheQueueLike] = None,
@@ -168,3 +199,4 @@ def wrap_storage(provider: Any, not_found_exc: type) -> StorageProvider:
             return await provider.list_keys(prefix)
 
     return _AdaptedStorage()
+

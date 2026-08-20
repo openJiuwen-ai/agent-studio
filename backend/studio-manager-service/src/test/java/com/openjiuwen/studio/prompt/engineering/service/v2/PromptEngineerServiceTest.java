@@ -980,6 +980,52 @@ class PromptEngineerServiceTest {
     }
 
     @Test
+    void test_listPromptTasks_mark_lost_pausing_task_as_failed() throws Exception {
+        // 验证反向检查：PAUSING 任务在九问侧已丢失（get_infos 未返回该 jobId）时，
+        // 应被标记为 FAILED 并写入 message，避免永久卡在暂停中
+        try (MockedStatic<PageMethod> mockedStaticPageMethod = mockStatic(PageMethod.class, RETURNS_DEEP_STUBS)) {
+            // Given: 一个处于 PAUSING 中间态的任务
+            String taskId = "task_pausing";
+            String jiuwenTaskId = "jw_lost";
+            PromptTaskEntity pausingEntity = PromptTaskEntity.builder()
+                .id(taskId)
+                .projectId("proj1")
+                .jiuwenTaskId(jiuwenTaskId)
+                .status(PromptTaskStatusEnum.PAUSING.getCode())
+                .ptType(PtTypeEnum.TEXT.toString())
+                .build();
+
+            // 分页结果包含该任务
+            PageInfo<PromptTaskEntity> entityPage = new PageInfo<>();
+            List<PromptTaskEntity> list = new ArrayList<>();
+            list.add(pausingEntity);
+            entityPage.setList(list);
+            mockedStaticPageMethod.when(
+                    () -> PageMethod.startPage(anyInt(), anyInt()).doSelectPageInfo(any(ISelect.class)))
+                .thenReturn(entityPage);
+
+            when(promptTaskMapper.queryTaskIdsByCondition(any(ListPromptTasksQo.class), anyString(),
+                anyInt())).thenReturn(list);
+
+            // 九问批量查询返回空 data：任务在执行引擎中已丢失
+            JiuWenJobDeatails jiuWenJobDeatails = JiuWenJobDeatails.builder().data(new ArrayList<>()).build();
+            when(promptOptimizeTaskService.queryTaskDetailsByIds(any(ArrayList.class))).thenReturn(jiuWenJobDeatails);
+
+            ListPromptTasksQo listPromptTasksQo = new ListPromptTasksQo();
+
+            // When
+            PromptBaseResp result = promptEngineerService.listPromptTasks("proj1", listPromptTasksQo);
+
+            // Then: 丢失的 PAUSING 任务被反向检查标记为 FAILED
+            assertNotNull(result);
+            assertEquals(200, result.getCode());
+            verify(promptTaskMapper).updateStatusByPrimaryKey(eq(taskId),
+                eq(PromptTaskStatusEnum.FAILED.getCode()), eq("proj1"), any());
+            verify(promptTaskMapper).updateMessageByPrimaryKey(eq(taskId), anyString(), eq("proj1"), any());
+        }
+    }
+
+    @Test
     void test_entity_convert_not_exception() {
         PromptTaskEntity promptTaskEntity = new PromptTaskEntity();
         PromptTaskDetailVo promptTaskDetailVo = promptTaskEntity.convert2PromptTaskDetailVo();

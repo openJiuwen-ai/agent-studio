@@ -22,9 +22,9 @@
     </nz-select>
     @if (currentFieldHasOptions) {
       <nz-select
-        [(ngModel)]="searchInputValue"
+        [ngModel]="searchInputValue"
         [nzPlaceHolder]="'select_placeholder' | i18nextEager"
-        (ngModelChange)="addSearchTagFromOption($event); searchInputValue = ''"
+        (ngModelChange)="addSearchTagFromOption($event)"
         [nzBorderless]="true"
         [nzSize]="'small'"
         class="flex-1 !h-[24px]"

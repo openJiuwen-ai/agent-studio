@@ -620,9 +620,9 @@ public class PluginAdapterImpl implements IPlugin {
             // 下载url数据
             for (String key : requestBody.keySet()) {
                 String value = requestBody.getString(key);
-                MultipartFile file = downloadFileAsMultipartFile(value);
-                if(file != null) {
-                    fileParams.put(key, file);
+                Optional<MultipartFile> file = downloadFileAsMultipartFile(value);
+                if (file.isPresent()) {
+                    fileParams.put(key, file.get());
                 } else {
                     formParams.put(key, value);
                 }
@@ -774,11 +774,11 @@ public class PluginAdapterImpl implements IPlugin {
      * @return MultipartFile对象
      */
     @SneakyThrows
-    public MultipartFile downloadFileAsMultipartFile(String fileUrl) {
+    public Optional<MultipartFile> downloadFileAsMultipartFile(String fileUrl) {
         log.info("downloadFileAsMultipartFile: {}", fileUrl);
 
         if (!VALID_URL_PATTERN.matcher(fileUrl).matches()) {
-            return null;
+            return Optional.empty();
         }
 
         long startTime = System.currentTimeMillis();
@@ -796,7 +796,7 @@ public class PluginAdapterImpl implements IPlugin {
             // 创建MultipartFile对象
             String fileName = extractFileName(fileUrl); // 从 URL 中提取文件名
             log.info("downloadFileAsMultipartFile:{}, cost: {} ms", fileUrl, System.currentTimeMillis() - startTime);
-            return new MockMultipartFile(fileName, fileName, "application/octet-stream", fileBytes);
+            return Optional.of(new MockMultipartFile(fileName, fileName, "application/octet-stream", fileBytes));
         } finally {
             closeResources(inputStream, outputStream);
         }

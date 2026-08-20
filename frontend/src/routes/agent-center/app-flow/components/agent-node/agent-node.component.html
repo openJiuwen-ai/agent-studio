@@ -1,0 +1,88 @@
+<div
+  class="pw-common-node-wrapper"
+  [ngClass]="{
+    'pw-common-node-error': alertContent.length > 0,
+    'pw-common-node-selected': alertContent.length === 0 && (isSelected || isSelection),
+    'pw-common-node-hover': alertContent.length === 0 && !(isSelected || isSelection),
+    'pw-common-node-extra': alertContent.length === 0,
+  }"
+>
+  <div *ngIf="alertContent.length > 0" class="pw-tips bg-[#ffeae8]">
+    <div class="flex items-center gap-[4px]">
+      <img class="h-[16px] w-[16px]" [src]="validateAlertIcon" />
+      <span>{{ 'node_error' | i18nextEager }}</span>
+    </div>
+    <button class="detail-tip" nz-button nzType="text" nz-popover [nzPopoverContent]="alertContent.join('\n')" nzPopoverPlacement="top">
+      {{ 'details' | i18nextEager }}
+    </button>
+  </div>
+
+  <div *ngIf="runNodeStatus" class="pw-tips" [ngStyle]="{ 'background-color': getBgColor(runNodeStatus), color: getColor(runNodeStatus) }">
+    <div class="flex items-center gap-[4px]">
+      <img class="h-[16px] w-[16px]" [src]="getNodeStatus(runNodeStatus)" />
+      <span>{{ getNodeStatusText(runNodeStatus) }}</span>
+      <span>{{ nodeElapsedTime }}</span>
+    </div>
+    <div class="node-test-info" (click)="onClickTestInfo($event)">{{ 'show_detail' | i18nextEager }}</div>
+  </div>
+
+  <div class="pw-common-node">
+    <div class="node-header">
+      <div class="node-icon-name">
+        <div [ngClass]="isExpand ? 'node-open' : 'node-close'" (click)="onSwitchExpand()"></div>
+
+        <img class="node-icon" [src]="type2Img(nodeInfo.type)" alt="llm-node" />
+
+        <div class="node-name" lineClamp>
+          {{ nodeInfo.name }}
+        </div>
+        <div
+          *ngIf="boundFlowVersionList.length"
+          class="update-flow-icon"
+          nz-tooltip
+          [nzTooltipTitle]="updateFlowTip"
+          nzTooltipPlacement="top"
+          (click)="openUpdateFlowListModal()"
+        ></div>
+      </div>
+
+      <div class="node-oprs" *ngIf="!isFlowReadonly">
+        <div (click)="onClickTest()" class="single-test-icon"></div>
+        <div class="cursor-pointer" nz-dropdown [nzDropdownMenu]="actionMenu" nzTrigger="click" nzPlacement="bottomRight">
+          <nz-icon nzType="more" nzTheme="outline"></nz-icon>
+        </div>
+        <nz-dropdown-menu #actionMenu="nzDropdownMenu">
+          <ul nz-menu>
+            @for (action of actions; track action.label) {
+              <li nz-menu-item (click)="onClickAction(action)">
+                <span>{{ action.label }}</span>
+              </li>
+            }
+          </ul>
+        </nz-dropdown-menu>
+      </div>
+    </div>
+    <node-card-description *ngIf="isExpand" [description]="nodeInfo.configs?.descriptionText" [nodeInfo]="nodeInfo"></node-card-description>
+
+    <div *ngIf="isExpand" class="node-groups">
+      <div class="node-group">
+        <div class="flex">
+          <div class="w-[calc(100%-120px)]">
+            {{ 'input_params' | i18nextEager }}
+          </div>
+          <div class="w-[120px]"></div>
+        </div>
+        <meta-input-params [inputs]="nodeInfo.inputs" />
+      </div>
+
+      <div class="node-group">
+        <div>{{ 'output_params' | i18nextEager }}</div>
+        <readonly-params (switchFold)="forceDetectChanges()" [params]="nodeInfo.outputs" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<ng-template #customTipTmpl let-context="context">
+  <div *ngFor="let item of context">{{ item }}</div>
+</ng-template>

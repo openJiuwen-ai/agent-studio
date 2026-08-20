@@ -384,23 +384,21 @@ public class AgentRuntimeService {
         executionInfo.setExecutionId(executeParams.getExecutionId());
         executionInfo.setMetaData(eventData.getMetaData());
         executionInfo.setInputs(executeParams.getQuery());
-        AgentInvokeInfo invokeInfo = convertAgentInvokeInfo(executionInfo, eventData, executeParams);
+        Optional<AgentInvokeInfo> invokeInfo = convertAgentInvokeInfo(executionInfo, eventData, executeParams);
         if (executionInfo.getInvokeList() == null) {
             executionInfo.setInvokeList(new ArrayList<>());
         }
-        if (invokeInfo != null) {
-            executionInfo.getInvokeList().add(invokeInfo);
-        }
+        invokeInfo.ifPresent(info -> executionInfo.getInvokeList().add(info));
         return executionInfo;
     }
 
     /**
      * event转换为invoke info
      */
-    public AgentInvokeInfo convertAgentInvokeInfo(AgentExecutionInfo executionInfo, JiuwenAgentEventData eventData,
+    public Optional<AgentInvokeInfo> convertAgentInvokeInfo(AgentExecutionInfo executionInfo, JiuwenAgentEventData eventData,
                                                   AgentExecuteParams executeParams) {
         if (StringUtils.isEmpty(eventData.getEndTime())) {
-            return null;
+            return Optional.empty();
         }
         AgentInvokeInfo agentInvokeInfo = new AgentInvokeInfo();
 
@@ -431,7 +429,7 @@ public class AgentRuntimeService {
                 executionInfo.setStartTime(startTime);
                 executionInfo.setEndTime(endTime);
             }
-            return null;
+            return Optional.empty();
         }
         if (PLUGIN_INVOKE_TYPE.equals(invokeType)) {
             JSONObject instanceAttributes = JSON.parseObject(
@@ -463,7 +461,7 @@ public class AgentRuntimeService {
         } else {
             agentInvokeInfo.setNodeStatus("succeeded");
         }
-        return agentInvokeInfo;
+        return Optional.of(agentInvokeInfo);
     }
 
     /**
@@ -481,6 +479,17 @@ public class AgentRuntimeService {
             return redisClient.get("task_id:" + agentId + ":" + conversationId);
         } catch (Exception e) {
             return "";
+        }
+    }
+
+    /**
+     * Delete taskId from Redis after workflow completes, to prevent reuse by next execution.
+     */
+    public void deleteTaskId(String agentId, String conversationId) {
+        try {
+            redisClient.delete("task_id:" + agentId + ":" + conversationId);
+        } catch (Exception e) {
+            log.warn("Failed to delete taskId: {}", e.getMessage());
         }
     }
 

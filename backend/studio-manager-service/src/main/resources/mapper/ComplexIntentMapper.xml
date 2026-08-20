@@ -139,7 +139,7 @@
                 and workspace_id=#{entity.workspaceId}
             </if>
             <if test="entity.name != null and entity.name != ''">
-                and `name`=#{entity.name,jdbcType=VARCHAR}
+                and name=#{entity.name,jdbcType=VARCHAR}
             </if>
             <if test="entity.createdOn != null">
                 and created_on=#{entity.createdOn}

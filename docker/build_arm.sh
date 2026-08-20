@@ -15,7 +15,7 @@ set -xe
 # java基础镜像 (Debian-based, for manager)
 BASE_IMAGE_JAVA="eclipse-temurin:17-jre"
 # nginx基础镜像
-BASE_IMAGE_NGINX="nginx:1.27"
+BASE_IMAGE_NGINX="nginx:1.28"
 # python基础镜像 (预编译Python 3.11)
 BASE_IMAGE_PYTHON="python:3.11-slim"
 GRAFANA_ARM_IMAGE="openjiuwen/grafana-victorialogs:11.3.0-0.29.0-arm64"
@@ -366,7 +366,7 @@ function package() {
   if [ -f "AgentBuilder-arm64.tar.gz" ]; then
       rm -f "AgentBuilder-arm64.tar.gz"
   fi
-  tar -czvf AgentBuilder-arm64.tar.gz ./image ./compose ./k8s -C "${WORKSPACE}/deploy" init.sql
+  tar -czvf AgentBuilder-arm64.tar.gz ./image ../deploy
 }
 
 main "$@"

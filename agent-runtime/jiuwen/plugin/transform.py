@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 
 from jiuwen.common.log.base import logger
 from jiuwen.common.utils.utils import load_json
+from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.plugin.common import constant
 from jiuwen.plugin.common import exception
 from jiuwen.plugin.common.constant import Status
@@ -167,7 +168,8 @@ class Transform:
         """convert data (dict) to function"""
         if not isinstance(function_dict, dict):
             raise exception.PluginCommonException(
-                message=exception.ExceptionsMessage.TypeError
+                code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+                message=exception.ExceptionsMessage.TypeError,
             )
         params = []
         arguments_list = load_json(function_dict.get("arguments") or "[]")
@@ -205,7 +207,8 @@ class Transform:
         """convert data (dict) to restfulapi"""
         if not isinstance(plugin, dict):
             raise exception.PluginCommonException(
-                message=exception.ExceptionsMessage.TypeError
+                code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+                message=exception.ExceptionsMessage.TypeError,
             )
         params = []
         response = []

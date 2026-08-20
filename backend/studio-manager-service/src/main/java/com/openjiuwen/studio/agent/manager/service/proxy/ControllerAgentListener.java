@@ -26,6 +26,7 @@ import org.springframework.http.HttpHeaders;
 
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 
 import static com.openjiuwen.studio.agent.manager.constant.Constant.TASK_ID;
 
@@ -53,11 +54,12 @@ public class ControllerAgentListener extends BaseEventListener {
     @Override
     public void onEvent(@NotNull EventSource eventSource, @Nullable String id, @Nullable String type,
         @NotNull String data) {
-        JiuwenAgentEvent eventObj = parseJiuWenEventFromSseData(data, JiuwenAgentEvent.class);
-        if (Objects.isNull(eventObj)) {
+        Optional<JiuwenAgentEvent> eventOpt = parseJiuWenEventFromSseData(data, JiuwenAgentEvent.class);
+        if (eventOpt.isEmpty()) {
             passThrough(data);
             return;
         }
+        JiuwenAgentEvent eventObj = eventOpt.get();
         try {
             String event = eventObj.getEvent();
             JiuwenEventType eventType;

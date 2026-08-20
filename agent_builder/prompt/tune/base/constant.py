@@ -69,6 +69,7 @@ class TuneConstant:
     """ 持久化配置 """
     MYSQL_STORAGE: str = "MYSQL"
     GAUSSDB_STORAGE: str = "GAUSSDB"
+    POSTGRESQL_STORAGE: str = "POSTGRESQL"
     STATUS_CHECK_INTERVAL: float = 5.0
     RUNNING_CHECK_PERIOD: int = 4
     RUNNING_STATUS_TIMEOUT: int = 120

@@ -33,6 +33,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.security.SecureRandom;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -119,9 +120,9 @@ public class SsoAuthenticationService {
      * 调用 SSO 鉴权接口验证 Token 并获取用户信息
      *
      * @param accessToken 访问令牌
-     * @return 用户信息，验证失败返回 null
+     * @return 用户信息，验证失败返回 Optional.empty()
      */
-    public SimpleUser authenticate(String accessToken) {
+    public Optional<SimpleUser> authenticate(String accessToken) {
         try {
             String ssoValidateUrl = authProperties.getSso().getValidateUrl();
             String ssoHeaderName = authProperties.getSso().getHeader();
@@ -140,11 +141,11 @@ public class SsoAuthenticationService {
                 log.info("SSO authentication successful");
                 SimpleUser userInfo = convertToUserInfo(responseBody);
                 tokenCache.put(accessToken, new CachedUserInfo(userInfo));
-                return userInfo;
+                return Optional.of(userInfo);
             }
 
             log.error("SSO authentication failed: response body is null, SSO service may be malfunctioning");
-            return null;
+            return Optional.empty();
 
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode() == HttpStatusCode.valueOf(401)) {
@@ -153,7 +154,7 @@ public class SsoAuthenticationService {
             } else {
                 log.error("SSO authentication failed: SSO service returned HTTP {}", e.getStatusCode());
             }
-            return null;
+            return Optional.empty();
         } catch (ResourceAccessException e) {
             log.error("SSO service unavailable: {}", e.getMessage());
             return getFromCache(accessToken);
@@ -166,14 +167,14 @@ public class SsoAuthenticationService {
     /**
      * SSO 服务不可用时尝试从缓存获取用户信息
      */
-    private SimpleUser getFromCache(String accessToken) {
+    private Optional<SimpleUser> getFromCache(String accessToken) {
         CachedUserInfo cached = tokenCache.get(accessToken);
         if (cached != null && !cached.isExpired()) {
             log.warn("SSO service unavailable, using cached authentication result for token");
-            return cached.userInfo;
+            return Optional.ofNullable(cached.userInfo);
         }
         log.error("SSO service unavailable and no valid cache found, request will be rejected");
-        return null;
+        return Optional.empty();
     }
 
     /**
@@ -197,10 +198,10 @@ public class SsoAuthenticationService {
      */
     private String extractClaim(Map<String, Object> ssoUserInfo, String claimName) {
         if (claimName == null || claimName.isBlank()) {
-            return null;
+            return "";
         }
         Object value = ssoUserInfo.get(claimName);
-        return value != null ? value.toString() : null;
+        return value != null ? value.toString() : "";
     }
 
     /**

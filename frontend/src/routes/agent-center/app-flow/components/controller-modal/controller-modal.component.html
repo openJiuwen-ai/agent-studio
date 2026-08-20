@@ -398,21 +398,25 @@
           </ng-template>
           <ng-template #content>
             <div class="mt-4 w-full" *ngIf="needUpdateFlowCtx.length">
-              <nz-alert [nzCloseable]="false" class="!w-full" nzType="info">
-                <div class="flex w-full items-center">
-                  <span
-                  >{{ needUpdateFlowCtx.length }}
-                    {{ 'version_upgrading' | i18nextEager }} </span
-                  ><button
+              <nz-alert
+                [nzCloseable]="false"
+                [nzShowIcon]="true"
+                class="!w-full"
+                nzType="info"
+                [nzMessage]="versionUpgradeMsg"
+                [nzAction]="upgradeBtn"
+              ></nz-alert>
+              <ng-template #versionUpgradeMsg>
+                {{ needUpdateFlowCtx.length }} {{ 'version_upgrading' | i18nextEager }}
+              </ng-template>
+              <ng-template #upgradeBtn>
+                <span
                   (click)="openUpdateModal()"
-                  class="ml-2"
-                  nz-button
-                  nzBorderless
+                  class="ml-2 cursor-pointer text-blue-500"
                 >
                   {{ 'click_to_upgrade' | i18nextEager }}
-                </button>
-                </div>
-              </nz-alert>
+                </span>
+              </ng-template>
             </div>
             <div class="mt-4">
               <div class="flex items-center gap-1">
@@ -730,9 +734,13 @@
   <div class="modal-body">
     <div class="flex h-[420px] w-full flex-col gap-4">
       <div class="w-full">
-        <nz-alert [nzCloseable]="false" class="!w-full" nzType="info">
-          {{ 'update_flows_tip' | i18nextEager }}
-        </nz-alert>
+        <nz-alert
+          [nzCloseable]="false"
+          [nzShowIcon]="true"
+          class="!w-full"
+          nzType="info"
+          [nzMessage]="'update_flows_tip' | i18nextEager"
+        ></nz-alert>
       </div>
 
       <div class="h-[calc(100%-40px)] w-full">
@@ -740,13 +748,20 @@
         <nz-table
           class="mt-2 h-[290px]"
           [nzData]="tableSrcData.data"
-          [nzFrontPagination]="false"
-          [nzShowPagination]="false"
+          [nzFrontPagination]="true"
+          [nzShowPagination]="true"
+          [nzPageSize]="pageSize.size"
+          [nzHideOnSinglePage]="true"
         >
           <thead>
             <tr>
               <th nzWidth="40px">
-                <label nz-checkbox (ngModelChange)="checkAll(!!$event)"></label>
+                <label
+                  nz-checkbox
+                  [(ngModel)]="allChecked"
+                  [nzIndeterminate]="indeterminate"
+                  (ngModelChange)="checkAll(!!$event)"
+                ></label>
               </th>
               <th *ngFor="let col of hasTitleCols">
                 {{ col.title }}
@@ -755,7 +770,7 @@
           </thead>
           <tbody>
             <tr
-              *ngFor="let row of displayedData; trackBy: trackByFn"
+              *ngFor="let row of tableSrcData.data; trackBy: trackByFn"
               [ngClass]="{
                   'ant-table-row-selected': checkedFlows.indexOf(row) !== -1
                 }"
@@ -784,16 +799,12 @@
             </tr>
           </tbody>
         </nz-table>
-        <nz-pagination
-          class="mt-2"
-          [(nzPageIndex)]="currentPage"
-          [nzTotal]="needUpdateFlowCtx.length"
-          [nzPageSize]="pageSize.size"
-          nzSize="small"
-        ></nz-pagination>
       </div>
     </div>
   </div>
+</ng-template>
+
+<ng-template #updateVersionModalFooter>
   <div class="modal-footer">
     <button type="button" (click)="dismissUpdateModal()" nz-button>
       {{ 'cancel' | i18nextEager }}

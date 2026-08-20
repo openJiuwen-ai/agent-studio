@@ -1474,7 +1474,12 @@ class SubWorkflow(WorkflowComponent):
             try:
                 session.update_global_state({REQUEST_VARIABLES: parent_snapshot})
             except Exception:
-                pass
+                workflow_logger.warning(
+                    "Failed to restore parent request scope snapshot as fallback",
+                    event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
+                    component_type_str="SubWorkflow",
+                    exc_info=True,
+                )
 
     def _sync_sub_request_to_parent(self, session: Session):
         """将子工作流的 REQUEST 变量同步回父工作流

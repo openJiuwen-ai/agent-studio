@@ -134,7 +134,7 @@ class Insight4CallbackHandler(BaseCallbackHandler, metaclass=ABCMeta):
             else:
                 invoke_data_in_map.error = {
                     "error_code": StatusCode.ERROR.code,
-                    "message": type(_exception).__name__,
+                    "message": repr(_exception),
                 }
             # update end time
             invoke_data_in_map.end_time = invoke_data["current_time"]

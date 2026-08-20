@@ -70,7 +70,7 @@
     </select>
 
     <insert id="insertOneEvaluationTask">
-        INSERT INTO t_pe_evaluation_task(`id`, `name`, method, task_id, test_set_id, description, regular_expression,
+        INSERT INTO t_pe_evaluation_task(id, name, method, task_id, test_set_id, description, regular_expression,
         eval_model_config, prompts, status, creator, workspace_id)
         VALUES (#{id}, #{name}, #{method}, #{taskId}, #{testSetId}, #{description}, #{regularExpression},
                 #{evalModelConfig,typeHandler=com.openjiuwen.studio.prompt.engineering.mapper.handler.ModelConfigHandler},
@@ -80,7 +80,7 @@
 
     <insert id="batchInsertEvalResult">
         insert into
-        t_pe_evaluation_result(`id`,`evaluation_task_id`,`prompt_id`,`test_num`,`generate_result`,`eval_result`,`eval_failed_reason`,`workspace_id`)
+        t_pe_evaluation_result(id,evaluation_task_id,prompt_id,test_num,generate_result,eval_result,eval_failed_reason,workspace_id)
         values
         <foreach collection="results" item="item" separator=",">
             (#{item.id,jdbcType=VARCHAR},

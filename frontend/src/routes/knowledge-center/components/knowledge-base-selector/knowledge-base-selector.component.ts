@@ -179,6 +179,8 @@ export class KnowledgeBaseSelectorComponent implements OnInit {
     }
   };
 
+  studioBtnShow = true;
+
   constructor(
     public configServ: AgentConfigService,
     public i18n: I18NextEagerPipe,
@@ -217,6 +219,8 @@ export class KnowledgeBaseSelectorComponent implements OnInit {
     } else {
       this.kbQuantityLimit = this.configServ.getConfigs()?.agent_knowledge_bound_limit ?? this.kbQuantityLimit;
     }
+
+    this.studioBtnShow = this.configServ.getConfigs()?.studio_btn_show;
 
     // CUSTOM 模式下，默认选中"个人知识库"
     if (this.isCustomSource) {

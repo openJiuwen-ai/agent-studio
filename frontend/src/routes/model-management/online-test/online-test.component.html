@@ -106,11 +106,12 @@
               [(nzFileList)]="fileList"
               [nzBeforeUpload]="beforeUploadImage2Text"
               [nzRemove]="onRemoveItemsNz"
-              [nzLimit]="5"
+              [nzPreview]="handlePreview"
               [nzMultiple]="true"
               nzAccept=".png,.jpg,.jpeg"
+              [nzShowButton]="image2textParam.uploadData.length + pendingImageCount < 5"
             >
-              <div *ngIf="fileList.length < 5" class="flex flex-col items-center justify-center text-gray-400">
+              <div class="flex flex-col items-center justify-center text-gray-400">
                 <span nz-icon nzType="plus" class="text-[20px]"></span>
               </div>
             </nz-upload>
@@ -128,7 +129,8 @@
             ></textarea>
           </div>
           <div class="item">
-            <button nz-button nzType="primary" nzSize="large" (click)="triggerImage2Text()"
+            <button nz-button nzType="primary" nzSize="large" [disabled]="image2textParam.uploadData.length === 0"
+                    (click)="triggerImage2Text()"
                     nz-tooltip [nzTooltipTitle]="Image2TextButtonTip">
               {{ 'generate_image_understanding'|i18nextEager }}
             </button>
@@ -249,5 +251,15 @@
         </ng-container>
       </div>
     </div>
+  </div>
+
+  <!-- 图片预览全屏遮罩：点击任何位置都关闭 -->
+  <div
+    *ngIf="previewVisible"
+    class="image-preview-mask"
+    (click)="closePreview()"
+  >
+    <img class="image-preview-img" [src]="previewImageSrc" alt="preview" />
+    <span class="image-preview-close" (click)="closePreview(); $event.stopPropagation()">×</span>
   </div>
 </div>

@@ -248,6 +248,14 @@ asset-arrow-icon {
   }
 }
 
+.cell-ellipsis {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  word-break: break-word;
+}
+
 .total-tip {
   margin-top: 8px;
   color: rgba(25, 25, 25, 1);
@@ -299,4 +307,128 @@ asset-arrow-icon {
   font-size: 12px;
   font-weight: 400;
   line-height: 18px;
+}
+
+
+.expandable-row {
+  cursor: pointer;
+
+  td {
+    padding: 20px 12px !important;
+    border-bottom: none !important;
+  }
+
+  &:hover {
+    background-color: #fafafa;
+  }
+
+  .expand-icon {
+    margin-right: 8px;
+    color: #999;
+  }
+
+  .cell-ellipsis {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.dep-row {
+  td {
+    background: #f9f9f9;
+    padding: 20px 12px !important;
+    border-bottom: none !important;
+  }
+
+  .dep-indent {
+    display: inline-block;
+    width: 24px;
+  }
+
+  .dep-type-tag {
+    margin-left: 8px;
+    font-size: 11px;
+    padding: 2px 6px;
+    background: #f0f0f0;
+    color: #666;
+    border: 1px solid #d9d9d9;
+    border-radius: 3px;
+    font-weight: normal;
+  }
+}
+
+
+// Remove table borders globally
+:host ::ng-deep .ant-table {
+  border: none !important;
+}
+:host ::ng-deep .ant-table-thead > tr > th {
+  border-bottom: none !important;
+}
+:host ::ng-deep .ant-table-tbody > tr > td {
+  border-bottom: none !important;
+}
+
+
+// Import table expand/collapse styles
+.expandable-row {
+  cursor: pointer;
+
+  td {
+    padding: 20px 12px !important;
+    border-bottom: none !important;
+  }
+
+  &:hover {
+    background-color: #fafafa;
+  }
+
+  .expand-icon {
+    margin-right: 8px;
+    color: #999;
+  }
+
+  .cell-ellipsis {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.dep-row {
+  td {
+    background: #f9f9f9;
+    padding: 20px 12px !important;
+    border-bottom: none !important;
+  }
+
+  .dep-indent {
+    display: inline-block;
+    width: 24px;
+  }
+
+  .dep-type-tag {
+    margin-left: 8px;
+    font-size: 11px;
+    padding: 2px 6px;
+    background: #f0f0f0;
+    color: #666;
+    border: 1px solid #d9d9d9;
+    border-radius: 3px;
+    font-weight: normal;
+  }
+}
+
+// Remove table borders globally
+:host ::ng-deep .ant-table {
+  border: none !important;
+}
+:host ::ng-deep .ant-table-thead > tr > th {
+  border-bottom: none !important;
+}
+:host ::ng-deep .ant-table-tbody > tr > td {
+  border-bottom: none !important;
 }

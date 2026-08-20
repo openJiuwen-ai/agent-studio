@@ -20,7 +20,7 @@
         </div>
         <img alt="" class="mr-4 h-10 w-10 rounded-[10px]" [src]="pluginInfo.icon" />
         <div class="flex items-center">
-          <div class="title">
+          <div class="title" nz-tooltip [nzTooltipTitle]="pluginInfo.plugin_chinese_name">
             {{ pluginInfo.plugin_chinese_name }}
           </div>
           <div class="px-2 text-[#f5f5f5]">|</div>

@@ -10,7 +10,7 @@ proto.unmountAngularContent = function () {
   }
   return origUnmount.call(this);
 };
-
+import { AgentNodeComponent } from './components/agent-node/agent-node.component';
 import { AggregationNodeComponent } from './components/aggregation-node/aggregation-node.component';
 import { BranchNodeComponent } from './components/branch-node/branch-node.component';
 import { ChildFlowComponent } from './components/child-flow-node/child-flow.component';
@@ -84,6 +84,7 @@ export class FlowNodeRegisterService {
     this.registerDataProcessNode(injector);
     this.registerDataSynthesisNode(injector);
     this.registerIntentContainerNode(injector);
+    this.registerAgentNode(injector);
     this.registerControllerNode(injector);
     this.registerSubControllerNode(injector);
     this.registerWorkflowNode(injector);
@@ -422,6 +423,12 @@ export class FlowNodeRegisterService {
       content: MCPServicenNodeComponent,
       injector,
     });
+  }
+
+  private registerAgentNode(injector: Injector) {
+    register(
+      this.commonRegisterNode('op-agent-node', injector, AgentNodeComponent),
+    );
   }
 
   private registerIntentContainerNode(injector: Injector) {

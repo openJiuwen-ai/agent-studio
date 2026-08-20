@@ -42,6 +42,9 @@ import { HelpCenterService } from '@services/help-center.service';
 import { CommonService } from '@services/common.service';
 import { NonEmptyValidatorDirective } from '@shared/directives/variable-name-validator.directive';
 import { NzSelectModule } from 'ng-zorro-antd/select';
+import { mapTreeAddKeyAndChildIndex, eachChildrenToRootObj, setAllChildrenVal } from '@routes/agent-center/app-plugin/utils';
+import { cloneDeep } from 'lodash';
+import { ExceptionHandlingComponent } from '../exception-handling/exception-handling.component';
 
 enum mapKeys {
   task_operators_console = 'task_operators_console',
@@ -67,6 +70,7 @@ enum mapKeys {
     InputTreeSelect,
     NonEmptyValidatorDirective,
     NzSelectModule,
+    ExceptionHandlingComponent,
   ],
   providers: [
     {
@@ -75,9 +79,7 @@ enum mapKeys {
     },
   ],
 })
-export class MCPServiceModalComponent
-  extends ModalBaseComponent
-  implements OnInit {
+export class MCPServiceModalComponent extends ModalBaseComponent implements OnInit {
   @Input('names') names: string[];
 
   @Input('nodeInfo') nodeInfo: IMcpNode;
@@ -85,6 +87,8 @@ export class MCPServiceModalComponent
   @Output('confirm') confirm = new EventEmitter<any>();
 
   @ViewChild('inputForm') inputForm: NgForm;
+
+  @ViewChild('exceptionHandling') exceptionHandling: ExceptionHandlingComponent;
 
   public icon = WORKFLOW_SVGS.Mcp;
 
@@ -98,7 +102,7 @@ export class MCPServiceModalComponent
 
   public inputParams: IWorkflowField[] = [];
 
-  public nodeOperators = []
+  public nodeOperators = [];
 
   public outputParams: IWorkflowField[] = [];
 
@@ -131,6 +135,8 @@ export class MCPServiceModalComponent
   workspaceId = '';
   updateTimeout: any = null;
 
+  public mcpInputParams = null;
+
   constructor(
     private readonly i18n: I18NextEagerPipe,
     protected override nodeServ: NodeService,
@@ -139,20 +145,23 @@ export class MCPServiceModalComponent
     private readonly http: HttpService,
     private helpCenterService: HelpCenterService,
     protected commonService: CommonService,
-    private cdr: ChangeDetectorRef,
+    private cdr: ChangeDetectorRef
   ) {
     super(nodeServ, appFlowServe);
   }
 
   getType = NodeUtils.getFieldTypeView;
 
-  onInputValueTypeChange(row: IWorkflowField) {
+  onInputValueTypeChange(row: IWorkflowField, changeChild) {
     row.value.content = NodeUtils.getChangeContent(row.value.type);
+    if (changeChild) {
+      (row as any).children = setAllChildrenVal((row as any).children, row.value);
+    }
     this.onSave();
   }
 
   public override ngOnInit() {
-    this.workspaceId = this.http.getWorkspaceId()
+    this.workspaceId = this.http.getWorkspaceId();
     this.icon = this.getIcon1();
     this.setNodeBase(this.nodeInfo);
     this.getServiceDeatil();
@@ -161,13 +170,7 @@ export class MCPServiceModalComponent
 
     this.toolName = this.nodeInfo.configs.tool_name;
 
-    this.validationRules.push(
-      CommonValidation.nameUniquenessVerify(
-        this.names,
-        this.i18n.transform('name_uniqueness'),
-        this.nodeInfo.name,
-      ),
-    );
+    this.validationRules.push(CommonValidation.nameUniquenessVerify(this.names, this.i18n.transform('name_uniqueness'), this.nodeInfo.name));
     this.outputParams = this.nodeInfo.outputs;
   }
 
@@ -182,11 +185,11 @@ export class MCPServiceModalComponent
   registerNodeUpdateHander() {
     const parentNode = this?.getParentNodeInfo(this.appFlowServ.getGraph());
     if (parentNode) {
-      this.getLoopInnerNodeRefs(parentNode)?.subscribe((info) => {
+      this.getLoopInnerNodeRefs(parentNode)?.subscribe(info => {
         this.onRefUpdate(info);
       });
     } else {
-      this.getSelfRefs().subscribe((info) => {
+      this.getSelfRefs().subscribe(info => {
         this.onRefUpdate(info);
       });
     }
@@ -205,12 +208,9 @@ export class MCPServiceModalComponent
   initOriginalName() {
     if (this.nodeInfo.configs?.original_info) {
       const { name, name_en } = this.nodeInfo.configs.original_info;
-      this.originalName = `${this.i18n.transform(
-        'original_name',
-      )}${name}（${name_en}）`;
+      this.originalName = `${this.i18n.transform('original_name')}${name}（${name_en}）`;
     } else {
-      this.originalName = `${this.i18n.transform('original_name')}${this.nodeInfo.name
-        }`;
+      this.originalName = `${this.i18n.transform('original_name')}${this.nodeInfo.name}`;
     }
   }
 
@@ -231,13 +231,14 @@ export class MCPServiceModalComponent
     this.mcpService
       .getMcpToolInfo(this.nodeInfo.configs.id)
       .then((res: any) => {
-        this.serviceDesc =
-          res.description ||
-          this.i18n.transform(this.nodeDesci18nMap(this.nodeInfo.type));
+        this.serviceDesc = res.description || this.i18n.transform(this.nodeDesci18nMap(this.nodeInfo.type));
         const data = res.tools || [];
         const key = 'task_operators';
-        this.toolList = data.map((item) => {
-          let config = this.nodeInfo.type === 'DataProcess' ? resSchemaDataField(item.config)[mapKeys.task_operators_console] : resSchemaDataField(item.config)[mapKeys.job_prompts];
+        this.toolList = data.map(item => {
+          let config =
+            this.nodeInfo.type === 'DataProcess'
+              ? resSchemaDataField(item.config)[mapKeys.task_operators_console]
+              : resSchemaDataField(item.config)[mapKeys.job_prompts];
           return {
             label: item.name,
             value: item.name,
@@ -256,28 +257,29 @@ export class MCPServiceModalComponent
           }
         }
         this.cdr.detectChanges();
-      }).finally(() => {
+      })
+      .finally(() => {
         this.registerNodeUpdateHander();
         this.cdr.detectChanges();
       });
   }
 
   getToolInfo(name: string) {
-    const item = this.toolList.find((item) => item.name === name);
+    const item = this.toolList.find(item => item.name === name);
     if (!item || !item?.config) {
-      return
+      return;
     }
     this.nodeOperators = item.config.map(item => {
       return {
         ...item,
         name: this.nodeInfo.type === 'DataProcess' ? item.operator_name : item.prompt_name,
         description: this.nodeInfo.type === 'DataProcess' ? item.operator_desc : '',
-      }
+      };
     });
   }
 
   inputParamsFormatter() {
-    this.inputParams.forEach((v) => {
+    this.inputParams.forEach(v => {
       v.location = Object.prototype.hasOwnProperty.call(this.headers, v.name) ? 'Headers' : 'Input';
       v.options = [
         { label: this.i18n.transform('ref'), value: 'ref' },
@@ -287,41 +289,38 @@ export class MCPServiceModalComponent
   }
 
   onToolChange(name: string) {
-    let key = 'value'
+    let key = 'value';
     if (['DataProcess', 'DataSynthesis'].includes(this.nodeInfo.type)) {
-      key = 'name'
+      key = 'name';
     }
-    const item = this.toolList.find((item) => item[key] === name);
+    const item = this.toolList.find(item => item[key] === name);
     if (!item) {
-      return
+      return;
     }
     this.inputParams = [
       ...this.inputParams.filter(item => item.location === 'Headers'),
-      ...NodeUtils.initInputs(reqSchemaStrMCPField(item.input), this.nameRefOptions)
+      ...NodeUtils.initInputs(reqSchemaStrMCPField(item.input), this.nameRefOptions),
     ];
 
     if (item?.config) {
       this.getToolInfo(name);
     }
     this.inputParamsFormatter();
+    this.mcpInputParams = mapTreeAddKeyAndChildIndex(cloneDeep(this.inputParams.filter(item => item.location === 'Input')), 0);
     this.outputParams = resSchemaStrMCPField(item.output);
     this.onSave();
   }
 
   public onRefUpdate(info: IParamRef[]) {
-
     this.nameRefOptions = info;
 
     if (this.isInit) {
-      this.inputParams = NodeUtils.initInputs(
-        this.nodeInfo.inputs,
-        this.nameRefOptions,
-      );
+      this.inputParams = NodeUtils.initInputs(this.nodeInfo.inputs, this.nameRefOptions);
     } else {
       NodeUtils.reSelectRefsWithNewOps(this.inputParams, this.nameRefOptions);
     }
-
     this.inputParamsFormatter();
+    this.mcpInputParams = mapTreeAddKeyAndChildIndex(cloneDeep(this.inputParams.filter(item => item.location === 'Input')), 0);
     this.isInit = false;
   }
 
@@ -329,21 +328,32 @@ export class MCPServiceModalComponent
     this.isValidated = true;
   }
 
-  dismiss(): void { }
+  dismiss(): void {}
+
+  changeChildVal(origin) {
+    if (origin.isChild) {
+      const index = Number(origin.key.split('_')[0]);
+      if (this.mcpInputParams[index].value.type === 'literal') {
+        const aaa = eachChildrenToRootObj((this.mcpInputParams[index] as any).children, origin);
+        this.mcpInputParams[index].value.content = JSON.stringify(aaa);
+      }
+    }
+  }
 
   handelSave() {
     if (this.tagCompareNoChange()) {
       return;
     }
-    const inputs = NodeUtils.getDtoInputs(this.inputParams, {
+    let inputsHeard = (cloneDeep(this.inputParams) || []).filter(item => item.location === 'Headers');
+    let inputsTools = cloneDeep(this.mcpInputParams);
+    const inputs = NodeUtils.getDtoInputs([...inputsHeard, ...inputsTools], {
       useContentType: false,
     });
 
-    inputs.forEach((input) => {
-      const isTrue = input.value.type === 'literal' &&
-        ['number', 'integer'].includes(input.type) &&
-        input.value.content !== null &&
-        typeof input.value.content !== 'number';
+    inputs.forEach(input => {
+      delete (input as any).children;
+      const isTrue =
+        input.value.type === 'literal' && ['number', 'integer'].includes(input.type) && input.value.content !== null && typeof input.value.content !== 'number';
       if (isTrue) {
         input.value.content = Number(input.value.content);
       }
@@ -354,6 +364,17 @@ export class MCPServiceModalComponent
         input.value.content = '[]';
       }
     });
+
+    // 异常处理：default_outputs 从编辑器字符串转为对象，后端需要 Map 类型
+    const ep = this.nodeInfo.configs?.exception_process;
+    if (ep?.default_outputs && typeof ep.default_outputs === 'string') {
+      try {
+        ep.default_outputs = JSON.parse(ep.default_outputs);
+      } catch {
+        ep.default_outputs = {};
+      }
+    }
+
     this.appFlowServ.setNodeSaveMonitor({
       nodeData: {
         ...this.nodeInfo,
@@ -364,8 +385,7 @@ export class MCPServiceModalComponent
           tool_name: this.toolName,
         },
       },
-    }
-    );
+    });
     if (this.updateTimeout) {
       clearTimeout(this.updateTimeout);
       this.updateTimeout = null;

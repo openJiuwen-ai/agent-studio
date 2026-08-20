@@ -95,7 +95,7 @@
       <img alt=""
         class="h-4 w-4 rounded"
         *ngIf="selectedModelInfo?.service_name"
-        [src]="selectedModelInfo && selectedModelInfo?.service_name?selectedModelInfo?.logo:image"
+        [src]="selectedModelInfo?.logo || image"
       />
       @if (selectedModelInfo?.service_name) {
         {{ selectedModelInfo?.service_name }}

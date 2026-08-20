@@ -137,6 +137,10 @@ class StreamableHttpClientNew(McpClient):
 
         self._execute_auth_hook(request_params, kwargs.get("name"))
 
+        #  同构：MCP 出站剥 auth_keys 的 cust- 前缀 + captured 覆盖（auth_hook 后、出站前）
+        from jiuwen.extension.wrapper.customer_header_inject import inject_customer_headers_to_mcp
+        inject_customer_headers_to_mcp(request_params)
+
         return request_params
 
     def _build_mcp_url(self, request_params: RequestParams) -> str:

@@ -6,7 +6,6 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.openjiuwen.studio.agent.agentbase.mapper.KnowledgeSegmentRuleMapper">
     <resultMap id="BaseResultMap" type="com.openjiuwen.studio.agent.agentbase.entity.KnowledgeSegmentRuleEntity">
-        <!--@Table t_knowledge_repo-->
         <id column="id" jdbcType="VARCHAR" property="id"/>
         <result column="project_id" jdbcType="VARCHAR" property="projectId"/>
         <result column="domain_id" jdbcType="VARCHAR" property="domainId"/>
@@ -14,8 +13,8 @@
         <result column="rule" jdbcType="VARCHAR" property="rule"/>
         <result column="creator" jdbcType="VARCHAR" property="creator"/>
         <result column="creator_id" jdbcType="VARCHAR" property="creatorId"/>
-        <result column="created_on_timestamp" jdbcType="BIGINT" property="createdOn"/>
-        <result column="updated_on_timestamp" jdbcType="BIGINT" property="updatedOn"/>
+        <result column="created_on" jdbcType="TIMESTAMP" property="createdOn"/>
+        <result column="updated_on" jdbcType="TIMESTAMP" property="updatedOn"/>
     </resultMap>
     <sql id="Base_Column_List">
         id
@@ -36,7 +35,7 @@
         values (#{id,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR}, #{domainId},
                 #{domainName}, #{rule,jdbcType=VARCHAR},
                 #{creator,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR},
-                FROM_UNIXTIME(#{createdOn}), FROM_UNIXTIME(#{updatedOn}),
+                #{createdOn,jdbcType=TIMESTAMP}, #{updatedOn,jdbcType=TIMESTAMP},
                 #{workspaceId,jdbcType=VARCHAR}, #{knowledgeBaseConnectionId,jdbcType=VARCHAR})
     </insert>
     <insert id="insert" parameterType="com.openjiuwen.studio.agent.agentbase.entity.KnowledgeSegmentRuleEntity"
@@ -65,7 +64,7 @@
                 rule = #{rule,jdbcType=VARCHAR},
             </if>
             <if test="updatedOn != null">
-                updated_on = FROM_UNIXTIME(#{updatedOn}),
+                updated_on = #{updatedOn,jdbcType=TIMESTAMP},
             </if>
         </set>
         where id = #{id,jdbcType=VARCHAR}
@@ -89,8 +88,6 @@
     <select id="selectByPrimaryKey" parameterType="map" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
-        , UNIX_TIMESTAMP(created_on) * 1000 as created_on_timestamp
-        , UNIX_TIMESTAMP(updated_on) * 1000 as updated_on_timestamp
         from t_knowledge_segment_rule
         where id = #{id,jdbcType=VARCHAR}
         and project_id = #{project_id}
@@ -98,8 +95,6 @@
     <select id="selectByDomainId" parameterType="map" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
-        , UNIX_TIMESTAMP(created_on) * 1000 as created_on_timestamp
-        , UNIX_TIMESTAMP(updated_on) * 1000 as updated_on_timestamp
         from t_knowledge_segment_rule
         where project_id = #{project_id}
         <if test="workspaceId != null and workspaceId != ''">

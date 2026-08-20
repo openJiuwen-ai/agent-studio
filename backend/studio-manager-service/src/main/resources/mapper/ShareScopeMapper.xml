@@ -21,7 +21,7 @@
         resource_id,
         resource_type,
         workspace_id,
-        `project_id`,
+        project_id,
         tenant_id
     </sql>
     <insert id="insert" parameterType="com.openjiuwen.studio.agent.manager.entity.ShareScopeEntity">

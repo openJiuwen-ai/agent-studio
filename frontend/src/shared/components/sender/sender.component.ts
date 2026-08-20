@@ -15,10 +15,10 @@ import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { InlineSvgComponent } from '../inline-svg.component';
 import {
   catchError,
+  concatMap,
   filter,
   finalize,
   from,
-  mergeMap,
   of,
   Subject,
   takeUntil,
@@ -30,6 +30,7 @@ import { MessageComponent } from '@shared/services/cfdata.service';
 import { v4 as uuidV4 } from 'uuid';
 import { AppAgentRepoService } from '@services/agent-center/app-agent-repo.service';
 import { AgentConfigService } from '@routes/agent-center/agent-config.service';
+import { formatUploadSizeMb } from '@routes/agent-center/utils';
 import { VoiceService } from '@services/voice.service';
 import { cdnAssetUrl } from 'src/single-spa/assets-url';
 import { AiAnswerListService } from '@routes/agent-center/app-agent/components/chat-item/ai-answer.component.service';
@@ -372,14 +373,15 @@ export class SenderComponent implements OnDestroy {
     const validFiles: FileItem[] = fileArray.flatMap((file) => {
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
       const isImage = ['png', 'jpeg', 'gif', 'webp', 'jpg'].includes(ext);
-      const limit = isImage ? 1024 * 1024 * 5 : 1024 * 1024 * 60;
+      const limit = isImage ? 5 * 1024 * 1024 : this.configServ.getFileMaxSizeKb() * 1024;
 
       if (file.size > limit) {
         MessageComponent.showWarn(
           this.i18n.transform(
             isImage
               ? 'image_size_cannot_exceed_5mb'
-              : 'file_size_cannot_exceed_128mb',
+              : 'file_size_cannot_exceed',
+            isImage ? undefined : { size: formatUploadSizeMb(this.configServ.getFileMaxSizeKb()) },
           ),
         );
         return [];
@@ -398,35 +400,39 @@ export class SenderComponent implements OnDestroy {
         },
       ];
     });
-    this.uploadData = validFiles;
-    from(validFiles)
-      .pipe(
-        takeUntil(this.destroy$),
-        mergeMap((item) => {
-          const { file, isImage, controller } = item;
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('is_image', JSON.stringify(isImage));
-          return from(
-            this.appAgentServe.uploadFile(formData, controller.signal),
-          ).pipe(
-            tap((res) => {
-              item.progress = 'succeeded';
-              item.url = res.url;
-            }),
-            catchError(() => {
-              item.progress = 'failed';
-              return of(null);
-            }),
-          );
-        }, 5),
-        finalize(() => {
-          this.uploading = false;
-          input.value = '';
-          this.checkContentWidth();
-        }),
-      )
-      .subscribe();
+    validFiles.forEach((item) => this.uploadData.push(item));
+    this.checkContentWidth();
+    setTimeout(() => {
+      from(validFiles)
+        .pipe(
+          takeUntil(this.destroy$),
+          concatMap((item) => {
+            const { file, isImage, controller } = item;
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('is_image', JSON.stringify(isImage));
+            return from(
+              this.appAgentServe.uploadFile(formData, controller.signal),
+            ).pipe(
+              tap((res) => {
+                item.progress = 'succeeded';
+                item.url = res.url;
+              }),
+              catchError(() => {
+                this.uploadData = this.uploadData.filter((f) => f.fileId !== item.fileId);
+                this.checkContentWidth();
+                return of(null);
+              }),
+            );
+          }),
+          finalize(() => {
+            this.uploading = false;
+            input.value = '';
+            this.checkContentWidth();
+          }),
+        )
+        .subscribe();
+    });
   }
 
   public removeFile(i: number) {

@@ -298,6 +298,10 @@ export class SetVariableModalComponent extends ModalBaseComponent implements OnI
         }
       }
 
+      if (left.value?.content[0]?.type && left.type !== left.value.content[0].type) {
+        queryType = left.value.content[0].type;
+      }
+
       const right: IWorkflowField = {
         ...cloneDeep(setting.right),
         refs: cloneDeep(

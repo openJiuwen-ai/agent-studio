@@ -102,3 +102,19 @@ def adapt_ir_converter_model_config(model_configs: dict, model_id: str) -> dict:
             }
         }
     }
+
+
+def adapt_react_agent_config(configs: dict) -> dict:
+    """LLMReAct 节点配置适配器
+
+    LLMReAct 节点的 configs 含 systemPrompt/model/plugins/maxIteration 等字段，
+    提取 model 部分转换为 Provider 期望的标准化格式。结构与 LLMChain 的 model
+    字段一致，单独建 adapter 保持节点类型清晰。
+
+    Args:
+        configs: LLMReAct 节点的完整配置字典
+
+    Returns:
+        标准化的 IR 节点配置格式 {"configs": {"model": {...}}}
+    """
+    return {"configs": {"model": configs.get("model", {})}}

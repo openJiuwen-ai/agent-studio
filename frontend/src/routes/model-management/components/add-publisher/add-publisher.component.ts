@@ -1,6 +1,6 @@
 import { Component, Input, ElementRef, ViewChild, OnInit, Optional, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { NgForm, FormBuilder, FormControl, FormGroup, Validators, ReactiveFormsModule, FormsModule } from '@angular/forms';
+import { NgForm, FormBuilder, FormControl, FormGroup, Validators, ValidatorFn, ReactiveFormsModule, FormsModule } from '@angular/forms';
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { cdnAssetUrl } from '../../../../single-spa/assets-url';
@@ -136,6 +136,7 @@ export class AddPublisherComponent implements OnInit {
   collapsed = false;
 
   apiKeyAuthArgs = [{ target_name: '', auth_key: '' }];
+  customApikeySubmitted = false;
 
   verifyMethods = [
     { label: this.i18n.transform('verify_methods.iam_username_and_password'), id: 'iam' },
@@ -234,25 +235,19 @@ export class AddPublisherComponent implements OnInit {
   }
 
   resetControl() {
-    this.myForm.controls[mapKeys.ak]?.setValidators([]);
-    this.myForm.controls[mapKeys.sk]?.setValidators([]);
-    this.myForm.controls[mapKeys.apikey]?.setValidators([]);
-    this.myForm.controls[mapKeys.appCode]?.setValidators([]);
-    this.myForm.controls[mapKeys.iamUser]?.setValidators([]);
-    this.myForm.controls[mapKeys.iamProject]?.setValidators([]);
-    this.myForm.controls[mapKeys.iamDomain]?.setValidators([]);
-    this.myForm.controls[mapKeys.iamPassword]?.setValidators([]);
-    this.myForm.controls[mapKeys.iamUrl]?.setValidators([]);
-    this.myForm.controls[mapKeys.iamAK]?.setValidators([]);
-    this.myForm.controls[mapKeys.iamSK]?.setValidators([]);
-    this.myForm.controls[mapKeys.appId]?.setValidators([]);
-    this.myForm.controls[mapKeys.credential]?.setValidators([]);
-    this.myForm.controls[mapKeys.sgovUrl]?.setValidators([]);
-    this.myForm.controls[mapKeys.iamAccount]?.setValidators([]);
-    this.myForm.controls[mapKeys.iamSecret]?.setValidators([]);
-    this.myForm.controls[mapKeys.iamEnterprise]?.setValidators([]);
-    this.myForm.controls[mapKeys.scenarioUuid]?.setValidators([]);
-    this.myForm.controls[mapKeys.userId]?.setValidators([]);
+    const keys = [
+      mapKeys.ak, mapKeys.sk, mapKeys.apikey, mapKeys.appCode,
+      mapKeys.iamUser, mapKeys.iamProject, mapKeys.iamDomain, mapKeys.iamPassword,
+      mapKeys.iamUrl, mapKeys.iamAK, mapKeys.iamSK,
+      mapKeys.appId, mapKeys.credential, mapKeys.sgovUrl,
+      mapKeys.iamAccount, mapKeys.iamSecret, mapKeys.iamEnterprise,
+      mapKeys.scenarioUuid, mapKeys.userId,
+    ];
+    keys.forEach(key => {
+      const control = this.myForm.controls[key];
+      control?.clearValidators();
+      control?.updateValueAndValidity({ onlySelf: true });
+    });
   }
 
   checkGroup(form: FormGroup | NgForm): boolean {
@@ -416,6 +411,7 @@ export class AddPublisherComponent implements OnInit {
   }
 
   createPublisher() {
+    this.customApikeySubmitted = true;
     const isMainValid = this.checkGroup(this.myForm);
     const isCustomValid = this.myForm.value.auth_type === 'CUSTOM_APIKEY' ? this.checkGroup(this.authkeyForm?.form) : true;
 
@@ -461,52 +457,71 @@ export class AddPublisherComponent implements OnInit {
     }
     if (auth === this.API_KEY) {
       this.resetControl();
-      this.myForm.controls[mapKeys.apikey].setValidators([Validators.required]);
+      const ctrl = this.myForm.controls[mapKeys.apikey];
+      ctrl.setValidators([Validators.required]);
+      ctrl.updateValueAndValidity({ onlySelf: true });
     }
     if (auth === this.AK_SK || auth === this.HMAC) {
       this.resetControl();
-      this.myForm.controls[mapKeys.ak].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.sk].setValidators([Validators.required]);
+      const akCtrl = this.myForm.controls[mapKeys.ak];
+      akCtrl.setValidators([Validators.required]);
+      akCtrl.updateValueAndValidity({ onlySelf: true });
+      const skCtrl = this.myForm.controls[mapKeys.sk];
+      skCtrl.setValidators([Validators.required]);
+      skCtrl.updateValueAndValidity({ onlySelf: true });
     }
     if (auth === this.APP_CODE) {
       this.resetControl();
-      this.myForm.controls[mapKeys.appCode].setValidators([Validators.required]);
+      const ctrl = this.myForm.controls[mapKeys.appCode];
+      ctrl.setValidators([Validators.required]);
+      ctrl.updateValueAndValidity({ onlySelf: true });
     }
     if (auth === 'CUSTOM_APIKEY') {
       this.resetControl();
-      // 显式清除 apikey 的 required 校验器并立即刷新状态
-      // setValidators([]) 在某些场景下未生效，使用 clearValidators 确保
       this.myForm.controls[mapKeys.apikey]?.clearValidators();
       this.myForm.controls[mapKeys.apikey]?.updateValueAndValidity({ onlySelf: true });
     }
     if (auth === 'CUSTOM_IAM') {
       this.resetControl();
-      this.myForm.controls[mapKeys.iamUrl].setValidators([Validators.required, Validators.pattern(this.urlPattern)]);
-      this.myForm.controls[mapKeys.iamDomain].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.iamProject].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.iamUser].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.iamPassword].setValidators([Validators.required]);
+      this.applyValidators([
+        [mapKeys.iamUrl, [Validators.required, Validators.pattern(this.urlPattern)]],
+        [mapKeys.iamDomain, [Validators.required]],
+        [mapKeys.iamProject, [Validators.required]],
+        [mapKeys.iamUser, [Validators.required]],
+        [mapKeys.iamPassword, [Validators.required]],
+      ]);
     }
     if (auth === 'HIS_IAM') {
       this.resetControl();
-      this.myForm.controls[mapKeys.iamUrl].setValidators([Validators.required, Validators.pattern(this.urlPattern)]);
-      this.myForm.controls[mapKeys.iamAccount].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.iamProject].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.iamSecret].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.iamEnterprise].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.scenarioUuid].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.userId].setValidators([Validators.required]);
+      this.applyValidators([
+        [mapKeys.iamUrl, [Validators.required, Validators.pattern(this.urlPattern)]],
+        [mapKeys.iamAccount, [Validators.required]],
+        [mapKeys.iamProject, [Validators.required]],
+        [mapKeys.iamSecret, [Validators.required]],
+        [mapKeys.iamEnterprise, [Validators.required]],
+        [mapKeys.scenarioUuid, [Validators.required]],
+        [mapKeys.userId, [Validators.required]],
+      ]);
     }
     if (auth === 'SGOV') {
       this.resetControl();
-      this.myForm.controls[mapKeys.sgovUrl].setValidators([Validators.required, Validators.pattern(this.urlPattern)]);
-      this.myForm.controls[mapKeys.appId].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.credential].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.iamEnterprise].setValidators([Validators.required]);
-      this.myForm.controls[mapKeys.scenarioUuid].setValidators([Validators.required]);
+      this.applyValidators([
+        [mapKeys.sgovUrl, [Validators.required, Validators.pattern(this.urlPattern)]],
+        [mapKeys.appId, [Validators.required]],
+        [mapKeys.credential, [Validators.required]],
+        [mapKeys.iamEnterprise, [Validators.required]],
+        [mapKeys.scenarioUuid, [Validators.required]],
+      ]);
     }
-    // 修复：setValidators 后刷新表单状态，避免 myForm.status 残留旧值导致 checkGroup 误判
     this.myForm.updateValueAndValidity();
+  }
+
+  private applyValidators(rules: [string, ValidatorFn[]][]) {
+    rules.forEach(([key, validators]) => {
+      const ctrl = this.myForm.controls[key];
+      ctrl.setValidators(validators);
+      ctrl.updateValueAndValidity({ onlySelf: true });
+    });
   }
 
   public changeApi(): void {

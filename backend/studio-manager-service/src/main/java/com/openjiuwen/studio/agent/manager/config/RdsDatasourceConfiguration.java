@@ -6,12 +6,9 @@ package com.openjiuwen.studio.agent.manager.config;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.ibatis.mapping.DatabaseIdProvider;
-import org.apache.ibatis.mapping.VendorDatabaseIdProvider;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
-import java.util.Properties;
 
 /**
  * 功能描述
@@ -26,20 +23,13 @@ import java.util.Properties;
 public class RdsDatasourceConfiguration {
 
     /**
-     * databaseIdProvider
+     * databaseIdProvider — 通过 JDBC URL 区分 openGauss / PostgreSQL / MySQL
      *
      * @return DatabaseIdProvider
      */
     @Bean
     public DatabaseIdProvider databaseIdProvider() {
-        VendorDatabaseIdProvider provider = new VendorDatabaseIdProvider();
-        Properties properties = new Properties();
-
-        // key必须与 DatabaseMetaData.getDatabaseProductName() 完全匹配
-        properties.setProperty("MySQL", "mysql");
-        properties.setProperty("PostgreSQL", "postgres");
-        provider.setProperties(properties);
-        return provider;
+        return new JdbcUrlDatabaseIdProvider();
     }
 
     public static class RdsAuthInfo {

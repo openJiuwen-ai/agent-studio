@@ -1,8 +1,8 @@
 /* eslint-disable eslint-comments/disable-enable-pair */
 /* eslint-disable import/no-cycle */
-import { Injectable, OnInit,
+import { ChangeDetectorRef, Injectable, OnInit,
   Output,
-  EventEmitter, } from '@angular/core';
+  EventEmitter, inject, } from '@angular/core';
 import { Graph } from '@antv/x6';
 import { cloneDeep } from 'lodash';
 import { combineLatest, debounceTime, map, takeUntil } from 'rxjs';
@@ -53,6 +53,8 @@ export abstract class ModalBaseComponent
 
   @Output('editCodeEvent') editCodeEvent = new EventEmitter();
 
+  protected modalCdr = inject(ChangeDetectorRef);
+
   constructor(
     protected override nodeServ: NodeService,
     protected override appFlowServ: AppFlowService,
@@ -67,6 +69,16 @@ export abstract class ModalBaseComponent
       .pipe(takeUntil(this.destroy$))
       .subscribe((stat) => {
         this.isConfirmLoading = stat;
+      });
+
+    this.appFlowServ
+      .nodeNameChange()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((info) => {
+        if (info && info.id === this.nodeBase.id) {
+          this.nodeBase.name = info.name;
+          this.modalCdr.detectChanges();
+        }
       });
 
     this.isNormalView = document.querySelector('body').offsetWidth >= 1920;
@@ -181,8 +193,19 @@ export abstract class ModalBaseComponent
     );
   }
 
-  protected getParentNodeInfo(graph: Graph) {
-    const parentCell = graph.getCellById(this.nodeBase.id).getParent();
+  protected getParentNodeInfo(graph: Graph): ILoopNode | undefined {
+    // 防御层：删除节点后，异步初始化的配置面板可能仍以已不存在的节点 id 调用本方法，
+    // 此时 graph 可能为 null、nodeBase.id 为空或 getCellById 返回 null，
+    // 不得再调用 getParent()，否则抛 “Cannot read properties of null (reading 'getParent')”。
+    // 有效节点行为保持不变：仍返回其父循环节点信息（无父节点时为 undefined）。
+    if (!graph || !this.nodeBase?.id) {
+      return undefined;
+    }
+    const cell = graph.getCellById(this.nodeBase.id);
+    if (!cell) {
+      return undefined;
+    }
+    const parentCell = cell.getParent();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const parentData = parentCell?.data?.ngArguments?.nodeInfo as ILoopNode;
 

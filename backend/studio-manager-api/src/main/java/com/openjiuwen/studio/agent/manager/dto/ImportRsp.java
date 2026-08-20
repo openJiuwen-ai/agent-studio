@@ -42,6 +42,15 @@ public class ImportRsp implements Serializable {
     @JsonProperty("failed_len")
     private Integer failedLen = 0;
 
+    @JsonProperty("imported_len")
+    private Integer importedLen = 0;
+
+    @JsonProperty("updated_len")
+    private Integer updatedLen = 0;
+
+    @JsonProperty("skipped_len")
+    private Integer skippedLen = 0;
+
     @JsonProperty("failed_ids")
     @Valid
     @Size()
@@ -103,6 +112,33 @@ public class ImportRsp implements Serializable {
         return this;
     }
 
+    public Integer getImportedLen() {
+        return importedLen;
+    }
+
+    public ImportRsp setImportedLen(Integer importedLen) {
+        this.importedLen = importedLen;
+        return this;
+    }
+
+    public Integer getUpdatedLen() {
+        return updatedLen;
+    }
+
+    public ImportRsp setUpdatedLen(Integer updatedLen) {
+        this.updatedLen = updatedLen;
+        return this;
+    }
+
+    public Integer getSkippedLen() {
+        return skippedLen;
+    }
+
+    public ImportRsp setSkippedLen(Integer skippedLen) {
+        this.skippedLen = skippedLen;
+        return this;
+    }
+
     public List<String> getFailedIds() {
         return failedIds;
     }
@@ -157,6 +193,9 @@ public class ImportRsp implements Serializable {
         sb.append("    count: ").append(toIndentedString(count)).append("\n");
         sb.append("    succeedIds: ").append(toIndentedString(succeedIds)).append("\n");
         sb.append("    failedLen: ").append(toIndentedString(failedLen)).append("\n");
+        sb.append("    importedLen: ").append(toIndentedString(importedLen)).append("\n");
+        sb.append("    updatedLen: ").append(toIndentedString(updatedLen)).append("\n");
+        sb.append("    skippedLen: ").append(toIndentedString(skippedLen)).append("\n");
         sb.append("    failedIds: ").append(toIndentedString(failedIds)).append("\n");
         sb.append("    innerPluginsMsg: ").append(toIndentedString(innerPluginsMsg)).append("\n");
         sb.append("    authPluginsMsg: ").append(toIndentedString(authPluginsMsg)).append("\n");
@@ -178,15 +217,17 @@ public class ImportRsp implements Serializable {
         return Objects.equals(this.succeedLen, importRsp.succeedLen) && Objects.equals(this.count, importRsp.count)
             && Objects.equals(this.succeedIds, importRsp.succeedIds) && Objects.equals(this.failedLen,
             importRsp.failedLen) && Objects.equals(this.failedIds, importRsp.failedIds) && Objects.equals(
-            this.innerPluginsMsg, importRsp.innerPluginsMsg) && Objects.equals(this.authPluginsMsg,
+            this.importedLen, importRsp.importedLen) && Objects.equals(this.updatedLen, importRsp.updatedLen)
+            && Objects.equals(this.skippedLen, importRsp.skippedLen) && Objects.equals(this.innerPluginsMsg,
+            importRsp.innerPluginsMsg) && Objects.equals(this.authPluginsMsg,
             importRsp.authPluginsMsg) && Objects.equals(this.authMcpsMsg, importRsp.authMcpsMsg) && Objects.equals(
             this.importList, importRsp.importList);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(succeedLen, count, succeedIds, failedLen, failedIds, innerPluginsMsg, authPluginsMsg,
-            authMcpsMsg, importList);
+        return Objects.hash(succeedLen, count, succeedIds, failedLen, importedLen, updatedLen, skippedLen, failedIds,
+            innerPluginsMsg, authPluginsMsg, authMcpsMsg, importList);
     }
 
     /**

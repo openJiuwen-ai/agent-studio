@@ -71,6 +71,18 @@
               </div>
             </div>
 
+            <div class="flex w-full" *ngIf="errorMessage">
+              <div class="assistant-content chat-content">
+                <div class="cv-content">
+                  <div class="flex w-full gap-[12px]">
+                    <div class="content-text">
+                      <p>{{ errorMessage }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div *ngIf="isLoading" class="pl-[5px]">
               <img alt=""
                 class="w-[20px] h-[20px]"

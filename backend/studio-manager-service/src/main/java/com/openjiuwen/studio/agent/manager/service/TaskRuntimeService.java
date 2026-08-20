@@ -462,7 +462,7 @@ public class TaskRuntimeService {
         if (listener != null && listener.getMessageContent().length() > 0) {
             return listener.getMessageContent().toString();
         }
-        return null;
+        return "";
     }
 
     /**
@@ -570,10 +570,18 @@ public class TaskRuntimeService {
                         executeParams.getConversationId());
                 return;
             }
+            // 协作式取消：周期性检测取消标志，发现后主动走异常清理路径，不依赖线程中断
+            if (executeParams.getAsyncTaskParamHolder() != null
+                    && executeParams.getAsyncTaskParamHolder().isCancelled()) {
+                log.info("Async workflow cancelled by user for conversationId: {}",
+                        executeParams.getConversationId());
+                throw new AgentStudioException(StudioError.WORKFLOW_ASYNC_EXECUTE_FAILED);
+            }
             try {
                 Thread.sleep(500);
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                log.warn("Async workflow polling interrupted for conversationId: {}",
+                        executeParams.getConversationId());
                 throw new AgentStudioException(StudioError.WORKFLOW_ASYNC_EXECUTE_FAILED);
             }
         }
@@ -643,12 +651,14 @@ public class TaskRuntimeService {
             if (asyncTaskParamHolder.getEventSource() != null) {
                 asyncTaskParamHolder.getEventSource().cancel();
             }
+            // 协作式取消：置位标志，由轮询线程检测后自行退出，不中断线程
+            asyncTaskParamHolder.setCancelled(true);
             taskEventSource.remove(taskId);
         }
         // 释放异步连接池
         CompletableFuture<?> future = taskFutures.get(taskId);
         if (future != null) {
-            future.cancel(true);
+            future.cancel(false);
             taskFutures.remove(taskId);
         }
     }

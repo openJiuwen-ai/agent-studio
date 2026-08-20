@@ -21,7 +21,7 @@
         <result column="updated_on" jdbcType="TIMESTAMP" property="updatedOn"/>
         <result column="updater" jdbcType="VARCHAR" property="updater"/>
         <result column="updater_id" jdbcType="VARCHAR" property="updaterId"/>
-        <result column="is_preset_agent" jdbcType="TINYINT" property="isPresetAgent"/>
+        <result column="is_preset_agent" jdbcType="INTEGER" property="isPresetAgent"/>
     </resultMap>
 
     <resultMap id="WorkspaceWithMappingsResultMap"
@@ -130,28 +130,28 @@
         update t_workspace
         <set>
             <if test="name != null">
-                `name` = #{name,jdbcType=VARCHAR},
+                name = #{name,jdbcType=VARCHAR},
             </if>
             <if test="description != null">
-                `description` = #{description,jdbcType=VARCHAR},
+                description = #{description,jdbcType=VARCHAR},
             </if>
             <if test="icon != null">
-                `icon` = #{icon,jdbcType=VARCHAR},
+                icon = #{icon,jdbcType=VARCHAR},
             </if>
             <if test="updatedOn != null">
-                `updated_on` = #{updatedOn,jdbcType=VARCHAR},
+                updated_on = #{updatedOn,jdbcType=VARCHAR},
             </if>
             <if test="updater != null">
-                `updater` = #{updater,jdbcType=VARCHAR},
+                updater = #{updater,jdbcType=VARCHAR},
             </if>
             <if test="updaterId != null">
-                `updater_id` = #{updaterId,jdbcType=VARCHAR},
+                updater_id = #{updaterId,jdbcType=VARCHAR},
             </if>
             <if test="status != null">
-                `status` = #{status,jdbcType=VARCHAR},
+                status = #{status,jdbcType=VARCHAR},
             </if>
             <if test="isPresetAgent != null">
-                `is_preset_agent` = #{isPresetAgent,jdbcType=TINYINT}
+                is_preset_agent = #{isPresetAgent,jdbcType=INTEGER}
             </if>
         </set>
         where id = #{id,jdbcType=VARCHAR}

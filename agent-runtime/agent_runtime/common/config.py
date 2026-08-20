@@ -4,10 +4,11 @@
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from common_utils.crypto_tool import decrypt
+from common_utils.password_provider import get_password_provider
 
 
 def _decrypt(v):
@@ -25,8 +26,8 @@ class ServerSettings(BaseSettings):
     tls_key_path: str = Field(default="", validation_alias="TLS_CERT_KEY_PATH")
     tls_key_password: str = Field(default="", validation_alias="TLS_CERT_KEY_PASSWD")
     tls_ciphers: str = Field(default="TLSv1.2 TLSv1.3", validation_alias="TLS_CIPHERS")
-    # Uvicorn worker 数量。未设置时由 _get_workers() 回退到 cgroup 感知的容器 CPU 核数 + 1
-    workers: Optional[int] = Field(default=None, validation_alias="GUNICORN_WORK_NUM")
+    # Uvicorn worker 数量，未设置时默认 1
+    workers: int = Field(default=1, validation_alias="GUNICORN_WORK_NUM")
     # Nginx 负载均衡模式。启用时 uvicorn 以单 worker 运行，由 Nginx 做负载均衡
     nginx_load_balancing: bool = Field(default=False, validation_alias="NGINX_LOAD_BALANCING")
 
@@ -40,16 +41,16 @@ class ServerSettings(BaseSettings):
 
     @field_validator("workers", mode="before")
     @classmethod
-    def _empty_str_to_none(cls, v):
-        """K8s YAML 中空字符串 value: '' 会导致 Pydantic 类型转换失败，需转为 None。"""
+    def _empty_str_to_default(cls, v):
+        """兼容已有配置中的空字符串，并按默认值 1 处理。"""
         if v == "":
-            return None
+            return 1
         return v
 
     @field_validator("workers")
     @classmethod
-    def _validate_workers(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v < 1:
+    def _validate_workers(cls, v: int) -> int:
+        if v < 1:
             raise ValueError("GUNICORN_WORK_NUM must be >= 1")
         return v
 
@@ -173,6 +174,22 @@ class WorkflowLogSettings(BaseSettings):
     level: str = Field(default="WARNING", validation_alias="WORKFLOW_LOG_LEVEL")
     graph_level: str = Field(default="WARNING", validation_alias="GRAPH_LOG_LEVEL")
     llm_level: str = Field(default="WARNING", validation_alias="LLM_LOG_LEVEL")
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
+class LlmCallLoggingSettings(BaseSettings):
+    """Model call logging configuration.
+
+    Controls whether the model-call detail callbacks (request/response/usage/
+    latency/tool_calls) are registered. Error callback is always registered
+    regardless of this switch. Defaults to off; set MODEL_CALL_LOGGING_ENABLED=true
+    to enable detail logging (still subject to the WORKFLOW_LOG_LEVEL <= INFO gate).
+    """
+
+    enabled: bool = Field(default=False, validation_alias="MODEL_CALL_LOGGING_ENABLED")
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -364,8 +381,18 @@ class CodeExecutionSettings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
+
 class DataBaseSettings(BaseSettings):
-    db_type: Literal["mysql", "gaussdb"] = Field(
+    password_provider_type: str = Field(
+        default="DEFAULT", validation_alias="DATASOURCE_PASSWORD_PROVIDER_TYPE"
+    )
+    password_provider_module: str = Field(
+        default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_MODULE"
+    )
+    password_provider_class: str = Field(
+        default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_CLASS"
+    )
+    db_type: Literal["mysql", "gaussdb", "postgresql"] = Field(
         default="mysql", validation_alias="STORE_DB_TYPE"
     )
     host: str = Field(default="", validation_alias="STORE_DB_HOST")
@@ -379,10 +406,18 @@ class DataBaseSettings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    @field_validator("password", mode="after")
-    @classmethod
-    def _decrypt_password(cls, v):
-        return _decrypt(v)
+    @model_validator(mode="after")
+    def _resolve_password(self):
+        if self.password_provider_type == "CUSTOM":
+            provider = get_password_provider(
+                custom_module=self.password_provider_module,
+                custom_class=self.password_provider_class,
+            )
+            self.password = provider.get_password(self.password)
+        elif self.password:
+            provider = get_password_provider()
+            self.password = provider.get_password(self.password)
+        return self
 
 
 class ConversationVariableSettings(BaseSettings):
@@ -397,6 +432,60 @@ class ConversationVariableSettings(BaseSettings):
     )
 
 
+class OpenJiuwenKBSettings(BaseSettings):
+    """openjiuwen 知识库配置。"""
+
+    store_provider: str = Field(
+        default="milvus", validation_alias="OPENJIUWEN_STORE_PROVIDER"
+    )
+    distance_metric: str = Field(
+        default="cosine", validation_alias="OPENJIUWEN_DISTANCE_METRIC"
+    )
+    chunk_size: int = Field(default=512, validation_alias="OPENJIUWEN_CHUNK_SIZE")
+    chunk_overlap: int = Field(
+        default=50, validation_alias="OPENJIUWEN_CHUNK_OVERLAP"
+    )
+    milvus_uri: str = Field(
+        default="./data/milvus_kb.db", validation_alias="OPENJIUWEN_MILVUS_URI"
+    )
+    milvus_token: str = Field(default="", validation_alias="OPENJIUWEN_MILVUS_TOKEN")
+    milvus_database: str = Field(
+        default="default", validation_alias="OPENJIUWEN_MILVUS_DATABASE"
+    )
+    chroma_path: str = Field(
+        default="./chroma_data", validation_alias="OPENJIUWEN_CHROMA_PATH"
+    )
+    pg_uri: str = Field(default="", validation_alias="OPENJIUWEN_PG_URI")
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
+class KnowledgeBaseSettings(BaseSettings):
+    """知识库检索（LakeSearch 等）出站 HTTP 客户端配置。
+
+    KB_SSL_VERIFY 控制知识库检索端点的 TLS 证书校验：
+    - false（默认）：不校验，对齐旧版（旧版 HttpClientUtils.createIgnoreVerifySsl
+      主动不校验），内网自签证书环境可直接连通；
+    - true：恢复校验，适用于端点使用受信任证书的场景。
+    """
+
+    ssl_verify: bool = Field(default=False, validation_alias="KB_SSL_VERIFY")
+
+    @field_validator("ssl_verify", mode="before")
+    @classmethod
+    def _empty_str_to_false(cls, v):
+        """K8s YAML 中空字符串 value: '' 会导致 bool 解析失败，需转为 False。"""
+        if v == "" or v is None:
+            return False
+        return v
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
+
 class Settings:
     server = ServerSettings()
     llm = LLMSettings()
@@ -404,6 +493,7 @@ class Settings:
     health_check = HealthCheckSettings()
     security_sandbox = SecuritySandboxSettings()
     workflow_log = WorkflowLogSettings()
+    llm_call_logging = LlmCallLoggingSettings()
     cache = CacheSettings()
     skill_storage = SkillStorageSettings()
     opensearch = OpenSearchSettings()
@@ -411,7 +501,9 @@ class Settings:
     checkpointer = CheckpointerSettings()
     otel = OtelSettings()
     code_execution = CodeExecutionSettings()
-    db_config = DataBaseSettings()
     conversation_variable = ConversationVariableSettings()
+    openjiuwen_kb = OpenJiuwenKBSettings()
+    kb = KnowledgeBaseSettings()
+
 
 settings = Settings()

@@ -12,6 +12,9 @@ from agent_runtime.extension.workflow_node.kb_adapter.ragflow_adapter import Rag
 from agent_runtime.extension.workflow_node.kb_adapter.general_kb_adapter import (
     GeneralKBAdapter,
 )
+from agent_runtime.extension.workflow_node.kb_adapter.openjiuwen_adapter import (
+    OpenJiuwenKBAdapter,
+)
 
 
 @pytest.mark.parametrize(
@@ -24,6 +27,7 @@ from agent_runtime.extension.workflow_node.kb_adapter.general_kb_adapter import 
         ("Ragflow", RagFlowAdapter),
         ("General", GeneralKBAdapter),
         ("Custom", LakeSearchAdapter),  # Custom 复用 LakeSearch
+        ("OpenJiuwen", OpenJiuwenKBAdapter),
     ],
 )
 def test_create_returns_correct_adapter(connector_type, expected_cls):
@@ -39,6 +43,7 @@ def test_create_returns_correct_adapter(connector_type, expected_cls):
         ("KOOSEARCH", KooSearchAdapter),
         ("ragflow", RagFlowAdapter),
         ("GENERAL", GeneralKBAdapter),
+        ("openjiuwen", OpenJiuwenKBAdapter),
     ],
 )
 def test_create_is_case_insensitive(connector_type, expected_cls):

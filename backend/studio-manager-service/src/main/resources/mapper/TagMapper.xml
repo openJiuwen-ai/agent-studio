@@ -11,7 +11,7 @@
     <sql id="Base_Column_List">
         tag_id
         ,
-        `name`,
+        name,
         name_en,
         created_on,
         updated_on

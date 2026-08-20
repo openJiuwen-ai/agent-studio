@@ -23,23 +23,23 @@
     </resultMap>
 
     <sql id="baseColumns">
-        `resource_id`
+        resource_id
         ,
-        `parent_id`,
-        `sku_code`,
-        `domain_id`,
-        `instance_id`,
-        `subproduct_code`,
-        `status`,
-        `cbc_order_id`,
-        `subproduct_id`,
-        `cloud_service_type`,
-        `region_id`,
-        `project_id`,
-        `created_date`,
-        `created_by_user_id`,
-        `last_updated_date`,
-        `last_updated_by_user_id`
+        parent_id,
+        sku_code,
+        domain_id,
+        instance_id,
+        subproduct_code,
+        status,
+        cbc_order_id,
+        subproduct_id,
+        cloud_service_type,
+        region_id,
+        project_id,
+        created_date,
+        created_by_user_id,
+        last_updated_date,
+        last_updated_by_user_id
     </sql>
 
     <select id="selectById">

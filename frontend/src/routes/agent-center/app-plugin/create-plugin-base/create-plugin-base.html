@@ -56,7 +56,7 @@
           </nz-form-control>
         </nz-form-item>
         <nz-form-item>
-          <nz-form-label [nzSpan]="24">{{ createPluginFormLabel.pluginZhName }}</nz-form-label>
+          <nz-form-label [nzSpan]="24" [nzRequired]="true">{{ createPluginFormLabel.pluginZhName }}</nz-form-label>
           <nz-form-control [nzErrorTip]="pluginZhNameTpl">
             <input nz-input maxlength="64" formControlName="pluginZhName" style="width: 100%" [placeholder]="createPluginFormLabel.defaultPlaceholder"/>
             <ng-template #pluginZhNameTpl let-control>
@@ -71,7 +71,7 @@
           </nz-form-control>
         </nz-form-item>
         <nz-form-item>
-          <nz-form-label [nzSpan]="24">{{ createPluginFormLabel.pluginDescription }}</nz-form-label>
+          <nz-form-label [nzSpan]="24" [nzRequired]="true">{{ createPluginFormLabel.pluginDescription }}</nz-form-label>
           <nz-form-control [nzErrorTip]="pluginDescriptionTpl">
             <textarea
               nz-input
@@ -110,8 +110,11 @@
               </nz-form-item>
               <nz-form-item>
                 <nz-form-label [nzSpan]="24">
-                  <div class="text-label flex justify-between items-center">
-                    <p>{{createPluginFormLabel.host }}</p>
+                  <div class="text-label flex justify-between items-center gap-2">
+                    <span>{{createPluginFormLabel.host }}</span>
+                    <span nz-tooltip [nzTooltipTitle]="'填写域名、IP地址、ip地址和端口号，例如：www.demo.com、127.0.0.1、127.0.0.1:8080'" class="cursor-pointer">
+                      <nz-icon nzType="question-circle" nzTheme="outline" />
+                    </span>
                     <button nz-button nzType="default" nzSize="small" (click)="showInserter()" (mousedown)="$event.preventDefault()">
                       <img [src]="changeUrl('assets/prompt/insert_variable.svg')" alt="" class="h-4 w-4" />
                     </button>
@@ -126,7 +129,7 @@
                     [promptType]="PromptType.TEXT"
                     [showInserter]="isShowInserter"
                     [variables]="variables"
-                    [style]="'min-height:18px;max-height:360px'"
+                    [styleObj]="'min-height:18px;max-height:360px'"
                     formControlName="host"
                     [class]="{'custom-error-style':hostError}"
                   ></meta-param-editor>
@@ -135,8 +138,11 @@
               </nz-form-item>
               <nz-form-item>
                 <nz-form-label [nzSpan]="24">
-                  <div class="text-label flex justify-between items-center">
-                    <p>{{createPluginFormLabel.baseURL }}</p>
+                  <div class="text-label flex justify-between items-center gap-2">
+                    <span>{{createPluginFormLabel.baseURL }}</span>
+                    <span nz-tooltip [nzTooltipTitle]="'排除协议、域名、ip地址、端口号、工具路径后剩余部分，例如：http://www.demo.com/example1/example2基准url为/example1/example2'" class="cursor-pointer">
+                      <nz-icon nzType="question-circle" nzTheme="outline" />
+                    </span>
                     <button nz-button nzType="default" nzSize="small" (click)="showInserterBase()" (mousedown)="$event.preventDefault()">
                       <img [src]="changeUrl('assets/prompt/insert_variable.svg')" alt="" class="h-4 w-4" />
                     </button>
@@ -151,7 +157,7 @@
                     [promptType]="PromptType.TEXT"
                     [showInserter]="isShowInserterBase"
                     [variables]="variablesBase"
-                    [style]="'min-height:18px;max-height:360px'"
+                    [styleObj]="'min-height:18px;max-height:360px'"
                     formControlName="baseURL"
                     [class]="{'custom-error-style':baseURLError}"
                   ></meta-param-editor>
@@ -175,7 +181,7 @@
                         <div class="w-[96px] text-label">{{ 'type' | i18nextEager }}</div>
                         <div class="text-label" style="width: 284px">{{ 'description' | i18nextEager }}</div>
                       </div>
-                      <nz-tree id="cp-res-tree" [nzData]="patchArgs" nzShowLine>
+                      <nz-tree id="cp-res-tree" [nzData]="patchArgs" nzShowLine [nzShowExpand]="false">
                         <ng-template #nzTreeTemplate let-node let-origin="origin" let-i="index">
                           <div class="mt-[8px] flex gap-2 leading-none">
                             <div class="w-[240px]">

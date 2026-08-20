@@ -33,6 +33,8 @@ import com.openjiuwen.studio.agent.agentbase.model.SegmentRule;
 import com.openjiuwen.studio.agent.agentbase.model.UploadFilesResp;
 import com.openjiuwen.studio.agent.agentbase.service.knowledgerepo.connection.LakeSearchConnection;
 import com.openjiuwen.studio.agent.agentbase.service.knowledgerepo.knowledgesourceprovider.LakeSearchConnectionProvider;
+import com.openjiuwen.studio.agent.common.customerheader.CustomerHeaderProfile;
+import com.openjiuwen.studio.agent.common.customerheader.HeaderRename;
 import com.openjiuwen.studio.agent.common.dto.knowledge.CreateKnowledgeRepoReq;
 import com.openjiuwen.studio.agent.common.dto.knowledge.FaqDeleteBatchResp;
 import com.openjiuwen.studio.agent.common.dto.knowledge.FaqInfo;
@@ -50,6 +52,7 @@ import com.openjiuwen.studio.agent.common.enums.KnowledgeSourceEnum;
 import com.openjiuwen.studio.agent.common.enums.RagAuthMode;
 import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
+import com.openjiuwen.studio.agent.common.utils.SpringBeanUtils;
 import com.openjiuwen.studio.agent.foundation.base.exception.AgentBaseException;
 import com.openjiuwen.studio.agent.foundation.base.exception.ErrorCode;
 import com.openjiuwen.studio.agent.foundation.base.utils.JacksonUtils;
@@ -102,12 +105,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -825,12 +823,26 @@ public class LakeSearchService implements KnowledgeRepoService {
         HttpHeaders headers = new HttpHeaders();
         String userId = RequestContextUtils.getRequestUserId();
         headers.add(CommonConstant.X_USER_ID, userId);
-        if (KnowledgeSourceEnum.CUSTOM.toString().equalsIgnoreCase(knowledgeSource)) {
+
+        // LakeSearch header rename — cust-userid→userid, cust-token→token
+        Map<String, String> captured = RequestContextUtils.getCustomerHeaders();
+        CustomerHeaderProfile profile = SpringBeanUtils.getBean(CustomerHeaderProfile.class);
+        if (profile != null && profile.isEnabled() && !captured.isEmpty()) {
+            Map<String, String> renamed = HeaderRename.resolve(captured, profile);
+            for (Map.Entry<String, String> entry : renamed.entrySet()) {
+                headers.add(entry.getKey(), entry.getValue());
+            }
+            log.info("[customer-header] Customer header rename applied: target=LAKESEARCH, capturedKeys={}, renamedKeys={}", captured.keySet(), renamed.keySet());
+        } else if (KnowledgeSourceEnum.CUSTOM.toString().equalsIgnoreCase(knowledgeSource)) {
+            // 向后兼容：Profile 未启用时，保持原有 CUSTOM 模式从 HTTP 请求直接读取的行为
             ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-            HttpServletRequest request = attrs.getRequest();
-            headers.add(CommonConstant.CustomModel.USER_ID, request.getHeader(CommonConstant.CustomModel.CUSTOM_USER_ID));
-            headers.add(CommonConstant.CustomModel.TOKEN, request.getHeader(CommonConstant.CustomModel.CUSTOM_TOKEN));
+            if (attrs != null) {
+                HttpServletRequest request = attrs.getRequest();
+                headers.add(CommonConstant.CustomModel.USER_ID, request.getHeader(CommonConstant.CustomModel.CUSTOM_USER_ID));
+                headers.add(CommonConstant.CustomModel.TOKEN, request.getHeader(CommonConstant.CustomModel.CUSTOM_TOKEN));
+            }
         }
+        // 无需认证，直接返回
         if (RagAuthMode.NONE.toString().equalsIgnoreCase(authMode)) {
             return headers;
         }

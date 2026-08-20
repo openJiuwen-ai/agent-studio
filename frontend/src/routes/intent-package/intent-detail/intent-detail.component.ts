@@ -68,6 +68,7 @@ export class IntentDetailComponent implements OnInit, OnDestroy {
   public intentPackageId = '';
   public intentPackageName = this.i18n.transform('default_intent_name');
   public isEditTitle = false;
+  public editTitleValue = '';
   public intentName = '';
   public dataList: IntentInfo[] = [];
   public activeItem: IntentInfo | null = null;
@@ -393,6 +394,16 @@ export class IntentDetailComponent implements OnInit, OnDestroy {
     this.showGenerate();
   }
 
+  startEditTitle(): void {
+    this.editTitleValue = this.form.controls.name.value;
+    this.isEditTitle = true;
+  }
+
+  onEditTitleChange(value: string): void {
+    this.form.controls.name.setValue(value);
+    this.form.controls.name.markAsDirty();
+  }
+
   cancelEditTitle(): void {
     this.isEditTitle = false;
     this.form.patchValue({
@@ -434,6 +445,9 @@ export class IntentDetailComponent implements OnInit, OnDestroy {
   }
 
   saveIntent() {
+    if (!this.#validatePackageName()) {
+      return;
+    }
     if (!this.#validateIntent()) {
       return;
     }
@@ -473,6 +487,7 @@ export class IntentDetailComponent implements OnInit, OnDestroy {
           this.isAdd = true;
           this.activeItem.branch_id = res.branch_id;
           this.dataList[this.isActive] = cloneDeep(this.activeItem);
+          this.intentName = this.intentForm.value.name;
         })
         .finally(() => {
           this.isPageLoading = false;
@@ -485,6 +500,7 @@ export class IntentDetailComponent implements OnInit, OnDestroy {
           this.isAdd = true;
           this.activeItem.branch_id = branch_id;
           this.dataList[this.isActive] = cloneDeep(this.activeItem);
+          this.intentName = this.intentForm.value.name;
           this.intentPackageId = intent_id;
         })
         .finally(() => {
@@ -524,6 +540,7 @@ export class IntentDetailComponent implements OnInit, OnDestroy {
           if (inputElement) inputElement.focus();
         }
       }
+      this.message.error(this.i18n.transform('form_verify_fail_tips'));
       return false;
     }
     return true;
@@ -535,15 +552,13 @@ export class IntentDetailComponent implements OnInit, OnDestroy {
       nzClassName: 'import-intent-modal',
       nzFooter: null,
       nzData: {
-        context: {
-          intentId: this.intentPackageId,
-          intentName: this.form.value.name,
-          outputs: {
-            refreshTable: (intentIds) => {
-              this.loadIntent(intentIds?.[0] || '');
-            },
+        intentId: this.intentPackageId,
+        intentName: this.form.value.name,
+        outputs: {
+          refreshTable: (intentIds) => {
+            this.loadIntent(intentIds?.[0] || '');
           },
-        }
+        },
       },
     });
   }

@@ -1,6 +1,7 @@
 <div
   *ngIf="param.value.type === 'literal' && isArrOrObj(param.type)"
   class="flex flex-col gap-2"
+  [ngClass]="{ 'obj-diabled': disabled }"
 >
   <div
     class="json-input align-center flex"

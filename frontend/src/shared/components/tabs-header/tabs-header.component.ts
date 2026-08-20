@@ -8,22 +8,28 @@ export interface ITabHeader {
   active: boolean;
   disabled?: boolean;
   tips?: string;
+  show?: boolean;
 }
 
 @Component({
   selector: 'tabs-header',
   template: `
-    <nz-tabs
-      id="cmp-tabs-header"
-      [nzSelectedIndex]="selectedIndex"
-      (nzSelectedIndexChange)="onSelectedIndexChange($event)"
-    >
-      <nz-tab
-        *ngFor="let tab of tabs"
-        [nzTitle]="tab.title"
-        [nzDisabled]="tab?.disabled"
-      >
-      </nz-tab>
+    <nz-tabs id="cmp-tabs-header" [nzSelectedIndex]="selectedIndex" (nzSelectedIndexChange)="onSelectedIndexChange($event)">
+      @for (tab of tabs; track tab.id) {
+        @if (tab.show !== false) {
+          <nz-tab [nzTitle]="tabTitle" [nzDisabled]="tab?.disabled">
+            <ng-template #tabTitle>
+              <span
+                class="tab-title-wrapper"
+                nz-tooltip
+                [nzTooltipTitle]="tab?.tips || null"
+                nzTooltipPlacement="bottom"
+                style="pointer-events: auto"
+              >{{ tab.title }}</span>
+            </ng-template>
+          </nz-tab>
+        }
+      }
     </nz-tabs>
   `,
   styles: [
@@ -37,6 +43,22 @@ export interface ITabHeader {
           .ant-tabs-content {
             height: calc(100% - 34px) !important;
           }
+
+          .tab-title-wrapper.ant-tooltip-open {
+            pointer-events: auto;
+          }
+        }
+
+        .ant-tooltip-inner {
+          background-color: #fff !important;
+          color: #333 !important;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+          border-radius: 8px !important;
+        }
+
+        .ant-tooltip-arrow::before,
+        .ant-tooltip-arrow-content {
+          background-color: #fff !important;
         }
       }
     `,

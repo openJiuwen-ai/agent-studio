@@ -27,7 +27,7 @@
       </nz-tabs>
     </div>
     <div class="kb-selector-operation-container"
-         *ngIf="currentSpaceType === 'currentSpace' && kbAbilitiesService.isPermitCreateKB">
+         *ngIf="currentSpaceType === 'currentSpace' && kbAbilitiesService.isPermitCreateKB && studioBtnShow">
       <button nz-button [disabled]="kbAbilitiesService.isResourceDisabled" (click)="createKB.emit()">{{ 'create_kb' | i18nextEager }}</button>
     </div>
 
@@ -76,17 +76,22 @@
         <div class="no-data-icon"></div>
         <span class="no-data-title mt-[8px]">{{ 'no_knowledge_base_resources'|i18nextEager }}</span>
         <span class="no-data-desc mt-[4px]" *ngIf="kbAbilitiesService.isPermitCreateKB">{{ 'no_data_available_create_knowledge_base'|i18nextEager }}</span>
-        <button *ngIf="kbAbilitiesService.isPermitCreateKB" nz-button (click)="createKB.emit()" class="mt-[16px]">{{ 'create_kb' | i18nextEager }}</button>
+        <button *ngIf="kbAbilitiesService.isPermitCreateKB && studioBtnShow" nz-button (click)="createKB.emit()" class="mt-[16px]">{{ 'create_kb' | i18nextEager }}</button>
       </div>
 
-      <nz-pagination
-        *ngIf="!isLoading"
-        [(nzPageIndex)]="pageState.currentPage"
-        [nzTotal]="pageState.totalNumber"
-        [(nzPageSize)]="pageState.pageSize"
-        nzSimple
-        (nzPageIndexChange)="getKBList()"
-      ></nz-pagination>
+      <div *ngIf="!isLoading" style="display: flex; justify-content: space-between; align-items: center">
+        <div class="page-div">
+          <div class="page-div-span">{{ 'total_number_of_records' | i18nextEager }}：{{ pageState.totalNumber }}</div>
+          <div class="page-div-select">{{ 'select_num' | i18nextEager }}{{ selectedKbs.length }}</div>
+        </div>
+        <nz-pagination
+          [(nzPageIndex)]="pageState.currentPage"
+          [nzTotal]="pageState.totalNumber"
+          [(nzPageSize)]="pageState.pageSize"
+          nzSimple
+          (nzPageIndexChange)="getKBList()"
+        ></nz-pagination>
+      </div>
     </div>
   </div>
 </div>

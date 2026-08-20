@@ -1,23 +1,25 @@
 <div class="com-drawer-title">{{ 'reference_plugins' | i18nextEager }}</div>
 <div class="com-drawer-content">
-  <nz-spin nzSimple [nzSpinning]="isLoading" class="loading-icon"></nz-spin>
-  <div *ngIf="!isLoading">
-    <nz-tabs class="add-mcp-tabs" [(nzSelectedIndex)]="tabSelectIndex" (nzSelectChange)="tabActiveChange($event)">
-      <nz-tab [nzTitle]="tabs[0].title"> </nz-tab>
-      <nz-tab [nzTitle]="tabs[1].title"> </nz-tab>
-    </nz-tabs>
+  <nz-tabs class="add-mcp-tabs" [(nzSelectedIndex)]="tabSelectIndex" (nzSelectChange)="tabActiveChange($event)">
+    <nz-tab [nzTitle]="tabs[0].title"> </nz-tab>
+    <nz-tab [nzTitle]="tabs[1].title"> </nz-tab>
+  </nz-tabs>
+  <!-- 仅刷新表格区域：loading 只覆盖 nz-table，tab 栏始终保持挂载不重建 -->
+  <nz-spin [nzSpinning]="isLoading">
     <nz-table
       [nzData]="srcData.data"
+      [nzFrontPagination]="false"
       [(nzPageIndex)]="currentPage"
       [nzTotal]="totalNumber"
-      [nzPageSize]="pageSize.size"
+      [(nzPageSize)]="pageSize.size"
       (nzPageIndexChange)="getReferenceList()"
+      (nzPageSizeChange)="onPageSizeChange()"
       [nzShowSizeChanger]="true"
       [nzPageSizeOptions]="pageSize.options"
     >
       <thead>
         <tr>
-          <th *ngFor="let column of type != 'system' ? columns : columns.slice(0, 1)">
+          <th *ngFor="let column of columns">
             {{ column.title }}
           </th>
         </tr>
@@ -30,11 +32,11 @@
               {{ row.app_name }}
             </a>
           </td>
-          <td *ngIf="type != 'system'">{{ row.app_version || ('unpublished' | i18nextEager) }}</td>
-          <td *ngIf="type != 'system'">{{ row.resource_version || ('unpublished' | i18nextEager) }}</td>
+          <td>{{ row.app_version || ('unpublished' | i18nextEager) }}</td>
+          <td>{{ row.resource_version || ('unpublished' | i18nextEager) }}</td>
         </tr>
       </tbody>
     </nz-table>
-  </div>
+  </nz-spin>
 </div>
 <div class="com-drawer-footer"></div>

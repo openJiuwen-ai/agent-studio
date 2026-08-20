@@ -2065,6 +2065,46 @@ export class AppFlowService {
     };
   }
 
+  public getInitAgentNodeData(): IAgentRepo {
+    const id = `node_${Date.now()}`;
+
+    return {
+      id,
+      name: 'Agent',
+      type: 'Agent',
+      inputs: [],
+      outputs: [
+        {
+          name: 'output',
+          type: 'string',
+          description: '',
+          value: {
+            type: 'generated',
+            content: null,
+            hint: '',
+          },
+          required: false,
+          source: 'user', // 输出变量配置为用户级变量，暂不支持前端修改（置灰）
+        },
+      ],
+      configs: {
+        system_prompt: '',
+        max_iteration: 9, // 最大工具调用轮次
+        temperature: 0.5,
+        model: {
+          model_name: '',
+          model_type: '',
+          model_deployment_id: '',
+          model_id: '',
+        },
+        top_p: 0.5,
+        max_tokens: null,
+        plugins: [],
+        isDefaultName: true,
+      },
+    };
+  }
+
   /** @param advancedIntentId 与新建的容器节点相绑定的高级意图节点id */
   public getInitIntentContainerNodeData(
     advancedIntentId: string,
@@ -2136,7 +2176,7 @@ export class AppFlowService {
     };
   }
 
-  /** 问答节点，工行定制节点 */
+  /** 问答节点 */
   public getInitQANodeData(): IQANode {
     const id = `node_${Date.now()}`;
 
@@ -2978,6 +3018,8 @@ export class AppFlowService {
         }
         return true;
       },
+      async: false,
+      virtual: { enabled: false, margin: 200 },
     });
   }
 

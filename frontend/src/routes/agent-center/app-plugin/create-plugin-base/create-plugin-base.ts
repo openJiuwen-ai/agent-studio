@@ -414,6 +414,9 @@ export class CreatePluginBaseComponent implements OnInit {
     this.groupFormControl.controls.host.valueChanges.subscribe(() => {
       this.onPathChange();
     });
+    this.groupFormControl.controls.protocol.valueChanges.subscribe(() => {
+      this.onPathChange();
+    });
   }
 
   ngOnDestroy(): void {
@@ -542,17 +545,9 @@ export class CreatePluginBaseComponent implements OnInit {
     }
   }
 
-  checkFormDom(form, cName) {
-    form.controls[cName].markAsDirty();
-    form.controls[cName].updateValueAndValidity({ onlySelf: false });
-  }
-
   public btnDisabledFunc(step: number): boolean {
-    //待优化
     const form = this.groupFormControl.controls;
     if (step === 0) {
-      this.checkFormDom(this.groupFormControl, 'pluginZhName');
-      this.checkFormDom(this.groupFormControl, 'pluginDescription');
       if (form.pluginZhName.errors || form.pluginName.errors || form.pluginDescription.errors) {
         return true;
       }
@@ -622,16 +617,6 @@ export class CreatePluginBaseComponent implements OnInit {
       if (form.baseURL.value.includes('\n')) {
         form.baseURL.setValue(form.baseURL.value.replaceAll('\n', ''));
       }
-      if (form.host.errors) {
-        this.hostError = form.host.errors.serviceName?.tiErrorMessage ?? 'Error';
-      } else {
-        this.hostError = '';
-      }
-      if (form.baseURL.errors) {
-        this.baseURLError = form.baseURL.errors.serviceName?.tiErrorMessage ?? 'Error';
-      } else {
-        this.baseURLError = '';
-      }
     }
     this.step += 1;
     this.activeStep = this.steps[this.step];
@@ -648,6 +633,16 @@ export class CreatePluginBaseComponent implements OnInit {
       !showFromError(this, this.groupFormControl)
     ) {
       return;
+    }
+
+    // 提交前校验完整URL长度，与后端 requestInfo.url @Length(max=256) 一致
+    const form = this.groupFormControl.controls;
+    if (form.host.value && form.baseURL.value) {
+      const fullUrl = `${form.protocol.value}://${form.host.value}${form.baseURL.value}`;
+      if (fullUrl.length > 256) {
+        this.baseURLError = '协议+域名+基准URL拼接后长度不能超过256';
+        return;
+      }
     }
 
     const data = this.buildRequestBody();
@@ -720,17 +715,23 @@ export class CreatePluginBaseComponent implements OnInit {
       if (this.usedFrom === 'flow') {
         from_id = this.route.snapshot.queryParams.id;
         agent_node = this.agentNode;
-      } else if (this.usedFrom === 'agent') {
-        from_id = this.route.snapshot.queryParams.agentId;
+        await this.router.navigate(['/home/agent-center/app-flow/flow'], {
+          queryParams: { id: from_id },
+          state: { currentModal: 'plugin', new_plugin_id: res.tool_id },
+        });
+      } else {
+        if (this.usedFrom === 'agent') {
+          from_id = this.route.snapshot.queryParams.agentId;
+        }
+        await this.router.navigate(['/home/agent-center/custom-plugin/detail'], {
+          queryParams: {
+            id: res.tool_id,
+            from: this.usedFrom,
+            from_id,
+            agent_node,
+          },
+        });
       }
-      await this.router.navigate(['/home/agent-center/custom-plugin/detail'], {
-        queryParams: {
-          id: res.tool_id,
-          from: this.usedFrom,
-          from_id,
-          agent_node,
-        },
-      });
       if (!this.isImport) {
         MessageComponent.showSuccess(this.i18n.transform('addpluginmodalcomponent_257'));
       } else if (isCreateToolsSuccess) {
@@ -1212,6 +1213,13 @@ export class CreatePluginBaseComponent implements OnInit {
       this.baseURLError = form.baseURL.errors.serviceName?.tiErrorMessage ?? 'Error';
     } else {
       this.baseURLError = '';
+    }
+    // 校验拼接后的完整URL长度（协议+host+基准URL），与后端 requestInfo.url 的 @Length(max=256) 保持一致
+    if (!this.baseURLError && form.host.value && form.baseURL.value) {
+      const fullUrl = `${form.protocol.value}://${form.host.value}${form.baseURL.value}`;
+      if (fullUrl.length > 256) {
+        this.baseURLError = '协议+域名+基准URL拼接后长度不能超过256';
+      }
     }
     const hostPatchList = this.groupFormControl.controls.host.value.match(/{[a-zA-Z0-9_-]+}/g) ?? [];
     let baseUrlPatchList: any = this.groupFormControl.controls.baseURL.value.match(/{[a-zA-Z0-9_-]+}/g) ?? [];

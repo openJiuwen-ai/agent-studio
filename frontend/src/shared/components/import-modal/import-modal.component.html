@@ -4,7 +4,6 @@
   </div>
   <div class="main-container">
     <div class="import-and-alert">
-      <!-- 意图管理有关提示先隐藏 -->
       <nz-alert
         *ngIf="false"
         nzType="info"
@@ -65,8 +64,9 @@
         class="mt-[8px]"
         [nzAction]="''"
         [nzAccept]="'.jsonl'"
-        [nzShowUploadList]="!!fileInfo"
+        [nzShowUploadList]="showUploadList"
         (nzChange)="onAddFileSuccess($event)"
+        [(nzFileList)]="uploadFileList"
       >
         <button nz-button>
           <span nz-icon nzType="upload"></span>
@@ -82,11 +82,14 @@
       ></nz-spin>
       <ng-template #parseContentArea>
         <nz-table
+          #importTable
           [nzData]="srcData.data"
           [nzTotal]="srcData.data.length"
           [nzShowSizeChanger]="false"
-          [nzFrontPagination]="false"
+          [nzFrontPagination]="true"
           *ngIf="isFileImported"
+          [nzNoResult]="tableNoData"
+          [nzTableLayout]="'fixed'"
         >
           <thead>
             <tr>
@@ -96,28 +99,43 @@
             </tr>
           </thead>
           <tbody>
-            <ng-container *ngFor="let row of srcData.data;index as i">
-              <tr>
-                <td>{{ row[columns[0].key] }}</td>
-                <td>{{ row[columns[1].key] }}</td>
+            <ng-container *ngFor="let row of importTable.data; index as i">
+              <tr (click)="toggleExpand(i)" class="expandable-row">
+                <td>
+                  <span nz-icon [nzType]="isExpanded(i) ? 'up' : 'down'" nzTheme="outline" class="expand-icon"></span>
+                  {{ row[columns[0].key] }}
+                </td>
+                <td>
+                  <span
+                    class="cell-ellipsis"
+                    nz-tooltip
+                    [nzTooltipTitle]="row[columns[1].key]"
+                  >{{ row[columns[1].key] }}</span>
+                </td>
                 <td>
                   <span *ngIf="columns[2].key!=='import_description'">{{ row[columns[2].key] }}</span>
                   <span *ngIf="columns[2].key==='import_description'" [nz-tooltip]="getStatusInfo(row)?.tip" class="flex align-center">
-                    <span nz-icon [nzType]="getStatusInfo(row)?.icon" [ngStyle]="{'color': getStatusInfo(row)?.color}"></span>
+                    <span nz-icon [nzType]="getStatusInfo(row)?.icon" nzTheme="fill" [ngStyle]="{'color': getStatusInfo(row)?.color}"></span>
                     {{getStatusInfo(row)?.text}}
                   </span>
                 </td>
               </tr>
-            </ng-container>
-            <ng-container *ngIf="!srcData.data?.length">
-              <tr>
-                <td colspan="3">
-                  <div class="no-data-container">
-                    <div class="text">{{ 'no_match_resource' | i18nextEager}}</div>
-                    <div class="tip">{{ 'no_match_resource_tip' | i18nextEager}}</div>
-                  </div>
-                </td>
-              </tr>
+              <ng-container *ngIf="isExpanded(i) && row.dependencies?.length">
+                <tr *ngFor="let dep of row.dependencies" class="dep-row">
+                  <td>
+                    <span class="dep-indent"></span>
+                    {{ dep.name }}
+                    <nz-tag nzSize="small" class="dep-type-tag">{{ dep.type }}</nz-tag>
+                  </td>
+                  <td></td>
+                  <td>
+                    <span [nz-tooltip]="getStatusInfo(dep)?.tip" class="flex align-center">
+                      <span nz-icon [nzType]="getStatusInfo(dep)?.icon" nzTheme="fill" [ngStyle]="{'color': getStatusInfo(dep)?.color}"></span>
+                      {{ getStatusInfo(dep)?.text }}
+                    </span>
+                  </td>
+                </tr>
+              </ng-container>
             </ng-container>
           </tbody>
         </nz-table>
@@ -144,6 +162,13 @@
     </nz-space>
   </div>
 </div>
+
+<ng-template #tableNoData>
+  <div class="no-data-container">
+    <div class="text">{{ 'no_match_resource' | i18nextEager }}</div>
+    <div class="tip">{{ 'no_match_resource_tip' | i18nextEager }}</div>
+  </div>
+</ng-template>
 
 <ng-template #tipContent let-context="context">
   <div class="flex align-center">

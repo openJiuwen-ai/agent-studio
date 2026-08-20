@@ -24,10 +24,12 @@ from urllib.parse import urlparse
 
 from openai import AsyncOpenAI
 
+from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm.model_clients.openai_model_client import OpenAIModelClient
 from openjiuwen.core.runner.callback import trigger
 from openjiuwen.core.runner.callback.events import LLMCallEvents
 
+from common_utils.customer_header import resolve, get_capture_keys, get_config
 from . import authz, dispatch, policy, resolver
 
 logger = logging.getLogger(__name__)
@@ -105,10 +107,26 @@ def _build_verbatim_headers(conn, params: dict) -> dict:
 
     ``API_KEY`` → ``Authorization: Bearer <api_key>``；``CUSTOM_APIKEY`` → ``auth_info`` 各项。
     再叠加 ``params`` 中携带的请求级 ``extra_headers`` / ``custom_headers``。
+    CUSTOM_APIKEY 模式下 auth_info 含 mappings from_key 时，通过 resolve 剥前缀。
     """
     headers = {"Content-Type": "application/json"}
     if conn.custom_headers:
-        headers.update(conn.custom_headers)
+        cfg = get_config()
+        capture_keys = [k.lower() for k in get_capture_keys()] if cfg.enabled else []
+        to_rename = {}
+        to_pass = {}
+        for k, v in conn.custom_headers.items():
+            if k.lower() in capture_keys:
+                to_rename[k] = v
+            else:
+                to_pass[k] = v
+        headers.update(to_pass)
+        if to_rename:
+            renamed = resolve(to_rename)
+            if renamed:
+                headers.update(renamed)
+            else:
+                headers.update(to_rename)
     else:
         headers["Authorization"] = f"Bearer {conn.api_key}"
     extra_headers = params.get("extra_headers")
@@ -288,8 +306,40 @@ class StudioModelClient(OpenAIModelClient):
             messages=messages, tools=tools, temperature=temperature, top_p=top_p,
             model=conn.model_name, stop=stop, max_tokens=max_tokens, stream=stream, **kwargs,
         )
-        if conn.custom_headers:
-            params["extra_headers"] = conn.custom_headers
+        # 从独立 customer Header provider 取值并执行 RUNTIME_LLM_CHAT 投影
+        # 不得从兼容 ctx.headers 取 customer 值（该字段不含 customer_headers）
+        # 从请求上下文获取 customer headers 并执行 rename
+        from model_service import ports as _ports
+        captured = _ports.get_request_customer_headers()
+        projected = resolve(captured)
+        if projected:
+            params["extra_headers"] = projected
+        elif conn.custom_headers:
+            # 页面试运行（无上游 captured）：用模型配置静态值做 rename
+            # 非 capture 键（含 CUSTOM_APIKEY 鉴权头）一律透传；功能禁用（_cap 为空）时等价于
+            # 旧的全量透传 params["extra_headers"] = conn.custom_headers，保证向后兼容。
+            _cap = [k.lower() for k in get_capture_keys()] if get_config().enabled else []
+            to_rename = {}
+            to_pass = {}
+            for k, v in conn.custom_headers.items():
+                if k.lower() in _cap:
+                    to_rename[k] = v
+                else:
+                    to_pass[k] = v
+            extra = dict(to_pass)
+            if to_rename:
+                renamed = resolve(to_rename)
+                if renamed:
+                    extra.update(renamed)
+                else:
+                    extra.update(to_rename)
+            if extra:
+                params["extra_headers"] = extra
+        workflow_logger.info(
+            f"[customer-header] LLM customer header rename: target=RUNTIME_LLM_CHAT, "
+            f"captured_keys={list(captured.keys()) if captured else []}, "
+            f"projected_keys={list((params.get('extra_headers') or {}).keys())}"
+        )
         # return_token_ids 需放入 body 供 vLLM（对应父类处理）。
         if "return_token_ids" in params:
             extra_body = dict(params.get("extra_body") or {})
@@ -548,3 +598,4 @@ def _request_headers() -> dict:
     """
     from .ports import get_request_headers
     return get_request_headers()
+

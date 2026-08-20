@@ -1,4 +1,4 @@
-<div>{{ 'update_flow_modal_btn' | i18nextEager }}</div>
+<div *nzModalTitle>{{ 'update_flow_modal_btn' | i18nextEager }}</div>
 <div class="update-modal-body">
   <nz-alert nzType="info" class="alert" [nzMessage]="'plugin_update_available'|i18nextEager" />
   <nz-table
@@ -43,7 +43,7 @@
     </tbody>
   </nz-table>
 </div>
-<div style="margin-top: 16px">
+<div *nzModalFooter>
   <button type="button" nz-button (click)="dismiss()">
     {{ 'cancel' | i18nextEager }}
   </button>

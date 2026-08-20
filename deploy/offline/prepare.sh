@@ -70,7 +70,7 @@ build_and_save_images() {
 
     # 构建基础镜像配置
     local BASE_IMAGE_JAVA="eclipse-temurin:17-jre"
-    local BASE_IMAGE_NGINX="nginx:1.27"
+    local BASE_IMAGE_NGINX="nginx:1.28"
     local BASE_IMAGE_PYTHON="python:3.11-slim"
 
     # ---- 拉取基础镜像 ----
@@ -350,7 +350,7 @@ main() {
     echo "  离线部署包: ${SCRIPT_DIR}/AgentBuilder-offline-${VERSION}.tar.gz"
     echo ""
     echo "  离线包内容："
-    echo "    images/              - 5个应用镜像 tar + image_info.txt"
+    echo "    images/              - 4个应用镜像 tar + image_info.txt"
     echo "    dep-images/          - MySQL/Redis/MinIO/MC 镜像 tar"
     echo "    scripts/             - 辅助脚本（install-docker-offline）"
     echo "    config/nginx.conf    - Nginx 配置（HTTP 模式）"

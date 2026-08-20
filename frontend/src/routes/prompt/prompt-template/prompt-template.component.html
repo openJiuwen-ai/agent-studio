@@ -23,15 +23,10 @@
               <span class="ml-2" *ngIf="totalCardNumber">({{ totalCardNumber }})</span>
             </span>
             <div class="button-area align-center">
-              <button
-                *ngIf="!isShowNoDataGuide && !isFirstLoading"
-                class="guide-collapse-btn mr-[16px]"
-                nz-button
-                nzType="default"
-                (click)="isShowGuide = !isShowGuide"
-              >
-                <span>{{ 'create_guide' | i18nextEager }}</span>
-              </button>
+              <div *ngIf="!isShowNoDataGuide && !isFirstLoading" class="guide-collapse-btn flex items-center cursor-pointer mr-[16px]" (click)="isShowGuide = !isShowGuide">
+                <span nz-icon [nzType]="isShowGuide ? 'down' : 'up'" class="mr-[4px]"></span>
+                {{ 'create_guide' | i18nextEager }}
+              </div>
               <button (click)="importTemplate()" [disabled]="!subscribeBtnStatus" nz-button>
                 {{ 'base_import' | i18nextEager }}
               </button>

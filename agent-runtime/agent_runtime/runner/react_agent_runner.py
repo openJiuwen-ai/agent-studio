@@ -311,7 +311,7 @@ class ReActAgentRunner:
 
         try:
             ability_manager = agent.ability_manager
-            # 使用 list() 方法获取已注册的工具
+            # 使用 list 方法获取已注册的工具
             abilities = ability_manager.list()
             for ability in abilities:
                 # 获取工具的 input_params（已经是 JSON Schema 格式）
@@ -446,7 +446,11 @@ class ReActAgentRunner:
                         Runner.resource_mgr.remove_workflow(workflow_id=key, tag=agent_id)
                         Runner.resource_mgr.remove_tool(tool_id=key, tag=agent_id)
                     except Exception:
-                        pass
+                        # 清理旧注册：未注册或已清理属正常情况，仅 debug 记录，不影响后续注册
+                        workflow_logger.debug(
+                            f"Skip stale workflow/tool cleanup for key={key} (tag={agent_id})",
+                            exc_info=True,
+                        )
 
                 # 注册到 resource_mgr（使用 workflow 方式）
                 new_card = WorkflowCard(
@@ -457,7 +461,16 @@ class ReActAgentRunner:
                 )
 
                 async def workflow_provider(ir_data=sub_ir):
-                    return await IRConverter.async_ir_to_workflow(ir_data)
+                    # 子工作流继承请求级 customer headers
+                    from agent_runtime.context.request_context import _request_ctx
+                    _ctx = _request_ctx.get()
+                    _cust_headers = _ctx.customer_headers if _ctx else {}
+                    _project_id = _ctx.project_id if _ctx else ""
+                    return await IRConverter.async_ir_to_workflow(
+                        ir_data,
+                        cust_headers=_cust_headers,
+                        project_id=_project_id,
+                    )
 
                 Runner.resource_mgr.add_workflow(
                     card=new_card,

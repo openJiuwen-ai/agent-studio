@@ -15,7 +15,7 @@
         <result property="tools" column="tools" jdbcType="LONGVARCHAR"/>
         <result property="type" column="type" jdbcType="VARCHAR"/>
         <result property="orgType" column="org_type" jdbcType="VARCHAR"/>
-        <result property="deleted" column="deleted" jdbcType="TINYINT"/>
+        <result property="deleted" column="deleted" jdbcType="BOOLEAN"/>
         <result property="tenantId" column="tenant_id" jdbcType="VARCHAR"/>
         <result property="deptCode" column="dept_code" jdbcType="VARCHAR"/>
         <result property="createdByUserId" column="created_date" jdbcType="TIMESTAMP"/>

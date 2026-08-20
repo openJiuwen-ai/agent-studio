@@ -319,6 +319,14 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
 
   fileList: NzUploadFile[] = [];
 
+  /** 同步计数器：已通过 beforeUpload 校验但 FileReader.onload 尚未完成的图片数 */
+  pendingImageCount = 0;
+
+  /** 当前预览的图片 dataURL */
+  previewImageSrc = '';
+  /** 是否显示预览遮罩 */
+  previewVisible = false;
+
   image2textParam: any = {
     uploadData: [],
     content: '',
@@ -373,6 +381,10 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   }
 
   beforeUploadImage2Text = (file: NzUploadFile): boolean => {
+    if (this.image2textParam.uploadData.length + this.pendingImageCount >= 5) {
+      this.message.error(this.i18n.transform('image_upload_max_count_exceeded'));
+      return false;
+    }
     const isValidType = file.type === 'image/jpeg' || file.type === 'image/png';
     if (!isValidType) {
       this.message.error(this.i18n.transform("unsupported_file_type"));
@@ -384,18 +396,24 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       return false;
     }
 
+    this.pendingImageCount++;
     const reader = new FileReader();
     reader.readAsDataURL(file as any);
     reader.onload = () => {
+      this.pendingImageCount--;
       const url = reader.result;
       const uuid = uuidV4();
       file.uid = uuid;
+      file.url = url as string;
       this.image2textParam.uploadData.push({
         url,
         type: file.type,
         uuid,
       });
       this.fileList = [...this.fileList, file];
+    };
+    reader.onerror = () => {
+      this.pendingImageCount--;
     };
     return false;
   };
@@ -406,6 +424,19 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       this.image2textParam.uploadData.splice(index, 1);
     }
     return true;
+  };
+
+  handlePreview = (file: NzUploadFile): void => {
+    // 使用组件内置遮罩预览，避免 window.open 被超长 base64 URL 截断
+    const src = file.url || file.thumbUrl;
+    if (src) {
+      this.previewImageSrc = src;
+      this.previewVisible = true;
+    }
+  };
+
+  closePreview = (): void => {
+    this.previewVisible = false;
   };
 
   changeValue(config) {

@@ -152,3 +152,15 @@
   align-items: center;
   z-index: 100;
 }
+
+.copy-version-id {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  cursor: pointer;
+  color: #595959;
+  font-size: 14px;
+  &:hover {
+    color: #1476ff;
+  }
+}

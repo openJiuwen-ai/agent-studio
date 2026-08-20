@@ -12,7 +12,7 @@
         <result column="domain_id" jdbcType="VARCHAR" property="domainId"/>
         <result column="domain_name" jdbcType="VARCHAR" property="domainName"/>
         <result column="query" jdbcType="VARCHAR" property="query"/>
-        <result column="created_on_timestamp" jdbcType="BIGINT" property="createdOn"/>
+        <result column="created_on" jdbcType="TIMESTAMP" property="createdOn"/>
     </resultMap>
     <sql id="Base_Column_List">
         record_id
@@ -28,7 +28,7 @@
         insert into t_knowledge_test_record (record_id, knowledge_repo_id, project_id, domain_id, domain_name, query,
                                              created_on)
         values (#{recordId,jdbcType=VARCHAR}, #{knowledgeRepoId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR},
-                #{domainId}, #{domainName}, #{query,jdbcType=VARCHAR}, FROM_UNIXTIME(#{createdOn}))
+                #{domainId}, #{domainName}, #{query,jdbcType=VARCHAR}, #{createdOn,jdbcType=TIMESTAMP})
     </insert>
     <insert id="insert" parameterType="com.openjiuwen.studio.agent.agentbase.entity.KnowledgeTestEntity"
             databaseId="gaussv5_M">
@@ -41,7 +41,6 @@
     <select id="selectByProjectIdAndRepoId" parameterType="map" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
-        , UNIX_TIMESTAMP(created_on) * 1000 as created_on_timestamp
         from t_knowledge_test_record
         where project_id = #{project_id}
         and knowledge_repo_id = #{knowledgeRepoId,jdbcType=VARCHAR}

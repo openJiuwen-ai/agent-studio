@@ -690,6 +690,7 @@ public class ComplexIntentManagementService implements IComplexIntentManagementS
         resourceId = "-1",
         resourceName = ""
     )
+    @Transactional
     public ComplexIntentImportRsp importIntent(String workspaceId, String projectId, MultipartFile file, String intentName) {
         return importIntentBranch(workspaceId, projectId, null, file, intentName);
     }
@@ -702,6 +703,7 @@ public class ComplexIntentManagementService implements IComplexIntentManagementS
         resourceId = "-1",
         resourceName = ""
     )
+    @Transactional
     public ComplexIntentImportRsp importIntentBranch(String workspaceId, String projectId, String intentId,
         MultipartFile file) {
         return importIntentBranch(workspaceId, projectId, intentId, file, null);

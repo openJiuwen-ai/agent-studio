@@ -195,7 +195,7 @@ public class AgentServiceProxyController {
         if (body.getInputs() != null && body.getInputs().get("query") != null) {
             return body.getInputs().get("query").toString();
         }
-        return null;
+        return "";
     }
 
     private Object runningAgent(String projectId, String workspaceId, String agentType, String agentId,

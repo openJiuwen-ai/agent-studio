@@ -44,14 +44,14 @@
         select
         <include refid="Base_Column_List"/>
         from t_release_version
-        where id = #{id,jdbcType=VARCHAR} and deleted = 0
+        where id = #{id,jdbcType=VARCHAR} and deleted = false
     </select>
     <select id="selectByAppIdAndVersionId" parameterType="map" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
         from t_release_version
         where version_id = #{versionId,jdbcType=VARCHAR}
-        and app_id = #{appId,jdbcType=VARCHAR} and deleted = 0
+        and app_id = #{appId,jdbcType=VARCHAR} and deleted = false
     </select>
 
     <select id="selectByAppIdAndVersionIdWithoutStatus"
@@ -67,14 +67,14 @@
         select
         <include refid="Base_Column_List"/>
         from t_release_version
-        where app_id = #{appId,jdbcType=VARCHAR} and deleted = 0
+        where app_id = #{appId,jdbcType=VARCHAR} and deleted = false
         order by version_id desc
     </select>
     <select id="selectByAppIdWithLimit" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
         from t_release_version
-        where app_id = #{appId,jdbcType=VARCHAR} and deleted = 0
+        where app_id = #{appId,jdbcType=VARCHAR} and deleted = false
         order by version_id desc limit #{limit,jdbcType=INTEGER}
     </select>
     <delete id="deleteByPrimaryKey" parameterType="map">
@@ -85,7 +85,7 @@
     <update id="softDeleteByPrimaryKey">
         update t_release_version
         <set>
-            deleted = 1
+            deleted = true
         </set>
         where id = #{id,jdbcType=VARCHAR}
     </update>
@@ -105,14 +105,14 @@
     <update id="softDeleteByAppId">
         update t_release_version
         <set>
-            deleted = 1
+            deleted = true
         </set>
         where app_id = #{appId,jdbcType=VARCHAR}
     </update>
 
     <update id="restoreReleaseVersion">
         update t_release_version
-        set deleted = 0
+        set deleted = false
             update
         where app_id = #{appId,jdbcType=VARCHAR}
           and version_id = #{versionId,jdbcType=VARCHAR}
@@ -121,7 +121,7 @@
     <select id="findReleaseVersionToBeDeleted" resultType="java.lang.String">
         SELECT id
         FROM t_release_version
-        WHERE deleted = 1
+        WHERE deleted = true
           AND updated_on IS NOT NULL
           AND updated_on &lt;= #{softDeleteTtl}
     </select>
@@ -143,7 +143,7 @@
         select
         <include refid="Base_Column_List"/>
         from t_release_version
-        where deleted = 0 and
+        where deleted = false and
             <foreach collection="releaseVersions" separator=" or " open="(" close=")" index="key" item="item">
                 (app_id = #{item.appId,jdbcType=VARCHAR} and version_id = #{item.versionId,jdbcType=VARCHAR})
             </foreach>

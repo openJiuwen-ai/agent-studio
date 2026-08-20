@@ -4,22 +4,25 @@
       <nz-form-item>
         <nz-form-label>{{ 'model_service_icon' | i18nextEager }}</nz-form-label>
         <nz-form-control>
-          <div *ngIf="myForm.value.logo" class="event-log-container">
-            <img alt="" [src]="myForm.value.logo" class="upload-avatar" />
-            <div (click)="deleteLogo()" class="delete-box cursor-pointer">
-              <span nz-icon nzType="edit" style="font-size: 16px;"></span>
-            </div>
-          </div>
           <nz-upload
-            *ngIf="!myForm.value.logo"
             class="page-upload"
             [ngClass]="{ 'is-logo-error': logoIsError }"
             [nzShowUploadList]="false"
             [nzBeforeUpload]="beforeUpload"
-            nzAccept=".png,.jpg"
+            nzAccept=".png,.jpg,.jpeg"
           >
-            <div class="flex items-center justify-center bg-[#f5f5f5] border border-dashed border-[#d9d9d9] hover:border-[#1890ff] cursor-pointer rounded transition-all" style="width: 64px; height: 64px;">
-              <span nz-icon nzType="plus" style="font-size: 20px; color: #999;"></span>
+            <div class="event-log-container" style="width: 64px; height: 64px;">
+              <ng-container *ngIf="myForm.value.logo; else uploadPlaceholder">
+                <img alt="" [src]="myForm.value.logo" class="upload-avatar" />
+                <div class="delete-box cursor-pointer">
+                  <span nz-icon nzType="edit" style="font-size: 16px;"></span>
+                </div>
+              </ng-container>
+              <ng-template #uploadPlaceholder>
+                <div class="flex items-center justify-center bg-[#f5f5f5] border border-dashed border-[#d9d9d9] rounded transition-all w-full h-full">
+                  <span nz-icon nzType="plus" style="font-size: 20px; color: #999;"></span>
+                </div>
+              </ng-template>
             </div>
           </nz-upload>
           <div style="color: #808080; margin-top: 10px">
@@ -121,7 +124,7 @@
         </nz-form-control>
       </nz-form-item>
 
-      <nz-form-item *ngIf="modelInfo['is_reasoning']">
+      <nz-form-item *ngIf="modelInfo['is_reasoning'] && (myForm.controls['model_type'].value === 'LLM' || myForm.controls['model_type'].value === 'IMAGE-TO-TEXT')">
         <nz-form-label>{{ 'is_support_close_reasoning'|i18nextEager }}</nz-form-label>
         <nz-form-control>
           <nz-switch formControlName="is_support_close_reasoning" class="mr-2"></nz-switch>
@@ -131,7 +134,7 @@
       <nz-form-item>
         <nz-form-label>{{ 'custom_label' | i18nextEager }}</nz-form-label>
         <nz-form-control>
-          <div class="flex items-center flex-wrap gap-2">
+          <div class="flex items-start flex-wrap gap-1">
             <nz-tag
               *ngFor="let item of modelTags; let i = index"
               nzMode="closeable"
@@ -141,25 +144,55 @@
               {{ item.label }}
             </nz-tag>
 
-            <input
-              *ngIf="showModelTagInput; else addTag"
-              nz-input
-              class="w-32"
-              formControlName="modelTagInputValue"
-              (keyup.enter)="onModelTagInputKeyup($event)"
-              (blur)="onModelTagInputKeyup($event)"
-            />
-            <ng-template #addTag>
+            <ng-container *ngIf="showModelTagInput">
+              <input
+                nz-input
+                class="tag-input"
+                [class.input-error]="tagInputError"
+                formControlName="modelTagInputValue"
+                (keydown.enter)="onModelTagEnter($event)"
+                (blur)="onModelTagBlur()"
+                (compositionstart)="onCompositionStart()"
+                (compositionend)="onCompositionEnd($event)"
+              />
+              <button
+                nz-button
+                nzType="text"
+                nzSize="small"
+                type="button"
+                class="tag-action-btn tag-confirm-btn"
+                (mousedown)="onTagActionMouseDown()"
+                (click)="confirmCurrentTag()"
+                nz-tooltip [nzTooltipTitle]="'ok' | i18nextEager"
+              >
+                <span nz-icon nzType="check"></span>
+              </button>
+              <button
+                nz-button
+                nzType="text"
+                nzSize="small"
+                type="button"
+                class="tag-action-btn tag-cancel-btn"
+                (mousedown)="onTagActionMouseDown()"
+                (click)="cancelTagInput()"
+                nz-tooltip [nzTooltipTitle]="'cancel' | i18nextEager"
+              >
+                <span nz-icon nzType="close"></span>
+              </button>
+              <div *ngIf="tagInputError" class="text-red-500 text-xs mt-1 w-full">{{ tagInputError }}</div>
+            </ng-container>
+            <ng-container *ngIf="!showModelTagInput">
               <button
                 nz-button
                 nzType="dashed"
                 nzShape="circle"
+                type="button"
                 [disabled]="modelTags.length >= 5"
                 (click)="onModelTagClick()"
               >
                 <span nz-icon nzType="plus"></span>
               </button>
-            </ng-template>
+            </ng-container>
           </div>
         </nz-form-control>
       </nz-form-item>
@@ -180,10 +213,10 @@
   </div>
 
   <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 bg-white">
-    <button nz-button nzType="default" (click)="dismiss()">
+    <button nz-button nzType="default" type="button" (click)="dismiss()">
       {{ 'cancel' | i18nextEager }}
     </button>
-    <button nz-button nzType="primary" [nzLoading]="btnLoading" (click)="submit()">
+    <button nz-button nzType="primary" type="button" [nzLoading]="btnLoading" (mousedown)="onSubmitMouseDown()" (click)="submit()">
       {{ 'ok' | i18nextEager }}
     </button>
   </div>

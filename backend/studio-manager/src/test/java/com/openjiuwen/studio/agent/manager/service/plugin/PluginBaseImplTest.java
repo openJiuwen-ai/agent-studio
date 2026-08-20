@@ -547,6 +547,100 @@ class PluginBaseImplTest extends BaseTest {
             "OpenAPI 'path' should map to 'Path'");
     }
 
+    /**
+     * 验证 OpenAPI 导入时 parameter.schema.default 值被正确读取并存入 input_schema。
+     * <p>
+     * OpenAPI 3.0 中参数的 schema 可包含 default 字段，
+     * parseParameters() 应将其读取并存入 SchemaConfig.defaultValue。
+     */
+    @Test
+    void testTransformOpenAPI2Plugin_parameterDefaultValue() {
+        // Arrange
+        OpenAPI openAPI = new OpenAPI();
+        openAPI.setInfo(new Info().title("Default Value Test API").description("Test default value reading"));
+
+        Server server = new Server();
+        server.setUrl("https://api.example.com/v1");
+        openAPI.setServers(List.of(server));
+
+        Paths paths = new Paths();
+        PathItem pathItem = new PathItem();
+        Operation getOp = new Operation();
+        getOp.setOperationId("testEndpoint");
+        getOp.setDescription("Test endpoint with default values");
+
+        // number 参数带 default 10.0
+        Schema<Number> delaySchema = new Schema<>();
+        delaySchema.setType("number");
+        delaySchema.setDefault(10.0);
+
+        // integer 参数带 default 500
+        Schema<Integer> statusSchema = new Schema<>();
+        statusSchema.setType("integer");
+        statusSchema.setDefault(500);
+
+        // string 参数带 default
+        Schema<String> msgSchema = new Schema<>();
+        msgSchema.setType("string");
+        msgSchema.setDefault("hello");
+
+        // 无 default 的参数
+        Schema<String> noDefaultSchema = new Schema<>();
+        noDefaultSchema.setType("string");
+
+        getOp.setParameters(List.of(
+            new Parameter().name("delay").in("query").required(false).schema(delaySchema),
+            new Parameter().name("status_code").in("query").required(false).schema(statusSchema),
+            new Parameter().name("message").in("query").required(false).schema(msgSchema),
+            new Parameter().name("tag").in("query").required(false).schema(noDefaultSchema)
+        ));
+
+        pathItem.setGet(getOp);
+        paths.put("/test", pathItem);
+        openAPI.setPaths(paths);
+
+        // Act
+        PluginDTO pluginDTO = pluginBaseImpl.transformOpenAPI2Plugin(openAPI);
+
+        // Assert
+        assertNotNull(pluginDTO);
+        List<ToolInputSchema> inputSchemas = pluginDTO.getToolInputSchemaList();
+        assertNotNull(inputSchemas);
+        assertEquals(1, inputSchemas.size());
+
+        String inputSchemaJson = inputSchemas.get(0).getInputSchema();
+        assertNotNull(inputSchemaJson);
+
+        Map<String, Object> schemaMap = JsonUtils.json2ObjQuietly(inputSchemaJson, Map.class);
+        assertNotNull(schemaMap);
+        Map<String, Object> properties = (Map<String, Object>) schemaMap.get("properties");
+        assertNotNull(properties);
+
+        // number default: 10.0
+        Map<String, Object> delayParam = (Map<String, Object>) properties.get("delay");
+        assertNotNull(delayParam, "parameter 'delay' should exist");
+        assertEquals("10.0", delayParam.get("default"),
+            "number parameter default should be '10.0'");
+
+        // integer default: 500
+        Map<String, Object> statusParam = (Map<String, Object>) properties.get("status_code");
+        assertNotNull(statusParam, "parameter 'status_code' should exist");
+        assertEquals("500", statusParam.get("default"),
+            "integer parameter default should be '500'");
+
+        // string default: hello
+        Map<String, Object> msgParam = (Map<String, Object>) properties.get("message");
+        assertNotNull(msgParam, "parameter 'message' should exist");
+        assertEquals("hello", msgParam.get("default"),
+            "string parameter default should be 'hello'");
+
+        // no default: should be null
+        Map<String, Object> tagParam = (Map<String, Object>) properties.get("tag");
+        assertNotNull(tagParam, "parameter 'tag' should exist");
+        assertNull(tagParam.get("default"),
+            "parameter without default should have null default");
+    }
+
 
 
     @Test

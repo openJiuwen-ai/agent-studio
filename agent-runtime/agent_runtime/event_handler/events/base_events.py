@@ -2,6 +2,7 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """通用事件处理基类"""
 
+import html
 from typing import Dict, Any
 from abc import ABC, abstractmethod
 
@@ -121,9 +122,13 @@ class BaseEventsProcessor(ABC):
         trace.workflow_name = data.get("workflow_name")
         error_code, error_msg, error_reason, error_suggestion = (
             ErrorContextBuilder.get_language_context(trace.language, code))
+        raw_message = data.get("message", "unknown error")
+        if raw_message and raw_message != error_msg:
+            error_msg = f"{error_msg}：{html.escape(raw_message)}"
+        safe_message = html.escape(raw_message) if isinstance(raw_message, str) else str(raw_message)
         error_data_field = ErrorEventDataField(
             code=code,
-            message=data.get("message", "unknown error"),
+            message=safe_message,
             error_msg=error_msg,
             error_reason=error_reason,
             error_suggestion=error_suggestion,

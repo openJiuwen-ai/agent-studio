@@ -3,7 +3,7 @@
     <div class="relative h-[96%] w-full flex" >
       <nz-tabset id="flow-add-tool-modal" class="h-full w-full" [nzAnimated]="false"  [(nzSelectedIndex)]="tabSelectIndex">
         <div *ngIf="currTab === tabs[0].id" class="add-button">
-          <button type="button" (click)="showAddPluginModal()" nz-button nzType="primary" class="!rounded-button">
+          <button type="button" (click)="showAddPluginModal()" nz-button nzType="primary" class="!rounded-button" [disabled]="isShowCreatePluginModal">
             {{ 'create_plugin' | i18nextEager }}
           </button>
         </div>
@@ -20,9 +20,9 @@
             </nz-tabset>
           <div class="flex w-full items-center gap-2">
             <multi-field-search
-              [searchItems]="searchItemsForPlugin"
-              [(searchTags)]="searchTagsPlugin"
-              [(searchField)]="searchFieldPlugin"
+              [searchItems]="searchItemsForInner"
+              [(searchTags)]="searchTagsInner"
+              [(searchField)]="searchFieldInner"
               (searchChange)="initApiList('search')"
               class="flex-1"
             ></multi-field-search>
@@ -57,13 +57,13 @@
                   <div class="w-[calc(100%-160px)]">
                     <div class="flex items-center gap-[8px]">
                       <div
-                        nz-ellipsis
-                        class="max-w-[calc(100%-114px)] text-sm font-bold text-label"
+                        nz-tooltip [nzTooltipTitle]="getPluginName(plugin)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                        class="plugin-name-single-line text-sm font-bold text-label"
                       >
                         {{ getPluginName(plugin) }}
                       </div>
                       <div>
-                        <nz-tag *ngIf="plugin?.quotaTag" 
+                        <nz-tag *ngIf="plugin?.quotaTag"
                                 nz-tooltip nzTooltipPlacement="bottomLeft" [nzTooltipTitle]="plugin.quotaTag.tip"
                                 class="!rounded-[4px] py-[1px] pl-[2px] pr-[4px]"  [style.color]="plugin.quotaTag.color" [style.background-color]="plugin.quotaTag.bgColor" size="small">
                           {{plugin.quotaTag.text}}
@@ -113,8 +113,8 @@
                       </div>
                     </div>
                     <div
-                      nz-ellipsis
-                      class="mt-[4px] break-words text-desc"
+                      nz-tooltip [nzTooltipTitle]="plugin.plugin_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                      class="mt-[4px] plugin-desc-clamp"
                     >
                       {{ plugin.plugin_desc }}
                     </div>
@@ -136,15 +136,15 @@
                       <div class="w-[calc(100%-160px)]">
                         <div class="flex items-center gap-[8px]">
                           <div
-                            nz-ellipsis
-                            class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                            nz-tooltip [nzTooltipTitle]="getToolName(tool)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                            class="plugin-name-single-line text-sm font-bold text-label"
                           >
                             {{ getToolName(tool) }}
                           </div>
                         </div>
                         <div
-                          nz-ellipsis
-                          class="mt-[4px] break-words text-desc"
+                          nz-tooltip [nzTooltipTitle]="tool.tool_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                          class="mt-[4px] plugin-desc-clamp"
                         >
                           {{ tool.tool_desc }}
                         </div>
@@ -154,6 +154,7 @@
                         nz-tooltip nzTooltipPlacement="left"
                         nz-button
                         nzType="default"
+                        [disabled]="isAddingTool"
                       >
                         {{ 'addpluginmodalcomponent_255' | i18nextEager }}{{tool.ref_num!==0?'('+tool.ref_num+')':''}}
                       </button>
@@ -183,9 +184,9 @@
         >
            <div class="flex w-full items-center gap-2">
             <multi-field-search
-              [searchItems]="searchItemsForPlugin"
-              [(searchTags)]="searchTagsPlugin"
-              [(searchField)]="searchFieldPlugin"
+              [searchItems]="searchItemsForCustom"
+              [(searchTags)]="searchTagsCustom"
+              [(searchField)]="searchFieldCustom"
               (searchChange)="initApiList('search')"
               class="flex-1"
             ></multi-field-search>
@@ -220,15 +221,15 @@
                   <div class="w-[calc(100%-160px)]">
                     <div class="flex items-center gap-[8px]">
                       <div
-                        nz-ellipsis
-                        class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                        nz-tooltip [nzTooltipTitle]="getPluginName(plugin)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                        class="plugin-name-single-line text-sm font-bold text-label"
                       >
                         {{ getPluginName(plugin) }}
                       </div>
                     </div>
                     <div
-                      nz-ellipsis
-                      class="mt-[4px] break-words text-desc"
+                      nz-tooltip [nzTooltipTitle]="plugin.plugin_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                      class="mt-[4px] plugin-desc-clamp"
                     >
                       {{ plugin.plugin_desc }}
                     </div>
@@ -251,15 +252,15 @@
                       <div class="w-[calc(100%-160px)]">
                         <div class="flex items-center gap-[8px]">
                           <div
-                            nz-ellipsis
-                            class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                            nz-tooltip [nzTooltipTitle]="getToolName(tool)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                            class="plugin-name-single-line text-sm font-bold text-label"
                           >
                             {{ getToolName(tool) }}
                           </div>
                         </div>
                         <div
-                          nz-ellipsis
-                          class="mt-[4px] break-words text-desc"
+                          nz-tooltip [nzTooltipTitle]="tool.tool_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                          class="mt-[4px] plugin-desc-clamp"
                         >
                           {{ tool.tool_desc }}
                         </div>
@@ -267,7 +268,7 @@
                       <button
                         [nz-tooltip]="plugin.last_version_id || useUnpublishedPlugin ? '' : 'addpluginmodalcomponent_249' | i18nextEager"
                         (click)="addTool($event, plugin,tool)"
-                        [disabled]="!plugin?.last_version_id && !useUnpublishedPlugin"
+                        [disabled]="!plugin?.last_version_id && !useUnpublishedPlugin || isAddingTool"
                         nz-tooltip nzTooltipPlacement="left"
                         nz-button
                         nzType="default"
@@ -319,36 +320,41 @@
           <div *ngIf="plugins.length" class="cards-wrapper">
             <div *ngFor="let plugin of plugins"
                  class="card-wrapper">
-              <div class="card" (click)="getShareTool(plugin)">
+              <div class="card share-card" (click)="getShareTool(plugin)">
                 <img
                   class="h-[40px] w-[40px]"
                   [src]="getCardIcon(plugin)"
                   alt="api"
                 />
-                <div class="w-[calc(100%-160px)]">
+                <div class="share-card-content">
                   <div class="flex items-center gap-[8px]">
                     <div
-                      nz-ellipsis
-                      class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                      nz-tooltip [nzTooltipTitle]="getPluginName(plugin)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                      class="plugin-name-single-line text-sm font-bold text-label"
                     >
                       {{ getPluginName(plugin) }}
                     </div>
                   </div>
                   <div >
-                    <span class="w-full mt-1 text-[#808080]" nz-ellipsis>
+                    <span class="w-full mt-1 text-[#808080] plugin-desc-clamp"
+                          nz-tooltip [nzTooltipTitle]="plugin.plugin_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                    >
                       {{plugin.plugin_desc}}
                     </span>
                   </div>
-                  <div class="flex items-center text-[#808080]">
-                    <span class="mr-1 !text-[16px]">cloudx-action-account</span>
-                    <span class="max-w-[130px]" nz-ellipsis>
-                    {{plugin.workspace_name || plugin.workspace_id}}
+                  <div class="share-plugin-meta text-[#808080]">
+                    <span
+                      class="share-workspace-name"
+                      nz-tooltip
+                      [nzTooltipTitle]="plugin.workspace_name || plugin.workspace_id"
+                    >
+                      {{plugin.workspace_name || plugin.workspace_id}}
                     </span>
-                    <span *ngIf="plugin.version_info_list?.length" class="pl-2 pr-2">|</span>
-                      <div class="version-info-list-div"  *ngIf="plugin.version_info_list?.length">
+                    <span *ngIf="plugin.version_info_list?.length" class="share-meta-separator">|</span>
+                      <div class="version-info-list-div" *ngIf="plugin.version_info_list?.length">
                         {{'version_name'|i18nextEager}}:
                         <nz-select
-                          class="!max-w-[130px]"
+                          class="share-version-select"
                           nzBorderless
                           [(ngModel)]="plugin.last_version_id"
                           (click)="onVersionClick($event)"
@@ -382,15 +388,15 @@
                     <div class="w-[calc(100%-160px)]">
                       <div class="flex items-center gap-[8px]">
                         <div
-                          nz-ellipsis
-                          class="max-w-[calc(100%-48px)] text-sm font-bold text-label"
+                          nz-tooltip [nzTooltipTitle]="getToolName(tool)" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                          class="plugin-name-single-line text-sm font-bold text-label"
                         >
                           {{ getToolName(tool) }}
                         </div>
                       </div>
                       <div
-                        nz-ellipsis
-                        class="mt-[4px] break-words text-desc"
+                        nz-tooltip [nzTooltipTitle]="tool.tool_desc" [nzTooltipOverlayClassName]="'plugin-tooltip-overlay'"
+                        class="mt-[4px] plugin-desc-clamp"
                       >
                         {{ tool.tool_desc }}
                       </div>
@@ -400,6 +406,7 @@
                       nz-tooltip nzTooltipPlacement="left"
                       nz-button
                       nzType="default"
+                      [disabled]="isAddingTool"
                     >
                       {{'add'|i18nextEager}}{{tool.ref_num ?'('+tool.ref_num+')':''}}
                     </button>
@@ -434,9 +441,10 @@
         [nzTotal]="totalNumber"
         nzSize="small"
         (nzPageIndexChange)="initApiList()"
-        [nzPageSize]="pageSize"
+        [(nzPageSize)]="pageSize"
         [nzShowSizeChanger]="true"
         [nzPageSizeOptions]="pageSizeOptions"
+        (nzPageSizeChange)="onPageSizeChange($event)"
       ></nz-pagination>
     </div>
   </div>

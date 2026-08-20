@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
 """
 agent builder chain Template optimizer
@@ -20,7 +20,7 @@ from agent_builder.prompt.tune.base.utils import (
     placeholder_to_dict,
 )
 from agent_builder.common.status import TaskStatus
-from agent_builder.common.store.dialect import GaussDBDialect
+from agent_builder.common.store.dialect import GaussDBDialect, PostgreSQLDialect
 from agent_builder.prompt.tune.storage.base import BaseContextStoreAccesser
 from agent_builder.adapter.exception_bridge import JiuWenBaseException
 from agent_builder.adapter.json_utils import safe_json_loads_raise_exception
@@ -372,7 +372,7 @@ class DbContextAccesser(BaseContextStoreAccesser):
         d = self._job_info_table.dialect
         describe_sql = d.describe_column_type_sql(table_name, column_name)
 
-        if isinstance(d, GaussDBDialect):
+        if isinstance(d, (GaussDBDialect, PostgreSQLDialect)):
             check_sql = (
                 "SELECT COUNT(*) FROM information_schema.columns "
                 f"WHERE table_name = '{table_name}' AND column_name = '{column_name}'"
@@ -389,7 +389,7 @@ class DbContextAccesser(BaseContextStoreAccesser):
                     f"Unable to retrieve the current type of the column {column_name}."
                 )
                 return
-            if isinstance(d, GaussDBDialect):
+            if isinstance(d, (GaussDBDialect, PostgreSQLDialect)):
                 current_type = str(type_result[0])
             else:
                 current_type = None

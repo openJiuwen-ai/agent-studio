@@ -1,11 +1,4 @@
-import {
-  Component,
-  EventEmitter,
-  Input,
-  OnInit,
-  Output,
-  ViewChild,
-} from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
 import { NgForm } from '@angular/forms';
 import { I18nNamespace } from '@i18n';
 import { RefSelectedRequireDirective } from '@shared/directives/common-validator.directive';
@@ -27,9 +20,7 @@ import { ReadonlyParamsTreeComponent } from '../readonly-params/readonly-params-
 import { NodeUtils } from '../utils';
 import { NODE_ACTIONS } from '@routes/agent-center/constants/workflow-common.const';
 import { TypedJsonInputComponent } from '@shared/components/typed-json-input/typed-json-input.component';
-import {
-  ExceptionHandlingComponent
-} from '@routes/agent-center/app-flow/components/exception-handling/exception-handling.component';
+import { ExceptionHandlingComponent } from '@routes/agent-center/app-flow/components/exception-handling/exception-handling.component';
 import { HttpService } from '@services/http.service';
 import { EditNameComponent } from '@routes/agent-center/app-flow/components/edit-name/edit-name.component';
 import { NodeDescriptionComponent } from '../node-description/node-description.component';
@@ -39,7 +30,7 @@ import { HelpCenterService } from '@services/help-center.service';
 import { CommonService } from '@services/common.service';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzMessageService } from 'ng-zorro-antd/message';
-
+import { mapTreeAddKeyAndChildIndex, eachChildrenToRootObj, setAllChildrenVal } from '@routes/agent-center/app-plugin/utils';
 @Component({
   selector: 'meta-child-flow-modal',
   templateUrl: './child-flow-modal.component.html',
@@ -69,9 +60,7 @@ import { NzMessageService } from 'ng-zorro-antd/message';
     NzMessageService,
   ],
 })
-export class ChildFlowModalComponent
-  extends ModalBaseComponent
-  implements OnInit {
+export class ChildFlowModalComponent extends ModalBaseComponent implements OnInit {
   @Input('names') names: string[];
 
   @Input('nodeInfo') nodeInfo: IFlowNode;
@@ -101,7 +90,7 @@ export class ChildFlowModalComponent
   };
 
   get tipVals() {
-    return this.inputParams.map((param) => param.name);
+    return this.inputParams.map(param => param.name);
   }
 
   public originalName = '';
@@ -127,7 +116,7 @@ export class ChildFlowModalComponent
     private helpCenterService: HelpCenterService,
     protected commonService: CommonService,
     private nzModal: NzModalService,
-    private nzMessage: NzMessageService,
+    private nzMessage: NzMessageService
   ) {
     super(nodeServ, appFlowServe);
   }
@@ -137,38 +126,27 @@ export class ChildFlowModalComponent
   initOriginalName() {
     if (this.nodeInfo.configs?.original_info) {
       const { name, name_en } = this.nodeInfo.configs.original_info;
-      this.originalName = `${this.i18n.transform(
-        'original_name',
-      )}${name}（${name_en}）`;
+      this.originalName = `${this.i18n.transform('original_name')}${name}（${name_en}）`;
     } else {
-      this.originalName = `${this.i18n.transform('original_name')}${this.nodeInfo.name
-        }`;
+      this.originalName = `${this.i18n.transform('original_name')}${this.nodeInfo.name}`;
     }
   }
 
   public override ngOnInit() {
-    this.workspaceId = this.http.getWorkspaceId()
+    this.workspaceId = this.http.getWorkspaceId();
     this.setNodeBase(this.nodeInfo);
     super.ngOnInit();
     this.initOriginalName();
     this.subNodeActions();
-    this.validationRules.push(
-      CommonValidation.nameUniquenessVerify(
-        this.names,
-        this.i18n.transform('name_uniqueness'),
-        this.nodeInfo?.name,
-      ),
-    );
+    this.validationRules.push(CommonValidation.nameUniquenessVerify(this.names, this.i18n.transform('name_uniqueness'), this.nodeInfo?.name));
 
     const parentNode = this.getParentNodeInfo(this.appFlowServ.getGraph());
     if (parentNode) {
-      this.getLoopInnerNodeRefs(parentNode, { strOnly: true }).subscribe(
-        (info) => {
-          this.onRefUpdate(info);
-        },
-      );
+      this.getLoopInnerNodeRefs(parentNode, { strOnly: true }).subscribe(info => {
+        this.onRefUpdate(info);
+      });
     } else {
-      this.getSelfRefs({ strOnly: true }).subscribe((info) => {
+      this.getSelfRefs({ strOnly: true }).subscribe(info => {
         this.onRefUpdate(info);
       });
     }
@@ -181,25 +159,21 @@ export class ChildFlowModalComponent
   }
 
   public onRefUpdate(info: IParamRef[]) {
-
     this.nameRefOptions = info;
 
     if (this.isInit) {
-      this.inputParams = NodeUtils.initInputs(
-        this.nodeInfo?.inputs,
-        this.nameRefOptions,
-      );
+      this.inputParams = NodeUtils.initInputs(this.nodeInfo?.inputs, this.nameRefOptions);
     } else {
       NodeUtils.reSelectRefsWithNewOps(this.inputParams, this.nameRefOptions);
     }
 
-    this.inputParams.forEach((v) => {
+    this.inputParams.forEach(v => {
       v.options = [
         { label: this.i18n.transform('ref'), value: 'ref' },
         { label: this.getType(v), value: 'literal' },
       ];
     });
-
+    this.inputParams = mapTreeAddKeyAndChildIndex(this.inputParams, 0);
     this.isInit = false;
   }
 
@@ -220,6 +194,7 @@ export class ChildFlowModalComponent
 
   public onTypeChange(row: nodeType.IWorkflowField) {
     row.value.content = NodeUtils.getChangeContent(row.value.type);
+    (row as any).children = setAllChildrenVal((row as any).children, row.value);
     this.onSave();
   }
 
@@ -246,12 +221,12 @@ export class ChildFlowModalComponent
 
   public subNodeActions() {
     this.appFlowServe.nodeActionUpdate$().pipe(
-      filter((action) => action && action.id === this.nodeInfo.id),
-      takeUntil(this.destroy$),
+      filter(action => action && action.id === this.nodeInfo.id),
+      takeUntil(this.destroy$)
     );
   }
-  dismiss(): void { }
-  close(): void { }
+  dismiss(): void {}
+  close(): void {}
   public isArrOrObj(type: string) {
     return type.startsWith('array') || type === 'object';
   }
@@ -277,12 +252,22 @@ export class ChildFlowModalComponent
     }
   }
 
+  changeChildVal(origin) {
+    if (origin.isChild) {
+      const index = Number(origin.key.split('_')[0]);
+      if (this.inputParams[index].value.type === 'literal') {
+        this.inputParams[index].value.content = JSON.stringify(eachChildrenToRootObj((this.inputParams[index] as any).children, origin));
+      }
+    }
+  }
+
   handelSave() {
     if (this.tagCompareNoChange()) {
       return;
     }
     const inputs = cloneDeep(this.inputParams);
-    inputs.forEach((param) => {
+    inputs.forEach(param => {
+      delete param.children;
       if (param.value?.type === 'ref') {
         const contentArr = (param.value.content as IParamRef[])?.[0];
 
@@ -299,14 +284,13 @@ export class ChildFlowModalComponent
       delete param?.refs;
     });
 
-    this.appFlowServ.setNodeSaveMonitor(
-      {
-        nodeData: {
-          ...this.nodeInfo,
-          inputs,
-          configs: this.nodeInfo.configs,
-        }
-      });
+    this.appFlowServ.setNodeSaveMonitor({
+      nodeData: {
+        ...this.nodeInfo,
+        inputs,
+        configs: this.nodeInfo.configs,
+      },
+    });
     if (this.updateTimeout) {
       clearTimeout(this.updateTimeout);
       this.updateTimeout = null;

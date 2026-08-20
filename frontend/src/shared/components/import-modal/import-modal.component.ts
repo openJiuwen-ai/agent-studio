@@ -23,7 +23,7 @@ import { cloneDeep, uniqBy } from "lodash";
 import { ImportResultModalComponent } from "@shared/components/import-modal/import-result-modal/import-result-modal.component";
 import { NzModalRef, NZ_MODAL_DATA } from "ng-zorro-antd/modal";
 import { NzModalService } from "ng-zorro-antd/modal";
-
+import { NzShowUploadList } from "ng-zorro-antd/upload";
 @Component({
   selector: "meta-import-modal",
   templateUrl: "./import-modal.component.html",
@@ -82,6 +82,8 @@ export class ImportModalComponent {
   public alertContent = "";
 
   public isLoading = false;
+
+  public expandedRows: Set<number> = new Set();
 
   // 是否正在导入中
   public isImporting = false;
@@ -174,6 +176,15 @@ export class ImportModalComponent {
     return this.importToolType === ApplicationType.WORKFLOW;
   }
 
+  uploadFileList = [];
+
+  showUploadList: NzShowUploadList = {
+    showRemoveIcon: false,
+    showPreviewIcon: false,
+    showDownloadIcon: false,
+  };
+
+
   constructor(
     private appFlowRepoServe: AppFlowRepoService,
     private appPluginRepoServe: AppPluginRepoService,
@@ -228,6 +239,30 @@ export class ImportModalComponent {
     if (fileItem.type !== "start") {
       return;
     }
+
+    if (this.uploadFileList.length >= 2) {
+      this.uploadFileList = [this.uploadFileList[1]];
+    }
+
+    if (this.uploadFileList.length >= 1) {
+      this.showUploadList = {
+        showRemoveIcon: false,
+        showPreviewIcon: false,
+        showDownloadIcon: false,
+      };
+      setTimeout(() => {
+        this.uploadFileList[0].status = 'done';
+        this.uploadFileList[0].response = '';
+        this.uploadFileList[0].error = '';
+        this.showUploadList = {
+          showRemoveIcon: true,
+          showPreviewIcon: false,
+          showDownloadIcon: false,
+        };
+        this.cdr.markForCheck();
+      }, 50);
+    }
+
     this.isFileImported = true;
     this.isParseError = false;
     this.isDuplicateContent = false;
@@ -685,49 +720,49 @@ export class ImportModalComponent {
   public getStatusInfo(childItem) {
     const typeMap = {
       "newResource": {
-        icon: "cloudx-action-state-operation",
+        icon: "check-circle",
         color: "#5db303",
         text: this.i18n.transform("add_resource"),
         tip: this.i18n.transform("add_resource_tip")
       },
       "newResourceVersion": {
-        icon: "cloudx-action-state-operation",
+        icon: "check-circle",
         color: "#5db303",
         text: this.i18n.transform("add_resource_version"),
         tip: this.i18n.transform("add_resource_version_tip")
       },
       "updateResource": {
-        icon: "cloudx-action-state-operation",
+        icon: "check-circle",
         color: "#5db303",
         text: this.i18n.transform("update_resource"),
         tip: this.i18n.transform("update_resource_tip")
       },
       "resourceExists": {
-        icon: "cloudx-action-state-freeze",
+        icon: "warning",
         color: "#fe8803",
         text: this.i18n.transform("exist_resource"),
         tip: this.i18n.transform("exist_resource_tip")
       },
       "prohibited": {
-        icon: "cloudx-action-state-freeze",
+        icon: "warning",
         color: "#fe8803",
         text: this.i18n.transform("prohibited_resource"),
         tip: this.i18n.transform("prohibited_resource_tip")
       },
       "oldUpdateResource": {
-        icon: "cloudx-action-state-operation",
+        icon: "check-circle",
         color: "#5db303",
         text: this.i18n.transform("update_resource"),
         tip: this.i18n.transform("update_resource_tip2")
       },
       "resourceMatch": {
-        icon: "cloudx-action-state-operation",
+        icon: "check-circle",
         color: "#5db303",
         text: this.i18n.transform("match_resource"),
         tip: this.i18n.transform("match_resource_tip")
       },
       "resourceNotMatch": {
-        icon: "cloudx-action-state-freeze",
+        icon: "warning",
         color: "#fe8803",
         text: this.i18n.transform("not_match_resource"),
         tip: this.i18n.transform("not_match_resource_tip")
@@ -737,11 +772,28 @@ export class ImportModalComponent {
     if (childItem.prohibited) {
       return typeMap.prohibited;
     } else {
-      if (childItem.import_description) {
+      if (this.isOldImport && this.importToolType === ApplicationType.PLUGIN) {
+        // 旧格式插件没有 import_description。status=true 表示同一资源已存在，
+        // 后端会覆盖更新；status=false 才是新增，不能再展示成“资源已存在并跳过”。
+        return childItem.status ? typeMap.updateResource : typeMap.newResource;
+      } else if (childItem.import_description) {
         return typeMap[childItem.import_description];
       } else { // 旧版本导入文件
         return typeMap[childItem.status ? "resourceExists" : "oldUpdateResource"];
       }
     }
   }
+
+  public toggleExpand(index: number): void {
+    if (this.expandedRows.has(index)) {
+      this.expandedRows.delete(index);
+    } else {
+      this.expandedRows.add(index);
+    }
+  }
+
+  public isExpanded(index: number): boolean {
+    return this.expandedRows.has(index);
+  }
+
 }

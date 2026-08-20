@@ -109,10 +109,10 @@
         )
         <!-- 其他原有条件 -->
         <if test="structuredMessageEntity.name != null and structuredMessageEntity.name != ''">
-            and `name` like concat('%', #{structuredMessageEntity.name,jdbcType=VARCHAR}, '%') escape '!'
+            and name like concat('%', #{structuredMessageEntity.name,jdbcType=VARCHAR}, '%') escape '!'
         </if>
         <if test="structuredMessageEntity.category != null and structuredMessageEntity.category != ''">
-            and `category`=#{structuredMessageEntity.category}
+            and category=#{structuredMessageEntity.category}
         </if>
         <if test="structuredMessageEntity.status != null and structuredMessageEntity.status != ''">
             and status=#{structuredMessageEntity.status}
@@ -151,10 +151,10 @@
         update t_structured_message
         <set>
             <if test="structuredMessageEntity.name != null">
-                `name` = #{structuredMessageEntity.name, jdbcType=VARCHAR},
+                name = #{structuredMessageEntity.name, jdbcType=VARCHAR},
             </if>
             <if test="structuredMessageEntity.category != null">
-                `category` = #{structuredMessageEntity.category, jdbcType=VARCHAR},
+                category = #{structuredMessageEntity.category, jdbcType=VARCHAR},
             </if>
             <if test="structuredMessageEntity.content != null">
                 content =
@@ -164,10 +164,10 @@
                 status = #{structuredMessageEntity.status, jdbcType=VARCHAR},
             </if>
             <if test="structuredMessageEntity.importMethod != null">
-                `import_method` = #{structuredMessageEntity.importMethod, jdbcType=VARCHAR},
+                import_method = #{structuredMessageEntity.importMethod, jdbcType=VARCHAR},
             </if>
             <if test="structuredMessageEntity.visibility != null">
-                `visibility` = #{structuredMessageEntity.visibility, jdbcType=VARCHAR},
+                visibility = #{structuredMessageEntity.visibility, jdbcType=VARCHAR},
             </if>
             <if test="structuredMessageEntity.updaterId != null">
                 updater_id = #{structuredMessageEntity.updaterId, jdbcType=VARCHAR},

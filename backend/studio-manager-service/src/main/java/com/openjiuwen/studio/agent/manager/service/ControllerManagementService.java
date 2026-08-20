@@ -1059,6 +1059,10 @@ public class ControllerManagementService {
                 irConfigsWorkflows.add(irWorkflow);
 
                 ControllerNodeVO workflowNode = nodeMap.get(dslConfigWorkflow.getNodeId());
+                if (workflowNode == null) {
+                    log.error("workflow node not found by nodeId: {}", dslConfigWorkflow.getNodeId());
+                    continue;
+                }
                 WorkflowNodeConfigVO wfNodeConfigs =
                     JsonUtils.objectToClassType(workflowNode.getConfigs(), WorkflowNodeConfigVO.class);
 
@@ -1109,6 +1113,10 @@ public class ControllerManagementService {
                 irConfigsAgents.add(irAgent);
 
                 ControllerNodeVO agentNode = nodeMap.get(dslConfigAgent.getNodeId());
+                if (agentNode == null) {
+                    log.error("agent node not found by nodeId: {}", dslConfigAgent.getNodeId());
+                    continue;
+                }
                 SubControllerNodeConfigVO nodeConfigs =
                     JsonUtils.objectToClassType(agentNode.getConfigs(), SubControllerNodeConfigVO.class);
 

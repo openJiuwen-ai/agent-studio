@@ -39,6 +39,7 @@ import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.MemoryRepoEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
 import com.openjiuwen.studio.agent.manager.entity.ShareInfo;
+import com.openjiuwen.studio.agent.manager.entity.ShareResourceEntity;
 import com.openjiuwen.studio.agent.manager.entity.SpaciousInfo;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
@@ -51,6 +52,7 @@ import com.openjiuwen.studio.agent.manager.enums.ResourceTypeEnum;
 import com.openjiuwen.studio.agent.manager.enums.controller.AgentNodeType;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ShareResourceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
@@ -88,6 +90,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -131,6 +134,9 @@ public class AgentImportService {
 
     @Autowired
     private ShareResourceManagerService shareResourceManagerService;
+
+    @Autowired
+    private ShareResourceMapper shareResourceMapper;
 
     @Autowired
     private MappingMapper mappingMapper;
@@ -361,28 +367,21 @@ public class AgentImportService {
                 if (CollectionUtils.isEmpty(l1Mappings)) {
                     continue;
                 }
-                String dslJson = JSON.toJSONString(importInfo.getDsl());
                 // 最新版本的信息构造
                 List<SpaciousInfo> spaciousInfoList = getSpaciousInfos(projectId, workspaceId, l1Mappings);
+                String dslJson = JSON.toJSONString(importInfo.getDsl());
 
-                // 仅当 DSL 含 {{latest}} 占位符时才做版本替换；无论是否含占位符，
-                // 都必须继续走 handleSpaciousMappingAndDsl 上传草稿 DSL 并插入 mapping，
-                // 否则 t_agent/t_workflow 里的 dsl_path 指向的 OBS 文件不会存在，
-                // 后续 retrieveAgent 下载会 404（错误码 openjiuwen.02001004）。
-                if (Strings.CI.contains(dslJson, LATEST_PARAM)) {
-                    if (Strings.CS.equals(importInfo.getResourceType(), ResourceTypeEnum.WORKFLOW.toString())) {
-                        WorkflowVO workflowVO = JSONObject.parseObject(dslJson, WorkflowVO.class);
-                        handleSpaciousWorkflowDsl(workflowVO, spaciousInfoList);
-                        importInfo.setDsl(workflowVO);
-                    } else if (Strings.CS.equals(importInfo.getResourceType(),
-                        ResourceTypeEnum.CONTROLLER.toString())) {
-                        ControllerVO controllerVO = JSONObject.parseObject(dslJson, ControllerVO.class);
-                        handleSpaciousControllerWorkflow(importInfo, controllerVO, spaciousInfoList);
-                        handleSpaciousSubController(controllerVO, spaciousInfoList);
-                        importInfo.setDsl(controllerVO);
-                    } else {
-                        continue;
-                    }
+                if (Strings.CS.equals(importInfo.getResourceType(), ResourceTypeEnum.WORKFLOW.toString())) {
+                    WorkflowVO workflowVO = JSONObject.parseObject(dslJson, WorkflowVO.class);
+                    handleSpaciousWorkflowDsl(workflowVO, spaciousInfoList);
+                    importInfo.setDsl(workflowVO);
+                } else if (Strings.CS.equals(importInfo.getResourceType(), ResourceTypeEnum.CONTROLLER.toString())) {
+                    ControllerVO controllerVO = JSONObject.parseObject(dslJson, ControllerVO.class);
+                    handleSpaciousControllerWorkflow(importInfo, controllerVO, projectId, workspaceId, spaciousInfoList);
+                    handleSpaciousSubController(controllerVO, projectId, workspaceId, spaciousInfoList);
+                    importInfo.setDsl(controllerVO);
+                } else {
+                    continue;
                 }
                 handleSpaciousMappingAndDsl(importInfo, spaciousInfoList, result);
             } catch (AgentStudioException e) {
@@ -433,6 +432,15 @@ public class AgentImportService {
                         latestVersionId = versions.get(0).getVersionId();
                         latestVersionName = versions.get(0).getVersionName();
                     }
+                } else {
+                    // 宽松导入：本地查不到时，按 traceId 查共享给当前空间的共享资源（含团队共享 'all'），命中取最新版本
+                    SpaciousInfo shareInfo = findSharedSpaciousInfo(projectId, workspaceId,
+                        ResourceTypeEnum.WORKFLOW.toString(), mapping.getTraceId());
+                    if (shareInfo != null) {
+                        targetResourceId = shareInfo.getTargetResourceId();
+                        latestVersionId = shareInfo.getLatestVersionId();
+                        latestVersionName = shareInfo.getLatestVersionName();
+                    }
                 }
             } else if (Strings.CS.equals(mapping.getResourceType(), ResourceTypeEnum.CONTROLLER.toString())) {
                 List<Agent> agents = agentMapper.selectAgentByTraceIdAndWorkspaceId(projectId, workspaceId,
@@ -445,9 +453,30 @@ public class AgentImportService {
                         latestVersionId = versions.get(0).getVersionId();
                         latestVersionName = versions.get(0).getVersionName();
                     }
+                } else {
+                    // 宽松导入：本地查不到时，按 traceId 查共享给当前空间的共享资源（含团队共享 'all'），命中取最新版本
+                    SpaciousInfo shareInfo = findSharedSpaciousInfo(projectId, workspaceId,
+                        ResourceTypeEnum.CONTROLLER.toString(), mapping.getTraceId());
+                    if (shareInfo != null) {
+                        targetResourceId = shareInfo.getTargetResourceId();
+                        latestVersionId = shareInfo.getLatestVersionId();
+                        latestVersionName = shareInfo.getLatestVersionName();
+                    }
+                }
+            } else if (Strings.CS.equals(mapping.getResourceType(), ResourceTypeEnum.MODEL.toString())) {
+                // 宽松导入：按模型 identityId 在目标空间匹配等价模型。
+                // mapping.resourceId 是源空间模型 id，需先查其 identityId（导入来的模型 id!=identityId），
+                // 再用 identityId 在目标空间 queryByIdentityId 查等价模型。查不到则保持原值（不抛异常）。
+                ModelServiceBase sourceModel = modelServiceMapper.queryById(mapping.getResourceId());
+                if (sourceModel != null && StringUtils.isNotEmpty(sourceModel.getIdentityId())) {
+                    List<ModelServiceBase> models = modelServiceMapper.queryByIdentityId(projectId, workspaceId,
+                        sourceModel.getIdentityId());
+                    if (CollectionUtils.isNotEmpty(models)) {
+                        targetResourceId = models.get(0).getId();
+                    }
                 }
             }
-            if (StringUtils.isNotEmpty(latestVersionId) && StringUtils.isNotEmpty(targetResourceId)) {
+            if (StringUtils.isNotEmpty(targetResourceId)) {
                 SpaciousInfo spaciousInfo = new SpaciousInfo();
                 spaciousInfo.setTargetResourceId(targetResourceId);
                 spaciousInfo.setOriginalResourceId(mapping.getResourceId());
@@ -457,6 +486,41 @@ public class AgentImportService {
             }
         }
         return spaciousInfoList;
+    }
+
+    /**
+     * 宽松导入：本地查不到子资源时，按 traceId 查共享给当前空间的共享资源（含团队共享 'all'）。
+     * 命中则取 version_list 中 versionId 最大的版本（与 selectByAppId 的 order by version_id desc 语义一致）。
+     * 查不到返回 null（保持原值不抛异常）。仅 getSpaciousInfos 宽松导入调用，不影响严格导入。
+     */
+    private SpaciousInfo findSharedSpaciousInfo(String projectId, String workspaceId, String resourceType,
+        String traceId) {
+        if (StringUtils.isEmpty(traceId)) {
+            return null;
+        }
+        List<ShareResourceEntity> shareResources = shareResourceMapper.selectSharedResourceByTraceIdAndAuthWorkspace(
+            projectId, workspaceId, resourceType, traceId);
+        if (CollectionUtils.isEmpty(shareResources)) {
+            return null;
+        }
+        ShareResourceEntity shareResource = shareResources.get(0);
+        SpaciousInfo spaciousInfo = new SpaciousInfo();
+        spaciousInfo.setTargetResourceId(shareResource.getResourceId());
+        spaciousInfo.setOriginalResourceId(shareResource.getResourceId());
+        // 从 version_list 取 versionId 最大的版本（versionId 为毫秒时间戳字符串，等长13位，字符串降序==数值降序）
+        List<ResourceVersionInfo> versionInfos = JsonUtils.json2Array(shareResource.getVersionList(),
+            ResourceVersionInfo.class);
+        if (CollectionUtils.isNotEmpty(versionInfos)) {
+            ResourceVersionInfo latest = versionInfos.stream()
+                .filter(v -> StringUtils.isNotEmpty(v.getVersionId()))
+                .max(Comparator.comparing(ResourceVersionInfo::getVersionId))
+                .orElse(null);
+            if (latest != null) {
+                spaciousInfo.setLatestVersionId(latest.getVersionId());
+                spaciousInfo.setLatestVersionName(latest.getVersionName());
+            }
+        }
+        return spaciousInfo;
     }
 
     private void handleSpaciousWorkflowDsl(WorkflowVO workflowVO, List<SpaciousInfo> spaciousInfoList) {
@@ -509,16 +573,15 @@ public class AgentImportService {
             }
             insertMapping(l1Mappings, spaciousInfoMap, appId, appVersion);
         }
-        // 草稿态导入：先删除旧的草稿态mapping，再重新上传DSL和插入mapping，确保子工作流版本引用为最新
-        else {
-            mappingMapper.deleteBatchByAppId(appId, null, false);
-            if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
-                uploadControllerDsl(importInfo, appId, null);
-            } else {
-                uploadWorkflowDsl(importInfo, appId, appId, appVersion);
-            }
-            insertMapping(l1Mappings, spaciousInfoMap, appId, null);
+        // 草稿态：先删除旧草稿态mapping，再重新上传替换后的草稿DSL和插入新草稿态mapping，
+        // 确保草稿DSL中子流节点version_id已被替换，mapping表指向目标空间子资源最新版本
+        mappingMapper.deleteBatchByAppId(appId, null, false);
+        if (Strings.CS.equals(importInfoResourceType, ResourceTypeEnum.CONTROLLER.toString())) {
+            uploadControllerDsl(importInfo, appId, null);
+        } else {
+            uploadWorkflowDsl(importInfo, appId, appId, null);
         }
+        insertMapping(l1Mappings, spaciousInfoMap, appId, null);
 
     }
 
@@ -544,12 +607,18 @@ public class AgentImportService {
         mappingMapper.insertBatch(mappingEntities);
     }
 
-    private void handleSpaciousSubController(ControllerVO controllerVO, List<SpaciousInfo> spaciousInfoList) {
+    private void handleSpaciousSubController(ControllerVO controllerVO, String projectId, String workspaceId,
+        List<SpaciousInfo> spaciousInfoList) {
         controllerVO.getNodes().forEach(node -> {
             if (Strings.CS.equals(node.getType(), AgentNodeType.SUB_CONTROLLER.getType())) {
                 Map<String, Object> configs = MapReadUtil.safeCastToMapWithStringKey(node.getConfigs());
                 SpaciousInfo relationInfo = getNodeSpaciousInfo(spaciousInfoList, node, String.valueOf(configs.get("id")));
                 handleSpaciousVersionResource(configs, relationInfo);
+                // 宽松模式：SubController 节点自身的 model 和 workflows[] 引用一并替换。
+                // 源空间 workflow 的 id==traceId，selectByTraceId 在目标空间命中后替换为新 id；
+                // version_id 为 {{latest}} 时用命中工作流最新发布版本替换。命中不到则保持原值。
+                replaceSpaciousModel(configs, spaciousInfoList);
+                replaceSpaciousWorkflows(configs, projectId, workspaceId);
                 node.setConfigs(configs);
             }
             if (Strings.CS.equals(node.getType(), AgentNodeType.CONTROLLER.getType())) {
@@ -576,12 +645,17 @@ public class AgentImportService {
             .findFirst().orElse(null);
     }
 
-    private void handleSpaciousControllerWorkflow(ImportInfo importInfo, ControllerVO controllerVO, List<SpaciousInfo> spaciousInfoList) {
+    private void handleSpaciousControllerWorkflow(ImportInfo importInfo, ControllerVO controllerVO, String projectId,
+        String workspaceId, List<SpaciousInfo> spaciousInfoList) {
         controllerVO.getNodes().stream().forEach(node -> {
             if (Strings.CS.equals(node.getType(), AgentNodeType.WORKFLOW.getType())) {
                 Map<String, Object> configs = MapReadUtil.safeCastToMapWithStringKey(node.getConfigs());
                 SpaciousInfo relationInfo = getNodeSpaciousInfo(spaciousInfoList, node, String.valueOf(configs.get("id")));
                 handleSpaciousVersionResource(configs, relationInfo);
+                // 顶层 Workflow 节点：test 等工作流可能不在一级 L1Mappings（recordRefWorkflow 只记主Controller的workflows），
+                // 导致无 SpaciousInfo。用 selectByTraceId 兜底：按 configs.id（源空间 workflow id==traceId）查目标空间，命中则替换 id；
+                // version_id 为 {{latest}} 时用命中工作流最新版本替换。命中不到则保持原值。
+                replaceSpaciousWorkflowConfigs(configs, projectId, workspaceId);
                 node.setConfigs(configs);
             }
             if (Strings.CS.equals(node.getType(), AgentNodeType.CONTROLLER.getType())) {
@@ -596,6 +670,8 @@ public class AgentImportService {
                     workflowMap.put("configs", workflowConfigs);
                 });
                 configs.put("workflows", workflows);
+                // 宽松模式：主 Controller 节点的 model 按 model_deployment_id 匹配 MODEL 类 SpaciousInfo 替换
+                replaceSpaciousModel(configs, spaciousInfoList);
                 node.setConfigs(configs);
             }
         });
@@ -1731,7 +1807,8 @@ public class AgentImportService {
             workflowVO.setName(parentResult.getNewName());
         }
         switch (ResourceTypeEnum.fromValue(result.getType())) {
-            case MODEL, STRATEGY -> handleWorkflowModel(result, workflowVO);
+            case MODEL, STRATEGY -> handleWorkflowModel(result, workflowVO, parentResource.getTargetProjectId(),
+                parentResource.getTargetWorkspaceId());
             case TOOL -> handleWorkflowPlugin(result, workflowVO);
             case MCP -> handleWorkflowNoVersionNode(result, workflowVO);
             case WORKFLOW -> handleWorkflowVersionNode(result, workflowVO);
@@ -1740,7 +1817,8 @@ public class AgentImportService {
         parentResource.setDsl(workflowVO);
     }
 
-    private void handleWorkflowModel(ImportResourceResult result, WorkflowVO workflowVO) {
+    private void handleWorkflowModel(ImportResourceResult result, WorkflowVO workflowVO, String projectId,
+        String workspaceId) {
         if (StringUtils.isEmpty(result.getNewId())) {
             return;
         }
@@ -1765,6 +1843,29 @@ public class AgentImportService {
         Map<String, String> defaultModel = JsonUtils.objectToClass(workflowConfig.get("default_model"));
         if (Strings.CS.equals(defaultModel.get("model_deployment_id"), result.getId())) {
             defaultModel.put("model_deployment_id", result.getNewId());
+        } else if (StringUtils.isNotEmpty(defaultModel.get("model_deployment_id"))) {
+            // 兜底：default_model 引用的模型若在目标空间不存在（如源空间已删该模型，配置残留为无效引用），
+            // 用本工作流 LLM 节点的 model（已被 updateModelIfMatch 替换为有效 newId）替换，保证运行时可用。
+            // 仅对无效引用兜底，有效引用不动。
+            String defaultModelDeploymentId = defaultModel.get("model_deployment_id");
+            List<ModelServiceData> existModels = modelServiceMapper.queryByIds(
+                Collections.singletonList(defaultModelDeploymentId), projectId, workspaceId);
+            if (CollectionUtils.isEmpty(existModels)) {
+                Optional<Map<String, Object>> llmModel = workflowVO.getNodes().stream()
+                    .filter(n -> Strings.CS.equals(n.getType(), NodeType.LLM.getType()))
+                    .map(n -> MapReadUtil.safeCastToMapWithStringKey(
+                        n.getConfigs() == null ? null : n.getConfigs().get("model")))
+                    .filter(m -> MapUtils.isNotEmpty(m) && m.get("model_deployment_id") != null)
+                    .findFirst();
+                if (llmModel.isPresent()) {
+                    defaultModel.put("model_deployment_id", String.valueOf(llmModel.get().get("model_deployment_id")));
+                    defaultModel.put("model", String.valueOf(llmModel.get().get("model_deployment_id")));
+                    defaultModel.put("model_name", String.valueOf(llmModel.get().get("model_name")));
+                    defaultModel.put("model_type", String.valueOf(llmModel.get().get("model_type")));
+                    // IR 生成读 configs.default_model（见 IrAdapterService.adaptConfigs），兜底替换后须写回该 key 才生效
+                    workflowConfig.put("default_model", defaultModel);
+                }
+            }
         }
         workflowConfig.put("model", defaultModel);
     }
@@ -1943,6 +2044,109 @@ public class AgentImportService {
             }
             config.put("version_id", relationInfo.getLatestVersionId());
             config.put("version_name", relationInfo.getLatestVersionName());
+        }
+    }
+
+    /**
+     * 宽松模式：按 model_deployment_id 匹配 MODEL 类 SpaciousInfo，命中则把模型引用替换为目标空间模型 ID。
+     * 与 strict 的 updateModelIfMatch 对齐，同时写 model_deployment_id 和 id 两个 key。
+     * 命中不到则保持原值（不抛异常），仅宽松模式调用。
+     */
+    private void replaceSpaciousModel(Map<String, Object> configs, List<SpaciousInfo> spaciousInfoList) {
+        if (MapUtils.isEmpty(configs)) {
+            return;
+        }
+        Object modelObj = configs.get("model");
+        if (!(modelObj instanceof Map)) {
+            return;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> model = (Map<String, Object>) modelObj;
+        Object modelDeploymentId = model.get("model_deployment_id");
+        if (modelDeploymentId == null) {
+            return;
+        }
+        SpaciousInfo relationInfo = spaciousInfoList.stream()
+            .filter(p -> Strings.CS.equals(p.getOriginalResourceId(), String.valueOf(modelDeploymentId)))
+            .findFirst().orElse(null);
+        if (Objects.nonNull(relationInfo) && StringUtils.isNotEmpty(relationInfo.getTargetResourceId())) {
+            model.put("model_deployment_id", relationInfo.getTargetResourceId());
+            model.put("id", relationInfo.getTargetResourceId());
+            configs.put("model", model);
+        }
+    }
+
+    /**
+     * 宽松模式：替换 configs.workflows[] 中工作流引用。每条工作流的 id（源空间 workflow id==traceId）
+     * 用 selectByTraceId 在目标空间匹配，命中则替换为新 id；configs.version_id 为 {{latest}} 时
+     * 用命中工作流的最新发布版本替换。命中不到则保持原值（不抛异常）。仅宽松模式调用。
+     */
+    @SuppressWarnings("unchecked")
+    private void replaceSpaciousWorkflows(Map<String, Object> configs, String projectId, String workspaceId) {
+        if (MapUtils.isEmpty(configs)) {
+            return;
+        }
+        Object workflowsObj = configs.get("workflows");
+        if (!(workflowsObj instanceof List)) {
+            return;
+        }
+        List<Object> workflows = (List<Object>) workflowsObj;
+        for (Object wfObj : workflows) {
+            if (!(wfObj instanceof Map)) {
+                continue;
+            }
+            Map<String, Object> wf = (Map<String, Object>) wfObj;
+            replaceSpaciousWorkflowConfigs(wf, projectId, workspaceId);
+            // SubController 的 workflows[] 条目含嵌套 configs，其 id 也要同步替换为目标空间新 id
+            Map<String, Object> wfConfigs = MapReadUtil.safeCastToMapWithStringKey(wf.get("configs"));
+            if (MapUtils.isNotEmpty(wfConfigs)) {
+                replaceSpaciousWorkflowConfigs(wfConfigs, projectId, workspaceId);
+                wf.put("configs", wfConfigs);
+            }
+        }
+        configs.put("workflows", workflows);
+    }
+
+    /**
+     * 宽松模式：按 configs.id（源空间 workflow id==traceId）用 selectByTraceId 在目标空间匹配，
+     * 命中则替换 id 为目标空间新 id；version_id 为 {{latest}} 时用命中工作流最新发布版本替换。
+     * 命中不到则保持原值（不抛异常）。顶层 Workflow 节点与 SubController 的 workflows[] 共用。仅宽松模式调用。
+     */
+    private void replaceSpaciousWorkflowConfigs(Map<String, Object> configs, String projectId, String workspaceId) {
+        if (MapUtils.isEmpty(configs)) {
+            return;
+        }
+        Object idObj = configs.get("id");
+        if (idObj == null) {
+            return;
+        }
+        List<WorkflowEntity> targetWorkflows = workflowMapper.selectByTraceId(projectId, workspaceId,
+            String.valueOf(idObj));
+        if (CollectionUtils.isNotEmpty(targetWorkflows)) {
+            // 本地命中：替换为本地新 id；version_id 为 {{latest}} 时用本地最新版本替换
+            WorkflowEntity targetWf = targetWorkflows.get(0);
+            configs.put("id", targetWf.getId());
+            if (Strings.CS.equals(String.valueOf(configs.get("version_id")), LATEST_PARAM)) {
+                List<ReleaseVersion> versions = releaseVersionMapper.selectByAppId(targetWf.getId());
+                if (CollectionUtils.isNotEmpty(versions)) {
+                    configs.put("version_id", versions.get(0).getVersionId());
+                    configs.put("version_name", versions.get(0).getVersionName());
+                }
+            }
+            return;
+        }
+        // 本地查不到：按 id（源空间 workflow id==traceId）查共享给当前空间的共享资源，命中则替换 version_id 为最新版本
+        // 共享工作流为纯引用，id 保持源空间id不变（运行时跨空间解析），仅替换版本为共享资源最新版本
+        SpaciousInfo shareInfo = findSharedSpaciousInfo(projectId, workspaceId,
+            ResourceTypeEnum.WORKFLOW.toString(), String.valueOf(idObj));
+        if (shareInfo != null) {
+            configs.put("id", shareInfo.getTargetResourceId());
+            if (Strings.CS.equals(String.valueOf(configs.get("version_id")), LATEST_PARAM)) {
+                if (StringUtils.isNotEmpty(shareInfo.getLatestVersionId())) {
+                    configs.put("version_id", shareInfo.getLatestVersionId());
+                    configs.put("version_name", shareInfo.getLatestVersionName());
+                }
+            }
         }
     }
 

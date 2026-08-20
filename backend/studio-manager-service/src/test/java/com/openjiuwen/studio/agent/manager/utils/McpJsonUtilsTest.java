@@ -58,6 +58,21 @@ class McpJsonUtilsTest {
     }
 
     @Test
+    void testIsValidJson_JsonStringLiteral() {
+        assertFalse(McpJsonUtils.isValidJson("\"异常\""));
+    }
+
+    @Test
+    void testIsValidJson_JsonNumber() {
+        assertFalse(McpJsonUtils.isValidJson("123"));
+    }
+
+    @Test
+    void testIsValidJson_JsonBoolean() {
+        assertFalse(McpJsonUtils.isValidJson("true"));
+    }
+
+    @Test
     void testIsValidJson_EmptyObject() {
         assertTrue(McpJsonUtils.isValidJson("{}"));
     }

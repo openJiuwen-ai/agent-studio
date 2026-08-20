@@ -48,11 +48,11 @@
                 <div nz-tooltip>{{ plugin.plugin_display_name }}</div>
               </div>
 
-              <div class="flex w-1/3 flex-col gap-2">
+              <div class="flex w-1/3 min-w-0 flex-col gap-2">
                 <div class="text-xs text-[#595959]">
                   {{ 'description' | i18nextEager }}
                 </div>
-                <div nz-tooltip>{{ plugin.plugin_desc }}</div>
+                <div nz-tooltip class="break-all">{{ plugin.plugin_desc }}</div>
               </div>
             </div>
           </div>
@@ -72,25 +72,25 @@
             </div>
 
             <div class="flex">
-              <div class="flex w-1/3 flex-col gap-2">
+              <div class="flex w-1/3 min-w-0 flex-col gap-2">
                 <div class="text-xs text-[#595959]">
                   {{ 'plugin_protocol' | i18nextEager }}
                 </div>
-                <div nz-tooltip>{{ plugin?.request_info?.basic_info?.protocol }}</div>
+                <div nz-tooltip class="truncate">{{ plugin?.request_info?.basic_info?.protocol }}</div>
               </div>
 
-              <div class="flex w-1/3 flex-col gap-2">
+              <div class="flex w-1/3 min-w-0 flex-col gap-2">
                 <div class="text-xs text-[#595959]">
                   {{ 'plugin_host' | i18nextEager }}
                 </div>
-                <div nz-tooltip>{{ plugin?.request_info?.basic_info?.host }}</div>
+                <div nz-tooltip class="truncate">{{ plugin?.request_info?.basic_info?.host }}</div>
               </div>
 
-              <div class="flex w-1/3 flex-col gap-2">
+              <div class="flex w-1/3 min-w-0 flex-col gap-2">
                 <div class="text-xs text-[#595959]">
                   {{ 'plugin_url' | i18nextEager }}
                 </div>
-                <div nz-tooltip>{{ plugin?.request_info?.basic_info?.path || '-' }}</div>
+                <div nz-tooltip class="break-all">{{ plugin?.request_info?.basic_info?.path || '-' }}</div>
               </div>
             </div>
 
@@ -100,92 +100,92 @@
               </div>
 
               <div class="flex">
-                <div class="flex w-1/3 flex-col gap-2">
+                <div class="flex w-1/3 min-w-0 flex-col gap-2">
                   <div class="text-xs text-[#595959]">
                     {{ 'auth_methods' | i18nextEager }}
                   </div>
-                  <div nz-tooltip>
+                  <div nz-tooltip class="truncate">
                     {{ authMap[authInfo.type] }}
                   </div>
                 </div>
 
-                <div *ngIf="authInfo?.location" class="flex w-1/3 flex-col gap-2">
+                <div *ngIf="authInfo?.location" class="flex w-1/3 min-w-0 flex-col gap-2">
                   <div class="text-xs text-[#595959]">
                     {{ 'request_secretKey' | i18nextEager }}
                   </div>
-                  <div nz-tooltip>{{ authInfo.location }}</div>
+                  <div nz-tooltip class="truncate">{{ authInfo.location }}</div>
                 </div>
               </div>
               <div class="flex" *ngIf="plugin?.auth_info?.scope === 'HIS_IAM'">
-                <div class="flex w-1/3 flex-col gap-2">
+                <div class="flex w-1/3 min-w-0 flex-col gap-2">
                   <div class="text-xs text-[#595959]">URL</div>
-                  <div nz-tooltip>
+                  <div nz-tooltip class="truncate">
                     {{ plugin.auth_info?.his_iam_info?.iam_url }}
                   </div>
                 </div>
-                <div class="flex w-1/3 flex-col gap-2">
+                <div class="flex w-1/3 min-w-0 flex-col gap-2">
                   <div class="text-xs text-[#595959]">
                     {{ 'createpluginbase_751' | i18nextEager }}
                   </div>
-                  <div nz-tooltip>
+                  <div nz-tooltip class="truncate">
                     {{ plugin.auth_info?.his_iam_info?.iam_account }}
                   </div>
                 </div>
-                <div class="flex w-1/3 flex-col gap-2">
+                <div class="flex w-1/3 min-w-0 flex-col gap-2">
                   <div class="text-xs text-[#595959]">
                     {{ 'createpluginbase_752' | i18nextEager }}
                   </div>
-                  <div nz-tooltip>
+                  <div nz-tooltip class="truncate">
                     {{ plugin.auth_info?.his_iam_info?.iam_secret }}
                   </div>
                 </div>
               </div>
               <div class="flex" *ngIf="plugin?.auth_info?.scope === 'HIS_IAM'">
-                <div class="flex w-1/3 flex-col gap-2">
+                <div class="flex w-1/3 min-w-0 flex-col gap-2">
                   <div class="text-xs text-[#595959]">
                     {{ 'createpluginbase_753' | i18nextEager }}
                   </div>
-                  <div nz-tooltip>
+                  <div nz-tooltip class="truncate">
                     {{ plugin.auth_info?.his_iam_info?.iam_project }}
                   </div>
                 </div>
-                <div class="flex w-1/3 flex-col gap-2">
+                <div class="flex w-1/3 min-w-0 flex-col gap-2">
                   <div class="text-xs text-[#595959]">
                     {{ 'createpluginbase_754' | i18nextEager }}
                   </div>
-                  <div nz-tooltip>
+                  <div nz-tooltip class="truncate">
                     {{ plugin.auth_info?.his_iam_info?.iam_enterprise }}
                   </div>
                 </div>
               </div>
               <div class="flex" *ngIf="plugin?.auth_info?.scope === 'SGOV'">
-                <div class="flex w-1/3 flex-col gap-2">
+                <div class="flex w-1/3 min-w-0 flex-col gap-2">
                   <div class="text-xs text-[#595959]">URL</div>
-                  <div nz-tooltip>
+                  <div nz-tooltip class="truncate">
                     {{ plugin.auth_info?.his_sgov.sgov_url }}
                   </div>
                 </div>
-                <div class="flex w-1/3 flex-col gap-2">
+                <div class="flex w-1/3 min-w-0 flex-col gap-2">
                   <div class="text-xs text-[#595959]">APP ID</div>
-                  <div nz-tooltip>
+                  <div nz-tooltip class="truncate">
                     {{ plugin.auth_info?.his_sgov?.app_id }}
                   </div>
                 </div>
-                <div class="flex w-1/3 flex-col gap-2">
+                <div class="flex w-1/3 min-w-0 flex-col gap-2">
                   <div class="text-xs text-[#595959]">
                     {{ 'createpluginbase_755' | i18nextEager }}
                   </div>
-                  <div nz-tooltip>
+                  <div nz-tooltip class="truncate">
                     {{ plugin.auth_info?.his_sgov?.credential }}
                   </div>
                 </div>
               </div>
               <div class="flex" style="flex-wrap: wrap" *ngIf="plugin?.auth_info?.scope === 'CUSTOM_IAM'">
-                <div class="flex w-1/3 flex-col gap-2 mb-[10px]" *ngFor="let item of customIamList">
+                <div class="flex w-1/3 min-w-0 flex-col gap-2 mb-[10px]" *ngFor="let item of customIamList">
                   <div class="text-xs text-[#595959]">
                     {{ item.name }}
                   </div>
-                  <div nz-tooltip>
+                  <div nz-tooltip class="truncate">
                     {{ item.value }}
                   </div>
                 </div>
@@ -217,7 +217,7 @@
                 <div class="text-xs text-[#595959]">
                   {{ 'metadata' | i18nextEager }}
                 </div>
-                <div nz-tooltip>
+                <div nz-tooltip class="truncate">
                   {{ plugin.metadata }}
                 </div>
               </div>

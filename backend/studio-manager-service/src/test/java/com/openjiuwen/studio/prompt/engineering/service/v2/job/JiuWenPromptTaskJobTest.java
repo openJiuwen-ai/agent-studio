@@ -55,6 +55,7 @@ import org.quartz.JobExecutionException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
 import java.util.ArrayList;
@@ -573,6 +574,40 @@ class JiuWenPromptTaskJobTest {
                 mockResponse);
             PromptTaskDetailVo promptTaskDetailVo = buildPromptTaskDetailVo();
             jiuWenPromptTaskJob.deleteTask(promptTaskDetailVo, TOKEN);
+        });
+    }
+
+    @Test
+    void test_delete_task_job_not_found() {
+        HttpServerErrorException notFoundEx = new HttpServerErrorException(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "Internal Server Error",
+            "{\"code\":102155,\"message\":\"Prompt optimize job not found.\"}".getBytes(),
+            java.nio.charset.StandardCharsets.UTF_8);
+
+        when(clientTemplate.deleteForEntity(anyString(), eq(TOKEN), eq(JIuWenPromptBaseRes.class))).thenThrow(
+            notFoundEx);
+
+        // 九问侧 job 不存在时不应抛异常，应正常返回
+        jiuWenPromptTaskJob.deleteTask(buildPromptTaskDetailVo(), TOKEN);
+
+        verify(clientTemplate).deleteForEntity(anyString(), eq(TOKEN), eq(JIuWenPromptBaseRes.class));
+    }
+
+    @Test
+    void test_delete_task_server_error_other_than_not_found() {
+        HttpServerErrorException serverErrorEx = new HttpServerErrorException(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "Internal Server Error",
+            "{\"code\":102099,\"message\":\"Some other server error.\"}".getBytes(),
+            java.nio.charset.StandardCharsets.UTF_8);
+
+        when(clientTemplate.deleteForEntity(anyString(), eq(TOKEN), eq(JIuWenPromptBaseRes.class))).thenThrow(
+            serverErrorEx);
+
+        // 非 job not found 的服务端错误仍应抛异常
+        assertThrows(AgentStudioException.class, () -> {
+            jiuWenPromptTaskJob.deleteTask(buildPromptTaskDetailVo(), TOKEN);
         });
     }
 

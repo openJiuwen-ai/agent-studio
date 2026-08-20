@@ -470,6 +470,16 @@ export const reqSchema2Field = (schema: IReqSchema): IWorkflowField[] => {
     if (type === undefined || type === null || type === '') {
       type = 'string';
     }
+    // number/integer 类型：确保 content 是正确的数字类型或 null
+    let content: any = defaultValue || '';
+    if (type === 'number' || type === 'integer') {
+      if (defaultValue === null || defaultValue === undefined || defaultValue === '') {
+        content = null; // 无有效默认值时置 null，运行时跳过该参数
+      } else {
+        content = Number(defaultValue); // 字符串数字转为真数字
+      }
+    }
+
     const field: IWorkflowField = {
       name: key,
       required: schema.required?.includes(key),
@@ -477,7 +487,7 @@ export const reqSchema2Field = (schema: IReqSchema): IWorkflowField[] => {
       type: type as IWorkflowFieldType,
       value: {
         type: 'literal',
-        content: defaultValue || '',
+        content,
         hint: '',
       },
       source: 'user',
@@ -911,4 +921,143 @@ export function mapTreeAddKeyIndex(tree, start) {
     }
     return item;
   });
+}
+
+export function mapTreeAddKeyAndChildIndex(tree, start) {
+  return (tree || []).map((item, index) => {
+    item.key = `${index}`;
+    if (item?.schema?.length > 0 && item.type === 'object') {
+      item.isObjRoot = true;
+      item.children = mapTreeSchemaIndex(item.schema, `${index}`, item.value.type);
+      item.children = setAllChildrenVal(item.children, item.value);
+    }
+    return item;
+  });
+}
+
+function mapTreeSchemaIndex(schema, start, rootValType) {
+  return (schema || []).map((item, index) => {
+    let newitem: any = {
+      options: [{ label: item.type, value: 'literal' }],
+      key: `${start}_${index}`,
+      type: item.type,
+      isChild: true,
+      name: item.name,
+      rootValType: rootValType,
+      isObjChild: item.type === 'object',
+      hasObjChild: item?.schema?.length > 0 && item.type === 'object',
+      value: {
+        content: '',
+        default: '',
+        hint: '',
+        type: 'literal',
+      },
+    };
+
+    if (item?.schema?.length > 0 && item.type === 'object') {
+      newitem.children = mapTreeSchemaIndex(item.schema, `${start}_${index}`, rootValType);
+    }
+    return newitem;
+  });
+}
+
+export function eachChildrenToRootObj(children, value) {
+  let res = {};
+  (children || []).map((item, index) => {
+    if (item?.children?.length > 0 && item.type === 'object') {
+      res[item.name] = eachChildrenToRootObj(item?.children, value);
+    } else {
+      if (item.key === value.key) {
+        if (item.type.startsWith('array')) {
+          try {
+            res[item.name] = JSON.parse(value.value.content);
+          } catch {
+            res[item.name] = null;
+          }
+        } else {
+          if (item.type === 'object') {
+            let itemVal = value.value.content;
+            try {
+              itemVal = JSON.parse(itemVal);
+            } catch {
+              itemVal = null;
+            }
+            res[item.name] = itemVal;
+          } else {
+            res[item.name] = value.value.content;
+          }
+        }
+      } else {
+        let itemVal = item.value.content;
+        if (item.type.startsWith('array')) {
+          try {
+            itemVal = JSON.parse(itemVal);
+          } catch {
+            itemVal = null;
+          }
+        }
+        if (item.type === 'object') {
+          try {
+            itemVal = JSON.parse(itemVal);
+          } catch {
+            itemVal = null;
+          }
+        }
+        res[item.name] = itemVal;
+      }
+    }
+  });
+  return res;
+}
+
+export function setAllChildrenVal(children, value) {
+  let obj = {};
+  try {
+    obj = JSON.parse(value.content);
+  } catch {
+    obj = {};
+  }
+  if (value.type !== 'literal') {
+    obj = {};
+  }
+  children = setEachAllChildrenVal(children, obj, value.type);
+  return children;
+}
+
+function setEachAllChildrenVal(children, objVal, rootValType) {
+  if (Object.keys(objVal).length <= 0) {
+    return (children || []).map((item, index) => {
+      item.rootValType = rootValType;
+      item.value.content = '';
+      if (item.children) {
+        item.children = setEachAllChildrenVal(item.children, objVal, rootValType);
+      }
+      return item;
+    });
+  } else {
+    return (children || []).map((item, index) => {
+      item.rootValType = rootValType;
+      if (objVal[item.name] !== null && objVal[item.name] !== undefined) {
+        let newVal = objVal[item.name];
+        if (item.type === 'object') {
+          if (item.children) {
+            item.children = setEachAllChildrenVal(item.children, objVal[item.name], rootValType);
+          } else if (newVal) {
+            item.value.content = JSON.stringify(newVal, null, 2);
+          }
+        } else {
+          if (item.type.startsWith('array')) {
+            if (newVal) {
+              newVal = JSON.stringify(newVal, null, 2);
+            } else {
+              newVal = null;
+            }
+          }
+
+          item.value.content = newVal;
+        }
+      }
+      return item;
+    });
+  }
 }

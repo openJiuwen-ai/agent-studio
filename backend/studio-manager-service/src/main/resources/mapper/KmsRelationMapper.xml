@@ -15,14 +15,14 @@
     </resultMap>
 
     <sql id="baseColumns">
-            `domain_id`,
-            `main_key_id`,
-            `related_primary_key`,
-            `type`,
-            `created_date`,
-            `created_by_user_id`,
-            `last_updated_date`,
-            `last_updated_by_user_id`
+            domain_id,
+            main_key_id,
+            related_primary_key,
+            type,
+            created_date,
+            created_by_user_id,
+            last_updated_date,
+            last_updated_by_user_id
 
     </sql>
 
