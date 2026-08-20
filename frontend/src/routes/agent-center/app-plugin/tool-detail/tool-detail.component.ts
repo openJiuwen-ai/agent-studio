@@ -209,9 +209,9 @@ export class PluginToolDetailComponent implements OnInit {
     node.expand = !node.expand;
 
     if (type === 'res') {
-      this.requestSrcData.data = this.getFlatData(this.res);
+      this.responseSrcData.data = this.getFlatData(this.res);
     } else {
-      this.responseSrcData.data = this.getFlatData(this.req);
+      this.requestSrcData.data = this.getFlatData(this.req);
     }
   }
 
