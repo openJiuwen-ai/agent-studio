@@ -1,6 +1,15 @@
 import { Component, ElementRef, Input, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormControl, FormGroup, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms';
+import {
+  FormBuilder,
+  FormControl,
+  FormGroup,
+  Validators,
+  FormsModule,
+  ReactiveFormsModule,
+  AbstractControl,
+  ValidationErrors,
+} from '@angular/forms';
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { cdnAssetUrl } from '../../../../single-spa/assets-url';
@@ -19,9 +28,21 @@ import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzUploadModule, NzUploadFile } from 'ng-zorro-antd/upload';
-import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { NzDrawerRef } from 'ng-zorro-antd/drawer';
 import { NzMessageService } from 'ng-zorro-antd/message';
+
+/**
+ * api_url 校验：必须是合法的 URL（http/https://host:port/path）。
+ * 空值交由 Validators.required 兜底。
+ */
+function apiUrlValidator(control: AbstractControl): ValidationErrors | null {
+  const url = (control.value || '').toString();
+  if (!url) {
+    return null;
+  }
+  const urlPattern = /^(https?:\/\/)?(([a-zA-Z0-9_-]+\.)+[a-zA-Z]{2,}|\d{1,3}(\.\d{1,3}){3}|localhost)(:\d+)?(\/.*)?$/i;
+  return urlPattern.test(url) ? null : { apiUrlInvalid: true };
+}
 
 @Component({
   selector: 'meta-add-model',
@@ -39,7 +60,6 @@ import { NzMessageService } from 'ng-zorro-antd/message';
     NzButtonModule,
     NzIconModule,
     NzUploadModule,
-    NzToolTipModule,
   ],
   templateUrl: './add-model.component.html',
   styleUrls: ['./add-model.component.scss'],
@@ -181,7 +201,7 @@ export class AddModelComponent implements OnInit {
       model_type: new FormControl('LLM', [Validators.required]),
       api_url: new FormControl('', [
         Validators.required,
-        Validators.pattern(/^(https?:\/\/)?(([a-zA-Z0-9_-]+\.)+[a-zA-Z]{2,}|\d{1,3}(\.\d{1,3}){3}|localhost)(:\d+)?(\/.*)?$/i),
+        apiUrlValidator,
         Validators.maxLength(255),
       ]),
       interface_protocol: new FormControl('openai', [Validators.required]),

@@ -1,0 +1,60 @@
+.import-modal-container {
+  .section {
+    margin-bottom: 16px;
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #191919;
+      margin-bottom: 8px;
+
+      .preview-summary {
+        font-weight: 400;
+        color: #595959;
+        margin-left: 4px;
+      }
+    }
+
+    .upload-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      .file-meta {
+        color: #595959;
+        font-size: 13px;
+      }
+    }
+
+    .hint {
+      color: #808080;
+      font-size: 12px;
+      margin-top: 6px;
+
+      &.warning {
+        color: #d46b08;
+      }
+    }
+
+    .result-summary {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .detail-cell {
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #595959;
+    }
+  }
+
+  .footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 8px;
+  }
+}

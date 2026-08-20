@@ -21,6 +21,8 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 功能描述
@@ -29,6 +31,18 @@ import java.util.List;
 @Component
 @Slf4j
 public class UrlCheckUtils {
+    /**
+     * 匹配任意 ``${...}`` 占位符（含大括号），用于逐一校验。
+     */
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]*)\\}");
+
+    /**
+     * 合法的环境变量占位符：``${_env.plugin_url_params.VAR}``。
+     * 与 Python ``env_resolver.py`` / ``logging_context.py:47`` 同源，跨环境迁移模型 apiUrl 占位符以此为准。
+     */
+    private static final Pattern VALID_ENV_PLACEHOLDER =
+        Pattern.compile("\\$\\{_env\\.plugin_url_params\\.([^}]+)\\}");
+
     @Value("${tool.url.enable-check}")
     private boolean enableUrlCheck;
 
@@ -105,6 +119,34 @@ public class UrlCheckUtils {
             if (isInternalIp(addr, projectId)) {
                 log.error("Access to internal network is forbidden [{}]", ip);
                 throw new AgentStudioException(StudioError.ACCESS_INTER_NETWORK_FORBIDDEN);
+            }
+        }
+    }
+
+    /**
+     * 校验 apiUrl 中的环境变量占位符语法。
+     *
+     * <p>跨环境迁移的模型 apiUrl 可能含 ``${_env.plugin_url_params.VAR}`` 占位符（运行期由 Python
+     * ``env_resolver.py`` 解析）。导入侧无法预知目标环境运行时变量是否存在，故此处只校验占位符
+     * <b>语法</b>：所有 ``${...}`` 必须匹配 ``${_env.plugin_url_params.VAR}`` 形态；
+     * 形如 ``${evil.var}`` 的非环境占位符视为语法非法，抛 {@link StudioError#MODEL_ENV_VAR_UNRESOLVED}，
+     * 与 Python 运行期 ``MD_ENV_VAR_UNRESOLVED`` 语义对齐。
+     *
+     * <p>注意：``checkUrl`` 对含 ``{`` 的 URL 直接放通（不校验内网/黑白名单），故占位符语法校验
+     * 由本方法独立承担。无 ``${`` 的 URL 直接放行。
+     *
+     * @param url 待校验的 apiUrl
+     */
+    public void validateEnvVarPlaceholders(String url) {
+        if (StringUtils.isEmpty(url) || !url.contains("${")) {
+            return;
+        }
+        Matcher matcher = PLACEHOLDER_PATTERN.matcher(url);
+        while (matcher.find()) {
+            String placeholder = matcher.group(0);
+            if (!VALID_ENV_PLACEHOLDER.matcher(placeholder).matches()) {
+                log.error("Invalid env var placeholder in url [{}]: {}", url, placeholder);
+                throw new AgentStudioException(StudioError.MODEL_ENV_VAR_UNRESOLVED);
             }
         }
     }

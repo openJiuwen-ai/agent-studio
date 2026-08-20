@@ -1215,7 +1215,6 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
     }
 
     public List<ModelExportEntity> buildModelExportEntity(String projectId, String workspaceId, List<String> modelIds) {
-
         try {
             List<ModelServiceData> modelList = getValidatedModels(projectId, workspaceId, modelIds);
             Map<String, ProviderExportMetadata> providerExportMap = batchGetProviderExportMetadata(projectId,
@@ -1246,6 +1245,32 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             return exportEntityList;
         } catch (Exception e) {
             log.error("Failed to build model export entity. Project: {}, Workspace: {}", projectId, workspaceId, e);
+            throw new AgentStudioException(StudioError.MODEL_EXPORT_DATA);
+        }
+    }
+
+    /**
+     * 组装导出实体，按 {@code includeProvider} 区分两种模式：
+     * <ul>
+     *   <li>{@code true}（缺省）— 供应商+模型：委托 3 参 {@link #buildModelExportEntity(String, String, List)}。</li>
+     *   <li>{@code false} — 只导模型：不取 provider 元数据，所有模型装入单个实体（providerMetadata=null）。
+     *       模型本身无密钥（api-key 在供应商侧 t_provider_auth_info，按 PROVIDER_ID 关联），故只导模型文件不含任何凭据。</li>
+     * </ul>
+     */
+    public List<ModelExportEntity> buildModelExportEntity(String projectId, String workspaceId,
+        List<String> modelIds, boolean includeProvider) {
+        if (includeProvider) {
+            return buildModelExportEntity(projectId, workspaceId, modelIds);
+        }
+        try {
+            List<ModelServiceData> modelList = getValidatedModels(projectId, workspaceId, modelIds);
+            ModelExportEntity entity = new ModelExportEntity();
+            entity.setModelMetadata(new ArrayList<>(modelList));
+            entity.setProviderMetadata(null);
+            return new ArrayList<>(Collections.singletonList(entity));
+        } catch (Exception e) {
+            log.error("Failed to build model-only export entity. Project: {}, Workspace: {}",
+                projectId, workspaceId, e);
             throw new AgentStudioException(StudioError.MODEL_EXPORT_DATA);
         }
     }
