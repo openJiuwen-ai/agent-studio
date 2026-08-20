@@ -275,14 +275,18 @@
   border-radius: 16px;
   background: #ffffff;
   cursor: pointer;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.04);
   height: 46px;
   font-size: 14px;
   text-align: left;
   padding: 12px 24px;
+
+  &:hover {
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
+  }
 }
 
 .loading {
