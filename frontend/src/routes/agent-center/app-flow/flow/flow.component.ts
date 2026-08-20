@@ -2596,6 +2596,8 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           const options = {skipParentHandler: false};
           this.graph.trigger('node:change:position', {node, options});
         });
+        // 布局完成后内容包围盒已变化，刷新 MiniMap 视口框，避免蓝色框过期不显示
+        this.debounceSetMiniMap();
       });
 
       if (this.workflowDetail.workflow_details.configs?.nl2workflow_first) {
@@ -3050,6 +3052,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public onClickShowThumb() {
     this.showMiniMap = !this.showMiniMap;
+    // 大型工作流布局仍在变化时，MiniMap 蓝色视口框的几何信息可能过期，显示时强制刷新一次
+    if (this.showMiniMap) {
+      this.debounceSetMiniMap();
+    }
   }
 
   public checkisIntersectWithLoopThenAddChild(
