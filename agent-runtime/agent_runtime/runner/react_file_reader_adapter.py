@@ -51,7 +51,6 @@ class ReactFileReaderAdapter(Tool):
     async def _fetch_file_content(self, url: str) -> str:
         """从 URL 获取文件内容"""
         import aiohttp
-        import ssl
         from urllib.parse import urlparse
 
         # 解析 URL 获取路径部分（去掉查询参数）
@@ -71,12 +70,10 @@ class ReactFileReaderAdapter(Tool):
             tmp_path = tmp.name
 
         try:
-            # 创建不验证 SSL 证书的 context
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            # FILE_READER_SSL_VERIFY=true 启用 TLS 证书与主机名校验（默认 false，
+            # 对齐旧版不校验行为，兼容任意 URL 拉取场景）。
+            ssl_verify = os.getenv("FILE_READER_SSL_VERIFY", "false").lower() == "true"
+            connector = aiohttp.TCPConnector(ssl=ssl_verify)
             async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
                     resp.raise_for_status()
