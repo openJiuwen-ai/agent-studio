@@ -215,8 +215,14 @@ def _error_response(exc: Exception) -> JSONResponse:
             "error_reason": spec.error_reason,
             "error_suggestion": spec.error_suggestion,
         }
-        if spec.with_details and upstream_body:
-            content["details"] = [{"error_msg": upstream_body}]
+        if spec.with_details:
+            if upstream_body:
+                content["details"] = [{"error_msg": upstream_body}]
+            elif msg:
+                # 上游无响应体（如 API 地址/endpoint 配错返回 404 空 body）时，
+                # 回退透出 msg（含上游 URL + 状态码），让调测页能看到是哪个地址、什么状态码，
+                # 避免前端只剩通用文案、无法定位是 API 地址配置问题。
+                content["details"] = [{"error_msg": msg}]
         status = upstream_status if (spec.use_upstream_status and upstream_status) else spec.http_status
         return JSONResponse(status_code=status, content=content)
     return JSONResponse(

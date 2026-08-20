@@ -306,6 +306,7 @@
   "text_content": "Text Content",
   "score": "Score",
   "cannot_sort_empty_text": "At least one text must be provided for sorting.",
+  "rerank_query_empty": "Please enter a query.",
   "route_policy_detail": "Routing Policy Details",
   "support_char_types": "Supports Chinese, English, numbers, spaces, hyphens (-), and underscores (_)",
   "search_supplier_name": "Search by provider name",

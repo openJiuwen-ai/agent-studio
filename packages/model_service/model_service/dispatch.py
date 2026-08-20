@@ -203,6 +203,8 @@ async def rerank(model, auth, request, projected_headers: Optional[dict] = None)
             raise ModelServiceError(
                 "MD_INVOKE_MODEL_SERVICE_FAIL",
                 f"rerank upstream {conn.api_base} returned {resp.status_code}: {resp.text}",
+                upstream_status=resp.status_code,
+                upstream_body=resp.text,
             )
         data = resp.json()
     finally:
