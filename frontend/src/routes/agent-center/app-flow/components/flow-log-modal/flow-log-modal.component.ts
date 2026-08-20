@@ -600,14 +600,37 @@ export class FlowLogModalComponent implements OnChanges {
     });
   }
 
+  hasLoopChildren(callItem): boolean {
+    return this.result?.event_list?.some(item => item.loop_node_id === callItem?.node_id);
+  }
+
+  getChildLoopNodes(loopNode) {
+    const list = this.result.event_list.filter(item => item.loop_node_id === loopNode?.node_id);
+    this.callChainInfo.list = this.convertToTableData(list);
+    this.timelineData = this?.convertToTimelineData(list);
+    this.crumb.push({
+      id: loopNode.node_id,
+      label: loopNode.node_name,
+      isLoop: true,
+    });
+  }
+
   onSelectWorkflow(curmbItem) {
     if (curmbItem.id) {
-      const list = this.result.event_list.filter(item => item.parent_node_id === curmbItem?.id);
-      this.callChainInfo.list = this.convertToTableData(list);
-      this.timelineData = this.convertToTimelineData(list);
-      const parent_node_id = this.callChainInfo?.list[0]?.parent_node_id;
-      const level = this.crumb.findIndex(item => item.id === parent_node_id);
-      this.crumb = this.crumb.slice(0, level + 1);
+      if (curmbItem.isLoop) {
+        const list = this.result.event_list.filter(item => item.loop_node_id === curmbItem?.id);
+        this.callChainInfo.list = this.convertToTableData(list);
+        this.timelineData = this.convertToTimelineData(list);
+        const level = this.crumb.findIndex(item => item.id === curmbItem.id);
+        this.crumb = this.crumb.slice(0, level + 1);
+      } else {
+        const list = this.result.event_list.filter(item => item.parent_node_id === curmbItem?.id);
+        this.callChainInfo.list = this.convertToTableData(list);
+        this.timelineData = this.convertToTimelineData(list);
+        const parent_node_id = this.callChainInfo?.list[0]?.parent_node_id;
+        const level = this.crumb.findIndex(item => item.id === parent_node_id);
+        this.crumb = this.crumb.slice(0, level + 1);
+      }
     } else {
       this.callChainInfo.list = this?.convertToTableData(this.result.event_list);
       this.callChainInfo.list = this.callChainInfo?.list.filter(item => !item.parent_node_id);

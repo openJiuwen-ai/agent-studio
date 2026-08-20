@@ -680,6 +680,7 @@
   "rounds_count_of_repeat": "{{number}}次重试",
   "first_token": "首token",
   "view_sub_workflow_call_chain": "查看子工作流调用链",
+  "view_loop_call_chain": "查看循环节点调用链",
   "model_input": "模型输入",
   "model_output": "模型输出",
   "start_time_label": "开始时间：",
