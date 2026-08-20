@@ -113,6 +113,14 @@ export class HttpService {
       ns: I18nNamespace.ERROR,
     });
 
+    // 兼容 facade 返回 code 而非 error_code 的情况
+    if (!error.error?.error_code && error.error?.code) {
+      error.error.error_code = error.error.code;
+    }
+    if (!error.error?.error_msg && error.error?.message) {
+      error.error.error_msg = error.error.message;
+    }
+
     if (error.error?.error_code) {
       if (['Openjiuwen.02001064', 'Openjiuwen.02001022', 'Openjiuwen.02501052', 'Openjiuwen.03002017'].includes(error.error?.error_code)) {
         StorageService.setSessionStorage('error_code', error.error?.error_code);

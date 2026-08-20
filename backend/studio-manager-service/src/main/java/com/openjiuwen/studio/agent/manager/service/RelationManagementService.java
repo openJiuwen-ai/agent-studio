@@ -1248,11 +1248,13 @@ public class RelationManagementService implements IRelationManagementService {
         // 传入的tool id与version
         Map<String, String> toolVersionMap = tools.stream()
             .filter(tool -> tool.getResourceVersion() != null)
-            .collect(Collectors.toMap(MappingEntity::getResourceId, MappingEntity::getResourceVersion));
+            .collect(Collectors.toMap(MappingEntity::getResourceId, MappingEntity::getResourceVersion,
+                (existingValue, newValue) -> existingValue));
         // 已绑定tool id和version
         Map<String, String> hasBoundToolIdVersionMap = hasBoundToolList.stream()
             .filter(tool -> tool.getResourceVersion() != null)
-            .collect(Collectors.toMap(MappingEntity::getResourceId, MappingEntity::getResourceVersion));
+            .collect(Collectors.toMap(MappingEntity::getResourceId, MappingEntity::getResourceVersion,
+                (existingValue, newValue) -> existingValue));
         for (String toolId : hasBoundToolIdList) {
             String toolVersion = toolVersionMap.get(toolId);
             String boundVersion = hasBoundToolIdVersionMap.get(toolId);
