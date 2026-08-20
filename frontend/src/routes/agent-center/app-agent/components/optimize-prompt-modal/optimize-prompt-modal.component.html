@@ -4,7 +4,10 @@
     <nz-spin />
     <span>{{ 'intelligent_generation' | i18nextEager }}</span>
   </div>
-  <div *ngIf="!state.isLoading" class="optimize-content">
+  <div *ngIf="!state.isLoading && !state.isError" class="optimize-content">
+    {{ state.optimizeResult }}
+  </div>
+  <div *ngIf="!state.isLoading && state.isError" class="optimize-content optimize-error">
     {{ state.optimizeResult }}
   </div>
 </div>
@@ -23,7 +26,7 @@
     nzType="primary"
     nzDanger
     (click)="confirm()"
-    [disabled]="state.fetching"
+    [disabled]="state.fetching || state.isError"
   >
     {{ 'optimize_prompt_modal_1' | i18nextEager }}
   </button>

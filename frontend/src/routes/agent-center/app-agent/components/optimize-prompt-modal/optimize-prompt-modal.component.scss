@@ -11,6 +11,10 @@
   white-space: pre-line;
 }
 
+.optimize-error {
+  color: #ff4d4f;
+}
+
 ::ng-deep {
   #optimize-scroll-body {
     scroll-behavior: smooth;
