@@ -44,13 +44,16 @@ public enum PromptTaskStatusEnum {
 
     /**
      * 任务暂停
+     * 允许 QUERY：暂停中/已暂停任务需支持详情查询(状态轮询同步、详情页恢复流程均依赖)，
+     * 否则 getPromptTask 权限校验失败导致详情页报错
      */
-    PAUSE(5, "任务暂停", Arrays.asList(OperatorEnum.RESUME, OperatorEnum.DELETE)),
+    PAUSE(5, "任务暂停", Arrays.asList(OperatorEnum.RESUME, OperatorEnum.DELETE, OperatorEnum.QUERY)),
 
     /**
      * 任务暂停中
+     * 允许 QUERY：PAUSING 为异步中间态，前端轮询详情驱动状态流转为 PAUSE，禁止查询将导致状态永久卡死
      */
-    PAUSING(6, "任务暂停中", List.of());
+    PAUSING(6, "任务暂停中", List.of(OperatorEnum.QUERY));
 
     /**
      * 状态编码
