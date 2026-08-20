@@ -6,7 +6,7 @@ boto3==1.40.61
 aioboto3==15.5.0
 httpx==0.28.1
 urllib3==2.7.0
-psycopg2-binary==2.9.10
+psycopg2==2.9.12
 redis==6.4.0
 PyYAML==6.0.3
 lxml==6.1.0

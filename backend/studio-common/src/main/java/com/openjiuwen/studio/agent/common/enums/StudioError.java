@@ -2004,6 +2004,26 @@ public enum StudioError {
     MD_VIDEO_GENERATION_TASK_NOT_EXIST(BAD_REQUEST, MODEL, "1071"),
 
     /**
+     * 模型导入文件行签名校验失败
+     */
+    MODEL_IMPORT_SIGNATURE_INVALID(BAD_REQUEST, MODEL, "1080"),
+
+    /**
+     * 模型导入文件格式非法（非JSONL / 行解析失败 / payload缺失）
+     */
+    MODEL_IMPORT_FORMAT_INVALID(BAD_REQUEST, MODEL, "1081"),
+
+    /**
+     * 模型apiUrl环境变量占位符语法非法（与Python运行期MD_ENV_VAR_UNRESOLVED语义对齐：导入侧校验语法，运行期校验变量存在性）
+     */
+    MODEL_ENV_VAR_UNRESOLVED(BAD_REQUEST, MODEL, "1082"),
+
+    /**
+     * 模型导入冲突无法自动解决（COVER策略下删除失败等）
+     */
+    MODEL_IMPORT_CONFLICT(CONFLICT, MODEL, "1083"),
+
+    /**
      * ============================== 组件（插件、MCP） ==============================
      */
     /**

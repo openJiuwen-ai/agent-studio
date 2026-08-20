@@ -14,6 +14,7 @@ import { DeleteModalComponent } from '@routes/model-management/delete-modal/dele
 import { statusNewMap, statusMeta } from '@constants/status';
 import { SetSidebarVisibilityService } from '@shared/services/set-sidebar-visibility.service';
 import { AuthModalComponent } from '@routes/model-management/components/auth-modal/auth-modal.component';
+import { ModelImportModalComponent } from '@routes/model-management/components/import-modal/import-modal.component';
 import { ModelType } from '@enums/jiuwen-model.enum';
 import { NewCommonNoDataWithBtnComponent } from '@shared/components/new-common-no-data-with-btn/new-common-no-data-with-btn.component';
 import { CommonService } from '@services/common.service';
@@ -192,6 +193,11 @@ export class ModalManagementDetailComponent {
           disabled: data?.publish_status === 'online' || !this.subscribeBtnStatus,
         },
         {
+          label: this.i18n.transform('export'),
+          key: 'export',
+          disabled: !this.subscribeBtnStatus,
+        },
+        {
           label: this.i18n.transform('delete'),
           key: 'delete',
           icon: cdnAssetUrl('assets/images/model/delete.svg'),
@@ -357,6 +363,8 @@ export class ModalManagementDetailComponent {
   public searchString = '';
   public queryFilter = {};
   public provider_boolean = false;
+
+  public exportLoading = false;
 
   ngOnInit() {
     this.sidebarVisibilityServ.setSidebarsVisibilityByState('init');
@@ -636,8 +644,52 @@ export class ModalManagementDetailComponent {
       this.changeModelStatus(item);
     } else if (menuItem.key === 'edit') {
       this.openHalfModel(item);
+    } else if (menuItem.key === 'export') {
+      this.exportSingleModel(item);
     } else if (menuItem.key === 'delete') {
       this.deleteModal(item);
     }
+  }
+
+  /** 单模型导出（只导模型，菜单入口）：导出该模型本身，不含供应商元数据。
+   *  模型本身无密钥（api-key 在供应商侧），导入时挂到目标环境已存在的供应商。 */
+  exportSingleModel(item: any) {
+    if (!this.subscribeBtnStatus) return;
+    this.exportLoading = true;
+    this.modelManagementService
+      .exportModels([item.id], { includeProvider: false })
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'models.jsonl';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        this.nzMessageService.success(this.i18n.transform('export_model_success'));
+      })
+      .catch(() => {
+        this.nzMessageService.error(this.i18n.transform('export_model_failed'));
+      })
+      .finally(() => {
+        this.exportLoading = false;
+      });
+  }
+
+  openImportModal() {
+    // 详情页导入=只导模型导入：传 targetProviderId=当前供应商，导入的模型重定向挂到该供应商。
+    const modalRef = this.nzModalService.create({
+      nzContent: ModelImportModalComponent,
+      nzTitle: this.i18n.transform('import_models'),
+      nzWidth: '760px',
+      nzFooter: null,
+      nzData: { targetProviderId: this.provider_id },
+    });
+    modalRef.afterClose.subscribe((imported: boolean) => {
+      if (imported) {
+        this.getData();
+      }
+    });
   }
 }

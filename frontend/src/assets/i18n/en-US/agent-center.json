@@ -675,6 +675,7 @@
   "rounds_count_of_repeat": "{{number}} rounds of repeat",
   "first_token": "First token ",
   "view_sub_workflow_call_chain": "View sub workflow call chain",
+  "view_loop_call_chain": "View loop call chain",
   "model_input": "Model input",
   "model_output": "Model output",
   "start_time_label": "Start time:",

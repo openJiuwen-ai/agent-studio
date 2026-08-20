@@ -260,6 +260,8 @@
   "external_knowledge_base_import": "从外部知识库系统中接入知识库",
   "no_knowledge_base_resources_need": "当前暂无接入的知识库资源，您需要先",
   "default_knowledge_base_config": "默认知识库配置",
+  "knowledge_base_type": "知识库类型",
+  "type_selection": "类型选择",
   "select_knowledge_base_first": "请先选择知识库",
   "enter_knowledge_base_name": "请输入知识库名称",
   "enter_knowledge_base_description": "请输入知识库描述",

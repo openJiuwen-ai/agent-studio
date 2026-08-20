@@ -134,6 +134,10 @@ export class DocumentComponent implements OnInit, OnChanges, OnDestroy {
   public isFaqEnable = false;
   public isRagFlow = false;
 
+  get isOpenJiuwen() {
+    return this.configServ.openjiuwenKbEnable() && this.kb?.source?.knowledge_base_connector_id === 'OpenjiuwenInside';
+  }
+
   ocrAccept =
     '.doc, .docx, .pdf, .pptx, .ppt, .xlsx, .xls, .csv, .wps, .png, .jpg, .jpeg, .bmp, .gif, .tiff, .tif, .webp, .pcx, .ico, .psd, .dps, .et, .txt, .ofd, .md, .html, .mhtml';
   acceptWithNoOcr = '.doc, .docx, .pdf, .pptx, .ppt, .xlsx, .xls, .csv, .wps, .dps, .et, .txt, .ofd, .md, .html, .mhtml';

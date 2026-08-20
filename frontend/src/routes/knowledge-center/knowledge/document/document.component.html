@@ -67,8 +67,8 @@
       <td *ngIf="!isMarket" [nzChecked]="setOfCheckedId.has(data.file_id)" [nzDisabled]="kbAbilitiesService.isResourceDisabled" (nzCheckedChange)="onItemChecked(data.file_id, $event)"></td>
 
       <td class="truncate" [title]="data.file_name">
-        <a *ngIf="!isMarket" [routerLink]="['/home/knowledge-center/knowledge', kbId, 'files', data.file_id]">{{ data.file_name }}</a>
-        <span *ngIf="isMarket">{{ data.file_name }}</span>
+        <a *ngIf="!isMarket && !isOpenJiuwen" [routerLink]="['/home/knowledge-center/knowledge', kbId, 'files', data.file_id]">{{ data.file_name }}</a>
+        <span *ngIf="isMarket || isOpenJiuwen">{{ data.file_name }}</span>
       </td>
 
       <td class="truncate" [title]="data.file_type">{{ data.file_type }}</td>

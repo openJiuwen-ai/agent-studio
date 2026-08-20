@@ -65,6 +65,9 @@
     <update id="update" parameterType="com.openjiuwen.studio.agent.agentbase.entity.KnowledgeBaseConnectionEntity">
         update t_knowledge_base_connection
         <set>
+            <if test="connection.connectorId != null and connection.connectorId != ''">
+                connector_id = #{connection.connectorId},
+            </if>
             <if test="connection.name != null and connection.name != ''">
                 name = #{connection.name},
             </if>

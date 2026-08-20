@@ -225,7 +225,9 @@ public class ProviderMgmtService implements IProviderMgmtService {
     )
     public Void deleteModelServiceProvider(String projectId, String workspaceId, String id) {
         queryAndAuthCheck(projectId, workspaceId, id, false);
-        int count = modelServiceMapper.countByProviderId(id);
+        // 仅统计当前工作空间下引用该供应商的模型：跨空间的模型行引用的是其他空间的同 UUID 供应商，
+        // 不应阻塞本空间供应商删除；同时避免历史孤儿行（auth_metadata_id 悬空等）阻挡删除。
+        int count = modelServiceMapper.countByProviderId(projectId, workspaceId, id);
         if (count > 0) {
             throw new AgentStudioException(StudioError.PROVIDER_ASSOCIATED_MODEL);
         }

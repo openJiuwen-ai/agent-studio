@@ -202,7 +202,7 @@ public class ProviderAuthService {
         authMapper.insertBackup(providerAuthData);
     }
 
-    private void saveAuthInfoToObs(ProviderAuthData authData) {
+    void saveAuthInfoToObs(ProviderAuthData authData) {
         String path = String.format(AUTH_INFO_PATH, authData.getProjectId(), authData.getProviderId(),
             authData.getId());
         String content = JsonUtils.encode(authData);
@@ -224,14 +224,32 @@ public class ProviderAuthService {
 
     public ProviderAuthConfig transToAuthConfig(ProviderAuthMetadata metadata) {
         String authInfo = metadata.getAuthInfo();
-        if (!StringUtils.isEmpty(metadata.getAuthId()) && !StringUtils.isEmpty(metadata.getAuthConfig())) {
-            ProviderAuth auth = getProviderAuth(metadata.getAuthType(), metadata.getAuthConfig());
-            authInfo = auth.convertToMaskStr(true);
+        boolean hasRecord = metadata.getAuthId() != null && !StringUtils.isEmpty(metadata.getAuthConfig());
+        if (hasRecord) {
+            // Defense-in-depth：auth_config 若不是合法 JSON（例如脱敏导入遗留的空格占位符 " "），
+            // 降级为 is_record=false，避免 JsonUtils.decode 抛异常导致整个详情页 500。
+            String cfg = metadata.getAuthConfig().trim();
+            if (cfg.startsWith("{")) {
+                try {
+                    ProviderAuth auth = getProviderAuth(metadata.getAuthType(), metadata.getAuthConfig());
+                    authInfo = auth.convertToMaskStr(true);
+                } catch (Exception e) {
+                    log.warn("transToAuthConfig: failed to decode auth_config for metadata={}, treat as no_record. err={}",
+                        metadata.getId(), e.getMessage());
+                    hasRecord = false;
+                    authInfo = "";
+                }
+            } else {
+                log.warn("transToAuthConfig: auth_config for metadata={} is not JSON ({}), treat as no_record",
+                    metadata.getId(), cfg.length() > 20 ? cfg.substring(0, 20) + "..." : cfg);
+                hasRecord = false;
+                authInfo = "";
+            }
         }
 
         return new ProviderAuthConfig().setAuthId(metadata.getAuthId())
             .setAuthType(metadata.getAuthType())
-            .setIsRecord(metadata.getAuthId() != null && metadata.getAuthConfig() != null)
+            .setIsRecord(hasRecord)
             .setMetadataId(metadata.getId())
             .setModelNames("")
             .setAuthUrl(metadata.getAuthUrl())

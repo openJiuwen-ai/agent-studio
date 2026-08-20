@@ -7,6 +7,7 @@ import { UploadImageComponent } from '@routes/knowledge-center/components/upload
 import { KbUtils } from '@routes/knowledge-center/kb.utils';
 import { KbConstantConfigKey } from '@routes/knowledge-center/knowledge-base.interface';
 import { CreateTipModalComponent } from '@routes/platform-management/resource-management/alert-model/create-tip-modal/create-tip-modal.component';
+import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 import { AppAgentRepoService } from '@services/agent-center/app-agent-repo.service';
 import { KnowledgeRepoService } from '@services/agent-center/knowledge.service';
 import { KbAbilitiesService } from '@services/knowledge-center/kb-abilities.service';
@@ -171,6 +172,8 @@ export class KnowledgeFormDrawerComponent implements OnInit {
   public hasOcr = false;
 
   public isRagFlow = false;
+  public isOpenJiuwen = false;
+  public isConfigLoaded = false;
 
   public showChunkMethod = true;
 
@@ -196,6 +199,7 @@ export class KnowledgeFormDrawerComponent implements OnInit {
     private modalService: NzModalService,
     private jiuwenModelServ: JiuwenModelService,
     public kbAbilities: KbAbilitiesService,
+    private configServ: AgentConfigService,
   ) {
     this.form = this.fb.group({
       icon: [''],
@@ -327,6 +331,13 @@ export class KnowledgeFormDrawerComponent implements OnInit {
     return SplitMode.RULE === this.splitMode2;
   }
 
+  public get filteredSplitModeOptions() {
+    if (this.isOpenJiuwen) {
+      return this.splitModeOptions.filter(item => item.value === SplitMode.AUTO);
+    }
+    return this.splitModeOptions;
+  }
+
   ngOnInit(): void {
     if (this.formData && this.formData.icon) {
       this.defaultIcon = this.formData.icon;
@@ -405,7 +416,6 @@ export class KnowledgeFormDrawerComponent implements OnInit {
       isValid = this.validateSpecificFields(['display_name', 'description']);
     } else if (this.showAdvancedForm) {
       isValid = this.validateSpecificFields([
-        'embedding_model',
         'rerank_model',
       ]);
     }
@@ -430,7 +440,7 @@ export class KnowledgeFormDrawerComponent implements OnInit {
   }
 
   async getModelOptionsApi(modelType: string, idParam) {
-    if (!this.isRagFlow) {
+    if (!this.isRagFlow && !this.isOpenJiuwen) {
       const { models } = await this.knowledgeRepoServ.getKnowledgeBaseUseModel({
         model_type: modelType,
         ...idParam,
@@ -476,7 +486,7 @@ export class KnowledgeFormDrawerComponent implements OnInit {
     const rerankOption = this.rerankModelOptions.find(
       (item) => !this.isRagFlow ? rerank_model === item.name : rerank_model === item.id,
     ) || (!this.isRagFlow ? { name: rerank_model, type: 'rerank' } : {});
-    const { split_mode, chunk_size, ...other } = split_conf;
+    const { split_mode, chunk_size, ...other } = split_conf || {};
     let split_mode1 = split_mode;
     let split_mode2 = SplitMode.CATALOG;
     if ([SplitMode.CATALOG, SplitMode.RULE].includes(split_mode)) {
@@ -495,11 +505,11 @@ export class KnowledgeFormDrawerComponent implements OnInit {
         chunk_size2: chunk_size,
       },
       parse_conf: {
-        ocr_enabled: parse_conf.ocr_enabled,
-        image_enabled: parse_conf.image_enabled,
-        header_footer_enabled: parse_conf.header_footer_enabled,
-        catalog_enabled: parse_conf.catalog_enabled,
-        image_conf: parse_conf.image_conf,
+        ocr_enabled: parse_conf?.ocr_enabled ?? false,
+        image_enabled: parse_conf?.image_enabled ?? false,
+        header_footer_enabled: parse_conf?.header_footer_enabled ?? false,
+        catalog_enabled: parse_conf?.catalog_enabled ?? false,
+        image_conf: parse_conf?.image_conf ?? 'IMAGE',
       },
     };
     if (rag_chunk_parser_conf) {
@@ -643,6 +653,18 @@ export class KnowledgeFormDrawerComponent implements OnInit {
         await this.appAgentRepoServ.getConfigs();
       this.hasOcr = ocr_enable;
       this.isRagFlow = knowledge_source === 'AgentBaseRag';
+
+      try {
+        const defaultConfig = await this.knowledgeRepoServ.getKnowledgeDefaultConfigDetail(
+          'default_lakesearch_inside_connection_id',
+        );
+        if (this.configServ.openjiuwenKbEnable() && defaultConfig?.knowledge_base_connection_detail?.connector_id === 'OpenjiuwenInside') {
+          this.isOpenJiuwen = true;
+        }
+      } catch (e) {
+        // 默认配置查询失败时不影响创建流程
+      }
+      this.isConfigLoaded = true;
 
       const rerankControl = this.form.get('rerank_model');
       if (!this.isRagFlow) {

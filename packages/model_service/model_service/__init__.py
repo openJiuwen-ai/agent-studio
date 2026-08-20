@@ -11,6 +11,9 @@ from .resolver import (
     InterfaceProtocol, ModelServiceBase, ModelServiceDetail, ModelStrategy,
     ProviderAuth, StrategyType, resolve_strategy,
 )
+from .env_resolver import (
+    ENV_PLACEHOLDER_PATTERN, has_env_placeholder, resolve_env_placeholders,
+)
 from .authz import assert_project_id_trusted, check_authz, extract_project_id
 from .policy import AuditLog, alarm, invoke_with_strategy, record_audit
 from .dispatch import build_httpx_client, embed, get_chat_connection, normalize_protocol, rerank
@@ -22,6 +25,7 @@ from .ports import (
     set_llm_settings, get_llm_settings,
     set_request_headers, get_request_headers,
     set_request_customer_headers, get_request_customer_headers,
+    set_env_variables, get_env_variables,
     set_cache_queues, get_model_cache, get_auth_cache,
 )
 
@@ -29,6 +33,8 @@ __all__ = [
     # resolver
     "InterfaceProtocol", "ModelServiceBase", "ModelServiceDetail", "ModelStrategy",
     "ProviderAuth", "StrategyType", "resolve_strategy",
+    # env_resolver
+    "ENV_PLACEHOLDER_PATTERN", "has_env_placeholder", "resolve_env_placeholders",
     # authz
     "extract_project_id", "assert_project_id_trusted", "check_authz",
     # policy
@@ -43,5 +49,6 @@ __all__ = [
     "set_llm_settings", "get_llm_settings",
     "set_request_headers", "get_request_headers",
     "set_request_customer_headers", "get_request_customer_headers",
+    "set_env_variables", "get_env_variables",
     "set_cache_queues", "get_model_cache", "get_auth_cache",
 ]

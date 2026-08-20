@@ -94,21 +94,34 @@
 
     <div class="main-container flex-1" [ngClass]="{ 'loading-class': loading }" style="margin-bottom: 16px">
       <div class="basicInfo height100">
-        <div class="btn-list" *ngIf="activeName === 'CUSTOM'">
-          <button
-            *ngIf="provider_boolean; else newModelTemplate"
-            [disabled]="!subscribeBtnStatus"
-            nz-button
-            nzType="primary"
-            (click)="synchronizeModelService()"
-          >
-            {{ 'synchronize-model-service' | i18nextEager }}
-          </button>
-          <ng-template #newModelTemplate>
-            <button [disabled]="basicData?.id?.startsWith('cdi-') || !subscribeBtnStatus" nz-button nzType="primary" (click)="openHalfModel()">
-              {{ 'add_model_service' | i18nextEager }}
+        <div class="flex items-center justify-between mb-[16px] gap-2" *ngIf="activeName === 'CUSTOM'">
+          <div class="btn-list">
+            <button
+              *ngIf="provider_boolean; else newModelTemplate"
+              [disabled]="!subscribeBtnStatus"
+              nz-button
+              nzType="primary"
+              (click)="synchronizeModelService()"
+            >
+              {{ 'synchronize-model-service' | i18nextEager }}
             </button>
-          </ng-template>
+            <ng-template #newModelTemplate>
+              <button [disabled]="basicData?.id?.startsWith('cdi-') || !subscribeBtnStatus" nz-button nzType="primary" (click)="openHalfModel()">
+                {{ 'add_model_service' | i18nextEager }}
+              </button>
+            </ng-template>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button
+              nz-button
+              nzType="default"
+              (click)="openImportModal()"
+              [disabled]="!subscribeBtnStatus"
+            >
+              {{ 'import_models' | i18nextEager }}
+            </button>
+          </div>
         </div>
 
         <div class="mb-[16px] flex items-center gap-2">

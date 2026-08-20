@@ -12,6 +12,7 @@ import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import type { ProviderInfo } from "@routes/model-management/components/auth-modal/auth.type";
+import { CommonValidation } from '@shared/validation/commonValidation';
 
 @Component({
   selector: 'meta-auth-modal',
@@ -249,6 +250,39 @@ export class AuthModalComponent implements OnInit {
 
   public deleteArgs(i: number) {
     this.apiKeyAuthArgs.splice(i, 1);
+  }
+
+  /**
+   * 输入事件处理：过滤不可见控制字符和零宽字符
+   * 应用于 API Key、AK、SK 等认证凭据输入框 (ngModel 模式)
+   */
+  onAuthInputChange(key: string, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const sanitized = CommonValidation.sanitizeInvisibleChars(input.value);
+    if (sanitized !== input.value) {
+      const cursorPos = Math.max(0, input.selectionStart - (input.value.length - sanitized.length));
+      this.authsInfo[key] = sanitized;
+      requestAnimationFrame(() => {
+        const pos = Math.min(cursorPos, sanitized.length);
+        input.setSelectionRange(pos, pos);
+      });
+    }
+  }
+
+  /**
+   * CUSTOM_APIKEY 模式下动态参数值的输入过滤
+   */
+  onCustomApikeyInput(index: number, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const sanitized = CommonValidation.sanitizeInvisibleChars(input.value);
+    if (sanitized !== input.value) {
+      const cursorPos = Math.max(0, input.selectionStart - (input.value.length - sanitized.length));
+      this.apiKeyAuthArgs[index].auth_key = sanitized;
+      requestAnimationFrame(() => {
+        const pos = Math.min(cursorPos, sanitized.length);
+        input.setSelectionRange(pos, pos);
+      });
+    }
   }
 
   delete() {
