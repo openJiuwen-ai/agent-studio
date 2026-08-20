@@ -178,6 +178,7 @@
   "unsupported_file_type": "Unsupported file type!",
   "unsupported_file_type_1": "File size exceeds limit!",
   "api_key_input": "Enter API Key",
+  "api_key_invalid": "API key contains invalid characters: only visible ASCII characters (letters, digits, common punctuation) are allowed. No spaces, control, or hidden characters permitted (check for invisible chars copied from rich text/spreadsheets).",
   "api_auth_tip": "The <strong>critical information</strong> you enter will be <strong>encrypted and stored</strong> solely for model service invocation. Changes take effect after 2 minutes.",
   "api_auth_tip_1": "The <strong>critical information</strong> you enter will be <strong>encrypted and stored</strong> solely for model service invocation.",
   "enter_ak": "Enter AK",

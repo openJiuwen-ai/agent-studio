@@ -165,6 +165,11 @@ export class AddPublisherComponent implements OnInit {
 
   private urlPattern = /^https?:\/\/.+/;
 
+  // API Key 合法字符：仅可见 ASCII 可打印字符（0x21-0x7E），不含空格/控制字符/零宽/非ASCII。
+  // 覆盖各厂商格式（dashscope sk-ws-...含 . _ -、OpenAI sk-proj-...、Bearer/JWT 等），
+  // 拦截从富文本/表格复制带入的隐藏字符与首尾空白。
+  private apiKeyPattern = /^[!-~]+$/;
+
   constructor(
     private i18n: I18NextEagerPipe,
     private fb: FormBuilder,
@@ -231,7 +236,26 @@ export class AddPublisherComponent implements OnInit {
     this.myForm.controls.description.setValue(providerInfo.description);
     let auth_type = providerInfo.auth_configs[0].auth_type;
     this.myForm.controls.auth_type.setValue(auth_type);
+    // 编辑回填后补设凭据字段合法校验（须在 changeAutoType 之前，因后者对空 auth_info 会抛异常跳过后续逻辑）
+    this.applyCredentialValidators(auth_type);
     this.changeAutoType(providerInfo.auth_configs[0]);
+  }
+
+  /** 为 API_KEY/AK_SK/HMAC/APP_CODE 凭据字段设置 required + 合法字符 pattern 校验（不清空已填值）。 */
+  private applyCredentialValidators(auth_type: string) {
+    const credValidators = [Validators.required, Validators.pattern(this.apiKeyPattern)];
+    if (auth_type === this.API_KEY) {
+      this.myForm.controls[mapKeys.apikey].setValidators(credValidators);
+      this.myForm.controls[mapKeys.apikey].updateValueAndValidity({ onlySelf: true });
+    } else if (auth_type === this.AK_SK || auth_type === this.HMAC) {
+      this.myForm.controls[mapKeys.ak].setValidators(credValidators);
+      this.myForm.controls[mapKeys.ak].updateValueAndValidity({ onlySelf: true });
+      this.myForm.controls[mapKeys.sk].setValidators(credValidators);
+      this.myForm.controls[mapKeys.sk].updateValueAndValidity({ onlySelf: true });
+    } else if (auth_type === this.APP_CODE) {
+      this.myForm.controls[mapKeys.appCode].setValidators(credValidators);
+      this.myForm.controls[mapKeys.appCode].updateValueAndValidity({ onlySelf: true });
+    }
   }
 
   resetControl() {
@@ -392,6 +416,11 @@ export class AddPublisherComponent implements OnInit {
 
   changeAutoType(res: any) {
     this.resetControl();
+    if (!res?.auth_info) {
+      // auth_info 为空（如鉴权脱敏/未配置），无需解析，直接保留 auth_type 即可
+      this.myForm.controls[mapKeys.auth_type].setValue(res?.auth_type);
+      return;
+    }
     let auth_info = JSON.parse(res.auth_info);
     let auth_type = res.auth_type;
 
@@ -491,7 +520,7 @@ export class AddPublisherComponent implements OnInit {
     if (auth === this.API_KEY) {
       this.resetControl();
       const ctrl = this.myForm.controls[mapKeys.apikey];
-      ctrl.setValidators([Validators.required]);
+      ctrl.setValidators([Validators.required, Validators.pattern(this.apiKeyPattern)]);
       ctrl.updateValueAndValidity({ onlySelf: true });
     }
     if (auth === this.AK_SK || auth === this.HMAC) {

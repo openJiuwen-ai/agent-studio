@@ -24,22 +24,26 @@
         <div class="auth-section" *ngIf="apiKeyForm.value.auth_type === 'API_KEY'">
           <div class="auth-label">{{ 'api_key_input'|i18nextEager }} <span class="required">*</span></div>
           <input nz-input class="w-full" type="password" formControlName="apikey" (input)="onAuthInputChange('apikey', $event)"/>
+          <div *ngIf="apiKeyForm.controls.apikey.touched && apiKeyForm.controls.apikey.hasError('pattern')" class="text-red-500 text-xs mt-1">{{ 'api_key_invalid' | i18nextEager }}</div>
           <div class="mt-[8px]" [innerHTML]="'api_auth_tip'|i18nextEager" ></div>
         </div>
         <!--AK/SK-->
         <div class="auth-section" *ngIf="apiKeyForm.value.auth_type === 'AK_SK' || apiKeyForm.value.auth_type === 'HMAC'">
           <div class="auth-label">{{ 'enter_ak'|i18nextEager }} <span class="required">*</span></div>
           <input nz-input class="w-full" type="password" formControlName="ak" (input)="onAuthInputChange('ak', $event)"/>
+          <div *ngIf="apiKeyForm.controls.ak.touched && apiKeyForm.controls.ak.hasError('pattern')" class="text-red-500 text-xs mt-1">{{ 'api_key_invalid' | i18nextEager }}</div>
         </div>
         <div class="auth-section" *ngIf="apiKeyForm.value.auth_type === 'AK_SK' || apiKeyForm.value.auth_type === 'HMAC'">
           <div class="auth-label">{{ 'enter_sk'|i18nextEager }} <span class="required">*</span></div>
           <input nz-input class="w-full" type="password" formControlName="sk" (input)="onAuthInputChange('sk', $event)"/>
+          <div *ngIf="apiKeyForm.controls.sk.touched && apiKeyForm.controls.sk.hasError('pattern')" class="text-red-500 text-xs mt-1">{{ 'api_key_invalid' | i18nextEager }}</div>
           <div class="mt-[8px]" [innerHTML]="'api_auth_tip_1'|i18nextEager" ></div>
         </div>
         <!--APPCODE-->
         <div class="auth-section" *ngIf="apiKeyForm.value.auth_type === 'APP_CODE'">
           <div class="auth-label">{{ 'enter_AppCode'|i18nextEager }} <span class="required">*</span></div>
           <input nz-input class="w-full" type="password" formControlName="appCode" (input)="onAuthInputChange('appCode', $event)"/>
+          <div *ngIf="apiKeyForm.controls.appCode.touched && apiKeyForm.controls.appCode.hasError('pattern')" class="text-red-500 text-xs mt-1">{{ 'api_key_invalid' | i18nextEager }}</div>
           <div class="mt-[8px]" [innerHTML]="'api_auth_tip'|i18nextEager" ></div>
         </div>
         <div class="auth-section" *ngIf="apiKeyForm.value.auth_type === 'CUSTOM_APIKEY'">
