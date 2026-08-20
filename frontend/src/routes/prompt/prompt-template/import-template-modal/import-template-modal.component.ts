@@ -89,7 +89,6 @@ export class ImportTemplateModalComponent {
         this.close();
       } else {
         MessageComponent.showError(res.join(','));
-        this.dismiss();
       }
     });
   }
