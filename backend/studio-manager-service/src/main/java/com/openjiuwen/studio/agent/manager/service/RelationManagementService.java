@@ -1248,11 +1248,13 @@ public class RelationManagementService implements IRelationManagementService {
         // 传入的tool id与version
         Map<String, String> toolVersionMap = tools.stream()
             .filter(tool -> tool.getResourceVersion() != null)
-            .collect(Collectors.toMap(MappingEntity::getResourceId, MappingEntity::getResourceVersion));
+            .collect(Collectors.toMap(MappingEntity::getResourceId, MappingEntity::getResourceVersion,
+                (existingValue, newValue) -> existingValue));
         // 已绑定tool id和version
         Map<String, String> hasBoundToolIdVersionMap = hasBoundToolList.stream()
             .filter(tool -> tool.getResourceVersion() != null)
-            .collect(Collectors.toMap(MappingEntity::getResourceId, MappingEntity::getResourceVersion));
+            .collect(Collectors.toMap(MappingEntity::getResourceId, MappingEntity::getResourceVersion,
+                (existingValue, newValue) -> existingValue));
         for (String toolId : hasBoundToolIdList) {
             String toolVersion = toolVersionMap.get(toolId);
             String boundVersion = hasBoundToolIdVersionMap.get(toolId);
@@ -2027,11 +2029,7 @@ public class RelationManagementService implements IRelationManagementService {
                     listResourceRelationsQo.getResourceType(), projectId, listResourceRelationsQo.getWorkspaceId());
             log.info("Resource validation passed.");
 
-            // 分页查询关联关系
-            log.info("Starting pagination query. Offset: {}, Limit: {}",
-                    listResourceRelationsQo.getOffset(), listResourceRelationsQo.getLimit());
-            PageHelper.offsetPage(listResourceRelationsQo.getOffset(), listResourceRelationsQo.getLimit());
-
+            // 查询全部关联关系（不分页，先去重再分页，避免去重后 total 不准确和部分记录丢失）
             log.info("Calling mappingMapper.selectByResourceIdAndVersionId with parameters: resourceId={}, version={}, workspaceId={}, appType={}, referenceType={}",
                     resourceId,
                     listResourceRelationsQo.getVersion(),
@@ -2059,6 +2057,16 @@ public class RelationManagementService implements IRelationManagementService {
                     .toList();
             log.info("Mapping entities after deduplication: {}.", mappingEntities.size());
 
+            // 内存分页（去重后再分页，保证 total 准确且记录不丢失）
+            int offset = listResourceRelationsQo.getOffset();
+            int limit = listResourceRelationsQo.getLimit();
+            int total = mappingEntities.size();
+            int fromIndex = Math.min(offset, total);
+            int toIndex = Math.min(offset + limit, total);
+            mappingEntities = mappingEntities.subList(fromIndex, toIndex);
+            log.info("Paginated mapping entities: offset={}, limit={}, returned={}, total={}",
+                    offset, limit, mappingEntities.size(), total);
+
             // 提取 workspaceId 列表
             List<String> workspaceIdList = mappingEntities.stream()
                     .map(MappingEntity::getAppWorkspaceId)
@@ -2071,11 +2079,9 @@ public class RelationManagementService implements IRelationManagementService {
             // 查询 workspace 信息
             List<WorkspaceEntity> workspaceEntityList = workspaceMapper.selectWorkspaceByWorkspaceIdList(workspaceIdList);
 
-            PageInfo<MappingEntity> pageInfo = new PageInfo<>(mappingEntities);
-
             // 构建返回结果
             RelationList relationList = new RelationList();
-            relationList.setCount(pageInfo.getTotal());
+            relationList.setCount((long) total);
 
             // 构建 workspace 信息 map
             Map<String, String> workspaceInfoMap = workspaceEntityList.stream()

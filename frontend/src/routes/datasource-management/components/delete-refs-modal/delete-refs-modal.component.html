@@ -12,13 +12,8 @@
         <nz-table
           [nzData]="srcData.data"
           [nzFrontPagination]="false"
-          [nzShowSizeChanger]="true"
-          [nzPageSizeOptions]="pageSize.options"
-          [nzPageSize]="pageSize.size"
-          [nzTotal]="totalNumber"
-          [(nzPageIndex)]="currentPage"
-          (nzPageIndexChange)="getMappingsByPage()"
-          (nzPageSizeChange)="getMappingsByPage()"
+          [nzShowPagination]="false"
+          [nzScroll]="{y:'300px'}"
         >
           <thead>
             <tr>
@@ -39,6 +34,19 @@
             </tr>
           </tbody>
         </nz-table>
+        <div style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center">
+          <span>{{ 'total_number_of_records' | i18nextEager }}：{{ totalNumber }}</span>
+          <nz-pagination
+            [(nzPageIndex)]="currentPage"
+            [nzTotal]="totalNumber"
+            [(nzPageSize)]="pageSize.size"
+            [nzPageSizeOptions]="pageSize.options"
+            nzShowSizeChanger
+            (nzPageIndexChange)="getMappingsByPage()"
+            (nzPageSizeChange)="getMappingsByPage()"
+          >
+          </nz-pagination>
+        </div>
 
         <div style="gap: 8px; display: flex; flex-direction: column">
           <div>

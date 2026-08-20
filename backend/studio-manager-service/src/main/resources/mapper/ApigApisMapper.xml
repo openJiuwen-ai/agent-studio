@@ -7,37 +7,37 @@
 <mapper namespace="com.openjiuwen.studio.agent.manager.mapper.ApigApisMapper">
 
     <sql id="Base_Column_List">
-        `ID`, `NAME`, `GROUP_ID`,`DESCRIPTION`, `TENANT_ID`,`THROTTLING_POLICY_ID`,`API_POLICY_BIND_ID`,
-        `CREATED_BY_USER_ID`, `LAST_UPDATED_BY_USER_ID`,`CREATED_DATE`, `LAST_UPDATED_DATE`, `STATUS`
+        ID, NAME, GROUP_ID,DESCRIPTION, TENANT_ID,THROTTLING_POLICY_ID,API_POLICY_BIND_ID,
+        CREATED_BY_USER_ID, LAST_UPDATED_BY_USER_ID,CREATED_DATE, LAST_UPDATED_DATE, STATUS
     </sql>
 
     <select id="selectById" resultType="com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigApisDto">
         select
         <include refid="Base_Column_List"/>
-        from `t_apig_apis`
-        where `ID` = #{id} and `status` != 'deleted'
+        from t_apig_apis
+        where ID = #{id} and status != 'deleted'
     </select>
 
     <select id="selectByName" resultType="com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigApisDto">
         select
         <include refid="Base_Column_List"/>
-        from `t_apig_apis`
-        where `NAME` = #{name} and `status` != 'deleted'
+        from t_apig_apis
+        where NAME = #{name} and status != 'deleted'
     </select>
 
     <select id="selectByTenantId" resultType="com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigApisDto">
         select
         <include refid="Base_Column_List"/>
-        from `t_apig_apis`
-        where `TENANT_ID` = #{tenant_id} and `status` != 'deleted'
+        from t_apig_apis
+        where TENANT_ID = #{tenant_id} and status != 'deleted'
     </select>
 
     <insert id="insert" keyProperty="apigApisDto.id">
-        insert into `t_apig_apis` (`ID`, `NAME`, `GROUP_ID`,
-                                                    `DESCRIPTION`, `TENANT_ID`, `THROTTLING_POLICY_ID`,
-                                                    `API_POLICY_BIND_ID`, `CREATED_BY_USER_ID`,
-                                                    `LAST_UPDATED_BY_USER_ID`,
-                                                    `CREATED_DATE`, `LAST_UPDATED_DATE`, `STATUS`)
+        insert into t_apig_apis (ID, NAME, GROUP_ID,
+                                                    DESCRIPTION, TENANT_ID, THROTTLING_POLICY_ID,
+                                                    API_POLICY_BIND_ID, CREATED_BY_USER_ID,
+                                                    LAST_UPDATED_BY_USER_ID,
+                                                    CREATED_DATE, LAST_UPDATED_DATE, STATUS)
         values (#{apigApisDto.id}, #{apigApisDto.name},
                 #{apigApisDto.groupId}, #{apigApisDto.description}, #{apigApisDto.tenantId},
                 #{apigApisDto.throttlingPolicyId}, #{apigApisDto.apiPolicyBindId}, #{apigApisDto.createdByUserId},
@@ -45,52 +45,52 @@
                 #{apigApisDto.status});
     </insert>
     <update id="update" parameterType="com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigApisDto">
-        update `t_apig_apis`
-        set `NAME`                    = #{apigApisDto.name},
-            `LAST_UPDATED_BY_USER_ID` = #{apigApisDto.lastUpdatedByUserId},
-            `LAST_UPDATED_DATE`       = #{apigApisDto.lastUpdatedDate}
-        where `ID` = #{apigApisDto.id};
+        update t_apig_apis
+        set NAME                    = #{apigApisDto.name},
+            LAST_UPDATED_BY_USER_ID = #{apigApisDto.lastUpdatedByUserId},
+            LAST_UPDATED_DATE       = #{apigApisDto.lastUpdatedDate}
+        where ID = #{apigApisDto.id};
     </update>
 
     <update id="deleteById" parameterType="com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigApisDto">
-        update `t_apig_apis`
-        set `STATUS`='deleted',
-            `LAST_UPDATED_DATE` = current_timestamp()
-        where `ID` = #{apigApisDto.id,jdbcType=VARCHAR}
+        update t_apig_apis
+        set STATUS='deleted',
+            LAST_UPDATED_DATE = current_timestamp()
+        where ID = #{apigApisDto.id,jdbcType=VARCHAR}
     </update>
 
     <update id="deleteByName" parameterType="com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigApisDto">
-        update `t_apig_apis`
-        set `STATUS`='deleted',
-            `LAST_UPDATED_DATE` = current_timestamp()
-        where `NAME` = #{apigApisDto.name}
+        update t_apig_apis
+        set STATUS='deleted',
+            LAST_UPDATED_DATE = current_timestamp()
+        where NAME = #{apigApisDto.name}
     </update>
 
     <delete id="hardDeleteById">
         delete
-        from `t_apig_apis`
-        where `ID` = #{id}
+        from t_apig_apis
+        where ID = #{id}
     </delete>
 
     <update id="updateThrottlingPolicy" parameterType="com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigApisDto">
-        update `t_apig_apis`
-        set `THROTTLING_POLICY_ID`= #{apigApisDto.throttlingPolicyId},
-            `API_POLICY_BIND_ID`  = #{apigApisDto.apiPolicyBindId},
-            `LAST_UPDATED_DATE`   = current_timestamp()
-        where `NAME` = #{apigApisDto.name}
+        update t_apig_apis
+        set THROTTLING_POLICY_ID= #{apigApisDto.throttlingPolicyId},
+            API_POLICY_BIND_ID  = #{apigApisDto.apiPolicyBindId},
+            LAST_UPDATED_DATE   = current_timestamp()
+        where NAME = #{apigApisDto.name}
     </update>
 
     <select id="selectDeleted" resultType="com.openjiuwen.studio.agent.manager.service.mcp.apigservice.bean.ApigApisDto">
         select
         <include refid="Base_Column_List"/>
-        from `t_apig_apis`
+        from t_apig_apis
         where STATUS='deleted';
     </select>
 
     <select id="getNullDeptCodeNum" resultType="Integer">
         select count(1)
         from t_apig_apis
-        where `DEPT_CODE` is null
+        where DEPT_CODE is null
           and created_by_user_id is not null;
     </select>
 

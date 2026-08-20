@@ -18,9 +18,14 @@ from dataclasses import dataclass, field
 
 @dataclass
 class RequestContext:
-    """请求级上下文 — 透传到深层调用栈的请求头集合。"""
+    """请求级上下文 — 透传到深层调用栈的请求头集合。
+
+    分仓：``headers`` 为平台 header（X-*），``customer_headers`` 为客户 header
+    （cust-*，值为 ``HeaderValue``）。两者独立，compat ``headers`` 不含客户 header。
+    """
 
     headers: dict = field(default_factory=dict)
+    customer_headers: dict = field(default_factory=dict)
     # 已加载的环境变量（load_environment_variables 产出；由 populate_request_context
     # 中间件按 X-Environment-Id 加载写入，供 StudioModelClient 解析 apiUrl 占位符）
     env_variables: dict = field(default_factory=dict)
@@ -38,6 +43,14 @@ def get_request_context() -> RequestContext:
 def get_request_headers() -> dict:
     """请求头 getter，供 model_service ports 注入。"""
     return _request_ctx.get().headers or {}
+
+
+def get_request_customer_headers() -> dict:
+    """客户 header getter（Mapping[str, HeaderValue]），供 model_service ports 注入。
+
+    无请求上下文时返回空 dict，不回退静态认证 Header。
+    """
+    return _request_ctx.get().customer_headers or {}
 
 
 def get_env_variables() -> dict:

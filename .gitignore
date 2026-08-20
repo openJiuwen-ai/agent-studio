@@ -49,6 +49,8 @@ mybatis.xml
 env/
 
 .codemate
+### Internal E2E test cases, not for public repository ###
+agent-runtime/jiuwen/test/cases/
 /agent-runtime/open_lumina_engine.egg-info
 /agent-runtime/.venv
 /agent-runtime/logs

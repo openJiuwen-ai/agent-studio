@@ -23,7 +23,7 @@ import { cloneDeep, uniqBy } from "lodash";
 import { ImportResultModalComponent } from "@shared/components/import-modal/import-result-modal/import-result-modal.component";
 import { NzModalRef, NZ_MODAL_DATA } from "ng-zorro-antd/modal";
 import { NzModalService } from "ng-zorro-antd/modal";
-
+import { NzShowUploadList } from "ng-zorro-antd/upload";
 @Component({
   selector: "meta-import-modal",
   templateUrl: "./import-modal.component.html",
@@ -174,6 +174,15 @@ export class ImportModalComponent {
     return this.importToolType === ApplicationType.WORKFLOW;
   }
 
+  uploadFileList = [];
+
+  showUploadList: NzShowUploadList = {
+    showRemoveIcon: false,
+    showPreviewIcon: false,
+    showDownloadIcon: false,
+  };
+
+
   constructor(
     private appFlowRepoServe: AppFlowRepoService,
     private appPluginRepoServe: AppPluginRepoService,
@@ -228,6 +237,30 @@ export class ImportModalComponent {
     if (fileItem.type !== "start") {
       return;
     }
+
+    if (this.uploadFileList.length >= 2) {
+      this.uploadFileList = [this.uploadFileList[1]];
+    }
+
+    if (this.uploadFileList.length >= 1) {
+      this.showUploadList = {
+        showRemoveIcon: false,
+        showPreviewIcon: false,
+        showDownloadIcon: false,
+      };
+      setTimeout(() => {
+        this.uploadFileList[0].status = 'done';
+        this.uploadFileList[0].response = '';
+        this.uploadFileList[0].error = '';
+        this.showUploadList = {
+          showRemoveIcon: true,
+          showPreviewIcon: false,
+          showDownloadIcon: false,
+        };
+        this.cdr.markForCheck();
+      }, 50);
+    }
+
     this.isFileImported = true;
     this.isParseError = false;
     this.isDuplicateContent = false;
@@ -737,7 +770,11 @@ export class ImportModalComponent {
     if (childItem.prohibited) {
       return typeMap.prohibited;
     } else {
-      if (childItem.import_description) {
+      if (this.isOldImport && this.importToolType === ApplicationType.PLUGIN) {
+        // 旧格式插件没有 import_description。status=true 表示同一资源已存在，
+        // 后端会覆盖更新；status=false 才是新增，不能再展示成“资源已存在并跳过”。
+        return childItem.status ? typeMap.updateResource : typeMap.newResource;
+      } else if (childItem.import_description) {
         return typeMap[childItem.import_description];
       } else { // 旧版本导入文件
         return typeMap[childItem.status ? "resourceExists" : "oldUpdateResource"];

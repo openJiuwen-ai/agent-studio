@@ -1,0 +1,259 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: studio-manager
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: studio-manager
+  template:
+    metadata:
+      labels:
+        app: studio-manager
+    spec:
+      volumes:
+        - name: shm-volume
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+      containers:
+        - name: container-studio-manager
+          image: studio-manager:1.0.0.20260526091153.x86_64
+          env:
+            # ======== [必填] 数据库 ========
+            # Manager JDBC URL，单机一个HOST，主备/集群逗号分隔(JDBC自动寻主)：
+            #   MySQL:      jdbc:mariadb://<HOST>:3306[,<HOST>:3306][,<HOST>:3306]/<DB>?allowMultiQueries=true
+            #   GaussDB:    jdbc:opengauss://<HOST>:8000[,<HOST>:8000]/<DB>?currentSchema=<SCHEMA>&targetServerType=master
+            #   PostgreSQL: jdbc:postgresql://<HOST>:5432[,<HOST>:5432]/<DB>?currentSchema=<SCHEMA>&targetServerType=primary
+            - name: spring_datasource_url
+              value: ''
+            - name: spring_datasource_username
+              value: ''
+            - name: spring_datasource_password
+              value: ''
+            # 驱动类名 — GaussDB: com.huawei.opengauss.jdbc.Driver / PostgreSQL: org.postgresql.Driver
+            # - name: spring_datasource_driver_class_name
+            #   value: 'com.huawei.opengauss.jdbc.Driver'
+            # - name: spring_datasource_driver_class_name
+            #   value: 'org.postgresql.Driver'
+            # ======== [必填] Redis ========
+            # 单机模式：配置 redis_host、redis_port、redis_password
+            # 集群模式：配置 cluster_node_list、redis_password
+            # 哨兵模式：配置 redis_host、redis_master_name、redis_sentinel_ports、redis_password
+            # Redis服务地址，单机模式为Redis节点IP，哨兵模式为哨兵节点IP
+            - name: redis_host
+              value: ''
+            - name: redis_password
+              value: ''
+            - name: redis_port
+              value: '6379'
+            # 集群模式时填写，格式：host1:port1,host2:port2,host3:port3
+            - name: cluster_node_list
+              value: ''
+            # 哨兵模式时填写
+            - name: redis_master_name
+              value: ''
+            # 哨兵模式时填写，格式：port1,port2（与redis_host配合）
+            - name: redis_sentinel_ports
+              value: ''
+            # ======== [必填] 对象存储 ========
+            - name: obs_url
+              value: ''
+            - name: obs_bucket
+              value: ''
+            - name: obs_staging_bucket
+              value: ''
+            - name: obs_ak
+              value: ''
+            - name: obs_sk
+              value: ''
+            # ======== [选填] HTTPS证书 ========
+            # 启用时设server_ssl_enabled=true，并填写证书Base64编码
+            - name: server_ssl_enabled
+              value: 'false'
+            - name: CB_CF_SERVER_KEYSTORE
+              value: ''
+            - name: CB_CF_TRUST_KEYSTORE
+              value: ''
+            - name: server_ssl_trust_store_password
+              value: ''
+            - name: server_ssl_key_store_password
+              value: ''
+            - name: server_ssl_key_password
+              value: ''
+            # ======== 服务间调用地址（默认无需修改） ========
+            # 鉴权配置，默认调自身，HTTPS启动需要改成https
+            - name: user_auth_endpoint
+              value: 'http://studio-manager:31111'
+            # studio-builder调用地址（n2l生成接口），HTTPS启动需要改成https
+            - name: agent_builder_endpoint
+              value: 'http://studio-builder:31015'
+            # studio-runtime调用地址，HTTPS启动需要改成https
+            - name: agent_runtime_endpoint
+              value: 'http://studio-runtime:31014'
+            # ======== [选填] 功能开关 ========
+            - name: front_page_block_nodes
+              value: 'Sql,DataQuery,Agent'
+            - name: share_knowledge_enabled
+              value: 'true'
+            - name: workflow_async_enable
+              value: 'true'
+            # 运行时agent/workflow地址前缀（IP:Port格式），用于前端拼接API调用地址
+            - name: front_page_runtime_host
+              value: ''
+            # Studio按钮显示开关，默认true
+            - name: studio_btn_show
+              value: 'true'
+            # 寻址方式：path（路径风格，默认）或 virtual（虚拟托管风格）
+            - name: DATASOURCE_OBS_PATH_STYLE
+              value: 'path'
+            # 系统默认的加解密方式，NO_OP_CIPHER-表示不加密
+            - name: system_crypt_name
+              value: 'NO_OP_CIPHER'
+            - name: enable_tool_url_check
+              value: 'true'
+            - name: storage_type
+              value: 'OBS'
+            - name: STORAGE_CUSTOM_CLASS
+              value: ''
+            - name: STORAGE_CUSTOM_CLASSPATH
+              value: ''
+            - name: datasource_password_provider_type
+              value: 'DEFAULT'
+            - name: datasource_password_provider_custom_class
+              value: ''
+            - name: datasource_password_provider_custom_classpath
+              value: ''
+            - name: storage_local_base_path
+              value: ''
+            - name: storage_local_bucket
+              value: ''
+            - name: storage_local_staging_bucket
+              value: ''
+            - name: storage_local_server_url
+              value: ''
+            # 是否启用资源管理的操作日志
+            - name: studio_operationLog_switch
+              value: 'false'
+            # SSO 鉴权验证地址，填写后启用 SSO 远程鉴权，留空则使用默认简单鉴权
+            - name: auth_sso_validate_url
+              value: ''
+            # ======== [选填] 知识库模式（CUSTOM 模式对接外部 LakeSearch）========
+            # 知识库来源模式：LakeSearch（默认，内置 LakeSearch 服务）/ CUSTOM（对接外部 LakeSearch）
+            - name: knowledge_source
+              value: 'LakeSearch'
+            # LakeSearch 服务地址：CUSTOM 模式必填，默认空
+            - name: knowledge_lakeSearch_endpoint
+              value: ''
+            # LakeSearch 鉴权方式：basic（默认）/ none（无鉴权，如本地 mock）
+            - name: knowledge_lakeSearch_auth_mode
+              value: 'basic'
+            - name: redis_max_string_length
+              value: '20000000'
+            # 非图片文件上传大小上限（单位 KB，默认 131072 即 128MB）
+            - name: agent_max_upload_file_size
+              value: '131072'
+            # 用户上传文件累计大小上限（单位 KB，默认 204800 即 200MB，按用户 24 小时窗口累计）
+            - name: max_upload_total_size
+              value: '204800'
+            # 引用未发布插件：默认关闭，置 true 时允许引用未发布的插件
+            - name: plugin_publish_choice
+              value: 'false'
+          resources:
+            limits:
+              cpu: '2'
+              memory: 4Gi
+            requests:
+              cpu: '2'
+              memory: 4Gi
+          volumeMounts:
+            - name: shm-volume
+              mountPath: /dev/shm
+          livenessProbe:
+            tcpSocket:
+              port: 31111
+            initialDelaySeconds: 10
+            timeoutSeconds: 15
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 12
+          startupProbe:
+            tcpSocket:
+              port: 31111
+            initialDelaySeconds: 10
+            timeoutSeconds: 15
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 240
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Never
+          securityContext:
+            privileged: false
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      automountServiceAccountToken: true
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: default-secret
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 60
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - studio-manager
+                topologyKey: failure-domain.beta.kubernetes.io/zone
+            - weight: 40
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - studio-manager
+                topologyKey: kubernetes.io/hostname
+      schedulerName: default-scheduler
+      tolerations:
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 30
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 30
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: studio-manager
+  namespace: default
+spec:
+  ports:
+    - name: cce-service-0
+      protocol: TCP
+      port: 31111
+      targetPort: 31111
+  selector:
+    app: studio-manager
+  type: ClusterIP

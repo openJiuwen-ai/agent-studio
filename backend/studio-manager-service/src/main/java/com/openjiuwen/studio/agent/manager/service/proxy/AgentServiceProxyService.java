@@ -23,8 +23,13 @@ import com.openjiuwen.studio.agent.common.dto.tool.RunToolResponseBody;
 import com.openjiuwen.studio.agent.common.entity.RouterStrategyEntity;
 import com.openjiuwen.studio.agent.common.entity.Text2AudioReq;
 import com.openjiuwen.studio.agent.common.enums.OperationType;
+import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
+import com.openjiuwen.studio.agent.common.utils.ErrorInfo;
+import com.openjiuwen.studio.agent.common.utils.I18nUtil;
+
+import feign.FeignException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.*;
 import com.openjiuwen.studio.agent.manager.bo.FileCheckWrapper;
@@ -194,6 +199,9 @@ public class AgentServiceProxyService {
     @Autowired
     private IPlugin iPlugin;
 
+    @Autowired
+    private I18nUtil i18nUtil;
+
     /**
      * 初始化
      */
@@ -336,7 +344,35 @@ public class AgentServiceProxyService {
 
             return stream(url, headers, JsonUtils.encode(request));
         }
-        return builderClient.chatCompletions(getToken(), projectId, workspaceId, request, refresh);
+        try {
+            return builderClient.chatCompletions(getToken(), projectId, workspaceId, request, refresh);
+        } catch (FeignException e) {
+            log.error("Model service call failed via Feign client.", e);
+            try {
+                String body = e.contentUTF8();
+                if (body != null) {
+                    JSONObject errObj = JSONObject.parseObject(body);
+                    if (errObj != null && errObj.containsKey("error_code")) {
+                        ErrorRsp errorRsp = new ErrorRsp()
+                            .setErrorCode(errObj.getString("error_code"))
+                            .setErrorMsg(errObj.getString("error_msg"))
+                            .setErrorReason(errObj.getString("error_reason"))
+                            .setErrorSuggestion(errObj.getString("error_suggestion"));
+                        return ResponseEntity.status(e.status() > 0 ? e.status() : 500).body(errorRsp);
+                    }
+                }
+            } catch (Exception parseEx) {
+                log.warn("Failed to parse Feign error body.", parseEx);
+            }
+            ErrorInfo errorInfo = i18nUtil.getMessage(
+                new AgentStudioException(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE));
+            ErrorRsp errorRsp = new ErrorRsp()
+                .setErrorCode(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode())
+                .setErrorMsg(errorInfo.getMessage())
+                .setErrorReason(errorInfo.getReason())
+                .setErrorSuggestion(errorInfo.getSuggestion());
+            return ResponseEntity.status(500).body(errorRsp);
+        }
     }
 
     public ResponseEntity<AutoAddResultJsonObject> additionalQuestions(String projectId, String agentId,
@@ -795,7 +831,10 @@ public class AgentServiceProxyService {
             log.error(
                     "The total size of the upload files exceeds the limit. fileSize:{}, currentSize:{}, maxUploadTotalSize:{}",
                     file.getSize(), currentSize, maxUploadTotalSize);
-            throw new AgentStudioException(StudioError.FILE_SIZE_EXCEED_LIMIT);
+            String maxSizeReadable = String.valueOf(maxUploadTotalSize / KB);
+            long hours = timeScopeUploadTotalSize / 3600;
+            String timeWindowReadable = String.valueOf(hours > 0 ? hours : timeScopeUploadTotalSize);
+            throw new AgentStudioException(StudioError.FILE_SIZE_EXCEED_LIMIT, maxSizeReadable, timeWindowReadable);
         }
     }
 
@@ -830,7 +869,7 @@ public class AgentServiceProxyService {
         FileCheckWrapper fileCheckWrapper = buildFileCheckWrapper(type);
         // 校验文件大小
         if (file.getSize() > fileCheckWrapper.getSize() * KB) {
-            log.error("The avatar file size exceeds the limit: {}KB", iconMaxSize);
+            log.error("The file size exceeds the limit: {}KB", fileCheckWrapper.getSize());
             throw new AgentStudioException(StudioError.PICTURE_FILE_SIZE_EXCEED_LIMIT);
         }
 

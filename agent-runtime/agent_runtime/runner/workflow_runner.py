@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from enum import Enum
 from typing import AsyncGenerator
@@ -217,7 +218,16 @@ class WorkflowRunner:
 
         t_convert_start = time.perf_counter()
         try:
-            workflow = await self._ir_converter.async_ir_to_workflow(ir_json)
+            # 显式传 cust_headers/project_id 到 workflow 构建链
+            from agent_runtime.context.request_context import _request_ctx
+            _ctx = _request_ctx.get()
+            _cust_headers = _ctx.customer_headers if _ctx else {}
+            _project_id = _ctx.project_id if _ctx else ""
+            workflow = await self._ir_converter.async_ir_to_workflow(
+                ir_json,
+                cust_headers=_cust_headers,
+                project_id=_project_id,
+            )
             performance_logger.info(
                 f"ir_convert|{round((time.perf_counter() - t_convert_start) * 1000)}"
             )
@@ -324,13 +334,14 @@ class WorkflowRunner:
             "createdTime": int(time.time() * 1000),
         }
 
+        wf_start_time = int(time.time() * 1000)
         if not is_resuming:
             yield {
                 "event": "workflow_start",
                 "data": {},
                 "index": 0,
                 "executionId": exec_id,
-                "createdTime": int(time.time() * 1000),
+                "createdTime": wf_start_time,
             }
 
         # 7. 执行工作流
@@ -352,6 +363,7 @@ class WorkflowRunner:
                 history=req.params.conversation_history,
                 query=req.query or "",
                 is_resuming=is_resuming,
+                start_time=wf_start_time,
             )
 
             t_compile_invoke_start = time.perf_counter()
@@ -409,7 +421,7 @@ class WorkflowRunner:
                 if e.node_type:
                     node_type = e.node_type
             else:
-                error_code = e.code
+                error_code = _resolve_error_code_from_exception(e)
                 error_msg = _format_error_message(error_code, e.message)
                 yield {
                     "event": "error",
@@ -446,7 +458,7 @@ class WorkflowRunner:
             node_id = last_node.get("node_id", "")
             node_type = last_node.get("node_type", "")
             node_name = _resolve_node_name(node_defs, workflow_id, node_id)
-            error_code = e.code
+            error_code = _resolve_error_code_from_exception(e)
             error_msg = _format_error_message(error_code, e.message)
             workflow_logger.error(f"Workflow execution failed: {e}, type={type(e).__name__}")
             yield {
@@ -624,7 +636,7 @@ class WorkflowRunner:
             yield event
 
     def _build_global_state_params(self, params: dict, node_defs: dict) -> dict:
-        """构建需要通过 inputs → commit_user_inputs() 写入 global_state 的参数。
+        """构建需要通过 inputs → commit_user_inputs 写入 global_state 的参数。
 
         这些参数同时存在于 envs（由 _build_envs 生成），但 envs 不被 checkpoint 保存。
         通过 commit_user_inputs() 写入 global_state 后，checkpoint 会保存这些值，
@@ -813,6 +825,31 @@ def _resolve_node_name(node_defs: dict, workflow_id: str, node_id: str) -> str:
     wf_defs = node_defs.get(workflow_id, {})
     node_info = wf_defs.get(node_id, {})
     return node_info.get("node_name", node_id) if isinstance(node_info, dict) else node_id
+
+
+_BRACKET_CODE_PATTERN = re.compile(r"\[(\d+)\]")
+
+
+def _resolve_error_code_from_exception(e: Exception) -> int:
+    """从异常对象及其因果链中提取原始错误码。
+
+    openjiuwen graph 引擎在捕获 JiuWenBaseException(105001) 后，
+    可能将其转换为 ExecutionError(code=-1)，原始错误码保留在
+    __cause__ 链或 str(e) 的 "[105001]..." 前缀中。
+    """
+    error_code = getattr(e, "error_code", None)
+    if error_code is not None and error_code != -1:
+        return error_code
+    cause = e.__cause__
+    while cause is not None:
+        cause_code = getattr(cause, "error_code", None)
+        if cause_code is not None and cause_code != -1:
+            return cause_code
+        cause = getattr(cause, "__cause__", None)
+    match = _BRACKET_CODE_PATTERN.search(str(e))
+    if match:
+        return int(match.group(1))
+    return getattr(e, "code", -1)
 
 
 def _format_error_message(code: int, raw_message: str) -> str:

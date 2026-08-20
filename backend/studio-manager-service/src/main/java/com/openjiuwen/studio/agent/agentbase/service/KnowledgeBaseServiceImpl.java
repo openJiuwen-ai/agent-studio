@@ -65,6 +65,8 @@ import com.openjiuwen.studio.agent.agentbase.utils.TenantTypeUtil;
 import com.openjiuwen.studio.agent.foundation.base.utils.UUIDGenerator;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
+import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
+import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.SqlLikeEscapeHelper;
 import com.openjiuwen.studio.agent.foundation.base.exception.AgentBaseException;
@@ -143,6 +145,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -203,6 +206,8 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
 
     private final KbConnectionStorageService kbConnectionStorageService;
 
+    private final ModelServiceMapper modelServiceMapper;
+
     @Value("${knowledge.bound.limit}")
     private int agentKnowledgeBoundLimit;
 
@@ -259,7 +264,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         KnowledgeBaseTransactionService knowledgeBaseTransactionService,
         RetrieveMergingStrategyContext retrieveMergingStrategyContext, ResourceUsageFactory resourceUsageFactory,
         KnowledgeConnectionRouterService knowledgeConnectionRouterService, RedisClient redisClient,
-        KbConnectionStorageService kbConnectionStorageService) {
+        KbConnectionStorageService kbConnectionStorageService, ModelServiceMapper modelServiceMapper) {
         this.knowledgeTestMapper = knowledgeTestMapper;
         this.knowledgeRepoMapper = knowledgeRepoMapper;
         this.knowledgeRepoContext = knowledgeRepoContext;
@@ -277,6 +282,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         this.knowledgeConnectionRouterService = knowledgeConnectionRouterService;
         this.redisClient = redisClient;
         this.kbConnectionStorageService = kbConnectionStorageService;
+        this.modelServiceMapper = modelServiceMapper;
     }
 
 
@@ -402,6 +408,19 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         log.info("Thread name", Thread.currentThread().getName());
         KnowledgeRepoEntity knowledgeRepoEntity = toKnowledgeRepoEntity(projectId, body);
         KnowledgeBaseEntity knowledgeBaseEntity = toKnowledgeBaseEntity(knowledgeRepoEntity, workspaceId);
+        // OpenJiuwen知识库：在DB插入前解析 embedding/rerank 模型名称为 model_service_id
+        if (KnowledgeSourceEnum.OPENJIUWEN.toString().equalsIgnoreCase(knowledgeRepoEntity.getSource())) {
+            if (body.getEmbeddingModel() != null) {
+                String embeddingServiceId = resolveModelServiceId(projectId, workspaceId,
+                    body.getEmbeddingModel().getName()).orElse(null);
+                knowledgeBaseEntity.setEmbeddingModelServiceId(embeddingServiceId);
+            }
+            if (body.getRerankModel() != null) {
+                String rerankServiceId = resolveModelServiceId(projectId, workspaceId,
+                    body.getRerankModel().getName()).orElse(null);
+                knowledgeBaseEntity.setRerankModelServiceId(rerankServiceId);
+            }
+        }
         try {
             knowledgeBaseTransactionService.createKnowledgeBaseInTransaction(knowledgeRepoEntity, knowledgeBaseEntity);
             String externalId = "";
@@ -467,6 +486,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
             .setProjectId(projectId)
             .setRepoType(RepoTypeEnum.fromValue(repoType))
             .setWorkspaceId(knowledgeBaseEntity.getWorkspaceId());
+        knowledgeRepo.setKnowledgeRepoId(knowledgeBaseEntity.getId());
         CreateKnowledgeRepoInfo createKnowledgeRepoInfo = knowledgeRepoContext.getService(source)
             .createKnowledgeRepo(knowledgeRepo);
         knowledgeBaseEntity.setExternalId(createKnowledgeRepoInfo.getKnowledgeBaseId());
@@ -498,8 +518,8 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         knowledgeRepoEntity.setSize(0L);
         knowledgeRepoEntity.setFileNum(0);
         knowledgeRepoEntity.setSource(knowledgeSource);
-        knowledgeRepoEntity.setCreatedOn(System.currentTimeMillis() / 1000);
-        knowledgeRepoEntity.setUpdatedOn(System.currentTimeMillis() / 1000);
+        knowledgeRepoEntity.setCreatedOn(new Date());
+        knowledgeRepoEntity.setUpdatedOn(new Date());
         return knowledgeRepoEntity;
     }
 
@@ -879,8 +899,8 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         if (StringUtils.isNotEmpty(knowledgeRepo.getMetadata())) {
             showKnowledgeRepoResponseBody.setMetadata(displayMetadata(knowledgeRepoEntity.getMetadata()));
         }
-        showKnowledgeRepoResponseBody.setCreateTime(knowledgeRepoEntity.getCreatedOn());
-        showKnowledgeRepoResponseBody.setUpdateTime(knowledgeRepoEntity.getUpdatedOn());
+        showKnowledgeRepoResponseBody.setCreateTime(knowledgeRepoEntity.getCreatedOn() != null ? knowledgeRepoEntity.getCreatedOn().getTime() : null);
+        showKnowledgeRepoResponseBody.setUpdateTime(knowledgeRepoEntity.getUpdatedOn() != null ? knowledgeRepoEntity.getUpdatedOn().getTime() : null);
         showKnowledgeRepoResponseBody.setWorkspaceId(knowledgeBase.getWorkspaceId());
         showKnowledgeRepoResponseBody.setShareScope(ShowKnowledgeRepoResponseBody.ShareScopeEnum.fromValue(knowledgeBase.getShareScope()));
         showKnowledgeRepoResponseBody.setUpdateUserName(knowledgeBase.getLastUpdateUserName());
@@ -1000,7 +1020,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
             newKnowledgeRepo.setDomainId(RequestContextUtils.getRequestUserDomainId());
             newKnowledgeRepo.setStatus(KnowledgeRepoStatus.OPEN.toString());
             newKnowledgeRepo.setProjectId(projectId);
-            newKnowledgeRepo.setUpdatedOn(System.currentTimeMillis() / 1000);
+            newKnowledgeRepo.setUpdatedOn(new Date());
             knowledgeRepoMapper.updateByPrimaryKeySelective(newKnowledgeRepo);
         }
 
@@ -1044,7 +1064,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
             newKnowledgeRepo.setDomainId(RequestContextUtils.getRequestUserDomainId());
             newKnowledgeRepo.setStatus(KnowledgeRepoStatus.CLOSE.toString());
             newKnowledgeRepo.setProjectId(projectId);
-            newKnowledgeRepo.setUpdatedOn(System.currentTimeMillis() / 1000);
+            newKnowledgeRepo.setUpdatedOn(new Date());
             knowledgeRepoMapper.updateByPrimaryKeySelective(newKnowledgeRepo);
         }
 
@@ -1113,7 +1133,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         knowledgeRepo.setMetadata(newEncryptMetadata);
         knowledgeRepo.setDomainId(RequestContextUtils.getRequestUserDomainId());
         knowledgeRepo.setDomainName(RequestContextUtils.getRequestUserDomainName());
-        knowledgeRepo.setUpdatedOn(System.currentTimeMillis() / 1000);
+        knowledgeRepo.setUpdatedOn(new Date());
         if (StringUtils.isBlank(body.getIcon())) {
             knowledgeRepo.setIcon(knowledgeBase.getIcon());
         } else {
@@ -1140,7 +1160,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
             KnowledgeSearchRecord searchRecord = new KnowledgeSearchRecord();
             searchRecord.setId(knowledgeTest.getRecordId());
             searchRecord.setQuery(knowledgeTest.getQuery());
-            searchRecord.setCreateTime(knowledgeTest.getCreatedOn());
+            searchRecord.setCreateTime(knowledgeTest.getCreatedOn() != null ? knowledgeTest.getCreatedOn().getTime() : null);
             searchRecords.add(searchRecord);
         }
         return searchRecords;
@@ -1174,7 +1194,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         knowledgeTest.setProjectId(projectId);
         knowledgeTest.setDomainId(RequestContextUtils.getRequestUserDomainId());
         knowledgeTest.setDomainName(RequestContextUtils.getRequestUserDomainName());
-        knowledgeTest.setCreatedOn(System.currentTimeMillis() / 1000);
+        knowledgeTest.setCreatedOn(new Date());
         knowledgeTestMapper.insert(knowledgeTest);
     }
 
@@ -1216,6 +1236,9 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
                         kbConnectionStorageService.writeConnectionToObs(
                             connectionEntity, connectorType, connectorName);
                     }
+                } else if (KnowledgeSourceEnum.OPENJIUWEN.toString().equalsIgnoreCase(knowledgeSource)) {
+                    // openjiuwen 知识库无 t_knowledge_base_connection 记录，直接写 OBS 连接文件
+                    kbConnectionStorageService.writeOpenJiuwenConnectionToObs(connectionId, knowledgeBaseEntity);
                 }
             }
         } catch (Exception e) {
@@ -1292,12 +1315,27 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
 
     private String getEmbeddingModel(String source, ModelConf modelConf) {
         if (!Objects.isNull(modelConf)) {
+            if (KnowledgeSourceEnum.OPENJIUWEN.toString().equalsIgnoreCase(source)) {
+                return modelConf.getId();
+            }
             return modelConf.getName();
         }
         log.info("Get embedding model name from env when create knowledge repo.");
         return KnowledgeSourceEnum.KOOSEARCH.toString().equalsIgnoreCase(source)
             ? kosEmbeddingModel
             : mrsEmbeddingModel;
+    }
+
+    private Optional<String> resolveModelServiceId(String projectId, String workspaceId, String modelName) {
+        if (StringUtils.isEmpty(modelName)) {
+            return Optional.empty();
+        }
+        List<ModelServiceBase> models = modelServiceMapper.queryByName(projectId, workspaceId, modelName, null);
+        if (models == null || models.isEmpty()) {
+            log.warn("Model service not found for name: {}", modelName);
+            return Optional.empty();
+        }
+        return Optional.ofNullable(models.get(0).getId());
     }
 
     private String getReRankModel(String source, ModelConf modelConf) {

@@ -58,12 +58,16 @@ def _handle_default_outputs(error, exception_config, session) -> dict:
 
     def _merge_dicts(origin, default) -> dict:
         result = origin.copy()
-        for key in default:
+        for key, value in default.items():
             if key in result:
-                if isinstance(result[key], dict) and isinstance(default[key], dict):
-                    result[key] = _merge_dicts(result[key], default[key])
+                if isinstance(result[key], dict) and isinstance(value, dict):
+                    result[key] = _merge_dicts(result[key], value)
                 else:
-                    result[key] = default[key]
+                    result[key] = value
+            else:
+                # 保留 default 中 origin 没有的 key（MCP 等节点的 outputs_schema
+                # 可能为空或结构与 default_outputs 不同）
+                result[key] = value
         return result
 
     result = _merge_dicts(base, default_outputs)

@@ -259,13 +259,15 @@ class ModelWrapper:
                     new_tool = ToolInfo(
                         name=tool.get("name") or "",
                         description=tool.get("description") or "",
-                        parameters=tool.get("parameters") or {},
+                        parameters=tool.get("parameters")
+                        or {"type": "object", "properties": {}},
                     )
                 else:
                     new_tool = ToolInfo(
                         name=tool.name or "",
                         description=tool.description or "",
-                        parameters=tool.parameters or {},
+                        parameters=tool.parameters
+                        or {"type": "object", "properties": {}},
                     )
                 new_tools.append(new_tool)
 

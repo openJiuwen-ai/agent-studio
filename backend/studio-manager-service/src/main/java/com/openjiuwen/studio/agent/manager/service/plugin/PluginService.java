@@ -140,6 +140,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -719,16 +720,19 @@ public class PluginService implements IPluginService {
                     continue;
                 }
 
+                // 插件以 traceId 标识同一资源。已存在时导入会执行覆盖更新，需要与新增导入分别计数。
+                boolean pluginExists = isPluginExist(projectId, workspaceId, plugin.getMetadata());
+
                 // id冲突，则随机生成一个uuid
                 checkAndUpdateUuid(workspaceId, projectId, pluginId, plugin);
 
                 // 导入插件逻辑
-                if (importPluginsHandler(projectId, workspaceId, plugin.getMetadata(),
-                    wfImportDataWrapper.getPluginsOfAuth())) {
-                    wfImportDataWrapper.getSucceedIds().add(plugin.getMetadata().getPluginId());
-                } else {
+                boolean succeeded = importPluginsHandler(projectId, workspaceId, plugin.getMetadata(),
+                    wfImportDataWrapper.getPluginsOfAuth());
+                recordImportResult(wfImportDataWrapper, pluginId, plugin.getMetadata().getPluginId(), pluginExists,
+                    succeeded);
+                if (!succeeded) {
                     log.error("Failed to import tool:{}", plugin);
-                    wfImportDataWrapper.getFailedIds().add(pluginId);
                 }
             }
             buildImportRsp(importRsp, wfImportDataWrapper);
@@ -835,11 +839,29 @@ public class PluginService implements IPluginService {
         }
     }
 
-    private void buildImportRsp(ImportRsp importRsp, WfImportDataWrapper wfImportDataWrapper) {
+    void recordImportResult(WfImportDataWrapper wrapper, String originalPluginId, String resultPluginId,
+        boolean pluginExists, boolean succeeded) {
+        if (!succeeded) {
+            wrapper.getFailedIds().add(originalPluginId);
+            return;
+        }
+        wrapper.getSucceedIds().add(resultPluginId);
+        if (pluginExists) {
+            wrapper.getUpdatedIds().add(resultPluginId);
+        } else {
+            wrapper.getImportedIds().add(resultPluginId);
+        }
+    }
+
+    void buildImportRsp(ImportRsp importRsp, WfImportDataWrapper wfImportDataWrapper) {
         importRsp.setSucceedIds(wfImportDataWrapper.getSucceedIds());
         importRsp.setFailedIds(wfImportDataWrapper.getFailedIds());
         importRsp.setSucceedLen(wfImportDataWrapper.getSucceedIds().size());
         importRsp.setFailedLen(wfImportDataWrapper.getFailedIds().size());
+        importRsp.setImportedLen(wfImportDataWrapper.getImportedIds().size());
+        importRsp.setUpdatedLen(wfImportDataWrapper.getUpdatedIds().size());
+        importRsp.setSkippedLen(wfImportDataWrapper.getSkippedIds().size());
+        importRsp.setCount(importRsp.getSucceedLen() + importRsp.getFailedLen() + importRsp.getSkippedLen());
         importRsp.setAuthPluginsMsg(new ArrayList<>(wfImportDataWrapper.getPluginsOfAuth()));
         importRsp.setInnerPluginsMsg(new ArrayList<>(wfImportDataWrapper.getInnerPluginsMsg()));
         importRsp.setAuthMcpsMsg(new ArrayList<>(wfImportDataWrapper.getMcpsOfAuth()));
@@ -1416,17 +1438,20 @@ public class PluginService implements IPluginService {
         pluginDTO.setToolDependencyList(new ArrayList<>());
 
         // 构建tool_dependency_list字段
+        // 统计口径与引用插件列表(listResourceRelations)保持完全一致，仅维度不同：
+        // 此处按工具(pluginId#toolId)分组计数，引用插件列表按插件粒度计数；
+        // 去重键、valid/工作空间/JOIN等筛选条件均与 listResourceRelations 相同。
+        Map<String, Long> workflowCountByTool = countReferencedAppsByTool(
+            mappingMapper.selectByResourceIdAndVersionId(pluginDTO.getPluginId(), null, workspaceId, "workflow", null));
+        Map<String, Long> agentCountByTool = countReferencedAppsByTool(
+            mappingMapper.selectByResourceIdAndVersionId(pluginDTO.getPluginId(), null, workspaceId, "agent", null));
         for (ToolInfo toolInfo : pluginDTO.getToolRequestInfo().getToolsInfoList()) {
-            List<MappingEntity> mappingEntities = mappingMapper.selectByResourceId(
-                pluginDTO.getPluginId() + "#" + toolInfo.getToolId());
-
+            String toolResourceId = pluginDTO.getPluginId() + "#" + toolInfo.getToolId();
             pluginDTO.getToolDependencyList()
                 .add(ToolDependency.builder()
                     .toolId(toolInfo.getToolId())
-                    .dependencyOnAgent(
-                        mappingEntities.stream().filter(entity -> "agent".equals(entity.getAppType())).count())
-                    .dependencyOnWorkflow(
-                        mappingEntities.stream().filter(entity -> "workflow".equals(entity.getAppType())).count())
+                    .dependencyOnAgent(agentCountByTool.getOrDefault(toolResourceId, 0L))
+                    .dependencyOnWorkflow(workflowCountByTool.getOrDefault(toolResourceId, 0L))
                     .build());
         }
         // 内置免费额度插件
@@ -1468,6 +1493,45 @@ public class PluginService implements IPluginService {
             }
         }
         return new BaseResp().setCode(200).setMessage("success").setData(pluginDTO);
+    }
+
+    /**
+     * 按工具维度统计被引用次数。SQL 用 selectByResourceIdAndVersionId（与引用插件列表同一条），
+     * 前缀匹配捞取 pluginId 及 pluginId#* 的全部行（含单后缀 pluginId#toolId 与
+     * 历史脏数据双后缀 pluginId#toolId#toolId）。分组时将 resource_id 规范化为 pluginId#toolId
+     * （取首个 # 后到第二个 # 前的段作为 toolId），使双后缀行也能正确归到对应工具；
+     * 去重键与 RelationManagementService#getDeduplicationKey 完全一致
+     * (appId|appVersion|resourceId|resourceVersion，resourceId 取完整原值)，
+     * 保证与引用插件列表口径相同，仅因按工具分组而维度不同。
+     */
+    private Map<String, Long> countReferencedAppsByTool(List<MappingEntity> mappingEntities) {
+        return mappingEntities.stream()
+            .collect(Collectors.groupingBy(entity -> normalizeToolResourceId(entity.getResourceId()),
+                Collectors.collectingAndThen(
+                    Collectors.mapping(this::getDeduplicationKey, Collectors.toSet()),
+                    set -> (long) set.size())));
+    }
+
+    /**
+     * 将 resource_id 规范化为 pluginId#toolId。
+     * pluginId#toolId → pluginId#toolId；pluginId#toolId#toolId → pluginId#toolId；
+     * 裸 pluginId（无工具后缀）原样返回。
+     */
+    private String normalizeToolResourceId(String resourceId) {
+        int first = resourceId.indexOf('#');
+        if (first < 0) {
+            return resourceId;
+        }
+        String tail = resourceId.substring(first + 1);
+        int second = tail.indexOf('#');
+        String toolId = second < 0 ? tail : tail.substring(0, second);
+        return resourceId.substring(0, first) + "#" + toolId;
+    }
+
+    private String getDeduplicationKey(MappingEntity entity) {
+        return entity.getAppId() + "|" + (entity.getAppVersion() == null ? "" : entity.getAppVersion())
+            + "|" + entity.getResourceId() + "|"
+            + (entity.getResourceVersion() == null ? "" : entity.getResourceVersion());
     }
 
     public void updateHost(PluginDTO pluginDTO) {

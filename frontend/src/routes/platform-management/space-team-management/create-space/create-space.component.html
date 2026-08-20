@@ -1,14 +1,9 @@
-<div class="pb-[30px] create-space">
+<div class="create-space">
   <form [formGroup]="myForm">
     <nz-form-item>
-      <nz-form-label [nzRequired]="true">{{ 'space_name' | i18nextEager }}</nz-form-label>
+      <nz-form-label [nzRequired]="true" style="width: 90px">{{ 'space_name' | i18nextEager }}</nz-form-label>
       <nz-form-control [nzErrorTip]="nameErrorTpl">
-        <input
-          class="w-full"
-          nz-input
-          formControlName="space_name"
-          maxlength="65"
-        />
+        <input class="w-full" nz-input formControlName="space_name" maxlength="65" />
         <ng-template #nameErrorTpl let-control>
           @if (control.hasError('maxlength')) {
             {{ '名称的最大长度为64个字符' }}
@@ -17,15 +12,9 @@
       </nz-form-control>
     </nz-form-item>
     <nz-form-item>
-      <nz-form-label>{{ 'space_description' | i18nextEager }}</nz-form-label>
+      <nz-form-label style="width: 90px">{{ 'space_description' | i18nextEager }}</nz-form-label>
       <nz-form-control [nzErrorTip]="descErrorTpl">
-        <textarea
-          class="w-full"
-          nz-input
-          placeholder="{{ 'pls_enter' | i18nextEager }}"
-          maxlength="257"
-          formControlName="space_description"
-        ></textarea>
+        <textarea class="w-full" nz-input placeholder="{{ 'pls_enter' | i18nextEager }}" maxlength="257" formControlName="space_description"></textarea>
         <ng-template #descErrorTpl let-control>
           @if (control.hasError('maxlength')) {
             {{ '名称的最大长度为256个字符' }}
@@ -34,18 +23,11 @@
       </nz-form-control>
     </nz-form-item>
     <nz-form-item>
-      <nz-form-label [nzRequired]="true">{{ 'space_avatar' | i18nextEager }}</nz-form-label>
+      <nz-form-label [nzRequired]="true" style="width: 90px">{{ 'space_avatar' | i18nextEager }}</nz-form-label>
       <nz-form-control>
         <div class="upload-avatar">
-          <div *ngIf="myForm.value.logo" class="event-log-container">
-            <img alt="" [src]="getIcon(myForm.value.logo)" class="upload-avatar"/>
-            <span (click)="editLogo()" class="delete-box">
-              <em class="cloudx cloudx-action-edit"></em>
-            </span>
-          </div>
           <nz-upload
-            *ngIf="!myForm.value.logo"
-            [ngClass]="{'is-logo-error': logoIsError}"
+            [ngClass]="{ 'is-logo-error': logoIsError }"
             nzType="select"
             [nzBeforeUpload]="beforeUpload"
             [nzLimit]="1"
@@ -54,30 +36,31 @@
             [nzShowUploadList]="false"
             nzAccept=".jpg,.jpeg,.png,.gif"
           >
-            <button nz-button type="button">
-              <em nz-icon nzType="upload"></em>
-              {{ '上传' }}
-            </button>
+            <div class="event-log-container" style="width: 64px; height: 64px;">
+              <ng-container *ngIf="myForm.value.logo; else uploadPlaceholder">
+                <img alt="" [src]="getIcon(myForm.value.logo)" class="upload-avatar" />
+                <span class="delete-box">
+                  <em class="cloudx cloudx-action-edit"></em>
+                </span>
+              </ng-container>
+              <ng-template #uploadPlaceholder>
+                <button nz-button type="button">
+                  <em nz-icon nzType="upload"></em>
+                  {{ '上传' }}
+                </button>
+              </ng-template>
+            </div>
           </nz-upload>
         </div>
       </nz-form-control>
     </nz-form-item>
   </form>
-  <div class="flex justify-end">
-    <button type="button" nz-button id="cancel" (click)="dismiss()">
-      {{ 'cancel' | i18nextEager }}
-    </button>
-    <button
-      type="button"
-      nz-button
-      id="ok"
-      class="ml-[8px]"
-      nzType="primary"
-      [nzLoading]="btnLoading"
-      [disabled]="isConfirmBtnDisabled()"
-      (click)="submit()"
-    >
-      {{ 'ok' | i18nextEager }}
-    </button>
-  </div>
+</div>
+<div *nzModalFooter>
+  <button type="button" nz-button id="cancel" (click)="dismiss()">
+    {{ 'cancel' | i18nextEager }}
+  </button>
+  <button type="button" nz-button id="ok" class="ml-[8px]" nzType="primary" [nzLoading]="btnLoading" [disabled]="isConfirmBtnDisabled()" (click)="submit()">
+    {{ 'ok' | i18nextEager }}
+  </button>
 </div>

@@ -148,9 +148,10 @@ export class ShareDetailBtnComponent {
     });
     modal.componentInstance.shareData = data;
     modal.componentInstance.pageType = this.pageType;
-    modal.afterClose.subscribe(() => {
-      MessageComponent.showSuccess(this.i18n.transform("share-delete-modal-4"), 3000);
-      this.backHome();
+    modal.afterClose.subscribe((result) => {
+      if (result) {
+        this.backHome();
+      }
     });
   }
 
@@ -159,7 +160,6 @@ export class ShareDetailBtnComponent {
       resource_type: data.resource_type
     }).then((res) => {
       this.backHome();
-      MessageComponent.showSuccess(this.i18n.transform("share-delete-modal-4"), 3000);
     });
   }
 

@@ -5,6 +5,7 @@
         (click)="onClickBack()"
         class="back-icon-container"
         [class.flow-back-agent-builder]="isFromAgentBuilder"
+        *ngIf="studioBtnShow"
       >
         <span nz-icon class="back-icon" nzType="left" nzTheme="outline"></span>
       </div>
@@ -22,7 +23,7 @@
           <span nz-tooltip [nzTooltipTitle]="workflowDetail?.name" class="title" [ngClass]="{ 'multi-agent-title': type === 'multi' }">
             {{ this.workflowDetail?.name }}
           </span>
-          <span *ngIf="!isFromAgentBuilder">
+          <span *ngIf="!isFromAgentBuilder && studioBtnShow">
             <span *ngIf="!isFlowReadonly && workflowDetail" nz-icon nzType="edit" nzTheme="outline" style="cursor: pointer; margin-left: 2px;position: relative;top: 2px;"
               (click)="onClickEditor()"></span>
           </span>

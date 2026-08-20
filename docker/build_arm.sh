@@ -366,7 +366,7 @@ function package() {
   if [ -f "AgentBuilder-arm64.tar.gz" ]; then
       rm -f "AgentBuilder-arm64.tar.gz"
   fi
-  tar -czvf AgentBuilder-arm64.tar.gz ./image ./compose ./k8s -C "${WORKSPACE}/deploy" init.sql
+  tar -czvf AgentBuilder-arm64.tar.gz ./image ../deploy
 }
 
 main "$@"

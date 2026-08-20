@@ -7,7 +7,6 @@ GaussDB: no quoting, inline values, ON CONFLICT, CREATE IF NOT EXISTS
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
 
 
 class Dialect(ABC):
@@ -111,7 +110,7 @@ class MysqlDialect(Dialect):
 
 
 class GaussDBDialect(Dialect):
-    """GaussDB dialect — no quoting, inline values, ON CONFLICT upsert, CREATE IF NOT EXISTS."""
+    """GaussDB dialect — no quoting, inline values, ON DUPLICATE KEY UPDATE upsert, CREATE IF NOT EXISTS."""
 
     _RESERVED_WORDS = {"desc"}
 
@@ -147,7 +146,7 @@ class GaussDBDialect(Dialect):
     ) -> str:
         if update_cols:
             return f"INSERT INTO {table_name} ({cols}) VALUES ({val_list}) ON DUPLICATE KEY UPDATE {update_cols};"
-        return f"INSERT INTO {table_name} ({cols}) VALUES ({val_list}) ON DUPLICATE KEY UPDATE {update_cols};"
+        return f"INSERT IGNORE INTO {table_name} ({cols}) VALUES ({val_list});"
 
     def alter_column_type_sql(self, table_name: str, column_name: str, new_type: str) -> str:
         return f"ALTER TABLE {table_name} ALTER COLUMN {column_name} TYPE {new_type}"
@@ -159,10 +158,68 @@ class GaussDBDialect(Dialect):
         )
 
 
+class PostgreSQLDialect(Dialect):
+    """PostgreSQL dialect — double-quote quoting, %s placeholders, ON CONFLICT upsert."""
+
+    _RESERVED_WORDS = {"desc"}
+
+    def quote(self, identifier: str) -> str:
+        return f'"{identifier}"'
+
+    def col_alias(self, name: str) -> str:
+        if name in self._RESERVED_WORDS:
+            return f"job_{name}"
+        return name
+
+    def from_alias(self, name: str) -> str:
+        if name == "job_desc":
+            return "desc"
+        return name
+
+    def supports_paramized(self) -> bool:
+        return True
+
+    def check_table_exists_sql(self, table_name: str) -> str:
+        return (
+            f"SELECT 1 FROM information_schema.tables "
+            f"WHERE table_name = '{table_name}' "
+            f"AND table_schema = current_schema();"
+        )
+
+    def create_table_sql(self, table_name: str, fields_str: str, pk_str: str) -> str:
+        return f"CREATE TABLE IF NOT EXISTS {table_name} ({fields_str}, PRIMARY KEY({pk_str}));"
+
+    def upsert_sql(
+        self,
+        table_name: str,
+        cols: str,
+        val_list: str,
+        conflict_cols: str,
+        update_cols: str,
+    ) -> str:
+        if update_cols:
+            return (
+                f"INSERT INTO {table_name} ({cols}) VALUES ({val_list}) "
+                f"ON CONFLICT ({conflict_cols}) DO UPDATE SET {update_cols};"
+            )
+        return f"INSERT INTO {table_name} ({cols}) VALUES ({val_list}) ON CONFLICT ({conflict_cols}) DO NOTHING;"
+
+    def alter_column_type_sql(self, table_name: str, column_name: str, new_type: str) -> str:
+        return f"ALTER TABLE {table_name} ALTER COLUMN {column_name} TYPE {new_type}"
+
+    def describe_column_type_sql(self, table_name: str, column_name: str) -> str:
+        return (
+            f"SELECT data_type FROM information_schema.columns "
+            f"WHERE table_name = '{table_name}' AND column_name = '{column_name}'"
+        )
+
+
 def get_dialect() -> Dialect:
     """Get the appropriate dialect based on STORE_DB_TYPE config."""
     from agent_builder.adapter.config_bridge import settings
 
     if settings.db_config.db_type == "gaussdb":
         return GaussDBDialect()
+    if settings.db_config.db_type == "postgresql":
+        return PostgreSQLDialect()
     return MysqlDialect()

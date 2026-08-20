@@ -18,7 +18,7 @@ from agent_runtime.common.logging_context import mask_debug_data, find_secret_en
 from agent_runtime.common.session_state_access import get_state_info
 from agent_runtime.context.request_context import _request_ctx
 from openjiuwen.core.common.constants.constant import INTERACTION
-from openjiuwen.core.common.logging import performance_logger
+from openjiuwen.core.common.logging import logger as common_logger, performance_logger
 from openjiuwen.core.session.stream.base import (
     OutputSchema,
     CustomSchema,
@@ -263,6 +263,7 @@ class WorkflowStreamDataWrapper:
         history: list = None,
         query: str = "",
         is_resuming: bool = False,
+        start_time: int = 0,
     ):
         if node_id_to_name is None:
             node_id_to_name = {}
@@ -274,6 +275,7 @@ class WorkflowStreamDataWrapper:
         self._history = history or []
         self._query = query
         self._is_resuming = is_resuming
+        self._start_time = start_time
         # Collect field names that reference encrypted env vars, per node.
         # Flag-based: checks if the referenced env var key is in secretEnvKeys,
         # not value matching. Per-node mapping avoids cross-node field name
@@ -396,6 +398,15 @@ class WorkflowStreamDataWrapper:
         if not stream_data:
             return []
 
+        event_type = stream_data.get("event", "")
+        if event_type == "workflow_start":
+            self._start_time = stream_data.get("createdTime", int(time.time() * 1000))
+        elif event_type == "workflow_finished":
+            data = stream_data.get("data")
+            if isinstance(data, dict):
+                data["start_time"] = self._start_time
+                data["end_time"] = stream_data.get("createdTime", int(time.time() * 1000))
+
         return [stream_data]
 
     def _convert_chunk_to_stream_data(self, chunk: Any) -> dict | None:
@@ -486,7 +497,7 @@ class WorkflowStreamDataWrapper:
             data = {"answer": str(payload)}
 
         return {
-            "event": "workflow_end",
+            "event": "workflow_finished",
             "data": data,
             "executionId": self._execution_id,
             "index": chunk.index,
@@ -572,7 +583,7 @@ class WorkflowStreamDataWrapper:
                 data[key] = payload[key]
 
         return {
-            "event": "workflow_end",
+            "event": "workflow_finished",
             "data": data,
             "executionId": self._execution_id,
             "index": chunk.index,
@@ -753,7 +764,7 @@ class WorkflowStreamDataWrapper:
                 result_data[key] = data[key]
 
         return {
-            "event": "workflow_end",
+            "event": "workflow_finished",
             "data": result_data,
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
@@ -771,7 +782,7 @@ class WorkflowStreamDataWrapper:
             data["userFields"] = mask_debug_data(data["userFields"], _sf)
 
         return {
-            "event": "workflow_end",
+            "event": "workflow_finished",
             "data": dict(data),
             "executionId": self._execution_id,
             "index": getattr(chunk, "index", 0),
@@ -1015,7 +1026,7 @@ class WorkflowStreamDataWrapper:
             "loopIndex": payload.get("loopIndex"),
             "innerError": inner_error,
             "memory": memory,
-            "parentNodeId": parent_node_id if not payload.get("loopNodeId") else None,
+            "parentNodeId": parent_node_id or None,
         }
 
         if (data["startTime"] and data["endTime"]) and (data["startTime"] > data["endTime"]):
@@ -1102,7 +1113,8 @@ def _register_jiuwen_callbacks() -> None:
     3. notify_start_trace_resolved (regular)
        — 通过 CustomSchema 通知 WorkflowWrapper 发送缓存的 start trace
     4. node_perf_start / node_perf_end (transform+regular)
-       — 记录节点执行耗时，输出 node_executed<node_id>|{ms} 性能日志
+       — 记录节点执行耗时，输出 _execute_invokable<node=type_name>|{ms} 性能日志
+       — 在节点开始/结束打印 common 日志
     """
     try:
         from openjiuwen.core.runner.callback.events import WorkflowEvents
@@ -1354,28 +1366,42 @@ def _register_jiuwen_callbacks() -> None:
                     ) or {}
                 if not isinstance(node_def, dict):
                     node_def = {}
+                workflow_id = session.workflow_id()
+                node_type = node_def.get("node_type", "")
+                node_name = node_def.get("node_name", "")
                 _node_start_time_ctx.set({
                     "start": time.perf_counter(),
-                    "node_type": node_def.get("node_type", ""),
-                    "node_name": node_def.get("node_name", ""),
+                    "workflow_id": workflow_id,
+                    "node_type": node_type,
+                    "node_name": node_name,
                 })
+                # 节点开始执行 common 日志
+                common_logger.info(
+                    f"The node starts to execute. "
+                    f"| flow_id: {workflow_id} | node type: {node_type} | node name: {node_name}"
+                )
             return (args, kwargs)
 
         @_fw.on(WorkflowEvents.NODE_EXECUTED, priority=0)
         async def node_perf_end(node_id, ability, graph_id, inputs, outputs):
             """Emit per-node execution timing.
 
-            Format: node_executed<type_name>|{ms}
-            e.g. node_executed<jiuwen.code_代码>|12
-            Aligns with old project: _execute_invokable<node=jiuwen.code_代码>|12
+            Format: _execute_invokable<node=type_name>|{ms}
+            e.g. _execute_invokable<node=jiuwen.code_代码>|12
             """
             ctx = _node_start_time_ctx.get()
             if ctx is None:
                 return
             duration_ms = round((time.perf_counter() - ctx["start"]) * 1000)
+            workflow_id = ctx.get("workflow_id", "")
             node_type = ctx.get("node_type", "")
             node_name = ctx.get("node_name", "")
-            # 对齐老项目格式: type_name (e.g. jiuwen.code_代码)
+            # 节点执行完成 common 日志
+            common_logger.info(
+                f"Node execution is complete. "
+                f"| flow_id: {workflow_id} | node type: {node_type} | node name: {node_name}"
+            )
+            # label 格式: type_name (e.g. jiuwen.code_代码)
             if node_type and node_name:
                 label = f"{node_type}_{node_name}"
             elif node_type:
@@ -1384,7 +1410,7 @@ def _register_jiuwen_callbacks() -> None:
                 label = node_name
             else:
                 label = node_id
-            performance_logger.info(f"node_executed<{label}>|{duration_ms}")
+            performance_logger.info(f"_execute_invokable<node={label}>|{duration_ms}")
             _node_start_time_ctx.set(None)
     except Exception as e:
         _logger.warning(

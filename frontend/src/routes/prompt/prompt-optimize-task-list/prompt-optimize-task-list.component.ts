@@ -77,7 +77,7 @@ interface PageSizeConfig {
 })
 export class PromptOptimizeTaskListComponent {
   @Input() isLibraryPrompt = false;
-  operateLoading = false;
+  operatingTaskId: string | null = null;
   isLoading = false;
   taskList = {
     data: [],
@@ -97,6 +97,7 @@ export class PromptOptimizeTaskListComponent {
     },
     {
       title: this.i18n.transform('prompt_status'),
+      width: '150px',
     },
     {
       title: this.i18n.transform('execution_time'),
@@ -295,7 +296,7 @@ export class PromptOptimizeTaskListComponent {
       });
     } else if (action.id === 'del') {
     } else if (action.id === 'retry') {
-      this.operateLoading = true;
+      this.operatingTaskId = task.id;
       this.promptOptimizeService
         .retryTask(task.id)
         .then(res => {
@@ -307,10 +308,10 @@ export class PromptOptimizeTaskListComponent {
           this.listTasks();
         })
         .finally(() => {
-          this.operateLoading = false;
+          this.operatingTaskId = null;
         });
     } else if (action.id === 'stop') {
-      this.operateLoading = true;
+      this.operatingTaskId = task.id;
       this.promptOptimizeService
         .stopTask(task.id)
         .then(res => {
@@ -322,10 +323,10 @@ export class PromptOptimizeTaskListComponent {
           this.listTasks();
         })
         .finally(() => {
-          this.operateLoading = false;
+          this.operatingTaskId = null;
         });
     } else if (action.id === 'continue') {
-      this.operateLoading = true;
+      this.operatingTaskId = task.id;
       this.promptOptimizeService
         .continueTask(task.id)
         .then(res => {
@@ -337,10 +338,10 @@ export class PromptOptimizeTaskListComponent {
           this.listTasks();
         })
         .finally(() => {
-          this.operateLoading = false;
+          this.operatingTaskId = null;
         });
     } else if (action.id === 'copy') {
-      this.operateLoading = true;
+      this.operatingTaskId = task.id;
       this.promptOptimizeService
         .copyTask(task.id)
         .then(res => {
@@ -350,7 +351,7 @@ export class PromptOptimizeTaskListComponent {
           });
         })
         .finally(() => {
-          this.operateLoading = false;
+          this.operatingTaskId = null;
         });
     }
   }

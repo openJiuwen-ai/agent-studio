@@ -34,6 +34,8 @@ class KBConnectionConfig:
     authorization: str = ""         # Basic Auth 凭证 或 Token
     extra_params: Dict[str, Any] = field(default_factory=dict)
     used_abilities: List[str] = field(default_factory=list)
+    model_config: Dict[str, Any] = field(default_factory=dict)
+    reranker_config: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -282,6 +284,23 @@ class OBSKnowledgeBaseConfigProvider(KnowledgeBaseConfigProvider):
                 authorization = auth_str  # adapter 会加 "Basic " 前缀
                 auth_mode = "BASIC"
 
+        # openjiuwen 连接文件中 model_config 以 JSON 字符串存储在 params 里
+        model_config: Dict[str, Any] = {}
+        mc_raw = params_dict.get("model_config", "")
+        if mc_raw:
+            try:
+                model_config = json.loads(mc_raw)
+            except (json.JSONDecodeError, TypeError):
+                workflow_logger.warning(f"Failed to parse model_config JSON: {mc_raw}")
+
+        reranker_config: Dict[str, Any] = {}
+        rc_raw = params_dict.get("reranker_config", "")
+        if rc_raw:
+            try:
+                reranker_config = json.loads(rc_raw)
+            except (json.JSONDecodeError, TypeError):
+                workflow_logger.warning(f"Failed to parse reranker_config JSON: {rc_raw}")
+
         return KBConnectionConfig(
             connection_id=connection_data.get("connectionId", ""),
             connector_type=connector_id,
@@ -292,6 +311,8 @@ class OBSKnowledgeBaseConfigProvider(KnowledgeBaseConfigProvider):
             authorization=authorization,
             extra_params=params_dict,
             used_abilities=connection_data.get("usedAbilities", []),
+            model_config=model_config,
+            reranker_config=reranker_config,
         )
 
     async def _load_kb_reference(self, knowledge_base_id: str) -> Optional[KBReferenceConfig]:

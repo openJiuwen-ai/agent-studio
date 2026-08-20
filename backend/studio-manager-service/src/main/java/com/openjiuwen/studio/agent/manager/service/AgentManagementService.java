@@ -625,7 +625,7 @@ public class AgentManagementService implements IAgentManagementService {
         newAgent.setSchedulingMode(oldAgent.getSchedulingMode());
         newAgent.setDslPath(oldAgent.getDslPath());
         newAgent.setMemoryConfig(oldAgent.getMemoryConfig());
-        newAgent.setDeleted(0);
+        newAgent.setDeleted(false);
         AgentType agentType = AgentType.naValueOf(oldAgent.getType());
 
         if (workspaceId.equals(targetWorkspaceId)) {
@@ -651,11 +651,16 @@ public class AgentManagementService implements IAgentManagementService {
             throw new AgentStudioException(StudioError.USER_NOT_IN_TARGET_WORKSPACE);
         }
 
-        String exportAgentStr = agentImportExportService.exportAgentStr(projectId, workspaceId, agentId);
+        try {
+            String exportAgentStr = agentImportExportService.exportAgentStr(projectId, workspaceId, agentId);
 
-        List<ImportListInfo> importListInfoList = listImportInfoFromJson(projectId, exportAgentStr);
+            List<ImportListInfo> importListInfoList = listImportInfoFromJson(projectId, exportAgentStr);
 
-        agentImportExportService.importAgentWithStr(projectId, targetWorkspaceId, exportAgentStr, importListInfoList);
+            agentImportExportService.importAgentWithStr(projectId, targetWorkspaceId, exportAgentStr, importListInfoList);
+        } catch (AgentStudioException e) {
+            log.error("Fail to copy agent, agentId: {}", agentId, e);
+            throw new AgentStudioException(StudioError.AGENT_COPY_FAIL);
+        }
 
         // 这里直接返回复制的对象信息，不能查询，避免读未提交
         return newAgent.convertToDto();
@@ -1680,7 +1685,8 @@ public class AgentManagementService implements IAgentManagementService {
         List<ShareResourceEntity> shareWorkflowList = shareResourceMapper.selectShareResourceByResourceIds(pluginsIds);
 
         Map<String, ShareResourceEntity> shareWorkflowMap = shareWorkflowList.stream()
-            .collect(Collectors.toMap(ShareResourceEntity::getResourceId, Function.identity()));
+            .collect(Collectors.toMap(ShareResourceEntity::getResourceId, Function.identity(),
+                (existingValue, newValue) -> existingValue));
         List<MappingEntity> toolReferences = new ArrayList<>();
         for (String id : toolIds) {
             MappingEntity mappingEntity = new MappingEntity();
@@ -1709,7 +1715,8 @@ public class AgentManagementService implements IAgentManagementService {
         List<ShareResourceEntity> shareWorkflowList = shareResourceMapper.selectShareResourceByResourceIds(pluginsIds);
 
         Map<String, ShareResourceEntity> shareWorkflowMap = shareWorkflowList.stream()
-            .collect(Collectors.toMap(ShareResourceEntity::getResourceId, Function.identity()));
+            .collect(Collectors.toMap(ShareResourceEntity::getResourceId, Function.identity(),
+                (existingValue, newValue) -> existingValue));
 
         List<MappingEntity> toolReferences = new ArrayList<>();
         for (AgentToolDetail toolDetail : toolDetails) {

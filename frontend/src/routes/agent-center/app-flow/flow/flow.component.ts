@@ -79,6 +79,7 @@ import {
 import { AddChildFlowModalComponent } from '../components/add-child-flow-modal/add-child-flow-modal.component';
 import { AddMCPServiceModalComponent } from '../components/add-mcp-service-modal/add-mcp-service-modal.component';
 import { AddPluginModalComponent } from '../components/add-plugin-modal/add-plugin-modal.component';
+import { AgentModalComponent } from '../components/agent-modal/agent-modal.component';
 import { AggregationModalComponent } from '../components/aggregation-modal/aggregation-modal.component';
 import { BranchModalComponent } from '../components/branch-modal/branch-modal.component';
 import { ChildFlowModalComponent } from '../components/child-flow-modal/child-flow-modal.component';
@@ -160,6 +161,9 @@ import {
   versionedResNodes, ExchangeNoOutputType,
 } from '../node.type';
 import { FlowUtils, TargetMarker } from '../utils/flow-utils';
+import { isEditableTarget } from '../utils/editable-target.util';
+import { shouldClearHalfModalOnClose } from '../utils/pending-open-node.util';
+import { withDrawerAutoClose } from '../utils/drawer-auto-close.util';
 import { IAppRefList } from '@routes/agent-center/types/common.types';
 import { getMaxReplySetting } from '@routes/agent-center/utils';
 import { ModelManagementService } from '@services/repositories/model-management-new';
@@ -233,6 +237,7 @@ const NodeMap = {
   Loop: LoopModalComponent,
   SetVariable: SetVariableModalComponent,
   IntentDetectionContainer: IntentContainerModalComponent,
+  Agent: AgentModalComponent,
   Controller: ControllerModalComponent,
   SubController: ControllerModalComponent,
   QA: QAModalComponent,
@@ -355,6 +360,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   public pluginModalRef: NzDrawerRef;
   public mcpModalRef: NzDrawerRef;
   public halfModalNodeId = '';
+
+  // FlowEventUtils.addGraphEventListeners 返回的清理函数：销毁时清掉 node:click
+  // 300ms 防抖 timer，避免组件销毁后残留 timer（回调本身只复位闭包局部变量、
+  // 不触碰 graph/DOM，故即便残留亦无害，此处显式清理仅为生命周期整洁）。
+  private disposeGraphEventListeners: (() => void) | null = null;
 
   public globalConfigDrawerWidth = '480px';
   public nodeConfigDrawerWidth = '600px';
@@ -539,6 +549,17 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   //ctrl + v keyDown事件
   private keyDownVSubject = new Subject<void>();
 
+  // 节点点击后延迟打开配置面板的失效令牌。每次调度新打开或显式失效时自增，
+  // 旧回调发现令牌不一致即放弃打开，避免删除/切换/空白点击后仍打开已不存在的节点。
+  private openNodeModalToken = 0;
+
+  // 节点配置抽屉的“打开版本”。每次 openNodeModal 创建新抽屉时自增，并捕获到该
+  // 抽屉 afterClose 闭包；旧抽屉关闭动画晚于新抽屉创建时（A→B、A→B→A），旧
+  // afterClose 回调发现版本/实例已变即放弃清空 halfModalNodeId，避免破坏新抽屉
+  // “稳定打开同一节点”的去重状态。与 openNodeModalToken 关注点不同：后者用于
+  // 250ms 延迟调度失效，本字段用于已创建抽屉的 afterClose 竞态守卫。
+  private halfModalVersion = 0;
+
   private envList: any = [];
 
   showEnv = true;
@@ -581,6 +602,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       id: 'appConfig',
       title: this.i18n.transform('multi_agent_config'),
       active: true,
+      show: this.configServ.getConfigs()?.studio_btn_show,
     },
     {
       id: 'releaseManage',
@@ -588,6 +610,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       active: false,
       disabled: !this.historyVersionList.length,
       tips: '',
+      show: this.configServ.getConfigs()?.studio_btn_show,
     },
   ];
   public curActiveConfigTabId = this.configHeaderTabs[0].id;
@@ -1338,7 +1361,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         if (!ref?.nodeData) {
           return;
         }
-        let {nodeData = {}, nodeInfo = {}} = ref || {};
+        let {nodeData = {}} = ref || {};
 
         // 保存
         this.exceptionBranchHandler(nodeData);
@@ -1410,7 +1433,14 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         if (nodeData?.id === 'node_start') {
           this.isStartNodeBtnClicked = true;
         }
-        this.checkRefChangeAndUpdateNode(nodeInfo, nodeData);
+        // 保存事件只携带 nodeData，旧节点快照需从当前 graph 按 nodeData.id 读取并深拷贝，
+        // 作为 checkRefChangeAndUpdateNode 的 oldNodeData；旧节点不存在（新增节点）时传
+        // {} 哨兵安全跳过差异检查（其内部 getOutputsRefIndex 对空 outputs 返回 []，不报错也不误更新）。
+        const graphOldNode = this.getNodeInfoById(nodeData.id);
+        const oldNodeData: NodeInfo = graphOldNode
+          ? cloneDeep(graphOldNode)
+          : ({} as NodeInfo);
+        this.checkRefChangeAndUpdateNode(oldNodeData, nodeData);
 
         // 更新画布上的node
         if (nodeData?.type === 'SubController') {
@@ -1778,6 +1808,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     this.resizeSub.unsubscribe();
     this.destroy$.next();
     this.destroy$.complete();
+    // 组件销毁时令待打开节点任务失效，避免销毁后仍尝试打开节点。
+    this.invalidatePendingOpenNode();
+    // 清理 node:click 300ms 防抖 timer，避免销毁后残留。
+    this.disposeGraphEventListeners?.();
+    this.disposeGraphEventListeners = null;
     this.closeNodeConfigDrawer();
     this.closeGlobalConfigDrawer();
     this.flowHelperServ.cleanupAppFlowService(
@@ -2037,13 +2072,19 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       });
       modalRef.afterClose.subscribe((result) => {
         if (result) {
-          nodeInfo.name = removeHTMLTag(result);
-          if (node?.data?.ngArguments?.nodeInfo) {
-            node.data.ngArguments.nodeInfo.name = nodeInfo.name;
-            node.data.ngArguments.nodeInfo.configs.isDefaultName = false;
-          }
-          this.appFlowServ.setNodeNameChange({id: nodeInfo.id, name: nodeInfo.name});
-          this.updateFlowData();
+          this.ngZone.run(() => {
+            nodeInfo.name = removeHTMLTag(result);
+            if (node?.data?.ngArguments?.nodeInfo) {
+              node.data.ngArguments.nodeInfo.name = nodeInfo.name;
+              node.data.ngArguments.nodeInfo.configs.isDefaultName = false;
+            }
+            if (this.nodeConfigNodeInfo && this.nodeConfigNodeInfo.id === nodeInfo.id) {
+              this.nodeConfigNodeInfo.name = nodeInfo.name;
+            }
+            this.appFlowServ.setNodeNameChange({id: nodeInfo.id, name: nodeInfo.name});
+            this.updateFlowData();
+            this.cdr.detectChanges();
+          });
         }
       });
     }
@@ -2323,7 +2364,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     );
 
     this.appFlowServ.setGraph(this.graph);
-    FlowEventUtils.addGraphEventListeners(this);
+    this.disposeGraphEventListeners = FlowEventUtils.addGraphEventListeners(this);
     this.setSelection();
     if (isDevMode()) {
       window.__x6_instances__ = [];
@@ -3871,6 +3912,8 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     if (UnDeletableNodeTypes.includes(nodeInfo.type) && !isContainerNode) {
       return;
     }
+    // 删除节点时令待打开节点任务失效，避免延迟回调仍打开已删除节点。
+    this.invalidatePendingOpenNode();
     const {type} = nodeInfo;
 
     if (FlowUtils.isAdvancedModeNew(nodeInfo)) {
@@ -3911,6 +3954,20 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     // 是否更新工作流数据。目前唯一不更新的情况：删除意图容器节点。
     if (isUpdateFlowData) {
       this.keyDownDelSubject.next(type);
+    }
+    // 删除完成后：检查当前 NodeService 选中 ID 是否仍存在于画布。若不存在
+    // （被删除的根节点正是当前选中节点，或被删除的是父循环/容器，连带删除
+    // 了作为当前选中节点的后代），则清理残留的选中 ID、配置抽屉与待打开
+    // 任务；若仍存在（多选删除中未被删除的节点），不清理以保留其抽屉。
+    // 仅清理实际已删除节点，不误伤仍存在的节点。X6 选中由 X6 在 removeCell
+    // 时自动清理，无需手动重置。节点操作按钮删除（subNodeActions→deleteNode）、
+    // 键盘删除、多选删除均经此清理，调用幂等，不改变不可删除节点/边/循环
+    // 关系规则。
+    const currSelectedId = this.nodeServ.getCurrSelectedNodeId();
+    if (currSelectedId && !this.graph.getCellById(currSelectedId)) {
+      this.nodeServ.setCurrSelectedNode('');
+      this.closeNodeConfigDrawer();
+      this.invalidatePendingOpenNode();
     }
   }
 
@@ -4491,11 +4548,16 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       },
     );
     this.appFlowServ.setPluginList(addedPluginList);
-    this.pluginCallback = callback;
+    // 闭包保存“本次”创建的 drawerRef：outputs 必须先于 create() 传入
+    // nzContentParams、而 ref 由 create() 返回，故用 getter 延迟读取局部
+    // let drawerRef；选择成功后关闭本次实例，不依赖会被后续打开覆盖的 this.pluginModalRef。
+    let drawerRef: NzDrawerRef | undefined;
+    const onSelect = withDrawerAutoClose(callback, () => drawerRef);
+    this.pluginCallback = onSelect;
     const outputs = {
-      pluginChange: callback,
+      pluginChange: onSelect,
     };
-    this.pluginModalRef = this.nzDrawerService.create({
+    drawerRef = this.nzDrawerService.create({
       nzTitle: this.i18n.transform('addpluginmodalcomponent_252'),
       nzContent: AddPluginModalComponent,
       nzPlacement: 'right',
@@ -4508,6 +4570,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         outputs,
       },
     });
+    this.pluginModalRef = drawerRef;
   }
 
   private useAddFlowModal(
@@ -4519,11 +4582,14 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       config: any;
     }) => void,
   ) {
-    this.childFlowCallback = callback;
+    // 闭包保存“本次”创建的 drawerRef（见 useAddPluginModal 注释）。
+    let drawerRef: NzDrawerRef | undefined;
+    const onSelect = withDrawerAutoClose(callback, () => drawerRef);
+    this.childFlowCallback = onSelect;
     const outputs = {
-      workflowChange: callback,
+      workflowChange: onSelect,
     };
-    this.childFlowModalRef = this.nzDrawerService.create({
+    drawerRef = this.nzDrawerService.create({
       nzTitle: '',
       nzContent: AddChildFlowModalComponent,
       nzPlacement: 'right',
@@ -4541,20 +4607,25 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         workflowSelectedLimit: 1,
       },
     });
+    this.childFlowModalRef = drawerRef;
   }
 
   private useAddMcpModal(
     callback: (mcpService: IMCPService) => void,
     type: string,
   ) {
-    this.mcpServiceCallback = callback;
+    // 闭包保存“本次”创建的 drawerRef（见 useAddPluginModal 注释）；
+    // MCP 回调为异步，withDrawerAutoClose 会 await 异步初始化/节点创建完成后再 close。
+    let drawerRef: NzDrawerRef | undefined;
+    const onSelect = withDrawerAutoClose(callback, () => drawerRef);
+    this.mcpServiceCallback = onSelect;
     const outputs = {
-      mcpServiceChange: callback,
+      mcpServiceChange: onSelect,
       createMcpRes: (data: any) => {
         this.createMcpResEmit(data);
       },
     };
-    this.mcpModalRef = this.nzDrawerService.create({
+    drawerRef = this.nzDrawerService.create({
       nzTitle: '',
       nzContent: AddMCPServiceModalComponent,
       nzPlacement: 'right',
@@ -4568,6 +4639,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         outputs,
       },
     });
+    this.mcpModalRef = drawerRef;
   }
 
   get halfModalWidth() {
@@ -4621,13 +4693,16 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     const nodeInfo = this.getNodeInfoById(curSelectId);
 
     if (isWinDel || isMacDel) {
+      // 画布删除：仅当本次按键 target 不在可编辑控件内时才触发。
+      // 不再依赖 “activeElement 必须是 body” 作为画布删除条件——节点切换后
+      // 配置抽屉/表单遗留焦点常落在非编辑元素（抽屉外壳、按钮、tab 等）上，
+      // 旧规则会误判为编辑态而 return，导致画布选中节点无法删除（A→B→A 后 Delete 失效）。
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+
       if (this.graph.getSelectedCells().length > 0) {
         if (document.querySelector('ti-modal-wrapper')) {
-          return;
-        }
-
-        const activeElement = document.activeElement;
-        if (activeElement && activeElement !== document.body) {
           return;
         }
         this.selectionDel();
@@ -4635,11 +4710,6 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       }
       if (curSelectId && !UnDeletableNodeTypes.includes(nodeInfo?.type)) {
         if (document.querySelector('ti-modal-wrapper')) {
-          return;
-        }
-
-        const activeElement = document.activeElement;
-        if (activeElement && activeElement !== document.body) {
           return;
         }
 
@@ -4899,8 +4969,11 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         ) {
           field.type = index.type;
 
+          // 视觉字段（标量与数组）都需按媒体类型同步命名与 configs.vision；
+          // 不能仅在 array/object 时调用，否则标量 file/image↔file/video 切换会漏同步。
+          this.changeLLMVisionName(field, index, node);
+
           if (['array', 'object'].includes(field.type)) {
-            this.changeLLMVisionName(field, index, node);
             field.schema = index.schema;
           } else if (field?.schema) {
             delete field.schema;
@@ -4931,25 +5004,35 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!node?.configs?.vision) {
       return;
     }
-    const type = newRef.schema?.type;
-    if (field.name.startsWith('_image_vision_') && type === 'file/video') {
-      const originIndex =
-        node.configs.vision.findIndex((v) => {
-          return v === field.name;
-        }) ?? 0;
-      field.name = field.name.replace('_image_', '_video_');
-      node.configs.vision[originIndex] = field.name;
-    } else if (
-      field.name.startsWith('_video_vision_') &&
-      type === 'file/image'
-    ) {
-      const originIndex =
-        node.configs.vision.findIndex((v) => {
-          return v === field.name;
-        }) ?? 0;
-      field.name = field.name.replace('_video_', '_image_');
-      node.configs.vision[originIndex] = field.name;
+    // 数组 schema 子类型优先，否则标量 newRef.type（标量引用经 getDtoInput 后 schema 被删除）
+    const refType = newRef.schema?.type ?? newRef.type;
+    // file/video -> 视频；file/image 或数组元素 string -> 图片
+    const isVideo = refType === 'file/video';
+    const isImage = refType === 'file/image' || refType === 'string';
+    if (!isVideo && !isImage) {
+      return;
     }
+
+    const currentIsImage = field.name.startsWith('_image_vision_');
+    const currentIsVideo = field.name.startsWith('_video_vision_');
+    if (!currentIsImage && !currentIsVideo) {
+      return;
+    }
+    // 媒体类型未变化 -> 无需重命名
+    if ((isVideo && currentIsVideo) || (isImage && currentIsImage)) {
+      return;
+    }
+
+    // 精确定位旧字段名；找不到时安全 no-op，不得写入 configs.vision[-1]
+    const originIndex = node.configs.vision.findIndex((v) => v === field.name);
+    if (originIndex === -1) {
+      return;
+    }
+
+    field.name = isVideo
+      ? field.name.replace('_image_', '_video_')
+      : field.name.replace('_video_', '_image_');
+    node.configs.vision[originIndex] = field.name;
   }
 
   /**
@@ -5185,10 +5268,48 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  /**
+   * 调度延迟打开节点配置面板，携带失效令牌：
+   * - 调度时自增令牌，使此前所有未触发的延迟回调失效（覆盖节点切换场景）；
+   * - 回调触发前再次确认 graph 存在、节点仍在 graph 中且仍是有效 node；
+   * - invalidatePendingOpenNode() 可显式令所有待打开任务失效（删除/空白点击/销毁）。
+   */
+  scheduleOpenNodeModal(nodeInfo: any) {
+    const token = ++this.openNodeModalToken;
+    setTimeout(() => {
+      if (token !== this.openNodeModalToken) {
+        return;
+      }
+      if (!this.graph) {
+        return;
+      }
+      const cell = this.graph.getCellById(nodeInfo?.id);
+      if (!cell || !cell.isNode()) {
+        return;
+      }
+      this.openNodeModal(nodeInfo);
+      this.appFlowServ.setNodeClicked(EHalfmodalType.NODE_CONFIG);
+    }, 250);
+  }
+
+  /**
+   * 使所有待打开的节点配置面板任务失效。删除节点、空白点击、组件销毁时调用，
+   * 防止 250ms 延迟回调打开已删除或不存在的节点。
+   */
+  invalidatePendingOpenNode() {
+    this.openNodeModalToken++;
+  }
+
   openNodeModal(nodeInfo: any, exict: Array<any> = []): void {
     const newexict = [...exict, 'checkErrorWorkflowHalfModalRef'];
     if (this.route.snapshot.queryParams.fromShare === 'true') {
       // 共享的节点不能点
+      return;
+    }
+    // 入口再次从当前 graph 解析节点：异步调用路径（如节点点击 250ms 延迟回调、
+    // 校验错误跳转）期间节点可能已被删除，此时不应再打开配置面板或变更选中态。
+    const existingCell = this.graph?.getCellById(nodeInfo?.id);
+    if (!existingCell || !existingCell.isNode()) {
       return;
     }
     // 如果接口loading中，直接跳过
@@ -5401,6 +5522,10 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       };
 
       this.halfModalNodeId = nodeInfo.id;
+      // 自增抽屉打开版本并捕获到 afterClose 闭包：旧抽屉的关闭动画可能在 新抽屉
+      // 创建之后才完成（A→B、A→B→A），旧 afterClose 晚到时不得清空新抽屉的
+      // halfModalNodeId，否则破坏“稳定打开同一节点”去重、导致后续重复打开。
+      const closingVersion = ++this.halfModalVersion;
       this.halfModalRef = this.nzDrawerService.create({
         nzTitle: '',
         nzContent: cmp,
@@ -5428,8 +5553,23 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       });
       this.showNodeConfigDrawer = true
 
+      // 抽屉 afterClose：仅当“正在关闭的抽屉实例仍是当前 halfModalRef 且版本未
+      // 变化”时才清空 halfModalNodeId。旧抽屉关闭动画可能在 新抽屉创建之后才
+      // 完成（A→B、A→B→A），旧 afterClose 晚到时若无条件清空会把新抽屉的 id
+      // 一并清空，破坏“稳定打开同一节点”去重、后续同节点点击重复打开。判定抽出
+      // 为纯函数 shouldClearHalfModalOnClose 以便单测（见 pending-open-node.util）。
+      const closingRef = this.halfModalRef;
       this.halfModalRef.afterClose.subscribe(() => {
-        this.halfModalNodeId = '';
+        if (
+          shouldClearHalfModalOnClose({
+            closingRef,
+            currentRef: this.halfModalRef,
+            closingVersion,
+            currentVersion: this.halfModalVersion,
+          })
+        ) {
+          this.halfModalNodeId = '';
+        }
       });
 
       this.adjustTopForNodeModal();
@@ -6213,6 +6353,13 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
       });
       this.updateFlowData();
     });
+    // 清理已删除节点遗留的当前选中态与配置抽屉：仅当当前选中节点已不在画布中时才清除，
+    // 不影响多选删除中未被删除节点的配置抽屉状态。
+    const currId = this.nodeServ.getCurrSelectedNodeId();
+    if (currId && !this.graph.getCellById(currId)) {
+      this.nodeServ.setCurrSelectedNode('');
+      this.closeNodeConfigDrawer();
+    }
   }
 
   protected readonly changeUrl = cdnAssetUrl;

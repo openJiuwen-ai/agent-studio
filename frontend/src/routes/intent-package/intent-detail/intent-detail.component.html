@@ -18,7 +18,9 @@
           [placeholder]="'input_placeholder' | i18nextEager"
           [minlength]="1"
           [maxlength]="33"
-          [formControl]="form.controls.name"
+          [(ngModel)]="editTitleValue"
+          (ngModelChange)="onEditTitleChange($event)"
+          [class.input-error]="form.controls.name.invalid && form.controls.name.dirty"
         />
 
         <div class="ml-[10px] flex items-center" *ngIf="isEditTitle">
@@ -37,7 +39,7 @@
             nz-button
             nzType="primary"
             nzDanger
-            [disabled]="!form.value.name"
+            [disabled]="form.invalid"
             [nzLoading]="isLoading"
             (click)="savePackageName()"
           >
@@ -45,7 +47,7 @@
           </button>
         </div>
       </div>
-      <div *ngIf="!isEditTitle" (click)="isEditTitle = true">
+      <div *ngIf="!isEditTitle" (click)="startEditTitle()">
         <nz-icon nzType="edit" nzTheme="outline" class="edit-icon" />
       </div>
     </div>
@@ -61,7 +63,17 @@
         [minlength]="1"
         [maxlength]="33"
         [formControl]="form.controls.name"
+        [attr.disabled]="isEditTitle ? 'disabled' : null"
+        [class.input-error]="form.controls.name.invalid && (form.controls.name.dirty || form.controls.name.touched)"
       />
+      <div
+        class="error-tip"
+        *ngIf="form.controls.name.invalid && (form.controls.name.dirty || form.controls.name.touched)"
+      >
+        {{ form.controls.name.hasError('required')
+          ? ('input_cannot_be_empty' | i18nextEager)
+          : ('variable_validator9' | i18nextEager) }}
+      </div>
       <div class="flex items-center justify-between mt-[16px]">
         <div class="text-[14px] text-[#191919]">
           {{ 'intent_management' | i18nextEager }}
@@ -147,7 +159,7 @@
           <form nz-form nzLayout="vertical" [formGroup]="intentForm">
             <nz-form-item>
               <nz-form-label>{{ 'intent_name' | i18nextEager }}</nz-form-label>
-              <nz-form-control>
+              <nz-form-control [nzErrorTip]="intentNameErrorTpl">
                 <input
                   nz-input
                   class="mt-[8px] w-[100%]"
@@ -156,6 +168,10 @@
                   [maxlength]="64"
                   formControlName="name"
                 />
+                <ng-template #intentNameErrorTpl let-control>
+                  <ng-container *ngIf="control.hasError('required')">{{ 'input_cannot_be_empty' | i18nextEager }}</ng-container>
+                  <ng-container *ngIf="control.hasError('pattern')">{{ 'variable_validator9' | i18nextEager }}</ng-container>
+                </ng-template>
               </nz-form-control>
             </nz-form-item>
           </form>
@@ -194,24 +210,38 @@
             >
               <div
                 *ngFor="let item of questions.controls; let $index = index"
-                class="item mb-[12px] flex items-center"
+                class="item mb-[12px] flex items-start"
               >
-                <span class="mr-[8px] min-w-[15px] text-[#808080]">{{
+                <span class="mr-[8px] mt-[4px] min-w-[15px] text-[#808080]">{{
                     $index + 1
                   }}</span>
-                <input
-                  nz-input
-                  class="question-input mr-[10px] grow"
-                  [placeholder]="'add_example_placeholder' | i18nextEager"
-                  [minlength]="1"
-                  [maxlength]="64"
-                  (ngModelChange)="textChange($event, $index)"
-                  [formControlName]="$index"
-                  [name]="$index"
-                />
+                <div class="mr-[10px] grow">
+                  <input
+                    nz-input
+                    class="question-input w-full"
+                    [placeholder]="'add_example_placeholder' | i18nextEager"
+                    [minlength]="1"
+                    [maxlength]="64"
+                    (ngModelChange)="textChange($event, $index)"
+                    [formControlName]="$index"
+                    [name]="$index"
+                    [class.input-error]="item.invalid && (item.dirty || item.touched)"
+                  />
+                  <div
+                    class="error-tip"
+                    *ngIf="item.invalid && (item.dirty || item.touched)"
+                  >
+                    <ng-container *ngIf="item.hasError('pattern'); else maxLenTip">
+                      {{ 'variable_validator9' | i18nextEager }}
+                    </ng-container>
+                    <ng-template #maxLenTip>
+                      {{ 'input_length_not_allow_over' | i18nextEager:{ length: 63 } }}
+                    </ng-template>
+                  </div>
+                </div>
                 <span
                   *ngIf="questions.controls.length - 1 !== $index"
-                  class="cursor-pointer"
+                  class="mt-[4px] cursor-pointer"
                   (click)="deleteQuestion($index)"
                 >
                   <span nz-icon nzType="delete" class="del-icon"></span>
@@ -233,7 +263,7 @@
             type="button"
             nz-button
             nzType="primary"
-            [disabled]="!activeItem.name || !subscribeBtnStatus"
+            [disabled]="intentForm.invalid || form.invalid || !subscribeBtnStatus"
             (click)="saveIntent()"
           >
             {{ 'save' | i18nextEager }}

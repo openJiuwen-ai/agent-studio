@@ -15,10 +15,11 @@ keeping the same env var names as agent_runtime.
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from common_utils.crypto_tool import decrypt
+from common_utils.password_provider import get_password_provider
 
 
 def _decrypt(v):
@@ -35,8 +36,11 @@ class ServerSettings(BaseSettings):
     tls_key_path: str = Field(default="", validation_alias="TLS_CERT_KEY_PATH")
     tls_key_password: str = Field(default="", validation_alias="TLS_CERT_KEY_PASSWD")
     tls_ciphers: str = Field(default="TLSv1.2 TLSv1.3", validation_alias="TLS_CIPHERS")
-    workers: Optional[int] = Field(default=None, validation_alias="GUNICORN_WORK_NUM")
+    workers: int = Field(default=1, validation_alias="GUNICORN_WORK_NUM")
     nginx_load_balancing: bool = Field(default=False, validation_alias="NGINX_LOAD_BALANCING")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     @field_validator("nginx_load_balancing", mode="before")
     @classmethod
@@ -47,15 +51,15 @@ class ServerSettings(BaseSettings):
 
     @field_validator("workers", mode="before")
     @classmethod
-    def _empty_str_to_none(cls, v):
+    def _empty_str_to_default(cls, v):
         if v == "":
-            return None
+            return 1
         return v
 
     @field_validator("workers")
     @classmethod
-    def _validate_workers(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v < 1:
+    def _validate_workers(cls, v: int) -> int:
+        if v < 1:
             raise ValueError("GUNICORN_WORK_NUM must be >= 1")
         return v
 
@@ -333,7 +337,16 @@ class CodeExecutionSettings(BaseSettings):
 
 
 class DataBaseSettings(BaseSettings):
-    db_type: Literal["mysql", "gaussdb"] = Field(
+    password_provider_type: str = Field(
+        default="DEFAULT", validation_alias="DATASOURCE_PASSWORD_PROVIDER_TYPE"
+    )
+    password_provider_module: str = Field(
+        default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_MODULE"
+    )
+    password_provider_class: str = Field(
+        default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_CLASS"
+    )
+    db_type: Literal["mysql", "gaussdb", "postgresql"] = Field(
         default="mysql", validation_alias="STORE_DB_TYPE"
     )
     host: str = Field(default="", validation_alias="STORE_DB_HOST")
@@ -347,10 +360,18 @@ class DataBaseSettings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    @field_validator("password", mode="after")
-    @classmethod
-    def _decrypt_password(cls, v):
-        return _decrypt(v)
+    @model_validator(mode="after")
+    def _resolve_password(self):
+        if self.password_provider_type == "CUSTOM":
+            provider = get_password_provider(
+                custom_module=self.password_provider_module,
+                custom_class=self.password_provider_class,
+            )
+            self.password = provider.get_password(self.password)
+        elif self.password:
+            provider = get_password_provider()
+            self.password = provider.get_password(self.password)
+        return self
 
 
 class Settings:

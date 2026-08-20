@@ -474,7 +474,7 @@ export class CreateToolComponent implements OnInit {
     ]),
     pluginZhName: new FormControl('', [
       Validators.required,
-      CommonValidation.toolZhNameVerify(this.i18n.transform('tool_name_validation_required'), this.i18n.transform('tool_zh_name_validation_formatter')),
+      CommonValidation.toolZhNameVerify(this.i18n.transform('tool_display_name_validation_required'), this.i18n.transform('tool_zh_name_validation_formatter')),
     ]),
     pluginDescription: new FormControl('', [Validators.required]),
     pluginLogo: new FormControl(''),

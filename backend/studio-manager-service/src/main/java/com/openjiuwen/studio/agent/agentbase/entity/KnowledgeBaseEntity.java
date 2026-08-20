@@ -126,4 +126,14 @@ public class KnowledgeBaseEntity {
 
     private String repoType;
 
+    /**
+     * Embedding模型服务ID（model_service_id，用于openjiuwen知识库）
+     */
+    private String embeddingModelServiceId;
+
+    /**
+     * Rerank模型服务ID（model_service_id，用于openjiuwen知识库）
+     */
+    private String rerankModelServiceId;
+
 }

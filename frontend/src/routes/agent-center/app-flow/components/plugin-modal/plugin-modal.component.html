@@ -65,12 +65,12 @@
           <form #inputForm="ngForm">
             <ng-container *ngFor="let param of inputParams; index as i">
               <div class="mt-2 flex" *ngIf="param.location === 'Headers'">
-                <div class="mr-1 flex h-[28px] w-[25%] items-center text-label">
+                <div class="mr-1 flex h-[28px] w-[25%] items-center gap-1 text-label">
                   <div class="flex max-w-[calc(100%-20px)] items-center">
-                    <span nz-tooltip [nzTooltipTitle]="param.name">
+                    <span nz-tooltip [nzTooltipTitle]="param.name" class="truncate min-w-0">
                       {{ param.name }}
                     </span>
-                    <span *ngIf="!param.required" class="w-12 shrink-0">{{ 'optional' | i18nextEager }}</span>
+                    <span *ngIf="!param.required" class="shrink-0 whitespace-nowrap">{{ 'optional' | i18nextEager }}</span>
                   </div>
                   <span
                     nz-icon
@@ -93,7 +93,7 @@
                           [nzOptions]="param.options"
                           [(ngModel)]="param.value.type"
                           nzLabelKey="value"
-                          (ngModelChange)="onInputValueTypeChange(param)"
+                          (ngModelChange)="onInputValueTypeChange(param,false)"
                         ></nz-select>
                       </div>
 
@@ -199,6 +199,8 @@
               </div>
             </ng-container>
           </form>
+
+
         </ng-template>
       </meta-acc-block>
       <div class="my-[16px] h-[1px] w-full bg-[#f0f0f0]" *ngIf="isShowHeaders"></div>
@@ -213,143 +215,144 @@
               {{ 'type' | i18nextEager }}
             </div>
           </div>
-
-          <form #inputFormContent="ngForm">
-            <ng-container *ngFor="let param of inputParams; index as i">
-              <div class="mt-2 flex" *ngIf="param.location !== 'Headers'">
-                <div class="mr-1 flex h-[28px] w-[25%] items-center text-label">
-                  <div class="flex max-w-[calc(100%-20px)] items-center">
-                    <span nz-tooltip [nzTooltipTitle]="param.name">
-                      {{ param.name }}
-                    </span>
-                    <span *ngIf="!param.required" class="w-12 shrink-0">{{ 'optional' | i18nextEager }}</span>
+          <form #inputForm="ngForm">
+            <nz-tree id="node-param-tree" [nzData]="toolsInputParams" nzBlockNode [nzTreeTemplate]="nzTreeTemplate">
+              <ng-template #nzTreeTemplate let-node let-origin="origin">
+                <div class="mt-2 flex">
+                  <div class="mr-1 flex h-[28px] w-[25%] items-center gap-1 text-label">
+                    <div class="flex max-w-[calc(100%-20px)] items-center">
+                      {{ origin.name }}{{ !origin.required ? ('optional' | i18nextEager) : '' }}
+                    </div>
+                    <span
+                      nz-icon
+                      nzType="question-circle"
+                      nzTheme="outline"
+                      *ngIf="origin.description"
+                      nz-tooltip
+                      [nzTooltipTitle]="origin.description"
+                      style="font-size: 16px; cursor: pointer; color: #808080"
+                    ></span>
                   </div>
-                  <span
-                    nz-icon
-                    nzType="question-circle"
-                    nzTheme="outline"
-                    *ngIf="param.description"
-                    nz-tooltip
-                    [nzTooltipTitle]="param.description"
-                    style="font-size: 16px; cursor: pointer; color: #808080"
-                  ></span>
-                </div>
-                <div class="flex w-[calc(75%-10px)]">
-                  <div class="flex h-fit w-full items-center">
-                    <div class="flex w-full">
-                      <div class="w-[30%]">
-                        <nz-select
-                          class="combo-select-left"
-                          style="width: 100%"
-                          [name]="'inputFormType' + i"
-                          [nzOptions]="param.options"
-                          [(ngModel)]="param.value.type"
-                          nzLabelKey="value"
-                          (ngModelChange)="onInputValueTypeChange(param)"
-                        ></nz-select>
-                      </div>
-
-                      <div class="w-[70%]">
-                        <ng-container *ngIf="param.value.type === 'literal'">
-                          <input
-                            class="combo-select-right"
-                            *ngIf="param.type === 'string'"
-                            style="width: 100%"
-                            type="text"
-                            [name]="'inputFormContentStr' + i"
-                            nz-input
-                            [nonEmptyValidator]="param.required"
-                            (ngModelChange)="changeUpdateTime()"
-                            (blur)="inputOnSave()"
-                            [placeholder]="'input_placeholder' | i18nextEager"
-                            [(ngModel)]="param.value.content"
-                            [title]="param.value.content"
-                            [class.input-error]="inputFormContent?.controls['inputFormContentStr' + i]?.invalid && (inputFormContent?.controls['inputFormContentStr' + i]?.dirty || inputFormContent?.controls['inputFormContentStr' + i]?.touched)"
-                          />
-                          <div *ngIf="inputFormContent?.controls['inputFormContentStr' + i]?.invalid && (inputFormContent?.controls['inputFormContentStr' + i]?.dirty || inputFormContent?.controls['inputFormContentStr' + i]?.touched)" class="error-tip">
-                            {{inputFormContent?.controls['inputFormContentStr' + i]?.errors?.serviceName?.tiErrorMessage}}
-                          </div>
-
-                          <typed-json-input
-                            *ngIf="isArrOrObj(param.type)"
-                            [param]="param"
-                            [isValidated]="isValidated"
-                            (changeValue)="onSave()"
-                          ></typed-json-input>
-
+                  <div class="flex w-[calc(75%-10px)]">
+                    <div class="flex h-fit w-full items-center">
+                      <div class="flex w-full">
+                        <div class="w-[30%]">
                           <nz-select
-                            *ngIf="param.type === 'boolean'"
-                            class="combo-select-right"
+                            class="combo-select-left"
                             style="width: 100%"
-                            [name]="'inputFormContentBool' + i"
-                            [nzOptions]="booleanOps"
-                            [(ngModel)]="param.value.content"
-                            [nzPlaceHolder]="'select_placeholder' | i18nextEager"
-                            nzAllowClear
+                            [name]="'inputFormType' + origin.key"
+                            [nzOptions]="origin.options"
+                            [(ngModel)]="origin.value.type"
                             nzLabelKey="value"
-                            (ngModelChange)="onSave()"
-                          >
-                          </nz-select>
+                            (ngModelChange)="onInputValueTypeChange(origin,true)"
+                          ></nz-select>
+                        </div>
+  
+                        <div class="w-[70%]">
+                            <input
+                              class="combo-select-right"
+                              *ngIf="origin.value.type === 'literal' && origin.type === 'string'"
+                              style="width: 100%"
+                              type="text"
+                              [name]="'inputFormContentStr' + origin.key"
+                              nz-input
+                              [nonEmptyValidator]="origin.required"
+                              (ngModelChange)="changeChildVal(origin);changeUpdateTime()"
+                              [disabled]="origin.rootValType === 'ref'"
+                              (blur)="inputOnSave()"
+                              [placeholder]="'input_placeholder' | i18nextEager"
+                              [(ngModel)]="origin.value.content"
+                              [title]="origin.value.content"
+                              [class.input-error]="inputFormContent?.controls['inputFormContentStr' + origin.key]?.invalid && (inputFormContent?.controls['inputFormContentStr' + origin.key]?.dirty || inputFormContent?.controls['inputFormContentStr' + origin.key]?.touched)"
+                            />
+                            <div *ngIf="inputFormContent?.controls['inputFormContentStr' + origin.key]?.invalid && (inputFormContent?.controls['inputFormContentStr' + origin.key]?.dirty || inputFormContent?.controls['inputFormContentStr' + origin.key]?.touched)" class="error-tip">
+                              {{inputFormContent?.controls['inputFormContentStr' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                            </div>
 
-                          <input
-                            *ngIf="param.type === 'number'"
-                            class="combo-select-right"
-                            [name]="'inputFormContentNum' + i"
+                            <typed-json-input
+                              *ngIf="origin.value.type === 'literal' && isArrOrObj(origin.type)"
+                              [param]="origin"
+                              [isValidated]="isValidated"
+                              (changeValue)="changeChildVal(origin);onSave()"
+                              [disabled]="origin.isObjRoot || origin.rootValType === 'ref' || origin.hasObjChild"
+                            ></typed-json-input>
+  
+                            <nz-select
+                              *ngIf="origin.value.type === 'literal' && origin.type === 'boolean'"
+                              class="combo-select-right"
+                              style="width: 100%"
+                              [name]="'inputFormContentBool' + origin.key"
+                              [nzOptions]="booleanOps"
+                              [(ngModel)]="origin.value.content"
+                              [nzPlaceHolder]="'select_placeholder' | i18nextEager"
+                              nzAllowClear
+                              nzLabelKey="value"
+                              (ngModelChange)="changeChildVal(origin); onSave()"
+                              [disabled]="origin.rootValType === 'ref'"
+                            >
+                            </nz-select>
+  
+                            <input
+                              *ngIf="origin.value.type === 'literal' && origin.type === 'number'"
+                              class="combo-select-right"
+                              [name]="'inputFormContentNum' + origin.key"
+                              style="width: 100%"
+                              [placeholder]="'input_placeholder' | i18nextEager"
+                              type="text"
+                              nz-input
+                              [(ngModel)]="origin.value.content"
+                              [title]="origin.value.content"
+                              nonEmptyValidator
+                              numberStr
+                              (ngModelChange)="changeChildVal(origin);changeUpdateTime()"
+                              [disabled]="origin.rootValType === 'ref'"
+                              (blur)="inputOnSave()"
+                              [class.input-error]="inputFormContent?.controls['inputFormContentNum' + origin.key]?.invalid && (inputFormContent?.controls['inputFormContentNum' + origin.key]?.dirty || inputFormContent?.controls['inputFormContentNum' + origin.key]?.touched)"
+                            />
+                            <div *ngIf="inputFormContent?.controls['inputFormContentNum' + origin.key]?.invalid && (inputFormContent?.controls['inputFormContentNum' + origin.key]?.dirty || inputFormContent?.controls['inputFormContentNum' + origin.key]?.touched)" class="error-tip">
+                              {{inputFormContent?.controls['inputFormContentNum' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                            </div>
+  
+                            <input
+                              *ngIf="origin.value.type === 'literal' && origin.type === 'integer'"
+                              class="combo-select-right"
+                              [name]="'inputFormContentInt' + origin.key"
+                              style="width: 100%"
+                              [placeholder]="'input_placeholder' | i18nextEager"
+                              type="text"
+                              nz-input
+                              [(ngModel)]="origin.value.content"
+                              [title]="origin.value.content"
+                              nonEmptyValidator
+                              integerStr
+                              (ngModelChange)="changeChildVal(origin);changeUpdateTime()"
+                              [disabled]="origin.rootValType === 'ref'"
+                              (blur)="inputOnSave()"
+                              [class.input-error]="inputFormContent?.controls['inputFormContentInt' + origin.key]?.invalid && (inputFormContent?.controls['inputFormContentInt' + origin.key]?.dirty || inputFormContent?.controls['inputFormContentInt' + origin.key]?.touched)"
+                            />
+                            <div *ngIf="inputFormContent?.controls['inputFormContentInt' +origin.key]?.invalid && (inputFormContent?.controls['inputFormContentInt' + origin.key]?.dirty || inputFormContent?.controls['inputFormContentInt' + origin.key]?.touched)" class="error-tip">
+                              {{inputFormContent?.controls['inputFormContentInt' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                            </div>
+  
+                          <input-tree-select
+                            *ngIf="origin.value.type === 'ref'"
                             style="width: 100%"
-                            [placeholder]="'input_placeholder' | i18nextEager"
-                            type="text"
-                            nz-input
-                            [(ngModel)]="param.value.content"
-                            [title]="param.value.content"
-                            nonEmptyValidator
-                            numberStr
-                            (ngModelChange)="changeUpdateTime()"
-                            (blur)="inputOnSave()"
-                            [class.input-error]="inputFormContent?.controls['inputFormContentNum' + i]?.invalid && (inputFormContent?.controls['inputFormContentNum' + i]?.dirty || inputFormContent?.controls['inputFormContentNum' + i]?.touched)"
-                          />
-                          <div *ngIf="inputFormContent?.controls['inputFormContentNum' + i]?.invalid && (inputFormContent?.controls['inputFormContentNum' + i]?.dirty || inputFormContent?.controls['inputFormContentNum' + i]?.touched)" class="error-tip">
-                            {{inputFormContent?.controls['inputFormContentNum' + i]?.errors?.serviceName?.tiErrorMessage}}
-                          </div>
-
-                          <input
-                            *ngIf="param.type === 'integer'"
-                            class="combo-select-right"
-                            [name]="'inputFormContentInt' + i"
-                            style="width: 100%"
-                            [placeholder]="'input_placeholder' | i18nextEager"
-                            type="text"
-                            nz-input
-                            [(ngModel)]="param.value.content"
-                            [title]="param.value.content"
-                            nonEmptyValidator
-                            integerStr
-                            (ngModelChange)="changeUpdateTime()"
-                            (blur)="inputOnSave()"
-                            [class.input-error]="inputFormContent?.controls['inputFormContentInt' + i]?.invalid && (inputFormContent?.controls['inputFormContentInt' + i]?.dirty || inputFormContent?.controls['inputFormContentInt' + i]?.touched)"
-                          />
-                          <div *ngIf="inputFormContent?.controls['inputFormContentInt' + i]?.invalid && (inputFormContent?.controls['inputFormContentInt' + i]?.dirty || inputFormContent?.controls['inputFormContentInt' + i]?.touched)" class="error-tip">
-                            {{inputFormContent?.controls['inputFormContentInt' + i]?.errors?.serviceName?.tiErrorMessage}}
-                          </div>
-                        </ng-container>
-
-                        <input-tree-select
-                          *ngIf="param.value.type === 'ref'"
-                          style="width: 100%"
-                          [(ngModel)]="param.value.content"
-                          [options]="param.refs"
-                          [name]="'inputFormContentRef' + i"
-                          refSelectedRequire
-                          [placeholder]="'select_placeholder' | i18nextEager"
-                          (select)="treeSelect()"
-                        ></input-tree-select>
-
-                        <div class="w-full" #valueWrapper></div>
+                            [(ngModel)]="origin.value.content"
+                            [options]="origin.refs"
+                            [name]="'inputFormContentRef' + origin.key"
+                            refSelectedRequire
+                            [placeholder]="'select_placeholder' | i18nextEager"
+                            (select)="treeSelect()"
+                          ></input-tree-select>
+  
+                          <div class="w-full" #valueWrapper></div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </ng-container>
+              </ng-template>
+            </nz-tree>
           </form>
         </ng-template>
       </meta-acc-block>

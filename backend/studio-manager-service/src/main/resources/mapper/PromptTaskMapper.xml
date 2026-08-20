@@ -35,8 +35,9 @@
         <result column="domain_id" jdbcType="VARCHAR" property="domainId"/>
         <result column="algorithm" jdbcType="VARCHAR" property="algorithm"/>
     </resultMap>
+    <sql id="descCol"><if test="_databaseId == null or _databaseId != 'postgres'">`desc`</if><if test="_databaseId == 'postgres'">"desc"</if></sql>
     <sql id="Base_Column_List">
-        id, jiuwen_task_id, `name`, `desc`, prompt_id, pt_type, pt_text, pt_vars, exec_time,pt_model, exec_object,
+        id, jiuwen_task_id, name, <include refid="descCol"/>, prompt_id, pt_type, pt_text, pt_vars, exec_time,pt_model, exec_object,
         max_iter_num, target_acc, show_case_num, target_type,score_standard, back_knowledge, progress_rate, status,
         message, project_id, workspace_id, creator, created_time, creator_id, updated_time, domain_id, algorithm
     </sql>
@@ -83,7 +84,7 @@
 
     <insert id="insert"
             parameterType="com.openjiuwen.studio.prompt.engineering.entity.v2.PromptTaskEntity">
-        INSERT INTO t_pe_op_task (id, jiuwen_task_id, name, `desc`, prompt_id, pt_type, pt_text, pt_vars, exec_time, pt_model,
+        INSERT INTO t_pe_op_task (id, jiuwen_task_id, name, <include refid="descCol"/>, prompt_id, pt_type, pt_text, pt_vars, exec_time, pt_model,
                                  exec_object, max_iter_num, target_acc, show_case_num, target_type, score_standard, back_knowledge, progress_rate,
                                  status, message, project_id, workspace_id, created_time, creator, creator_id, updated_time, domain_id, algorithm)
         VALUES (#{id, jdbcType=VARCHAR},
@@ -163,7 +164,7 @@
                 name = #{promptTaskEntity.name, jdbcType=VARCHAR},
             </if>
             <if test="promptTaskEntity.desc != null">
-                `desc` = #{promptTaskEntity.desc, jdbcType=VARCHAR},
+                <include refid="descCol"/> = #{promptTaskEntity.desc, jdbcType=VARCHAR},
             </if>
             <if test="promptTaskEntity.ptType != null">
                 pt_type = #{promptTaskEntity.ptType, jdbcType=VARCHAR},

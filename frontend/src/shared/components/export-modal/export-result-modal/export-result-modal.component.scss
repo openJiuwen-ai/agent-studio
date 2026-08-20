@@ -188,7 +188,7 @@
   font-weight: 400;
   line-height: 18px;
   color: rgba(25, 25, 25, 1);
-  padding: 4px 16px 4px 0;
+  padding: 4px 16px;
 }
 
 .status-font {
@@ -255,7 +255,7 @@ asset-arrow-icon {
 
   .sub-detail-container {
     width: 100%;
-    padding: 8px 0 8px 40px;
+    padding: 8px 0;
   }
 }
 
@@ -277,8 +277,9 @@ asset-arrow-icon {
     .ant-table-tbody > tr > td {
       padding: 12px 16px;
     }
-    .ant-table-expanded-row-level-1 > td {
+    .ant-table-tbody > tr.expand-detail-row > td {
       padding: 0;
+      background: #f9f9fa;
     }
   }
 }
@@ -289,6 +290,14 @@ asset-arrow-icon {
 
 .status-fail {
   color: #f13132;
+}
+
+.cell-ellipsis {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  word-break: break-word;
 }
 
 .operate-btn {

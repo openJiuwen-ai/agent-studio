@@ -27,3 +27,9 @@
   border-color: #f23030;
   background-color: #fce3e1;
 }
+
+.obj-diabled {
+  pointer-events: none;
+  background: rgb(239, 239, 240);
+  cursor: not-allowed !important;
+}

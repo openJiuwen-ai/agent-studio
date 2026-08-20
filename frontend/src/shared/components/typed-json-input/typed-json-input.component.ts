@@ -35,6 +35,8 @@ export class TypedJsonInputComponent {
 
   @Input() isValidated: boolean = false;
 
+  @Input() disabled: boolean = false;
+
   @Output('changeValue') changeValue = new EventEmitter<any>();
 
   public isArrOrObj(type: string) {

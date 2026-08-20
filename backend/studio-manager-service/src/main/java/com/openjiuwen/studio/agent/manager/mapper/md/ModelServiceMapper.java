@@ -22,6 +22,9 @@ public interface ModelServiceMapper {
     List<ModelServiceBase> queryByName(@Param("projectId") String projectId, @Param("workspaceId") String workspaceId,
         @Param("name") String serviceName, @Param("providerId") String providerId);
 
+    List<ModelServiceBase> queryByModelName(@Param("projectId") String projectId, @Param("workspaceId") String workspaceId,
+        @Param("name") String modelName, @Param("providerId") String providerId);
+
     int countByModelName(@Param("projectId") String projectId, @Param("workspaceId") String workspaceId,
         @Param("name") String modelName);
 

@@ -273,9 +273,15 @@ export class SSE {
     this.progress += data.length;
     data.split(/(\r\n|\r|\n){2}/g).forEach((part) => {
       if (part.trim().length === 0) {
-        this.handleFirstToken(this.parseEventChunk(this.chunk.trim()));
-        this.dispatchEvent(this.parseEventChunk(this.chunk.trim()));
+        const eventChunk = this.parseEventChunk(this.chunk.trim());
         this.chunk = '';
+        try {
+          this.handleFirstToken(eventChunk);
+          this.dispatchEvent(eventChunk);
+        } catch (err) {
+          // 监听器异常不能中断解析循环，否则剩余字节丢失会让后续事件拼接成损坏数据
+          console.error('[SSE] event listener error:', err);
+        }
       } else {
         this.chunk += part;
       }
@@ -285,8 +291,13 @@ export class SSE {
   private onStreamLoaded(e: Event) {
     this.onStreamProgress(e);
 
-    this.dispatchEvent(this.parseEventChunk(this.chunk));
+    const tailChunk = this.parseEventChunk(this.chunk);
     this.chunk = '';
+    try {
+      this.dispatchEvent(tailChunk);
+    } catch (err) {
+      console.error('[SSE] event listener error:', err);
+    }
   }
 
   private checkStreamClosed = () => {

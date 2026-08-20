@@ -4,7 +4,7 @@
     {{ 'prompt_with_variable'|i18nextEager }}
   </div>
   <div #editor
-       [style]="style"
+       [style]="styleObj"
        (blur)="onblur()"
        (click)="handleClick()"
        (copy)="handleCopy($event)"

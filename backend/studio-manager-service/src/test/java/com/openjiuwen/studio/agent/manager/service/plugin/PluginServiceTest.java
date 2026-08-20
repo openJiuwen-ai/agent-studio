@@ -14,6 +14,7 @@ import com.openjiuwen.studio.agent.common.redis.RedisLock;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
+import com.openjiuwen.studio.agent.manager.bo.WfImportDataWrapper;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.BaseResp;
 import com.openjiuwen.studio.agent.manager.dto.BatchCreatePluginToolReq;
@@ -23,6 +24,7 @@ import com.openjiuwen.studio.agent.manager.dto.CreatePluginToolReq;
 import com.openjiuwen.studio.agent.manager.dto.CreatePluginToolRsp;
 import com.openjiuwen.studio.agent.manager.dto.CreateVersionReq;
 import com.openjiuwen.studio.agent.manager.dto.GetPluginVersionQo;
+import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModifyPluginReq;
 import com.openjiuwen.studio.agent.manager.dto.ModifyPluginRsp;
 import com.openjiuwen.studio.agent.manager.dto.ParsePluginReq;
@@ -758,6 +760,66 @@ class PluginServiceTest {
     }
 
     @Test
+    void testRetrievePlugin_ToolDependencyDedupByApp() {
+        // 工具引用数口径：与引用插件列表(listResourceRelations)完全一致，仅按工具粒度分组。
+        // SQL 前缀匹配捞取 pluginId 与 pluginId#* 全部行（含双后缀脏数据）；
+        // 分组时 resource_id 规范化为 pluginId#toolId，使双后缀 pluginId#toolId#toolId 归到对应工具；
+        // 去重键 = appId|appVersion|resourceId|resourceVersion（resourceId 取完整原值，与引用插件列表一致）：
+        // 同一工作流草稿(null)+发布(v1)算 2 条；完全重复行算 1 条。
+        PluginEntity pluginEntity = new PluginEntity();
+        pluginEntity.setPluginId("p-1");
+        pluginEntity.setType(ToolType.CUSTOM.type);
+        pluginEntity.setWorkspaceId("ws-1");
+
+        PluginDTO pluginDTO = new PluginDTO();
+        pluginDTO.setPluginId("p-1");
+        pluginDTO.setToolRequestInfo(ToolRequestInfo.builder()
+            .basicInfo(BasicInfo.builder().host("host").protocol("https").build())
+            .toolsInfoList(new ArrayList<>(List.of(
+                ToolInfo.builder().toolId("t-1").build(),
+                ToolInfo.builder().toolId("t-2").build())))
+            .build());
+
+        when(pluginMapper.selectByPrimaryKeyAndWorkspaceAndCredential("p-1", null, "ws-1")).thenReturn(pluginEntity);
+        when(pluginBase.transformEntityToDTO(pluginEntity)).thenReturn(pluginDTO);
+
+        // 工具t-1: wf-1草稿(null,双后缀脏数据)+wf-1发布(v1)+wf-2草稿 + wf-1草稿重复行 → 去重后3条
+        // 工具t-2: wf-3草稿(单后缀)+wf-4草稿(双后缀脏数据) → 规范化后都归 t-2，去重2条
+        MappingEntity wf1Draft = mapping("p-1#t-1#t-1", "wf-1", null);
+        MappingEntity wf1Published = mapping("p-1#t-1#t-1", "wf-1", "v1");
+        MappingEntity wf1DraftDup = mapping("p-1#t-1#t-1", "wf-1", null); // 与wf1Draft同key，去重掉
+        MappingEntity wf2 = mapping("p-1#t-1", "wf-2", null);
+        MappingEntity wf3 = mapping("p-1#t-2", "wf-3", null);
+        MappingEntity wf4 = mapping("p-1#t-2#t-2", "wf-4", null);
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("p-1"), isNull(), eq("ws-1"), eq("workflow"), isNull()))
+            .thenReturn(List.of(wf1Draft, wf1Published, wf1DraftDup, wf2, wf3, wf4));
+
+        MappingEntity ag1 = mapping("p-1#t-1", "ag-1", null);
+        when(mappingMapper.selectByResourceIdAndVersionId(eq("p-1"), isNull(), eq("ws-1"), eq("agent"), isNull()))
+            .thenReturn(List.of(ag1));
+
+        BaseResp resp = pluginService.retrievePlugin("proj-1", "p-1", "ws-1");
+
+        assertEquals(200, resp.getCode());
+        PluginDTO data = (PluginDTO) resp.getData();
+        assertEquals(2, data.getToolDependencyList().size());
+        // t-1: wf-1(草稿)+wf-1(发布)+wf-2 = 3（双后缀已归一）
+        assertEquals(3, data.getToolDependencyList().get(0).getDependencyOnWorkflow());
+        assertEquals(1, data.getToolDependencyList().get(0).getDependencyOnAgent());
+        // t-2: wf-3 + wf-4 = 2（单/双后缀都归 t-2）
+        assertEquals(2, data.getToolDependencyList().get(1).getDependencyOnWorkflow());
+        assertEquals(0, data.getToolDependencyList().get(1).getDependencyOnAgent());
+    }
+
+    private static MappingEntity mapping(String resourceId, String appId, String appVersion) {
+        MappingEntity entity = new MappingEntity();
+        entity.setResourceId(resourceId);
+        entity.setAppId(appId);
+        entity.setAppVersion(appVersion);
+        return entity;
+    }
+
+    @Test
     void testBatchCreateTool_PluginNotExist() {
         CreatePluginToolReq toolReq = new CreatePluginToolReq();
         toolReq.setPluginId("p-1");
@@ -868,5 +930,26 @@ class PluginServiceTest {
         BaseResp result = pluginService.updatePluginVersionByVersionId(projectId, pluginId, versionId, workspaceId);
 
         assertEquals(200, result.getCode());
+    }
+
+    @Test
+    void testBuildImportRspDistinguishesImportedUpdatedAndFailedPlugins() {
+        WfImportDataWrapper wrapper = new WfImportDataWrapper();
+
+        pluginService.recordImportResult(wrapper, "new-plugin", "new-plugin", false, true);
+        pluginService.recordImportResult(wrapper, "existing-plugin", "existing-plugin", true, true);
+        pluginService.recordImportResult(wrapper, "failed-plugin", "failed-plugin", false, false);
+
+        ImportRsp response = new ImportRsp();
+        pluginService.buildImportRsp(response, wrapper);
+
+        assertEquals(2, response.getSucceedLen());
+        assertEquals(1, response.getImportedLen());
+        assertEquals(1, response.getUpdatedLen());
+        assertEquals(0, response.getSkippedLen());
+        assertEquals(1, response.getFailedLen());
+        assertEquals(3, response.getCount());
+        assertEquals(List.of("new-plugin", "existing-plugin"), response.getSucceedIds());
+        assertEquals(List.of("failed-plugin"), response.getFailedIds());
     }
 }

@@ -311,7 +311,7 @@ class ReActAgentRunner:
 
         try:
             ability_manager = agent.ability_manager
-            # 使用 list() 方法获取已注册的工具
+            # 使用 list 方法获取已注册的工具
             abilities = ability_manager.list()
             for ability in abilities:
                 # 获取工具的 input_params（已经是 JSON Schema 格式）
@@ -457,7 +457,16 @@ class ReActAgentRunner:
                 )
 
                 async def workflow_provider(ir_data=sub_ir):
-                    return await IRConverter.async_ir_to_workflow(ir_data)
+                    # 子工作流继承请求级 customer headers
+                    from agent_runtime.context.request_context import _request_ctx
+                    _ctx = _request_ctx.get()
+                    _cust_headers = _ctx.customer_headers if _ctx else {}
+                    _project_id = _ctx.project_id if _ctx else ""
+                    return await IRConverter.async_ir_to_workflow(
+                        ir_data,
+                        cust_headers=_cust_headers,
+                        project_id=_project_id,
+                    )
 
                 Runner.resource_mgr.add_workflow(
                     card=new_card,

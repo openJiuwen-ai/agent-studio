@@ -33,6 +33,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 
@@ -90,8 +91,8 @@ public class KnowledgeBaseRuleServiceImpl implements IKnowledgeRuleManagementSer
         ruleEntity.setCreatorId(RequestContextUtils.getRequestUserId());
         ruleEntity.setWorkspaceId(workspaceId);
         ruleEntity.setKnowledgeBaseConnectionId(knowledgeSegRuleInfo.getKnowledgeBaseConnectionId());
-        ruleEntity.setCreatedOn(System.currentTimeMillis() / 1000);
-        ruleEntity.setUpdatedOn(System.currentTimeMillis() / 1000);
+        ruleEntity.setCreatedOn(new Date());
+        ruleEntity.setUpdatedOn(new Date());
         segmentRuleMapper.insert(ruleEntity);
         return new CreateKnowledgeSegmentRuleResponseBody().setId(knowledgeSegRuleInfo.getRuleId());
     }
@@ -156,7 +157,7 @@ public class KnowledgeBaseRuleServiceImpl implements IKnowledgeRuleManagementSer
 
         // 修改库中记录
         ruleEntity.setRule(String.join(CommonConstant.ZERO_SPACE, body.getRuleRegexs()));
-        ruleEntity.setUpdatedOn(System.currentTimeMillis() / 1000);
+        ruleEntity.setUpdatedOn(new Date());
         segmentRuleMapper.updateByPrimaryKeySelective(ruleEntity);
         return new ModifyKnowledgeSegmentRuleResponseBody().setId(id);
     }

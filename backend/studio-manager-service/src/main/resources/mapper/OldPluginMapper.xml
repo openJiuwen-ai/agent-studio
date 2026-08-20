@@ -19,18 +19,18 @@
         <result column="visibility" jdbcType="VARCHAR" property="visibility"/>
         <result column="input_schema" jdbcType="VARCHAR" property="inputSchema"/>
         <result column="output_schema" jdbcType="VARCHAR" property="outputSchema"/>
-        <result column="is_input_list" jdbcType="TINYINT" property="isInputList"/>
-        <result column="is_output_list" jdbcType="TINYINT" property="isOutputList"/>
+        <result column="is_input_list" jdbcType="VARCHAR" property="isInputList"/>
+        <result column="is_output_list" jdbcType="VARCHAR" property="isOutputList"/>
         <result column="intf_type" jdbcType="VARCHAR" property="intfType"/>
         <result column="type" jdbcType="VARCHAR" property="type"/>
-        <result column="test_status" jdbcType="TINYINT" property="testStatus"/>
+        <result column="test_status" jdbcType="VARCHAR" property="testStatus"/>
         <result column="last_version_id" jdbcType="VARCHAR" property="lastVersionId"/>
         <result column="metadata" jdbcType="VARCHAR" property="metadata"/>
         <result column="creator" jdbcType="VARCHAR" property="creator"/>
         <result column="creator_id" jdbcType="VARCHAR" property="creatorId"/>
         <result column="created_on" jdbcType="TIMESTAMP" property="createdOn"/>
         <result column="updated_on" jdbcType="TIMESTAMP" property="updatedOn"/>
-        <result column="auth_required" jdbcType="TINYINT" property="authRequired"/>
+        <result column="auth_required" jdbcType="BOOLEAN" property="authRequired"/>
         <result column="credential_status" jdbcType="VARCHAR" property="credentialStatus"/>
         <result column="customize_node" jdbcType="TINYINT" property="customizeNode"/>
         <result column="published" jdbcType="TINYINT" property="published"/>
@@ -56,7 +56,7 @@
         is_input_list,
         is_output_list,
         intf_type,
-        `type`,
+        type,
         test_status,
         last_version_id,
         customize_node,
@@ -84,7 +84,7 @@
         is_input_list,
         is_output_list,
         intf_type,
-        `type`,
+        type,
         last_version_id,
         customize_node,
         auth_required,

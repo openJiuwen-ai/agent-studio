@@ -738,7 +738,8 @@ public class WorkflowValidationService {
                     if (!McpJsonUtils.isValidJson(templeteStr)) {
                         errors.add(new WorkflowValidationVOErrors().setId(node.getId())
                             .setType(node.getType())
-                            .setReason(i18nUtil.getMessage("workflow.validate.exception")));
+                            .setReason(i18nUtil.getMessage(StudioError.WORKFLOW_TEMPLATE_INVALID_JSON,
+                                node.getNodeInfo().getName())));
                     }
                 }
             }
@@ -750,7 +751,6 @@ public class WorkflowValidationService {
 
     private void validateAgentTools(Node node, List<WorkflowValidationVOErrors> errors) {
         Map<String, Object> configs = node.getNodeInfo().getConfigs();
-        Set<String> pluginIds = new HashSet<>();
 
         // 校验agent绑定工具是否存在
         if (configs.get(CommonConstant.Workflow.PLUGINS) != null) {
@@ -760,7 +760,6 @@ public class WorkflowValidationService {
                 for (Map<String, Object> pluginConfig : originPlugins) {
                     if (pluginConfig.get(Constants.ID) != null) {
                         validateToolExist(pluginConfig, node, errors);
-                        handlePluginId(pluginConfig, pluginIds);
                     } else {
                         // 插件校验错误信息返回
                         errors.add(new WorkflowValidationVOErrors().setId(node.getId())
@@ -771,26 +770,6 @@ public class WorkflowValidationService {
             }
         }
 
-        // 校验跳出插件是否合法
-        if (configs.get(CommonConstant.Workflow.BREAK_PLUGIN_IDS) != null) {
-            List<String> breakPluginIds =
-                JsonUtils.objectToClass(configs.get(CommonConstant.Workflow.BREAK_PLUGIN_IDS));
-            if (breakPluginIds != null) {
-                breakPluginIds.forEach(m -> {
-                    if (!pluginIds.contains(m)) {
-                        errors.add(new WorkflowValidationVOErrors().setId(node.getId())
-                            .setType(node.getType())
-                            .setReason(i18nUtil.getMessage("workflow.validate.plugin.break")));
-                    }
-                });
-            }
-        }
-    }
-
-    public void handlePluginId(Map<String, Object> pluginConfig, Set<String> pluginIds) {
-        String ids = pluginConfig.get(Constants.ID).toString();
-        String[] split = ids.split("#");
-        pluginIds.add(split[0]);
     }
 
     private void validateToolExist(Map<String, Object> pluginConfig, Node node,

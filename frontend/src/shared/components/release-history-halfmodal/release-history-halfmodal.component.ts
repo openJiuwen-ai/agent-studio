@@ -179,8 +179,44 @@ export class ReleaseHistoryHalfmodalComponent {
     );
   }
 
-  public clickCopy(e: Event) {
+  public clickCopy(e: Event, version_id: string) {
     e.stopPropagation();
+    if (!version_id) {
+      return;
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(version_id).then(
+        () => {
+          MessageComponent.showSuccess(
+            this.i18n.transform('copy_success'),
+            3000,
+          );
+        },
+        () => {
+          this.fallbackCopy(version_id);
+        },
+      );
+    } else {
+      this.fallbackCopy(version_id);
+    }
+  }
+
+  private fallbackCopy(text: string) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      MessageComponent.showSuccess(
+        this.i18n.transform('copy_success'),
+        3000,
+      );
+    } finally {
+      document.body.removeChild(textarea);
+    }
   }
 
   private getFlowVersions() {
@@ -267,15 +303,15 @@ export class ReleaseHistoryHalfmodalComponent {
     e.stopPropagation();
     e.preventDefault();
     const modalRef = this.nzModal.create({
-      nzTitle: '',
       nzContent: DiffVersionModalComponent,
-      nzWidth: 900,
+      nzWidth: 'min(1100px, calc(100vw - 32px))',
+      nzClosable: true,
       nzFooter: null,
-      nzClosable: false,
     });
     const instance = modalRef.getContentComponent();
     instance.app_id = this.app_id;
-    instance.versionList = this.publishedCards;
+    // 快照拷贝，避免 publishedCards 原地增删后选中态过期 → 404 被当 per-side error
+    instance.versionList = [...this.publishedCards];
     instance.leftIndex = this.selectedTab;
     instance.rightIndex = index;
     instance.type = this.type;

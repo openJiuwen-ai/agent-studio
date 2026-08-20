@@ -67,10 +67,10 @@
                   <span nz-icon nzType="question-circle" class="ml-[4px] !text-[16px] text-gray-400 cursor-pointer" nz-tooltip [nzTooltipTitle]="'strategy_timeout_too_small_warning'|i18nextEager"></span>
                 </div>
               </nz-form-label>
-              <nz-form-control>
+              <nz-form-control [nzErrorTip]="'strategy_timeout_range_tip' | i18nextEager">
                 <div class="flex model-item-content">
                   <nz-input-number formControlName="strategy_timeout" id="policy-timeout"
-                                   [nzMin]="0" [(ngModel)]="strategy_spinner_Value"
+                                   [(ngModel)]="strategy_spinner_Value"
                                    class="model-item-content-left w-full"></nz-input-number>
                   <span class="model-item-content-right">ms</span>
                 </div>
@@ -84,10 +84,10 @@
                   <span nz-icon nzType="question-circle" class="ml-[4px] !text-[16px] text-gray-400 cursor-pointer" nz-tooltip [nzTooltipTitle]="'max_repeat_limit_100'|i18nextEager"></span>
                 </div>
               </nz-form-label>
-              <nz-form-control>
+              <nz-form-control [nzErrorTip]="'retry_count_range_tip' | i18nextEager">
                 <div class="flex model-item-content">
                   <nz-input-number class="model-item-content-left w-full" id="model-retry-times"
-                                   [nzMin]="0" formControlName="strategy_retry_count"></nz-input-number>
+                                   formControlName="strategy_retry_count"></nz-input-number>
                   <span class="model-item-content-right">{{ 'times'|i18nextEager }}</span>
                 </div>
               </nz-form-control>
@@ -96,8 +96,10 @@
             <nz-form-item>
               <nz-form-label>{{ 'policy_des' | i18nextEager }}</nz-form-label>
               <nz-form-control>
-                <textarea nz-input maxlength="100" formControlName="strategy_description"
-                          class="!w-full min-h-[80px]" [placeholder]="'pls_enter' | i18nextEager"></textarea>
+                <nz-textarea-count [nzMaxCharacterCount]="maxStrategyDescriptionLength" class="block w-full">
+                  <textarea nz-input [maxLength]="maxStrategyDescriptionLength" formControlName="strategy_description"
+                            class="!w-full min-h-[80px]" [placeholder]="'pls_enter' | i18nextEager"></textarea>
+                </nz-textarea-count>
               </nz-form-control>
             </nz-form-item>
 

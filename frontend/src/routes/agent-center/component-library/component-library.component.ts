@@ -31,6 +31,7 @@ import { ExportHalfModalComponent } from '@shared/components/export-half-modal/e
 import { HttpService } from '@services/http.service';
 import { AddMcpThirdPartyModal } from '@routes/agent-center/app-mcp-service/components/add-mcp-third-party-modal/add-mcp-third-party-modal';
 import { NoDataGuideComponentComponent } from '@shared/components/no-data-guide/no-data-guide.component';
+import { MultiFieldSearchComponent, ISearchTag } from '@shared/components/multi-field-search/multi-field-search.component';
 import { DebounceDecorators } from '@shared/decorators/debouncing-throttling.directive';
 import { NzModalService } from 'ng-zorro-antd/modal';
 import { NzDrawerService } from 'ng-zorro-antd/drawer';
@@ -55,6 +56,7 @@ enum mapKeys {
     ComponentCardComponent,
     NewCommonNoDataWithBtnComponent,
     NoDataGuideComponentComponent,
+    MultiFieldSearchComponent,
   ],
   providers: [
     {
@@ -117,6 +119,8 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
   ];
 
   public searchName = '';
+  public searchTags: ISearchTag[] = [];
+  public searchField: string = 'name';
   public currentCardPage = 1;
   public isLoadingCard = false;
   public cards: ITmplCard[] = [];
@@ -129,6 +133,9 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
   public alertType: 'error' | 'success' | 'warn' | 'prompt' | 'simple' = 'success';
   public alertText = '';
   public totalCardNumber = 0;
+
+  // 改变每页条数时，ng-zorro 会同步夹页并触发一次 nzPageIndexChange，与本次重查重复，用此 flag 屏蔽
+  private _sizeChangeSuppressClamp = false;
 
   public open = false;
   public warnOpen = false;
@@ -201,9 +208,30 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
       .importResUpdate$()
       .pipe(takeUntil(this.destroy$))
       .subscribe((result: any) => {
-        const { succeed_len, failed_len, inner_plugins_msg, isShow, auth_plugins_msg, auth_mcps_msg } = result;
+        const {
+          succeed_len,
+          failed_len,
+          imported_len,
+          updated_len,
+          skipped_len,
+          inner_plugins_msg,
+          isShow,
+          importType,
+          auth_plugins_msg,
+          auth_mcps_msg,
+        } = result;
         if (isShow === 'success') {
-          if (succeed_len >= 0 && failed_len === 0) {
+          const hasDetailedCounts = importType === 'plugin' && [imported_len, updated_len, skipped_len]
+            .some((count) => typeof count === 'number');
+          if (hasDetailedCounts) {
+            this.alertType = failed_len > 0 ? 'error' : 'success';
+            this.alertText = this.getPluginImportResultMsg(
+              imported_len ?? 0,
+              updated_len ?? 0,
+              skipped_len ?? 0,
+              failed_len ?? 0,
+            );
+          } else if (succeed_len > 0 && failed_len === 0) {
             this.alertType = 'success';
             this.alertText = this.getSuccessMsg(succeed_len, failed_len);
           } else if (failed_len > 0) {
@@ -330,17 +358,16 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
   }
 
   get searchNameIsEmpty(): boolean {
-    return this.searchName.length === 0;
+    return this.searchTags.length === 0;
   }
 
   @DebounceDecorators()
   handleClickClearSearch(): void {
-    this.searchName = '';
+    this.searchTags = [];
     this.onSearchContentChange();
   }
 
   public onSearchContentChange(): void {
-    StorageService.setSessionStorage('JIUWEN_SEARCH_PARAMS', this.searchName);
     this.currentCardPage = 1;
     this.getCardData();
   }
@@ -388,16 +415,9 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
       }
       const { size } = this.cardPageSize;
 
-      if (this.searchName.length > 0) {
-        if (this.appType === 'Plugin') {
-          params.tool_chinese_name = this.searchName;
-          params.language = 'ZH';
-        }
-        if (this.appType === 'MCP') {
-          params.name = this.searchName;
-          params.language = 'ZH';
-        }
-      }
+      this.searchTags.forEach(tag => {
+        params[tag.field] = tag.value;
+      });
       if (isDisableSearch) {
         MessageComponent.showWarn(this.i18n.transform('componentlibrarycomponent_1176'), 3000);
         return;
@@ -429,6 +449,28 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
     }
   }
 
+  public onCardPageIndexChange(page: number): void {
+    this.currentCardPage = page;
+    // ng-zorro 改变每页条数时会同步夹页并触发 nzPageIndexChange，该次与改 size 的请求重复，跳过
+    if (this._sizeChangeSuppressClamp) {
+      return;
+    }
+    this.getCardData();
+  }
+
+  public onCardPageSizeChange(size: number): void {
+    this.cardPageSize.size = size;
+    // 改每页条数应回到第 1 页，避免用旧页码 × 新 size 算出越界 offset（如第2页 offset=(2-1)*24=24）
+    this.currentCardPage = 1;
+    this._sizeChangeSuppressClamp = true;
+    // flag 仅在当前同步周期有效：夹页的 nzPageIndexChange 会同步紧随其后触发并被屏蔽；
+    // 若页码本就有效未触发夹页，则由下一微任务清除，避免误屏蔽后续真实翻页
+    Promise.resolve().then(() => {
+      this._sizeChangeSuppressClamp = false;
+    });
+    this.getCardData();
+  }
+
   public copyUrl() {
     this.clipboard.copy(this.callUrl);
     MessageComponent.showSuccess(this.i18n.transform('copy_successful'));
@@ -457,7 +499,7 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
       instance.pluginId = data?.tool_id;
       instance.confirm.subscribe(() => {
         if (!data?.tool_id) {
-          this.searchName = '';
+          this.searchTags = [];
           this.currentCardPage = 1;
         }
         this.getCardData().then();
@@ -518,8 +560,9 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
     if (!active) {
       return;
     }
-    this.searchbox?.clear();
+    this.searchTags = [];
     this.searchItems = id === 'mcp' ? this.getMcpSearchItems() : this.getPluginSearchItems();
+    this.searchField = this.searchItems[0]?.field || '';
     this.open = false;
     this.warnOpen = false;
     this.currActivedTab = index;
@@ -624,6 +667,20 @@ export class ComponentLibraryComponent implements OnInit, OnDestroy {
   private getSuccessMsg(succeed_len: number, failed_len: number) {
     return this.i18n.transform('imported_succeeded_count_content', {
       succeed_len,
+      failed_len,
+    });
+  }
+
+  private getPluginImportResultMsg(
+    imported_len: number,
+    updated_len: number,
+    skipped_len: number,
+    failed_len: number,
+  ) {
+    return this.i18n.transform('plugin_import_result_content', {
+      imported_len,
+      updated_len,
+      skipped_len,
       failed_len,
     });
   }

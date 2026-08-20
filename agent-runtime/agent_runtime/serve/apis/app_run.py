@@ -40,6 +40,8 @@ from agent_runtime.event_handler.base.conversation import (
 from agent_runtime.context.request_context import _request_ctx
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from jiuwen.common.exception import JiuWenBaseException
+from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.serve.controllers.execution.enum import PlanModeType, IRType
 from jiuwen.serve.controllers.execution.open_utils import async_ir_load
 from openjiuwen.core.common.logging import workflow_logger, set_session_id
@@ -501,7 +503,10 @@ async def _execute_agent_run(
         handler_type = await _resolve_handler_type(ir_path)
     except Exception as e:
         workflow_logger.error(f"Failed to resolve handler type from IR: {ir_path}, error: {e}")
-        raise
+        raise JiuWenBaseException(
+            error_code=StatusCode.IR_DATA_JSON_LOAD_FAILED.code,
+            message=f"resolve handler type failed: {e}",
+        ) from e
 
     if stream:
         return await _encapsulate_stream_response(
@@ -552,7 +557,12 @@ async def _execute_node_run(
     workflow_logger.debug(f"Built IR path: {ir_path}")
 
     instance_id = ctx.workflow_id
-    user_id = body.user_id or _request_ctx.get().user_id
+    # Profile 启用时使用 ctx.user_id（effective userId，不让 body 优先）
+    from common_utils.customer_header import get_config
+    if get_config().enabled:
+        user_id = _request_ctx.get().user_id
+    else:
+        user_id = body.user_id or _request_ctx.get().user_id
     version_id = ""
     request.state.user_id = user_id
     request.state.version_id = version_id
@@ -608,3 +618,4 @@ async def run_node_execute(
         node_id=path_params["node_id"],
     )
     return await _execute_node_run(ctx, body, request)
+

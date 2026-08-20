@@ -50,6 +50,8 @@ export class AddPluginModalComponent implements OnInit {
   @Output('pluginChange') pluginChange = new EventEmitter<IPlugin>();
   readonly drawerRef = inject(NzDrawerRef);
   public controller = new AbortController();
+  public isShowCreatePluginModal = false;
+  public isAddingTool = false;
   public changeUrl = cdnAssetUrl;
   public tabs = [
     {
@@ -69,13 +71,21 @@ export class AddPluginModalComponent implements OnInit {
     },
   ];
   protected readonly PluginCredentialStatus = PluginCredentialStatus;
-  public searchItemsForPlugin = [
+  public searchItemsForInner = [
     { label: this.i18n.transform('plugin_name'), field: 'tool_chinese_name' },
     { label: this.i18n.transform('plugin_en_name'), field: 'name' },
     { label: this.i18n.transform('plugin_description'), field: 'tool_desc' },
   ];
-  public searchTagsPlugin: ISearchTag[] = [];
-  public searchFieldPlugin: string = 'tool_chinese_name';
+  public searchTagsInner: ISearchTag[] = [];
+  public searchFieldInner: string = 'tool_chinese_name';
+
+  public searchItemsForCustom = [
+    { label: this.i18n.transform('plugin_name'), field: 'tool_chinese_name' },
+    { label: this.i18n.transform('plugin_en_name'), field: 'name' },
+    { label: this.i18n.transform('plugin_description'), field: 'tool_desc' },
+  ];
+  public searchTagsCustom: ISearchTag[] = [];
+  public searchFieldCustom: string = 'tool_chinese_name';
 
   public searchItemsForShare = [
     { label: this.i18n.transform('name'), field: 'resourceName' },
@@ -102,8 +112,10 @@ export class AddPluginModalComponent implements OnInit {
   get searchNameIsEmpty(): boolean {
     if (this.currTab === 'share') {
       return this.searchTagsShare.length === 0;
+    } else if (this.currTab === 'inner') {
+      return this.searchTagsInner.length === 0;
     }
-    return this.searchTagsPlugin.length === 0;
+    return this.searchTagsCustom.length === 0;
   }
   public pluginLabels = [
     {
@@ -245,7 +257,8 @@ export class AddPluginModalComponent implements OnInit {
           offset: !isChangeTab ? ((this.currentPage || 1) - 1) * this.pageSize : 0,
           limit: this.pageSize,
         };
-        this.searchTagsPlugin.forEach(tag => {
+        const activeSearchTags = this.currTab === 'inner' ? this.searchTagsInner : this.searchTagsCustom;
+        activeSearchTags.forEach(tag => {
           params[tag.field] = tag.value;
         });
         if (this.currTab !== 'custom') {
@@ -284,6 +297,12 @@ export class AddPluginModalComponent implements OnInit {
     }
   }
 
+  public onPageSizeChange(size: number) {
+    this.pageSize = size;
+    this.currentPage = 1;
+    this.initApiList();
+  }
+
   public countRefNum(pluginId: string, toolId: string) {
     const key = `${pluginId}#${toolId}`;
     if (this.refMap.has(key)) {
@@ -316,35 +335,46 @@ export class AddPluginModalComponent implements OnInit {
 
   public addTool(e: Event, plugin, tool) {
     e.stopPropagation();
+    if (this.isAddingTool) {
+      return;
+    }
     if (this.tabSelectIndex === 1 && !plugin.last_version_id && !this.useUnpublishedPlugin) {
       return;
     }
+    this.isAddingTool = true;
     const { plugin_id, last_version_id } = plugin;
 
     const key = `${plugin.plugin_id}#${tool.tool_id}`;
     this.refMap.set(key, (this.refMap.get(key) ?? 0) + 1);
     if (last_version_id) {
-      this.appFlowRepoServe.getPluginVersionInfo(plugin_id, last_version_id).then(res => {
-        const pluginVersion = res.data;
-        let toolList = pluginVersion.intf_type.find(toolIntfType => toolIntfType.tool_id === tool.tool_id);
-        if (!toolList) {
-          MessageComponent.showError(this.i18n.transform('addpluginmodalcomponent_260'));
-          return;
-        }
-        tool.ref_num++;
-        const toolInfo = {
-          ...tool,
-          plugin_chinese_name: plugin.plugin_chinese_name,
-          id: pluginVersion.plugin_id,
-          intf_type: pluginVersion.intf_type.find(toolIntfType => toolIntfType.tool_id === tool.tool_id).intf_type,
-          input_schema: pluginVersion.input_schema.find(toolInputSchema => toolInputSchema.tool_id === tool.tool_id).input_schema,
-          output_schema: pluginVersion.output_schema.find(toolOutputSchema => toolOutputSchema.tool_id === tool.tool_id).output_schema,
-          type: pluginVersion.type,
-        };
-        const result = { ...toolInfo, last_version_id, request_info: plugin.request_info };
-        this.pluginChange.emit(result);
-        this.outputs?.pluginChange?.(result);
-      });
+      this.appFlowRepoServe
+        .getPluginVersionInfo(plugin_id, last_version_id)
+        .then(res => {
+          const pluginVersion = res.data;
+          let toolList = pluginVersion.intf_type.find(toolIntfType => toolIntfType.tool_id === tool.tool_id);
+          if (!toolList) {
+            this.isAddingTool = false;
+            MessageComponent.showError(this.i18n.transform('addpluginmodalcomponent_260'));
+            return;
+          }
+          tool.ref_num++;
+          const toolInfo = {
+            ...tool,
+            plugin_chinese_name: plugin.plugin_chinese_name,
+            id: pluginVersion.plugin_id,
+            intf_type: pluginVersion.intf_type.find(toolIntfType => toolIntfType.tool_id === tool.tool_id).intf_type,
+            input_schema: pluginVersion.input_schema.find(toolInputSchema => toolInputSchema.tool_id === tool.tool_id).input_schema,
+            output_schema: pluginVersion.output_schema.find(toolOutputSchema => toolOutputSchema.tool_id === tool.tool_id).output_schema,
+            type: pluginVersion.type,
+          };
+          const result = { ...toolInfo, last_version_id, request_info: plugin.request_info };
+          this.pluginChange.emit(result);
+          this.outputs?.pluginChange?.(result);
+          this.drawerRef.close();
+        })
+        .catch(() => {
+          this.isAddingTool = false;
+        });
     } else {
       const toolInfo = {
         ...tool,
@@ -359,6 +389,7 @@ export class AddPluginModalComponent implements OnInit {
       const result = { ...toolInfo, request_info: plugin.request_info };
       this.pluginChange.emit(result);
       this.outputs?.pluginChange?.(result);
+      this.drawerRef.close();
     }
   }
 
@@ -385,6 +416,10 @@ export class AddPluginModalComponent implements OnInit {
   }
 
   public showAddPluginModal() {
+    if (this.isShowCreatePluginModal) {
+      return;
+    }
+    this.isShowCreatePluginModal = true;
     const modalContainer = document.querySelector('#addPluginModalComponent > div');
     const thisNzModal: any = this.modalService.create({
       nzWidth: '1000px',
@@ -397,11 +432,13 @@ export class AddPluginModalComponent implements OnInit {
     const instance = thisNzModal.getContentComponent();
     instance.usedFrom = 'flow';
     instance.confirm.subscribe(() => {
-      MessageComponent.showSuccess(this.i18n.transform('addpluginmodalcomponent_257'));
       this.drawerRef.close();
       if (this.currTab === 'custom') {
         this.initApiList();
       }
+    });
+    thisNzModal.afterClose.subscribe(() => {
+      this.isShowCreatePluginModal = false;
     });
   }
 
@@ -427,8 +464,10 @@ export class AddPluginModalComponent implements OnInit {
   handleClickClearSearch() {
     if (this.currTab === 'share') {
       this.searchTagsShare = [];
+    } else if (this.currTab === 'inner') {
+      this.searchTagsInner = [];
     } else {
-      this.searchTagsPlugin = [];
+      this.searchTagsCustom = [];
     }
     this.currentPage = 1;
     this.initApiList();
@@ -465,14 +504,21 @@ export class AddPluginModalComponent implements OnInit {
   }
 
   getPluginVersion(plugin, version_id) {
+    const requestId = (plugin.toolRequestId ?? 0) + 1;
+    plugin.toolRequestId = requestId;
     plugin.toolIsReady = false;
     this.agentRepoServe
       .getPluginVersion(plugin.plugin_id, version_id)
       .then(res => {
-        plugin.tool_info = res?.data?.request_info?.tool_info || [];
+        if (plugin.toolRequestId === requestId) {
+          plugin.tool_info = res?.data?.request_info?.tool_info || [];
+        }
       })
       .finally(() => {
-        plugin.toolIsReady = true;
+        if (plugin.toolRequestId === requestId) {
+          plugin.toolIsReady = true;
+          this.cdr.markForCheck();
+        }
       });
   }
 

@@ -96,17 +96,33 @@ export class SubControllerNodeComponent
     super.ngOnInit();
     this.agent_id = this.route.snapshot.queryParams[mapKeys.id];
 
+    // 响应式订阅：resNodes 数据到达时更新版本相关字段，避免 ngOnInit 同步读取时数据未到
+    this.appFlowServ
+      .resNodesUpdate()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((childFlowNodes) => {
+        const matchedNode = childFlowNodes.find((n) => n.id === this.nodeBase?.id);
+        if (matchedNode) {
+          this.isChildFlowsUpdated = matchedNode;
+          const { ref_workflows } = matchedNode;
+          this.updateFlowTip = this.i18n.transform('update_flow_tip', {
+            versionName: ref_workflows?.last_version_name,
+          });
+          this.relations = ref_workflows;
+          this.last_version_id = ref_workflows?.last_version_id ?? '';
+          this.last_version_name = ref_workflows?.last_version_name ?? '';
+          this.resource_id = ref_workflows?.workflow_id ?? '';
+        }
+      });
+
+    // 如果 super.ngOnInit() 中数据已同步到达，也处理一次
     const { ref_workflows } = this.isChildFlowsUpdated || {};
     this.updateFlowTip = this.i18n.transform('update_flow_tip', {
       versionName: ref_workflows?.last_version_name,
     });
-
     this.relations = ref_workflows;
-
-    this.last_version_id =
-      ref_workflows?.last_version_id ?? '';
-    this.last_version_name =
-      ref_workflows?.last_version_name ?? '';
+    this.last_version_id = ref_workflows?.last_version_id ?? '';
+    this.last_version_name = ref_workflows?.last_version_name ?? '';
     this.resource_id = ref_workflows?.workflow_id ?? '';
     this.actions[0].disabled = this.route.snapshot.queryParams.fromShare === 'true';
   }

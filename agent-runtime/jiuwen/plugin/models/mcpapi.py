@@ -129,6 +129,10 @@ class McpAPI(Invokable, ABC):
             # mcp自定义鉴权
             self._validate_auth_hook_function(request_params)
 
+            #  同构：MCP 出站剥 auth_keys 的 cust- 前缀 + captured 覆盖（auth_hook 后、出站前）
+            from jiuwen.extension.wrapper.customer_header_inject import inject_customer_headers_to_mcp
+            inject_customer_headers_to_mcp(request_params)
+
             tmp_url = copy.copy(request_params.ip_address_url)
             if request_params.query_params_in_inputs.items():
                 if "?" in tmp_url:
@@ -336,6 +340,10 @@ class McpServer(McpAPI, ABC):
 
             # mcp自定义鉴权
             self._validate_auth_hook_function(request_params)
+
+            #  同构：MCP 出站剥 auth_keys 的 cust- 前缀 + captured 覆盖（auth_hook 后、出站前）
+            from jiuwen.extension.wrapper.customer_header_inject import inject_customer_headers_to_mcp
+            inject_customer_headers_to_mcp(request_params)
 
             tmp_url = copy.copy(request_params.ip_address_url)
             if request_params.query_params_in_inputs.items():

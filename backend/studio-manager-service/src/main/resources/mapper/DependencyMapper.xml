@@ -24,7 +24,7 @@
         <result column="updated_on" jdbcType="TIMESTAMP" property="updatedOn"/>
         <result column="updater_id" jdbcType="VARCHAR" property="updaterId"/>
         <result column="version" jdbcType="TINYINT" property="version"/>
-        <result column="deleted" jdbcType="TINYINT" property="deleted"/>
+        <result column="deleted" jdbcType="BOOLEAN" property="deleted"/>
     </resultMap>
     <sql id="Base_Column_List">
         <!--@mbg.generated-->
@@ -33,11 +33,11 @@
         project_id,
         domain_id,
         workspace_id,
-        `name`,
+        name,
         function_graph_name,
         description,
         runtime,
-        `scope`,
+        scope,
         link,
         created_on,
         creator_id,
@@ -58,7 +58,7 @@
         select
         <include refid="Base_Column_List"/>
         from t_dependency
-        where deleted = 0
+        where deleted = false
         <choose>
             <when test="projectId != null and projectId != ''">
                 and ((project_id = #{projectId,jdbcType=VARCHAR} and workspace_id = #{workspaceId,jdbcType=VARCHAR})
@@ -80,7 +80,7 @@
         select
         <include refid="Base_Column_List"/>
         from t_dependency
-        where deleted = 0
+        where deleted = false
         <choose>
             <when test="projectId != null and projectId != ''">
                 and ((project_id = #{projectId,jdbcType=VARCHAR} and workspace_id = #{workspaceId,jdbcType=VARCHAR})
@@ -124,34 +124,34 @@
         update t_dependency
         <set>
             <if test="name != null">
-                `name` = #{name,jdbcType=VARCHAR},
+                name = #{name,jdbcType=VARCHAR},
             </if>
             <if test="versionId != null">
-                `version_id` = #{versionId,jdbcType=VARCHAR},
+                version_id = #{versionId,jdbcType=VARCHAR},
             </if>
             <if test="functionGraphName != null">
-                `function_graph_name` = #{functionGraphName,jdbcType=VARCHAR},
+                function_graph_name = #{functionGraphName,jdbcType=VARCHAR},
             </if>
             <if test="description != null">
-                `description` = #{description,jdbcType=VARCHAR},
+                description = #{description,jdbcType=VARCHAR},
             </if>
             <if test="runtime != null">
-                `runtime` = #{runtime,jdbcType=VARCHAR},
+                runtime = #{runtime,jdbcType=VARCHAR},
             </if>
             <if test="scope != null">
-                `scope` = #{scope,jdbcType=VARCHAR},
+                scope = #{scope,jdbcType=VARCHAR},
             </if>
             <if test="link != null">
-                `link` = #{link,jdbcType=VARCHAR},
+                link = #{link,jdbcType=VARCHAR},
             </if>
             <if test="updatedOn != null">
-                `updated_on` = #{updatedOn,jdbcType=VARCHAR},
+                updated_on = #{updatedOn,jdbcType=VARCHAR},
             </if>
             <if test="updaterId != null">
-                `updater_id` = #{updaterId,jdbcType=VARCHAR},
+                updater_id = #{updaterId,jdbcType=VARCHAR},
             </if>
             <if test="version != null">
-                `version` = #{version,jdbcType=VARCHAR},
+                version = #{version,jdbcType=VARCHAR},
             </if>
         </set>
         where id = #{id,jdbcType=VARCHAR}

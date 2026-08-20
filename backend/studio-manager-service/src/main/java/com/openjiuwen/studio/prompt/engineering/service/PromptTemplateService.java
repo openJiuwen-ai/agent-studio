@@ -21,6 +21,7 @@ import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.N
 import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.PROMPT_NAME_DUPLICATE;
 import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.PROMPT_NAME_EXISTS;
 import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.PROMPT_NAME_INVALID;
+import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.REQUIRED_FIELD_MISSING;
 import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.ROWS_EXCEED_LIMIT;
 import static com.openjiuwen.studio.prompt.engineering.constant.CommonConstant.TAG_NOT_FOUND;
 import static com.openjiuwen.studio.prompt.engineering.enums.FileType.FILE_TYPE_EXCEL;
@@ -651,6 +652,9 @@ public class PromptTemplateService implements IPromptLibraryService {
         List<String> message;
         try (InputStream in = file.getInputStream()) {
             message = processExcel(in, userInfo, projectId, workspaceId, true);
+        } catch (AgentStudioException e) {
+            // 业务校验异常（如表头格式错误）保留原始错误码，避免统一包装后提示不明确
+            throw e;
         } catch (Exception e) {
             log.error("Failed to upload file [{}]", file.getOriginalFilename(), e);
             throw new AgentStudioException(StudioError.UPLOAD_FILE_FAILED);
@@ -673,6 +677,9 @@ public class PromptTemplateService implements IPromptLibraryService {
         List<String> message;
         try (InputStream in = file.getInputStream()) {
             message = processExcel(in, userInfo, projectId, workspaceId, false);
+        } catch (AgentStudioException e) {
+            // 业务校验异常（如表头格式错误）保留原始错误码，避免统一包装后提示不明确
+            throw e;
         } catch (Exception e) {
             log.error("Failed to upload file [{}]", file.getOriginalFilename(), e);
             throw new AgentStudioException(StudioError.UPLOAD_FILE_FAILED);
@@ -828,6 +835,15 @@ public class PromptTemplateService implements IPromptLibraryService {
 
         for (int i = 0; i < templateNames.size(); i++) {
             String templateName = templateNames.get(i);
+
+            // 必填项校验：模板名称为空时直接提示并跳过该行，
+            // 避免后续正则匹配对 null 名称抛出 NPE 导致上传失败且提示不明确
+            if (StringUtils.isBlank(templateName)) {
+                messages.add(MessageFormat.format(i18nHandler.getLocaleName(REQUIRED_FIELD_MISSING),
+                    i18nHandler.getLocaleName(LOCAL_NAME_TEMPLATE_NAME), i));
+                removeIndex.add(i);
+                continue;
+            }
 
             // 校验重复模板名称
             if (!templateNameSet.add(templateName)) {

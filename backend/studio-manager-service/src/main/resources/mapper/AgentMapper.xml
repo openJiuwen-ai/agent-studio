@@ -16,7 +16,7 @@
         <result column="model_config" jdbcType="VARCHAR" property="modelConfig"/>
         <result column="model_type" jdbcType="VARCHAR" property="modelType"/>
         <result column="model" jdbcType="VARCHAR" property="model"/>
-        <result column="plan_qa_independent" jdbcType="TINYINT" property="planQaIndependent"/>
+        <result column="plan_qa_independent" jdbcType="BOOLEAN" property="planQaIndependent"/>
         <result column="plan_model_deployment_id" jdbcType="VARCHAR" property="planModelDeploymentId"/>
         <result column="plan_model_name" jdbcType="VARCHAR" property="planModelName"/>
         <result column="plan_model_config" jdbcType="VARCHAR" property="planModelConfig"/>
@@ -35,7 +35,7 @@
         <result column="input_variables" property="inputVariables" typeHandler="com.openjiuwen.studio.agent.manager.mapper.handler.AgentInputVariableArrayHandler"/>
         <result column="memory_config" jdbcType="VARCHAR" property="memoryConfig"/>
         <result column="content_review" jdbcType="VARCHAR" property="contentReview" />
-        <result column="safety_barrier" jdbcType="TINYINT" property="safetyBarrier"/>
+        <result column="safety_barrier" jdbcType="BOOLEAN" property="safetyBarrier"/>
         <result column="ir_path" jdbcType="VARCHAR" property="irPath"/>
         <result column="dsl_path" jdbcType="VARCHAR" property="dslPath"/>
         <result column="type" jdbcType="VARCHAR" property="type"/>
@@ -43,7 +43,7 @@
         <result column="status" jdbcType="VARCHAR" property="status"/>
         <result column="creator" jdbcType="VARCHAR" property="creator"/>
         <result column="creator_id" jdbcType="VARCHAR" property="creatorId"/>
-        <result column="workflow_switch_enabled" jdbcType="TINYINT" property="workflowSwitchEnabled"/>
+        <result column="workflow_switch_enabled" jdbcType="BOOLEAN" property="workflowSwitchEnabled"/>
         <result column="scheduling_mode" jdbcType="VARCHAR" property="schedulingMode"/>
         <result column="created_on" jdbcType="TIMESTAMP" property="createdOn"/>
         <result column="updated_on" jdbcType="TIMESTAMP" property="updatedOn"/>
@@ -78,7 +78,7 @@
         domain_id,
         trace_id,
         workspace_id,
-        `name`,
+        name,
         description,
         icon,
         icon_name,
@@ -104,7 +104,7 @@
         knowledge_retrieve_policy,
         dsl_path,
         ir_path,
-        `type`,
+        type,
         status,
         creator,
         creator_id,
@@ -208,7 +208,7 @@
             <if test="deleted != null">
                 deleted,
             </if>
-            agent_id, project_id, `name`, description, icon, model_config, additional_questions_config, content_review, safety_barrier, dsl_path, ir_path, `type`, `status`, creator, creator_id, icon_name
+            agent_id, project_id, name, description, icon, model_config, additional_questions_config, content_review, safety_barrier, dsl_path, ir_path, type, status, creator, creator_id, icon_name
         </trim>
         <trim prefix="values (" suffix=")" suffixOverrides=",">
             <if test="instructions != null">
@@ -245,7 +245,7 @@
                 #{knowledgeRetrievePolicy,jdbcType=VARCHAR},
             </if>
             <if test="workflowSwitchEnabled != null">
-                #{workflowSwitchEnabled,jdbcType=TINYINT},
+                #{workflowSwitchEnabled,jdbcType=BOOLEAN},
             </if>
             <if test="schedulingMode != null">
                 #{schedulingMode,jdbcType=VARCHAR},
@@ -272,7 +272,7 @@
                 #{subType,jdbcType=VARCHAR},
             </if>
             <if test="planQaIndependent != null">
-                #{planQaIndependent,jdbcType=TINYINT},
+                #{planQaIndependent,jdbcType=BOOLEAN},
             </if>
             <if test="planModelDeploymentId != null">
                 #{planModelDeploymentId,jdbcType=VARCHAR},
@@ -290,11 +290,11 @@
                 #{planModel,jdbcType=VARCHAR},
             </if>
             <if test="deleted != null">
-                #{deleted,jdbcType=TINYINT},
+                #{deleted,jdbcType=BOOLEAN},
             </if>
             #{agentId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR}, #{name,jdbcType=VARCHAR},
             #{description,jdbcType=VARCHAR}, #{icon,jdbcType=VARCHAR}, #{modelConfig,jdbcType=VARCHAR}, #{additionalQuestionsConfig,jdbcType=VARCHAR},
-            #{contentReview,jdbcType=VARCHAR},#{safetyBarrier,jdbcType=TINYINT},#{dslPath,jdbcType=VARCHAR},#{irPath,jdbcType=VARCHAR}, #{type,jdbcType=VARCHAR},
+            #{contentReview,jdbcType=VARCHAR},#{safetyBarrier,jdbcType=BOOLEAN},#{dslPath,jdbcType=VARCHAR},#{irPath,jdbcType=VARCHAR}, #{type,jdbcType=VARCHAR},
             #{status,jdbcType=VARCHAR}, #{creator,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR}, #{iconName,jdbcType=VARCHAR}
         </trim>
     </insert>
@@ -303,21 +303,21 @@
         <include refid="Base_Column_List"/>
         from t_agent
         where project_id = #{projectId,jdbcType=VARCHAR}
-        and deleted = 0
+        and deleted = false
         <if test="workspaceId != null and workspaceId != ''">
             and workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
         <if test="searchCriteria != null and searchCriteria.name != null">
-            and `name` like concat('%', #{searchCriteria.name,jdbcType=VARCHAR}, '%')
+            and name like concat('%', #{searchCriteria.name,jdbcType=VARCHAR}, '%')
         </if>
         <if test="searchCriteria != null and searchCriteria.userId != null">
-            and `creator_id` = #{searchCriteria.userId,jdbcType=VARCHAR}
+            and creator_id = #{searchCriteria.userId,jdbcType=VARCHAR}
         </if>
         <if test="searchCriteria != null and searchCriteria.id != null">
-            and `agent_id` = #{searchCriteria.id,jdbcType=VARCHAR}
+            and agent_id = #{searchCriteria.id,jdbcType=VARCHAR}
         </if>
         <if test="searchCriteria != null and searchCriteria.type != null">
-            and `type` = #{searchCriteria.type,jdbcType=VARCHAR}
+            and type = #{searchCriteria.type,jdbcType=VARCHAR}
         </if>
         order by updated_on desc
     </select>
@@ -327,7 +327,7 @@
         from t_agent
         where agent_id = #{agentId,jdbcType=VARCHAR}
         and project_id = #{projectId,jdbcType=VARCHAR}
-        and deleted = 0
+        and deleted = false
     </select>
     <select id="selectByProjectIdAndWorkspaceId" parameterType="map" resultMap="BaseResultMap">
         select
@@ -336,37 +336,37 @@
         where agent_id = #{agentId,jdbcType=VARCHAR}
         and project_id = #{projectId,jdbcType=VARCHAR}
         and workspace_id = #{workspaceId,jdbcType=VARCHAR}
-        and deleted = 0
+        and deleted = false
     </select>
     <select id="selectByProjectIdAndSearchCriteria" parameterType="map" resultMap="BaseResultMap">
         select
         <include refid="Sub_Column_List"/>
         from t_agent
         where project_id = #{projectId,jdbcType=VARCHAR}
-        and deleted = 0
+        and deleted = false
         <if test="searchCriteria != null and searchCriteria.workspaceId != null">
-            and `workspace_id` = #{searchCriteria.workspaceId,jdbcType=VARCHAR}
+            and workspace_id = #{searchCriteria.workspaceId,jdbcType=VARCHAR}
         </if>
         <if test="searchCriteria != null and searchCriteria.name != null">
-            and `name` like concat('%', #{searchCriteria.name,jdbcType=VARCHAR}, '%') escape '!'
+            and name like concat('%', #{searchCriteria.name,jdbcType=VARCHAR}, '%') escape '!'
         </if>
         <if test="searchCriteria != null and searchCriteria.type != null">
-            and `type` = #{searchCriteria.type,jdbcType=VARCHAR}
+            and type = #{searchCriteria.type,jdbcType=VARCHAR}
         </if>
         <if test="searchCriteria != null and searchCriteria.userId != null">
-            and `creator_id` = #{searchCriteria.userId,jdbcType=VARCHAR}
+            and creator_id = #{searchCriteria.userId,jdbcType=VARCHAR}
         </if>
         <if test="searchCriteria != null and searchCriteria.id != null">
-            and `agent_id` = #{searchCriteria.id,jdbcType=VARCHAR}
+            and agent_id = #{searchCriteria.id,jdbcType=VARCHAR}
         </if>
         <if test="searchCriteria != null and searchCriteria.status != null">
-            and `status` = #{searchCriteria.status,jdbcType=VARCHAR}
+            and status = #{searchCriteria.status,jdbcType=VARCHAR}
         </if>
         <if test="searchCriteria != null and searchCriteria.description != null">
-            and `description` like concat('%', #{searchCriteria.description,jdbcType=VARCHAR}, '%') escape '!'
+            and description like concat('%', #{searchCriteria.description,jdbcType=VARCHAR}, '%') escape '!'
         </if>
         <if test="searchCriteria != null and searchCriteria.creator != null">
-            and `creator` like concat('%', #{searchCriteria.creator,jdbcType=VARCHAR}, '%') escape '!'
+            and creator like concat('%', #{searchCriteria.creator,jdbcType=VARCHAR}, '%') escape '!'
         </if>
         order by updated_on desc
     </select>
@@ -374,11 +374,11 @@
     <select id="selectByProjectIdAndSearchKey" resultType="com.openjiuwen.studio.agent.manager.dto.AgentApplicationInfo">
         SELECT * FROM
         (
-        SELECT agent_id as id, `name`, icon, description, type, workspace_id, updated_on as updated_at, prologue FROM t_agent
+        SELECT agent_id as id, name, icon, description, type, workspace_id, updated_on as updated_at, prologue FROM t_agent
         where project_id = #{projectId,jdbcType=VARCHAR}
-        and deleted = 0
+        and deleted = false
         <if test="name != null and !name.equals('')">
-            and `name` like concat('%', #{name,jdbcType=VARCHAR}, '%')
+            and name like concat('%', #{name,jdbcType=VARCHAR}, '%')
         </if>
         <if test="ids != null">
             and agent_id  in
@@ -387,10 +387,10 @@
             </foreach>
         </if>
         <if test="status != null and !status.equals('')">
-            and `status` = #{status,jdbcType=VARCHAR}
+            and status = #{status,jdbcType=VARCHAR}
         </if>
         <if test="workspaceId != null and !workspaceId.equals('')">
-            and `workspace_id` = #{workspaceId,jdbcType=VARCHAR}
+            and workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
         <if test="types != null">
             and type IN
@@ -399,10 +399,17 @@
             </foreach>
         </if>
         UNION ALL
-        SELECT id, `name`, avatar AS icon, description, workflow_type as type, workspace_id, FROM_UNIXTIME(updated_at / 1000) as updated_at, NULL AS prologue
-        FROM t_agent_workflow where project_id = #{projectId,jdbcType=VARCHAR} and deleted != 1
+        SELECT id, name, avatar AS icon, description, workflow_type as type, workspace_id,
+        <if test="_databaseId == 'postgres'">
+            TO_TIMESTAMP(updated_at / 1000) AT TIME ZONE 'UTC' as updated_at,
+        </if>
+        <if test="_databaseId != 'postgres'">
+            FROM_UNIXTIME(updated_at / 1000) as updated_at,
+        </if>
+        NULL AS prologue
+        FROM t_agent_workflow where project_id = #{projectId,jdbcType=VARCHAR} and deleted IS NOT true
         <if test="name != null and !name.equals('')">
-            and `name` like concat('%', #{name,jdbcType=VARCHAR}, '%')
+            and name like concat('%', #{name,jdbcType=VARCHAR}, '%')
         </if>
         <if test="ids != null">
             and id  in
@@ -411,10 +418,10 @@
             </foreach>
         </if>
         <if test="status != null and !status.equals('')">
-            and `status` = #{status,jdbcType=VARCHAR}
+            and status = #{status,jdbcType=VARCHAR}
         </if>
         <if test="workspaceId != null and !workspaceId.equals('')">
-            and `workspace_id` = #{workspaceId,jdbcType=VARCHAR}
+            and workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
         <if test="types != null">
             and workflow_type IN
@@ -431,7 +438,7 @@
         update t_agent
         <set>
             <if test="name != null">
-                `name` = #{name,jdbcType=VARCHAR},
+                name = #{name,jdbcType=VARCHAR},
             </if>
             <if test="description != null">
                 description = #{description,jdbcType=VARCHAR},
@@ -455,7 +462,7 @@
                 model_type = #{modelType,jdbcType=VARCHAR},
             </if>
             <if test="planQaIndependent != null">
-                plan_qa_independent = #{planQaIndependent,jdbcType=TINYINT},
+                plan_qa_independent = #{planQaIndependent,jdbcType=BOOLEAN},
             </if>
             <if test="planModel != null">
                 plan_model = #{planModel,jdbcType=VARCHAR},
@@ -503,10 +510,10 @@
                 content_review = #{contentReview,jdbcType=VARCHAR},
             </if>
             <if test="safetyBarrier != null">
-                safety_barrier = #{safetyBarrier,jdbcType=TINYINT},
+                safety_barrier = #{safetyBarrier,jdbcType=BOOLEAN},
             </if>
             <if test="workflowSwitchEnabled != null">
-                workflow_switch_enabled = #{workflowSwitchEnabled,jdbcType=TINYINT},
+                workflow_switch_enabled = #{workflowSwitchEnabled,jdbcType=BOOLEAN},
             </if>
             <if test="schedulingMode != null">
                 scheduling_mode = #{schedulingMode,jdbcType=VARCHAR},
@@ -550,7 +557,7 @@
         from t_agent
         where agent_id = #{agentId,jdbcType=VARCHAR}
         and project_id = #{projectId,jdbcType=VARCHAR}
-        and deleted = 0
+        and deleted = false
     </delete>
     <delete id="deleteByPrimaryKeys">
         delete
@@ -563,7 +570,7 @@
     <update id="softDeleteByPrimaryKey">
         update t_agent
         <set>
-            deleted = 1
+            deleted = true
         </set>
         where agent_id = #{agentId,jdbcType=VARCHAR}
         and project_id = #{projectId,jdbcType=VARCHAR}
@@ -571,7 +578,7 @@
     <select id="findAgentToBeDeleted" resultType="java.lang.String">
         SELECT agent_id
         FROM t_agent
-        WHERE deleted = 1
+        WHERE deleted = true
           AND updated_on IS NOT NULL
           AND updated_on &lt;= #{softDeleteTtl}
     </select>
@@ -580,7 +587,7 @@
         <include refid="Base_Column_List"/>
         from t_agent
         where agent_id = #{agentId,jdbcType=VARCHAR}
-        and deleted = 0
+        and deleted = false
     </select>
     <update id="updateOwnerById" parameterType="com.openjiuwen.studio.agent.manager.entity.Agent">
         update t_agent
@@ -606,7 +613,7 @@
         UPDATE t_agent
         <set>
             <if test="agentInfo.name != null">
-                `name` = #{agentInfo.name},
+                name = #{agentInfo.name},
             </if>
             <if test="agentInfo.description != null">
                 description = #{agentInfo.description},
@@ -688,7 +695,7 @@
         update t_agent
         <set>
             <if test="agentInfo.name != null">
-                `name` = #{agentInfo.name,jdbcType=VARCHAR},
+                name = #{agentInfo.name,jdbcType=VARCHAR},
             </if>
             <if test="agentInfo.description != null">
                 description = #{agentInfo.description,jdbcType=VARCHAR},
@@ -712,7 +719,7 @@
                 model_type = #{agentInfo.modelType,jdbcType=VARCHAR},
             </if>
             <if test="agentInfo.planQaIndependent != null">
-                plan_qa_independent = #{agentInfo.planQaIndependent,jdbcType=TINYINT},
+                plan_qa_independent = #{agentInfo.planQaIndependent,jdbcType=BOOLEAN},
             </if>
             <if test="agentInfo.planModel != null">
                 plan_model = #{agentInfo.planModel,jdbcType=VARCHAR},
@@ -757,10 +764,10 @@
                 content_review = #{agentInfo.contentReview,jdbcType=VARCHAR},
             </if>
             <if test="agentInfo.safetyBarrier != null">
-                safety_barrier = #{agentInfo.safetyBarrier,jdbcType=TINYINT},
+                safety_barrier = #{agentInfo.safetyBarrier,jdbcType=BOOLEAN},
             </if>
             <if test="agentInfo.workflowSwitchEnabled != null">
-                workflow_switch_enabled = #{agentInfo.workflowSwitchEnabled,jdbcType=TINYINT},
+                workflow_switch_enabled = #{agentInfo.workflowSwitchEnabled,jdbcType=BOOLEAN},
             </if>
             <if test="agentInfo.schedulingMode != null">
                 scheduling_mode = #{agentInfo.schedulingMode,jdbcType=VARCHAR},
@@ -813,7 +820,7 @@
         creator
         from t_agent
         where project_id = #{projectId,jdbcType=VARCHAR}
-        and deleted = 0
+        and deleted = false
         <if test="searchCriteria != null and searchCriteria.id != null">
             and agent_id = #{searchCriteria.id,jdbcType=VARCHAR}
         </if>
@@ -821,13 +828,13 @@
             and workspace_id = #{searchCriteria.workspaceId,jdbcType=VARCHAR}
         </if>
         <if test="searchCriteria != null and searchCriteria.name != null">
-            and `name` like concat('%', #{searchCriteria.name,jdbcType=VARCHAR}, '%') escape '!'
+            and name like concat('%', #{searchCriteria.name,jdbcType=VARCHAR}, '%') escape '!'
         </if>
         <if test="searchCriteria != null and searchCriteria.type != null">
-            and `type` = #{searchCriteria.type,jdbcType=VARCHAR}
+            and type = #{searchCriteria.type,jdbcType=VARCHAR}
         </if>
         <if test="searchCriteria != null and searchCriteria.subType != null">
-            and `sub_type` = #{searchCriteria.subType,jdbcType=VARCHAR}
+            and sub_type = #{searchCriteria.subType,jdbcType=VARCHAR}
         </if>
         ) t1
         inner join (
@@ -852,7 +859,7 @@
         left join t_mapping m on a.agent_id = m.app_id
         where a.project_id = #{projectId,jdbcType=VARCHAR} and a.workspace_id = #{workspaceId,jdbcType=VARCHAR}
         and m.resource_id = #{resourceId,jdbcType=VARCHAR} and m.resource_type = #{resourceType,jdbcType=VARCHAR}
-        and deleted = 0
+        and deleted = false
     </select>
 
     <select id="selectAgentByTraceIdAndWorkspaceId"
@@ -863,21 +870,21 @@
         WHERE trace_id = #{traceId}
         AND project_id = #{projectId}
         AND workspace_id = #{workspaceId}
-        AND deleted = 0
+        AND deleted = false
     </select>
 
     <select id="countAgentCountByDomainId" resultType="java.lang.Integer">
         SELECT COUNT(*)
         FROM t_agent
         WHERE domain_id = #{domainId}
-        and deleted = 0
+        and deleted = false
     </select>
 
     <select id="selectByAgentIds" parameterType="map" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
         from t_agent
-        where project_id = #{projectId,jdbcType=VARCHAR} and deleted = 0 and type = #{type,jdbcType=VARCHAR} and agent_id in
+        where project_id = #{projectId,jdbcType=VARCHAR} and deleted = false and type = #{type,jdbcType=VARCHAR} and agent_id in
         <choose>
             <when test="agentIds != null and agentIds.size() > 0">
                 <foreach collection="agentIds" separator="," open="(" close=")" item="id">
@@ -903,14 +910,14 @@
         </if>
         AND project_id = #{projectId, jdbcType=VARCHAR}
         AND workspace_id = #{workspaceId, jdbcType=VARCHAR}
-        AND deleted = 0
+        AND deleted = false
     </select>
 
     <select id="queryAgentList" resultMap="agentBaseInfoMap">
         SELECT t1.*, t2.tenant_id
         FROM t_agent t1
                  LEFT JOIN t_workspace t2 on t1.workspace_id = t2.id and t1.project_id = t2.project_id
-        where t1.type = #{agentType} and t1.deleted = 0
+        where t1.type = #{agentType} and t1.deleted = false
         order by t1.workspace_id, t1.agent_id
         limit #{limit} offset #{offset}
     </select>
@@ -919,7 +926,7 @@
         SELECT count(*) as total
         FROM t_agent
         where domain_id = #{domainId,jdbcType=VARCHAR} and status = #{status,jdbcType=VARCHAR} and published_on > #{publishedOn,jdbcType=TIMESTAMP}
-        and deleted = 0
+        and deleted = false
     </select>
 
     <select id="countAgentIdInDb" resultType="java.lang.Integer">
@@ -944,7 +951,7 @@
     </update>
 
     <select id="countAgentMetric" resultType="double">
-        select count(*) from t_agent  where deleted = 0 and project_id = #{projectId} and workspace_id = #{workspaceId} and type = #{agentMetricRequest.agentType}
+        select count(*) from t_agent  where deleted = false and project_id = #{projectId} and workspace_id = #{workspaceId} and type = #{agentMetricRequest.agentType}
 
         <if test="agentMetricRequest.agentStatus!=null and agentMetricRequest.agentStatus!=''">
             and status = #{agentMetricRequest.agentStatus}
@@ -957,7 +964,7 @@
     <select id="selectByMemoryRepoId" resultMap="BaseResultMap">
         SELECT <include refid="Base_Column_List"/>
         FROM t_agent
-        WHERE deleted = 0
+        WHERE deleted = false
           AND memory_config IS NOT NULL
           AND memory_config LIKE CONCAT('%', #{memoryRepoId}, '%')
     </select>

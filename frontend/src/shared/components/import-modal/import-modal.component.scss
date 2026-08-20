@@ -248,6 +248,14 @@ asset-arrow-icon {
   }
 }
 
+.cell-ellipsis {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  word-break: break-word;
+}
+
 .total-tip {
   margin-top: 8px;
   color: rgba(25, 25, 25, 1);

@@ -27,14 +27,14 @@
 
 
     <sql id="baseColumns">
-        `domain_id`
-        , `domain_name`,
-        `description`,
-        `created_date`,
-        `last_updated_date`,
-        `status`,
-        `tenant_type`,
-        `ext_info`
+        domain_id
+        , domain_name,
+        description,
+        created_date,
+        last_updated_date,
+        status,
+        tenant_type,
+        ext_info
     </sql>
 
     <select id="selectById">
@@ -75,7 +75,7 @@
         select *
         from t_common_tenant
         order by domain_id
-        limit #{offset},#{limit}
+        limit #{limit} offset #{offset}
     </select>
     <select id="queryTenantConfigList"
             resultType="com.openjiuwen.studio.common.service.entity.TenantConfigEntity">

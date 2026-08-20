@@ -62,7 +62,7 @@ export class MCPServicenNodeComponent extends NodeBaseComponent {
     this.workspaceId = this.http.getWorkspaceId()
     this.setNodeBase(this.nodeInfo);
     super.ngOnInit();
-    if (this.nodeInfo.type === 'Mcp') {
+    if (this.nodeInfo.type === 'Mcp' && this.configServ.getConfigs()?.studio_btn_show) {
       this.actions.unshift({
         id: 'detail',
         label: this.i18n.transform('mcp_service_detail'),

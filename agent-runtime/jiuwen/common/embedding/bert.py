@@ -16,6 +16,7 @@ from jiuwen.common.configs.env_constants import (
 from jiuwen.common.log.base import logger
 from jiuwen.common.security.cryptor import Crypt
 from jiuwen.common.utils.utils import safe_json_loads
+from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.plugin.common import exception
 from jiuwen.plugin.common.constant import REQUEST_TIME_OUT
 
@@ -45,7 +46,8 @@ class TextEmbeddingService:
             ssl_emb_cert = safe_json_loads(ssl_emb_cert, ssl_emb_cert)
             if not isinstance(ssl_emb_cert, str) and not isinstance(ssl_emb_cert, bool):
                 raise exception.PluginCommonException(
-                    message="plugin ssl emb cert is not bool or str"
+                    code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+                    message="plugin ssl emb cert is not bool or str",
                 )
             self.ssl_check = ssl_emb_cert
 

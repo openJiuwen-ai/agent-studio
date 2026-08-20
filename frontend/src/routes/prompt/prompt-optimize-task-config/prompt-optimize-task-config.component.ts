@@ -185,10 +185,13 @@ export class PromptOptimizeTaskConfigComponent {
 
   public variant: 'compact' | 'simple' | '常规' = 'compact';
 
+  private taskNameErrorShown: 'required' | 'maxlength' | null = null;
+
   public get footerDisabled(): string {
     if (this.activeStep === 0) {
-      if (!this.basicInfoForm.controls.taskName.valid) {
-        return this.i18n.transform('prompt_optimize_task_config_1');
+      const taskNameError = this.getTaskNameError();
+      if (taskNameError) {
+        return this.getTaskNameErrorMessage(taskNameError);
       }
       if (!this.basicInfoForm.controls.desc.valid) {
         return this.i18n.transform('prompt_optimize_task_config_2');
@@ -213,12 +216,33 @@ export class PromptOptimizeTaskConfigComponent {
     }
   }
 
+  private getTaskNameError(): 'required' | 'maxlength' | null {
+    const taskNameControl = this.basicInfoForm.controls.taskName;
+    if (taskNameControl.hasError('required')) {
+      return 'required';
+    }
+    if (taskNameControl.hasError('maxlength')) {
+      return 'maxlength';
+    }
+    return null;
+  }
+
+  private getTaskNameErrorMessage(error: 'required' | 'maxlength'): string {
+    const messageKey = error === 'required' ? 'prompt_optimize_task_config_1' : 'prompt_optimize_task_config_name_max_length';
+    return this.i18n.transform(messageKey);
+  }
+
   public get promptMaxLength() {
     return this.configServ.getConfigs().prompt_max_length ?? 20000;
   }
   isSpinning = false;
 
   private isEdit: boolean = false;
+
+  get basicInfoFormValuePrompt() {
+    return !this.basicInfoForm.value.prompt?.trim();
+  }
+
   constructor(
     private variableService: VariableService,
     private sidebarVisibilityServ: SetSidebarVisibilityService,
@@ -402,12 +426,12 @@ export class PromptOptimizeTaskConfigComponent {
       nzWidth: '700px',
     });
     const instance = thisNzModal.getContentComponent();
-    instance.ensure.subscribe((res) => {
-      if(res){
+    instance.ensure.subscribe(res => {
+      if (res) {
         this.basicInfoForm.controls.type.setValue(value);
         this.modelType = ModelType.LLM;
         this.cdr.markForCheck();
-      }else{
+      } else {
         this.basicInfoForm.controls.type.setValue(this.promptTypeOptions[1].value);
         this.promptTypeSelected = this.promptTypeOptions[1].value;
         this.cdr.markForCheck();
@@ -719,7 +743,7 @@ export class PromptOptimizeTaskConfigComponent {
     // 不触发表单更新事件 { emitEvent: false }
     this.basicInfoForm.patchValue(
       {
-        taskName: `${example.title}#${Date.now()}`,
+        taskName: `${example.title.substring(0, 50)}#${Date.now()}`,
         desc: example.title,
         prompt: example.value,
       },
@@ -769,6 +793,16 @@ export class PromptOptimizeTaskConfigComponent {
   }
 
   private async saveDraft() {
+    const taskNameError = this.getTaskNameError();
+    if (taskNameError) {
+      if (this.taskNameErrorShown !== taskNameError) {
+        MessageComponent.showError(this.getTaskNameErrorMessage(taskNameError));
+        this.taskNameErrorShown = taskNameError;
+      }
+      return;
+    }
+    this.taskNameErrorShown = null;
+
     const draft = this.buildDraftData();
     if (this.taskId) {
       const res = await this.promptOptimizeService.updateDraft(this.taskId, draft);

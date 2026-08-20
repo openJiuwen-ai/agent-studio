@@ -439,7 +439,8 @@ export class AgentBotPageComponent implements OnInit, OnDestroy {
             nzMaskClosable: false,
             nzMask: true,
             nzContentParams: {
-              showLogModal: this.isShowLogModal
+              showLogModal: this.isShowLogModal,
+              conversationId: this.agentDataServe.getCurrentConversationId()
             }
           });
           this.drawerLog.afterClose.subscribe(() => {

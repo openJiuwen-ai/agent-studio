@@ -162,6 +162,71 @@ public class KbConnectionStorageService {
         }
     }
 
+    /**
+     * 为 openjiuwen 知识库写入连接文件到 OBS。
+     * <p>
+     * openjiuwen 知识库没有 t_knowledge_base_connection 表记录，直接构造连接文件，
+     * connectorId 设为 OpenJiuwen，params 中携带 model_config（JSON 字符串），
+     * 供 Python 运行时解析 embedding 模型配置。
+     * </p>
+     *
+     * @param connectionId 连接ID（与 kbId 相同）
+     * @param kbEntity 知识库实体（含 embeddingModelServiceId / rerankModelServiceId / workspaceId）
+     */
+    public void writeOpenJiuwenConnectionToObs(String connectionId, KnowledgeBaseEntity kbEntity) {
+        if (StringUtils.isEmpty(connectionId) || kbEntity == null) {
+            log.warn("connectionId is empty or kbEntity is null, skip writing openjiuwen connection to OBS.");
+            return;
+        }
+
+        try {
+            Map<String, Object> modelConfigMap = new HashMap<>();
+            modelConfigMap.put("model_service_id", kbEntity.getEmbeddingModelServiceId());
+            modelConfigMap.put("workspace_id", kbEntity.getWorkspaceId());
+            modelConfigMap.put("project_id", "0");
+            modelConfigMap.put("auth_id", "");
+            String modelConfigJson = JacksonUtils.toJson(modelConfigMap);
+
+            List<KbConnectionObsData.KbConnectionParamData> params = new ArrayList<>();
+            params.add(KbConnectionObsData.KbConnectionParamData.builder()
+                .code("model_config")
+                .value(modelConfigJson)
+                .build());
+
+            if (StringUtils.isNotEmpty(kbEntity.getRerankModelServiceId())) {
+                Map<String, Object> rerankerConfigMap = new HashMap<>();
+                rerankerConfigMap.put("model_service_id", kbEntity.getRerankModelServiceId());
+                rerankerConfigMap.put("workspace_id", kbEntity.getWorkspaceId());
+                rerankerConfigMap.put("project_id", "0");
+                rerankerConfigMap.put("auth_id", "");
+                String rerankerConfigJson = JacksonUtils.toJson(rerankerConfigMap);
+                params.add(KbConnectionObsData.KbConnectionParamData.builder()
+                    .code("reranker_config")
+                    .value(rerankerConfigJson)
+                    .build());
+            }
+
+            KbConnectionObsData data = KbConnectionObsData.builder()
+                .connectionId(connectionId)
+                .connectorId("OpenJiuwen")
+                .connectorType("inside")
+                .connectorName("OpenJiuwen")
+                .knowledgeSource("OpenJiuwen")
+                .name("OpenJiuwen")
+                .status("OPEN")
+                .params(params)
+                .build();
+
+            String jsonContent = JacksonUtils.toJson(data);
+            String objectKey = String.format(CONNECTION_PATH, connectionId);
+            mgObsService.uploadObsFile(objectKey, jsonContent, -1);
+            log.info("Write openjiuwen connection to OBS success. connectionId: {}", connectionId);
+        } catch (Exception e) {
+            log.error("Write openjiuwen connection to OBS failed. connectionId: {}", connectionId, e);
+            throw new AgentStudioException(StudioError.OBS_FAILED);
+        }
+    }
+
     // ==================== 知识库文件操作（仅含知识库自身信息 + connectionId 引用） ====================
 
     /**

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig.json",
   "extends": "./tsconfig.json",
-  "files": ["src/main.ts"],
+  "files": ["src/main.ts", "src/polyfills-compat.ts"],
   "include": ["src/**/*.d.ts"],
   "compilerOptions": { "outDir": "./out-tsc/app", "types": ["node"] }
 }

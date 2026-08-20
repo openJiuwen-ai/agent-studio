@@ -154,7 +154,6 @@ export class AddMultipleAgentModalComponent implements OnInit {
       this.initMultiAgentList();
     },
   };
-
   constructor(
     private appFlowRepoServe: AppFlowRepoService,
     private i18n: I18NextEagerPipe,
@@ -164,6 +163,10 @@ export class AddMultipleAgentModalComponent implements OnInit {
   ) {}
 
   ngOnInit() {
+    this.agentTabs = this.agentTabs.filter(item => this.configServ.getConfigs()?.studio_btn_show || item.id !== ApplicationType.SINGLE_AGENT);
+    this.agentTabs[0].active = true;
+    this.activeTabId = this.agentTabs[0].id;
+
     if (!this.isShowSingleEnter()) {
       this.agentTabs = this.agentTabs.filter(
         (item) => item.id !== ApplicationType.SINGLE_AGENT,
@@ -232,10 +235,18 @@ export class AddMultipleAgentModalComponent implements OnInit {
       return;
     }
     if (this.isSingleAgent) {
-      if (!agent.checked) {
-        agent.checked = true;
+      if (agent.checked) {
+        // 选中：单选语义，先清掉已选的单智能体再选当前
+        this.onCardSingleSelected(agent);
+      } else {
+        // 取消选中：从已选列表移除，计数归零
+        const index = this.agentSelected.findIndex(
+          (item) => item.id === agent.id,
+        );
+        if (index > -1) {
+          this.agentSelected.splice(index, 1);
+        }
       }
-      this.onCardSingleSelected(agent);
     } else {
       this.onCardMultiSelected(agent);
     }

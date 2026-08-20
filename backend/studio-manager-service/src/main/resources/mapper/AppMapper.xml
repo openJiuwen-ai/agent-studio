@@ -25,7 +25,7 @@
         ,
         project_id,
         workspace_id,
-        `name`,
+        name,
         description,
         icon,
         tags,
@@ -41,7 +41,7 @@
         suggest_queries
     </sql>
     <insert id="insert" parameterType="com.openjiuwen.studio.agent.manager.entity.App">
-        insert into t_app (app_id, project_id, workspace_id, `name`, description, icon, tags, app_type, resource_id,
+        insert into t_app (app_id, project_id, workspace_id, name, description, icon, tags, app_type, resource_id,
                            resource_type, creator, published_on, workflow_type, input_params, output_params, prologue,
                            suggest_queries)
         values (#{appId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR}, #{workspaceId,jdbcType=VARCHAR},
@@ -57,15 +57,15 @@
         <include refid="Base_Column_List"/>
         from t_app
         where resource_id = #{resourceId,jdbcType=VARCHAR}
-        and deleted = 0
+        and deleted = false
     </select>
     <select id="selectBySearchCriteria" parameterType="map" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
         from t_app
-        where 1 = 1 and deleted = 0
+        where 1 = 1 and deleted = false
         <if test="searchCriteria != null and searchCriteria.name != null">
-            and `name` like concat('%', #{searchCriteria.name,jdbcType=VARCHAR}, '%') escape '!'
+            and name like concat('%', #{searchCriteria.name,jdbcType=VARCHAR}, '%') escape '!'
         </if>
         <if test="searchCriteria != null and searchCriteria.tagId != null">
             and tags like concat('%', #{searchCriteria.tagId,jdbcType=VARCHAR}, '%')
@@ -92,7 +92,7 @@
     <update id="softDeleteByResourceId">
         update t_app
         <set>
-            deleted = 1
+            deleted = true
         </set>
         where resource_id = #{resourceId,jdbcType=VARCHAR}
         and project_id = #{projectId,jdbcType=VARCHAR}
@@ -102,7 +102,7 @@
     <select id="findAppToBeDeleted" resultType="java.lang.String">
         SELECT app_id
         FROM t_app
-        WHERE deleted = 1
+        WHERE deleted = true
           AND updated_on IS NOT NULL
           AND updated_on &lt;= #{softDeleteTtl}
     </select>

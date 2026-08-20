@@ -23,6 +23,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 
 @Slf4j
@@ -65,7 +66,7 @@ public class BaseEventListener extends EventSourceListener {
     public void onFailure(@NotNull EventSource eventSource, @Nullable Throwable t, @Nullable Response response) {
         try {
             MDC.put(REQUEST_ID, requestId);
-            this.errorRsp = createErrorRsp(t, response);
+            this.errorRsp = createErrorRsp(t, response).orElse(null);
             this.openConnect = true;
             log.error("Fail handler stream event. Throwable: {}, Response: {}", t, response);
             sseEmitter.complete();
@@ -84,22 +85,22 @@ public class BaseEventListener extends EventSourceListener {
         }
     }
 
-    ResponseEntity<Object> createErrorRsp(Throwable throwable, Response response) throws IOException {
+    Optional<ResponseEntity<Object>> createErrorRsp(Throwable throwable, Response response) throws IOException {
         if (this.openConnect) {
             log.error("Fail handler request.", throwable);
-            return null;
+            return Optional.empty();
         }
         if (response != null) {
             String rsp = response.body() == null ? "{}" : new String(response.body().bytes(), StandardCharsets.UTF_8);
             log.error("Request fail. rsp:{}", rsp);
             try {
-                return ResponseEntity.status(response.code()).body(JsonUtils.decode(rsp, Object.class));
+                return Optional.of(ResponseEntity.status(response.code()).body(JsonUtils.decode(rsp, Object.class)));
             } catch (Exception e) {
-                return ResponseEntity.status(response.code()).body(new ErrorRsp().setErrorMsg(rsp));
+                return Optional.of(ResponseEntity.status(response.code()).body(new ErrorRsp().setErrorMsg(rsp)));
             }
         }
         log.error("Fail handler request.", throwable);
-        return ResponseEntity.status(500).body(new ErrorRsp().setErrorMsg("Internal error."));
+        return Optional.of(ResponseEntity.status(500).body(new ErrorRsp().setErrorMsg("Internal error.")));
     }
 
     @Override
@@ -110,12 +111,12 @@ public class BaseEventListener extends EventSourceListener {
         log.info("Stream request open.");
     }
 
-    <T> T parseJiuWenEventFromSseData(String sseData, Class<T> clazz) {
+    <T> Optional<T> parseJiuWenEventFromSseData(String sseData, Class<T> clazz) {
         try {
-            return com.alibaba.fastjson.JSON.parseObject(sseData, clazz);
+            return Optional.ofNullable(com.alibaba.fastjson.JSON.parseObject(sseData, clazz));
         } catch (Exception e) {
             log.error("Fail to parse sse data: [{}]", sseData);
-            return null;
+            return Optional.empty();
         }
     }
 }

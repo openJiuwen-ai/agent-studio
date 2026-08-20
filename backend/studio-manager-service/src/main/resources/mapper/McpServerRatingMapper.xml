@@ -35,8 +35,13 @@
     <update id="insertRating">
         INSERT INTO ws_mcp_server_rating (server_id, tenant_id, score, created_date, updated_date)
         VALUES (#{serverId}, #{tenantId}, #{score},
-                NOW(), NOW()) ON DUPLICATE KEY
-        UPDATE
+                NOW(), NOW())
+        <if test="_databaseId == 'postgres'">
+            ON CONFLICT (server_id, tenant_id) DO UPDATE SET
+        </if>
+        <if test="_databaseId != 'postgres'">
+            ON DUPLICATE KEY UPDATE
+        </if>
             score = #{score},
             updated_date = NOW();
     </update>

@@ -62,8 +62,8 @@ enum mapKeys {
                         {{ tmpl.template_name }}
                       </div>
 
-                      <div class="tag-container flex flex-1 items-center gap-[4px] overflow-hidden">
-                        <div class="w-[40px] shrink-0 grow-0 rounded-[4px] bg-[#f5f5f5] px-[8px]" *ngFor="let tag of tmpl.tag_list">
+                      <div class="tag-container flex flex-1 items-center gap-[2px] overflow-hidden">
+                        <div class="whitespace-nowrap shrink-0 rounded-[4px] bg-[#f5f5f5] px-[4px] text-[12px]" *ngFor="let tag of tmpl.tag_list">
                           {{ lang === 'zh-cn' ? tag.name : tag?.name_en }}
                         </div>
                       </div>
@@ -427,7 +427,7 @@ export class RefPromptComponent implements OnInit {
         this.tmpls = data;
       }
 
-      this.searchItems.find(item => item.field === 'template_id').options = data.map(d => ({ label: d.template_id }));
+      this.searchItems.find(item => item.field === 'template_id').options = data.map(d => ({ label: d.template_id, id: d.template_id }));
 
       this.offset += data.length;
 

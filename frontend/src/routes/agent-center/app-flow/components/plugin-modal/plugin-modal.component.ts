@@ -71,6 +71,7 @@ import { NodeTypeTopic } from '@routes/agent-center/types/common.types';
 import { HelpCenterService } from '@services/help-center.service';
 import { CommonService } from '@services/common.service';
 import { getPluginQuota, getQuotaTip } from '../../../utils';
+import { mapTreeAddKeyAndChildIndex, eachChildrenToRootObj, setAllChildrenVal } from '@routes/agent-center/app-plugin/utils';
 
 type MonacoUri = monaco.Uri;
 
@@ -192,7 +193,7 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
   override actions = [...NODE_ACTIONS];
 
   public isValidated = false;
-  workspaceId = ''
+  workspaceId = '';
 
   public inputSchema: any = '';
 
@@ -200,6 +201,8 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
 
   public quotaConfig = null;
   updateTimeout: any = null;
+
+  public toolsInputParams = null;
 
   constructor(
     private i18n: I18NextEagerPipe,
@@ -213,42 +216,43 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
     private readonly http: HttpService,
     private appFlowRepoServe: AppFlowRepoService,
     private helpCenterService: HelpCenterService,
-    protected commonService: CommonService,
+    protected commonService: CommonService
   ) {
     super(nodeServ, appFlowServ);
   }
 
   isComplexType = NodeUtils.isComplexType;
 
-  onInputValueTypeChange(row: IWorkflowField) {
+  onInputValueTypeChange(row: IWorkflowField, changeChild) {
     row.value.content = NodeUtils.getChangeContent(row.value.type);
+    if (changeChild) {
+      (row as any).children = setAllChildrenVal((row as any).children, row.value);
+    }
     this.onSave();
   }
 
   public override ngOnInit() {
-    this.workspaceId = this.http.getWorkspaceId()
+    this.workspaceId = this.http.getWorkspaceId();
     this.setNodeBase(this.nodeInfo);
     super.ngOnInit();
 
-    this.actions.unshift({
-      id: 'detail',
-      label: this.i18n.transform('plugin_details'),
-    });
+    if (this.configServ.getConfigs()?.studio_btn_show) {
+      this.actions.unshift({
+        id: 'detail',
+        label: this.i18n.transform('plugin_details'),
+      });
+    }
 
     this.initOriginalName();
-    this.labelWidth = this.isNormalView
-      ? normalParamLableWidth
-      : slimParamLableWidth;
+    this.labelWidth = this.isNormalView ? normalParamLableWidth : slimParamLableWidth;
 
     this.monacoLoader.isMonacoLoaded$
       .pipe(
-        filter((isLoaded) => isLoaded),
-        take(1),
+        filter(isLoaded => isLoaded),
+        take(1)
       )
       .subscribe(async () => {
-        this.editorUri = monaco.Uri.parse(
-          `agent://flow/plugin/${this.nodeInfo.id}/exception_suppression.json`,
-        );
+        this.editorUri = monaco.Uri.parse(`agent://flow/plugin/${this.nodeInfo.id}/exception_suppression.json`);
         if (this.nodeInfo.configs?.exception_suppression) {
           this.ignoreMsg = this.nodeInfo.configs.exception_suppression;
         } else {
@@ -267,22 +271,16 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
 
     const parentNode = this.getParentNodeInfo(this.appFlowServ.getGraph());
     if (parentNode) {
-      this.getLoopInnerNodeRefs(parentNode).subscribe((info) => {
+      this.getLoopInnerNodeRefs(parentNode).subscribe(info => {
         this.onRefUpdate(info);
       });
     } else {
-      this.getSelfRefs().subscribe((info) => {
+      this.getSelfRefs().subscribe(info => {
         this.onRefUpdate(info);
       });
     }
 
-    this.validationRules.push(
-      CommonValidation.nameUniquenessVerify(
-        this.names,
-        this.i18n.transform('name_uniqueness'),
-        this.nodeInfo.name,
-      ),
-    );
+    this.validationRules.push(CommonValidation.nameUniquenessVerify(this.names, this.i18n.transform('name_uniqueness'), this.nodeInfo.name));
     this.outputParams = NodeUtils.fields2Views(this.nodeInfo.outputs);
   }
 
@@ -302,10 +300,7 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
     if (this.isInit) {
       this.setInputSchema().then(() => {
         this.inputSchema = JSON.parse(this.inputSchema);
-        this.inputParams = NodeUtils.initInputs(
-          this.nodeInfo.inputs,
-          this.nameRefOptions,
-        );
+        this.inputParams = NodeUtils.initInputs(this.nodeInfo.inputs, this.nameRefOptions);
         setTimeout(() => {
           this.inputParams.forEach((param, index) => {
             if (this.inputSchema.properties[param.name]) {
@@ -327,23 +322,25 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
               }
             }
           });
+          this.toolsInputParams = mapTreeAddKeyAndChildIndex(cloneDeep(this.inputParams.filter(item => item.location !== 'Headers')), 0);
         });
-        this.inputParams.forEach((v) => {
+        this.inputParams.forEach(v => {
           v.options = [
             { label: this.i18n.transform('ref'), value: 'ref' },
             { label: this.getType(v), value: 'literal' },
           ];
         });
         this.isInit = false;
-      })
+      });
     } else {
       NodeUtils.reSelectRefsWithNewOps(this.inputParams, this.nameRefOptions);
-      this.inputParams.forEach((v) => {
+      this.inputParams.forEach(v => {
         v.options = [
           { label: this.i18n.transform('ref'), value: 'ref' },
           { label: this.getType(v), value: 'literal' },
         ];
       });
+      this.toolsInputParams = mapTreeAddKeyAndChildIndex(cloneDeep(this.inputParams.filter(item => item.location !== 'Headers')), 0);
       this.isInit = false;
     }
   }
@@ -351,21 +348,23 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
   private setQuotaConfig(plugin) {
     const quota = getPluginQuota(plugin, false);
     const text = getQuotaTip(this.i18n, quota, plugin.limit || 0, true);
-    this.quotaConfig = text ? {
-      type: quota > 0 ? 'warn' : 'error',
-      text,
-    } : null;
+    this.quotaConfig = text
+      ? {
+          type: quota > 0 ? 'warn' : 'error',
+          text,
+        }
+      : null;
   }
 
   private async setInputSchema() {
     if (!this.nodeInfo.configs.version_id) {
-      const res = await this.pluginService.getPluginList({id:this.nodeInfo.configs?.id, type: this.nodeInfo.configs.type});
+      const res = await this.pluginService.getPluginList({ id: this.nodeInfo.configs?.id, type: this.nodeInfo.configs.type });
       const { plugin_list, count } = res || {};
       if (!Array.isArray(plugin_list) || plugin_list.length <= 0) {
         return;
       }
       if (this.nodeInfo.configs.tool_id) {
-        const filterData =  plugin_list[0].input_schema.filter((item: any) => item.tool_id === this.nodeInfo.configs.tool_id);
+        const filterData = plugin_list[0].input_schema.filter((item: any) => item.tool_id === this.nodeInfo.configs.tool_id);
         if (filterData.length > 0) {
           this.inputSchema = filterData[0].input_schema;
         }
@@ -377,13 +376,11 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
       return;
     }
 
-
-    const res = await this.appFlowRepoServe
-      .getPluginVersionInfo(this.nodeInfo.configs?.id, this.nodeInfo.configs?.version_id);
+    const res = await this.appFlowRepoServe.getPluginVersionInfo(this.nodeInfo.configs?.id, this.nodeInfo.configs?.version_id);
     this.pluginInfo = res.data;
-      this.setQuotaConfig(this.pluginInfo);
+    this.setQuotaConfig(this.pluginInfo);
     if (this.nodeInfo.configs.tool_id) {
-      const filterData =  res.data.input_schema.filter((item: any) => item.tool_id === this.nodeInfo.configs.tool_id);
+      const filterData = res.data.input_schema.filter((item: any) => item.tool_id === this.nodeInfo.configs.tool_id);
       if (filterData.length > 0) {
         this.inputSchema = filterData[0].input_schema;
       }
@@ -410,13 +407,9 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
   initOriginalName() {
     if (this.nodeInfo.configs?.original_info) {
       const { name, name_en } = this.nodeInfo.configs.original_info;
-      this.originalName = `${this.i18n.transform(
-        'original_name',
-      )}${name}（${name_en}）`;
+      this.originalName = `${this.i18n.transform('original_name')}${name}（${name_en}）`;
     } else {
-      this.originalName = `${this.i18n.transform('original_name')}${
-        this.nodeInfo.name
-      }`;
+      this.originalName = `${this.i18n.transform('original_name')}${this.nodeInfo.name}`;
     }
   }
 
@@ -427,10 +420,7 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
       if (this.nodeInfo.configs?.original_info?.type === 'inner') {
         window.open(`${prefixUrl}/home/plugin-market`, '_blank');
       } else {
-        window.open(
-          `${prefixUrl}/home/agent-center/custom-plugin/detail?id=${this.nodeInfo.configs.id}&workspace_id=${this.workspaceId}`,
-          '_blank',
-        );
+        window.open(`${prefixUrl}/home/agent-center/custom-plugin/detail?id=${this.nodeInfo.configs.id}&workspace_id=${this.workspaceId}`, '_blank');
       }
     } else {
       this.appFlowServ.setNodeAction({
@@ -443,10 +433,7 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
   validateNode() {
     this.exceptionHandling.validate();
     this.isValidated = true;
-    const isJsonTypeInvalid = this.inputParams.some(
-      (obj) =>
-        this.isArrOrObj(obj.type) && obj.value?.content === '' && obj.required,
-    );
+    const isJsonTypeInvalid = this.inputParams.some(obj => this.isArrOrObj(obj.type) && obj.value?.content === '' && obj.required);
   }
 
   getIndexWidth(param: IWFView): string {
@@ -477,13 +464,9 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
     };
 
     const useMap = this.isNormalView ? map : slimMap;
-    const useWithChildrenMap = this.isNormalView
-      ? mapWithChildren
-      : slimMapWithChildren;
+    const useWithChildrenMap = this.isNormalView ? mapWithChildren : slimMapWithChildren;
 
-    return param?.children
-      ? useWithChildrenMap[param.depth]
-      : useMap[param.depth];
+    return param?.children ? useWithChildrenMap[param.depth] : useMap[param.depth];
   }
 
   onNameChange() {
@@ -495,7 +478,7 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
   getOutputNames(index: number): {
     existingValues: string[];
   } {
-    const names = this.outputParams.map((p) => p.name);
+    const names = this.outputParams.map(p => p.name);
     names.splice(index, 1);
     return { existingValues: names };
   }
@@ -526,15 +509,27 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
     });
   }
 
+  changeChildVal(origin) {
+    if (origin.isChild) {
+      const index = Number(origin.key.split('_')[0]);
+      if (this.toolsInputParams[index].value.type === 'literal') {
+        this.toolsInputParams[index].value.content = JSON.stringify(eachChildrenToRootObj((this.toolsInputParams[index] as any).children, origin));
+      }
+    }
+  }
+
   handelSave() {
     if (this.tagCompareNoChange()) {
       return;
     }
-    const inputs = NodeUtils.getDtoInputs(this.inputParams, {
+    let inputsHeard = (cloneDeep(this.inputParams) || []).filter(item => item.location === 'Headers');
+    let inputsTools = cloneDeep(this.toolsInputParams);
+    const inputs = NodeUtils.getDtoInputs([...inputsHeard, ...inputsTools], {
       useContentType: false,
     });
 
-    inputs.forEach((input) => {
+    inputs.forEach(input => {
+      delete (input as any).children;
       if (input.value.type === 'literal' && ['number', 'integer'].includes(input.type)) {
         if (typeof input.value.content !== 'number') {
           if (input.value.content === '' || input.value.content == null) {
@@ -557,7 +552,7 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
       configs,
     };
     this.appFlowServ.setNodeSaveMonitor({
-      nodeData
+      nodeData,
     });
     if (this.updateTimeout) {
       clearTimeout(this.updateTimeout);
