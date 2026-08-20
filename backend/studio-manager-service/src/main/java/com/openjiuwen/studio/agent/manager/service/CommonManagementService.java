@@ -121,6 +121,9 @@ public class CommonManagementService implements ICommonManagementService {
     @Value("${knowledge.source}")
     private String knowledgeSource;
 
+    @Value("${knowledge.openjiuwen-kb-enable:false}")
+    private boolean openjiuwenKbEnable;
+
     @Value("${knowledge.internal.enabled}")
     private boolean knowledgeInternalEnabled;
 
@@ -329,6 +332,7 @@ public class CommonManagementService implements ICommonManagementService {
         defConfigJsonObject.put("embedding_model_name", getPreSetEmbeddingModel());
         defConfigJsonObject.put("rerank_model_name", getPreSetReRankModel());
         defConfigJsonObject.put("knowledge_source", knowledgeSource);
+        defConfigJsonObject.put("openjiuwen_kb_enable", openjiuwenKbEnable);
         defConfigJsonObject.put("share_knowledge_enabled", knowledgeShareEnabled);
         defConfigJsonObject.put("agent_tool_bound_limit", agentToolBoundLimit);
         defConfigJsonObject.put("agent_workflow_bound_limit", agentWorkflowBoundLimit);

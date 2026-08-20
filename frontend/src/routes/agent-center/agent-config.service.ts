@@ -29,6 +29,7 @@ export interface IAgentConfigs {
   knowledge_recall_threshold_min?: number; // 知识库检索（相关度阈值、FAQ直出阈值）最小值
   knowledge_recall_threshold_max?: number; // 知识库检索（相关度阈值、FAQ直出阈值）最大值
   lakesearch_faq_enable?: boolean; // lakesearch特性开关
+  openjiuwen_kb_enable?: boolean; // OpenJiuwen知识库特性开关
   block_nodes?: string[]; // 被屏蔽的节点类型，大小写不敏感
   agent_tool_priority_enable?: boolean; // 工具优先调度模式是否可见
   knowledge_source?: 'KooSearch' | 'LakeSearch' | 'AgentBaseRag' | 'CUSTOM';
@@ -105,6 +106,11 @@ export class AgentConfigService {
   public faqEnable() {
     const {lakesearch_faq_enable} = this.getConfigs();
     return lakesearch_faq_enable;
+  }
+
+  public openjiuwenKbEnable() {
+    const {openjiuwen_kb_enable} = this.getConfigs();
+    return openjiuwen_kb_enable;
   }
 
   public knowledgeSource() {

@@ -1,5 +1,6 @@
 import {
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   OnInit,
   ViewChild,
@@ -12,6 +13,7 @@ import { I18nNamespace } from "@i18n";
 import { FormBuilder, FormGroup, Validators } from "@angular/forms";
 import { CommonValidation } from "@shared/validation/commonValidation";
 import { KnowledgeRepoService } from "@services/agent-center/knowledge.service";
+import { AgentConfigService } from "@routes/agent-center/agent-config.service";
 import { IKnowledgeDefaultConfigConnection } from "@routes/agent-center/app-knowledge/knowledge.types";
 import { NzSwitchModule } from 'ng-zorro-antd/switch';
 import { NzRadioModule } from 'ng-zorro-antd/radio';
@@ -57,12 +59,21 @@ export class DefaultConfigModalComponent implements OnInit, OnDestroy {
     authorization: '******',
   }
   showAuth = true;
+  isOpenJiuwen = false;
+  openjiuwenEnabled = false;
+  kbTypeList: Array<{ label: string; value: string }> = [
+    { label: 'OpenJiuwen', value: 'OpenjiuwenInside' },
+    { label: 'Other', value: 'LakeSearchInside' },
+  ];
+  kbTypeSelected = 'LakeSearchInside';
   constructor(
     private fb: FormBuilder,
     private i18n: I18NextEagerPipe,
     private knowledgeService: KnowledgeRepoService,
     private drawerService: NzDrawerService,
-    private nzMessage: NzMessageService
+    private nzMessage: NzMessageService,
+    private cdr: ChangeDetectorRef,
+    private configServ: AgentConfigService
   ) {
     this.form = this.fb.group({
       auth_mode: ['basic'],
@@ -88,6 +99,10 @@ export class DefaultConfigModalComponent implements OnInit, OnDestroy {
   }
 
   public closeAndSaveConfig(): void {
+    if (this.isOpenJiuwen) {
+      this.saveOpenJiuwenConfig();
+      return;
+    }
     let isValid = true;
     isValid = this.validateSpecificFields(['auth_mode', 'ocr_enable', 'endpoint']);
     if (!isValid) {
@@ -137,6 +152,27 @@ export class DefaultConfigModalComponent implements OnInit, OnDestroy {
     }
   }
 
+  private saveOpenJiuwenConfig(): void {
+    const param: IKnowledgeDefaultConfigConnection = {
+      connector_id: 'OpenjiuwenInside',
+      params: [
+        { code: 'auth_mode', value: 'openjiuwen' },
+      ],
+    };
+    if (this.connectionId) {
+      param.changed = true;
+      this.knowledgeService.updateKnowLedgeDefaultConfig(param, this.connectionId).then(res => {
+        this.nzMessage.success(this.i18n.transform('modify_default_config_success'));
+        this.drawerRef.close();
+      });
+    } else {
+      this.knowledgeService.createKnowLedgeDefaultConfig(param).then(res => {
+        this.nzMessage.success(this.i18n.transform('create_default_config_success'));
+        this.drawerRef.close();
+      });
+    }
+  }
+
   private setOtherParams(param: IKnowledgeDefaultConfigConnection) {
     param.params.push({ code: "cluster_ips", value: "" });
     param.params.push({ code: "port", value: "" });
@@ -149,12 +185,24 @@ export class DefaultConfigModalComponent implements OnInit, OnDestroy {
   }
 
   public open(connectionId: string) {
+    this.openjiuwenEnabled = this.configServ.openjiuwenKbEnable();
     if (connectionId) {
       this.connectionId = connectionId;
       this.showAuth = false;
       this.knowledgeService.getKnowledgeDefaultConfigDetail(connectionId).then(res => {
         if (res?.knowledge_base_connection_detail?.params) {
-          const params = res.knowledge_base_connection_detail.params;
+          const detail = res.knowledge_base_connection_detail;
+          const params = detail.params;
+          const connectorId = detail.connector_id;
+          if (this.openjiuwenEnabled && connectorId === 'OpenjiuwenInside') {
+            this.isOpenJiuwen = true;
+            this.kbTypeSelected = 'OpenjiuwenInside';
+            this.openDrawer();
+            this.cdr.markForCheck();
+            return;
+          }
+          this.isOpenJiuwen = false;
+          this.kbTypeSelected = 'LakeSearchInside';
           const authModeInfo = params.find(item => item.code === 'auth_mode');
           const endpointInfo = params.find(item => item.code === 'endpoint');
           const ocrEnableInfo = params.find(item => item.code === 'ocr_enable');
@@ -173,19 +221,22 @@ export class DefaultConfigModalComponent implements OnInit, OnDestroy {
           }
           this.showAuth = this.oldConnection.auth_mode === 'basic';
           this.openDrawer();
+          this.cdr.markForCheck();
         }
       })
     } else {
       this.connectionId = '';
-      this.form.patchValue({
-        auth_mode: 'basic',
-        endpoint: '',
-        ocr_enable: false,
-        authorization: '',
-      });
-      this.modeSelected = 'basic';
-      this.showAuth = true;
+      if (this.openjiuwenEnabled) {
+        this.isOpenJiuwen = true;
+        this.kbTypeSelected = 'OpenjiuwenInside';
+        this.showAuth = false;
+      } else {
+        this.isOpenJiuwen = false;
+        this.kbTypeSelected = 'LakeSearchInside';
+        this.showAuth = true;
+      }
       this.openDrawer();
+      this.cdr.markForCheck();
     }
   }
 
@@ -237,7 +288,29 @@ export class DefaultConfigModalComponent implements OnInit, OnDestroy {
     this.showAuth = event === 'basic';
   }
 
+  changeKbType(event) {
+    this.kbTypeSelected = event;
+    this.isOpenJiuwen = event === 'OpenjiuwenInside';
+    if (this.isOpenJiuwen) {
+      this.showAuth = false;
+    } else {
+      this.form.patchValue({
+        auth_mode: 'basic',
+        endpoint: '',
+        ocr_enable: false,
+        authorization: '',
+      });
+      this.modeSelected = 'basic';
+      this.showAuth = true;
+    }
+    this.cdr.markForCheck();
+  }
+
   testConnection() {
+    if (this.isOpenJiuwen) {
+      this.nzMessage.success(this.i18n.transform('connection_success'));
+      return;
+    }
     if (this.connectionId) {
       if (this.oldConnection.auth_mode !== this.form.get('auth_mode').value || this.oldConnection.endpoint !== this.form.get('endpoint').value) {
         let isValid = this.validateSpecificFields();

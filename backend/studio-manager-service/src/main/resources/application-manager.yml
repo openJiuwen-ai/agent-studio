@@ -391,6 +391,7 @@ knowledge:
   share:
     enabled: ${share_knowledge_enabled:true}
   source: ${knowledge_source:LakeSearch}
+  openjiuwen-kb-enable: ${openjiuwen_kb_enable:false} # OpenJiuwen知识库功能开关，默认关闭
   internal:
     enabled: ${knowledge_internal_enabled:true} # 用于控制前端页面是否开启自建知识库，适配于用户无LakeSearch和KooSearch的场景
   bound:

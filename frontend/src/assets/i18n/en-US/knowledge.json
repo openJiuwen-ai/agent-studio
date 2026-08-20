@@ -260,6 +260,8 @@
   "external_knowledge_base_import": "Knowledge bases accessed from external knowledge base systems",
   "no_knowledge_base_resources_need": "No connected knowledge base resources available. You need to first",
   "default_knowledge_base_config": "Default Knowledge Base Configuration",
+  "knowledge_base_type": "Knowledge Base Type",
+  "type_selection": "Type Selection",
   "select_knowledge_base_first": "Please select a knowledge base first",
   "enter_knowledge_base_name": "Enter a knowledge base name.",
   "enter_knowledge_base_description": "Enter a knowledge base description.",
