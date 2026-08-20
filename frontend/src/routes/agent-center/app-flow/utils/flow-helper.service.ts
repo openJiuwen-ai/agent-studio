@@ -291,8 +291,12 @@ export class FlowHelperService {
   }
 
   public setMiniMap(minimapContainer: HTMLElement, graph: Graph, previewMiniMap?: MiniMap): MiniMap {
-    if (graph.getPlugin('minimap')) {
-      (graph.getPlugin('minimap') as any).updateViewport();
+    const exist = graph.getPlugin('minimap') as any;
+    if (exist) {
+      // 主图内容变化后（如大图异步布局完成），ratio 可能仍为空图时代的旧值，
+      // 需重算 updatePaper（更新 ratio）再刷新视口框，否则蓝色框按 1:1 主画布尺寸溢出缩略图
+      exist.updatePaper(graph.options.width, graph.options.height);
+      exist.updateViewport();
       return previewMiniMap;
     }
 
