@@ -100,6 +100,21 @@ class ModelStrategy:
     strategy_timeout_ms: int = 600_000          # 默认 10min，对应 Java defaultTimeout
 
 
+@dataclass(frozen=True)
+class ResolveCtx:
+    """单次策略解析的共享上下文（``project_id`` / ``workspace_id`` / ``refresh`` / ``env_vars``）。
+
+    将 ``_build_strategy`` / ``_build_detail`` 等 private 解析函数的关联参数收敛为一个具名对象，
+    降低参数个数（G.FNM.03）。``auth_id`` 因路由场景下逐子模型不同（取自 ``auth_id_list``），
+    不并入 ctx，仍作为独立参数传入。
+    """
+    project_id: str
+    workspace_id: str
+    refresh: bool = False
+    env_vars: Optional[dict] = None
+
+
+
 def _load_aes_gcm_decrypt():
     """Lazily import AES-GCM decrypt; returns None if pycryptodome is unavailable."""
     try:
@@ -134,12 +149,14 @@ def _try_aes_gcm_decrypt(value: str) -> Optional[str]:
     except ValueError:
         return None
     nonce, tag, ct = raw[:12], raw[-16:], raw[12:-16]
-    AES_mod = _load_aes_gcm_decrypt()
-    if AES_mod is None:
+    aes_gcm = _load_aes_gcm_decrypt()
+    if aes_gcm is None:
         return None
     try:
-        return AES_mod.new(key, AES_mod.MODE_GCM, nonce=nonce).decrypt_and_verify(ct, tag).decode("utf-8")
-    except (ValueError, UnicodeDecodeError):
+        return aes_gcm.new(key, aes_gcm.MODE_GCM, nonce=nonce).decrypt_and_verify(ct, tag).decode("utf-8")
+    except ValueError:
+        # UnicodeDecodeError 是 ValueError 子类，并入此类；密钥/nonce/tag 校验失败或
+        # 解密后非合法 UTF-8 均视为"非本布局密文"，返回 None 让调用方回退原值。
         return None
 
 
@@ -203,29 +220,25 @@ async def resolve_strategy(
     metadata = await _query_model_metadata(model_service_id, refresh)
     if metadata is None:
         return None
-    return await _build_strategy(
-        metadata, project_id, workspace_id, auth_id, refresh, env_vars,
-    )
+    ctx = ResolveCtx(project_id=project_id, workspace_id=workspace_id,
+                     refresh=refresh, env_vars=env_vars)
+    return await _build_strategy(metadata, ctx, auth_id)
 
 
 async def _build_strategy(
-    metadata, project_id, workspace_id, auth_id, refresh, env_vars=None,
+    metadata: dict, ctx: ResolveCtx, auth_id: str = "",
 ) -> ModelStrategy:
     mtype = metadata.get("type")
     data = metadata.get("data") or {}
     if mtype == "router":
-        return await _build_router_strategy(
-            data, project_id, workspace_id, refresh, env_vars,
-        )
+        return await _build_router_strategy(data, ctx)
     model = _model_from_data(data)
-    detail = await _build_detail(
-        model, project_id, workspace_id, auth_id, refresh, env_vars,
-    )
+    detail = await _build_detail(model, ctx, auth_id)
     return ModelStrategy(type=StrategyType.MODEL, name=model.model_name, models=[detail])
 
 
 async def _build_router_strategy(
-    data, project_id, workspace_id, refresh, env_vars=None,
+    data: dict, ctx: ResolveCtx,
 ) -> ModelStrategy:
     """构造 ROUTER 策略（对应 Java ``getRouterStrategy``）。
 
@@ -241,14 +254,12 @@ async def _build_router_strategy(
 
     details: list[ModelServiceDetail] = []
     for idx, mid in enumerate(model_ids):
-        child = await _query_model_metadata(mid, refresh)
+        child = await _query_model_metadata(mid, ctx.refresh)
         if child is None:
             raise ModelServiceError("MD_MODEL_ROUTER_INVALID", f"router miss model {mid}")
         child_model = _model_from_data(child.get("data") or {})
         aid = auth_ids[min(idx, len(auth_ids) - 1)]
-        details.append(await _build_detail(
-            child_model, project_id, workspace_id, aid, refresh, env_vars,
-        ))
+        details.append(await _build_detail(child_model, ctx, aid))
 
     return ModelStrategy(
         type=StrategyType.ROUTER,
@@ -260,7 +271,7 @@ async def _build_router_strategy(
 
 
 async def _build_detail(
-    model, project_id, workspace_id, auth_id, refresh, env_vars=None,
+    model: ModelServiceBase, ctx: ResolveCtx, auth_id: str = "",
 ) -> ModelServiceDetail:
     """构造单模型 detail（对应 Java ``getModelServiceDetail``）。
 
@@ -275,14 +286,14 @@ async def _build_detail(
     """
     if has_env_placeholder(model.api_url):
         model = replace(
-            model, api_url=resolve_env_placeholders(model.api_url, env_vars),
+            model, api_url=resolve_env_placeholders(model.api_url, ctx.env_vars),
         )
-    auth_proj = _auth_project_id(model.project_id, project_id)
+    auth_proj = _auth_project_id(model.project_id, ctx.project_id)
     if auth_id:
-        auth = await _query_auth(auth_proj, model.provider_id, auth_id, refresh)
+        auth = await _query_auth(auth_proj, model.provider_id, auth_id, ctx.refresh)
     else:
         auth = await _query_auth_v1(
-            auth_proj, model.provider_id, workspace_id, model.workspace_id, refresh
+            auth_proj, model.provider_id, ctx.workspace_id, model.workspace_id, ctx.refresh
         )
     available = auth is not None
     return ModelServiceDetail(model=model, auth=auth, available=available, is_free_model=False)
