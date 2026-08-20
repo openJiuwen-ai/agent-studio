@@ -14,6 +14,7 @@ import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { NzModalRef } from 'ng-zorro-antd/modal';
 import { AppFlowRepoService } from '@services/agent-center/app-flow-repo.service';
 import { FormBuilder, FormControl, FormGroup, FormArray, NgForm, ValidationErrors } from '@angular/forms';
+import { CommonValidation } from '@shared/validation/commonValidation';
 
 @Component({
   selector: 'model-auth-modal',
@@ -258,6 +259,39 @@ export class ModelAuthModalComponent {
       this.saveSuccess.emit();
       this.modalRef.destroy();
     });
+  }
+
+  /**
+   * 输入事件处理：过滤不可见控制字符和零宽字符
+   * 应用于 API Key、AK、SK、AppCode 等认证凭据输入框
+   */
+  onAuthInputChange(controlName: string, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const sanitized = CommonValidation.sanitizeInvisibleChars(input.value);
+    if (sanitized !== input.value) {
+      const cursorPos = Math.max(0, input.selectionStart - (input.value.length - sanitized.length));
+      this.apiKeyForm.controls[controlName]?.setValue(sanitized);
+      requestAnimationFrame(() => {
+        const pos = Math.min(cursorPos, sanitized.length);
+        input.setSelectionRange(pos, pos);
+      });
+    }
+  }
+
+  /**
+   * CUSTOM_APIKEY 模式下动态参数值的输入过滤
+   */
+  onCustomApikeyInput(index: number, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const sanitized = CommonValidation.sanitizeInvisibleChars(input.value);
+    if (sanitized !== input.value) {
+      const cursorPos = Math.max(0, input.selectionStart - (input.value.length - sanitized.length));
+      this.apiKeyAuthArgs[index].auth_key = sanitized;
+      requestAnimationFrame(() => {
+        const pos = Math.min(cursorPos, sanitized.length);
+        input.setSelectionRange(pos, pos);
+      });
+    }
   }
 
   public handleAutoInfo() {

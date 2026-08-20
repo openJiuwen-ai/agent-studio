@@ -29,6 +29,7 @@
           type="password"
           maxlength="20000"
           [(ngModel)]="param.auth_key"
+          (input)="onCustomApikeyInput(i, $event)"
           [placeholder]="'pls_enter' | i18nextEager"
           autocomplete="new-password"
         />
@@ -48,7 +49,7 @@
       <label class="text-sm">{{item.labelName}}</label>
     </div>
     <nz-input-password *ngIf="item['hide']">
-      <input nz-input [(ngModel)]="authsInfo[item.key]" />
+      <input nz-input [(ngModel)]="authsInfo[item.key]" (input)="onAuthInputChange(item.key, $event)" />
     </nz-input-password>
     <input class="w-full" *ngIf="!item['hide']" [readonly]="" nz-input [(ngModel)]="authsInfo[item.key]"/>
     </ng-container>

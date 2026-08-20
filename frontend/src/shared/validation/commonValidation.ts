@@ -384,6 +384,19 @@ export class CommonValidation {
         : { serviceName: { tiErrorMessage: tips } };
   }
 
+  /**
+   * 过滤字符串中的不可见控制字符和零宽字符
+   * 包括: Tab(\t)、DEL、零宽空格/连接符/非连接符、BOM、软连字符等
+   * 用于 API Key 等敏感输入框的输入清洗，防止 JSON 序列化/反序列化异常
+   */
+  public static sanitizeInvisibleChars(value: string): string {
+    if (!value) return value;
+    // 控制字符 \u0000-\u001F (含Tab \u0009)、DEL \u007F
+    // 零宽字符 \u200B-\u200F、行/段分隔 \u2028-\u2029、软连字符 \u00AD
+    // BOM/零宽不换行空格 \uFEFF、不可见操作符 \u2060-\u2064
+    return value.replace(/[\u0000-\u001F\u007F\u00AD\u200B-\u200F\u2028\u2029\u2060-\u2064\uFEFF]/g, '');
+  }
+
   // 仅支持英文、数字、下划线,且需要以字母开头
   public static validNameVerify(tips: string) {
     return (control: AbstractControl): ValidationErrors | null =>
