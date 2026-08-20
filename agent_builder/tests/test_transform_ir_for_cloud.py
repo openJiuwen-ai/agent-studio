@@ -55,8 +55,7 @@ def _clean_env(monkeypatch):
 
 
 class TestFunctionGraphSslVerify:
-    @staticmethod
-    def test_default_off(monkeypatch):
+    def test_default_off(self, monkeypatch):
         captured = {}
         _patch_deps(monkeypatch, captured)
         adapter = _make_adapter()
@@ -66,8 +65,7 @@ class TestFunctionGraphSslVerify:
         assert result == "fg-123"
         assert captured.get("kwargs", {}).get("verify") is False
 
-    @staticmethod
-    def test_enabled_uses_system_trust(monkeypatch):
+    def test_enabled_uses_system_trust(self, monkeypatch):
         monkeypatch.setenv("FG_SSL_VERIFY", "true")
         captured = {}
         _patch_deps(monkeypatch, captured)
@@ -77,8 +75,7 @@ class TestFunctionGraphSslVerify:
 
         assert captured.get("kwargs", {}).get("verify") is True
 
-    @staticmethod
-    def test_enabled_with_ca_bundle(monkeypatch):
+    def test_enabled_with_ca_bundle(self, monkeypatch):
         monkeypatch.setenv("FG_SSL_VERIFY", "true")
         monkeypatch.setenv("FG_SSL_CA", "/etc/ssl/internal-ca.pem")
         captured = {}

@@ -39,8 +39,7 @@ def _remove_pymupdf():
 
 
 class TestReadPdfClosesDoc:
-    @staticmethod
-    def test_close_called_after_read():
+    def test_close_called_after_read(self):
         page = MagicMock()
         page.get_text.return_value = "page1"
         doc = _make_doc([page])
@@ -50,8 +49,7 @@ class TestReadPdfClosesDoc:
         assert text == "page1"
         doc.close.assert_called_once()
 
-    @staticmethod
-    def test_close_called_even_when_page_get_text_raises():
+    def test_close_called_even_when_page_get_text_raises(self):
         # 读取过程抛异常时，finally 仍必须 close（G.PRM.03 异常场景）
         page = MagicMock()
         page.get_text.side_effect = RuntimeError("boom")
@@ -62,8 +60,7 @@ class TestReadPdfClosesDoc:
             adapter._read_pdf("dummy.pdf")
         doc.close.assert_called_once()
 
-    @staticmethod
-    def test_returns_message_when_pymupdf_missing():
+    def test_returns_message_when_pymupdf_missing(self):
         # pymupdf 未安装 → ImportError 友好提示，不应抛异常
         adapter = ReactFileReaderAdapter()
         text = adapter._read_pdf("dummy.pdf")
