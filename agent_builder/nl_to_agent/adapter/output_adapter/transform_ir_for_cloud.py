@@ -1030,7 +1030,7 @@ class ConvertToEicloud:
         # 仅在非本地执行且禁用沙箱时，切换至 FG 模式
         if not is_local_mode and not sandbox_enabled:
             configs.update(
-                {"exec_env": "fg", "fg_id": self._get_function_graph_id(node, code)}
+                {"exec_env": "fg", "fg_id": self.get_function_graph_id(node, code)}
             )
 
         code = NodeField(
@@ -1043,7 +1043,7 @@ class ConvertToEicloud:
         )
         return code
 
-    def _get_function_graph_id(self, node, code):
+    def get_function_graph_id(self, node, code):
         function_graph_code = convert_sandbox_to_fg_code(code)
 
         project_id = self.metadata.get("project_id")
