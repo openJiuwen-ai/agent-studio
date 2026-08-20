@@ -64,7 +64,7 @@ class TestFunctionGraphSslVerify:
         result = adapter.get_function_graph_id(node={"id": "n1"}, code="print(1)")
 
         assert result == "fg-123"
-        assert captured["kwargs"]["verify"] is False
+        assert captured.get("kwargs", {}).get("verify") is False
 
     @staticmethod
     def test_enabled_uses_system_trust(monkeypatch):
@@ -75,7 +75,7 @@ class TestFunctionGraphSslVerify:
 
         adapter.get_function_graph_id(node={"id": "n1"}, code="print(1)")
 
-        assert captured["kwargs"]["verify"] is True
+        assert captured.get("kwargs", {}).get("verify") is True
 
     @staticmethod
     def test_enabled_with_ca_bundle(monkeypatch):
@@ -87,4 +87,4 @@ class TestFunctionGraphSslVerify:
 
         adapter.get_function_graph_id(node={"id": "n1"}, code="print(1)")
 
-        assert captured["kwargs"]["verify"] == "/etc/ssl/internal-ca.pem"
+        assert captured.get("kwargs", {}).get("verify") == "/etc/ssl/internal-ca.pem"
