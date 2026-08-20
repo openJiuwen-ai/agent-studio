@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
-"""get_function_graph_id 出站 TLS 校验配置单测。
+"""_get_function_graph_id 出站 TLS 校验配置单测。
 
 覆盖 S5527/S4830：FunctionGraph 调用由 FG_SSL_VERIFY 控制 TLS 证书与主机名
 校验，默认关闭（对齐旧版），开启时 verify 走 True 或 FG_SSL_CA 指定 CA bundle。
@@ -17,7 +17,7 @@ from agent_builder.nl_to_agent.adapter.output_adapter.transform_ir_for_cloud imp
 
 
 def _make_adapter():
-    """构造最小 ConvertToEicloud 实例，仅满足 get_function_graph_id 依赖。"""
+    """构造最小 ConvertToEicloud 实例，仅满足 _get_function_graph_id 依赖。"""
     adapter = ConvertToEicloud.__new__(ConvertToEicloud)
     adapter.metadata = {
         "project_id": "proj",
@@ -61,7 +61,7 @@ class TestFunctionGraphSslVerify:
         _patch_deps(monkeypatch, captured)
         adapter = _make_adapter()
 
-        result = adapter.get_function_graph_id(node={"id": "n1"}, code="print(1)")
+        result = adapter._get_function_graph_id(node={"id": "n1"}, code="print(1)")
 
         assert result == "fg-123"
         assert captured.get("kwargs", {}).get("verify") is False
@@ -73,7 +73,7 @@ class TestFunctionGraphSslVerify:
         _patch_deps(monkeypatch, captured)
         adapter = _make_adapter()
 
-        adapter.get_function_graph_id(node={"id": "n1"}, code="print(1)")
+        adapter._get_function_graph_id(node={"id": "n1"}, code="print(1)")
 
         assert captured.get("kwargs", {}).get("verify") is True
 
@@ -85,6 +85,6 @@ class TestFunctionGraphSslVerify:
         _patch_deps(monkeypatch, captured)
         adapter = _make_adapter()
 
-        adapter.get_function_graph_id(node={"id": "n1"}, code="print(1)")
+        adapter._get_function_graph_id(node={"id": "n1"}, code="print(1)")
 
         assert captured.get("kwargs", {}).get("verify") == "/etc/ssl/internal-ca.pem"

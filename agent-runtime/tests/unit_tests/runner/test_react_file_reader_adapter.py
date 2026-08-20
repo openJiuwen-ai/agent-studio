@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) Huawei Technologies Co., Ltd. 2026-2026. All rights reserved.
-"""ReactFileReaderAdapter.read_pdf 单测 — 覆盖 G.PRM.03：pymupdf.open 后 doc.close() 成对释放。"""
+"""ReactFileReaderAdapter._read_pdf 单测 — 覆盖 G.PRM.03：pymupdf.open 后 doc.close() 成对释放。"""
 
 import sys
 from types import ModuleType
@@ -46,7 +46,7 @@ class TestReadPdfClosesDoc:
         doc = _make_doc([page])
         _install_fake_pymupdf(doc)
         adapter = ReactFileReaderAdapter()
-        text = adapter.read_pdf("dummy.pdf")
+        text = adapter._read_pdf("dummy.pdf")
         assert text == "page1"
         doc.close.assert_called_once()
 
@@ -59,12 +59,12 @@ class TestReadPdfClosesDoc:
         _install_fake_pymupdf(doc)
         adapter = ReactFileReaderAdapter()
         with pytest.raises(RuntimeError):
-            adapter.read_pdf("dummy.pdf")
+            adapter._read_pdf("dummy.pdf")
         doc.close.assert_called_once()
 
     @staticmethod
     def test_returns_message_when_pymupdf_missing():
         # pymupdf 未安装 → ImportError 友好提示，不应抛异常
         adapter = ReactFileReaderAdapter()
-        text = adapter.read_pdf("dummy.pdf")
+        text = adapter._read_pdf("dummy.pdf")
         assert "pymupdf" in text
