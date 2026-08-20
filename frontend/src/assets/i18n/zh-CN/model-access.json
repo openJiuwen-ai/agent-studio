@@ -318,6 +318,7 @@
   "text_content": "文本内容",
   "score": "评分",
   "cannot_sort_empty_text": "排序文本不能全部为空，至少填写一个",
+  "rerank_query_empty": "请输入查询文本",
   "route_policy_detail": "路由策略详情",
   "support_char_types": "支持中英文、数字、空格、中划线(-)、下划线(_)",
   "search_supplier_name": "输入供应商名称搜索",

@@ -66,6 +66,50 @@
                         class="content"
                         [(answer)]="result"
                       ></app-markdown-answer>
+                      <div *ngIf="isError" class="error-answer-main">
+                        <a
+                          class="error-answer-main-span"
+                          (click)="errorIsOpen = false"
+                          *ngIf="errorIsOpen"
+                        >{{ 'hide_question_details'| i18nextEager }}</a
+                        >
+                        <a
+                          class="error-answer-main-span"
+                          (click)="errorIsOpen = true"
+                          *ngIf="!errorIsOpen"
+                        >{{ 'show_question_details'| i18nextEager }}</a
+                        >
+                        <div
+                          *ngIf="errorIsOpen"
+                          class="error-answer-main-text"
+                        >
+                          <div class="error-answer-main-text-title">
+                            <div class="error-answer-main-text-title-left">
+                              {{ 'question_details'| i18nextEager }}
+                            </div>
+                            <div class="error-answer-main-text-title-right" (click)="copy(errorContent)">
+                              <svg
+                                x="0px"
+                                y="0px"
+                                viewBox="0 0 16 16"
+                                style="fill: currentcolor"
+                                xml:space="preserve"
+                              >
+                              <path
+                                id="形状结合"
+                                d="M10,3.5c1.4,0,2.5,1.1,2.5,2.5v6c0,1.4-1.1,2.5-2.5,2.5H4c-1.4,0-2.5-1.1-2.5-2.5V6
+                                c0-1.4,1.1-2.5,2.5-2.5H10z M10,4.5H4C3.2,4.5,2.5,5.2,2.5,6v6c0,0.8,0.7,1.5,1.5,1.5h6c0.8,0,1.5-0.7,1.5-1.5V6
+                                C11.5,5.2,10.8,4.5,10,4.5z M12,1.5c1.4,0,2.5,1.1,2.5,2.5v5c0,0.3-0.2,0.5-0.5,0.5c-0.3,0-0.5-0.2-0.5-0.5V4c0-0.8-0.7-1.5-1.5-1.5
+                                H7C6.7,2.5,6.5,2.3,6.5,2c0-0.3,0.2-0.5,0.5-0.5H12z"
+                              ></path>
+                            </svg>
+                            </div>
+                          </div>
+                          <div class="error-answer-main-text-content">
+                            {{ errorContent }}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

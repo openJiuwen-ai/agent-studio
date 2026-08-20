@@ -24,6 +24,7 @@ import com.openjiuwen.studio.agent.common.entity.RouterStrategyEntity;
 import com.openjiuwen.studio.agent.common.entity.Text2AudioReq;
 import com.openjiuwen.studio.agent.common.enums.OperationType;
 import com.openjiuwen.studio.agent.common.dto.ErrorRsp;
+import com.openjiuwen.studio.agent.common.dto.ErrorDetail;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.ErrorInfo;
@@ -322,7 +323,15 @@ public class AgentServiceProxyService {
         String projectId) {
         String modelId = request.getModel();
         checkModelPermission(projectId, workspaceId, modelId);
-        return builderClient.rerank(getToken(), projectId, workspaceId, request, refresh);
+        try {
+            return builderClient.rerank(getToken(), projectId, workspaceId, request, refresh);
+        } catch (FeignException e) {
+            ResponseEntity<Object> errorResponse = parseModelServiceFeignError(e);
+            if (errorResponse != null) {
+                return errorResponse;
+            }
+            throw e;
+        }
     }
 
     public Object textEmbeddings(HttpHeaders headers, String workspaceId, EmbeddingRequest request, Boolean refresh,
@@ -330,7 +339,64 @@ public class AgentServiceProxyService {
 
         String modelId = request.getModel();
         checkModelPermission(projectId, workspaceId, modelId);
-        return builderClient.textEmbeddings(getToken(), projectId, workspaceId, request, refresh);
+        try {
+            return builderClient.textEmbeddings(getToken(), projectId, workspaceId, request, refresh);
+        } catch (FeignException e) {
+            ResponseEntity<Object> errorResponse = parseModelServiceFeignError(e);
+            if (errorResponse != null) {
+                return errorResponse;
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * 解析模型服务 Feign 调用的错误响应体，提取错误信息及上游 details。
+     * 解析失败时退回通用错误码（MD_MODEL_SERVICE_NOT_AVAILABLE），透传上游 HTTP 状态码。
+     */
+    private ResponseEntity<Object> parseModelServiceFeignError(FeignException e) {
+        log.error("Model service call failed via Feign client.", e);
+        try {
+            String body = e.contentUTF8();
+            if (body != null) {
+                JSONObject errObj = JSONObject.parseObject(body);
+                if (errObj != null && errObj.containsKey("error_code")) {
+                    ErrorRsp errorRsp = new ErrorRsp()
+                        .setErrorCode(errObj.getString("error_code"))
+                        .setErrorMsg(errObj.getString("error_msg"))
+                        .setErrorReason(errObj.getString("error_reason"))
+                        .setErrorSuggestion(errObj.getString("error_suggestion"));
+                    if (errObj.containsKey("details")) {
+                        JSONArray detailsArr = errObj.getJSONArray("details");
+                        if (detailsArr != null) {
+                            List<ErrorDetail> details = new ArrayList<>();
+                            for (int i = 0; i < detailsArr.size(); i++) {
+                                JSONObject d = detailsArr.getJSONObject(i);
+                                if (d != null) {
+                                    details.add(new ErrorDetail()
+                                        .setErrorMsg(d.getString("error_msg")));
+                                }
+                            }
+                            errorRsp.setDetails(details);
+                        }
+                    }
+                    return ResponseEntity.status(e.status() > 0 ? e.status() : 500).body(errorRsp);
+                }
+            }
+        } catch (Exception parseEx) {
+            log.warn("Failed to parse Feign error body.", parseEx);
+        }
+        // 无法从 Feign 异常解析出 builder 的 error body 时，退回通用错误码（不带构造的 details，
+        // 避免透出对用户无意义的异常堆栈信息）
+        ErrorInfo errorInfo = i18nUtil.getMessage(
+            new AgentStudioException(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE));
+        ErrorRsp errorRsp = new ErrorRsp()
+            .setErrorCode(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode())
+            .setErrorMsg(errorInfo.getMessage())
+            .setErrorReason(errorInfo.getReason())
+            .setErrorSuggestion(errorInfo.getSuggestion());
+        int status = e.status() > 0 ? e.status() : 500;
+        return ResponseEntity.status(status).body(errorRsp);
     }
 
     public Object chatCompletions(HttpHeaders headers, String workspaceId, ChatCompletionRequest request,
@@ -347,31 +413,7 @@ public class AgentServiceProxyService {
         try {
             return builderClient.chatCompletions(getToken(), projectId, workspaceId, request, refresh);
         } catch (FeignException e) {
-            log.error("Model service call failed via Feign client.", e);
-            try {
-                String body = e.contentUTF8();
-                if (body != null) {
-                    JSONObject errObj = JSONObject.parseObject(body);
-                    if (errObj != null && errObj.containsKey("error_code")) {
-                        ErrorRsp errorRsp = new ErrorRsp()
-                            .setErrorCode(errObj.getString("error_code"))
-                            .setErrorMsg(errObj.getString("error_msg"))
-                            .setErrorReason(errObj.getString("error_reason"))
-                            .setErrorSuggestion(errObj.getString("error_suggestion"));
-                        return ResponseEntity.status(e.status() > 0 ? e.status() : 500).body(errorRsp);
-                    }
-                }
-            } catch (Exception parseEx) {
-                log.warn("Failed to parse Feign error body.", parseEx);
-            }
-            ErrorInfo errorInfo = i18nUtil.getMessage(
-                new AgentStudioException(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE));
-            ErrorRsp errorRsp = new ErrorRsp()
-                .setErrorCode(StudioError.MD_MODEL_SERVICE_NOT_AVAILABLE.getFullCode())
-                .setErrorMsg(errorInfo.getMessage())
-                .setErrorReason(errorInfo.getReason())
-                .setErrorSuggestion(errorInfo.getSuggestion());
-            return ResponseEntity.status(500).body(errorRsp);
+            return parseModelServiceFeignError(e);
         }
     }
 

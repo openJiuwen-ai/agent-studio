@@ -25,7 +25,11 @@ public class FeignIgnoreSSLConfig {
 
     @Bean
     public Client feignClient() {
-        return new Client.Default(sslSocketFactory(), (host, session) -> true);
+        // 第三参 disableRequestBuffering=false：请求体先缓冲再发送（Feign 13 之前的默认行为）。
+        // 若走流式（streaming mode），JDK HttpURLConnection 收到 401 时会触发内置认证协商，
+        // 将响应体（getErrorStream）消费掉，导致 Feign 异常 contentUTF8() 为空，
+        // builder 返回的错误详情（如 "Token is invalid."）无法透传给前端。buffered 模式下不受影响。
+        return new Client.Default(sslSocketFactory(), (host, session) -> true, false);
     }
 
     private SSLSocketFactory sslSocketFactory() {
