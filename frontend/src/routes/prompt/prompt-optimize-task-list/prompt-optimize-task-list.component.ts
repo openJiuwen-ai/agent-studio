@@ -154,6 +154,10 @@ export class PromptOptimizeTaskListComponent {
   };
   private listDebounceSubject = new Subject<any>();
   private destroy$ = new Subject<void>();
+  private taskPollTimer: ReturnType<typeof setTimeout>;
+  // 执行中/暂停中均为异步态:进度与状态只在后端被查询时才从执行引擎同步，需前端静默轮询驱动
+  private static readonly PAUSING_POLL_INTERVAL_MS = 5000;
+  private static readonly OPTIMIZING_POLL_INTERVAL_MS = 15000;
   public subTabs: Array<any> = [
     {
       title: this.i18n.transform('prompt'),
@@ -206,6 +210,7 @@ export class PromptOptimizeTaskListComponent {
     this.destroy$.next();
     this.destroy$.complete();
     this.listDebounceSubject.complete();
+    this.stopTaskPolling();
   }
 
   handleClickClearSearch() {
@@ -426,13 +431,15 @@ export class PromptOptimizeTaskListComponent {
     this.listDebounceSubject.next(null);
   }
 
-  public listTasks(page = 1, pageSize = 10) {
-    this.totalNumber = 0;
-    this.taskList.data = [];
+  public listTasks(page = 1, pageSize = 10, silent = false) {
+    if (!silent) {
+      this.totalNumber = 0;
+      this.taskList.data = [];
+    }
     this.subTabs[0].active = false;
     this.subTabs[1].active = true;
     this.buttonGroupSelected = this.subTabs[1].id;
-    this.isLoading = true;
+    this.isLoading = !silent;
     const params: any = {};
     if (this.filterOption.searchText.value) {
       params.name = this.filterOption.searchText?.value;
@@ -465,12 +472,37 @@ export class PromptOptimizeTaskListComponent {
           res.data?.list?.map(item => {
             return this.convertTask(item);
           }) ?? [];
+        this.scheduleTaskPolling();
         this.cdr.markForCheck();
       })
       .finally(() => {
         this.isLoading = false;
         this.isFirstLoading = false;
       });
+  }
+
+  /** 存在"执行中/暂停中"任务时静默轮询列表(不闪loading)，驱动后端从执行引擎同步状态与进度，全部流转为终态后自动停止 */
+  private scheduleTaskPolling(): void {
+    this.stopTaskPolling();
+    const hasPausingTask = this.taskList.data.some(task => task.status === 'pausing');
+    const hasOptimizingTask = this.taskList.data.some(task => task.status === 'optimizing');
+    if (!hasPausingTask && !hasOptimizingTask) {
+      return;
+    }
+    // 暂停流转快(秒级)用短间隔；执行中周期长(分钟级/轮)用长间隔，参考项目内 15-20s 轮询惯例
+    const interval = hasPausingTask
+      ? PromptOptimizeTaskListComponent.PAUSING_POLL_INTERVAL_MS
+      : PromptOptimizeTaskListComponent.OPTIMIZING_POLL_INTERVAL_MS;
+    this.taskPollTimer = setTimeout(() => {
+      this.listTasks(this.currentPage, this.pageSize.size, true);
+    }, interval);
+  }
+
+  private stopTaskPolling(): void {
+    if (this.taskPollTimer) {
+      clearTimeout(this.taskPollTimer);
+      this.taskPollTimer = null;
+    }
   }
 
   public delTask(id: string) {
