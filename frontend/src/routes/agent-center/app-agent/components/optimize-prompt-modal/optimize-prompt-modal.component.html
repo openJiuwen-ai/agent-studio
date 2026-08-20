@@ -23,7 +23,7 @@
     nzType="primary"
     nzDanger
     (click)="confirm()"
-    [disabled]="state.fetching"
+    [disabled]="state.fetching || state.hasError"
   >
     {{ 'optimize_prompt_modal_1' | i18nextEager }}
   </button>
