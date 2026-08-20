@@ -303,6 +303,26 @@ def filter_enable_history(chat_history: list) -> list:
     return filtered_history
 
 
+def _extract_history_role_content(history) -> tuple[str, str]:
+    """从历史消息中提取 role/content。
+
+    兼容两种形态：dict（遗留 fixture/旧路径）与 ``ConversationMessage`` /
+    ``BaseMessage`` 对象（``context.get_messages()`` 返回的 pydantic 模型，
+    role/content 为属性而非 dict 键，无 ``.get()`` 方法）。
+    """
+    if isinstance(history, dict):
+        return history.get(ROLE, "") or "", history.get(CONTENT, "") or ""
+    # ConversationMessage(pydantic) / BaseMessage：属性访问
+    role = getattr(history, "role", None) or getattr(history, "type", None) or ""
+    content = getattr(history, "content", None)
+    if content is None:
+        content = getattr(history, "text", "") or ""
+    if not isinstance(content, str):
+        content = str(content)
+    return role, content
+
+
+
 def _get_default_prompt_template() -> PromptTemplate:
     """获取默认意图识别 prompt 模板。"""
     return PromptTemplate(
@@ -973,8 +993,9 @@ class IntentDetection(WorkflowComponent):
         for history in filtered_chat_history[
             -self.intent_config.chat_history_max_turn :
         ]:
+            role, content = _extract_history_role_content(history)
             chat_history_str += "{}：{}\n".format(
-                ROLE_MAP.get(history.get(ROLE, CONTENT), "用户"), history.get(CONTENT)
+                ROLE_MAP.get(role, "用户"), content
             )
         return chat_history_str
 
