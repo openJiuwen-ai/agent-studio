@@ -202,14 +202,17 @@ export class ModelImportModalComponent {
       .then(res => {
         this.importRsp = res;
         this.hasImported = true;
-        const tip =
-          res.failed_len === 0
-            ? this.i18n.transform('import_model_success_tip')
-            : this.i18n.transform('import_model_partial_tip', { succeed: res.succeed_len, failed: res.failed_len });
-        if (res.failed_len === 0) {
-          this.message.success(tip);
-        } else {
+        const succeed = res.succeed_len ?? 0;
+        const failed = res.failed_len ?? 0;
+        const skipped = res.skipped_len ?? 0;
+        const hasError = failed > 0;
+        const tip = hasError
+          ? this.i18n.transform('import_model_partial_tip', { succeed, failed, skipped })
+          : this.i18n.transform('import_model_success_tip', { succeed, skipped });
+        if (hasError) {
           this.message.warning(tip);
+        } else {
+          this.message.success(tip);
         }
       })
       .catch(() => {

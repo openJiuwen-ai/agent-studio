@@ -41,9 +41,11 @@ export interface ModelImportResultItem {
 export interface ModelImportRsp {
   succeed_len: number;
   failed_len: number;
+  skipped_len: number;
   count: number;
   succeed_ids: string[];
   failed_ids: string[];
+  skipped_ids: string[];
   import_list: ModelImportResultItem[];
 }
 

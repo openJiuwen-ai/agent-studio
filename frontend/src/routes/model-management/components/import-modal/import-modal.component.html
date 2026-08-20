@@ -94,7 +94,8 @@
     <div class="section-title">{{ 'import_result' | i18nextEager }}</div>
     <div class="result-summary">
       <nz-tag nzColor="success">{{ 'import_result_succeed' | i18nextEager }}: {{ importRsp.succeed_len }}</nz-tag>
-      <nz-tag nzColor="error">{{ 'import_result_failed' | i18nextEager }}: {{ importRsp.failed_len }}</nz-tag>
+      <nz-tag nzColor="warning" *ngIf="(importRsp.skipped_len ?? 0) > 0">{{ 'import_result_skipped' | i18nextEager }}: {{ importRsp.skipped_len }}</nz-tag>
+      <nz-tag nzColor="error" *ngIf="(importRsp.failed_len ?? 0) > 0">{{ 'import_result_failed' | i18nextEager }}: {{ importRsp.failed_len }}</nz-tag>
     </div>
     <nz-table #resultTable [nzData]="importRsp.import_list || []" [nzPageSize]="5" nzSize="small">
       <thead>
@@ -108,8 +109,8 @@
         <tr *ngFor="let item of resultTable.data">
           <td>{{ item.name || item.id || '-' }}</td>
           <td>
-            <nz-tag [nzColor]="item.status === 'SUCCESS' ? 'success' : 'error'">
-              {{ (item.status === 'SUCCESS' ? 'import_result_success' : 'import_result_failed') | i18nextEager }}
+            <nz-tag [nzColor]="item.status === 'SUCCESS' ? 'success' : (item.status === 'SKIPPED' ? 'warning' : 'error')">
+              {{ (item.status === 'SUCCESS' ? 'import_result_success' : (item.status === 'SKIPPED' ? 'import_result_skipped' : 'import_result_failed')) | i18nextEager }}
             </nz-tag>
           </td>
           <td class="detail-cell" [title]="item.detail || ''">{{ item.detail || '-' }}</td>

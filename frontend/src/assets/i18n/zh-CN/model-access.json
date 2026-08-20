@@ -356,11 +356,12 @@
   "import_result": "导入结果",
   "import_result_succeed": "成功",
   "import_result_failed": "失败",
+  "import_result_skipped": "跳过",
   "import_result_status": "状态",
   "import_result_success": "成功",
   "import_model_confirm": "确认导入",
-  "import_model_success_tip": "导入完成",
-  "import_model_partial_tip": "导入完成，成功 {{succeed}} 个，失败 {{failed}} 个",
+  "import_model_success_tip": "导入完成，成功 {{succeed}} 个，跳过 {{skipped}} 个",
+  "import_model_partial_tip": "导入完成，成功 {{succeed}} 个，跳过 {{skipped}} 个，失败 {{failed}} 个",
   "import_model_preview_failed": "预检失败",
   "import_model_failed": "导入失败"
 }

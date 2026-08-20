@@ -430,6 +430,12 @@ public class ModelImportExportService implements IModelImportExportService {
             return successRes(model);
         } catch (AgentStudioException e) {
             String detail = describe(e);
+            // MODEL_IMPORT_CONFLICT 是 SKIP 策略命中的主动跳过（用户选择"同名跳过"时的预期行为），
+            // 归类为 SKIPPED 而非 FAILED，避免前端把预期跳过显示为"失败"引起歧义。
+            if (e.getErrorCode() == StudioError.MODEL_IMPORT_CONFLICT) {
+                log.info("Import model {} skipped: {}", model.getServiceName(), detail);
+                return skippedRes(model.getId(), model.getServiceName(), detail);
+            }
             log.warn("Import model {} failed: {}", model.getServiceName(), detail);
             return failedRes(model.getId(), model.getServiceName(), detail);
         } catch (Exception e) {
@@ -516,10 +522,28 @@ public class ModelImportExportService implements IModelImportExportService {
             throw new AgentStudioException(StudioError.MODEL_IMPORT_CONFLICT,
                 "model service " + model.getServiceName() + " already exists, skipped");
         }
-        // COVER：事务化删旧(existingId)+插新(导入id)，DB 原子；缓存补偿在事务提交后 best-effort。
-        // 缓存同步顺序：先清旧(existingId)后写新(importId)，避免 existingId==importId 时自删
-        // （同文件二次导入同一空间：首次无冲突落 importId，二次 COVER 按名查到的即 importId 那条）。
+        // COVER：事务化删旧(existingId)+插新(导入 id 或 COPY 新 id)，DB 原子；缓存补偿在事务提交后 best-effort。
+        // 缓存同步顺序：先清旧(existingId)后写新(newId)，避免 existingId==newId 时自删
+        // （同文件二次导入同一空间：首次无冲突落导入 id，二次 COVER 按名查到的即导入 id 那条）。
         String existingId = exist.get(0).getId();
+        // COVER 路径的跨空间 PK 冲突守卫：exist 是按 (projectId,workspaceId,serviceName,providerId) 查到的同名行，
+        // 只保证同名冲突会被删除。若导入包中的 model.id 被其他记录占用（其他工作空间、或同空间不同名/不同 provider），
+        // deleteById(existingId) 不会释放那个 PK 槽位，直接 insert 会触发 Duplicate entry PRIMARY。
+        // 此时走 COPY 语义——为导入模型分配新 UUID，保留占用方记录不动（和无冲突分支 lines 494-508 一致）。
+        // case A：existingId.equals(model.getId()) → 同文件二次导入同空间，占用方就是将被删除的同名行，无需再生。
+        // case B：model.getId() 全局不存在 → 直接使用导入 id，无需再生。
+        if (StringUtils.isNotBlank(model.getId()) && !existingId.equals(model.getId())) {
+            ModelServiceBase globalById = modelServiceMapper.queryById(model.getId());
+            if (globalById != null) {
+                String oldId = model.getId();
+                String newId = UUID.randomUUID().toString();
+                model.setId(newId);
+                log.info("COVER import id collision for model '{}' (oldId={}, occupying row scope={}/{}, serviceName={}, "
+                        + "existingNameConflictId={}); generating new id {} (COPY semantics, occupying row preserved)",
+                    model.getServiceName(), oldId, globalById.getProjectId(), globalById.getWorkspaceId(),
+                    globalById.getServiceName(), existingId, newId);
+            }
+        }
         modelServiceManager.coverModelService(model, existingId);
         syncCachesForCover(model.getId(), model, existingId);
     }
@@ -881,11 +905,18 @@ public class ModelImportExportService implements IModelImportExportService {
     private ImportRsp buildImportRsp(List<ImportRes> importList) {
         List<String> succeedIds = new ArrayList<>();
         List<String> failedIds = new ArrayList<>();
+        List<String> skippedIds = new ArrayList<>();
         int failedLen = 0;
+        int skippedLen = 0;
         for (ImportRes res : importList) {
             if ("SUCCESS".equals(res.getStatus())) {
                 if (res.getId() != null) {
                     succeedIds.add(res.getId());
+                }
+            } else if ("SKIPPED".equals(res.getStatus())) {
+                skippedLen++;
+                if (res.getId() != null) {
+                    skippedIds.add(res.getId());
                 }
             } else {
                 failedLen++;
@@ -899,6 +930,8 @@ public class ModelImportExportService implements IModelImportExportService {
         rsp.setSucceedIds(succeedIds);
         rsp.setFailedLen(failedLen);
         rsp.setFailedIds(failedIds);
+        rsp.setSkippedLen(skippedLen);
+        rsp.setSkippedIds(skippedIds);
         rsp.setCount(importList.size());
         rsp.setImportList(importList);
         return rsp;
@@ -920,6 +953,10 @@ public class ModelImportExportService implements IModelImportExportService {
 
     private ImportRes failedRes(String id, String name, String detail) {
         return new ImportRes().setId(id).setName(name).setType("MODEL").setStatus("FAILED").setDetail(detail);
+    }
+
+    private ImportRes skippedRes(String id, String name, String detail) {
+        return new ImportRes().setId(id).setName(name).setType("MODEL").setStatus("SKIPPED").setDetail(detail);
     }
 
     /** 一行 JSONL 的解析上下文（行号 + 原始文本）。 */

@@ -47,6 +47,14 @@ public class ImportRsp implements Serializable {
     @Size()
     private List<@Length() String> failedIds = null;
 
+    @JsonProperty("skipped_len")
+    private Integer skippedLen = 0;
+
+    @JsonProperty("skipped_ids")
+    @Valid
+    @Size()
+    private List<@Length() String> skippedIds = null;
+
     @JsonProperty("inner_plugins_msg")
     @Valid
     @Size()
@@ -112,6 +120,24 @@ public class ImportRsp implements Serializable {
         return this;
     }
 
+    public Integer getSkippedLen() {
+        return skippedLen;
+    }
+
+    public ImportRsp setSkippedLen(Integer skippedLen) {
+        this.skippedLen = skippedLen;
+        return this;
+    }
+
+    public List<String> getSkippedIds() {
+        return skippedIds;
+    }
+
+    public ImportRsp setSkippedIds(List<String> skippedIds) {
+        this.skippedIds = skippedIds;
+        return this;
+    }
+
     public List<ExtraMsg> getInnerPluginsMsg() {
         return innerPluginsMsg;
     }
@@ -158,6 +184,8 @@ public class ImportRsp implements Serializable {
         sb.append("    succeedIds: ").append(toIndentedString(succeedIds)).append("\n");
         sb.append("    failedLen: ").append(toIndentedString(failedLen)).append("\n");
         sb.append("    failedIds: ").append(toIndentedString(failedIds)).append("\n");
+        sb.append("    skippedLen: ").append(toIndentedString(skippedLen)).append("\n");
+        sb.append("    skippedIds: ").append(toIndentedString(skippedIds)).append("\n");
         sb.append("    innerPluginsMsg: ").append(toIndentedString(innerPluginsMsg)).append("\n");
         sb.append("    authPluginsMsg: ").append(toIndentedString(authPluginsMsg)).append("\n");
         sb.append("    authMcpsMsg: ").append(toIndentedString(authMcpsMsg)).append("\n");
@@ -178,15 +206,16 @@ public class ImportRsp implements Serializable {
         return Objects.equals(this.succeedLen, importRsp.succeedLen) && Objects.equals(this.count, importRsp.count)
             && Objects.equals(this.succeedIds, importRsp.succeedIds) && Objects.equals(this.failedLen,
             importRsp.failedLen) && Objects.equals(this.failedIds, importRsp.failedIds) && Objects.equals(
-            this.innerPluginsMsg, importRsp.innerPluginsMsg) && Objects.equals(this.authPluginsMsg,
+            this.skippedLen, importRsp.skippedLen) && Objects.equals(this.skippedIds, importRsp.skippedIds)
+            && Objects.equals(this.innerPluginsMsg, importRsp.innerPluginsMsg) && Objects.equals(this.authPluginsMsg,
             importRsp.authPluginsMsg) && Objects.equals(this.authMcpsMsg, importRsp.authMcpsMsg) && Objects.equals(
             this.importList, importRsp.importList);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(succeedLen, count, succeedIds, failedLen, failedIds, innerPluginsMsg, authPluginsMsg,
-            authMcpsMsg, importList);
+        return Objects.hash(succeedLen, count, succeedIds, failedLen, failedIds, skippedLen, skippedIds,
+            innerPluginsMsg, authPluginsMsg, authMcpsMsg, importList);
     }
 
     /**

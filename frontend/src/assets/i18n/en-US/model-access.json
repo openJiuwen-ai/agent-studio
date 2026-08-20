@@ -345,11 +345,12 @@
   "import_result": "Import Result",
   "import_result_succeed": "Succeeded",
   "import_result_failed": "Failed",
+  "import_result_skipped": "Skipped",
   "import_result_status": "Status",
   "import_result_success": "Success",
   "import_model_confirm": "Confirm Import",
-  "import_model_success_tip": "Import completed",
-  "import_model_partial_tip": "Import completed, {{succeed}} succeeded, {{failed}} failed",
+  "import_model_success_tip": "Import completed, {{succeed}} succeeded, {{skipped}} skipped",
+  "import_model_partial_tip": "Import completed, {{succeed}} succeeded, {{skipped}} skipped, {{failed}} failed",
   "import_model_preview_failed": "Preview failed",
   "import_model_failed": "Import failed"
 }
