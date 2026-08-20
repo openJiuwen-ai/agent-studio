@@ -23,6 +23,7 @@ public enum ConnectorTypeEnum {
     AGENT_BASE_RAG("AgentBaseRag", "inside"),
     LAKE_SEARCH_INSIDE("LakeSearchInside", "inside"),
     KOO_SEARCH_INSIDE("KooSearchInside", "inside"),
+    OPENJIUWEN_INSIDE("OpenjiuwenInside", "inside"),
     CUSTOM("Custom", "inside");
 
     private final String value;

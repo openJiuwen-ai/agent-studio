@@ -355,6 +355,7 @@ class OpenJiuwenKBManager:
         return {
             "success": True,
             "doc_count": len(all_docs),
+            "doc_ids": doc_ids,
             "message": f"Uploaded {len(all_docs)} documents",
         }
 
@@ -393,6 +394,24 @@ class OpenJiuwenKBManager:
             }
             for r in results[:opts.top_k]
         ]
+
+    async def delete_documents(self, kb_id: str, doc_ids: List[str]) -> Dict[str, Any]:
+        """删除知识库中的文档（通过 doc_id 从向量库移除）。"""
+        kb = self._kb_cache.get(kb_id)
+        if kb is not None:
+            await kb.delete_documents(doc_ids)
+        else:
+            # KB 未缓存（如服务重启后），直接创建 Indexer 删除，无需 embedding model
+            vs_config = self._build_vector_store_config(kb_id)
+            index_manager = self._create_indexer(vs_config)
+            index_name = _collection_name(kb_id)
+            for doc_id in doc_ids:
+                try:
+                    await index_manager.delete_index(doc_id=doc_id, index_name=index_name)
+                except Exception as e:
+                    logger.warning("Failed to delete doc '%s' from KB '%s': %s", doc_id, kb_id, e)
+        logger.info("Deleted %d documents from KB '%s'", len(doc_ids), kb_id)
+        return {"success": True, "message": f"Deleted {len(doc_ids)} documents"}
 
     async def delete_kb(self, kb_id: str) -> Dict[str, Any]:
         """删除知识库（删除 collection + 清理缓存）。"""

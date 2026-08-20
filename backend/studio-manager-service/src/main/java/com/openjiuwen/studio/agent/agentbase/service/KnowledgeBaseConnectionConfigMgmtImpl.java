@@ -6,6 +6,7 @@ package com.openjiuwen.studio.agent.agentbase.service;
 
 import static com.openjiuwen.studio.agent.agentbase.converter.KbConnectionConverter.DEFAULT_CONNECTION_ID;
 import static com.openjiuwen.studio.agent.foundation.connection.constants.ConnectorTypeEnum.LAKE_SEARCH_INSIDE;
+import static com.openjiuwen.studio.agent.foundation.connection.constants.ConnectorTypeEnum.OPENJIUWEN_INSIDE;
 
 import com.openjiuwen.studio.agent.agentbase.enums.KnowledgeBaseConnectionStatus;
 import com.openjiuwen.studio.agent.common.enums.RagAuthMode;
@@ -116,6 +117,11 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
 
     private static final Set<String> REQUIRED_FIELDS = Set.of(AUTH_MODE, ENDPOINT, OCR_ENABLE);
 
+    private static final Set<String> SUPPORTED_DEFAULT_CONNECTORS = Set.of(
+        LAKE_SEARCH_INSIDE.getValue(),
+        ConnectorTypeEnum.OPENJIUWEN_INSIDE.getValue()
+    );
+
     public KnowledgeBaseConnectionConfigMgmtImpl(
         KnowledgeBaseConnectionValidateService knowledgeBaseConnectionValidateService,
         KbConnectionConverter kbConnectionConverter, KnowledgeBaseConnectionMapper connectionMapper,
@@ -179,6 +185,7 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
             syncLakeSearchInsideConnection();
             syncKooSearchInsideConnection();
             syncAgentBaseRagConnection();
+            syncOpenJiuwenInsideConnection();
         } catch (Exception e) {
             log.error("Failed to sync default connections to OBS", e);
         }
@@ -296,6 +303,36 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
     }
 
     /**
+     * 同步 OpenJiuwenInside 连接到 OBS
+     * 当前仅支持 DB 连接（OpenJiuwenInside 无 YAML-only 部署场景）
+     */
+    private void syncOpenJiuwenInsideConnection() {
+        String connectorId = OPENJIUWEN_INSIDE.getValue();
+        log.info("Syncing OpenJiuwenInside connection to OBS");
+
+        try {
+            List<KnowledgeBaseConnectionEntity> dbConnections =
+                connectionMapper.findDefaultConnection(connectorId);
+
+            if (!CollectionUtils.isEmpty(dbConnections)) {
+                KnowledgeBaseConnectionEntity connection = dbConnections.get(0);
+                KnowledgeBaseConnectorEntity connector = connectorMapper.find(connectorId);
+
+                kbConnectionStorageService.writeConnectionToObs(
+                    connection,
+                    connector != null ? connector.getType() : "inside",
+                    connector != null ? connector.getName() : "OpenJiuwen",
+                    null);
+                log.info("Synced OpenJiuwenInside connection from DB: connectionId={}", connection.getId());
+            } else {
+                log.info("No OpenJiuwenInside connection to sync (no DB row)");
+            }
+        } catch (Exception e) {
+            log.error("Failed to sync OpenJiuwenInside connection to OBS", e);
+        }
+    }
+
+    /**
      * 从 YAML 配置构造 LakeSearch 虚拟连接实体（用于 CUSTOM 模式）
      * 注意：构造的 params 中的敏感字段（password）应已加密，但 YAML 配置中通常是明文
      * 本方法假设 YAML 中的凭证为明文，调用 CryptoUtils.encrypt 加密后存入 params
@@ -349,11 +386,12 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
         log.info("operation log projectId: {}, userId:{}, createDefaultKbConnection", projectId,
             RequestContextUtils.getRequestUserId());
         checkPermission();
-        if (KERBEROS.equalsIgnoreCase(authMode)) {
+        if (KERBEROS.equalsIgnoreCase(authMode)
+            && LAKE_SEARCH_INSIDE.getValue().equals(body.getConnectorId())) {
             log.error("do not support to config default knowledge base connection with kerberos");
             throw new AgentBaseException(ErrorCode.INVALID_KNOWLEDGE_REPO_REQUEST, KERBEROS);
         }
-        if (!Strings.CS.equals(body.getConnectorId(), LAKE_SEARCH_INSIDE.getValue())) {
+        if (!SUPPORTED_DEFAULT_CONNECTORS.contains(body.getConnectorId())) {
             log.error("do not support to config default knowledge base connection with connectorId [{}]",
                 body.getConnectorId());
             throw new AgentBaseException(ErrorCode.INVALID_PARAMETER, body.getConnectorId());
@@ -364,7 +402,7 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
             throw new AgentBaseException(ErrorCode.INVALID_PARAMETER, body.getConnectorId());
         }
         // 参数校验，当前值进行了判空检验
-        checkDefaultKbConnectionParams(body.getParams());
+        checkDefaultKbConnectionParams(body.getConnectorId(), body.getParams());
         // 校验参数与连接器中定义的参数是否一致并加密
         List<ConnectionParamInfo> connectionParamInfos = knowledgeBaseConnectionValidateService.checkAndEncryptedParams(
             body.getConnectorId(), body.getParams());
@@ -378,14 +416,21 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
             knowledgeBaseMapper.updatePreviewsKnowledgeBaseConnectionId(entity.getId());
 
             // 连接信息独立存储，写入连接文件到OBS
-            // 默认 LakeSearch 连接需要注入 YAML 配置中的 project_id 和 application_id
             try {
                 KnowledgeBaseConnectorEntity connector = connectorMapper.find(body.getConnectorId());
-                kbConnectionStorageService.syncDefaultConnectionToObs(
-                    entity,
-                    connector != null ? connector.getType() : null,
-                    connector != null ? connector.getName() : null,
-                    lakeSearchProjectId, lakeSearchApplicationId);
+                if (OPENJIUWEN_INSIDE.getValue().equals(body.getConnectorId())) {
+                    kbConnectionStorageService.writeConnectionToObs(
+                        entity,
+                        connector != null ? connector.getType() : "inside",
+                        connector != null ? connector.getName() : "OpenJiuwen",
+                        null);
+                } else {
+                    kbConnectionStorageService.syncDefaultConnectionToObs(
+                        entity,
+                        connector != null ? connector.getType() : null,
+                        connector != null ? connector.getName() : null,
+                        lakeSearchProjectId, lakeSearchApplicationId);
+                }
             } catch (Exception ex) {
                 log.error("Write connection to OBS after default connection create failed. connectionId: {}", entity.getId(), ex);
                 // OBS写入失败不影响主流程
@@ -401,16 +446,17 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
     public ListDefaultKnowledgeBaseConnectorsResponseBody listDefaultKnowledgeBaseConnectors(String projectId,
         Integer offset, Integer limit) {
         checkPermission();
-        // 当前只有LakeSearch允许页面配置
-        final KnowledgeBaseConnectorEntity knowledgeBaseConnectorEntity = connectorMapper.find(
-            LAKE_SEARCH_INSIDE.getValue());
-        ListDefaultKnowledgeBaseConnectorsResponseBody listDefaultKnowledgeBaseConnectorsResponseBody
-            = new ListDefaultKnowledgeBaseConnectorsResponseBody();
-        listDefaultKnowledgeBaseConnectorsResponseBody.setTotal(1L);
-        KnowledgeBaseConnectorDetail knowledgeBaseConnectorDetail = toKnowledgeBaseConnectorDetail(
-            knowledgeBaseConnectorEntity);
-        listDefaultKnowledgeBaseConnectorsResponseBody.setConnectors(List.of(knowledgeBaseConnectorDetail));
-        return listDefaultKnowledgeBaseConnectorsResponseBody;
+        List<KnowledgeBaseConnectorEntity> connectors = new ArrayList<>();
+        for (String connectorId : SUPPORTED_DEFAULT_CONNECTORS) {
+            KnowledgeBaseConnectorEntity entity = connectorMapper.find(connectorId);
+            if (entity != null) {
+                connectors.add(entity);
+            }
+        }
+        ListDefaultKnowledgeBaseConnectorsResponseBody response = new ListDefaultKnowledgeBaseConnectorsResponseBody();
+        response.setTotal((long) connectors.size());
+        response.setConnectors(connectors.stream().map(this::toKnowledgeBaseConnectorDetail).toList());
+        return response;
     }
 
     private KnowledgeBaseConnectorDetail toKnowledgeBaseConnectorDetail(
@@ -426,26 +472,26 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
     public ShowDefaultKnowledgeBaseConnectionDetailResponseBody showDefaultKnowledgeBaseConnection(String projectId,
         String kbConnectionId) {
         checkPermission();
-        ShowDefaultKnowledgeBaseConnectionDetailResponseBody showDefaultKnowledgeBaseConnectionDetailResponseBody
+        ShowDefaultKnowledgeBaseConnectionDetailResponseBody response
             = new ShowDefaultKnowledgeBaseConnectionDetailResponseBody();
-        List<KnowledgeBaseConnectionEntity> defaultConnections = connectionMapper.findDefaultConnection(
-            LAKE_SEARCH_INSIDE.getValue());
-        if (CollectionUtils.isEmpty(defaultConnections)) {
-            // 若未配置，则为null
-            showDefaultKnowledgeBaseConnectionDetailResponseBody.setKnowledgeBaseConnectionDetail(null);
-            return showDefaultKnowledgeBaseConnectionDetailResponseBody;
+        for (String connectorId : SUPPORTED_DEFAULT_CONNECTORS) {
+            List<KnowledgeBaseConnectionEntity> defaultConnections = connectionMapper.findDefaultConnection(
+                connectorId);
+            if (CollectionUtils.isEmpty(defaultConnections)) {
+                continue;
+            }
+            KnowledgeBaseConnectionEntity knowledgeBaseConnectionEntity = Optional.ofNullable(
+                defaultConnections.get(0)).orElse(new KnowledgeBaseConnectionEntity());
+            DefaultKnowledgeBaseConnectionDetail defaultKnowledgeBaseConnectionDetail
+                = kbConnectionConverter.toDefaultKnowledgeBaseConnectionDetail(knowledgeBaseConnectionEntity);
+            List<ConnectionParamInfo> connectionParamInfos = kbConnectionConverter.kbConnectionParams2ConnectionParamInfos(
+                knowledgeBaseConnectionEntity.getParams());
+            defaultKnowledgeBaseConnectionDetail.setParams(connectionParamInfos);
+            response.setKnowledgeBaseConnectionDetail(defaultKnowledgeBaseConnectionDetail);
+            return response;
         }
-        KnowledgeBaseConnectionEntity knowledgeBaseConnectionEntity = Optional.ofNullable(defaultConnections.get(0))
-            .orElse(new KnowledgeBaseConnectionEntity());
-
-        DefaultKnowledgeBaseConnectionDetail defaultKnowledgeBaseConnectionDetail
-            = kbConnectionConverter.toDefaultKnowledgeBaseConnectionDetail(knowledgeBaseConnectionEntity);
-        List<ConnectionParamInfo> connectionParamInfos = kbConnectionConverter.kbConnectionParams2ConnectionParamInfos(
-            knowledgeBaseConnectionEntity.getParams());
-        defaultKnowledgeBaseConnectionDetail.setParams(connectionParamInfos);
-        showDefaultKnowledgeBaseConnectionDetailResponseBody.setKnowledgeBaseConnectionDetail(
-            defaultKnowledgeBaseConnectionDetail);
-        return showDefaultKnowledgeBaseConnectionDetailResponseBody;
+        response.setKnowledgeBaseConnectionDetail(null);
+        return response;
     }
 
     @Override
@@ -456,7 +502,9 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
         checkPermission();
         try {
             boolean result = false;
-            if (Strings.CS.equals(body.getConnectorId(), LAKE_SEARCH_INSIDE.getValue())) {
+            if (OPENJIUWEN_INSIDE.getValue().equals(body.getConnectorId())) {
+                result = true;
+            } else if (Strings.CS.equals(body.getConnectorId(), LAKE_SEARCH_INSIDE.getValue())) {
                 // 校验参数与连接器中定义的参数是否一致并加密
                 List<ConnectionParamInfo> connectionParamInfos
                     = knowledgeBaseConnectionValidateService.checkAndEncryptedParams(body.getConnectorId(),
@@ -496,7 +544,8 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
         log.info("operation log projectId: {}, userId:{}, UpdateDefaultKnowledgeBaseConnection", projectId,
             RequestContextUtils.getRequestUserId());
         checkPermission();
-        if (KERBEROS.equalsIgnoreCase(authMode)) {
+        if (KERBEROS.equalsIgnoreCase(authMode)
+            && LAKE_SEARCH_INSIDE.getValue().equals(body.getConnectorId())) {
             log.error("do not support to config default knowledge base connection with kerberos");
             throw new AgentBaseException(ErrorCode.INVALID_KNOWLEDGE_REPO_REQUEST, KERBEROS);
         }
@@ -505,7 +554,6 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
             return new UpdateDefaultKnowledgeBaseConnectionResponse().setId(kbConnectionId);
         }
         if (!Strings.CS.equals(kbConnectionId, DEFAULT_CONNECTION_ID)) {
-            // 当前先只支持更新默认LakeSearch，其余不支持
             log.error("do not support to update config default knowledge base connection with connectionId [{}]",
                 body.getConnectorId());
             throw new AgentBaseException(ErrorCode.SERVER_INTERNAL_ERROR);
@@ -520,25 +568,24 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
         connectionMapper.update(entity);
 
         // 连接信息独立存储，更新连接文件即可，无需刷新关联的知识库文件
-        // 默认 LakeSearch 连接需要注入 YAML 配置中的 project_id 和 application_id
         try {
             KnowledgeBaseConnectorEntity connector = connectorMapper.find(body.getConnectorId());
             entity.setConnectorId(body.getConnectorId());
-            // 更新时需要从 DB 获取完整的连接实体（包含 status 等字段）
             KnowledgeBaseConnectionEntity fullEntity = connectionMapper.findById(kbConnectionId);
+            KnowledgeBaseConnectionEntity obsEntity = fullEntity != null ? fullEntity : entity;
             if (fullEntity != null) {
-                // 用更新请求的 params 替换原有 params
                 fullEntity.setParams(entity.getParams());
                 fullEntity.setConnectorId(entity.getConnectorId());
-                kbConnectionStorageService.syncDefaultConnectionToObs(
-                    fullEntity,
-                    connector != null ? connector.getType() : null,
-                    connector != null ? connector.getName() : null,
-                    lakeSearchProjectId, lakeSearchApplicationId);
+            }
+            if (OPENJIUWEN_INSIDE.getValue().equals(body.getConnectorId())) {
+                kbConnectionStorageService.writeConnectionToObs(
+                    obsEntity,
+                    connector != null ? connector.getType() : "inside",
+                    connector != null ? connector.getName() : "OpenJiuwen",
+                    null);
             } else {
-                // DB 中找不到完整实体，使用请求中的部分实体
                 kbConnectionStorageService.syncDefaultConnectionToObs(
-                    entity,
+                    obsEntity,
                     connector != null ? connector.getType() : null,
                     connector != null ? connector.getName() : null,
                     lakeSearchProjectId, lakeSearchApplicationId);
@@ -568,11 +615,12 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
         }
     }
 
-    public void checkDefaultKbConnectionParams(List<ConnectionParamInfo> params) {
+    public void checkDefaultKbConnectionParams(String connectorId, List<ConnectionParamInfo> params) {
         if (params == null || params.isEmpty()) {
             return;
         }
-        params.forEach(this::validateSingleItemAndThrow);
+        Set<String> requiredFields = getRequiredFields(connectorId);
+        params.forEach(item -> validateSingleItemAndThrow(item, requiredFields));
         String authModeParamValue = params.stream()
             .filter(item -> AUTH_MODE.equals(item.getCode()))
             .map(ConnectionParamInfo::getValue)
@@ -593,13 +641,20 @@ public class KnowledgeBaseConnectionConfigMgmtImpl implements IKnowledgeBaseConn
         }
     }
 
-    private void validateSingleItemAndThrow(ConnectionParamInfo item) {
+    private Set<String> getRequiredFields(String connectorId) {
+        if (OPENJIUWEN_INSIDE.getValue().equals(connectorId)) {
+            return Set.of(AUTH_MODE);
+        }
+        return REQUIRED_FIELDS;
+    }
+
+    private void validateSingleItemAndThrow(ConnectionParamInfo item, Set<String> requiredFields) {
         if (item.getCode() == null || item.getCode().trim().isEmpty()) {
             log.error("code is null");
             throw new AgentBaseException(ErrorCode.INVALID_PARAMETER, "code");
         }
 
-        if (REQUIRED_FIELDS.contains(item.getCode())) {
+        if (requiredFields.contains(item.getCode())) {
             if (!org.springframework.util.StringUtils.hasLength(item.getValue())) {
                 log.error("{} is null", item.getCode());
                 throw new AgentBaseException(ErrorCode.INVALID_PARAMETER, item.getCode());

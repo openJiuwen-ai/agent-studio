@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
+  -->
+
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.openjiuwen.studio.agent.agentbase.mapper.KnowledgeFileMapper">
+
+    <resultMap id="fileResultMap" type="com.openjiuwen.studio.agent.agentbase.entity.KnowledgeFileEntity">
+        <id property="fileId" column="file_id"/>
+        <result property="kbId" column="kb_id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="fileName" column="file_name"/>
+        <result property="fileType" column="file_type"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="fileStatus" column="file_status"/>
+        <result property="fileTags" column="file_tags"/>
+        <result property="docIds" column="doc_ids"/>
+        <result property="obsPath" column="obs_path"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        file_id, kb_id, project_id, file_name, file_type, file_size,
+        file_status, file_tags, doc_ids, obs_path, create_time, update_time
+    </sql>
+
+    <insert id="insertFile" parameterType="com.openjiuwen.studio.agent.agentbase.entity.KnowledgeFileEntity">
+        INSERT INTO t_knowledge_file (file_id, kb_id, project_id, file_name, file_type,
+                                      file_size, file_status, file_tags, doc_ids, obs_path,
+                                      create_time, update_time)
+        VALUES (#{fileId}, #{kbId}, #{projectId}, #{fileName}, #{fileType},
+                #{fileSize}, #{fileStatus}, #{fileTags}, #{docIds}, #{obsPath},
+                #{createTime}, #{updateTime})
+    </insert>
+
+    <delete id="deleteByFileId">
+        DELETE FROM t_knowledge_file
+        WHERE file_id = #{fileId}
+    </delete>
+
+    <delete id="deleteByKbId">
+        DELETE FROM t_knowledge_file
+        WHERE kb_id = #{kbId}
+    </delete>
+
+    <select id="selectByFileId" resultMap="fileResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_knowledge_file
+        WHERE file_id = #{fileId}
+    </select>
+
+    <select id="selectByKbId" resultMap="fileResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM t_knowledge_file
+        WHERE kb_id = #{kbId}
+          AND project_id = #{projectId}
+        <if test="fileName != null and fileName != ''">
+            AND file_name LIKE CONCAT('%', #{fileName}, '%')
+        </if>
+        <if test="fileType != null and fileType != ''">
+            AND file_type = #{fileType}
+        </if>
+        <if test="fileStatus != null and fileStatus != ''">
+            AND file_status = #{fileStatus}
+        </if>
+        ORDER BY create_time DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countByKbId" resultType="int">
+        SELECT COUNT(1)
+        FROM t_knowledge_file
+        WHERE kb_id = #{kbId}
+          AND project_id = #{projectId}
+        <if test="fileName != null and fileName != ''">
+            AND file_name LIKE CONCAT('%', #{fileName}, '%')
+        </if>
+        <if test="fileType != null and fileType != ''">
+            AND file_type = #{fileType}
+        </if>
+        <if test="fileStatus != null and fileStatus != ''">
+            AND file_status = #{fileStatus}
+        </if>
+    </select>
+
+    <update id="updateFileStatus">
+        UPDATE t_knowledge_file
+        SET file_status = #{fileStatus},
+            <if test="docIds != null">
+                doc_ids = #{docIds},
+            </if>
+            update_time = #{updateTime}
+        WHERE file_id = #{fileId}
+    </update>
+
+</mapper>

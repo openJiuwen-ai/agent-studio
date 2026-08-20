@@ -11,6 +11,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 上传文档到 openjiuwen 知识库响应。
@@ -26,6 +27,9 @@ public class OpenJiuwenUploadResp implements Serializable {
 
     @JsonProperty("doc_count")
     private Integer docCount;
+
+    @JsonProperty("doc_ids")
+    private List<String> docIds;
 
     private String message;
 }
