@@ -89,9 +89,13 @@
 
     <nz-form-item *ngIf="myForm.value.auth_type === API_KEY">
       <nz-form-label nzRequired>{{ 'api_key_input' | i18nextEager }}</nz-form-label>
-      <nz-form-control [nzErrorTip]="'api_key_input' | i18nextEager">
+      <nz-form-control [nzErrorTip]="apiKeyErrorTpl">
         <input nz-input type="password" formControlName="apikey" class="w-full" autocomplete="new-password" (input)="onAuthInputChange('apikey', $event)" />
         <div [innerHTML]="'api_auth_tip' | i18nextEager" class="mt-1 text-xs text-gray-500"></div>
+        <ng-template #apiKeyErrorTpl let-control>
+          <ng-container *ngIf="control.hasError('required'); else invalidChars">{{ 'api_key_input' | i18nextEager }}</ng-container>
+          <ng-template #invalidChars>{{ 'api_key_invalid' | i18nextEager }}</ng-template>
+        </ng-template>
       </nz-form-control>
     </nz-form-item>
 

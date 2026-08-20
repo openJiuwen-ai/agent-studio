@@ -13,7 +13,7 @@ import { I18nNamespace } from '@i18n';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { NzModalRef } from 'ng-zorro-antd/modal';
 import { AppFlowRepoService } from '@services/agent-center/app-flow-repo.service';
-import { FormBuilder, FormControl, FormGroup, FormArray, NgForm, ValidationErrors } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, FormArray, NgForm, ValidationErrors, Validators } from '@angular/forms';
 import { CommonValidation } from '@shared/validation/commonValidation';
 
 @Component({
@@ -41,6 +41,9 @@ export class ModelAuthModalComponent {
   @ViewChild('authkeyForm') authkeyForm: NgForm;
   @Input() id: string = '';
   @Output() saveSuccess = new EventEmitter<any>();
+
+  // API Key/AK/SK/AppCode 合法字符：仅可见 ASCII 可打印字符（0x21-0x7E），禁空格/控制/零宽/非ASCII
+  private apiKeyPattern = /^[!-~]+$/;
 
   public radioList: Array<{ label: string; id: string; tip?: string; show?: boolean }> = [
     {
@@ -176,18 +179,18 @@ export class ModelAuthModalComponent {
 
     if (auth === 'API_KEY') {
       this.resetControl();
-      this.apiKeyForm.controls.apikey.setValidators([]);
+      this.apiKeyForm.controls.apikey.setValidators([Validators.required, Validators.pattern(this.apiKeyPattern)]);
     }
 
     if (auth === 'AK_SK' || auth === 'HMAC') {
       this.resetControl();
-      this.apiKeyForm.controls.ak.setValidators([]);
-      this.apiKeyForm.controls.sk.setValidators([]);
+      this.apiKeyForm.controls.ak.setValidators([Validators.required, Validators.pattern(this.apiKeyPattern)]);
+      this.apiKeyForm.controls.sk.setValidators([Validators.required, Validators.pattern(this.apiKeyPattern)]);
     }
 
     if (auth === 'APP_CODE') {
       this.resetControl();
-      this.apiKeyForm.controls.appCode.setValidators([]);
+      this.apiKeyForm.controls.appCode.setValidators([Validators.required, Validators.pattern(this.apiKeyPattern)]);
     }
 
     if (auth === 'CUSTOM_APIKEY') {
@@ -248,11 +251,9 @@ export class ModelAuthModalComponent {
   }
 
   public confirm() {
-    let errors: ValidationErrors | null;
-    if (this.apiKeyForm.value.auth_type === 'CUSTOM_APIKEY') {
-      errors = null;
-    } else {
-      errors = null;
+    if (this.apiKeyForm.invalid) {
+      this.apiKeyForm.markAllAsTouched();
+      return;
     }
     const params = this.handleAutoInfo();
     this.appFlowRepoServe.saveAutheConfig(params, this.id).then(res => {
