@@ -83,6 +83,8 @@ export class ImportModalComponent {
 
   public isLoading = false;
 
+  public expandedRows: Set<number> = new Set();
+
   // 是否正在导入中
   public isImporting = false;
 
@@ -718,49 +720,49 @@ export class ImportModalComponent {
   public getStatusInfo(childItem) {
     const typeMap = {
       "newResource": {
-        icon: "cloudx-action-state-operation",
+        icon: "check-circle",
         color: "#5db303",
         text: this.i18n.transform("add_resource"),
         tip: this.i18n.transform("add_resource_tip")
       },
       "newResourceVersion": {
-        icon: "cloudx-action-state-operation",
+        icon: "check-circle",
         color: "#5db303",
         text: this.i18n.transform("add_resource_version"),
         tip: this.i18n.transform("add_resource_version_tip")
       },
       "updateResource": {
-        icon: "cloudx-action-state-operation",
+        icon: "check-circle",
         color: "#5db303",
         text: this.i18n.transform("update_resource"),
         tip: this.i18n.transform("update_resource_tip")
       },
       "resourceExists": {
-        icon: "cloudx-action-state-freeze",
+        icon: "warning",
         color: "#fe8803",
         text: this.i18n.transform("exist_resource"),
         tip: this.i18n.transform("exist_resource_tip")
       },
       "prohibited": {
-        icon: "cloudx-action-state-freeze",
+        icon: "warning",
         color: "#fe8803",
         text: this.i18n.transform("prohibited_resource"),
         tip: this.i18n.transform("prohibited_resource_tip")
       },
       "oldUpdateResource": {
-        icon: "cloudx-action-state-operation",
+        icon: "check-circle",
         color: "#5db303",
         text: this.i18n.transform("update_resource"),
         tip: this.i18n.transform("update_resource_tip2")
       },
       "resourceMatch": {
-        icon: "cloudx-action-state-operation",
+        icon: "check-circle",
         color: "#5db303",
         text: this.i18n.transform("match_resource"),
         tip: this.i18n.transform("match_resource_tip")
       },
       "resourceNotMatch": {
-        icon: "cloudx-action-state-freeze",
+        icon: "warning",
         color: "#fe8803",
         text: this.i18n.transform("not_match_resource"),
         tip: this.i18n.transform("not_match_resource_tip")
@@ -781,4 +783,17 @@ export class ImportModalComponent {
       }
     }
   }
+
+  public toggleExpand(index: number): void {
+    if (this.expandedRows.has(index)) {
+      this.expandedRows.delete(index);
+    } else {
+      this.expandedRows.add(index);
+    }
+  }
+
+  public isExpanded(index: number): boolean {
+    return this.expandedRows.has(index);
+  }
+
 }
