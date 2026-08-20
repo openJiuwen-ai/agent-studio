@@ -11,17 +11,26 @@
             form.value.name
           }}</span>
 
-        <input
-          *ngIf="isEditTitle"
-          nz-input
-          class="w-[240px]"
-          [placeholder]="'input_placeholder' | i18nextEager"
-          [minlength]="1"
-          [maxlength]="33"
-          [(ngModel)]="editTitleValue"
-          (ngModelChange)="onEditTitleChange($event)"
-          [class.input-error]="form.controls.name.invalid && form.controls.name.dirty"
-        />
+        <div class="title-input-wrapper" *ngIf="isEditTitle">
+          <input
+            nz-input
+            class="w-[240px]"
+            [placeholder]="'input_placeholder' | i18nextEager"
+            [minlength]="1"
+            [maxlength]="33"
+            [(ngModel)]="editTitleValue"
+            (ngModelChange)="onEditTitleChange($event)"
+            [class.input-error]="form.controls.name.invalid && form.controls.name.dirty"
+          />
+          <div
+            class="error-tip"
+            *ngIf="form.controls.name.invalid && form.controls.name.dirty"
+          >
+            {{ form.controls.name.hasError('required')
+              ? ('input_cannot_be_empty' | i18nextEager)
+              : ('variable_validator9' | i18nextEager) }}
+          </div>
+        </div>
 
         <div class="ml-[10px] flex items-center" *ngIf="isEditTitle">
           <button
@@ -68,7 +77,7 @@
       />
       <div
         class="error-tip"
-        *ngIf="form.controls.name.invalid && (form.controls.name.dirty || form.controls.name.touched)"
+        *ngIf="!isEditTitle && form.controls.name.invalid && (form.controls.name.dirty || form.controls.name.touched)"
       >
         {{ form.controls.name.hasError('required')
           ? ('input_cannot_be_empty' | i18nextEager)
