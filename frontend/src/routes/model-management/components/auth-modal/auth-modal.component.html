@@ -49,9 +49,9 @@
       <label class="text-sm">{{item.labelName}}</label>
     </div>
     <nz-input-password *ngIf="item['hide']">
-      <input nz-input [(ngModel)]="authsInfo[item.key]" (input)="onAuthInputChange(item.key, $event)" />
+      <input nz-input [(ngModel)]="authsInfo[item.key]" (input)="onAuthInputChange(item.key, $event)" [readonly]="!!authsInfo.auth_id" />
     </nz-input-password>
-    <input class="w-full" *ngIf="!item['hide']" [readonly]="" nz-input [(ngModel)]="authsInfo[item.key]"/>
+    <input class="w-full" *ngIf="!item['hide']" [readonly]="!!authsInfo.auth_id" nz-input [(ngModel)]="authsInfo[item.key]"/>
     </ng-container>
   </ng-container>
 </div>
