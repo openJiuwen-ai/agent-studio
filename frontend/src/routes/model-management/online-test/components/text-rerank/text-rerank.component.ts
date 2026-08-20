@@ -188,6 +188,7 @@ export class TextRerankComponent {
         this.scrollToBottom();
       })
       .catch((error) => {
+        if (this.abortController?.signal?.aborted) { return; }
         this.result = null;
         this.srcData.data = [];
         this.errorMessage = this.extractErrorMsg(error);

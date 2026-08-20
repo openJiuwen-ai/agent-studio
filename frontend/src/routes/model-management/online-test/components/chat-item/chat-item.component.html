@@ -42,7 +42,7 @@
         <div *ngIf="content['reasoning_content']" class="assistant-content">
           <div class="collapse-btn" [class.collapse-btn-border]="content['reason_hidden']">
             <div class="flex items-center">
-              <img alt="" *ngIf="!content['content']" [src]="changeUrl('assets/agent-center/images/running.webp')" [alt]="'loading' | i18nextEager" />
+              <img alt="" *ngIf="!content['content'] && !content['abort']" [src]="changeUrl('assets/agent-center/images/running.webp')" [alt]="'loading' | i18nextEager" />
               <img alt="" *ngIf="content['content']" [src]="cdnUrl('assets/agent-center/images/deep-success.svg')"/>
               <span style="margin-top: 2px">{{ content['abort'] ? ('thought_terminated'|i18nextEager) : (content['content'] ? ('complete_deep_thinking'|i18nextEager) : ('deep_thinking'|i18nextEager)) }}</span>
             </div>
