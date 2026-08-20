@@ -701,7 +701,6 @@ export class CreateToolComponent implements OnInit {
 
   onInput() {
     window.setTimeout(() => {
-      this.requestArgs = mapTreeAddKeyIndex(this.requestArgs, 0);
       if (!this.inputForm) {
         return;
       }
