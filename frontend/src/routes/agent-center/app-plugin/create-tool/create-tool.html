@@ -173,10 +173,9 @@
                       </div>
                       @for(tabItem of tabs; track tabItem.id) {
                       <nz-tree
-                        id="cp-req-tree"
+                        [id]="'cp-req-tree-' + tabItem.id"
                         [hidden]="tabItem.id !== selectedTab"
                         [nzData]="showParams(tabItem.id)"
-                        bnzBlockNode
                         nzShowLine
                         [nzShowIcon]="false"
                         [nzTreeTemplate]="nzTreeTemplate1"
@@ -594,7 +593,7 @@
                     <div class="w-[96px] text-label">{{ 'param_type' | i18nextEager }}</div>
                     <div class="w-[400px] text-label">{{ 'param_desc' | i18nextEager }}</div>
                   </div>
-                  <nz-tree id="cp-res-tree" [nzData]="patchArgs" bnzBlockNode nzShowLine [nzShowIcon]="false" [nzTreeTemplate]="nzTreeTemplate2">
+                  <nz-tree id="cp-res-tree" [nzData]="patchArgs" nzShowLine [nzShowIcon]="false" [nzTreeTemplate]="nzTreeTemplate2">
                     <ng-template #nzTreeTemplate2 let-node let-origin="origin" let-i="index">
                       <div class="mt-[8px] flex gap-2 leading-none">
                         <div style="flex: 1">
@@ -724,7 +723,7 @@
                   <div class="w-[175px] text-label">{{ 'param_type' | i18nextEager }}</div>
                   <div class="w-[90px] text-label">{{ 'required' | i18nextEager }}</div>
                 </div>
-                <nz-tree id="cp-res-tree" [nzData]="responseArgs" nzBlockNode nzShowLine [nzShowIcon]="false" [nzTreeTemplate]="nzTreeTemplate3">
+                <nz-tree id="cp-resp-tree" [nzData]="responseArgs" nzShowLine [nzShowIcon]="false" [nzTreeTemplate]="nzTreeTemplate3">
                   <ng-template #nzTreeTemplate3 let-node let-origin="origin" let-i="index">
                     <div class="mt-[8px] flex gap-2 leading-none" style="flex: 1">
                       <div style="flex: 1" class="getresponseargs">
