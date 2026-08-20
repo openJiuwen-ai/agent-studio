@@ -36,6 +36,7 @@ export class OptimizePromptModalComponent implements OnInit {
     fetching: false,
     optimizeResult: '',
     isLoading: false,
+    isError: false,
   };
 
   public agentId = '';
@@ -100,6 +101,10 @@ export class OptimizePromptModalComponent implements OnInit {
 
   /** 弹窗中智能生成的Prompt，点击确定时，调用put接口实时保存 */
   public confirm() {
+    if (this.state.isError) {
+      this.modalRef.destroy();
+      return;
+    }
     this.close();
     this.modalRef.destroy();
     if (this.isWorkflow) {
@@ -144,17 +149,21 @@ export class OptimizePromptModalComponent implements OnInit {
   private optimizePrompt(inputs: any) {
     this.state.fetching = true;
     this.state.isLoading = true; // 显示loading+智能生成中
+    this.state.isError = false;
     this.sseInstance = this.appAgentRepoServe.optimizePromptSSE(inputs, this.agentId, this.lang, {
       onMessage: (event: any) => {
         try {
           const { code, message, data } = event.data && commonLogicWorkflow.stringToObject(event.data);
           if (code === 0 && data) {
             this.state.isLoading = false;
+            this.state.isError = false;
             this.state.optimizeResult += data;
           }
           if (code !== 0) {
             this.state.isLoading = false;
+            this.state.isError = true;
             this.state.optimizeResult = message !== '' ? message : this.i18n.transform('NetErrorTips');
+            MessageComponent.showError(this.state.optimizeResult, 3000);
           }
         } catch {}
         this.scrollToBottom();
@@ -168,6 +177,7 @@ export class OptimizePromptModalComponent implements OnInit {
       onError: (error: { data: string; status: any }) => {
         this.state.fetching = false;
         this.state.isLoading = false;
+        this.state.isError = true;
         if (error.data) {
           try {
             const errInfo = JSON.parse(error.data);
@@ -183,6 +193,7 @@ export class OptimizePromptModalComponent implements OnInit {
         } else {
           this.state.optimizeResult = this.i18n.transform('NetErrorTips');
         }
+        MessageComponent.showError(this.state.optimizeResult, 3000);
         this.scrollToBottom();
         this.cdr.markForCheck();
       },
@@ -194,6 +205,7 @@ export class OptimizePromptModalComponent implements OnInit {
         /** 如果没有之前的回答 */
         if (this.state.optimizeResult === '') {
           this.state.optimizeResult = this.i18n.transform('streaming_timeout');
+          this.state.isError = true;
         }
         this.scrollToBottom();
         this.cdr.markForCheck();
