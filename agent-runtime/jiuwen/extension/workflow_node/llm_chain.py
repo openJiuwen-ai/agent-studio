@@ -18,7 +18,6 @@ LLMChain 组件 - 完整迁移自商用版本
 
 import asyncio
 import base64
-import html
 import ast
 import json
 import re
@@ -32,7 +31,6 @@ from jiuwen.common.exception.base import JiuWenBaseException
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.foundation.llm import Model
 from openjiuwen.core.foundation.prompt import PromptTemplate
-from jiuwen.prompt import Prompt, Template
 from openjiuwen.core.session.stream.base import CustomSchema
 from openjiuwen.core.workflow import WorkflowComponent
 from pydantic import BaseModel, StrictStr, Field, ValidationError
@@ -681,7 +679,11 @@ class LLMChain(WorkflowComponent):
             return messages
 
         messages[last_user_idx]["content"] = instruction.replace(
-            "${query}", html.escape(user_content)
+            # NOTE: 不做 html.escape(与 orchestration 栈 format_prompt 的修复保持一致)。
+            # 此处 user_content 是渲染后的工作流模板(模型文本 Prompt,HTML 转义会改变语义),
+            # 合法包含 JSON 示例引号("key": "value")与 "&" 连接符(如 "e5051&n消费卡");
+            # html.escape 会把它们转义成 &quot; / &amp;,破坏模型收到的格式指令。
+            "${query}", user_content
         )
         return messages
 
