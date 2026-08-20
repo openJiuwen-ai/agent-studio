@@ -172,6 +172,18 @@ spec:
             # 源日志文件路径，默认 /opt/cloud/logs/common.log
             - name: BACKUP_COMMON_LOG_FILE
               value: ''
+            # 转储策略：TIME=按时间(默认)，SIZE=按文件大小
+            - name: BACKUP_COMMON_LOG_STRATEGY
+              value: ''
+            # 转储后是否压缩：true=gzip压缩(默认)，false=不压缩
+            - name: BACKUP_COMMON_LOG_COMPRESS
+              value: ''
+            # SIZE策略触发阈值，单位MB，默认500
+            - name: BACKUP_COMMON_LOG_MAX_SIZE
+              value: ''
+            # SIZE策略检查间隔，单位分钟，默认1
+            - name: BACKUP_COMMON_LOG_SIZE_CHECK_INTERVAL
+              value: ''
             # 日志详细模式，设为true时显示完整错误信息
             - name: LOG_VERBOSE
               value: 'true'
