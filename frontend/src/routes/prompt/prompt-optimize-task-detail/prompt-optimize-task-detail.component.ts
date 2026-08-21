@@ -525,6 +525,8 @@ export class PromptOptimizeTaskDetailComponent {
           this.promptOptimizeService.savePromptTemplate(promptTemplate).then(res => {
             const href = `${window.location.href.split('#')[0]}#/home/agent-center/library-home?tabId=prompt`;
             MessageComponent.showSuccess(`${this.i18n.transform('prompt_creation_success')} <a href="${href}">${this.i18n.transform('goto_view')}</a>`);
+            // 保存成功后关闭抽屉，与其他入口(系统模板/模板列表)行为一致，避免停留导致重复保存
+            drawerRef?.close();
           });
         },
       },
