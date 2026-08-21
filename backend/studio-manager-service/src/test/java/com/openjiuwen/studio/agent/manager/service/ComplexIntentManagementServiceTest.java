@@ -12,6 +12,7 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.LanguageUtils;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
@@ -28,6 +29,7 @@ import com.openjiuwen.studio.agent.manager.entity.ComplexIntentBranchEntity;
 import com.openjiuwen.studio.agent.manager.entity.ComplexIntentEntity;
 import com.openjiuwen.studio.agent.manager.mapper.ComplexIntentBranchMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ComplexIntentMapper;
+import com.openjiuwen.studio.agent.manager.utils.XmlParser;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +44,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.mock.web.MockMultipartFile;
+
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -396,5 +404,46 @@ class ComplexIntentManagementServiceTest {
             Resource result = complexIntentManagementService.exportIntentTemplate("proj-1", "ws-1");
             assertNotNull(result);
         }
+    }
+
+    @Test
+    void testImportBranch_InvalidBranchIdFormat_Chinese() throws Exception {
+        try (MockedStatic<XmlParser> xmlParser = mockStatic(XmlParser.class)) {
+            MockMultipartFile file = buildIntentExcel("TestIntent", "newbranch", "ex1", "你好111");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> complexIntentManagementService.importIntentBranch("ws-1", "proj-1", null, file));
+            assertEquals(StudioError.IMPORT_COMPLEX_INTENT_BRANCH_ID_INVALID, ex.getErrorCode());
+        }
+    }
+
+    @Test
+    void testImportBranch_InvalidBranchIdFormat_Spaces() throws Exception {
+        try (MockedStatic<XmlParser> xmlParser = mockStatic(XmlParser.class)) {
+            MockMultipartFile file = buildIntentExcel("TestIntent", "newbranch", "ex1", "branch id with spaces");
+
+            AgentStudioException ex = assertThrows(AgentStudioException.class,
+                () -> complexIntentManagementService.importIntentBranch("ws-1", "proj-1", null, file));
+            assertEquals(StudioError.IMPORT_COMPLEX_INTENT_BRANCH_ID_INVALID, ex.getErrorCode());
+        }
+    }
+
+    private MockMultipartFile buildIntentExcel(String sheetName, String branchName, String examples,
+        String branchId) throws Exception {
+        XSSFWorkbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet(sheetName);
+        Row header = sheet.createRow(0);
+        header.createCell(0).setCellValue("意图名称");
+        header.createCell(1).setCellValue("意图样例");
+        header.createCell(2).setCellValue("意图分支ID");
+        Row data = sheet.createRow(1);
+        data.createCell(0).setCellValue(branchName);
+        data.createCell(1).setCellValue(examples);
+        data.createCell(2).setCellValue(branchId);
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        workbook.write(bos);
+        workbook.close();
+        return new MockMultipartFile("file", "test.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", bos.toByteArray());
     }
 }

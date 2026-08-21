@@ -90,6 +90,10 @@ public class ComplexIntentManagementService implements IComplexIntentManagementS
 
     private static final Pattern NAME_PATTERN = Pattern.compile(NAME_REGEX);
 
+    private static final String BRANCH_ID_REGEX = "^[a-zA-Z0-9_-]+$";
+
+    private static final Pattern BRANCH_ID_PATTERN = Pattern.compile(BRANCH_ID_REGEX);
+
     @Autowired
     ComplexIntentMapper complexIntentMapper;
 
@@ -806,6 +810,12 @@ public class ComplexIntentManagementService implements IComplexIntentManagementS
                     log.error("Failed to import intent file, branch name:{} invalid.", branch.getName());
                     throw new AgentStudioException(StudioError.IMPORT_COMPLEX_INTENT_BRANCH_NAME_INVALID, branch
                         .getName());
+                }
+                if (StringUtils.isNotEmpty(branch.getBranchId())
+                    && !BRANCH_ID_PATTERN.matcher(branch.getBranchId()).matches()) {
+                    log.error("Failed to import intent file, branch ID:{} invalid.", branch.getBranchId());
+                    throw new AgentStudioException(StudioError.IMPORT_COMPLEX_INTENT_BRANCH_ID_INVALID,
+                        branch.getBranchId());
                 }
                 for (String example : branch.getExamples()) {
                     if (example.length() > 63) {
