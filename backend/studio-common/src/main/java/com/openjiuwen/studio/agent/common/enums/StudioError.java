@@ -1713,6 +1713,11 @@ public enum StudioError {
      */
     COMPLEX_INTENT_EXAMPLE_REPEATED(BAD_REQUEST, CONFIG, "1024"),
 
+    /**
+     * 导入的意图分支ID格式无效
+     */
+    IMPORT_COMPLEX_INTENT_BRANCH_ID_INVALID(BAD_REQUEST, CONFIG, "1025"),
+
     /* ***********************模型接入***********************/
     /**
      * 缺少模型配置
