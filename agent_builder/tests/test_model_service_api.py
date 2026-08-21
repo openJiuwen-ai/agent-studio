@@ -444,3 +444,170 @@ def test_status_check_unsupported_model_type_short_circuits(monkeypatch):
     assert body["reason"] == "model type is not support to check."
     # 未发起任何上游调用
     assert fake.posted is None
+
+
+# ----------------------------- text embeddings facade -----------------------------
+
+
+def _make_strategy():
+    """构造一个 MODEL 策略（单模型 + API_KEY 认证），供 text_embeddings facade 测试使用。"""
+    from model_service.resolver import (
+        InterfaceProtocol, ModelServiceBase, ModelServiceDetail,
+        ModelStrategy, ProviderAuth, StrategyType,
+    )
+    model = ModelServiceBase(
+        id="m1", model_name="real-model",
+        api_url="http://up/v1/embeddings", provider_id="p1",
+        interface_protocol=InterfaceProtocol.OPENAI,
+        project_id="proj", workspace_id="ws", auth_id="a1",
+    )
+    auth = ProviderAuth(auth_id="a1", auth_type="API_KEY",
+                        auth_info={"api_key": "sk-test"})
+    detail = ModelServiceDetail(model=model, auth=auth, available=True, is_free_model=False)
+    return ModelStrategy(type=StrategyType.MODEL, name="real-model", models=[detail])
+
+
+class _EmbedFakeResp:
+    def __init__(self, payload, status=200):
+        self._payload = payload
+        self.status_code = status
+        self.text = str(payload)
+
+    def json(self):
+        return self._payload
+
+    async def aclose(self):
+        pass
+
+
+class _EmbedFakeClient:
+    def __init__(self, payload, status=200):
+        self.resp = _EmbedFakeResp(payload, status)
+        self.closed = False
+        self.posted = None
+
+    async def post(self, url, **kwargs):
+        self.posted = (url, kwargs)
+        return self.resp
+
+    async def aclose(self):
+        self.closed = True
+
+
+def test_text_embeddings_success(monkeypatch):
+    """文本向量化调测 — 上游 200，返回 embedding 结果。"""
+    from agent_builder.serve.apis import model_service_api
+    from model_service import dispatch
+
+    strategy = _make_strategy()
+
+    async def _fake_resolve(*a, **kw):
+        return strategy
+
+    monkeypatch.setattr(model_service_api.resolver, "resolve_strategy", _fake_resolve)
+
+    payload = {"data": [{"embedding": [0.1, 0.2, 0.3], "index": 0}]}
+    fake = _EmbedFakeClient(payload)
+    monkeypatch.setattr(dispatch, "build_httpx_client", lambda *a, **kw: fake)
+
+    # 构造最小 Request 对象
+    req = types.SimpleNamespace(
+        headers={"X-Owner-Project-Id": "proj", "X-Auth-Id": "a1", "X-Workspace-Id": "ws"},
+        query_params={},
+    )
+    body = model_service_api.EmbeddingRequest(model="m1", input="hello")
+
+    rsp = asyncio.run(model_service_api.text_embeddings(req, body))
+
+    assert rsp.status_code == 200
+    result = json.loads(rsp.body)
+    assert result["data"][0]["embedding"] == [0.1, 0.2, 0.3]
+    # 验证上游请求体只含 model + input
+    posted_body = fake.posted[1]["json"]
+    assert posted_body["model"] == "real-model"
+    assert posted_body["input"] == "hello"
+    assert fake.closed
+
+
+def test_text_embeddings_upstream_error_returns_error_response(monkeypatch):
+    """文本向量化调测 — 上游 500，返回错误契约（error_code/details）。"""
+    from agent_builder.serve.apis import model_service_api
+    from model_service import dispatch
+
+    strategy = _make_strategy()
+
+    async def _fake_resolve(*a, **kw):
+        return strategy
+
+    monkeypatch.setattr(model_service_api.resolver, "resolve_strategy", _fake_resolve)
+
+    fake = _EmbedFakeClient({"error": "boom"}, status=500)
+    monkeypatch.setattr(dispatch, "build_httpx_client", lambda *a, **kw: fake)
+
+    req = types.SimpleNamespace(
+        headers={"X-Owner-Project-Id": "proj", "X-Auth-Id": "a1", "X-Workspace-Id": "ws"},
+        query_params={},
+    )
+    body = model_service_api.EmbeddingRequest(model="m1", input="hello")
+
+    rsp = asyncio.run(model_service_api.text_embeddings(req, body))
+
+    result = json.loads(rsp.body)
+    assert result["error_code"] == "openjiuwen.02501049"
+    assert result["details"][0]["error_msg"]  # 透传上游错误信息
+    assert fake.closed
+
+
+def test_text_embeddings_strategy_not_found(monkeypatch):
+    """文本向量化调测 — 模型服务未发布（strategy=None），返回 404 通用错误。"""
+    from agent_builder.serve.apis import model_service_api
+
+    async def _fake_resolve(*a, **kw):
+        return None
+
+    monkeypatch.setattr(model_service_api.resolver, "resolve_strategy", _fake_resolve)
+
+    req = types.SimpleNamespace(
+        headers={"X-Owner-Project-Id": "proj", "X-Auth-Id": "a1", "X-Workspace-Id": "ws"},
+        query_params={},
+    )
+    body = model_service_api.EmbeddingRequest(model="m1", input="hello")
+
+    rsp = asyncio.run(model_service_api.text_embeddings(req, body))
+
+    # MODEL_SERVICE_NOT_PUBLISH 的 full_code=None → 通用兜底 {error:{code,message}}
+    assert rsp.status_code == 404
+    result = json.loads(rsp.body)
+    assert result["error"]["code"]  # MD_MODEL_SERVICE_NOT_PUBLISH
+    assert "not found" in result["error"]["message"]
+
+
+def test_text_embeddings_network_error_returns_500(monkeypatch):
+    """文本向量化调测 — httpx 传输异常（DNS/超时），返回 MD_INVOKE_MODEL_SERVICE_FAIL。"""
+    from agent_builder.serve.apis import model_service_api
+    from model_service import dispatch
+
+    strategy = _make_strategy()
+
+    async def _fake_resolve(*a, **kw):
+        return strategy
+
+    monkeypatch.setattr(model_service_api.resolver, "resolve_strategy", _fake_resolve)
+
+    class _BoomClient(_EmbedFakeClient):
+        async def post(self, url, **kwargs):
+            raise httpx.ConnectError("boom")
+
+    fake = _BoomClient(None)
+    monkeypatch.setattr(dispatch, "build_httpx_client", lambda *a, **kw: fake)
+
+    req = types.SimpleNamespace(
+        headers={"X-Owner-Project-Id": "proj", "X-Auth-Id": "a1", "X-Workspace-Id": "ws"},
+        query_params={},
+    )
+    body = model_service_api.EmbeddingRequest(model="m1", input="hello")
+
+    rsp = asyncio.run(model_service_api.text_embeddings(req, body))
+
+    result = json.loads(rsp.body)
+    assert result["error_code"] == "openjiuwen.02501049"
