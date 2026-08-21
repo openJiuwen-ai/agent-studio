@@ -301,7 +301,7 @@ export class ModalManagementDetailComponent {
   }
 
   private getText(data) {
-    if (data.auth_config_status) {
+    if (data.auth_config_status === 'part_available') {
       return this.i18n.transform('partial_access');
     } else if (data.auth_config_status === 'available') {
       return this.i18n.transform('auth_available');
