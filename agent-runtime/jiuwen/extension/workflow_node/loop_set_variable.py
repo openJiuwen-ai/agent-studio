@@ -75,9 +75,11 @@ class LoopSetVariable(LoopSetVariableComponent):
 
         # 获取会话级变量定义（由 Start 节点写入）
         session_var_defs = get_workflow_param(session, "_session_var_defs", {})
+        result_output: dict = {}
 
         for left, right in self._variable_mapping.items():
             left_ref_str = extract_origin_key(left)
+            right_ref_str = extract_origin_key(right) if isinstance(right, str) else str(right)
             # 获取原始值
             value = LoopSetVariableComponent.generate_value(session, right)
 
@@ -110,6 +112,7 @@ class LoopSetVariable(LoopSetVariableComponent):
                 if session_var_defs and var_name in session_var_defs:
                     await self._save_to_redis(session, f"{MEMORY_VAR_PATH_PREFIX}.{var_name}", {var_name: value})
 
+                result_output.setdefault("userFields", {})[var_name] = value
                 continue
             keys = left_ref_str.split(NESTED_PATH_SPLIT)
 
@@ -161,7 +164,17 @@ class LoopSetVariable(LoopSetVariableComponent):
             if self._is_session_var(left_ref_str, session_var_defs, keys):
                 # 写入 Redis 持久化
                 await self._save_to_redis(session, left_ref_str, output_data)
-        return None
+
+            if isinstance(output_data, dict):
+                for k, v in output_data.items():
+                    if k in result_output and isinstance(result_output[k], dict) and isinstance(v, dict):
+                        result_output[k].update(v)
+                    else:
+                        result_output[k] = v
+            else:
+                result_output = output_data
+
+        return result_output if result_output else None
 
     def _is_session_var(
         self, left_ref_str: str, session_var_defs: dict, keys: list
