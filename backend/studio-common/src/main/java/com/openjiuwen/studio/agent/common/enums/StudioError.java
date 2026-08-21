@@ -1718,6 +1718,18 @@ public enum StudioError {
      */
     IMPORT_COMPLEX_INTENT_BRANCH_ID_INVALID(BAD_REQUEST, CONFIG, "1025"),
 
+    /**
+     * 导入意图包时，sheet 页名称与已有意图包重名（列表页场景）
+     * args: [0]=撞名的 sheet 名
+     */
+    IMPORT_INTENT_PKG_NAME_DUPLICATE_BY_SHEET(BAD_REQUEST, CONFIG, "1026"),
+
+    /**
+     * 导入意图包时，意图包名输入框的值与已有意图包重名（详情页/新建页场景）
+     * args: [0]=撞名的意图包名
+     */
+    IMPORT_INTENT_PKG_NAME_DUPLICATE_BY_INPUT(BAD_REQUEST, CONFIG, "1027"),
+
     /* ***********************模型接入***********************/
     /**
      * 缺少模型配置
