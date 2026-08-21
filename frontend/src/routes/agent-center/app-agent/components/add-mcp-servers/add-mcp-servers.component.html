@@ -66,9 +66,14 @@
           </div>
         </div>
       </ng-template>
-      <div class="footer" *ngIf="!customMcpServers.isLoading && customMcpServers.list.length ">
+      <div class="footer" *ngIf="!customMcpServers.isLoading && customMcpServers.list.length">
+        <div class="footer-left">
+          <span>{{ 'total_number_of_records' | i18nextEager }}：{{ totalNumberPersonal }}</span>
+          <span class="footer-divider">|</span>
+          <span>{{ 'select_num' | i18nextEager }}{{ mcpSelected.length }}</span>
+        </div>
         <nz-pagination
-        [(nzPageIndex)]="curPagePersonal"
+          [(nzPageIndex)]="curPagePersonal"
           [nzTotal]="totalNumberPersonal"
           nzSimple
           (nzPageIndexChange)="getMCPListByPage('custom')"
