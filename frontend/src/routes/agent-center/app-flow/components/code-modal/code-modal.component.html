@@ -226,6 +226,7 @@
                         (ngModelChange)="onOutputParamTypeChange(origin); onSave()"
                         *ngIf="origin.depth === 5; else otherTypes"
                         [(ngModel)]="origin.type"
+                        [attr.title]="origin.type | paramLabel"
                         [disabled]="origin.source === 'system'"
                         [name]="'outputFormValue' + node.key"
                         [nzOptions]="$any(noneObjDataTypes)"
@@ -239,6 +240,7 @@
                         <nz-select
                           (ngModelChange)="onOutputParamTypeChange(origin); onSave()"
                           [(ngModel)]="origin.type"
+                          [attr.title]="origin.type | paramLabel"
                           [disabled]="origin.source === 'system'"
                           [name]="'outputFormValue' + node.key"
                           [nzOptions]="$any(outputDataTypes)"
