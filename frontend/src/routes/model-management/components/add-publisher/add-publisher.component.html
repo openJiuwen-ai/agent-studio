@@ -90,7 +90,7 @@
     <nz-form-item *ngIf="myForm.value.auth_type === API_KEY">
       <nz-form-label nzRequired>{{ 'api_key_input' | i18nextEager }}</nz-form-label>
       <nz-form-control [nzErrorTip]="'api_key_input' | i18nextEager">
-        <input nz-input type="password" formControlName="apikey" class="w-full" autocomplete="new-password" />
+        <input nz-input type="password" formControlName="apikey" class="w-full" autocomplete="new-password" (input)="onAuthInputChange('apikey', $event)" />
         <div [innerHTML]="'api_auth_tip' | i18nextEager" class="mt-1 text-xs text-gray-500"></div>
       </nz-form-control>
     </nz-form-item>
@@ -99,13 +99,13 @@
       <nz-form-item>
         <nz-form-label nzRequired>{{ 'enter_ak' | i18nextEager }}</nz-form-label>
         <nz-form-control [nzErrorTip]="'Required'">
-          <input nz-input type="password" formControlName="ak" class="w-full" />
+          <input nz-input type="password" formControlName="ak" class="w-full" (input)="onAuthInputChange('ak', $event)" />
         </nz-form-control>
       </nz-form-item>
       <nz-form-item>
         <nz-form-label nzRequired>{{ 'enter_sk' | i18nextEager }}</nz-form-label>
         <nz-form-control [nzErrorTip]="'Required'">
-          <input nz-input type="password" formControlName="sk" class="w-full" />
+          <input nz-input type="password" formControlName="sk" class="w-full" (input)="onAuthInputChange('sk', $event)" />
           <div [innerHTML]="'api_auth_tip_1' | i18nextEager" class="mt-1 text-xs text-gray-500"></div>
         </nz-form-control>
       </nz-form-item>
@@ -114,7 +114,7 @@
     <nz-form-item *ngIf="myForm.value.auth_type === APP_CODE">
       <nz-form-label nzRequired>{{ 'enter_AppCode' | i18nextEager }}</nz-form-label>
       <nz-form-control [nzErrorTip]="'Required'">
-        <input nz-input type="password" formControlName="appCode" class="w-full" />
+        <input nz-input type="password" formControlName="appCode" class="w-full" (input)="onAuthInputChange('appCode', $event)" />
         <div [innerHTML]="'api_auth_tip' | i18nextEager" class="mt-1 text-xs text-gray-500"></div>
       </nz-form-control>
     </nz-form-item>
@@ -161,6 +161,7 @@
                 maxlength="20000"
                 required
                 [(ngModel)]="param.auth_key"
+                (input)="onCustomApikeyInput(i, $event)"
                 [placeholder]="'input_placeholder' | i18nextEager"
                 #valModel="ngModel"
                 autocomplete="new-password"

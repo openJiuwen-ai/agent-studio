@@ -250,6 +250,39 @@ export class AddPublisherComponent implements OnInit {
     });
   }
 
+  /**
+   * 输入事件处理：过滤不可见控制字符和零宽字符
+   * 应用于 API Key、AK、SK、AppCode 等认证凭据输入框
+   */
+  onAuthInputChange(controlName: string, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const sanitized = CommonValidation.sanitizeInvisibleChars(input.value);
+    if (sanitized !== input.value) {
+      const cursorPos = Math.max(0, input.selectionStart - (input.value.length - sanitized.length));
+      this.myForm.controls[controlName]?.setValue(sanitized);
+      requestAnimationFrame(() => {
+        const pos = Math.min(cursorPos, sanitized.length);
+        input.setSelectionRange(pos, pos);
+      });
+    }
+  }
+
+  /**
+   * CUSTOM_APIKEY 模式下动态参数值的输入过滤
+   */
+  onCustomApikeyInput(index: number, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const sanitized = CommonValidation.sanitizeInvisibleChars(input.value);
+    if (sanitized !== input.value) {
+      const cursorPos = Math.max(0, input.selectionStart - (input.value.length - sanitized.length));
+      this.apiKeyAuthArgs[index].auth_key = sanitized;
+      requestAnimationFrame(() => {
+        const pos = Math.min(cursorPos, sanitized.length);
+        input.setSelectionRange(pos, pos);
+      });
+    }
+  }
+
   checkGroup(form: FormGroup | NgForm): boolean {
     if (form.invalid) {
       Object.values(form.controls).forEach(control => {

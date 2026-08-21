@@ -249,6 +249,11 @@
       <span>{{ 'view_sub_workflow_call_chain' | i18nextEager }}</span>
     </div>
 
+    <div class="crumb" *ngIf="hasLoopChildren(callItem)" (click)="getChildLoopNodes(callItem)">
+      <nz-icon class="mr-1" nzType="expand"></nz-icon>
+      <span>{{ 'view_loop_call_chain' | i18nextEager }}</span>
+    </div>
+
     <div *ngIf="!callItem?.isQuestionNode && !callItem?.isParamExtractionNode" class="flex-gap-center">
       <div *ngIf="!callItem.isIOEmptyInputs; else noInputs" class="cell-bg-border">
         <div class="node-inputs-area">

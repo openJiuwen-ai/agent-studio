@@ -808,8 +808,19 @@ class IntentDetection(Invokable):
         for history in filtered_chat_history[
             -self.intent_config.chat_history_max_turn :
         ]:
+            # 兼容 dict 与 ConversationMessage/BaseMessage 对象（role/content 为属性，无 .get()）
+            if isinstance(history, dict):
+                role = history.get(ROLE, "") or ""
+                content = history.get(CONTENT, "") or ""
+            else:
+                role = getattr(history, "role", None) or getattr(history, "type", None) or ""
+                content = getattr(history, "content", None)
+                if content is None:
+                    content = getattr(history, "text", "") or ""
+                if not isinstance(content, str):
+                    content = str(content)
             chat_history_str += "{}：{}\n".format(
-                ROLE_MAP.get(history.get(ROLE, CONTENT), "用户"), history.get(CONTENT)
+                ROLE_MAP.get(role, "用户"), content
             )
         return chat_history_str
 

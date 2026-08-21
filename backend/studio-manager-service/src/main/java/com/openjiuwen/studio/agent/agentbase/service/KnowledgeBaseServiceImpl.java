@@ -1183,7 +1183,7 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         if (source != null && KnowledgeSourceEnum.OPENJIUWEN.toString().equalsIgnoreCase(source)) {
             if (body.getRerankModel() != null) {
                 String rerankServiceId = resolveModelServiceId(projectId, workspaceId,
-                    body.getRerankModel().getName());
+                    body.getRerankModel().getName()).orElse(null);
                 knowledgeBaseEntity.setRerankModelServiceId(rerankServiceId);
                 knowledgeBaseMapper.updateKnowledgeBase(projectId, knowledgeBaseEntity);
             }
