@@ -168,8 +168,14 @@
   align-items: center;
   justify-content: space-between;
 
-  span {
-    width: calc(100% - 210px);
+  .footer-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .footer-divider {
+    color: #e1e5eb;
   }
 }
 
