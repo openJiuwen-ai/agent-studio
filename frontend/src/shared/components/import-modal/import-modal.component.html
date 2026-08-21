@@ -84,7 +84,9 @@
         <nz-table
           #importTable
           [nzData]="srcData.data"
-          [nzFrontPagination]="false"
+          [nzTotal]="srcData.data.length"
+          [nzShowSizeChanger]="false"
+          [nzFrontPagination]="true"
           *ngIf="isFileImported"
           [nzNoResult]="tableNoData"
           [nzTableLayout]="'fixed'"
