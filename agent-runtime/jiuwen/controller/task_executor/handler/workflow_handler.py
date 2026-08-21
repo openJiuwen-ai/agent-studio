@@ -1149,12 +1149,7 @@ class WorkflowHandler(BaseHandler):
                         simple_log="drop workflow intermediate_message data",
                     )
                     continue
-                # 检测工作流结束
-                # 当 questioner_interrupted 已为 True 时，不设置 workflow_end=True。
-                # 根因：工作流拓扑中 end 节点可能在 QA/Questioner 节点之前（或不同分支），
-                # end 节点先执行后，QA 节点抛出 GraphInterrupt，但 Workflow._stream
-                # 仍会产出 workflow_final（FINISH）帧。若此时设置 workflow_end=True，
-                # 会误判为工作流已正常完成，导致 checkpoint 未被保留、下一轮 111121 错误。
+                # 检测工作流结束：中断时跳过，避免 end 在 QA 之前导致误判完成
                 if (
                     output.data.get("node_type") == WORKFLOW_END_TYPE
                     and output.code == StreamCode.FINISH.value
@@ -1265,13 +1260,7 @@ class WorkflowHandler(BaseHandler):
         query: Optional[str] = None,
         current_node: Optional[NodeExecutionInfo] = None,
     ):
-        # 根据最终状态生成相应消息
-        # 注意：workflow_end=True 不代表工作流真正正常完成。当工作流拓扑中
-        # end 节点在 QA/Questioner 节点之前（或不同分支）时，end 节点可能先执行，
-        # 随后 QA 节点抛出 GraphInterrupt。此时 Workflow._stream 仍会产出
-        # workflow_final（FINISH）帧，导致 workflow_end 被误判为 True。
-        # 因此当 questioner_interrupted=True 时，无论 workflow_end 是否为 True，
-        # 都应视为中断而非完成。
+        # 根据最终状态生成相应消息：中断时即使 workflow_end=True 也不走完成路径（防御性守卫）
         if workflow_status["workflow_end"] and not workflow_status["questioner_interrupted"]:
             # 正常完成：清空 state，标记 COMPLETED
             self.context_manager.update_workflow_status(
