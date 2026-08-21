@@ -587,7 +587,7 @@
                     resize="none"
                     style="width: 100%; height: 109px; min-width: 100%"
                     [placeholder]="followupPlaceholder"
-                    [(ngModel)]="probeInputed" [disabled]="isFlowReadonly"
+                    [(ngModel)]="probeInputed" [disabled]="isFlowReadonly || !switchState"
                     (ngModelChange)="updateFollowUpPrompt($event)"
                   ></textarea>
                 </nz-textarea-count>
