@@ -1,4 +1,4 @@
-{
+﻿{
   "add": "Add",
   "added": "Added nodes: {}",
   "prompt": "Prompt",
@@ -438,6 +438,8 @@
   "data_verify_fail": "Data verification failed. Please check",
   "del_workflow_version": "Delete the APP",
   "del_workflow_tip": "This APP version has been referenced, and deleting it will automatically cancel the reference, which may cause the APP to fail to run, and this operation cannot be revoked.",
+  "del_single_agent_tip": "This single agent version has been referenced. Deleting it will automatically remove the references, which may cause multi-agents or applications to fail to run, and this action cannot be undone.",
+  "del_multi_agent_tip": "This multi-agent version has been referenced. Deleting it will automatically remove the references, which may cause applications to fail to run, and this action cannot be undone.",
   "del_mcp_service": "Delete the MCP service",
   "del_mcp_service_tips": "The MCP service has been referenced. After the MCP service is deleted, the reference will be automatically canceled. As a result, the workflow or agent may fail to run, and the operation cannot be undone.",
   "del_mcp_service_title": "Are you sure you want to delete the MCP service?",

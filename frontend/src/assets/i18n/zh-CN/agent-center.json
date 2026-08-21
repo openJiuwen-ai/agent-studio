@@ -1,4 +1,4 @@
-{
+﻿{
   "add": "添加",
   "added": "已添加",
   "prompt": "提示词",
@@ -441,6 +441,8 @@
   "data_verify_fail": "数据校验不通过，请检查",
   "del_workflow_version": "删除版本",
   "del_workflow_tip": "该工作流版本已被引用，删除后引用将自动取消，可能会导致工作流或应用无法运行，且该操作不可撤回",
+  "del_single_agent_tip": "该单智能体版本已被引用，删除后引用将自动取消，可能会导致多智能体或应用无法运行，且该操作不可撤回",
+  "del_multi_agent_tip": "该多智能体版本已被引用，删除后引用将自动取消，可能会导致应用无法运行，且该操作不可撤回",
   "del_mcp_service": "卸载MCP服务",
   "del_mcp_service_tips": "该MCP服务已被引用，删除后引用将自动取消，可能会导致工作流或Agent无法运行，且该操作不可撤回。",
   "del_mcp_service_title": "确定删除该MCP服务吗？",
