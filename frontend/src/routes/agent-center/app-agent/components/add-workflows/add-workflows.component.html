@@ -113,7 +113,11 @@
         </div>
       </div>
       <div class="footer">
-        <span>{{ 'total_number_of_records' | i18nextEager }}: {{ totalNumber }}</span>
+        <div class="footer-left">
+          <span>{{ 'total_number_of_records' | i18nextEager }}：{{ totalNumber }}</span>
+          <span class="footer-divider">|</span>
+          <span>{{ 'select_num' | i18nextEager }}{{ workflowCardSelected.length }}</span>
+        </div>
         <nz-pagination
           *ngIf="isShowNoData()"
           id="add-workflow-pagination"
