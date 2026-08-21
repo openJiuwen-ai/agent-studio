@@ -1149,10 +1149,11 @@ class WorkflowHandler(BaseHandler):
                         simple_log="drop workflow intermediate_message data",
                     )
                     continue
-                # 检测工作流结束
+                # 检测工作流结束：中断时跳过，避免 end 在 QA 之前导致误判完成
                 if (
                     output.data.get("node_type") == WORKFLOW_END_TYPE
                     and output.code == StreamCode.FINISH.value
+                    and not workflow_status["questioner_interrupted"]
                 ):
                     workflow_status["workflow_end"] = True
                     # end组件输出更新写入controller global variables全局变量
@@ -1259,8 +1260,9 @@ class WorkflowHandler(BaseHandler):
         query: Optional[str] = None,
         current_node: Optional[NodeExecutionInfo] = None,
     ):
-        # 根据最终状态生成相应消息
-        if workflow_status["workflow_end"]:
+        # 根据最终状态生成相应消息：中断时即使 workflow_end=True 也不走完成路径（防御性守卫）
+        if workflow_status["workflow_end"] and not workflow_status["questioner_interrupted"]:
+            # 正常完成：清空 state，标记 COMPLETED
             self.context_manager.update_workflow_status(
                 workflow_context.workflow_id,
                 workflow_context.type,
