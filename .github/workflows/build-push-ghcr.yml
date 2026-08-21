@@ -50,6 +50,7 @@ jobs:
           fi
           mkdir -p docker/studio-manager/config
           cp backend/studio-manager-service/src/main/resources/application-manager.yml docker/studio-manager/config/
+          cp backend/studio-manager-service/src/main/resources/application-postgres.yml docker/studio-manager/config/
           cp backend/studio-manager-service/src/main/resources/log4j2.xml docker/studio-manager/config/
 
       - name: Build frontend with pnpm
