@@ -461,6 +461,26 @@ public class ComplexIntentManagementService implements IComplexIntentManagementS
         }
     }
 
+    /**
+     * 校验意图包名是否已存在（不抛错，返回 boolean）。导入路径预检专用，区分来源由调用方负责。
+     * excludeIntentId 为空表示纯新建校验，非空表示排除自身后判断是否仍有重名。
+     */
+    private boolean checkIntentNameExists(String projectId, String workspaceId, String name, String excludeIntentId) {
+        ComplexIntentEntity complexIntentSearch = new ComplexIntentEntity();
+        complexIntentSearch.setProjectId(projectId);
+        complexIntentSearch.setWorkspaceId(workspaceId);
+        complexIntentSearch.setName(name);
+        List<ComplexIntentEntity> entitiesAccurate = complexIntentMapper.getEntitiesAccurate(complexIntentSearch);
+        if (entitiesAccurate.isEmpty()) {
+            return false;
+        }
+        if (entitiesAccurate.size() > 1) {
+            return true;
+        }
+        ComplexIntentEntity entity = entitiesAccurate.get(0);
+        return excludeIntentId == null || !entity.getIntentId().equals(excludeIntentId);
+    }
+
     // 校验操作权限
     private void checkPermission(String projectId, String workspaceId, String intentId) {
         ComplexIntentEntity originEntity = complexIntentMapper.getByKeyAndWorkspaceId(intentId, projectId, workspaceId);
@@ -847,6 +867,17 @@ public class ComplexIntentManagementService implements IComplexIntentManagementS
                 // 创建意图包之前需校验branchId重复
                 value.forEach(branch -> validateBranchId(branch.getBranchId()));
                 if (StringUtils.isEmpty(intentId)) {
+                    // 创建意图包之前先做重名预检，区分来源抛专属错误码
+                    if (!intentIdMap.containsKey(key) && checkIntentNameExists(projectId, workspaceId, key, null)) {
+                        if (StringUtils.isNotEmpty(intentName)) {
+                            // 详情页/新建页场景：intentName 覆盖了 sheet 名
+                            throw new AgentStudioException(
+                                StudioError.IMPORT_INTENT_PKG_NAME_DUPLICATE_BY_INPUT, key);
+                        }
+                        // 列表页场景：sheet 名直接被当意图包名
+                        throw new AgentStudioException(
+                            StudioError.IMPORT_INTENT_PKG_NAME_DUPLICATE_BY_SHEET, key);
+                    }
                     // 创建意图包
                     ComplexIntentInfoReq intent = new ComplexIntentInfoReq().setName(key);
                     if (intentIdMap.containsKey(key)) {
