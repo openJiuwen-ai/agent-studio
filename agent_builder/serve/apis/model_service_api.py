@@ -23,11 +23,11 @@
 - rerank 响应按 ``index`` 升序排序后截断到 ``top_n``（对应 Java ``MaasRerankRequestAdaptor.resBodyConvert``）。
 """
 
+import json
+import logging
 from typing import Dict, List, Optional, Union
 
 import httpx
-import json
-import logging
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
