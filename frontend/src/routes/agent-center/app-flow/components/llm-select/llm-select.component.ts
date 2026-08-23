@@ -21,6 +21,7 @@ import { I18nNamespace } from '@i18n';
 import { Router } from '@angular/router';
 import { NzModalService, NzModalRef, NzModalModule } from 'ng-zorro-antd/modal';
 import { cdnAssetUrl } from '../../../../../single-spa/assets-url';
+import { hasEnvPlaceholder } from '../../../../../utils/model-api-url.util';
 import { ModelManagementService } from '@services/repositories/model-management-new';
 import { ModelType } from '@enums/jiuwen-model.enum';
 import { CommonService } from '@services/common.service';
@@ -69,6 +70,12 @@ export class LLMSelectComponent implements OnDestroy {
   @Input() showError?: boolean = false;
 
   @Input() refreshSubscribe = true;
+
+  /** 单智能体场景置 true：禁用 api_url 含环境变量占位符的模型。
+   *  单智能体无环境选择 UI，占位符运行期无法解析（不传 environment_id → 不加载 env_vars），
+   *  故在选模型入口拦截，置灰不可选但显示，并提示「单智能体不支持环境变量占位符模型」。
+   *  多智能体有环境选择，默认 false 不禁用。 */
+  @Input() disableEnvPlaceholderModels: boolean = false;
 
   public serviceMap: object = {};
   public selectedModelInfo = {
@@ -195,11 +202,13 @@ export class LLMSelectComponent implements OnDestroy {
           ...o,
           children: o.children?.map(c => {
             const isSubscribed = o.isFirstPlatform ? (map.get(c.model_name) || c.is_subscribed) : undefined;
+            const envPlaceholderDisabled = this.disableEnvPlaceholderModels && hasEnvPlaceholder(c.api_url);
             return {
               ...c,
+              envPlaceholderDisabled,
               ...(o.isFirstPlatform ? {
                 isSubscribed,
-                disabled: c.type === 'button' ? false : !isSubscribed && !c.is_in_free_trial
+                disabled: c.type === 'button' ? false : ((!isSubscribed && !c.is_in_free_trial) || envPlaceholderDisabled)
               } : {})
             };
           })
@@ -253,6 +262,20 @@ export class LLMSelectComponent implements OnDestroy {
     return this.i18n.transform('not_validated', {
       ns: I18nNamespace.AGENT_CENTER,
     });
+  }
+
+  /**
+   * 当前选中模型是否为环境变量占位符模型（仅单智能体场景 disableEnvPlaceholderModels=true 时判定）。
+   * 用 serviceMap[selectedModel].api_url（分组接口返回，已确认含 api_url）判定。
+   * serviceMap 在 getModelOptions 的 then 里由 getServiceMap 填充、_modelOptions.set 触发 effect、
+   * 末尾 detectChanges 重新求值此 getter → 存量坏选择在列表加载后即显示告警，提示用户重新选择。
+   */
+  get selectedModelIsEnvPlaceholder(): boolean {
+    if (!this.disableEnvPlaceholderModels || !this.selectedModel) {
+      return false;
+    }
+    const m = this.serviceMap[this.selectedModel];
+    return !!m && hasEnvPlaceholder(m.api_url);
   }
 
   getModelOptions(params?: any) {

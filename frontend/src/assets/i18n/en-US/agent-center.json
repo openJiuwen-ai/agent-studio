@@ -2042,6 +2042,8 @@
   "llmselectcomponent_430": "Text",
   "llmselectcomponent_431": "Embedding",
   "llmselectcomponent_432": "Ranking",
+  "llmselectcomponent_env_placeholder_disabled": "Single agent does not support models with environment variable placeholders in the API URL",
+  "llmselectcomponent_env_placeholder_selected_warn": "The selected model has an environment variable placeholder in its API URL and cannot run in single agent. Please select another model.",
   "mcpservicemodalcomponent_436": "Orchestration",
   "mcpservicenodecomponent_438": "Waiting for {{nodeOperators}} operators",
   "mcpservicenodecomponent_439": "{{nodeOperators}} operators",
