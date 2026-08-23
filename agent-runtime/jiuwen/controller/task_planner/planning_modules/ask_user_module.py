@@ -62,8 +62,9 @@ class AskUserModule:
                 yield result
 
         except Exception as e:
+            from model_service.env_resolver import friendly_message
             raise LLMInvocationFailedException(
-                str(e) if LOG_VERBOSE_MODE else "Failed to stream calling LLM"
+                friendly_message(e)
             ) from e
 
         logger.info(

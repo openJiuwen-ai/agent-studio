@@ -16,6 +16,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import List, Tuple, Dict
 
+from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 from jiuwen.context.history import ConversationHistory
 from jiuwen.controller.agent.control_mode.base_mode import BaseMode
@@ -168,12 +169,24 @@ class PlanExecuteMode(BaseMode):
                 yield self._create_task_end_stream_data()
 
         except Exception as e:
+            from model_service.env_resolver import friendly_message
+            # 面向用户的可读信息：剥离 [code] 前缀，避免错误码在「错误信息」正文中重复
+            err_message = friendly_message(e)
+            # 日志保留原始异常（含 [code]/类型信息，便于定位）
             error_msg = f"task_id: {self.task_id}| PlanExecute 模式执行失败: {e}"
             logger.error(error_msg)
             yield StreamData(
                 code=StreamCode.ERROR.value,
                 msg="PlanExecute execution failed",
-                data={"error": error_msg},
+                # 统一 ERROR 事件 data 形状为 {"code": int, "message": str}，与
+                # ReAct/Controller 的 adapt_error 一致。此前仅写 "error" 键、缺 "code"，
+                # 导致下游 _process_streaming_output 把 None 格式进「错误信息：None」、
+                # base_events 回退到 999999（用户看到 openjiuwen.999999 / 错误信息：None）。
+                # 103104 与 adapt_error 默认码一致，其 reason/suggestion 已覆盖占位符未配置场景。
+                data={
+                    "code": StatusCode.CONTROLLER_INTENT_DETECTION_ERROR.code,
+                    "message": err_message,
+                },
                 execution_id=self.task_id,
             )
 

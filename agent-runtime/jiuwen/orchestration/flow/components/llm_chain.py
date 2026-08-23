@@ -22,6 +22,7 @@ from jiuwen.context.memory_engine.config.memory_ir_config import (
     USER_PROFILE_KEY,
     ENABLE_KEY,
 )
+from model_service.env_resolver import friendly_message
 from jiuwen.orchestration import Invokable
 from jiuwen.orchestration.callbacks.span import Span
 from jiuwen.orchestration.flow.components.util import (
@@ -369,7 +370,7 @@ class LLMChain(Invokable):
                     code=StreamCode.ERROR.value,
                     msg=StreamDataMsg.FAIL.value,
                     data=get_data_of_streaming_with_metadata(
-                        answer=str(state["error"]), metadata=self.metadata
+                        answer=friendly_message(state["error"]), metadata=self.metadata
                     ),
                     execution_id=execution_id,
                 )
