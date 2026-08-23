@@ -132,6 +132,7 @@ function copy_manager() {
   fi
   mkdir -pv ${MANAGER_TARGET_PATH}/config
   cp -f ${WORKSPACE}/backend/studio-manager-service/src/main/resources/application-manager.yml ${MANAGER_TARGET_PATH}/config/
+  cp -f ${WORKSPACE}/backend/studio-manager-service/src/main/resources/application-postgres.yml ${MANAGER_TARGET_PATH}/config/
   cp -f ${WORKSPACE}/backend/studio-manager-service/src/main/resources/log4j2.xml ${MANAGER_TARGET_PATH}/config/
 }
 

@@ -701,7 +701,6 @@ export class CreateToolComponent implements OnInit {
 
   onInput() {
     window.setTimeout(() => {
-      this.requestArgs = mapTreeAddKeyIndex(this.requestArgs, 0);
       if (!this.inputForm) {
         return;
       }
@@ -715,6 +714,7 @@ export class CreateToolComponent implements OnInit {
       param.default = '';
     } else {
       delete param?.children;
+      (param as any).isLeaf = true;
 
       if (param.type === 'string') {
         param.validate_type = 'CHAR';
@@ -725,9 +725,11 @@ export class CreateToolComponent implements OnInit {
 
     if (param.type.startsWith('array') && param.type !== 'array<object>' && param?.children) {
       delete param?.children;
+      (param as any).isLeaf = true;
     }
 
     if (this.isObjectLikeType(param.type)) {
+      (param as any).isLeaf = false;
       if (!param?.children) {
         this.addReqObjProps(param);
       }
@@ -789,13 +791,16 @@ export class CreateToolComponent implements OnInit {
   onResParamTypeChange(param: IResponseArgsView) {
     if (this.isSimpleType(param.type) && param?.children) {
       delete param?.children;
+      (param as any).isLeaf = true;
     }
 
     if (param.type.startsWith('array') && param.type !== 'array<object>' && param?.children) {
       delete param?.children;
+      (param as any).isLeaf = true;
     }
 
     if (this.isObjectLikeType(param.type)) {
+      (param as any).isLeaf = false;
       if (!param?.children) {
         this.addResObjProps(param);
       }
@@ -1061,6 +1066,7 @@ export class CreateToolComponent implements OnInit {
         validate_type: 'CHAR',
         validated: false,
         children: item.type === 'object' ? schema2View(item.schema, 1, 'object') : undefined,
+        isLeaf: item.type !== 'object',
       }));
       this.requestArgs.unshift(...headerArgs);
       this.requestArgs = mapTreeAddKeyIndex(this.requestArgs, 0);

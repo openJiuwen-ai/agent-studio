@@ -1,9 +1,10 @@
-/*
+﻿/*
  * Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
  */
 
 package com.openjiuwen.studio.agent.manager.rce.service;
 
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
@@ -94,10 +95,22 @@ public class JiuWenService {
 
         ResponseEntity<JSONObject> response = builderClient.askModel(RequestContextUtils.getRequestAuthToken(),
             auth == null ? "" : auth.getId(), request);
-        String content = response.getBody()
-            .getJSONArray(CommonConstant.CHOICES)
-            .getJSONObject(0)
-            .getJSONObject(CommonConstant.MESSAGE)
+        JSONObject body = response.getBody();
+        if (body == null) {
+            log.error("Model response body is null. request: {}", request);
+            throw new AgentStudioException(StudioError.CALL_MODEL_ERROR);
+        }
+        JSONArray choices = body.getJSONArray(CommonConstant.CHOICES);
+        if (choices == null || choices.isEmpty()) {
+            log.error("Model response choices is null or empty. request: {}, response: {}", request, body);
+            throw new AgentStudioException(StudioError.CALL_MODEL_ERROR);
+        }
+        JSONObject firstChoice = choices.getJSONObject(0);
+        if (firstChoice == null) {
+            log.error("Model response first choice is null. request: {}, choices: {}", request, choices);
+            throw new AgentStudioException(StudioError.CALL_MODEL_ERROR);
+        }
+        String content = firstChoice.getJSONObject(CommonConstant.MESSAGE)
             .getString(CommonConstant.CONTENT);
         return Strings.CS.removeEnd(Strings.CS.removeStart(content, "```json"), "```");
     }

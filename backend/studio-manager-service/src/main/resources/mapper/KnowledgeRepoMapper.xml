@@ -59,7 +59,7 @@
                 #{icon,jdbcType=VARCHAR}, #{size,jdbcType=INTEGER}, #{fileNum}, #{domainId},
                 #{domainName}, #{creator,jdbcType=VARCHAR},
                 #{creatorId,jdbcType=VARCHAR}, #{metadata,jdbcType=VARCHAR}, #{iconName,jdbcType=VARCHAR},
-                #{createdOn,jdbcType=TIMESTAMP}, #{updatedOn,jdbcType=TIMESTAMP}))
+                #{createdOn,jdbcType=TIMESTAMP}, #{updatedOn,jdbcType=TIMESTAMP})
     </insert>
     <insert id="insert" parameterType="com.openjiuwen.studio.agent.agentbase.entity.KnowledgeRepoEntity"
             databaseId="gaussv5_M">

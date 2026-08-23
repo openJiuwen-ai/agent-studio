@@ -265,13 +265,15 @@ export class ModelServiceCompareRouter implements OnChanges, OnInit {
   }
 
   progressError(error, currentIndex, currentWindow) {
-    if (error.data) {
+    // 兼容 SSE 路径（error.data）和非流式路径（HttpErrorResponse，数据在 error.error）
+    const errorData = error?.data ?? error?.error;
+    if (errorData) {
       try {
         let errInfo;
-        if (typeof error.data === 'string') {
-          errInfo = JSON.parse(error.data);
+        if (typeof errorData === 'string') {
+          errInfo = JSON.parse(errorData);
         } else {
-          errInfo = error.data;
+          errInfo = errorData;
         }
         const content = errInfo.error_msg;
         let assistantMessage = this.dialogHistory[currentWindow][
@@ -298,7 +300,8 @@ export class ModelServiceCompareRouter implements OnChanges, OnInit {
           ];
         }
       } catch {
-        const content = error.error_msg || this.i18n.transform('third_party_model_call_error');
+        const errRaw = error?.data ?? error?.error ?? error;
+        const content = errRaw?.error_msg || this.i18n.transform('third_party_model_call_error');
         let assistantMessage = this.dialogHistory[currentWindow][
           currentIndex
         ].find((item) => item.role === 'assistant');
@@ -306,7 +309,7 @@ export class ModelServiceCompareRouter implements OnChanges, OnInit {
           assistantMessage.content = content;
           assistantMessage.isError = true;
           assistantMessage.errorContent = JSON.stringify(
-            error.details || this.i18n.transform('unknown_reason'),
+            errRaw?.details || this.i18n.transform('unknown_reason'),
           );
           assistantMessage.errorIsOpen = true;
         } else {
@@ -314,7 +317,7 @@ export class ModelServiceCompareRouter implements OnChanges, OnInit {
             role: 'assistant',
             content,
             isError: true,
-            errorContent: JSON.stringify(error.details || this.i18n.transform('unknown_reason')),
+            errorContent: JSON.stringify(errRaw?.details || this.i18n.transform('unknown_reason')),
             errorIsOpen: true,
           };
           this.dialogHistory[currentWindow][currentIndex] = [

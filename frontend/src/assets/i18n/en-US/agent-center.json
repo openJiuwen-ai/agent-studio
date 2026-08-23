@@ -1,4 +1,4 @@
-{
+﻿{
   "add": "Add",
   "added": "Added nodes: {}",
   "prompt": "Prompt",
@@ -438,6 +438,8 @@
   "data_verify_fail": "Data verification failed. Please check",
   "del_workflow_version": "Delete the APP",
   "del_workflow_tip": "This APP version has been referenced, and deleting it will automatically cancel the reference, which may cause the APP to fail to run, and this operation cannot be revoked.",
+  "del_single_agent_tip": "This single agent version has been referenced. Deleting it will automatically remove the references, which may cause multi-agents or applications to fail to run, and this action cannot be undone.",
+  "del_multi_agent_tip": "This multi-agent version has been referenced. Deleting it will automatically remove the references, which may cause applications to fail to run, and this action cannot be undone.",
   "del_mcp_service": "Delete the MCP service",
   "del_mcp_service_tips": "The MCP service has been referenced. After the MCP service is deleted, the reference will be automatically canceled. As a result, the workflow or agent may fail to run, and the operation cannot be undone.",
   "del_mcp_service_title": "Are you sure you want to delete the MCP service?",
@@ -675,6 +677,7 @@
   "rounds_count_of_repeat": "{{number}} rounds of repeat",
   "first_token": "First token ",
   "view_sub_workflow_call_chain": "View sub workflow call chain",
+  "view_loop_call_chain": "View loop call chain",
   "model_input": "Model input",
   "model_output": "Model output",
   "start_time_label": "Start time:",
@@ -1138,6 +1141,9 @@
   "import_intent_pkg_desc_2": "2. Upload files in xlsx format, with a file size not exceeding 5MB. Click",
   "import_intent_pkg_desc_3": "The file to be uploaded must be in xlsx format. Only the first sheet of the file can be identified. The file can contain a maximum of 200 records (excluding the header row) and the file size cannot exceed 5 MB. Click ",
   "import_intent_pkg_desc_4": "Click here to download the template.",
+  "import_intent_pkg_desc_5": "3. Each sheet name will be used as the intent package name and must not duplicate an existing intent package.",
+  "import_intent_pkg_desc_6": "3. The intent package name must not duplicate an existing intent package.",
+  "intent_pkg_name_input_helper": "This name will be used as the intent package name and must be globally unique.",
   "add_intent_tip": "Please save the newly added intention first",
   "add_intention": "New intention",
   "agent_user_login": "Agent user login",

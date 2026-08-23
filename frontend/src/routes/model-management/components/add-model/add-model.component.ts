@@ -20,7 +20,6 @@ import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzUploadModule, NzUploadFile } from 'ng-zorro-antd/upload';
-import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { NzDrawerRef } from 'ng-zorro-antd/drawer';
 import { NzMessageService } from 'ng-zorro-antd/message';
 
@@ -40,7 +39,6 @@ import { NzMessageService } from 'ng-zorro-antd/message';
     NzButtonModule,
     NzIconModule,
     NzUploadModule,
-    NzToolTipModule,
   ],
   templateUrl: './add-model.component.html',
   styleUrls: ['./add-model.component.scss'],

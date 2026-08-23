@@ -12,7 +12,7 @@ ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib64
 
 WORKDIR $SERVICE_HOME
 
-# 安装运行时依赖（不含编译工具链）
+# 安装运行时依赖
 RUN mirror=mirrors.aliyun.com; \
     new_src=/etc/apt/sources.list.d/debian.sources; \
     old_src=/etc/apt/sources.list; \
@@ -22,22 +22,22 @@ RUN mirror=mirrors.aliyun.com; \
       sed -i "s|deb.debian.org|${mirror}|g" "$old_src"; \
     fi \
     && apt-get update \
-    && apt-get install -y bash coreutils findutils sed gawk hostname procps vim curl wget tar unzip net-tools iptables cron libpq-dev \
+    && apt-get install -y bash coreutils findutils sed gawk hostname procps curl wget tar unzip net-tools iptables cron libpq-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && echo 'alias ll="ls -alF"' >> /etc/bash.bashrc
 
-# 先复制 requirements.txt（已移除 openjiuwen 行），单独安装依赖以利用 Docker 层缓存
+# 安装 Python 依赖 + openjiuwen 源码（临时安装编译工具链，编译完成后卸载）
 COPY requirements.txt $SERVICE_HOME/app/
-RUN pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
-    && pip3 config set global.trusted-host mirrors.aliyun.com \
-    && pip3 install -r $SERVICE_HOME/app/requirements.txt \
-    && rm -rf ${PACKAGES_HOME}/future/backports/test
-
-# 从本地源码安装 openjiuwen（替代 PyPI 包，对应 agent-core git 仓库）
 COPY agent-core/ /tmp/agent-core/
-RUN cd /tmp/agent-core \
-    && pip3 install . \
-    && rm -rf /tmp/agent-core
+RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev \
+    && pip3 config set global.index-url https://mirrors.aliyun.com/pypi/simple/ \
+    && pip3 config set global.trusted-host mirrors.aliyun.com \
+    && pip3 install --upgrade pip \
+    && pip3 install -r $SERVICE_HOME/app/requirements.txt \
+    && rm -rf ${PACKAGES_HOME}/future/backports/test \
+    && cd /tmp/agent-core && pip3 install . && rm -rf /tmp/agent-core \
+    && apt-get remove -y gcc python3-dev && apt-get autoremove -y \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # 再复制应用代码（变更频率高，放在依赖安装之后）
 COPY agent_builder/ $SERVICE_HOME/app/agent_builder/

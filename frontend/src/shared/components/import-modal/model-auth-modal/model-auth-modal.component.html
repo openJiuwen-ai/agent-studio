@@ -23,23 +23,23 @@
         <!--API-key-->
         <div class="auth-section" *ngIf="apiKeyForm.value.auth_type === 'API_KEY'">
           <div class="auth-label">{{ 'api_key_input'|i18nextEager }} <span class="required">*</span></div>
-          <input nz-input class="w-full" type="password" formControlName="apikey"/>
+          <input nz-input class="w-full" type="password" formControlName="apikey" (input)="onAuthInputChange('apikey', $event)"/>
           <div class="mt-[8px]" [innerHTML]="'api_auth_tip'|i18nextEager" ></div>
         </div>
         <!--AK/SK-->
         <div class="auth-section" *ngIf="apiKeyForm.value.auth_type === 'AK_SK' || apiKeyForm.value.auth_type === 'HMAC'">
           <div class="auth-label">{{ 'enter_ak'|i18nextEager }} <span class="required">*</span></div>
-          <input nz-input class="w-full" type="password" formControlName="ak"/>
+          <input nz-input class="w-full" type="password" formControlName="ak" (input)="onAuthInputChange('ak', $event)"/>
         </div>
         <div class="auth-section" *ngIf="apiKeyForm.value.auth_type === 'AK_SK' || apiKeyForm.value.auth_type === 'HMAC'">
           <div class="auth-label">{{ 'enter_sk'|i18nextEager }} <span class="required">*</span></div>
-          <input nz-input class="w-full" type="password" formControlName="sk"/>
+          <input nz-input class="w-full" type="password" formControlName="sk" (input)="onAuthInputChange('sk', $event)"/>
           <div class="mt-[8px]" [innerHTML]="'api_auth_tip_1'|i18nextEager" ></div>
         </div>
         <!--APPCODE-->
         <div class="auth-section" *ngIf="apiKeyForm.value.auth_type === 'APP_CODE'">
           <div class="auth-label">{{ 'enter_AppCode'|i18nextEager }} <span class="required">*</span></div>
-          <input nz-input class="w-full" type="password" formControlName="appCode"/>
+          <input nz-input class="w-full" type="password" formControlName="appCode" (input)="onAuthInputChange('appCode', $event)"/>
           <div class="mt-[8px]" [innerHTML]="'api_auth_tip'|i18nextEager" ></div>
         </div>
         <div class="auth-section" *ngIf="apiKeyForm.value.auth_type === 'CUSTOM_APIKEY'">
@@ -86,6 +86,7 @@
                     maxlength="20000"
                     [(ngModel)]="param.auth_key"
                     [ngModelOptions]="{standalone: true}"
+                    (input)="onCustomApikeyInput(i, $event)"
                     [placeholder]="'input_placeholder' | i18nextEager"
                   />
                 </div>

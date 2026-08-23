@@ -27,7 +27,8 @@ async def chat_n2l(
     request: Request,
 ) -> StreamingResponse:
     """NL2 chat — natural-language to agent generation (moved from
-    agent_runtime/serve/apis/orchestration.py)."""
+    agent_runtime/serve/apis/orchestration.py).
+    """
     payload = _n2l_json_wapper(
         project_id,
         agent_type,

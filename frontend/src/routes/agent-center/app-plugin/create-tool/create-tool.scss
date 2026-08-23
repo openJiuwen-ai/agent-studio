@@ -205,3 +205,9 @@
 ::ng-deep nz-tree-node-title{
   flex: auto !important;
   }
+
+::ng-deep .ant-tree-switcher-noop {
+  .ant-tree-switcher-line-icon {
+    display: none;
+  }
+}

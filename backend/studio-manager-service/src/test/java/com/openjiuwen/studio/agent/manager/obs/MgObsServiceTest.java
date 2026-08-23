@@ -272,4 +272,19 @@ class MgObsServiceTest {
         var result = mgObsService.deleteByPrefix("prefix");
         assertNotNull(result);
     }
+
+    @Test
+    void testReadObsFileStream_Success() {
+        InputStream expected = new ByteArrayInputStream("file content".getBytes(StandardCharsets.UTF_8));
+        when(fileStore.readStream(anyString())).thenReturn(expected);
+        InputStream result = mgObsService.readObsFileStream("path/to/file");
+        assertNotNull(result);
+        verify(fileStore).readStream("test-bucket/path/to/file");
+    }
+
+    @Test
+    void testReadObsFileStream_Exception() {
+        when(fileStore.readStream(anyString())).thenThrow(new RuntimeException("fail"));
+        assertThrows(AgentStudioException.class, () -> mgObsService.readObsFileStream("key"));
+    }
 }

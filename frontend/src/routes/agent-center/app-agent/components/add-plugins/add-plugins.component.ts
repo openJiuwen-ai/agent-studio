@@ -165,6 +165,10 @@ export class AddPluginsComponent {
 
   public pluginSelected: any = [];
 
+  get selectedPluginCount(): number {
+    return new Set(this.pluginSelected.map(item => item.id?.split('#')[0])).size;
+  }
+
   public tabs: any = [
     { title: this.i18n.transform("pre_installed_plugins"), active: false },
     { title: this.i18n.transform("component_plugin"), active: true },
@@ -497,7 +501,7 @@ export class AddPluginsComponent {
           id: combinedId
         });
       } else {
-        this.pluginSelected = this.pluginSelected.filter(item => item.id !== combinedId);
+        this.pluginSelected = this.pluginSelected.filter(item => item.id !== combinedId && item.tool_id !== combinedId);
       }
     });
     this.pluginAdded.emit(this.pluginSelected);
@@ -791,7 +795,7 @@ export class AddPluginsComponent {
 
   public isSelectedTool(pluginId: string, toolId: string): boolean {
     const combinedId = `${pluginId}#${toolId}`;
-    return this.pluginSelected.some((plugin) => plugin.id === combinedId);
+    return this.pluginSelected.some((plugin) => plugin.id === combinedId || plugin.tool_id === combinedId);
   }
 
   protected readonly changeUrl = cdnAssetUrl;

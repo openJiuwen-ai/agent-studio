@@ -54,7 +54,13 @@
                 class="initial-prologue-content"
                 *ngIf="getOpenTextAndQuestions.openText || (getOpenTextAndQuestions.openQuestions && getOpenTextAndQuestions.openQuestions.length > 0)"
               >
-                <div class="prologue-text-style" nz-tooltip [nzTooltipTitle]="getOpenTextAndQuestions.openText" nzTooltipPlacement="top" *ngIf="getOpenTextAndQuestions.openText">
+                <div
+                  class="prologue-text-style"
+                  [nz-tooltip]="prologueTextOverflow ? getOpenTextAndQuestions.openText : ''"
+                  nzTooltipMaxWidth="500px"
+                  #prologueTextEl
+                  *ngIf="getOpenTextAndQuestions.openText"
+                >
                   {{ getOpenTextAndQuestions.openText }}
                 </div>
                 <div
@@ -62,7 +68,13 @@
                   *ngIf="getOpenTextAndQuestions.openQuestions && getOpenTextAndQuestions.openQuestions.length > 0"
                 >
                   <div *ngFor="let item of getOpenTextAndQuestions.openQuestions">
-                    <span class="suggest-question-text-style" nz-tooltip [nzTooltipTitle]="item" nzTooltipPlacement="top" (click)="submitQuestion(item)">{{ item }}</span>
+                    <span
+                      class="suggest-question-text-style"
+                      [nz-tooltip]="isQuestionOverflow[item] ? item : ''"
+                      nzTooltipMaxWidth="500px"
+                      (click)="submitQuestion(item)"
+                      #questionEl
+                      >{{ item }}</span>
                   </div>
                 </div>
               </div>

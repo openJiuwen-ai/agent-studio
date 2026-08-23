@@ -56,7 +56,7 @@
           </nz-form-control>
         </nz-form-item>
         <nz-form-item>
-          <nz-form-label [nzSpan]="24">{{ createPluginFormLabel.pluginZhName }}</nz-form-label>
+          <nz-form-label [nzSpan]="24" [nzRequired]="true">{{ createPluginFormLabel.pluginZhName }}</nz-form-label>
           <nz-form-control [nzErrorTip]="pluginZhNameTpl">
             <input nz-input maxlength="64" formControlName="pluginZhName" style="width: 100%" [placeholder]="createPluginFormLabel.defaultPlaceholder"/>
             <ng-template #pluginZhNameTpl let-control>
@@ -71,7 +71,7 @@
           </nz-form-control>
         </nz-form-item>
         <nz-form-item>
-          <nz-form-label [nzSpan]="24">{{ createPluginFormLabel.pluginDescription }}</nz-form-label>
+          <nz-form-label [nzSpan]="24" [nzRequired]="true">{{ createPluginFormLabel.pluginDescription }}</nz-form-label>
           <nz-form-control [nzErrorTip]="pluginDescriptionTpl">
             <textarea
               nz-input
