@@ -77,6 +77,11 @@ export class ModelServiceCompareRouter implements OnChanges, OnInit {
     thinking:false
   };
 
+  @Input() envVarValues: Record<string, string> = {};
+
+  /** 模型服务API地址变量是否已全部填好（空或非法URL时为false，禁止发送） */
+  @Input() envVarReady: boolean = true;
+
   @ViewChild('chatContainerLeftRef') chatContainerLeftRef!: ElementRef;
   @ViewChild('chatContainerRightRef') chatContainerRightRef!: ElementRef;
 
@@ -157,6 +162,10 @@ export class ModelServiceCompareRouter implements OnChanges, OnInit {
   }
 
   public sendQuestion(chatContent: any) {
+    if (!this.envVarReady) {
+      this.message.warning(this.i18n.transform('env_var_not_ready_tip'));
+      return;
+    }
     const oneChat = [chatContent];
     this.dialogHistory[0].push(oneChat);
     this.dialogHistory[1].push(oneChat);
@@ -324,7 +333,7 @@ export class ModelServiceCompareRouter implements OnChanges, OnInit {
       this.abortController = new AbortController();
       this.isLoading[currentWindow] = true;
       this.jiuwenModelServ
-        .modelTestChat(param, this.abortController?.signal)
+        .modelTestChat(param, this.abortController?.signal, this.envVarValues)
         .then(({ content, reasoning_content }) => {
           let assistantMessage = {
             role: 'assistant',
@@ -489,7 +498,7 @@ export class ModelServiceCompareRouter implements OnChanges, OnInit {
             }
             this.cdr.markForCheck();
           },
-        }),
+        }, this.envVarValues),
       );
     });
   }

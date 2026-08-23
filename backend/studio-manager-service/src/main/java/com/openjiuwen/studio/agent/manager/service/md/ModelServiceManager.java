@@ -27,6 +27,7 @@ import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentBuilderClient;
 import com.openjiuwen.studio.agent.manager.rce.client.AgentRuntimeClient;
 import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
+import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -92,6 +93,9 @@ public class ModelServiceManager {
 
     @Autowired
     private RouterStrategyMapper routerStrategyMapper;
+
+    @Autowired
+    private UrlCheckUtils urlCheckUtils;
 
     @Autowired
     private RedisClient redisClient;
@@ -397,6 +401,14 @@ public class ModelServiceManager {
     @SuppressWarnings("unchecked")
     public ModelServiceCheckRsp checkModelAvailable(String projectId, String modelName, String modelType,
         String modelApiUrl, String interfaceProtocol, String authType, Object authInfo, Boolean encrypted) {
+
+        // 含环境变量占位符的模型，真实 URL 由 Python 运行期 env_resolver 按环境变量解析，
+        // 探测期无法预知目标环境运行时变量，探测字面占位符必失败，故直接跳过可用性探测。
+        // 覆盖发布/鉴权/创建/更新等所有 check 入口（与发布 02501037、鉴权 02501058 同源根因）。
+        if (urlCheckUtils.hasEnvPlaceholder(modelApiUrl)) {
+            log.info("Skip model availability check for env-var placeholder apiUrl. modelName:{}", modelName);
+            return new ModelServiceCheckRsp().setSuccess(true);
+        }
 
         ModelServiceCheckReq req = new ModelServiceCheckReq().setModelType(modelType)
                 .setModelName(modelName)

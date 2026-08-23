@@ -9,6 +9,17 @@
   font-size: 12px;
   line-height: 1.5;
 }
+.api-url-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.api-url-input {
+  flex: 1;
+}
+.env-var-btn {
+  flex-shrink: 0;
+}
 .item {
   display: flex;
   align-items: center;

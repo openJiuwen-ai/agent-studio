@@ -62,6 +62,8 @@ export class TextRerankComponent {
     question: String,
   };
 
+  @Input() envVarValues: Record<string, string> = {};
+
   @ViewChild('chatContainerRef') chatContainerRef!: ElementRef;
 
   public isShowStopIcon = false;
@@ -169,7 +171,7 @@ export class TextRerankComponent {
   private postMessage(param) {
     this.abortController = new AbortController();
     this.jiuwenModelServ
-      .modelTestReRank(param, this.abortController?.signal)
+      .modelTestReRank(param, this.abortController?.signal, this.envVarValues)
       .then((content) => {
         this.result = content;
         const newData = [];

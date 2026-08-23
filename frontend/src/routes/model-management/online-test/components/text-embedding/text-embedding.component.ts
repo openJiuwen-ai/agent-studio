@@ -52,6 +52,9 @@ export class TextEmbeddingComponent {
   @Input() param: any = {
     content: '',
   };
+
+  @Input() envVarValues: Record<string, string> = {};
+
   public isShowStopIcon = false;
 
   @ViewChild('chatContainerRef') chatContainerRef!: ElementRef;
@@ -150,7 +153,7 @@ export class TextEmbeddingComponent {
   private postMessage(param) {
     this.abortController = new AbortController();
     this.jiuwenModelServ
-      .modelTestEmbedding(param, this.abortController?.signal)
+      .modelTestEmbedding(param, this.abortController?.signal, this.envVarValues)
       .then((content) => {
         this.result = `[${String(content[0]?.embedding)}]`;
         this.scrollToBottom();
