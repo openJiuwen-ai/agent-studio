@@ -47,6 +47,9 @@ sleep 1
 pkill -KILL -f "$RUN/nginx.conf" 2>/dev/null || true
 rm -f "$RUN/nginx.pid"
 
+log "停止 studio-builder..."
+kill_pid "$RUN/builder.pid" builder
+
 log "停止 studio-runtime..."
 kill_pid "$RUN/runtime.pid" runtime
 # runtime 用 multiprocessing-fork 起 worker；父进程被杀后 worker 可能成孤儿仍占端口
@@ -54,9 +57,6 @@ kill_pid "$RUN/runtime.pid" runtime
 # 兜底清孤儿 worker，不波及用户机器上其它 python。kill_pid 成功也清 pid 文件（见下）。
 pkill -f "$BUNDLE_ROOT/run/venv/bin/python" 2>/dev/null || true
 pkill -f "$BUNDLE_ROOT/deps/linux/python" 2>/dev/null || true
-
-log "停止 studio-service..."
-kill_pid "$RUN/service.pid" service
 
 log "停止 studio-manager..."
 kill_pid "$RUN/manager.pid" manager

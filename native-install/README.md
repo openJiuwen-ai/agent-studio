@@ -25,15 +25,18 @@ native-install/
 
 ## 组件与依赖
 
-应用组件（**从源码构建**，跨平台产物）：
+应用组件（**从源码构建**，跨平台产物，与 docker 新架构对齐）：
 - `studio-manager.jar` ← `backend/studio-manager`（profile=manager，端口 31111）
-- `studio-service.jar` ← `backend/studio-runtime`（profile=runtime，端口 31113，产物重命名）
-- `frontend/dist/hws` ← `frontend`（pnpm build，nginx 托管，端口 80）
-- `agent_runtime/` + `jiuwen/` + `agent_builder/` ← `agent-runtime` + `agent_builder`（Python 3.11，端口 31014）
+- `frontend/dist/hws` ← `frontend`（pnpm build，nginx 托管，端口 CONSOLE_PORT）
+- `agent_runtime/` + `jiuwen/` ← `agent-runtime`（Python 3.11，studio-runtime，端口 31014）
+- `agent_builder/` ← `agent_builder`（Python 3.11，studio-builder，端口 31015）
+- `model_service/` + `storage/` + `common_utils/` ← `packages/*` 共享包（PYTHONPATH=app 非 pip 安装）
+- 注：旧 Java「agent-service」(studio-runtime 模块，31113) 已随代码库删除，由 Python studio-builder 替代。
 
 外部原生依赖（**构建时联网下载并内置**，两平台各一份）：
 JRE17(Temurin) / MySQL8.0 / Redis7 / MinIO+mc / Python3.11(python-build-standalone) / nginx
-- Linux redis 与 nginx 无官方预编译二进制可整包下载，由构建机 gcc 编译（免 pcre/zlib）。
+- Linux redis 用 Remi el7 预编译 RPM（glibc 2.17）；Linux nginx 无官方预编译二进制，由构建机 gcc 编译
+  （带 gzip+rewrite 模块并静态捆绑 pcre2+zlib，产物自包含）。
 - Windows Redis 用社区移植版 redis-windows（官方无 Windows 版）。
 
 ## 构建
@@ -44,9 +47,10 @@ cd native-install
 ./build.sh                    # 全量构建
 # 可选：./build.sh --skip-apps / --skip-deps / --skip-wheels  跳过阶段
 # 可选：./build.sh -v 1.0.1    自定义版本号
+# 可选：./build.sh --seed-deps <上次构建目录或解压后的包根>   复用已有 deps/（免重新下载/编译）
 ```
 构建机前置：JDK17+Maven、Node+pnpm、Python3+pip、gcc+make（编译 redis/nginx）、curl/unzip/tar。
-产物：`native-install/dist/AgentStudio-native-<ver>.tar.gz` 与 `.zip`。
+产物：`native-install/dist/AgentStudio-native-<ver>-<windows|linux>.zip`（双平台包）。
 
 ### 在 Windows 构建机
 ```powershell
@@ -77,8 +81,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1
 |---|---|---|---|---|
 | console(nginx) | 80 | | MinIO API/控制台 | 9000/9001 |
 | MySQL | 3306 | | manager | 31111 |
-| Redis | 6379 | | service | 31113 |
-| | | | runtime | 31014 |
+| Redis | 6379 | | runtime | 31014 |
+| | | | builder | 31015 |
 
 ## 平台差异
 

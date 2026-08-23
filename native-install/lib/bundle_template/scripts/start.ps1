@@ -1,5 +1,5 @@
 ﻿# openJiuwen AgentStudio — 原生（免容器）一键启动（Windows PowerShell）
-# 按序拉起：MySQL → Redis → MinIO(+mc) → manager → service → runtime → console(nginx)
+# 按序拉起：MySQL → Redis → MinIO(+mc) → manager → runtime → builder → console(nginx)
 [CmdletBinding()] param()
 $ErrorActionPreference = "Continue"
 $ErrorView = "NormalView"
@@ -39,8 +39,8 @@ if (-not $env:REDIS_EXTERNAL_PORT) { $env:REDIS_EXTERNAL_PORT = '6379' }
 if (-not $env:MINIO_API_PORT)     { $env:MINIO_API_PORT = '9000' }
 if (-not $env:MINIO_CONSOLE_PORT) { $env:MINIO_CONSOLE_PORT = '9001' }
 if (-not $env:MANAGER_PORT)       { $env:MANAGER_PORT = '31111' }
-if (-not $env:SERVICE_PORT)       { $env:SERVICE_PORT = '31113' }
 if (-not $env:RUNTIME_PORT)       { $env:RUNTIME_PORT = '31014' }
+if (-not $env:BUILDER_PORT)       { $env:BUILDER_PORT = '31015' }
 
 # ── 依赖路径 ────────────────────────────────────────────────────────────────
 $Deps = Join-Path $BundleRoot 'deps\win'
@@ -165,20 +165,9 @@ if (-not (Is-PidAlive $MgrPid)) {
 Wait-Http "http://127.0.0.1:$($env:MANAGER_PORT)/health" 'studio-manager' 180 | Out-Null
 
 # ════════════════════════════════════════════════════════════════════════════
-# [5/7] studio-service (Java)
+# [5/7] studio-runtime (Python, agent_runtime/EIStart)
 # ════════════════════════════════════════════════════════════════════════════
-W-Log "[5/7] studio-service"
-$SvcPid = Join-Path $Run 'service.pid'
-if (-not (Is-PidAlive $SvcPid)) {
-  $ja = @("-Xms${heapMin}m","-Xmx${heapMax}m","-XX:MaxDirectMemorySize=${direct}m","-Dfile.encoding=UTF-8","-jar","$(Join-Path $BundleRoot 'app\service\studio-service.jar')","--spring.config.additional-location=file:$BundleRoot\config\","--spring.profiles.active=runtime","--logging.config=file:$BundleRoot\config\log4j2-runtime.xml")
-  $p = Start-Bg (Join-Path $env:JAVA_HOME 'bin\java.exe') $ja (Join-Path $Log 'service.log'); $p.Id | Set-Content $SvcPid
-}
-Wait-Http "http://127.0.0.1:$($env:SERVICE_PORT)/v1/health" 'studio-service' 180 | Out-Null
-
-# ════════════════════════════════════════════════════════════════════════════
-# [6/7] studio-runtime (Python)
-# ════════════════════════════════════════════════════════════════════════════
-W-Log "[6/7] studio-runtime"
+W-Log "[5/7] studio-runtime"
 $RtPid = Join-Path $Run 'runtime.pid'
 $Venv = Join-Path $Run 'venv'; $VenvPy = Join-Path $Venv 'Scripts\python.exe'; $VenvPip = Join-Path $Venv 'Scripts\pip.exe'
 $venvFlag = Join-Path $Run '.venv_ready'
@@ -216,11 +205,35 @@ if (-not (Is-PidAlive $RtPid)) {
 Wait-Http "http://127.0.0.1:$($env:RUNTIME_PORT)/v1/health" 'studio-runtime' 180 | Out-Null
 
 # ════════════════════════════════════════════════════════════════════════════
+# [6/7] studio-builder (Python, agent_builder/EIBuilder)
+# ════════════════════════════════════════════════════════════════════════════
+W-Log "[6/7] studio-builder"
+$BdrPid = Join-Path $Run 'builder.pid'
+if (-not (Is-PidAlive $BdrPid)) {
+  # 复用 runtime 同一 venv；PYTHONPATH 含 app（model_service/storage/common_utils/agent_builder 经此解析）。
+  # 与 docker/studio-builder 对齐在 app\ 下执行（config.yaml 按 cwd 相对解析）。
+  $pp = "$(Join-Path $Venv 'Lib\site-packages');$(Join-Path $BundleRoot 'app')"
+  if ($env:PYTHONPATH) { $pp = $pp + ';' + $env:PYTHONPATH }
+  $env:PYTHONPATH = $pp
+  $env:LOGGING_LOG_PATH = $Log; $env:host = '127.0.0.1'
+  Push-Location (Join-Path $BundleRoot 'app')
+  $p = Start-Bg $VenvPy @('-u','-m','agent_builder.EIBuilder','--host','0.0.0.0','--port',"$($env:BUILDER_PORT)") (Join-Path $Log 'builder.log'); $p.Id | Set-Content $BdrPid
+  Pop-Location
+}
+Wait-Http "http://127.0.0.1:$($env:BUILDER_PORT)/v1/health" 'studio-builder' 180 | Out-Null
+
+# ════════════════════════════════════════════════════════════════════════════
 # [7/7] console (nginx)
 # ════════════════════════════════════════════════════════════════════════════
 W-Log "[7/7] console (nginx)"
 $NginxPid = Join-Path $Run 'nginx.pid'
 New-Item -ItemType Directory -Force -Path (Join-Path $BundleRoot 'temp') | Out-Null
+# 兜底：包内缺 config\mime.types 时（如 -SeedDeps 复用构建路径遗漏/历史包），从 nginx 依赖补一份，
+# 否则 nginx 起不来（include 指令 CreateFile 失败 → 80 端口不驻听，console 健康检查超时）。
+if (-not (Test-Path (Join-Path $BundleRoot 'config\mime.types'))) {
+  $mimeSrc = Join-Path $Deps 'nginx\mime.types'
+  if (Test-Path $mimeSrc) { Copy-Item $mimeSrc (Join-Path $BundleRoot 'config\mime.types') -Force; W-Warn "已补 config\mime.types（来自 $mimeSrc）" }
+}
 # 用 .NET 读写：ReadAllText 自动剥模板 BOM；WriteAllText(UTF8Encoding $false) 写无 BOM。
 #   PS5.1 Set-Content -Encoding UTF8 会加 BOM，nginx 报 "unknown directive ﻿..." 致启动失败。
 # 路径必须正斜杠：nginx 把 \t \n 当转义符，会毁掉 D:\task\... 这类 Windows 反斜杠路径。
@@ -253,7 +266,7 @@ Write-Host "================================================================" -F
 Write-Host "  控制台 :  $consoleUrl"
 Write-Host "  状态   :  .\scripts\status.ps1"
 Write-Host "  停止   :  .\scripts\stop.ps1"
-Write-Host "  日志   :  .\scripts\logs.ps1 [manager|service|runtime|mysql|redis|minio|nginx]"
+Write-Host "  日志   :  .\scripts\logs.ps1 [manager|runtime|builder|mysql|redis|minio|nginx]"
 Write-Host "================================================================" -ForegroundColor Green
 Start-Process $consoleUrl
 # URL 作为脚本最后一行输出，确保执行结束时它就在光标正上方

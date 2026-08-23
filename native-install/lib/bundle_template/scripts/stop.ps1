@@ -55,8 +55,8 @@ $NginxPrefixFw = "$BundleRoot" -replace '\\','/'
 Stop-PidFile (Join-Path $Run 'nginx.pid') 'nginx'
 Stop-BundleNginx   # 兜底清无 pid 文件的孤儿 nginx
 
+W-Log "停止 studio-builder..."; Stop-PidFile (Join-Path $Run 'builder.pid') 'builder'
 W-Log "停止 studio-runtime..."; Stop-PidFile (Join-Path $Run 'runtime.pid') 'runtime'; Stop-BundlePython 'runtime'
-W-Log "停止 studio-service..."; Stop-PidFile (Join-Path $Run 'service.pid') 'service'
 W-Log "停止 studio-manager..."; Stop-PidFile (Join-Path $Run 'manager.pid') 'manager'
 W-Log "停止 MinIO...";         Stop-PidFile (Join-Path $Run 'minio.pid') 'minio'
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # openJiuwen AgentStudio — 原生（免容器）一键启动（Linux）
-# 按序拉起：MySQL → Redis → MinIO(+mc) → manager → service → runtime → console(nginx)
+# 按序拉起：MySQL → Redis → MinIO(+mc) → manager → runtime → builder → console(nginx)
 set -uo pipefail
 
 # ── 定位包根 ────────────────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ set -a; . "$BUNDLE_ROOT/.env"; set +a
 CONSOLE_PORT="${CONSOLE_PORT:-80}"; DB_PORT="${DB_PORT:-3306}"
 REDIS_EXTERNAL_PORT="${REDIS_EXTERNAL_PORT:-6379}"
 MINIO_API_PORT="${MINIO_API_PORT:-9000}"; MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9001}"
-MANAGER_PORT="${MANAGER_PORT:-31111}"; SERVICE_PORT="${SERVICE_PORT:-31113}"; RUNTIME_PORT="${RUNTIME_PORT:-31014}"
+MANAGER_PORT="${MANAGER_PORT:-31111}"; RUNTIME_PORT="${RUNTIME_PORT:-31014}"; BUILDER_PORT="${BUILDER_PORT:-31015}"
 
 # ── 原生依赖路径 ──────────────────────────────────────────────────────────────
 DEPS="$BUNDLE_ROOT/deps/linux"
@@ -163,27 +163,9 @@ fi
 wait_http "http://127.0.0.1:$MANAGER_PORT/health" "studio-manager" 180 || warn "manager 健康检查未通过（可能仍启动中）"
 
 # ════════════════════════════════════════════════════════════════════════════
-# [5/7] studio-service (Java)
+# [5/7] studio-runtime (Python, agent_runtime/EIStart)
 # ════════════════════════════════════════════════════════════════════════════
-log "[5/7] studio-service"
-SVC_PID="$RUN/service.pid"
-if [ -f "$SVC_PID" ] && kill -0 "$(cat "$SVC_PID")" 2>/dev/null; then
-  log "  studio-service 已在运行"
-else
-  nohup "$JAVA_HOME/bin/java" -Xms${HEAP_MIN}m -Xmx${HEAP_MAX}m -XX:MaxDirectMemorySize=${DIRECT}m \
-    -Dfile.encoding=UTF-8 \
-    -jar "$BUNDLE_ROOT/app/service/studio-service.jar" \
-    --spring.config.additional-location="file:$BUNDLE_ROOT/config/" \
-    --spring.profiles.active=runtime \
-    --logging.config="file:$BUNDLE_ROOT/config/log4j2-runtime.xml" \
-    >> "$LOG/service.log" 2>&1 & echo $! > "$SVC_PID"
-fi
-wait_http "http://127.0.0.1:$SERVICE_PORT/v1/health" "studio-service" 180 || warn "service 健康检查未通过（可能仍启动中）"
-
-# ════════════════════════════════════════════════════════════════════════════
-# [6/7] studio-runtime (Python)
-# ════════════════════════════════════════════════════════════════════════════
-log "[6/7] studio-runtime"
+log "[5/7] studio-runtime"
 RT_PID="$RUN/runtime.pid"
 VENV="$RUN/venv"; VENV_PY="$VENV/bin/python"; VENV_PIP="$VENV/bin/pip"
 if [ ! -f "$RUN/.venv_ready" ]; then
@@ -220,6 +202,23 @@ fi
 wait_http "http://127.0.0.1:$RUNTIME_PORT/v1/health" "studio-runtime" 180 || warn "runtime 健康检查未通过（可能仍启动中）"
 
 # ════════════════════════════════════════════════════════════════════════════
+# [6/7] studio-builder (Python, agent_builder/EIBuilder)
+# ════════════════════════════════════════════════════════════════════════════
+log "[6/7] studio-builder"
+BDR_PID="$RUN/builder.pid"
+if [ -f "$BDR_PID" ] && kill -0 "$(cat "$BDR_PID")" 2>/dev/null; then
+  log "  studio-builder 已在运行"
+else
+  # 复用 runtime 同一 venv；PYTHONPATH 含 app（model_service/storage/common_utils/agent_builder 经此解析）。
+  # 与 docker/studio-builder 对齐在 app/ 下执行（config.yaml 按 cwd 相对解析 "./logs" → $BUNDLE_ROOT/logs）。
+  export PYTHONPATH="$VENV/lib/python3.11/site-packages:$BUNDLE_ROOT/app${PYTHONPATH:+:$PYTHONPATH}"
+  export LOGGING_LOG_PATH="$LOG"; export host=127.0.0.1
+  ( cd "$BUNDLE_ROOT/app" && nohup "$VENV_PY" -u -m agent_builder.EIBuilder --host 0.0.0.0 --port "$BUILDER_PORT" \
+    >> "$LOG/builder.log" 2>&1 & echo $! > "$BDR_PID" )
+fi
+wait_http "http://127.0.0.1:$BUILDER_PORT/v1/health" "studio-builder" 180 || warn "builder 健康检查未通过（可能仍启动中）"
+
+# ════════════════════════════════════════════════════════════════════════════
 # [7/7] console (nginx)
 # ════════════════════════════════════════════════════════════════════════════
 log "[7/7] console (nginx)"
@@ -227,6 +226,13 @@ NGINX_PID="$RUN/nginx.pid"
 # 建 temp 目录：nginx 用 -p $BUNDLE_ROOT/ 改了 prefix，temp 路径（client_body_temp 等）落到包内，
 # 缺目录可能致启动失败。对齐 start.ps1 的 New-Item temp。
 mkdir -p "$BUNDLE_ROOT/temp"
+# 兜底：包内缺 config/mime.types 时（如 seed 复用构建路径遗漏），从 nginx 依赖补一份，
+# 否则 nginx 起不来（include 指令 CreateFile 失败 → worker 不驻听）。
+if [ ! -f "$BUNDLE_ROOT/config/mime.types" ]; then
+  for m in "$DEPS/nginx/conf/mime.types" "$DEPS/nginx/mime.types"; do
+    if [ -f "$m" ]; then cp -f "$m" "$BUNDLE_ROOT/config/mime.types" && warn "已补 config/mime.types（来自 $m）"; break; fi
+  done
+fi
 # 由 tmpl 生成最终配置：注入 pid、user、替换 BUNDLE_ROOT/CONSOLE_PORT
 # user 设为启动用户：worker 默认 nobody 读不到 700 的 /root（index.html Permission denied）。
 {
@@ -260,7 +266,7 @@ echo "================================================================"
 echo "  控制台 :  $CONSOLE_URL"
 echo "  状态   :  ./scripts/status.sh"
 echo "  停止   :  ./scripts/stop.sh"
-echo "  日志   :  ./scripts/logs.sh [manager|service|runtime|mysql|redis|minio|nginx]"
+echo "  日志   :  ./scripts/logs.sh [manager|runtime|builder|mysql|redis|minio|nginx]"
 echo "================================================================"
 # URL 作为脚本最后一行输出，确保执行结束时它就在光标正上方
 echo

@@ -8,7 +8,7 @@ if (Test-Path $EnvFile) {
   Get-Content $EnvFile -Encoding UTF8 | ForEach-Object { $l=$_.Trim(); if ($l -and -not $l.StartsWith('#') -and $l.Contains('=')) { $kv=$l -split '=',2; Set-Item "Env:$($kv[0].Trim())" $kv[1].Trim() } }
 }
 if (-not $env:CONSOLE_PORT){$env:CONSOLE_PORT='80'};if(-not $env:DB_PORT){$env:DB_PORT='3306'};if(-not $env:REDIS_EXTERNAL_PORT){$env:REDIS_EXTERNAL_PORT='6379'}
-if(-not $env:MINIO_API_PORT){$env:MINIO_API_PORT='9000'};if(-not $env:MANAGER_PORT){$env:MANAGER_PORT='31111'};if(-not $env:SERVICE_PORT){$env:SERVICE_PORT='31113'};if(-not $env:RUNTIME_PORT){$env:RUNTIME_PORT='31014'}
+if(-not $env:MINIO_API_PORT){$env:MINIO_API_PORT='9000'};if(-not $env:MANAGER_PORT){$env:MANAGER_PORT='31111'};if(-not $env:RUNTIME_PORT){$env:RUNTIME_PORT='31014'};if(-not $env:BUILDER_PORT){$env:BUILDER_PORT='31015'}
 
 function IsAlive($pf){ if (Test-Path $pf) { $p=[int](Get-Content $pf -Raw); try { Get-Process -Id $p -ErrorAction Stop | Out-Null; return $p } catch { return $null } }; return $null }
 function PortOk($port){ try { $c=New-Object System.Net.Sockets.TcpClient; $c.Connect('127.0.0.1',[int]$port); $c.Close(); return $true } catch { return $false } }
@@ -21,8 +21,8 @@ $services = @(
   @{n='redis';  pf='redis.pid';  kind='port'; tgt=$env:REDIS_EXTERNAL_PORT},
   @{n='minio';  pf='minio.pid';  kind='http'; tgt="http://127.0.0.1:$($env:MINIO_API_PORT)/minio/health/live"},
   @{n='manager';pf='manager.pid';kind='http'; tgt="http://127.0.0.1:$($env:MANAGER_PORT)/health"},
-  @{n='service';pf='service.pid';kind='http'; tgt="http://127.0.0.1:$($env:SERVICE_PORT)/v1/health"},
   @{n='runtime';pf='runtime.pid';kind='http';tgt="http://127.0.0.1:$($env:RUNTIME_PORT)/v1/health"},
+  @{n='builder';pf='builder.pid';kind='http';tgt="http://127.0.0.1:$($env:BUILDER_PORT)/v1/health"},
   @{n='console';pf='nginx.pid'; kind='http'; tgt="http://127.0.0.1:$($env:CONSOLE_PORT)/openjiuwen/"}
 )
 foreach ($s in $services) {

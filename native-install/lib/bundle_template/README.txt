@@ -8,18 +8,19 @@ openJiuwen AgentStudio — 原生（免容器）运行包
 -------
   .env                 运行配置（首次从 .env.template 复制；改端口/口令改这里）
   .env.template        配置模板
-  config/              应用配置（application-*.yml、log4j2-*.xml、nginx.conf.tmpl、init.sql、mime.types）
+  config/              应用配置（application-manager.yml、log4j2-manager.xml、nginx.conf.tmpl、init.sql、mime.types）
   app/                 应用产物
-    studio-manager.jar / studio-service.jar   Java 服务
-    frontend/dist/hws/                         前端构建产物（nginx 托管）
-    agent_runtime/ jiuwen/ agent_builder/ tests/  runtime(Python) 源码
-    requirements.txt
+    manager/           studio-manager.jar + 依赖（Java manager，端口 31111）
+    frontend/dist/hws/   前端构建产物（nginx 托管）
+    agent_runtime/ jiuwen/ agent_builder/ tests/   Python 源码
+    model_service/ storage/ common_utils/          packages/ 共享包
+    requirements.txt    合并后的 runtime+builder 依赖（单一 venv 装一次）
   deps/
     win/  jre-17 mysql-8.0 redis-7 minio mc python-3.11 nginx   Windows 原生依赖
     linux/ ...                                                Linux 原生依赖
-    wheels/                  runtime Python 依赖离线 wheel（目标机免联网安装）
+    wheels/                  runtime Python 依赖离线 wheel（cp311，目标机免联网安装）
   scripts/
-    start.sh / start.ps1     一键启动（infra→java→runtime→console + 健康检查）
+    start.sh / start.ps1     一键启动（infra→manager→runtime→builder→console + 健康检查）
     stop.sh  / stop.ps1      停止全部
     status.sh/ status.ps1    查看状态
     logs.sh  / logs.ps1      查看日志
@@ -33,11 +34,11 @@ openJiuwen AgentStudio — 原生（免容器）运行包
   Linux:    ./scripts/start.sh
   Windows:  powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1
 
-启动完成后访问：http://localhost/openjiuwen/   （无需登录）
+启动完成后访问：http://localhost/openjiuwen/
 
 端口（改 .env 后重启）
   80   控制台(console/nginx)   3306 MySQL   6379 Redis
-  9000/9001 MinIO API/控制台    31111 manager   31113 service   31014 runtime
+  9000/9001 MinIO API/控制台    31111 manager   31014 runtime   31015 builder
 
 注意
   - Windows 非管理员无法绑 80 端口；start.ps1 检测到非 admin 会自动改用 8080 并提示。

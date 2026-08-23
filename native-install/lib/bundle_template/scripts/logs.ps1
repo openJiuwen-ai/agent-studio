@@ -1,5 +1,5 @@
 ﻿# openJiuwen AgentStudio — 查看日志（Windows PowerShell）
-# 用法: .\scripts\logs.ps1 [manager|service|runtime|mysql|redis|minio|nginx|access|error]
+# 用法: .\scripts\logs.ps1 [manager|runtime|builder|mysql|redis|minio|nginx|access|error]
 param([string]$svc = 'manager')
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BundleRoot = (Resolve-Path (Join-Path $ScriptDir '..')).Path
@@ -8,7 +8,7 @@ $name = if ($svc -in @('nginx','access','error')) { $svc } else { $svc }
 $file = Join-Path $Log "$name.log"
 if (-not (Test-Path $file)) {
   Write-Host "日志不存在: $file" -ForegroundColor Yellow
-  Write-Host "可选: manager service runtime mysql redis minio nginx access error"
+  Write-Host "可选: manager runtime builder mysql redis minio nginx access error"
   Get-ChildItem $Log -Filter *.log -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
   exit 1
 }

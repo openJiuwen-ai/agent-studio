@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # openJiuwen AgentStudio — 查看日志（Linux）
-# 用法: ./scripts/logs.sh [manager|service|runtime|mysql|redis|minio|nginx|access|error]
+# 用法: ./scripts/logs.sh [manager|runtime|builder|mysql|redis|minio|nginx|access|error]
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"; cd "$BUNDLE_ROOT"
@@ -13,6 +13,6 @@ case "$svc" in
   *) f="$svc" ;;
 esac
 file="$LOG/$f.log"
-[ -f "$file" ] || { echo "日志不存在: $file（可选: manager service runtime mysql redis minio nginx access error）"; ls -1 "$LOG"/*.log 2>/dev/null; exit 1; }
+[ -f "$file" ] || { echo "日志不存在: $file（可选: manager runtime builder mysql redis minio nginx access error）"; ls -1 "$LOG"/*.log 2>/dev/null; exit 1; }
 echo "→ tail -f $file   (Ctrl+C 退出)"
 tail -f "$file"

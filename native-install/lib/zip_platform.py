@@ -28,6 +28,11 @@ def kept_for_platform(rel, platform):
     if fname.endswith('.map') and 'frontend' in parts:
         return False
 
+    # Python 缓存目录（__pycache__）——工作区的 .pyc 是构建机解释器版本（如 cp312）产物，
+    # 与本包内置 cp311 运行时版本不符，属垃圾且可能误导；运行时按版本忽略并自动重建。
+    if '__pycache__' in parts:
+        return False
+
     # 1) 对端平台依赖目录整体排除
     if len(parts) >= 2 and parts[0] == 'deps':
         other = 'linux' if platform == 'win' else 'win'
