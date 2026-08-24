@@ -64,6 +64,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -655,40 +656,41 @@ public class JiuWenPromptTaskJob implements Job {
      * - HTTP 状态 4xx/5xx 但解析不到 code 时，按 5xx 视为服务异常，4xx 视为参数类错误（同归到 LLM 码）
      */
     private AgentStudioException mapBuilderError(HttpStatusCode status, String errorBody) {
-        Integer builderCode = parseBuilderCode(errorBody);
-        if (builderCode == null) {
+        OptionalInt builderCode = parseBuilderCode(errorBody);
+        if (builderCode.isEmpty()) {
             log.warn("Builder error body unparseable, status={}, bodyLen={}", status,
                 errorBody == null ? 0 : errorBody.length());
             return new AgentStudioException(StudioError.OPTIMIZATION_TASK_FROM_JIUWEN_SERVICE_ERROR,
                 "unparseable");
         }
-        if (isLlmRelatedCode(builderCode)) {
+        int code = builderCode.getAsInt();
+        if (isLlmRelatedCode(code)) {
             return new AgentStudioException(StudioError.CALL_LLM_EXECUTION_ERROR,
-                String.valueOf(builderCode));
+                String.valueOf(code));
         }
         return new AgentStudioException(StudioError.OPTIMIZATION_TASK_FROM_JIUWEN_SERVICE_ERROR,
-            String.valueOf(builderCode));
+            String.valueOf(code));
     }
 
-    private Integer parseBuilderCode(String errorBody) {
+    private OptionalInt parseBuilderCode(String errorBody) {
         if (StringUtils.isEmpty(errorBody)) {
-            return null;
+            return OptionalInt.empty();
         }
         try {
             Map<String, Object> body = JsonUtils.json2ObjQuietly(errorBody, Map.class);
             if (body == null) {
-                return null;
+                return OptionalInt.empty();
             }
             Object code = body.get("code");
             if (code instanceof Number) {
-                return ((Number) code).intValue();
+                return OptionalInt.of(((Number) code).intValue());
             }
             if (code instanceof String) {
-                return Integer.parseInt((String) code);
+                return OptionalInt.of(Integer.parseInt((String) code));
             }
-            return null;
+            return OptionalInt.empty();
         } catch (Exception e) {
-            return null;
+            return OptionalInt.empty();
         }
     }
 
