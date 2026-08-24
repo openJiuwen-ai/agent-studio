@@ -62,6 +62,7 @@ import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
 import com.openjiuwen.studio.agent.manager.utils.MapReadUtil;
 import com.openjiuwen.studio.agent.manager.workflow.resource.adapt.ResourceAdapterFactory;
+import com.openjiuwen.studio.agent.manager.workflow.resource.model.ExportInfo;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportCheckResult;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportExportStatusEnum;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportInfo;
@@ -200,6 +201,10 @@ public class AgentImportService {
         skuManageService.validateAttrEnable(CommonConstant.SKU_ATTR_CODE.EXPORT_AND_IMPORT);
         List<ImportInfo> resourceList = getImportInfos(file);
         validateImportAppCount(workspaceId, resourceList);
+        return sortImportInfos(resourceList);
+    }
+
+    private List<ImportInfo> sortImportInfos(List<ImportInfo> resourceList) {
         return resourceList.stream().sorted((v1, v2) -> {
             int orderCompare = Integer.compare(v1.getOrder(), v2.getOrder());
             if (orderCompare != 0) {
@@ -306,6 +311,36 @@ public class AgentImportService {
      */
     public ImportRsp importFile(String projectId, String workspaceId, MultipartFile file, String mode) {
         List<ImportInfo> resourceList = getAndValidateImportInfos(workspaceId, file);
+        return doImport(projectId, workspaceId, resourceList, mode);
+    }
+
+    /**
+     * 从内存 ExportInfo 列表导入资源（不经文件中转），供跨空间复用调用
+     *
+     * @param projectId projectId
+     * @param targetWorkspaceId 目标空间id
+     * @param exportInfos 导出资源列表
+     * @return ImportRsp
+     */
+    public ImportRsp importFromExportInfos(String projectId, String targetWorkspaceId,
+        List<ExportInfo> exportInfos) {
+        List<ImportInfo> resourceList = sortImportInfos(exportInfos.stream()
+            .map(this::convertToImportInfo)
+            .collect(Collectors.toList()));
+        validateImportAppCount(targetWorkspaceId, resourceList);
+        return doImport(projectId, targetWorkspaceId, resourceList, null);
+    }
+
+    /**
+     * 核心导入逻辑：遍历资源列表执行适配器导入，按模式选择后续处理
+     *
+     * @param projectId projectId
+     * @param workspaceId 目标空间id
+     * @param resourceList 已排序的导入资源列表
+     * @param mode 导入模式（null 走 STRICT）
+     * @return ImportRsp
+     */
+    private ImportRsp doImport(String projectId, String workspaceId, List<ImportInfo> resourceList, String mode) {
         List<ImportResourceResult> result = new ArrayList<>();
         resourceList.forEach(p -> {
             initImportData(workspaceId, projectId, p);
@@ -330,6 +365,12 @@ public class AgentImportService {
             handleStrictImport(projectId, resourceList, result);
         }
         return handleImportRsp(resourceList, result);
+    }
+
+    private ImportInfo convertToImportInfo(ExportInfo exportInfo) {
+        ImportInfo importInfo = new ImportInfo();
+        BeanUtils.copyProperties(exportInfo, importInfo);
+        return importInfo;
     }
 
     /**

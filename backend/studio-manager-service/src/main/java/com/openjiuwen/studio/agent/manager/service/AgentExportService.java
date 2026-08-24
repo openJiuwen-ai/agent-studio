@@ -401,28 +401,7 @@ public class AgentExportService {
 
     private ByteArrayInputStream buildExportFile(List<ExportResp> exportResps, ExportResourceParams resourceParams)
         throws JsonProcessingException {
-        List<ExportInfo> exportInfos = exportResps.stream()
-            .map(ExportResp::getExportInfos)
-            .filter(CollectionUtils::isNotEmpty)
-            .flatMap(List::stream)
-            .collect(Collectors.toList());
-        exportInfos = new ArrayList<>(exportInfos.stream()
-            .collect(Collectors.toMap(
-                p -> p.getResourceId() + "|" + p.getResourceLevel() + "|"
-                    + (p.getReleaseVersion() != null ? p.getReleaseVersion().getVersionId() : ""),
-                p -> p,
-                (p1, p2) -> {
-                    List<String> mergedParents = new ArrayList<>();
-                    if (CollectionUtils.isNotEmpty(p1.getParents())) {
-                        mergedParents.addAll(p1.getParents());
-                    }
-                    if (CollectionUtils.isNotEmpty(p2.getParents())) {
-                        mergedParents.addAll(p2.getParents());
-                    }
-                    p1.setParents(mergedParents.stream().distinct().toList());
-                    return p1;
-                }))
-            .values());
+        List<ExportInfo> exportInfos = flattenExportInfos(exportResps);
         java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
         for (ExportInfo exportInfo : exportInfos) {
             baos.writeBytes(jacksonObjectMapper.writeValueAsBytes(exportInfo));
@@ -576,48 +555,8 @@ public class AgentExportService {
 
     private ExportResourceRsp exportAgents(String projectId, String workspaceId, String accept,
         ExportResourceParams body) {
-        List<String> agentIds = body.getResourceIds();
-        validAgent(projectId, workspaceId, agentIds);
-        List<ExportResp> exportResps = new ArrayList<>();
         try {
-            for (ExportResourceVersion exportResourceVersion : body.getResourceVersions()) {
-                String agentId = exportResourceVersion.getResourceId();
-                // 空 version 转 latest（对齐旧版 lumina AgentExportService.exportAgents）
-                String versionId = StringUtils.isEmpty(exportResourceVersion.getResourceVersion())
-                    ? Constants.LATEST_PUBLISH_VERSION : exportResourceVersion.getResourceVersion();
-                log.info("parse Processing:{} version:{}", agentId, versionId);
-                Agent currentAgent = agentMapper.selectById(agentId);
-                // 版本存在性校验（latest 跳过；具体版本不存在则记录失败项并跳过），SPACIOUS 和 strict 模式均执行
-                if (validReleaseVersion(agentId, versionId, currentAgent.getName(), body.getResourceType(),
-                    exportResps)) {
-                    continue;
-                }
-                List<ExportResourceUnit> exportResourceUnits;
-                if (ExportModeEnum.SPACIOUS.getCode().equals(body.getMode())) {
-                    // SPACIOUS 模式：仅导出父智能体自身资源（不递归展开子资源）
-                    exportResourceUnits = getSpaciousExportResourceUnits(projectId, workspaceId, body,
-                        agentId, versionId, currentAgent.getName());
-                } else {
-                    // 获取该版本下所有资源（versionId=latest 查草稿 mapping，具体 versionId 查版本 mapping）
-                    List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(agentId,
-                        versionId, null, null);
-                    List<MappingEntity> subExportResources = new ArrayList<>();
-                    buildSubExportResources(subExportResources, mappingEntities);
-
-                    subExportResources = filterShareResource(workspaceId, subExportResources);
-                    exportResourceUnits = convertMapping2ExportParam(subExportResources);
-                    // 模型供应商查询
-                    List<ModelExportEntity> modelProviders = getModelProviders(projectId, workspaceId, subExportResources);
-                    exportResourceUnits.add(addCurrentResource(agentId, versionId, currentAgent.getName(), body.getResourceType(),
-                        subExportResources, modelProviders));
-                }
-                for (ResourceTypeEnum resourceTypeEnum : EXPORT_RESOURCE_TYPE_LIST) {
-                    ExportResp exportResp = buildSubResource(exportResourceUnits, agentId, resourceTypeEnum);
-                    if (Objects.nonNull(exportResp)) {
-                        exportResps.add(exportResp);
-                    }
-                }
-            }
+            List<ExportResp> exportResps = collectExportResps(projectId, workspaceId, body);
             String exportFilePath = getExportFilePath(accept, body, exportResps);
             if (exportFilePath == null) {
                 return null;
@@ -626,10 +565,59 @@ public class AgentExportService {
             exportResourceRsp.setExportResult(getExportResults(exportResps));
             exportResourceRsp.setDownloadUrl(exportFilePath);
             return exportResourceRsp;
+        } catch (AgentStudioException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to export the agent.", e);
             throw new AgentStudioException(StudioError.AGENT_EXPORT_FILE);
         }
+    }
+
+    /**
+     * 核心导出逻辑：遍历资源版本，收集 ExportResp 列表（不落文件）
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param body 导出参数（含 resourceIds、resourceVersions、mode 等）
+     * @return 导出结果列表
+     */
+    private List<ExportResp> collectExportResps(String projectId, String workspaceId, ExportResourceParams body) {
+        List<String> agentIds = body.getResourceIds();
+        validAgent(projectId, workspaceId, agentIds);
+        List<ExportResp> exportResps = new ArrayList<>();
+        for (ExportResourceVersion exportResourceVersion : body.getResourceVersions()) {
+            String agentId = exportResourceVersion.getResourceId();
+            String versionId = StringUtils.isEmpty(exportResourceVersion.getResourceVersion())
+                ? Constants.LATEST_PUBLISH_VERSION : exportResourceVersion.getResourceVersion();
+            log.info("export agent:{} version:{}", agentId, versionId);
+            Agent currentAgent = agentMapper.selectById(agentId);
+            if (validReleaseVersion(agentId, versionId, currentAgent.getName(), body.getResourceType(),
+                exportResps)) {
+                continue;
+            }
+            List<ExportResourceUnit> exportResourceUnits;
+            if (ExportModeEnum.SPACIOUS.getCode().equals(body.getMode())) {
+                exportResourceUnits = getSpaciousExportResourceUnits(projectId, workspaceId, body,
+                    agentId, versionId, currentAgent.getName());
+            } else {
+                List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(agentId,
+                    versionId, null, null);
+                List<MappingEntity> subExportResources = new ArrayList<>();
+                buildSubExportResources(subExportResources, mappingEntities);
+                subExportResources = filterShareResource(workspaceId, subExportResources);
+                exportResourceUnits = convertMapping2ExportParam(subExportResources);
+                List<ModelExportEntity> modelProviders = getModelProviders(projectId, workspaceId, subExportResources);
+                exportResourceUnits.add(addCurrentResource(agentId, versionId, currentAgent.getName(),
+                    body.getResourceType(), subExportResources, modelProviders));
+            }
+            for (ResourceTypeEnum resourceTypeEnum : EXPORT_RESOURCE_TYPE_LIST) {
+                ExportResp exportResp = buildSubResource(exportResourceUnits, agentId, resourceTypeEnum);
+                if (Objects.nonNull(exportResp)) {
+                    exportResps.add(exportResp);
+                }
+            }
+        }
+        return exportResps;
     }
 
     private void validAgent(String projectId, String workspaceId, List<String> agentIds) {
@@ -690,5 +678,62 @@ public class AgentExportService {
         currentResource.setL1Mappings(mappingEntities);
         exportResourceUnits.add(currentResource);
         return exportResourceUnits;
+    }
+
+    /**
+     * 构建智能体导出资源（内存版，不落文件），供跨空间复用调用
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param agentId agentId
+     * @return List<ExportResp> 导出结果列表
+     */
+    public List<ExportResp> buildExportResps(String projectId, String workspaceId, String agentId) {
+        ExportResourceParams body = new ExportResourceParams();
+        body.setResourceType(ResourceTypeEnum.AGENT.toString());
+        body.setResourceIds(List.of(agentId));
+        ExportResourceVersion version = new ExportResourceVersion();
+        version.setResourceId(agentId);
+        body.setResourceVersions(List.of(version));
+        try {
+            return collectExportResps(projectId, workspaceId, body);
+        } catch (AgentStudioException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to build export resps for agent: {}", agentId, e);
+            throw new AgentStudioException(StudioError.AGENT_EXPORT_FILE);
+        }
+    }
+
+    /**
+     * 将 ExportResp 列表展平为 ExportInfo 列表（去重、合并 parents）
+     *
+     * @param exportResps 导出结果列表
+     * @return 展平去重后的 ExportInfo 列表
+     */
+    public List<ExportInfo> flattenExportInfos(List<ExportResp> exportResps) {
+        List<ExportInfo> exportInfos = exportResps.stream()
+            .map(ExportResp::getExportInfos)
+            .filter(CollectionUtils::isNotEmpty)
+            .flatMap(List::stream)
+            .collect(Collectors.toList());
+        exportInfos = new ArrayList<>(exportInfos.stream()
+            .collect(Collectors.toMap(
+                p -> p.getResourceId() + "|" + p.getResourceLevel() + "|"
+                    + (p.getReleaseVersion() != null ? p.getReleaseVersion().getVersionId() : ""),
+                p -> p,
+                (p1, p2) -> {
+                    List<String> mergedParents = new ArrayList<>();
+                    if (CollectionUtils.isNotEmpty(p1.getParents())) {
+                        mergedParents.addAll(p1.getParents());
+                    }
+                    if (CollectionUtils.isNotEmpty(p2.getParents())) {
+                        mergedParents.addAll(p2.getParents());
+                    }
+                    p1.setParents(mergedParents.stream().distinct().toList());
+                    return p1;
+                }))
+            .values());
+        return exportInfos;
     }
 }
