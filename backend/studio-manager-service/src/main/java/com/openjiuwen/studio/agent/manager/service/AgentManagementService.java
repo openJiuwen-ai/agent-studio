@@ -114,6 +114,8 @@ import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowExportEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkspaceEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
+import com.openjiuwen.studio.agent.manager.workflow.resource.model.ExportInfo;
+import com.openjiuwen.studio.agent.manager.workflow.resource.model.ExportResp;
 import com.openjiuwen.studio.agent.manager.entity.plugin.PluginExportEntity;
 import com.openjiuwen.studio.agent.manager.enums.AgentStatus;
 import com.openjiuwen.studio.agent.manager.enums.AgentType;
@@ -652,11 +654,9 @@ public class AgentManagementService implements IAgentManagementService {
         }
 
         try {
-            String exportAgentStr = agentImportExportService.exportAgentStr(projectId, workspaceId, agentId);
-
-            List<ImportListInfo> importListInfoList = listImportInfoFromJson(projectId, exportAgentStr);
-
-            agentImportExportService.importAgentWithStr(projectId, targetWorkspaceId, exportAgentStr, importListInfoList);
+            List<ExportResp> exportResps = agentExportService.buildExportResps(projectId, workspaceId, agentId);
+            List<ExportInfo> exportInfos = agentExportService.flattenExportInfos(exportResps);
+            agentImportService.importFromExportInfos(projectId, targetWorkspaceId, exportInfos);
         } catch (AgentStudioException e) {
             log.error("Fail to copy agent, agentId: {}", agentId, e);
             throw new AgentStudioException(StudioError.AGENT_COPY_FAIL);

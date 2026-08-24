@@ -361,7 +361,11 @@ export class AddPluginsComponent {
      */
     if (changes.plugins && this.addOrCreate) {
       // 创建副本，避免同步修改父组件中的pluginAdded.list
-      this.pluginSelected = [...changes.plugins.currentValue];
+      // 为每个元素设置id字段，确保isSelectedTool方法能正确匹配
+      this.pluginSelected = changes.plugins.currentValue.map((plugin: any) => ({
+        ...plugin,
+        id: plugin.id || plugin.tool_id
+      }));
       // 页面被强制刷新后，一定要用get接口传入的输入属性值更新service，给service赋初值
       this.agentDataServe.setPluginsAndTabId(
         this.commonLogic.getCurrentTabId(
