@@ -114,6 +114,12 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
     { id: '1', label: this.i18n.transform('non_streaming'), value: false, disabled: false },
     { id: '2', label: this.i18n.transform('streaming'), value: true, disabled: false },
   ];
+  public envPlaceholderVars: Array<{name: string, value: string}> = [];
+  /** 缓存的环境变量值Map，避免每次变更检测都重新创建 */
+  public envVarValuesMap: Record<string, string> = {};
+  // 匹配后台返回格式${_env.plugin_url_params.VAR_NAME}提取变量名
+  private readonly ENV_PLACEHOLDER_REGEX = /\$\{_env\.plugin_url_params\.([a-zA-Z_$][a-zA-Z0-9_$]*)\}/g;
+
   public mySelected: any;
   public selectedMap: any = {
     '0': { id: '' },
@@ -278,6 +284,7 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
           }
         }
         this.initThinking();
+        this.extractEnvPlaceholders();
       }
     });
   }
@@ -319,20 +326,15 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
 
   fileList: NzUploadFile[] = [];
 
-  /** 同步计数器：已通过 beforeUpload 校验但 FileReader.onload 尚未完成的图片数 */
-  pendingImageCount = 0;
-
-  /** 当前预览的图片 dataURL */
-  previewImageSrc = '';
-  /** 是否显示预览遮罩 */
-  previewVisible = false;
-
   image2textParam: any = {
     uploadData: [],
     content: '',
   };
 
   get Image2TextButtonTip(){
+    if(this.hasInvalidEnvVar()){
+      return this.i18n.transform('env_var_not_ready_tip')
+    }
     if(!this.mySelected?.id){
       return this.i18n.transform('select_model_first')
     }
@@ -347,6 +349,9 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   }
 
   get EmbeddingButtonTip(){
+    if(this.hasInvalidEnvVar()){
+      return this.i18n.transform('env_var_not_ready_tip')
+    }
     if(!this.mySelected?.id){
       return this.i18n.transform('select_model_first')
     }
@@ -357,6 +362,9 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   }
 
   get RerankButtonTip(){
+    if(this.hasInvalidEnvVar()){
+      return this.i18n.transform('env_var_not_ready_tip')
+    }
     if(!this.mySelected?.id){
       return this.i18n.transform('select_model_first')
     }
@@ -377,14 +385,14 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   }
 
   triggerImage2Text() {
+    if (this.hasInvalidEnvVar()) {
+      this.message.warning(this.i18n.transform('env_var_not_ready_tip'));
+      return;
+    }
     this.image2text.sendQuestion();
   }
 
   beforeUploadImage2Text = (file: NzUploadFile): boolean => {
-    if (this.image2textParam.uploadData.length + this.pendingImageCount >= 5) {
-      this.message.error(this.i18n.transform('image_upload_max_count_exceeded'));
-      return false;
-    }
     const isValidType = file.type === 'image/jpeg' || file.type === 'image/png';
     if (!isValidType) {
       this.message.error(this.i18n.transform("unsupported_file_type"));
@@ -396,24 +404,18 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       return false;
     }
 
-    this.pendingImageCount++;
     const reader = new FileReader();
     reader.readAsDataURL(file as any);
     reader.onload = () => {
-      this.pendingImageCount--;
       const url = reader.result;
       const uuid = uuidV4();
       file.uid = uuid;
-      file.url = url as string;
       this.image2textParam.uploadData.push({
         url,
         type: file.type,
         uuid,
       });
       this.fileList = [...this.fileList, file];
-    };
-    reader.onerror = () => {
-      this.pendingImageCount--;
     };
     return false;
   };
@@ -424,19 +426,6 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       this.image2textParam.uploadData.splice(index, 1);
     }
     return true;
-  };
-
-  handlePreview = (file: NzUploadFile): void => {
-    // 使用组件内置遮罩预览，避免 window.open 被超长 base64 URL 截断
-    const src = file.url || file.thumbUrl;
-    if (src) {
-      this.previewImageSrc = src;
-      this.previewVisible = true;
-    }
-  };
-
-  closePreview = (): void => {
-    this.previewVisible = false;
   };
 
   changeValue(config) {
@@ -463,6 +452,10 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   textEmbeddingTips = this.i18n.transform('embedding_example');
 
   triggerTextEmbedding() {
+    if (this.hasInvalidEnvVar()) {
+      this.message.warning(this.i18n.transform('env_var_not_ready_tip'));
+      return;
+    }
     this.textEmbedding.sendQuestion();
   }
 
@@ -478,6 +471,10 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   };
 
   triggerTextRerank() {
+    if (this.hasInvalidEnvVar()) {
+      this.message.warning(this.i18n.transform('env_var_not_ready_tip'));
+      return;
+    }
     this.textRerank.sendQuestion();
   }
 
@@ -532,7 +529,78 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
     } else {
       this.mySelected = this.mySelected[0];
     }
+    this.extractEnvPlaceholders();
     this.initThinking();
+  }
+
+  /**
+   * 从选中的模型api_url中提取环境变量占位符
+   */
+  extractEnvPlaceholders() {
+    const varSet = new Set<string>();
+    const models = Array.isArray(this.mySelected) ? this.mySelected : (this.mySelected ? [this.mySelected] : []);
+
+    models.forEach(model => {
+      if (!model?.api_url) return;
+      let match;
+      const regex = new RegExp(this.ENV_PLACEHOLDER_REGEX.source, 'g');
+      while ((match = regex.exec(model.api_url)) !== null) {
+        varSet.add(match[1]);
+      }
+    });
+
+    // 保留已输入的值
+    const existingValues = new Map(this.envPlaceholderVars.map(v => [v.name, v.value]));
+    this.envPlaceholderVars = Array.from(varSet).map(name => ({
+      name,
+      value: existingValues.get(name) || ''
+    }));
+    // 更新缓存的环境变量Map
+    this.updateEnvVarValuesMap();
+  }
+
+  /**
+   * 更新缓存的环境变量值Map
+   * 仅当值为合法URL时才纳入Map，确保后端不会收到空值或非法URL
+   */
+  updateEnvVarValuesMap() {
+    const map: Record<string, string> = {};
+    this.envPlaceholderVars.forEach(item => {
+      if (this.isUrlValid(item.value)) {
+        map[item.name] = item.value.trim();
+      }
+    });
+    this.envVarValuesMap = map;
+  }
+
+  /**
+   * 校验是否为合法URL（仅允许 http/https 协议）
+   */
+  isUrlValid(url: string): boolean {
+    if (!url || !url.trim()) {
+      return false;
+    }
+    try {
+      const u = new URL(url.trim());
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 是否存在未填好（空或非法URL）的模型服务API地址变量
+   */
+  hasInvalidEnvVar(): boolean {
+    return this.envPlaceholderVars.length > 0 &&
+      this.envPlaceholderVars.some(item => !this.isUrlValid(item.value));
+  }
+
+  /**
+   * 获取用户输入的环境变量值Map，用于传给后端（已缓存，避免频繁创建）
+   */
+  getEnvVarValuesMap(): Record<string, string> {
+    return this.envVarValuesMap;
   }
 
   initThinking(){

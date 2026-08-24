@@ -8,6 +8,7 @@ import { cdnAssetUrl } from 'src/single-spa/assets-url';
 import { ModelManagementService } from '@services/repositories/model-management-new';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonUtils } from '../../../utils/common.util';
+import { hasEnvPlaceholder } from '../../../utils/model-api-url.util';
 import { AddPublisherComponent } from '@routes/model-management/components/add-publisher/add-publisher.component';
 import { AddModelComponent } from '@routes/model-management/components/add-model/add-model.component';
 import { DeleteModalComponent } from '@routes/model-management/delete-modal/delete-modal.component';
@@ -424,6 +425,9 @@ export class ModalManagementDetailComponent {
       }
 
       this.getData();
+    }).catch(err => {
+      console.error('Failed to load provider detail:', err);
+      this.nzMessageService.error(this.i18n.transform('load_failed'));
     });
   }
 
@@ -439,9 +443,8 @@ export class ModalManagementDetailComponent {
   changeModelStatus(data) {
     let query = {};
     if (data?.publish_status === 'offline') {
-      query = {
-        available_check: true,
-      };
+      // 带环境变量占位符的模型，URL 运行期才解析，发布期可用性探测无意义，跳过 available_check
+      query = hasEnvPlaceholder(data.api_url) ? {} : { available_check: true };
     }
     this.modelManagementService.publishModelInfo(data.id, data?.publish_status === 'online' ? 'offline' : 'online', query).then(() => {
       this.currentPage = 1;

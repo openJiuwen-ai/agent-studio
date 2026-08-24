@@ -2074,6 +2074,8 @@
   "llmselectcomponent_430": "文本",
   "llmselectcomponent_431": "嵌入",
   "llmselectcomponent_432": "排序",
+  "llmselectcomponent_env_placeholder_disabled": "单智能体不支持配置环境变量占位符的模型",
+  "llmselectcomponent_env_placeholder_selected_warn": "当前选择的模型配置了环境变量占位符，单智能体不支持运行，请重新选择模型",
   "mcpservicemodalcomponent_436": "编排",
   "mcpservicenodecomponent_438": "等{{nodeOperators}}个算子",
   "mcpservicenodecomponent_439": "{{nodeOperators}}个算子",

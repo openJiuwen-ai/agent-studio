@@ -29,7 +29,7 @@
           <nz-option
             [nzValue]="item.id"
             [nzLabel]="item.service_name"
-            [nzDisabled]="item.type === 'button'"
+            [nzDisabled]="item.type === 'button' || item.envPlaceholderDisabled"
             [nzCustomContent]="true"
           >
             @if (item.type === 'button') {
@@ -44,7 +44,7 @@
                     *ngIf="image && item.service_name"
                     [src]="item.logo?item.logo:image"
                   />
-                  <div nz-tooltip [nzTooltipTitle]="item.service_name" nzTooltipZIndex="99999" class="service_name">{{ item.service_name }}</div>
+                  <div nz-tooltip [nzTooltipTitle]="item.envPlaceholderDisabled ? ('llmselectcomponent_env_placeholder_disabled' | i18nextEager) : item.service_name" nzTooltipZIndex="99999" class="service_name">{{ item.service_name }}</div>
                 </div>
                 <div class="flex">
                   <div *ngIf="item.model_tags" style="max-width: 180px;overflow: hidden;text-overflow: ellipsis;">
@@ -150,5 +150,9 @@
   <div *ngIf="showError" class="error-class">
     <nz-icon nzType="close-circle" nzTheme="outline" class="error-class-icon" />
     {{'select_placeholder'|i18nextEager}}
+  </div>
+  <div *ngIf="disableEnvPlaceholderModels && selectedModelIsEnvPlaceholder" class="env-placeholder-warn">
+    <nz-icon nzType="warning" nzTheme="outline" class="env-placeholder-warn-icon" />
+    {{'llmselectcomponent_env_placeholder_selected_warn'|i18nextEager}}
   </div>
 </div>

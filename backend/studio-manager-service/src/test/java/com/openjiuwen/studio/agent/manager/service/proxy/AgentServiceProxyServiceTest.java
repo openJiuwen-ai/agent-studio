@@ -370,13 +370,13 @@ class AgentServiceProxyServiceTest {
             com.alibaba.fastjson.JSONObject expectedResult = new com.alibaba.fastjson.JSONObject();
             expectedResult.put("data", "embedding-result");
             when(builderClient.textEmbeddings(anyString(), anyString(), anyString(),
-                any(EmbeddingRequest.class), any())).thenReturn(expectedResult);
+                any(EmbeddingRequest.class), any(), any())).thenReturn(expectedResult);
 
             EmbeddingRequest request = new EmbeddingRequest();
             request.setModel("model-1");
             request.setInput("hello");
 
-            Object result = proxyService.textEmbeddings(new HttpHeaders(), "ws-1", request, true, "proj-1");
+            Object result = proxyService.textEmbeddings(new HttpHeaders(), "ws-1", request, true, "proj-1", null);
 
             assertNotNull(result);
             assertEquals(expectedResult, result);
@@ -399,7 +399,7 @@ class AgentServiceProxyServiceTest {
             request.setInput("hello");
 
             assertThrows(AgentStudioException.class,
-                () -> proxyService.textEmbeddings(new HttpHeaders(), "ws-1", request, true, "proj-1"));
+                () -> proxyService.textEmbeddings(new HttpHeaders(), "ws-1", request, true, "proj-1", null));
         }
     }
 
@@ -421,13 +421,13 @@ class AgentServiceProxyServiceTest {
                 "internal error", mockFeignRequest(), errorBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
             when(builderClient.textEmbeddings(anyString(), anyString(), anyString(),
-                any(EmbeddingRequest.class), any())).thenThrow(feignException);
+                any(EmbeddingRequest.class), any(), any())).thenThrow(feignException);
 
             EmbeddingRequest request = new EmbeddingRequest();
             request.setModel("model-1");
             request.setInput("hello");
 
-            Object result = proxyService.textEmbeddings(new HttpHeaders(), "ws-1", request, true, "proj-1");
+            Object result = proxyService.textEmbeddings(new HttpHeaders(), "ws-1", request, true, "proj-1", null);
 
             assertNotNull(result);
             assertTrue(result instanceof ResponseEntity);
@@ -468,13 +468,13 @@ class AgentServiceProxyServiceTest {
                 "bad gateway", mockFeignRequest(), badBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
             when(builderClient.textEmbeddings(anyString(), anyString(), anyString(),
-                any(EmbeddingRequest.class), any())).thenThrow(feignException);
+                any(EmbeddingRequest.class), any(), any())).thenThrow(feignException);
 
             EmbeddingRequest request = new EmbeddingRequest();
             request.setModel("model-1");
             request.setInput("hello");
 
-            Object result = proxyService.textEmbeddings(new HttpHeaders(), "ws-1", request, true, "proj-1");
+            Object result = proxyService.textEmbeddings(new HttpHeaders(), "ws-1", request, true, "proj-1", null);
 
             assertNotNull(result);
             assertTrue(result instanceof ResponseEntity);
@@ -502,7 +502,7 @@ class AgentServiceProxyServiceTest {
             com.alibaba.fastjson.JSONObject expectedResult = new com.alibaba.fastjson.JSONObject();
             expectedResult.put("results", "rerank-result");
             when(builderClient.rerank(anyString(), anyString(), anyString(),
-                any(RankDocumentsRequest.class), any())).thenReturn(expectedResult);
+                any(RankDocumentsRequest.class), any(), any())).thenReturn(expectedResult);
 
             RankDocumentsRequest request = new RankDocumentsRequest();
             request.setModel("model-1");
@@ -510,7 +510,7 @@ class AgentServiceProxyServiceTest {
             request.setDocs(List.of("doc1", "doc2"));
             request.setTopN(2);
 
-            Object result = proxyService.rerank(new HttpHeaders(), "ws-1", request, true, "proj-1");
+            Object result = proxyService.rerank(new HttpHeaders(), "ws-1", request, true, "proj-1", null);
 
             assertNotNull(result);
             assertEquals(expectedResult, result);
@@ -535,7 +535,7 @@ class AgentServiceProxyServiceTest {
             request.setTopN(1);
 
             assertThrows(AgentStudioException.class,
-                () -> proxyService.rerank(new HttpHeaders(), "ws-1", request, true, "proj-1"));
+                () -> proxyService.rerank(new HttpHeaders(), "ws-1", request, true, "proj-1", null));
         }
     }
 
@@ -557,7 +557,7 @@ class AgentServiceProxyServiceTest {
                 "internal error", mockFeignRequest(), errorBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
             when(builderClient.rerank(anyString(), anyString(), anyString(),
-                any(RankDocumentsRequest.class), any())).thenThrow(feignException);
+                any(RankDocumentsRequest.class), any(), any())).thenThrow(feignException);
 
             RankDocumentsRequest request = new RankDocumentsRequest();
             request.setModel("model-1");
@@ -565,7 +565,7 @@ class AgentServiceProxyServiceTest {
             request.setDocs(List.of("doc1"));
             request.setTopN(1);
 
-            Object result = proxyService.rerank(new HttpHeaders(), "ws-1", request, true, "proj-1");
+            Object result = proxyService.rerank(new HttpHeaders(), "ws-1", request, true, "proj-1", null);
 
             assertNotNull(result);
             assertTrue(result instanceof ResponseEntity);
@@ -606,7 +606,7 @@ class AgentServiceProxyServiceTest {
                 "service unavailable", mockFeignRequest(), badBody.getBytes(StandardCharsets.UTF_8),
                 Collections.emptyMap());
             when(builderClient.rerank(anyString(), anyString(), anyString(),
-                any(RankDocumentsRequest.class), any())).thenThrow(feignException);
+                any(RankDocumentsRequest.class), any(), any())).thenThrow(feignException);
 
             RankDocumentsRequest request = new RankDocumentsRequest();
             request.setModel("model-1");
@@ -614,7 +614,7 @@ class AgentServiceProxyServiceTest {
             request.setDocs(List.of("doc1"));
             request.setTopN(1);
 
-            Object result = proxyService.rerank(new HttpHeaders(), "ws-1", request, true, "proj-1");
+            Object result = proxyService.rerank(new HttpHeaders(), "ws-1", request, true, "proj-1", null);
 
             assertNotNull(result);
             assertTrue(result instanceof ResponseEntity);

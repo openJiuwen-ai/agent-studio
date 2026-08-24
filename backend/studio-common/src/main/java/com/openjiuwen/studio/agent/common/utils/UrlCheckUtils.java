@@ -152,6 +152,24 @@ public class UrlCheckUtils {
     }
 
     /**
+     * 判断 apiUrl 是否含环境变量占位符 ``${_env.plugin_url_params.VAR}``。
+     *
+     * <p>含占位符的模型，其真实 URL 由 Python 运行期 ``env_resolver.py`` 按环境变量解析，
+     * 在发布/鉴权/创建/更新等可用性探测时无法预知目标环境运行时变量，探测字面占位符必失败。
+     * 故探测入口据此跳过占位符模型（与 Python ``resolver._build_detail`` 的 fail-fast 语义互补：
+     * 运行期解析缺变量抛 MD_ENV_VAR_UNRESOLVED；导入侧探测期直接跳过）。
+     *
+     * @param url 待判断的 apiUrl
+     * @return 含占位符返回 true
+     */
+    public boolean hasEnvPlaceholder(String url) {
+        if (StringUtils.isEmpty(url) || !url.contains("${")) {
+            return false;
+        }
+        return VALID_ENV_PLACEHOLDER.matcher(url).find();
+    }
+
+    /**
      * 检查给定的URL是否在白名单中
      *
      * @param url 需要检查的URL

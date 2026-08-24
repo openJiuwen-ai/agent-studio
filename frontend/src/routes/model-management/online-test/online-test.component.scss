@@ -110,6 +110,21 @@
           }
         }
       }
+      /* 模型服务API地址变量：URL校验错误态 */
+      .env-var-input-error {
+        border-color: #ff4d4f !important;
+        &:hover {
+          border-color: #ff7875 !important;
+        }
+        &:focus {
+          border-color: #ff4d4f !important;
+          box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.2) !important;
+        }
+      }
+      .env-var-error-msg {
+        padding-left: 104px;
+        line-height: 1.4;
+      }
     }
 
     .main-right {

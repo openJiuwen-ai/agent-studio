@@ -698,7 +698,7 @@ async def _handle_error_response(item: JiuWenBaseException) -> bytes:
             "data": {
                 MESSAGE: WORKFLOW_UNIFIED_ERROR_INFORMATION_UNSAFE.format(
                     item.error_code,
-                    item.message if LOG_VERBOSE_MODE else "test error message",
+                    item.message,
                 ),
                 CODE: item.error_code,
             },
@@ -1072,9 +1072,7 @@ async def _process_streaming_output(
                 dict(
                     message=WORKFLOW_UNIFIED_ERROR_INFORMATION_UNSAFE.format(
                         code_of_data,
-                        item.data.get("message")
-                        if LOG_VERBOSE_MODE
-                        else "test error message",
+                        item.data.get("message"),
                     )
                 )
             )

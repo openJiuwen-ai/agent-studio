@@ -818,9 +818,12 @@ class QuestionerDirectReplyHandler:
         try:
             response = (await self._model.invoke(messages=llm_inputs)).content
         except Exception as e:
+            # 透传真实原因：friendly_message 对 ModelServiceError 取 .msg 剥 [code] 前缀
+            # （如「模型服务API地址配置有误：...未配置环境变量 ali」），其余异常保留 str(e)。
+            from model_service.env_resolver import friendly_message
             raise build_error(
                 StatusCode.COMPONENT_QUESTIONER_INVOKE_CALL_FAILED,
-                error_msg="failed to invoke llm for extraction",
+                error_msg=friendly_message(e),
                 cause=e,
             ) from e
 
