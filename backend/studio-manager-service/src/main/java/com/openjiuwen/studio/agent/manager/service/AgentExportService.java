@@ -710,4 +710,93 @@ public class AgentExportService {
         exportResourceUnits.add(currentResource);
         return exportResourceUnits;
     }
+
+    /**
+     * 构建智能体导出资源（内存版，不落文件），供跨空间复用调用
+     *
+     * @param projectId projectId
+     * @param workspaceId workspaceId
+     * @param agentId agentId
+     * @return List<ExportResp> 导出结果列表
+     */
+    public List<ExportResp> buildExportResps(String projectId, String workspaceId, String agentId) {
+        ExportResourceParams body = new ExportResourceParams();
+        body.setResourceType(ResourceTypeEnum.AGENT.toString());
+        body.setResourceIds(List.of(agentId));
+        ExportResourceVersion version = new ExportResourceVersion();
+        version.setResourceId(agentId);
+        body.setResourceVersions(List.of(version));
+
+        List<String> agentIds = body.getResourceIds();
+        validAgent(projectId, workspaceId, agentIds);
+        List<ExportResp> exportResps = new ArrayList<>();
+        try {
+            for (ExportResourceVersion exportResourceVersion : body.getResourceVersions()) {
+                String currentAgentId = exportResourceVersion.getResourceId();
+                String versionId = StringUtils.isEmpty(exportResourceVersion.getResourceVersion())
+                    ? Constants.LATEST_PUBLISH_VERSION : exportResourceVersion.getResourceVersion();
+                log.info("buildExportResps agent:{} version:{}", currentAgentId, versionId);
+                Agent currentAgent = agentMapper.selectById(currentAgentId);
+                if (validReleaseVersion(currentAgentId, versionId, currentAgent.getName(), body.getResourceType(),
+                    exportResps)) {
+                    continue;
+                }
+                List<ExportResourceUnit> exportResourceUnits;
+                List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(currentAgentId,
+                    versionId, null, null);
+                List<MappingEntity> subExportResources = new ArrayList<>();
+                buildSubExportResources(subExportResources, mappingEntities);
+                subExportResources = filterShareResource(workspaceId, subExportResources);
+                exportResourceUnits = convertMapping2ExportParam(subExportResources);
+                List<ModelExportEntity> modelProviders = getModelProviders(projectId, workspaceId, subExportResources);
+                exportResourceUnits.add(addCurrentResource(currentAgentId, versionId, currentAgent.getName(),
+                    body.getResourceType(), subExportResources, modelProviders));
+
+                for (ResourceTypeEnum resourceTypeEnum : EXPORT_RESOURCE_TYPE_LIST) {
+                    ExportResp exportResp = buildSubResource(exportResourceUnits, currentAgentId, resourceTypeEnum);
+                    if (Objects.nonNull(exportResp)) {
+                        exportResps.add(exportResp);
+                    }
+                }
+            }
+        } catch (AgentStudioException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to build export resps for agent: {}", agentId, e);
+            throw new AgentStudioException(StudioError.AGENT_EXPORT_FILE);
+        }
+        return exportResps;
+    }
+
+    /**
+     * 将 ExportResp 列表展平为 ExportInfo 列表（去重、合并 parents）
+     *
+     * @param exportResps 导出结果列表
+     * @return 展平去重后的 ExportInfo 列表
+     */
+    public List<ExportInfo> flattenExportInfos(List<ExportResp> exportResps) {
+        List<ExportInfo> exportInfos = exportResps.stream()
+            .map(ExportResp::getExportInfos)
+            .filter(CollectionUtils::isNotEmpty)
+            .flatMap(List::stream)
+            .collect(Collectors.toList());
+        exportInfos = new ArrayList<>(exportInfos.stream()
+            .collect(Collectors.toMap(
+                p -> p.getResourceId() + "|" + p.getResourceLevel() + "|"
+                    + (p.getReleaseVersion() != null ? p.getReleaseVersion().getVersionId() : ""),
+                p -> p,
+                (p1, p2) -> {
+                    List<String> mergedParents = new ArrayList<>();
+                    if (CollectionUtils.isNotEmpty(p1.getParents())) {
+                        mergedParents.addAll(p1.getParents());
+                    }
+                    if (CollectionUtils.isNotEmpty(p2.getParents())) {
+                        mergedParents.addAll(p2.getParents());
+                    }
+                    p1.setParents(mergedParents.stream().distinct().toList());
+                    return p1;
+                }))
+            .values());
+        return exportInfos;
+    }
 }

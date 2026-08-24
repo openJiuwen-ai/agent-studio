@@ -4,12 +4,14 @@
 package com.openjiuwen.studio.agent.manager.service;
 
 import com.openjiuwen.studio.agent.common.constant.Constants;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AgentMemoryConfig;
 import com.openjiuwen.studio.agent.manager.dto.ControllerVO;
+import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.WorkflowVO;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
 import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
@@ -22,9 +24,14 @@ import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MemoryRepoMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
+import com.openjiuwen.studio.agent.manager.workflow.resource.adapt.ResourceAdapter;
+import com.openjiuwen.studio.agent.manager.workflow.resource.adapt.ResourceAdapterFactory;
+import com.openjiuwen.studio.agent.manager.workflow.resource.model.ExportInfo;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportExportStatusEnum;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportInfo;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportResourceResult;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,7 +57,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
@@ -75,6 +86,12 @@ class AgentImportServiceTest {
     @Mock
     private I18nUtil i18nUtil;
 
+    @Mock
+    private SkuManageService skuManageService;
+
+    @Mock
+    private ResourceAdapterFactory resourceAdapterFactory;
+
     @InjectMocks
     private AgentImportService agentImportService;
 
@@ -89,6 +106,9 @@ class AgentImportServiceTest {
         ReflectionTestUtils.setField(agentImportService, "releaseVersionMapper", releaseVersionMapper);
         ReflectionTestUtils.setField(agentImportService, "mappingMapper", mappingMapper);
         ReflectionTestUtils.setField(agentImportService, "i18nUtil", i18nUtil);
+        ReflectionTestUtils.setField(agentImportService, "skuManageService", skuManageService);
+        ReflectionTestUtils.setField(agentImportService, "resourceAdapterFactory", resourceAdapterFactory);
+        ReflectionTestUtils.setField(agentImportService, "jacksonObjectMapper", new ObjectMapper());
     }
 
     @AfterEach
@@ -753,6 +773,160 @@ class AgentImportServiceTest {
     }
 
     /**
+     * 用例描述：importFromExportInfos 在传入有效的 AGENT 类型 ExportInfo 时返回成功的 ImportRsp
+     * 预制条件：RequestContextUtils 静态方法已 mock，skuManageService 和 resourceAdapterFactory 已 mock，adapter.parseImport 正常执行
+     * 输入参数：projectId="p1", targetWorkspaceId="w2", 一个 AGENT 类型 ExportInfo（无 parents、无 shareInfo）
+     * 预期结果：ImportRsp 的 count=1, succeedLen=1, failedLen=0
+     */
+    @Test
+    void testImportFromExportInfosShouldReturnSuccessImportRsp() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceName).thenReturn("target-workspace");
+            mockedStatic.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+            mockedStatic.when(RequestContextUtils::getRequestUserName).thenReturn("test-user");
+            mockedStatic.when(RequestContextUtils::getRequestUserId).thenReturn("user-1");
+
+            ExportInfo exportInfo = new ExportInfo();
+            exportInfo.setResourceId("agent-1");
+            exportInfo.setResourceType("agent");
+            exportInfo.setResourceName("test-agent");
+            exportInfo.setResourceLevel(1);
+
+            ResourceAdapter adapter = mock(ResourceAdapter.class);
+            when(resourceAdapterFactory.getAdapter(anyString())).thenReturn(adapter);
+            doNothing().when(adapter).parseImport(any(), any());
+
+            ImportRsp result = agentImportService.importFromExportInfos("p1", "w2", List.of(exportInfo));
+
+            assertNotNull(result);
+            assertEquals(1, result.getCount());
+            assertEquals(1, result.getSucceedLen());
+            assertEquals(0, result.getFailedLen());
+        }
+    }
+
+    /**
+     * 用例描述：importFromExportInfos 在传入空列表时返回空的 ImportRsp
+     * 预制条件：无
+     * 输入参数：projectId="p1", targetWorkspaceId="w2", 空列表
+     * 预期结果：ImportRsp 的 count=0, succeedLen=0, failedLen=0
+     */
+    @Test
+    void testImportFromExportInfosShouldReturnEmptyRspForEmptyList() {
+        ImportRsp result = agentImportService.importFromExportInfos("p1", "w2", Collections.emptyList());
+
+        assertNotNull(result);
+        assertEquals(0, result.getCount());
+        assertEquals(0, result.getSucceedLen());
+        assertEquals(0, result.getFailedLen());
+    }
+
+    /**
+     * 用例描述：importFromExportInfos 在 adapter 抛出 AgentStudioException 时将结果标记为 FAILED
+     * 预制条件：RequestContextUtils 已 mock，adapter.parseImport 抛出 AgentStudioException
+     * 输入参数：一个 AGENT 类型 ExportInfo
+     * 预期结果：ImportRsp 的 count=1, succeedLen=0, failedLen=1
+     */
+    @Test
+    void testImportFromExportInfosShouldHandleAgentStudioException() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceName).thenReturn("target-workspace");
+            mockedStatic.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+            mockedStatic.when(RequestContextUtils::getRequestUserName).thenReturn("test-user");
+            mockedStatic.when(RequestContextUtils::getRequestUserId).thenReturn("user-1");
+
+            ExportInfo exportInfo = new ExportInfo();
+            exportInfo.setResourceId("agent-1");
+            exportInfo.setResourceType("agent");
+            exportInfo.setResourceName("test-agent");
+            exportInfo.setResourceLevel(1);
+
+            ResourceAdapter adapter = mock(ResourceAdapter.class);
+            when(resourceAdapterFactory.getAdapter(anyString())).thenReturn(adapter);
+            doThrow(new AgentStudioException(StudioError.UNEXPECTED_ERROR)).when(adapter)
+                .parseImport(any(), any());
+
+            ImportRsp result = agentImportService.importFromExportInfos("p1", "w2", List.of(exportInfo));
+
+            assertNotNull(result);
+            assertEquals(1, result.getCount());
+            assertEquals(0, result.getSucceedLen());
+            assertEquals(1, result.getFailedLen());
+        }
+    }
+
+    /**
+     * 用例描述：importFromExportInfos 在 adapter 抛出 RuntimeException 时将结果标记为 FAILED
+     * 预制条件：RequestContextUtils 已 mock，adapter.parseImport 抛出 RuntimeException
+     * 输入参数：一个 AGENT 类型 ExportInfo
+     * 预期结果：ImportRsp 的 count=1, succeedLen=0, failedLen=1
+     */
+    @Test
+    void testImportFromExportInfosShouldHandleGenericException() {
+        try (MockedStatic<RequestContextUtils> mockedStatic = mockStatic(RequestContextUtils.class,
+            RETURNS_DEEP_STUBS)) {
+            mockedStatic.when(RequestContextUtils::getRequestWorkspaceName).thenReturn("target-workspace");
+            mockedStatic.when(RequestContextUtils::getRequestUserDomainId).thenReturn("domain-1");
+            mockedStatic.when(RequestContextUtils::getRequestUserName).thenReturn("test-user");
+            mockedStatic.when(RequestContextUtils::getRequestUserId).thenReturn("user-1");
+
+            ExportInfo exportInfo = new ExportInfo();
+            exportInfo.setResourceId("agent-1");
+            exportInfo.setResourceType("agent");
+            exportInfo.setResourceName("test-agent");
+            exportInfo.setResourceLevel(1);
+
+            ResourceAdapter adapter = mock(ResourceAdapter.class);
+            when(resourceAdapterFactory.getAdapter(anyString())).thenReturn(adapter);
+            doThrow(new RuntimeException("unexpected error")).when(adapter)
+                .parseImport(any(), any());
+
+            ImportRsp result = agentImportService.importFromExportInfos("p1", "w2", List.of(exportInfo));
+
+            assertNotNull(result);
+            assertEquals(1, result.getCount());
+            assertEquals(0, result.getSucceedLen());
+            assertEquals(1, result.getFailedLen());
+        }
+    }
+
+    /**
+     * 用例描述：convertToImportInfo 通过 BeanUtils.copyProperties 将 ExportInfo 的所有属性复制到 ImportInfo
+     * 预制条件：ExportInfo 的所有字段已设置
+     * 输入参数：一个填充了各字段的 ExportInfo
+     * 预期结果：ImportInfo 的对应字段值与 ExportInfo 一致，ImportInfo 特有字段为 null
+     */
+    @Test
+    void testConvertToImportInfoShouldCopyAllProperties() {
+        ExportInfo exportInfo = new ExportInfo();
+        exportInfo.setResourceId("res-1");
+        exportInfo.setResourceType("agent");
+        exportInfo.setResourceName("test-agent");
+        exportInfo.setResourceLevel(1);
+        exportInfo.setDsl("dsl-content");
+        exportInfo.setMetadata("metadata-content");
+        exportInfo.setSchemaVersion("V2.0");
+        exportInfo.setLevel2Resources(List.of("dep-1", "dep-2"));
+        exportInfo.setParents(List.of("parent-1"));
+
+        ImportInfo importInfo = invokeConvertToImportInfo(exportInfo);
+
+        assertEquals("res-1", importInfo.getResourceId());
+        assertEquals("agent", importInfo.getResourceType());
+        assertEquals("test-agent", importInfo.getResourceName());
+        assertEquals(1, importInfo.getResourceLevel());
+        assertEquals("dsl-content", importInfo.getDsl());
+        assertEquals("metadata-content", importInfo.getMetadata());
+        assertEquals("V2.0", importInfo.getSchemaVersion());
+        assertEquals(2, importInfo.getLevel2Resources().size());
+        assertEquals(1, importInfo.getParents().size());
+        assertNull(importInfo.getTargetProjectId());
+        assertNull(importInfo.getTargetWorkspaceId());
+    }
+
+    /**
      * 使用反射调用私有方法handleSpaciousImport
      */
     @SuppressWarnings("unchecked")
@@ -765,6 +939,20 @@ class AgentImportServiceTest {
             method.invoke(agentImportService, projectId, workspaceId, resourceList, result);
         } catch (Exception e) {
             throw new AgentStudioException("Failed to invoke handleSpaciousImport: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 使用反射调用私有方法 convertToImportInfo
+     */
+    private ImportInfo invokeConvertToImportInfo(ExportInfo exportInfo) {
+        try {
+            Method method = AgentImportService.class.getDeclaredMethod("convertToImportInfo",
+                ExportInfo.class);
+            method.setAccessible(true);
+            return (ImportInfo) method.invoke(agentImportService, exportInfo);
+        } catch (Exception e) {
+            throw new AgentStudioException("Failed to invoke convertToImportInfo: " + e.getMessage());
         }
     }
 }

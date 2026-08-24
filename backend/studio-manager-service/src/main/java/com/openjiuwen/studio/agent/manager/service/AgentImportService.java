@@ -64,6 +64,7 @@ import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
 import com.openjiuwen.studio.agent.manager.utils.MapReadUtil;
 import com.openjiuwen.studio.agent.manager.workflow.resource.adapt.ResourceAdapterFactory;
+import com.openjiuwen.studio.agent.manager.workflow.resource.model.ExportInfo;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportCheckResult;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportExportStatusEnum;
 import com.openjiuwen.studio.agent.manager.workflow.resource.model.ImportInfo;
@@ -336,6 +337,57 @@ public class AgentImportService {
             handleStrictImport(projectId, resourceList, result);
         }
         return handleImportRsp(resourceList, result);
+    }
+
+    /**
+     * 从内存 ExportInfo 列表导入资源（不经文件中转），供跨空间复用调用
+     *
+     * @param projectId projectId
+     * @param targetWorkspaceId 目标空间id
+     * @param exportInfos 导出资源列表
+     * @return ImportRsp
+     */
+    public ImportRsp importFromExportInfos(String projectId, String targetWorkspaceId,
+        List<ExportInfo> exportInfos) {
+        List<ImportInfo> resourceList = exportInfos.stream()
+            .map(this::convertToImportInfo)
+            .sorted((v1, v2) -> {
+                int orderCompare = Integer.compare(v1.getOrder(), v2.getOrder());
+                if (orderCompare != 0) {
+                    return orderCompare;
+                }
+                return Integer.compare(v2.getLevel(), v1.getLevel());
+            })
+            .collect(Collectors.toList());
+
+        validateImportAppCount(targetWorkspaceId, resourceList);
+
+        List<ImportResourceResult> result = new ArrayList<>();
+        resourceList.forEach(p -> {
+            initImportData(targetWorkspaceId, projectId, p);
+            ImportResourceResult importResourceResult = setBaseImportResult(p);
+            try {
+                resourceAdapterFactory.getAdapter(p.getResourceType()).parseImport(importResourceResult, p);
+            } catch (AgentStudioException e) {
+                importResourceResult.setStatus(ImportExportStatusEnum.FAILED.getCode());
+                importResourceResult.setErrorMsg(i18nUtil.getMessage(e.getErrorCode()));
+                importResourceResult.setSuggestion(i18nUtil.getSuggestion(e.getErrorCode()));
+            } catch (Exception e) {
+                log.error("resourceAdapter error,resourceType:{},resourceId:{},resourceName:{}", p.getResourceType(),
+                    p.getResourceId(), p.getResourceName(), e);
+                importResourceResult.setStatus(ImportExportStatusEnum.FAILED.getCode());
+                importResourceResult.setErrorMsg(i18nUtil.getMessage(StudioError.UNEXPECTED_ERROR));
+            }
+            result.add(importResourceResult);
+        });
+        handleStrictImport(projectId, resourceList, result);
+        return handleImportRsp(resourceList, result);
+    }
+
+    private ImportInfo convertToImportInfo(ExportInfo exportInfo) {
+        ImportInfo importInfo = new ImportInfo();
+        BeanUtils.copyProperties(exportInfo, importInfo);
+        return importInfo;
     }
 
     /**
