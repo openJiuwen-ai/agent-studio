@@ -28,6 +28,74 @@ tp-layout-content-body {
   z-index: 2000 !important;
 }
 
+/* Export modal - pagination layout: total/selected on far left, page buttons right-aligned with table */
+.export-modal-container .ant-table-pagination.ant-table-pagination-right {
+  float: none;
+  text-align: left;
+  margin: 0;
+  padding: 8px 0;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  position: relative;
+}
+
+.export-modal-container .ant-table-pagination .ant-pagination-total-text {
+  position: absolute;
+  left: 0;
+  margin-right: 0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.export-modal-container .ant-table-pagination ul {
+  display: flex;
+  align-items: center;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.export-modal-container .ant-table-pagination .ant-pagination-options {
+  margin-left: 16px;
+  flex-shrink: 0;
+}
+
+/* Export half-modal (drawer) - same pagination layout */
+.com-drawer-content .ant-table-pagination.ant-table-pagination-right {
+  float: none;
+  text-align: left;
+  margin: 0;
+  padding: 8px 0;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  position: relative;
+}
+
+.com-drawer-content .ant-table-pagination .ant-pagination-total-text {
+  position: absolute;
+  left: 0;
+  margin-right: 0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.com-drawer-content .ant-table-pagination ul {
+  display: flex;
+  align-items: center;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.com-drawer-content .ant-table-pagination .ant-pagination-options {
+  margin-left: 16px;
+  flex-shrink: 0;
+}
+
 tp-layout-content {
   margin-left: 0px !important;
 }

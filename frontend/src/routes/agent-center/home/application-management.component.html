@@ -36,7 +36,6 @@
               nz-button
               nzType="default"
               [disabled]="!subscribeBtnStatus || !_agent_export_import_enable"
-              class="common-btn"
               (click)="importTool()"
             >
               {{ 'import' | i18nextEager }}
@@ -62,7 +61,6 @@
               nz-button
               nzType="default"
               [disabled]="!subscribeBtnStatus || !_agent_export_import_enable"
-              class="common-btn"
               (click)="exportTool()"
             >
               {{ 'export' | i18nextEager }}

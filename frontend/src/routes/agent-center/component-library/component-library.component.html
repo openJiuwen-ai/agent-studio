@@ -32,7 +32,7 @@
         <button nz-button [disabled]="!subscribeBtnStatus" (click)="importTool()" *ngIf="currActivedTab === 1">
           {{ 'import' | i18nextEager }}
         </button>
-        <button class="common-btn" nz-button nzType="default" [disabled]="!subscribeBtnStatus" (click)="exportTool()" *ngIf="currActivedTab === 1">
+        <button nz-button nzType="default" [disabled]="!subscribeBtnStatus" (click)="exportTool()" *ngIf="currActivedTab === 1">
           {{ 'export' | i18nextEager }}
         </button>
         <button
