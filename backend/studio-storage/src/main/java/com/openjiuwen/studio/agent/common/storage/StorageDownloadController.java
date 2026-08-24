@@ -31,6 +31,13 @@ public class StorageDownloadController {
     private final LocalFileStoreImpl localFileStore;
 
     public StorageDownloadController(FileStore fileStore) {
+        // G.TYP.13：向下转型前用 instanceof 判断，非法实现给出带类型诊断的 IllegalStateException
+        // 而非不透明的 ClassCastException（null 的 instanceof 为 false，一并无害拦截）
+        if (!(fileStore instanceof LocalFileStoreImpl)) {
+            throw new IllegalStateException(
+                "StorageDownloadController requires LocalFileStoreImpl but got: "
+                    + (fileStore == null ? "null" : fileStore.getClass().getName()));
+        }
         this.localFileStore = (LocalFileStoreImpl) fileStore;
     }
 
