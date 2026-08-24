@@ -46,6 +46,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -375,7 +376,8 @@ public class ModelImportExportService implements IModelImportExportService {
             // 否则 FK 指向源空间 id（dangling）。modelOnly 模式下 providerId 已被显式置为 targetProviderId，无需重映射。
             Map<String, String> batchIdRemap = new HashMap<>();
             if (modelOnly) {
-                targetAuthMetadataId = resolveTargetAuthMetadataId(projectId, workspaceId, targetProviderId);
+                targetAuthMetadataId = resolveTargetAuthMetadataId(projectId, workspaceId, targetProviderId)
+                    .orElse(null);
             } else {
                 // provider 元数据 best-effort：单条失败仅告警不中断导入（模型本身仍按导入数据落库）。
                 // 返回目标环境的 auth metadata ID，供 model 重链（源环境 authMetadataId 在目标环境无效）；
@@ -384,7 +386,7 @@ public class ModelImportExportService implements IModelImportExportService {
                 targetAuthMetadataId = null;
                 try {
                     targetAuthMetadataId = upsertProviderMetadata(projectId, workspaceId, entity.getProviderMetadata(),
-                        batchIdRemap);
+                        batchIdRemap).orElse(null);
                 } catch (Exception e) {
                     log.warn("Provider metadata upsert failed for line {}, continuing with model import",
                         ctx.lineNo, e);
@@ -631,15 +633,15 @@ public class ModelImportExportService implements IModelImportExportService {
      * <p>注意：batchIdRemap 的写入发生在这里（模型循环之前），保证后续子模型在 importOneModel 时
      * 先把自己的 providerId 重定向到新 id 再落库，避免 dangling FK。
      *
-     * @return 目标环境的 auth metadata ID；无 provider auth 元数据时返回 null
+     * @return 目标环境的 auth metadata ID（无 provider auth 元数据时返回 Optional.empty()）
      */
-    private String upsertProviderMetadata(String projectId, String workspaceId, ProviderExportMetadata pem,
+    private Optional<String> upsertProviderMetadata(String projectId, String workspaceId, ProviderExportMetadata pem,
         Map<String, String> batchIdRemap) {
         if (pem == null) {
-            return null;
+            return Optional.empty();
         }
         String resolvedProviderId = upsertServiceProvider(projectId, workspaceId, pem.getModelServiceProviderMetadata(),
-            batchIdRemap);
+            batchIdRemap).orElse(null);
         // 若 provider 行因跨空间 COPY 被分配新 id，auth metadata/data 的 providerId 也要跟着重定向。
         ProviderAuthMetadata am = pem.getProviderAuthMetadata();
         if (am != null && resolvedProviderId != null) {
@@ -649,11 +651,11 @@ public class ModelImportExportService implements IModelImportExportService {
         if (ad != null && resolvedProviderId != null) {
             ad.setProviderId(resolvedProviderId);
         }
-        String authMetadataId = upsertAuthMetadata(projectId, workspaceId, am);
+        String authMetadataId = upsertAuthMetadata(projectId, workspaceId, am).orElse(null);
         if (authMetadataId != null) {
             upsertAuthData(projectId, workspaceId, ad, authMetadataId);
         }
-        return authMetadataId;
+        return Optional.ofNullable(authMetadataId);
     }
 
     /**
@@ -667,17 +669,17 @@ public class ModelImportExportService implements IModelImportExportService {
      *
      * @return 目标空间实际落库的 provider id（可能等于导入 id，也可能是新生成的 id）
      */
-    private String upsertServiceProvider(String projectId, String workspaceId, ModelServiceProvider provider,
+    private Optional<String> upsertServiceProvider(String projectId, String workspaceId, ModelServiceProvider provider,
         Map<String, String> batchIdRemap) {
         if (provider == null || StringUtils.isBlank(provider.getId())) {
-            return null;
+            return Optional.empty();
         }
         String originalId = provider.getId();
         // 1) 先查目标工作空间是否已经存在同 id 行（已被导入过）→ 直接复用
         List<ModelServiceProvider> existInScope = userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(
             Collections.singletonList(originalId), projectId, workspaceId);
         if (CollectionUtils.isNotEmpty(existInScope)) {
-            return originalId;
+            return Optional.of(originalId);
         }
         // 2) 全局查：selectByIds 跨所有项目/空间。命中 → 跨空间 PK 冲突，走 COPY
         Set<String> ids = new HashSet<>(Collections.singletonList(originalId));
@@ -694,7 +696,7 @@ public class ModelImportExportService implements IModelImportExportService {
         }
         provider.setProjectId(projectId).setWorkspaceId(workspaceId);
         userModelServiceProviderMapper.insert(provider);
-        return newId;
+        return Optional.of(newId);
     }
 
     /**
@@ -706,16 +708,16 @@ public class ModelImportExportService implements IModelImportExportService {
      * 的 COPY 模式），避免 DuplicateKeyException 导致 auth metadata 插入失败进而造成模型行
      * {@code auth_metadata_id} 悬空的孤儿行 bug。
      *
-     * @return 目标环境的 auth metadata ID（已存在则返回已有记录的 ID，缺失则插入后返回新 ID）
+     * @return 目标环境的 auth metadata ID（已存在则返回已有记录的 ID，缺失则插入后返回新 ID；无鉴权元数据时返回 Optional.empty()）
      */
-    private String upsertAuthMetadata(String projectId, String workspaceId, ProviderAuthMetadata authMeta) {
+    private Optional<String> upsertAuthMetadata(String projectId, String workspaceId, ProviderAuthMetadata authMeta) {
         if (authMeta == null || StringUtils.isBlank(authMeta.getProviderId())) {
-            return null;
+            return Optional.empty();
         }
         List<ProviderAuthMetadata> exist = providerAuthMetadataMapper.selectByProjectWorkspaceProvider(
             projectId, workspaceId, authMeta.getProviderId());
         if (CollectionUtils.isNotEmpty(exist)) {
-            return exist.get(0).getId();
+            return Optional.of(exist.get(0).getId());
         }
         // 跨工作空间 COPY：源 id 在其他项目/空间已存在 → 生成新 UUID，避免主键冲突。
         // 此时作用域查无(providerId, projectId, workspaceId)对应行，任何全局同 id 行都属于其他空间。
@@ -728,7 +730,7 @@ public class ModelImportExportService implements IModelImportExportService {
         }
         authMeta.setProjectId(projectId).setWorkspaceId(workspaceId);
         providerAuthMetadataMapper.insert(authMeta);
-        return authMeta.getId();
+        return Optional.of(authMeta.getId());
     }
 
     /**
@@ -775,15 +777,17 @@ public class ModelImportExportService implements IModelImportExportService {
     /**
      * 只导模型导入：查目标供应商在目标工作空间已存在的 auth metadata ID（只读，不 insert）。
      * 复用 {@code upsertAuthMetadata} 的同一作用域查询；模型本身无密钥，导入只重链 authMetadataId 引用
-     * 到目标供应商本地鉴权。目标供应商无 auth metadata 时返回 null（模型仍落库，仅鉴权不可用，与 best-effort 一致）。
+     * 到目标供应商本地鉴权。目标供应商无 auth metadata 时返回 Optional.empty()（模型仍落库，仅鉴权不可用，与 best-effort 一致）。
      */
-    private String resolveTargetAuthMetadataId(String projectId, String workspaceId, String targetProviderId) {
+    private Optional<String> resolveTargetAuthMetadataId(String projectId, String workspaceId, String targetProviderId) {
         if (StringUtils.isBlank(targetProviderId)) {
-            return null;
+            return Optional.empty();
         }
         List<ProviderAuthMetadata> exist = providerAuthMetadataMapper.selectByProjectWorkspaceProvider(
             projectId, workspaceId, targetProviderId);
-        return CollectionUtils.isNotEmpty(exist) ? exist.get(0).getId() : null;
+        return CollectionUtils.isNotEmpty(exist)
+            ? Optional.of(exist.get(0).getId())
+            : Optional.empty();
     }
 
     // ============================== 验签 / 解析 ==============================

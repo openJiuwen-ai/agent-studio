@@ -76,6 +76,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
@@ -202,7 +203,7 @@ public class OpenJiuwenKBService implements KnowledgeRepoService {
             .kbId(kbId)
             .projectId(projectId)
             .fileName(originalName)
-            .fileType(extractFileType(originalName))
+            .fileType(extractFileType(originalName).orElse(null))
             .fileSize(file.getSize())
             .fileStatus("RUNNING")
             .fileTags(tags != null ? JSON.toJSONString(tags) : null)
@@ -270,11 +271,11 @@ public class OpenJiuwenKBService implements KnowledgeRepoService {
         }
     }
 
-    private String extractFileType(String fileName) {
+    private Optional<String> extractFileType(String fileName) {
         if (fileName == null || !fileName.contains(".")) {
-            return null;
+            return Optional.empty();
         }
-        return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
+        return Optional.of(fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase());
     }
 
     @Override
