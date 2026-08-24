@@ -13,13 +13,14 @@ s%...%...%g 字符串替换、/.../d 行删除），并通过 .bak 备份保证�
 
 用法：由 venv 的 python 运行 ——
   Linux:   run/venv/bin/python scripts/runtime_patches.py
-  Windows: run\\venv\\Scripts\\python.exe scripts\\runtime_patches.py
+  Windows: run\\venv\\Scripts\\python.exe scripts/runtime_patches.py
 """
-import os
-import sys
-import site
-import shutil
+import logging
 import pathlib
+import shutil
+import site
+import sys
+
 
 def resolve_site_packages() -> pathlib.Path:
     paths = site.getsitepackages()
@@ -29,91 +30,104 @@ def resolve_site_packages() -> pathlib.Path:
             return pathlib.Path(p)
     return pathlib.Path(paths[0])
 
+
 def backup_once(p: pathlib.Path):
     bak = p.with_suffix(p.suffix + ".bak")
     if not bak.exists():
         shutil.copy2(p, bak)
 
+
 def patch_text(p: pathlib.Path, transform, guard_bak=True):
     """对单个文件做文本变换；文件不存在则告警跳过（等价 init.sh 的 || true）。"""
     if not p.exists():
-        print(f"[patch] SKIP (missing): {p}")
+        logging.info("[patch] SKIP (missing): %s", p)
         return
     if guard_bak:
         backup_once(p)
     try:
-        t = p.read_text(encoding="utf-8")
+        text = p.read_text(encoding="utf-8")
     except UnicodeDecodeError:
-        t = p.read_text(encoding="utf-8", errors="replace")
-    new = transform(t)
-    if new != t:
+        text = p.read_text(encoding="utf-8", errors="replace")
+    new = transform(text)
+    if new != text:
         p.write_text(new, encoding="utf-8")
-        print(f"[patch] OK   : {p}")
+        logging.info("[patch] OK   : %s", p)
     else:
-        print(f"[patch] noop : {p} (already patched or pattern not found)")
+        logging.info("[patch] noop : %s (already patched or pattern not found)", p)
+
 
 def insert_after_line(p: pathlib.Path, lineno_1based: int, block_lines: list):
-    """复刻 sed '95a\\n...' —— 在指定行（1-based）之后插入 block_lines（已含前导空行等）。
-    受 .bak 守卫保护，幂等。"""
+    """
+    复刻 sed '95a\\n...' —— 在指定行（1-based）之后插入 block_lines（已含前导空行等）。
+    受 .bak 守卫保护，幂等。
+    """
     if not p.exists():
-        print(f"[patch] SKIP (missing): {p}")
+        logging.info("[patch] SKIP (missing): %s", p)
         return
     bak = p.with_suffix(p.suffix + ".bak")
     if bak.exists():
-        print(f"[patch] skip : {p} (.bak exists, already patched)")
+        logging.info("[patch] skip : %s (.bak exists, already patched)", p)
         return
     shutil.copy2(p, bak)
     lines = p.read_text(encoding="utf-8").splitlines(keepends=True)
     idx = lineno_1based  # 插入点：第 lineno 行之后 → 索引 lineno（0-based）
     if idx > len(lines):
-        print(f"[patch] WARN: {p} only {len(lines)} lines, cannot insert after line {lineno_1based}")
+        logging.warning("[patch] WARN: %s only %d lines, cannot insert after line %d",
+                         p, len(lines), lineno_1based)
         return
-    block = "".join(l if l.endswith("\n") else l + "\n" for l in block_lines)
+    block = "".join(line if line.endswith("\n") else line + "\n" for line in block_lines)
     new = "".join(lines[:idx]) + block + "".join(lines[idx:])
     p.write_text(new, encoding="utf-8")
-    print(f"[patch] OK   : {p} (inserted {len(block_lines)} lines after line {lineno_1based})")
+    logging.info("[patch] OK   : %s (inserted %d lines after line %d)",
+                 p, len(block_lines), lineno_1based)
+
 
 def insert_after_match(p: pathlib.Path, anchor_substring: str, block_lines: list, guard_bak=True):
     """复刻 sed '/anchor/a ...' —— 在每个含 anchor_substring 的行之后插入 block_lines。"""
     if not p.exists():
-        print(f"[patch] SKIP (missing): {p}")
+        logging.info("[patch] SKIP (missing): %s", p)
         return
     if guard_bak:
         backup_once(p)
     lines = p.read_text(encoding="utf-8").splitlines(keepends=True)
     out = []
-    block = [l if l.endswith("\n") else l + "\n" for l in block_lines]
+    block = [line if line.endswith("\n") else line + "\n" for line in block_lines]
     inserted = 0
-    for l in lines:
-        out.append(l)
-        if anchor_substring in l:
+    for line in lines:
+        out.append(line)
+        if anchor_substring in line:
             out.extend(block)
             inserted += 1
     if inserted:
         p.write_text("".join(out), encoding="utf-8")
-        print(f"[patch] OK   : {p} (inserted after {inserted} match(es) of '{anchor_substring}')")
+        logging.info("[patch] OK   : %s (inserted after %d match(es) of '%s')",
+                     p, inserted, anchor_substring)
     else:
-        print(f"[patch] noop : {p} (anchor '{anchor_substring}' not found)")
+        logging.info("[patch] noop : %s (anchor '%s' not found)", p, anchor_substring)
+
 
 def delete_lines_with(p: pathlib.Path, substring: str):
-    """复刻 sed '/.../d' —— 删除所有含 substring 的行。幂等。"""
+    """复刻 sed '/.../d' —— 删除所有含 substring 的行，幂等。"""
     if not p.exists():
-        print(f"[patch] SKIP (missing): {p}")
+        logging.info("[patch] SKIP (missing): %s", p)
         return
     backup_once(p)
     lines = p.read_text(encoding="utf-8").splitlines(keepends=True)
-    kept = [l for l in lines if substring not in l]
+    kept = [line for line in lines if substring not in line]
     if len(kept) != len(lines):
         p.write_text("".join(kept), encoding="utf-8")
-        print(f"[patch] OK   : {p} (deleted {len(lines)-len(kept)} line(s) with '{substring}')")
+        logging.info("[patch] OK   : %s (deleted %d line(s) with '%s')",
+                     p, len(lines) - len(kept), substring)
     else:
-        print(f"[patch] noop : {p} (no line with '{substring}')")
+        logging.info("[patch] noop : %s (no line with '%s')", p, substring)
+
 
 def main():
+    logging.basicConfig(level=logging.INFO, format='%(message)s')
     sp = resolve_site_packages()
-    print(f"[patch] site-packages = {sp}")
+    logging.info("[patch] site-packages = %s", sp)
     if not sp.exists():
-        print("[patch] FATAL: site-packages not found", file=sys.stderr)
+        logging.error("[patch] FATAL: site-packages not found")
         sys.exit(1)
 
     # spiffworkflow 版本告警（位置插入型补丁针对 2.0.1）
@@ -122,16 +136,21 @@ def main():
         import importlib.metadata as md
         ver = md.version("spiffworkflow")
         if ver != "2.0.1":
-            print(f"[patch] WARN: spiffworkflow=={ver} (patches target 2.0.1; line-position insert may misalign)")
-    except Exception:
-        pass
+            logging.warning(
+                "[patch] WARN: spiffworkflow==%s (patches target 2.0.1; line-position insert may misalign)",
+                ver,
+            )
+    except Exception as exc:
+        logging.warning("[patch] WARN: cannot read spiffworkflow version: %s", exc)
 
     # 1) inclusive_gateway.py：READY|WAITING → +STARTED（字符串替换）
     patch_text(
         ig,
         lambda t: t.replace(
             "tasks = my_task.workflow.get_tasks(TaskState.READY | TaskState.WAITING, workflow=my_task.workflow)",
-            "tasks = my_task.workflow.get_tasks(TaskState.READY | TaskState.WAITING | TaskState.STARTED, workflow=my_task.workflow)  # STARTED /NOT_YET_COMPLETED 也算活跃状态",
+            "tasks = my_task.workflow.get_tasks(TaskState.READY | TaskState.WAITING "
+            "| TaskState.STARTED, workflow=my_task.workflow)  "
+            "# STARTED /NOT_YET_COMPLETED 也算活跃状态",
         ),
         guard_bak=False,
     )
@@ -189,7 +208,8 @@ def main():
         guard_bak=False,
     )
 
-    print("[patch] done.")
+    logging.info("[patch] done.")
+
 
 if __name__ == "__main__":
     main()

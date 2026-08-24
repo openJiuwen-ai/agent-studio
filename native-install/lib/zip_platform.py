@@ -6,11 +6,17 @@
 # 遍历 staging，按平台**排除**对端依赖 + MySQL 冗余 + 对端 wheel，写正斜杠 arcname 的
 # ZIP_DEFLATED zip。避免复制 4GB staging 两次。排除规则见同目录 build.ps1/build.sh 注释。
 
-import sys, os, zipfile
+import logging
+import os
+import sys
+import zipfile
+
 
 def kept_for_platform(rel, platform):
-    """rel: 相对 staging 的正斜杠路径（如 deps/win/mysql-8.0/bin/mysqld.pdb）。
-    返回 True=写入 zip，False=排除。"""
+    """
+    rel: 相对 staging 的正斜杠路径（如 deps/win/mysql-8.0/bin/mysqld.pdb）。
+    返回 True=写入 zip，False=排除。
+    """
     parts = rel.split('/')
     # 保险：排除构建期临时/产物（本不在 staging，防御性）
     top = parts[0] if parts else ''
@@ -47,7 +53,7 @@ def kept_for_platform(rel, platform):
                 return False
             # mecab 日文字典：保留 utf-8 兜底现代日文，去掉 euc-jp/sjis 遗留编码（省 ~80MB/平台）
             # 路径形如 deps/<plat>/mysql-8.0/lib/mecab/dic/ipadic_euc-jp/sys.dic
-            if len(parts) >= 7 and parts[3] == 'lib' and parts[4] == 'mecab' and parts[5] == 'dic':
+            if len(parts) >= 7 and parts[3:6] == ['lib', 'mecab', 'dic']:
                 dic = parts[6]
                 if dic in ('ipadic_euc-jp', 'ipadic_sjis'):
                     return False
@@ -72,15 +78,16 @@ def kept_for_platform(rel, platform):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format='%(message)s')
     if len(sys.argv) != 4:
-        print("用法: python zip_platform.py <staging_abs> <out_zip_abs> <win|linux>", file=sys.stderr)
+        logging.error("用法: python zip_platform.py <staging_abs> <out_zip_abs> <win|linux>")
         sys.exit(2)
     staging, out_zip, platform = sys.argv[1], sys.argv[2], sys.argv[3].lower()
     if platform not in ('win', 'linux'):
-        print("platform 须为 win 或 linux，得到: %s" % platform, file=sys.stderr)
+        logging.error("platform 须为 win 或 linux，得到: %s", platform)
         sys.exit(2)
     if not os.path.isdir(staging):
-        print("staging 不存在: %s" % staging, file=sys.stderr)
+        logging.error("staging 不存在: %s", staging)
         sys.exit(1)
 
     kept = 0
@@ -97,9 +104,9 @@ def main():
                     kept += 1
                 else:
                     excluded += 1
-    print("[%s] wrote %d entries, excluded %d -> %s (%.1f MB)" % (
-        platform, kept, excluded, out_zip,
-        os.path.getsize(out_zip) / 1048576.0))
+    logging.info("[%s] wrote %d entries, excluded %d -> %s (%.1f MB)",
+                 platform, kept, excluded, out_zip, os.path.getsize(out_zip) / 1048576.0)
+
 
 if __name__ == '__main__':
     main()
