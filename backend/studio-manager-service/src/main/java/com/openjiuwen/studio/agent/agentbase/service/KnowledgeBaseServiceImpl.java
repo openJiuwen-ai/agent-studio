@@ -1591,8 +1591,24 @@ public class KnowledgeBaseServiceImpl implements IKnowledgeRepoManagementService
         }
         ListKnowledgeBasesResponseBody response = new ListKnowledgeBasesResponseBody();
         response.setTotal(knowledgeRepoResp.getTotal());
+        // 外部 LakeSearch 服务可能不遵守 pageSize/pageNum（返回全部数据），这里做防御性分页截断。
+        // 仅当返回条数 > limit（即外部明显未分页）时才截断；若外部已正确分页（返回 <= limit），保持原样，
+        // 避免对外部遵守分页的场景造成二次截断（否则 offset>0 的页会静默返回空）。
+        List<KnowledgeRepoInfo> dataList = knowledgeRepoResp.getDataList();
+        List<KnowledgeRepoInfo> pagedDataList;
+        Integer bodyLimit = body.getLimit();
+        int limit = (bodyLimit == null || bodyLimit <= 0) ? dataList.size() : bodyLimit;
+        if (dataList.size() > limit) {
+            Integer bodyOffset = body.getOffset();
+            int offset = bodyOffset == null ? 0 : Math.max(bodyOffset, 0);
+            int fromIndex = Math.min(offset, dataList.size());
+            int toIndex = Math.min(fromIndex + limit, dataList.size());
+            pagedDataList = dataList.subList(fromIndex, toIndex);
+        } else {
+            pagedDataList = dataList;
+        }
         response.setItems(Lists.newArrayList());
-        for (KnowledgeRepoInfo knowledgeRepoInfo : knowledgeRepoResp.getDataList()) {
+        for (KnowledgeRepoInfo knowledgeRepoInfo : pagedDataList) {
             response.getItems().add(buildCustomKnowledgeBaseItem(knowledgeRepoInfo));
         }
         return response;
