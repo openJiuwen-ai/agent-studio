@@ -62,10 +62,11 @@
       <nz-upload
         [nzLimit]="1"
         class="mt-[8px]"
-        [nzAction]="''"
+        nzAction="/"
+        [nzBeforeUpload]="beforeUpload"
+        [nzRemove]="removeFile"
         [nzAccept]="'.jsonl'"
         [nzShowUploadList]="showUploadList"
-        (nzChange)="onAddFileSuccess($event)"
         [(nzFileList)]="uploadFileList"
       >
         <button nz-button>
