@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, ViewChild, OnInit, OnDestroy } from '@angular/core';
+import { Component, ViewChild, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { v4 as uuidV4 } from 'uuid';
@@ -11,6 +11,8 @@ import { Image2textOutputComponent } from '@routes/model-management/online-test/
 import { TextEmbeddingComponent } from '@routes/model-management/online-test/components/text-embedding/text-embedding.component';
 import { TextRerankComponent } from '@routes/model-management/online-test/components/text-rerank/text-rerank.component';
 import { getNewServiceKeyList } from "@routes/model-management/router-policy-detail/router-common";
+import { EnvManagementService } from '@routes/platform-management/environment-management/env-management.service';
+import { EnvironmentVariablesManagementService } from '@routes/platform-management/environment-variables-management/environment-variables-management.service';
 import { ModelManagementService } from "@services/repositories/model-management-new";
 import { ModelRouterStrategiesService } from '@services/repositories/model-router-strategies';
 import { JiuwenModelService } from '@services/jiuwen-model/jiuwen-model.service';
@@ -77,6 +79,9 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
     private sidebarVisibilityServ: SetSidebarVisibilityService,
     private modelManagementService: ModelManagementService,
     private message: NzMessageService,
+    private envManagementServ: EnvManagementService,
+    private envVariablesMgmtServ: EnvironmentVariablesManagementService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   public providerInfo: any = {};
@@ -119,6 +124,13 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   public envVarValuesMap: Record<string, string> = {};
   // 匹配后台返回格式${_env.plugin_url_params.VAR_NAME}提取变量名
   private readonly ENV_PLACEHOLDER_REGEX = /\$\{_env\.plugin_url_params\.([a-zA-Z_$][a-zA-Z0-9_$]*)\}/g;
+
+  /** 默认环境 id（缓存，组件生命周期内复用）；undefined=无默认环境或未加载 */
+  public defaultEnvId: string | undefined;
+  /** 默认环境的变量名集合（缓存）；undefined=未加载，空 Set=已加载但无变量 */
+  public defaultEnvVarNames: Set<string> | undefined;
+  /** 是否正在加载/校验默认环境变量 */
+  public defaultEnvChecking = false;
 
   public mySelected: any;
   public selectedMap: any = {
@@ -549,58 +561,79 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       }
     });
 
-    // 保留已输入的值
-    const existingValues = new Map(this.envPlaceholderVars.map(v => [v.name, v.value]));
     this.envPlaceholderVars = Array.from(varSet).map(name => ({
       name,
-      value: existingValues.get(name) || ''
+      value: '',
     }));
-    // 更新缓存的环境变量Map
-    this.updateEnvVarValuesMap();
+    // 占位符变量值由后端按「默认环境」自动解析，前端不再收集手填值。
+    this.envVarValuesMap = {};
+
+    // 选中含占位符的模型时，异步加载默认环境上下文（取默认环境 id + 变量名集合），
+    // 完成后据变量名是否在默认环境，渲染「自动注入」或「未配置」提示。
+    if (this.envPlaceholderVars.length > 0) {
+      this.ensureDefaultEnvContext();
+    }
   }
 
   /**
-   * 更新缓存的环境变量值Map
-   * 仅当值为合法URL时才纳入Map，确保后端不会收到空值或非法URL
+   * 懒加载默认环境上下文（幂等）：取默认环境 id → 取其变量名集合。
+   * 无默认环境时 defaultEnvId=undefined、defaultEnvVarNames=空 Set，不报错。
    */
-  updateEnvVarValuesMap() {
-    const map: Record<string, string> = {};
-    this.envPlaceholderVars.forEach(item => {
-      if (this.isUrlValid(item.value)) {
-        map[item.name] = item.value.trim();
+  ensureDefaultEnvContext() {
+    // 已加载过则直接返回
+    if (this.defaultEnvVarNames !== undefined) {
+      return;
+    }
+    this.defaultEnvChecking = true;
+    this.envManagementServ.getEnvironmentList({ offset: 0, limit: 99 }).then((res: any) => {
+      const defaultEnv = (res?.env_info || []).find((e: any) => e.isDefault);
+      this.defaultEnvId = defaultEnv?.id;
+      if (!this.defaultEnvId) {
+        // 无默认环境：变量名集合置空 Set（已加载），所有占位符变量都判为「未配置」
+        this.defaultEnvVarNames = new Set<string>();
+        this.defaultEnvChecking = false;
+        this.cdr.markForCheck();
+        return;
       }
+      // 取默认环境的变量名集合（name 不脱敏，可用于判断存在性）
+      this.envVariablesMgmtServ.getEnvVariablesDetail(this.defaultEnvId).then((varRes: any) => {
+        this.defaultEnvVarNames = new Set<string>((varRes?.variables || []).map((v: any) => v.name));
+        this.defaultEnvChecking = false;
+        this.cdr.markForCheck();
+      }).catch(() => {
+        this.defaultEnvVarNames = new Set<string>();
+        this.defaultEnvChecking = false;
+        this.cdr.markForCheck();
+      });
+    }).catch(() => {
+      this.defaultEnvVarNames = new Set<string>();
+      this.defaultEnvChecking = false;
+      this.cdr.markForCheck();
     });
-    this.envVarValuesMap = map;
   }
 
   /**
-   * 校验是否为合法URL（仅允许 http/https 协议）
+   * 占位符变量名是否在默认环境中配置（将由后端按默认环境自动解析）。
+   * defaultEnvVarNames 未加载完成时返回 false（保守，期间 hasMissingEnvVar 会判为缺失并禁用发送）。
    */
-  isUrlValid(url: string): boolean {
-    if (!url || !url.trim()) {
-      return false;
-    }
-    try {
-      const u = new URL(url.trim());
-      return u.protocol === 'http:' || u.protocol === 'https:';
-    } catch {
-      return false;
-    }
+  isVarInDefaultEnv(name: string): boolean {
+    return this.defaultEnvVarNames?.has(name) ?? false;
   }
 
   /**
-   * 是否存在未填好（空或非法URL）的模型服务API地址变量
+   * 是否存在「未在默认环境配置」的占位符变量（任一缺失即禁用发送，引导用户去默认环境配置）。
+   */
+  hasMissingEnvVar(): boolean {
+    return this.envPlaceholderVars.length > 0 &&
+      this.envPlaceholderVars.some(item => !this.isVarInDefaultEnv(item.name));
+  }
+
+  /**
+   * 环境变量是否就绪（免填方案下的发送守卫）：存在缺失变量、或默认环境上下文仍在加载时为 true。
+   * 保留原方法名以复用现有发送守卫/按钮禁用/[envVarReady] 绑定，语义由「URL非法」改为「默认环境未就绪」。
    */
   hasInvalidEnvVar(): boolean {
-    return this.envPlaceholderVars.length > 0 &&
-      this.envPlaceholderVars.some(item => !this.isUrlValid(item.value));
-  }
-
-  /**
-   * 获取用户输入的环境变量值Map，用于传给后端（已缓存，避免频繁创建）
-   */
-  getEnvVarValuesMap(): Record<string, string> {
-    return this.envVarValuesMap;
+    return this.hasMissingEnvVar() || this.defaultEnvChecking;
   }
 
   initThinking(){

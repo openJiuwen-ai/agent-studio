@@ -61,6 +61,8 @@ export class Image2textOutputComponent {
   };
 
   @Input() envVarValues: Record<string, string> = {};
+  /** 默认环境 id（占位符模型免填时由后端按默认环境解析真实地址） */
+  @Input() environmentId: string | undefined;
 
   @ViewChild('chatContainerRef') chatContainerRef!: ElementRef;
 
@@ -193,7 +195,7 @@ export class Image2textOutputComponent {
   private postMessage(param) {
     this.abortController = new AbortController();
     this.jiuwenModelServ
-      .modelTestChat(param, this.abortController?.signal, this.envVarValues)
+      .modelTestChat(param, this.abortController?.signal, this.envVarValues, this.environmentId)
       .then(({ content }) => {
         this.result = content;
         this.scrollToBottom();
@@ -300,7 +302,7 @@ export class Image2textOutputComponent {
           this.scrollToBottom();
           this.cdr.markForCheck();
         },
-      }, this.envVarValues,
+      }, this.envVarValues, this.environmentId,
     );
   }
 

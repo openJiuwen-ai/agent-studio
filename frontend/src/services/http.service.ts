@@ -333,7 +333,7 @@ export class HttpService {
         params = params.set(key, config.query[key as keyof typeof config.query] as string);
       });
     }
-    const headers = this.buildHeaders();
+    const headers = this.buildHeaders(config);
     return this.httpClient.get(config.url as string, { params, headers: headers, responseType: 'blob' }).pipe() as Observable<Blob>;
   }
 
@@ -345,7 +345,7 @@ export class HttpService {
         params = params.set(key, config.query[key as keyof typeof config.query] as string);
       });
     }
-    const headers = this.buildHeaders();
+    const headers = this.buildHeaders(config);
     return this.httpClient.get<T>(config.url as string, {params, headers}).pipe(
       catchError((err) => this.retryOnWorkspaceReady(err, httpConfig, () => this.get(httpConfig)))
     ) as Observable<T>;
@@ -359,7 +359,7 @@ export class HttpService {
         queryParams = queryParams.set(key, config.query[key as keyof typeof config.query] as string);
       });
     }
-    const headers = this.buildHeaders();
+    const headers = this.buildHeaders(config);
     const body = config.body ?? config.params;
     return this.httpClient.post<T>(config.url as string, body, {params: queryParams, headers}).pipe(
       catchError((err) => this.retryOnWorkspaceReady(err, httpConfig, () => this.post(httpConfig)))
@@ -374,7 +374,7 @@ export class HttpService {
         queryParams = queryParams.set(key, config.query[key as keyof typeof config.query] as string);
       });
     }
-    const headers = this.buildHeaders();
+    const headers = this.buildHeaders(config);
     const body = config.body ?? config.params;
     return this.httpClient.post(config.url as string, body, { params: queryParams, headers: headers, responseType: 'blob' }).pipe() as Observable<Blob>;
   }
@@ -387,7 +387,7 @@ export class HttpService {
         queryParams = queryParams.set(key, config.query[key as keyof typeof config.query] as string);
       });
     }
-    const headers = this.buildHeaders();
+    const headers = this.buildHeaders(config);
     const body = config.body ?? config.params;
     return this.httpClient.put<T>(config.url as string, body, {params: queryParams, headers}).pipe(
       catchError((err) => this.retryOnWorkspaceReady(err, httpConfig, () => this.put(httpConfig)))
@@ -402,7 +402,7 @@ export class HttpService {
         params = params.set(key, config.query[key as keyof typeof config.query] as string);
       });
     }
-    const headers = this.buildHeaders();
+    const headers = this.buildHeaders(config);
     const body = config.body ?? config.params;
     return this.httpClient.delete<T>(config.url as string, {params, headers, body}).pipe(
       catchError((err) => this.retryOnWorkspaceReady(err, httpConfig, () => this.delete(httpConfig)))
@@ -417,16 +417,24 @@ export class HttpService {
         queryParams = queryParams.set(key, config.query[key as keyof typeof config.query] as string);
       });
     }
-    const headers = this.buildHeaders();
+    const headers = this.buildHeaders(config);
     const body = config.body ?? config.params;
     return this.httpClient.patch<T>(config.url as string, body, {params: queryParams, headers}).pipe(
       catchError((err) => this.retryOnWorkspaceReady(err, httpConfig, () => this.patch(httpConfig)))
     ) as Observable<T>;
   }
 
-  private buildHeaders(): HttpHeaders {
+  private buildHeaders(config?: Partial<HttpConfig>): HttpHeaders {
     let headers = new HttpHeaders();
     headers = headers.set('X-Language', CommonUtils.getLanguage());
+    // 合并调用方传入的自定义 headers（同名键覆盖 X-Language）。
+    // IHttpConfig.headers 字段早已定义，但历史实现未合并，此处补齐使其生效。
+    const customHeaders = config?.headers;
+    if (customHeaders) {
+      Object.keys(customHeaders).forEach(key => {
+        headers = headers.set(key, customHeaders[key]);
+      });
+    }
     return headers;
   }
 
@@ -440,7 +448,7 @@ export class HttpService {
             queryParams = queryParams.set(key, config.query[key as keyof typeof config.query] as string);
           });
         }
-        const headers = this.buildHeaders();
+        const headers = this.buildHeaders(config);
         const body = config.body ?? config.params;
         return this.httpClient.post(config.url as string, body, {
           params: queryParams,

@@ -185,7 +185,7 @@ export class AddModelComponent implements OnInit {
             if (value.startsWith('{') && !value.includes('}')) {
               return null;
             }
-            return { invalidUrl: { tiErrorMessage: this.i18n.transform('service_url_invalid_tip') } };
+            return { invalidUrl: { tiErrorMessage: this.i18n.transform('api_url_invalid_tip') } };
           },
           Validators.maxLength(255),
         ],

@@ -381,8 +381,11 @@
   "import_model_preview_failed": "预检失败",
   "import_model_failed": "导入失败",
   "env_var_values": "模型服务API地址变量",
-  "env_var_values_tip": "该模型的服务地址使用了环境变量占位符，请填入真实URL地址后才能发送测试（此值仅用于本次调测，不会保存）。",
+  "env_var_values_tip": "该模型的服务地址使用了环境变量占位符，调测时无需手填，由后端按默认环境中配置的同名变量自动解析为真实地址。请在环境管理中为默认环境配置相应变量。",
   "pls_input_env_value": "请输入真实url地址",
   "env_var_invalid_url": "请输入合法的url地址（以http://或https://开头）",
-  "env_var_not_ready_tip": "请先填写模型服务API地址变量"
+  "env_var_not_ready_tip": "模型服务API地址变量未就绪，请检查默认环境是否已配置所需变量",
+  "env_var_auto_injected_tip": "将由默认环境自动注入，无需手填",
+  "env_var_not_in_default_env_tip": "默认环境未配置此变量 {{name}}，请到环境管理配置后再调测",
+  "env_var_checking_default_env": "正在检查默认环境变量..."
 }

@@ -191,7 +191,7 @@ def instance_app() -> FastAPI:
         def _h(name: str) -> str:
             return request.headers.get(name) or request.headers.get(name.lower(), "")
 
-        workspace_id = _h("X-Workspace-Id")
+        workspace_id = _h("X-Workspace-Id") or request.query_params.get("workspace_id", "")
         environment_id = _h("X-Environment-Id")
         # 按 environment_id 从 Redis 加载环境变量（缺省返回 {}，不查 Redis），供
         # StudioModelClient 解析跨环境迁移模型 apiUrl 中的 ${_env.plugin_url_params.VAR} 占位符

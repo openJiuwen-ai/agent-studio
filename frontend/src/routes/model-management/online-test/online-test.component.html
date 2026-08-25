@@ -38,17 +38,26 @@
                   class="ml-1 text-gray-400 cursor-pointer text-[16px]"></span>
           </h3>
           <div class="flex flex-col gap-2">
-            <div *ngFor="let varItem of envPlaceholderVars; let i = index" class="flex flex-col gap-1">
-              <div class="flex items-center gap-2">
-                <span class="w-24 text-sm truncate" nz-tooltip [nzTooltipTitle]="varItem.name">{{ varItem.name }}</span>
-                <input nz-input [(ngModel)]="varItem.value" (ngModelChange)="updateEnvVarValuesMap()"
-                       [ngClass]="{ 'env-var-input-error': varItem.value && !isUrlValid(varItem.value) }"
-                       [placeholder]="'pls_input_env_value' | i18nextEager" />
-              </div>
-              <span class="text-[12px] text-red-500 env-var-error-msg" *ngIf="varItem.value && !isUrlValid(varItem.value)">
-                {{ 'env_var_invalid_url' | i18nextEager }}
-              </span>
+            <div *ngIf="defaultEnvChecking" class="flex items-center gap-2 py-1">
+              <nz-spin nzSize="small"></nz-spin>
+              <span class="text-[12px] text-gray-500">{{ 'env_var_checking_default_env' | i18nextEager }}</span>
             </div>
+            <ng-container *ngIf="!defaultEnvChecking">
+              <div *ngFor="let varItem of envPlaceholderVars" class="flex flex-col gap-1">
+                <div class="flex items-center gap-2">
+                  <span class="w-24 text-sm truncate" nz-tooltip [nzTooltipTitle]="varItem.name">{{ varItem.name }}</span>
+                  <span class="text-[12px] flex items-center gap-1"
+                        [ngClass]="isVarInDefaultEnv(varItem.name) ? 'text-green-600' : 'text-orange-500'">
+                    <span nz-icon [nzType]="isVarInDefaultEnv(varItem.name) ? 'check-circle' : 'exclamation-circle'"
+                          nzTheme="outline"></span>
+                    <span *ngIf="isVarInDefaultEnv(varItem.name)">{{ 'env_var_auto_injected_tip' | i18nextEager }}</span>
+                    <span *ngIf="!isVarInDefaultEnv(varItem.name)">
+                      {{ 'env_var_not_in_default_env_tip' | i18nextEager: { name: varItem.name } }}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            </ng-container>
           </div>
         </div>
 
@@ -256,22 +265,22 @@
         <ng-container *ngIf="modelType===ModelType.LLM">
           <model-service-compare-router [serviceInfo]="mySelected" [config]="configs" [modelType]="modelType"
                                         [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap"
-                                        [envVarReady]="!hasInvalidEnvVar()" *ngIf="toggleModel"></model-service-compare-router>
+                                        [envVarReady]="!hasInvalidEnvVar()" [environmentId]="defaultEnvId" *ngIf="toggleModel"></model-service-compare-router>
           <model-service-compare-router [serviceInfo]="mySelected" [config]="configs" [modelType]="modelType"
                                         [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap"
-                                        [envVarReady]="!hasInvalidEnvVar()" *ngIf="!toggleModel"></model-service-compare-router>
+                                        [envVarReady]="!hasInvalidEnvVar()" [environmentId]="defaultEnvId" *ngIf="!toggleModel"></model-service-compare-router>
         </ng-container>
         <ng-container *ngIf="modelType===ModelType.IMAGE_TO_TEXT">
           <image2text-output [serviceInfo]="mySelected" #image2text [param]="image2textParam"
-                             [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap"></image2text-output>
+                             [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap" [environmentId]="defaultEnvId"></image2text-output>
         </ng-container>
         <ng-container *ngIf="modelType===ModelType.Text_Embedding">
           <text-embedding [serviceInfo]="mySelected" #textEmbedding [param]="textEmbeddingParam"
-                          [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap"></text-embedding>
+                          [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap" [environmentId]="defaultEnvId"></text-embedding>
         </ng-container>
         <ng-container *ngIf="modelType===ModelType.RERANK">
           <text-rerank [serviceInfo]="mySelected" #textRerank [param]="textRerankParam"
-                       [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap"></text-rerank>
+                       [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap" [environmentId]="defaultEnvId"></text-rerank>
         </ng-container>
       </div>
     </div>
