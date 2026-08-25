@@ -107,6 +107,9 @@ export interface IFlowChatItem {
 
   /** 是否终止 */
   terminate?: boolean
+
+  /** 最终输出结果复制按钮是否已点击（图标切换） */
+  answerCopyIcon?: boolean;
 }
 
 export interface IAnswerItem {

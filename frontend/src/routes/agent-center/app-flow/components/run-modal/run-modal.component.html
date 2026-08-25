@@ -212,8 +212,20 @@
                 "
                 class="has-answer"
               >
-                <div class="text-chunk-title">
-                  {{ 'final_output_result' | i18nextEager }}
+                <div class="text-chunk-title flex items-center justify-between">
+                  <span>{{ 'final_output_result' | i18nextEager }}</span>
+                  <asset-copy-icon
+                    *ngIf="!item.answerCopyIcon; else copiedIcon"
+                    class="cursor-pointer"
+                    nz-tooltip
+                    [nzTooltipTitle]="'copy' | i18nextEager"
+                    (click)="handleCopyAnswer(item)"
+                  ></asset-copy-icon>
+                  <ng-template #copiedIcon>
+                    <asset-copy-success-icon
+                      class="cursor-pointer"
+                    ></asset-copy-success-icon>
+                  </ng-template>
                 </div>
                 <div #chatContainerRef cdkScrollable class="answer-text">
                   <ng-container *ngFor="let subItem of item.showAnswer">

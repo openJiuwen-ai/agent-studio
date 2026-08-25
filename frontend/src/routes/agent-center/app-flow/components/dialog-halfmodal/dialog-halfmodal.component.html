@@ -394,7 +394,7 @@
                                 (item.execution_id && !isDevelporFlag && supportAnnotation))}"
                               *ngIf="
                             last &&
-                            (item.latency || (item.execution_id && !answer.loading)) &&
+                            ((item.latency || (item.execution_id && !answer.loading)) || !isRequesting) &&
                             !(answer.isError && !answer.loading)
                           "
                             >
@@ -415,10 +415,20 @@
                               ((supportFeedback || voiceEnable) &&
                                 !answer.isError &&
                                 answer.messageId) ||
-                                (item.execution_id && !isDevelporFlag && supportAnnotation)
+                                (item.execution_id && !isDevelporFlag && supportAnnotation) ||
+                                (!isRequesting && !answer.loading && getText(answer.text).length)
                             "
                                 class="flex gap-[4px] items-center pl-[16px] split"
                               >
+                                <div
+                                  *ngIf="!isRequesting && !answer.loading && getText(answer.text).length"
+                                  class="chat-footer-icon"
+                                  nz-tooltip
+                                  [nzTooltipTitle]="'copy' | i18nextEager"
+                                  (click)="handleCopyAnswer(item)"
+                                >
+                                  <nz-icon nzType="copy" nzTheme="outline"></nz-icon>
+                                </div>
                                 <ng-container *ngIf="voiceEnable">
                                   <button
                                     *ngIf="soundState !== 'loading'"
@@ -610,7 +620,7 @@
                                 (item.execution_id && !isDevelporFlag && supportAnnotation))}"
                                 *ngIf="
                              last &&
-                                (item.latency || (item.execution_id && !answer.loading)) &&
+                                ((item.latency || (item.execution_id && !answer.loading)) || !isRequesting) &&
                                 !(answer.isError && !answer.loading)
                             "
                               >
@@ -631,10 +641,20 @@
                                  ((supportFeedback || voiceEnable) &&
                                 !answer.isError &&
                                 answer.messageId) ||
-                                (item.execution_id && !isDevelporFlag && supportAnnotation)
+                                (item.execution_id && !isDevelporFlag && supportAnnotation) ||
+                                (!isRequesting && !answer.loading && getText(answer.text).length)
                               "
                                   class="flex gap-[4px] items-center pl-[16px] split"
                                 >
+                                  <div
+                                    *ngIf="!isRequesting && !answer.loading && getText(answer.text).length"
+                                    class="chat-footer-icon"
+                                    nz-tooltip
+                                    [nzTooltipTitle]="'copy' | i18nextEager"
+                                    (click)="handleCopyAnswer(item)"
+                                  >
+                                    <nz-icon nzType="copy" nzTheme="outline"></nz-icon>
+                                  </div>
                                   <ng-container *ngIf="voiceEnable">
                                     <button
                                       *ngIf="soundState !== 'loading'"
