@@ -73,6 +73,20 @@ export class ModelImportModalComponent {
     return this.nzData?.targetProviderId;
   }
 
+  /** 预检表第一列标题：全为空供应商壳行(PROVIDER)→供应商名称，否则→模型服务名称。 */
+  get previewFirstNameColKey(): string {
+    const items = this.preview?.items ?? [];
+    const allProvider = items.length > 0 && items.every(i => i.type === 'PROVIDER');
+    return allProvider ? 'import_preview_provider_name' : 'model_service_name';
+  }
+
+  /** 结果表第一列标题：同理基于 importRsp.import_list 的 type 判断。 */
+  get resultFirstNameColKey(): string {
+    const items = this.importRsp?.import_list ?? [];
+    const allProvider = items.length > 0 && items.every(i => i.type === 'PROVIDER');
+    return allProvider ? 'import_preview_provider_name' : 'model_service_name';
+  }
+
   constructor(
     private modelManagementService: ModelManagementService,
     private modalRef: NzModalRef,

@@ -19,6 +19,7 @@ import com.openjiuwen.studio.agent.manager.entity.ProviderExportMetadata;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceProvider;
+import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceProviderDetail;
 import com.openjiuwen.studio.agent.manager.entity.md.ProviderAuthData;
 import com.openjiuwen.studio.agent.manager.entity.md.ProviderAuthMetadata;
 import com.openjiuwen.studio.agent.manager.enums.ModelImportConflictStrategy;
@@ -144,10 +145,33 @@ public class ModelImportExportService implements IModelImportExportService {
             .distinct()
             .collect(Collectors.toList());
         if (modelIds.isEmpty()) {
-            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
-                "no models under provider " + providerId);
+            // 无模型的供应商：仍导出供应商元数据壳（空模型列表），目标环境可导入壳后再补模型。
+            // 修复「空供应商导出空文件 / 抛异常无法再导入」——保证导出物含供应商元数据，可被重新导入。
+            return exportEmptyProvider(projectId, workspaceId, providerId);
         }
         return exportModels(projectId, workspaceId, modelIds, true);
+    }
+
+    /**
+     * 无模型供应商导出：直接按 providerId 取供应商元数据（不经模型派生），组装单行 JSONL
+     * （空模型列表 + 供应商元数据），经 {@link #buildSignedLine} 脱敏+签名，与常规导出格式一致。
+     * 导入端 {@code modelsOf} 对空模型列表返回 {@link Collections#emptyList()}，循环不执行，
+     * 仅 upsert 供应商元数据——即「导入空供应商壳」成立。
+     */
+    private byte[] exportEmptyProvider(String projectId, String workspaceId, String providerId) {
+        Map<String, ProviderExportMetadata> providerMap = modelServiceMgmtService
+            .getProviderExportMetadataByIds(Collections.singleton(providerId));
+        ProviderExportMetadata providerMetadata = providerMap.get(providerId);
+        if (providerMetadata == null) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "provider not found or has no metadata: " + providerId);
+        }
+        ModelExportEntity entity = new ModelExportEntity();
+        entity.setProviderMetadata(providerMetadata);
+        entity.setModelMetadata(new ArrayList<>());
+        StringBuilder jsonl = new StringBuilder();
+        jsonl.append(serialize(buildSignedLine(entity))).append('\n');
+        return jsonl.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     /**
@@ -236,7 +260,8 @@ public class ModelImportExportService implements IModelImportExportService {
             boolean modelOnly = line.getPayload().getProviderMetadata() == null
                 && StringUtils.isNotBlank(targetProviderId);
             boolean cipherAdapted = isCipherAdapted(line.getPayload());
-            for (ModelServiceData model : modelsOf(line)) {
+            List<ModelServiceData> models = modelsOf(line);
+            for (ModelServiceData model : models) {
                 if (modelOnly) {
                     // 只导模型预检：重定向 providerId 到目标供应商，冲突判定/展示用重定向后的值。
                     model.setProviderId(targetProviderId);
@@ -247,6 +272,12 @@ public class ModelImportExportService implements IModelImportExportService {
                     conflictCount++;
                 }
             }
+            // 空供应商壳：provider_metadata 非空但无模型，导入会 upsert 供应商壳（0 模型）。预检须为其产出条目，
+            // 否则 totalCount=0 使前端 canConfirm 禁用确认按钮，与导入实际效果（建出供应商）不一致。
+            // modelOnly 文件 provider_metadata 必为 null，不会误入此分支。
+            if (!modelOnly && models.isEmpty() && line.getPayload().getProviderMetadata() != null) {
+                items.add(previewProviderShell(line.getPayload().getProviderMetadata(), cipherAdapted));
+            }
         }
         return new ModelImportPreviewRsp().setTotalCount(items.size()).setConflictCount(conflictCount).setItems(items);
     }
@@ -256,22 +287,30 @@ public class ModelImportExportService implements IModelImportExportService {
         ModelImportPreviewItem item = new ModelImportPreviewItem().setId(model.getId())
             .setServiceName(model.getServiceName())
             .setProviderId(model.getProviderId())
-            .setConflict(hasConflict(projectId, workspaceId, model))
-            .setCipherAdapted(cipherAdapted);
-        // providerId 空值：冲突键退化、COVER 可能误删无关记录 → 与导入侧 validateModel 一致判定为非法。
+            .setConflict(false)
+            .setCipherAdapted(cipherAdapted)
+            .setType("MODEL");
+        // providerId 空值：queryByName 的 PROVIDER_ID 条件会退化（serviceName-only 跨供应商匹配），
+        // 可能误报冲突且 COVER 会误删无关记录。与导入侧 validateModel（冲突检测前抛异常）一致 →
+        // 此处不跑 detectConflict，直接判非法，避免 preview 与 import 背离。
         if (StringUtils.isBlank(model.getProviderId())) {
             return item.setSignatureValid(true)
                 .setApiUrlValid(false)
                 .setEnvVarValid(false)
                 .setDetail("model " + model.getServiceName() + " has blank providerId, cannot import");
         }
+        // 冲突检测：对齐 resolveConflictAndPersist 的三情况（本空间同名 / 本空间同 id / 跨空间同 id），
+        // 返回结构化说明（无冲突返回 conflict=false、desc=null）。
+        ConflictInfo conflictInfo = detectConflict(projectId, workspaceId, model);
+        item.setConflict(conflictInfo.isConflict());
         // 加密鉴权未适配：api_url/env_var 校验不再继续（加密情况下这些字段仍是明文/占位符，但密钥不可用，整体不可导入）。
         if (!cipherAdapted) {
             return item.setSignatureValid(true)
                 .setApiUrlValid(true)
                 .setEnvVarValid(true)
-                .setDetail("auth data is encrypted by a cipher not adapted in this environment; "
-                    + "please reconfigure credentials in the target environment after import");
+                .setDetail(mergeDetail(conflictInfo.getDesc(),
+                    "auth data is encrypted by a cipher not adapted in this environment; "
+                    + "please reconfigure credentials in the target environment after import"));
         }
         // 两个校验独立判定：checkUrl 对含 ${...} 占位符的 URL 放通（交由 validateEnvVarPlaceholders 管语法），
         // 故非法占位符 URL 应 apiUrlValid=true、envVarValid=false。耦合在一个 try/catch 会误把两标志同时置 false。
@@ -290,10 +329,23 @@ public class ModelImportExportService implements IModelImportExportService {
             item.setEnvVarValid(false);
             details.add(describe(e));
         }
-        if (!details.isEmpty()) {
-            item.setDetail(String.join("; ", details));
+        String hardDetail = details.isEmpty() ? null : String.join("; ", details);
+        return item.setSignatureValid(true)
+            .setDetail(mergeDetail(conflictInfo.getDesc(), hardDetail));
+    }
+
+    /**
+     * 合并硬校验失败说明与冲突说明：冲突在前、硬校验在后，用 "；" 分隔。两者皆空返回 null（前端展示"无"）。
+     */
+    private String mergeDetail(String conflictDesc, String hardCheckDesc) {
+        List<String> parts = new ArrayList<>(2);
+        if (StringUtils.isNotBlank(conflictDesc)) {
+            parts.add(conflictDesc);
         }
-        return item.setSignatureValid(true);
+        if (StringUtils.isNotBlank(hardCheckDesc)) {
+            parts.add(hardCheckDesc);
+        }
+        return parts.isEmpty() ? null : String.join("；", parts);
     }
 
     private ModelImportPreviewItem previewForLineFailure(LineContext ctx, AgentStudioException e) {
@@ -305,6 +357,7 @@ public class ModelImportExportService implements IModelImportExportService {
             .setApiUrlValid(false)
             .setEnvVarValid(false)
             .setCipherAdapted(true)
+            .setType("MODEL")
             .setDetail(describe(e));
     }
 
@@ -318,7 +371,36 @@ public class ModelImportExportService implements IModelImportExportService {
             .setApiUrlValid(false)
             .setEnvVarValid(false)
             .setCipherAdapted(true)
+            .setType("MODEL")
             .setDetail("payload is missing");
+    }
+
+    /**
+     * 空供应商壳行的预检条目。provider_metadata 非空但无模型时，导入会 upsert 供应商壳（0 模型）；
+     * 预检须产出此条目，否则 totalCount=0 使前端 canConfirm 禁用确认按钮。api_url/env_var 校验对
+     * 供应商壳无意义（供应商本身无 api_url），放通为 true；signature 已在 verifyLine 通过。
+     */
+    private ModelImportPreviewItem previewProviderShell(ProviderExportMetadata pem, boolean cipherAdapted) {
+        ModelServiceProvider provider = pem.getModelServiceProviderMetadata();
+        String providerId = provider != null ? provider.getId() : null;
+        String providerName = provider != null ? provider.getProviderName() : null;
+        ModelImportPreviewItem item = new ModelImportPreviewItem()
+            .setId(providerId)
+            .setServiceName(providerName)
+            .setProviderId(providerId)
+            .setConflict(false)
+            .setCipherAdapted(cipherAdapted)
+            .setSignatureValid(true)
+            .setApiUrlValid(true)
+            .setEnvVarValid(true)
+            .setType("PROVIDER");
+        if (!cipherAdapted) {
+            return item.setDetail("auth data is encrypted by a cipher not adapted in this environment; "
+                + "please reconfigure credentials in the target environment after import");
+        }
+        // 供应商壳（无模型）无冲突且可导入（导入侧 providerShellRes 报 SUCCESS）→ detail=null，
+        // 前端展示"无"（success），避免在精简后的单列里误显红色 error。
+        return item;
     }
 
     // ============================== 导入落库 ==============================
@@ -371,6 +453,7 @@ public class ModelImportExportService implements IModelImportExportService {
             boolean modelOnly = entity.getProviderMetadata() == null
                 && StringUtils.isNotBlank(targetProviderId);
             String targetAuthMetadataId;
+            boolean providerUpsertOk = false;
             // 单行内 id 重映射：跨工作空间 COPY 场景下 upsertProviderMetadata / resolveConflictAndPersist
             // 可能为 provider 或某个子模型生成新 UUID；同一行内后续子模型的 providerId 必须跟着重定向到新 id，
             // 否则 FK 指向源空间 id（dangling）。modelOnly 模式下 providerId 已被显式置为 targetProviderId，无需重映射。
@@ -387,12 +470,14 @@ public class ModelImportExportService implements IModelImportExportService {
                 try {
                     targetAuthMetadataId = upsertProviderMetadata(projectId, workspaceId, entity.getProviderMetadata(),
                         batchIdRemap).orElse(null);
+                    providerUpsertOk = true;
                 } catch (Exception e) {
                     log.warn("Provider metadata upsert failed for line {}, continuing with model import",
                         ctx.lineNo, e);
                 }
             }
-            for (ModelServiceData model : modelsOf(line)) {
+            List<ModelServiceData> models = modelsOf(line);
+            for (ModelServiceData model : models) {
                 if (modelOnly) {
                     // 只导模型：模型 providerId/authMetadataId 重定向到目标供应商（模型本身无密钥，
                     // api-key 在供应商侧 t_provider_auth_info 按 PROVIDER_ID 关联，目标供应商本地已有）。
@@ -410,6 +495,11 @@ public class ModelImportExportService implements IModelImportExportService {
                 if (!modelOnly && StringUtils.isNotBlank(originalId) && !originalId.equals(model.getId())) {
                     batchIdRemap.put(originalId, model.getId());
                 }
+            }
+            // 空供应商壳：无模型但供应商元数据已 upsert → 须产出一条结果条目，否则 succeed_len=0 与实际
+            // "建出供应商"不一致，用户会误以为没导入成功。upsert 失败（best-effort catch）时改报 failed。
+            if (!modelOnly && models.isEmpty() && entity.getProviderMetadata() != null) {
+                importList.add(providerShellRes(entity.getProviderMetadata(), providerUpsertOk));
             }
         }
         return buildImportRsp(importList);
@@ -662,12 +752,15 @@ public class ModelImportExportService implements IModelImportExportService {
      * 供应商行 upsert，跨工作空间 COPY 语义。
      * <ul>
      *   <li>先按 workspace 作用域查：目标空间已存在同 id 行 → 返回原 id，不插入</li>
+     *   <li>目标空间已存在同 name 行（含 SYSTEM 预置供应商，与 id 查重 scope 一致）→ 复用那条的 id，不插入、
+     *       不更新供应商本体（与 id 复用语义一致：只借 id，auth metadata/data 后续按 providerId 查自动复用目标空间已有）</li>
      *   <li>全局无同 id 行 → 原样插入，返回原 id</li>
      *   <li>全局存在但在其他项目/空间 → 生成新 UUID，写入 {@code batchIdRemap[oldId→newId]}，插入新行，返回新 id</li>
      * </ul>
-     * 不依赖 name 判定（同名供应商在不同环境可能合法共存），只按 id 判定是否需要 COPY。
+     * name 复用与 id 复用并列为"目标空间已有则复用"的判定键（创建流程 {@code ProviderMgmtService} 已在代码层
+     * 挡住同空间同名重复创建，故目标空间正常至多 1 条同名；这里取首条复用）。
      *
-     * @return 目标空间实际落库的 provider id（可能等于导入 id，也可能是新生成的 id）
+     * @return 目标空间实际落库的 provider id（可能等于导入 id、复用既有 id，也可能是新生成的 id）
      */
     private Optional<String> upsertServiceProvider(String projectId, String workspaceId, ModelServiceProvider provider,
         Map<String, String> batchIdRemap) {
@@ -681,7 +774,20 @@ public class ModelImportExportService implements IModelImportExportService {
         if (CollectionUtils.isNotEmpty(existInScope)) {
             return Optional.of(originalId);
         }
-        // 2) 全局查：selectByIds 跨所有项目/空间。命中 → 跨空间 PK 冲突，走 COPY
+        // 2) 目标工作空间已存在同 name 行（含 SYSTEM，与 id 查重 scope 一致）→ 复用其 id。
+        //    与 id 复用语义一致：只借 id、不更新供应商本体、不碰既有 auth；后续 upsertAuthMetadata/upsertAuthData
+        //    按 providerId 查会自动复用目标空间已有 auth 行。originalId→existingId 写入 batchIdRemap，
+        //    让后续子模型的 providerId 重定向到复用的供应商（否则模型会挂到不存在的 originalId 下）。
+        List<ModelServiceProvider> existByName = userModelServiceProviderMapper.selectUserDataByName(
+            projectId, workspaceId, provider.getProviderName());
+        if (CollectionUtils.isNotEmpty(existByName)) {
+            String existingId = existByName.get(0).getId();
+            if (batchIdRemap != null && !StringUtils.equals(originalId, existingId)) {
+                batchIdRemap.put(originalId, existingId);
+            }
+            return Optional.of(existingId);
+        }
+        // 3) 全局查：selectByIds 跨所有项目/空间。命中 → 跨空间 PK 冲突，走 COPY
         Set<String> ids = new HashSet<>(Collections.singletonList(originalId));
         List<ModelServiceProvider> existGlobal = userModelServiceProviderMapper.selectByIds(ids);
         String newId = originalId;
@@ -857,9 +963,82 @@ public class ModelImportExportService implements IModelImportExportService {
 
     // ============================== 辅助 ==============================
 
-    private boolean hasConflict(String projectId, String workspaceId, ModelServiceBase model) {
-        return CollectionUtils.isNotEmpty(modelServiceMapper.queryByName(projectId, workspaceId,
-            model.getServiceName(), model.getProviderId()));
+    /**
+     * 冲突检测：对齐 {@link #resolveConflictAndPersist} 的三情况判定，返回结构化说明供预检展示。
+     * <ul>
+     *   <li>情况1：{@code queryByName} 命中（本空间同供应商+同服务名）→
+     *       "本空间下供应商「{provider_name}」已存在相同的模型服务「{service_name}」"</li>
+     *   <li>情况2：{@code queryById} 命中同 scope（本空间同 model_id）→
+     *       "本空间下已存在相同的模型ID（{model_id}）"</li>
+     *   <li>情况3：{@code queryById} 命中不同 scope（跨空间同 model_id）→
+     *       "其他工作空间已存在相同的模型ID（{model_id}）"（不显示具体空间名）</li>
+     * </ul>
+     * 无冲突返回 {@code conflict=false, desc=null}。
+     */
+    private ConflictInfo detectConflict(String projectId, String workspaceId, ModelServiceBase model) {
+        // 情况1：本空间同供应商+同服务名
+        List<ModelServiceBase> existByName = modelServiceMapper.queryByName(projectId, workspaceId,
+            model.getServiceName(), model.getProviderId());
+        if (CollectionUtils.isNotEmpty(existByName)) {
+            String providerName = resolveProviderName(model.getProviderId());
+            String desc = String.format("本空间下供应商「%s」已存在相同的模型服务「%s」",
+                StringUtils.isNotBlank(providerName) ? providerName : model.getProviderId(),
+                model.getServiceName());
+            return new ConflictInfo(true, desc);
+        }
+        // 情况2/3：本空间无同名 → 全局按 id 查（跨工作空间 PK 冲突）
+        if (StringUtils.isNotBlank(model.getId())) {
+            ModelServiceBase existingById = modelServiceMapper.queryById(model.getId());
+            if (existingById != null) {
+                boolean sameScope = StringUtils.equals(existingById.getProjectId(), projectId)
+                    && StringUtils.equals(existingById.getWorkspaceId(), workspaceId);
+                if (sameScope) {
+                    return new ConflictInfo(true,
+                        String.format("本空间下已存在相同的模型ID（%s）", model.getId()));
+                }
+                return new ConflictInfo(true,
+                    String.format("其他工作空间已存在相同的模型ID（%s）", model.getId()));
+            }
+        }
+        return new ConflictInfo(false, null);
+    }
+
+    /**
+     * 按 providerId 查供应商显示名（一次查询覆盖平台 + 用户两类供应商）。
+     * 查不到返回 null（调用方回退显示 providerId）。
+     */
+    private String resolveProviderName(String providerId) {
+        if (StringUtils.isBlank(providerId)) {
+            return null;
+        }
+        List<ModelServiceProviderDetail> providers = modelServiceMapper
+            .getLogosAndProviderNamesByProviderIds(Collections.singleton(providerId));
+        if (CollectionUtils.isEmpty(providers)) {
+            return null;
+        }
+        String name = providers.get(0).getProviderName();
+        return StringUtils.isNotBlank(name) ? name : providers.get(0).getProviderNameEn();
+    }
+
+    /**
+     * 冲突检测结果：conflict 布尔 + 人类可读说明（desc）。desc=null 表示无冲突。
+     */
+    private static class ConflictInfo {
+        private final boolean conflict;
+        private final String desc;
+
+        ConflictInfo(boolean conflict, String desc) {
+            this.conflict = conflict;
+            this.desc = desc;
+        }
+
+        boolean isConflict() {
+            return conflict;
+        }
+
+        String getDesc() {
+            return desc;
+        }
     }
 
     /**
@@ -953,6 +1132,23 @@ public class ModelImportExportService implements IModelImportExportService {
             .setType("MODEL")
             .setStatus("SUCCESS")
             .setDetail("imported with preserved id: " + model.getId());
+    }
+
+    /**
+     * 空供应商壳导入结果条目。provider_metadata 非空但无模型时，导入仅 upsert 供应商壳（0 模型），
+     * 须产出此条目，否则 succeed_len=0 与实际"建出供应商"不一致。type=PROVIDER 与 MODEL 区分；
+     * ok=false（provider upsert best-effort 失败）时记 failed。
+     */
+    private ImportRes providerShellRes(ProviderExportMetadata pem, boolean ok) {
+        ModelServiceProvider provider = pem.getModelServiceProviderMetadata();
+        String providerId = provider != null ? provider.getId() : null;
+        String providerName = provider != null ? provider.getProviderName() : null;
+        if (ok) {
+            return new ImportRes().setId(providerId).setName(providerName).setType("PROVIDER")
+                .setStatus("SUCCESS").setDetail("provider shell imported (no models)");
+        }
+        return new ImportRes().setId(providerId).setName(providerName).setType("PROVIDER")
+            .setStatus("FAILED").setDetail("provider metadata upsert failed");
     }
 
     private ImportRes failedRes(String id, String name, String detail) {

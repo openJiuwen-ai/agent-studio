@@ -82,6 +82,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1294,8 +1295,17 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             .map(ModelServiceData::getProviderId)
             .filter(StringUtils::isNotBlank)
             .collect(Collectors.toSet());
+        return getProviderExportMetadataByIds(providerIds);
+    }
 
-        if (providerIds.isEmpty()) {
+    /**
+     * 按 providerId 集合直接取供应商导出元数据（不依赖模型行派生）。
+     *
+     * <p>供「空供应商导出」复用：供应商下无模型时（queryByProviders 返回空）仍可导出供应商壳，
+     * 目标环境导入壳后再补模型。与 {@link #batchGetProviderExportMetadata} 共用同一段取数逻辑。
+     */
+    public Map<String, ProviderExportMetadata> getProviderExportMetadataByIds(Collection<String> providerIds) {
+        if (providerIds == null || providerIds.isEmpty()) {
             log.error("providerIds is empty");
             return Collections.emptyMap();
         }

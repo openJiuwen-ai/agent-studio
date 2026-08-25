@@ -19,6 +19,8 @@ export interface ModelImportPreviewItem {
   env_var_valid: boolean;
   cipher_adapted: boolean | null;
   detail: string | null;
+  /** 行类型：MODEL=模型行，PROVIDER=空供应商壳行（用于第一列标题动态切换）。 */
+  type: string;
 }
 
 /** 模型导入预检响应。 */
