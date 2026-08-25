@@ -157,18 +157,9 @@
   margin-top: 8px;
 }
 
-.env-placeholder-warn {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  color: #d46b08;
-  font-size: 12px;
-  margin-top: 8px;
-}
-
-.env-placeholder-warn-icon {
-  color: #fa8c16;
-  margin-right: 4px;
-  font-size: 16px;
+/* 单智能体场景：当前选中模型为环境变量占位符模型时，选择框加橙色边框作持久提示。
+   完整说明通过 hover tooltip 呈现，避免在固定高度(28px)标题行内插入流式告警条
+   导致内容溢出、布局错乱（config-tools .header-right/.inner 高度固定）。 */
+::ng-deep #llm-select.env-placeholder-selected .ant-select-selector {
+  border-color: #fa8c16 !important;
 }

@@ -262,7 +262,7 @@ export class ModalManagementComponent implements OnInit, OnDestroy {
   public openImportModal(): void {
     const modalRef = this.modalService.create({
       nzContent: ModelImportModalComponent,
-      nzTitle: this.i18n.transform('import_models'),
+      nzTitle: this.i18n.transform('import_model_providers'),
       nzWidth: '760px',
       nzFooter: null,
     });

@@ -5,6 +5,7 @@
     [id]="'llm-select'"
     class="!w-full model-select"
     [class]="showError ? 'select-error-class' : ''"
+    [class.env-placeholder-selected]="disableEnvPlaceholderModels && selectedModelIsEnvPlaceholder"
     [ngModel]="selectedModel"
     (ngModelChange)="changeSelect($event)"
     [nzPlaceHolder]="'model_select_placeholder' | i18nextEager"
@@ -13,6 +14,9 @@
     [nzShowSearch]="true"
     [nzAllowClear]="clearable"
     (nzOnSearch)="onBeforeSearch($event)"
+    nz-tooltip
+    [nzTooltipTitle]="(disableEnvPlaceholderModels && selectedModelIsEnvPlaceholder) ? ('llmselectcomponent_env_placeholder_selected_warn' | i18nextEager) : null"
+    [nzTooltipPlacement]="'top'"
   >
     @for (group of modelOptions; track group.id) {
       <nz-option-group [nzLabel]="groupLabelTemplate">
@@ -150,9 +154,5 @@
   <div *ngIf="showError" class="error-class">
     <nz-icon nzType="close-circle" nzTheme="outline" class="error-class-icon" />
     {{'select_placeholder'|i18nextEager}}
-  </div>
-  <div *ngIf="disableEnvPlaceholderModels && selectedModelIsEnvPlaceholder" class="env-placeholder-warn">
-    <nz-icon nzType="warning" nzTheme="outline" class="env-placeholder-warn-icon" />
-    {{'llmselectcomponent_env_placeholder_selected_warn'|i18nextEager}}
   </div>
 </div>

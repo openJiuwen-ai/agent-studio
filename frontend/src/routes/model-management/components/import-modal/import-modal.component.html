@@ -32,48 +32,20 @@
     <nz-table *ngIf="preview" #previewTable [nzData]="preview.items || []" [nzPageSize]="5" nzSize="small">
       <thead>
         <tr>
-          <th>{{ 'service_name' | i18nextEager }}</th>
-          <th>{{ 'provider_id' | i18nextEager }}</th>
-          <th>{{ 'import_preview_conflict' | i18nextEager }}</th>
-          <th>{{ 'import_preview_signature' | i18nextEager }}</th>
-          <th>{{ 'import_preview_cipher' | i18nextEager }}</th>
-          <th>API URL</th>
-          <th>{{ 'import_preview_env_var' | i18nextEager }}</th>
-          <th>{{ 'import_preview_detail' | i18nextEager }}</th>
+          <th>{{ previewFirstNameColKey | i18nextEager }}</th>
+          <th>{{ 'import_preview_conflict_desc' | i18nextEager }}</th>
         </tr>
       </thead>
       <tbody>
         <tr *ngFor="let item of previewTable.data">
           <td>{{ item.service_name || item.id || '-' }}</td>
-          <td>{{ item.provider_id || '-' }}</td>
           <td>
-            <nz-tag [nzColor]="item.conflict ? 'warning' : 'success'">
-              {{ (item.conflict ? 'yes' : 'no') | i18nextEager }}
+            <nz-tag *ngIf="!item.detail" nzColor="success">{{ 'import_preview_none' | i18nextEager }}</nz-tag>
+            <nz-tag *ngIf="item.detail"
+              [nzColor]="(item.signature_valid && item.api_url_valid && item.env_var_valid && item.cipher_adapted) ? 'warning' : 'error'">
+              {{ item.detail }}
             </nz-tag>
           </td>
-          <td>
-            <nz-tag [nzColor]="item.signature_valid ? 'success' : 'error'">
-              {{ (item.signature_valid ? 'valid' : 'invalid') | i18nextEager }}
-            </nz-tag>
-          </td>
-          <td>
-            <ng-container *ngIf="item.cipher_adapted === true">
-              <nz-tag nzColor="success">✓</nz-tag>
-            </ng-container>
-            <ng-container *ngIf="item.cipher_adapted === false">
-              <nz-tag nzColor="error">✗</nz-tag>
-            </ng-container>
-            <ng-container *ngIf="item.cipher_adapted == null">
-              <span>-</span>
-            </ng-container>
-          </td>
-          <td>
-            <nz-tag [nzColor]="item.api_url_valid ? 'success' : 'error'">{{ item.api_url_valid ? '✓' : '✗' }}</nz-tag>
-          </td>
-          <td>
-            <nz-tag [nzColor]="item.env_var_valid ? 'success' : 'error'">{{ item.env_var_valid ? '✓' : '✗' }}</nz-tag>
-          </td>
-          <td class="detail-cell" [title]="item.detail || ''">{{ item.detail || '-' }}</td>
         </tr>
       </tbody>
     </nz-table>
@@ -82,11 +54,32 @@
   <!-- Step 3: conflict strategy -->
   <div class="section" *ngIf="preview && !importRsp">
     <div class="section-title">{{ 'conflict_strategy' | i18nextEager }}</div>
-    <nz-radio-group [(ngModel)]="conflictStrategy">
-      <label nz-radio-button nzValue="SKIP">{{ 'conflict_strategy_skip' | i18nextEager }}</label>
-      <label nz-radio-button nzValue="COVER">{{ 'conflict_strategy_cover' | i18nextEager }}</label>
+    <nz-radio-group [(ngModel)]="conflictStrategy" class="strategy-group">
+      <label nz-radio-button nzValue="SKIP" class="strategy-btn">
+        <span class="strategy-text">{{ 'conflict_strategy_skip' | i18nextEager }}</span>
+        <span
+          class="strategy-help"
+          nz-tooltip
+          [nzTooltipTitle]="'conflict_strategy_skip_desc' | i18nextEager"
+          nzTooltipPlacement="top"
+          (click)="$event.stopPropagation(); $event.preventDefault()"
+        >
+          <nz-icon nzType="question-circle" nzTheme="outline" />
+        </span>
+      </label>
+      <label nz-radio-button nzValue="COVER" class="strategy-btn">
+        <span class="strategy-text">{{ 'conflict_strategy_cover' | i18nextEager }}</span>
+        <span
+          class="strategy-help"
+          nz-tooltip
+          [nzTooltipTitle]="'conflict_strategy_cover_desc' | i18nextEager"
+          nzTooltipPlacement="top"
+          (click)="$event.stopPropagation(); $event.preventDefault()"
+        >
+          <nz-icon nzType="question-circle" nzTheme="outline" />
+        </span>
+      </label>
     </nz-radio-group>
-    <div class="hint warning" *ngIf="conflictStrategy === 'COVER'">{{ 'conflict_strategy_cover_warn' | i18nextEager }}</div>
   </div>
 
   <!-- Step 4: result -->
@@ -100,7 +93,7 @@
     <nz-table #resultTable [nzData]="importRsp.import_list || []" [nzPageSize]="5" nzSize="small">
       <thead>
         <tr>
-          <th>{{ 'service_name' | i18nextEager }}</th>
+          <th>{{ resultFirstNameColKey | i18nextEager }}</th>
           <th>{{ 'import_result_status' | i18nextEager }}</th>
           <th>{{ 'import_preview_detail' | i18nextEager }}</th>
         </tr>
