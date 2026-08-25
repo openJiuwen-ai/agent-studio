@@ -253,8 +253,9 @@ public class ZipValidationUtils {
      */
     private static boolean isWindowsSymlink(ZipEntry entry) {
         String name = entry.getName().toLowerCase(Locale.ROOT);
-        return name.contains("lnk") || name.contains("url") ||
-                name.contains("desktop.ini") || name.contains(".lnk");
+        String fileName = name.substring(name.lastIndexOf('/') + 1);
+        return fileName.endsWith(".lnk") || fileName.endsWith(".url") ||
+                fileName.equals("desktop.ini");
     }
 
     /**
@@ -262,8 +263,9 @@ public class ZipValidationUtils {
      */
     private static boolean isUnixSymlink(ZipEntry entry) {
         String name = entry.getName();
-        return name.startsWith("@") || name.startsWith("._") ||
-                name.contains("symlink") || name.contains("link");
+        String fileName = name.substring(name.lastIndexOf('/') + 1);
+        return fileName.startsWith("._") || fileName.endsWith(".symlink") ||
+                fileName.endsWith(".link");
     }
 
     /**
