@@ -445,12 +445,7 @@ export class RunModalComponent extends WorkflowChatBaseComponent {
       return;
     }
     this.clipboard.copy(content);
-    item.answerCopyIcon = true;
     MessageComponent.showSuccess(this.i18n.transform('copy_success'), 3000);
-    setTimeout(() => {
-      item.answerCopyIcon = false;
-      this.cdr.markForCheck();
-    }, 3000);
   }
 
   public changePluginFormCollapse(pluginForm: any) {

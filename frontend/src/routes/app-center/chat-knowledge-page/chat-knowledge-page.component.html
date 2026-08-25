@@ -212,7 +212,7 @@
                         (click)="regenerate(item, i)"
                       ></span>
                     </div>
-                    <div class="chat-footer-icon" *ngIf="isVisibleOfLastBtns(item)" nz-tooltip [nzTooltipTitle]="item.showCopiedTip ? ('replicated_tip' | i18nextEager) : ('copy' | i18nextEager)">
+                    <div class="chat-footer-icon" *ngIf="isVisibleOfLastBtns(item)" nz-tooltip [nzTooltipTitle]="'copy' | i18nextEager">
                       <span
                         class="common-ops-icon copy-answer-icon abled-icon"
                         (click)="copyAllAnswer(item, i)"

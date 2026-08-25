@@ -95,11 +95,9 @@
                 }}{{ 'character' | i18nextEager }}
               </span>
               <div
+                *ngIf="canCopyAnswer()"
                 class="chat-header-icon"
-                nz-tooltip [nzTooltipTitle]="chatLoop[0]?.showCopiedTip ? ('replicated_tip' | i18nextEager) : ('copy' | i18nextEager)"
-                [ngClass]="
-                  (!canCopyAnswer()) ? 'disabled-icon' : 'abled-icon'
-                "
+                nz-tooltip [nzTooltipTitle]="'copy' | i18nextEager"
                 (click)="copyAnswer(chatLoop)"
               >
                 <nz-icon nzType="copy" nzTheme="outline"></nz-icon>

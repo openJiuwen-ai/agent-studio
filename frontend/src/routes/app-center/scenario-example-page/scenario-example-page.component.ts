@@ -423,10 +423,12 @@ export class ScenarioExamplePageComponent
     return Promise.resolve(false);
   }
 
-  /** 复制按钮disabled属性，要使用相反的返回值 */
+  /** 复制按钮disabled属性，要使用相反的返回值（流式生成中/失败/无内容均不可复制） */
   public canCopyAnswer() {
     return (
-      !this.isStreamFail && !!this.chatLoop[0]?.showAnswer?.[0]?.text?.trim()
+      !this.isRequesting &&
+      !this.isStreamFail &&
+      !!this.chatLoop[0]?.showAnswer?.[0]?.text?.trim()
     );
   }
 
@@ -444,11 +446,16 @@ export class ScenarioExamplePageComponent
 
   /** 复制整体答案 */
   public copyAnswer(messages: any) {
-    this.clipboard.copy(messages[0].showAnswer[0].text);
-    this.chatLoop[0].showCopiedTip = true;
-    setTimeout(() => {
-      this.chatLoop[0].showCopiedTip = false;
-    }, 1000);
+    // 拼接全部 answer 块（task 型含循环/多节点输出时 showAnswer 可能多块），块间空行分隔
+    const content = (messages[0]?.showAnswer || [])
+      .map((sub: any) => sub.text || '')
+      .join('\n\n')
+      .trim();
+    if (!content) {
+      return;
+    }
+    this.clipboard.copy(content);
+    MessageComponent.showSuccess(this.i18n.transform('copy_success'), 3000);
   }
 
   public changeCollapsedState(configInfo: any) {
