@@ -231,6 +231,9 @@ public class AgentInfo implements Serializable {
     @JsonProperty("is_share")
     private Integer isShare = null;
 
+    @JsonProperty("fromShare")
+    private Boolean fromShare = null;
+
     @JsonProperty("channel_type")
     @Valid
     @Size()
@@ -747,6 +750,15 @@ public class AgentInfo implements Serializable {
 
     public AgentInfo setIsShare(Integer isShare) {
         this.isShare = isShare;
+        return this;
+    }
+
+    public Boolean getFromShare() {
+        return fromShare;
+    }
+
+    public AgentInfo setFromShare(Boolean fromShare) {
+        this.fromShare = fromShare;
         return this;
     }
 
