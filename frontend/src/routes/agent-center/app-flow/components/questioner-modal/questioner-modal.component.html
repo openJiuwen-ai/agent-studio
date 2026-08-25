@@ -138,7 +138,7 @@
           </div>
 
           <form #inputForm="ngForm">
-            <div *ngFor="let param of inputParams; index as i" class="mt-2 flex gap-2">
+            <div *ngFor="let param of inputParams; index as i" class="mt-2 flex items-start gap-2">
               <div class="w-1/4">
                 <input
                   style="width: 100%"
@@ -171,8 +171,8 @@
                 </div>
               </div>
 
-              <div class="flex w-3/4 gap-[8px]">
-                <div class="flex h-fit w-[calc(100%-16px)] items-center gap-2">
+              <div class="flex items-start w-3/4 gap-[8px]">
+                <div class="flex h-fit w-[calc(100%-16px)] items-start gap-2">
                   <div class="flex w-full">
                     <div class="w-[33%]">
                       <nz-select

@@ -51,12 +51,12 @@
           <form #inputForm="ngForm">
             <nz-tree id="node-param-tree" [nzData]="$any(inputParams)" nzBlockNode [nzTreeTemplate]="nzTreeTemplate">
               <ng-template #nzTreeTemplate let-node let-origin="origin">
-                <div class="mt-2 flex gap-2">
+                <div class="mt-2 flex items-start gap-2">
                   <div class="flex flex-1 h-[28px] shrink-0 items-center leading-[18px] text-label overflow-text">
                     {{ origin.name }}{{ !origin.required ? ('optional' | i18nextEager) : '' }}
                   </div>
-                  <div class="flex w-[330px] shrink-0 gap-[8px]">
-                    <div class="flex h-fit w-[100%] items-center gap-2">
+                  <div class="flex items-start w-[330px] shrink-0 gap-[8px]">
+                    <div class="flex h-fit w-[100%] items-start gap-2">
                       <div class="flex w-full">
                         <div class="w-[30%]">
                           <nz-select
