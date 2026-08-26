@@ -276,7 +276,6 @@ class FastRedisCheckpointer(Checkpointer):
                     await self._delegate.post_workflow_execute(session, {}, None)
                     return
         else:
-
             probe_key = build_key_with_namespace(
                 session_id, WORKFLOW_NAMESPACE_GRAPH, workflow_id, _GRAPH_DATA_TYPE)
             try:
@@ -286,7 +285,13 @@ class FastRedisCheckpointer(Checkpointer):
                     f"FastRedisCheckpointer: probe exists failed for "
                     f"session {session_id}, workflow {workflow_id}: {exc}"
                 )
-                exists = 1  # 探测失败时保守走 prefix delete
+                exists = 1
+            if not exists:
+                workflow_logger.info(
+                    f"FastRedisCheckpointer: no graph state keys found for "
+                    f"session {session_id}, workflow {workflow_id}, "
+                    f"skipping prefix delete"
+                )
  
         # Step 1.5: Delete bare session key (clears comp_state with QA
         #            QUESTIONER_STATE_KEY + comp_state_updates, ensuring next
