@@ -276,31 +276,23 @@ class FastRedisCheckpointer(Checkpointer):
                     await self._delegate.post_workflow_execute(session, {}, None)
                     return
         else:
-            # 兜底：索引为空（老数据 / save 未命中），走原 prefix 删除
-            graph_state = getattr(self._delegate, "_graph_state", None)
-            if graph_state is not None:
-                try:
-                    await graph_state.delete(session_id, workflow_id)
-                    workflow_logger.info(
-                        f"FastRedisCheckpointer: prefix GraphStore delete for "
-                        f"session {session_id}, workflow {workflow_id}"
-                    )
-                except Exception as e:
-                    workflow_logger.warning(
-                        f"FastRedisCheckpointer: prefix GraphStore delete failed, "
-                        f"falling back to delegate post_workflow_execute: {e}"
-                    )
-                    await self._delegate.post_workflow_execute(session, {}, None)
-                    return
-            else:
+            probe_key = build_key_with_namespace(
+                session_id, WORKFLOW_NAMESPACE_GRAPH, workflow_id, _GRAPH_DATA_TYPE)
+            try:
+                exists = await self._redis.exists(probe_key)
+            except Exception as exc:
                 workflow_logger.warning(
-                    f"FastRedisCheckpointer: delegate has no _graph_state, "
-                    f"falling back to delegate post_workflow_execute for session "
-                    f"{session_id}, workflow {workflow_id}"
+                    f"FastRedisCheckpointer: probe exists failed for "
+                    f"session {session_id}, workflow {workflow_id}: {exc}"
                 )
-                await self._delegate.post_workflow_execute(session, {}, None)
-                return
-
+                exists = 1
+            if not exists:
+                workflow_logger.info(
+                    f"FastRedisCheckpointer: no graph state keys found for "
+                    f"session {session_id}, workflow {workflow_id}, "
+                    f"skipping prefix delete"
+                )
+ 
         # Step 1.5: Delete bare session key (clears comp_state with QA
         #            QUESTIONER_STATE_KEY + comp_state_updates, ensuring next
         #            round starts fresh).

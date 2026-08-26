@@ -570,58 +570,60 @@ class TestNsIndexFallback:
         return mock
 
     @pytest.mark.asyncio
-    async def test_empty_ns_index_falls_back_to_prefix_delete(
+    async def test_empty_ns_index_with_graph_state_exists_logs(
         self, checkpointer, mock_delegate, mock_redis
     ):
-        """NS index SET empty (old data) → fallback to prefix delete via _graph_state."""
+        """NS index empty + graph state key EXISTS → logs info, proceeds to Step 1.5."""
         mock_redis.delete = AsyncMock(return_value=0)
         mock_redis.srem = AsyncMock(return_value=1)
         mock_redis.smembers = AsyncMock(return_value=set())  # empty index
+        mock_redis.exists = AsyncMock(return_value=1)  # graph state key exists
         mock_session = self._make_session()
         result = {}
 
         await checkpointer.post_workflow_execute(mock_session, result, None)
 
-        # Fallback to delegate's _graph_state.delete (prefix delete)
-        getattr(mock_delegate, "_graph_state").delete.assert_awaited_once_with(
-            "sess-1", "wf-1"
-        )
+        # Delegate's _graph_state.delete (prefix scan) NOT called
+        getattr(mock_delegate, "_graph_state").delete.assert_not_called()
         # Delegate.post_workflow_execute NOT called
         mock_delegate.post_workflow_execute.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_smembers_failure_falls_back_to_prefix_delete(
+    async def test_empty_ns_index_skips_delete_when_no_keys(
         self, checkpointer, mock_delegate, mock_redis
     ):
-        """SMEMBERS failure → fallback to prefix delete."""
+        """NS index empty + graph state key NOT exists → logs skip, no scan_iter."""
+        mock_redis.delete = AsyncMock(return_value=0)
+        mock_redis.srem = AsyncMock(return_value=1)
+        mock_redis.smembers = AsyncMock(return_value=set())  # empty index
+        mock_redis.exists = AsyncMock(return_value=0)  # no graph state key
+        mock_session = self._make_session()
+        result = {}
+
+        await checkpointer.post_workflow_execute(mock_session, result, None)
+
+        # graph_state.delete NOT called
+        getattr(mock_delegate, "_graph_state").delete.assert_not_called()
+        # Delegate.post_workflow_execute NOT called
+        mock_delegate.post_workflow_execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_smembers_failure_probes_exists(
+        self, checkpointer, mock_delegate, mock_redis
+    ):
+        """SMEMBERS failure → EXISTS check (no prefix scan)."""
         mock_redis.delete = AsyncMock(return_value=0)
         mock_redis.srem = AsyncMock(return_value=1)
         mock_redis.smembers = AsyncMock(side_effect=Exception("Redis down"))
+        mock_redis.exists = AsyncMock(return_value=0)  # no graph state key
         mock_session = self._make_session()
         result = {}
 
         await checkpointer.post_workflow_execute(mock_session, result, None)
 
-        # Fallback to delegate's _graph_state.delete (prefix delete)
-        getattr(mock_delegate, "_graph_state").delete.assert_awaited_once_with(
-            "sess-1", "wf-1"
-        )
-
-    @pytest.mark.asyncio
-    async def test_empty_ns_index_and_no_graph_state_falls_back_to_delegate(
-        self, checkpointer, mock_delegate, mock_redis
-    ):
-        """NS index empty + no _graph_state → fallback to delegate post_workflow_execute."""
-        mock_redis.delete = AsyncMock(return_value=0)
-        mock_redis.srem = AsyncMock(return_value=1)
-        mock_redis.smembers = AsyncMock(return_value=set())
-        delattr(mock_delegate, "_graph_state")
-        mock_session = self._make_session()
-        result = {}
-
-        await checkpointer.post_workflow_execute(mock_session, result, None)
-
-        mock_delegate.post_workflow_execute.assert_awaited_once()
+        # EXISTS called (not prefix scan)
+        mock_redis.exists.assert_awaited_once()
+        getattr(mock_delegate, "_graph_state").delete.assert_not_called()
 
 
 class TestNsIndexingGraphStoreSave:
