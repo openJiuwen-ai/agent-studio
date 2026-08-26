@@ -283,21 +283,21 @@ class RequestParamsCreator:
         self, api_inputs_params: List[Param], inputs: dict
     ):
         """缺少的required参数填充默认值"""
-        if not inputs:
-            inputs = {}
         if isinstance(inputs, str):
             try:
                 inputs = json.loads(inputs)
             except (ValueError, TypeError):
                 raise exception.PluginCommonException(
                     code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
-                    message=f"object类型的参数值应为合法的JSON字符串，实际收到: {inputs[:100]}",
+                    message=f"参数值应为合法的JSON字符串，实际收到: {inputs[:100]}",
                 )
         if not isinstance(inputs, dict):
             raise exception.PluginCommonException(
                 code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
                 message=f"参数值应为JSON对象(dict)，实际收到{type(inputs).__name__}类型，请检查输入是否为合法的JSON字符串",
             )
+        if not inputs:
+            inputs = {}
         for param in api_inputs_params:
             if not param.required:
                 continue
