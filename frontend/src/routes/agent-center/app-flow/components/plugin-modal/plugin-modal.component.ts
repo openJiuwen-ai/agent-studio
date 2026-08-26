@@ -535,7 +535,8 @@ export class PluginModalComponent extends ModalBaseComponent implements OnInit {
           if (input.value.content === '' || input.value.content == null) {
             input.value.content = null; // 空值置 null，运行时跳过该参数
           } else {
-            input.value.content = Number(input.value.content);
+            const num = Number(input.value.content);
+            input.value.content = Number.isNaN(num) ? null : num;
           }
         }
       }

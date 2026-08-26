@@ -211,14 +211,17 @@ export class InputModalComponent extends ModalBaseComponent implements OnInit {
     const typeStr = Array.isArray(type) ? type.join('/') : type;
     if (this.isSimpleType(typeStr) && param?.children) {
       delete param?.children;
+      param.isLeaf = true;
       return;
     }
 
     if (typeStr.startsWith('array') && typeStr !== 'array<object>' && param?.children) {
       delete param?.children;
+      param.isLeaf = true;
     }
 
     if (this.isObjectLikeType(typeStr)) {
+      param.isLeaf = false;
       if (!param?.children) {
         this.addChild(param);
       }
@@ -232,6 +235,7 @@ export class InputModalComponent extends ModalBaseComponent implements OnInit {
     const parentNodeParam = getParentNodeFromTree(this.inputNodeParams, param) as IWFView;
     if (this.isObjectLikeType(parentNodeParam?.type) && parentNodeParam?.children?.length === 0) {
       delete parentNodeParam.children;
+      parentNodeParam.isLeaf = true;
     }
     this.inputNodeParams = [...this.inputNodeParams];
     this.onSave();
@@ -242,6 +246,7 @@ export class InputModalComponent extends ModalBaseComponent implements OnInit {
       ...getInitOutputParamConfig(),
       depth: param.depth + 1,
       parentType: param.type[0] as IWFViewParentType,
+      isLeaf: true,
       type: ['string'],
     };
 
@@ -251,6 +256,7 @@ export class InputModalComponent extends ModalBaseComponent implements OnInit {
       param.children = [child];
     }
 
+    param.isLeaf = false;
     param.expanded = true;
     this.onSave();
   }

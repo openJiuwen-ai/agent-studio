@@ -139,6 +139,7 @@ export const NodeUtils = {
         depth,
         parentType,
         value,
+        isLeaf: true,
         ...(isDisabled !== undefined && { isDisabled }),
       };
 
@@ -150,6 +151,7 @@ export const NodeUtils = {
       if (type === 'array') {
         if ((schema as IWorkflowField).type === 'object') {
           view.type = 'array<object>';
+          view.isLeaf = false;
           view.children = this.fields2Views(((schema as IWorkflowField)?.schema ?? []) as IWorkflowField[], depth + 1, view.type);
           view.expanded = true;
         } else {
@@ -162,6 +164,7 @@ export const NodeUtils = {
       }
 
       if (type === 'object') {
+        view.isLeaf = false;
         view.children = this.fields2Views((schema ?? []) as IWorkflowField[], depth + 1, view.type);
         view.expanded = true;
       }
@@ -187,6 +190,7 @@ export const NodeUtils = {
         value,
         schema,
         visibility,
+        isLeaf: true,
         required: parentType === 'object' ? !parentVisibility : !visibility,
         ...(isDisabled !== undefined && { isDisabled }),
       };
@@ -198,12 +202,14 @@ export const NodeUtils = {
       //array 不展开
       if (type === 'array' && false) {
         if ((schema as IWorkflowField).type === 'object') {
+          view.isLeaf = false;
           view.children = this.fields2ViewsUnchangeType(((schema as IWorkflowField)?.schema ?? []) as IWorkflowField[], depth + 1, view.type, visibility);
           view.expanded = true;
         }
       }
 
       if (type === 'object') {
+        view.isLeaf = false;
         view.children = this.fields2ViewsUnchangeType((schema ?? []) as IWorkflowField[], depth + 1, view.type, visibility);
         view.isDisabled = true;
         view.expanded = true;
@@ -366,14 +372,17 @@ export const NodeUtils = {
   onOutputParamTypeChange(param: IWFView) {
     if (NodeUtils.isSimpleType(param.type) && param?.children) {
       delete param?.children;
+      param.isLeaf = true;
       return;
     }
 
     if (param.type.startsWith('array') && param.type !== 'array<object>' && param?.children) {
       delete param?.children;
+      param.isLeaf = true;
     }
 
     if (this.isObjectLikeType(param.type)) {
+      param.isLeaf = false;
       if (!param?.children) {
         this.addChild(param);
       }
@@ -385,6 +394,7 @@ export const NodeUtils = {
       ...getInitOutputParamConfig(),
       depth: param.depth + 1,
       parentType: param.type,
+      isLeaf: true,
       key: `child_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
     };
 
@@ -394,6 +404,7 @@ export const NodeUtils = {
       param.children = [child];
     }
 
+    param.isLeaf = false;
     param.expanded = true;
   },
 

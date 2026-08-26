@@ -490,6 +490,7 @@ export class GlobalConfigComponent
       key: param.key + "-" + Date.now(),
       title: "",
       type: "string",
+      isLeaf: true,
       desc: ""
     };
     if (param?.children) {
@@ -497,6 +498,7 @@ export class GlobalConfigComponent
     } else {
       param.children = [child];
     }
+    param.isLeaf = false;
     param.expanded = true;
     this.treeNodes = [...this.treeNodes];
     this.cdr.detectChanges();
@@ -525,6 +527,7 @@ export class GlobalConfigComponent
     param.value.default = "";
     if (this.isSimpleType(param.type) && param?.children) {
       delete param?.children;
+      param.isLeaf = true;
       return;
     }
 
@@ -534,9 +537,11 @@ export class GlobalConfigComponent
       param?.children
     ) {
       delete param?.children;
+      param.isLeaf = true;
     }
 
     if (this.isObjectLikeType(param.type)) {
+      param.isLeaf = false;
       const children = param?.children;
       if (!children || (Array.isArray(children) && children.length === 0)) {
         this.addChild(param);
@@ -717,6 +722,7 @@ export class GlobalConfigComponent
       parentNodeParam?.children?.length === 0
     ) {
       delete parentNodeParam.children;
+      parentNodeParam.isLeaf = true;
     }
     this.assignmentMemos = this.convertToAssignMemos(this.treeNodes);
     this.treeNodes = [...this.treeNodes];
@@ -996,6 +1002,7 @@ export class GlobalConfigComponent
         depth,
         parentType,
         value,
+        isLeaf: true,
         ...(isDisabled !== undefined && { isDisabled })
       };
 
@@ -1007,6 +1014,7 @@ export class GlobalConfigComponent
       if (type === "array") {
         if ((schema as IWorkflowField).type === "object") {
           view.type = "array<object>";
+          view.isLeaf = false;
           view.children = this.fields2Views(
             ((schema as IWorkflowField)?.schema ?? []) as IWorkflowField[],
             depth + 1,
@@ -1027,6 +1035,7 @@ export class GlobalConfigComponent
       }
 
       if (type === "object") {
+        view.isLeaf = false;
         view.children = this.fields2Views(
           (schema ?? []) as IWorkflowField[],
           depth + 1,

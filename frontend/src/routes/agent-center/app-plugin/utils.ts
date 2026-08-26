@@ -940,8 +940,10 @@ export function mapTreeAddKeyIndex(tree, start) {
 export function mapTreeAddKeyAndChildIndex(tree, start) {
   return (tree || []).map((item, index) => {
     item.key = `${index}`;
+    item.isLeaf = true;
     if (item?.schema?.length > 0 && item.type === 'object') {
       item.isObjRoot = true;
+      item.isLeaf = false;
       item.children = mapTreeSchemaIndex(item.schema, `${index}`, item.value.type);
       item.children = setAllChildrenVal(item.children, item.value);
     }
@@ -956,6 +958,7 @@ function mapTreeSchemaIndex(schema, start, rootValType) {
       key: `${start}_${index}`,
       type: item.type,
       isChild: true,
+      isLeaf: true,
       name: item.name,
       rootValType: rootValType,
       isObjChild: item.type === 'object',
@@ -969,6 +972,7 @@ function mapTreeSchemaIndex(schema, start, rootValType) {
     };
 
     if (item?.schema?.length > 0 && item.type === 'object') {
+      newitem.isLeaf = false;
       newitem.children = mapTreeSchemaIndex(item.schema, `${start}_${index}`, rootValType);
     }
     return newitem;
@@ -998,7 +1002,15 @@ export function eachChildrenToRootObj(children, value) {
             }
             res[item.name] = itemVal;
           } else {
-            res[item.name] = value.value.content;
+            // string / number / integer / boolean — 按类型转换值
+            let content = value.value.content;
+            if (item.type === 'number' || item.type === 'integer') {
+              content = content === '' || content == null ? null : Number(content);
+              if (Number.isNaN(content as number)) { content = null; }
+            } else if (item.type === 'boolean') {
+              content = content === 'true' || content === true;
+            }
+            res[item.name] = content;
           }
         }
       } else {
@@ -1016,6 +1028,12 @@ export function eachChildrenToRootObj(children, value) {
           } catch {
             itemVal = null;
           }
+        }
+        if (item.type === 'number' || item.type === 'integer') {
+          itemVal = itemVal === '' || itemVal == null ? null : Number(itemVal);
+          if (Number.isNaN(itemVal as number)) { itemVal = null; }
+        } else if (item.type === 'boolean') {
+          itemVal = itemVal === 'true' || itemVal === true;
         }
         res[item.name] = itemVal;
       }
