@@ -4,11 +4,10 @@
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from common_utils.crypto_tool import decrypt
-from common_utils.password_provider import get_password_provider
 
 
 def _decrypt(v):
@@ -380,44 +379,6 @@ class CodeExecutionSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
-
-
-class DataBaseSettings(BaseSettings):
-    password_provider_type: str = Field(
-        default="DEFAULT", validation_alias="DATASOURCE_PASSWORD_PROVIDER_TYPE"
-    )
-    password_provider_module: str = Field(
-        default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_MODULE"
-    )
-    password_provider_class: str = Field(
-        default="", validation_alias="DATASOURCE_PASSWORD_PROVIDER_CLASS"
-    )
-    db_type: Literal["mysql", "gaussdb", "postgresql"] = Field(
-        default="mysql", validation_alias="STORE_DB_TYPE"
-    )
-    host: str = Field(default="", validation_alias="STORE_DB_HOST")
-    port: str = Field(default="", validation_alias="STORE_DB_PORT")
-    user: str = Field(default="", validation_alias="STORE_DB_USER")
-    password: str = Field(default="", validation_alias="STORE_DB_PASSWORD")
-    database: str = Field(default="", validation_alias="STORE_DB_DATABASE")
-    db_schema: str = Field(default="", validation_alias="STORE_DB_SCHEMA")
-    sslmode: str = Field(default="disable", validation_alias="STORE_DB_SSLMODE")
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
-    )
-
-    @model_validator(mode="after")
-    def _resolve_password(self):
-        if self.password_provider_type == "CUSTOM":
-            provider = get_password_provider(
-                custom_module=self.password_provider_module,
-                custom_class=self.password_provider_class,
-            )
-            self.password = provider.get_password(self.password)
-        elif self.password:
-            provider = get_password_provider()
-            self.password = provider.get_password(self.password)
-        return self
 
 
 class ConversationVariableSettings(BaseSettings):
