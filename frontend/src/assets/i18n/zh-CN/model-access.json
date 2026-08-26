@@ -193,6 +193,7 @@
   "api_url_env_placeholder_btn_tip": "插入环境变量占位符（整字段，如 {parm}）",
   "api_url_env_tip": "填写完整 URL，或点 {} 用环境变量占位符（整字段，如 {parm}）",
   "api_url_invalid_tip": "网址格式无效，请输入例如 https://xxx.demo.com 或 {parm} 形占位符",
+  "api_url_placeholder_name_too_long": "环境变量占位符变量名长度不能超过{{maxLength}}个字符",
   "api_url_env_input_title": "API 地址环境变量",
   "api_url_env_input_ph": "请输入该变量的真实值",
   "api_url_env_input_tip": "该模型 API 地址使用环境变量占位符，调测时请填入临时值（不会保存）",

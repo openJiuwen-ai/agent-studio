@@ -136,6 +136,9 @@ export class AddModelComponent implements OnInit {
   // URL中禁止{ }字符（URL中不允许未编码的大括号），防止用户在内嵌路径写占位符绕过校验
   private readonly USER_ENV_PLACEHOLDER = /^\{[a-zA-Z_$][a-zA-Z0-9_$]*\}$/;
   private readonly USER_URL_PATTERN = /^https?:\/\/[^{}\s]+$/i;
+  // 占位符变量名长度上限：与环境变量配置侧 config-env-variable NAME_MAX_LENGTH 对齐（64）。
+  // 占位符变量名必须能在环境管理里建成同名变量才能被解析，超长则环境管理根本无法配置同名变量，占位符永不解析。
+  private readonly ENV_VAR_NAME_MAX_LENGTH = 64;
   logoIsError = false;
 
   constructor(
@@ -175,10 +178,21 @@ export class AddModelComponent implements OnInit {
             if (value === '{}') {
               return null;
             }
-            // 仅允许两种格式：纯URL、纯{VAR}占位符（整个地址为占位符）
-            const isValid = this.USER_URL_PATTERN.test(value)
-              || this.USER_ENV_PLACEHOLDER.test(value);
-            if (isValid) {
+            // 占位符变量名长度校验：仅当完整闭合为 {VAR} 时校验（输入未闭合 {V... 放通，不干扰输入过程）。
+            // 上限对齐环境变量配置侧 NAME_MAX_LENGTH(64)——超长则环境管理无法配置同名变量，占位符永不解析。
+            if (this.USER_ENV_PLACEHOLDER.test(value)) {
+              const varName = value.slice(1, -1);
+              if (varName.length > this.ENV_VAR_NAME_MAX_LENGTH) {
+                return {
+                  placeholderNameTooLong: {
+                    tiErrorMessage: this.i18n.transform('api_url_placeholder_name_too_long', { maxLength: this.ENV_VAR_NAME_MAX_LENGTH }),
+                  },
+                };
+              }
+              return null;
+            }
+            // 纯 URL
+            if (this.USER_URL_PATTERN.test(value)) {
               return null;
             }
             // 输入过程中如果以{开头且还没闭合，暂时不报错

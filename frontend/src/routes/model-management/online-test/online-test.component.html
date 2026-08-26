@@ -44,12 +44,12 @@
             </div>
             <ng-container *ngIf="!defaultEnvChecking">
               <div *ngFor="let varItem of envPlaceholderVars" class="flex flex-col gap-1">
-                <div class="flex items-center gap-2">
-                  <span class="w-24 text-sm truncate" nz-tooltip [nzTooltipTitle]="varItem.name">{{ varItem.name }}</span>
-                  <span class="text-[12px] flex items-center gap-1"
+                <div class="flex items-start gap-2">
+                  <span class="w-24 flex-shrink-0 text-sm truncate" nz-tooltip [nzTooltipTitle]="varItem.name">{{ varItem.name }}</span>
+                  <span class="text-[12px] flex items-start gap-1 min-w-0 break-all"
                         [ngClass]="isVarInDefaultEnv(varItem.name) ? 'text-green-600' : 'text-orange-500'">
                     <span nz-icon [nzType]="isVarInDefaultEnv(varItem.name) ? 'check-circle' : 'exclamation-circle'"
-                          nzTheme="outline"></span>
+                          nzTheme="outline" class="mt-[2px] flex-shrink-0"></span>
                     <span *ngIf="isVarInDefaultEnv(varItem.name)">{{ 'env_var_auto_injected_tip' | i18nextEager }}</span>
                     <span *ngIf="!isVarInDefaultEnv(varItem.name)">
                       {{ 'env_var_not_in_default_env_tip' | i18nextEager: { name: varItem.name } }}

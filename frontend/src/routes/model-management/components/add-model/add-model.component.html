@@ -77,6 +77,9 @@
             <ng-container *ngIf="control.hasError('required')">
               {{ 'pls_enter' | i18nextEager }}{{ 'service_url' | i18nextEager }}
             </ng-container>
+            <ng-container *ngIf="control.hasError('placeholderNameTooLong')">
+              {{ control.errors?.placeholderNameTooLong?.tiErrorMessage }}
+            </ng-container>
             <ng-container *ngIf="control.hasError('invalidUrl')">
               {{ control.errors?.invalidUrl?.tiErrorMessage }}
             </ng-container>
