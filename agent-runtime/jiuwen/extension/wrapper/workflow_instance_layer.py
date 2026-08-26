@@ -63,6 +63,7 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
         session_id: str = "",
         context=None,
         node_name_type_map: dict[str, dict] = None,
+        workflow_instance=None,
     ):
         super().__init__(node_name_type_map=node_name_type_map)
         self.workflow_id = workflow_id
@@ -72,6 +73,9 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
         self.agent_id = agent_id or ""
         self.session_id = session_id or ""
         self._context = context
+        # 本次请求注册的本地工作流实例（LazyWorkflow shell），执行时优先使用，
+        # 避免并发会话经全局注册表取到同一 Workflow 实例造成 session 串扰
+        self._workflow_instance = workflow_instance
         self.graph_engine = SimpleNamespace(graph_instance=_CompatGraphInstance(self))
 
     async def astream(
@@ -88,6 +92,7 @@ class OpenJiuWenWorkflowInstanceLayer(WorkflowWrapper):
             session_id=args_tuple.session_id,
             context=context,
             workflow_name=args_tuple.workflow_name,
+            workflow=self._workflow_instance,
         )
 
     def set_runtime_context(self, key: str, value: Any = None) -> None:
