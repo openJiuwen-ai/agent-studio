@@ -181,6 +181,7 @@
   "api_url_env_placeholder_btn_tip": "Insert env-var placeholder (whole-value, e.g. {parm})",
   "api_url_env_tip": "Enter a full URL, or click {} to use an env-var placeholder (whole-value, e.g. {parm})",
   "api_url_invalid_tip": "Invalid format; use e.g. https://xxx.demo.com or a {parm} placeholder",
+  "api_url_placeholder_name_too_long": "Env-var placeholder name cannot exceed {{maxLength}} characters",
   "api_url_env_input_title": "API URL Environment Variables",
   "api_url_env_input_ph": "Enter the real value for this variable",
   "api_url_env_input_tip": "This model's API URL uses an env-var placeholder; enter a temporary value for the test run (not persisted).",
@@ -370,8 +371,11 @@
   "import_model_preview_failed": "Preview failed",
   "import_model_failed": "Import failed",
   "env_var_values": "Model Service API URL Variable",
-  "env_var_values_tip": "This model's service URL uses an env-var placeholder. Fill in the real URL before sending a test (used only for this test, not saved).",
+  "env_var_values_tip": "This model's service URL uses an env-var placeholder. No manual entry is needed during testing — the backend resolves it automatically using the variable of the same name configured in the default environment. Please configure the corresponding variables in Environment Management.",
   "pls_input_env_value": "Please enter the real URL",
   "env_var_invalid_url": "Please enter a valid URL starting with http:// or https://",
-  "env_var_not_ready_tip": "Please fill in the model service API URL variable first"
+  "env_var_not_ready_tip": "Model service API URL variables are not ready. Please check whether the default environment has the required variables.",
+  "env_var_auto_injected_tip": "Will be auto-injected from the default environment, no manual entry needed",
+  "env_var_not_in_default_env_tip": "Variable {{name}} is not configured in the default environment. Please configure it in Environment Management before testing.",
+  "env_var_checking_default_env": "Checking default environment variables..."
 }

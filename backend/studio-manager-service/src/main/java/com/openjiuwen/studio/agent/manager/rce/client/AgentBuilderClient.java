@@ -43,6 +43,7 @@ public interface AgentBuilderClient {
     @PostMapping("/v1/agent-builder/rerank")
     Object rerank(
             @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
+            @RequestHeader(value = "X-Environment-Id", required = false) String environmentId,
             @RequestParam("project_id") String projectId,
             @RequestParam("workspace_id") String workspaceId, @RequestBody @Valid RankDocumentsRequest request,
             @RequestParam("refresh") Boolean refresh,
@@ -51,6 +52,7 @@ public interface AgentBuilderClient {
     @PostMapping("/v1/agent-builder/embeddings")
     Object textEmbeddings(
             @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
+            @RequestHeader(value = "X-Environment-Id", required = false) String environmentId,
             @RequestParam("project_id") String projectId,
             @RequestParam("workspace_id") String workspaceId, @RequestBody @Valid EmbeddingRequest request,
             @RequestParam("refresh") Boolean refresh,
@@ -59,6 +61,7 @@ public interface AgentBuilderClient {
     @PostMapping("/v1/agent-builder/chat/completions")
     Object chatCompletions(
             @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
+            @RequestHeader(value = "X-Environment-Id", required = false) String environmentId,
             @RequestParam("project_id") String projectId,
             @RequestParam("workspace_id") String workspaceId, @RequestBody ChatCompletionRequest request,
             @RequestParam("refresh") boolean refresh,
@@ -67,6 +70,7 @@ public interface AgentBuilderClient {
     @PostMapping("/v1/agent-builder/chat/completions")
     Flux<Object> chatCompletionsStream(
             @RequestHeader(CommonConstant.X_AUTH_TOKEN) String authToken,
+            @RequestHeader(value = "X-Environment-Id", required = false) String environmentId,
             @RequestParam("project_id") String projectId,
             @RequestParam("workspace_id") String workspaceId, @RequestBody ChatCompletionRequest request,
             @RequestParam("refresh") boolean refresh,

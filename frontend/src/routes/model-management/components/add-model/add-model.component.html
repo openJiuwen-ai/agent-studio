@@ -66,7 +66,7 @@
             <button
               nz-button
               nzType="default"
-              nz-tooltip [nzTooltipTitle]="'insert_env_placeholder' | i18nextEager"
+              nz-tooltip [nzTooltipTitle]="'api_url_env_placeholder_btn_tip' | i18nextEager"
               (click)="insertEnvPlaceholder()"
               class="!px-3 font-mono font-bold"
             >
@@ -76,6 +76,9 @@
           <ng-template #urlErrorTpl let-control>
             <ng-container *ngIf="control.hasError('required')">
               {{ 'pls_enter' | i18nextEager }}{{ 'service_url' | i18nextEager }}
+            </ng-container>
+            <ng-container *ngIf="control.hasError('placeholderNameTooLong')">
+              {{ control.errors?.placeholderNameTooLong?.tiErrorMessage }}
             </ng-container>
             <ng-container *ngIf="control.hasError('invalidUrl')">
               {{ control.errors?.invalidUrl?.tiErrorMessage }}

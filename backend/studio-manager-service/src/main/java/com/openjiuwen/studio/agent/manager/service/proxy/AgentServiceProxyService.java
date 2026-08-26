@@ -325,8 +325,9 @@ public class AgentServiceProxyService {
         String projectId, String apiUrlEnvVars) {
         String modelId = request.getModel();
         checkModelPermission(projectId, workspaceId, modelId);
+        String environmentId = headers.getFirst("X-Environment-Id");
         try {
-            return builderClient.rerank(getToken(), projectId, workspaceId, request, refresh, apiUrlEnvVars);
+            return builderClient.rerank(getToken(), environmentId, projectId, workspaceId, request, refresh, apiUrlEnvVars);
         } catch (FeignException e) {
             ResponseEntity<Object> errorResponse = parseModelServiceFeignError(e);
             if (errorResponse != null) {
@@ -341,8 +342,9 @@ public class AgentServiceProxyService {
 
         String modelId = request.getModel();
         checkModelPermission(projectId, workspaceId, modelId);
+        String environmentId = headers.getFirst("X-Environment-Id");
         try {
-            return builderClient.textEmbeddings(getToken(), projectId, workspaceId, request, refresh, apiUrlEnvVars);
+            return builderClient.textEmbeddings(getToken(), environmentId, projectId, workspaceId, request, refresh, apiUrlEnvVars);
         } catch (FeignException e) {
             ResponseEntity<Object> errorResponse = parseModelServiceFeignError(e);
             if (errorResponse != null) {
@@ -415,8 +417,9 @@ public class AgentServiceProxyService {
 
             return stream(url, headers, JsonUtils.encode(request));
         }
+        String environmentId = headers.getFirst("X-Environment-Id");
         try {
-            return builderClient.chatCompletions(getToken(), projectId, workspaceId, request, refresh, apiUrlEnvVars);
+            return builderClient.chatCompletions(getToken(), environmentId, projectId, workspaceId, request, refresh, apiUrlEnvVars);
         } catch (FeignException e) {
             return parseModelServiceFeignError(e);
         }

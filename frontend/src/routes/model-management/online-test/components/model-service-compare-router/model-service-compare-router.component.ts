@@ -78,6 +78,8 @@ export class ModelServiceCompareRouter implements OnChanges, OnInit {
   };
 
   @Input() envVarValues: Record<string, string> = {};
+  /** 默认环境 id（占位符模型免填时由后端按默认环境解析真实地址） */
+  @Input() environmentId: string | undefined;
 
   /** 模型服务API地址变量是否已全部填好（空或非法URL时为false，禁止发送） */
   @Input() envVarReady: boolean = true;
@@ -336,7 +338,7 @@ export class ModelServiceCompareRouter implements OnChanges, OnInit {
       this.abortController = new AbortController();
       this.isLoading[currentWindow] = true;
       this.jiuwenModelServ
-        .modelTestChat(param, this.abortController?.signal, this.envVarValues)
+        .modelTestChat(param, this.abortController?.signal, this.envVarValues, this.environmentId)
         .then(({ content, reasoning_content }) => {
           let assistantMessage = {
             role: 'assistant',
@@ -501,7 +503,7 @@ export class ModelServiceCompareRouter implements OnChanges, OnInit {
             }
             this.cdr.markForCheck();
           },
-        }, this.envVarValues),
+        }, this.envVarValues, this.environmentId),
       );
     });
   }
