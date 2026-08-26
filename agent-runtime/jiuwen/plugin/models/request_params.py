@@ -286,11 +286,11 @@ class RequestParamsCreator:
         if isinstance(inputs, str):
             try:
                 inputs = json.loads(inputs)
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
                 raise exception.PluginCommonException(
                     code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
                     message=f"参数值应为合法的JSON字符串，实际收到: {inputs[:100]}",
-                )
+                ) from e
         if not isinstance(inputs, dict):
             raise exception.PluginCommonException(
                 code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
