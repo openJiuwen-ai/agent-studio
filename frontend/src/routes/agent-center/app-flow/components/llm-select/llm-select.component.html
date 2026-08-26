@@ -5,6 +5,7 @@
     [id]="'llm-select'"
     class="!w-full model-select"
     [class]="showError ? 'select-error-class' : ''"
+    [class.env-placeholder-selected]="disableEnvPlaceholderModels && selectedModelIsEnvPlaceholder"
     [ngModel]="selectedModel"
     (ngModelChange)="changeSelect($event)"
     [nzPlaceHolder]="'model_select_placeholder' | i18nextEager"
@@ -13,6 +14,9 @@
     [nzShowSearch]="true"
     [nzAllowClear]="clearable"
     (nzOnSearch)="onBeforeSearch($event)"
+    nz-tooltip
+    [nzTooltipTitle]="(disableEnvPlaceholderModels && selectedModelIsEnvPlaceholder) ? ('llmselectcomponent_env_placeholder_selected_warn' | i18nextEager) : null"
+    [nzTooltipPlacement]="'top'"
   >
     @for (group of modelOptions; track group.id) {
       <nz-option-group [nzLabel]="groupLabelTemplate">
@@ -29,7 +33,7 @@
           <nz-option
             [nzValue]="item.id"
             [nzLabel]="item.service_name"
-            [nzDisabled]="item.type === 'button'"
+            [nzDisabled]="item.type === 'button' || item.envPlaceholderDisabled"
             [nzCustomContent]="true"
           >
             @if (item.type === 'button') {
@@ -44,7 +48,7 @@
                     *ngIf="image && item.service_name"
                     [src]="item.logo?item.logo:image"
                   />
-                  <div nz-tooltip [nzTooltipTitle]="item.service_name" nzTooltipZIndex="99999" class="service_name">{{ item.service_name }}</div>
+                  <div nz-tooltip [nzTooltipTitle]="item.envPlaceholderDisabled ? ('llmselectcomponent_env_placeholder_disabled' | i18nextEager) : item.service_name" nzTooltipZIndex="99999" class="service_name">{{ item.service_name }}</div>
                 </div>
                 <div class="flex">
                   <div *ngIf="item.model_tags" style="max-width: 180px;overflow: hidden;text-overflow: ellipsis;">

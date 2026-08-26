@@ -51,7 +51,6 @@ class ReactFileReaderAdapter(Tool):
     async def _fetch_file_content(self, url: str) -> str:
         """从 URL 获取文件内容"""
         import aiohttp
-        import ssl
         from urllib.parse import urlparse
 
         # 解析 URL 获取路径部分（去掉查询参数）
@@ -71,12 +70,10 @@ class ReactFileReaderAdapter(Tool):
             tmp_path = tmp.name
 
         try:
-            # 创建不验证 SSL 证书的 context
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            # FILE_READER_SSL_VERIFY=true 启用 TLS 证书与主机名校验（默认 false，
+            # 对齐旧版不校验行为，兼容任意 URL 拉取场景）。
+            ssl_verify = os.getenv("FILE_READER_SSL_VERIFY", "false").lower() == "true"
+            connector = aiohttp.TCPConnector(ssl=ssl_verify)
             async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
                     resp.raise_for_status()
@@ -85,20 +82,20 @@ class ReactFileReaderAdapter(Tool):
                             f.write(chunk)
 
             if is_docx:
-                return self.read_docx(tmp_path)
+                return self._read_docx(tmp_path)
             elif is_pdf:
-                return self.read_pdf(tmp_path)
+                return self._read_pdf(tmp_path)
             elif is_excel:
-                return self.read_excel(tmp_path, is_xlsx=url_lower.endswith('.xlsx'))
+                return self._read_excel(tmp_path, is_xlsx=url_lower.endswith('.xlsx'))
             elif is_csv:
-                return self.read_csv(tmp_path)
+                return self._read_csv(tmp_path)
             else:
-                return self.read_text(tmp_path)
+                return self._read_text(tmp_path)
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
-    def read_text(self, path: str) -> str:
+    def _read_text(self, path: str) -> str:
         """读取纯文本文件"""
         encodings = ['utf-8', 'gbk', 'gb2312', 'gb18030']
         for encoding in encodings:
@@ -110,7 +107,7 @@ class ReactFileReaderAdapter(Tool):
         with open(path, 'r', encoding='utf-8', errors='ignore') as f:
             return f.read()
 
-    def read_docx(self, path: str) -> str:
+    def _read_docx(self, path: str) -> str:
         """读取 docx 文件"""
         try:
             from docx import Document
@@ -119,7 +116,7 @@ class ReactFileReaderAdapter(Tool):
         except ImportError:
             return "[无法读取 docx 文件，请安装 python-docx 库]"
 
-    def read_pdf(self, path: str) -> str:
+    def _read_pdf(self, path: str) -> str:
         """读取 pdf 文件"""
         try:
             import pymupdf
@@ -134,7 +131,7 @@ class ReactFileReaderAdapter(Tool):
         except ImportError:
             return "[无法读取 pdf 文件，请安装 pymupdf 库]"
 
-    def read_excel(self, path: str, is_xlsx: bool = True) -> str:
+    def _read_excel(self, path: str, is_xlsx: bool = True) -> str:
         """读取 excel 文件"""
         try:
             import pandas as pd
@@ -145,7 +142,7 @@ class ReactFileReaderAdapter(Tool):
         except Exception as e:
             return f"[读取 excel 文件失败: {e}]"
 
-    def read_csv(self, path: str) -> str:
+    def _read_csv(self, path: str) -> str:
         """读取 csv 文件"""
         encodings = ['utf-8', 'gbk', 'gb2312', 'gb18030']
         try:

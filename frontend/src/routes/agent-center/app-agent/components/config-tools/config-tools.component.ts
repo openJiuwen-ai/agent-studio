@@ -1534,7 +1534,7 @@ export class ConfigToolsComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public isDisabledPlugin() {
-    return this.confirmSavePlugins.length > this.pluginLimit || this.confirmSavePlugins.length === 0;
+    return this.confirmSavePlugins.length > this.pluginLimit;
   }
 
   public isDisabledFlow() {
@@ -1542,7 +1542,7 @@ export class ConfigToolsComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   public isDisabledMCP() {
-    return this.confirmSaveMCPs.length > this.mcpLimit || this.confirmSaveMCPs.length === 0;
+    return this.confirmSaveMCPs.length > this.mcpLimit;
   }
 
   /** 删除一个知识库 */

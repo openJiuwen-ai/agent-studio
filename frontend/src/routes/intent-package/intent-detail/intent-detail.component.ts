@@ -146,6 +146,31 @@ export class IntentDetailComponent implements OnInit, OnDestroy {
       this.getIntentPackageDetail();
       this.loadIntent('');
     }
+    // 新建模式下递增 default 名，避免"未命名1"持续撞名（方案 I）
+    if (!this.intentPackageId) {
+      this.autoIncrementDefaultName();
+    }
+  }
+
+  /**
+   * 查询 DB 已有"未命名N"开头的意图包，取 max+1 设为 form.name 默认值。
+   * 每次点开新建页都查一次，按 DB 实际状态算；查询失败时 fallback 保持原默认值"未命名1"。
+   */
+  private autoIncrementDefaultName() {
+    this.api
+      .getIntentGroupList({ name: '未命名', offset: 0, limit: 1000 })
+      .then((res: any) => {
+        const items: any[] = res?.intents ?? [];
+        const maxNum = items
+          .map(item => item?.name ?? '')
+          .filter(name => /^未命名(\d+)$/.test(name))
+          .map(name => parseInt(name.replace('未命名', ''), 10))
+          .reduce((a, b) => Math.max(a, b), 0);
+        if (maxNum > 0) {
+          this.form.patchValue({ name: `未命名${maxNum + 1}` });
+        }
+      })
+      .catch(() => {});
   }
 
   onPageBack() {

@@ -136,7 +136,7 @@
               >
                 <div
                   *ngFor="let param of inputParams; index as i"
-                  class="mt-2 flex gap-2"
+                  class="mt-2 flex items-start gap-2"
                 >
                   <div class="w-1/5">
                     <input
@@ -164,8 +164,8 @@
                       [placeholder]="'input_placeholder' | i18nextEager"
                     />
                   </div>
-                  <div class="flex w-3/5 gap-[8px]">
-                    <div class="flex h-fit w-full items-center gap-2">
+                  <div class="flex items-start w-3/5 gap-[8px]">
+                    <div class="flex h-fit w-full items-start gap-2">
                       <div class="flex w-full">
                         <div class="w-[34%]">
                           <nz-select

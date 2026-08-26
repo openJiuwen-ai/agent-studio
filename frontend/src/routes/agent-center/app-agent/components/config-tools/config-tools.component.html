@@ -17,6 +17,7 @@
                     style="width: 100%;"
                     [selectedModel]="modelConfig.model_deployment_id"
                     [clearable]="false"
+                    [disableEnvPlaceholderModels]="true"
                     (update)="changeModelSelected($event)"
                   ></llm-select>
                 </div>
@@ -160,6 +161,7 @@
                     nz-tooltip
                     [nzTooltipTitle]="inputParamsTipTmpl"
                     nzTooltipColor="#fff"
+                    [nzTooltipOverlayStyle]="{ maxWidth: '320px' }"
                   />
 
                   <nz-icon
@@ -587,7 +589,7 @@
                     resize="none"
                     style="width: 100%; height: 109px; min-width: 100%"
                     [placeholder]="followupPlaceholder"
-                    [(ngModel)]="probeInputed" [disabled]="isFlowReadonly"
+                    [(ngModel)]="probeInputed" [disabled]="isFlowReadonly || !switchState"
                     (ngModelChange)="updateFollowUpPrompt($event)"
                   ></textarea>
                 </nz-textarea-count>

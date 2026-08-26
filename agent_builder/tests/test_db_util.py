@@ -40,8 +40,7 @@ def _isolate_singleton():
 class TestResetClosesConnection:
     """reset() 必须关闭既有连接（G.PRM.03：重置场景下成对释放）。"""
 
-    @staticmethod
-    def test_reset_closes_existing_connection():
+    def test_reset_closes_existing_connection(self):
         conn = MagicMock()
         with patch.object(db_module, "settings") as settings_mock:
             settings_mock.db_config = _cfg(db_type="mysql", port=3306)
@@ -50,14 +49,12 @@ class TestResetClosesConnection:
         DBUtil.reset()
         conn.close.assert_called_once()
 
-    @staticmethod
-    def test_reset_when_none_is_safe_noop():
+    def test_reset_when_none_is_safe_noop(self):
         # 单例为 None 时 reset 不应抛异常（连续 reset 验证幂等安全）
         DBUtil.reset()
         DBUtil.reset()
 
-    @staticmethod
-    def test_reset_swallows_close_failure():
+    def test_reset_swallows_close_failure(self):
         # close() 自身抛异常（如连接已断）不应冒泡，仍要把单例置空
         conn = MagicMock()
         conn.close.side_effect = RuntimeError("already closed")
@@ -72,8 +69,7 @@ class TestResetClosesConnection:
 class TestReconnectClosesOldConnection:
     """instance(reconnect=True) 必须先关闭旧连接再建新连接（G.PRM.03）。"""
 
-    @staticmethod
-    def test_reconnect_mysql_closes_old():
+    def test_reconnect_mysql_closes_old(self):
         old = MagicMock()
         new = MagicMock()
         with patch.object(db_module, "settings") as settings_mock:
@@ -86,8 +82,7 @@ class TestReconnectClosesOldConnection:
         patched.assert_called_once()
         assert result is new
 
-    @staticmethod
-    def test_reconnect_gaussdb_closes_old():
+    def test_reconnect_gaussdb_closes_old(self):
         # 被扫描项（序号 5）：py_opengauss.open 后未 close
         old = MagicMock()
         new = MagicMock()
@@ -101,8 +96,7 @@ class TestReconnectClosesOldConnection:
         patched.assert_called_once()
         assert result is new
 
-    @staticmethod
-    def test_first_connect_does_not_close_anything():
+    def test_first_connect_does_not_close_anything(self):
         # 首次连接（单例为空）不应调用 close
         new = MagicMock()
         with patch.object(db_module, "settings") as settings_mock:

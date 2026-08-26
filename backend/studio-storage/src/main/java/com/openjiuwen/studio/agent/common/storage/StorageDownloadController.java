@@ -31,6 +31,11 @@ public class StorageDownloadController {
     private final LocalFileStoreImpl localFileStore;
 
     public StorageDownloadController(FileStore fileStore) {
+        if (!(fileStore instanceof LocalFileStoreImpl)) {
+            throw new IllegalStateException(
+                "StorageDownloadController requires LocalFileStoreImpl but got: "
+                    + (fileStore == null ? "null" : fileStore.getClass().getName()));
+        }
         this.localFileStore = (LocalFileStoreImpl) fileStore;
     }
 

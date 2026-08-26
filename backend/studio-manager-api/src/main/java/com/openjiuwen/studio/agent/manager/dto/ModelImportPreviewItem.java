@@ -45,6 +45,13 @@ public class ModelImportPreviewItem implements Serializable {
     @JsonProperty("detail")
     private String detail;
 
+    /**
+     * 行类型：MODEL=模型行，PROVIDER=空供应商壳行（无模型、仅 upsert 供应商）。
+     * 前端据全表 type 判断第一列标题：全 PROVIDER→供应商名称，否则→模型服务名称。
+     */
+    @JsonProperty("type")
+    private String type;
+
     public String getId() {
         return id;
     }
@@ -123,6 +130,15 @@ public class ModelImportPreviewItem implements Serializable {
 
     public ModelImportPreviewItem setDetail(String detail) {
         this.detail = detail;
+        return this;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public ModelImportPreviewItem setType(String type) {
+        this.type = type;
         return this;
     }
 }

@@ -467,7 +467,8 @@ export class AddMcpServersComponent {
     });
     this.agentMcpSelected.set(data.id, data);
     const list = [...this.agentMcpSelected.values()];
-    this.mcpAdded.emit(list.filter(mcp => mcp?.selectedTools?.size > 0));
+    this.mcpSelected = list.filter(mcp => mcp?.selectedTools?.size > 0);
+    this.mcpAdded.emit(this.mcpSelected);
   }
 
   public async createMcp(data, tab) {

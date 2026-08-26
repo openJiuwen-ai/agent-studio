@@ -59,6 +59,25 @@ export class AuthModalComponent implements OnInit {
   authType = '';
   apiKeyAuthArgs = [{ target_name: '', auth_key: '' }];
 
+  /**
+   * auth_info 为空（脱敏导入后尚未填写鉴权 / 新建供应商未保存凭据）时，按 auth_type 重建输入字段模板。
+   * key 集合对齐 {@link AddPublisherComponent.handleAutoInfo}；CUSTOM_APIKEY 由 apiKeyAuthArgs + 模板分支 A 处理，不在此表。
+   */
+  private static readonly AUTH_FIELD_TEMPLATE: Readonly<Record<string, readonly string[]>> = {
+    API_KEY: ['API Key'],
+    AK_SK: ['ak', 'sk'],
+    HMAC: ['ak', 'sk'],
+    APP_CODE: ['APP Code'],
+    CUSTOM_IAM: ['iamUrl', 'iamDomain', 'iamProject', 'iamUser', 'iamPassword'],
+    HIS_IAM: ['iamUrl', 'iamAccount', 'iamProject', 'iamSecret', 'iamEnterprise', 'scenarioUuid', 'userId'],
+    SGOV: ['appId', 'credential', 'sgovUrl', 'scenarioUuid'],
+  };
+
+  /** 密钥类字段，渲染为密码框；与 geAuthsInfo 的 if 分支 passwordList 一致。 */
+  private static readonly PASSWORD_KEYS: readonly string[] = [
+    'API Key', 'ak', 'sk', 'APP Code', 'iamPassword', 'iamAK', 'iamSK',
+  ];
+
   constructor(
     private modelManagementService: ModelManagementService,
     private modalService: NzModalService,
@@ -79,7 +98,11 @@ export class AuthModalComponent implements OnInit {
       .then((res: any) => {
         this.authsList = [];
         this.authType = res?.data[0]?.auth_type || '';
-        if (res?.data[0]?.auth_info) {
+        // auth_info 可能是脱敏导入遗留的空格占位符 " "（truthy 但非合法 JSON）。
+        // 仅当 trim 后以 '{' 开头时才按已配置凭据解析；否则按未填写处理，走模板分支让用户补填。
+        const rawAuthInfo = res?.data[0]?.auth_info;
+        const hasValidAuthInfo = typeof rawAuthInfo === 'string' && rawAuthInfo.trim().startsWith('{');
+        if (hasValidAuthInfo) {
           this.authsInfo = JSON.parse(res?.data[0].auth_info);
           const passwordList = [
             'API Key',
@@ -130,12 +153,43 @@ export class AuthModalComponent implements OnInit {
 
           this.authsInfo.auth_id = res?.data[0].auth_id;
         } else {
-          this.authsInfo = res?.data[0] || {};
+          // auth_info 为空（脱敏导入后尚未填写鉴权 / 新建供应商未保存凭据）：
+          // 凭据容器置空（仅保留 auth_id 供提交逻辑判定为新建），按 auth_type 重建输入字段模板，
+          // 让用户能像新建供应商那样补填。CUSTOM_APIKEY 由 apiKeyAuthArgs + 模板分支 A 渲染，不在此处理。
+          const meta = res?.data[0] || {};
+          this.authsInfo = { auth_id: meta.auth_id || '' };
+          if (!this.provider_info.auth_configs) {
+            this.provider_info.auth_configs = res?.data || [];
+          }
           if (this.authType === 'CUSTOM_APIKEY') {
             this.apiKeyAuthArgs = [{ target_name: '', auth_key: '' }];
+          } else {
+            this.buildAuthsListFromTemplate();
           }
         }
       });
+  }
+
+  /**
+   * auth_info 为空时按 auth_type 用字段模板填充 authsList，让用户能补填凭据。
+   * labelName/hide 规则与 {@link geAuthsInfo} 的 if 分支一致：
+   *   - IAM 系字段（CUSTOM_IAM/HIS_IAM/SGOV）走 iamLabel 映射，其余用 key 原值；
+   *   - 密钥类字段（见 PASSWORD_KEYS）渲染为密码框，其余为普通输入框。
+   * modalVal 置空（待用户填入）。NO_AUTH 等不在 AUTH_FIELD_TEMPLATE 的类型 → 不渲染输入框。
+   */
+  private buildAuthsListFromTemplate(): void {
+    const keys = AuthModalComponent.AUTH_FIELD_TEMPLATE[this.authType];
+    if (!keys) {
+      return;
+    }
+    keys.forEach((key) => {
+      this.authsList.push({
+        key,
+        labelName: this.iamLabel[key as keyof typeof this.iamLabel] || key,
+        hide: AuthModalComponent.PASSWORD_KEYS.indexOf(key) > -1,
+        modalVal: '',
+      });
+    });
   }
 
   handelAuth() {

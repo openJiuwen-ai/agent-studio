@@ -2342,6 +2342,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public save(): void {
+    if (this.isFlowReadonly) {
+      return;
+    }
     this.updateFlowData();
   }
 

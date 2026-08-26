@@ -902,9 +902,10 @@ public class AgentServiceProxyController {
         @Pattern(regexp = "^[a-zA-Z0-9_()-]+$") @Size(max = 64) @RequestParam(value = "workspace_id", required = false)
         String workspaceId, @RequestHeader HttpHeaders headers, @Valid @RequestBody RankDocumentsRequest request,
         @RequestParam(value = "refresh", required = false) Boolean refresh,
-        @PathVariable(value = "project_id") String projectId) {
+        @PathVariable(value = "project_id") String projectId,
+        @RequestParam(value = "api_url_env_vars", required = false) String apiUrlEnvVars) {
 
-        return agentServiceProxyService.rerank(headers, workspaceId, request, refresh, projectId);
+        return agentServiceProxyService.rerank(headers, workspaceId, request, refresh, projectId, apiUrlEnvVars);
     }
 
     @ApiOperation(value = "文本向量化", nickname = "textEmbeddings", notes = "textEmbeddings", response = Object.class,
@@ -917,9 +918,11 @@ public class AgentServiceProxyController {
         @Pattern(regexp = "^[a-zA-Z0-9_()-]+$") @Size(max = 64) @RequestParam(value = "workspace_id", required = false)
         String workspaceId, @RequestHeader HttpHeaders headers, @RequestBody EmbeddingRequest request,
         @RequestParam(value = "refresh", required = false) Boolean refresh,
-        @PathVariable(value = "project_id", required = false) String projectId) {
+        @PathVariable(value = "project_id", required = false) String projectId,
+        @RequestParam(value = "api_url_env_vars", required = false) String apiUrlEnvVars) {
 
-        return agentServiceProxyService.textEmbeddings(headers, workspaceId, request, refresh, projectId);
+        return agentServiceProxyService.textEmbeddings(headers, workspaceId, request, refresh, projectId,
+            apiUrlEnvVars);
     }
 
     @ApiOperation(value = "模型调测", nickname = "chatCompletions", notes = "chatCompletions", response = Object.class,
@@ -933,8 +936,10 @@ public class AgentServiceProxyController {
         @Pattern(regexp = "^[a-zA-Z0-9_()-]+$") @Size(max = 64) @RequestParam(value = "workspace_id", required = false)
         String workspaceId, @RequestHeader HttpHeaders headers, @Valid @RequestBody ChatCompletionRequest request,
         @RequestParam(value = "refresh", required = false) Boolean refresh,
-        @PathVariable(value = "project_id", required = false) String projectId) {
-        return agentServiceProxyService.chatCompletions(headers, workspaceId, request, refresh, projectId);
+        @PathVariable(value = "project_id", required = false) String projectId,
+        @RequestParam(value = "api_url_env_vars", required = false) String apiUrlEnvVars) {
+        return agentServiceProxyService.chatCompletions(headers, workspaceId, request, refresh, projectId,
+            apiUrlEnvVars);
     }
 
     @ApiOperation(value = "自动生成追问", nickname = "additionalQuestions", notes = "自动生成追问",

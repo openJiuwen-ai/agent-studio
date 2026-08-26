@@ -121,6 +121,7 @@ import com.openjiuwen.studio.agent.manager.service.asset.AssetFreeTrialMgmtServi
 import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentServiceManagerService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.memory.AgentMemoryConfigService;
+import com.openjiuwen.studio.agent.manager.service.ShareResourceManagerService;
 import com.openjiuwen.studio.agent.manager.service.plugin.impl.PluginBaseImpl;
 import com.openjiuwen.studio.agent.manager.service.serializer.YamlSerializer;
 import com.openjiuwen.studio.agent.manager.service.workspace.WorkspaceMemberService;
@@ -129,6 +130,7 @@ import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 import com.openjiuwen.studio.agent.manager.utils.IconNameCheckUtils;
 import com.openjiuwen.studio.agent.manager.utils.ImageBase64Utils;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
+import com.openjiuwen.studio.agent.manager.utils.MapReadUtil;
 import com.openjiuwen.studio.agent.common.utils.KV;
 import com.openjiuwen.studio.agent.common.utils.PromptTemplate;
 import com.openjiuwen.studio.agent.manager.utils.WorkflowUtils;
@@ -140,6 +142,7 @@ import jakarta.annotation.Resource;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
@@ -797,6 +800,36 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         }
     }
 
+    /**
+     * 遍历工作流节点，对引用共享资源的节点 configs 设 fromShare=true。
+     * 用于前端只读控制：共享子资源在目标空间不可编辑。仅对有 id 的节点校验，本地资源不误判。
+     */
+    @SuppressWarnings("unchecked")
+    private void markSharedWorkflowNodes(Map<String, Object> workflowDetails, String workspaceId) {
+        if (workflowDetails == null) {
+            return;
+        }
+        Object nodesObj = workflowDetails.get("nodes");
+        if (!(nodesObj instanceof List)) {
+            return;
+        }
+        List<Object> nodes = (List<Object>) nodesObj;
+        for (Object nodeObj : nodes) {
+            Map<String, Object> configs = MapReadUtil.safeCastToMapWithStringKey(
+                nodeObj instanceof Map ? ((Map<?, ?>) nodeObj).get("configs") : null);
+            if (MapUtils.isEmpty(configs) || configs.get("id") == null) {
+                continue;
+            }
+            if (shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId,
+                String.valueOf(configs.get("id")))) {
+                configs.put("fromShare", true);
+                if (nodeObj instanceof Map) {
+                    ((Map<String, Object>) nodeObj).put("configs", configs);
+                }
+            }
+        }
+    }
+
     @Override
     public WorkflowValidationVO validateWorkflow(String projectId, String workflowId,
         ValidateWorkflowQo validateWorkflowQo) {
@@ -1281,6 +1314,8 @@ public class WorkflowManagementService implements IWorkflowManagementService {
 
         // 获取工作流
         WorkflowInfo workflowInfo = convertEntityToInfo(workflowEntity, workflowJson);
+        // 遍历节点，对引用共享资源的节点 configs 设 fromShare=true（用于前端只读控制）
+        markSharedWorkflowNodes(workflowInfo.getWorkflowDetails(), workspaceId);
         workflowInfo.setRefWorkflows(new ArrayList<>());
         workflowInfo.setTriggerList(workflowEntity.getTriggerList());
         return workflowInfo;
@@ -2460,6 +2495,10 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         WorkflowEntity workflowEntity =
             workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
         if (workflowEntity == null) {
+            // 本地查不到时，校验是否为共享给当前空间的共享资源；共享资源在目标空间不可编辑
+            if (shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, workflowId)) {
+                throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+            }
             log.info("Workflow:{} does not exist!", workflowId);
             throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }

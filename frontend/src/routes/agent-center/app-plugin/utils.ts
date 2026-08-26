@@ -927,7 +927,9 @@ export function IWFViewListToSchema(obj: IWFView[]): any {
 
 export function mapTreeAddKeyIndex(tree, start) {
   return (tree || []).map((item, index) => {
-    item.keyindex = `${start}_${index}`;
+    const key = `${start}_${index}`;
+    item.keyindex = key;
+    item.key = key;
     if (item.children) {
       item.children = mapTreeAddKeyIndex(item.children, `${start}_${index}`);
     }

@@ -19,7 +19,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Optional
 
-from .env_resolver import has_env_placeholder, resolve_env_placeholders
+from .env_resolver import has_env_placeholder, resolve_env_placeholders, ENV_PLACEHOLDER_PATTERN
 
 # OBS 对象 key 模板（对应 Java ModelStorageService / ModelAuthStorageService 的路径规则）。
 MODEL_PATH = "model-service/ir/%s.json"
@@ -221,10 +221,23 @@ async def _build_detail(
 
     api_url 含 ``${_env.plugin_url_params.VAR}`` 占位符时，用 env_vars 替换为真实值
     （跨环境迁移的字面量 apiUrl 在此解析，与管理侧 ``UrlCheckUtils.validateEnvVarPlaceholders``
-    校验同源）。无占位符或 env_vars 为 None 时跳过、保持 verbatim（向后兼容）。缺变量
-    fail-fast 抛 ``MD_ENV_VAR_UNRESOLVED``（对应 Java ``MODEL_ENV_VAR_UNRESOLVED`` / 1083）。
+    校验同源）。用了占位符但未配置/加载全局环境（env_vars/plugin_url_params 为空）时，
+    fail-fast 抛 ``MD_ENV_VAR_UNRESOLVED``（对应 Java ``MODEL_ENV_VAR_UNRESOLVED`` / 1082，
+    消息说明「未配全局环境」）；环境已配置但缺对应变量时由 ``resolve_env_placeholders``
+    抛同 code（消息说明「环境无对应变量」）。无占位符时跳过、保持 verbatim。
     """
     if has_env_placeholder(model.api_url):
+        if not ctx.env_vars or not ctx.env_vars.get("plugin_url_params"):
+            names = ", ".join(ENV_PLACEHOLDER_PATTERN.findall(model.api_url or ""))
+            # 用户友好：占位符显示为 {ali} 而非后端格式 ${_env.plugin_url_params.ali}
+            user_friendly_url = ENV_PLACEHOLDER_PATTERN.sub(
+                lambda m: "{" + m.group(1) + "}", model.api_url or ""
+            )
+            raise ModelServiceError(
+                "MD_ENV_VAR_UNRESOLVED",
+                f"模型服务API地址配置有误：api_url 使用了环境变量占位符 {user_friendly_url!r}，"
+                f"但当前未加载/配置全局环境变量。请为当前环境配置所需的环境变量：{names}",
+            )
         model = replace(
             model, api_url=resolve_env_placeholders(model.api_url, ctx.env_vars),
         )

@@ -123,10 +123,14 @@ export class JiuwenModelService {
       onTimeout,
       onDone,
     }: any = {},
+    apiUrlEnvOverrides?: Record<string, string>,
   ): any {
     let seeUrl = `${
       this.prefixChatSseManager
     }/chat/completions?workspace_id=${this.http.getWorkspaceId()}&refresh=true`;
+    if (apiUrlEnvOverrides && Object.keys(apiUrlEnvOverrides).length) {
+      seeUrl += `&api_url_env_vars=${encodeURIComponent(JSON.stringify(apiUrlEnvOverrides))}`;
+    }
     return this.configureJiuwenSse(seeUrl, params, lang, {
       onStatus,
       onOpen,
@@ -141,13 +145,15 @@ export class JiuwenModelService {
   }
 
   /** 非流式接口：调测模型  */
-  public modelTestChat(params: any, signal?: AbortSignal) {
+  public modelTestChat(params: any, signal?: AbortSignal, apiUrlEnvOverrides?: Record<string, string>) {
+    const query: any = { refresh: "true" }; //接口参数有更新
+    if (apiUrlEnvOverrides && Object.keys(apiUrlEnvOverrides).length) {
+      query.api_url_env_vars = JSON.stringify(apiUrlEnvOverrides);
+    }
     return this.http
       .postAsync({
         url: `${this.prefixChatManager}/chat/completions`,
-        query:{
-          refresh:"true" //接口参数有更新
-        },
+        query,
         params: params,
         signal,
         timeout: 120_000,
@@ -168,13 +174,15 @@ export class JiuwenModelService {
   }
 
   /** 非流式接口：文本向量化 */
-  public modelTestEmbedding(params: any, signal?: AbortSignal) {
+  public modelTestEmbedding(params: any, signal?: AbortSignal, apiUrlEnvOverrides?: Record<string, string>) {
+    const query: any = { refresh: "true" };
+    if (apiUrlEnvOverrides && Object.keys(apiUrlEnvOverrides).length) {
+      query.api_url_env_vars = JSON.stringify(apiUrlEnvOverrides);
+    }
     return this.http
       .postAsync({
         url: `${this.prefixChatManager}/embeddings`,
-        query:{
-          refresh:"true"
-        },
+        query,
         params: params,
         signal,
         timeout: 120_000,
@@ -185,13 +193,15 @@ export class JiuwenModelService {
   }
 
   /** 非流式接口：文本排序 */
-  public modelTestReRank(params: any, signal?: AbortSignal) {
+  public modelTestReRank(params: any, signal?: AbortSignal, apiUrlEnvOverrides?: Record<string, string>) {
+    const query: any = { refresh: "true" };
+    if (apiUrlEnvOverrides && Object.keys(apiUrlEnvOverrides).length) {
+      query.api_url_env_vars = JSON.stringify(apiUrlEnvOverrides);
+    }
     return this.http
       .postAsync({
         url: `${this.prefixChatManager}/rerank`,
-        query:{
-          refresh:"true"
-        },
+        query,
         params: params,
         signal,
         timeout: 120_000,

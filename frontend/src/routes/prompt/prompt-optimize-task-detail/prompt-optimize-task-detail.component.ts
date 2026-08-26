@@ -185,6 +185,9 @@ export class PromptOptimizeTaskDetailComponent {
   public initVariableList: Array<{ type: VariableType; value: string }> = [];
   public diffHighLight = false;
   isSpinning = false;
+  private pausingPollTimer: ReturnType<typeof setTimeout>;
+  // PAUSING 为后端异步中间态(等执行引擎完成停止)，轻量轮询状态字段直至流转为 PAUSE
+  private static readonly PAUSING_POLL_INTERVAL_MS = 5000;
 
   @ViewChild('chartContainer', { static: false }) chartContainer: ElementRef;
 
@@ -214,6 +217,7 @@ export class PromptOptimizeTaskDetailComponent {
 
   ngOnDestroy(): void {
     this.sidebarVisibilityServ.setSidebarsVisibilityByState('destroy');
+    this.stopPausingPolling();
   }
 
   ngOnChanges() {
@@ -237,6 +241,7 @@ export class PromptOptimizeTaskDetailComponent {
         this.taskDetail = task;
         this.initTaskDetail(task);
         this.renderChart();
+        this.schedulePausingPolling(task.status);
       })
       .catch(error => {
         //加载失败，跳回列表
@@ -245,6 +250,49 @@ export class PromptOptimizeTaskDetailComponent {
       .finally(() => {
         this.isSpinning = false;
       });
+  }
+
+  /** 任务处于"暂停中"时轮询状态(仅更新状态字段，避免重复执行 initTaskDetail 的弹窗等副作用)，流转后整页刷新一次 */
+  private schedulePausingPolling(status: string): void {
+    this.stopPausingPolling();
+    if (status !== 'PAUSING') {
+      return;
+    }
+    this.pausingPollTimer = setTimeout(() => this.pollTaskStatus(), PromptOptimizeTaskDetailComponent.PAUSING_POLL_INTERVAL_MS);
+  }
+
+  private pollTaskStatus(): void {
+    this.promptOptimizeService
+      .TaskDetail(this.taskId)
+      .then(res => {
+        const status = res.data?.status;
+        if (!status) {
+          this.stopPausingPolling();
+          return;
+        }
+        this.taskDetail.status = status;
+        this.cdr.markForCheck();
+        if (status === 'PAUSING') {
+          this.pausingPollTimer = setTimeout(
+            () => this.pollTaskStatus(),
+            PromptOptimizeTaskDetailComponent.PAUSING_POLL_INTERVAL_MS
+          );
+        } else {
+          // 已流转(如 PAUSE)，整页刷新同步迭代结果与操作按钮
+          this.loadTaskDetail();
+        }
+      })
+      .catch(() => {
+        // 静默失败即停止轮询，等待用户手动刷新
+        this.stopPausingPolling();
+      });
+  }
+
+  private stopPausingPolling(): void {
+    if (this.pausingPollTimer) {
+      clearTimeout(this.pausingPollTimer);
+      this.pausingPollTimer = null;
+    }
   }
 
   onBack() {
@@ -477,6 +525,8 @@ export class PromptOptimizeTaskDetailComponent {
           this.promptOptimizeService.savePromptTemplate(promptTemplate).then(res => {
             const href = `${window.location.href.split('#')[0]}#/home/agent-center/library-home?tabId=prompt`;
             MessageComponent.showSuccess(`${this.i18n.transform('prompt_creation_success')} <a href="${href}">${this.i18n.transform('goto_view')}</a>`);
+            // 保存成功后关闭抽屉，与其他入口(系统模板/模板列表)行为一致，避免停留导致重复保存
+            drawerRef?.close();
           });
         },
       },

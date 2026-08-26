@@ -332,20 +332,25 @@ export class AppCardComponent implements OnInit {
     const { agent_id, workflow_id, name } = this.data;
     let deleteTitle = "";
     let resource_type = "";
+    let deleteTipKey = "del_workflow_tip";
     if (this.type === TabIndex.SINGLE_AGENT) {
       deleteTitle = this.i18n.transform("delete_single_agent");
       resource_type = "agent";
+      deleteTipKey = "del_single_agent_tip";
     } else if (this.type === TabIndex.WORKFLOW) {
       deleteTitle = this.i18n.transform("delete_workflow");
       resource_type = "workflow";
+      deleteTipKey = "del_workflow_tip";
     } else if (this.type === TabIndex.MULTI_AGENT) {
       deleteTitle = this.i18n.transform("delete_multi_agent");
       resource_type = "controller";
+      deleteTipKey = "del_multi_agent_tip";
     } else if (this.type === TabIndex.HIGH) {
       deleteTitle = this.i18n.transform("delete_high_agent");
       resource_type = "high";
     } else {
       deleteTitle = this.i18n.transform("delete_workflow");
+      deleteTipKey = "del_workflow_tip";
     }
     this.deleteRefsServe.onDeleteRefs(
       {
@@ -356,7 +361,7 @@ export class AppCardComponent implements OnInit {
       },
       {
         title: this.i18n.transform("del_workflow_version"),
-        alertText: this.i18n.transform("del_workflow_tip"),
+        alertText: this.i18n.transform(deleteTipKey),
         secondConfirmLabel: `${this.i18n.transform(
           "del_sure_tips"
         )} <strong>DELETE</strong>`,

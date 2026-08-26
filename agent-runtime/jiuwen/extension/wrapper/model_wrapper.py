@@ -372,7 +372,11 @@ class ModelWrapper:
                 timeout=timeout,
             )
         except Exception as e:
-            error_msg = f"Model invoke failed: {e}"
+            # 病A：直接 ``{e}`` 会把内层 ``ModelServiceError`` 的 ``[MD_ENV_VAR_UNRESOLVED]``
+            # 等错误码前缀泄进消息。用 friendly_message 取干净信息（控制器/Agent 调用路径，
+            # 早期仅修了 workflow_node，此处补齐）。
+            from model_service.env_resolver import friendly_message
+            error_msg = f"Model invoke failed: {friendly_message(e)}"
             raise ModelError(StatusCode.MODEL_CALL_FAILED, msg=error_msg)
 
         cur_ai_message, tool_calls = self._post_stream_message(model_response)

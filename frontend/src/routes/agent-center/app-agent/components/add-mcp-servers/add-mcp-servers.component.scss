@@ -186,16 +186,19 @@
 }
 
 .footer {
-  //width: 100%;
-  //position: absolute;
-  //bottom: 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding-bottom: 24px;
 
-  span {
-    width: calc(100% - 210px);
+  .footer-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .footer-divider {
+    color: #e1e5eb;
   }
 }
 

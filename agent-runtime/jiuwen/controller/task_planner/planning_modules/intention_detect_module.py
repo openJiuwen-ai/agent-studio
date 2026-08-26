@@ -809,9 +809,13 @@ class IntentionDetectModule:
 
         except Exception as e:
             await trace_manager.on_llm_error(e)
-            raise LLMInvocationFailedException(
-                str(e) if LOG_VERBOSE_MODE else "Failed to invoke LLM"
-            ) from e
+            # 始终透传真实错误信息：模型 URL/环境变量占位符未解析等场景抛出的
+            # ModelServiceError 已是用户友好中文消息，吞成 "Failed to invoke LLM"
+            # 会让用户无法定位（如 103104 配 "test error message"）。
+            # 统一用 friendly_message 对 ModelServiceError 取 .msg 剥 [code] 前缀，
+            # 其他异常保留 str(exc)；用 isinstance 精确匹配避免 stdlib .msg 误匹配。
+            from model_service.env_resolver import friendly_message
+            raise LLMInvocationFailedException(friendly_message(e)) from e
 
     async def _execute_llm_call(self, llm_input):
         """调用llm"""

@@ -60,6 +60,8 @@ export class Image2textOutputComponent {
     content: '',
   };
 
+  @Input() envVarValues: Record<string, string> = {};
+
   @ViewChild('chatContainerRef') chatContainerRef!: ElementRef;
 
   public isShowStopIcon = false;
@@ -155,13 +157,7 @@ export class Image2textOutputComponent {
   private getChatParam(msg: any) {
     const messages = [];
     messages.push(msg);
-    let thinking = {type: ''}
-    if (this.settingInfo.thinking) {
-      thinking.type = 'enabled'
-    }else{
-      thinking.type = 'disabled'
-    }
-    const params:any = {
+    return {
       model: this.serviceInfo.id,
       stream: this.settingInfo.stream_val,
       messages,
@@ -170,11 +166,7 @@ export class Image2textOutputComponent {
         is_response_verify: this.settingInfo.securityVerify,
         is_request_verify: this.settingInfo.securityVerify,
       },
-    }
-    if(this.serviceInfo.is_reasoning){
-      params.thinking = thinking
-    }
-    return params;
+    };
   }
 
   private postChat(messages) {
@@ -201,7 +193,7 @@ export class Image2textOutputComponent {
   private postMessage(param) {
     this.abortController = new AbortController();
     this.jiuwenModelServ
-      .modelTestChat(param, this.abortController?.signal)
+      .modelTestChat(param, this.abortController?.signal, this.envVarValues)
       .then(({ content }) => {
         this.result = content;
         this.scrollToBottom();
@@ -308,7 +300,7 @@ export class Image2textOutputComponent {
           this.scrollToBottom();
           this.cdr.markForCheck();
         },
-      },
+      }, this.envVarValues,
     );
   }
 

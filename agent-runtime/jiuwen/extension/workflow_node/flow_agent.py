@@ -25,6 +25,7 @@ import traceback
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from agent_runtime.common.config import settings
+from model_service.env_resolver import friendly_message
 from openjiuwen.core.common.logging import logger, workflow_logger
 from openjiuwen.core.common.logging.events import LogEventType
 from openjiuwen.core.context_engine import ContextEngineConfig
@@ -351,7 +352,7 @@ class FlowAgent(WorkflowComponent):
         except Exception as e:
             logger.error(f"FlowAgent invoke error: {e}\n{traceback.format_exc()}")
             return {
-                "output": f"Error in FlowAgent execution: {str(e)}",
+                "output": f"Error in FlowAgent execution: {friendly_message(e)}",
                 "result_type": "error",
             }
 
@@ -379,7 +380,7 @@ class FlowAgent(WorkflowComponent):
             yield {
                 "type": "error",
                 "payload": {
-                    "output": f"Error in FlowAgent streaming: {str(e)}",
+                    "output": f"Error in FlowAgent streaming: {friendly_message(e)}",
                     "result_type": "error",
                 },
             }
@@ -419,7 +420,7 @@ class FlowAgent(WorkflowComponent):
         except Exception as e:
             logger.error(f"FlowAgent collect error: {e}")
             return {
-                "output": f"Error in FlowAgent collect: {str(e)}",
+                "output": f"Error in FlowAgent collect: {friendly_message(e)}",
                 "result_type": "error",
             }
 
@@ -448,7 +449,7 @@ class FlowAgent(WorkflowComponent):
             yield {
                 "type": "error",
                 "payload": {
-                    "output": f"Error in FlowAgent transform: {str(e)}",
+                    "output": f"Error in FlowAgent transform: {friendly_message(e)}",
                     "result_type": "error",
                 },
             }

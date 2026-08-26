@@ -179,10 +179,10 @@ export class ImportModalComponent {
   uploadFileList = [];
 
   showUploadList: NzShowUploadList = {
-    showRemoveIcon: false,
+    showRemoveIcon: true,
     showPreviewIcon: false,
     showDownloadIcon: false,
-  };
+  };;
 
 
   constructor(
@@ -231,72 +231,51 @@ export class ImportModalComponent {
     return result;
   }
 
-  public onAddFileSuccess(fileItem: any): void {
-    if (fileItem.type === "removed") {
-      this.onRemoveItems(null);
-      return;
-    }
-    if (fileItem.type !== "start") {
-      return;
-    }
+  public removeFile = () => {
+    this.onRemoveItems(null);
+    return true
+  }
 
-    if (this.uploadFileList.length >= 2) {
-      this.uploadFileList = [this.uploadFileList[1]];
-    }
-
-    if (this.uploadFileList.length >= 1) {
-      this.showUploadList = {
-        showRemoveIcon: false,
-        showPreviewIcon: false,
-        showDownloadIcon: false,
-      };
-      setTimeout(() => {
-        this.uploadFileList[0].status = 'done';
-        this.uploadFileList[0].response = '';
-        this.uploadFileList[0].error = '';
-        this.showUploadList = {
-          showRemoveIcon: true,
-          showPreviewIcon: false,
-          showDownloadIcon: false,
-        };
-        this.cdr.markForCheck();
-      }, 50);
-    }
-
+  public beforeUpload = file => {
     this.isFileImported = true;
     this.isParseError = false;
     this.isDuplicateContent = false;
     this.isSelectError = false;
-    this.fileInfo = fileItem.file.originFileObj;
+    this.fileInfo = file;
     this.isLoading = true;
     const formData = new FormData();
-    formData.append("file", fileItem.file.originFileObj);
+    formData.append('file', file);
     this.appFlowRepoServe.parseFile(formData).then(
       (res: any) => {
+        this.uploadFileList = [
+          {
+            uid: file.uid,
+            name: file.name,
+            status: 'done',
+            response: '',
+            error: '',
+          },
+        ];
         this.isLoading = false;
         this.isOldImport = !Boolean(res[0]?.import_description);
         this.isDuplicateContent = this.checkDuplicateContent(res);
         // 通过增加 dependencies: [], 保证插件对应的jsonl文件解析出的数据结构和工作流一致
         const filter_res = this.filteredRes(res);
         this.import_type_tip = filter_res.length <= 0;
-        this.parseContent = filter_res.map((item) => ({
+        this.parseContent = filter_res.map(item => ({
           ...item,
           collapsed: true,
-          dependencies: (item?.dependencies || []).map((childItem) => ({
+          dependencies: (item?.dependencies || []).map(childItem => ({
             ...childItem,
             collapsed: true,
             uniqueId: `${item.id}-${childItem.id}-${uuidV4()}`,
             disabled: childItem.status,
-            dependencies: (childItem?.dependencies || []).map(
-              (grandChildItem) => ({
-                ...grandChildItem,
-                uniqueId: `${item.id}-${childItem.id}-${
-                  grandChildItem.id
-                }-${uuidV4()}`,
-                disabled: grandChildItem.status
-              })
-            )
-          }))
+            dependencies: (childItem?.dependencies || []).map(grandChildItem => ({
+              ...grandChildItem,
+              uniqueId: `${item.id}-${childItem.id}-${grandChildItem.id}-${uuidV4()}`,
+              disabled: grandChildItem.status,
+            })),
+          })),
         }));
         this.parseContent = this.initializeCheckStatus(this.parseContent);
 
@@ -311,23 +290,20 @@ export class ImportModalComponent {
         }
 
         for (let i = 0; i < copy_data.length; i++) {
-          copy_data[i].dependencies = uniqBy(copy_data[i].plat_dependencies, "id");
+          copy_data[i].dependencies = uniqBy(copy_data[i].plat_dependencies, 'id');
         }
 
         this.parseContent = copy_data;
         this.srcData.data = this.parseContent;
         // prohibited等于true，表示这是不允许导入的预置插件
-        this.parentContentChecked = [...this.parseContent].filter(
-          (item) => !item.prohibited
-        );
-        const { childChecked, grandChildChecked } = this.checkAllDependencies(
-          this.parseContent
-        );
+        this.parentContentChecked = [...this.parseContent].filter(item => !item.prohibited);
+        const { childChecked, grandChildChecked } = this.checkAllDependencies(this.parseContent);
         this.childContentChecked = childChecked;
         this.grandChildContentChecked = grandChildChecked;
         this.cdr.markForCheck();
       },
       () => {
+        this.uploadFileList = [];
         this.isLoading = false;
         this.isParseError = true;
         this.parseContent = [];
@@ -339,7 +315,8 @@ export class ImportModalComponent {
         this.cdr.markForCheck();
       }
     );
-  }
+    return false;
+  };
 
   public onAddItemFailed(info) {
     const error_type = info.validResults[0];

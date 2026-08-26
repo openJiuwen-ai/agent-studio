@@ -26,6 +26,34 @@
       }
     }
 
+    .strategy-group {
+      .strategy-btn {
+        position: relative;
+
+        .strategy-text {
+          // 右侧为问号图标预留空间，避免文字与右上角 ? 重叠
+          padding-right: 14px;
+        }
+
+        .strategy-help {
+          position: absolute;
+          top: 2px;
+          right: 4px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #8c8c8c;
+          font-size: 12px;
+          line-height: 1;
+          cursor: help;
+
+          &:hover {
+            color: #595959;
+          }
+        }
+      }
+    }
+
     .hint {
       color: #808080;
       font-size: 12px;

@@ -36,7 +36,11 @@
     </nz-table>
   </div>
 
-  <div class="flex justify-end mt-4">
+  <div class="flex justify-between items-center mt-4">
+    <div class="page-div">
+      <div class="page-div-span">{{ ('count_num' | i18nextEager) + totalNumber }}</div>
+      <div class="page-div-select">{{ ('select_num' | i18nextEager) + setOfCheckedId.size }}</div>
+    </div>
     <nz-pagination
       [nzPageIndex]="currentPage"
       [nzTotal]="totalNumber"
