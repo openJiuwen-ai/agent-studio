@@ -12,9 +12,11 @@
   },
   "scripts": {
     "start": "set NODE_OPTIONS=--max-old-space-size=15360 && ng serve",
-    "build": "ng build",
+    "build": "node scripts/check-large-dsl-threshold-consistency.mjs && ng build && node scripts/check-large-dsl-threshold-consistency.mjs --dist",
     "lint:es": "pnpm exec eslint --fix --cache --cache-location ./.cache/eslint/ --cache-strategy content ./",
     "lint:style": "pnpm exec stylelint --fix --cache --cache-location ./.cache/stylelint/ --cache-strategy content \"**/*.{scss,html}\"",
+    "check:threshold": "node scripts/check-large-dsl-threshold-consistency.mjs",
+    "check:threshold:dist": "node scripts/check-large-dsl-threshold-consistency.mjs --dist",
     "test": "ng test --watch=false"
   },
   "dependencies": {

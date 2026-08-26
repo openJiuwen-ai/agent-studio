@@ -8,6 +8,13 @@ declare interface Window {
 
   readonly AppWebPath?: string;
 
+  /**
+   * DSL 版本对比大 DSL 降级阈值（单侧规范化后文本字节）。
+   * 部署时 studio-console start.sh 把 index.html 的 large_dsl_placeholder 替换为字节数；
+   * 本地 ng serve 不替换，environment 侧回退默认值。
+   */
+  readonly largeDslBytesThreshold?: string | number;
+
   getConsoleContext: () => ConsoleFramework.ConsoleContext;
 
   __x6_instances__?: any[];

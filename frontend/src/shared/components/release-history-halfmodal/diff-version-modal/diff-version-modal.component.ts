@@ -10,6 +10,7 @@ import { AppFlowRepoService } from '@services/agent-center/app-flow-repo.service
 import { MODULES } from '@shared/modules';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { serializeGraphDslForDiff } from './normalize-graph-dsl-for-diff';
+import { environment } from 'src/environment/environment';
 import { extractSingleAgentDsl, normalizeSingleAgentDslForDiff } from './single-agent-dsl-for-diff';
 
 @Component({
@@ -60,8 +61,8 @@ export class DiffVersionModalComponent implements OnDestroy {
   // Unit 4：每侧独立异步治理（DiffSideState）。global dslTooLarge 由两侧 tooLarge 派生，不单独维护易失真状态。
   originalState: DiffSideState = makeSideState();
   modifiedState: DiffSideState = makeSideState();
-  /** 大 DSL 字节阈值（实现期用代表性脱敏 fixture 压测后调，见 Open Questions）。用 Blob.size（字节，非 string.length 的 UTF-16 码元）。 */
-  largeDslBytesThreshold = 2 * 1024 * 1024;
+  /** 大 DSL 字节阈值（单侧规范化后文本字节，Monaco 保护阈值）：部署参数注入（start.sh → index.html → window → environment），无效/缺失回退默认 10MB。 */
+  largeDslBytesThreshold = environment.largeDslBytesThreshold;
 
   get dslTooLarge(): boolean {
     return this.originalState.tooLarge || this.modifiedState.tooLarge;
