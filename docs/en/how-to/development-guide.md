@@ -414,7 +414,7 @@ agent-studio abstracts database password retrieval into a `DataSourcePasswordPro
 In DEFAULT mode, the platform uses built-in encryption capabilities to handle database passwords:
 
 - **studio-manager (Java)**: `DefaultDataSourcePasswordProvider` calls `CryptoUtils.decrypt()` to decrypt the `spring.datasource.password` config value
-- **agent-runtime / agent-builder (Python)**: `DefaultDataSourcePasswordProvider` calls `crypto_tool.decrypt()` to decrypt the `STORE_DB_PASSWORD` environment variable value
+- **agent-builder (Python)**: `DefaultDataSourcePasswordProvider` calls `crypto_tool.decrypt()` to decrypt the `STORE_DB_PASSWORD` environment variable value
 
 > DEFAULT mode requires no additional configuration — simply leave `DATASOURCE_PASSWORD_PROVIDER_TYPE` unset or set it to `DEFAULT`.
 
@@ -447,7 +447,7 @@ Custom password retrieval implementation, suitable for scenarios requiring integ
    }
    ```
 
-#### agent-builder / agent-runtime Configuration (Python)
+#### agent-builder Configuration (Python)
 
 | Environment variable | Required | Description |
 |---------------------|----------|-------------|
@@ -471,9 +471,9 @@ Custom password retrieval implementation, suitable for scenarios requiring integ
            return self._fetch_from_kms(raw_password)
    ```
 
-#### CUSTOM Configuration Differences: studio-manager vs agent-builder / agent-runtime
+#### CUSTOM Configuration Differences: studio-manager vs agent-builder
 
-| Dimension | studio-manager (Java) | agent-builder / agent-runtime (Python) |
+| Dimension | studio-manager (Java) | agent-builder (Python) |
 |-----------|----------------------|----------------------------------------|
 | Type config | `datasource_password_provider_type=CUSTOM` | `DATASOURCE_PASSWORD_PROVIDER_TYPE=CUSTOM` |
 | Implementation specified | `datasource_password_provider_custom_class` (fully qualified class name) | `DATASOURCE_PASSWORD_PROVIDER_CLASS` (class name) |
@@ -528,7 +528,7 @@ class DataSourcePasswordProvider(ABC):
 In CUSTOM mode, external JAR / .py plugin files need to be mounted into the container, similar to CUSTOM mode for storage extension:
 
 - **Java (studio-manager)**: Place JAR in host `/opt/cloud/plugins/`, configure `datasource_password_provider_custom_classpath` as `/opt/cloud/plugins/xxx.jar`
-- **Python (agent-builder / agent-runtime)**: Place .py in host `/opt/cloud/plugins/`, configure `DATASOURCE_PASSWORD_PROVIDER_MODULE` as `/opt/cloud/plugins/xxx`
+- **Python (agent-builder)**: Place .py in host `/opt/cloud/plugins/`, configure `DATASOURCE_PASSWORD_PROVIDER_MODULE` as `/opt/cloud/plugins/xxx`
 
 K8s Deployment mount example:
 
