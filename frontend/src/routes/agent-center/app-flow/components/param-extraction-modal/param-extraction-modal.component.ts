@@ -297,6 +297,7 @@ export class ParamExtractionModalComponent
       ...getInitOutputParamConfig(),
       depth: param.depth + 1,
       parentType: param.type,
+      isLeaf: true,
       key: `child_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
     };
     if (param?.children) {
@@ -304,6 +305,7 @@ export class ParamExtractionModalComponent
     } else {
       param.children = [child];
     }
+    param.isLeaf = false;
     param.expanded = true;
     this.refreshRootArray(this.midParams, param);
     this.refreshRootArray(this.fetchParams, param);
@@ -326,6 +328,7 @@ export class ParamExtractionModalComponent
       ...getInitOutputParamConfig(),
       depth: param.depth + 1,
       parentType: param.type,
+      isLeaf: true,
       key: `child_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
     };
     if (param?.children) {
@@ -333,6 +336,7 @@ export class ParamExtractionModalComponent
     } else {
       param.children = [child];
     }
+    param.isLeaf = false;
     param.expanded = true;
     this.fetchParams = this.updateImmutablePath(this.fetchParams, param);
     this.cdr.detectChanges();

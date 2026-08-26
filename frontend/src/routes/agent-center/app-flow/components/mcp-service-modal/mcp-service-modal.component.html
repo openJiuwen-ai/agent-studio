@@ -93,10 +93,10 @@
   >
     <ng-template #content>
       <div class="mt-2 flex items-center">
-        <div class="mr-[5px] flex w-[25%] text-label">
+        <div class="mr-[5px] flex flex-1 text-label">
           {{ 'param_name'|i18nextEager }}
         </div>
-        <div class="mr-[5px] w-[calc(75%-10px)] text-label">
+        <div class="mr-[5px] w-[330px] shrink-0 text-label">
           {{ 'type' | i18nextEager }}
         </div>
       </div>
@@ -107,7 +107,7 @@
             *ngIf="param.location === location"
             class="mt-2 flex"
           >
-            <div class="mr-1 flex h-[28px] w-[25%] items-center text-label gap-[4px]">
+            <div class="mr-1 flex h-[28px] flex-1 shrink-0 items-center text-label gap-[4px]">
               <div class="flex max-w-[calc(100%-20px)] items-center">
                 <span tiOverflow>{{ param.name }}</span>
                 <span *ngIf="!param.required" class="w-12 shrink-0">{{ 'optional' | i18nextEager }}</span>
@@ -120,8 +120,8 @@
                 nzType="question-circle" nzTheme="outline"
               />
             </div>
-            <div class="flex w-[calc(75%-10px)]">
-              <div class="flex h-fit w-full items-center">
+            <div class="flex items-start w-[330px] shrink-0">
+              <div class="flex h-fit w-full items-start">
                 <div class="flex w-full">
                   <div class="w-[30%]">
                     <nz-select
@@ -252,10 +252,10 @@
   >
     <ng-template #content>
       <div class="mt-2 flex items-center">
-        <div class="mr-[5px] flex w-[25%] text-label">
+        <div class="mr-[5px] flex flex-1 text-label">
           {{ 'param_name'|i18nextEager }}
         </div>
-        <div class="mr-[5px] w-[calc(75%-10px)] text-label">
+        <div class="mr-[5px] w-[330px] shrink-0 text-label">
           {{ 'type' | i18nextEager }}
         </div>
       </div>
@@ -266,7 +266,7 @@
             <div
             class="mt-2 flex"
           >
-            <div class="mr-1 flex h-[28px] w-[25%] items-center text-label gap-[4px]">
+            <div class="mr-1 flex h-[28px] flex-1 shrink-0 items-center text-label gap-[4px]">
               <div class="flex max-w-[calc(100%-20px)] items-center">
                 <span tiOverflow>{{ origin.name }}</span>
                 <span *ngIf="!origin.required" class="w-12 shrink-0">{{ 'optional' | i18nextEager }}</span>
@@ -279,8 +279,8 @@
                 nzType="question-circle" nzTheme="outline"
               />
             </div>
-            <div class="flex w-[calc(75%-10px)]">
-              <div class="flex h-fit w-full items-center">
+            <div class="flex items-start w-[330px] shrink-0">
+              <div class="flex h-fit w-full items-start">
                 <div class="flex w-full">
                   <div class="w-[30%]">
                     <nz-select

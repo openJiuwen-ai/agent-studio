@@ -305,6 +305,7 @@ export interface IWorkflowField {
 export type IWFViewParentType = IWorkflowFieldType | 'none';
 
 export type IWFView = {
+  isLeaf?: boolean;
   key?: string;
   parentType?: IWFViewParentType;
   children?: IWFView[];
@@ -315,6 +316,7 @@ export type IWFView = {
 } & Omit<IWorkflowField, 'schema'>;
 
 export type IWFViewWithMultiType = {
+  isLeaf?: boolean;
   key?: string;
   parentType?: IWFViewParentType;
   children?: IWFViewWithMultiType[];

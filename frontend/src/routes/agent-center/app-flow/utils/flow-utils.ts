@@ -1799,11 +1799,13 @@ export const FlowUtils = {
         depth,
         parentType,
         value,
+        isLeaf: true,
       };
 
       if (type === 'array') {
         if ((schema as IWorkflowField).type === 'object') {
           view.type = ['array<object>'];
+          view.isLeaf = false;
           view.children = this.fields2Views(
             ((schema as IWorkflowField)?.schema ?? []) as IWorkflowField[],
             depth + 1,
@@ -1822,6 +1824,7 @@ export const FlowUtils = {
       }
 
       if (type === 'object') {
+        view.isLeaf = false;
         view.children = this.fields2Views(
           (schema ?? []) as IWorkflowField[],
           depth + 1,
@@ -1853,12 +1856,14 @@ export const FlowUtils = {
         depth,
         parentType,
         value,
+        isLeaf: true,
         key: `${depth}_${index}_${name}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       };
 
       if (type === 'array') {
         if ((schema as IWorkflowField).type === 'object') {
           view.type = ['array<object>'];
+          view.isLeaf = false;
           view.children = this.objectTempStartNodeFields2Views(
             ((schema as IWorkflowField)?.schema ?? []) as IWorkflowField[],
             depth + 1,
@@ -1877,6 +1882,7 @@ export const FlowUtils = {
       }
 
       if (type === 'object') {
+        view.isLeaf = false;
         view.children = this.objectTempStartNodeFields2Views(
           (schema ?? []) as IWorkflowField[],
           depth + 1,
@@ -1917,12 +1923,14 @@ export const FlowUtils = {
         depth,
         parentType,
         value: midValue,
+        isLeaf: true,
         key: `${depth}_${index}_${name}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       };
 
       if (type === 'array') {
         if ((schema as IWorkflowField).type === 'object') {
           view.type = 'array<object>';
+          view.isLeaf = false;
           view.children = this.objectTempIWFields2Views(
             ((schema as IWorkflowField)?.schema ?? []) as IWorkflowField[],
             depth + 1,
@@ -1933,6 +1941,7 @@ export const FlowUtils = {
       }
 
       if (type === 'object') {
+        view.isLeaf = false;
         view.children = this.objectTempIWFields2Views(
           (schema ?? []) as IWorkflowField[],
           depth + 1,

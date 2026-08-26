@@ -194,3 +194,11 @@ tp-layout-content {
 .cdk-virtual-scroll-viewport {
   overflow-anchor: none;
 }
+
+/* 顶层叶子节点（非 object/array<object>）隐藏展开按钮占位；
+ * object/array<object> 保留展开按钮以展开子项 */
+.ant-tree-treenode:not(:has(.ant-tree-indent-unit)) > .ant-tree-switcher-noop {
+  width: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}

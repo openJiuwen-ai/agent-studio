@@ -940,8 +940,10 @@ export function mapTreeAddKeyIndex(tree, start) {
 export function mapTreeAddKeyAndChildIndex(tree, start) {
   return (tree || []).map((item, index) => {
     item.key = `${index}`;
+    item.isLeaf = true;
     if (item?.schema?.length > 0 && item.type === 'object') {
       item.isObjRoot = true;
+      item.isLeaf = false;
       item.children = mapTreeSchemaIndex(item.schema, `${index}`, item.value.type);
       item.children = setAllChildrenVal(item.children, item.value);
     }
@@ -956,6 +958,7 @@ function mapTreeSchemaIndex(schema, start, rootValType) {
       key: `${start}_${index}`,
       type: item.type,
       isChild: true,
+      isLeaf: true,
       name: item.name,
       rootValType: rootValType,
       isObjChild: item.type === 'object',
@@ -969,6 +972,7 @@ function mapTreeSchemaIndex(schema, start, rootValType) {
     };
 
     if (item?.schema?.length > 0 && item.type === 'object') {
+      newitem.isLeaf = false;
       newitem.children = mapTreeSchemaIndex(item.schema, `${start}_${index}`, rootValType);
     }
     return newitem;
