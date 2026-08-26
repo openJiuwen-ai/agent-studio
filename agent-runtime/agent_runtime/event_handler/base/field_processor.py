@@ -2,7 +2,6 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Field data processor — 事件字段转换核心逻辑."""
 
-import html
 import json
 import time
 from typing import Dict, Any, List
@@ -114,10 +113,13 @@ class FieldDataProcessor:
             ErrorContextBuilder.get_language_context(trace.language, code)
         )
         if error_message and error_message != error_msg:
-            error_msg = f"{error_msg}：{html.escape(error_message)}"
+            # NOTE: 不做 html.escape(与 Java 错误路径及 llm_chain 的既有约定一致)。
+            # 前端纯文本插值({{ }})会原样显示实体(&#x27;/&amp;/&lt;),转义反而破坏展示;
+            # XSS 防护由前端渲染上下文承担:插值自动编码,innerHTML 路径经 Angular DomSanitizer。
+            error_msg = f"{error_msg}：{error_message}"
         error_data_field = ErrorEventDataField(
             code=code,
-            message=html.escape(error_message) if error_message else "",
+            message=error_message if error_message else "",
             error_msg=error_msg,
             error_reason=error_reason,
             error_suggestion=error_suggestion,

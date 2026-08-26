@@ -2,7 +2,6 @@
 # Copyright (c) Huawei Technologies Co., Ltd. 2026. All rights reserved.
 """Workflow event processor"""
 
-import html
 import time
 import traceback
 from typing import Dict, Any, List
@@ -169,8 +168,11 @@ class WorkflowEventsProcessor(BaseEventsProcessor):
         )
         raw_message = data.get("message", "unknown error")
         if raw_message and raw_message != error_msg:
-            error_msg = f"{error_msg}：{html.escape(raw_message)}"
-        safe_message = html.escape(raw_message) if isinstance(raw_message, str) else str(raw_message)
+            # NOTE: 不做 html.escape(与 Java 错误路径及 llm_chain 的既有约定一致)。
+            # 前端纯文本插值({{ }})会原样显示实体(&#x27;/&amp;/&lt;),转义反而破坏展示;
+            # XSS 防护由前端渲染上下文承担:插值自动编码,innerHTML 路径经 Angular DomSanitizer。
+            error_msg = f"{error_msg}：{raw_message}"
+        safe_message = raw_message if isinstance(raw_message, str) else str(raw_message)
         error_data_field = ErrorEventDataField(
             node_id=data.get("node_id"),
             node_name=data.get("node_name"),
