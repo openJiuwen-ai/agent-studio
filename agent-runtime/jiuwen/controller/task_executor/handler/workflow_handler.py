@@ -121,8 +121,11 @@ class WorkflowHandler(BaseHandler):
         if WorkflowHandler._use_openjiuwen_workflow():
             agent_id = WorkflowHandler._resolve_workflow_agent_id(workflow_context)
             try:
+                workflow_shell = None
                 if workflow_context.workflow_ir:
-                    await ensure_openjiuwen_workflow_registered(
+                    # 保留返回的本地实例：执行时优先使用，避免并发会话通过全局注册表
+                    # 拿到同一 Workflow 实例导致 session 串扰（Vertex._session 互相覆盖）
+                    workflow_shell = await ensure_openjiuwen_workflow_registered(
                         workflow_context.workflow_ir,
                         workflow_id=workflow_context.workflow_id,
                         workflow_name=workflow_context.workflow_name,
@@ -165,6 +168,7 @@ class WorkflowHandler(BaseHandler):
                     agent_id=agent_id,
                     session_id=conversation_id,
                     node_name_type_map=component_name_type_map,
+                    workflow_instance=workflow_shell,
                 )
             except Exception as e:
                 logger.warning(

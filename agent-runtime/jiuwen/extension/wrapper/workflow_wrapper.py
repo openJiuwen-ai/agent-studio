@@ -102,6 +102,7 @@ class WorkflowWrapper:
         session_id: str = None,
         context=None,
         workflow_name: str = "",
+        workflow=None,
     ) -> AsyncGenerator[Union[Message, StreamData], None]:
         """流式执行工作流，等价于旧 ControllerWorkflow.astream(inputs, params)。
 
@@ -113,6 +114,11 @@ class WorkflowWrapper:
             session_id: 会话 ID
             context: ModelContext（agent-core 上下文）
             workflow_name: 工作流名称，用于 WORKFLOW_START 等事件
+            workflow: 本次请求注册的工作流实例（LazyWorkflow shell）。
+                传入时直接使用，不再查询全局注册表——并发会话下注册表按
+                workflow_id+agent_id 覆盖写入，get_workflow 可能拿到其他会话
+                刚注册的实例，导致同一 Workflow 被两个 session 并发 stream()，
+                Vertex._session 互相覆盖、消息 chunk 写入他人会话（无消息返回）。
 
         Yields:
             StreamData 对象（Questioner 中断时不 yield Message，由 Handler 检测 should_interrupt 生成）；
@@ -179,9 +185,11 @@ class WorkflowWrapper:
         else:
             self._current_workflow_query = str(query)
 
-        workflow = await Runner.resource_mgr.get_workflow(
-            workflow_id=workflow_id, tag=agent_id
-        )
+        if workflow is None:
+            # 回退路径：未提供本地实例时才查全局注册表（存在并发覆盖风险，仅作兼容）
+            workflow = await Runner.resource_mgr.get_workflow(
+                workflow_id=workflow_id, tag=agent_id
+            )
         if workflow is None:
             raise ValueError(f"Workflow not found: {workflow_id}")
 
