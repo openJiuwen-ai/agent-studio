@@ -88,6 +88,8 @@ export class MCPServiceModalComponent extends ModalBaseComponent implements OnIn
 
   @ViewChild('inputForm') inputForm: NgForm;
 
+  @ViewChild('inputFormContent') inputFormContent: NgForm;
+
   @ViewChild('exceptionHandling') exceptionHandling: ExceptionHandlingComponent;
 
   public icon = WORKFLOW_SVGS.Mcp;
@@ -355,7 +357,8 @@ export class MCPServiceModalComponent extends ModalBaseComponent implements OnIn
       const isTrue =
         input.value.type === 'literal' && ['number', 'integer'].includes(input.type) && input.value.content !== null && typeof input.value.content !== 'number';
       if (isTrue) {
-        input.value.content = Number(input.value.content);
+        const num = Number(input.value.content);
+        input.value.content = Number.isNaN(num) ? null : num;
       }
       if (input.type === 'object' && input.value.content === '') {
         input.value.content = '{}';

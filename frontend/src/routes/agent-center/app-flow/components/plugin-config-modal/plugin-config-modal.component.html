@@ -122,10 +122,10 @@
                                   [nonEmptyValidator]="type !== 'mcp' && node.origin.depth === 0 && !node.origin.visibility"
                                   numberStr
                                   [disabled]="node.origin.isDisabled"
-                                  [class.input-error]="type !== 'mcp' && node.origin.depth === 0 && !node.origin.visibility && inputForm?.controls['inputFormValueNum_' + node.origin.name]?.invalid && (inputForm?.controls['inputFormValueNum_' + node.origin.name]?.dirty || inputForm?.controls['inputFormValueNum_' + node.origin.name]?.touched)"
+                                  [class.input-error]="type !== 'mcp' && !node.origin.visibility && inputForm?.controls['inputFormValueNum_' + node.origin.name]?.invalid && (inputForm?.controls['inputFormValueNum_' + node.origin.name]?.dirty || inputForm?.controls['inputFormValueNum_' + node.origin.name]?.touched)"
                                 />
                                 <div
-                                  *ngIf="type !== 'mcp' && node.origin.depth === 0 && !node.origin.visibility && inputForm?.controls['inputFormValueNum_' + node.origin.name]?.invalid && (inputForm?.controls['inputFormValueNum_' + node.origin.name]?.dirty || inputForm?.controls['inputFormValueNum_' + node.origin.name]?.touched)"
+                                  *ngIf="type !== 'mcp' && !node.origin.visibility && inputForm?.controls['inputFormValueNum_' + node.origin.name]?.invalid && (inputForm?.controls['inputFormValueNum_' + node.origin.name]?.dirty || inputForm?.controls['inputFormValueNum_' + node.origin.name]?.touched)"
                                   class="error-tip">
                                   {{ inputForm?.controls['inputFormValueNum_' + node.origin.name]?.errors?.serviceName?.tiErrorMessage }}
                                 </div>
@@ -144,10 +144,10 @@
                                   [nonEmptyValidator]="type !== 'mcp' && node.origin.depth === 0 && !node.origin.visibility"
                                   [disabled]="node.origin.isDisabled"
                                   integerStr
-                                  [class.input-error]="type !== 'mcp' && node.origin.depth === 0 && !node.origin.visibility && inputForm?.controls['inputFormValueInt_' + node.origin.name]?.invalid && (inputForm?.controls['inputFormValueInt_' + node.origin.name]?.dirty || inputForm?.controls['inputFormValueInt_' + node.origin.name]?.touched)"
+                                  [class.input-error]="type !== 'mcp' && !node.origin.visibility && inputForm?.controls['inputFormValueInt_' + node.origin.name]?.invalid && (inputForm?.controls['inputFormValueInt_' + node.origin.name]?.dirty || inputForm?.controls['inputFormValueInt_' + node.origin.name]?.touched)"
                                 />
                                 <div
-                                  *ngIf="type !== 'mcp' && node.origin.depth === 0 && !node.origin.visibility && inputForm?.controls['inputFormValueInt_' + node.origin.name]?.invalid && (inputForm?.controls['inputFormValueInt_' + node.origin.name]?.dirty || inputForm?.controls['inputFormValueInt_' + node.origin.name]?.touched)"
+                                  *ngIf="type !== 'mcp' && !node.origin.visibility && inputForm?.controls['inputFormValueInt_' + node.origin.name]?.invalid && (inputForm?.controls['inputFormValueInt_' + node.origin.name]?.dirty || inputForm?.controls['inputFormValueInt_' + node.origin.name]?.touched)"
                                   class="error-tip">
                                   {{ inputForm?.controls['inputFormValueInt_' + node.origin.name]?.errors?.serviceName?.tiErrorMessage }}
                                 </div>

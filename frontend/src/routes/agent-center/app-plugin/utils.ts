@@ -998,7 +998,15 @@ export function eachChildrenToRootObj(children, value) {
             }
             res[item.name] = itemVal;
           } else {
-            res[item.name] = value.value.content;
+            // string / number / integer / boolean — 按类型转换值
+            let content = value.value.content;
+            if (item.type === 'number' || item.type === 'integer') {
+              content = content === '' || content == null ? null : Number(content);
+              if (Number.isNaN(content as number)) { content = null; }
+            } else if (item.type === 'boolean') {
+              content = content === 'true' || content === true;
+            }
+            res[item.name] = content;
           }
         }
       } else {
@@ -1016,6 +1024,12 @@ export function eachChildrenToRootObj(children, value) {
           } catch {
             itemVal = null;
           }
+        }
+        if (item.type === 'number' || item.type === 'integer') {
+          itemVal = itemVal === '' || itemVal == null ? null : Number(itemVal);
+          if (Number.isNaN(itemVal as number)) { itemVal = null; }
+        } else if (item.type === 'boolean') {
+          itemVal = itemVal === 'true' || itemVal === true;
         }
         res[item.name] = itemVal;
       }

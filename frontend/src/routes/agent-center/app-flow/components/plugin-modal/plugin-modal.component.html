@@ -215,7 +215,7 @@
               {{ 'type' | i18nextEager }}
             </div>
           </div>
-          <form #inputForm="ngForm">
+          <form #inputFormContent="ngForm">
             <nz-tree id="node-param-tree" [nzData]="toolsInputParams" nzBlockNode [nzTreeTemplate]="nzTreeTemplate">
               <ng-template #nzTreeTemplate let-node let-origin="origin">
                 <div class="mt-2 flex">
@@ -257,11 +257,11 @@
                               [name]="'inputFormContentStr' + origin.key"
                               nz-input
                               [nonEmptyValidator]="origin.required"
+                              [(ngModel)]="origin.value.content"
                               (ngModelChange)="changeChildVal(origin);changeUpdateTime()"
                               [disabled]="origin.rootValType === 'ref'"
                               (blur)="inputOnSave()"
                               [placeholder]="'input_placeholder' | i18nextEager"
-                              [(ngModel)]="origin.value.content"
                               [title]="origin.value.content"
                               [class.input-error]="inputFormContent?.controls['inputFormContentStr' + origin.key]?.invalid && (inputFormContent?.controls['inputFormContentStr' + origin.key]?.dirty || inputFormContent?.controls['inputFormContentStr' + origin.key]?.touched)"
                             />

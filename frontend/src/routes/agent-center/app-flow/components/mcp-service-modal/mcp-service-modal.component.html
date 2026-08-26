@@ -260,7 +260,7 @@
         </div>
       </div>
 
-      <form #inputForm="ngForm">
+      <form #inputFormContent="ngForm">
         <nz-tree id="node-param-tree" [nzData]="params" nzBlockNode [nzTreeTemplate]="nzTreeTemplate">
           <ng-template #nzTreeTemplate let-node let-origin="origin">
             <div
@@ -303,16 +303,16 @@
                         type="text"
                         [name]="'inputFormValueStr' + origin.key"
                         [nonEmptyValidator]="origin.required"
+                        [(ngModel)]="origin.value.content"
                         (ngModelChange)="changeChildVal(origin);changeUpdateTime()"
                         [disabled]="origin.rootValType === 'ref'"
                         (blur)="inputOnSave()"
                         [placeholder]="'input_placeholder' | i18nextEager"
-                        [(ngModel)]="origin.value.content"
                         [title]="origin.value.content"
-                        [class.input-error]="inputForm?.controls['inputFormValueStr' + origin.key]?.invalid && (inputForm?.controls['inputFormValueStr' + origin.key]?.dirty || inputForm?.controls['inputFormValueStr' + origin.key]?.touched)"
+                        [class.input-error]="inputFormContent?.controls['inputFormValueStr' + origin.key]?.invalid && (inputFormContent?.controls['inputFormValueStr' + origin.key]?.dirty || inputFormContent?.controls['inputFormValueStr' + origin.key]?.touched)"
                       />
-                      <div *ngIf="inputForm?.controls['inputFormValueStr' + origin.key]?.invalid && (inputForm?.controls['inputFormValueStr' + origin.key]?.dirty || inputForm?.controls['inputFormValueStr' + origin.key]?.touched)" class="error-tip">
-                        {{inputForm?.controls['inputFormValueStr' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                      <div *ngIf="inputFormContent?.controls['inputFormValueStr' + origin.key]?.invalid && (inputFormContent?.controls['inputFormValueStr' + origin.key]?.dirty || inputFormContent?.controls['inputFormValueStr' + origin.key]?.touched)" class="error-tip">
+                        {{inputFormContent?.controls['inputFormValueStr' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
                       </div>
 
                       <typed-json-input
@@ -336,8 +336,8 @@
                         [disabled]="origin.rootValType === 'ref'"
                       >
                       </nz-select>
-                      <div *ngIf="inputForm?.controls['inputFormValueBool' + origin.key]?.invalid && (inputForm?.controls['inputFormValueBool' + origin.key]?.dirty || inputForm?.controls['inputFormValueBool' + origin.key]?.touched)" class="error-tip">
-                        {{inputForm?.controls['inputFormValueBool' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                      <div *ngIf="inputFormContent?.controls['inputFormValueBool' + origin.key]?.invalid && (inputFormContent?.controls['inputFormValueBool' + origin.key]?.dirty || inputFormContent?.controls['inputFormValueBool' + origin.key]?.touched)" class="error-tip">
+                        {{inputFormContent?.controls['inputFormValueBool' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
                       </div>
                       <input
                         *ngIf="origin.type === 'number'"
@@ -354,10 +354,10 @@
                         (ngModelChange)="changeChildVal(origin);changeUpdateTime()"
                         [disabled]="origin.rootValType === 'ref'"
                         (blur)="inputOnSave()"
-                        [class.input-error]="inputForm?.controls['inputFormValueNum' + origin.key]?.invalid && (inputForm?.controls['inputFormValueNum' + origin.key]?.dirty || inputForm?.controls['inputFormValueNum' + origin.key]?.touched)"
+                        [class.input-error]="inputFormContent?.controls['inputFormValueNum' + origin.key]?.invalid && (inputFormContent?.controls['inputFormValueNum' + origin.key]?.dirty || inputFormContent?.controls['inputFormValueNum' + origin.key]?.touched)"
                       />
-                      <div *ngIf="inputForm?.controls['inputFormValueNum' + origin.key]?.invalid && (inputForm?.controls['inputFormValueNum' + origin.key]?.dirty || inputForm?.controls['inputFormValueNum' + origin.key]?.touched)" class="error-tip">
-                        {{inputForm?.controls['inputFormValueNum' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                      <div *ngIf="inputFormContent?.controls['inputFormValueNum' + origin.key]?.invalid && (inputFormContent?.controls['inputFormValueNum' + origin.key]?.dirty || inputFormContent?.controls['inputFormValueNum' + origin.key]?.touched)" class="error-tip">
+                        {{inputFormContent?.controls['inputFormValueNum' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
                       </div>
 
                       <input
@@ -375,10 +375,10 @@
                         (ngModelChange)="changeChildVal(origin);changeUpdateTime()"
                         [disabled]="origin.rootValType === 'ref'"
                         (blur)="inputOnSave()"
-                        [class.input-error]="inputForm?.controls['inputFormValueInt' + origin.key]?.invalid && (inputForm?.controls['inputFormValueInt' + origin.key]?.dirty || inputForm?.controls['inputFormValueInt' + origin.key]?.touched)"
+                        [class.input-error]="inputFormContent?.controls['inputFormValueInt' + origin.key]?.invalid && (inputFormContent?.controls['inputFormValueInt' + origin.key]?.dirty || inputFormContent?.controls['inputFormValueInt' + origin.key]?.touched)"
                       />
-                      <div *ngIf="inputForm?.controls['inputFormValueInt' + origin.key]?.invalid && (inputForm?.controls['inputFormValueInt' + origin.key]?.dirty || inputForm?.controls['inputFormValueInt' + origin.key]?.touched)" class="error-tip">
-                        {{inputForm?.controls['inputFormValueInt' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                      <div *ngIf="inputFormContent?.controls['inputFormValueInt' + origin.key]?.invalid && (inputFormContent?.controls['inputFormValueInt' + origin.key]?.dirty || inputFormContent?.controls['inputFormValueInt' + origin.key]?.touched)" class="error-tip">
+                        {{inputFormContent?.controls['inputFormValueInt' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
                       </div>
                     </ng-container>
 
@@ -394,8 +394,8 @@
                       (select)="treeSelect()"
                     ></input-tree-select>
 
-                    <div *ngIf="inputForm?.controls['inputFormValue' + origin.key]?.invalid && (inputForm?.controls['inputFormValue' + origin.key]?.dirty || inputForm?.controls['inputFormValue' + origin.key]?.touched)" class="error-tip">
-                      {{inputForm?.controls['inputFormValue' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
+                    <div *ngIf="inputFormContent?.controls['inputFormValue' + origin.key]?.invalid && (inputFormContent?.controls['inputFormValue' + origin.key]?.dirty || inputFormContent?.controls['inputFormValue' + origin.key]?.touched)" class="error-tip">
+                      {{inputFormContent?.controls['inputFormValue' + origin.key]?.errors?.serviceName?.tiErrorMessage}}
                     </div>
                   </div>
                 </div>
