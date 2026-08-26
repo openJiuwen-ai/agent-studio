@@ -922,6 +922,10 @@ spec:
       containers:
         - name: container-studio-console
           image: studio-console:1.0.0.20260526091150.x86_64
+          env:
+            # DSL 版本对比大 DSL 降级阈值（单侧规范化后文本字节，Monaco 保护阈值），暂定 10MB
+            - name: LARGE_DSL_BYTES_THRESHOLD
+              value: '10485760'
           resources:
             limits:
               cpu: '2'

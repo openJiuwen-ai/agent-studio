@@ -110,6 +110,9 @@ services:
     restart: always
     cpus: 0.5
     mem_limit: 512m
+    environment:
+      # DSL 版本对比大 DSL 降级阈值（单侧规范化后文本字节，Monaco 保护阈值），暂定 10MB，压测后调整
+      LARGE_DSL_BYTES_THRESHOLD: ${LARGE_DSL_BYTES_THRESHOLD:-10485760}
     volumes:
       - ./config/nginx.conf:/home/conf/nginx.conf
       - console_logs:/opt/cloud/wiseagent-nginx/logs
