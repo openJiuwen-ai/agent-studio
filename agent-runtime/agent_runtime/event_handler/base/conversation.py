@@ -7,6 +7,7 @@ Redis key格式: {conversationId}_{instanceId}_{userId}[_{versionId}]
 """
 
 import json
+import logging
 import os
 import time
 import traceback
@@ -179,9 +180,10 @@ class ConversationManager:
                     size += len(content)
 
                 if size > MAX_MESSAGE_SIZE:
-                    workflow_logger.warning(
-                        f"Conversation message size exceed limit. size={size} limit={MAX_MESSAGE_SIZE}"
-                    )
+                    if workflow_logger.logger().isEnabledFor(logging.WARNING):
+                        workflow_logger.warning(
+                            f"Conversation message size exceed limit. size={size} limit={MAX_MESSAGE_SIZE}"
+                        )
                     break
                 offset += 1
 

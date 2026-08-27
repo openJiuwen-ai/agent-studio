@@ -1,4 +1,5 @@
 #  Copyright (c) Huawei Technologies Co., Ltd. 2024-2024. All rights reserved.
+import logging
 from typing import Optional
 
 from jiuwen.common.log.base import logger
@@ -140,13 +141,16 @@ class Tracer:
         Returns:
 
         """
+        # 诊断性 span dump，仅 DEBUG 级别启用时构造
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
         for span in self._active_spans:
-            logger.info(f"Span {span.span_id} ({span.operation_name}):")
-            logger.info(f"  Parent ID: {span.parent_id}")
-            logger.info(f"  Start time: {span.start_time}")
-            logger.info(f"  End time: {span.end_time}")
+            logger.debug("Span %s (%s):", span.span_id, span.operation_name)
+            logger.debug("  Parent ID: %s", span.parent_id)
+            logger.debug("  Start time: %s", span.start_time)
+            logger.debug("  End time: %s", span.end_time)
             for log in span.logs:
-                logger.info(f"  Log: {log}", simple_log="Log")
+                logger.debug("  Log: %s", log, simple_log="Log")
 
     def _load_state(self, trace_state: TraceState):
         handler: Insight4CallbackHandler = CallbackHandlerManager().get_handler(

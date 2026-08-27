@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 #  Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+import logging
 from typing import AsyncGenerator
 
 from jiuwen.common.log.base import logger
@@ -89,9 +90,13 @@ class ToolUseMode(BaseMode):
         runtime_data = initial_message.runtime_data
 
         while iterations < self.max_task_iterations:
-            logger.info(
-                f"Stream task iteration {iterations}: Processing message type {current_message.message_type}"
-            )
+            # 与 base_mode._run_task_loop 保持一致，迭代开始信息为 DEBUG
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Stream task iteration %s: Processing message type %s",
+                    iterations,
+                    current_message.message_type,
+                )
             # 1. 任务识别 - 使用流式任务规划
             final_task_or_message = None
 
@@ -125,10 +130,13 @@ class ToolUseMode(BaseMode):
                 yield item
 
             # 使用最后一个消息作为下一轮循环的输入
-            logger.info(
-                f"Stream task loop continue with current message: {task_execution.last_message}",
-                simple_log="Stream task loop continue with current message",
-            )
+            # 完整 last_message repr 内容较大，降级为 DEBUG
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Stream task loop continue with current message: %s",
+                    task_execution.last_message,
+                    simple_log="Stream task loop continue with current message",
+                )
             current_message = task_execution.last_message
 
         # 如果达到最大迭代次数，返回超时错误
