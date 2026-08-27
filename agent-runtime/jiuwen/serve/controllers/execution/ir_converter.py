@@ -1128,22 +1128,24 @@ class IRConverter:
         agent_id_in_config = f"{agent_id}_{agent_version}"
         plugin_irs = ir_data.get("configs", {}).get("plugins")
         plugins = None
-        logger.info(
-            f"[PluginLoad] create_agent_config: plugin_irs count={len(plugin_irs) if plugin_irs else 0}, "
-            f"agent_id={agent_id}, "
-            f"configs keys="
-            f"{list(ir_data.get('configs', {}).keys()) if isinstance(ir_data.get('configs'), dict) else 'N/A'}"
-        )
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(
+                f"[PluginLoad] create_agent_config: plugin_irs count={len(plugin_irs) if plugin_irs else 0}, "
+                f"agent_id={agent_id}, "
+                f"configs keys="
+                f"{list(ir_data.get('configs', {}).keys()) if isinstance(ir_data.get('configs'), dict) else 'N/A'}"
+            )
         if plugin_irs:
             plugins = []
             for idx, plugin_ir in enumerate(plugin_irs):
                 try:
                     plugin = PluginIRConverter.ir_to_plugin(plugin_ir, agent_id, conversation_id)
                     plugins.append(plugin)
-                    logger.info(
-                        f"[PluginLoad] create_agent_config: "
-                        f"Successfully loaded plugin '{plugin_ir.get('name', 'unknown')}'"
-                    )
+                    if logger.isEnabledFor(logging.INFO):
+                        logger.info(
+                            f"[PluginLoad] create_agent_config: "
+                            f"Successfully loaded plugin '{plugin_ir.get('name', 'unknown')}'"
+                        )
                 except Exception as e:
                     plugin_name = plugin_ir.get("name", plugin_ir.get("id", f"index_{idx}"))
                     logger.error(
@@ -1230,10 +1232,12 @@ class IRConverter:
             # check if current ir_data has child agents
             if current_ir_data.get("configs", {}).get("agents"):
                 for child in current_ir_data.get("configs", {}).get("agents"):
-                    logger.info(
-                        f"loading ir data of {child.get('id')}",
-                        simple_log="loading ir data of child",
-                    )
+                    # IR 转换递归热路径：每子代理一条 routine 进度日志，降级为 DEBUG 并加守卫
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            f"loading ir data of {child.get('id')}",
+                            simple_log="loading ir data of child",
+                        )
                     # 支持从父Agent修改子Agent描述
                     parent_description = child.get("description", "")
                     child_ir_data = await async_ir_load(child.get("ir_path"))
@@ -3575,10 +3579,12 @@ class IRConverter:
                 mode=child.get("mode", "Controller"),
             )
             child_metadata_list.append(child_metadata)
-            logger.info(
-                f"Added child agent metadata: id={child.get('id')}, mode={child.get('mode')}",
-                simple_log="added child agent metadata",
-            )
+            # routine 元数据添加日志，降级为 DEBUG 并加守卫
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    f"Added child agent metadata: id={child.get('id')}, mode={child.get('mode')}",
+                    simple_log="added child agent metadata",
+                )
         agent_config.child_agents_metadata = child_metadata_list
 
     @staticmethod
