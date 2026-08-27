@@ -291,6 +291,13 @@ export class AddModelComponent implements OnInit {
     return true;
   }
 
+  // 异步回调里更新按钮 loading 后，变更检测可能不会及时作用到当前视图
+  // （表现：报错后按钮一直转圈，直到用户再次与表单交互）。此处主动刷新。
+  stopBtnLoading(): void {
+    this.btnLoading = false;
+    this.cdr.detectChanges();
+  }
+
   createModel(modelInfo) {
     if (!this.checkGroup()) return;
 
@@ -298,27 +305,23 @@ export class AddModelComponent implements OnInit {
       this.modelManagementService
         .updateModel(this.model_id, modelInfo)
         .then(() => {
-          this.btnLoading = false;
+          this.stopBtnLoading();
           this.message.success(this.i18n.transform('modified_service_successfully'));
           this.close();
         })
         .catch(() => {
-          setTimeout(() => {
-            this.btnLoading = false;
-          }, 3000);
+          this.stopBtnLoading();
         });
     } else {
       this.modelManagementService
         .createModel(modelInfo)
         .then(() => {
-          this.btnLoading = false;
+          this.stopBtnLoading();
           this.message.success(this.i18n.transform('added_service_successfully'));
           this.close();
         })
         .catch(() => {
-          setTimeout(() => {
-            this.btnLoading = false;
-          }, 3000);
+          this.stopBtnLoading();
         });
     }
   }
@@ -361,13 +364,13 @@ export class AddModelComponent implements OnInit {
     this.modelManagementService.checkModelName({ model_name: modelInfo.model_name }).then(res => {
       if (res.exist_model_name) {
         this.message.error(this.i18n.transform('exist_model_name'));
-        this.btnLoading = false;
+        this.stopBtnLoading();
         return;
       }
 
       this.createModel(modelInfo);
     }).catch(() => {
-      this.btnLoading = false;
+      this.stopBtnLoading();
     });
   }
 
