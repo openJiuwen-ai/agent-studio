@@ -120,6 +120,7 @@ import org.jetbrains.annotations.Nullable;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import com.google.common.collect.Lists;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -321,6 +322,7 @@ public class AgentImportExportService {
      * @param targetWorkspaceId 空间id
      * @return ImportRsp 导入请求的响应，包括id、name、description、status和dependencies（工作流的依赖）
      */
+    @Transactional(rollbackFor = Exception.class)
     public ImportRsp importWorkflows(String projectId, String targetWorkspaceId, MultipartFile file,
         String importWorkflows, String importTools) {
         ImportRsp importRsp = new ImportRsp();
@@ -365,6 +367,7 @@ public class AgentImportExportService {
         return importRsp;
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void importWorkflowsWithStr(String projectId, String targetWorkspaceId, String workflowStr,
         List<ImportListInfo> importListInfoList) {
         WfImportDataWrapper importDataWrapper = new WfImportDataWrapper();
@@ -1260,7 +1263,9 @@ public class AgentImportExportService {
             // 先删除关联关系
             mappingMapper.deleteBatchByAppIdAndResourceType(metadata.getAgentId(), CommonConstant.CONTROLLER_TYPE);
             if (!CollectionUtils.isEmpty(relateAgents)) {
-                mappingMapper.insertBatch(relateAgents);
+                for (List<MappingEntity> batch : Lists.partition(relateAgents, 2000)) {
+                    mappingMapper.insertBatch(batch);
+                }
             }
         }
 
@@ -1287,7 +1292,9 @@ public class AgentImportExportService {
             // 先删除关联关系
             mappingMapper.deleteBatchByAppIdAndResourceType(metadata.getAgentId(), CommonConstant.AGENT_TYPE);
             if (!CollectionUtils.isEmpty(relateSingleAgents)) {
-                mappingMapper.insertBatch(relateSingleAgents);
+                for (List<MappingEntity> batch : Lists.partition(relateSingleAgents, 2000)) {
+                    mappingMapper.insertBatch(batch);
+                }
             }
         }
 
@@ -1371,7 +1378,9 @@ public class AgentImportExportService {
             mappingEntities.add(mappingEntity);
         }
 
-        mappingMapper.insertBatch(mappingEntities);
+        for (List<MappingEntity> batch : Lists.partition(mappingEntities, 2000)) {
+            mappingMapper.insertBatch(batch);
+        }
     }
 
     /**
@@ -2049,7 +2058,9 @@ public class AgentImportExportService {
             relateWorkflows.add(buildAgentWorkflowMapping(agent, workflow));
         }
         if (!CollectionUtils.isEmpty(relateWorkflows)) {
-            mappingMapper.insertBatch(relateWorkflows);
+            for (List<MappingEntity> batch : Lists.partition(relateWorkflows, 2000)) {
+                mappingMapper.insertBatch(batch);
+            }
         }
     }
 
@@ -3851,7 +3862,9 @@ public class AgentImportExportService {
         }).toList();
         if (!CollectionUtils.isEmpty(modelMapping)) {
             mappingMapper.deleteBatchByAppIdAndResourceType(workflowId, ResourceTypeEnum.MODEL.toString());
-            mappingMapper.insertBatch(modelMapping);
+            for (List<MappingEntity> batch : Lists.partition(modelMapping, 2000)) {
+                mappingMapper.insertBatch(batch);
+            }
         }
     }
 
