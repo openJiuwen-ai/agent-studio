@@ -29,6 +29,7 @@ import time
 from enum import Enum
 from typing import AsyncIterator, List, Optional
 
+from jiuwen.common.exception import JiuWenBaseException as CommonJiuWenBaseException
 from jiuwen.extension.workflow_node.utils import (
     JiuWenBaseException,
     WorkflowMetadata,
@@ -83,9 +84,14 @@ def _build_flow_api_error(
         JiuWenBaseException 实例
     """
     format_kwargs = {"msg": error_msg, **kwargs}
+    message = status.value[1].format(**format_kwargs)
+    if cause:
+        cause_type = type(cause).__name__
+        cause_msg = str(cause) or "(no message)"
+        message = f"{message}. cause: {cause_type}: {cause_msg}"
     return JiuWenBaseException(
         error_code=status.value[0],
-        message=status.value[1].format(**format_kwargs),
+        message=message,
     )
 
 
@@ -271,11 +277,32 @@ class FlowApi(WorkflowComponent):
             )
             return outputs
 
+        except CommonJiuWenBaseException as e:
+            # plugin 层抛出的异常(如参数校验 101742)转为 utils 风格(ExecutionError 子类)
+            # 并保留原始错误码，使引擎透传、异常恢复(_format_inner_exception)、
+            # 调试包装器(_build_error_stream_data)均能识别
+            if _err_ignore(self._conf):
+                return {USER_FIELDS: _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
+            raise JiuWenBaseException(
+                error_code=e.error_code,
+                message=e.message,
+                node_id=e.node_id,
+                node_name=e.node_name,
+                node_type=e.node_type,
+            ) from e
         except JiuWenBaseException:
             if _err_ignore(self._conf):
                 return {USER_FIELDS: _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
             raise
         except Exception as e:
+            workflow_logger.error(
+                "FlowApi invoke error: %s: %s",
+                type(e).__name__,
+                e,
+                event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
+                component_type_str="FlowApi",
+                metadata={"api_id": self._api_id},
+            )
             if _err_ignore(self._conf):
                 return {USER_FIELDS: _load_json(self._conf.get(EXCEPTIONSUPPRESSION))}
             raise _build_flow_api_error(
@@ -340,6 +367,25 @@ class FlowApi(WorkflowComponent):
                 }
             )
 
+        except CommonJiuWenBaseException as e:
+            # plugin 层抛出的异常(如参数校验 101742)转为 utils 风格(ExecutionError 子类)
+            # 并保留原始错误码，使引擎透传、异常恢复(_format_inner_exception)、
+            # 调试包装器(_build_error_stream_data)均能识别
+            if _err_ignore(self._conf):
+                yield OutputSchema(
+                    type="error",
+                    index=0,
+                    payload={
+                        USER_FIELDS: _load_json(self._conf.get(EXCEPTIONSUPPRESSION))
+                    },
+                )
+            raise JiuWenBaseException(
+                error_code=e.error_code,
+                message=e.message,
+                node_id=e.node_id,
+                node_name=e.node_name,
+                node_type=e.node_type,
+            ) from e
         except JiuWenBaseException:
             if _err_ignore(self._conf):
                 yield OutputSchema(
@@ -351,6 +397,14 @@ class FlowApi(WorkflowComponent):
                 )
             raise
         except Exception as e:
+            workflow_logger.error(
+                "FlowApi stream error: %s: %s",
+                type(e).__name__,
+                e,
+                event_type=LogEventType.WORKFLOW_COMPONENT_ERROR,
+                component_type_str="FlowApi",
+                metadata={"api_id": self._api_id},
+            )
             if _err_ignore(self._conf):
                 yield OutputSchema(
                     type="error",
