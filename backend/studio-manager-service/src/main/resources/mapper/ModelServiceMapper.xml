@@ -184,10 +184,10 @@
         #{condition.workspaceId} or s.WORKSPACE_ID = 'SYSTEM')
         <include refid="conditionSql"></include>
         <if test="condition.freeProviderId != null">
-            and (s.PROVIDER_ID = #{condition.freeProviderId} or (a.ID is not null and a.AUTH_INFO is not null))
+            and (s.MODEL_DEPLOY_TYPE = 'PLATFORM-INTEGRATION' or s.PROVIDER_ID = #{condition.freeProviderId} or (a.ID is not null and a.AUTH_INFO is not null))
         </if>
         <if test="condition.freeProviderId == null">
-            and a.ID is not null and a.AUTH_INFO is not null
+            and (s.MODEL_DEPLOY_TYPE = 'PLATFORM-INTEGRATION' or (a.ID is not null and a.AUTH_INFO is not null))
         </if>
         order by s.MODEL_PRIORITY
     </select>
