@@ -325,12 +325,14 @@ async def async_ir_load(path: str) -> dict:
     from openjiuwen.core.common.logging import performance_logger
 
     t_start = time.perf_counter()
-    logger.info("Async Loading IR content from %s", path)
+    # 每次 IR 加载都打 INFO 过于频繁（621 次/10k 行），内存缓存命中是预期行为，降级为 DEBUG
+    logger.debug("Async Loading IR content from %s", path)
 
     ir_value, source = await cache_ir_queue.aget_with_source(path)
     if ir_value is not None:
         if source == "memory":
-            logger.info("Cache HIT! Process %d async got cached data: %s", os.getpid(), path)
+            # 内存缓存命中（0ms），降级为 DEBUG；Redis/OBS 命中保留 INFO
+            logger.debug("Cache HIT! Process %d async got cached data: %s", os.getpid(), path)
         else:
             logger.info(
                 "Redis HIT! Process %d async got cached data: %s, "
