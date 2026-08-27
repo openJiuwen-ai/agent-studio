@@ -317,12 +317,18 @@ class WorkflowHandler(BaseHandler):
             mark_interrupted()
 
     @staticmethod
-    async def _cleanup_workflow_instance(workflow_instance) -> None:
+    async def _cleanup_workflow_instance(
+        workflow_instance, preserve_state: bool = False
+    ) -> None:
         cleanup = getattr(workflow_instance, "cleanup", None) or getattr(
             workflow_instance, "async_clean_up", None
         )
         if cleanup:
-            await cleanup()
+            try:
+                await cleanup(preserve_state=preserve_state)
+            except TypeError:
+                # 兼容不支持 preserve_state 参数的旧实现
+                await cleanup()
 
     @staticmethod
     def _get_workflow_execute_status(workflow_instance):
@@ -643,7 +649,17 @@ class WorkflowHandler(BaseHandler):
             # 上层 _parse_workflow_output 会检测到空结果并触发 LLM fallback
             return
         finally:
-            await self._cleanup_workflow_instance(workflow_instance)
+            # 意图识别工作流与主工作流共享同一个 session_id（conversation_id），
+            # release(session_id) 会全量清理该 session 下所有 workflow 的 state，
+            # 误删主工作流的中断 checkpoint。意图识别的 state 已由框架
+            # post_workflow_execute 在正常完成/异常时清理，无需额外 release。
+            # 因此意图识别路径始终跳过 release（preserve_state=True）。
+            _workflow_instance = locals().get("workflow_instance")
+            if _workflow_instance is not None:
+                await self._cleanup_workflow_instance(
+                    _workflow_instance,
+                    preserve_state=True,
+                )
 
     def prepare_workflow_params(
         self,
@@ -827,7 +843,10 @@ class WorkflowHandler(BaseHandler):
                     workflow_context=workflow_context, exec_res=exec_res_dict
                 )
         finally:
-            await self._cleanup_workflow_instance(workflow_instance)
+            # 中断时保留 checkpoint state 供下一轮恢复；非中断时清理
+            await self._cleanup_workflow_instance(
+                workflow_instance, preserve_state=questioner_interrupted
+            )
 
     @staticmethod
     def _transform_function_call_to_interactive_input(function_call, workflow_context):
@@ -978,7 +997,21 @@ class WorkflowHandler(BaseHandler):
         finally:
             # 无论成功、失败还是中断，都同步 _REQUEST 变量
             self._sync_request_variables(workflow_instance)
-            await self._cleanup_workflow_instance(workflow_instance)
+            # 异常路径兜底：若流处理中已检测到 questioner 中断但异常打断了
+            # 后续 _handle_workflow_interruption 的执行，补设 INTERRUPTED 状态，
+            # 确保下一轮走恢复路径（InteractiveInput），而非首发执行触发 111121
+            if workflow_status.get("questioner_interrupted"):
+                self._handle_workflow_interruption(
+                    workflow_context, workflow_instance, workflow_status, current_node
+                )
+            # 中断时保留 openjiuwen session 的 checkpoint state 供下一轮恢复；
+            # 非中断（正常完成或异常）时清理 Redis 残留 state，避免下一轮
+            # 首发执行命中 "workflow state exists but non-interactive input
+            # and cleanup is disabled"（111121）
+            preserve = bool(workflow_status.get("questioner_interrupted"))
+            await self._cleanup_workflow_instance(
+                workflow_instance, preserve_state=preserve
+            )
 
     def _has_workflow_sequence(self) -> bool:
         """检查是否存在工作流序列"""
