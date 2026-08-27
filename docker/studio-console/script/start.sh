@@ -137,7 +137,10 @@ function init_static_index(){
       && { echo "[ERROR]: large_dsl_placeholder remains after replace"; exit 1; }
     echo "[INFO]: largeDslBytesThreshold = ${val}"
 
-    chmod 500 "$index_html"
+    # 首页为静态资源，nginx 需读取；644 保证 owner 可写、others 可读
+    # （原 add_context_path 用 500 owner-only，但该分支仅在配 context_path 时执行；
+    #  本函数无条件执行，500 会让非 service 用户的 nginx worker 读不了 → 部署 403）
+    chmod 644 "$index_html"
 }
 
 function start_nginx() {
