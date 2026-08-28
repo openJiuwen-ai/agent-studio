@@ -651,9 +651,9 @@ public class AgentImportService {
             }
             mappingEntities.add(mappingEntity);
         }
-        // 分批插入：openGauss 单条 PreparedStatement 参数数受 2 字节限制（≤32767），
-        // 与 AgentImportExportService 保持一致的 2000 分批，避免参数超限。
-        for (List<MappingEntity> batch : Lists.partition(mappingEntities, 2000)) {
+        // 分批插入：openGauss 单条 PreparedStatement 参数数受 2 字节限制（≤32767）。
+        // t_mapping 单行 17 个参数，单批上限 = 32767/17 ≈ 1927 行；取 1000 留充足余量。
+        for (List<MappingEntity> batch : Lists.partition(mappingEntities, 1000)) {
             mappingMapper.insertBatch(batch);
         }
     }
@@ -1013,9 +1013,10 @@ public class AgentImportService {
         if (CollectionUtils.isNotEmpty(mappingList)) {
             // 分组并删除旧数据
             groupedDelete(mappingList);
-            // 批量插入新数据：openGauss 单条 PreparedStatement 参数数受 2 字节限制（≤32767），
-            // 大工作流导入产生的 mapping 较多时需分批插入，避免参数超限导致连接被打成 broken。
-            for (List<MappingEntity> batch : Lists.partition(mappingList, 2000)) {
+            // 批量插入新数据：openGauss 单条 PreparedStatement 参数数受 2 字节限制（≤32767）。
+            // t_mapping 单行 17 个参数，单批上限 = 32767/17 ≈ 1927 行；取 1000 留充足余量，
+            // 大工作流导入产生的 mapping 较多时避免参数超限导致连接被打成 broken。
+            for (List<MappingEntity> batch : Lists.partition(mappingList, 1000)) {
                 mappingMapper.insertBatch(batch);
             }
         }
