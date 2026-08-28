@@ -337,7 +337,7 @@ class CodeExecutionSettings(BaseSettings):
 
 
 class DataBaseSettings(BaseSettings):
-    password_provider_type: str = Field(
+    password_provider_type: Literal["DEFAULT", "CUSTOM"] = Field(
         default="DEFAULT", validation_alias="DATASOURCE_PASSWORD_PROVIDER_TYPE"
     )
     password_provider_module: str = Field(
@@ -368,9 +368,15 @@ class DataBaseSettings(BaseSettings):
                 custom_class=self.password_provider_class,
             )
             self.password = provider.get_password(self.password)
-        elif self.password:
-            provider = get_password_provider()
-            self.password = provider.get_password(self.password)
+        elif self.password_provider_type == "DEFAULT":
+            if self.password:
+                provider = get_password_provider()
+                self.password = provider.get_password(self.password)
+        else:
+            raise ValueError(
+                f"Unsupported DATASOURCE_PASSWORD_PROVIDER_TYPE: "
+                f"{self.password_provider_type}, must be 'DEFAULT' or 'CUSTOM'"
+            )
         return self
 
 
