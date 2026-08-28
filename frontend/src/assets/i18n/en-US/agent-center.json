@@ -1329,7 +1329,7 @@
   "continue": "continue",
   "termination": "termination",
   "waiting_for_input": "Waiting for input",
-  "controller_prompt_placeholder": "You are a multi workflow controller with the ability to accurately analyze user intent and select the most suitable workflow from the configured business workflows. If you are unable to select a workflow, you will return 'none_iresent'",
+  "controller_prompt_placeholder": "You are a multi workflow controller with the ability to accurately analyze user intent and select the most suitable workflow from the configured business workflows. If you are unable to select a workflow, you will return 'none_exist'",
   "model_automatic_control": "Model automatic control",
   "specify_sequential_mode": "Specify sequential mode",
   "scheduling_mode": "Scheduling mode",
