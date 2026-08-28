@@ -1,37 +1,31 @@
 .dependency-form {
+  // Grid 钉死列宽：A/B 各占 minmax(0,1fr)，与内容宽度完全无关，
+  // 避免 flex 布局的 min-content 传导把行撑出容器；
+  // width:100%：form 是 flex 容器，form-row 作为其子项空内容时会按内容收缩
   .form-row {
-    display: flex;
-    flex-wrap: nowrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
+    width: 100%;
   }
 
   .inline-form-item {
     display: inline-flex;
     align-items: center;
     margin-bottom: 0;
+    min-width: 0;
 
-    // 下拉框弹性宽度
+    // 下拉框弹性宽度（选中项单行省略样式在 global.css 的 .dependency-form 作用域下）
     .flex-select {
       width: 100%;
-      min-width: 200px;
+      min-width: 0;
     }
 
     // 依赖符号输入框固定宽度
     .symbol-input {
       width: 50px;
     }
-  }
-
-  // 两个下拉框的 form-item 占据剩余空间
-  .inline-form-item:first-child,
-  .inline-form-item:nth-child(3) {
-    flex: 1;
-  }
-
-  // 依赖符号的 form-item 固定宽度
-  .inline-form-item:nth-child(2) {
-    flex: 0 0 auto;
   }
 }
 
