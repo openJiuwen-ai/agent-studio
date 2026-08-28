@@ -61,7 +61,8 @@ import static org.mockito.Mockito.when;
 /**
  * {@link ModelImportExportService} 单测。纯 Mockito Mock，对齐 {@code AgentExportServiceTest} 风格。
  * 真实构件：{@code ObjectMapper}、{@code UrlCheckUtils}
- * （enableUrlCheck=false 使 checkUrl 放通，validateEnvVarPlaceholders 走真实逻辑）。
+ * （enableUrlCheck=false 仅关闭 SSRF 黑名单/内网 IP 拦截；validateUrlSyntax 始终执行 URL 结构校验，
+ * validateEnvVarPlaceholders 走真实逻辑）。
  *
  * <p>本模块已移除签名/HMAC 与 cipher 适配检测（特性未上线，无向后兼容）。
  * 导出 JSONL 仅含 import_type + payload，不再签名；导入不验签；preview 用 line_valid 表示行级硬错误。
@@ -168,7 +169,8 @@ class ModelImportExportServiceTest {
 
     @Test
     void testEnvVarPlaceholderValid() throws Exception {
-        ModelExportEntity entity = buildEntity("m1", "https://${_env.plugin_url_params.HOST}/v1");
+        // 占位符必须整串出现（与前端创建对齐：USER_URL_PATTERN=[^{}\s]+，内联占位符一律非法）
+        ModelExportEntity entity = buildEntity("m1", "${_env.plugin_url_params.HOST}");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = toJsonlLine(entity);
@@ -180,7 +182,21 @@ class ModelImportExportServiceTest {
 
     @Test
     void testEnvVarPlaceholderInvalid() throws Exception {
-        ModelExportEntity entity = buildEntity("m1", "https://${evil.var}/x");
+        // 整串 ${...} 但形态非法（不是 ${_env.plugin_url_params.VAR}）→ 拒绝
+        ModelExportEntity entity = buildEntity("m1", "${evil.var}");
+        when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+
+        byte[] jsonl = toJsonlLine(entity);
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP", "p1");
+
+        verify(modelServiceManager, never()).createModelServiceForImport(any());
+        assertEquals(1, rsp.getFailedLen());
+    }
+
+    @Test
+    void testInlinePlaceholderRejected() throws Exception {
+        // URL 中间嵌 ${...} 子串 → 创建页拒绝，导入侧对齐拒绝
+        ModelExportEntity entity = buildEntity("m1", "https://${_env.plugin_url_params.HOST}/v1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = toJsonlLine(entity);
@@ -245,8 +261,10 @@ class ModelImportExportServiceTest {
 
     @Test
     void testPreviewImport_urlInvalid() throws Exception {
+        // 整串 ${evil.var}：URL 语法层视为占位符放行（validateUrlSyntax 放通整串占位符），
+        // 但占位符形态非法 → envVarValid=false，apiUrlValid=true（URL 骨架非错，错在占位符语法）
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://${evil.var}/x")));
+            .thenReturn(List.of(buildEntity("m1", "${evil.var}")));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
@@ -254,13 +272,63 @@ class ModelImportExportServiceTest {
 
         assertEquals(1, rsp.getTotalCount());
         ModelImportPreviewItem item = rsp.getItems().get(0);
-        // 行合法（解析通过）但 apiUrl/占位符校验失败
         assertTrue(item.getLineValid());
-        // checkUrl 对含 ${...} 占位符的 URL 放通(enableUrlCheck=false 亦放通)→ apiUrlValid=true；
-        // 仅 validateEnvVarPlaceholders 失败 → envVarValid=false
-        assertTrue(item.getApiUrlValid());
+        assertTrue(item.getApiUrlValid(), "whole-string bad placeholder: URL syntax is placeholder-shaped, apiUrlValid stays true");
         assertFalse(item.getEnvVarValid());
         assertNotNull(item.getDetail());
+    }
+
+    @Test
+    void testPreviewImport_inlinePlaceholder_flagsInvalid() throws Exception {
+        when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        // URL 中间嵌占位符（哪怕变量名合法）→ apiUrlValid=false、envVarValid=false，与创建页一致
+        byte[] jsonl = toJsonlLine(buildEntity("m1", "https://${_env.plugin_url_params.HOST}/v1"));
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
+        ModelImportPreviewItem item = rsp.getItems().get(0);
+        assertTrue(item.getLineValid());
+        assertFalse(item.getApiUrlValid(), "inline placeholder must be flagged as api_url_valid=false");
+        assertFalse(item.getEnvVarValid(), "inline placeholder must be flagged as env_var_valid=false");
+    }
+
+    @Test
+    void testPreviewImport_notAurl_flagsApiUrlInvalid() throws Exception {
+        when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        byte[] jsonl = toJsonlLine(buildEntity("m1", "not-a-url"));
+
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
+
+        ModelImportPreviewItem item = rsp.getItems().get(0);
+        assertTrue(item.getLineValid());
+        assertFalse(item.getApiUrlValid(), "non-URL string must be flagged as api_url_valid=false");
+        assertNotNull(item.getDetail());
+    }
+
+    @Test
+    void testPreviewImport_ftpScheme_flagsApiUrlInvalid() throws Exception {
+        when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        byte[] jsonl = toJsonlLine(buildEntity("m1", "ftp://evil.com/file"));
+
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
+
+        ModelImportPreviewItem item = rsp.getItems().get(0);
+        assertTrue(item.getLineValid());
+        assertFalse(item.getApiUrlValid(), "ftp:// scheme must be flagged as api_url_valid=false");
+    }
+
+    @Test
+    void testImport_notAurl_failed() throws Exception {
+        byte[] jsonl = toJsonlLine(buildEntity("m1", "not-a-url"));
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP", "p1");
+        assertEquals(1, rsp.getFailedLen(), "bad-syntax URL must be rejected on import");
+        verify(modelServiceManager, never()).createModelServiceForImport(any());
+    }
+
+    @Test
+    void testImport_ftpScheme_failed() throws Exception {
+        byte[] jsonl = toJsonlLine(buildEntity("m1", "ftp://evil.com/file"));
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP", "p1");
+        assertEquals(1, rsp.getFailedLen(), "ftp:// URL must be rejected on import");
+        verify(modelServiceManager, never()).createModelServiceForImport(any());
     }
 
     // ============================== 冲突说明（detectConflict 三情况 + 硬校验合并） ==============================
@@ -377,9 +445,10 @@ class ModelImportExportServiceTest {
 
     @Test
     void testPreviewImport_conflictMergedWithHardCheckFailure() throws Exception {
+        // 整串非法占位符 ${evil.var}：URL 语法视为占位符形状放行（apiUrlValid=true），占位符语法非法（envVarValid=false），
+        // 同时存在冲突 → detail 应拼接冲突说明 + 硬校验失败说明
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://${evil.var}/x")));
-        // 情况1冲突 + 非法占位符硬校验失败 → detail 拼接两者
+            .thenReturn(List.of(buildEntity("m1", "${evil.var}")));
         ModelServiceBase existing = new ModelServiceBase().setId("old").setServiceName("svc-m1").setProviderId("p1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(List.of(existing));
         when(modelServiceMapper.getLogosAndProviderNamesByProviderIds(any())).thenReturn(Collections.emptyList());
@@ -395,6 +464,7 @@ class ModelImportExportServiceTest {
         assertTrue(item.getDetail().contains("本空间下供应商"), "conflict desc present");
         assertTrue(item.getDetail().contains("；"), "merged with hard-check desc by separator");
         assertFalse(item.getEnvVarValid(), "env var hard-check failed");
+        assertTrue(item.getApiUrlValid(), "whole-string bad placeholder: URL syntax is placeholder-shaped, not a URL error");
     }
 
     @Test

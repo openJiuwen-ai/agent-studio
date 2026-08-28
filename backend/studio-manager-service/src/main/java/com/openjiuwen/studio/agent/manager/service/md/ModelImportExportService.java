@@ -309,11 +309,15 @@ public class ModelImportExportService implements IModelImportExportService {
         // 返回结构化说明（无冲突返回 conflict=false、desc=null）。
         ConflictInfo conflictInfo = detectConflict(projectId, workspaceId, model);
         item.setConflict(conflictInfo.isConflict());
-        // 两个校验独立判定：checkUrl 对含 ${...} 占位符的 URL 放通（交由 validateEnvVarPlaceholders 管语法），
-        // 故非法占位符 URL 应 apiUrlValid=true、envVarValid=false。耦合在一个 try/catch 会误把两标志同时置 false。
+        // 两个校验独立判定：
+        // 1) validateUrlSyntax 始终执行，拒绝非 http(s) / 无 host / 非法 URI（"not-a-url"、ftp:// 等）；
+        // 2) validateEnvVarPlaceholders 校验 ${_env.plugin_url_params.VAR} 占位符语法；
+        // 合法占位符 URL（如 https://x/${_env.plugin_url_params.VAR}/v）应 apiUrlValid=true、envVarValid=false（若占位符非法）。
+        // 耦合在一个 try/catch 会误把两标志同时置 false。checkUrl（SSRF 黑名单/内网 IP 拦截）受开关控制默认关闭，
+        // 不用于 api_url_valid 判定——SSRF 拦截是发布/鉴权期探测的职责，不是导入预检要否决的硬错误。
         List<String> details = new ArrayList<>();
         try {
-            urlCheckUtils.checkUrl(projectId, model.getApiUrl());
+            urlCheckUtils.validateUrlSyntax(model.getApiUrl());
             item.setApiUrlValid(true);
         } catch (AgentStudioException e) {
             item.setApiUrlValid(false);
@@ -500,6 +504,9 @@ public class ModelImportExportService implements IModelImportExportService {
         model.setAuthMetadataId(targetAuthMetadataId);
         try {
             validateModel(model);
+            // 始终执行的语法校验（非 http/https、无 host、非法 URI 拒绝），与预检 api_url_valid 对齐。
+            urlCheckUtils.validateUrlSyntax(model.getApiUrl());
+            // SSRF 黑名单/内网 IP 拦截（受 tool.url.enable-check 开关控制，默认关闭）。
             urlCheckUtils.checkUrl(projectId, model.getApiUrl());
             urlCheckUtils.validateEnvVarPlaceholders(model.getApiUrl());
             resolveConflictAndPersist(projectId, workspaceId, model, strategy);
