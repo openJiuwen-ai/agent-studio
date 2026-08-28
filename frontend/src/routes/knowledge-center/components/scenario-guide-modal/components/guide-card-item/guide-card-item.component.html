@@ -60,13 +60,13 @@
           </nz-form-label>
           <nz-form-control [nzErrorTip]="fieldErrorTpl">
             @if (formItem.type === FIELD_TYPE.TEXT_INPUT) {
-              <input
+              <textarea
                 nz-input
-                type="text"
-                style="width: 100%"
                 [placeholder]="'input_placeholder' | i18nextEager"
                 [formControlName]="formItem.id"
-              />
+                [nzAutosize]="{ minRows: 1, maxRows: 4 }"
+                style="width: 100%; resize: none"
+              ></textarea>
             }
             @if (formItem.type === FIELD_TYPE.SELECT) {
               <nz-select
