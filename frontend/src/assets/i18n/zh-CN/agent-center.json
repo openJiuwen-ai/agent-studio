@@ -37,6 +37,7 @@
   "save": "保存",
   "description": "描述",
   "input_placeholder": "请输入",
+  "exception_timeout_range_tip": "可输入范围：0.1 ~ 900 秒",
   "select_placeholder": "请选择",
   "name_verify_tips": "请输入以中文、字母开头，以中文、字母、数字结尾，长度2~30的字符。只允许输入中文、字母、数字、下划线、中划线等字符",
   "validation_name_tip": "支持中英文、数字、下划线、中划线，长度 2-64 字符，以中英文、数字开头。",
