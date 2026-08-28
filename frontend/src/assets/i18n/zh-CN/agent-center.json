@@ -1,4 +1,4 @@
-﻿{
+{
   "add": "添加",
   "added": "已添加",
   "prompt": "提示词",
@@ -285,6 +285,8 @@
   "dependency_relate_config_label": "依赖关系配置（可选）",
   "add_dependency_relate_label": "添加依赖关系",
   "guide_least_two_tip": "请先至少配置2个指南",
+  "dependency_item_required_tip": "请选择依赖项",
+  "be_depended_item_required_tip": "请选择被依赖项",
   "dependent_relation_label": "依赖",
   "dependency_conflict_tip": "A依赖B、B依赖C、C依赖A，存在闭环冲突，无法保存，请修改",
   "guide_rename_tip": "该规则条件已存在，不支持重名，请修改",
