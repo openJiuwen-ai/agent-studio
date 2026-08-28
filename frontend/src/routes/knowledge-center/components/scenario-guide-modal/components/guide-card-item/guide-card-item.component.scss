@@ -3,7 +3,12 @@
   height: 40px;
   padding: 8px 16px;
   font-size: 14px;
-  cursor: pointer;
+  // 标题栏为拖拽把手（cdkDragHandle），可拖动调整优先级，点击仍触发折叠
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
 
   .left-box {
     overflow: hidden;
