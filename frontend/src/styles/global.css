@@ -202,3 +202,19 @@ tp-layout-content {
   min-width: 0 !important;
   overflow: hidden !important;
 }
+
+/* 情景指南-依赖关系行：选中长指南名时单行省略（ng-zorro 20 默认无省略号样式）。
+ * 组件内 ::ng-deep 在当前构建链无法穿透，故置于全局并用 .dependency-form 限定作用域 */
+.dependency-form .ant-select-selection-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 情景指南-依赖关系行：强制 form-item 内部三层容器宽度撑满，
+ * 防止下拉框空内容（placeholder 阶段）时中间层按 intrinsic 宽度塌缩导致框变得极小 */
+.dependency-form .ant-form-item-control,
+.dependency-form .ant-form-item-control-input,
+.dependency-form .ant-form-item-control-input-content {
+  width: 100%;
+}
