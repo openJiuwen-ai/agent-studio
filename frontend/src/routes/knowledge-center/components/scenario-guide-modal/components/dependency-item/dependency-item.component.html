@@ -15,6 +15,9 @@
               [compareWith]="compareWith"
               [class.row-cycle-error-select]="isRowInCycle(itemIndex)"
               [class.priority-warning-select]="isHigherDependentLower && formItem.id === SCENARIO_FIELD_ID.BE_DEPENDED_ITEM"
+              nz-tooltip
+              [nzTooltipTitle]="formGroupItem.get(formItem.id)?.value?.[SCENARIO_FIELD_ID.TRIGGER_CONDITION]"
+              nzTooltipPlacement="top"
               (nzOnSearch)="false"
             >
               <nz-option
