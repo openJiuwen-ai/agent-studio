@@ -121,7 +121,7 @@ class ModelImportExportServiceTest {
 
         byte[] jsonl = toJsonlLine(entity);
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            "SKIP");
+            "SKIP", "p1");
 
         ArgumentCaptor<ModelServiceBase> captor = ArgumentCaptor.forClass(ModelServiceBase.class);
         verify(modelServiceManager).createModelServiceForImport(captor.capture());
@@ -137,7 +137,7 @@ class ModelImportExportServiceTest {
         ModelServiceBase existing = new ModelServiceBase().setId("old-id").setServiceName("svc-m1").setProviderId("p1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(List.of(existing));
 
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP", "p1");
 
         verify(modelServiceManager, never()).createModelServiceForImport(any());
         verify(modelServiceManager, never()).deleteModelService(any());
@@ -153,7 +153,7 @@ class ModelImportExportServiceTest {
         ModelServiceBase existing = new ModelServiceBase().setId("old-id").setServiceName("svc-m1").setProviderId("p1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(List.of(existing));
 
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "COVER");
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "COVER", "p1");
 
         // COVER 走事务化 coverModelService(DB) + 缓存补偿，不再直接调 delete/create（其内部逻辑已迁入 cover）
         ArgumentCaptor<ModelServiceBase> captor = ArgumentCaptor.forClass(ModelServiceBase.class);
@@ -172,7 +172,7 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = toJsonlLine(entity);
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP", "p1");
 
         verify(modelServiceManager).createModelServiceForImport(any());
         assertEquals(1, rsp.getSucceedLen());
@@ -184,7 +184,7 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = toJsonlLine(entity);
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP", "p1");
 
         verify(modelServiceManager, never()).createModelServiceForImport(any());
         assertEquals(1, rsp.getFailedLen());
@@ -230,7 +230,7 @@ class ModelImportExportServiceTest {
             .thenReturn(List.of(existing));
 
         byte[] jsonl = toJsonlLine(entity);
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
 
         assertEquals(2, rsp.getTotalCount());
         assertEquals(1, rsp.getConflictCount());
@@ -250,7 +250,7 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
 
         assertEquals(1, rsp.getTotalCount());
         ModelImportPreviewItem item = rsp.getItems().get(0);
@@ -273,7 +273,7 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.queryById(any())).thenReturn(null);
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
 
         assertEquals(1, rsp.getTotalCount());
         assertEquals(0, rsp.getConflictCount());
@@ -302,7 +302,7 @@ class ModelImportExportServiceTest {
             .thenReturn(List.of(provider));
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
 
         assertEquals(1, rsp.getConflictCount());
         ModelImportPreviewItem item = rsp.getItems().get(0);
@@ -323,7 +323,7 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.getLogosAndProviderNamesByProviderIds(any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
 
         ModelImportPreviewItem item = rsp.getItems().get(0);
         assertTrue(item.getConflict());
@@ -343,7 +343,7 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.queryById(eq("m1"))).thenReturn(existing);
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
 
         assertEquals(1, rsp.getConflictCount());
         ModelImportPreviewItem item = rsp.getItems().get(0);
@@ -364,7 +364,7 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.queryById(eq("m1"))).thenReturn(existing);
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
 
         assertEquals(1, rsp.getConflictCount());
         ModelImportPreviewItem item = rsp.getItems().get(0);
@@ -385,7 +385,7 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.getLogosAndProviderNamesByProviderIds(any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
 
         assertEquals(1, rsp.getConflictCount());
         ModelImportPreviewItem item = rsp.getItems().get(0);
@@ -408,7 +408,12 @@ class ModelImportExportServiceTest {
         model.setApiUrl("https://x.com/v1");
         ModelExportEntity entity = new ModelExportEntity();
         entity.setModelMetadata(new ArrayList<>(List.of(model)));
-        entity.setProviderMetadata(null);
+        // 带 provider_metadata → 非 model-only 文件，绕过 targetProviderId 校验，保留模型 null providerId 以测试 blank-provider 逻辑
+        ProviderExportMetadata pm = new ProviderExportMetadata();
+        ModelServiceProvider provider = new ModelServiceProvider();
+        provider.setId("p1");
+        pm.setModelServiceProviderMetadata(provider);
+        entity.setProviderMetadata(pm);
         byte[] jsonl = toJsonlLine(entity);
 
         ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
@@ -431,7 +436,7 @@ class ModelImportExportServiceTest {
         byte[] jsonl = ("{\"import_type\":\"model_service\",\"payload\":\"not-json\"}\n").getBytes(StandardCharsets.UTF_8);
 
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            "SKIP");
+            "SKIP", "p1");
 
         assertEquals(1, rsp.getFailedLen());
         assertEquals(0, rsp.getSucceedLen());
@@ -465,7 +470,7 @@ class ModelImportExportServiceTest {
             .getBytes(StandardCharsets.UTF_8);
 
         AgentStudioException e = assertThrows(AgentStudioException.class,
-            () -> service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP"));
+            () -> service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP", "p1"));
         assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
         assertTrue(e.getMessage().contains("单行 JSONL"), "message must hint single-line JSONL, got: " + e.getMessage());
         verify(modelServiceManager, never()).createModelServiceForImport(any());
@@ -490,7 +495,7 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = toJsonlLine(entity);
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP", "p1");
 
         assertEquals(2, rsp.getSucceedLen());
         verify(modelServiceManager, times(2)).createModelServiceForImport(any());
@@ -501,7 +506,7 @@ class ModelImportExportServiceTest {
         // payload 缺失（`{import_type:model_service}`）→ failedRes
         byte[] jsonl = ("{\"import_type\":\"model_service\"}\n").getBytes(StandardCharsets.UTF_8);
 
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP", "p1");
 
         assertEquals(1, rsp.getFailedLen());
         verify(modelServiceManager, never()).createModelServiceForImport(any());
@@ -573,7 +578,7 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = toJsonlLine(entity);
-        service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
+        service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP", "p1");
 
         // importModels 入口须做 license 校验
         verify(licenseCtrlService).canAccessIntegrationModel();
@@ -591,7 +596,7 @@ class ModelImportExportServiceTest {
 
         byte[] jsonl = toJsonlLine(entity);
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            "SKIP");
+            "SKIP", "p1");
 
         assertEquals(1, rsp.getFailedLen());
         assertEquals(0, rsp.getSucceedLen());
@@ -634,7 +639,7 @@ class ModelImportExportServiceTest {
             .coverModelService(any(), any());
 
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            "COVER");
+            "COVER", "p1");
 
         // DB 事务失败 → 记 failed（如实反映"什么都没改"，旧记录完好），缓存同步未触发
         assertEquals(1, rsp.getFailedLen());
@@ -652,7 +657,7 @@ class ModelImportExportServiceTest {
         ModelServiceBase existing = new ModelServiceBase().setId("old-id").setServiceName("svc-m1").setProviderId("p1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(List.of(existing));
 
-        service.importModels("proj", "ws", toMultipartFile(jsonl), "COVER");
+        service.importModels("proj", "ws", toMultipartFile(jsonl), "COVER", "p1");
 
         // 顺序校验：coverModelService(DB 提交) → removeModelCaches(清旧) → saveModelInfoToObsAndRedis(写新)
         InOrder inOrder = inOrder(modelServiceManager);
@@ -672,7 +677,7 @@ class ModelImportExportServiceTest {
             .saveModelInfoToObsAndRedis(any(), any(), any());
 
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            "COVER");
+            "COVER", "p1");
 
         // DB 已提交，缓存写失败仅告警，导入仍成功；旧缓存清理仍被调用（best-effort 各自独立 try/catch）
         assertEquals(1, rsp.getSucceedLen());
@@ -692,7 +697,7 @@ class ModelImportExportServiceTest {
             .saveModelInfoToObsAndRedis(any(), any(), any());
 
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            "SKIP");
+            "SKIP", "p1");
 
         // DB insert(createModelServiceForImport)已提交，缓存写失败被 syncCachesForCreate best-effort 吞掉 → 仍成功
         assertEquals(1, rsp.getSucceedLen());
@@ -708,7 +713,7 @@ class ModelImportExportServiceTest {
         // Finding 2 回归：payload 缺失时，预检须展示该行（与导入报 FAILED 对齐），
         // lineValid=true（解析通过，import_type 对），detail="payload is missing"。
         byte[] jsonl = ("{\"import_type\":\"model_service\"}\n").getBytes(StandardCharsets.UTF_8);
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl), "p1");
 
         assertEquals(1, rsp.getTotalCount());
         assertEquals(1, rsp.getItems().size());
@@ -724,7 +729,7 @@ class ModelImportExportServiceTest {
         // 构造 JSON 非法行（payload 不是合法对象）→ preview 返回 item.line_valid=false 并展示错误原因。
         String badLine = "{\"import_type\":\"model_service\",\"payload\":{broken-json!!!}}\n";
         ModelImportPreviewRsp rsp = service.previewImport("proj", "ws",
-            toMultipartFile(badLine.getBytes(StandardCharsets.UTF_8)));
+            toMultipartFile(badLine.getBytes(StandardCharsets.UTF_8)), "p1");
 
         assertEquals(1, rsp.getTotalCount());
         assertEquals(1, rsp.getItems().size());
@@ -998,7 +1003,12 @@ class ModelImportExportServiceTest {
         model.setApiUrl("https://x.com/v1");
         ModelExportEntity entity = new ModelExportEntity();
         entity.setModelMetadata(new ArrayList<>(List.of(model)));
-        entity.setProviderMetadata(null);
+        // 带 provider_metadata → 非 model-only 文件，绕过 targetProviderId 校验，保留模型 null providerId 以测试 blank-provider 逻辑
+        ProviderExportMetadata pm = new ProviderExportMetadata();
+        ModelServiceProvider provider = new ModelServiceProvider();
+        provider.setId("p1");
+        pm.setModelServiceProviderMetadata(provider);
+        entity.setProviderMetadata(pm);
 
         byte[] jsonl = toJsonlLine(entity);
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
@@ -1118,19 +1128,28 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testImportModelOnly_noTarget_fallsBackToBestEffort() throws Exception {
-        // R4：model-only 文件 + target=null → 模型保留源 providerId
+    void testImportModelOnly_noTarget_throws() throws Exception {
+        // R4：model-only 文件（无 provider_metadata）+ targetProviderId 缺失 → 顶层抛 400，避免模型以源 providerId 落库成孤儿。
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any(), eq(false)))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
-        when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"), false);
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        verify(modelServiceManager, never()).createModelServiceForImport(any());
+    }
 
-        ArgumentCaptor<ModelServiceBase> captor = ArgumentCaptor.forClass(ModelServiceBase.class);
-        verify(modelServiceManager).createModelServiceForImport(captor.capture());
-        assertEquals("p1", captor.getValue().getProviderId());
-        assertEquals(1, rsp.getSucceedLen());
+    @Test
+    void testPreviewModelOnly_noTarget_throws() throws Exception {
+        // R4：预检与导入一致：只导模型文件缺少 targetProviderId 直接 400。
+        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any(), eq(false)))
+            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
+
+        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"), false);
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.previewImport("proj", "ws", toMultipartFile(jsonl), null));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
     }
 
     @Test
@@ -1273,7 +1292,7 @@ class ModelImportExportServiceTest {
 
         AgentStudioException e = assertThrows(AgentStudioException.class, () -> service.importModels("proj", "ws",
             toMultipartFile(mixedContent.getBytes(StandardCharsets.UTF_8)),
-            "SKIP"));
+            "SKIP", "p1"));
         assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
         assertTrue(e.getMessage().contains("单行 JSONL"), "message must hint single-line, got: " + e.getMessage());
         verify(modelServiceManager, never()).createModelServiceForImport(any());
@@ -1349,7 +1368,7 @@ class ModelImportExportServiceTest {
             + "}\n";
         MultipartFile file = toMultipartFile(pretty.getBytes(StandardCharsets.UTF_8), "pretty.jsonl");
         AgentStudioException e = assertThrows(AgentStudioException.class,
-            () -> service.importModels("proj", "ws", file, "SKIP"));
+            () -> service.importModels("proj", "ws", file, "SKIP", "p1"));
         assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
         assertTrue(e.getMessage().contains("单行 JSONL"),
             "pretty-printed multi-line must be rejected with single-line hint, got: " + e.getMessage());
@@ -1362,7 +1381,7 @@ class ModelImportExportServiceTest {
             + "{\"import_type\":\"model_service\",\"payload\":{\"model_metadata\":[]}}\n";
         MultipartFile file = toMultipartFile(two.getBytes(StandardCharsets.UTF_8), "two.jsonl");
         AgentStudioException e = assertThrows(AgentStudioException.class,
-            () -> service.importModels("proj", "ws", file, "SKIP"));
+            () -> service.importModels("proj", "ws", file, "SKIP", "p1"));
         assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
         assertTrue(e.getMessage().contains("单行 JSONL"), "two-object file rejected, got: " + e.getMessage());
     }
@@ -1374,7 +1393,7 @@ class ModelImportExportServiceTest {
         byte[] body = toJsonlLine(buildEntity("m1", "https://x.com/v1"));
         String withBlankLines = "\n\n   \n" + new String(body, StandardCharsets.UTF_8) + "\n\n";
         ImportRsp rsp = service.importModels("proj", "ws",
-            toMultipartFile(withBlankLines.getBytes(StandardCharsets.UTF_8), "a.jsonl"), "SKIP");
+            toMultipartFile(withBlankLines.getBytes(StandardCharsets.UTF_8), "a.jsonl"), "SKIP", "p1");
         assertEquals(1, rsp.getSucceedLen(), "blank lines around single valid line must be tolerated");
         verify(modelServiceManager, times(1)).createModelServiceForImport(any());
     }
@@ -1417,7 +1436,7 @@ class ModelImportExportServiceTest {
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
         AgentStudioException e = assertThrows(AgentStudioException.class,
-            () -> service.importModels("proj", "ws", toMultipartFile(jsonl), "MERGE"));
+            () -> service.importModels("proj", "ws", toMultipartFile(jsonl), "MERGE", "p1"));
         assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
         assertTrue(e.getMessage().contains("conflict_strategy"));
         assertTrue(e.getMessage().contains("SKIP/COVER"), "expected values listed, got: " + e.getMessage());
@@ -1434,11 +1453,11 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
         byte[] jLower = service.exportModels("proj", "ws", List.of("case-lower"));
-        ImportRsp r1 = service.importModels("proj", "ws", toMultipartFile(jLower), "skip");
+        ImportRsp r1 = service.importModels("proj", "ws", toMultipartFile(jLower), "skip", "p1");
         assertEquals(1, r1.getSucceedLen(), "lowercase 'skip' must be accepted");
 
         byte[] jMixed = service.exportModels("proj", "ws", List.of("case-mixed"));
-        ImportRsp r2 = service.importModels("proj", "ws", toMultipartFile(jMixed), "Cover");
+        ImportRsp r2 = service.importModels("proj", "ws", toMultipartFile(jMixed), "Cover", "p1");
         assertEquals(1, r2.getSucceedLen(), "mixed-case 'Cover' must be accepted");
     }
 
@@ -1448,7 +1467,7 @@ class ModelImportExportServiceTest {
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "  SKIP  ");
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "  SKIP  ", "p1");
         assertEquals(1, rsp.getSucceedLen());
     }
 
@@ -1459,13 +1478,13 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
 
-        ImportRsp r1 = service.importModels("proj", "ws", toMultipartFile(jsonl), null);
+        ImportRsp r1 = service.importModels("proj", "ws", toMultipartFile(jsonl), null, "p1");
         assertEquals(1, r1.getSucceedLen(), "null should default to SKIP");
 
-        ImportRsp r2 = service.importModels("proj", "ws", toMultipartFile(jsonl), "");
+        ImportRsp r2 = service.importModels("proj", "ws", toMultipartFile(jsonl), "", "p1");
         assertEquals(1, r2.getSucceedLen(), "empty string should default to SKIP");
 
-        ImportRsp r3 = service.importModels("proj", "ws", toMultipartFile(jsonl), "   ");
+        ImportRsp r3 = service.importModels("proj", "ws", toMultipartFile(jsonl), "   ", "p1");
         assertEquals(1, r3.getSucceedLen(), "blank should default to SKIP");
     }
 
@@ -1500,7 +1519,7 @@ class ModelImportExportServiceTest {
 
         String content = "{\"import_type\":\"workflow\",\"dsl\":{}}\n" + new String(modelLineBytes, StandardCharsets.UTF_8);
         AgentStudioException e = assertThrows(AgentStudioException.class, () -> service.importModels("proj", "ws",
-            toMultipartFile(content.getBytes(StandardCharsets.UTF_8), "a.jsonl"), "SKIP"));
+            toMultipartFile(content.getBytes(StandardCharsets.UTF_8), "a.jsonl"), "SKIP", "p1"));
         assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
         assertTrue(e.getMessage().contains("单行 JSONL"), "multi-line rejected, got: " + e.getMessage());
         verify(modelServiceManager, never()).createModelServiceForImport(any());
@@ -1523,7 +1542,7 @@ class ModelImportExportServiceTest {
             + new String(line3, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
 
         AgentStudioException e = assertThrows(AgentStudioException.class,
-            () -> service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP"));
+            () -> service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP", "p1"));
         assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
         assertTrue(e.getMessage().contains("单行 JSONL"), "multi-line rejected, got: " + e.getMessage());
         verify(modelServiceManager, never()).createModelServiceForImport(any());
@@ -1699,7 +1718,7 @@ class ModelImportExportServiceTest {
         String s1 = new String(l1, StandardCharsets.UTF_8).replaceAll("\\n$", "\r\n");
         byte[] singleLineCrlf = s1.getBytes(StandardCharsets.UTF_8);
 
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(singleLineCrlf), "SKIP");
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(singleLineCrlf), "SKIP", "p1");
         assertEquals(1, rsp.getSucceedLen(), "single CRLF-terminated line must import");
     }
 
