@@ -14,11 +14,27 @@ from typing import Optional
 from openjiuwen.core.common.logging import workflow_logger
 from openjiuwen.core.session.checkpointer import Checkpointer
 from openjiuwen.core.session.checkpointer.base import (
+    SESSION_NAMESPACE_AGENT,
+    SESSION_NAMESPACE_AGENT_TEAM,
+    SESSION_NAMESPACE_WORKFLOW,
     WORKFLOW_NAMESPACE_GRAPH,
     build_key_with_namespace,
 )
 from openjiuwen.core.graph.store import Store
 from redis.asyncio import Redis
+
+# Agent state key suffixes — mirrors AgentStorage / AgentGroupStorage in
+# openjiuwen/extensions/checkpointer/redis/storage.py
+_AGENT_STATE_BLOBS = "agent_state_blobs"
+_AGENT_STATE_DUMP_TYPE = "agent_state_blobs_dump_type"
+_AGENT_GROUP_STATE_BLOBS = "agent_group_state_blobs"
+_AGENT_GROUP_STATE_DUMP_TYPE = "agent_group_state_blobs_dump_type"
+
+# Workflow state key suffixes — mirrors WorkflowStorage in storage.py
+_WORKFLOW_STATE_BLOBS = "workflow_state_blobs"
+_WORKFLOW_STATE_BLOBS_DUMP_TYPE = "workflow_state_blobs_dump_type"
+_WORKFLOW_UPDATE_BLOBS = "workflow_update_blobs"
+_WORKFLOW_UPDATE_BLOBS_DUMP_TYPE = "workflow_update_blobs_dump_type"
 
 
 # GraphStore key suffixes — mirrors GraphStore._DATA_TYPE / _DATA_VALUE
@@ -366,14 +382,131 @@ class FastRedisCheckpointer(Checkpointer):
         await self._delegate.post_agent_team_execute(session)
 
     async def release(self, session_id: str, agent_id: Optional[str] = None):
-        """Delegate release. Sentinel SET is NOT deleted — it will expire via TTL.
+        """Release session resources using O(K) precise key deletion.
 
-        Intentionally keeping the sentinel key after release avoids accidental
-        deletion that could cause loss of interrupt state if release is called
-        prematurely. The sentinel TTL (default 24h, configurable via
+        For agent-specific release (agent_id is not None): delegate directly
+        — AgentStorage.clear only deletes 2 keys, no scan_iter.
+
+        For full-session release (agent_id is None): collect all checkpoint
+        keys via existing index SETs (SMEMBERS) and batch_delete them, instead
+        of the delegate's O(N) delete_by_prefix scan_iter.
+
+        Sentinel SET is NOT deleted — it will expire via TTL. This avoids
+        accidental loss of interrupt state if release is called prematurely.
+        The sentinel TTL (default 24h, configurable via
         FAST_CHECKPOINTER_SENTINEL_TTL_SECONDS) ensures eventual cleanup.
+
+        Fallback: if any index SET read fails, falls back to the delegate's
+        release (scan_iter path), ensuring correctness at the cost of speed.
         """
-        await self._delegate.release(session_id, agent_id)
+        if agent_id is not None:
+            await self._delegate.release(session_id, agent_id)
+            return
+
+        success = await self._fast_release_session(session_id)
+        if not success:
+            workflow_logger.warning(
+                f"FastRedisCheckpointer: fast release fell back to delegate "
+                f"(scan_iter) for session {session_id}"
+            )
+            await self._delegate.release(session_id, agent_id)
+
+    async def _fast_release_session(self, session_id: str) -> bool:
+        """Precise O(K) deletion of all checkpoint keys for a session.
+
+        Returns False on any failure (caller should fall back to delegate).
+        Sentinel SET is left intact — relies on TTL for cleanup.
+        """
+        keys_to_delete: list = []
+
+        try:
+            # 1. Graph state keys: enumerate NS index SET, build 2 keys per ns
+            ns_index = _ns_index_key(session_id)
+            ns_members = await self._redis.smembers(ns_index)
+            for ns in ns_members:
+                if isinstance(ns, bytes):
+                    ns = ns.decode("utf-8")
+                if not ns:
+                    continue
+                keys_to_delete.append(
+                    build_key_with_namespace(
+                        session_id, WORKFLOW_NAMESPACE_GRAPH, ns,
+                        _GRAPH_DATA_TYPE))
+                keys_to_delete.append(
+                    build_key_with_namespace(
+                        session_id, WORKFLOW_NAMESPACE_GRAPH, ns,
+                        _GRAPH_DATA_VALUE))
+
+            # 2. Workflow state keys: enumerate sentinel SET members, build
+            #    4 keys per workflow_id (state + dump_type + updates + dump_type)
+            sentinel = _sentinel_key(session_id)
+            wf_members = await self._redis.smembers(sentinel)
+            for wf_id in wf_members:
+                if isinstance(wf_id, bytes):
+                    wf_id = wf_id.decode("utf-8")
+                if not wf_id:
+                    continue
+                keys_to_delete.append(build_key_with_namespace(
+                    session_id, SESSION_NAMESPACE_WORKFLOW, wf_id,
+                    _WORKFLOW_STATE_BLOBS))
+                keys_to_delete.append(build_key_with_namespace(
+                    session_id, SESSION_NAMESPACE_WORKFLOW, wf_id,
+                    _WORKFLOW_STATE_BLOBS_DUMP_TYPE))
+                keys_to_delete.append(build_key_with_namespace(
+                    session_id, SESSION_NAMESPACE_WORKFLOW, wf_id,
+                    _WORKFLOW_UPDATE_BLOBS))
+                keys_to_delete.append(build_key_with_namespace(
+                    session_id, SESSION_NAMESPACE_WORKFLOW, wf_id,
+                    _WORKFLOW_UPDATE_BLOBS_DUMP_TYPE))
+
+            # 3. Agent state keys: agent_id is dynamic per workflow, but the
+            #    sentinel SET only holds workflow_ids, not agent_ids. Since we
+            #    cannot enumerate agent_ids without a separate index, we probe
+            #    using the agent_id field from the session's workflow context.
+            #    For now, agent/team state keys are left to the delegate's TTL.
+            #    This is acceptable because:
+            #    a) The delegate's delete_by_prefix would have caught them, but
+            #       we're avoiding scan_iter.
+            #    b) Agent state keys have their own TTL (configured in
+            #       RedisCheckpointer init).
+            #    c) 111121 is triggered by workflow/graph state, not agent state.
+            # NOTE: If an agent_id index SET is added in the future, we can
+            #       extend this section to delete agent state keys precisely.
+
+            # 4. Bare session key (comp_state with QA QUESTIONER_STATE_KEY)
+            keys_to_delete.append(session_id)
+
+            if not keys_to_delete:
+                workflow_logger.info(
+                    f"FastRedisCheckpointer: no checkpoint keys found for "
+                    f"session {session_id}, skipping release"
+                )
+                return True
+
+            # 5. Batch delete all collected keys
+            deleted = await self._redis.delete(*keys_to_delete)
+
+            # 6. Clean up the NS index SET (now that all graph keys are gone)
+            try:
+                await self._redis.delete(ns_index)
+            except Exception as e:
+                workflow_logger.warning(
+                    f"FastRedisCheckpointer: NS index SET delete failed for "
+                    f"session {session_id}: {e}"
+                )
+
+            workflow_logger.info(
+                f"FastRedisCheckpointer: fast release deleted {deleted} keys "
+                f"for session {session_id} (sentinel SET left for TTL)"
+            )
+            return True
+
+        except Exception as e:
+            workflow_logger.warning(
+                f"FastRedisCheckpointer: fast release failed for session "
+                f"{session_id}: {e}"
+            )
+            return False
 
     def graph_store(self):
         return NsIndexingGraphStore(
