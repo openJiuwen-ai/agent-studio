@@ -38,7 +38,7 @@ The current deployment includes four application services:
 | `studio-runtime` | `agent-runtime/` | Agent/Workflow execution, publish invocation, LLM, MCP, and memory runtime |
 | `studio-builder` | `agent_builder/` | NL2, Prompt, model tuning, and build-time storage |
 
-Python services reuse model invocation and storage capabilities through the root-level `packages/` directory. The original Java `studio-service` has been removed from the deployment architecture; `backend/studio-runtime*` is retained only as legacy source code. See Section 2.1 for details.
+Python services reuse model invocation and storage capabilities through the root-level `packages/` directory. The original Java `studio-service` was completely removed from the repository during the Beta5 architecture refactoring. Its capabilities were migrated to `studio-manager-service`, Python `agent-runtime/`, and `agent_builder/` respectively. See Section 2.1 for details.
 
 ---
 
@@ -55,19 +55,20 @@ backend/
 │   ├── schema.sql                    # Database table structure definitions
 │   ├── init.sql                      # Initialization data
 │   └── data.sql                      # Business test data
-├── studio/                           # Aggregation module
-├── studio-api/                       # API definition module
 ├── studio-common/                    # Common module
 ├── studio-manager/                   # Manager service startup module
 ├── studio-manager-api/               # Manager API definition module
 ├── studio-manager-service/           # Manager service business implementation
-├── studio-runtime/                   # Original Java studio-service startup module (legacy source, no longer deployed)
-├── studio-runtime-api/               # Original Java studio-service API (legacy source)
-├── studio-runtime-service/           # Original Java studio-service implementation (legacy source)
-└── studio-space/                     # DeepResearch
+├── studio-storage/                   # Storage abstraction module
+└── studio-space/                     # DeepResearch (independent aggregation, not included in parent POM <modules>)
 ```
 
-> **Module Status Note**: Starting from Beta5, the original Java `studio-service` has been removed from the deployment architecture. Its capabilities have been migrated to `studio-manager`, Python `agent-runtime`, and `agent_builder` respectively. The above `backend/studio-runtime*` modules are temporarily retained for migration traceability and compatibility testing, and are no longer built as independently deployed images. The currently deployed service `studio-runtime` corresponds to the repository root directory `agent-runtime/` — do not confuse it with these Java legacy modules.
+> **Architecture Evolution Note**: The Beta5 architecture refactoring completely removed the original Java `studio-service` related modules (`studio-runtime`, `studio-runtime-api`, `studio-runtime-service`, `studio-api`, and the aggregation module `studio`) from the repository. Their capabilities were migrated to:
+> - Management capabilities → `studio-manager-service`
+> - Execution capabilities → Python `agent-runtime/`
+> - Build-time capabilities → Python `agent_builder/`
+>
+> The currently deployed service `studio-runtime` corresponds to the repository root directory `agent-runtime/` and is unrelated to the above removed Java modules. `backend/studio-space/` physically exists but has its own independent aggregation POM and is not included in `backend/pom.xml`'s `<modules>`, allowing it to be built independently.
 
 ## 2.2 Core Module Description
 
@@ -153,33 +154,7 @@ studio-manager/
 - Package scan path: `com.openjiuwen.studio.agent.manager`
 - Provides REST API endpoints for Agent management
 
-### 2.2.3 studio-runtime (Original Java studio-service Startup Module, Legacy)
-
-**Location**: `backend/studio-runtime/`
-
-**Description**: This module is the startup module of the original Java `studio-service`. After Beta5, it is no longer built or deployed as an independent service. The active execution capabilities are now in Python `agent-runtime/`, the management agent capabilities are in `studio-manager-service`, and the build-time capabilities are in `agent_builder/`.
-
-**Directory Structure**:
-
-```
-studio-runtime/
-├── pom.xml
-└── src/
-    ├── main/
-    │   ├── java/
-    │   │   └── com/openjiuwen/studio/agent/runtime/
-    │   │       └── Application.java          # Spring Boot startup class
-    │   └── resources/                        # Resource files
-    └── test/                                 # Test code
-```
-
-**Legacy Startup Class Information**:
-
-- Annotated with `@SpringBootApplication`
-- Package scan path: `com.openjiuwen.studio.agent.runtime`
-- Retains the original Agent runtime REST API entry point, for migration traceability and compatibility testing
-
-### 2.2.4 studio-manager-service (Manager Service Business Implementation)
+### 2.2.3 studio-manager-service (Manager Service Business Implementation)
 
 **Location**: `backend/studio-manager-service/`
 
@@ -260,71 +235,7 @@ studio-manager-service/
 | **common/service** | Common services shared across modules |
 | **prompt/engineering** | Prompt generation, optimization, and testing functions |
 
-### 2.2.5 studio-runtime-service (Original Java studio-service Business Implementation, Legacy)
-
-**Location**: `backend/studio-runtime-service/`
-
-**Description**: Business implementation module of the original Java `studio-service`, currently not corresponding to any deployed container. The controllers, services, and configurations in the directory are pre-migration implementations and should not be used as a deployment or configuration reference for the active Python `studio-runtime`.
-
-**Directory Structure**:
-
-```
-studio-runtime-service/
-├── pom.xml
-└── src/
-    ├── main/
-    │   ├── java/
-    │   │   └── com/openjiuwen/studio/agent/runtime/
-    │   │       ├── alarm/                      # Alarm module
-    │   │       │   ├── aom/                    # AOM alarm integration
-    │   │       │   └── app/                    # Application alarms
-    │   │       ├── annotation/                 # Custom annotations
-    │   │       ├── aop/                        # Aspect-oriented programming
-    │   │       ├── bo/                         # Business objects
-    │   │       ├── config/                     # Configuration classes
-    │   │       ├── constant/                   # Constant definitions
-    │   │       ├── controller/                 # REST controllers
-    │   │       ├── datasource/                 # Data source management
-    │   │       ├── dto/                        # Data transfer objects
-    │   │       ├── entity/                     # Entity classes
-    │   │       ├── enums/                      # Enum definitions
-    │   │       ├── event/                      # Event handling
-    │   │       ├── exception/                  # Exception definitions
-    │   │       ├── filter/                     # Request filters
-    │   │       ├── http/                       # HTTP client
-    │   │       ├── mapper/                     # Database mappings
-    │   │       ├── mcp/                        # MCP protocol support
-    │   │       ├── model/                      # Data models
-    │   │       ├── properties/                 # Configuration properties
-    │   │       ├── rce/                        # Remote calls
-    │   │       ├── redis/                      # Redis cache
-    │   │       ├── sensitive/                  # Sensitive word filtering
-    │   │       ├── service/                    # Business services
-    │   │       ├── task/                       # Task scheduling
-    │   │       ├── thread/                     # Thread management
-    │   │       └── utils/                      # Utility classes
-    │   └── resources/                          # Resource files
-    └── test/                                   # Test code
-```
-
-**Package Function Details**:
-
-| Package | Description |
-|---------|-------------|
-| **alarm/aom** | Application Operations Management (AOM) alarm integration, implements runtime alarm reporting |
-| **alarm/app** | Application-level alarm service, provides application-level alerting capabilities |
-| **aop** | Aspect-oriented programming, for logging, performance monitoring, transaction management, etc. |
-| **controller** | Original Java Service REST API controllers, for legacy code documentation only |
-| **datasource** | Multi-datasource management, supports runtime datasource switching and connection pool management |
-| **event** | Event handling mechanism, supports event subscription and dispatching during Agent execution |
-| **mcp** | Model Context Protocol support, implements communication with MCP servers |
-| **service** | Core business services related to Agent execution |
-| **thread** | Thread pool management, controls concurrent execution |
-| **task** | Scheduled task scheduling, manages periodic tasks |
-| **sensitive** | Sensitive word filtering, content safety checks |
-| **dto/entity** | Data transfer object and entity class definitions |
-
-### 2.2.6 studio-space (DeepResearch)
+### 2.2.4 studio-space (DeepResearch)
 
 **Location**: `backend/studio-space/`
 

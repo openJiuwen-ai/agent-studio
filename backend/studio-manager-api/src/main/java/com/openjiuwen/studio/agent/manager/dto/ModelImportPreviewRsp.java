@@ -10,7 +10,7 @@ import java.io.Serializable;
 import java.util.List;
 
 /**
- * 模型导入预检响应（逐行解析+验签+冲突检测，不落库）。
+ * 模型导入预检响应（逐行解析+冲突检测+URL 校验，不落库）。
  */
 @ApiModel(description = "模型导入预检响应")
 public class ModelImportPreviewRsp implements Serializable {

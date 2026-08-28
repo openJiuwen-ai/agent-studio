@@ -79,10 +79,13 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import com.google.common.collect.Lists;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
@@ -302,6 +305,7 @@ public class AgentImportService {
      * @param file 前端传入的导入文件，文件内容格式为多条jsonl，每个资源一行
      * @return ImportRsp
      */
+    @Transactional(rollbackFor = Exception.class)
     public ImportRsp importFile(String projectId, String workspaceId, MultipartFile file) {
         return importFile(projectId, workspaceId, file, null);
     }
@@ -315,6 +319,7 @@ public class AgentImportService {
      * @param mode 导入模式
      * @return ImportRsp
      */
+    @Transactional(rollbackFor = Exception.class)
     public ImportRsp importFile(String projectId, String workspaceId, MultipartFile file, String mode) {
         List<ImportInfo> resourceList = getAndValidateImportInfos(workspaceId, file);
         return doImport(projectId, workspaceId, resourceList, mode);
@@ -328,6 +333,7 @@ public class AgentImportService {
      * @param exportInfos 导出资源列表
      * @return ImportRsp
      */
+    @Transactional(rollbackFor = Exception.class)
     public ImportRsp importFromExportInfos(String projectId, String targetWorkspaceId,
         List<ExportInfo> exportInfos) {
         List<ImportInfo> resourceList = sortImportInfos(exportInfos.stream()
@@ -645,7 +651,11 @@ public class AgentImportService {
             }
             mappingEntities.add(mappingEntity);
         }
-        mappingMapper.insertBatch(mappingEntities);
+        // 分批插入：openGauss 单条 PreparedStatement 参数数受 2 字节限制（≤32767）。
+        // t_mapping 单行 17 个参数，单批上限 = 32767/17 ≈ 1927 行；取 1000 留充足余量。
+        for (List<MappingEntity> batch : Lists.partition(mappingEntities, 1000)) {
+            mappingMapper.insertBatch(batch);
+        }
     }
 
     private void handleSpaciousSubController(ControllerVO controllerVO, String projectId, String workspaceId,
@@ -1003,8 +1013,12 @@ public class AgentImportService {
         if (CollectionUtils.isNotEmpty(mappingList)) {
             // 分组并删除旧数据
             groupedDelete(mappingList);
-            // 批量插入新数据
-            mappingMapper.insertBatch(mappingList);
+            // 批量插入新数据：openGauss 单条 PreparedStatement 参数数受 2 字节限制（≤32767）。
+            // t_mapping 单行 17 个参数，单批上限 = 32767/17 ≈ 1927 行；取 1000 留充足余量，
+            // 大工作流导入产生的 mapping 较多时避免参数超限导致连接被打成 broken。
+            for (List<MappingEntity> batch : Lists.partition(mappingList, 1000)) {
+                mappingMapper.insertBatch(batch);
+            }
         }
     }
 

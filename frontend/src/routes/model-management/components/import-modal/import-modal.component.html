@@ -42,7 +42,7 @@
           <td>
             <nz-tag *ngIf="!item.detail" nzColor="success">{{ 'import_preview_none' | i18nextEager }}</nz-tag>
             <nz-tag *ngIf="item.detail"
-              [nzColor]="(item.signature_valid && item.api_url_valid && item.env_var_valid && item.cipher_adapted) ? 'warning' : 'error'">
+              [nzColor]="(item.line_valid && item.api_url_valid && item.env_var_valid) ? 'warning' : 'error'">
               {{ item.detail }}
             </nz-tag>
           </td>

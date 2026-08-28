@@ -12,6 +12,7 @@ import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { NzIconModule } from 'ng-zorro-antd/icon';
+import { CdkDragHandle } from '@angular/cdk/drag-drop';
 
 @Component({
   selector: 'guide-card-item',
@@ -28,6 +29,7 @@ import { NzIconModule } from 'ng-zorro-antd/icon';
     NzButtonModule,
     NzToolTipModule,
     NzIconModule,
+    CdkDragHandle,
   ],
   providers: [
     {

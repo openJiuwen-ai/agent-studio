@@ -1263,7 +1263,8 @@ public class AgentImportExportService {
             // 先删除关联关系
             mappingMapper.deleteBatchByAppIdAndResourceType(metadata.getAgentId(), CommonConstant.CONTROLLER_TYPE);
             if (!CollectionUtils.isEmpty(relateAgents)) {
-                for (List<MappingEntity> batch : Lists.partition(relateAgents, 2000)) {
+                // t_mapping 单行 17 个参数，openGauss 单条 SQL 上限 32767（2字节），单批 ≤1927 行；取 1000 留余量
+                for (List<MappingEntity> batch : Lists.partition(relateAgents, 1000)) {
                     mappingMapper.insertBatch(batch);
                 }
             }
@@ -1292,7 +1293,7 @@ public class AgentImportExportService {
             // 先删除关联关系
             mappingMapper.deleteBatchByAppIdAndResourceType(metadata.getAgentId(), CommonConstant.AGENT_TYPE);
             if (!CollectionUtils.isEmpty(relateSingleAgents)) {
-                for (List<MappingEntity> batch : Lists.partition(relateSingleAgents, 2000)) {
+                for (List<MappingEntity> batch : Lists.partition(relateSingleAgents, 1000)) {
                     mappingMapper.insertBatch(batch);
                 }
             }
@@ -1378,7 +1379,7 @@ public class AgentImportExportService {
             mappingEntities.add(mappingEntity);
         }
 
-        for (List<MappingEntity> batch : Lists.partition(mappingEntities, 2000)) {
+        for (List<MappingEntity> batch : Lists.partition(mappingEntities, 1000)) {
             mappingMapper.insertBatch(batch);
         }
     }
@@ -2058,7 +2059,7 @@ public class AgentImportExportService {
             relateWorkflows.add(buildAgentWorkflowMapping(agent, workflow));
         }
         if (!CollectionUtils.isEmpty(relateWorkflows)) {
-            for (List<MappingEntity> batch : Lists.partition(relateWorkflows, 2000)) {
+            for (List<MappingEntity> batch : Lists.partition(relateWorkflows, 1000)) {
                 mappingMapper.insertBatch(batch);
             }
         }
@@ -3862,7 +3863,7 @@ public class AgentImportExportService {
         }).toList();
         if (!CollectionUtils.isEmpty(modelMapping)) {
             mappingMapper.deleteBatchByAppIdAndResourceType(workflowId, ResourceTypeEnum.MODEL.toString());
-            for (List<MappingEntity> batch : Lists.partition(modelMapping, 2000)) {
+            for (List<MappingEntity> batch : Lists.partition(modelMapping, 1000)) {
                 mappingMapper.insertBatch(batch);
             }
         }

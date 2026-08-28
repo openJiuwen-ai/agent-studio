@@ -315,6 +315,7 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             base.setIsSupportCloseReasoning(false);
         }
         urlCheckUtils.checkUrl(projectId, body.getApiUrl());
+        urlCheckUtils.validateEnvVarPlaceholders(body.getApiUrl());
 
         String id = UUID.randomUUID().toString();
         base.setId(id)
@@ -737,7 +738,18 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
         if (!insertModelServices.isEmpty()) {
             List<ProviderAuthMetadata> metadataList = authService.selectProviderMetadataAndPermissionCheck(projectId,
                 workspaceId, providerId, false);
+            List<ModelServiceBase> validInsertServices = new ArrayList<>();
             insertModelServices.forEach(item -> {
+                // 校验 provider 同步下来的模型 apiUrl：非法 URL / 非法占位符直接跳过该条，
+                // 不阻断整条同步链路，避免一个坏模型污染整个 provider 的同步结果
+                try {
+                    urlCheckUtils.checkUrl(projectId, item.getApiUrl());
+                    urlCheckUtils.validateEnvVarPlaceholders(item.getApiUrl());
+                } catch (AgentStudioException e) {
+                    log.warn("Skip synced model [{}] due to invalid apiUrl [{}]: {}",
+                        item.getServiceName(), item.getApiUrl(), e.getMessage());
+                    return;
+                }
                 String id = UUID.randomUUID().toString();
                 item.setId(id)
                     .setModelVersion(item.getModelName())
@@ -756,9 +768,10 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
                     .setPublishStatus("offline")
                     .setIdentityId(id)
                     .setInterfaceProtocol("abmodel");
+                validInsertServices.add(item);
             });
-            modelServiceMapper.batchInsert(insertModelServices);
-            for (ModelServiceBase modelServiceBase : insertModelServices) {
+            modelServiceMapper.batchInsert(validInsertServices);
+            for (ModelServiceBase modelServiceBase : validInsertServices) {
                 String path = String.format(MODEL_PATH, modelServiceBase.getId() + ".json");
                 String content = JsonUtils.encode(new ModelStrategy().setType("model").setData(modelServiceBase));
                 obsService.putObject(path, content);
@@ -900,6 +913,7 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             base.setIsSupportCloseReasoning(false);
         }
         urlCheckUtils.checkUrl(projectId, serviceReq.getApiUrl());
+        urlCheckUtils.validateEnvVarPlaceholders(serviceReq.getApiUrl());
 
         base.setServiceName(serviceReq.getServiceName())
             .setServiceKey("integration:" + workspaceId + ":" + serviceReq.getServiceName())
@@ -1224,6 +1238,19 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             Map<String, List<ModelServiceData>> groupedModels = modelList.stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.groupingBy(m -> Objects.toString(m.getProviderId(), "UNKNOWN")));
+
+            // 供应商+模型导出（include_provider=true）：一次导出只允许属于同一供应商的模型，
+            // 避免返回多行 ndjson 让调用方误按"单个 JSON"解析触发"语法错误"，也避免一个文件里混入多个供应商密钥。
+            // 只导模型（include_provider=false，走 4 参重载）无此限制，允许跨供应商挑选模型迁移到目标供应商。
+            if (groupedModels.size() > 1) {
+                List<String> distinctProviders = new ArrayList<>(groupedModels.keySet());
+                String reason = "include_provider=true 时导出的模型必须属于同一供应商，但传入的 model_ids 分属 "
+                    + distinctProviders.size() + " 个不同供应商";
+                log.error("model_ids span multiple providers, rejected for provider+model export. projectId={}, workspaceId={}, providers={}",
+                    projectId, workspaceId, distinctProviders);
+                throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID, reason);
+            }
+
             List<ModelExportEntity> exportEntityList = new ArrayList<>();
 
             for (Map.Entry<String, List<ModelServiceData>> entry : groupedModels.entrySet()) {
@@ -1244,6 +1271,10 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             }
 
             return exportEntityList;
+        } catch (AgentStudioException e) {
+            // 业务异常（如模型不存在）原样抛出，保留明确的错误码给前端/API 调用方，
+            // 不要被包成模糊的 MODEL_EXPORT_DATA(02501028) 让调用方无法识别真因。
+            throw e;
         } catch (Exception e) {
             log.error("Failed to build model export entity. Project: {}, Workspace: {}", projectId, workspaceId, e);
             throw new AgentStudioException(StudioError.MODEL_EXPORT_DATA);
@@ -1269,6 +1300,9 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             entity.setModelMetadata(new ArrayList<>(modelList));
             entity.setProviderMetadata(null);
             return new ArrayList<>(Collections.singletonList(entity));
+        } catch (AgentStudioException e) {
+            // 业务异常原样抛出（与 3 参重载保持一致）。
+            throw e;
         } catch (Exception e) {
             log.error("Failed to build model-only export entity. Project: {}, Workspace: {}",
                 projectId, workspaceId, e);
@@ -1281,10 +1315,21 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             log.warn("No found modelIds: {}", modelIds);
             return Collections.emptyList();
         }
-        List<ModelServiceData> models = modelServiceMapper.selectByIds(modelIds);
-        if (CollectionUtils.isEmpty(models)) {
-            log.warn("Models not found for Ids: {}", modelIds);
-            return Collections.emptyList();
+        // 使用按 project/workspace 过滤的 queryByIds：避免跨空间 id 泄漏。
+        List<ModelServiceData> models = modelServiceMapper.queryByIds(modelIds, projectId, workspaceId);
+        // 参照环境变量导出的 removeAll 模式：请求集合 - 查到集合 = 不存在/无权限的 id，必须显式报错，
+        // 而不是像之前那样静默返回空列表/部分结果，让调用方导出一个无用的空/残缺 jsonl。
+        List<String> requested = new ArrayList<>(modelIds);
+        List<String> found = models.stream()
+            .map(ModelServiceData::getId)
+            .filter(StringUtils::isNotBlank)
+            .toList();
+        requested.removeAll(found);
+        if (!requested.isEmpty()) {
+            log.error("model(s) not found or no permission in project/workspace: projectId={}, workspaceId={}, missing={}",
+                projectId, workspaceId, requested);
+            throw new AgentStudioException(StudioError.MD_DATA_NOT_EXIST,
+                "model(s) not found or no permission: " + requested);
         }
         return models;
     }
@@ -1375,6 +1420,7 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
                 throw new AgentStudioException(StudioError.MD_MODEL_TAGS_LIMIT);
             }
             urlCheckUtils.checkUrl(projectId, modelData.getApiUrl());
+            urlCheckUtils.validateEnvVarPlaceholders(modelData.getApiUrl());
             if (Boolean.TRUE.equals(availableCheck)) {
                 try {
                     modelData.setStatus("success");

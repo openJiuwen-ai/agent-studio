@@ -1,4 +1,4 @@
-﻿{
+{
   "add": "Add",
   "added": "Added nodes: {}",
   "prompt": "Prompt",
@@ -37,6 +37,7 @@
   "save": "Save",
   "description": "Description",
   "input_placeholder": "Enter a value.",
+  "exception_timeout_range_tip": "Range: 0.1 ~ 900 seconds",
   "select_placeholder": "Please select",
   "name_verify_tips": "Please enter characters that start with Chinese, letters and end with Chinese, letters and numbers, and are 2~32 in length. Only Chinese, letters, numbers, underscores and underscores are allowed.",
   "validation_name_tip": "Supports Chinese, English, numbers, underscores, hyphens. Length: 2-64 characters. Must start with Chinese, English, or number.",
@@ -285,6 +286,8 @@
   "dependency_relate_config_label": "Dependency Configuration (Optional)",
   "add_dependency_relate_label": "Add Dependency",
   "guide_least_two_tip": "Configure at least two guides first.",
+  "dependency_item_required_tip": "Select a dependency item.",
+  "be_depended_item_required_tip": "Select a depended item.",
   "dependent_relation_label": "depends on",
   "priority_depend_inappropriate_tip": "High-priority tasks depend on low-priority tasks, which affects the execution efficiency. You are advised to adjust the priorities.",
   "skill_effective_label": "Expired",

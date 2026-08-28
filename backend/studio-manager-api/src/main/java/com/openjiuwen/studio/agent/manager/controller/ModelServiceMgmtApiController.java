@@ -33,6 +33,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayInputStream;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * ModelServiceMgmt controller
@@ -126,16 +129,23 @@ public class ModelServiceMgmtApiController implements ModelServiceMgmtApi {
     @Override
     public ResponseEntity<Resource> exportModelServices(String projectId, String workspaceId, ModelExportReq body) {
         byte[] jsonl;
-        if (body.getProviderId() != null && !body.getProviderId().isEmpty()) {
-            // 卡片入口：按供应商导出（供应商+其下全部模型）
-            jsonl = modelImportExportService.exportModelsByProvider(projectId, workspaceId, body.getProviderId());
-        } else if (body.getModelIds() != null && !body.getModelIds().isEmpty()) {
+        boolean hasProviderId = body.getProviderId() != null && !body.getProviderId().trim().isEmpty();
+        // model_ids 过滤掉空串/空白串/null 后得到有效 id 列表；空列表按"未提供"处理，走参数校验
+        List<String> effectiveModelIds = body.getModelIds() == null ? Collections.emptyList()
+            : body.getModelIds().stream()
+                .filter(id -> id != null && !id.trim().isEmpty())
+                .collect(Collectors.toList());
+        boolean hasModelIds = !effectiveModelIds.isEmpty();
+        if (hasProviderId) {
+            // 卡片入口：按供应商导出（供应商+其下全部模型）；provider_id 与 model_ids 同时提供时以 provider_id 为准
+            jsonl = modelImportExportService.exportModelsByProvider(projectId, workspaceId, body.getProviderId().trim());
+        } else if (hasModelIds) {
             // 按模型 id 导出，include_provider 区分供应商+模型 / 只导模型
-            jsonl = modelImportExportService.exportModels(projectId, workspaceId, body.getModelIds(),
+            jsonl = modelImportExportService.exportModels(projectId, workspaceId, effectiveModelIds,
                 body.effectiveIncludeProvider());
         } else {
             throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
-                "either model_ids or provider_id is required");
+                "model_ids 与 provider_id 不能同时为空，请至少选择一个模型或指定一个供应商");
         }
         TransferResource resource = new TransferResource(new ByteArrayInputStream(jsonl));
         resource.setFilename("models.jsonl");
@@ -153,7 +163,7 @@ public class ModelServiceMgmtApiController implements ModelServiceMgmtApi {
 
     @Override
     public ResponseEntity<ImportRsp> importModelServices(String projectId, String workspaceId, MultipartFile file,
-        ModelImportConflictStrategy conflictStrategy, String targetProviderId) {
+        String conflictStrategy, String targetProviderId) {
         return ResponseModel.success(
             modelImportExportService.importModels(projectId, workspaceId, file, conflictStrategy, targetProviderId));
     }

@@ -2021,11 +2021,6 @@ public enum StudioError {
     MD_VIDEO_GENERATION_TASK_NOT_EXIST(BAD_REQUEST, MODEL, "1071"),
 
     /**
-     * 模型导入文件行签名校验失败
-     */
-    MODEL_IMPORT_SIGNATURE_INVALID(BAD_REQUEST, MODEL, "1080"),
-
-    /**
      * 模型导入文件格式非法（非JSONL / 行解析失败 / payload缺失）
      */
     MODEL_IMPORT_FORMAT_INVALID(BAD_REQUEST, MODEL, "1081"),
