@@ -1809,6 +1809,9 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             throw new AgentStudioException(StudioError.NO_PERMISSION_DELETE_WORKFLOW_VERSION);
         }
 
+        // 已共享到资产广场的版本不允许直接删除（与 AgentManagementService#deleteAgentVersion 对齐）
+        shareResourceManagerService.checkVersionSharedOrNot(workflowId, versionId);
+
         // 删除版本纪录
         if (isSoftDelete) {
             agentCommonService.softDeleteReleaseVersionById(releaseVersion);
