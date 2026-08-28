@@ -11,7 +11,7 @@ import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 import { CommonService } from '@services/common.service';
 import { HelpCenterService } from '@services/help-center.service';
 import { CommonUtils } from '../../../../utils/common.util';
-import { convertModelApiUrlToBackendFormat, convertModelApiUrlToUserFormat } from '../../../../utils/model-api-url.util';
+import { convertModelApiUrlToBackendFormat, convertModelApiUrlToUserFormat, USER_ENV_PLACEHOLDER, USER_URL_PATTERN, USER_EMPTY_PLACEHOLDER } from '../../../../utils/model-api-url.util';
 import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzRadioModule } from 'ng-zorro-antd/radio';
@@ -132,10 +132,6 @@ export class AddModelComponent implements OnInit {
   ];
 
   validateServiceUrlTip = ``;
-  // 用户输入格式：仅支持两种：纯URL，或纯{VAR_NAME}（整个地址为一个环境变量占位符）
-  // URL中禁止{ }字符（URL中不允许未编码的大括号），防止用户在内嵌路径写占位符绕过校验
-  private readonly USER_ENV_PLACEHOLDER = /^\{[a-zA-Z_$][a-zA-Z0-9_$]*\}$/;
-  private readonly USER_URL_PATTERN = /^https?:\/\/[^{}\s]+$/i;
   // 占位符变量名长度上限：与环境变量配置侧 config-env-variable NAME_MAX_LENGTH 对齐（64）。
   // 占位符变量名必须能在环境管理里建成同名变量才能被解析，超长则环境管理根本无法配置同名变量，占位符永不解析。
   private readonly ENV_VAR_NAME_MAX_LENGTH = 64;
@@ -170,17 +166,19 @@ export class AddModelComponent implements OnInit {
       model_type: new FormControl('LLM', [Validators.required]),
       api_url: new FormControl<string>('', {
         nonNullable: true,
+        updateOn: 'blur',
         validators: [
           Validators.required,
           (control: AbstractControl) => {
             const value = (control.value as string)?.trim() || '';
-            // 插入占位符后用户尚未输入变量名的中间状态：允许{}空占位符，不报错
-            if (value === '{}') {
+            // 空占位符 {}：点击 {} 按钮未填变量名的中间态，允许保存(后端原样存储为 "{}"，
+            // 等价于"尚未配置占位符"；调测/运行时 builder 侧 hasEnvPlaceholder 仅识别 ${_env...} 和 {VAR}，
+            // 不会把 "{}" 当占位符也不会当合法 URL，会给出友好错误提示)。
+            if (value === USER_EMPTY_PLACEHOLDER) {
               return null;
             }
-            // 占位符变量名长度校验：仅当完整闭合为 {VAR} 时校验（输入未闭合 {V... 放通，不干扰输入过程）。
-            // 上限对齐环境变量配置侧 NAME_MAX_LENGTH(64)——超长则环境管理无法配置同名变量，占位符永不解析。
-            if (this.USER_ENV_PLACEHOLDER.test(value)) {
+            // 合法完整占位符 {VAR}：校验变量名长度
+            if (USER_ENV_PLACEHOLDER.test(value)) {
               const varName = value.slice(1, -1);
               if (varName.length > this.ENV_VAR_NAME_MAX_LENGTH) {
                 return {
@@ -191,14 +189,11 @@ export class AddModelComponent implements OnInit {
               }
               return null;
             }
-            // 纯 URL
-            if (this.USER_URL_PATTERN.test(value)) {
+            // 合法 http(s) URL（禁止含未转义花括号）
+            if (USER_URL_PATTERN.test(value)) {
               return null;
             }
-            // 输入过程中如果以{开头且还没闭合，暂时不报错
-            if (value.startsWith('{') && !value.includes('}')) {
-              return null;
-            }
+            // 其他情况一律报错（包括未闭合的 {xxx、含花括号的伪URL、非 http(s) scheme 等）
             return { invalidUrl: { tiErrorMessage: this.i18n.transform('api_url_invalid_tip') } };
           },
           Validators.maxLength(255),
@@ -399,8 +394,8 @@ export class AddModelComponent implements OnInit {
     const trimmed = currentValue.trim();
 
     // 环境变量占位符必须是整个URL（不能内嵌），如果已有URL内容则清空并插入{}
-    // 仅当输入框为空或已经是纯占位符编辑状态（以{开头）时，才在当前光标位置插入
-    if (trimmed === '' || (trimmed.startsWith('{') && !trimmed.includes('}')) || trimmed === '{}' || this.USER_ENV_PLACEHOLDER.test(trimmed)) {
+    // 仅当输入框为空、处于未闭合占位符输入中（以{开头但无}）、已是{}、或已是完整{VAR}时，才在光标处插入
+    if (trimmed === '' || (trimmed.startsWith('{') && !trimmed.includes('}')) || trimmed === USER_EMPTY_PLACEHOLDER || USER_ENV_PLACEHOLDER.test(trimmed)) {
       const start = inputEl.selectionStart || 0;
       const end = inputEl.selectionEnd || 0;
       const placeholder = '{}';

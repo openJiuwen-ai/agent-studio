@@ -22,8 +22,8 @@ import { NzMessageService } from 'ng-zorro-antd/message';
 type ConflictStrategy = 'SKIP' | 'COVER';
 
 /**
- * 模型批量导入弹窗：上传 .jsonl → 预检（解析+验签+冲突检测）→ 选冲突策略 → 确认导入 → 结果。
- * 鉴权 MASKED：导入后 authInfo 为空，需在目标环境重新配置鉴权（提示于预检阶段）。
+ * 模型批量导入弹窗：上传 .jsonl → 预检（解析+冲突检测+URL校验）→ 选冲突策略 → 确认导入 → 结果。
+ * 鉴权 MASKED：导入后 authInfo 为空，需在目标环境重新配置鉴权（提示于上传阶段）。
  */
 @Component({
   selector: 'meta-model-import-modal',
@@ -167,6 +167,12 @@ export class ModelImportModalComponent {
     }
   }
 
+  /** 从 HTTP 错误对象中提取后端返回的中文错误原因，取不到再回退到默认文案。 */
+  private extractErrorMsg(err: unknown, fallbackKey: string): string {
+    const body = (err as { error?: { error_reason?: string; error_msg?: string; message?: string } })?.error;
+    return body?.error_reason || body?.error_msg || body?.message || this.i18n.transform(fallbackKey);
+  }
+
   private callPreview(file: File) {
     const seq = ++this.previewSeq;
     this.previewLoading = true;
@@ -178,11 +184,11 @@ export class ModelImportModalComponent {
         }
         this.preview = res;
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (seq !== this.previewSeq) {
           return;
         }
-        this.message.error(this.i18n.transform('import_model_preview_failed'));
+        this.message.error(this.extractErrorMsg(err, 'import_model_preview_failed'));
       })
       .finally(() => {
         if (seq === this.previewSeq) {
@@ -196,12 +202,9 @@ export class ModelImportModalComponent {
       return false;
     }
     const items = this.preview.items || [];
-    // 任意条目 cipher_adapted===false 时禁止导入（当前环境无法解密）
-    const hasCipherMismatch = items.some(i => i.cipher_adapted === false);
-    // 任意条目 signature_valid===false（行级校验失败：只导模型误入列表页/验签失败/格式错）禁止导入，
-    // 与后端守卫一致——避免用户对预检失败行点确认。
-    const hasInvalidLine = items.some(i => i.signature_valid === false);
-    return !hasCipherMismatch && !hasInvalidLine;
+    // 任意条目 line_valid===false（行级硬错误：解析失败/import_type 错）时禁止导入，与后端守卫一致。
+    const hasInvalidLine = items.some(i => i.line_valid === false);
+    return !hasInvalidLine;
   }
 
   confirmImport() {
@@ -229,8 +232,8 @@ export class ModelImportModalComponent {
           this.message.success(tip);
         }
       })
-      .catch(() => {
-        this.message.error(this.i18n.transform('import_model_failed'));
+      .catch((err: unknown) => {
+        this.message.error(this.extractErrorMsg(err, 'import_model_failed'));
       })
       .finally(() => {
         this.importLoading = false;

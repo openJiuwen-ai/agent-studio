@@ -37,11 +37,27 @@ public class UrlCheckUtils {
     private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]*)\\}");
 
     /**
-     * 合法的环境变量占位符：``${_env.plugin_url_params.VAR}``。
+     * 合法的环境变量占位符：``${_env.plugin_url_params.VAR}``（子串匹配）。
      * 与 Python ``env_resolver.py`` / ``logging_context.py:47`` 同源，跨环境迁移模型 apiUrl 占位符以此为准。
+     * 变量名 VAR 必须匹配环境变量配置侧命名正则：``[a-zA-Z_$][a-zA-Z0-9_$]*``（与前端
+     * ``config-env-variable.component.ts:103`` 的 ``NAME_PATTERN`` 对齐），确保占位符里的变量名
+     * 能在环境管理页建成同名变量。
      */
     private static final Pattern VALID_ENV_PLACEHOLDER =
-        Pattern.compile("\\$\\{_env\\.plugin_url_params\\.([^}]+)\\}");
+        Pattern.compile("\\$\\{_env\\.plugin_url_params\\.([a-zA-Z_$][a-zA-Z0-9_$]*)\\}");
+
+    /**
+     * 合法的环境变量占位符：整串必须是 ``${_env.plugin_url_params.VAR}``（整串匹配，anchored）。
+     * 用于 checkUrl 判断"整个 URL 就是一个占位符、运行期才解析"的场景，此类值跳过 URI/IP 校验。
+     */
+    private static final Pattern VALID_ENV_PLACEHOLDER_FULL =
+        Pattern.compile("^\\$\\{_env\\.plugin_url_params\\.([a-zA-Z_$][a-zA-Z0-9_$]*)\\}$");
+
+    /**
+     * 用户点击 {} 按钮后未填变量名的空占位符字符串，与前端 USER_EMPTY_PLACEHOLDER 同源。
+     * 保存时原样入库，等价于"尚未配置占位符"，跳过 URI/IP 校验。
+     */
+    private static final String USER_EMPTY_PLACEHOLDER = "{}";
 
     @Value("${tool.url.enable-check}")
     private boolean enableUrlCheck;
@@ -71,14 +87,18 @@ public class UrlCheckUtils {
             log.info("not check url");
             return;
         }
-        if (url.contains("{")) {
-            // 含有占位符，放通处理
+        String trimmed = url.trim();
+        // 整串就是一个合法占位符（${_env.plugin_url_params.VAR} 或 {}），运行期才解析，跳过 URI/IP 校验。
+        // 注意：这里只放通"整串占位符"的情况。若 URL 中间嵌 ${...} 或含裸 { / }，
+        // 将走下面的 URI 解析，因未转义花括号触发 URISyntaxException → INVALID_URL，避免 SSRF/绕过。
+        if (isFullPlaceholder(trimmed)) {
+            log.info("url is a full placeholder, skip URI/IP check");
             return;
         }
 
         URI parsedUri;
         try {
-            parsedUri = new URI(url);
+            parsedUri = new URI(trimmed);
         } catch (URISyntaxException e) {
             log.error("Fail to parse url [{}]", url, e);
             throw new AgentStudioException(StudioError.INVALID_URL);
@@ -124,30 +144,56 @@ public class UrlCheckUtils {
     }
 
     /**
+     * 判断 url 是否整串就是一个占位符（运行期才解析，应跳过 URI/IP/SSRF 校验）。
+     * 支持三种形态：``{}``（空占位）、``${_env.plugin_url_params.VAR}``（后端存储格式）。
+     * 注意：用户输入形态的 ``{VAR}`` 在入库前已被前端 convertModelApiUrlToBackendFormat 转成
+     * ``${_env.plugin_url_params.VAR}``，后端不需要单独识别 ``{VAR}``。
+     */
+    private boolean isFullPlaceholder(String url) {
+        if (USER_EMPTY_PLACEHOLDER.equals(url)) {
+            return true;
+        }
+        return VALID_ENV_PLACEHOLDER_FULL.matcher(url).matches();
+    }
+
+    /**
      * 校验 apiUrl 中的环境变量占位符语法。
      *
      * <p>跨环境迁移的模型 apiUrl 可能含 ``${_env.plugin_url_params.VAR}`` 占位符（运行期由 Python
      * ``env_resolver.py`` 解析）。导入侧无法预知目标环境运行时变量是否存在，故此处只校验占位符
-     * <b>语法</b>：所有 ``${...}`` 必须匹配 ``${_env.plugin_url_params.VAR}`` 形态；
-     * 形如 ``${evil.var}`` 的非环境占位符视为语法非法，抛 {@link StudioError#MODEL_ENV_VAR_UNRESOLVED}，
-     * 与 Python 运行期 ``MD_ENV_VAR_UNRESOLVED`` 语义对齐。
-     *
-     * <p>注意：``checkUrl`` 对含 ``{`` 的 URL 直接放通（不校验内网/黑白名单），故占位符语法校验
-     * 由本方法独立承担。无 ``${`` 的 URL 直接放行。
+     * <b>语法</b>：
+     * <ol>
+     *   <li>所有 ``${...}`` 必须匹配 ``${_env.plugin_url_params.VAR}`` 形态，形如 ``${evil.var}`` 的
+     *       非环境占位符视为语法非法；</li>
+     *   <li>剥离合法占位符后，字符串中仍不得残留裸 ``{`` 或 ``}``（未闭合或不合法的花括号，例如
+     *       用户通过 API 直接写入 ``{foo`` / ``http://evil{x}/``），一律视为语法非法。</li>
+     * </ol>
+     * 错误抛 {@link StudioError#MODEL_ENV_VAR_UNRESOLVED}，与 Python 运行期
+     * ``MD_ENV_VAR_UNRESOLVED`` 语义对齐。
      *
      * @param url 待校验的 apiUrl
      */
     public void validateEnvVarPlaceholders(String url) {
-        if (StringUtils.isEmpty(url) || !url.contains("${")) {
+        if (StringUtils.isEmpty(url)) {
             return;
         }
-        Matcher matcher = PLACEHOLDER_PATTERN.matcher(url);
-        while (matcher.find()) {
-            String placeholder = matcher.group(0);
-            if (!VALID_ENV_PLACEHOLDER.matcher(placeholder).matches()) {
-                log.error("Invalid env var placeholder in url [{}]: {}", url, placeholder);
-                throw new AgentStudioException(StudioError.MODEL_ENV_VAR_UNRESOLVED);
+        // 1) 先找出所有 ${...} 并逐一校验形态
+        if (url.contains("${")) {
+            Matcher matcher = PLACEHOLDER_PATTERN.matcher(url);
+            while (matcher.find()) {
+                String placeholder = matcher.group(0);
+                if (!VALID_ENV_PLACEHOLDER.matcher(placeholder).matches()) {
+                    log.error("Invalid env var placeholder in url [{}]: {}", url, placeholder);
+                    throw new AgentStudioException(StudioError.MODEL_ENV_VAR_UNRESOLVED);
+                }
             }
+        }
+        // 2) 剥离所有合法 ${_env.plugin_url_params.VAR} 子串后，若还残留 { 或 }，说明存在未闭合/
+        //    非法花括号（例如 {xxx、http://foo{bar、${VAR 缺 } 等），一律拒绝。
+        String stripped = VALID_ENV_PLACEHOLDER.matcher(url).replaceAll("");
+        if (stripped.contains("{") || stripped.contains("}")) {
+            log.error("Bare curly brace in url (unclosed or non-placeholder): [{}]", url);
+            throw new AgentStudioException(StudioError.MODEL_ENV_VAR_UNRESOLVED);
         }
     }
 
