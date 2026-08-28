@@ -26,6 +26,7 @@ import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.util.CollectionUtils;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -275,6 +276,18 @@ public class MgGlobalExceptionHandler {
     public ResponseEntity<ErrorRsp> handleMultipartException(MultipartException exception) {
         String reason = "请求格式错误，需要 multipart/form-data 上传文件";
         log.error("MultipartException: {}", exception.getMessage());
+        return badRequest(reason);
+    }
+
+    /**
+     * Content-Type 不匹配（例如直接 POST 未设置 multipart/form-data）。
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    @ResponseBody
+    public ResponseEntity<ErrorRsp> handleHttpMediaTypeNotSupportedException(
+        HttpMediaTypeNotSupportedException exception) {
+        String reason = "请求格式错误，需要 multipart/form-data 上传文件";
+        log.error("HttpMediaTypeNotSupportedException: {}", exception.getMessage());
         return badRequest(reason);
     }
 
