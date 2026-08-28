@@ -124,7 +124,9 @@ export class ScenarioGuideModalComponent implements OnInit, AfterViewInit, OnDes
     [SCENARIO_FIELD_ID.DEPEND_ITEM]: {
       label: "",
       id: SCENARIO_FIELD_ID.DEPEND_ITEM,
-      validators: [],
+      required: true,
+      errorTip: this.i18n.transform("dependency_item_required_tip"),
+      validators: [Validators.required],
       type: FIELD_TYPE.SELECT
     },
     [SCENARIO_FIELD_ID.DEPEND_SYMBOL]: {
@@ -136,8 +138,10 @@ export class ScenarioGuideModalComponent implements OnInit, AfterViewInit, OnDes
     [SCENARIO_FIELD_ID.BE_DEPENDED_ITEM]: {
       label: "",
       id: SCENARIO_FIELD_ID.BE_DEPENDED_ITEM,
+      required: true,
+      errorTip: this.i18n.transform("be_depended_item_required_tip"),
       type: FIELD_TYPE.SELECT,
-      validators: []
+      validators: [Validators.required]
     }
   };
 
@@ -334,6 +338,14 @@ export class ScenarioGuideModalComponent implements OnInit, AfterViewInit, OnDes
     this.updateInValidGuideGlobalTip();
   }
 
+  private dependencyRowsCompleteValidator = (control: AbstractControl): ValidationErrors | null => {
+    const rows = control.value || [];
+    const hasIncomplete = rows.some(
+      (item) => !item?.[SCENARIO_FIELD_ID.DEPEND_ITEM] || !item?.[SCENARIO_FIELD_ID.BE_DEPENDED_ITEM]
+    );
+    return hasIncomplete ? { incomplete: true } : null;
+  };
+
   private getFormGroup(formConfig: any, defaultData?: any): UntypedFormGroup {
     const formGroup = this.formBuilder.group({});
     Object.keys(formConfig).forEach((key) => {
@@ -350,11 +362,12 @@ export class ScenarioGuideModalComponent implements OnInit, AfterViewInit, OnDes
         this.guideFormList = field;
       } else if (formItem.id === SCENARIO_FIELD_ID.DEPENDENCY_LIST) {
         const defaultRelations = defaultData?.[SCENARIO_FIELD_ID.DEPENDENCY_LIST];
-        if (defaultRelations?.length) {
-          field = this.formBuilder.array(defaultRelations.map((item) => this.getFormGroup(formItem.children, item)));
-        } else {
-          field = this.formBuilder.array([]);
-        }
+        const relationControls = defaultRelations?.length
+          ? defaultRelations.map((item) => this.getFormGroup(formItem.children, item))
+          : [];
+        field = this.formBuilder.array(relationControls, {
+          validators: [this.dependencyRowsCompleteValidator]
+        });
         this.dependencyFormList = field;
       } else {
         field = this.formBuilder.control(defaultData?.[formItem.id] || formItem.defaultValue, formItem.validators);
@@ -600,7 +613,10 @@ export class ScenarioGuideModalComponent implements OnInit, AfterViewInit, OnDes
           elementRef = this.elementRef.nativeElement.querySelector(`[id=guideCard${firstInvalidGuideIndex}]`);
           this.changeCardCollapse(this.guideFormListData[firstInvalidGuideIndex], this.guideFormList?.controls?.[firstInvalidGuideIndex], false);
         } else if (dependencyErrorKeys.length) {
-          elementRef = this.elementRef.nativeElement.querySelector(`[id=dependency${dependencyErrorKeys[0]}]`);
+          const firstInvalidDependencyIndex = this.dependencyFormList.controls.findIndex((item) => item.invalid);
+          if (firstInvalidDependencyIndex !== -1) {
+            elementRef = this.elementRef.nativeElement.querySelector(`[id=dependency${firstInvalidDependencyIndex}]`);
+          }
         }
       }
       elementRef?.scrollIntoView({ behavior: "smooth" });

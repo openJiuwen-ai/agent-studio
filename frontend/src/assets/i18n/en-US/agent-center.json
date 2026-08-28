@@ -1,4 +1,4 @@
-﻿{
+{
   "add": "Add",
   "added": "Added nodes: {}",
   "prompt": "Prompt",
@@ -285,6 +285,8 @@
   "dependency_relate_config_label": "Dependency Configuration (Optional)",
   "add_dependency_relate_label": "Add Dependency",
   "guide_least_two_tip": "Configure at least two guides first.",
+  "dependency_item_required_tip": "Select a dependency item.",
+  "be_depended_item_required_tip": "Select a depended item.",
   "dependent_relation_label": "depends on",
   "priority_depend_inappropriate_tip": "High-priority tasks depend on low-priority tasks, which affects the execution efficiency. You are advised to adjust the priorities.",
   "skill_effective_label": "Expired",

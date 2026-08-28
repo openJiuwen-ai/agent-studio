@@ -57,6 +57,13 @@
   }
 }
 
+// 依赖项未选择错误样式（红色边框）
+.dependency-select-error {
+  :host ::ng-deep .ant-select-selector {
+    border-color: #ff4d4f !important;
+  }
+}
+
 // 高优先级依赖低优先级警告样式（橙色边框）
 .priority-warning-select {
   :host ::ng-deep .ant-select-selector {
