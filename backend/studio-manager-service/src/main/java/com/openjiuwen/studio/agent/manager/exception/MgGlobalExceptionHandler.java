@@ -18,6 +18,8 @@ import jakarta.validation.ConstraintViolationException;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.jdbc.BadSqlGrammarException;
@@ -25,11 +27,15 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.sql.SQLException;
@@ -41,6 +47,7 @@ import java.util.stream.Collectors;
  */
 @ControllerAdvice
 @Slf4j
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class MgGlobalExceptionHandler {
     final I18nUtil i18nUtil;
 
@@ -219,5 +226,66 @@ public class MgGlobalExceptionHandler {
     public ResponseEntity<ErrorRsp> handleException(MaxUploadSizeExceededException exception) {
         log.error("MaxUploadSizeExceededException: {}", exception.getMessage());
         return handleAgentManagerException(new AgentStudioException(StudioError.MAX_UPLOAD_SIZE_EXCEEDED));
+    }
+
+    /**
+     * 必填 multipart 段缺失（如未传 file 参数）
+     */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    @ResponseBody
+    public ResponseEntity<ErrorRsp> handleMissingServletRequestPartException(MissingServletRequestPartException exception) {
+        String reason = "缺少必填参数：" + exception.getRequestPartName();
+        log.error("MissingServletRequestPartException: {}", exception.getMessage());
+        return badRequest(reason);
+    }
+
+    /**
+     * 必填 RequestParam 缺失（如 workspace_id 没传）
+     */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    @ResponseBody
+    public ResponseEntity<ErrorRsp> handleMissingServletRequestParameterException(MissingServletRequestParameterException exception) {
+        String reason = "缺少必填参数：" + exception.getParameterName();
+        log.error("MissingServletRequestParameterException: {}", exception.getMessage());
+        return badRequest(reason);
+    }
+
+    /**
+     * 参数类型转换失败（如 enum 值非法：conflict_strategy=XXX 不是 SKIP/COVER）
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseBody
+    public ResponseEntity<ErrorRsp> handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException exception) {
+        String name = exception.getName();
+        Class<?> required = exception.getRequiredType();
+        String expected = (required != null && required.isEnum())
+            ? String.join("/", java.util.Arrays.stream(required.getEnumConstants())
+                .map(Object::toString).toArray(String[]::new))
+            : (required != null ? required.getSimpleName() : "value");
+        String reason = "参数 " + name + " 取值非法，期望值：" + expected;
+        log.error("MethodArgumentTypeMismatchException: {} expected={} got={}", name, expected, exception.getValue());
+        return badRequest(reason);
+    }
+
+    /**
+     * Multipart 请求本身异常（非 multipart 请求、解析失败等）。
+     */
+    @ExceptionHandler(MultipartException.class)
+    @ResponseBody
+    public ResponseEntity<ErrorRsp> handleMultipartException(MultipartException exception) {
+        String reason = "请求格式错误，需要 multipart/form-data 上传文件";
+        log.error("MultipartException: {}", exception.getMessage());
+        return badRequest(reason);
+    }
+
+    /** 构造 400 错误响应，error_reason 使用入参 reason（直接中文字面量），绕过 i18n 模板。 */
+    private ResponseEntity<ErrorRsp> badRequest(String reason) {
+        StudioError code = StudioError.METHOD_ARGUMENT_NOT_VALID;
+        ErrorRsp rsp = new ErrorRsp()
+            .setErrorCode(code.getFullCode())
+            .setErrorMsg(i18nUtil.getMessage(code))
+            .setErrorReason(reason)
+            .setErrorSuggestion(i18nUtil.getSuggestion(code));
+        return new ResponseEntity<>(rsp, code.getHttpStatus());
     }
 }

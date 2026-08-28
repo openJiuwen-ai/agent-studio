@@ -6,13 +6,13 @@ package com.openjiuwen.studio.agent.manager.service.md;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
-import com.openjiuwen.studio.agent.common.utils.SignatureUtils;
 import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.common.dto.ImportRes;
 import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelImportPreviewItem;
 import com.openjiuwen.studio.agent.manager.dto.ModelImportPreviewRsp;
 import com.openjiuwen.studio.agent.manager.entity.ModelExportEntity;
+import com.openjiuwen.studio.agent.manager.entity.ModelExportLine;
 import com.openjiuwen.studio.agent.manager.entity.ProviderExportMetadata;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
@@ -20,7 +20,6 @@ import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceProvider;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceProviderDetail;
 import com.openjiuwen.studio.agent.manager.entity.md.ProviderAuthData;
 import com.openjiuwen.studio.agent.manager.entity.md.ProviderAuthMetadata;
-import com.openjiuwen.studio.agent.manager.enums.ModelImportConflictStrategy;
 import com.openjiuwen.studio.agent.manager.mapper.md.ModelServiceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthDataMapper;
 import com.openjiuwen.studio.agent.manager.mapper.md.ProviderAuthMetadataMapper;
@@ -35,6 +34,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -46,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
@@ -59,8 +60,11 @@ import static org.mockito.Mockito.when;
 
 /**
  * {@link ModelImportExportService} 单测。纯 Mockito Mock，对齐 {@code AgentExportServiceTest} 风格。
- * 真实构件：{@code ObjectMapper}、{@code SignatureUtils}（按用例启用/禁用）、{@code UrlCheckUtils}
+ * 真实构件：{@code ObjectMapper}、{@code UrlCheckUtils}
  * （enableUrlCheck=false 使 checkUrl 放通，validateEnvVarPlaceholders 走真实逻辑）。
+ *
+ * <p>本模块已移除签名/HMAC 与 cipher 适配检测（特性未上线，无向后兼容）。
+ * 导出 JSONL 仅含 import_type + payload，不再签名；导入不验签；preview 用 line_valid 表示行级硬错误。
  */
 class ModelImportExportServiceTest {
 
@@ -73,6 +77,7 @@ class ModelImportExportServiceTest {
     private ModelLicenseCtrlService licenseCtrlService;
 
     private ModelImportExportService service;
+    private ObjectMapper testObjectMapper;
 
     @BeforeEach
     void setUp() {
@@ -85,9 +90,7 @@ class ModelImportExportServiceTest {
         licenseCtrlService = mock(ModelLicenseCtrlService.class);
 
         ObjectMapper objectMapper = new ObjectMapper();
-        SignatureUtils signatureUtils = new SignatureUtils();
-        ReflectionTestUtils.setField(signatureUtils, "signatureEnable", true);
-        ReflectionTestUtils.setField(signatureUtils, "secretKey", "test-secret-key");
+        testObjectMapper = objectMapper;
         UrlCheckUtils urlCheckUtils = new UrlCheckUtils();
         ReflectionTestUtils.setField(urlCheckUtils, "enableUrlCheck", false);
 
@@ -98,21 +101,27 @@ class ModelImportExportServiceTest {
         ReflectionTestUtils.setField(service, "userModelServiceProviderMapper", userModelServiceProviderMapper);
         ReflectionTestUtils.setField(service, "providerAuthMetadataMapper", providerAuthMetadataMapper);
         ReflectionTestUtils.setField(service, "providerAuthDataMapper", providerAuthDataMapper);
-        ReflectionTestUtils.setField(service, "signatureUtils", signatureUtils);
         ReflectionTestUtils.setField(service, "urlCheckUtils", urlCheckUtils);
         ReflectionTestUtils.setField(service, "jacksonObjectMapper", objectMapper);
         ReflectionTestUtils.setField(service, "licenseCtrlService", licenseCtrlService);
     }
 
+    /** 直接把 payload 序列化成一行 JSONL（{@code {"import_type":"model_service","payload":{...}}}），绕过导出签名。 */
+    private byte[] toJsonlLine(ModelExportEntity entity) throws Exception {
+        ModelExportLine line = new ModelExportLine();
+        line.setImportType("model_service");
+        line.setPayload(entity);
+        return (testObjectMapper.writeValueAsString(line) + "\n").getBytes(StandardCharsets.UTF_8);
+    }
+
     @Test
-    void testRoundTrip_importPreservesId() {
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
+    void testRoundTrip_importPreservesId() throws Exception {
+        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
+        byte[] jsonl = toJsonlLine(entity);
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP);
+            "SKIP");
 
         ArgumentCaptor<ModelServiceBase> captor = ArgumentCaptor.forClass(ModelServiceBase.class);
         verify(modelServiceManager).createModelServiceForImport(captor.capture());
@@ -122,29 +131,13 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testSignatureFailure_recordedAsFailed() {
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        // 篡改 payload：serviceName 含 "-"（标准 Base64 不含 "-"，故仅命中 payload，签名不变）→ 验签失败
-        String tampered = new String(jsonl, StandardCharsets.UTF_8).replace("svc-m1", "tampered");
-
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(tampered.getBytes(StandardCharsets.UTF_8)),
-            ModelImportConflictStrategy.SKIP);
-
-        verify(modelServiceManager, never()).createModelServiceForImport(any());
-        assertTrue(rsp.getFailedLen() >= 1);
-    }
-
-    @Test
-    void testConflictSkip() {
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
+    void testConflictSkip() throws Exception {
+        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        byte[] jsonl = toJsonlLine(entity);
         ModelServiceBase existing = new ModelServiceBase().setId("old-id").setServiceName("svc-m1").setProviderId("p1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(List.of(existing));
 
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.SKIP);
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
 
         verify(modelServiceManager, never()).createModelServiceForImport(any());
         verify(modelServiceManager, never()).deleteModelService(any());
@@ -154,14 +147,13 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testConflictCover() {
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
+    void testConflictCover() throws Exception {
+        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        byte[] jsonl = toJsonlLine(entity);
         ModelServiceBase existing = new ModelServiceBase().setId("old-id").setServiceName("svc-m1").setProviderId("p1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(List.of(existing));
 
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.COVER);
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "COVER");
 
         // COVER 走事务化 coverModelService(DB) + 缓存补偿，不再直接调 delete/create（其内部逻辑已迁入 cover）
         ArgumentCaptor<ModelServiceBase> captor = ArgumentCaptor.forClass(ModelServiceBase.class);
@@ -175,70 +167,61 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testEnvVarPlaceholderValid() {
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://${_env.plugin_url_params.HOST}/v1")));
+    void testEnvVarPlaceholderValid() throws Exception {
+        ModelExportEntity entity = buildEntity("m1", "https://${_env.plugin_url_params.HOST}/v1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.SKIP);
+        byte[] jsonl = toJsonlLine(entity);
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
 
         verify(modelServiceManager).createModelServiceForImport(any());
         assertEquals(1, rsp.getSucceedLen());
     }
 
     @Test
-    void testEnvVarPlaceholderInvalid() {
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://${evil.var}/x")));
+    void testEnvVarPlaceholderInvalid() throws Exception {
+        ModelExportEntity entity = buildEntity("m1", "https://${evil.var}/x");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.SKIP);
+        byte[] jsonl = toJsonlLine(entity);
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
 
         verify(modelServiceManager, never()).createModelServiceForImport(any());
         assertEquals(1, rsp.getFailedLen());
     }
 
     @Test
-    void testMaskedAuthExport() {
+    void testMaskedAuthExport() throws Exception {
         ProviderExportMetadata pm = new ProviderExportMetadata();
         pm.setProviderAuthMetadata(new ProviderAuthMetadata().setProviderId("p1").setAuthInfo("secret-cipher"));
         ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
         entity.setProviderMetadata(pm);
+
+        // 通过 buildLine 路径走 service.exportModels 验证 maskProviderAuth 生效
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
 
         // maskProviderAuth 把 ProviderAuthMetadata.authInfo 置空，密文不外泄
         assertEquals(" ", pm.getProviderAuthMetadata().getAuthInfo());
-        assertTrue(!new String(jsonl, StandardCharsets.UTF_8).contains("secret-cipher"));
+        String content = new String(jsonl, StandardCharsets.UTF_8);
+        assertFalse(content.contains("secret-cipher"), "auth_info must be masked, got: " + content);
+        // 契约：导出 JSONL 不再含 signature 字段
+        assertFalse(content.contains("\"signature\""), "export must not contain signature field, got: " + content);
     }
 
-    @Test
-    void testSignatureDisabled() {
-        SignatureUtils disabled = new SignatureUtils();
-        ReflectionTestUtils.setField(disabled, "signatureEnable", false);
-        ReflectionTestUtils.setField(service, "signatureUtils", disabled);
-
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
-        when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
-
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        // 签名禁用：导出行无 signature 字段，导入 verifySignature 直接放行
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.SKIP);
-
-        verify(modelServiceManager).createModelServiceForImport(any());
-        assertEquals(1, rsp.getSucceedLen());
-    }
-
-    // ============================== previewImport 路径（此前完全未覆盖） ==============================
+    // ============================== previewImport 路径 ==============================
 
     @Test
-    void testPreviewImport_normalWithConflict() {
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1"), buildEntity("m2", "https://y.com/v2")));
+    void testPreviewImport_normalWithConflict() throws Exception {
+        // 用单行 JSONL（一个 entity 装两个同 provider 模型）覆盖冲突预检路径。
+        ModelServiceData m1 = new ModelServiceData();
+        m1.setId("m1"); m1.setServiceName("svc-m1"); m1.setProviderId("p1"); m1.setApiUrl("https://x.com/v1");
+        ModelServiceData m2 = new ModelServiceData();
+        m2.setId("m2"); m2.setServiceName("svc-m2"); m2.setProviderId("p1"); m2.setApiUrl("https://y.com/v2");
+        ModelExportEntity entity = new ModelExportEntity();
+        entity.setModelMetadata(new ArrayList<>(List.of(m1, m2)));
+        entity.setProviderMetadata(null);
         // m1 无冲突，m2 同名冲突
         when(modelServiceMapper.queryByName(eq("proj"), eq("ws"), eq("svc-m1"), any()))
             .thenReturn(Collections.emptyList());
@@ -246,7 +229,7 @@ class ModelImportExportServiceTest {
         when(modelServiceMapper.queryByName(eq("proj"), eq("ws"), eq("svc-m2"), any()))
             .thenReturn(List.of(existing));
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1", "m2"));
+        byte[] jsonl = toJsonlLine(entity);
         ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
 
         assertEquals(2, rsp.getTotalCount());
@@ -256,29 +239,12 @@ class ModelImportExportServiceTest {
         verify(modelServiceManager, never()).deleteModelService(any());
         ModelImportPreviewItem m2Item = rsp.getItems().get(1);
         assertTrue(m2Item.getConflict());
-        assertTrue(m2Item.getSignatureValid());
+        assertTrue(m2Item.getLineValid());
         assertTrue(m2Item.getApiUrlValid());
     }
 
     @Test
-    void testPreviewImport_signatureFailureLine() {
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        String tampered = new String(jsonl, StandardCharsets.UTF_8).replace("svc-m1", "tampered");
-
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws",
-            toMultipartFile(tampered.getBytes(StandardCharsets.UTF_8)));
-
-        // 验签失败行仍计入 total_count，signatureValid=false
-        assertEquals(1, rsp.getTotalCount());
-        assertEquals(1, rsp.getItems().size());
-        assertFalse(rsp.getItems().get(0).getSignatureValid());
-        assertNotNull(rsp.getItems().get(0).getDetail());
-    }
-
-    @Test
-    void testPreviewImport_urlInvalid() {
+    void testPreviewImport_urlInvalid() throws Exception {
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
             .thenReturn(List.of(buildEntity("m1", "https://${evil.var}/x")));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
@@ -288,10 +254,10 @@ class ModelImportExportServiceTest {
 
         assertEquals(1, rsp.getTotalCount());
         ModelImportPreviewItem item = rsp.getItems().get(0);
-        // 验签通过但 apiUrl/占位符校验失败
-        assertTrue(item.getSignatureValid());
+        // 行合法（解析通过）但 apiUrl/占位符校验失败
+        assertTrue(item.getLineValid());
         // checkUrl 对含 ${...} 占位符的 URL 放通(enableUrlCheck=false 亦放通)→ apiUrlValid=true；
-        // 仅 validateEnvVarPlaceholders 失败 → envVarValid=false（Finding 5：两标志独立判定）
+        // 仅 validateEnvVarPlaceholders 失败 → envVarValid=false
         assertTrue(item.getApiUrlValid());
         assertFalse(item.getEnvVarValid());
         assertNotNull(item.getDetail());
@@ -300,7 +266,7 @@ class ModelImportExportServiceTest {
     // ============================== 冲突说明（detectConflict 三情况 + 硬校验合并） ==============================
 
     @Test
-    void testPreviewImport_noConflict_detailIsNull() {
+    void testPreviewImport_noConflict_detailIsNull() throws Exception {
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
@@ -315,13 +281,13 @@ class ModelImportExportServiceTest {
         assertFalse(item.getConflict());
         // 无冲突且无硬校验失败 → detail=null（前端展示"无"）
         assertNull(item.getDetail());
-        assertTrue(item.getSignatureValid());
+        assertTrue(item.getLineValid());
         assertTrue(item.getApiUrlValid());
         assertTrue(item.getEnvVarValid());
     }
 
     @Test
-    void testPreviewImport_conflictByName_resolvesProviderName() {
+    void testPreviewImport_conflictByName_resolvesProviderName() throws Exception {
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         // 情况1：本空间同供应商+同服务名命中
@@ -348,7 +314,7 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testPreviewImport_conflictByName_providerNotFound_fallsBackToProviderId() {
+    void testPreviewImport_conflictByName_providerNotFound_fallsBackToProviderId() throws Exception {
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         ModelServiceBase existing = new ModelServiceBase().setId("old").setServiceName("svc-m1").setProviderId("p1");
@@ -366,7 +332,7 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testPreviewImport_conflictBySameScopeModelId() {
+    void testPreviewImport_conflictBySameScopeModelId() throws Exception {
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         // queryByName 未命中（无同名/同供应商）
@@ -388,7 +354,7 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testPreviewImport_conflictByCrossScopeModelId() {
+    void testPreviewImport_conflictByCrossScopeModelId() throws Exception {
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
@@ -410,7 +376,7 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testPreviewImport_conflictMergedWithHardCheckFailure() {
+    void testPreviewImport_conflictMergedWithHardCheckFailure() throws Exception {
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
             .thenReturn(List.of(buildEntity("m1", "https://${evil.var}/x")));
         // 情况1冲突 + 非法占位符硬校验失败 → detail 拼接两者
@@ -432,7 +398,7 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testPreviewImport_blankProviderId_noFalseConflict() {
+    void testPreviewImport_blankProviderId_noFalseConflict() throws Exception {
         // MEDIUM-1 回归：providerId 空值时 previewOneModel 不应跑 detectConflict（与导入侧 validateModel
         // 前置一致），避免 queryByName 退化为 serviceName-only 误报冲突、且空 providerId 回退进说明括号。
         ModelServiceData model = new ModelServiceData();
@@ -443,9 +409,8 @@ class ModelImportExportServiceTest {
         ModelExportEntity entity = new ModelExportEntity();
         entity.setModelMetadata(new ArrayList<>(List.of(model)));
         entity.setProviderMetadata(null);
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
+        byte[] jsonl = toJsonlLine(entity);
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
         ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
 
         assertEquals(1, rsp.getTotalCount());
@@ -463,10 +428,10 @@ class ModelImportExportServiceTest {
 
     @Test
     void testImport_formatInvalidLine() {
-        byte[] jsonl = "this is not json".getBytes(StandardCharsets.UTF_8);
+        byte[] jsonl = ("{\"import_type\":\"model_service\",\"payload\":\"not-json\"}\n").getBytes(StandardCharsets.UTF_8);
 
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP);
+            "SKIP");
 
         assertEquals(1, rsp.getFailedLen());
         assertEquals(0, rsp.getSucceedLen());
@@ -475,39 +440,39 @@ class ModelImportExportServiceTest {
 
     @Test
     void testImport_emptyFile() {
+        // 全空/空白行文件 → 整文件无合法模型行，顶层 fast-fail 抛 400
         byte[] jsonl = "\n  \n".getBytes(StandardCharsets.UTF_8);
 
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP);
-
-        // 全空行被跳过，无任何导入记录
-        assertEquals(0, rsp.getCount());
-        assertEquals(0, rsp.getSucceedLen());
-        assertEquals(0, rsp.getFailedLen());
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
         verify(modelServiceManager, never()).createModelServiceForImport(any());
     }
 
     @Test
-    void testImport_multipleLines_partialSuccess() {
+    void testImport_multipleLines_rejectedAsSingleLineRequired() throws Exception {
+        // R5b：模型导出文件为单行 JSONL（每行一个完整 JSON 对象，一个文件只包含一行）。
+        // 若包含多有效行（通常是被文本编辑器 pretty-print），直接顶层抛错，不再逐行处理。
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1"), buildEntity("m2", "https://y.com/v2")));
-        // m1 无冲突 → 成功；m2 同名 + SKIP → 失败
-        when(modelServiceMapper.queryByName(eq("proj"), eq("ws"), eq("svc-m1"), any()))
-            .thenReturn(Collections.emptyList());
-        when(modelServiceMapper.queryByName(eq("proj"), eq("ws"), eq("svc-m2"), any()))
-            .thenReturn(List.of(new ModelServiceBase().setId("old").setServiceName("svc-m2").setProviderId("p1")));
+            .thenAnswer(inv -> {
+                List<String> ids = inv.getArgument(2);
+                return List.of(buildEntity(ids.get(0), "https://x.com/v1?m=" + ids.get(0)));
+            });
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1", "m2"));
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.SKIP);
+        byte[] l1 = service.exportModels("proj", "ws", List.of("m1"));
+        byte[] l2 = service.exportModels("proj", "ws", List.of("m2"));
+        byte[] jsonl = (new String(l1, StandardCharsets.UTF_8) + new String(l2, StandardCharsets.UTF_8))
+            .getBytes(StandardCharsets.UTF_8);
 
-        assertEquals(1, rsp.getSucceedLen());
-        // m2 同名 + SKIP → 归类为 SKIPPED（非 FAILED）
-        assertEquals(1, rsp.getSkippedLen());
-        assertEquals(0, rsp.getFailedLen());
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("单行 JSONL"), "message must hint single-line JSONL, got: " + e.getMessage());
+        verify(modelServiceManager, never()).createModelServiceForImport(any());
     }
 
     @Test
-    void testImport_multipleModelsInLine() {
+    void testImport_multipleModelsInLine() throws Exception {
         // 一行 JSONL 含两个模型 → 均导入成功
         ModelServiceData m1 = new ModelServiceData();
         m1.setId("m1");
@@ -522,11 +487,10 @@ class ModelImportExportServiceTest {
         ModelExportEntity entity = new ModelExportEntity();
         entity.setModelMetadata(new ArrayList<>(List.of(m1, m2)));
         entity.setProviderMetadata(null);
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1", "m2"));
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.SKIP);
+        byte[] jsonl = toJsonlLine(entity);
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
 
         assertEquals(2, rsp.getSucceedLen());
         verify(modelServiceManager, times(2)).createModelServiceForImport(any());
@@ -534,36 +498,34 @@ class ModelImportExportServiceTest {
 
     @Test
     void testImport_nullPayload() {
-        // 签名禁用：构造 payload 为 null 的行（`{}`），验签放行后触发 payload 缺失分支
-        SignatureUtils disabled = new SignatureUtils();
-        ReflectionTestUtils.setField(disabled, "signatureEnable", false);
-        ReflectionTestUtils.setField(service, "signatureUtils", disabled);
+        // payload 缺失（`{import_type:model_service}`）→ failedRes
+        byte[] jsonl = ("{\"import_type\":\"model_service\"}\n").getBytes(StandardCharsets.UTF_8);
 
-        byte[] jsonl = "{}\n".getBytes(StandardCharsets.UTF_8);
-
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.SKIP);
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
 
         assertEquals(1, rsp.getFailedLen());
         verify(modelServiceManager, never()).createModelServiceForImport(any());
     }
 
     @Test
-    void testUpsertProviderMetadata_insertIfMissing() {
+    void testUpsertProviderMetadata_insertIfMissing() throws Exception {
         // 目标环境无该 provider 元数据 → insert 被调，且 model.authMetadataId 重链到新插入记录的 ID
         ProviderAuthMetadata authMeta = new ProviderAuthMetadata();
         authMeta.setProviderId("p1");
         authMeta.setAuthInfo(" ");
         ProviderExportMetadata pm = new ProviderExportMetadata();
         pm.setProviderAuthMetadata(authMeta);
-        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        ModelExportEntity entity = buildEntityWithProvider("m1", "https://x.com/v1", "p1");
         entity.setProviderMetadata(pm);
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
         when(providerAuthMetadataMapper.selectByProjectWorkspaceProvider(any(), any(), any()))
             .thenReturn(Collections.emptyList());
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+        when(userModelServiceProviderMapper.selectByIds(any())).thenReturn(Collections.emptyList());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.SKIP);
+        byte[] jsonl = toJsonlLine(entity);
+        service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
 
         // round-trip 反序列化产生新实例，用 captor 捕获实际插入对象并校验 re-scope + 脱敏
         ArgumentCaptor<ProviderAuthMetadata> captor = ArgumentCaptor.forClass(ProviderAuthMetadata.class);
@@ -576,25 +538,27 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testUpsertProviderMetadata_alreadyExists() {
+    void testUpsertProviderMetadata_alreadyExists() throws Exception {
         // 目标工作空间已有该 provider 元数据(按作用域查命中) → 跳过 insert，但 model.authMetadataId 重链到已有记录的 ID
         ProviderAuthMetadata authMeta = new ProviderAuthMetadata();
         authMeta.setProviderId("p1");
         authMeta.setAuthInfo(" ");
         ProviderExportMetadata pm = new ProviderExportMetadata();
         pm.setProviderAuthMetadata(authMeta);
-        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        ModelExportEntity entity = buildEntityWithProvider("m1", "https://x.com/v1", "p1");
         entity.setProviderMetadata(pm);
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+        when(userModelServiceProviderMapper.selectByIds(any())).thenReturn(Collections.emptyList());
         // 目标工作空间已存在该 provider 的 auth metadata，ID="target-meta-id"
         ProviderAuthMetadata existingMeta = new ProviderAuthMetadata();
         existingMeta.setId("target-meta-id");
         when(providerAuthMetadataMapper.selectByProjectWorkspaceProvider(any(), any(), any()))
             .thenReturn(List.of(existingMeta));
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.SKIP);
+        byte[] jsonl = toJsonlLine(entity);
+        service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
 
         verify(providerAuthMetadataMapper, never()).insert(any(ProviderAuthMetadata.class));
         // model.authMetadataId 被重链到目标环境的 ID（非源环境旧值）
@@ -604,74 +568,52 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testLicenseCheck_invoked() {
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
+    void testLicenseCheck_invoked() throws Exception {
+        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.SKIP);
+        byte[] jsonl = toJsonlLine(entity);
+        service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
 
         // importModels 入口须做 license 校验
         verify(licenseCtrlService).canAccessIntegrationModel();
     }
 
     @Test
-    void testMalformedBase64Signature_recordedAsFailed_not500() {
-        // HIGH-1 回归：畸形签名（非法 Base64）原会逃逸 IllegalArgumentException → 500；
-        // 修复后 verifyLine 捕获并转为 MODEL_IMPORT_SIGNATURE_INVALID，记 failed 不中断整批。
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        // 把合法签名替换为非法 Base64（含空格/中文，Base64.getDecoder().decode 必抛 IllegalArgumentException）
-        String malformed = new String(jsonl, StandardCharsets.UTF_8)
-            .replaceAll("\"signature\":\"[^\"]*\"", "\"signature\":\"这不是合法base64!!! \"");
-
-        ImportRsp rsp = service.importModels("proj", "ws",
-            toMultipartFile(malformed.getBytes(StandardCharsets.UTF_8)), ModelImportConflictStrategy.SKIP);
-
-        verify(modelServiceManager, never()).createModelServiceForImport(any());
-        assertEquals(1, rsp.getFailedLen());
-        assertEquals(0, rsp.getSucceedLen());
-    }
-
-    @Test
-    void testCreateModelServiceInfraException_recordedAsFailed_not500() {
+    void testCreateModelServiceInfraException_recordedAsFailed_not500() throws Exception {
         // HIGH-3 回归：无冲突路径的 DB insert 抛非 AgentStudioException 时，
-        // 兜底 catch 转 failed，不抛异常中断整批。（注：缓存写失败已由 syncCachesForCreate best-effort 吞掉，不会到此）
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
+        // 兜底 catch 转 failed，不抛异常中断整批。
+        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
         // 模拟 DB insert 异常（createModelServiceForImport 抛出 → importOneModel catch(Exception)）
         doThrow(new RuntimeException("DB insert duplicate key")).when(modelServiceManager)
             .createModelServiceForImport(any());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
+        byte[] jsonl = toJsonlLine(entity);
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP);
+            "SKIP");
 
         assertEquals(1, rsp.getFailedLen());
         assertEquals(0, rsp.getSucceedLen());
     }
 
     @Test
-    void testUpsertProviderMetadataFailure_doesNotAbortImport() {
+    void testUpsertProviderMetadataFailure_doesNotAbortImport() throws Exception {
         // HIGH-2 回归：upsertProviderMetadata 抛异常时（best-effort），模型导入不被中断。
         ProviderAuthMetadata authMeta = new ProviderAuthMetadata();
         authMeta.setProviderId("p1");
         authMeta.setAuthInfo(" ");
         ProviderExportMetadata pm = new ProviderExportMetadata();
         pm.setProviderAuthMetadata(authMeta);
-        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        ModelExportEntity entity = buildEntityWithProvider("m1", "https://x.com/v1", "p1");
         entity.setProviderMetadata(pm);
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
         when(providerAuthMetadataMapper.selectByIds(any()))
             .thenThrow(new RuntimeException("DB connection lost"));
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
+        byte[] jsonl = toJsonlLine(entity);
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP);
+            "SKIP");
 
         // provider 元数据失败不阻断，模型本身仍导入成功
         assertEquals(1, rsp.getSucceedLen());
@@ -681,19 +623,18 @@ class ModelImportExportServiceTest {
     // ============================== HIGH-4 回归：COVER 事务化 + 缓存补偿 ==============================
 
     @Test
-    void testCover_dbFailure_recordsFailed_noCacheSync() {
+    void testCover_dbFailure_recordsFailed_noCacheSync() throws Exception {
         // HIGH-4 回归：coverModelService(DB 事务)失败时，旧记录由事务回滚保护，
         // 且不触发缓存同步（DB 未提交，写缓存无意义）。
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
+        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        byte[] jsonl = toJsonlLine(entity);
         ModelServiceBase existing = new ModelServiceBase().setId("old-id").setServiceName("svc-m1").setProviderId("p1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(List.of(existing));
         doThrow(new RuntimeException("DB insert duplicate key")).when(modelServiceManager)
             .coverModelService(any(), any());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.COVER);
+            "COVER");
 
         // DB 事务失败 → 记 failed（如实反映"什么都没改"，旧记录完好），缓存同步未触发
         assertEquals(1, rsp.getFailedLen());
@@ -703,16 +644,15 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testCover_success_clearsOldCacheBeforeWritingNew() {
+    void testCover_success_clearsOldCacheBeforeWritingNew() throws Exception {
         // HIGH-4 回归：缓存同步顺序须"先清旧(existingId)后写新(importId)"，
         // 避免同文件二次导入同空间时 existingId==importId 自删（先写后清会把刚写的缓存删掉）。
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
+        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        byte[] jsonl = toJsonlLine(entity);
         ModelServiceBase existing = new ModelServiceBase().setId("old-id").setServiceName("svc-m1").setProviderId("p1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(List.of(existing));
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.COVER);
+        service.importModels("proj", "ws", toMultipartFile(jsonl), "COVER");
 
         // 顺序校验：coverModelService(DB 提交) → removeModelCaches(清旧) → saveModelInfoToObsAndRedis(写新)
         InOrder inOrder = inOrder(modelServiceManager);
@@ -722,18 +662,17 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testCover_cacheWriteFails_doesNotFailImport() {
+    void testCover_cacheWriteFails_doesNotFailImport() throws Exception {
         // HIGH-4 回归：coverModelService(DB)已提交后，缓存写失败不致导入失败（best-effort，DB 为 source of truth）。
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
+        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        byte[] jsonl = toJsonlLine(entity);
         ModelServiceBase existing = new ModelServiceBase().setId("old-id").setServiceName("svc-m1").setProviderId("p1");
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(List.of(existing));
         doThrow(new RuntimeException("OBS putObject failed")).when(modelServiceManager)
             .saveModelInfoToObsAndRedis(any(), any(), any());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.COVER);
+            "COVER");
 
         // DB 已提交，缓存写失败仅告警，导入仍成功；旧缓存清理仍被调用（best-effort 各自独立 try/catch）
         assertEquals(1, rsp.getSucceedLen());
@@ -744,18 +683,16 @@ class ModelImportExportServiceTest {
     // ============================== Finding 1 回归：无冲突路径缓存 best-effort ==============================
 
     @Test
-    void testNoConflict_cacheWriteFails_doesNotFailImport() {
+    void testNoConflict_cacheWriteFails_doesNotFailImport() throws Exception {
         // Finding 1 回归：无冲突路径缓存写失败时（DB 已提交），导入仍成功——与 COVER 路径语义一致。
-        // 旧实现走 createModelService(insert+缓存耦合)，缓存写失败会致响应报 FAILED 但 DB 行已落（误导）。
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
+        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        byte[] jsonl = toJsonlLine(entity);
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
         doThrow(new RuntimeException("OBS putObject failed")).when(modelServiceManager)
             .saveModelInfoToObsAndRedis(any(), any(), any());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP);
+            "SKIP");
 
         // DB insert(createModelServiceForImport)已提交，缓存写失败被 syncCachesForCreate best-effort 吞掉 → 仍成功
         assertEquals(1, rsp.getSucceedLen());
@@ -768,34 +705,71 @@ class ModelImportExportServiceTest {
 
     @Test
     void testPreviewImport_nullPayloadShown() {
-        // Finding 2 回归：验签通过但 payload 缺失时，预检须展示该行（与导入报 FAILED 对齐），
-        // 旧实现 modelsOf 返回空列表致该行被丢弃、totalCount 不含它，预检说 0 导入说 1 失败。
-        SignatureUtils disabled = new SignatureUtils();
-        ReflectionTestUtils.setField(disabled, "signatureEnable", false);
-        ReflectionTestUtils.setField(service, "signatureUtils", disabled);
-
-        byte[] jsonl = "{}\n".getBytes(StandardCharsets.UTF_8);
+        // Finding 2 回归：payload 缺失时，预检须展示该行（与导入报 FAILED 对齐），
+        // lineValid=true（解析通过，import_type 对），detail="payload is missing"。
+        byte[] jsonl = ("{\"import_type\":\"model_service\"}\n").getBytes(StandardCharsets.UTF_8);
         ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
 
-        // null-payload 行计入 totalCount，signatureValid=true（验签放行），detail="payload is missing"
         assertEquals(1, rsp.getTotalCount());
         assertEquals(1, rsp.getItems().size());
-        assertTrue(rsp.getItems().get(0).getSignatureValid());
+        assertTrue(rsp.getItems().get(0).getLineValid());
         assertEquals("payload is missing", rsp.getItems().get(0).getDetail());
         verify(modelServiceManager, never()).createModelServiceForImport(any());
+    }
+
+    // ============================== 新增契约：line_valid 行级硬错误 ==============================
+
+    @Test
+    void testPreview_lineFailure_setsLineValidFalse() {
+        // 构造 JSON 非法行（payload 不是合法对象）→ preview 返回 item.line_valid=false 并展示错误原因。
+        String badLine = "{\"import_type\":\"model_service\",\"payload\":{broken-json!!!}}\n";
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws",
+            toMultipartFile(badLine.getBytes(StandardCharsets.UTF_8)));
+
+        assertEquals(1, rsp.getTotalCount());
+        assertEquals(1, rsp.getItems().size());
+        ModelImportPreviewItem item = rsp.getItems().get(0);
+        assertFalse(item.getLineValid(), "parse failure must set line_valid=false");
+        assertNotNull(item.getDetail());
+    }
+
+    @Test
+    void testImport_lineWithCipherNameField_parsesButIsIgnored() throws Exception {
+        // 契约：外部文件 payload.provider_auth_data 若带 cipher_name 字段（旧加密环境遗留），
+        // 因 @JsonIgnoreProperties(ignoreUnknown=true) 不抛 UnrecognizedPropertyException，
+        // 行正常解析并导入（cipher 适配检测已删除，任何 cipher_name 都被静默忽略）。
+        String line = "{\"import_type\":\"model_service\",\"payload\":{\"model_metadata\":"
+            + "[{\"id\":\"m1\",\"service_name\":\"svc-m1\",\"provider_id\":\"p1\",\"api_url\":\"https://x.com/v1\"}],"
+            + "\"provider_metadata\":{\"model_service_provider_metadata\":{\"id\":\"p1\"},"
+            + "\"provider_auth_metadata\":{\"provider_id\":\"p1\",\"auth_info\":\" \"},"
+            + "\"provider_auth_data\":{\"cipher_name\":\"AES_GCM\",\"auth_info\":\" \"}"
+            + "}}}\n";
+        when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+        when(userModelServiceProviderMapper.selectByIds(any())).thenReturn(Collections.emptyList());
+        when(providerAuthMetadataMapper.selectByProjectWorkspaceProvider(any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+
+        ImportRsp rsp = service.importModels("proj", "ws",
+            toMultipartFile(line.getBytes(StandardCharsets.UTF_8), "a.jsonl"), "SKIP");
+
+        assertEquals(1, rsp.getSucceedLen(), "cipher_name field should be ignored (unknown property), line imported");
+        assertEquals(0, rsp.getFailedLen());
+        verify(modelServiceManager).createModelServiceForImport(any());
     }
 
     // ============================== R3-1 回归：auth 作用域化 + MASKED 不插入 auth_data ==============================
 
     @Test
-    void testAuthMetadata_scopedQuery_insertsMetadata_skipsBlankAuthData() {
+    void testAuthMetadata_scopedQuery_insertsMetadata_skipsBlankAuthData() throws Exception {
         // R3-1 回归：旧实现按全局 PROVIDER_ID 查，目标环境任一工作空间有同 provider 即误判已存在→漏插。
         // 修复后按 (providerId, projectId, workspaceId) 作用域查，目标工作空间无则插入。
         //
         // 注：MASKED 导出路径下 authInfo 是 " " 占位符，upsertAuthData 会 skip auth_data insert（符合"脱敏导入
         // 需用户重填密钥"语义，同时避免详情页 500）。故本测只验证 auth_metadata 插入 + 不插入 auth_data。
         ProviderAuthMetadata authMeta = new ProviderAuthMetadata();
-        authMeta.setId("exported-meta-id"); // 导出携带源环境 auth metadata 的 id（insert SQL 用 #{id}，非 DB 自增）
+        authMeta.setId("exported-meta-id");
         authMeta.setProviderId("p1");
         authMeta.setAuthInfo(" ");
         ProviderAuthData authData = new ProviderAuthData();
@@ -805,17 +779,19 @@ class ModelImportExportServiceTest {
         ProviderExportMetadata pm = new ProviderExportMetadata();
         pm.setProviderAuthMetadata(authMeta);
         pm.setProviderAuthData(authData);
-        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        ModelExportEntity entity = buildEntityWithProvider("m1", "https://x.com/v1", "p1");
         entity.setProviderMetadata(pm);
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+        when(userModelServiceProviderMapper.selectByIds(any())).thenReturn(Collections.emptyList());
         // 目标工作空间无 auth metadata（即使其他工作空间有同 providerId，作用域查也返回空→插入）
         when(providerAuthMetadataMapper.selectByProjectWorkspaceProvider(any(), any(), any()))
             .thenReturn(Collections.emptyList());
         when(providerAuthDataMapper.selectByProviderId(any(), any(), any())).thenReturn(Collections.emptyList());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.SKIP);
+        byte[] jsonl = toJsonlLine(entity);
+        service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
 
         // auth metadata 插入（未因跨工作空间误判跳过）
         verify(providerAuthMetadataMapper).insert(any(ProviderAuthMetadata.class));
@@ -826,7 +802,7 @@ class ModelImportExportServiceTest {
     // ============================== R3-2 回归：跨工作空间 COPY 时 auth_metadata id UUID 再生，避免 DuplicateKey 孤儿行 ==============================
 
     @Test
-    void testCrossWorkspaceCopy_regeneratesAuthMetadataIdAndRemapsModelFk() {
+    void testCrossWorkspaceCopy_regeneratesAuthMetadataIdAndRemapsModelFk() throws Exception {
         // 复现 0729 残留供应商 bug：第二次导入到不同工作空间时，源 id 在其他空间已存在 → 必须生成新 UUID，
         // 否则 t_provider_auth_metadata.PRIMARY 冲突，DuplicateKeyException 被 catch 吞掉，
         // t_model_service.auth_metadata_id 保留源值（悬空 FK），模型在 UI 不可见但删除供应商时全局 COUNT(*)
@@ -845,7 +821,7 @@ class ModelImportExportServiceTest {
         ProviderAuthData authData = new ProviderAuthData();
         authData.setId("exported-data-id");
         authData.setProviderId(srcProviderId);
-        authData.setAuthInfo(" "); // MASKED 占位符 → auth_data insert 被 skip（产品预期）
+        authData.setAuthInfo(" ");
         ModelServiceProvider provider = new ModelServiceProvider();
         provider.setId(srcProviderId);
         ProviderExportMetadata pm = new ProviderExportMetadata();
@@ -858,20 +834,17 @@ class ModelImportExportServiceTest {
         model.setServiceName("svc-m1");
         model.setProviderId(srcProviderId);
         model.setApiUrl("https://x.com/v1");
-        model.setAuthMetadataId(srcMetaId); // 源环境 authMetadataId
+        model.setAuthMetadataId(srcMetaId);
 
         ModelExportEntity entity = new ModelExportEntity();
         entity.setModelMetadata(new ArrayList<>(List.of(model)));
         entity.setProviderMetadata(pm);
 
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
-
         // 目标工作空间内无同名/同 provider 冲突（queryByName 空）
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
-        // 目标工作空间内无同 id 模型（queryById 返回 null → 非跨空间模型冲突；本测只验证 auth 表）
         when(modelServiceMapper.queryById(any())).thenReturn(null);
 
-        // provider 作用域内不存在（selectByProjectIdAndWorkspaceId 空），但全局 selectByIds 命中其他空间 → COPY 分支
+        // provider 作用域内不存在，但全局 selectByIds 命中其他空间 → COPY 分支
         when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
             .thenReturn(Collections.emptyList());
         ModelServiceProvider otherWsProvider = new ModelServiceProvider();
@@ -887,11 +860,10 @@ class ModelImportExportServiceTest {
         otherWsMeta.setId(srcMetaId);
         when(providerAuthMetadataMapper.selectById(eq(srcMetaId))).thenReturn(otherWsMeta);
 
-        // authData 作用域查无（MASKED 路径下会被 skip insert，此处仅验证作用域查询行为）
         when(providerAuthDataMapper.selectByProviderId(any(), any(), any())).thenReturn(Collections.emptyList());
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of(srcModelId));
-        service.importModels("proj", "ws-new", toMultipartFile(jsonl), ModelImportConflictStrategy.COVER);
+        byte[] jsonl = toJsonlLine(entity);
+        service.importModels("proj", "ws-new", toMultipartFile(jsonl), "COVER");
 
         // 断言 1：provider 被 COPY（生成新 id 插入，而非源 id）
         ArgumentCaptor<ModelServiceProvider> provCaptor = ArgumentCaptor.forClass(ModelServiceProvider.class);
@@ -919,14 +891,10 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testUpsertProvider_sameNameInTarget_reusesExistingProviderId_doesNotInsertOrUpdate() {
-        // 新需求：目标空间已有同 provider name（不同 id）的供应商 → 复用其 id，行为与 id 复用一致：
-        //   - 不 insert 供应商行（复用目标空间既有）
-        //   - 不更新供应商本体（name/logo/描述等保持目标空间的，导入的被丢弃）
-        //   - auth metadata/data 按 providerId 查已存在 → 复用目标空间既有（不碰其鉴权）
-        //   - 模型 providerId 经 batchIdRemap 重定向到复用的 id（否则模型挂到不存在的源 id 下）
+    void testUpsertProvider_sameNameInTarget_reusesExistingProviderId_doesNotInsertOrUpdate() throws Exception {
+        // 新需求：目标空间已有同 provider name（不同 id）的供应商 → 复用其 id
         String srcProviderId = "p-src";
-        String existingProviderId = "p-existing"; // 目标空间同名供应商的 id（≠ 源 id）
+        String existingProviderId = "p-existing";
         String providerName = "阿里";
 
         ModelServiceProvider provider = new ModelServiceProvider();
@@ -934,25 +902,21 @@ class ModelImportExportServiceTest {
         provider.setProviderName(providerName);
         ProviderExportMetadata pm = new ProviderExportMetadata();
         pm.setModelServiceProviderMetadata(provider);
-        pm.setProviderAuthMetadata(null); // 复用路径下 auth 按 providerId 查，无需导入 auth
+        pm.setProviderAuthMetadata(null);
 
         ModelServiceData model = new ModelServiceData();
         model.setId("m1");
         model.setServiceName("svc-m1");
-        model.setProviderId(srcProviderId); // 模型仍引用源 providerId，需经 batchIdRemap 重定向
+        model.setProviderId(srcProviderId);
         model.setApiUrl("https://x.com/v1");
 
         ModelExportEntity entity = new ModelExportEntity();
         entity.setModelMetadata(new ArrayList<>(List.of(model)));
         entity.setProviderMetadata(pm);
 
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
-
-        // 目标空间无同 serviceName 模型、无同 id 模型 → 走无冲突 insert
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
         when(modelServiceMapper.queryById(any())).thenReturn(null);
 
-        // provider：目标空间无同 id（selectByProjectIdAndWorkspaceId 空），但 selectUserDataByName 命中同名 → 复用
         when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
             .thenReturn(Collections.emptyList());
         ModelServiceProvider existingProvider = new ModelServiceProvider();
@@ -961,13 +925,11 @@ class ModelImportExportServiceTest {
         when(userModelServiceProviderMapper.selectUserDataByName(any(), any(), eq(providerName)))
             .thenReturn(List.of(existingProvider));
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        service.importModels("proj", "ws", toMultipartFile(jsonl), ModelImportConflictStrategy.COVER);
+        byte[] jsonl = toJsonlLine(entity);
+        service.importModels("proj", "ws", toMultipartFile(jsonl), "COVER");
 
-        // 断言 1：供应商未被 insert（复用目标空间既有，不新建）
         verify(userModelServiceProviderMapper, never()).insert(any());
 
-        // 断言 2：模型 insert 时 providerId 已重定向到复用的 id（非源 id）
         ArgumentCaptor<ModelServiceBase> modelCaptor = ArgumentCaptor.forClass(ModelServiceBase.class);
         verify(modelServiceManager).createModelServiceForImport(modelCaptor.capture());
         assertEquals(existingProviderId, modelCaptor.getValue().getProviderId(),
@@ -975,9 +937,8 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testImport_whenAuthMetadataUpsertFails_modelAuthMetadataIdIsSetToNull_notDanglingSource() {
-        // defense-in-depth：即使未来其他原因导致 upsertProviderMetadata 抛异常（metadata 插入失败），
-        // 模型落库时 authMetadataId 必须显式置 null，不能保留源 UUID（源 UUID 指向其他空间，造成悬空 FK 孤儿行）。
+    void testImport_whenAuthMetadataUpsertFails_modelAuthMetadataIdIsSetToNull_notDanglingSource() throws Exception {
+        // defense-in-depth：metadata 插入失败 → 模型 authMetadataId 显式置 null，不能保留源 UUID
         String srcMetaId = "src-meta-id";
         String srcProviderId = "p1";
 
@@ -1002,27 +963,21 @@ class ModelImportExportServiceTest {
         entity.setModelMetadata(new ArrayList<>(List.of(model)));
         entity.setProviderMetadata(pm);
 
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
         when(modelServiceMapper.queryById(any())).thenReturn(null);
         when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
             .thenReturn(Collections.emptyList());
         when(userModelServiceProviderMapper.selectByIds(any())).thenReturn(Collections.emptyList());
-        // provider insert 成功
-        // metadata insert 抛异常（模拟 DB 故障 / 未来其他约束冲突）
         when(providerAuthMetadataMapper.selectByProjectWorkspaceProvider(any(), any(), any()))
             .thenReturn(Collections.emptyList());
         when(providerAuthMetadataMapper.selectById(any())).thenReturn(null);
         org.springframework.dao.DuplicateKeyException dke =
             new org.springframework.dao.DuplicateKeyException("simulated auth_metadata PK conflict");
         doThrow(dke).when(providerAuthMetadataMapper).insert(any(ProviderAuthMetadata.class));
-        // 模型 insert 本身 stub（createModelServiceForImport 是 void 方法，用 doNothing）
         doNothing().when(modelServiceManager).createModelServiceForImport(any(ModelServiceBase.class));
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        // 不应抛异常，模型 best-effort 落库（catch 吞 metadata 异常后继续）
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.COVER);
+        byte[] jsonl = toJsonlLine(entity);
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "COVER");
 
         assertEquals(1, rsp.getSucceedLen(), "model should still be inserted best-effort");
         ArgumentCaptor<ModelServiceBase> captor = ArgumentCaptor.forClass(ModelServiceBase.class);
@@ -1034,21 +989,19 @@ class ModelImportExportServiceTest {
     // ============================== R3-3 回归：providerId 非空校验 ==============================
 
     @Test
-    void testImport_blankProviderId_rejected() {
-        // R3-3 回归：providerId 空值会使 queryByName 退化为 serviceName-only，COVER 可能误删无关记录 → 拒绝导入。
+    void testImport_blankProviderId_rejected() throws Exception {
+        // R3-3 回归：providerId 空值会使 queryByName 退化为 serviceName-only → 拒绝导入。
         ModelServiceData model = new ModelServiceData();
         model.setId("m1");
         model.setServiceName("svc-m1");
-        model.setProviderId(null); // 空 providerId
+        model.setProviderId(null);
         model.setApiUrl("https://x.com/v1");
         ModelExportEntity entity = new ModelExportEntity();
         entity.setModelMetadata(new ArrayList<>(List.of(model)));
         entity.setProviderMetadata(null);
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
 
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP);
+        byte[] jsonl = toJsonlLine(entity);
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
 
         assertEquals(1, rsp.getFailedLen());
         assertEquals(0, rsp.getSucceedLen());
@@ -1059,8 +1012,7 @@ class ModelImportExportServiceTest {
 
     @Test
     void testExportModelOnly_noProviderMetadata() {
-        // R4：includeProvider=false → 4参 buildModelExportEntity 被调，payload.provider_metadata 为 null，
-        // batchGetProviderExportMetadata 从未被调（不查供应商）。
+        // R4：includeProvider=false → 4参 buildModelExportEntity 被调，payload.provider_metadata 为 null
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any(), eq(false)))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
 
@@ -1070,15 +1022,21 @@ class ModelImportExportServiceTest {
         assertTrue(content.contains("\"provider_metadata\":null"));
         verify(modelServiceMgmtService).buildModelExportEntity(any(), any(), any(), eq(false));
         verify(modelServiceMgmtService, never()).batchGetProviderExportMetadata(any(), any(), any());
+        // 契约：导出不包含 signature
+        assertFalse(content.contains("\"signature\""), "model-only export must not contain signature");
     }
 
     @Test
     void testExportByProvider_resolvesModelIdsViaQueryByProviders() {
-        // R4：卡片入口 exportModelsByProvider → queryByProviders 取该供应商下模型 → 3参 buildModelExportEntity(供应商+模型)
+        // R4：卡片入口 exportModelsByProvider → queryByProviders 取该供应商下模型
         ModelServiceBase m1 = new ModelServiceData();
         m1.setId("m1");
         ModelServiceBase m2 = new ModelServiceData();
         m2.setId("m2");
+        ModelServiceProvider p = new ModelServiceProvider();
+        p.setId("p1");
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(List.of(p));
         when(modelServiceMapper.queryByProviders(any(), any(), eq("p1")))
             .thenReturn(List.of(m1, m2));
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
@@ -1094,9 +1052,8 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testImportModelOnly_redirectsProviderId() {
-        // R4：model-only 文件（provider_metadata=null）+ targetProviderId → 模型 providerId 重定向到 target，
-        // 不 upsert 供应商（userModelServiceProviderMapper.insert / providerAuthMetadataMapper.insert 从未调）。
+    void testImportModelOnly_redirectsProviderId() throws Exception {
+        // R4：model-only 文件（provider_metadata=null）+ targetProviderId → 模型 providerId 重定向到 target
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any(), eq(false)))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         ProviderAuthMetadata existingMeta = new ProviderAuthMetadata();
@@ -1108,7 +1065,7 @@ class ModelImportExportServiceTest {
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"), false);
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP, "target-provider");
+            "SKIP", "target-provider");
 
         ArgumentCaptor<ModelServiceBase> captor = ArgumentCaptor.forClass(ModelServiceBase.class);
         verify(modelServiceManager).createModelServiceForImport(captor.capture());
@@ -1121,21 +1078,19 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testImportModelOnly_conflictUsesRedirectedProviderId() {
-        // R4：model-only 导入冲突判定用重定向后的 providerId（非源 "p1"）。
+    void testImportModelOnly_conflictUsesRedirectedProviderId() throws Exception {
+        // R4：model-only 导入冲突判定用重定向后的 providerId
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any(), eq(false)))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         when(providerAuthMetadataMapper.selectByProjectWorkspaceProvider(any(), any(), eq("target-provider")))
             .thenReturn(Collections.emptyList());
-        // queryByName 第4参必须 == target-provider（重定向后）
         when(modelServiceMapper.queryByName(any(), any(), any(), eq("target-provider")))
             .thenReturn(List.of(new ModelServiceData()));
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"), false);
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP, "target-provider");
+            "SKIP", "target-provider");
 
-        // SKIP + 冲突 → 归类为 SKIPPED（非 FAILED），createModelServiceForImport 未调
         verify(modelServiceMapper).queryByName(any(), any(), any(), eq("target-provider"));
         verify(modelServiceManager, never()).createModelServiceForImport(any());
         assertEquals(1, rsp.getSkippedLen());
@@ -1143,8 +1098,8 @@ class ModelImportExportServiceTest {
     }
 
     @Test
-    void testPreviewModelOnly_redirectsProviderId_shownInItem() {
-        // R4：model-only 预检传 target → 预检项 provider_id 显示重定向值，不报 blank providerId。
+    void testPreviewModelOnly_redirectsProviderId_shownInItem() throws Exception {
+        // R4：model-only 预检传 target → 预检项 provider_id 显示重定向值
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any(), eq(false)))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         when(modelServiceMapper.queryByName(any(), any(), any(), eq("target-provider")))
@@ -1156,79 +1111,58 @@ class ModelImportExportServiceTest {
         assertEquals(1, rsp.getItems().size());
         ModelImportPreviewItem item = rsp.getItems().get(0);
         assertEquals("target-provider", item.getProviderId());
-        // queryByName 返回空 → 无冲突（这里验证 provider_id 重定向，不验证冲突）
         assertEquals(Boolean.FALSE, item.getConflict());
-        // 重定向后 providerId 非空 → 不会走 blank-providerId 短路（apiUrlValid/envVarValid 正常判定）
         assertTrue(item.getApiUrlValid());
         assertTrue(item.getEnvVarValid());
+        assertTrue(item.getLineValid());
     }
 
     @Test
-    void testImportModelOnly_noTarget_fallsBackToBestEffort() {
-        // R4 向后兼容：model-only 文件 + target=null → 模型保留源 providerId（现有 best-effort 行为不变）。
+    void testImportModelOnly_noTarget_fallsBackToBestEffort() throws Exception {
+        // R4：model-only 文件 + target=null → 模型保留源 providerId
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any(), eq(false)))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"), false);
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP);
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP");
 
         ArgumentCaptor<ModelServiceBase> captor = ArgumentCaptor.forClass(ModelServiceBase.class);
         verify(modelServiceManager).createModelServiceForImport(captor.capture());
-        // 源 providerId "p1" 保留，未重定向
         assertEquals("p1", captor.getValue().getProviderId());
         assertEquals(1, rsp.getSucceedLen());
     }
 
     @Test
-    void testImport_providerPlusModelFile_withTarget_ignoresTargetForProviderLines() {
-        // R4：provider+模型文件（provider_metadata 非空）+ target 非空 → 仍 upsert 文件自带 provider，
-        // model.providerId 保持源值（不被重定向）。
+    void testImport_providerPlusModelFile_withTarget_ignoresTargetForProviderLines() throws Exception {
+        // R4：provider+模型文件（provider_metadata 非空）+ target 非空 → 仍 upsert 文件自带 provider
         ModelExportEntity entity = buildEntityWithProvider("m1", "https://x.com/v1", "p1");
-        // includeProvider=true → 4参委托 3参，stub 3参
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
             .thenReturn(List.of(entity));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+        when(userModelServiceProviderMapper.selectByIds(any())).thenReturn(Collections.emptyList());
         when(providerAuthMetadataMapper.selectByProjectWorkspaceProvider(any(), any(), any()))
             .thenReturn(Collections.emptyList());
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"), true);
         service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP, "target-provider");
+            "SKIP", "target-provider");
 
         ArgumentCaptor<ModelServiceBase> captor = ArgumentCaptor.forClass(ModelServiceBase.class);
         verify(modelServiceManager).createModelServiceForImport(captor.capture());
-        // provider+模型：providerId 保持源值 "p1"，未被重定向到 "target-provider"
         assertEquals("p1", captor.getValue().getProviderId());
-        // upsert 供应商被调（provider_metadata 非空）
         verify(userModelServiceProviderMapper, atLeastOnce()).selectByIds(any());
     }
 
     @Test
-    void testRoundTrip_modelOnly_signatureVerifies() {
-        // R4 跨模式签名兼容：model-only 导出（provider_metadata=null）→ model-only 导入（带 target）→ 验签通过、导入成功。
-        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any(), eq(false)))
-            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
-        when(providerAuthMetadataMapper.selectByProjectWorkspaceProvider(any(), any(), eq("target-provider")))
-            .thenReturn(Collections.emptyList());
-        when(modelServiceMapper.queryByName(any(), any(), any(), eq("target-provider")))
-            .thenReturn(Collections.emptyList());
-
-        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"), false);
-        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP, "target-provider");
-
-        // 验签通过（否则 failed_len=1 且 createModelServiceForImport 未调）
-        verify(modelServiceManager).createModelServiceForImport(any());
-        assertEquals(0, rsp.getFailedLen());
-        assertEquals(1, rsp.getSucceedLen());
-    }
-
-    @Test
     void testExportByProvider_noModels_exportsProviderShell() {
-        // 修复「空供应商导出空文件/抛异常无法再导入」：queryByProviders 返回空 → 不再抛异常，
-        // 改为经 getProviderExportMetadataByIds 直接按 providerId 取供应商元数据，导出单行壳（空模型列表）。
+        // 修复「空供应商导出空文件/抛异常无法再导入」：queryByProviders 返回空 → 导出单行壳
+        ModelServiceProvider p = new ModelServiceProvider();
+        p.setId("p-empty");
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(List.of(p));
         when(modelServiceMapper.queryByProviders(any(), any(), eq("p-empty")))
             .thenReturn(Collections.emptyList());
         ProviderExportMetadata pm = new ProviderExportMetadata();
@@ -1239,39 +1173,35 @@ class ModelImportExportServiceTest {
         byte[] jsonl = service.exportModelsByProvider("proj", "ws", "p-empty");
         String content = new String(jsonl, StandardCharsets.UTF_8);
 
-        // 单行 JSONL，含供应商元数据，模型列表为空（可被导入端 upsertProviderMetadata 消费）
         assertEquals(1, content.trim().split("\n").length,
             "empty provider should export exactly one line, got: " + content);
         assertTrue(content.contains("\"model_metadata\":[]"),
             "empty provider must export empty model_metadata, got: " + content);
         verify(modelServiceMgmtService).getProviderExportMetadataByIds(any());
-        // 空供应商不应走模型导出路径
         verify(modelServiceMgmtService, never()).buildModelExportEntity(any(), any(), any());
+        assertFalse(content.contains("\"signature\""), "provider-shell export must not contain signature");
     }
 
     @Test
     void testExportByProvider_noModels_providerNotFound_throws() {
-        // 供应商元数据也查不到（getProviderExportMetadataByIds 返回空 map）→ 抛 MODEL_IMPORT_FORMAT_INVALID，
-        // 明确提示供应商不存在（此时确无可导出之物，不应产出空文件）。
-        when(modelServiceMapper.queryByProviders(any(), any(), eq("p-missing")))
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
             .thenReturn(Collections.emptyList());
-        when(modelServiceMgmtService.getProviderExportMetadataByIds(any()))
-            .thenReturn(Collections.emptyMap());
 
         AgentStudioException e = assertThrows(AgentStudioException.class,
             () -> service.exportModelsByProvider("proj", "ws", "p-missing"));
-        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertEquals(StudioError.MD_PROVIDER_NOT_EXIST, e.getErrorCode());
     }
 
     @Test
     void testPreview_emptyProviderShell_producesOneItem() {
-        // 空供应商壳（provider_metadata 非空 + 0 模型）导出后预检：须产出 1 条供应商壳条目（totalCount=1），
-        // 否则前端 canConfirm 因 total_count<=0 禁用确认按钮。signature_valid=true 放行导入。
+        // 空供应商壳预检：须产出 1 条供应商壳条目（totalCount=1），lineValid=true 放行导入。
         ModelServiceProvider provider = new ModelServiceProvider();
         provider.setId("p-shell");
         provider.setProviderName("shell-provider");
         ProviderExportMetadata pm = new ProviderExportMetadata();
         pm.setModelServiceProviderMetadata(provider);
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(List.of(provider));
         when(modelServiceMapper.queryByProviders(any(), any(), eq("p-shell")))
             .thenReturn(Collections.emptyList());
         when(modelServiceMgmtService.getProviderExportMetadataByIds(any()))
@@ -1283,35 +1213,31 @@ class ModelImportExportServiceTest {
         assertEquals(1, rsp.getTotalCount(), "empty provider shell should produce 1 preview item");
         assertEquals(1, rsp.getItems().size());
         ModelImportPreviewItem item = rsp.getItems().get(0);
-        assertEquals(Boolean.TRUE, item.getSignatureValid());
+        assertEquals(Boolean.TRUE, item.getLineValid(), "empty shell line should be valid");
         assertEquals("p-shell", item.getProviderId());
         assertEquals("shell-provider", item.getServiceName());
-        // 供应商壳无冲突且可导入（cipherAdapted=true）→ detail=null，前端展示"无"（success），
-        // 避免在精简后的单列里误显红色 error。
         assertNull(item.getDetail(), "non-conflicting shell should have null detail (renders 无)");
     }
 
     @Test
     void testImport_emptyProviderShell_reportsSuccess() {
-        // 空供应商壳导入：upsertProviderMetadata 建出供应商（0 模型），须产出 1 条 SUCCESS，否则 succeed_len=0
-        // 与实际"建出供应商"不一致，用户误以为没导入成功。无模型故不调 createModelServiceForImport。
+        // 空供应商壳导入：upsertProviderMetadata 建出供应商（0 模型），须产出 1 条 SUCCESS
         ModelServiceProvider provider = new ModelServiceProvider();
         provider.setId("p-shell");
         provider.setProviderName("shell-provider");
         ProviderExportMetadata pm = new ProviderExportMetadata();
         pm.setModelServiceProviderMetadata(provider);
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(List.of(provider));
         when(modelServiceMapper.queryByProviders(any(), any(), eq("p-shell")))
             .thenReturn(Collections.emptyList());
         when(modelServiceMgmtService.getProviderExportMetadataByIds(any()))
             .thenReturn(Collections.singletonMap("p-shell", pm));
-        // upsertServiceProvider 路径：作用域查空 + 全局查空 → insert 新行。
-        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
-            .thenReturn(Collections.emptyList());
         when(userModelServiceProviderMapper.selectByIds(any())).thenReturn(Collections.emptyList());
 
         byte[] jsonl = service.exportModelsByProvider("proj", "ws", "p-shell");
         ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl),
-            ModelImportConflictStrategy.SKIP);
+            "SKIP");
 
         assertEquals(1, rsp.getSucceedLen(), "empty provider shell should report 1 success");
         assertEquals(0, rsp.getFailedLen());
@@ -1324,7 +1250,7 @@ class ModelImportExportServiceTest {
 
     @Test
     void testExport_setsImportType_modelService() {
-        // R5：导出端在签名覆盖的包装层写入 import_type=model_service。
+        // R5：导出端写入 import_type=model_service。
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
 
@@ -1333,222 +1259,451 @@ class ModelImportExportServiceTest {
 
         assertTrue(content.contains("\"import_type\":\"model_service\""),
             "export line must carry import_type=model_service, got: " + content);
+        assertFalse(content.contains("\"signature\""), "export must not contain signature field");
     }
 
     @Test
-    void testImport_nullImportType_legacyFile_accepted() {
-        // R5 向后兼容：旧模型导出文件无 import_type 字段 → 反序列化为 null → 放行导入成功。
-        // 手搓一行无 import_type 的旧格式（signature 缺失，但本测试关签名校验）。
-        SignatureUtils disabled = new SignatureUtils();
-        ReflectionTestUtils.setField(disabled, "signatureEnable", false);
-        ReflectionTestUtils.setField(service, "signatureUtils", disabled);
+    void testImport_mixedWorkflowAndModelLines_rejectedAsMultiLine() throws Exception {
+        // R5b：单行 JSONL 校验先于逐行处理——workflow 行 + model_service 行的混合文件被顶层拒绝，
+        // 不再逐行"部分成功"。单文件纯 workflow 走 fast-fail（见 testImport_fileWithoutAnyModelLine_throwsTopLevel）。
+        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        byte[] modelLineBytes = toJsonlLine(entity);
+        String workflowLine = "{\"import_type\":\"workflow\",\"dsl\":{},\"metadata\":{}}\n";
+        String mixedContent = workflowLine + new String(modelLineBytes, StandardCharsets.UTF_8);
 
-        String legacyLine = "{\"payload\":{\"model_metadata\":[{\"id\":\"m1\",\"service_name\":\"svc-m1\","
-            + "\"provider_id\":\"p1\",\"api_url\":\"https://x.com/v1\"}],\"provider_metadata\":null}}\n";
+        AgentStudioException e = assertThrows(AgentStudioException.class, () -> service.importModels("proj", "ws",
+            toMultipartFile(mixedContent.getBytes(StandardCharsets.UTF_8)),
+            "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("单行 JSONL"), "message must hint single-line, got: " + e.getMessage());
+        verify(modelServiceManager, never()).createModelServiceForImport(any());
+    }
+
+    // ============================== A. readLines() 前置文件校验 ==============================
+
+    @Test
+    void testImport_emptyMultipartFile_throws400() {
+        MultipartFile file = toMultipartFile(new byte[0], "a.jsonl", true);
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", file, "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("上传文件不能为空"));
+    }
+
+    @Test
+    void testImport_nullBytesMultipartFile_throws400() {
+        MultipartFile file = toMultipartFile(null, "a.jsonl", true);
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", file, "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("上传文件不能为空"));
+    }
+
+    @Test
+    void testImport_wrongExtension_txt_throws400() {
+        MultipartFile file = toMultipartFile("hello".getBytes(StandardCharsets.UTF_8), "a.txt");
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", file, "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains(".jsonl"), "reason should mention .jsonl");
+    }
+
+    @Test
+    void testImport_nullFilename_throws400() {
+        MultipartFile file = toMultipartFile("hello".getBytes(StandardCharsets.UTF_8), null);
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", file, "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains(".jsonl"));
+    }
+
+    @Test
+    void testImport_upperCaseJsonlExtension_accepted() {
+        MultipartFile file = toMultipartFile("{\"x\":1}\n".getBytes(StandardCharsets.UTF_8), "A.JSONL");
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", file, "SKIP"));
+        assertTrue(e.getMessage().contains("请使用模型管理页面导出的文件"),
+            "upper-case .JSONL should pass extension check, reason=" + e.getMessage());
+    }
+
+    @Test
+    void testImport_binaryFileWithNulByte_throws400() {
+        byte[] bin = new byte[]{'{', '}', '\0', '\n'};
+        MultipartFile file = toMultipartFile(bin, "a.jsonl");
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", file, "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("UTF-8"), "binary detection should mention UTF-8");
+    }
+
+    @Test
+    void testImport_multiLinePrettyPrinted_throwsSingleLineError() {
+        // 模拟用户用文本编辑器 pretty-print 后的多行 JSON（对齐用户实测的 provider_no_model.jsonl 场景）：
+        // 虽然整体是合法 JSON 对象，但被拆成多行，每一行都不是完整 JSON 对象，单行 JSONL 校验应在解析之前就顶层拒绝。
+        String pretty = "{\n"
+            + "  \"import_type\": \"model_service\",\n"
+            + "  \"payload\": {\n"
+            + "    \"model_metadata\": [],\n"
+            + "    \"provider_metadata\": null\n"
+            + "  }\n"
+            + "}\n";
+        MultipartFile file = toMultipartFile(pretty.getBytes(StandardCharsets.UTF_8), "pretty.jsonl");
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", file, "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("单行 JSONL"),
+            "pretty-printed multi-line must be rejected with single-line hint, got: " + e.getMessage());
+    }
+
+    @Test
+    void testImport_multiLineTwoObjects_throwsSingleLineError() {
+        // 两行合法 JSONL 对象（两个独立 entity）也必须拒绝——导出始终是单行。
+        String two = "{\"import_type\":\"model_service\",\"payload\":{\"model_metadata\":[]}}\n"
+            + "{\"import_type\":\"model_service\",\"payload\":{\"model_metadata\":[]}}\n";
+        MultipartFile file = toMultipartFile(two.getBytes(StandardCharsets.UTF_8), "two.jsonl");
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", file, "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("单行 JSONL"), "two-object file rejected, got: " + e.getMessage());
+    }
+
+    @Test
+    void testImport_singleLineWithLeadingTrailingBlankLines_accepted() throws Exception {
+        // 首尾空行/纯空白行应被 trim+过滤，仅剩 1 有效行 → 合法导入。
+        when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        byte[] body = toJsonlLine(buildEntity("m1", "https://x.com/v1"));
+        String withBlankLines = "\n\n   \n" + new String(body, StandardCharsets.UTF_8) + "\n\n";
+        ImportRsp rsp = service.importModels("proj", "ws",
+            toMultipartFile(withBlankLines.getBytes(StandardCharsets.UTF_8), "a.jsonl"), "SKIP");
+        assertEquals(1, rsp.getSucceedLen(), "blank lines around single valid line must be tolerated");
+        verify(modelServiceManager, times(1)).createModelServiceForImport(any());
+    }
+
+    @Test
+    void testPreview_multiLinePrettyPrinted_throwsSingleLineError() {
+        // preview 路径同样要拦截多行 pretty 文件（对称覆盖）。
+        String pretty = "{\n  \"import_type\":\"model_service\",\n  \"payload\":{}\n}\n";
+        MultipartFile file = toMultipartFile(pretty.getBytes(StandardCharsets.UTF_8), "pretty.jsonl");
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.previewImport("proj", "ws", file));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("单行 JSONL"), "preview path must also reject multi-line, got: " + e.getMessage());
+    }
+
+    @Test
+    void testPreview_sameFileChecks_applyToPreview() {
+        MultipartFile empty = toMultipartFile(new byte[0], "a.jsonl", true);
+        AgentStudioException e1 = assertThrows(AgentStudioException.class,
+            () -> service.previewImport("proj", "ws", empty));
+        assertTrue(e1.getMessage().contains("上传文件不能为空"));
+
+        MultipartFile txt = toMultipartFile("x".getBytes(StandardCharsets.UTF_8), "a.txt");
+        AgentStudioException e2 = assertThrows(AgentStudioException.class,
+            () -> service.previewImport("proj", "ws", txt));
+        assertTrue(e2.getMessage().contains(".jsonl"));
+
+        byte[] bin = new byte[]{'{', '\0', '}'};
+        MultipartFile binary = toMultipartFile(bin, "a.jsonl");
+        AgentStudioException e3 = assertThrows(AgentStudioException.class,
+            () -> service.previewImport("proj", "ws", binary));
+        assertTrue(e3.getMessage().contains("UTF-8"));
+    }
+
+    // ============================== B. conflict_strategy 解析校验 ==============================
+
+    @Test
+    void testImport_conflictStrategy_invalidValue_throws() throws Exception {
+        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
+            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
+        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", toMultipartFile(jsonl), "MERGE"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("conflict_strategy"));
+        assertTrue(e.getMessage().contains("SKIP/COVER"), "expected values listed, got: " + e.getMessage());
+    }
+
+    @Test
+    void testImport_conflictStrategy_caseInsensitive_accepted() throws Exception {
+        // conflict_strategy 大小写不敏感：skip/cover/Skip/Cover 都等价于 SKIP/COVER（不抛 400）
+        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
+            .thenAnswer(inv -> {
+                List<String> ids = inv.getArgument(2);
+                return List.of(buildEntity(ids.get(0), "https://x.com/v1?m=" + ids.get(0)));
+            });
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
-        ImportRsp rsp = service.importModels("proj", "ws",
-            toMultipartFile(legacyLine.getBytes(StandardCharsets.UTF_8)),
-            ModelImportConflictStrategy.SKIP);
+        byte[] jLower = service.exportModels("proj", "ws", List.of("case-lower"));
+        ImportRsp r1 = service.importModels("proj", "ws", toMultipartFile(jLower), "skip");
+        assertEquals(1, r1.getSucceedLen(), "lowercase 'skip' must be accepted");
 
-        verify(modelServiceManager).createModelServiceForImport(any());
+        byte[] jMixed = service.exportModels("proj", "ws", List.of("case-mixed"));
+        ImportRsp r2 = service.importModels("proj", "ws", toMultipartFile(jMixed), "Cover");
+        assertEquals(1, r2.getSucceedLen(), "mixed-case 'Cover' must be accepted");
+    }
+
+    @Test
+    void testImport_conflictStrategy_withWhitespace_trimmedAndAccepted() throws Exception {
+        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
+            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
+        when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(jsonl), "  SKIP  ");
         assertEquals(1, rsp.getSucceedLen());
     }
 
     @Test
-    void testImport_wrongImportType_workflowFile_rejected() {
-        // R5：工作流文件的 import_type=workflow（AgentExportEntity/WorkflowExportEntity 扁平结构带 import_type）
-        // → 反序列化进 ModelExportLine.importType → validateImportType 拒绝，不落库。
-        // 即便签名关闭，也据类型标识挡住错格式文件。
-        SignatureUtils disabled = new SignatureUtils();
-        ReflectionTestUtils.setField(disabled, "signatureEnable", false);
-        ReflectionTestUtils.setField(service, "signatureUtils", disabled);
-
-        String workflowLine = "{\"import_type\":\"workflow\",\"signature\":null,\"dsl\":{},\"metadata\":{}}\n";
-        ImportRsp rsp = service.importModels("proj", "ws",
-            toMultipartFile(workflowLine.getBytes(StandardCharsets.UTF_8)),
-            ModelImportConflictStrategy.SKIP);
-
-        verify(modelServiceManager, never()).createModelServiceForImport(any());
-        assertEquals(1, rsp.getFailedLen());
-        ImportRes failed = rsp.getImportList().get(0);
-        assertTrue(failed.getDetail().contains("model_service"));
-    }
-
-    // ============================== 加密检测（cipher_adapted）回归 ==============================
-    // 检测+提示保留：默认 MASKED/NoOp 下 cipher_adapted=true；文件中 provider_auth_data.cipher_name 为非 NoOp 值
-    // （例如由其他支持加密导出的环境生成的 ENCRYPTED 文件）时，预检标 cipher_adapted=false、导入整行拒绝。
-    // 实际加解密逻辑（AesGcmCipher / ENCRYPTED 导出路径 / decryptByName）已移除。
-
-    @Test
-    void testPreview_defaultExport_cipherAdaptedTrue() {
-        // 本服务导出的 MASKED 文件不带 cipher_name → cipher_adapted=true，可正常导入。
+    void testImport_conflictStrategy_nullOrBlank_defaultsToSkip() throws Exception {
         when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
             .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
+
+        ImportRsp r1 = service.importModels("proj", "ws", toMultipartFile(jsonl), null);
+        assertEquals(1, r1.getSucceedLen(), "null should default to SKIP");
+
+        ImportRsp r2 = service.importModels("proj", "ws", toMultipartFile(jsonl), "");
+        assertEquals(1, r2.getSucceedLen(), "empty string should default to SKIP");
+
+        ImportRsp r3 = service.importModels("proj", "ws", toMultipartFile(jsonl), "   ");
+        assertEquals(1, r3.getSucceedLen(), "blank should default to SKIP");
+    }
+
+    // ============================== C. 整文件 fast-fail 路径 ==============================
+
+    @Test
+    void testPreview_fileWithoutAnyModelLine_multiLineRejected() {
+        // 多非 model_service 行首先命中"单行 JSONL"校验（readLines 先拦），
+        // 单文件纯非 model_service 走 fast-fail，见 testImport_fileWithoutAnyModelLine_throwsTopLevel。
+        String content = "{\"import_type\":\"workflow\"}\n{\"import_type\":\"agent\"}\n";
+        MultipartFile file = toMultipartFile(content.getBytes(StandardCharsets.UTF_8), "a.jsonl");
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.previewImport("proj", "ws", file));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("单行 JSONL"), "multi-line must hit single-line guard first, got: " + e.getMessage());
+    }
+
+    @Test
+    void testImport_fileWithoutAnyModelLine_throwsTopLevel() {
+        String content = "{\"import_type\":\"workflow\",\"dsl\":{}}\n";
+        MultipartFile file = toMultipartFile(content.getBytes(StandardCharsets.UTF_8), "a.jsonl");
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", file, "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+    }
+
+    @Test
+    void testImport_mixedLines_oneModelOneBad_rejectedAsMultiLine() throws Exception {
+        // R5b：workflow 行 + model_service 行混合属于多行，被 readLines 顶层拒绝。
+        ModelExportEntity entity = buildEntity("m1", "https://x.com/v1");
+        byte[] modelLineBytes = toJsonlLine(entity);
+
+        String content = "{\"import_type\":\"workflow\",\"dsl\":{}}\n" + new String(modelLineBytes, StandardCharsets.UTF_8);
+        AgentStudioException e = assertThrows(AgentStudioException.class, () -> service.importModels("proj", "ws",
+            toMultipartFile(content.getBytes(StandardCharsets.UTF_8), "a.jsonl"), "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("单行 JSONL"), "multi-line rejected, got: " + e.getMessage());
+        verify(modelServiceManager, never()).createModelServiceForImport(any());
+    }
+
+    // ============================== D. 多故障混合场景 ==============================
+
+    @Test
+    void testImport_threeLines_multiLineRejected() throws Exception {
+        // R5b：3 有效行（坏 JSON + 冲突模型 + 新模型）被"单行 JSONL"校验顶层拒绝，不再逐行计数。
+        // 逐行语义通过单行坏 payload / 单行冲突 / 单行成功等用例覆盖（见 testImport_nullPayload、testConflictSkip、
+        // testImport_multipleModelsInLine 等）。
+        String badLine = "{\"import_type\":\"model_service\",\"payload\":{broken!!!}\n"; // 故意缺闭合括号
+
+        byte[] line2 = toJsonlLine(buildEntity("m2", "https://x.com/v1?m=m2"));
+        byte[] line3 = toJsonlLine(buildEntity("m3", "https://x.com/v1?m=m3"));
+
+        byte[] jsonl = (badLine
+            + new String(line2, StandardCharsets.UTF_8)
+            + new String(line3, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
+
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.importModels("proj", "ws", toMultipartFile(jsonl), "SKIP"));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e.getErrorCode());
+        assertTrue(e.getMessage().contains("单行 JSONL"), "multi-line rejected, got: " + e.getMessage());
+        verify(modelServiceManager, never()).createModelServiceForImport(any());
+    }
+
+    // ============================== E. target_provider_id 边界 ==============================
+
+    @Test
+    void testImport_modelOnly_targetProviderIdNonExistent_modelInsertedWithNullAuthMeta() throws Exception {
+        // 只导模型（无 provider_metadata）+ targetProviderId 不存在 → model 仍插入（best-effort），
+        // authMetadataId 为 null
+        when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+
+        String line = "{\"import_type\":\"model_service\",\"payload\":{\"model_metadata\":"
+            + "[{\"id\":\"m1\",\"service_name\":\"svc-m1\",\"provider_id\":\"src-p\",\"api_url\":\"https://x.com/v1\"}],"
+            + "\"provider_metadata\":null}}\n";
+        ImportRsp rsp = service.importModels("proj", "ws",
+            toMultipartFile(line.getBytes(StandardCharsets.UTF_8), "a.jsonl"),
+            "SKIP", "non-existent-target");
+
+        assertEquals(1, rsp.getSucceedLen(), "model still inserted when target provider missing (best-effort)");
+        ArgumentCaptor<ModelServiceBase> captor = ArgumentCaptor.forClass(ModelServiceBase.class);
+        verify(modelServiceManager).createModelServiceForImport(captor.capture());
+        assertNull(captor.getValue().getAuthMetadataId(),
+            "authMetadataId should be null when target provider missing");
+    }
+
+    @Test
+    void testPreview_targetProviderId_withSpecialCharacters_doesNotThrow() {
+        // 防 SQL 注入回归：targetProviderId 含特殊字符不应抛 SQL 异常（MyBatis 预处理）
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+
+        String line = "{\"import_type\":\"model_service\",\"payload\":{\"model_metadata\":"
+            + "[{\"id\":\"m1\",\"service_name\":\"svc-m1\",\"provider_id\":\"src-p\",\"api_url\":\"https://x.com/v1\"}],"
+            + "\"provider_metadata\":null}}\n";
+        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws",
+            toMultipartFile(line.getBytes(StandardCharsets.UTF_8), "a.jsonl"),
+            "'; DROP TABLE --");
+        assertNotNull(rsp);
+        assertEquals(1, rsp.getTotalCount());
+    }
+
+    // ============================== F. 导出参数校验 ==============================
+
+    @Test
+    void testExport_nullOrEmptyModelIds_throws() {
+        // null model_ids
+        AgentStudioException e1 = assertThrows(AgentStudioException.class,
+            () -> service.exportModels("proj", "ws", (List<String>) null));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e1.getErrorCode());
+
+        // 空数组
+        AgentStudioException e2 = assertThrows(AgentStudioException.class,
+            () -> service.exportModels("proj", "ws", Collections.emptyList()));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e2.getErrorCode());
+
+        // 全空白字符串元素
+        AgentStudioException e3 = assertThrows(AgentStudioException.class,
+            () -> service.exportModels("proj", "ws", Arrays.asList("", "  ", null)));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e3.getErrorCode());
+
+        // 4 参重载 includeProvider=false 同等校验
+        AgentStudioException e4 = assertThrows(AgentStudioException.class,
+            () -> service.exportModels("proj", "ws", Collections.emptyList(), false));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e4.getErrorCode());
+
+        // buildModelExportEntity 不应被调用（在入口就抛）
+        verify(modelServiceMgmtService, never()).buildModelExportEntity(any(), any(), any());
+        verify(modelServiceMgmtService, never()).buildModelExportEntity(any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void testExport_modelsContainingBlanks_validOnesStillPass() {
+        // 非空 id 夹杂空白：入口校验只看"是否存在至少一个非空 id"，放行；下游 stub 返回一个最小合法 entity
+        ModelServiceData m = new ModelServiceData();
+        m.setId("m1");
+        m.setServiceName("svc-m1");
+        m.setProviderId("p1");
+        m.setApiUrl("https://example.com/v1");
+        ModelExportEntity entity = new ModelExportEntity();
+        entity.setModelMetadata(new ArrayList<>(List.of(m)));
+        entity.setProviderMetadata(null);
+        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
+            .thenReturn(Collections.singletonList(entity));
+        byte[] out = service.exportModels("proj", "ws", Arrays.asList("  ", "m1", ""));
+        assertNotNull(out);
+        assertTrue(out.length > 0, "mixed blank/valid ids → valid ids exported");
+    }
+
+    @Test
+    void testExportByProvider_blankProviderId_throws() {
+        AgentStudioException e1 = assertThrows(AgentStudioException.class,
+            () -> service.exportModelsByProvider("proj", "ws", null));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e1.getErrorCode());
+
+        AgentStudioException e2 = assertThrows(AgentStudioException.class,
+            () -> service.exportModelsByProvider("proj", "ws", ""));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e2.getErrorCode());
+
+        AgentStudioException e3 = assertThrows(AgentStudioException.class,
+            () -> service.exportModelsByProvider("proj", "ws", "   "));
+        assertEquals(StudioError.MODEL_IMPORT_FORMAT_INVALID, e3.getErrorCode());
+
+        // 不应进入下游查询
+        verify(userModelServiceProviderMapper, never()).selectByProjectIdAndWorkspaceId(any(), any(), any());
+    }
+
+    @Test
+    void testExport_buildEntityReturnsFewerModels_exportsOnlyReturned() {
+        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any()))
+            .thenReturn(List.of(buildEntity("m1", "https://x.com/v1")));
+        byte[] out = service.exportModels("proj", "ws", List.of("m1", "ghost"));
+        String content = new String(out, StandardCharsets.UTF_8);
+        assertEquals(1, content.trim().split("\n").length, "exports what buildModelExportEntity returns");
+        assertTrue(content.contains("m1"));
+        assertFalse(content.contains("ghost"));
+    }
+
+    @Test
+    void testExport_byProvider_notFound_throws() {
+        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
+            .thenReturn(Collections.emptyList());
+        AgentStudioException e = assertThrows(AgentStudioException.class,
+            () -> service.exportModelsByProvider("proj", "ws", "no-such"));
+        assertEquals(StudioError.MD_PROVIDER_NOT_EXIST, e.getErrorCode());
+    }
+
+    @Test
+    void testExport_authMetadataFieldIsMasked() {
+        // maskProviderAuth 对 ProviderAuthMetadata.authInfo 置 " "，真实密钥不出域。
+        ProviderAuthMetadata authMeta = new ProviderAuthMetadata();
+        authMeta.setProviderId("p1");
+        authMeta.setAuthInfo("sk-real-secret-xxxxxxxx");
+        ProviderAuthData authData = new ProviderAuthData();
+        // 按下游契约：authData.authInfo 已由 buildModelExportEntity 置为 " "（真实密钥不出域）。
+        // cipher_name 字段已从 ProviderAuthData 删除；若外部文件带该字段会被 ignoreUnknown 忽略。
+        authData.setAuthInfo(" ");
+        ProviderExportMetadata pm = new ProviderExportMetadata();
+        ModelServiceProvider p = new ModelServiceProvider();
+        p.setId("p1");
+        pm.setModelServiceProviderMetadata(p);
+        pm.setProviderAuthMetadata(authMeta);
+        pm.setProviderAuthData(authData);
+
+        ModelServiceData m = new ModelServiceData();
+        m.setId("m1"); m.setServiceName("svc-m1"); m.setProviderId("p1"); m.setApiUrl("https://x.com/v1");
+        ModelExportEntity entity = new ModelExportEntity();
+        entity.setModelMetadata(new ArrayList<>(List.of(m)));
+        entity.setProviderMetadata(pm);
+        when(modelServiceMgmtService.buildModelExportEntity(any(), any(), any())).thenReturn(List.of(entity));
 
         byte[] jsonl = service.exportModels("proj", "ws", List.of("m1"));
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", toMultipartFile(jsonl));
+        String content = new String(jsonl, StandardCharsets.UTF_8);
 
-        assertEquals(1, rsp.getItems().size());
-        assertEquals(Boolean.TRUE, rsp.getItems().get(0).getCipherAdapted(),
-            "default MASKED export must be cipher_adapted=true");
+        assertFalse(content.contains("sk-real-secret-xxxxxxxx"),
+            "provider_auth_metadata.auth_info must be masked, content=" + content);
+        assertFalse(content.contains("\"cipher_name\""),
+            "export must not write cipher_name field, content=" + content);
     }
 
+    // ============================== G. 其他防御性回归 ==============================
+
     @Test
-    void testPreview_unsupportedCipher_flagsNotAdapted() throws Exception {
-        // 构造带 cipher_name=AES_GCM 的单行 JSONL（模拟加密导出环境产生的文件），
-        // 本地仅 NoOp → 预检条目 cipherAdapted=false，detail 提示需重配密钥。
-        ObjectMapper om = new ObjectMapper();
-        com.openjiuwen.studio.agent.manager.entity.ModelExportLine line =
-            new com.openjiuwen.studio.agent.manager.entity.ModelExportLine();
-        line.setImportType("model_service");
-        // 构造一个 provider+model 实体，authData 带 cipherName=AES_GCM
-        ModelServiceProvider provider = new ModelServiceProvider();
-        provider.setId("p1");
-        ProviderAuthMetadata authMeta = new ProviderAuthMetadata();
-        authMeta.setProviderId("p1");
-        authMeta.setAuthInfo(" ");
-        ProviderAuthData authData = new ProviderAuthData();
-        authData.setProviderId("p1");
-        authData.setAuthInfo(" ");
-        authData.setCipherName("AES_GCM"); // 关键：标识加密（无 DB 列映射，仅在 JSON 中作为识别标记）
-        ProviderExportMetadata pm = new ProviderExportMetadata();
-        pm.setModelServiceProviderMetadata(provider);
-        pm.setProviderAuthMetadata(authMeta);
-        pm.setProviderAuthData(authData);
-        ModelServiceData model = new ModelServiceData();
-        model.setId("m1");
-        model.setServiceName("svc-m1");
-        model.setProviderId("p1");
-        model.setApiUrl("https://x.com/v1");
-        ModelExportEntity entity = new ModelExportEntity();
-        entity.setModelMetadata(new ArrayList<>(List.of(model)));
-        entity.setProviderMetadata(pm);
-        line.setPayload(entity);
-        line.setSignature(null);
-        String oneLine = om.writeValueAsString(line) + "\n";
-
-        SignatureUtils noSig = new SignatureUtils();
-        ReflectionTestUtils.setField(noSig, "signatureEnable", false);
-        ReflectionTestUtils.setField(service, "signatureUtils", noSig);
-
-        MultipartFile file = toMultipartFile(oneLine.getBytes(StandardCharsets.UTF_8));
-        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
-            .thenReturn(Collections.emptyList());
-        when(userModelServiceProviderMapper.selectByIds(any())).thenReturn(Collections.emptyList());
+    void testImport_crlfLineEndings_singleLineAccepted() throws Exception {
+        // Windows CRLF 结尾的单行文件应正确解析（CRLF 被当作换行 trim 后仅剩 1 有效行）。
         when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
 
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", file);
-        assertEquals(1, rsp.getTotalCount(), "should parse exactly one line");
-        ModelImportPreviewItem item = rsp.getItems().get(0);
-        assertEquals(Boolean.FALSE, item.getCipherAdapted(), "cipher_adapted must be false for AES_GCM under NoOp");
-        assertTrue(item.getDetail() != null && item.getDetail().contains("cipher"),
-            "detail must mention cipher/adaptation, got: " + item.getDetail());
-    }
+        byte[] l1 = toJsonlLine(buildEntity("crlf1", "https://x.com/v1?m=crlf1"));
+        // 将 LF 结尾换成 CRLF
+        String s1 = new String(l1, StandardCharsets.UTF_8).replaceAll("\\n$", "\r\n");
+        byte[] singleLineCrlf = s1.getBytes(StandardCharsets.UTF_8);
 
-    @Test
-    void testImport_unsupportedCipher_rejectsLine_notInserted() throws Exception {
-        // 后端防御性检查：绕过预检直接调 importModels（API 直连）时，若 auth cipher 未适配 → 整行记 failed，
-        // 不尝试 insert（不会因无法解密而落半残数据，也不会抛 500）。
-        ObjectMapper om = new ObjectMapper();
-        com.openjiuwen.studio.agent.manager.entity.ModelExportLine line =
-            new com.openjiuwen.studio.agent.manager.entity.ModelExportLine();
-        line.setImportType("model_service");
-        ModelServiceProvider provider = new ModelServiceProvider();
-        provider.setId("p1");
-        ProviderAuthMetadata authMeta = new ProviderAuthMetadata();
-        authMeta.setProviderId("p1");
-        authMeta.setAuthInfo(" ");
-        ProviderAuthData authData = new ProviderAuthData();
-        authData.setProviderId("p1");
-        authData.setAuthInfo(" ");
-        authData.setCipherName("AesGcm");
-        ProviderExportMetadata pm = new ProviderExportMetadata();
-        pm.setModelServiceProviderMetadata(provider);
-        pm.setProviderAuthMetadata(authMeta);
-        pm.setProviderAuthData(authData);
-        ModelServiceData model = new ModelServiceData();
-        model.setId("m1");
-        model.setServiceName("svc-m1");
-        model.setProviderId("p1");
-        model.setApiUrl("https://x.com/v1");
-        ModelExportEntity entity = new ModelExportEntity();
-        entity.setModelMetadata(new ArrayList<>(List.of(model)));
-        entity.setProviderMetadata(pm);
-        line.setPayload(entity);
-        line.setSignature(null);
-        String oneLine = om.writeValueAsString(line) + "\n";
-
-        SignatureUtils noSig = new SignatureUtils();
-        ReflectionTestUtils.setField(noSig, "signatureEnable", false);
-        ReflectionTestUtils.setField(service, "signatureUtils", noSig);
-
-        MultipartFile file = toMultipartFile(oneLine.getBytes(StandardCharsets.UTF_8));
-
-        ImportRsp rsp = service.importModels("proj", "ws", file, ModelImportConflictStrategy.SKIP);
-
-        assertEquals(1, rsp.getFailedLen(), "encrypted line must be recorded as failed");
-        assertEquals(0, rsp.getSucceedLen());
-        // provider / authMetadata / authData / model 均不得被 insert（防御性拦截）
-        verify(userModelServiceProviderMapper, never()).insert(any());
-        verify(providerAuthMetadataMapper, never()).insert(any());
-        verify(providerAuthDataMapper, never()).insert(any());
-        verify(modelServiceManager, never()).createModelServiceForImport(any());
-        verify(modelServiceManager, never()).coverModelService(any(), any());
-    }
-
-    @Test
-    void testPreview_noopCipherAlias_cipherAdaptedTrue() throws Exception {
-        // 兼容历史：cipher_name="NoOp"（无下划线）也应视为已适配，不得被误拒。
-        ObjectMapper om = new ObjectMapper();
-        com.openjiuwen.studio.agent.manager.entity.ModelExportLine line =
-            new com.openjiuwen.studio.agent.manager.entity.ModelExportLine();
-        line.setImportType("model_service");
-        ModelServiceProvider provider = new ModelServiceProvider();
-        provider.setId("p1");
-        ProviderAuthMetadata authMeta = new ProviderAuthMetadata();
-        authMeta.setProviderId("p1");
-        authMeta.setAuthInfo("{\"API Key\":\"k\"}");
-        ProviderAuthData authData = new ProviderAuthData();
-        authData.setProviderId("p1");
-        authData.setAuthInfo("{\"API Key\":\"k\"}");
-        authData.setCipherName("NoOp");
-        ProviderExportMetadata pm = new ProviderExportMetadata();
-        pm.setModelServiceProviderMetadata(provider);
-        pm.setProviderAuthMetadata(authMeta);
-        pm.setProviderAuthData(authData);
-        ModelServiceData model = new ModelServiceData();
-        model.setId("m1");
-        model.setServiceName("svc-m1");
-        model.setProviderId("p1");
-        model.setApiUrl("https://x.com/v1");
-        ModelExportEntity entity = new ModelExportEntity();
-        entity.setModelMetadata(new ArrayList<>(List.of(model)));
-        entity.setProviderMetadata(pm);
-        line.setPayload(entity);
-        line.setSignature(null);
-        String oneLine = om.writeValueAsString(line) + "\n";
-
-        SignatureUtils noSig = new SignatureUtils();
-        ReflectionTestUtils.setField(noSig, "signatureEnable", false);
-        ReflectionTestUtils.setField(service, "signatureUtils", noSig);
-
-        MultipartFile file = toMultipartFile(oneLine.getBytes(StandardCharsets.UTF_8));
-        when(userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(any(), any(), any()))
-            .thenReturn(Collections.emptyList());
-        when(userModelServiceProviderMapper.selectByIds(any())).thenReturn(Collections.emptyList());
-        when(modelServiceMapper.queryByName(any(), any(), any(), any())).thenReturn(Collections.emptyList());
-
-        ModelImportPreviewRsp rsp = service.previewImport("proj", "ws", file, null);
-        assertEquals(1, rsp.getTotalCount());
-        assertEquals(Boolean.TRUE, rsp.getItems().get(0).getCipherAdapted(),
-            "cipher_name='NoOp' must be cipher_adapted=true (NoOp alias)");
+        ImportRsp rsp = service.importModels("proj", "ws", toMultipartFile(singleLineCrlf), "SKIP");
+        assertEquals(1, rsp.getSucceedLen(), "single CRLF-terminated line must import");
     }
 
     private ModelExportEntity buildEntity(String modelId, String apiUrl) {
-        // 注意：setId/setServiceName/setApiUrl 继承自 ModelServiceBase，链式返回 ModelServiceBase，
-        // 不能跨继承层级链式赋值给 ModelServiceData，故用分步语句。
         ModelServiceData model = new ModelServiceData();
         model.setId(modelId);
         model.setServiceName("svc-" + modelId);
@@ -1561,7 +1716,6 @@ class ModelImportExportServiceTest {
     }
 
     private ModelExportEntity buildEntityWithProvider(String modelId, String apiUrl, String providerId) {
-        // 供应商+模型：payload.provider_metadata 非空。
         ModelServiceData model = new ModelServiceData();
         model.setId(modelId);
         model.setServiceName("svc-" + modelId);
@@ -1582,13 +1736,22 @@ class ModelImportExportServiceTest {
     }
 
     private MultipartFile toMultipartFile(byte[] bytes) {
+        return toMultipartFile(bytes, "a.jsonl");
+    }
+
+    private MultipartFile toMultipartFile(byte[] bytes, String filename) {
+        return toMultipartFile(bytes, filename, bytes == null || bytes.length == 0);
+    }
+
+    private MultipartFile toMultipartFile(byte[] bytes, String filename, boolean empty) {
         MultipartFile file = mock(MultipartFile.class);
-        // getBytes() 声明 throws IOException，编译期强制处理
         try {
-            when(file.getBytes()).thenReturn(bytes);
+            when(file.getBytes()).thenReturn(empty ? new byte[0] : bytes);
         } catch (java.io.IOException e) {
             throw new RuntimeException(e);
         }
+        when(file.getOriginalFilename()).thenReturn(filename);
+        when(file.isEmpty()).thenReturn(empty);
         return file;
     }
 }

@@ -8,7 +8,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openjiuwen.studio.agent.common.dto.ImportRes;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
-import com.openjiuwen.studio.agent.common.utils.SignatureUtils;
 import com.openjiuwen.studio.agent.common.utils.UrlCheckUtils;
 import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelImportPreviewItem;
@@ -42,6 +41,7 @@ import static com.openjiuwen.studio.agent.manager.constant.CommonConstant.MODEL_
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -59,7 +59,6 @@ import java.util.stream.Collectors;
  * <p>复用下层构件：
  * <ul>
  *   <li>{@link ModelServiceMgmtService#buildModelExportEntity} —— 纯构造导出实体</li>
- *   <li>{@link SignatureUtils} —— HMAC-SHA256 签名/验签</li>
  *   <li>{@link UrlCheckUtils} —— URL 校验 + {@code validateEnvVarPlaceholders} 占位符语法校验</li>
  *   <li>{@link ImportRsp} / {@link ImportRes} —— 导入响应封装</li>
  * </ul>
@@ -67,7 +66,7 @@ import java.util.stream.Collectors;
  * <p>跨环境 id 一致：导入落库走 {@link ModelServiceManager#createModelServiceForImport}（{@code mapper.insert}
  * 用 {@code #{id}} 原值），不经过 API 层 {@code createModelService}（重生成 UUID + 硬编码 offline）。
  *
- * <p>鉴权 MASKED only（agent-studio 无加密 SPI）：导出时 authInfo 两处均置空，导入后用户在目标环境重新配置。
+ * <p>鉴权 MASKED only（agent-studio 无加密 SPI）：导出时 authInfo 两处均置为空格占位，导入后用户在目标环境重新配置。
  */
 @Slf4j
 @Service
@@ -92,9 +91,6 @@ public class ModelImportExportService implements IModelImportExportService {
     private ProviderAuthDataMapper providerAuthDataMapper;
 
     @Autowired
-    private SignatureUtils signatureUtils;
-
-    @Autowired
     private UrlCheckUtils urlCheckUtils;
 
     @Autowired
@@ -110,33 +106,58 @@ public class ModelImportExportService implements IModelImportExportService {
 
     @Override
     public byte[] exportModels(String projectId, String workspaceId, List<String> modelIds) {
+        // 防御性校验：controller 已兜底，此处再次拦截绕过 controller 直接调 service 的调用方（空列表/全空白列表）
+        if (CollectionUtils.isEmpty(modelIds) || modelIds.stream().noneMatch(StringUtils::isNotBlank)) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "model_ids 不能为空，请至少选择一个模型");
+        }
         // 保留原行为：直接走 3 参 buildModelExportEntity（供应商+模型），不经 4 参重载，避免 mock 环境下绕过 3 参 stub。
         List<ModelExportEntity> entities = modelServiceMgmtService.buildModelExportEntity(projectId, workspaceId,
             modelIds);
         StringBuilder jsonl = new StringBuilder();
         for (ModelExportEntity entity : entities) {
-            jsonl.append(serialize(buildSignedLine(entity))).append('\n');
+            jsonl.append(serialize(buildLine(entity))).append('\n');
         }
         return jsonl.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     @Override
     public byte[] exportModels(String projectId, String workspaceId, List<String> modelIds, boolean includeProvider) {
-        // includeProvider=true 时委托 3 参（命中现有 3 参 mock/stub）；false 走 4 参（只导模型）。
+        // includeProvider=true 时委托 3 参（命中现有 3 参 mock/stub，3 参内也做参数校验）；false 走 4 参（只导模型）。
         if (includeProvider) {
             return exportModels(projectId, workspaceId, modelIds);
+        }
+        if (CollectionUtils.isEmpty(modelIds) || modelIds.stream().noneMatch(StringUtils::isNotBlank)) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "model_ids 不能为空，请至少选择一个模型");
         }
         List<ModelExportEntity> entities = modelServiceMgmtService.buildModelExportEntity(projectId, workspaceId,
             modelIds, false);
         StringBuilder jsonl = new StringBuilder();
         for (ModelExportEntity entity : entities) {
-            jsonl.append(serialize(buildSignedLine(entity))).append('\n');
+            jsonl.append(serialize(buildLine(entity))).append('\n');
         }
         return jsonl.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     @Override
     public byte[] exportModelsByProvider(String projectId, String workspaceId, String providerId) {
+        // 防御性校验：controller 已兜底（isBlank 拦截），此处再次拦截绕过 controller 的调用方
+        if (StringUtils.isBlank(providerId)) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "provider_id 不能为空，请指定一个供应商");
+        }
+        // 参照环境变量导出的校验模式：在取数据前先验证 providerId 是否属于本 project/workspace，
+        // 避免传入不存在 / 跨空间的 providerId 时静默导出空 jsonl 文件（queryByProviders scoped 过滤后返回空列表），
+        // 让调用方拿到一个无用的空响应。
+        List<ModelServiceProvider> existing = userModelServiceProviderMapper.selectByProjectIdAndWorkspaceId(
+            Collections.singleton(providerId), projectId, workspaceId);
+        if (CollectionUtils.isEmpty(existing)) {
+            log.error("provider not found or no permission for export: projectId={}, workspaceId={}, providerId={}",
+                projectId, workspaceId, providerId);
+            throw new AgentStudioException(StudioError.MD_PROVIDER_NOT_EXIST,
+                "provider not found or no permission: " + providerId);
+        }
         // 复用 queryByProviders 取该供应商下全部模型（含 SYSTEM 作用域，导入时 applyTargetScope 重新 scope）。
         List<ModelServiceBase> models = modelServiceMapper.queryByProviders(projectId, workspaceId, providerId);
         List<String> modelIds = models.stream()
@@ -154,7 +175,7 @@ public class ModelImportExportService implements IModelImportExportService {
 
     /**
      * 无模型供应商导出：直接按 providerId 取供应商元数据（不经模型派生），组装单行 JSONL
-     * （空模型列表 + 供应商元数据），经 {@link #buildSignedLine} 脱敏+签名，与常规导出格式一致。
+     * （空模型列表 + 供应商元数据），经 {@link #buildLine} 脱敏，与常规导出格式一致。
      * 导入端 {@code modelsOf} 对空模型列表返回 {@link Collections#emptyList()}，循环不执行，
      * 仅 upsert 供应商元数据——即「导入空供应商壳」成立。
      */
@@ -163,29 +184,29 @@ public class ModelImportExportService implements IModelImportExportService {
             .getProviderExportMetadataByIds(Collections.singleton(providerId));
         ProviderExportMetadata providerMetadata = providerMap.get(providerId);
         if (providerMetadata == null) {
-            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+            // 此分支理论上不可达：exportModelsByProvider 入口已通过 selectByProjectIdAndWorkspaceId 验证
+            // providerId 属于本 project/workspace；但 SYSTEM 作用域供应商等边界情况仍可能取不到，保留兜底
+            // （错误码对齐为 MD_PROVIDER_NOT_EXIST，而非导入侧的 MODEL_IMPORT_FORMAT_INVALID）。
+            throw new AgentStudioException(StudioError.MD_PROVIDER_NOT_EXIST,
                 "provider not found or has no metadata: " + providerId);
         }
         ModelExportEntity entity = new ModelExportEntity();
         entity.setProviderMetadata(providerMetadata);
         entity.setModelMetadata(new ArrayList<>());
         StringBuilder jsonl = new StringBuilder();
-        jsonl.append(serialize(buildSignedLine(entity))).append('\n');
+        jsonl.append(serialize(buildLine(entity))).append('\n');
         return jsonl.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     /**
-     * 组装单行（含签名）。顺序：脱敏 → 设 import_type → payload 置好 → signature 置 null → 序列化 → 计算签名 → 回填。
-     * import_type 在签名覆盖范围内，使导入端能据 type 拒绝非模型文件（工作流/agent 文件 import_type 为 workflow/agent）。
+     * 组装单行（不签名）。顺序：脱敏 → 设 import_type → payload 置好 → 序列化。
+     * import_type 用于导入端据类型拒绝非模型文件（工作流/agent 文件 import_type 为 workflow/agent）。
      */
-    private ModelExportLine buildSignedLine(ModelExportEntity entity) {
+    private ModelExportLine buildLine(ModelExportEntity entity) {
         maskProviderAuth(entity);
         ModelExportLine line = new ModelExportLine();
         line.setImportType(MODEL_SERVICE);
         line.setPayload(entity);
-        line.setSignature(null);
-        String signed = serialize(line);
-        line.setSignature(signatureUtils.signature(signed));
         return line;
     }
 
@@ -201,33 +222,6 @@ public class ModelImportExportService implements IModelImportExportService {
         pm.getProviderAuthMetadata().setAuthInfo(" ");
     }
 
-    /**
-     * 判断导入实体的鉴权加密方式是否被当前环境适配。
-     * <ul>
-     *   <li>只导模型（providerMetadata=null）或无 authData → 视为适配（不含加密密钥）</li>
-     *   <li>authData.cipher_name 为空 / "NoOp" → 明文 / MASKED 占位，适配</li>
-     *   <li>其他 cipherName（如 "AesGcm"）→ 当前环境仅支持 NoOp，未适配</li>
-     * </ul>
-     * 不做实际解密——仅识别标记，未适配时预检/导入拒绝并提示用户在目标环境重配密钥。
-     */
-    private boolean isCipherAdapted(ModelExportEntity entity) {
-        if (entity == null) {
-            return true;
-        }
-        ProviderExportMetadata pm = entity.getProviderMetadata();
-        if (pm == null || pm.getProviderAuthData() == null) {
-            return true;
-        }
-        String cipher = pm.getProviderAuthData().getCipherName();
-        // 空白字段视为明文/MASKED（旧版本导出无此字段）。
-        if (StringUtils.isBlank(cipher)) {
-            return true;
-        }
-        // 归一化（去下划线，忽略大小写）后匹配 "NOOP"：覆盖 "NoOp"、"NO_OP"、"NO_OP_CIPHER" 等变体。
-        String normalized = StringUtils.remove(cipher, '_');
-        return StringUtils.containsIgnoreCase(normalized, "NOOP");
-    }
-
     // ============================== 导入预检 ==============================
 
     @Override
@@ -238,35 +232,44 @@ public class ModelImportExportService implements IModelImportExportService {
     @Override
     public ModelImportPreviewRsp previewImport(String projectId, String workspaceId, MultipartFile file,
         String targetProviderId) {
+        List<LineContext> lines = readLines(file);
+        // Fast-fail：整份文件里一行 import_type=model_service 都没有 → 直接顶层抛错，
+        // 由全局异常处理器返回标准 error envelope，前端在顶部红条展示，避免对 N 行逐行列相同的英文/中文错误提示。
+        // 只有混了合法模型行 + 非法行的部分损坏文件才走逐行处理（那种逐行提示才有信息量）。
+        boolean atLeastOneModelLine = lines.stream()
+            .anyMatch(l -> l.raw.contains("\"import_type\":\"" + MODEL_SERVICE + "\"")
+                || l.raw.contains("\"import_type\": \"" + MODEL_SERVICE + "\""));
+        if (!atLeastOneModelLine) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "文件格式非法，请使用模型管理页面导出的文件。");
+        }
         List<ModelImportPreviewItem> items = new ArrayList<>();
         int conflictCount = 0;
-        for (LineContext ctx : readLines(file)) {
+        for (LineContext ctx : lines) {
             ModelExportLine line;
             try {
                 line = parseLine(ctx);
                 validateImportType(line);
-                verifyLine(line);
             } catch (AgentStudioException e) {
                 log.warn("Preview line {} failed: {}", ctx.lineNo, e.getMessage());
                 items.add(previewForLineFailure(ctx, e));
                 continue;
             }
-            // 与 importModels 对齐：验签通过但 payload 缺失时，导入侧报 FAILED("payload is missing")，
-            // 预检侧须同步展示该行（否则 totalCount 不含它，预检说 0 导入说 1 失败，用户困惑）。
+            // payload 缺失时，导入侧报 FAILED("payload is missing")，预检侧须同步展示该行
+            // （否则 totalCount 不含它，预检说 0 导入说 1 失败，用户困惑）。
             if (line.getPayload() == null) {
                 items.add(previewForNullPayload(ctx));
                 continue;
             }
             boolean modelOnly = line.getPayload().getProviderMetadata() == null
                 && StringUtils.isNotBlank(targetProviderId);
-            boolean cipherAdapted = isCipherAdapted(line.getPayload());
             List<ModelServiceData> models = modelsOf(line);
             for (ModelServiceData model : models) {
                 if (modelOnly) {
                     // 只导模型预检：重定向 providerId 到目标供应商，冲突判定/展示用重定向后的值。
                     model.setProviderId(targetProviderId);
                 }
-                ModelImportPreviewItem item = previewOneModel(projectId, workspaceId, model, cipherAdapted);
+                ModelImportPreviewItem item = previewOneModel(projectId, workspaceId, model);
                 items.add(item);
                 if (Boolean.TRUE.equals(item.getConflict())) {
                     conflictCount++;
@@ -276,26 +279,24 @@ public class ModelImportExportService implements IModelImportExportService {
             // 否则 totalCount=0 使前端 canConfirm 禁用确认按钮，与导入实际效果（建出供应商）不一致。
             // modelOnly 文件 provider_metadata 必为 null，不会误入此分支。
             if (!modelOnly && models.isEmpty() && line.getPayload().getProviderMetadata() != null) {
-                items.add(previewProviderShell(line.getPayload().getProviderMetadata(), cipherAdapted));
+                items.add(previewProviderShell(line.getPayload().getProviderMetadata()));
             }
         }
         return new ModelImportPreviewRsp().setTotalCount(items.size()).setConflictCount(conflictCount).setItems(items);
     }
 
-    private ModelImportPreviewItem previewOneModel(String projectId, String workspaceId, ModelServiceData model,
-        boolean cipherAdapted) {
+    private ModelImportPreviewItem previewOneModel(String projectId, String workspaceId, ModelServiceData model) {
         ModelImportPreviewItem item = new ModelImportPreviewItem().setId(model.getId())
             .setServiceName(model.getServiceName())
             .setProviderId(model.getProviderId())
             .setConflict(false)
-            .setCipherAdapted(cipherAdapted)
+            .setLineValid(true)
             .setType("MODEL");
         // providerId 空值：queryByName 的 PROVIDER_ID 条件会退化（serviceName-only 跨供应商匹配），
         // 可能误报冲突且 COVER 会误删无关记录。与导入侧 validateModel（冲突检测前抛异常）一致 →
         // 此处不跑 detectConflict，直接判非法，避免 preview 与 import 背离。
         if (StringUtils.isBlank(model.getProviderId())) {
-            return item.setSignatureValid(true)
-                .setApiUrlValid(false)
+            return item.setApiUrlValid(false)
                 .setEnvVarValid(false)
                 .setDetail("model " + model.getServiceName() + " has blank providerId, cannot import");
         }
@@ -303,15 +304,6 @@ public class ModelImportExportService implements IModelImportExportService {
         // 返回结构化说明（无冲突返回 conflict=false、desc=null）。
         ConflictInfo conflictInfo = detectConflict(projectId, workspaceId, model);
         item.setConflict(conflictInfo.isConflict());
-        // 加密鉴权未适配：api_url/env_var 校验不再继续（加密情况下这些字段仍是明文/占位符，但密钥不可用，整体不可导入）。
-        if (!cipherAdapted) {
-            return item.setSignatureValid(true)
-                .setApiUrlValid(true)
-                .setEnvVarValid(true)
-                .setDetail(mergeDetail(conflictInfo.getDesc(),
-                    "auth data is encrypted by a cipher not adapted in this environment; "
-                    + "please reconfigure credentials in the target environment after import"));
-        }
         // 两个校验独立判定：checkUrl 对含 ${...} 占位符的 URL 放通（交由 validateEnvVarPlaceholders 管语法），
         // 故非法占位符 URL 应 apiUrlValid=true、envVarValid=false。耦合在一个 try/catch 会误把两标志同时置 false。
         List<String> details = new ArrayList<>();
@@ -330,8 +322,7 @@ public class ModelImportExportService implements IModelImportExportService {
             details.add(describe(e));
         }
         String hardDetail = details.isEmpty() ? null : String.join("; ", details);
-        return item.setSignatureValid(true)
-            .setDetail(mergeDetail(conflictInfo.getDesc(), hardDetail));
+        return item.setDetail(mergeDetail(conflictInfo.getDesc(), hardDetail));
     }
 
     /**
@@ -353,24 +344,21 @@ public class ModelImportExportService implements IModelImportExportService {
             .setServiceName("(line " + ctx.lineNo + ")")
             .setProviderId(null)
             .setConflict(false)
-            .setSignatureValid(false)
+            .setLineValid(false)
             .setApiUrlValid(false)
             .setEnvVarValid(false)
-            .setCipherAdapted(true)
             .setType("MODEL")
             .setDetail(describe(e));
     }
 
     private ModelImportPreviewItem previewForNullPayload(LineContext ctx) {
-        // 验签已通过但 payload 缺失：signatureValid=true，其余校验无法进行。
         return new ModelImportPreviewItem().setId(null)
             .setServiceName("(line " + ctx.lineNo + ")")
             .setProviderId(null)
             .setConflict(false)
-            .setSignatureValid(true)
+            .setLineValid(true)
             .setApiUrlValid(false)
             .setEnvVarValid(false)
-            .setCipherAdapted(true)
             .setType("MODEL")
             .setDetail("payload is missing");
     }
@@ -378,50 +366,53 @@ public class ModelImportExportService implements IModelImportExportService {
     /**
      * 空供应商壳行的预检条目。provider_metadata 非空但无模型时，导入会 upsert 供应商壳（0 模型）；
      * 预检须产出此条目，否则 totalCount=0 使前端 canConfirm 禁用确认按钮。api_url/env_var 校验对
-     * 供应商壳无意义（供应商本身无 api_url），放通为 true；signature 已在 verifyLine 通过。
+     * 供应商壳无意义（供应商本身无 api_url），放通为 true。
      */
-    private ModelImportPreviewItem previewProviderShell(ProviderExportMetadata pem, boolean cipherAdapted) {
+    private ModelImportPreviewItem previewProviderShell(ProviderExportMetadata pem) {
         ModelServiceProvider provider = pem.getModelServiceProviderMetadata();
         String providerId = provider != null ? provider.getId() : null;
         String providerName = provider != null ? provider.getProviderName() : null;
-        ModelImportPreviewItem item = new ModelImportPreviewItem()
+        // 供应商壳（无模型）无冲突且可导入（导入侧 providerShellRes 报 SUCCESS）→ detail=null，
+        // 前端展示"无"（success），避免在精简后的单列里误显红色 error。
+        return new ModelImportPreviewItem()
             .setId(providerId)
             .setServiceName(providerName)
             .setProviderId(providerId)
             .setConflict(false)
-            .setCipherAdapted(cipherAdapted)
-            .setSignatureValid(true)
+            .setLineValid(true)
             .setApiUrlValid(true)
             .setEnvVarValid(true)
             .setType("PROVIDER");
-        if (!cipherAdapted) {
-            return item.setDetail("auth data is encrypted by a cipher not adapted in this environment; "
-                + "please reconfigure credentials in the target environment after import");
-        }
-        // 供应商壳（无模型）无冲突且可导入（导入侧 providerShellRes 报 SUCCESS）→ detail=null，
-        // 前端展示"无"（success），避免在精简后的单列里误显红色 error。
-        return item;
     }
 
     // ============================== 导入落库 ==============================
 
     @Override
     public ImportRsp importModels(String projectId, String workspaceId, MultipartFile file,
-        ModelImportConflictStrategy conflictStrategy) {
+        String conflictStrategy) {
         return importModels(projectId, workspaceId, file, conflictStrategy, null);
     }
 
     @Override
     public ImportRsp importModels(String projectId, String workspaceId, MultipartFile file,
-        ModelImportConflictStrategy conflictStrategy, String targetProviderId) {
+        String conflictStrategy, String targetProviderId) {
+        ModelImportConflictStrategy strategy = parseConflictStrategy(conflictStrategy);
         licenseCtrlService.canAccessIntegrationModel();
+        List<LineContext> lines = readLines(file);
+        // 与 previewImport 对齐：整文件没有一行合法模型行就直接顶层报错，避免逐行 N 条相同错误。
+        boolean atLeastOneModelLine = lines.stream()
+            .anyMatch(l -> l.raw.contains("\"import_type\":\"" + MODEL_SERVICE + "\"")
+                || l.raw.contains("\"import_type\": \"" + MODEL_SERVICE + "\""));
+        if (!atLeastOneModelLine) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "文件格式非法，请使用模型管理页面导出的文件。");
+        }
         List<ImportRes> importList = new ArrayList<>();
-        for (LineContext ctx : readLines(file)) {
+        for (LineContext ctx : lines) {
             ModelExportLine line;
             try {
                 line = parseLine(ctx);
                 validateImportType(line);
-                verifyLine(line);
             } catch (AgentStudioException e) {
                 log.warn("Import line {} skipped: {}", ctx.lineNo, e.getMessage());
                 importList.addAll(failedForLine(ctx, e));
@@ -430,22 +421,6 @@ public class ModelImportExportService implements IModelImportExportService {
             ModelExportEntity entity = line.getPayload();
             if (entity == null) {
                 importList.add(failedRes(null, "(line " + ctx.lineNo + ")", "payload is missing"));
-                continue;
-            }
-            // 加密鉴权未适配：整行拒绝（所有子模型），提示用户在目标环境重新配置密钥。
-            // 防御性兜底——预检已会标 cipher_adapted=false 阻止前端提交；后端再次检查防止绕过预检直接调用导入接口。
-            if (!isCipherAdapted(entity)) {
-                String cipherName = entity.getProviderMetadata() != null
-                        && entity.getProviderMetadata().getProviderAuthData() != null
-                    ? entity.getProviderMetadata().getProviderAuthData().getCipherName()
-                    : "<unknown>";
-                String msg = "auth data uses cipher '" + cipherName
-                    + "' which is not adapted in this environment (NoOp only); "
-                    + "please reconfigure credentials in the target environment after import";
-                log.warn("Import line {} rejected: {}", ctx.lineNo, msg);
-                for (ModelServiceData model : modelsOf(line)) {
-                    importList.add(failedRes(model.getId(), model.getServiceName(), msg));
-                }
                 continue;
             }
             // 模式判定：provider_metadata 为 null + targetProviderId 非空 → 只导模型（重定向到目标供应商，
@@ -490,7 +465,7 @@ public class ModelImportExportService implements IModelImportExportService {
                     }
                 }
                 String originalId = model.getId();
-                importList.add(importOneModel(projectId, workspaceId, model, conflictStrategy, targetAuthMetadataId));
+                importList.add(importOneModel(projectId, workspaceId, model, strategy, targetAuthMetadataId));
                 // 若跨空间 COPY 导致 id 变更，记录 old→new 供后续子模型重链 providerId。
                 if (!modelOnly && StringUtils.isNotBlank(originalId) && !originalId.equals(model.getId())) {
                     batchIdRemap.put(originalId, model.getId());
@@ -621,7 +596,7 @@ public class ModelImportExportService implements IModelImportExportService {
         // COVER 路径的跨空间 PK 冲突守卫：exist 是按 (projectId,workspaceId,serviceName,providerId) 查到的同名行，
         // 只保证同名冲突会被删除。若导入包中的 model.id 被其他记录占用（其他工作空间、或同空间不同名/不同 provider），
         // deleteById(existingId) 不会释放那个 PK 槽位，直接 insert 会触发 Duplicate entry PRIMARY。
-        // 此时走 COPY 语义——为导入模型分配新 UUID，保留占用方记录不动（和无冲突分支 lines 494-508 一致）。
+        // 此时走 COPY 语义——为导入模型分配新 UUID，保留占用方记录不动（和无冲突分支一致）。
         // case A：existingId.equals(model.getId()) → 同文件二次导入同空间，占用方就是将被删除的同名行，无需再生。
         // case B：model.getId() 全局不存在 → 直接使用导入 id，无需再生。
         if (StringUtils.isNotBlank(model.getId()) && !existingId.equals(model.getId())) {
@@ -896,51 +871,25 @@ public class ModelImportExportService implements IModelImportExportService {
             : Optional.empty();
     }
 
-    // ============================== 验签 / 解析 ==============================
+    // ============================== 解析 ==============================
 
     /**
      * 导入类型校验：拒绝非模型导出文件。
      * <ul>
-     *   <li>{@code import_type} 为 {@link MODEL_SERVICE} → 放行（当前版本导出的模型文件）</li>
-     *   <li>{@code import_type} 为 null → 放行（旧版本导出的模型文件无此字段，向后兼容）</li>
-     *   <li>{@code import_type} 为其他值（如 {@code workflow}/{@code agent}/{@code Plugin}）→
-     *       抛 {@link StudioError#MODEL_IMPORT_FORMAT_INVALID}，明确提示文件类型不符</li>
+     *   <li>{@code import_type} 为 {@link MODEL_SERVICE} → 放行</li>
+     *   <li>{@code import_type} 为 null/空白或其他值（工作流/Agent/插件/其他模块导出的 jsonl，或非 jsonl 文件）→
+     *       抛 {@link StudioError#MODEL_IMPORT_FORMAT_INVALID}，预检阶段即标红禁用确认按钮。</li>
      * </ul>
-     * 在 {@link #verifyLine} 之前执行：即便签名校验关闭（{@code export.signature.enable=false}），
-     * 也能据类型标识挡住错格式文件（如把工作流 jsonl 误导入模型接口）。
      */
     private void validateImportType(ModelExportLine line) {
         String importType = line.getImportType();
-        if (StringUtils.isBlank(importType) || MODEL_SERVICE.equals(importType)) {
+        if (MODEL_SERVICE.equals(importType)) {
             return;
         }
-        throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
-            "not a model export file (import_type=" + importType + "), expected " + MODEL_SERVICE);
-    }
-
-    /**
-     * 验签：取 signature → 置 null → 序列化 → {@code verifySignature}。
-     * 底层 {@code verifySignature} 不匹配抛 {@code VERIFY_SIGNATURE_FAILED}，此处转换为模型导入语义
-     * {@link StudioError#MODEL_IMPORT_SIGNATURE_INVALID}（隔离模块错误码）。
-     */
-    private void verifyLine(ModelExportLine line) {
-        String signature = line.getSignature();
-        line.setSignature(null);
-        String json = serialize(line);
-        try {
-            signatureUtils.verifySignature(json, signature);
-        } catch (AgentStudioException e) {
-            if (e.getErrorCode() == StudioError.VERIFY_SIGNATURE_FAILED) {
-                throw new AgentStudioException(StudioError.MODEL_IMPORT_SIGNATURE_INVALID,
-                    "signature verification failed");
-            }
-            throw e;
-        } catch (IllegalArgumentException e) {
-            // 畸形签名（非法 Base64）—— SignatureUtils 内部 Base64.decode 抛出，非 AgentStudioException，
-            // 不加此 catch 会逃逸到全局处理器返回 500（该处理器无 IllegalArgumentException 处理分支）。
-            throw new AgentStudioException(StudioError.MODEL_IMPORT_SIGNATURE_INVALID,
-                "signature is malformed (not valid Base64)");
-        }
+        String detail = StringUtils.isBlank(importType)
+            ? "文件格式非法：该行缺少 import_type 字段。"
+            : "文件格式非法：该行 import_type=" + importType + "，期望值 model_service。";
+        throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID, detail);
     }
 
     private ModelExportLine parseLine(LineContext ctx) {
@@ -1065,13 +1014,46 @@ public class ModelImportExportService implements IModelImportExportService {
         return entity.getModelMetadata();
     }
 
+    /**
+     * 解析冲突策略字符串，大小写不敏感匹配 SKIP/COVER，其他值抛 400。
+     */
+    private ModelImportConflictStrategy parseConflictStrategy(String conflictStrategy) {
+        if (StringUtils.isBlank(conflictStrategy)) {
+            return ModelImportConflictStrategy.SKIP;
+        }
+        String normalized = conflictStrategy.trim().toUpperCase(java.util.Locale.ROOT);
+        try {
+            return ModelImportConflictStrategy.valueOf(normalized);
+        } catch (IllegalArgumentException e) {
+            String expected = String.join("/",
+                Arrays.stream(ModelImportConflictStrategy.values())
+                    .map(Enum::name).toArray(String[]::new));
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "参数 conflict_strategy 取值非法，期望值：" + expected);
+        }
+    }
+
     private List<LineContext> readLines(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID, "上传文件不能为空");
+        }
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || !originalFilename.toLowerCase().endsWith(".jsonl")) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "文件格式非法，仅支持 .jsonl 文件");
+        }
         String content;
         try {
             content = new String(file.getBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             log.error("Fail to read import file.", e);
-            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID, "fail to read upload file");
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID, "文件读取失败");
+        }
+        // 二进制/非文本文件探测：UTF-8 解码后若包含 NUL 字符或不可打印控制字符比例过高，直接拒绝。
+        // 正常 jsonl 全是可见字符 + 换行/制表符。
+        if (content.indexOf('\0') >= 0) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "文件格式非法，仅支持 UTF-8 编码的 .jsonl 文本文件");
         }
         String[] lines = content.split("\n");
         List<LineContext> result = new ArrayList<>();
@@ -1081,6 +1063,17 @@ public class ModelImportExportService implements IModelImportExportService {
                 continue;
             }
             result.add(new LineContext(i + 1, raw));
+        }
+        if (result.isEmpty()) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "文件内容为空，请使用模型管理页面导出的 JSONL 文件");
+        }
+        // 模型导出文件始终是"单行 JSONL"——每行一个完整 JSON 对象，一个文件只包含一行（一个 ModelExportEntity，
+        // 其 model_metadata 数组承载全部模型）。若 trim 后非空行数 > 1，通常是文件被文本编辑器 pretty-print
+        // 成多行缩进格式，此时按行解析会逐行报"JSON 解析失败"，错误信息对用户不友好。这里直接给明确提示。
+        if (result.size() > 1) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "文件格式非法：模型文件为单行 JSONL");
         }
         return result;
     }
@@ -1121,7 +1114,7 @@ public class ModelImportExportService implements IModelImportExportService {
     }
 
     private List<ImportRes> failedForLine(LineContext ctx, AgentStudioException e) {
-        // 与 previewForLineFailure/importOneModel 一致用 describe(e)：generateHmac 等单参构造器异常
+        // 与 previewForLineFailure/importOneModel 一致用 describe(e)：单参构造器异常
         // getMessage() 为 null，直接透传会致 detail 空白。
         return Collections.singletonList(failedRes(null, "(line " + ctx.lineNo + ")", describe(e)));
     }
