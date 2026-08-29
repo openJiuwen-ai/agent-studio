@@ -1376,7 +1376,7 @@ def _register_jiuwen_callbacks() -> None:
                     "node_name": node_name,
                 })
                 # 节点开始执行 common 日志
-                common_logger.info(
+                common_logger.debug(
                     f"The node starts to execute. "
                     f"| flow_id: {workflow_id} | node type: {node_type} | node name: {node_name}"
                 )
@@ -1397,7 +1397,7 @@ def _register_jiuwen_callbacks() -> None:
             node_type = ctx.get("node_type", "")
             node_name = ctx.get("node_name", "")
             # 节点执行完成 common 日志
-            common_logger.info(
+            common_logger.debug(
                 f"Node execution is complete. "
                 f"| flow_id: {workflow_id} | node type: {node_type} | node name: {node_name}"
             )

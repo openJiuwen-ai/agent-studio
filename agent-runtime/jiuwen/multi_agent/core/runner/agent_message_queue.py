@@ -161,14 +161,14 @@ class AgentMessageQueue:
                     self._receive_queue.task_done()
                 except asyncio.QueueEmpty:
                     break
-            logger.info("_receive_queue cleared")
+            logger.debug("_receive_queue cleared")
             while not self._processing_queue.empty():
                 try:
                     self._processing_queue.get_nowait()
                     self._processing_queue.task_done()
                 except asyncio.QueueEmpty:
                     break
-            logger.info("_processing_queue cleared")
+            logger.debug("_processing_queue cleared")
 
     async def shutdown(self) -> None:
         """关闭队列"""

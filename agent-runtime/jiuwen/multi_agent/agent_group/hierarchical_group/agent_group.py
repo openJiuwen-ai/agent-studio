@@ -63,7 +63,7 @@ class HierarchicalAgentGroup(BaseAgentGroup):
                 await self.runner.start()
 
             self._running = True
-            logger.info(f"AgentGroup {self.config.group_id} started successfully")
+            logger.debug(f"AgentGroup {self.config.group_id} started successfully")
 
         except Exception as e:
             logger.error(
@@ -79,7 +79,7 @@ class HierarchicalAgentGroup(BaseAgentGroup):
             return
 
         try:
-            logger.info(f"Stopping AgentGroup {self.config.group_id}")
+            logger.debug(f"Stopping AgentGroup {self.config.group_id}")
             self._running = False
             await self.runner.stop()
             logger.info(f"AgentGroup {self.config.group_id} stopped successfully")

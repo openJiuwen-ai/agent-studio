@@ -1719,7 +1719,7 @@ class BpmnWorkflow(BaseWorkflow):
     async def _pre_execution_debug_info(
         self, invokable: Node, inputs: dict, cur_span: Span
     ):
-        logger.info(
+        logger.debug(
             "The node starts to execute. "
             "| flow_id: {} | node type: {} | node name: {}".format(
                 self._runtime_debug_info.get(WORKFLOW_ID, ""),
@@ -2016,7 +2016,7 @@ class BpmnWorkflow(BaseWorkflow):
         cur_span: Span,
         inputs: Union[dict, str] = None,
     ):
-        logger.info(
+        logger.debug(
             "Node execution is complete. "
             "| flow_id: {} | node type: {} | node name: {}".format(
                 self._runtime_debug_info.get(WORKFLOW_ID, ""),
