@@ -1926,6 +1926,16 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             = shareResourceManagerService.queryShareResourceEntityByResourceIdAndVersionId(workflowId,
             ThreadLocalUtils.getWorkspaceId(), versionId);
 
+        if (shareResourceEntity == null) {
+            // 宽松/共享场景兜底：版本不在共享 version_list 时，只要工作流本身共享给当前空间（含团队共享 'all'），
+            // 仍按源空间查询版本详情，避免误报"工作流不存在"；版本真实性由下方 releaseVersion 查询兜底
+            ShareResourceEntity shared = shareResourceManagerService.queryShareResourceEntityByResourceId(workflowId);
+            if (shared != null && shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(
+                ThreadLocalUtils.getWorkspaceId(), workflowId)) {
+                shareResourceEntity = shared;
+            }
+        }
+
         if (shareResourceEntity != null) {
             workspaceId = shareResourceEntity.getWorkspaceId();
         }
@@ -1954,6 +1964,10 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             workflowCommonService.getWorkflowByWorkspaceAndOpProject(projectId, workspaceId, workflowId);
         String workflowJson = obsService.downloadObsFile(releaseVersion.getDslPath());
         WorkflowInfo workflowInfo = convertEntityToInfo(workflowEntities, workflowJson);
+        // 与 getWorkflowInfo 对齐：版本视图同样标记引用共享资源的子流节点（configs.fromShare），
+        // 保证共享工作流只读页内向嵌套子流跳转时只读标记不断链
+        // （否则下级跳转会因丢失 fromShare 进入可"退出预览"的版本预览页，违背共享资源只读约束）
+        markSharedWorkflowNodes(workflowInfo.getWorkflowDetails(), ThreadLocalUtils.getWorkspaceId());
         WorkflowVO releasedWorkflow = JsonUtils.json2ObjQuietly(workflowJson, WorkflowVO.class);
         // 顶层 name 取工作流实体的显示名（convertEntityToInfo 已设置），不可用 DSL 的 name 覆盖：
         // 前端保存时会把 workflow_details.name 写成 code（拼音标识符，供运行时使用），覆盖后会导致
