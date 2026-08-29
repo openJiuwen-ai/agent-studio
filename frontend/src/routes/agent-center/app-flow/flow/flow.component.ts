@@ -1265,7 +1265,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       });
     this.modelManagementService
-      .getAvailableModelList({with_router: true})
+      .getAvailableModelList({with_router: true, publish_status: 'online'})
       .then((res) => {
         this.availableModelList = res.data.map((item: any) => ({
           ...item,
