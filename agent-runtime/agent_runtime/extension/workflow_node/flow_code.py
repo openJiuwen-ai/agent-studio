@@ -15,6 +15,10 @@ from typing import AsyncIterator, Optional, Union
 from agent_runtime.extension.workflow_node.code_runner import (
     CodeRunner,
 )
+from agent_runtime.extension.workflow_node.code_runner.result_cache import (
+    get_code_result_cache,
+    make_cache_key,
+)
 from openjiuwen.core.common.constants.constant import USER_FIELDS
 from openjiuwen.core.common.exception.codes import StatusCode
 from openjiuwen.core.common.exception.errors import build_error
@@ -454,45 +458,77 @@ class FlowCode(WorkflowComponent):
             if inputs_schema:
                 user_fields = _coerce_inputs(user_fields, inputs_schema)
 
-            # 4. 执行代码（带 sandbox 失败 fallback 到 local）
-            from agent_runtime.common.config import settings
-
-            exec_timeout = settings.security_sandbox.timeout_seconds
-            workflow_logger.info(
-                "[FlowCode] exec_timeout=%s (from SECURITY_SANDBOX_TIMEOUT)",
-                exec_timeout,
-            )
-            active_runner = self._code_runner
-            try:
-                result_dict = await self._code_runner.run(
-                    user_code=self._conf.code,
-                    inputs=user_fields,
-                    timeout=exec_timeout,
+            # 3.6 结果缓存查询：基于 (code, exec_env, inputs, outputs_schema) hash，
+            # 命中则跳过执行（CODE_EXECUTION_RESULT_CACHE_ENABLE 控制，默认开启）
+            outputs_schema = self._conf.user_fields.get("outputs", [])
+            result_cache = get_code_result_cache()
+            cache_key = None
+            cached = None
+            if result_cache is not None:
+                cache_key = make_cache_key(
+                    self._conf.code,
+                    self._conf.exec_env,
+                    user_fields,
+                    outputs_schema,
                 )
-            except Exception as e:
-                # Sandbox execution failed, fallback to local
-                exec_env = self._conf.exec_env or "local"
-                if exec_env == "sandbox":
-                    if "timeout" in str(e).lower():
-                        # 超时不应 fallback 到本地，否则同样的代码会再次超时
-                        raise RuntimeError(
-                            f"代码执行超时（已超过 {exec_timeout} 秒限制），"
-                            f"请优化代码或调整 SECURITY_SANDBOX_TIMEOUT 配置"
-                        ) from e
-                    workflow_logger.warning(
-                        f"Sandbox execution failed: {e}, fallback to local"
-                    )
-                    active_runner = self._get_local_runner()
-                    result_dict = await active_runner.run(
+                cached = result_cache.get(cache_key)
+
+            if cached is not None:
+                # 缓存命中：结果已含 outputs 类型转换，直接返回
+                # （HIT 日志由 CodeResultCache.get 输出，key 前缀一致可关联）
+                result_dict, function_log = cached
+            else:
+                # 4. 执行代码（带 sandbox 失败 fallback 到 local）
+                from agent_runtime.common.config import settings
+
+                exec_timeout = settings.security_sandbox.timeout_seconds
+                workflow_logger.info(
+                    "[FlowCode] exec_timeout=%s (from SECURITY_SANDBOX_TIMEOUT)",
+                    exec_timeout,
+                )
+                active_runner = self._code_runner
+                try:
+                    result_dict = await self._code_runner.run(
                         user_code=self._conf.code,
                         inputs=user_fields,
                         timeout=exec_timeout,
                     )
-                else:
-                    raise  # Re-raise for non-sandbox environments
+                except Exception as e:
+                    # Sandbox execution failed, fallback to local
+                    exec_env = self._conf.exec_env or "local"
+                    if exec_env == "sandbox":
+                        if "timeout" in str(e).lower():
+                            # 超时不应 fallback 到本地，否则同样的代码会再次超时
+                            raise RuntimeError(
+                                f"代码执行超时（已超过 {exec_timeout} 秒限制），"
+                                f"请优化代码或调整 SECURITY_SANDBOX_TIMEOUT 配置"
+                            ) from e
+                        workflow_logger.warning(
+                            f"Sandbox execution failed: {e}, fallback to local"
+                        )
+                        active_runner = self._get_local_runner()
+                        # 回退执行结果不缓存，避免 sandbox 恢复后命中 local 结果
+                        cache_key = None
+                        result_dict = await active_runner.run(
+                            user_code=self._conf.code,
+                            inputs=user_fields,
+                            timeout=exec_timeout,
+                        )
+                    else:
+                        raise  # Re-raise for non-sandbox environments
 
-            # 4.5 将 function_log（用户 print 输出）通过 tracer 发送到 onInvokeData
-            function_log = getattr(active_runner, "function_log", "")
+                # 4.5 提取 function_log（用户 print 输出）
+                function_log = getattr(active_runner, "function_log", "")
+
+                # 5. 根据 output schema 做类型转换
+                if outputs_schema:
+                    result_dict = _coerce_outputs(result_dict, outputs_schema)
+
+                # 5.2 写入结果缓存（仅缓存成功结果）
+                if result_cache is not None and cache_key is not None:
+                    result_cache.put(cache_key, result_dict, function_log)
+
+            # 4.6 将 function_log（用户 print 输出）通过 tracer 发送到 onInvokeData
             if function_log:
                 try:
                     await session.trace(data={"function_log": function_log})
@@ -506,11 +542,6 @@ class FlowCode(WorkflowComponent):
                 component_type_str=JIUWEN_CODE_TYPE,
                 session_id=session.get_session_id(),
             )
-
-            # 5. 根据 output schema 做类型转换
-            outputs_schema = self._conf.user_fields.get("outputs", [])
-            if outputs_schema:
-                result_dict = _coerce_outputs(result_dict, outputs_schema)
 
             # 5.5 记录代码执行信息到 on_invoke_data
             if hasattr(session, 'trace'):
