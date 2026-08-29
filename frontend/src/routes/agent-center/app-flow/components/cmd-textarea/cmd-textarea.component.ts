@@ -236,7 +236,21 @@ export class CmdTextareaComponent implements ControlValueAccessor {
       this.editor.nativeElement.innerHTML = '';
     }
     if (this.maxLength && this.getLength() > this.maxLength) {
-      document.execCommand('delete');
+      // 超长时一次性截断：先断开 Observer 防止 innerText 触发 processContent 卡死
+      const truncated = this.getEditorTextContent().replace(/\n$/, '').slice(0, this.maxLength);
+      this.editorObserver.disconnect();
+      this.editor.nativeElement.innerText = truncated;
+      const selection = window.getSelection();
+      const newRange = document.createRange();
+      newRange.selectNodeContents(this.editor.nativeElement);
+      newRange.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(newRange);
+      this.editorObserver.observe(this.editor.nativeElement, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
     }
     this.emit();
     this.updateSelection();
@@ -248,10 +262,9 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     if (content === '\n') {
       return 0;
     }
-    return Math.max(
-      this.getEditorTextContent().length,
-      0,
-    );
+    // 去除末尾换行符，与 emit() 输出值保持一致，避免计数偏差
+    content = content.replace(/\n$/, '');
+    return Math.max(content.length, 0);
   }
 
   handlePaste(event: ClipboardEvent) {
@@ -271,15 +284,9 @@ export class CmdTextareaComponent implements ControlValueAccessor {
 
     // 超过最大长度截断
     if (this.maxLength) {
-      let contentLength = clipboardContent.length;
       const leaveLength = this.maxLength - this.getLength();
-      while (contentLength > leaveLength) {
-        const extraCharactersNum = contentLength - leaveLength;
-        clipboardContent = clipboardContent.slice(
-          0,
-          clipboardContent.length - extraCharactersNum,
-        );
-        contentLength = clipboardContent.length;
+      if (clipboardContent.length > leaveLength) {
+        clipboardContent = clipboardContent.slice(0, leaveLength);
       }
     }
 
@@ -300,6 +307,19 @@ export class CmdTextareaComponent implements ControlValueAccessor {
     if (
       ['ArrowUp', 'ArrowDown', 'Enter'].includes(event.key) &&
       this.showList
+    ) {
+      event.preventDefault();
+      return;
+    }
+
+    // 达到 maxLength 后阻止可见字符输入（事前拦截，避免快速连续敲击突破限制）
+    if (
+      this.maxLength &&
+      this.getLength() >= this.maxLength &&
+      event.key.length === 1 &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
     ) {
       event.preventDefault();
       return;
