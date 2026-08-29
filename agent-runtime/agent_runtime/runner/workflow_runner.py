@@ -200,9 +200,18 @@ class WorkflowRunner:
             workflow_logger.error(
                 f"Failed to load IR from {ir_path}: {e}", exc_info=True
             )
+            error_code = _resolve_error_code_from_exception(e)
+            if error_code == -1:
+                error_code = GENERAL_ERROR
+                raw_msg = "Failed to load workflow configuration"
+            else:
+                raw_msg = getattr(e, "message", None) or "Failed to load workflow configuration"
             yield {
                 "event": "error",
-                "data": {"response": "Failed to load workflow configuration"},
+                "data": {
+                    "code": error_code,
+                    "message": _format_error_message(error_code, raw_msg),
+                },
                 "executionId": exec_id,
                 "index": 0,
                 "createdTime": int(time.time() * 1000),
@@ -568,9 +577,18 @@ class WorkflowRunner:
             workflow_logger.error(
                 f"Failed to load IR from {ir_path}: {e}", exc_info=True
             )
+            error_code = _resolve_error_code_from_exception(e)
+            if error_code == -1:
+                error_code = GENERAL_ERROR
+                raw_msg = "Failed to load workflow configuration"
+            else:
+                raw_msg = getattr(e, "message", None) or "Failed to load workflow configuration"
             yield {
                 "event": "error",
-                "data": {"response": "Failed to load workflow configuration"},
+                "data": {
+                    "code": error_code,
+                    "message": _format_error_message(error_code, raw_msg),
+                },
                 "executionId": exec_id,
                 "index": 0,
                 "createdTime": int(time.time() * 1000),
