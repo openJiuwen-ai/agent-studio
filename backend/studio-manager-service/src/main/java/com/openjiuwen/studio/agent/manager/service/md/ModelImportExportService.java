@@ -243,6 +243,12 @@ public class ModelImportExportService implements IModelImportExportService {
             throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
                 "文件格式非法，请使用模型管理页面导出的文件。");
         }
+        // Fast-fail：只导模型文件（payload.provider_metadata 缺失）必须显式传 target_provider_id 指定
+        // 目标供应商，否则模型会以源空间 provider_id 落库成为孤儿数据；从供应商详情页发起的导入会自动带该参数。
+        if (isModelOnlyFile(lines) && StringUtils.isBlank(targetProviderId)) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "只导模型文件需要指定目标供应商，请从供应商详情页发起导入，或显式传入 target_provider_id");
+        }
         List<ModelImportPreviewItem> items = new ArrayList<>();
         int conflictCount = 0;
         for (LineContext ctx : lines) {
@@ -261,8 +267,7 @@ public class ModelImportExportService implements IModelImportExportService {
                 items.add(previewForNullPayload(ctx));
                 continue;
             }
-            boolean modelOnly = line.getPayload().getProviderMetadata() == null
-                && StringUtils.isNotBlank(targetProviderId);
+            boolean modelOnly = line.getPayload().getProviderMetadata() == null;
             List<ModelServiceData> models = modelsOf(line);
             for (ModelServiceData model : models) {
                 if (modelOnly) {
@@ -304,11 +309,15 @@ public class ModelImportExportService implements IModelImportExportService {
         // 返回结构化说明（无冲突返回 conflict=false、desc=null）。
         ConflictInfo conflictInfo = detectConflict(projectId, workspaceId, model);
         item.setConflict(conflictInfo.isConflict());
-        // 两个校验独立判定：checkUrl 对含 ${...} 占位符的 URL 放通（交由 validateEnvVarPlaceholders 管语法），
-        // 故非法占位符 URL 应 apiUrlValid=true、envVarValid=false。耦合在一个 try/catch 会误把两标志同时置 false。
+        // 两个校验独立判定：
+        // 1) validateUrlSyntax 始终执行，拒绝非 http(s) / 无 host / 非法 URI（"not-a-url"、ftp:// 等）；
+        // 2) validateEnvVarPlaceholders 校验 ${_env.plugin_url_params.VAR} 占位符语法；
+        // 合法占位符 URL（如 https://x/${_env.plugin_url_params.VAR}/v）应 apiUrlValid=true、envVarValid=false（若占位符非法）。
+        // 耦合在一个 try/catch 会误把两标志同时置 false。checkUrl（SSRF 黑名单/内网 IP 拦截）受开关控制默认关闭，
+        // 不用于 api_url_valid 判定——SSRF 拦截是发布/鉴权期探测的职责，不是导入预检要否决的硬错误。
         List<String> details = new ArrayList<>();
         try {
-            urlCheckUtils.checkUrl(projectId, model.getApiUrl());
+            urlCheckUtils.validateUrlSyntax(model.getApiUrl());
             item.setApiUrlValid(true);
         } catch (AgentStudioException e) {
             item.setApiUrlValid(false);
@@ -407,6 +416,11 @@ public class ModelImportExportService implements IModelImportExportService {
             throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
                 "文件格式非法，请使用模型管理页面导出的文件。");
         }
+        // 与 previewImport 对齐：只导模型文件必须显式传 target_provider_id。
+        if (isModelOnlyFile(lines) && StringUtils.isBlank(targetProviderId)) {
+            throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID,
+                "只导模型文件需要指定目标供应商，请从供应商详情页发起导入，或显式传入 target_provider_id");
+        }
         List<ImportRes> importList = new ArrayList<>();
         for (LineContext ctx : lines) {
             ModelExportLine line;
@@ -423,10 +437,9 @@ public class ModelImportExportService implements IModelImportExportService {
                 importList.add(failedRes(null, "(line " + ctx.lineNo + ")", "payload is missing"));
                 continue;
             }
-            // 模式判定：provider_metadata 为 null + targetProviderId 非空 → 只导模型（重定向到目标供应商，
-            // 不 upsert 供应商）。其余情况走供应商+模型 upsert 路径（target 为 null 时现有 best-effort 行为不变）。
-            boolean modelOnly = entity.getProviderMetadata() == null
-                && StringUtils.isNotBlank(targetProviderId);
+            // 模式判定：provider_metadata 为 null → 只导模型（重定向到目标供应商，不 upsert 供应商），
+            // 此时 targetProviderId 必须非空（fast-fail 已校验）；其余情况走供应商+模型 upsert 路径，targetProviderId 被忽略。
+            boolean modelOnly = entity.getProviderMetadata() == null;
             String targetAuthMetadataId;
             boolean providerUpsertOk = false;
             // 单行内 id 重映射：跨工作空间 COPY 场景下 upsertProviderMetadata / resolveConflictAndPersist
@@ -491,6 +504,9 @@ public class ModelImportExportService implements IModelImportExportService {
         model.setAuthMetadataId(targetAuthMetadataId);
         try {
             validateModel(model);
+            // 始终执行的语法校验（非 http/https、无 host、非法 URI 拒绝），与预检 api_url_valid 对齐。
+            urlCheckUtils.validateUrlSyntax(model.getApiUrl());
+            // SSRF 黑名单/内网 IP 拦截（受 tool.url.enable-check 开关控制，默认关闭）。
             urlCheckUtils.checkUrl(projectId, model.getApiUrl());
             urlCheckUtils.validateEnvVarPlaceholders(model.getApiUrl());
             resolveConflictAndPersist(projectId, workspaceId, model, strategy);
@@ -1017,6 +1033,75 @@ public class ModelImportExportService implements IModelImportExportService {
     /**
      * 解析冲突策略字符串，大小写不敏感匹配 SKIP/COVER，其他值抛 400。
      */
+    /**
+     * 预检/导入共用：判断该文件是否为"只导模型"文件。
+     * 判定规则：存在任一 import_type=model_service 的非空行，且该行在快速文本扫描下未携带 provider_metadata 字段
+     * （即 payload.provider_metadata 缺失或为 null）。
+     * 只做文本层面的快速扫描（与 atLeastOneModelLine 风格一致），避免在 fast-fail 阶段重复做完整 JSON 绑定；
+     * 格式错误 / 非 model_service 行交由后续逐行 parseLine 产生行级错误。
+     */
+    private boolean isModelOnlyFile(List<LineContext> lines) {
+        for (LineContext ctx : lines) {
+            String raw = ctx.raw;
+            if (raw == null || !raw.contains("\"import_type\"")) {
+                continue;
+            }
+            // 取 payload 对象的粗粒度边界：首个 "payload":{ 开始 → 匹配到对应闭合 }
+            int payloadKey = raw.indexOf("\"payload\"");
+            if (payloadKey < 0) {
+                continue;
+            }
+            int payloadBrace = raw.indexOf('{', payloadKey);
+            if (payloadBrace < 0) {
+                continue;
+            }
+            int depth = 0;
+            int payloadEnd = -1;
+            for (int i = payloadBrace; i < raw.length(); i++) {
+                char c = raw.charAt(i);
+                if (c == '{') {
+                    depth++;
+                } else if (c == '}') {
+                    depth--;
+                    if (depth == 0) {
+                        payloadEnd = i;
+                        break;
+                    }
+                }
+            }
+            if (payloadEnd < 0) {
+                continue;
+            }
+            String payload = raw.substring(payloadBrace + 1, payloadEnd);
+            // 若 payload 内出现 "provider_metadata" 键且其后（跳过空白）不是 'n'（即不是 null），认为是供应商+模型文件；
+            // 其余情况（键缺失、或显式 "provider_metadata":null）视为只导模型文件。
+            int pmIdx = payload.indexOf("\"provider_metadata\"");
+            if (pmIdx < 0) {
+                return true;
+            }
+            int after = pmIdx + "\"provider_metadata\"".length();
+            while (after < payload.length() && Character.isWhitespace(payload.charAt(after))) {
+                after++;
+            }
+            if (after >= payload.length() || payload.charAt(after) != ':') {
+                // 键出现但后无冒号（异常 JSON）——保守按"非 model-only"交给后续 parseLine 报错
+                return false;
+            }
+            after++; // skip ':'
+            while (after < payload.length() && Character.isWhitespace(payload.charAt(after))) {
+                after++;
+            }
+            // 值紧跟 null → 视为 provider_metadata 缺失/置空 → 只导模型
+            if (after + 3 <= payload.length()
+                && payload.charAt(after) == 'n'
+                && payload.startsWith("null", after)) {
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
     private ModelImportConflictStrategy parseConflictStrategy(String conflictStrategy) {
         if (StringUtils.isBlank(conflictStrategy)) {
             return ModelImportConflictStrategy.SKIP;
