@@ -32,14 +32,8 @@ public class DataSourceConfig {
                 .type(HikariDataSource.class)
                 .build();
         String originalPassword = dataSource.getPassword();
-        if (originalPassword != null && !originalPassword.isEmpty()) {
-            String resolvedPassword = passwordProvider.getPassword(originalPassword);
-            if (resolvedPassword == null) {
-                log.warn("DataSourcePasswordProvider returned null, falling back to original password");
-                resolvedPassword = originalPassword;
-            }
-            dataSource.setPassword(resolvedPassword);
-        }
+        String resolvedPassword = passwordProvider.getPassword(originalPassword);
+        dataSource.setPassword(resolvedPassword);
         return dataSource;
     }
 }
