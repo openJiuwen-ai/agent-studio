@@ -1235,7 +1235,8 @@ class IRConverter:
                     # IR 转换递归热路径：每子代理一条 routine 进度日志，降级为 DEBUG 并加守卫
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(
-                            f"loading ir data of {child.get('id')}",
+                            "loading ir data of %s",
+                            child.get("id"),
                             simple_log="loading ir data of child",
                         )
                     # 支持从父Agent修改子Agent描述
@@ -3582,7 +3583,9 @@ class IRConverter:
             # routine 元数据添加日志，降级为 DEBUG 并加守卫
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
-                    f"Added child agent metadata: id={child.get('id')}, mode={child.get('mode')}",
+                    "Added child agent metadata: id=%s, mode=%s",
+                    child.get("id"),
+                    child.get("mode"),
                     simple_log="added child agent metadata",
                 )
         agent_config.child_agents_metadata = child_metadata_list

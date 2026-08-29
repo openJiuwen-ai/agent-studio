@@ -555,6 +555,7 @@ class LogRouter:
 
         @wraps(original_method)
         def wrapper(msg: str, *args: Any, **kwargs: Any) -> None:
+            has_simple_log = "simple_log" in kwargs
             simple_log = kwargs.pop("simple_log", msg)
             if self._verbose_mode:
                 processed_msg = msg
@@ -566,6 +567,10 @@ class LogRouter:
                 kwargs.setdefault("stacklevel", 2)
                 return original_method(msg, *args, **kwargs)
             kwargs.setdefault("stacklevel", 1)
+            if has_simple_log:
+                # simple 消息不含 msg 的占位符：丢弃其惰性格式化参数，
+                # 避免 non-verbose 下占位符与参数错配触发 logging 格式化错误
+                return original_method(processed_msg, **kwargs)
             return original_method(processed_msg, *args, **kwargs)
 
         return wrapper

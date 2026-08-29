@@ -279,7 +279,7 @@ class MilvusVector(BaseVector):
         )
         del_ret = cls.client.delete(collection_name=cls.config.collection_name, ids=ids)
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f"pop ids {ids}, ret {del_ret}")
+            logger.debug("pop ids %s, ret %s", ids, del_ret)
         return [hit["text"] for hit in results]
 
     @classmethod
