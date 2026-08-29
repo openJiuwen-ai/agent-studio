@@ -3757,6 +3757,11 @@ public enum StudioError {
      */
     GET_PROMPT_TASK_DETAIL_FAILED(BAD_REQUEST, PE, "1185"),
 
+    /**
+     * 提示词优化任务在执行引擎中已丢失（被清理或重启后无持久化兜底）
+     */
+    JOB_NOT_FOUND_IN_BUILDER(BAD_REQUEST, PE, "1186"),
+
 
 
 
