@@ -523,13 +523,13 @@ export class RefPromptComponent implements OnInit {
 
   changeAppTab(tab: AssertSquareTagType) {
     if (tab.active) {
+      const newTagId = tab.id === 'all' ? '' : tab.id;
+      if (this.selectedTagId === newTagId) {
+        return;
+      }
       this.tmpls.length = 0;
       this.curTmpl = null;
-      if (tab.id === 'all') {
-        this.selectedTagId = '';
-      } else {
-        this.selectedTagId = tab.id;
-      }
+      this.selectedTagId = newTagId;
     }
     this.getPrompts().then();
   }
