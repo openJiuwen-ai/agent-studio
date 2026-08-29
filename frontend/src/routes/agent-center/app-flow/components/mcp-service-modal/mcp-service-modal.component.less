@@ -52,3 +52,35 @@
 .input-error {
   border-color: #ff4d4f !important;
 }
+
+::ng-deep {
+  #node-param-tree {
+    .ant-tree-treenode {
+      padding-left: 0 !important;
+      display: block;
+    }
+    .ant-tree-switcher {
+      width: 0 !important;
+      min-width: 0 !important;
+    }
+    // ng-zorro 默认 inline-flex 不撑满 → 模板根 div 的 w-full 失效，
+    // 名称列 calc(100%-345px) 与类型列 330px 无法稳定对齐，强制撑满。
+    .ant-tree-node-content-wrapper {
+      display: flex !important;
+      width: 100% !important;
+      flex: 1 1 auto !important;
+      min-height: 28px;
+      align-items: center;
+    }
+    .ant-tree-node-content-wrapper:hover,
+    .ant-tree-node-content-wrapper.ant-tree-node-selected {
+      background: transparent !important;
+    }
+  }
+
+  #output-param-tree {
+    .ant-tree-node-content-wrapper {
+      pointer-events: none !important;
+    }
+  }
+}

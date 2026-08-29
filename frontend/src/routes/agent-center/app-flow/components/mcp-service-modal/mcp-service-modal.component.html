@@ -93,7 +93,7 @@
   >
     <ng-template #content>
       <div class="mt-2 flex items-center">
-        <div class="mr-[5px] flex flex-1 text-label">
+        <div class="mr-[5px] w-[calc(100%-345px)] shrink-0 text-label">
           {{ 'param_name'|i18nextEager }}
         </div>
         <div class="mr-[5px] w-[330px] shrink-0 text-label">
@@ -107,11 +107,9 @@
             *ngIf="param.location === location"
             class="mt-2 flex"
           >
-            <div class="mr-1 flex h-[28px] flex-1 shrink-0 items-center text-label gap-[4px]">
-              <div class="flex max-w-[calc(100%-20px)] items-center">
-                <span tiOverflow>{{ param.name }}</span>
-                <span *ngIf="!param.required" class="w-12 shrink-0">{{ 'optional' | i18nextEager }}</span>
-              </div>
+            <div class="mr-1 flex h-[28px] w-[calc(100%-345px)] shrink-0 items-center text-label gap-[4px]">
+              <span nz-tooltip [nzTooltipTitle]="param.name" [nzTooltipOverlayStyle]="{ 'white-space': 'nowrap', 'max-width': 'none' }" class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap block" [ngClass]="param.required ? 'max-w-[120px]' : 'w-[120px]'">{{ param.name }}</span>
+              <span *ngIf="!param.required" class="shrink-0 whitespace-nowrap">{{ 'optional' | i18nextEager }}</span>
               <nz-icon
                 *ngIf="param.description"
                 nz-tooltip
@@ -120,8 +118,8 @@
                 nzType="question-circle" nzTheme="outline"
               />
             </div>
-            <div class="flex items-start w-[330px] shrink-0">
-              <div class="flex h-fit w-full items-start">
+            <div class="flex items-center w-[330px] shrink-0 h-[28px]">
+              <div class="flex w-full items-center">
                 <div class="flex w-full">
                   <div class="w-[30%]">
                     <nz-select
@@ -252,7 +250,7 @@
   >
     <ng-template #content>
       <div class="mt-2 flex items-center">
-        <div class="mr-[5px] flex flex-1 text-label">
+        <div class="mr-[5px] w-[calc(100%-345px)] shrink-0 text-label">
           {{ 'param_name'|i18nextEager }}
         </div>
         <div class="mr-[5px] w-[330px] shrink-0 text-label">
@@ -264,13 +262,11 @@
         <nz-tree id="node-param-tree" [nzData]="params" nzBlockNode [nzTreeTemplate]="nzTreeTemplate">
           <ng-template #nzTreeTemplate let-node let-origin="origin">
             <div
-            class="mt-2 flex"
+            class="mt-2 flex items-center w-full"
           >
-            <div class="mr-1 flex h-[28px] flex-1 shrink-0 items-center text-label gap-[4px]">
-              <div class="flex max-w-[calc(100%-20px)] items-center">
-                <span tiOverflow>{{ origin.name }}</span>
-                <span *ngIf="!origin.required" class="w-12 shrink-0">{{ 'optional' | i18nextEager }}</span>
-              </div>
+            <div class="mr-1 flex h-[28px] w-[calc(100%-345px)] shrink-0 items-center text-label gap-[4px]">
+              <span nz-tooltip [nzTooltipTitle]="origin.name" [nzTooltipOverlayStyle]="{ 'white-space': 'nowrap', 'max-width': 'none' }" class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left" [ngClass]="origin.required ? 'max-w-[120px]' : 'w-[120px]'">{{ origin.name }}</span>
+              <span *ngIf="!origin.required" class="shrink-0 whitespace-nowrap">{{ 'optional' | i18nextEager }}</span>
               <nz-icon
                 *ngIf="origin.description"
                 nz-tooltip
@@ -279,8 +275,8 @@
                 nzType="question-circle" nzTheme="outline"
               />
             </div>
-            <div class="flex items-start w-[330px] shrink-0">
-              <div class="flex h-fit w-full items-start">
+            <div class="flex items-center w-[330px] shrink-0 h-[28px]">
+              <div class="flex w-full items-center">
                 <div class="flex w-full">
                   <div class="w-[30%]">
                     <nz-select

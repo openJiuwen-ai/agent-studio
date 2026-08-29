@@ -54,7 +54,7 @@
       <meta-acc-block class="mt-2 block w-full" [title]="'request_header' | i18nextEager" *ngIf="isShowHeaders">
         <ng-template #content>
           <div class="mt-2 flex items-center">
-            <div class="mr-[5px] flex flex-1 text-label">
+            <div class="mr-[5px] w-[calc(100%-345px)] shrink-0 text-label">
               {{ 'param_name' | i18nextEager }}
             </div>
             <div class="mr-[5px] w-[330px] shrink-0 text-label">
@@ -65,13 +65,9 @@
           <form #inputForm="ngForm">
             <ng-container *ngFor="let param of inputParams; index as i">
               <div class="mt-2 flex" *ngIf="param.location === 'Headers'">
-                <div class="mr-1 flex h-[28px] flex-1 shrink-0 items-center gap-1 text-label">
-                  <div class="flex max-w-[calc(100%-20px)] items-center">
-                    <span nz-tooltip [nzTooltipTitle]="param.name" class="truncate min-w-0">
-                      {{ param.name }}
-                    </span>
-                    <span *ngIf="!param.required" class="shrink-0 whitespace-nowrap">{{ 'optional' | i18nextEager }}</span>
-                  </div>
+                <div class="mr-1 flex h-[28px] w-[calc(100%-345px)] shrink-0 items-center gap-1 text-label">
+                  <span nz-tooltip [nzTooltipTitle]="param.name" [nzTooltipOverlayStyle]="{ 'white-space': 'nowrap', 'max-width': 'none' }" class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap block" [ngClass]="param.required ? 'max-w-[120px]' : 'w-[120px]'">{{ param.name }}</span>
+                  <span *ngIf="!param.required" class="shrink-0 whitespace-nowrap">{{ 'optional' | i18nextEager }}</span>
                   <span
                     nz-icon
                     nzType="question-circle"
@@ -82,8 +78,8 @@
                     style="font-size: 16px; cursor: pointer; color: #808080"
                   ></span>
                 </div>
-                <div class="flex items-start w-[330px] shrink-0">
-                  <div class="flex h-fit w-full items-start">
+                <div class="flex items-center w-[330px] shrink-0 h-[28px]">
+                  <div class="flex w-full items-center">
                     <div class="flex w-full">
                       <div class="w-[30%]">
                         <nz-select
@@ -208,7 +204,7 @@
       <meta-acc-block class="mt-2 block w-full" [title]="'input_params' | i18nextEager">
         <ng-template #content>
           <div class="mt-2 flex items-center">
-            <div class="mr-[5px] flex flex-1 text-label">
+            <div class="mr-[5px] w-[calc(100%-345px)] shrink-0 text-label">
               {{ 'param_name' | i18nextEager }}
             </div>
             <div class="mr-[5px] w-[330px] shrink-0 text-label">
@@ -218,11 +214,10 @@
           <form #inputFormContent="ngForm">
             <nz-tree id="node-param-tree" [nzData]="toolsInputParams" nzBlockNode [nzTreeTemplate]="nzTreeTemplate">
               <ng-template #nzTreeTemplate let-node let-origin="origin">
-                <div class="mt-2 flex">
-                  <div class="mr-1 flex h-[28px] flex-1 shrink-0 items-center gap-1 text-label">
-                    <div class="flex max-w-[calc(100%-20px)] items-center">
-                      {{ origin.name }}{{ !origin.required ? ('optional' | i18nextEager) : '' }}
-                    </div>
+                <div class="mt-2 flex items-center w-full">
+                  <div class="mr-1 flex h-[28px] w-[calc(100%-345px)] shrink-0 items-center gap-1 text-label">
+                    <span nz-tooltip [nzTooltipTitle]="origin.name" [nzTooltipOverlayStyle]="{ 'white-space': 'nowrap', 'max-width': 'none' }" class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left" [ngClass]="origin.required ? 'max-w-[120px]' : 'w-[120px]'">{{ origin.name }}</span>
+                    <span *ngIf="!origin.required" class="shrink-0 whitespace-nowrap">{{ 'optional' | i18nextEager }}</span>
                     <span
                       nz-icon
                       nzType="question-circle"
@@ -233,8 +228,8 @@
                       style="font-size: 16px; cursor: pointer; color: #808080"
                     ></span>
                   </div>
-                  <div class="flex items-start w-[330px] shrink-0">
-                    <div class="flex h-fit w-full items-start">
+                  <div class="flex items-center w-[330px] shrink-0 h-[28px]">
+                    <div class="flex w-full items-center">
                       <div class="flex w-full">
                         <div class="w-[30%]">
                           <nz-select
@@ -361,7 +356,7 @@
       <!-- 出参配置表格 -->
       <meta-acc-block class="mt-4 block w-full" [title]="'output_params' | i18nextEager">
         <ng-template #content>
-          <nz-tree id="node-param-tree" [nzData]="outputParams" [nzTreeTemplate]="nzTreeTemplate">
+          <nz-tree id="output-param-tree" [nzData]="outputParams" [nzTreeTemplate]="nzTreeTemplate">
             <ng-template #nzTreeTemplate let-node let-origin="origin">
               <div class="ml-[2px] mt-[8px] flex w-full items-center gap-3 leading-none">
                 <span class="text-[#595959]">{{ origin.name }}</span>
