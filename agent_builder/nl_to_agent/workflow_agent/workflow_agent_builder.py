@@ -28,7 +28,7 @@ from agent_builder.nl_to_agent.workflow_agent.progress_bar import (
     QUESTION_WITHOUT_OPTION,
 )
 from agent_builder.adapter.exception_bridge import JiuWenBaseException
-from agent_builder.adapter.jiuwen_bridge import SystemMessage
+from agent_builder.adapter.jiuwen_bridge import HumanMessage, SystemMessage
 from agent_builder.adapter.logger_bridge import logger
 
 from .agent_designer.agent_designer import (
@@ -84,6 +84,35 @@ class IntentionOperator:
         result = json_match.group(1) if json_match else input_text
         return result
 
+    @staticmethod
+    def _build_intention_messages(prompt):
+        """按 `#system#`/`#user#` 标记将意图提示词拆分为 system 与 user 两条消息。
+
+        部分大模型接口（如 GLM 系列）要求请求中至少包含一条 user 角色消息，
+        仅含 system 消息会导致接口报错。因此这里依据提示词内置的
+        `#system#`/`#user#` 标记进行拆分，分别构造 SystemMessage 与
+        HumanMessage，与同包内其它模块保持一致。
+
+        Args:
+            prompt (str): 含 `#system#`/`#user#` 标记的意图提示词。
+
+        Returns:
+            list: [SystemMessage(content=...), HumanMessage(content=...)]。
+        """
+        # 标记形如 `#system#` / `#user#`，去掉可选的反引号后拆分
+        parts = re.split(r"`?#system#`?|`?#user#`?", prompt)
+        system_content = parts[1].strip() if len(parts) > 1 else ""
+        user_content = parts[2].strip() if len(parts) > 2 else ""
+        if not user_content:
+            # 兜底：未找到 #user# 标记时，整体作为 user 消息，保证存在 user 角色
+            user_content = prompt
+            system_content = ""
+        messages = []
+        if system_content:
+            messages.append(SystemMessage(content=system_content))
+        messages.append(HumanMessage(content=user_content))
+        return messages
+
     def operate(self, dig_history, mermaid_code=None):
         """根据对话历史和可选 Mermaid 信息，判断用户意图。
 
@@ -108,8 +137,9 @@ class IntentionOperator:
             if mermaid_code
             else PLAN_INTENTION_PROMPT.replace("{{dig_history}}", dig_history)
         )
+        messages = self._build_intention_messages(prompt)
         for item in self.model.chat(
-            [SystemMessage(content=prompt)], method="stream", add_prefix=False
+            messages, method="stream", add_prefix=False
         ):
             if item.content:
                 return self.clean_intent(item.content)
@@ -144,8 +174,9 @@ class IntentionOperator:
             if mermaid_code
             else PLAN_INTENTION_PROMPT.replace("{{dig_history}}", dig_history)
         )
+        messages = self._build_intention_messages(prompt)
         async for item in self.model.achat(
-            [SystemMessage(content=prompt)], method="stream", add_prefix=False
+            messages, method="stream", add_prefix=False
         ):
             yield item.raw_content
             if item.content:
