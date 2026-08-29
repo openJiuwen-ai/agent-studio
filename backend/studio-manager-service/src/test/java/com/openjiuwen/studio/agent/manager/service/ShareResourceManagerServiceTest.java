@@ -2,6 +2,7 @@
 
 package com.openjiuwen.studio.agent.manager.service;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -18,6 +19,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.bo.WfImportDataWrapper;
@@ -920,5 +922,58 @@ class ShareResourceManagerServiceTest {
             assertTrue(result);
             verify(workflowMapper).updateWorkflowShareStatus(RESOURCE_ID, 1);
         }
+    }
+
+    // ==================== checkVersionSharedOrNot ====================
+
+    @Test
+    void testCheckVersionSharedOrNot_nullOrBlankArgs_noop() {
+        // 空参数不应查库、不应抛异常
+        assertDoesNotThrow(() -> shareResourceManagerService.checkVersionSharedOrNot(null, "v1"));
+        assertDoesNotThrow(() -> shareResourceManagerService.checkVersionSharedOrNot("", "v1"));
+        assertDoesNotThrow(() -> shareResourceManagerService.checkVersionSharedOrNot(RESOURCE_ID, null));
+        assertDoesNotThrow(() -> shareResourceManagerService.checkVersionSharedOrNot(RESOURCE_ID, "  "));
+        verify(shareResourceMapper, never()).selectShareResourceEntityByResourceId(anyString());
+    }
+
+    @Test
+    void testCheckVersionSharedOrNot_noShareRecord_noop() {
+        when(shareResourceMapper.selectShareResourceEntityByResourceId(RESOURCE_ID)).thenReturn(null);
+
+        assertDoesNotThrow(() -> shareResourceManagerService.checkVersionSharedOrNot(RESOURCE_ID, "v1"));
+    }
+
+    @Test
+    void testCheckVersionSharedOrNot_shareRecordVersionListEmpty_noop() {
+        ShareResourceEntity share = new ShareResourceEntity();
+        share.setVersionList(null);
+        when(shareResourceMapper.selectShareResourceEntityByResourceId(RESOURCE_ID)).thenReturn(share);
+
+        assertDoesNotThrow(() -> shareResourceManagerService.checkVersionSharedOrNot(RESOURCE_ID, "v1"));
+
+        share.setVersionList("");
+        assertDoesNotThrow(() -> shareResourceManagerService.checkVersionSharedOrNot(RESOURCE_ID, "v1"));
+    }
+
+    @Test
+    void testCheckVersionSharedOrNot_versionNotInList_noop() {
+        ShareResourceEntity share = new ShareResourceEntity();
+        share.setVersionList("[{\"version_id\":\"v0\",\"version_name\":\"0.9\"}]");
+        when(shareResourceMapper.selectShareResourceEntityByResourceId(RESOURCE_ID)).thenReturn(share);
+
+        // v1 不在已共享版本列表中，应放行
+        assertDoesNotThrow(() -> shareResourceManagerService.checkVersionSharedOrNot(RESOURCE_ID, "v1"));
+    }
+
+    @Test
+    void testCheckVersionSharedOrNot_versionIsShared_throwsCannotDelete() {
+        // versionList 序列化中以字串包含目标 versionId 时（与 AgentManagementService/PluginService 校验语义一致）应抛错
+        ShareResourceEntity share = new ShareResourceEntity();
+        share.setVersionList("[{\"version_id\":\"v1\",\"version_name\":\"1.0\"},{\"version_id\":\"v2\",\"version_name\":\"2.0\"}]");
+        when(shareResourceMapper.selectShareResourceEntityByResourceId(RESOURCE_ID)).thenReturn(share);
+
+        AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
+            shareResourceManagerService.checkVersionSharedOrNot(RESOURCE_ID, "v1"));
+        assertEquals(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY, ex.getErrorCode());
     }
 }
