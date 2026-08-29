@@ -3,7 +3,7 @@
 
 命中时跳过执行直接返回 (result_dict, function_log)，用于降低代码节点重复执行的时延。
 仅缓存成功结果；读写均做 deepcopy，避免上游对返回值的修改污染缓存。
-通过 CODE_EXECUTION_RESULT_CACHE_ENABLE 开关控制，默认开启。
+通过 CODE_EXECUTION_RESULT_CACHE_ENABLE 开关控制，默认关闭。
 """
 
 import copy
@@ -131,7 +131,7 @@ _instance_lock = threading.Lock()
 def get_code_result_cache():
     """返回全局结果缓存实例；开关未开启时返回 None。
 
-    开关：CODE_EXECUTION_RESULT_CACHE_ENABLE（默认 true）。
+    开关：CODE_EXECUTION_RESULT_CACHE_ENABLE（默认 false）。
     """
     from agent_runtime.common.config import settings
 

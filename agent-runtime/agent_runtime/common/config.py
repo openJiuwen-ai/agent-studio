@@ -377,10 +377,10 @@ class CodeExecutionSettings(BaseSettings):
         validation_alias="LOCAL_CODE_EXEC_MODE",
     )
     # 结果缓存：基于 (code, exec_env, inputs, outputs_schema) hash 的进程内 LRU，
-    # 命中则跳过执行直接返回。默认开启；非确定性代码（random/time/网络等）会返回
-    # 陈旧结果，可设 CODE_EXECUTION_RESULT_CACHE_ENABLE=false 关闭。
+    # 命中则跳过执行直接返回。默认关闭；非确定性代码（random/time/网络等）会返回
+    # 陈旧结果，仅在确认代码节点幂等时开启。
     result_cache_enabled: bool = Field(
-        default=True, validation_alias="CODE_EXECUTION_RESULT_CACHE_ENABLE"
+        default=False, validation_alias="CODE_EXECUTION_RESULT_CACHE_ENABLE"
     )
     result_cache_maxsize: int = Field(
         default=256, validation_alias="CODE_EXECUTION_RESULT_CACHE_MAXSIZE"

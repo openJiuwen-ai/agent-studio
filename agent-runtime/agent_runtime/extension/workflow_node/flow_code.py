@@ -459,7 +459,7 @@ class FlowCode(WorkflowComponent):
                 user_fields = _coerce_inputs(user_fields, inputs_schema)
 
             # 3.6 结果缓存查询：基于 (code, exec_env, inputs, outputs_schema) hash，
-            # 命中则跳过执行（CODE_EXECUTION_RESULT_CACHE_ENABLE 控制，默认开启）
+            # 命中则跳过执行（CODE_EXECUTION_RESULT_CACHE_ENABLE 控制，默认关闭）
             outputs_schema = self._conf.user_fields.get("outputs", [])
             result_cache = get_code_result_cache()
             cache_key = None
