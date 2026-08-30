@@ -2,6 +2,7 @@
 package com.openjiuwen.studio.agent.manager.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
@@ -219,11 +220,11 @@ class AgentExportServiceTest {
     }
 
     /**
-     * T11: 不存在的 versionId → 容错处理（对齐旧版 lumina validResource）：
-     * 不抛异常中断导出，而是把该资源作为失败项加入 exportResps 并 continue 跳过，导出仍返回 200 + downloadUrl。
+     * T11: 单资源 + 不存在的 versionId → 直接抛错（不生成空文件，不返回 200+空下载链接）。
+     * 历史行为曾是"容错+空文件返回 200"，但这让 API 调用方无法感知失败，修正为明确 400。
      */
     @Test
-    void testExportWorkflow_NonExistVersion_ToleratesAndSkips() {
+    void testExportWorkflow_NonExistSingleVersion_Throws() {
         try (MockedStatic<RequestContextUtils> mockedStatic = Mockito.mockStatic(RequestContextUtils.class)) {
             mockedStatic.when(RequestContextUtils::getRequestProjectId).thenReturn("p1");
             mockedStatic.when(RequestContextUtils::getRequestWorkspaceId).thenReturn("w1");
@@ -234,7 +235,7 @@ class AgentExportServiceTest {
                 new ExportResourceVersion().setResourceId("wf-1").setResourceVersion("non-exist")));
             params.setResourceType("WORKFLOW");
 
-            com.openjiuwen.studio.agent.manager.entity.WorkflowEntity wf = new com.openjiuwen.studio.agent.manager.entity.WorkflowEntity();
+            WorkflowEntity wf = new WorkflowEntity();
             wf.setId("wf-1");
             wf.setName("wf-name");
             when(workflowMapper.selectByWorkflowIds("p1", "w1", List.of("wf-1"))).thenReturn(List.of(wf));
@@ -242,19 +243,13 @@ class AgentExportServiceTest {
             when(workflowMapper.selectByWorkflowId("p1", "w1", "wf-1")).thenReturn(wf);
             // 版本不存在
             when(releaseVersionMapper.selectByAppIdAndVersionId("wf-1", "non-exist")).thenReturn(null);
-            // mock OBS 上传（容错后仍会走 buildExportFile 上传空 jsonl）
-            mockObsForExport();
 
-            // 不抛异常（容错，对齐旧版 lumina）
-            com.openjiuwen.studio.agent.manager.dto.ExportResourceRsp rsp1 = assertDoesNotThrow(() ->
+            AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
                 agentExportService.exportResource("p1", "w1", null, params));
-            // 验证校验了版本存在性
-            verify(releaseVersionMapper).selectByAppIdAndVersionId("wf-1", "non-exist");
-            // 验证未查版本 mapping（版本不存在，continue 跳过，不进入子资源导出）
+            assertEquals(StudioError.EXPORT_RESOURCE_NOT_EXISTS, ex.getErrorCode());
+            // 未进入 mapping 查询，也未上传 OBS（无成功资源即短路抛错）
             verify(mappingMapper, never()).selectByAppIdAndAppVersion(eq("wf-1"), anyString(), isNull(), isNull());
-            // 导出仍返回下载 URL（不中断）
-            assertNotNull(rsp1);
-            assertNotNull(rsp1.getDownloadUrl());
+            verify(obsService, never()).uploadObsFile(anyString(), any(ByteArrayInputStream.class), anyInt());
         }
     }
 
@@ -436,7 +431,7 @@ class AgentExportServiceTest {
         when(resourceAdapterFactory.getAdapter(anyString())).thenReturn(adapter);
         when(adapter.parseExport(anyList())).thenReturn(null);
 
-        when(modelServiceMgmtService.buildModelExportEntity(anyString(), anyString(), anyList()))
+        when(modelServiceMgmtService.buildModelExportEntity(anyString(), anyString(), anyList(), eq(true), eq(false)))
             .thenReturn(Collections.emptyList());
         when(strategyMgmtService.buildModelStrategyExport(anyString(), anyString(), anyList()))
             .thenReturn(Collections.emptyList());
@@ -483,7 +478,7 @@ class AgentExportServiceTest {
             return exportResp;
         });
 
-        when(modelServiceMgmtService.buildModelExportEntity(anyString(), anyString(), anyList()))
+        when(modelServiceMgmtService.buildModelExportEntity(anyString(), anyString(), anyList(), eq(true), eq(false)))
             .thenReturn(Collections.emptyList());
         when(strategyMgmtService.buildModelStrategyExport(anyString(), anyString(), anyList()))
             .thenReturn(Collections.emptyList());
