@@ -602,9 +602,18 @@ class WorkflowRunner:
             )
         except Exception as e:
             workflow_logger.error(f"Failed to create component: {e}", exc_info=True)
+            error_code = _resolve_error_code_from_exception(e)
+            if error_code == -1:
+                error_code = GENERAL_ERROR
+                raw_msg = f"Failed to create component: {e}"
+            else:
+                raw_msg = getattr(e, "message", None) or f"Failed to create component: {e}"
             yield {
                 "event": "error",
-                "data": {"response": f"Failed to create component: {e}"},
+                "data": {
+                    "code": error_code,
+                    "message": _format_error_message(error_code, raw_msg),
+                },
                 "executionId": exec_id,
                 "index": 0,
                 "createdTime": int(time.time() * 1000),
@@ -640,9 +649,21 @@ class WorkflowRunner:
             workflow_logger.error(
                 f"Debug component execution failed: {e}", exc_info=True
             )
+            error_code = _resolve_error_code_from_exception(e)
+            if error_code == -1:
+                error_code = GENERAL_ERROR
+                raw_msg = f"Debug component execution failed: {e}"
+            else:
+                raw_msg = (
+                    getattr(e, "message", None)
+                    or f"Debug component execution failed: {e}"
+                )
             yield {
                 "event": "error",
-                "data": {"response": f"Debug component execution failed: {e}"},
+                "data": {
+                    "code": error_code,
+                    "message": _format_error_message(error_code, raw_msg),
+                },
                 "executionId": exec_id,
                 "index": 0,
                 "createdTime": int(time.time() * 1000),

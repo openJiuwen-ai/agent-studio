@@ -95,6 +95,20 @@ def _build_flow_api_error(
     )
 
 
+def _inner_error_text(e: Exception) -> str:
+    """提取内层异常的错误码与 message，作为可读的错误描述。
+
+    不直接使用 str(e)：框架异常（如 PluginCommonException）的 str 形如
+    "<PluginCommonException: (code=105004, ...)>", 尖括号在前端按 HTML
+    渲染时会被当作未知标签吞掉，导致根因信息不可见。
+    """
+    inner_code = getattr(e, "error_code", None) or getattr(e, "code", None)
+    inner_msg = getattr(e, "message", None) or str(e) or "(no message)"
+    if inner_code:
+        return f"[{inner_code}] {inner_msg}"
+    return inner_msg
+
+
 def _err_ignore(conf: dict) -> bool:
     """判断当前是否需要忽略异常返回默认值"""
     exception_enable = conf.get(EXCEPTIONENABLE)
@@ -211,7 +225,7 @@ class FlowApi(WorkflowComponent):
         except Exception as e:
             raise _build_flow_api_error(
                 FlowApiStatusCode.WORKFLOW_API_INIT_ERROR,
-                error_msg=f"Failed to build API from IR config: {e}",
+                error_msg=f"Failed to build API from IR config: {_inner_error_text(e)}",
             ) from e
 
     async def invoke(
