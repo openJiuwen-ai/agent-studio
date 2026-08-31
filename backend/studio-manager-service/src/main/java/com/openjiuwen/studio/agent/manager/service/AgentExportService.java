@@ -181,6 +181,7 @@ public class AgentExportService {
         // 工作流导出逻辑
         try {
             List<ExportResp> exportResps = new ArrayList<>();
+            int successCnt = 0;
             for (ExportResourceVersion exportResourceVersion : body.getResourceVersions()) {
                 String workflowId = exportResourceVersion.getResourceId();
                 // 空 version 转 latest（对齐旧版 lumina AgentExportService.exportWorkflow 行 152-154）
@@ -193,6 +194,7 @@ public class AgentExportService {
                     exportResps)) {
                     continue;
                 }
+                successCnt++;
                 List<ExportResourceUnit> exportResourceUnits;
                 if (ExportModeEnum.SPACIOUS.getCode().equals(body.getMode())) {
                     // SPACIOUS 模式：仅导出父工作流自身资源（不递归展开子资源）
@@ -223,6 +225,13 @@ public class AgentExportService {
                 }
             }
 
+            if (successCnt == 0) {
+                log.error("All requested workflow versions not found, abort export. workflowIds:{}, versions:{}",
+                    workflowIds, body.getResourceVersions().stream()
+                        .map(ExportResourceVersion::getResourceVersion).toList());
+                throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS, body.getResourceType());
+            }
+
             String exportFilePath = getExportFilePath(accept, body, exportResps);
             if (exportFilePath == null) {
                 return Optional.empty();
@@ -231,6 +240,8 @@ public class AgentExportService {
             exportResourceRsp.setExportResult(getExportResults(exportResps));
             exportResourceRsp.setDownloadUrl(exportFilePath);
             return Optional.of(exportResourceRsp);
+        } catch (AgentStudioException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to export the workflow.", e);
             throw new AgentStudioException(StudioError.WORKFLOW_EXPORT_FILE);
@@ -267,7 +278,7 @@ public class AgentExportService {
             .map(MappingEntity::getResourceId)
             .toList();
         List<ModelExportEntity> modelExportEntities = modelServiceMgmtService.buildModelExportEntity(projectId,
-            workspaceId, modelIds);
+            workspaceId, modelIds, true, false);
         List<String> strategyIds = subExportResources.stream()
             .filter(p -> Strings.CS.equals(p.getResourceType(), ResourceTypeEnum.STRATEGY.toString()))
             .map(MappingEntity::getResourceId)
@@ -592,6 +603,7 @@ public class AgentExportService {
         List<String> agentIds = body.getResourceIds();
         validAgent(projectId, workspaceId, agentIds);
         List<ExportResp> exportResps = new ArrayList<>();
+        int successCnt = 0;
         for (ExportResourceVersion exportResourceVersion : body.getResourceVersions()) {
             String agentId = exportResourceVersion.getResourceId();
             String versionId = StringUtils.isEmpty(exportResourceVersion.getResourceVersion())
@@ -602,6 +614,7 @@ public class AgentExportService {
                 exportResps)) {
                 continue;
             }
+            successCnt++;
             List<ExportResourceUnit> exportResourceUnits;
             if (ExportModeEnum.SPACIOUS.getCode().equals(body.getMode())) {
                 exportResourceUnits = getSpaciousExportResourceUnits(projectId, workspaceId, body,
@@ -623,6 +636,12 @@ public class AgentExportService {
                     exportResps.add(exportResp);
                 }
             }
+        }
+        if (successCnt == 0) {
+            log.error("All requested agent versions not found, abort export. agentIds:{}, versions:{}",
+                agentIds, body.getResourceVersions().stream()
+                    .map(ExportResourceVersion::getResourceVersion).toList());
+            throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS, body.getResourceType());
         }
         return exportResps;
     }

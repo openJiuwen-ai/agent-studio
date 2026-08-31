@@ -24,6 +24,7 @@ import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.dto.ModelServiceRsp;
 import com.openjiuwen.studio.agent.manager.dto.RouterStrategyRequest;
+import com.openjiuwen.studio.agent.manager.entity.ModelExportEntity;
 import com.openjiuwen.studio.agent.manager.entity.ModelStrategyExportEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
 import com.openjiuwen.studio.agent.common.entity.RouterStrategyEntity;
@@ -149,8 +150,16 @@ public class RouterStrategyMgmtServiceTest {
 
         when(strategyMapperMock.queryByIds(Collections.singletonList(sIdNormal), projectId, workspaceId)).thenReturn(
             Collections.singletonList(normalStrategy));
-        when(modelServiceMgmtService.getValidatedModels(projectId, workspaceId, Arrays.asList("m1", "m2"))).thenReturn(
-            Arrays.asList(new ModelServiceData(), new ModelServiceData()));
+        // 注意：buildModelStrategyExport 走 5 参 buildModelExportEntity(includeProvider=true, strict=false)，
+        // 不再直接调 getValidatedModels（后者在 strict=false 下是 warn+skip）。这里返回一个含两个模型的导出实体供下游断言。
+        ModelServiceData m1 = new ModelServiceData();
+        m1.setId("m1");
+        ModelServiceData m2 = new ModelServiceData();
+        m2.setId("m2");
+        ModelExportEntity exportEntity = new ModelExportEntity();
+        exportEntity.setModelMetadata(Arrays.asList(m1, m2));
+        when(modelServiceMgmtService.buildModelExportEntity(eq(projectId), eq(workspaceId), eq(Arrays.asList("m1", "m2")),
+            eq(true), eq(false))).thenReturn(Collections.singletonList(exportEntity));
 
         List<ModelStrategyExportEntity> normalResult = service.buildModelStrategyExport(projectId, workspaceId,
             Collections.singletonList(sIdNormal));
