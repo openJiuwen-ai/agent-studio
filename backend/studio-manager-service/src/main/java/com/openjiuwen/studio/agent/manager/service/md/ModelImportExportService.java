@@ -47,6 +47,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -114,6 +115,12 @@ public class ModelImportExportService implements IModelImportExportService {
         // 保留原行为：直接走 3 参 buildModelExportEntity（供应商+模型），不经 4 参重载，避免 mock 环境下绕过 3 参 stub。
         List<ModelExportEntity> entities = modelServiceMgmtService.buildModelExportEntity(projectId, workspaceId,
             modelIds);
+        // standalone 模型服务导出「供应商+模型」模式强制单供应商：
+        // 用户在前端是按供应商维度显式勾选的，跨供应商的选择在该模式下没有明确语义，
+        // 且旧版前端可能按"单 JSON"解析 payload 会产生语法错误。
+        // 注意：该校验属于 standalone 模型服务导出的业务规则，不在底层 buildModelExportEntity 里做——
+        // 底层方法是通用的，工作流/Agent/路由策略连带导出天然允许跨供应商，会直接复用分组后的多实体结果。
+        enforceSingleProviderForStandaloneExport(entities);
         StringBuilder jsonl = new StringBuilder();
         for (ModelExportEntity entity : entities) {
             jsonl.append(serialize(buildLine(entity))).append('\n');
@@ -220,6 +227,35 @@ public class ModelImportExportService implements IModelImportExportService {
             return;
         }
         pm.getProviderAuthMetadata().setAuthInfo(" ");
+    }
+
+    /**
+     * standalone 模型服务导出「供应商+模型」模式的业务校验：一次导出只允许属于同一供应商的模型。
+     * 这是 standalone 导出（前端按供应商维度选模型）的 UX 约束——底层 {@code buildModelExportEntity} 是通用方法，
+     * 工作流/Agent/路由策略连带导出（V2 资源包路径）允许多供应商分组，不能在底层加这道校验。
+     */
+    private void enforceSingleProviderForStandaloneExport(List<ModelExportEntity> entities) {
+        if (CollectionUtils.size(entities) <= 1) {
+            return;
+        }
+        List<String> distinctProviderNames = entities.stream()
+            .map(ModelExportEntity::getProviderMetadata)
+            .filter(Objects::nonNull)
+            .map(pm -> pm.getModelServiceProviderMetadata())
+            .filter(Objects::nonNull)
+            .map(ModelServiceProvider::getProviderName)
+            .filter(StringUtils::isNotBlank)
+            .distinct()
+            .collect(Collectors.toList());
+        // 退化兜底：拿不到名字时用数量提示
+        String providerDesc = CollectionUtils.isEmpty(distinctProviderNames)
+            ? String.valueOf(entities.size()) + " 个不同供应商"
+            : String.join("、", distinctProviderNames);
+        String reason = "include_provider=true 时导出的模型必须属于同一供应商，但传入的 model_ids 分属 "
+            + CollectionUtils.size(entities) + " 个不同供应商（" + providerDesc + "）";
+        log.error("standalone model export rejected: model_ids span multiple providers. providers={}",
+            distinctProviderNames);
+        throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID, reason);
     }
 
     // ============================== 导入预检 ==============================
