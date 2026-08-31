@@ -1,0 +1,245 @@
+name: Build & Push Dev Branch Docker Images
+
+on:
+  schedule:
+    # 北京时间每天凌晨 3:00（UTC 前一天 19:00）
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: build-push-dev-daily-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      build_ts: ${{ steps.meta.outputs.build_ts }}
+    steps:
+      - name: Checkout code (studio-2.0-dev)
+        uses: actions/checkout@v4
+        with:
+          ref: studio-2.0-dev
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.13.1
+          run_install: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Extract metadata
+        id: meta
+        run: echo "build_ts=$(date +"%Y%m%d%H%M%S")" >> "$GITHUB_OUTPUT"
+
+      - name: Build backend with Maven
+        run: |
+          cd backend
+          mvn clean package -Dmaven.test.skip=true -U
+
+      - name: Prepare studio-manager artifacts
+        run: |
+          mkdir -p docker/studio-manager/lib
+          cp backend/studio-manager/target/studio-manager-*.jar docker/studio-manager/lib/studio-manager.jar
+          if [ -d backend/studio-manager/target/lib ]; then
+            cp backend/studio-manager/target/lib/* docker/studio-manager/lib/
+          fi
+          mkdir -p docker/studio-manager/config
+          cp backend/studio-manager-service/src/main/resources/application-manager.yml docker/studio-manager/config/
+          cp backend/studio-manager-service/src/main/resources/application-postgres.yml docker/studio-manager/config/
+          cp backend/studio-manager-service/src/main/resources/log4j2.xml docker/studio-manager/config/
+
+      - name: Build frontend with pnpm
+        run: |
+          cd frontend
+          pnpm install --ignore-scripts
+          pnpm run build
+          cd ..
+          tar -cf docker/studio-console/agent-console.tar -C frontend dist
+
+      - name: Prepare studio-runtime artifacts
+        run: |
+          rm -rf docker/studio-runtime/agent_runtime
+          cp -rf agent-runtime/agent_runtime docker/studio-runtime/agent_runtime
+          rm -rf docker/studio-runtime/jiuwen
+          cp -rf agent-runtime/jiuwen docker/studio-runtime/jiuwen
+          rm -rf docker/studio-runtime/model_service
+          test -d packages/model_service/model_service
+          cp -rf packages/model_service/model_service docker/studio-runtime/model_service
+          rm -rf docker/studio-runtime/storage
+          test -d packages/storage/storage
+          cp -rf packages/storage/storage docker/studio-runtime/storage
+          rm -rf docker/studio-runtime/common_utils
+          test -d packages/common_utils/common_utils
+          cp -rf packages/common_utils/common_utils docker/studio-runtime/common_utils
+          rm -rf docker/studio-runtime/tests
+          cp -rf agent-runtime/tests docker/studio-runtime/tests
+          cp -f agent-runtime/requirements.txt docker/studio-runtime/requirements.txt
+          rm -rf docker/studio-runtime/bin
+          cp -rf docker/studio-runtime/script docker/studio-runtime/bin
+
+      - name: Prepare studio-builder artifacts
+        run: |
+          rm -rf docker/studio-builder/agent_builder docker/studio-builder/model_service docker/studio-builder/storage docker/studio-builder/common_utils
+          cp -rf agent_builder docker/studio-builder/agent_builder
+          cp -rf packages/model_service/model_service docker/studio-builder/model_service
+          cp -rf packages/storage/storage docker/studio-builder/storage
+          cp -rf packages/common_utils/common_utils docker/studio-builder/common_utils
+
+      - name: Use official package repositories in CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          find docker -type f -name 'Dockerfile*' -print0 | while IFS= read -r -d '' dockerfile; do
+            sed -i \
+              -e 's|https://mirrors.aliyun.com/pypi/simple/|https://pypi.org/simple|g' \
+              -e '/pip3 config set global.trusted-host mirrors.aliyun.com/d' \
+              -e 's|mirrors.aliyun.com|deb.debian.org|g' \
+              "${dockerfile}"
+          done
+
+      - name: Upload build contexts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-dev-daily-build-contexts
+          path: |
+            docker/studio-manager
+            docker/studio-console
+            docker/studio-runtime
+            docker/studio-builder
+            docker/grafana
+          retention-days: 1
+          if-no-files-found: error
+
+  build-and-push:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: studio-manager
+            context_dir: studio-manager
+            base_image: eclipse-temurin:17-jre
+            cache_scope: studio-manager-dev
+          - service: studio-console
+            context_dir: studio-console
+            base_image: nginx:1.27
+            cache_scope: studio-console-dev
+          - service: studio-runtime
+            context_dir: studio-runtime
+            base_image: python:3.11-slim
+            cache_scope: studio-runtime-dev
+          - service: studio-builder
+            context_dir: studio-builder
+            base_image: python:3.11-slim
+            cache_scope: studio-builder-dev
+          - service: grafana-victorialogs
+            context_dir: grafana
+            cache_scope: grafana-victorialogs
+
+    steps:
+      - name: Download build contexts
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-dev-daily-build-contexts
+          path: docker
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve image repository config
+        id: image_config
+        shell: bash
+        env:
+          GHCR_IMAGE_REPOSITORY_OVERRIDE: ${{ vars.GHCR_IMAGE_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          REPOSITORY_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          GHCR_IMAGE_REPOSITORY="${GHCR_IMAGE_REPOSITORY_OVERRIDE:-ghcr.io/${REPOSITORY_LOWER}}"
+          echo "ghcr_registry=${GHCR_IMAGE_REPOSITORY%%/*}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_repository=${GHCR_IMAGE_REPOSITORY}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.image_config.outputs.ghcr_registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check existing Grafana multi-architecture image
+        if: matrix.service == 'grafana-victorialogs'
+        id: grafana_image
+        shell: bash
+        env:
+          IMAGE: ${{ steps.image_config.outputs.ghcr_repository }}/grafana-victorialogs:11.3.0-0.29.0
+        run: |
+          set -euo pipefail
+          EXISTS=false
+          if MANIFEST=$(docker buildx imagetools inspect --raw "${IMAGE}" 2>/dev/null); then
+            AMD64=$(jq -r '[.manifests[]? | select(.platform.os == "linux" and .platform.architecture == "amd64")] | length' <<<"${MANIFEST}")
+            ARM64=$(jq -r '[.manifests[]? | select(.platform.os == "linux" and .platform.architecture == "arm64")] | length' <<<"${MANIFEST}")
+            if [ "${AMD64}" -gt 0 ] && [ "${ARM64}" -gt 0 ]; then
+              EXISTS=true
+              echo "Grafana image already contains linux/amd64 and linux/arm64; skipping build."
+            fi
+          fi
+          echo "exists=${EXISTS}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push ${{ matrix.service }}
+        if: matrix.service != 'grafana-victorialogs' || steps.grafana_image.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/${{ matrix.context_dir }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.image_config.outputs.ghcr_repository }}/${{ matrix.service }}:${{ matrix.service == 'grafana-victorialogs' && '11.3.0-0.29.0' || format('dev-{0}', needs.prepare.outputs.build_ts) }}
+          build-args: |
+            BASE_IMAGE=${{ matrix.base_image }}
+            GRAFANA_VERSION=11.3.0
+            VICTORIA_LOGS_DATASOURCE_VERSION=0.29.0
+          cache-from: type=gha,scope=${{ matrix.cache_scope }}
+          cache-to: type=gha,scope=${{ matrix.cache_scope }},mode=max
+
+      - name: Create architecture tags on GHCR
+        if: matrix.service != 'grafana-victorialogs'
+        env:
+          REPOSITORY: ${{ steps.image_config.outputs.ghcr_repository }}
+          SERVICE: ${{ matrix.service }}
+          BUILD_TS: ${{ needs.prepare.outputs.build_ts }}
+        run: |
+          set -euo pipefail
+          SRC="${REPOSITORY}/${SERVICE}:dev-${BUILD_TS}"
+          AMD64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
+          ARM64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
+          docker buildx imagetools create -t "${REPOSITORY}/${SERVICE}:dev-${BUILD_TS}.x86_64" "${REPOSITORY}/${SERVICE}@${AMD64_DIGEST}"
+          docker buildx imagetools create -t "${REPOSITORY}/${SERVICE}:dev-${BUILD_TS}.arm64" "${REPOSITORY}/${SERVICE}@${ARM64_DIGEST}"
+
+  summary:
+    needs: [prepare, build-and-push]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print image summary
+        run: |
+          echo "Dev branch images published with tags:"
+          echo "  dev-${{ needs.prepare.outputs.build_ts }}.x86_64"
+          echo "  dev-${{ needs.prepare.outputs.build_ts }}.arm64"
