@@ -64,7 +64,7 @@ class Param:
         if ValueTypeEnum.is_object(self.type) and schema_is_invalid:
             raise PluginCommonException(
                 code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
-                message="The schema field is missing.",
+                message=f"The schema field is missing for object parameter '{name}'.",
             )
         if schema is not None:
             self.schema: list = self._format_schema(schema)
@@ -199,7 +199,10 @@ class Param:
                 ):
                     raise PluginCommonException(
                         code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
-                        message="The schema field is missing.",
+                        message=(
+                            f"The schema field is missing for object parameter "
+                            f"'{item.get('name')}'."
+                        ),
                     )
                 sub_schema = item.get("schema", [])
                 sub_params = Param._format_schema(sub_schema) if sub_schema else []

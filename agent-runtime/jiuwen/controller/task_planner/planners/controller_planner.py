@@ -82,7 +82,7 @@ class ControllerPlanner(TaskPlanner):
             ControllerState: 控制器状态对象
         """
         controller_state = self.context_manager.get_controller_state(self.task_id)
-        logger.info(
+        logger.debug(
             f"get controller state for {self.task_id}, create at {controller_state.created_at}"
         )
         return controller_state

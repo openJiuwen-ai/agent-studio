@@ -5,7 +5,6 @@ package com.openjiuwen.studio.agent.manager.workflow.resource.adapt;
 
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
-import com.openjiuwen.studio.agent.common.utils.I18nUtil;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.entity.ModelExportEntity;
@@ -37,7 +36,6 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -51,9 +49,6 @@ public class ModelAdapter extends ResourceAdapter {
     @Autowired
     private ModelServiceMapper modelServiceMapper;
 
-    @Autowired
-    private I18nUtil i18nUtil;
-
 
     @Override
     public ExportResp parseExport(List<ExportResourceUnit> exportResources) {
@@ -65,7 +60,8 @@ public class ModelAdapter extends ResourceAdapter {
         ExportResp exportResp = new ExportResp();
         List<String> modelIds = exportResources.stream().map(ExportResourceUnit::getResourceId).toList();
         List<ModelExportEntity> modelExportEntities = modelServiceMgmtService.buildModelExportEntity(
-            RequestContextUtils.getRequestProjectId(), RequestContextUtils.getRequestWorkspaceId(), modelIds);
+            RequestContextUtils.getRequestProjectId(), RequestContextUtils.getRequestWorkspaceId(), modelIds,
+            true, false);
         List<ModelServiceBase> modelServiceBases = buildModelProviderInfos(parentIdMap, exportResp, modelExportEntities);
         // 构造导出结果
         exportResp.getExportResults().addAll(getExportModelResults(exportResources, modelServiceBases));
@@ -121,29 +117,26 @@ public class ModelAdapter extends ResourceAdapter {
     }
 
     /**
-     * 模型资源导出校验
-     * @param exportResources 待导出资源
-     * @param modelServiceBases 有效资源
-     * @return
+     * 模型资源导出结果构造。lenient 语义下，缺失的模型 warn+skip（已在上游 getValidatedModels 过滤掉），
+     * 这里不再为其生成 FAILED 条目，避免让调用方误以为导出失败；只返回实际能导出的模型结果。
      */
     public List<ExportResult> getExportModelResults(List<ExportResourceUnit> exportResources,
         List<ModelServiceBase> modelServiceBases) {
-        List<String> validModelIds = modelServiceBases.stream().map(ModelServiceBase::getId).toList();
         Map<String, ModelServiceBase> serviceBaseMap = modelServiceBases.stream()
             .collect(Collectors.toMap(ModelServiceBase::getId, p -> p));
         List<ExportResult> exportResults = new ArrayList<>();
         for (ExportResourceUnit exportResourceUnit : exportResources) {
+            ModelServiceBase base = serviceBaseMap.get(exportResourceUnit.getResourceId());
+            if (base == null) {
+                // 缺失模型已在上游 warn 日志记录，这里直接跳过，不产生 FAILED 条目
+                continue;
+            }
             ExportResult result = new ExportResult();
             result.setResourceId(exportResourceUnit.getResourceId());
             result.setResourceName(exportResourceUnit.getResourceName());
             result.setResourceType(exportResourceUnit.getResourceType());
             result.setStatus(ImportExportStatusEnum.SUCCESS);
-            if (!validModelIds.contains(exportResourceUnit.getResourceId())) {
-                result.setReason(i18nUtil.getMessage(StudioError.EXPORT_RESOURCE_NOT_EXISTS, ResourceTypeEnum.MODEL.toString()));
-                result.setStatus(ImportExportStatusEnum.FAILED);
-            }
-            result.setResourceDesc(Optional.ofNullable(serviceBaseMap.get(exportResourceUnit.getResourceId()))
-                .map(p -> p.getModelDescription()).orElse(null));
+            result.setResourceDesc(base.getModelDescription());
             exportResults.add(result);
         }
         return exportResults;

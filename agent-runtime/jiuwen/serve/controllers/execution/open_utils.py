@@ -16,6 +16,7 @@ from typing import Any, Optional
 
 from cachetools import LRUCache
 from common_utils.redis_manager import get_redis_client
+from redis import RedisError
 
 from storage import get_storage_provider
 from agent_runtime.common.config import settings
@@ -243,8 +244,16 @@ class CacheUtils:
             self._update_memory_cache(unique_key, value)
             return value, "memory"
 
-        # redis 缓存
-        value = await self.async_redis_cache.get(unique_key)
+        # redis 缓存（Redis 故障包装为带错误码的框架异常，与 RedisUtils 源头包装约定一致；
+        # 传播行为不变：上层 ir_load_failed / run_check 契约均预期 JiuWenBaseException）
+        try:
+            value = await self.async_redis_cache.get(unique_key)
+        except RedisError as e:
+            logger.error(f"cache get error, exception {e}", exc_info=True)
+            raise JiuWenBaseException(
+                StatusCode.REDIS_SERVICE_NOT_FOUND.code,
+                StatusCode.REDIS_SERVICE_NOT_FOUND.errmsg,
+            ) from e
         if value is not None:
             value = deserialize_object(value) if self.should_serialize else value
             self._update_memory_cache(unique_key, value)

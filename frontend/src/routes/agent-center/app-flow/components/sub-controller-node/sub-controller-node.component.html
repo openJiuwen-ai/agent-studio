@@ -106,7 +106,10 @@
           <span>{{ 'workflow' | i18nextEager }}</span>
 
           <ng-container *ngIf="startFlow?.length; else noStartTmpl">
-            <div *ngFor="let item of startFlow" class="flex items-center gap-2">
+            <div *ngFor="let item of startFlow"
+              class="flex items-center gap-2 cursor-pointer"
+              (click)="onClickSubWorkflow(item)"
+              [title]="item.name">
               <img alt=""
                 [src]="
                   changeUrl('assets/agent-center/flow/start-flow-icon.svg')
@@ -127,7 +130,10 @@
           </ng-template>
 
           <ng-container *ngIf="intentDetectionFlow?.length; else noIntentDetectionTmpl">
-            <div *ngFor="let item of intentDetectionFlow" class="flex items-center gap-2">
+            <div *ngFor="let item of intentDetectionFlow"
+              class="flex items-center gap-2 cursor-pointer"
+              (click)="onClickSubWorkflow(item)"
+              [title]="item.name">
               <img alt=""
                 [src]="
                   changeUrl('assets/agent-center/flow/intent-container-configured.svg')
@@ -150,7 +156,9 @@
           <ng-container *ngIf="normalFlows?.length; else noNormalTmpl">
             <div
               *ngFor="let item of normalFlows"
-              class="flex items-center gap-2"
+              class="flex items-center gap-2 cursor-pointer"
+              (click)="onClickSubWorkflow(item)"
+              [title]="item.name"
             >
               <img alt=""
                 [src]="changeUrl('assets/agent-center/flow/flow-item-icon.svg')"
@@ -168,7 +176,10 @@
           </ng-template>
 
           <ng-container *ngIf="endFlow?.length; else noEndTmpl">
-            <div *ngFor="let item of endFlow" class="flex items-center gap-2">
+            <div *ngFor="let item of endFlow"
+              class="flex items-center gap-2 cursor-pointer"
+              (click)="onClickSubWorkflow(item)"
+              [title]="item.name">
               <img alt=""
                 [src]="changeUrl('assets/agent-center/flow/end-flow-icon.svg')"
               />

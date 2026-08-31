@@ -9,7 +9,7 @@ import { NzTreeNodeOptions } from 'ng-zorro-antd/tree';
   selector: 'readonly-params-tree',
   template: `
     <nz-tree
-      id="node-param-tree"
+      id="output-param-tree"
       [nzData]="nzTreeNodes"
       [nzShowLine]="true"
       [nzExpandAll]="true"

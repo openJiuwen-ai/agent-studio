@@ -634,6 +634,27 @@ public class ShareResourceManagerService implements IShareResourceManagerService
     }
 
     /**
+     * 校验资源的指定版本是否已共享到资产广场，若已共享则拒绝删除。
+     * <p>与 {@link #checkResourceSharedOrNot(String, String)} 资源级校验对应，本方法是版本级校验，
+     * 供工作流/智能体/插件版本删除时复用，与 AgentManagementService#deleteAgentVersion 的校验语义一致。
+     *
+     * @param resourceId 资源ID（agentId / workflowId / pluginId 等）
+     * @param versionId  待删除的版本ID
+     */
+    public void checkVersionSharedOrNot(String resourceId, String versionId) {
+        if (StringUtils.isBlank(resourceId) || StringUtils.isBlank(versionId)) {
+            return;
+        }
+        ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(resourceId);
+        if (ObjectUtils.isNotEmpty(shareResource) && StringUtils.isNotEmpty(shareResource.getVersionList())
+            && shareResource.getVersionList().contains(versionId)) {
+            log.error("the resource version [{}] of resource [{}] has been shared, you can't delete it",
+                versionId, resourceId);
+            throw new AgentStudioException(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY);
+        }
+    }
+
+    /**
      * 创建或者更新共享资源的授权范围
      *
      * @param resourceId 资源ID

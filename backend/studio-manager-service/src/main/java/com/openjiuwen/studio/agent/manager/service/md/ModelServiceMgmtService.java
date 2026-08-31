@@ -1229,9 +1229,61 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
         return ids;
     }
 
+    /**
+     * 组装导出实体（3 参）— 缺省 {@code includeProvider=true, strict=true}，供应商+模型严格模式。
+     */
     public List<ModelExportEntity> buildModelExportEntity(String projectId, String workspaceId, List<String> modelIds) {
+        return buildModelExportEntity(projectId, workspaceId, modelIds, true, true);
+    }
+
+    /**
+     * 组装导出实体（4 参，兼容旧调用）— 指定是否包含供应商元数据，缺省 {@code strict=true}。
+     */
+    public List<ModelExportEntity> buildModelExportEntity(String projectId, String workspaceId,
+        List<String> modelIds, boolean includeProvider) {
+        return buildModelExportEntity(projectId, workspaceId, modelIds, includeProvider, true);
+    }
+
+    /**
+     * 组装导出实体（5 参）。按 {@code includeProvider} 区分两种模式：
+     * <ul>
+     *   <li>{@code true} — 供应商+模型（同一供应商）。</li>
+     *   <li>{@code false} — 只导模型：不取 provider 元数据，所有模型装入单个实体（providerMetadata=null）。
+     *       模型本身无密钥（api-key 在供应商侧 t_provider_auth_info，按 PROVIDER_ID 关联），故只导模型文件不含任何凭据。</li>
+     * </ul>
+     *
+     * @param strict 缺模型/无权限时的行为：{@code true} 抛 {@link StudioError#MD_DATA_NOT_EXIST}（用于单独导模型场景）；
+     *               {@code false} 记录 warn 日志后跳过缺失项，返回能查到的部分（用于工作流/智能体/路由策略连带导出，避免历史脏数据阻塞整体导出）。
+     */
+    public List<ModelExportEntity> buildModelExportEntity(String projectId, String workspaceId, List<String> modelIds,
+        boolean includeProvider, boolean strict) {
+        if (includeProvider) {
+            return buildModelExportEntityStrictInternal(projectId, workspaceId, modelIds, strict);
+        }
         try {
-            List<ModelServiceData> modelList = getValidatedModels(projectId, workspaceId, modelIds);
+            List<ModelServiceData> modelList = getValidatedModels(projectId, workspaceId, modelIds, strict);
+            ModelExportEntity entity = new ModelExportEntity();
+            entity.setModelMetadata(new ArrayList<>(modelList));
+            entity.setProviderMetadata(null);
+            return new ArrayList<>(Collections.singletonList(entity));
+        } catch (AgentStudioException e) {
+            // 业务异常原样抛出（仅 strict=true 时 getValidatedModels 才会抛；strict=false 走不到这里）。
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to build model-only export entity. Project: {}, Workspace: {}",
+                projectId, workspaceId, e);
+            throw new AgentStudioException(StudioError.MODEL_EXPORT_DATA);
+        }
+    }
+
+    private List<ModelExportEntity> buildModelExportEntityStrictInternal(String projectId, String workspaceId,
+        List<String> modelIds, boolean strict) {
+        try {
+            List<ModelServiceData> modelList = getValidatedModels(projectId, workspaceId, modelIds, strict);
+            // lenient 模式下模型可能全缺失，此时无需查供应商元数据（会产生误导性 ERROR "providerIds is empty"）。
+            if (CollectionUtils.isEmpty(modelList)) {
+                return Collections.emptyList();
+            }
             Map<String, ProviderExportMetadata> providerExportMap = batchGetProviderExportMetadata(projectId,
                 workspaceId, modelList);
             // 按 providerId 对模型进行分组
@@ -1282,43 +1334,27 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
     }
 
     /**
-     * 组装导出实体，按 {@code includeProvider} 区分两种模式：
-     * <ul>
-     *   <li>{@code true}（缺省）— 供应商+模型：委托 3 参 {@link #buildModelExportEntity(String, String, List)}。</li>
-     *   <li>{@code false} — 只导模型：不取 provider 元数据，所有模型装入单个实体（providerMetadata=null）。
-     *       模型本身无密钥（api-key 在供应商侧 t_provider_auth_info，按 PROVIDER_ID 关联），故只导模型文件不含任何凭据。</li>
-     * </ul>
+     * 查询并校验 modelIds 是否全部存在于指定 project/workspace 下（strict=true，兼容旧调用）。
+     * 缺模型时抛 {@link StudioError#MD_DATA_NOT_EXIST}。
      */
-    public List<ModelExportEntity> buildModelExportEntity(String projectId, String workspaceId,
-        List<String> modelIds, boolean includeProvider) {
-        if (includeProvider) {
-            return buildModelExportEntity(projectId, workspaceId, modelIds);
-        }
-        try {
-            List<ModelServiceData> modelList = getValidatedModels(projectId, workspaceId, modelIds);
-            ModelExportEntity entity = new ModelExportEntity();
-            entity.setModelMetadata(new ArrayList<>(modelList));
-            entity.setProviderMetadata(null);
-            return new ArrayList<>(Collections.singletonList(entity));
-        } catch (AgentStudioException e) {
-            // 业务异常原样抛出（与 3 参重载保持一致）。
-            throw e;
-        } catch (Exception e) {
-            log.error("Failed to build model-only export entity. Project: {}, Workspace: {}",
-                projectId, workspaceId, e);
-            throw new AgentStudioException(StudioError.MODEL_EXPORT_DATA);
-        }
+    public List<ModelServiceData> getValidatedModels(String projectId, String workspaceId, List<String> modelIds) {
+        return getValidatedModels(projectId, workspaceId, modelIds, true);
     }
 
-    public List<ModelServiceData> getValidatedModels(String projectId, String workspaceId, List<String> modelIds) {
+    /**
+     * 查询并校验 modelIds。
+     *
+     * @param strict {@code true} 缺模型抛错；{@code false} 记录 warn 后跳过缺失项，返回能查到的部分（用于历史脏数据场景的连带导出）。
+     */
+    public List<ModelServiceData> getValidatedModels(String projectId, String workspaceId, List<String> modelIds,
+        boolean strict) {
         if (CollectionUtils.isEmpty(modelIds)) {
             log.warn("No found modelIds: {}", modelIds);
             return Collections.emptyList();
         }
         // 使用按 project/workspace 过滤的 queryByIds：避免跨空间 id 泄漏。
         List<ModelServiceData> models = modelServiceMapper.queryByIds(modelIds, projectId, workspaceId);
-        // 参照环境变量导出的 removeAll 模式：请求集合 - 查到集合 = 不存在/无权限的 id，必须显式报错，
-        // 而不是像之前那样静默返回空列表/部分结果，让调用方导出一个无用的空/残缺 jsonl。
+        // 参照环境变量导出的 removeAll 模式：请求集合 - 查到集合 = 不存在/无权限的 id。
         List<String> requested = new ArrayList<>(modelIds);
         List<String> found = models.stream()
             .map(ModelServiceData::getId)
@@ -1326,10 +1362,14 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             .toList();
         requested.removeAll(found);
         if (!requested.isEmpty()) {
-            log.error("model(s) not found or no permission in project/workspace: projectId={}, workspaceId={}, missing={}",
+            if (strict) {
+                log.error("model(s) not found or no permission in project/workspace: projectId={}, workspaceId={}, missing={}",
+                    projectId, workspaceId, requested);
+                throw new AgentStudioException(StudioError.MD_DATA_NOT_EXIST,
+                    "model(s) not found or no permission: " + requested);
+            }
+            log.warn("model(s) not found or no permission in project/workspace, skipped for lenient export: projectId={}, workspaceId={}, missing={}",
                 projectId, workspaceId, requested);
-            throw new AgentStudioException(StudioError.MD_DATA_NOT_EXIST,
-                "model(s) not found or no permission: " + requested);
         }
         return models;
     }

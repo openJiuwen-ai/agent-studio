@@ -276,6 +276,16 @@ public class JiuWenPromptTaskJob implements Job {
                 throw new AgentStudioException(StudioError.GET_OPTIMIZATION_TASK);
             }
             return response.getBody();
+        } catch (HttpServerErrorException e) {
+            String responseBody = e.getResponseBodyAsString();
+            if (responseBody != null && responseBody.contains("\"code\":102155")) {
+                log.warn("jiuwen optimization job not found, taskId: {}, skip remote getDetail",
+                    promptTaskDetailVo.getJiuwenTaskId());
+                throw new AgentStudioException(StudioError.JOB_NOT_FOUND_IN_BUILDER);
+            }
+            log.error("jiuwen server returned error, taskId: {}, response: {}",
+                promptTaskDetailVo.getJiuwenTaskId(), responseBody);
+            throw new AgentStudioException(StudioError.GET_OPTIMIZATION_TASK, e);
         } catch (ResourceAccessException e) {
             log.error("optimization template service access failed, error: {}", e.getMessage());
             throw new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED);

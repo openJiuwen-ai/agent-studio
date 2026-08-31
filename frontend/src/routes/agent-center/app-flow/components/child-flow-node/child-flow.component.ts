@@ -21,6 +21,8 @@ import { NodeBaseComponent } from '../base/node-base.component';
 import { NodeDependencies } from '../modules';
 import { HttpService } from '@services/http.service';
 import { NzModalService } from 'ng-zorro-antd/modal';
+import { NzMessageService } from 'ng-zorro-antd/message';
+import { Clipboard } from '@angular/cdk/clipboard';
 
 @Component({
   selector: 'meta-child-flow',
@@ -49,8 +51,25 @@ export class ChildFlowComponent extends NodeBaseComponent {
       id: 'detail',
       label: this.i18n.transform('sub_workflow_details'),
     },
+    {
+      id: 'copyId',
+      label: this.i18n.transform('copy_workflow_id'),
+    },
     ...NODE_ACTIONS,
   ];
+
+  /**
+   * 只读态（如共享工作流查看）下仅保留"子工作流详情"与"复制工作流ID"两项只读安全操作，
+   * 隐藏重命名/复制/删除等编辑类操作（与其他节点组件的只读菜单保持一致）；
+   * 非只读态返回完整操作列表。配合模板中 node-oprs 的显示条件
+   * （!isFlowReadonly || configs.fromShare）实现：只读页面中共享子流可跳只读详情、非共享节点不显示菜单。
+   */
+  public get displayActions() {
+    if (!this.isFlowReadonly) {
+      return this.actions;
+    }
+    return this.actions.filter((action) => ['detail', 'copyId'].includes(action.id));
+  }
 
   public childFlowsUpdated_tip = this.i18n.transform('childFlowsUpdated_tip');
 
@@ -65,6 +84,8 @@ export class ChildFlowComponent extends NodeBaseComponent {
     protected override elementRef: ElementRef<HTMLDivElement>,
     private nzModal: NzModalService,
     private ngZone: NgZone,
+    private clipboard: Clipboard,
+    private nzMessage: NzMessageService,
     private i18n: I18NextEagerPipe,
     private configServ: AgentConfigService,
     private appAgentRepoServe: AppAgentRepoService,
@@ -131,12 +152,20 @@ export class ChildFlowComponent extends NodeBaseComponent {
   override onClickAction(action: any) {
     if (action.id === 'detail') {
       this.onClickWorkflow();
+    } else if (action.id === 'copyId') {
+      this.onCopyWorkflowId();
     } else {
       this.appFlowServ.setNodeAction({
         type: action.id,
         id: this.nodeBase.id,
       });
     }
+  }
+
+  public onCopyWorkflowId() {
+    const config = this.nodeInfo.configs;
+    this.clipboard.copy(config.id);
+    this.nzMessage.success(this.i18n.transform('copy_workflow_id_successfully'));
   }
 
   public get versionName() {
