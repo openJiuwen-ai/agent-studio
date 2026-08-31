@@ -744,7 +744,7 @@ export class PromptOptimizeTaskConfigComponent {
     // 不触发表单更新事件 { emitEvent: false }
     this.basicInfoForm.patchValue(
       {
-        taskName: `${example.title.substring(0, 50)}#${Date.now()}`,
+        taskName: `${example.title.substring(0, 50)}_${Date.now()}`,
         desc: example.title,
         prompt: example.value,
       },
