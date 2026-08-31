@@ -167,7 +167,7 @@
                 #{updatedBy,jdbcType=VARCHAR}, #{updaterId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR},
                 #{domainId,jdbcType=VARCHAR}, #{workspaceId,jdbcType=INTEGER}, #{deployWfVersion,jdbcType=BIGINT},
                 #{deleted,jdbcType=BOOLEAN}, #{workflowType,jdbcType=VARCHAR}, #{lastVersionId,jdbcType=VARCHAR},
-                #{testStatus,jdbcType=VARCHAR}, #{iconName,jdbcType=VARCHAR}, #{traceId,jdbcType=VARCHAR})
+                #{testStatus,jdbcType=TINYINT}, #{iconName,jdbcType=VARCHAR}, #{traceId,jdbcType=VARCHAR})
     </insert>
 
     <insert id="insertWorkflowEntity">
@@ -187,7 +187,7 @@
                 #{updatedBy,jdbcType=VARCHAR}, #{updaterId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR},
                 #{domainId,jdbcType=VARCHAR}, #{workspaceId,jdbcType=INTEGER}, #{deployWfVersion,jdbcType=BIGINT},
                 #{deleted,jdbcType=BOOLEAN}, #{workflowType,jdbcType=VARCHAR}, #{lastVersionId,jdbcType=VARCHAR},
-                #{testStatus,jdbcType=VARCHAR}, #{iconName,jdbcType=VARCHAR}, #{traceId,jdbcType=VARCHAR})
+                #{testStatus,jdbcType=TINYINT}, #{iconName,jdbcType=VARCHAR}, #{traceId,jdbcType=VARCHAR})
     </insert>
 
     <update id="updateWorkflowEntity" parameterType="com.openjiuwen.studio.agent.manager.entity.WorkflowEntity">
