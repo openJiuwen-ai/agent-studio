@@ -1375,12 +1375,14 @@ def _register_jiuwen_callbacks() -> None:
                     "node_type": node_type,
                     "node_name": node_name,
                 })
-                # 节点开始执行 common 日志
-                if common_logger.isEnabledFor(logging.DEBUG):
-                    common_logger.debug(
-                        f"The node starts to execute. "
-                        f"| flow_id: {workflow_id} | node type: {node_type} | node name: {node_name}"
-                    )
+                # 节点开始执行 common 日志（%-style 惰性传参，DEBUG 关闭时 _emit 内部短路不拼接）
+                common_logger.debug(
+                    "The node starts to execute. "
+                    "| flow_id: %s | node type: %s | node name: %s",
+                    workflow_id,
+                    node_type,
+                    node_name,
+                )
             return (args, kwargs)
 
         @_fw.on(WorkflowEvents.NODE_EXECUTED, priority=0)
@@ -1397,12 +1399,14 @@ def _register_jiuwen_callbacks() -> None:
             workflow_id = ctx.get("workflow_id", "")
             node_type = ctx.get("node_type", "")
             node_name = ctx.get("node_name", "")
-            # 节点执行完成 common 日志
-            if common_logger.isEnabledFor(logging.DEBUG):
-                common_logger.debug(
-                    f"Node execution is complete. "
-                    f"| flow_id: {workflow_id} | node type: {node_type} | node name: {node_name}"
-                )
+            # 节点执行完成 common 日志（%-style 惰性传参，DEBUG 关闭时 _emit 内部短路不拼接）
+            common_logger.debug(
+                "Node execution is complete. "
+                "| flow_id: %s | node type: %s | node name: %s",
+                workflow_id,
+                node_type,
+                node_name,
+            )
             # label 格式: type_name (e.g. jiuwen.code_代码)
             if node_type and node_name:
                 label = f"{node_type}_{node_name}"
