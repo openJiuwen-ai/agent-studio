@@ -954,12 +954,14 @@ export function mapTreeAddKeyAndChildIndex(tree, start) {
 function mapTreeSchemaIndex(schema, start, rootValType) {
   return (schema || []).map((item, index) => {
     let newitem: any = {
-      options: [{ label: item.type, value: 'literal' }],
+      options: [{ label: capitalize(item.type), value: 'literal' }],
       key: `${start}_${index}`,
       type: item.type,
       isChild: true,
       isLeaf: true,
       name: item.name,
+      required: item.required,
+      description: item.description,
       rootValType: rootValType,
       isObjChild: item.type === 'object',
       hasObjChild: item?.schema?.length > 0 && item.type === 'object',
