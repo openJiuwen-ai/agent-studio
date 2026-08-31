@@ -749,12 +749,20 @@ class _LoopPassThroughComponent(WorkflowComponent):
 class _ParallelInvokeLaneDoneComponent(WorkflowComponent):
     """Control marker emitted when one parallel lane has completed."""
 
+    def skip_trace(self) -> bool:
+        return True
+
+
     async def invoke(self, inputs, session, context):
         return {}
 
 
 class _ParallelTransformLaneDoneComponent(WorkflowComponent):
     """Stream-preserving control marker for a completed parallel lane."""
+
+    def skip_trace(self) -> bool:
+        return True
+
 
     async def transform(
         self, inputs: Any, session: Any, context: Any
@@ -800,6 +808,10 @@ class _LaneSentinelComponent(WorkflowComponent):
     does not route it -- the LLM field resolves to empty, matching the fact
     that the LLM branch did not execute.
     """
+
+    def skip_trace(self) -> bool:
+        return True
+
 
     async def stream(self, inputs: Any, session: Any, context: Any) -> AsyncIterator[Any]:
         # One empty data frame: its first_frame=True arrival starts the
