@@ -1247,18 +1247,21 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
     /**
      * 组装导出实体（5 参）。按 {@code includeProvider} 区分两种模式：
      * <ul>
-     *   <li>{@code true} — 供应商+模型（同一供应商）。</li>
+     *   <li>{@code true} — 供应商+模型：按 providerId 自然分组，每个供应商组装一个 {@link ModelExportEntity}
+     *       （允许多个供应商分组，返回多条实体；是否需要单供应商约束由上层业务决定）。</li>
      *   <li>{@code false} — 只导模型：不取 provider 元数据，所有模型装入单个实体（providerMetadata=null）。
      *       模型本身无密钥（api-key 在供应商侧 t_provider_auth_info，按 PROVIDER_ID 关联），故只导模型文件不含任何凭据。</li>
      * </ul>
      *
-     * @param strict 缺模型/无权限时的行为：{@code true} 抛 {@link StudioError#MD_DATA_NOT_EXIST}（用于单独导模型场景）；
-     *               {@code false} 记录 warn 日志后跳过缺失项，返回能查到的部分（用于工作流/智能体/路由策略连带导出，避免历史脏数据阻塞整体导出）。
+     * @param strict 缺模型/无权限时的行为：{@code true} 抛 {@link StudioError#MD_DATA_NOT_EXIST}；
+     *               {@code false} 记录 warn 日志后跳过缺失项，返回能查到的部分。
+     *               注意：该参数只控制缺失模型的行为，不约束跨供应商分组——跨供应商允许多实体返回是本方法的默认行为，
+     *               上层业务（如 standalone 模型服务导出）若需要单供应商语义，请在调用方自行校验。
      */
     public List<ModelExportEntity> buildModelExportEntity(String projectId, String workspaceId, List<String> modelIds,
         boolean includeProvider, boolean strict) {
         if (includeProvider) {
-            return buildModelExportEntityStrictInternal(projectId, workspaceId, modelIds, strict);
+            return buildModelExportEntityGroupedByProvider(projectId, workspaceId, modelIds, strict);
         }
         try {
             List<ModelServiceData> modelList = getValidatedModels(projectId, workspaceId, modelIds, strict);
@@ -1276,7 +1279,11 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
         }
     }
 
-    private List<ModelExportEntity> buildModelExportEntityStrictInternal(String projectId, String workspaceId,
+    /**
+     * 供应商+模型模式：按 providerId 分组，每个供应商返回一个 {@link ModelExportEntity}（含 providerMetadata+其下 modelMetadata）。
+     * 不做单供应商校验——是否允许跨供应商由上层业务场景决定（standalone 用户导出要求单供应商，工作流/Agent/路由策略连带导出天然多供应商）。
+     */
+    private List<ModelExportEntity> buildModelExportEntityGroupedByProvider(String projectId, String workspaceId,
         List<String> modelIds, boolean strict) {
         try {
             List<ModelServiceData> modelList = getValidatedModels(projectId, workspaceId, modelIds, strict);
@@ -1290,18 +1297,6 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             Map<String, List<ModelServiceData>> groupedModels = modelList.stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.groupingBy(m -> Objects.toString(m.getProviderId(), "UNKNOWN")));
-
-            // 供应商+模型导出（include_provider=true）：一次导出只允许属于同一供应商的模型，
-            // 避免返回多行 ndjson 让调用方误按"单个 JSON"解析触发"语法错误"，也避免一个文件里混入多个供应商密钥。
-            // 只导模型（include_provider=false，走 4 参重载）无此限制，允许跨供应商挑选模型迁移到目标供应商。
-            if (groupedModels.size() > 1) {
-                List<String> distinctProviders = new ArrayList<>(groupedModels.keySet());
-                String reason = "include_provider=true 时导出的模型必须属于同一供应商，但传入的 model_ids 分属 "
-                    + distinctProviders.size() + " 个不同供应商";
-                log.error("model_ids span multiple providers, rejected for provider+model export. projectId={}, workspaceId={}, providers={}",
-                    projectId, workspaceId, distinctProviders);
-                throw new AgentStudioException(StudioError.MODEL_IMPORT_FORMAT_INVALID, reason);
-            }
 
             List<ModelExportEntity> exportEntityList = new ArrayList<>();
 
