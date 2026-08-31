@@ -89,7 +89,7 @@ export class PromptOptimizeTaskConfigComponent {
     theObjectToApply: this.i18n.transform('prompt_optimize_task_the_object_to_apply'),
   };
   public basicInfoForm = this.fb.group({
-    taskName: new FormControl('', [Validators.required, Validators.maxLength(64)]),
+    taskName: new FormControl('', [Validators.required, Validators.maxLength(34)]),
     type: new FormControl(this.promptTypeOptions[0].value, [Validators.required]),
     desc: new FormControl('', [Validators.required]),
     prompt: new FormControl('', [Validators.required]),
