@@ -967,7 +967,7 @@ class ShareResourceManagerServiceTest {
 
     @Test
     void testCheckVersionSharedOrNot_versionIsShared_throwsCannotDelete() {
-        // versionList 序列化中以字串包含目标 versionId 时（与 AgentManagementService/PluginService 校验语义一致）应抛错
+        // versionList 序列化中以字串包含目标 versionId 时（与 AgentManagementService 校验语义一致）应抛错
         ShareResourceEntity share = new ShareResourceEntity();
         share.setVersionList("[{\"version_id\":\"v1\",\"version_name\":\"1.0\"},{\"version_id\":\"v2\",\"version_name\":\"2.0\"}]");
         when(shareResourceMapper.selectShareResourceEntityByResourceId(RESOURCE_ID)).thenReturn(share);

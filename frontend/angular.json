@@ -94,11 +94,11 @@
             ],
             "styles": [
               "src/styles/main.scss",
-              "src/styles/global.css",
               "node_modules/@angular/cdk/overlay-prebuilt.css",
               "node_modules/@angular/cdk/text-field-prebuilt.css",
               "src/styles/console.css",
-              "node_modules/ng-zorro-antd/ng-zorro-antd.min.css"
+              "node_modules/ng-zorro-antd/ng-zorro-antd.min.css",
+              "src/styles/global.css"
             ],
             "scripts": []
           },
@@ -139,6 +139,9 @@
             "main": "src/test/test.ts",
             "tsConfig": "src/test/tsconfig.spec.json",
             "karmaConfig": "src/test/karma.conf.js",
+            "include": [
+              "src/test/**/*.spec.ts"
+            ],
             "assets": [
               "src/favicon.ico",
               "src/assets"

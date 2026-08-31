@@ -4,6 +4,7 @@
 import asyncio
 import hashlib
 import json
+import logging
 import secrets
 import time
 from functools import wraps
@@ -75,10 +76,11 @@ def log_request_stats(func):
 
         # 日志打印请求URL、处理时间、客户端IP和响应码
         host_infos = request.get().client.host.split(":") or ["unknown"]
-        if is_json(request.get()):
+        if is_json(request.get()) and logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                f"{func.__name__} JiuWenRequestRecorder request.json ="
-                f" {json.dumps(request_json.get(), ensure_ascii=False)}",
+                "%s JiuWenRequestRecorder request.json = %s",
+                func.__name__,
+                json.dumps(request_json.get(), ensure_ascii=False),
                 simple_log=f"{func.__name__} JiuWenRequestRecorder request.json.",
             )
 
@@ -123,7 +125,8 @@ def log_function_timing(func):
         try:
             result = func(*args, **kwargs)
             elapsed_time = (time.perf_counter() - start_time) * 1000
-            logger.info(f"{func.__name__} completed in {elapsed_time:.2f} ms")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"{func.__name__} completed in {elapsed_time:.2f} ms")
             return result
         except Exception as e:
             elapsed_time = (time.perf_counter() - start_time) * 1000
@@ -136,7 +139,8 @@ def log_function_timing(func):
         try:
             result = await func(*args, **kwargs)
             elapsed_time = (time.perf_counter() - start_time) * 1000
-            logger.info(f"async {func.__name__} completed in {elapsed_time:.2f} ms")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"async {func.__name__} completed in {elapsed_time:.2f} ms")
             return result
         except Exception as e:
             elapsed_time = (time.perf_counter() - start_time) * 1000

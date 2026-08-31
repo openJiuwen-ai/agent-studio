@@ -82,6 +82,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -314,6 +315,7 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             base.setIsSupportCloseReasoning(false);
         }
         urlCheckUtils.checkUrl(projectId, body.getApiUrl());
+        urlCheckUtils.validateEnvVarPlaceholders(body.getApiUrl());
 
         String id = UUID.randomUUID().toString();
         base.setId(id)
@@ -736,7 +738,18 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
         if (!insertModelServices.isEmpty()) {
             List<ProviderAuthMetadata> metadataList = authService.selectProviderMetadataAndPermissionCheck(projectId,
                 workspaceId, providerId, false);
+            List<ModelServiceBase> validInsertServices = new ArrayList<>();
             insertModelServices.forEach(item -> {
+                // 校验 provider 同步下来的模型 apiUrl：非法 URL / 非法占位符直接跳过该条，
+                // 不阻断整条同步链路，避免一个坏模型污染整个 provider 的同步结果
+                try {
+                    urlCheckUtils.checkUrl(projectId, item.getApiUrl());
+                    urlCheckUtils.validateEnvVarPlaceholders(item.getApiUrl());
+                } catch (AgentStudioException e) {
+                    log.warn("Skip synced model [{}] due to invalid apiUrl [{}]: {}",
+                        item.getServiceName(), item.getApiUrl(), e.getMessage());
+                    return;
+                }
                 String id = UUID.randomUUID().toString();
                 item.setId(id)
                     .setModelVersion(item.getModelName())
@@ -755,9 +768,10 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
                     .setPublishStatus("offline")
                     .setIdentityId(id)
                     .setInterfaceProtocol("abmodel");
+                validInsertServices.add(item);
             });
-            modelServiceMapper.batchInsert(insertModelServices);
-            for (ModelServiceBase modelServiceBase : insertModelServices) {
+            modelServiceMapper.batchInsert(validInsertServices);
+            for (ModelServiceBase modelServiceBase : validInsertServices) {
                 String path = String.format(MODEL_PATH, modelServiceBase.getId() + ".json");
                 String content = JsonUtils.encode(new ModelStrategy().setType("model").setData(modelServiceBase));
                 obsService.putObject(path, content);
@@ -899,6 +913,7 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             base.setIsSupportCloseReasoning(false);
         }
         urlCheckUtils.checkUrl(projectId, serviceReq.getApiUrl());
+        urlCheckUtils.validateEnvVarPlaceholders(serviceReq.getApiUrl());
 
         base.setServiceName(serviceReq.getServiceName())
             .setServiceKey("integration:" + workspaceId + ":" + serviceReq.getServiceName())
@@ -1214,16 +1229,75 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
         return ids;
     }
 
+    /**
+     * 组装导出实体（3 参）— 缺省 {@code includeProvider=true, strict=true}，供应商+模型严格模式。
+     */
     public List<ModelExportEntity> buildModelExportEntity(String projectId, String workspaceId, List<String> modelIds) {
+        return buildModelExportEntity(projectId, workspaceId, modelIds, true, true);
+    }
 
+    /**
+     * 组装导出实体（4 参，兼容旧调用）— 指定是否包含供应商元数据，缺省 {@code strict=true}。
+     */
+    public List<ModelExportEntity> buildModelExportEntity(String projectId, String workspaceId,
+        List<String> modelIds, boolean includeProvider) {
+        return buildModelExportEntity(projectId, workspaceId, modelIds, includeProvider, true);
+    }
+
+    /**
+     * 组装导出实体（5 参）。按 {@code includeProvider} 区分两种模式：
+     * <ul>
+     *   <li>{@code true} — 供应商+模型：按 providerId 自然分组，每个供应商组装一个 {@link ModelExportEntity}
+     *       （允许多个供应商分组，返回多条实体；是否需要单供应商约束由上层业务决定）。</li>
+     *   <li>{@code false} — 只导模型：不取 provider 元数据，所有模型装入单个实体（providerMetadata=null）。
+     *       模型本身无密钥（api-key 在供应商侧 t_provider_auth_info，按 PROVIDER_ID 关联），故只导模型文件不含任何凭据。</li>
+     * </ul>
+     *
+     * @param strict 缺模型/无权限时的行为：{@code true} 抛 {@link StudioError#MD_DATA_NOT_EXIST}；
+     *               {@code false} 记录 warn 日志后跳过缺失项，返回能查到的部分。
+     *               注意：该参数只控制缺失模型的行为，不约束跨供应商分组——跨供应商允许多实体返回是本方法的默认行为，
+     *               上层业务（如 standalone 模型服务导出）若需要单供应商语义，请在调用方自行校验。
+     */
+    public List<ModelExportEntity> buildModelExportEntity(String projectId, String workspaceId, List<String> modelIds,
+        boolean includeProvider, boolean strict) {
+        if (includeProvider) {
+            return buildModelExportEntityGroupedByProvider(projectId, workspaceId, modelIds, strict);
+        }
         try {
-            List<ModelServiceData> modelList = getValidatedModels(projectId, workspaceId, modelIds);
+            List<ModelServiceData> modelList = getValidatedModels(projectId, workspaceId, modelIds, strict);
+            ModelExportEntity entity = new ModelExportEntity();
+            entity.setModelMetadata(new ArrayList<>(modelList));
+            entity.setProviderMetadata(null);
+            return new ArrayList<>(Collections.singletonList(entity));
+        } catch (AgentStudioException e) {
+            // 业务异常原样抛出（仅 strict=true 时 getValidatedModels 才会抛；strict=false 走不到这里）。
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to build model-only export entity. Project: {}, Workspace: {}",
+                projectId, workspaceId, e);
+            throw new AgentStudioException(StudioError.MODEL_EXPORT_DATA);
+        }
+    }
+
+    /**
+     * 供应商+模型模式：按 providerId 分组，每个供应商返回一个 {@link ModelExportEntity}（含 providerMetadata+其下 modelMetadata）。
+     * 不做单供应商校验——是否允许跨供应商由上层业务场景决定（standalone 用户导出要求单供应商，工作流/Agent/路由策略连带导出天然多供应商）。
+     */
+    private List<ModelExportEntity> buildModelExportEntityGroupedByProvider(String projectId, String workspaceId,
+        List<String> modelIds, boolean strict) {
+        try {
+            List<ModelServiceData> modelList = getValidatedModels(projectId, workspaceId, modelIds, strict);
+            // lenient 模式下模型可能全缺失，此时无需查供应商元数据（会产生误导性 ERROR "providerIds is empty"）。
+            if (CollectionUtils.isEmpty(modelList)) {
+                return Collections.emptyList();
+            }
             Map<String, ProviderExportMetadata> providerExportMap = batchGetProviderExportMetadata(projectId,
                 workspaceId, modelList);
             // 按 providerId 对模型进行分组
             Map<String, List<ModelServiceData>> groupedModels = modelList.stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.groupingBy(m -> Objects.toString(m.getProviderId(), "UNKNOWN")));
+
             List<ModelExportEntity> exportEntityList = new ArrayList<>();
 
             for (Map.Entry<String, List<ModelServiceData>> entry : groupedModels.entrySet()) {
@@ -1244,21 +1318,53 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             }
 
             return exportEntityList;
+        } catch (AgentStudioException e) {
+            // 业务异常（如模型不存在）原样抛出，保留明确的错误码给前端/API 调用方，
+            // 不要被包成模糊的 MODEL_EXPORT_DATA(02501028) 让调用方无法识别真因。
+            throw e;
         } catch (Exception e) {
             log.error("Failed to build model export entity. Project: {}, Workspace: {}", projectId, workspaceId, e);
             throw new AgentStudioException(StudioError.MODEL_EXPORT_DATA);
         }
     }
 
+    /**
+     * 查询并校验 modelIds 是否全部存在于指定 project/workspace 下（strict=true，兼容旧调用）。
+     * 缺模型时抛 {@link StudioError#MD_DATA_NOT_EXIST}。
+     */
     public List<ModelServiceData> getValidatedModels(String projectId, String workspaceId, List<String> modelIds) {
+        return getValidatedModels(projectId, workspaceId, modelIds, true);
+    }
+
+    /**
+     * 查询并校验 modelIds。
+     *
+     * @param strict {@code true} 缺模型抛错；{@code false} 记录 warn 后跳过缺失项，返回能查到的部分（用于历史脏数据场景的连带导出）。
+     */
+    public List<ModelServiceData> getValidatedModels(String projectId, String workspaceId, List<String> modelIds,
+        boolean strict) {
         if (CollectionUtils.isEmpty(modelIds)) {
             log.warn("No found modelIds: {}", modelIds);
             return Collections.emptyList();
         }
-        List<ModelServiceData> models = modelServiceMapper.selectByIds(modelIds);
-        if (CollectionUtils.isEmpty(models)) {
-            log.warn("Models not found for Ids: {}", modelIds);
-            return Collections.emptyList();
+        // 使用按 project/workspace 过滤的 queryByIds：避免跨空间 id 泄漏。
+        List<ModelServiceData> models = modelServiceMapper.queryByIds(modelIds, projectId, workspaceId);
+        // 参照环境变量导出的 removeAll 模式：请求集合 - 查到集合 = 不存在/无权限的 id。
+        List<String> requested = new ArrayList<>(modelIds);
+        List<String> found = models.stream()
+            .map(ModelServiceData::getId)
+            .filter(StringUtils::isNotBlank)
+            .toList();
+        requested.removeAll(found);
+        if (!requested.isEmpty()) {
+            if (strict) {
+                log.error("model(s) not found or no permission in project/workspace: projectId={}, workspaceId={}, missing={}",
+                    projectId, workspaceId, requested);
+                throw new AgentStudioException(StudioError.MD_DATA_NOT_EXIST,
+                    "model(s) not found or no permission: " + requested);
+            }
+            log.warn("model(s) not found or no permission in project/workspace, skipped for lenient export: projectId={}, workspaceId={}, missing={}",
+                projectId, workspaceId, requested);
         }
         return models;
     }
@@ -1269,8 +1375,17 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
             .map(ModelServiceData::getProviderId)
             .filter(StringUtils::isNotBlank)
             .collect(Collectors.toSet());
+        return getProviderExportMetadataByIds(providerIds);
+    }
 
-        if (providerIds.isEmpty()) {
+    /**
+     * 按 providerId 集合直接取供应商导出元数据（不依赖模型行派生）。
+     *
+     * <p>供「空供应商导出」复用：供应商下无模型时（queryByProviders 返回空）仍可导出供应商壳，
+     * 目标环境导入壳后再补模型。与 {@link #batchGetProviderExportMetadata} 共用同一段取数逻辑。
+     */
+    public Map<String, ProviderExportMetadata> getProviderExportMetadataByIds(Collection<String> providerIds) {
+        if (providerIds == null || providerIds.isEmpty()) {
             log.error("providerIds is empty");
             return Collections.emptyMap();
         }
@@ -1340,6 +1455,7 @@ public class ModelServiceMgmtService implements IModelServiceMgmtService {
                 throw new AgentStudioException(StudioError.MD_MODEL_TAGS_LIMIT);
             }
             urlCheckUtils.checkUrl(projectId, modelData.getApiUrl());
+            urlCheckUtils.validateEnvVarPlaceholders(modelData.getApiUrl());
             if (Boolean.TRUE.equals(availableCheck)) {
                 try {
                     modelData.setStatus("success");

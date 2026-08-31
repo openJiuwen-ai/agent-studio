@@ -27,6 +27,13 @@ from typing import Optional
 
 INVOKE_MODEL_SERVICE_FAIL = "MD_INVOKE_MODEL_SERVICE_FAIL"
 MODEL_SERVICE_NOT_PUBLISH = "MD_MODEL_SERVICE_NOT_PUBLISH"
+# 占位符变量未解析（运行期）：api_url 含 ${_env.plugin_url_params.VAR} 但环境未配置/加载或
+# 缺对应变量。raise 点在 model_service.env_resolver / resolver._build_detail。
+# full_code 对齐 Java ``StudioError.MODEL_ENV_VAR_UNRESOLVED`` = openjiuwen.02501082
+# （StudioError.java:2019，BAD_REQUEST + MODEL + 1082）。注意 1083 是 MODEL_IMPORT_CONFLICT，
+# 二者不可混。Java 侧 1082 语义偏「占位符语法校验（导入侧）」，Python 运行期复用此 code 做
+# 「变量存在性」校验，语义注释见 StudioError 与 env_resolver.py。
+ENV_VAR_UNRESOLVED = "MD_ENV_VAR_UNRESOLVED"
 
 
 @dataclass
@@ -71,6 +78,18 @@ MODEL_ERROR_SPECS: dict[str, ModelErrorSpec] = {
     MODEL_SERVICE_NOT_PUBLISH: ModelErrorSpec(
         full_code=None,           # 通用兜底 {error:{code,message}}
         http_status=404,
+    ),
+    ENV_VAR_UNRESOLVED: ModelErrorSpec(
+        # 对齐 Java StudioError.MODEL_ENV_VAR_UNRESOLVED = openjiuwen.02501082。
+        # 旧 Java ErrorRsp 契约：error_code/error_msg/error_reason/error_suggestion。
+        # 不透传上游 status（非上游调用失败，是解析期 fail-fast）、不带 details。
+        full_code="openjiuwen.02501082",
+        error_msg="模型apiUrl环境变量占位符未解析,请配置或加载对应环境变量",
+        error_reason="模型apiUrl环境变量占位符未解析,请配置或加载对应环境变量",
+        error_suggestion="请在环境管理中配置全局环境变量,或在调测页面为占位符填入真实值",
+        http_status=400,
+        use_upstream_status=False,
+        with_details=False,
     ),
 }
 

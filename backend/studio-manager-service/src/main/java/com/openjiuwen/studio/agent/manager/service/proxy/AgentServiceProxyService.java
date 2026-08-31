@@ -97,6 +97,8 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -320,11 +322,12 @@ public class AgentServiceProxyService {
     }
 
     public Object rerank(HttpHeaders headers, String workspaceId, RankDocumentsRequest request, Boolean refresh,
-        String projectId) {
+        String projectId, String apiUrlEnvVars) {
         String modelId = request.getModel();
         checkModelPermission(projectId, workspaceId, modelId);
+        String environmentId = headers.getFirst("X-Environment-Id");
         try {
-            return builderClient.rerank(getToken(), projectId, workspaceId, request, refresh);
+            return builderClient.rerank(getToken(), environmentId, projectId, workspaceId, request, refresh, apiUrlEnvVars);
         } catch (FeignException e) {
             ResponseEntity<Object> errorResponse = parseModelServiceFeignError(e);
             if (errorResponse != null) {
@@ -335,12 +338,13 @@ public class AgentServiceProxyService {
     }
 
     public Object textEmbeddings(HttpHeaders headers, String workspaceId, EmbeddingRequest request, Boolean refresh,
-        String projectId) {
+        String projectId, String apiUrlEnvVars) {
 
         String modelId = request.getModel();
         checkModelPermission(projectId, workspaceId, modelId);
+        String environmentId = headers.getFirst("X-Environment-Id");
         try {
-            return builderClient.textEmbeddings(getToken(), projectId, workspaceId, request, refresh);
+            return builderClient.textEmbeddings(getToken(), environmentId, projectId, workspaceId, request, refresh, apiUrlEnvVars);
         } catch (FeignException e) {
             ResponseEntity<Object> errorResponse = parseModelServiceFeignError(e);
             if (errorResponse != null) {
@@ -400,18 +404,22 @@ public class AgentServiceProxyService {
     }
 
     public Object chatCompletions(HttpHeaders headers, String workspaceId, ChatCompletionRequest request,
-        Boolean refresh, String projectId) {
+        Boolean refresh, String projectId, String apiUrlEnvVars) {
 
         String modelId = request.getModel();
         checkModelPermission(projectId, workspaceId, modelId);
         if (request.getStream() == null || request.getStream()) {
             String url = agentBuilderEndpoint + "/v1/agent-builder/chat/completions?project_id=" + projectId + "&workspace_id="
                 + workspaceId + "&refresh=" + (Boolean.FALSE.equals(refresh) ? "false" : "true");
+            if (apiUrlEnvVars != null && !apiUrlEnvVars.isEmpty()) {
+                url += "&api_url_env_vars=" + URLEncoder.encode(apiUrlEnvVars, StandardCharsets.UTF_8);
+            }
 
             return stream(url, headers, JsonUtils.encode(request));
         }
+        String environmentId = headers.getFirst("X-Environment-Id");
         try {
-            return builderClient.chatCompletions(getToken(), projectId, workspaceId, request, refresh);
+            return builderClient.chatCompletions(getToken(), environmentId, projectId, workspaceId, request, refresh, apiUrlEnvVars);
         } catch (FeignException e) {
             return parseModelServiceFeignError(e);
         }

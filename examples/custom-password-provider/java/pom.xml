@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.openjiuwen.studio.examples</groupId>
+    <artifactId>custom-password-provider</artifactId>
+    <version>0.0.1</version>
+    <packaging>jar</packaging>
+    <name>custom-password-provider-example</name>
+    <description>自定义数据库密码获取实现示例（Java 侧）</description>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <revision>0.0.1</revision>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.openjiuwen</groupId>
+            <artifactId>studio-storage</artifactId>
+            <version>0.0.1</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

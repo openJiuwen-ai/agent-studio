@@ -47,8 +47,62 @@
   color: #ff4d4f;
   font-size: 12px;
   margin-top: 4px;
+  line-height: 1;
 }
 
 .input-error {
   border-color: #ff4d4f !important;
+}
+
+::ng-deep {
+  #node-param-tree {
+    // 使用 flex 布局让展开图标与参数内容在同一行水平对齐
+    .ant-tree-treenode {
+      padding-left: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      min-height: 32px;
+    }
+    // 展开/收起按钮保持默认宽度，与参数内容对齐
+    .ant-tree-switcher {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      width: 24px !important;
+      min-width: 24px !important;
+    }
+    // 叶子节点（非 object 类型）无展开按钮，隐藏宽度避免偏移
+    .ant-tree-switcher.ant-tree-switcher-noop {
+      width: 0 !important;
+      min-width: 0 !important;
+    }
+    // 缩进单元：子节点层级的水平缩进
+    .ant-tree-indent {
+      display: inline-flex !important;
+      align-self: stretch;
+    }
+    .ant-tree-indent-unit {
+      width: 24px !important;
+      min-width: 24px !important;
+    }
+    // ng-zorro 默认 inline-flex 不撑满 → 模板根 div 的 w-full 失效，
+    // 名称列 calc(100%-345px) 与类型列 330px 无法稳定对齐，强制撑满。
+    .ant-tree-node-content-wrapper {
+      display: flex !important;
+      flex: 1 1 0 !important;
+      min-width: 0 !important;
+      min-height: 28px;
+      align-items: center;
+    }
+    .ant-tree-node-content-wrapper:hover,
+    .ant-tree-node-content-wrapper.ant-tree-node-selected {
+      background: transparent !important;
+    }
+  }
+
+  #output-param-tree {
+    .ant-tree-node-content-wrapper {
+      pointer-events: none !important;
+    }
+  }
 }

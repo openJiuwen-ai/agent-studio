@@ -47,6 +47,7 @@
     </button>
   </div>
   <nz-table
+    [nzShowTotal]="totalTemplate"
     #remoteTable
     [nzData]="listOfData"
     [nzTotal]="total"
@@ -59,6 +60,16 @@
     (nzQueryParams)="onQueryParamsChange($event)"
     [nzScroll]="{ x: '500px', y: '400px' }"
   >
+    <ng-template #totalTemplate>
+      <div class="page-div">
+        <div class="page-div-span">
+          {{ ('count_num' | i18nextEager) + total }}
+        </div>
+        <div class="page-div-select">
+          {{ ('select_num' | i18nextEager) + setOfCheckedId.size }}
+        </div>
+      </div>
+    </ng-template>
     <thead>
     <tr>
       <th
@@ -100,7 +111,7 @@
       type="button"
       nz-button
       nzType="primary"
-      [disabled]="!selectedRows.length"
+      [disabled]="!setOfCheckedId.size"
       (click)="handleExport()"
     >
       {{ 'export' | i18nextEager }}

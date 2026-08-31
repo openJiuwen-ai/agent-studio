@@ -304,12 +304,14 @@ export class ReleaseHistoryHalfmodalComponent {
     e.preventDefault();
     const modalRef = this.nzModal.create({
       nzContent: DiffVersionModalComponent,
-      nzWidth: 1100,
+      nzWidth: 'min(1100px, calc(100vw - 32px))',
+      nzClosable: true,
       nzFooter: null,
     });
     const instance = modalRef.getContentComponent();
     instance.app_id = this.app_id;
-    instance.versionList = this.publishedCards;
+    // 快照拷贝，避免 publishedCards 原地增删后选中态过期 → 404 被当 per-side error
+    instance.versionList = [...this.publishedCards];
     instance.leftIndex = this.selectedTab;
     instance.rightIndex = index;
     instance.type = this.type;

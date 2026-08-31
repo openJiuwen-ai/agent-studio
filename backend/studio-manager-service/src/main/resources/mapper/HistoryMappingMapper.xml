@@ -20,7 +20,7 @@
         <result column="resource_name" jdbcType="VARCHAR" property="resourceName"/>
         <result column="resource_version" jdbcType="VARCHAR" property="resourceVersion"/>
         <result column="resource_desc" jdbcType="VARCHAR" property="resourceDesc"/>
-        <result column="valid" jdbcType="TINYINT" property="valid"/>
+        <result column="valid" jdbcType="BOOLEAN" property="valid"/>
         <result column="created_on" jdbcType="TIMESTAMP" property="createdOn"/>
         <result column="updated_on" jdbcType="TIMESTAMP" property="updatedOn"/>
         <result column="reference_type" jdbcType="VARCHAR" property="referenceType"/>

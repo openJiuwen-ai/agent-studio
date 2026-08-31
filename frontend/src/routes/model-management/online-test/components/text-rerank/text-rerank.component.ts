@@ -62,6 +62,10 @@ export class TextRerankComponent {
     question: String,
   };
 
+  @Input() envVarValues: Record<string, string> = {};
+  /** 默认环境 id（占位符模型免填时由后端按默认环境解析真实地址） */
+  @Input() environmentId: string | undefined;
+
   @ViewChild('chatContainerRef') chatContainerRef!: ElementRef;
 
   public isShowStopIcon = false;
@@ -172,7 +176,7 @@ export class TextRerankComponent {
   private postMessage(param) {
     this.abortController = new AbortController();
     this.jiuwenModelServ
-      .modelTestReRank(param, this.abortController?.signal)
+      .modelTestReRank(param, this.abortController?.signal, this.envVarValues, this.environmentId)
       .then((content) => {
         this.result = content;
         const newData = [];

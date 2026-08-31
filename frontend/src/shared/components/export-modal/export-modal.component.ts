@@ -57,6 +57,7 @@ export class ExportModalComponent implements OnInit {
 
   public selectedRows: any[] = [];
   public setOfCheckedId = new Set<any>();
+  public selectedRowsMap = new Map<any, any>();
 
   public get allChecked(): boolean {
     return this.listOfData.length > 0 && this.listOfData.every((item) =>
@@ -229,8 +230,6 @@ export class ExportModalComponent implements OnInit {
           });
           this.total = res.total;
           this.loading = false;
-          this.selectedRows = [];
-          this.setOfCheckedId.clear();
           this.cdr.detectChanges();
         },
         error: () => {
@@ -278,20 +277,34 @@ export class ExportModalComponent implements OnInit {
 
   public onItemChecked(id: any, checked: boolean): void {
     this.updateCheckedSet(id, checked);
+    const item = this.listOfData.find((d) => d[this.selectedType.rowKey] === id);
+    if (checked && item) {
+      this.selectedRowsMap.set(id, item);
+    } else {
+      this.selectedRowsMap.delete(id);
+    }
     this.selectedRows = this.listOfData.filter((item) =>
       this.setOfCheckedId.has(item[this.selectedType.rowKey])
     );
   }
 
   public onAllChecked(checked: boolean): void {
-    this.listOfData.forEach((item) => this.updateCheckedSet(item[this.selectedType.rowKey], checked));
+    this.listOfData.forEach((item) => {
+      const id = item[this.selectedType.rowKey];
+      this.updateCheckedSet(id, checked);
+      if (checked) {
+        this.selectedRowsMap.set(id, item);
+      } else {
+        this.selectedRowsMap.delete(id);
+      }
+    });
     this.selectedRows = checked ? [...this.listOfData] : [];
   }
 
   public handleExport(): void {
     this.confirm.emit({
       type: this.exportType,
-      rows: this.selectedRows
+      rows: Array.from(this.selectedRowsMap.values())
     });
   }
 

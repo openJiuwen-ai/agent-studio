@@ -749,12 +749,20 @@ class _LoopPassThroughComponent(WorkflowComponent):
 class _ParallelInvokeLaneDoneComponent(WorkflowComponent):
     """Control marker emitted when one parallel lane has completed."""
 
+    def skip_trace(self) -> bool:
+        return True
+
+
     async def invoke(self, inputs, session, context):
         return {}
 
 
 class _ParallelTransformLaneDoneComponent(WorkflowComponent):
     """Stream-preserving control marker for a completed parallel lane."""
+
+    def skip_trace(self) -> bool:
+        return True
+
 
     async def transform(
         self, inputs: Any, session: Any, context: Any
@@ -800,6 +808,10 @@ class _LaneSentinelComponent(WorkflowComponent):
     does not route it -- the LLM field resolves to empty, matching the fact
     that the LLM branch did not execute.
     """
+
+    def skip_trace(self) -> bool:
+        return True
+
 
     async def stream(self, inputs: Any, session: Any, context: Any) -> AsyncIterator[Any]:
         # One empty data frame: its first_frame=True arrival starts the
@@ -1128,22 +1140,24 @@ class IRConverter:
         agent_id_in_config = f"{agent_id}_{agent_version}"
         plugin_irs = ir_data.get("configs", {}).get("plugins")
         plugins = None
-        logger.info(
-            f"[PluginLoad] create_agent_config: plugin_irs count={len(plugin_irs) if plugin_irs else 0}, "
-            f"agent_id={agent_id}, "
-            f"configs keys="
-            f"{list(ir_data.get('configs', {}).keys()) if isinstance(ir_data.get('configs'), dict) else 'N/A'}"
-        )
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(
+                f"[PluginLoad] create_agent_config: plugin_irs count={len(plugin_irs) if plugin_irs else 0}, "
+                f"agent_id={agent_id}, "
+                f"configs keys="
+                f"{list(ir_data.get('configs', {}).keys()) if isinstance(ir_data.get('configs'), dict) else 'N/A'}"
+            )
         if plugin_irs:
             plugins = []
             for idx, plugin_ir in enumerate(plugin_irs):
                 try:
                     plugin = PluginIRConverter.ir_to_plugin(plugin_ir, agent_id, conversation_id)
                     plugins.append(plugin)
-                    logger.info(
-                        f"[PluginLoad] create_agent_config: "
-                        f"Successfully loaded plugin '{plugin_ir.get('name', 'unknown')}'"
-                    )
+                    if logger.isEnabledFor(logging.INFO):
+                        logger.info(
+                            f"[PluginLoad] create_agent_config: "
+                            f"Successfully loaded plugin '{plugin_ir.get('name', 'unknown')}'"
+                        )
                 except Exception as e:
                     plugin_name = plugin_ir.get("name", plugin_ir.get("id", f"index_{idx}"))
                     logger.error(
@@ -1230,10 +1244,13 @@ class IRConverter:
             # check if current ir_data has child agents
             if current_ir_data.get("configs", {}).get("agents"):
                 for child in current_ir_data.get("configs", {}).get("agents"):
-                    logger.info(
-                        f"loading ir data of {child.get('id')}",
-                        simple_log="loading ir data of child",
-                    )
+                    # IR 转换递归热路径：每子代理一条 routine 进度日志，降级为 DEBUG 并加守卫
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "loading ir data of %s",
+                            child.get("id"),
+                            simple_log="loading ir data of child",
+                        )
                     # 支持从父Agent修改子Agent描述
                     parent_description = child.get("description", "")
                     child_ir_data = await async_ir_load(child.get("ir_path"))
@@ -1786,12 +1803,6 @@ class IRConverter:
         deferred_connections: list[tuple[str, str, bool]] = []
         branch_connections: list[tuple[str, str, str]] = []
         existing_connections: set[tuple[str, str]] = set()
-        # Track _parallel_done nodes that receive incoming edges from
-        # rewrite_target in both Phase 1 and Phase 2, so that orphaned
-        # done nodes (caused by terminal_to_done key overwrites across
-        # parallel groups sharing the same join target) can be filtered
-        # out during parallel join wiring.
-        active_done_nodes: set[str] = set()
 
         # Phase 1: wire branch routes before BranchComponent/IntentDetection join the
         # graph so add_workflow_comp → register_branch_targets sees populated routers.
@@ -1807,10 +1818,9 @@ class IRConverter:
                 continue
             if not branch_id or "@@" in branch_id:
                 continue
-            rewritten = parallel_join_plan.rewrite_target(source, target, branch_id)
-            if rewritten:
-                active_done_nodes.add(rewritten)
-                target = rewritten
+            target = (
+                parallel_join_plan.rewrite_target(source, target, branch_id) or target
+            )
             # Branch connections (default/non-default) are batch paths
             if target in end_node_ids:
                 batch_connection_targets.add(target)
@@ -1843,7 +1853,6 @@ class IRConverter:
             rewritten_target = parallel_join_plan.rewrite_target(source, target)
             if rewritten_target:
                 existing_connections.add((source, target))
-                active_done_nodes.add(rewritten_target)
                 # Mixed-lane sentinel: reroute non-stream terminal -> sentinel
                 # -> lane-done. The terminal->sentinel edge is batch (the
                 # terminal is non-stream); the sentinel->lane-done edge is
@@ -1964,13 +1973,6 @@ class IRConverter:
             if is_stream_out:
                 set_end_kwargs["response_mode"] = "streaming"
 
-            # Parallel-join End nodes must wait for all branches regardless of
-            # comp_ability.  set_end_comp derives wait_for_all from COLLECT/TRANSFORM
-            # ability, which is absent for batch-only End nodes.  Supplying an empty
-            # stream_inputs_schema triggers COLLECT ability so wait_for_all=True.
-            if parallel_join_nodes and node_id in parallel_join_nodes:
-                if "stream_inputs_schema" not in set_end_kwargs:
-                    set_end_kwargs["stream_inputs_schema"] = {}
             workflow.set_end_comp(node_id, end, **set_end_kwargs)
 
         for source, target, is_stream in deferred_connections:
@@ -1979,15 +1981,8 @@ class IRConverter:
                 workflow.add_stream_connection(source, target)
             else:
                 workflow.add_connection(source, target)
-        # When two parallel groups share the same join target and terminals,
-        # terminal_to_done entries from the second group overwrite the first,
-        # leaving some _parallel_done nodes with no incoming edges (orphaned).
-        # With wait_for_all=True, orphaned done nodes in BarrierChannel cause
-        # deadlock.  Filter them out using active_done_nodes tracked during
-        # Phase 1 and Phase 2 rewrite_target calls.
         for join_spec in parallel_join_plan.joins.values():
-            lane_done_nodes = [lane.done_node for lane in join_spec.lanes
-                               if lane.done_node in active_done_nodes]
+            lane_done_nodes = [lane.done_node for lane in join_spec.lanes]
             if len(lane_done_nodes) >= 2:
                 has_stream_lane = _parallel_join_has_stream_lane.get(
                     join_spec.join_target, False
@@ -2007,8 +2002,6 @@ class IRConverter:
                         workflow.add_connection(invoke_done_nodes, join_spec.join_target)
                 else:
                     workflow.add_connection(lane_done_nodes, join_spec.join_target)
-            elif len(lane_done_nodes) == 1:
-                workflow.add_connection(lane_done_nodes[0], join_spec.join_target)
 
         # Add missing connections based on schema references.
         # Strategy:
@@ -3599,10 +3592,14 @@ class IRConverter:
                 mode=child.get("mode", "Controller"),
             )
             child_metadata_list.append(child_metadata)
-            logger.info(
-                f"Added child agent metadata: id={child.get('id')}, mode={child.get('mode')}",
-                simple_log="added child agent metadata",
-            )
+            # routine 元数据添加日志，降级为 DEBUG 并加守卫
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Added child agent metadata: id=%s, mode=%s",
+                    child.get("id"),
+                    child.get("mode"),
+                    simple_log="added child agent metadata",
+                )
         agent_config.child_agents_metadata = child_metadata_list
 
     @staticmethod
@@ -3888,7 +3885,13 @@ def _parse_exception_config(node: dict) -> ExceptionConfig | None:
     )
 
     node_type = node.get("type", "")
-    outputs_schema = _convert_schema(node.get("outputs") or {})
+    # MCP 节点的 outputs_schema 使用类型描述符（如 {"type": "array"}），
+    # 不适合作为 get_by_schema 的提取模板。置空后 _post_invoke 跳过 schema 提取，
+    # 错误恢复结果（defaultOutputs）直接通过。
+    if node_type in ("jiuwen.mcp", "jiuwen.flowMcp"):
+        outputs_schema = {}
+    else:
+        outputs_schema = _convert_schema(node.get("outputs") or {})
 
     timeout = ep.get("timeout", DEFAULT_EXECUTION_NODE_TIMEOUT)
     if not isinstance(timeout, (int, float)) or timeout < 0:

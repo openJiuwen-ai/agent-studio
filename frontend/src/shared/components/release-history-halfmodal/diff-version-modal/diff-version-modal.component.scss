@@ -1,5 +1,40 @@
 .header {
   display: flex;
+  align-items: center;
+}
+
+/* 标题栏右侧操作按钮共同样式：边框/高度与复制按钮一致 */
+.action-btn {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  color: #434343;
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.action-btn:hover {
+  color: #1476ff;
+  border-color: #1476ff;
+}
+
+/* 第一个导航按钮：margin-left:auto 把整组按钮推到右边 */
+.nav-btn:first-of-type {
+  margin-left: auto;
+}
+
+/* 自动换行按钮：与复制按钮同款边框 */
+.wrap-btn {
+  /* 间距由 .action-btn 的 margin-right:8px 提供 */
+}
+
+/* 全屏按钮：右侧让出 NzModal 关闭(×)按钮的位置 */
+.fullscreen-btn {
+  margin-right: 40px;
 }
 
 .header-title {
@@ -23,4 +58,99 @@
 
 .select-div {
   width: 50%;
+}
+
+.side-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  min-height: 20px;
+}
+
+.side-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #d4380d;
+  font-size: 12px;
+}
+
+.showing-previous {
+  color: #8c8c8c;
+}
+
+.retry-link {
+  color: #1476ff;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+
+.same-version-hint {
+  align-self: center;
+  padding: 2px 8px;
+  background: #e6f4ff;
+  border-radius: 2px;
+  color: #0958d9;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.noise-banner {
+  padding: 6px 12px;
+  margin-bottom: 8px;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 4px;
+  color: #874d00;
+  font-size: 12px;
+}
+
+.editor-area {
+  position: relative;
+}
+
+/* Materia diff 组件未给 :host 设 display，Angular 自定义元素 host 默认 inline 会忽略 [style] 的 width/height，
+   导致 .editor-container height:100% = 0、编辑器绝对定位填充 0 高度 → 活着但不可见。强制 block 让 [style] 高度生效。 */
+.editor-area ngx-monaco-diff-editor {
+  display: block;
+}
+
+/* 版本下拉框 + 复制按钮同一行 */
+.select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 复制按钮：与版本下拉框同高、并排，点击复制该版本全文 */
+.copy-btn {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  color: #434343;
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.copy-btn:hover {
+  color: #1476ff;
+  border-color: #1476ff;
+}
+
+.dsl-too-large-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(250, 250, 250, 0.95);
+  color: #8c8c8c;
+  font-size: 14px;
 }

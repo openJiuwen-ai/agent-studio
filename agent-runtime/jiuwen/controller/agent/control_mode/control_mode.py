@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 #  Copyright (c) Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+import logging
 import traceback
 from typing import AsyncGenerator
 
@@ -401,10 +402,11 @@ class ControllerMode(BaseMode):
                 execution_id=self.task_id,
             )
         while iterations < self.max_task_iterations:
-            logger.info(
-                f"task_id: {self.task_id}|Stream task iteration {iterations}: "
-                f"Processing message type {current_message.message_type}"
-            )
+            if logger.isEnabledFor(logging.INFO):
+                logger.info(
+                    f"task_id: {self.task_id}|Stream task iteration {iterations}: "
+                    f"Processing message type {current_message.message_type}"
+                )
 
             # 1. 任务识别 - 使用流式任务规划
             task_planner_results = []
@@ -424,13 +426,17 @@ class ControllerMode(BaseMode):
 
             # 如果返回的是消息而非任务，说明这是最终输出
             if not isinstance(final_task_or_message, Task):
-                logger.info(
-                    f"task_id: {self.task_id}| Stream task loop completed with final message: "
-                    f"{final_task_or_message}"
-                )
+                # 完整 message repr 内容较大，降级为 DEBUG
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "task_id: %s| Stream task loop completed with final message: %s",
+                        self.task_id,
+                        final_task_or_message,
+                    )
                 if final_task_or_message is None and self.context_manager.is_task_end():
                     self.task_end = True
-                    logger.info(f"task_id: {self.task_id}| Stream task end")
+                    if logger.isEnabledFor(logging.INFO):
+                        logger.info(f"task_id: {self.task_id}| Stream task end")
                     yield self._create_task_end_message()
                     return
                 yield self._create_intermediate_message()
@@ -438,9 +444,10 @@ class ControllerMode(BaseMode):
 
             # 检查是否为 AGENT_HANDOFF 类型的任务
             if final_task_or_message.task_type == TaskType.AGENT_HANDOFF:
-                logger.info(
-                    f"task_id: {self.task_id}| Detected AGENT_HANDOFF task: {final_task_or_message.id}"
-                )
+                if logger.isEnabledFor(logging.INFO):
+                    logger.info(
+                        f"task_id: {self.task_id}| Detected AGENT_HANDOFF task: {final_task_or_message.id}"
+                    )
                 # 根据子任务类型生成相应的 handoff 流数据
                 async for result in self._handle_handoff_task(final_task_or_message):
                     yield result
@@ -462,10 +469,11 @@ class ControllerMode(BaseMode):
                     iterations += 1
                     self.context_manager.controller_context.global_iteration_count += 1
                     processed_workflow_names.add(workflow_name)
-                    logger.info(
-                        f"task_id: {self.task_id}| "
-                        f"Incrementing iteration count to {iterations} for workflow: {workflow_name}"
-                    )
+                    if logger.isEnabledFor(logging.INFO):
+                        logger.info(
+                            f"task_id: {self.task_id}| "
+                            f"Incrementing iteration count to {iterations} for workflow: {workflow_name}"
+                        )
             task_execution.task.input_data["conversation_id"] = (
                 initial_message.runtime_data.get("runtime_context").conversation_id
             )
@@ -477,24 +485,30 @@ class ControllerMode(BaseMode):
 
             # 检查执行后的状态
             if self.terminate:
-                logger.info(f"task_id: {self.task_id}| Stream task loop terminate")
+                if logger.isEnabledFor(logging.INFO):
+                    logger.info(f"task_id: {self.task_id}| Stream task loop terminate")
                 yield self._create_intermediate_message()
                 yield self._create_interrupt_message()
                 return
             if self.task_end:
-                logger.info(f"task_id: {self.task_id}| Stream task end")
+                if logger.isEnabledFor(logging.INFO):
+                    logger.info(f"task_id: {self.task_id}| Stream task end")
                 yield self._create_task_end_message()
                 return
             # 使用最后一个消息作为下一轮循环的输入
-            logger.info(
-                f"task_id: {self.task_id}| Stream task loop continue with current message: "
-                f"{task_execution.last_message}"
-            )
+            # 完整 last_message repr 内容较大，降级为 DEBUG
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "task_id: %s| Stream task loop continue with current message: %s",
+                    self.task_id,
+                    task_execution.last_message,
+                )
             current_message = task_execution.last_message
             if not current_message:
-                logger.info(
-                    f"task_id: {self.task_id}| Stream task loop terminate, current_message is None"
-                )
+                if logger.isEnabledFor(logging.INFO):
+                    logger.info(
+                        f"task_id: {self.task_id}| Stream task loop terminate, current_message is None"
+                    )
                 yield self._create_intermediate_message()
                 yield self._create_interrupt_message()
                 return

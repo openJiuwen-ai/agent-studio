@@ -290,3 +290,24 @@ CREATE TABLE t_knowledge_test_record
 ALTER TABLE t_knowledge_base
     ADD COLUMN embedding_model_service_id varchar(64) NULL DEFAULT NULL COMMENT 'Embedding模型服务ID',
     ADD COLUMN rerank_model_service_id varchar(80) NULL DEFAULT NULL COMMENT 'Rerank模型服务ID';
+
+CREATE TABLE IF NOT EXISTS t_knowledge_file
+(
+    file_id     varchar(64)   NOT NULL COMMENT '文件ID（UUID）',
+    kb_id       varchar(64)   NOT NULL COMMENT '知识库ID',
+    project_id  varchar(64)   NOT NULL COMMENT '租户ID',
+    file_name   varchar(128)  NOT NULL COMMENT '文件名',
+    file_type   varchar(16)   NULL DEFAULT NULL COMMENT '文件扩展名（pdf/txt/docx等）',
+    file_size   bigint        NOT NULL DEFAULT 0 COMMENT '文件大小（Byte）',
+    file_status varchar(16)   NOT NULL DEFAULT 'RUNNING' COMMENT '文件状态：RUNNING/SUCCESS/ERROR/POST_PROCESSING/PENDING',
+    file_tags   varchar(1024) NULL DEFAULT NULL COMMENT '文件标签（JSON数组）',
+    doc_ids     varchar(2048) NULL DEFAULT NULL COMMENT '向量库文档ID列表（JSON数组）',
+    obs_path    varchar(512)  NULL DEFAULT NULL COMMENT 'OBS存储路径',
+    create_time bigint        NOT NULL DEFAULT 0 COMMENT '创建时间（毫秒时间戳）',
+    update_time bigint        NOT NULL DEFAULT 0 COMMENT '更新时间（毫秒时间戳）',
+    PRIMARY KEY (file_id),
+    INDEX idx_kb_id (kb_id),
+    INDEX idx_project_kb (project_id, kb_id)
+) ENGINE = InnoDB
+  CHARACTER SET = utf8mb4
+  COLLATE = utf8mb4_general_ci COMMENT = '知识库文件元数据表';

@@ -8,6 +8,49 @@ import { AgentConfigService } from '@routes/agent-center/agent-config.service';
 import { CommonUtils } from 'src/utils/common.util';
 import { CommonService } from '@services/common.service';
 
+/** 模型导入预检单行结果（与后端 ModelImportPreviewItem 字段对齐，snake_case）。 */
+export interface ModelImportPreviewItem {
+  id: string | null;
+  service_name: string | null;
+  provider_id: string | null;
+  conflict: boolean;
+  /** 本行是否合法（解析/import_type 校验通过）；false 时禁止确认导入。 */
+  line_valid: boolean;
+  api_url_valid: boolean;
+  env_var_valid: boolean;
+  detail: string | null;
+  /** 行类型：MODEL=模型行，PROVIDER=空供应商壳行（用于第一列标题动态切换）。 */
+  type: string;
+}
+
+/** 模型导入预检响应。 */
+export interface ModelImportPreviewRsp {
+  total_count: number;
+  conflict_count: number;
+  items: ModelImportPreviewItem[];
+}
+
+/** 模型导入结果单行（与后端 ImportRes 字段对齐）。 */
+export interface ModelImportResultItem {
+  id: string | null;
+  name: string;
+  type: string;
+  status: string;
+  detail: string;
+}
+
+/** 模型导入响应（仅取需要的字段）。 */
+export interface ModelImportRsp {
+  succeed_len: number;
+  failed_len: number;
+  skipped_len: number;
+  count: number;
+  succeed_ids: string[];
+  failed_ids: string[];
+  skipped_ids: string[];
+  import_list: ModelImportResultItem[];
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -260,6 +303,66 @@ export class ModelManagementService {
   public getSynchronizeModelService(provider_id): Promise<any> {
     return this.http.postAsync({
       url: `${this.prefix}/model-services/sync?provider_id=${provider_id}`,
+    });
+  }
+
+  /**
+   * 批量导出模型服务为 JSONL 文件（Blob）。
+   * workspace_id 由 HttpService.mergeConfig 自动注入为 query 参数。
+   * @param includeProvider true=供应商+模型（缺省），false=只导模型（详情页用，模型挂到目标供应商）
+   */
+  public exportModels(modelIds: string[], opts?: { includeProvider?: boolean }): Promise<Blob> {
+    return this.http.postBlobAsync({
+      url: `${this.prefix}/model-services/export`,
+      params: { model_ids: modelIds, include_provider: opts?.includeProvider ?? true },
+    });
+  }
+
+  /**
+   * 按供应商导出（供应商列表页卡片入口）：导出该供应商+其下全部模型。
+   */
+  public exportModelsByProvider(providerId: string): Promise<Blob> {
+    return this.http.postBlobAsync({
+      url: `${this.prefix}/model-services/export`,
+      params: { provider_id: providerId },
+    });
+  }
+
+  /**
+   * 模型导入预检：上传 .jsonl → 解析+冲突检测+URL/占位符校验，不落库。
+   * @param targetProviderId 目标供应商 id（详情页只导模型导入用，模型重定向挂到该供应商）
+   */
+  public previewImportModels(file: File, targetProviderId?: string): Promise<ModelImportPreviewRsp> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    const query: Record<string, string> = {};
+    if (targetProviderId) {
+      query['target_provider_id'] = targetProviderId;
+    }
+    return this.http.postAsync({
+      url: `${this.prefix}/model-services/import/preview`,
+      query,
+      params: formData,
+      cancelGlobalError: true,
+    });
+  }
+
+  /**
+   * 批量导入模型服务（落库，保留跨环境 id）。conflict_strategy: SKIP | COVER。
+   * @param targetProviderId 目标供应商 id（详情页只导模型导入用，模型重定向挂到该供应商）
+   */
+  public importModels(file: File, conflictStrategy: string, targetProviderId?: string): Promise<ModelImportRsp> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    const query: Record<string, string> = { conflict_strategy: conflictStrategy };
+    if (targetProviderId) {
+      query['target_provider_id'] = targetProviderId;
+    }
+    return this.http.postAsync({
+      url: `${this.prefix}/model-services/import`,
+      query,
+      params: formData,
+      cancelGlobalError: true,
     });
   }
 

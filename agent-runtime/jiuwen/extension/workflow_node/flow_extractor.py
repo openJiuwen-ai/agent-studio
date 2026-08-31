@@ -143,16 +143,16 @@ class ExtractorStatusCode(Enum):
     """Extractor 组件专用错误码"""
 
     WORKFLOW_INITIAL_CONFIG_ERROR = (
-        101200,
+        101814,
         "extractor config error, reason: {error_msg}",
     )
     PROMPT_ASSEMBLER_TEMPLATE_FORMAT_ERROR = (
-        101201,
+        101815,
         "extractor prompt template format error",
     )
     INVOKE_LLM_FAILED = (
-        101202,
-        "extractor invoke llm failed",
+        101816,
+        "extractor invoke llm failed, reason: {error_msg}",
     )
 
 
@@ -679,8 +679,11 @@ class Extractor(WorkflowComponent):
         try:
             response = await self._invoke_llm(messages)
         except Exception as e:
+            # 透传真实原因：friendly_message 对 ModelServiceError 取 .msg 剥 [code] 前缀
+            # （如「模型服务API地址配置有误：...未配置环境变量 ali」），其余异常保留 str(e)。
+            from model_service.env_resolver import friendly_message
             raise build_extractor_error(
-                ExtractorStatusCode.INVOKE_LLM_FAILED, cause=e
+                ExtractorStatusCode.INVOKE_LLM_FAILED, error_msg=friendly_message(e), cause=e
             ) from e
 
         await session.trace({LLM_OUTPUTS: response})

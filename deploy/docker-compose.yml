@@ -1,4 +1,4 @@
-﻿# openJiuwen AgentStudio Docker Compose 部署编排
+# openJiuwen AgentStudio Docker Compose 部署编排
 # 在线/离线统一编排：默认 8 个服务（4 基础设施 + 4 应用），另有 3 个可选日志服务
 # 在线部署：IMAGE_SOURCE=ghcr/dockerhub，脚本自动 pull 镜像
 # 离线部署：IMAGE_SOURCE=offline，脚本自动 docker load 镜像
@@ -110,6 +110,9 @@ services:
     restart: always
     cpus: 0.5
     mem_limit: 512m
+    environment:
+      # DSL 版本对比大 DSL 降级阈值（单侧规范化后文本字节，Monaco 保护阈值），暂定 10MB，压测后调整
+      LARGE_DSL_BYTES_THRESHOLD: ${LARGE_DSL_BYTES_THRESHOLD:-10485760}
     volumes:
       - ./config/nginx.conf:/home/conf/nginx.conf
       - console_logs:/opt/cloud/wiseagent-nginx/logs
@@ -165,6 +168,16 @@ services:
       obs_staging_bucket: ${OBS_BUCKET:-}
       obs_ak: ${OBS_AK:-}
       obs_sk: ${OBS_SK:-}
+      storage_type: ${STORAGE_TYPE:-OBS}
+      storage_custom_class: ${STORAGE_CUSTOM_CLASS:-}
+      storage_custom_classpath: ${STORAGE_CUSTOM_CLASSPATH:-}
+      datasource_password_provider_type: ${DATASOURCE_PASSWORD_PROVIDER_TYPE:-DEFAULT}
+      datasource_password_provider_custom_class: ${DATASOURCE_PASSWORD_PROVIDER_CUSTOM_CLASS:-}
+      datasource_password_provider_custom_classpath: ${DATASOURCE_PASSWORD_PROVIDER_CUSTOM_CLASSPATH:-}
+      storage_local_base_path: ${STORAGE_LOCAL_BASE_PATH:-}
+      storage_local_bucket: ${STORAGE_LOCAL_BUCKET:-}
+      storage_local_staging_bucket: ${STORAGE_LOCAL_STAGING_BUCKET:-}
+      storage_local_server_url: ${STORAGE_LOCAL_SERVER_URL:-}
       server_ssl_enabled: ${SERVER_SSL_ENABLED:-false}
       CB_CF_SERVER_KEYSTORE: ${CB_CF_SERVER_KEYSTORE:-}
       CB_CF_TRUST_KEYSTORE: ${CB_CF_TRUST_KEYSTORE:-}
@@ -192,6 +205,11 @@ services:
       # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true
       CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
       CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}
+      front_page_runtime_host: ${FRONT_PAGE_RUNTIME_HOST:-}
+      studio_btn_show: ${STUDIO_BTN_SHOW:-true}
+      system_crypt_name: ${SYSTEM_CRYPT_NAME:-}
+      enable_tool_url_check: ${ENABLE_TOOL_URL_CHECK:-true}
+      studio_operationLog_switch: ${STUDIO_OPERATION_LOG_SWITCH:-false}
       # redis json序列化最大长度
       redis_max_string_length: ${REDIS_MAX_STRING_LENGTH:-20000000}
       # 引用未发布插件：默认关闭，置 true 时允许引用未发布的插件
@@ -281,14 +299,30 @@ services:
       GUNICORN_WORK_NUM: ${GUNICORN_WORK_NUM:-1}
       SECURITY_SANDBOX_TYPE: ${SECURITY_SANDBOX_TYPE:-jiuwenbox}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
-      # agent_builder 启动时会强制初始化关系库存储；代码读取的是 STORE_DB_*（非 STORE_MYSQL_*）
-      STORE_DB_TYPE: ${STORE_DB_TYPE:-mysql}
-      STORE_DB_HOST: ${STORE_DB_HOST:-mysql}
-      STORE_DB_PORT: ${STORE_DB_PORT:-3306}
-      STORE_DB_USER: ${SPRING_DATASOURCE_USERNAME:-root}
-      STORE_DB_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-123456}
-      STORE_DB_DATABASE: ${STORE_DB_DATABASE:-agent-builder}
-      STORE_DB_SSLMODE: ${STORE_DB_SSLMODE:-disable}
+      STORAGE_TYPE: ${STORAGE_TYPE:-OBS}
+      STORAGE_CUSTOM_MODULE: ${RUNTIME_STORAGE_CUSTOM_MODULE:-}
+      STORAGE_CUSTOM_CLASS: ${RUNTIME_STORAGE_CUSTOM_CLASS:-}
+      STORAGE_LOCAL_BASE_PATH: ${STORAGE_LOCAL_BASE_PATH:-}
+      STORAGE_LOCAL_BUCKET: ${STORAGE_LOCAL_BUCKET:-}
+      MODEL_CONFIG_STRATEGY: ${MODEL_CONFIG_STRATEGY:-obs}
+      MAX_MODEL_SERVICE_CACHE_NUM: ${MAX_MODEL_SERVICE_CACHE_NUM:-500}
+      MAX_MODEL_AUTH_CACHE_NUM: ${MAX_MODEL_AUTH_CACHE_NUM:-500}
+      MODEL_CACHE_MEM_TTL: ${MODEL_CACHE_MEM_TTL:-60}
+      MODEL_CACHE_REDIS_TTL: ${MODEL_CACHE_REDIS_TTL:-300}
+      KB_SSL_VERIFY: ${KB_SSL_VERIFY:-false}
+      BACKUP_COMMON_LOG_DIR: ${BACKUP_COMMON_LOG_DIR:-}
+      BACKUP_COMMON_LOG_FILE: ${BACKUP_COMMON_LOG_FILE:-}
+      BACKUP_COMMON_LOG_STRATEGY: ${BACKUP_COMMON_LOG_STRATEGY:-}
+      BACKUP_COMMON_LOG_COMPRESS: ${BACKUP_COMMON_LOG_COMPRESS:-}
+      BACKUP_COMMON_LOG_MAX_SIZE: ${BACKUP_COMMON_LOG_MAX_SIZE:-}
+      BACKUP_COMMON_LOG_SIZE_CHECK_INTERVAL: ${BACKUP_COMMON_LOG_SIZE_CHECK_INTERVAL:-}
+      LOG_MASKED_ENABLED: ${LOG_MASKED_ENABLED:-false}
+      LOG_MASKED_PATTERNS: ${LOG_MASKED_PATTERNS:-}
+      MODEL_CALL_LOGGING_ENABLED: ${MODEL_CALL_LOGGING_ENABLED:-false}
+      ENABLE_INTENT_WORKFLOW: ${ENABLE_INTENT_WORKFLOW:-true}
+      EXECUTION_STATE_STORAGE_MEDIUM: ${EXECUTION_STATE_STORAGE_MEDIUM:-redis}
+      INSIGHT_EI_DEBUG_INFO_ENABLE: ${INSIGHT_EI_DEBUG_INFO_ENABLE:-}
+      LOG_VERBOSE: ${LOG_VERBOSE:-true}
       # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true
       CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
       CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}
@@ -333,8 +367,8 @@ services:
       STORE_DB_TYPE: ${STORE_DB_TYPE:-mysql}
       STORE_DB_HOST: ${STORE_DB_HOST:-mysql}
       STORE_DB_PORT: ${STORE_DB_PORT:-3306}
-      STORE_DB_USER: ${SPRING_DATASOURCE_USERNAME:-root}
-      STORE_DB_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-123456}
+      STORE_DB_USER: ${STORE_DB_USER:-${SPRING_DATASOURCE_USERNAME:-}}
+      STORE_DB_PASSWORD: ${STORE_DB_PASSWORD:-${SPRING_DATASOURCE_PASSWORD:-}}
       STORE_DB_DATABASE: ${STORE_DB_DATABASE:-agent-builder}
       STORE_DB_SCHEMA: ${STORE_DB_SCHEMA:-}
       STORE_DB_SSLMODE: ${STORE_DB_SSLMODE:-disable}
@@ -348,6 +382,15 @@ services:
       LOGGING_LOG_PATH: /opt/cloud/logs/agent-builder
       LOG_VERBOSE: ${LOG_VERBOSE:-true}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      STORAGE_TYPE: ${STORAGE_TYPE:-OBS}
+      STORAGE_CUSTOM_MODULE: ${RUNTIME_STORAGE_CUSTOM_MODULE:-}
+      STORAGE_CUSTOM_CLASS: ${RUNTIME_STORAGE_CUSTOM_CLASS:-}
+      DATASOURCE_PASSWORD_PROVIDER_TYPE: ${DATASOURCE_PASSWORD_PROVIDER_TYPE:-DEFAULT}
+      DATASOURCE_PASSWORD_PROVIDER_MODULE: ${DATASOURCE_PASSWORD_PROVIDER_MODULE:-}
+      DATASOURCE_PASSWORD_PROVIDER_CLASS: ${DATASOURCE_PASSWORD_PROVIDER_CLASS:-}
+      STORAGE_LOCAL_BASE_PATH: ${STORAGE_LOCAL_BASE_PATH:-}
+      STORAGE_LOCAL_BUCKET: ${STORAGE_LOCAL_BUCKET:-}
+      MODEL_CONFIG_STRATEGY: ${MODEL_CONFIG_STRATEGY:-obs}
       # 客户 Header 改写规则引擎：默认关闭，客户部署时置 true（前置）
       CUSTOMER_HEADER_ENABLED: ${CUSTOMER_HEADER_ENABLED:-false}
       CUSTOMER_HEADER_MAPPINGS: ${CUSTOMER_HEADER_MAPPINGS:-}

@@ -140,6 +140,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -1494,10 +1495,6 @@ public class PluginService implements IPluginService {
         return new BaseResp().setCode(200).setMessage("success").setData(pluginDTO);
     }
 
-    /**
-     * 将引用映射按工具维度(resource_id，形如 pluginId#toolId)分组，值为去重后的应用id集合。
-     * 同一应用的多个版本/多个节点重复引用只保留一个appId，保证按应用数计数。
-     */
     /**
      * 按工具维度统计被引用次数。SQL 用 selectByResourceIdAndVersionId（与引用插件列表同一条），
      * 前缀匹配捞取 pluginId 及 pluginId#* 的全部行（含单后缀 pluginId#toolId 与

@@ -40,6 +40,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -254,11 +255,16 @@ public class WorkflowAdapter extends ResourceAdapter {
         WorkflowVO dsl = JsonUtils.objectToClassType(importInfo.getDsl(), WorkflowVO.class);
         // 校验导入工作流是否包含隐藏节点
         Set<String> blockedNodeTypes = new HashSet<>(Arrays.asList(StringUtils.split(blockNodes, ",")));
-        if (dsl.getNodes().stream().anyMatch(node -> blockedNodeTypes.contains(node.getType()))) {
-            log.error("workflow validate failed because contains block nodes");
+        String matchedNodeTypes = dsl.getNodes().stream()
+                .map(node -> node.getType())
+                .filter(blockedNodeTypes::contains)
+                .distinct()
+                .collect(Collectors.joining(", "));
+        if (!matchedNodeTypes.isEmpty()) {
+            log.error("workflow validate failed because contains block nodes: {}", matchedNodeTypes);
             importResourceResult.setStatus(ImportExportStatusEnum.FAILED.getCode());
-            importResourceResult.setErrorMsg(i18nUtil.getMessage(StudioError.WORKFLOW_BLOCK_NODE_EXIST));
-            importResourceResult.setSuggestion(i18nUtil.getSuggestion(StudioError.WORKFLOW_BLOCK_NODE_EXIST));
+            importResourceResult.setErrorMsg(MessageFormat.format(i18nUtil.getMessage(StudioError.WORKFLOW_BLOCK_NODE_EXIST), matchedNodeTypes));
+            importResourceResult.setSuggestion(MessageFormat.format(i18nUtil.getMessage(StudioError.WORKFLOW_BLOCK_NODE_EXIST), matchedNodeTypes));
             return false;
         }
         return true;
@@ -327,7 +333,7 @@ public class WorkflowAdapter extends ResourceAdapter {
         workflow.setPublishedAt(null);
         workflow.setDeployWfVersion(null);
         workflow.setLastVersionId(null);
-        workflow.setDeleted(0);
+        workflow.setDeleted(false);
         workflow.setTestStatus(null);
 
     }

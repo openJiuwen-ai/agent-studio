@@ -39,12 +39,13 @@
             <nz-input-number
               style="width: 100%"
               [(ngModel)]="exception_process.timeout"
-              (blur)="onTimeoutChange()"
+              (ngModelChange)="onTimeoutChange()"
               [nzPlaceHolder]="'input_placeholder' | i18nextEager"
               [nzMin]="minTimeout"
               [nzMax]="maxTimeout"
               [nzStep]="1"
             ></nz-input-number>
+            <div class="mt-1 text-xs text-gray-400">{{ 'exception_timeout_range_tip' | i18nextEager }}</div>
 
             <div class="w-full" #wrapper></div>
           </div>
@@ -103,7 +104,7 @@
                   [options]="editorOps"
                   name="ignoreMsg"
                   [uri]="editorUri"
-                  (blur)="handelChangeValue()"
+                  (ngModelChange)="handelChangeValue()"
                 ></ngx-monaco-editor>
               </div>
             </div>

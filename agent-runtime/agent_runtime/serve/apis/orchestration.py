@@ -456,10 +456,19 @@ async def delete_ir_execution_instance(req_json: dict):
             error_code=StatusCode.PARAM_CHECK_FAILED_ERROR.code,
             message=StatusCode.PARAM_CHECK_FAILED_ERROR.errmsg,
         ) from e
-    await AsyncStateManager().delete_state(key=req.conversation_id)
-    # 清除 WorkFlow spec缓存
-    if req.ir_path:
-        await cache_workflow_queue.apop(req.ir_path)
+    try:
+        await AsyncStateManager().delete_state(key=req.conversation_id)
+        # 清除 WorkFlow spec缓存
+        if req.ir_path:
+            await cache_workflow_queue.apop(req.ir_path)
+    except JiuWenBaseException:
+        raise
+    except Exception as e:
+        workflow_logger.error("delete state failed: %s", e, exc_info=True)
+        raise JiuWenBaseException(
+            error_code=StatusCode.WORKFLOW_EXECUTE_ERROR.code,
+            message=f"delete state error: {e}",
+        ) from e
     return {
         "code": StatusCode.SUCCESS.code,
         "message": StatusCode.SUCCESS.errmsg,

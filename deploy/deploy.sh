@@ -360,6 +360,13 @@ container_is_ready() {
             [ "$exit_code" = "0" ]
             return
             ;;
+        created)
+            # 容器已创建但未启动（一次性容器如 minio-init 可能因 depends_on
+            # 条件未满足或重入时跳过 compose up 而停留在此状态）。
+            # 通过 compose up -d 重新启动，让 compose 评估依赖并启动。
+            compose up -d "$service" 2>/dev/null || true
+            return 1
+            ;;
         unhealthy)
             return 1
             ;;
@@ -393,7 +400,7 @@ wait_for_services() {
             return 0
         fi
 
-        log_warn "Still waiting for: ${pending[*]}"
+        log_info "Waiting for: ${pending[*]}"
         sleep "$interval"
     done
 
@@ -468,6 +475,11 @@ init_database() {
     if [ "$mysql_running" = false ]; then
         compose up -d "${INFRA_SERVICES[@]}"
         wait_for_services "${INFRA_SERVICES[@]}"
+    else
+        # mysql 已在运行，但 minio-init 可能处于 Created 状态（depends_on 时序或
+        # 前次 compose up 未等到 minio healthy 即返回）。显式 up 确保桶初始化执行。
+        compose up -d minio-init
+        wait_for_services minio-init
     fi
 
     # 执行 init.sql
@@ -937,7 +949,7 @@ case "${1:-}" in
     monitor)
         # L2：在【监控节点】部署日志聚合栈（VictoriaLogs/Grafana/gateway）。转发到 observability 脚本。
         # 注意：不调 check_docker_prerequisites —— 那会创建 deploy/.env（app 节点用），监控节点不需要。
-        # docker/compose 检测由 deploy-monitor.sh 自身完成。监控节点只需此子命令。
+        # docker compose 检测由 deploy-monitor.sh 自身完成。监控节点只需此子命令。
         MONITOR_SCRIPT="$SCRIPT_DIR/observability/scripts/deploy-monitor.sh"
         if [ ! -f "$MONITOR_SCRIPT" ]; then
             log_error "L2 monitor 脚本不存在: $MONITOR_SCRIPT"

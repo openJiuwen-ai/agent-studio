@@ -121,9 +121,16 @@ class BaseEventsProcessor(ABC):
         trace.workflow_name = data.get("workflow_name")
         error_code, error_msg, error_reason, error_suggestion = (
             ErrorContextBuilder.get_language_context(trace.language, code))
+        raw_message = data.get("message", "unknown error")
+        if raw_message and raw_message != error_msg:
+            # NOTE: 不做 html.escape(与 Java 错误路径及 llm_chain 的既有约定一致)。
+            # 前端纯文本插值({{ }})会原样显示实体(&#x27;/&amp;/&lt;),转义反而破坏展示;
+            # XSS 防护由前端渲染上下文承担:插值自动编码,innerHTML 路径经 Angular DomSanitizer。
+            error_msg = f"{error_msg}：{raw_message}"
+        safe_message = raw_message if isinstance(raw_message, str) else str(raw_message)
         error_data_field = ErrorEventDataField(
             code=code,
-            message=data.get("message", "unknown error"),
+            message=safe_message,
             error_msg=error_msg,
             error_reason=error_reason,
             error_suggestion=error_suggestion,

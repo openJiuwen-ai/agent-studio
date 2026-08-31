@@ -298,9 +298,11 @@ class LLMModule:
                 yield item
         except Exception as e:
             await trace_manager.on_llm_error(e)
-            raise LLMInvocationFailedException(
-                str(e) if LOG_VERBOSE_MODE else "Failed to stream calling LLM"
-            ) from e
+            # 始终透传真实原因：friendly_message 对 ModelServiceError 取 .msg 剥 [code] 前缀，
+            # 其余异常保留 str(e)。避免非 verbose 模式吞成 "Failed to stream calling LLM"
+            # 让用户无法定位（占位符未解析等）。
+            from model_service.env_resolver import friendly_message
+            raise LLMInvocationFailedException(friendly_message(e)) from e
         for output in _process_time_info_by_llm_output(llm_output, time_dict):
             yield output
 

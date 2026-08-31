@@ -35,7 +35,7 @@ public class DefaultDataSourcePasswordProvider implements DataSourcePasswordProv
         if (rawPassword == null || rawPassword.isEmpty()) {
             return rawPassword;
         }
-        String decryptedPassword = cryptoUtils.decrypt(rawPassword);
+        String decryptedPassword = CryptoUtils.decrypt(rawPassword);
         log.info("DataSource password decrypted successfully");
         return decryptedPassword;
     }

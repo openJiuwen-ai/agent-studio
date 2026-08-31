@@ -27,7 +27,7 @@
         <result column="creator_id" jdbcType="VARCHAR" property="creatorId"/>
         <result column="created_on" jdbcType="TIMESTAMP" property="createdOn"/>
         <result column="updated_on" jdbcType="TIMESTAMP" property="updatedOn"/>
-        <result column="auth_required" jdbcType="TINYINT" property="authRequired"/>
+        <result column="auth_required" jdbcType="BOOLEAN" property="authRequired"/>
         <result column="credential_status" jdbcType="VARCHAR" property="credentialStatus"/>
         <result column="customize_node" jdbcType="TINYINT" property="customizeNode"/>
         <result column="published" jdbcType="TINYINT" property="published"/>
@@ -52,7 +52,7 @@
         is_input_list,
         is_output_list,
         intf_type,
-        `type`,
+        type,
         test_status,
         last_version_id,
         customize_node,
@@ -89,7 +89,7 @@
         is_input_list,
         is_output_list,
         intf_type,
-        `type`,
+        type,
         last_version_id,
         customize_node,
         auth_required,
@@ -133,7 +133,7 @@
                 WHEN c.auth_keys IS NULL THEN
                     CASE
                         WHEN t.type = 'custom' THEN 'NONE'
-                        WHEN t.auth_required = 0 THEN 'NONE'
+                        WHEN t.auth_required = false THEN 'NONE'
                         ELSE 'UNAUTHENTICATED'
                         END
                 ELSE 'AUTHENTICATED'
@@ -268,7 +268,7 @@
             is_input_list,
             is_output_list,
             intf_type,
-            `type`,
+            type,
             test_status,
             last_version_id,
             customize_node,
@@ -305,7 +305,7 @@
             is_input_list,
             is_output_list,
             intf_type,
-            `type`,
+            type,
             test_status,
             last_version_id,
             customize_node,
@@ -333,22 +333,22 @@
         insert into t_tool (tool_id, project_id, workspace_id, tool_display_name, tool_chinese_name, tool_desc, icon, request_info,
                             auth_info, visibility, input_schema, output_schema, is_input_list, is_output_list,
                             intf_type,
-                            `type`, metadata, creator, creator_id, icon_name, test_status, last_version_id, auth_required, trace_id, published, is_free, category)
+                            type, metadata, creator, creator_id, icon_name, test_status, last_version_id, auth_required, trace_id, published, is_free, category)
         values (#{toolId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR}, #{workspaceId,jdbcType=VARCHAR}, #{toolDisplayName,jdbcType=VARCHAR},
                 #{toolChineseName,jdbcType=VARCHAR},
                 #{toolDesc,jdbcType=VARCHAR}, #{icon,jdbcType=VARCHAR}, #{requestInfo,jdbcType=VARCHAR},
                 #{authInfo,jdbcType=VARCHAR}, #{visibility,jdbcType=VARCHAR}, #{inputSchema,jdbcType=VARCHAR},
                 #{outputSchema,jdbcType=VARCHAR},
-                #{isInputList,jdbcType=TINYINT}, #{isOutputList,jdbcType=TINYINT}, #{intfType,jdbcType=VARCHAR},
+                #{isInputList,jdbcType=VARCHAR}, #{isOutputList,jdbcType=VARCHAR}, #{intfType,jdbcType=VARCHAR},
                 #{type,jdbcType=VARCHAR},
                 #{metadata,jdbcType=VARCHAR}, #{creator,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR},
-                #{iconName,jdbcType=VARCHAR}, #{testStatus,jdbcType=TINYINT}, #{lastVersionId,jdbcType=VARCHAR}, #{authRequired,jdbcType=TINYINT}, #{traceId,jdbcType=TINYINT}, #{published,jdbcType=TINYINT}, #{isFree,jdbcType=TINYINT}, #{category,jdbcType=VARCHAR})
+                #{iconName,jdbcType=VARCHAR}, #{testStatus,jdbcType=VARCHAR}, #{lastVersionId,jdbcType=VARCHAR}, #{authRequired,jdbcType=BOOLEAN}, #{traceId,jdbcType=VARCHAR}, #{published,jdbcType=TINYINT}, #{isFree,jdbcType=TINYINT}, #{category,jdbcType=VARCHAR})
     </insert>
     <insert id="insertPlugin" parameterType="com.openjiuwen.studio.agent.manager.entity.plugin.PluginEntity">
         insert into t_tool (tool_id, project_id, workspace_id, tool_display_name, tool_chinese_name, tool_desc, icon, request_info,
                             auth_info, visibility, input_schema, output_schema, is_input_list, is_output_list,
                             intf_type,
-                            `type`, metadata, creator, creator_id, icon_name, test_status, last_version_id, auth_required, trace_id, published, is_free,category)
+                            type, metadata, creator, creator_id, icon_name, test_status, last_version_id, auth_required, trace_id, published, is_free,category)
         values (#{pluginId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR}, #{workspaceId,jdbcType=VARCHAR}, #{pluginDisplayName,jdbcType=VARCHAR},
                 #{pluginChineseName,jdbcType=VARCHAR},
                 #{pluginDesc,jdbcType=VARCHAR}, #{icon,jdbcType=VARCHAR}, #{requestInfo,jdbcType=VARCHAR},
@@ -357,7 +357,7 @@
                 #{isInputList,jdbcType=VARCHAR}, #{isOutputList,jdbcType=VARCHAR}, #{intfType,jdbcType=VARCHAR},
                 #{type,jdbcType=VARCHAR},
                 #{metadata,jdbcType=VARCHAR}, #{creator,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR},
-                #{iconName,jdbcType=VARCHAR}, #{testStatus,jdbcType=VARCHAR}, #{lastVersionId,jdbcType=VARCHAR}, #{authRequired,jdbcType=TINYINT}, #{traceId,jdbcType=TINYINT}, #{published,jdbcType=TINYINT}, #{isFree,jdbcType=TINYINT}, #{category,jdbcType=VARCHAR})
+                #{iconName,jdbcType=VARCHAR}, #{testStatus,jdbcType=VARCHAR}, #{lastVersionId,jdbcType=VARCHAR}, #{authRequired,jdbcType=BOOLEAN}, #{traceId,jdbcType=VARCHAR}, #{published,jdbcType=TINYINT}, #{isFree,jdbcType=TINYINT}, #{category,jdbcType=VARCHAR})
     </insert>
 
     <update id="updateByPrimaryKeySelective"
@@ -395,16 +395,16 @@
                 output_schema = #{outputSchema,jdbcType=VARCHAR},
             </if>
             <if test="isInputList != null">
-                is_input_list = #{isInputList,jdbcType=TINYINT},
+                is_input_list = #{isInputList,jdbcType=VARCHAR},
             </if>
             <if test="isOutputList != null">
-                is_output_list = #{isOutputList,jdbcType=TINYINT},
+                is_output_list = #{isOutputList,jdbcType=VARCHAR},
             </if>
             <if test="intfType != null">
-                `intf_type` = #{intfType,jdbcType=VARCHAR},
+                intf_type = #{intfType,jdbcType=VARCHAR},
             </if>
             <if test="type != null">
-                `type` = #{type,jdbcType=VARCHAR},
+                type = #{type,jdbcType=VARCHAR},
             </if>
             <if test="metadata != null">
                 metadata = #{metadata,jdbcType=VARCHAR},
@@ -416,13 +416,13 @@
                 updated_on = #{updatedOn,jdbcType=TIMESTAMP},
             </if>
             <if test="testStatus != null">
-                test_status = #{testStatus,jdbcType=TINYINT},
+                test_status = #{testStatus,jdbcType=VARCHAR},
             </if>
             <if test="lastVersionId != null">
                 last_version_id = #{lastVersionId,jdbcType=VARCHAR},
             </if>
             <if test="authRequired != null">
-                auth_required = #{authRequired,jdbcType=TINYINT},
+                auth_required = #{authRequired,jdbcType=BOOLEAN},
             </if>
             <if test="customizeNode != null">
                 customize_node = #{customizeNode,jdbcType=TINYINT},
@@ -469,7 +469,7 @@
         WHEN c.auth_keys IS NULL THEN
         CASE
         WHEN t.type = 'custom' THEN 'NONE'
-        WHEN t.auth_required = 0 THEN 'NONE'
+        WHEN t.auth_required = false THEN 'NONE'
         ELSE 'UNAUTHENTICATED'
         END
         ELSE 'AUTHENTICATED'
@@ -523,10 +523,10 @@
             </foreach>
         </if>
         <if test="searchCriteria != null and searchCriteria.isPublished() == true">
-            and published = true
+            and published = 1
         </if>
         <if test="searchCriteria != null and searchCriteria.isPublished() == false">
-            and published = false
+            and published = 0
         </if>
         <if test="searchCriteria != null and searchCriteria.isCustomizeNode() == true">
             and t.customize_node = 1
@@ -568,7 +568,7 @@
         WHEN c.auth_keys IS NULL THEN
         CASE
         WHEN t.type = 'custom' THEN 'NONE'
-        WHEN t.auth_required = 0 THEN 'NONE'
+        WHEN t.auth_required = false THEN 'NONE'
         ELSE 'UNAUTHENTICATED'
         END
         ELSE 'AUTHENTICATED'
@@ -619,10 +619,10 @@
             </foreach>
         </if>
         <if test="searchCriteria != null and searchCriteria.isPublished() == true">
-            and published = true
+            and published = 1
         </if>
         <if test="searchCriteria != null and searchCriteria.isPublished() == false">
-            and published = false
+            and published = 0
         </if>
         <if test="searchCriteria != null and searchCriteria.isCustomizeNode() == true">
             and t.customize_node = 1
@@ -680,10 +680,10 @@
             </foreach>
         </if>
         <if test="searchCriteria != null and searchCriteria.isPublished() == true">
-            and published = true
+            and published = 1
         </if>
         <if test="searchCriteria != null and searchCriteria.isPublished() == false">
-            and published = false
+            and published = 0
         </if>
         <if test="searchCriteria != null and searchCriteria.isCustomizeNode() == true">
             and customize_node = 1
@@ -773,16 +773,16 @@
                 output_schema = #{updateValue.outputSchema,jdbcType=VARCHAR},
             </if>
             <if test="updateValue.isInputList != null">
-                is_input_list = #{updateValue.isInputList,jdbcType=TINYINT},
+                is_input_list = #{updateValue.isInputList,jdbcType=VARCHAR},
             </if>
             <if test="updateValue.isOutputList != null">
-                is_output_list = #{updateValue.isOutputList,jdbcType=TINYINT},
+                is_output_list = #{updateValue.isOutputList,jdbcType=VARCHAR},
             </if>
             <if test="updateValue.intfType != null">
                 intf_type = #{updateValue.intfType,jdbcType=VARCHAR},
             </if>
             <if test="updateValue.type != null">
-                `type` = #{updateValue.type,jdbcType=VARCHAR},
+                type = #{updateValue.type,jdbcType=VARCHAR},
             </if>
             <if test="updateValue.metadata != null">
                 metadata = #{updateValue.metadata,jdbcType=VARCHAR},
@@ -803,7 +803,7 @@
                 creator_id = #{updateValue.creatorId,jdbcType=VARCHAR},
             </if>
             <if test="updateValue.auth_required != null">
-                auth_required = #{updateValue.authRequired,jdbcType=TINYINT},
+                auth_required = #{updateValue.authRequired,jdbcType=BOOLEAN},
             </if>
             <if test="published != null">
                 published = #{published,jdbcType=TINYINT}
@@ -949,7 +949,7 @@
         WHEN c.auth_keys IS NULL THEN
         CASE
         WHEN t.type = 'custom' THEN 'NONE'
-        WHEN t.auth_required = 0 THEN 'NONE'
+        WHEN t.auth_required = false THEN 'NONE'
         ELSE 'UNAUTHENTICATED'
         END
         ELSE 'AUTHENTICATED'
@@ -1003,10 +1003,10 @@
             </foreach>
         </if>
         <if test="searchCriteria != null and searchCriteria.isPublished() == true">
-            and published = true
+            and published = 1
         </if>
         <if test="searchCriteria != null and searchCriteria.isPublished() == false">
-            and published = false
+            and published = 0
         </if>
         <if test="searchCriteria != null and searchCriteria.isCustomizeNode() == true">
             and t.customize_node = 1

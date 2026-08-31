@@ -52,8 +52,8 @@
     </insert>
 
     <insert id="insertOneTemplate">
-        insert into t_pe_prompt_library(`id`, `name`, `content`, `source`, `variables`, `pt_type`, `creator`, `updater`,
-                                        `project_id`, `description`, `industry_id`, `workspace_id`, `domain_id`)
+        insert into t_pe_prompt_library(id, name, content, source, variables, pt_type, creator, updater,
+                                        project_id, description, industry_id, workspace_id, domain_id)
         values (#{template.id}, #{template.name}, #{template.content}, #{template.source}, #{template.variables},
                 #{template.ptType}, #{template.creator}, #{template.updater},
                 #{projectId}, #{template.description}, #{industryId}, #{template.workspaceId}, #{template.domainId})
@@ -145,7 +145,7 @@
             <if test="body.source == null or body.source == ''">
                 AND tppl.project_id = #{projectId}
                 AND tppl.workspace_id = #{workspaceId}
-                AND ifnull(tppl.source,"") != 'PRESET'
+                AND COALESCE(tppl.source,'') != 'PRESET'
             </if>
             <if test="body.source != null and body.source!=''">
                 AND tppl.source = #{body.source}

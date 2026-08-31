@@ -376,6 +376,7 @@ export class CodeModalComponent extends ModalBaseComponent implements OnInit {
     const parentNodeParam = getParentNodeFromTree(this.outputParams, param) as IWFView;
     if (this.isObjectLikeType(parentNodeParam?.type) && parentNodeParam?.children?.length === 0) {
       delete parentNodeParam.children;
+      parentNodeParam.isLeaf = true;
     }
     this.outputParams = [...this.outputParams];
     this.onSave();
@@ -386,6 +387,7 @@ export class CodeModalComponent extends ModalBaseComponent implements OnInit {
       ...getInitOutputParamConfig(),
       depth: 0,
       parentType: 'none',
+      isLeaf: true,
     });
     this.outputParams = [...this.outputParams];
     this.onSave();

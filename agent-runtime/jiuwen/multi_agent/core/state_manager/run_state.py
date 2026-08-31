@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Dict, Optional, Any
 
 from jiuwen.common.exception.base import JiuWenBaseException
+from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 from jiuwen.multi_agent.core.member_instance_manager import MemberInstanceManager
 from jiuwen.multi_agent.core.runner.agent_message_queue import (
@@ -56,7 +57,10 @@ class RunState:
             manager: MemberInstanceManager, members_state: Dict[str, Any]
         ) -> None:
             if manager is None:
-                raise JiuWenBaseException(-1, "Member instance manager must exist")
+                raise JiuWenBaseException(
+                    StatusCode.MULTI_AGENT_RUNNER_NOT_STARTED.code,
+                    "Member instance manager must exist",
+                )
             if members_state is None:
                 logger.warning("Members state not found")
                 return
@@ -73,7 +77,10 @@ class RunState:
             queue: AgentMessageQueue, queue_state: MessageQueueState
         ) -> None:
             if queue is None:
-                raise JiuWenBaseException(-1, "Message queue must exist")
+                raise JiuWenBaseException(
+                    StatusCode.MULTI_AGENT_RUNNER_NOT_STARTED.code,
+                    "Message queue must exist",
+                )
             if queue_state is None:
                 logger.warning("Message queue state not found")
                 return

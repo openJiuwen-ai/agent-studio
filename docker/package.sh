@@ -77,14 +77,9 @@ function frontend_build_copy() {
        echo "[PACKAGE] 前端构建成功，打包 dist..."
        tar -cf agent-console.tar dist
        rm -rf dist
-       mv agent-console.tar ${CONSOLE_TARGET_PATH}
-       echo "[PACKAGE] 前端产物已复制到 ${CONSOLE_TARGET_PATH}"
-
-       # nginx.conf 已移至 compose/config/，复制到 studio-console build context 供 Dockerfile 使用
-       mkdir -p ${CONSOLE_TARGET_PATH}/config
-       cp -f ${WORKSPACE}/docker/compose/config/nginx.conf ${CONSOLE_TARGET_PATH}/config/nginx.conf
-       echo "[PACKAGE] nginx.conf 已复制到 ${CONSOLE_TARGET_PATH}/config/"
-     else
+        mv agent-console.tar ${CONSOLE_TARGET_PATH}
+        echo "[PACKAGE] 前端产物已复制到 ${CONSOLE_TARGET_PATH}"
+      else
        echo "[PACKAGE] 前端构建失败！"
        exit 1
   fi
@@ -137,6 +132,7 @@ function copy_manager() {
   fi
   mkdir -pv ${MANAGER_TARGET_PATH}/config
   cp -f ${WORKSPACE}/backend/studio-manager-service/src/main/resources/application-manager.yml ${MANAGER_TARGET_PATH}/config/
+  cp -f ${WORKSPACE}/backend/studio-manager-service/src/main/resources/application-postgres.yml ${MANAGER_TARGET_PATH}/config/
   cp -f ${WORKSPACE}/backend/studio-manager-service/src/main/resources/log4j2.xml ${MANAGER_TARGET_PATH}/config/
 }
 
@@ -146,7 +142,7 @@ function package() {
   if [ -f "package.tar.gz" ]; then
       rm -f "package.tar.gz"
   fi
-  tar -czvf package.tar.gz ./compose ./k8s ./studio-manager ./studio-runtime ./studio-builder ./studio-console ./build.sh
+  tar -czvf package.tar.gz ./studio-manager ./studio-runtime ./studio-builder ./studio-console ./build.sh
 }
 
 function clean() {

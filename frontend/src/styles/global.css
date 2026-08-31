@@ -28,6 +28,74 @@ tp-layout-content-body {
   z-index: 2000 !important;
 }
 
+/* Export modal - pagination layout: total/selected on far left, page buttons right-aligned with table */
+.export-modal-container .ant-table-pagination.ant-table-pagination-right {
+  float: none;
+  text-align: left;
+  margin: 0;
+  padding: 8px 0;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  position: relative;
+}
+
+.export-modal-container .ant-table-pagination .ant-pagination-total-text {
+  position: absolute;
+  left: 0;
+  margin-right: 0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.export-modal-container .ant-table-pagination ul {
+  display: flex;
+  align-items: center;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.export-modal-container .ant-table-pagination .ant-pagination-options {
+  margin-left: 16px;
+  flex-shrink: 0;
+}
+
+/* Export half-modal (drawer) - same pagination layout */
+.com-drawer-content .ant-table-pagination.ant-table-pagination-right {
+  float: none;
+  text-align: left;
+  margin: 0;
+  padding: 8px 0;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  position: relative;
+}
+
+.com-drawer-content .ant-table-pagination .ant-pagination-total-text {
+  position: absolute;
+  left: 0;
+  margin-right: 0;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.com-drawer-content .ant-table-pagination ul {
+  display: flex;
+  align-items: center;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.com-drawer-content .ant-table-pagination .ant-pagination-options {
+  margin-left: 16px;
+  flex-shrink: 0;
+}
+
 tp-layout-content {
   margin-left: 0px !important;
 }
@@ -125,4 +193,28 @@ tp-layout-content {
  */
 .cdk-virtual-scroll-viewport {
   overflow-anchor: none;
+}
+
+/* 顶层叶子节点（非 object/array<object>）隐藏展开按钮占位；
+ * object/array<object> 保留展开按钮以展开子项 */
+.ant-tree-treenode:not(:has(.ant-tree-indent-unit)) > .ant-tree-switcher-noop {
+  width: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+/* 情景指南-依赖关系行：选中长指南名时单行省略（ng-zorro 20 默认无省略号样式）。
+ * 组件内 ::ng-deep 在当前构建链无法穿透，故置于全局并用 .dependency-form 限定作用域 */
+.dependency-form .ant-select-selection-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 情景指南-依赖关系行：强制 form-item 内部三层容器宽度撑满，
+ * 防止下拉框空内容（placeholder 阶段）时中间层按 intrinsic 宽度塌缩导致框变得极小 */
+.dependency-form .ant-form-item-control,
+.dependency-form .ant-form-item-control-input,
+.dependency-form .ant-form-item-control-input-content {
+  width: 100%;
 }

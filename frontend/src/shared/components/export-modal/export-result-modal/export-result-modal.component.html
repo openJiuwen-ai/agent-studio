@@ -62,7 +62,7 @@
                       <span class="operate-btn"
                             nz-tooltip
                             [nzTooltipTitle]="tipContent"
-                            [nzTooltipTitleContext]="$any(row.reason)"
+                            [nzTooltipTitleContext]="{ $implicit: row.reason }"
                       >{{ 'view_reason' | i18nextEager }}</span>
                     }
                   }
@@ -116,7 +116,7 @@
                                     <span class="operate-btn"
                                           nz-tooltip
                                           [nzTooltipTitle]="tipContent"
-                                          [nzTooltipTitleContext]="$any(childItem.reason)"
+                                          [nzTooltipTitleContext]="{ $implicit: childItem.reason }"
                                     >{{ 'view_reason' | i18nextEager }}</span>
                                   }
                                 </div>
@@ -160,7 +160,7 @@
   </div>
 </div>
 
-<ng-template #tipContent let-context="context">
+<ng-template #tipContent let-context>
   <div class="flex align-center">
     <nz-icon class="status-fail text-[16px]" nzType="close-circle"></nz-icon>
     <span class="ml-[8px] leading-[24px]">{{ context }}</span>

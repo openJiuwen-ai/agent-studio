@@ -121,6 +121,7 @@ import com.openjiuwen.studio.agent.manager.service.asset.AssetFreeTrialMgmtServi
 import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentServiceManagerService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.memory.AgentMemoryConfigService;
+import com.openjiuwen.studio.agent.manager.service.ShareResourceManagerService;
 import com.openjiuwen.studio.agent.manager.service.plugin.impl.PluginBaseImpl;
 import com.openjiuwen.studio.agent.manager.service.serializer.YamlSerializer;
 import com.openjiuwen.studio.agent.manager.service.workspace.WorkspaceMemberService;
@@ -129,6 +130,7 @@ import com.openjiuwen.studio.agent.common.utils.CryptoUtils;
 import com.openjiuwen.studio.agent.manager.utils.IconNameCheckUtils;
 import com.openjiuwen.studio.agent.manager.utils.ImageBase64Utils;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
+import com.openjiuwen.studio.agent.manager.utils.MapReadUtil;
 import com.openjiuwen.studio.agent.common.utils.KV;
 import com.openjiuwen.studio.agent.common.utils.PromptTemplate;
 import com.openjiuwen.studio.agent.manager.utils.WorkflowUtils;
@@ -140,6 +142,7 @@ import jakarta.annotation.Resource;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
@@ -797,6 +800,36 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         }
     }
 
+    /**
+     * 遍历工作流节点，对引用共享资源的节点 configs 设 fromShare=true。
+     * 用于前端只读控制：共享子资源在目标空间不可编辑。仅对有 id 的节点校验，本地资源不误判。
+     */
+    @SuppressWarnings("unchecked")
+    private void markSharedWorkflowNodes(Map<String, Object> workflowDetails, String workspaceId) {
+        if (workflowDetails == null) {
+            return;
+        }
+        Object nodesObj = workflowDetails.get("nodes");
+        if (!(nodesObj instanceof List)) {
+            return;
+        }
+        List<Object> nodes = (List<Object>) nodesObj;
+        for (Object nodeObj : nodes) {
+            Map<String, Object> configs = MapReadUtil.safeCastToMapWithStringKey(
+                nodeObj instanceof Map ? ((Map<?, ?>) nodeObj).get("configs") : null);
+            if (MapUtils.isEmpty(configs) || configs.get("id") == null) {
+                continue;
+            }
+            if (shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId,
+                String.valueOf(configs.get("id")))) {
+                configs.put("fromShare", true);
+                if (nodeObj instanceof Map) {
+                    ((Map<String, Object>) nodeObj).put("configs", configs);
+                }
+            }
+        }
+    }
+
     @Override
     public WorkflowValidationVO validateWorkflow(String projectId, String workflowId,
         ValidateWorkflowQo validateWorkflowQo) {
@@ -1089,7 +1122,7 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         WorkflowEntity workflowEntity = convertInfoToEntity(workspaceId, body);
         workflowEntity.setCreatorId(RequestContextUtils.getRequestUserId());
         workflowEntity.setUpdaterId(RequestContextUtils.getRequestUserId());
-        workflowEntity.setDeleted(0);
+        workflowEntity.setDeleted(false);
         workflowEntity.setDslPath(flowPath);
         workflowEntity.setTestStatus(0);
         workflowEntity.setAvatar(body.getAvatar());
@@ -1259,9 +1292,17 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             workspaceId);
         WorkflowEntity workflowEntity =
             workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
+        // 本地查不到时，校验是否为共享给当前空间的共享资源，命中则跨空间查源空间工作流（读操作支持共享资源查看）
         if (workflowEntity == null) {
-            log.error("workflow does not exist, projectId = {}, agentId = {}", projectId, workflowId);
-            throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+            if (!shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, workflowId)) {
+                log.error("workflow does not exist, projectId = {}, agentId = {}", projectId, workflowId);
+                throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+            }
+            workflowEntity = workflowMapper.getWorkflowById(workflowId);
+            if (workflowEntity == null) {
+                log.error("workflow does not exist, projectId = {}, agentId = {}", projectId, workflowId);
+                throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+            }
         }
         if (Strings.CI.equals(workflowEntity.getVisibility(), VisibilityEnum.USER.getValue())
             && !Strings.CS.equals(workflowEntity.getCreatorId(), RequestContextUtils.getRequestUserId())) {
@@ -1273,6 +1314,8 @@ public class WorkflowManagementService implements IWorkflowManagementService {
 
         // 获取工作流
         WorkflowInfo workflowInfo = convertEntityToInfo(workflowEntity, workflowJson);
+        // 遍历节点，对引用共享资源的节点 configs 设 fromShare=true（用于前端只读控制）
+        markSharedWorkflowNodes(workflowInfo.getWorkflowDetails(), workspaceId);
         workflowInfo.setRefWorkflows(new ArrayList<>());
         workflowInfo.setTriggerList(workflowEntity.getTriggerList());
         return workflowInfo;
@@ -1886,6 +1929,16 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             = shareResourceManagerService.queryShareResourceEntityByResourceIdAndVersionId(workflowId,
             ThreadLocalUtils.getWorkspaceId(), versionId);
 
+        if (shareResourceEntity == null) {
+            // 宽松/共享场景兜底：版本不在共享 version_list 时，只要工作流本身共享给当前空间（含团队共享 'all'），
+            // 仍按源空间查询版本详情，避免误报"工作流不存在"；版本真实性由下方 releaseVersion 查询兜底
+            ShareResourceEntity shared = shareResourceManagerService.queryShareResourceEntityByResourceId(workflowId);
+            if (shared != null && shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(
+                ThreadLocalUtils.getWorkspaceId(), workflowId)) {
+                shareResourceEntity = shared;
+            }
+        }
+
         if (shareResourceEntity != null) {
             workspaceId = shareResourceEntity.getWorkspaceId();
         }
@@ -1914,6 +1967,10 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             workflowCommonService.getWorkflowByWorkspaceAndOpProject(projectId, workspaceId, workflowId);
         String workflowJson = obsService.downloadObsFile(releaseVersion.getDslPath());
         WorkflowInfo workflowInfo = convertEntityToInfo(workflowEntities, workflowJson);
+        // 与 getWorkflowInfo 对齐：版本视图同样标记引用共享资源的子流节点（configs.fromShare），
+        // 保证共享工作流只读页内向嵌套子流跳转时只读标记不断链
+        // （否则下级跳转会因丢失 fromShare 进入可"退出预览"的版本预览页，违背共享资源只读约束）
+        markSharedWorkflowNodes(workflowInfo.getWorkflowDetails(), ThreadLocalUtils.getWorkspaceId());
         WorkflowVO releasedWorkflow = JsonUtils.json2ObjQuietly(workflowJson, WorkflowVO.class);
         // 顶层 name 取工作流实体的显示名（convertEntityToInfo 已设置），不可用 DSL 的 name 覆盖：
         // 前端保存时会把 workflow_details.name 写成 code（拼音标识符，供运行时使用），覆盖后会导致
@@ -2071,9 +2128,25 @@ public class WorkflowManagementService implements IWorkflowManagementService {
             listWorkflowVersionsQo.setWorkspaceId(null);
         }
 
-        checkWorkflowExist(projectId, listWorkflowVersionsQo.getWorkspaceId(), workflowId);
+        // 本地查不到时，校验是否为共享给当前空间的共享资源（读操作支持共享资源查看）
+        if (!checkWorkflowExistOrShared(projectId, listWorkflowVersionsQo.getWorkspaceId(), workflowId)) {
+            throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+        }
 
         return agentCommonService.listVersions(workflowId, releaseMaxSize);
+    }
+
+    /**
+     * 校验工作流存在性：本地查到返回 true；本地查不到则校验是否为共享给当前空间的共享资源（含团队共享 'all'）。
+     * 用于读操作（查看版本列表/详情）识别共享资源，避免共享子资源被误判为不存在。仅读操作调用，写操作不应用。
+     */
+    private boolean checkWorkflowExistOrShared(String projectId, String workspaceId, String workflowId) {
+        WorkflowEntity workflow = workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
+        if (workflow != null) {
+            return true;
+        }
+        // 本地查不到：校验是否为共享给当前空间的共享资源
+        return shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, workflowId);
     }
 
     /**
@@ -2439,6 +2512,10 @@ public class WorkflowManagementService implements IWorkflowManagementService {
         WorkflowEntity workflowEntity =
             workflowMapper.getWorkflowEntityByWorkspaceId(projectId, workspaceId, workflowId);
         if (workflowEntity == null) {
+            // 本地查不到时，校验是否为共享给当前空间的共享资源；共享资源在目标空间不可编辑
+            if (shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, workflowId)) {
+                throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
+            }
             log.info("Workflow:{} does not exist!", workflowId);
             throw new AgentStudioException(StudioError.WORKFLOW_NOT_EXIST);
         }

@@ -8,6 +8,7 @@ from typing import AsyncGenerator, Union, Any
 
 from openjiuwen.core.common.logging import workflow_logger
 
+from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.context.history import ConversationMessage, ConversationHistory
 from jiuwen.controller.common.message import Message
 from jiuwen.controller.common.message_type import MessageType
@@ -872,7 +873,7 @@ class WorkflowWrapper:
         if stream_data is None or not stream_data.data:
             return None
         code = stream_data.data.get("code")
-        if code != 103102:  # StatusCode.CONTROLLER_INTERRUPT_ERROR.code
+        if code != StatusCode.CONTROLLER_INTERRUPT_ERROR.code:
             return None
 
         import json

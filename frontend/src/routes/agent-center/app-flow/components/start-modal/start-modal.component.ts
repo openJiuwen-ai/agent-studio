@@ -204,6 +204,7 @@ export class StartModalComponent extends ModalBaseComponent implements OnInit {
         ...getInitOutputParamConfig(),
         depth: 0,
         parentType: 'none' as IWFViewParentType,
+        isLeaf: true,
         type: ['string'],
       },
     ];
@@ -289,6 +290,7 @@ export class StartModalComponent extends ModalBaseComponent implements OnInit {
     const type = param.type.join('/');
     if (this.isSimpleType(type) && param?.children) {
       delete param?.children;
+      param.isLeaf = true;
       return;
     }
 
@@ -298,9 +300,11 @@ export class StartModalComponent extends ModalBaseComponent implements OnInit {
       param?.children
     ) {
       delete param?.children;
+      param.isLeaf = true;
     }
 
     if (this.isObjectLikeType(param.type)) {
+      param.isLeaf = false;
       if (!param?.children) {
         this.addChild(param);
       }
@@ -324,6 +328,7 @@ export class StartModalComponent extends ModalBaseComponent implements OnInit {
       parentNodeParam?.children?.length === 0
     ) {
       delete parentNodeParam.children;
+      parentNodeParam.isLeaf = true;
     }
     this.onSave();
   }
@@ -361,6 +366,7 @@ export class StartModalComponent extends ModalBaseComponent implements OnInit {
       ...getInitOutputParamConfig(),
       depth: param.depth + 1,
       parentType: param.type[0] as IWFViewParentType,
+      isLeaf: true,
       type: ['string'],
     };
 
@@ -370,6 +376,7 @@ export class StartModalComponent extends ModalBaseComponent implements OnInit {
       param.children = [child];
     }
 
+    param.isLeaf = false;
     param.expanded = true;
     this.onSave();
   }

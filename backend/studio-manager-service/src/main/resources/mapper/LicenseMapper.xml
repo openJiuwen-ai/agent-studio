@@ -20,20 +20,20 @@
     </resultMap>
 
     <sql id="baseColumns">
-        `id`
+        id
         ,
-        `resource_id`,
-        `sku_code`,
-        `attr_code`,
-        `status`,
-        `current_value`,
-        `max_value`,
-        `type`,
-        `created_by_user_id`,
-        `created_date`,
-        `last_updated_by_user_id`,
-        `last_updated_date`,
-        `domain_id`
+        resource_id,
+        sku_code,
+        attr_code,
+        status,
+        current_value,
+        max_value,
+        type,
+        created_by_user_id,
+        created_date,
+        last_updated_by_user_id,
+        last_updated_date,
+        domain_id
     </sql>
 
     <insert id="batchInsert" keyProperty="param.id" useGeneratedKeys="true" keyColumn="id"

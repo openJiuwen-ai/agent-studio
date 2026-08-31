@@ -32,6 +32,7 @@ import com.openjiuwen.studio.agent.manager.entity.MappingEntity;
 import com.openjiuwen.studio.agent.manager.entity.ModelExportEntity;
 import com.openjiuwen.studio.agent.manager.entity.ModelStrategyExportEntity;
 import com.openjiuwen.studio.agent.manager.entity.ReleaseVersion;
+import com.openjiuwen.studio.agent.manager.entity.ShareResourceEntity;
 import com.openjiuwen.studio.agent.manager.entity.WorkflowEntity;
 import com.openjiuwen.studio.agent.manager.entity.md.ModelServiceData;
 import com.openjiuwen.studio.agent.manager.enums.ExportModeEnum;
@@ -40,6 +41,7 @@ import com.openjiuwen.studio.agent.manager.enums.relation.ReferenceTypeEnum;
 import com.openjiuwen.studio.agent.manager.mapper.AgentMapper;
 import com.openjiuwen.studio.agent.manager.mapper.MappingMapper;
 import com.openjiuwen.studio.agent.manager.mapper.ReleaseVersionMapper;
+import com.openjiuwen.studio.agent.manager.mapper.ShareResourceMapper;
 import com.openjiuwen.studio.agent.manager.mapper.WorkflowMapper;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceMgmtService;
@@ -62,6 +64,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -103,6 +106,9 @@ public class AgentExportService {
 
     @Autowired
     private AgentMapper agentMapper;
+
+    @Autowired
+    private ShareResourceMapper shareResourceMapper;
 
     @Autowired
     private ReleaseVersionMapper releaseVersionMapper;
@@ -153,10 +159,10 @@ public class AgentExportService {
         body.setResourceType(resourceTypeEnum.toString());
         switch (resourceTypeEnum) {
             case AGENT, CONTROLLER:
-                exportRsp = exportAgents(projectId, workspaceId, accept, body);
+                exportRsp = exportAgents(projectId, workspaceId, accept, body).orElse(null);
                 break;
             case WORKFLOW:
-                exportRsp = exportWorkflow(projectId, workspaceId, accept, body);
+                exportRsp = exportWorkflow(projectId, workspaceId, accept, body).orElse(null);
                 break;
             default:
                 log.error("resource type:{} not supported for export", body.getResourceType());
@@ -166,7 +172,7 @@ public class AgentExportService {
         return exportRsp;
     }
 
-    private ExportResourceRsp exportWorkflow(String projectId, String workspaceId, String accept,
+    private Optional<ExportResourceRsp> exportWorkflow(String projectId, String workspaceId, String accept,
         ExportResourceParams body) {
         List<String> workflowIds = body.getResourceIds();
         log.debug("Processing {} workflows: {}", workflowIds.size(), workflowIds);
@@ -175,6 +181,7 @@ public class AgentExportService {
         // 工作流导出逻辑
         try {
             List<ExportResp> exportResps = new ArrayList<>();
+            int successCnt = 0;
             for (ExportResourceVersion exportResourceVersion : body.getResourceVersions()) {
                 String workflowId = exportResourceVersion.getResourceId();
                 // 空 version 转 latest（对齐旧版 lumina AgentExportService.exportWorkflow 行 152-154）
@@ -187,6 +194,7 @@ public class AgentExportService {
                     exportResps)) {
                     continue;
                 }
+                successCnt++;
                 List<ExportResourceUnit> exportResourceUnits;
                 if (ExportModeEnum.SPACIOUS.getCode().equals(body.getMode())) {
                     // SPACIOUS 模式：仅导出父工作流自身资源（不递归展开子资源）
@@ -217,14 +225,23 @@ public class AgentExportService {
                 }
             }
 
+            if (successCnt == 0) {
+                log.error("All requested workflow versions not found, abort export. workflowIds:{}, versions:{}",
+                    workflowIds, body.getResourceVersions().stream()
+                        .map(ExportResourceVersion::getResourceVersion).toList());
+                throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS, body.getResourceType());
+            }
+
             String exportFilePath = getExportFilePath(accept, body, exportResps);
             if (exportFilePath == null) {
-                return null;
+                return Optional.empty();
             }
             ExportResourceRsp exportResourceRsp = new ExportResourceRsp();
             exportResourceRsp.setExportResult(getExportResults(exportResps));
             exportResourceRsp.setDownloadUrl(exportFilePath);
-            return exportResourceRsp;
+            return Optional.of(exportResourceRsp);
+        } catch (AgentStudioException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to export the workflow.", e);
             throw new AgentStudioException(StudioError.WORKFLOW_EXPORT_FILE);
@@ -261,7 +278,7 @@ public class AgentExportService {
             .map(MappingEntity::getResourceId)
             .toList();
         List<ModelExportEntity> modelExportEntities = modelServiceMgmtService.buildModelExportEntity(projectId,
-            workspaceId, modelIds);
+            workspaceId, modelIds, true, false);
         List<String> strategyIds = subExportResources.stream()
             .filter(p -> Strings.CS.equals(p.getResourceType(), ResourceTypeEnum.STRATEGY.toString()))
             .map(MappingEntity::getResourceId)
@@ -373,9 +390,10 @@ public class AgentExportService {
         throws JsonProcessingException {
         ByteArrayInputStream exportFileStream = buildExportFile(exportResps, body);
         if (Strings.CI.startsWith(accept, MediaType.APPLICATION_OCTET_STREAM_VALUE)) {
-            HttpServletResponse response = Optional.ofNullable(
-                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes())
-                .map(ServletRequestAttributes::getResponse).orElse(null);
+            // 非Web线程（异步任务等）取不到Servlet响应对象，走response==null的文件落盘分支
+            HttpServletResponse response = (RequestContextHolder.getRequestAttributes()
+                instanceof ServletRequestAttributes servletAttributes)
+                ? servletAttributes.getResponse() : null;
             if (response != null) {
                 String fileName = getFileName(body);
                 response.setContentType("application/octet-stream;charset=utf-8");
@@ -553,18 +571,18 @@ public class AgentExportService {
         }
     }
 
-    private ExportResourceRsp exportAgents(String projectId, String workspaceId, String accept,
+    private Optional<ExportResourceRsp> exportAgents(String projectId, String workspaceId, String accept,
         ExportResourceParams body) {
         try {
             List<ExportResp> exportResps = collectExportResps(projectId, workspaceId, body);
             String exportFilePath = getExportFilePath(accept, body, exportResps);
             if (exportFilePath == null) {
-                return null;
+                return Optional.empty();
             }
             ExportResourceRsp exportResourceRsp = new ExportResourceRsp();
             exportResourceRsp.setExportResult(getExportResults(exportResps));
             exportResourceRsp.setDownloadUrl(exportFilePath);
-            return exportResourceRsp;
+            return Optional.of(exportResourceRsp);
         } catch (AgentStudioException e) {
             throw e;
         } catch (Exception e) {
@@ -585,6 +603,7 @@ public class AgentExportService {
         List<String> agentIds = body.getResourceIds();
         validAgent(projectId, workspaceId, agentIds);
         List<ExportResp> exportResps = new ArrayList<>();
+        int successCnt = 0;
         for (ExportResourceVersion exportResourceVersion : body.getResourceVersions()) {
             String agentId = exportResourceVersion.getResourceId();
             String versionId = StringUtils.isEmpty(exportResourceVersion.getResourceVersion())
@@ -595,6 +614,7 @@ public class AgentExportService {
                 exportResps)) {
                 continue;
             }
+            successCnt++;
             List<ExportResourceUnit> exportResourceUnits;
             if (ExportModeEnum.SPACIOUS.getCode().equals(body.getMode())) {
                 exportResourceUnits = getSpaciousExportResourceUnits(projectId, workspaceId, body,
@@ -616,6 +636,12 @@ public class AgentExportService {
                     exportResps.add(exportResp);
                 }
             }
+        }
+        if (successCnt == 0) {
+            log.error("All requested agent versions not found, abort export. agentIds:{}, versions:{}",
+                agentIds, body.getResourceVersions().stream()
+                    .map(ExportResourceVersion::getResourceVersion).toList());
+            throw new AgentStudioException(StudioError.EXPORT_RESOURCE_NOT_EXISTS, body.getResourceType());
         }
         return exportResps;
     }
@@ -642,7 +668,7 @@ public class AgentExportService {
         ExportResourceParams body, String appId, String appVersion, String appName) {
         List<MappingEntity> mappingEntities = mappingMapper.selectByAppIdAndAppVersion(appId, appVersion, null, null);
         if (CollectionUtils.isEmpty(mappingEntities)) {
-            return null;
+            return Collections.emptyList();
         }
         List<MappingEntity> workflowMappings = mappingEntities.stream()
             .filter(p -> Strings.CS.equals(p.getResourceType(), ResourceTypeEnum.WORKFLOW.toString()))
@@ -655,7 +681,19 @@ public class AgentExportService {
             Map<String, String> workflowTraceIdMap = workflowEntities.stream()
                 .filter(w -> StringUtils.isNotEmpty(w.getTraceId()))
                 .collect(Collectors.toMap(WorkflowEntity::getId, WorkflowEntity::getTraceId, (v1, v2) -> v1));
-            workflowMappings.forEach(m -> m.setTraceId(workflowTraceIdMap.get(m.getResourceId())));
+            workflowMappings.forEach(m -> {
+                String traceId = workflowTraceIdMap.get(m.getResourceId());
+                // 本地查不到 traceId（共享子工作流在源空间，selectByWorkflowIdList 带 workspace 过滤查不到），
+                // 从 t_share_resource 按 resource_id 补 traceId（共享子资源 mapping.resourceId = 源空间资源id = t_share_resource.resource_id）
+                if (StringUtils.isEmpty(traceId)) {
+                    ShareResourceEntity shareResource = shareResourceMapper.selectShareResourceEntityByResourceId(
+                        m.getResourceId());
+                    if (shareResource != null) {
+                        traceId = shareResource.getTraceId();
+                    }
+                }
+                m.setTraceId(traceId);
+            });
         }
 
         List<MappingEntity> controllerMappings = mappingEntities.stream()

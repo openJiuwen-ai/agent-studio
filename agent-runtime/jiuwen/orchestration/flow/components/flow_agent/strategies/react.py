@@ -105,8 +105,8 @@ class ReActStrategy(AgentStrategy):
                 simple_log="ReAct strategy ainvoke failed",
             )
             raise JiuWenBaseException(
-                message=StatusCode.AINVOKE_STREATEGY_ERROR.errmsg,
-                error_code=StatusCode.AINVOKE_STREATEGY_ERROR.code,
+                message=StatusCode.AINVOKE_STRATEGY_ERROR.errmsg,
+                error_code=StatusCode.AINVOKE_STRATEGY_ERROR.code,
             ) from e
         return {USER_FIELDS: {"output": final_output}}
 

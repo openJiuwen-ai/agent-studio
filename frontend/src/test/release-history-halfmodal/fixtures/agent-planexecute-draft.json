@@ -1,0 +1,118 @@
+{
+  "name": "test_name",
+  "description": "test_description",
+  "icon": "data:image/svg+xml;base64,test",
+  "type": "agent",
+  "status": "draft",
+  "creator": "",
+  "agent_id": "test_agent_id11",
+  "project_id": "test_project_id",
+  "workspace_id": "test_workspace_id",
+  "model_deployment_id": "179",
+  "model_name": "qwen3-32b",
+  "model_config": {
+    "top_p": 1.0,
+    "temperature": 0.0,
+    "history_size": 20,
+    "output_format": "text",
+    "max_tokens": 2048,
+    "frequency_penalty": 0.0,
+    "enable_thinking": true
+  },
+  "model_type": "LLM",
+  "plan_qa_independent": false,
+  "additional_questions_config": {
+    "enable": true,
+    "rounds": 1,
+    "prompt": "- 问题应该与你最后一轮的回复紧密相关\n- 问题不要与上文已经提问或者回答过的内容重复\n- 每句话只包含一个问题，但也可以不是问句而是一句指令\n- 推荐你有能力回答的问题"
+  },
+  "voice_interaction": {
+    "language": "chinese",
+    "timbre": "huaxiaohe",
+    "domain": "common"
+  },
+  "content_review": {
+    "enabled": true,
+    "filter": {
+      "keywords": ""
+    },
+    "replace": [],
+    "reply": []
+  },
+  "sub_type": "planexecute",
+  "creator_id": "a8f68bb358d84d3e95087b6c7d373efa",
+  "workflow_switch_enabled": false,
+  "scheduling_mode": "draft_mode",
+  "updated_on": 1770607452714,
+  "is_share": 0,
+  "service_name": "DeepSeek-V3-64K",
+  "tools": [
+    {
+      "tool_id": "preset_dsf4343#0",
+      "plugin_display_name": "web_search",
+      "plugin_chinese_name": "联网搜索",
+      "tool_display_name": "dsf4343",
+      "tool_chinese_name": "未发布",
+      "tool_parameter": "[{\"default\": \"HWWAFSESID=REDACTED; HWWAFSESTIME=0\", \"description\": \"\", \"name\": \"Cookie\", \"required\": true, \"type\": \"string\", \"value\": {\"content\": \"HWWAFSESID=REDACTED; HWWAFSESTIME=0\", \"type\": \"literal\"}, \"visibility\": true}, {\"default\": \"{\\\"identity\\\":{\\\"methods\\\":[\\\"password\\\"],\\\"password\\\":{\\\"user\\\":{\\\"domain\\\":{\\\"name\\\":\\\"redacted-domain\\\"},\\\"name\\\":\\\"redacted-user\\\",\\\"password\\\":\\\"REDACTED\\\"}}},\\\"scope\\\":{\\\"domain\\\":{\\\"name\\\":\\\"redacted-domain-id\\\"},\\\"project\\\":{\\\"name\\\":\\\"redacted-region\\\"}}}\", \"description\": \"343\", \"name\": \"auth\", \"required\": false, \"type\": \"string\", \"value\": {\"content\": \"{\\\"identity\\\":{\\\"methods\\\":[\\\"password\\\"],\\\"password\\\":{\\\"user\\\":{\\\"domain\\\":{\\\"name\\\":\\\"redacted-domain\\\"},\\\"name\\\":\\\"redacted-user\\\",\\\"password\\\":\\\"REDACTED\\\"}}},\\\"scope\\\":{\\\"domain\\\":{\\\"name\\\":\\\"redacted-domain-id\\\"},\\\"project\\\":{\\\"name\\\":\\\"redacted-region\\\"}}}\", \"type\": \"literal\"}, \"visibility\": true}, {\"default\": \"application/json\", \"description\": \"\", \"name\": \"Content-Type\", \"required\": true, \"type\": \"string\", \"value\": {\"content\": \"application/json\", \"type\": \"literal\"}, \"visibility\": true}]",
+      "tool_icon": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAuMDAwMDAwIiBoZWlnaHQ9IjQwLjAwMDAwMCIgdmlld0JveD0iMCAwIDQwIDQwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIj4KCTxkZXNjPgoJCQlDcmVhdGVkIHdpdGggUGl4c28uCgk8L2Rlc2M+Cgk8ZGVmcy8+Cgk8cmVjdCByeD0iOC4wMDAwMDAiIHdpZHRoPSI0MC4wMDAwMDAiIGhlaWdodD0iMzkuOTk5OTk2IiBmaWxsPSIjODk3QUU5IiBmaWxsLW9wYWNpdHk9IjEuMDAwMDAwIi8+Cgk8cGF0aCBkPSJNMzAuMjYgMTguOTVMMjguNjEgMTguOTVMMjguNjEgMTQuNTdDMjguNjEgMTMuMzYgMjcuNjMgMTIuMzggMjYuNDIgMTIuMzhMMjIuMDQgMTIuMzhMMjIuMDQgMTAuNzNDMjIuMDQgMTAuNjQgMjIuMDQgMTAuNTUgMjIuMDMgMTAuNDZDMjIuMDIgMTAuMzggMjIuMDEgMTAuMjkgMjEuOTkgMTAuMkMyMS45NyAxMC4xMSAyMS45NSAxMC4wMiAyMS45MiA5Ljk0QzIxLjkgOS44NSAyMS44NyA5Ljc3IDIxLjgzIDkuNjlDMjEuOCA5LjYgMjEuNzYgOS41MiAyMS43MiA5LjQ0QzIxLjY4IDkuMzYgMjEuNjMgOS4yOSAyMS41OCA5LjIxQzIxLjUzIDkuMTQgMjEuNDggOS4wNyAyMS40MiA5QzIxLjM2IDguOTMgMjEuMyA4Ljg2IDIxLjI0IDguOEMyMS4xOCA4LjczIDIxLjExIDguNjcgMjEuMDQgOC42MkMyMC45NyA4LjU2IDIwLjkgOC41MSAyMC44MyA4LjQ2QzIwLjc1IDguNDEgMjAuNjcgOC4zNiAyMC42IDguMzJDMjAuNTIgOC4yOCAyMC40NCA4LjI0IDIwLjM1IDguMkMyMC4yNyA4LjE3IDIwLjE4IDguMTQgMjAuMSA4LjExQzIwLjAxIDguMDkgMTkuOTMgOC4wNyAxOS44NCA4LjA1QzE5Ljc1IDguMDMgMTkuNjYgOC4wMiAxOS41NyA4LjAxQzE5LjQ4IDggMTkuMzkgOCAxOS4zIDhDMTkuMjEgOCAxOS4xMyA4IDE5LjA0IDguMDFDMTguOTUgOC4wMiAxOC44NiA4LjAzIDE4Ljc3IDguMDVDMTguNjggOC4wNyAxOC42IDguMDkgMTguNTEgOC4xMUMxOC40MiA4LjE0IDE4LjM0IDguMTcgMTguMjYgOC4yQzE4LjE3IDguMjQgMTguMDkgOC4yOCAxOC4wMSA4LjMyQzE3LjkzIDguMzYgMTcuODYgOC40MSAxNy43OCA4LjQ2QzE3LjcxIDguNTEgMTcuNjQgOC41NiAxNy41NyA4LjYyQzE3LjUgOC42NyAxNy40MyA4LjczIDE3LjM3IDguOEMxNy4zMSA4Ljg2IDE3LjI1IDguOTMgMTcuMTkgOUMxNy4xMyA5LjA3IDE3LjA4IDkuMTQgMTcuMDMgOS4yMUMxNi45OCA5LjI5IDE2LjkzIDkuMzYgMTYuODkgOS40NEMxNi44NSA5LjUyIDE2LjgxIDkuNiAxNi43NyA5LjY5QzE2Ljc0IDkuNzcgMTYuNzEgOS44NSAxNi42OCA5Ljk0QzE2LjY2IDEwLjAyIDE2LjY0IDEwLjExIDE2LjYyIDEwLjJDMTYuNiAxMC4yOSAxNi41OSAxMC4zOCAxNi41OCAxMC40NkMxNi41NyAxMC41NSAxNi41NyAxMC42NCAxNi41NyAxMC43M0wxNi41NyAxMi4zOEwxMi4xOSAxMi4zOEMxMC45OCAxMi4zOCAxMC4wMSAxMy4zNiAxMC4wMSAxNC41N0wxMC4wMSAxOC43M0wxMS42NCAxOC43M0MxMy4yNyAxOC43MyAxNC42IDIwLjA1IDE0LjYgMjEuNjlDMTQuNiAyMy4zMiAxMy4yNyAyNC42NCAxMS42NCAyNC42NEwxMCAyNC42NEwxMCAyOC44QzEwIDMwLjAxIDEwLjk4IDMxIDEyLjE5IDMxTDE2LjM1IDMxTDE2LjM1IDI5LjM1QzE2LjM1IDI3LjcyIDE3LjY3IDI2LjM5IDE5LjMgMjYuMzlDMjAuOTQgMjYuMzkgMjIuMjYgMjcuNzIgMjIuMjYgMjkuMzVMMjIuMjYgMzFMMjYuNDIgMzFDMjcuNjMgMzEgMjguNjEgMzAuMDEgMjguNjEgMjguOEwyOC42MSAyNC40MkwzMC4yNiAyNC40MkMzMC4zNSAyNC40MiAzMC40NCAyNC40MiAzMC41MyAyNC40MUMzMC42MSAyNC40IDMwLjcgMjQuMzkgMzAuNzkgMjQuMzdDMzAuODggMjQuMzUgMzAuOTcgMjQuMzMgMzEuMDUgMjQuMzFDMzEuMTQgMjQuMjggMzEuMjIgMjQuMjUgMzEuMyAyNC4yMkMzMS4zOSAyNC4xOCAzMS40NyAyNC4xNCAzMS41NSAyNC4xQzMxLjYzIDI0LjA2IDMxLjcgMjQuMDEgMzEuNzggMjMuOTZDMzEuODUgMjMuOTEgMzEuOTIgMjMuODYgMzEuOTkgMjMuOEMzMi4wNiAyMy43NSAzMi4xMyAyMy42OCAzMi4xOSAyMy42MkMzMi4yNiAyMy41NiAzMi4zMiAyMy40OSAzMi4zNyAyMy40MkMzMi40MyAyMy4zNSAzMi40OCAyMy4yOCAzMi41MyAyMy4yMUMzMi41OCAyMy4xMyAzMi42MyAyMy4wNiAzMi42NyAyMi45OEMzMi43MSAyMi45IDMyLjc1IDIyLjgyIDMyLjc5IDIyLjczQzMyLjgyIDIyLjY1IDMyLjg1IDIyLjU3IDMyLjg4IDIyLjQ4QzMyLjkgMjIuMzkgMzIuOTIgMjIuMzEgMzIuOTQgMjIuMjJDMzIuOTYgMjIuMTMgMzIuOTcgMjIuMDQgMzIuOTggMjEuOTVDMzIuOTkgMjEuODYgMzMgMjEuNzggMzMgMjEuNjlDMzMgMjEuNiAzMi45OSAyMS41MSAzMi45OCAyMS40MkMzMi45NyAyMS4zMyAzMi45NiAyMS4yNCAzMi45NCAyMS4xNUMzMi45MiAyMS4wNiAzMi45IDIwLjk4IDMyLjg4IDIwLjg5QzMyLjg1IDIwLjgxIDMyLjgyIDIwLjcyIDMyLjc5IDIwLjY0QzMyLjc1IDIwLjU1IDMyLjcxIDIwLjQ3IDMyLjY3IDIwLjM5QzMyLjYzIDIwLjMyIDMyLjU4IDIwLjI0IDMyLjUzIDIwLjE2QzMyLjQ4IDIwLjA5IDMyLjQzIDIwLjAyIDMyLjM3IDE5Ljk1QzMyLjMyIDE5Ljg4IDMyLjI2IDE5LjgxIDMyLjE5IDE5Ljc1QzMyLjEzIDE5LjY5IDMyLjA2IDE5LjYzIDMxLjk5IDE5LjU3QzMxLjkyIDE5LjUxIDMxLjg1IDE5LjQ2IDMxLjc4IDE5LjQxQzMxLjcgMTkuMzYgMzEuNjMgMTkuMzEgMzEuNTUgMTkuMjdDMzEuNDcgMTkuMjMgMzEuMzkgMTkuMTkgMzEuMyAxOS4xNkMzMS4yMiAxOS4xMiAzMS4xNCAxOS4wOSAzMS4wNSAxOS4wN0MzMC45NyAxOS4wNCAzMC44OCAxOS4wMiAzMC43OSAxOUMzMC43IDE4Ljk4IDMwLjYxIDE4Ljk3IDMwLjUzIDE4Ljk2QzMwLjQ0IDE4Ljk1IDMwLjM1IDE4Ljk1IDMwLjI2IDE4Ljk1WiIgZmlsbD0iI0ZGRkZGRiIgZmlsbC1vcGFjaXR5PSIxLjAwMDAwMCIgZmlsbC1ydWxlPSJub256ZXJvIi8+Cjwvc3ZnPgo=",
+      "credential_status": "NONE",
+      "desc": "4354334",
+      "auth_info": {},
+      "metadata": "",
+      "last_version_id": "1770284608807",
+      "last_version_name": "v20260205174327"
+    },
+    {
+      "tool_id": "08a29122-0119-42ed-b4b7-e358ef297542#0",
+      "plugin_display_name": "image_generation",
+      "plugin_chinese_name": "图片生成",
+      "tool_display_name": "image_generation",
+      "tool_chinese_name": "图片生成",
+      "tool_parameter": "[{\"default\": false, \"description\": \"是否对图片进行水印处理。\", \"name\": \"watermark\", \"required\": false, \"type\": \"boolean\", \"value\": {\"content\": false, \"type\": \"literal\"}, \"visibility\": true}, {\"default\": \"512x512\", \"description\": \"生成图像尺寸。\", \"name\": \"size\", \"required\": true, \"type\": \"string\", \"value\": {\"content\": \"512x512\", \"type\": \"literal\"}, \"visibility\": true}, {\"default\": \"qwen-image\", \"description\": \"模型名称。\", \"name\": \"model\", \"required\": true, \"type\": \"string\", \"value\": {\"content\": \"qwen-image\", \"type\": \"literal\"}, \"visibility\": true}, {\"default\": \"A running cat\", \"description\": \"文本提示词，用于引导模型生成图像，支持中英文。\", \"name\": \"prompt\", \"required\": true, \"type\": \"string\", \"value\": {\"content\": \"A running cat\", \"type\": \"literal\"}, \"visibility\": true}, {\"default\": \"application/json\", \"description\": \"Content-Type\", \"name\": \"Content-Type\", \"required\": true, \"type\": \"string\", \"value\": {\"content\": \"application/json\", \"type\": \"literal\"}, \"visibility\": true}]",
+      "tool_icon": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAuMDAwMDAwIiBoZWlnaHQ9IjQwLjAwMDAwMCIgdmlld0JveD0iMCAwIDQwIDQwIiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIj4KCTxkZXNjPgoJCQlDcmVhdGVkIHdpdGggUGl4c28uCgk8L2Rlc2M+Cgk8ZGVmcy8+Cgk8cmVjdCByeD0iOC4wMDAwMDAiIHdpZHRoPSI0MC4wMDAwMDAiIGhlaWdodD0iMzkuOTk5OTk2IiBmaWxsPSIjODk3QUU5IiBmaWxsLW9wYWNpdHk9IjEuMDAwMDAwIi8+Cgk8cGF0aCBkPSJNMzAuMjYgMTguOTVMMjguNjEgMTguOTVMMjguNjEgMTQuNTdDMjguNjEgMTMuMzYgMjcuNjMgMTIuMzggMjYuNDIgMTIuMzhMMjIuMDQgMTIuMzhMMjIuMDQgMTAuNzNDMjIuMDQgMTAuNjQgMjIuMDQgMTAuNTUgMjIuMDMgMTAuNDZDMjIuMDIgMTAuMzggMjIuMDEgMTAuMjkgMjEuOTkgMTAuMkMyMS45NyAxMC4xMSAyMS45NSAxMC4wMiAyMS45MiA5Ljk0QzIxLjkgOS44NSAyMS44NyA5Ljc3IDIxLjgzIDkuNjlDMjEuOCA5LjYgMjEuNzYgOS41MiAyMS43MiA5LjQ0QzIxLjY4IDkuMzYgMjEuNjMgOS4yOSAyMS41OCA5LjIxQzIxLjUzIDkuMTQgMjEuNDggOS4wNyAyMS40MiA5QzIxLjM2IDguOTMgMjEuMyA4Ljg2IDIxLjI0IDguOEMyMS4xOCA4LjczIDIxLjExIDguNjcgMjEuMDQgOC42MkMyMC45NyA4LjU2IDIwLjkgOC41MSAyMC44MyA4LjQ2QzIwLjc1IDguNDEgMjAuNjcgOC4zNiAyMC42IDguMzJDMjAuNTIgOC4yOCAyMC40NCA4LjI0IDIwLjM1IDguMkMyMC4yNyA4LjE3IDIwLjE4IDguMTQgMjAuMSA4LjExQzIwLjAxIDguMDkgMTkuOTMgOC4wNyAxOS44NCA4LjA1QzE5Ljc1IDguMDMgMTkuNjYgOC4wMiAxOS41NyA4LjAxQzE5LjQ4IDggMTkuMzkgOCAxOS4zIDhDMTkuMjEgOCAxOS4xMyA4IDE5LjA0IDguMDFDMTguOTUgOC4wMiAxOC44NiA4LjAzIDE4Ljc3IDguMDVDMTguNjggOC4wNyAxOC42IDguMDkgMTguNTEgOC4xMUMxOC40MiA4LjE0IDE4LjM0IDguMTcgMTguMjYgOC4yQzE4LjE3IDguMjQgMTguMDkgOC4yOCAxOC4wMSA4LjMyQzE3LjkzIDguMzYgMTcuODYgOC40MSAxNy43OCA4LjQ2QzE3LjcxIDguNTEgMTcuNjQgOC41NiAxNy41NyA4LjYyQzE3LjUgOC42NyAxNy40MyA4LjczIDE3LjM3IDguOEMxNy4zMSA4Ljg2IDE3LjI1IDguOTMgMTcuMTkgOUMxNy4xMyA5LjA3IDE3LjA4IDkuMTQgMTcuMDMgOS4yMUMxNi45OCA5LjI5IDE2LjkzIDkuMzYgMTYuODkgOS40NEMxNi44NSA5LjUyIDE2LjgxIDkuNiAxNi43NyA5LjY5QzE2Ljc0IDkuNzcgMTYuNzEgOS44NSAxNi42OCA5Ljk0QzE2LjY2IDEwLjAyIDE2LjY0IDEwLjExIDE2LjYyIDEwLjJDMTYuNiAxMC4yOSAxNi41OSAxMC4zOCAxNi41OCAxMC40NkMxNi41NyAxMC41NSAxNi41NyAxMC42NCAxNi41NyAxMC43M0wxNi41NyAxMi4zOEwxMi4xOSAxMi4zOEMxMC45OCAxMi4zOCAxMC4wMSAxMy4zNiAxMC4wMSAxNC41N0wxMC4wMSAxOC43M0wxMS42NCAxOC43M0MxMy4yNyAxOC43MyAxNC42IDIwLjA1IDE0LjYgMjEuNjlDMTQuNiAyMy4zMiAxMy4yNyAyNC42NCAxMS42NCAyNC42NEwxMCAyNC42NEwxMCAyOC44QzEwIDMwLjAxIDEwLjk4IDMxIDEyLjE5IDMxTDE2LjM1IDMxTDE2LjM1IDI5LjM1QzE2LjM1IDI3LjcyIDE3LjY3IDI2LjM5IDE5LjMgMjYuMzlDMjAuOTQgMjYuMzkgMjIuMjYgMjcuNzIgMjIuMjYgMjkuMzVMMjIuMjYgMzFMMjYuNDIgMzFDMjcuNjMgMzEgMjguNjEgMzAuMDEgMjguNjEgMjguOEwyOC42MSAyNC40MkwzMC4yNiAyNC40MkMzMC4zNSAyNC40MiAzMC40NCAyNC40MiAzMC41MyAyNC40MUMzMC42MSAyNC40IDMwLjcgMjQuMzkgMzAuNzkgMjQuMzdDMzAuODggMjQuMzUgMzAuOTcgMjQuMzMgMzEuMDUgMjQuMzFDMzEuMTQgMjQuMjggMzEuMjIgMjQuMjUgMzEuMyAyNC4yMkMzMS4zOSAyNC4xOCAzMS40NyAyNC4xNCAzMS41NSAyNC4xQzMxLjYzIDI0LjA2IDMxLjcgMjQuMDEgMzEuNzggMjMuOTZDMzEuODUgMjMuOTEgMzEuOTIgMjMuODYgMzEuOTkgMjMuOEMzMi4wNiAyMy43NSAzMi4xMyAyMy42OCAzMi4xOSAyMy42MkMzMi4yNiAyMy41NiAzMi4zMiAyMy40OSAzMi4zNyAyMy40MkMzMi40MyAyMy4zNSAzMi40OCAyMy4yOCAzMi41MyAyMy4yMUMzMi41OCAyMy4xMyAzMi42MyAyMy4wNiAzMi42NyAyMi45OEMzMi43MSAyMi45IDMyLjc1IDIyLjgyIDMyLjc5IDIyLjczQzMyLjgyIDIyLjY1IDMyLjg1IDIyLjU3IDMyLjg4IDIyLjQ4QzMyLjkgMjIuMzkgMzIuOTIgMjIuMzEgMzIuOTQgMjIuMjJDMzIuOTYgMjIuMTMgMzIuOTcgMjIuMDQgMzIuOTggMjEuOTVDMzIuOTkgMjEuODYgMzMgMjEuNzggMzMgMjEuNjlDMzMgMjEuNiAzMi45OSAyMS41MSAzMi45OCAyMS40MkMzMi45NyAyMS4zMyAzMi45NiAyMS4yNCAzMi45NCAyMS4xNUMzMi45MiAyMS4wNiAzMi45IDIwLjk4IDMyLjg4IDIwLjg5QzMyLjg1IDIwLjgxIDMyLjgyIDIwLjcyIDMyLjc5IDIwLjY0QzMyLjc1IDIwLjU1IDMyLjcxIDIwLjQ3IDMyLjY3IDIwLjM5QzMyLjYzIDIwLjMyIDMyLjU4IDIwLjI0IDMyLjUzIDIwLjE2QzMyLjQ4IDIwLjA5IDMyLjQzIDIwLjAyIDMyLjM3IDE5Ljk1QzMyLjMyIDE5Ljg4IDMyLjI2IDE5LjgxIDMyLjE5IDE5Ljc1QzMyLjEzIDE5LjY5IDMyLjA2IDE5LjYzIDMxLjk5IDE5LjU3QzMxLjkyIDE5LjUxIDMxLjg1IDE5LjQ2IDMxLjc4IDE5LjQxQzMxLjcgMTkuMzYgMzEuNjMgMTkuMzEgMzEuNTUgMTkuMjdDMzEuNDcgMTkuMjMgMzEuMzkgMTkuMTkgMzEuMyAxOS4xNkMzMS4yMiAxOS4xMiAzMS4xNCAxOS4wOSAzMS4wNSAxOS4wN0MzMC45NyAxOS4wNCAzMC44OCAxOS4wMiAzMC43OSAxOUMzMC43IDE4Ljk4IDMwLjYxIDE4Ljk3IDMwLjUzIDE4Ljk2QzMwLjQ0IDE4Ljk1IDMwLjM1IDE4Ljk1IDMwLjI2IDE4Ljk1WiIgZmlsbD0iI0ZGRkZGRiIgZmlsbC1vcGFjaXR5PSIxLjAwMDAwMCIgZmlsbC1ydWxlPSJub256ZXJvIi8+Cjwvc3ZnPgo=",
+      "credential_status": "NONE",
+      "desc": "图片生成。",
+      "auth_info": {
+        "scope": "SERVICE",
+        "domain": "HEADERS",
+        "auth_keys": [
+          {
+            "target_name": "Authorization",
+            "auth_key": "B****g"
+          }
+        ]
+      },
+      "metadata": "",
+      "last_version_id": "1769787110797",
+      "last_version_name": "v20260130233149"
+    }
+  ],
+  "workflows": [],
+  "mcp_servers": [],
+  "knowledge_repos": [],
+  "create_time": 1770606569000,
+  "update_time": 1770607452714,
+  "scenes": [
+    {
+      "id": "4e606ba0-b7ea-426b-8b9e-830f2bfdc2c7-draft",
+      "name": "场景1",
+      "description": "场景1的描述_modify",
+      "guidelines": [
+        {
+          "id": 1,
+          "condition": "这是一个指南，他的优先级为1",
+          "action": "这是一个指南动作，他的优先级为1",
+          "tools": [
+            {
+              "id": "88f80d21-d717-4ad3-803f-e25156d89a14",
+              "name": "工具名字",
+              "type": "Tool"
+            }
+          ]
+        }
+      ],
+      "relations": []
+    }
+  ],
+  "instructions": "草稿态：已更新规划指令"
+}

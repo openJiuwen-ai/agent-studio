@@ -5,6 +5,7 @@ import os
 import re
 import time
 import functools
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
@@ -34,7 +35,8 @@ def interface_log(operate):
 
             end_time = time.perf_counter()
             duration = round((end_time - start_time) * 1000)
-            interface_logger.info(f"milvus_vector|{operate}|{duration}")
+            if interface_logger.isEnabledFor(logging.INFO):
+                interface_logger.info(f"milvus_vector|{operate}|{duration}")
             return result
 
         return wrapper
@@ -276,7 +278,8 @@ class MilvusVector(BaseVector):
             output_fields=["id", "text"],
         )
         del_ret = cls.client.delete(collection_name=cls.config.collection_name, ids=ids)
-        logger.info(f"pop ids {ids}, ret {del_ret}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("pop ids %s, ret %s", ids, del_ret)
         return [hit["text"] for hit in results]
 
     @classmethod

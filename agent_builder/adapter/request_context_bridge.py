@@ -26,6 +26,9 @@ class RequestContext:
 
     headers: dict = field(default_factory=dict)
     customer_headers: dict = field(default_factory=dict)
+    # 已加载的环境变量（load_environment_variables 产出；由 populate_request_context
+    # 中间件按 X-Environment-Id 加载写入，供 StudioModelClient 解析 apiUrl 占位符）
+    env_variables: dict = field(default_factory=dict)
 
 
 _request_ctx: ContextVar[RequestContext] = ContextVar(
@@ -48,3 +51,8 @@ def get_request_customer_headers() -> dict:
     无请求上下文时返回空 dict，不回退静态认证 Header。
     """
     return _request_ctx.get().customer_headers or {}
+
+
+def get_env_variables() -> dict:
+    """环境变量 getter，供 model_service ports 注入（StudioModelClient 解析 apiUrl 占位符）。"""
+    return _request_ctx.get().env_variables or {}

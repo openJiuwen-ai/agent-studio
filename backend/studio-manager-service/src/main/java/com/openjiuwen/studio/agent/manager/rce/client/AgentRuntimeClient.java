@@ -408,4 +408,13 @@ public interface AgentRuntimeClient {
      */
     @GetMapping(value = "/internal/v1/kb/list")
     ResponseEntity<Object> listOpenJiuwenKBs(@RequestParam("kb_ids") String kbIds);
+
+    /**
+     * 删除 openjiuwen 知识库文档。
+     */
+    @DeleteMapping(value = "/internal/v1/kb/{kb_id}/documents/{doc_id}")
+    ResponseEntity<OpenJiuwenKBResponse> deleteOpenJiuwenKBDocument(
+        @PathVariable("kb_id") String kbId,
+        @PathVariable("doc_id") String docId,
+        @RequestBody java.util.Map<String, List<String>> body);
 }

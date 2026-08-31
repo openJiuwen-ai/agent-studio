@@ -12,10 +12,12 @@
   },
   "scripts": {
     "start": "set NODE_OPTIONS=--max-old-space-size=15360 && ng serve",
-    "build": "ng build",
+    "build": "node scripts/check-large-dsl-threshold-consistency.mjs && ng build && node scripts/check-large-dsl-threshold-consistency.mjs --dist",
     "lint:es": "pnpm exec eslint --fix --cache --cache-location ./.cache/eslint/ --cache-strategy content ./",
     "lint:style": "pnpm exec stylelint --fix --cache --cache-location ./.cache/stylelint/ --cache-strategy content \"**/*.{scss,html}\"",
-    "test": "jest"
+    "check:threshold": "node scripts/check-large-dsl-threshold-consistency.mjs",
+    "check:threshold:dist": "node scripts/check-large-dsl-threshold-consistency.mjs --dist",
+    "test": "ng test --watch=false"
   },
   "dependencies": {
     "@angular/animations": "20.3.25",
@@ -33,7 +35,7 @@
     "@antv/layout": "0.3.25",
     "@antv/x6": "3.1.4",
     "@antv/x6-angular-shape": "3.0.1",
-    "lodash": "4.18.1",
+	"lodash": "4.18.1",
     "@materia-ui/ngx-monaco-editor": "^6.0.0",
     "@ng-dynamic-forms/core": "^18.0.0",
     "angular-i18next": "17.0.2",

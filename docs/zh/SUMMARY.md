@@ -9,6 +9,7 @@
   - [开发指南](how-to/development-guide.md)
   - [资产广场预置](how-to/asset-plaza-preset.md)
   - [可观测性部署](how-to/configure-opentelemetry.md)
+  - [知识库接入指南](how-to/knowledge-base-guide.md)
   - [运行问题排查](how-to/troubleshooting.md)
 - [参考文档（Reference）](reference/)
   - [REST API 参考](reference/rest-api.md)

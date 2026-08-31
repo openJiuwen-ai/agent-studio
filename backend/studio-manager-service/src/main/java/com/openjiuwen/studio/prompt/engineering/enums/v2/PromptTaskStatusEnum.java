@@ -40,7 +40,7 @@ public enum PromptTaskStatusEnum {
     /**
      * 执行失败
      */
-    FAILED(4, "执行失败", Arrays.asList(OperatorEnum.RESTART, OperatorEnum.COPY, OperatorEnum.DELETE, OperatorEnum.CREATE)),
+    FAILED(4, "执行失败", Arrays.asList(OperatorEnum.RESTART, OperatorEnum.COPY, OperatorEnum.DELETE, OperatorEnum.CREATE, OperatorEnum.EDIT)),
 
     /**
      * 任务暂停

@@ -338,7 +338,7 @@ class BpmnWorkflow(BaseWorkflow):
             err_msg = exception.message
         else:
             err_msg = StatusCode.WORKFLOW_COMPONENT_EXECUTE_ERROR.errmsg.format(
-                invokable.type, StatusCode.WORKFLOW_COMPONENT_EXECUTE_ERROR.code
+                invokable.type, getattr(exception, "message", None) or str(exception)
             )
         return JiuWenBaseException(
             message=err_msg,
@@ -1719,13 +1719,12 @@ class BpmnWorkflow(BaseWorkflow):
     async def _pre_execution_debug_info(
         self, invokable: Node, inputs: dict, cur_span: Span
     ):
-        logger.info(
+        logger.debug(
             "The node starts to execute. "
-            "| flow_id: {} | node type: {} | node name: {}".format(
-                self._runtime_debug_info.get(WORKFLOW_ID, ""),
-                invokable.type,
-                invokable.name,
-            )
+            "| flow_id: %s | node type: %s | node name: %s",
+            self._runtime_debug_info.get(WORKFLOW_ID, ""),
+            invokable.type,
+            invokable.name,
         )
         if invokable.action:
             try:
@@ -2016,13 +2015,12 @@ class BpmnWorkflow(BaseWorkflow):
         cur_span: Span,
         inputs: Union[dict, str] = None,
     ):
-        logger.info(
+        logger.debug(
             "Node execution is complete. "
-            "| flow_id: {} | node type: {} | node name: {}".format(
-                self._runtime_debug_info.get(WORKFLOW_ID, ""),
-                invokable.type,
-                invokable.name,
-            )
+            "| flow_id: %s | node type: %s | node name: %s",
+            self._runtime_debug_info.get(WORKFLOW_ID, ""),
+            invokable.type,
+            invokable.name,
         )
         if invokable.action:
             try:

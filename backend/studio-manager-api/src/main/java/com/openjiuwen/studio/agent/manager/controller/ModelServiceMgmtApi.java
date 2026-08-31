@@ -15,6 +15,10 @@ import com.openjiuwen.studio.agent.manager.dto.ModelServiceListRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelServiceReq;
 import com.openjiuwen.studio.agent.manager.dto.ModelServiceRsp;
 import com.openjiuwen.studio.agent.manager.dto.ModelStatusReq;
+import com.openjiuwen.studio.agent.manager.dto.ImportRsp;
+import com.openjiuwen.studio.agent.manager.dto.ModelExportReq;
+import com.openjiuwen.studio.agent.manager.dto.ModelImportPreviewRsp;
+import com.openjiuwen.studio.agent.manager.enums.ModelImportConflictStrategy;
 
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -36,6 +40,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.core.io.Resource;
+import org.springframework.web.multipart.MultipartFile;
 
 @Api(value = "ModelServiceMgmt", description = "the ModelServiceMgmt API")
 @Validated
@@ -224,5 +231,53 @@ import org.springframework.web.bind.annotation.RequestParam;
         String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
         @RequestParam(value = "workspace_id", required = true) String workspaceId,
         @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody ModelStatusReq body);
+
+    @ApiOperation(value = "", nickname = "exportModelServices", notes = "批量导出模型服务为 JSONL 文件",
+        response = Resource.class, tags = {"ModelServiceMgmt"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "成功", response = Resource.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/model-manager/model-services/export",
+        produces = {"application/octet-stream"}, consumes = {"application/json"}, method = RequestMethod.POST)
+    ResponseEntity<Resource> exportModelServices(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
+        @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        @RequestParam(value = "workspace_id", required = true) String workspaceId,
+        @NotNull @ApiParam(value = "", required = true) @Valid @RequestBody ModelExportReq body);
+
+    @ApiOperation(value = "", nickname = "previewImportModelServices", notes = "模型导入预检（解析+冲突检测+URL校验，不落库）",
+        response = ModelImportPreviewRsp.class, tags = {"ModelServiceMgmt"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "成功", response = ModelImportPreviewRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/model-manager/model-services/import/preview",
+        produces = {"application/json"}, consumes = {"multipart/form-data"}, method = RequestMethod.POST)
+    ResponseEntity<ModelImportPreviewRsp> previewImportModelServices(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
+        @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        @RequestParam(value = "workspace_id", required = true) String workspaceId,
+        @Parameter(description = "file detail") @Valid @RequestPart(value = "file", required = true)
+        MultipartFile file,
+        @ApiParam(value = "目标供应商id（详情页只导模型导入用，模型重定向挂到该供应商）", required = false)
+        @RequestParam(value = "target_provider_id", required = false) String targetProviderId);
+
+    @ApiOperation(value = "", nickname = "importModelServices", notes = "批量导入模型服务（落库，保留跨环境id）",
+        response = ImportRsp.class, tags = {"ModelServiceMgmt"})
+    @ApiResponses(value = {
+        @ApiResponse(code = 200, message = "成功", response = ImportRsp.class)
+    })
+    @RequestMapping(value = "/v1/{project_id}/model-manager/model-services/import",
+        produces = {"application/json"}, consumes = {"multipart/form-data"}, method = RequestMethod.POST)
+    ResponseEntity<ImportRsp> importModelServices(@Pattern(regexp = "^[a-zA-Z0-9_-]{1,40}$")
+        @Parameter(in = ParameterIn.PATH, description = "", required = true, schema = @Schema()) @PathVariable("project_id")
+        String projectId, @NotNull @Pattern(regexp = "^[a-zA-Z0-9_()\\-]{1,40}$") @ApiParam(value = "", required = true)
+        @RequestParam(value = "workspace_id", required = true) String workspaceId,
+        @Parameter(description = "file detail") @Valid @RequestPart(value = "file", required = true)
+        MultipartFile file,
+        @ApiParam(value = "冲突策略: SKIP-同名跳过 / COVER-同名覆盖", required = false, defaultValue = "SKIP")
+        @RequestParam(value = "conflict_strategy", required = false, defaultValue = "SKIP")
+        String conflictStrategy,
+        @ApiParam(value = "目标供应商id（详情页只导模型导入用，模型重定向挂到该供应商）", required = false)
+        @RequestParam(value = "target_provider_id", required = false) String targetProviderId);
 
 }

@@ -76,29 +76,71 @@ function init_env() {
     export NGINX_START_GROUP="servicegroup"
 }
 
-function add_context_path(){
-    # POC替换前端路径
+# 大 DSL 版本对比阈值：默认与前端 environment.ts 同值（压测前暂定 10MB / 上限 100MB），
+# 一致性由 frontend/scripts/check-large-dsl-threshold-consistency.mjs 校验（npm run check:threshold）。
+DEFAULT_LARGE_DSL_BYTES_THRESHOLD=10485760
+MAX_LARGE_DSL_BYTES_THRESHOLD=104857600
+
+# 静态首页统一初始化：模板恢复（无条件，保证占位符每次重新出现、重启不叠加）
+#   + context_path 替换（保留原替换目标：首页 /openjiuwen/ 前缀 + nginx #rewritercontext_path rewrite）
+#   + large_dsl 阈值注入（校验：正整数 + 长度<=9位 + <=MAX，防注入与 Bash 算术溢出；sed 零匹配也返回 0，
+#     故替换前后 grep 显式检查，新脚本配旧前端产物等错误组合快速失败）。
+# 由旧 add_context_path() 迁移整合而来，替换失败一律 exit 1 阻止启动，避免"配置表面存在实际未生效"。
+function init_static_index(){
+    local dist_dir="$nginx_dic/nginx/dist/hws"
+    local index_html="$dist_dir/index.html"
+    local template_html="$dist_dir/template_index.html"
+
+    cd "$dist_dir" || { echo "[ERROR]: enter static path failed"; exit 1; }
+
+    # 首次创建模板；之后每次启动从模板恢复 index.html（无论是否配置 context_path）
+    if [ ! -f "$template_html" ]; then
+      cp -v "$index_html" "$template_html" || { echo "[ERROR]: create template_index.html failed"; exit 1; }
+    fi
+    chmod 700 "$index_html"
+    cp -f "$template_html" "$index_html" || { echo "[ERROR]: restore index.html failed"; exit 1; }
+
+    # 1. context_path 替换（如有配置；替换目标与原实现一致，不能改成别的占位符）
+    local context_path
     context_path=$(printenv "context_path")
     if [ -n "${context_path}" ]; then
       echo "start to replace console path: ${context_path}"
-      cd /opt/cloud/wiseagent-nginx/nginx/dist/hws/ || { echo "enter static path failed"; exit 1; }
-      # 如果template_index.html不存在，则创建副本
-      if [ ! -f "template_index.html" ]; then
-        cp -v index.html template_index.html || { echo "create template_index.html failed"; exit 1; }
-      fi
-      chmod 700 index.html
-      # 用模板覆盖index.html
-      cp -f template_index.html index.html || { echo "copy -f index.html failed"; exit 1; }
-      # 替换文本内容（使用#作为分隔符避免路径冲突）
-      sed -i "s#/openjiuwen/#${context_path}/openjiuwen/#g" index.html || { echo "replace failed"; exit 1; }
+      sed -i "s#/openjiuwen/#${context_path}/openjiuwen/#g" "$index_html" \
+        || { echo "[ERROR]: context_path index replace failed"; exit 1; }
+      sed -i "s#\#rewritercontext_path#rewrite ^${context_path}/(.*) /\$1 last;#g" \
+        "$nginx_conf/nginx.conf" \
+        || { echo "[ERROR]: context_path nginx rewrite failed"; exit 1; }
       echo "finish to replace console path"
-      chmod 500 index.html
-
-      # 替换rewriter
-      sed -i "s#\#rewritercontext_path#rewrite ^${context_path}/(.*) /\$1 last;#g" /opt/cloud/wiseagent-nginx/conf/nginx.conf || { echo "replace failed"; exit 1; }
     else
-      echo "skip replace console path: ENABLE_POC=$ENABLE_POC, context_path=${context_path}"
+      echo "skip replace console path: context_path is empty"
     fi
+
+    # 2. large_dsl 阈值注入
+    local val="${LARGE_DSL_BYTES_THRESHOLD:-$DEFAULT_LARGE_DSL_BYTES_THRESHOLD}"
+    if ! [[ "$val" =~ ^[1-9][0-9]*$ ]]; then
+      echo "[WARN]: invalid LARGE_DSL_BYTES_THRESHOLD '${val}', fallback to default"
+      val="$DEFAULT_LARGE_DSL_BYTES_THRESHOLD"
+    elif (( ${#val} > 9 )); then
+      # 100MB 为 9 位数：先限长度再算术比较，避免超长数字串导致 Bash 算术溢出
+      echo "[WARN]: LARGE_DSL_BYTES_THRESHOLD too long, fallback to default"
+      val="$DEFAULT_LARGE_DSL_BYTES_THRESHOLD"
+    elif (( val > MAX_LARGE_DSL_BYTES_THRESHOLD )); then
+      echo "[WARN]: LARGE_DSL_BYTES_THRESHOLD > MAX, fallback to default"
+      val="$DEFAULT_LARGE_DSL_BYTES_THRESHOLD"
+    fi
+
+    grep -q "large_dsl_placeholder" "$index_html" \
+      || { echo "[ERROR]: large_dsl_placeholder not found (start.sh 与前端产物版本不匹配)"; exit 1; }
+    sed -i "s/large_dsl_placeholder/${val}/g" "$index_html" \
+      || { echo "[ERROR]: large_dsl replace failed"; exit 1; }
+    grep -q "large_dsl_placeholder" "$index_html" \
+      && { echo "[ERROR]: large_dsl_placeholder remains after replace"; exit 1; }
+    echo "[INFO]: largeDslBytesThreshold = ${val}"
+
+    # 首页为静态资源，nginx 需读取；644 保证 owner 可写、others 可读
+    # （原 add_context_path 用 500 owner-only，但该分支仅在配 context_path 时执行；
+    #  本函数无条件执行，500 会让非 service 用户的 nginx worker 读不了 → 部署 403）
+    chmod 644 "$index_html"
 }
 
 function start_nginx() {
@@ -134,7 +176,7 @@ function main() {
 
   init_env
 
-  add_context_path
+  init_static_index
 
   start_nginx
 

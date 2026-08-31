@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from functools import wraps
 
 import psycopg2
+from jiuwen.common.exception.status_code import StatusCode
 from jiuwen.common.log.base import logger
 from jiuwen.plugin.common import constant
 from jiuwen.plugin.common import exception
@@ -45,7 +46,8 @@ def do_db_connect(func):
         except Exception as e:
             logger.error("Database connection error.")
             raise exception.PluginCommonException(
-                message=exception.ExceptionsMessage.DatabaseConnectionErrorJson
+                code=StatusCode.PLUGIN_DATABASE_EXCEPTION,
+                message=exception.ExceptionsMessage.DatabaseConnectionErrorJson,
             ) from e
         # 调用原始函数
         return func(self, *args, **kwargs)
@@ -67,4 +69,7 @@ def load_json(file_path):
             config_dict = json.load(f)
         return config_dict
     except Exception as _:
-        raise exception.PluginCommonException(message="load json failed")
+        raise exception.PluginCommonException(
+            code=StatusCode.PLUGIN_PARAMS_CHECK_FAILED,
+            message="load json failed",
+        )

@@ -31,6 +31,9 @@ class RequestContext:
     secret_env_keys: list = field(default_factory=list)
     # 当前节点引用了加密环境变量的字段名集合（由 on_* 入口设置，供模板渲染层读取）
     current_secret_field_names: dict = field(default_factory=dict)
+    # 已加载的环境变量（load_environment_variables 产出；由请求入口写入，供
+    # StudioModelClient 解析 apiUrl 中的 ${_env.plugin_url_params.VAR} 占位符）
+    env_variables: dict = field(default_factory=dict)
     # 内容审核引擎实例（由请求入口设置，供审核节点读取）
     moderation_engine: Any = None
 

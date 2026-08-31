@@ -62,7 +62,7 @@ export class PromptEditorComponent {
   // 控制编辑器模式,仅首次输入时有效
   @Input() onlyShow = false;
   // 样式传递
-  @Input() style: any = 'height:400px';
+  @Input() styleObj: any = 'height:400px';
   @Input() backgroundColor = '#fafafa';
   // 传入已有变量，仅用于变量类型解析（可选）
   @Input() variables: Array<IVariable> = [];
@@ -866,7 +866,8 @@ export class PromptEditorComponent {
           }
         } else if (node.localName === 'div') {
           const subResult = this.html2prompt(node);
-          if (subResult === '\n') {
+          if (subResult === '') {
+          } else if (subResult === '\n') {
             // 空行不要重复加换行符
             result += '\n';
           } else {
@@ -1338,6 +1339,7 @@ export class PromptEditorComponent {
           this.editorContainer.element.nativeElement,
           newLine,
         );
+        this.rebuildPrompt();
       }
     }, 0);
   }

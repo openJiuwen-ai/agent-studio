@@ -18,9 +18,21 @@ import java.util.List;
  */
 @Mapper
 public interface AgentBuilderStepMapper extends BaseMapper<AgentBuilderStepEntity> {
-    @Insert(
-        "INSERT IGNORE INTO ws_agent_builder_step_def (id, agent_name, message_id, finished, domain_id, dept_code, created_date, created_by_user_id, last_updated_date,last_updated_by_user_id, deleted)"
-            + " VALUES (#{id}, #{agentName}, #{messageId}, #{finished}, #{domainId}, #{deptCode}, #{createdDate}, #{createdByUserId}, #{lastUpdatedDate}, #{lastUpdatedByUserId}, #{deleted})")
+    @Insert({
+        """
+        <script>
+            <if test='_databaseId == "postgres"'>
+                INSERT INTO ws_agent_builder_step_def (id, agent_name, message_id, finished, domain_id, dept_code, created_date, created_by_user_id, last_updated_date, last_updated_by_user_id, deleted)
+                VALUES (#{id}, #{agentName}, #{messageId}, #{finished}, #{domainId}, #{deptCode}, #{createdDate}, #{createdByUserId}, #{lastUpdatedDate}, #{lastUpdatedByUserId}, #{deleted})
+                ON CONFLICT (id) DO NOTHING
+            </if>
+            <if test='_databaseId != "postgres"'>
+                INSERT IGNORE INTO ws_agent_builder_step_def (id, agent_name, message_id, finished, domain_id, dept_code, created_date, created_by_user_id, last_updated_date, last_updated_by_user_id, deleted)
+                VALUES (#{id}, #{agentName}, #{messageId}, #{finished}, #{domainId}, #{deptCode}, #{createdDate}, #{createdByUserId}, #{lastUpdatedDate}, #{lastUpdatedByUserId}, #{deleted})
+            </if>
+        </script>
+        """
+    })
     int insertIfNotExists(AgentBuilderStepEntity entity);
 
     @Update(

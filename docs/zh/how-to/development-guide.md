@@ -414,7 +414,7 @@ agent-studio 将数据库密码获取逻辑抽象为 `DataSourcePasswordProvider
 默认模式下，平台使用内置加解密能力处理数据库密码：
 
 - **studio-manager（Java）**：`DefaultDataSourcePasswordProvider` 调用 `CryptoUtils.decrypt()` 解密 `spring.datasource.password` 配置值
-- **agent-runtime / agent-builder（Python）**：`DefaultDataSourcePasswordProvider` 调用 `crypto_tool.decrypt()` 解密 `STORE_DB_PASSWORD` 环境变量值
+- **agent-builder（Python）**：`DefaultDataSourcePasswordProvider` 调用 `crypto_tool.decrypt()` 解密 `STORE_DB_PASSWORD` 环境变量值
 
 > DEFAULT 模式无需额外配置，只要不设置 `DATASOURCE_PASSWORD_PROVIDER_TYPE` 或设为 `DEFAULT` 即可。
 
@@ -447,7 +447,7 @@ agent-studio 将数据库密码获取逻辑抽象为 `DataSourcePasswordProvider
    }
    ```
 
-#### agent-builder / agent-runtime 配置（Python）
+#### agent-builder 配置（Python）
 
 | 环境变量 | 必填 | 说明 |
 |---------|------|------|
@@ -471,9 +471,9 @@ agent-studio 将数据库密码获取逻辑抽象为 `DataSourcePasswordProvider
            return self._fetch_from_kms(raw_password)
    ```
 
-#### CUSTOM 配置差异：studio-manager vs agent-builder / agent-runtime
+#### CUSTOM 配置差异：studio-manager vs agent-builder
 
-| 维度 | studio-manager（Java） | agent-builder / agent-runtime（Python） |
+| 维度 | studio-manager（Java） | agent-builder（Python） |
 |------|------------------------|----------------------------------------|
 | 类型配置 | `datasource_password_provider_type=CUSTOM` | `DATASOURCE_PASSWORD_PROVIDER_TYPE=CUSTOM` |
 | 实现指定 | `datasource_password_provider_custom_class`（全限定类名） | `DATASOURCE_PASSWORD_PROVIDER_CLASS`（类名） |
@@ -528,7 +528,7 @@ class DataSourcePasswordProvider(ABC):
 CUSTOM 模式下外部 JAR / .py 插件文件需挂载到容器内，方式与存储扩展的 CUSTOM 模式一致：
 
 - **Java（studio-manager）**：JAR 放宿主机 `/opt/cloud/plugins/`，`datasource_password_provider_custom_classpath` 配为 `/opt/cloud/plugins/xxx.jar`
-- **Python（agent-builder / agent-runtime）**：.py 放宿主机 `/opt/cloud/plugins/`，`DATASOURCE_PASSWORD_PROVIDER_MODULE` 配为 `/opt/cloud/plugins/xxx`
+- **Python（agent-builder）**：.py 放宿主机 `/opt/cloud/plugins/`，`DATASOURCE_PASSWORD_PROVIDER_MODULE` 配为 `/opt/cloud/plugins/xxx`
 
 K8s Deployment 挂载示例：
 

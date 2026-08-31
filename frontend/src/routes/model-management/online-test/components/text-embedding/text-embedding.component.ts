@@ -52,6 +52,11 @@ export class TextEmbeddingComponent {
   @Input() param: any = {
     content: '',
   };
+
+  @Input() envVarValues: Record<string, string> = {};
+  /** 默认环境 id（占位符模型免填时由后端按默认环境解析真实地址） */
+  @Input() environmentId: string | undefined;
+
   public isShowStopIcon = false;
 
   @ViewChild('chatContainerRef') chatContainerRef!: ElementRef;
@@ -150,7 +155,7 @@ export class TextEmbeddingComponent {
   private postMessage(param) {
     this.abortController = new AbortController();
     this.jiuwenModelServ
-      .modelTestEmbedding(param, this.abortController?.signal)
+      .modelTestEmbedding(param, this.abortController?.signal, this.envVarValues, this.environmentId)
       .then((content) => {
         this.result = `[${String(content[0]?.embedding)}]`;
         this.scrollToBottom();

@@ -17,6 +17,7 @@
                     style="width: 100%;"
                     [selectedModel]="modelConfig.model_deployment_id"
                     [clearable]="false"
+                    [disableEnvPlaceholderModels]="true"
                     (update)="changeModelSelected($event)"
                   ></llm-select>
                 </div>

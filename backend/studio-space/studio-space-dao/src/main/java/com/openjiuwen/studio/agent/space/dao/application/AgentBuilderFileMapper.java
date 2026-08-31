@@ -56,6 +56,6 @@ public interface AgentBuilderFileMapper extends BaseMapper<AgentBuilderFileEntit
 
     default int softDeleteFiles(List<String> fileIds, String taskId) {
         return update(
-            new UpdateWrapper<AgentBuilderFileEntity>().in("id", fileIds).in("task_id", taskId).set("deleted", 1));
+            new UpdateWrapper<AgentBuilderFileEntity>().in("id", fileIds).in("task_id", taskId).set("deleted", true));
     }
 }

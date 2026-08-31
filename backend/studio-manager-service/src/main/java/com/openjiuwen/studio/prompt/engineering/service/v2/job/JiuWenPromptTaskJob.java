@@ -54,6 +54,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -63,6 +64,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -236,6 +238,16 @@ public class JiuWenPromptTaskJob implements Job {
                 log.warn("optimize template delete failed, response code: {}", jIuWenPromptBaseRes.getCode());
                 throw new AgentStudioException(StudioError.OPTIMIZE_TEMPLATE_DELETE_FAILED);
             }
+        } catch (HttpServerErrorException e) {
+            String responseBody = e.getResponseBodyAsString();
+            if (responseBody != null && responseBody.contains("\"code\":102155")) {
+                log.warn("jiuwen optimization job not found, taskId: {}, skip remote delete",
+                    promptTaskDetailVo.getJiuwenTaskId());
+                return;
+            }
+            log.error("jiuwen server returned error, taskId: {}, response: {}",
+                promptTaskDetailVo.getJiuwenTaskId(), responseBody);
+            throw new AgentStudioException(StudioError.DELETE_OPTIMIZATION_TASK, e);
         } catch (ResourceAccessException e) {
             log.error("optimization template service access failed, error: {}", e.getMessage());
             throw new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED);
@@ -264,6 +276,16 @@ public class JiuWenPromptTaskJob implements Job {
                 throw new AgentStudioException(StudioError.GET_OPTIMIZATION_TASK);
             }
             return response.getBody();
+        } catch (HttpServerErrorException e) {
+            String responseBody = e.getResponseBodyAsString();
+            if (responseBody != null && responseBody.contains("\"code\":102155")) {
+                log.warn("jiuwen optimization job not found, taskId: {}, skip remote getDetail",
+                    promptTaskDetailVo.getJiuwenTaskId());
+                throw new AgentStudioException(StudioError.JOB_NOT_FOUND_IN_BUILDER);
+            }
+            log.error("jiuwen server returned error, taskId: {}, response: {}",
+                promptTaskDetailVo.getJiuwenTaskId(), responseBody);
+            throw new AgentStudioException(StudioError.GET_OPTIMIZATION_TASK, e);
         } catch (ResourceAccessException e) {
             log.error("optimization template service access failed, error: {}", e.getMessage());
             throw new AgentStudioException(StudioError.OPTIMIZATION_TEMPLATE_SERVICE_ACCESS_FAILED);
@@ -644,40 +666,41 @@ public class JiuWenPromptTaskJob implements Job {
      * - HTTP 状态 4xx/5xx 但解析不到 code 时，按 5xx 视为服务异常，4xx 视为参数类错误（同归到 LLM 码）
      */
     private AgentStudioException mapBuilderError(HttpStatusCode status, String errorBody) {
-        Integer builderCode = parseBuilderCode(errorBody);
-        if (builderCode == null) {
+        OptionalInt builderCode = parseBuilderCode(errorBody);
+        if (builderCode.isEmpty()) {
             log.warn("Builder error body unparseable, status={}, bodyLen={}", status,
                 errorBody == null ? 0 : errorBody.length());
             return new AgentStudioException(StudioError.OPTIMIZATION_TASK_FROM_JIUWEN_SERVICE_ERROR,
                 "unparseable");
         }
-        if (isLlmRelatedCode(builderCode)) {
+        int code = builderCode.getAsInt();
+        if (isLlmRelatedCode(code)) {
             return new AgentStudioException(StudioError.CALL_LLM_EXECUTION_ERROR,
-                String.valueOf(builderCode));
+                String.valueOf(code));
         }
         return new AgentStudioException(StudioError.OPTIMIZATION_TASK_FROM_JIUWEN_SERVICE_ERROR,
-            String.valueOf(builderCode));
+            String.valueOf(code));
     }
 
-    private Integer parseBuilderCode(String errorBody) {
+    private OptionalInt parseBuilderCode(String errorBody) {
         if (StringUtils.isEmpty(errorBody)) {
-            return null;
+            return OptionalInt.empty();
         }
         try {
             Map<String, Object> body = JsonUtils.json2ObjQuietly(errorBody, Map.class);
             if (body == null) {
-                return null;
+                return OptionalInt.empty();
             }
             Object code = body.get("code");
             if (code instanceof Number) {
-                return ((Number) code).intValue();
+                return OptionalInt.of(((Number) code).intValue());
             }
             if (code instanceof String) {
-                return Integer.parseInt((String) code);
+                return OptionalInt.of(Integer.parseInt((String) code));
             }
-            return null;
+            return OptionalInt.empty();
         } catch (Exception e) {
-            return null;
+            return OptionalInt.empty();
         }
     }
 

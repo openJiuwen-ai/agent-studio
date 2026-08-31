@@ -1265,7 +1265,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       });
     this.modelManagementService
-      .getAvailableModelList({with_router: true})
+      .getAvailableModelList({with_router: true, publish_status: 'online'})
       .then((res) => {
         this.availableModelList = res.data.map((item: any) => ({
           ...item,
@@ -2342,6 +2342,9 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public save(): void {
+    if (this.isFlowReadonly) {
+      return;
+    }
     this.updateFlowData();
   }
 
@@ -5608,7 +5611,7 @@ export class FlowComponent implements OnInit, OnDestroy, AfterViewInit {
           operate: 'remove',
         });
       }
-      if (exception_process.handle_type === 'defaultOutputs') {
+      if (exception_process.default_outputs != null) {
         if (typeof exception_process.default_outputs === 'string') {
           try {
             target.default_outputs = JSON.parse(

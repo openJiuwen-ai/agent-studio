@@ -115,6 +115,10 @@ export class ExceptionHandlingComponent implements OnInit, OnDestroy {
   minTimeout = 0.1;
 
   onTimeoutChange() {
+    if (this.exception_process.timeout == null) {
+      this.changeValue.emit();
+      return;
+    }
     if (this.exception_process.timeout > this.maxTimeout) {
       this.exception_process.timeout = this.maxTimeout;
     }
@@ -131,10 +135,12 @@ export class ExceptionHandlingComponent implements OnInit, OnDestroy {
       setTimeout(() => {
         this.scrollToCode();
       });
-      if (this.nodeInfo.type === 'Plugin') {
-        if (!this.exception_process.default_outputs) {
-          this.exception_process.default_outputs = this.demoCode;
-        }
+      // 所有节点类型：确保 default_outputs 是有效的字符串值供 Monaco 编辑器使用
+      if (
+        !this.exception_process.default_outputs ||
+        typeof this.exception_process.default_outputs !== 'string'
+      ) {
+        this.exception_process.default_outputs = this.demoCode;
       }
     }
     this.changeValue.emit();
@@ -187,6 +193,17 @@ export class ExceptionHandlingComponent implements OnInit, OnDestroy {
         this.demoCode = '{}';
       }
       this.exception_process.default_outputs = this.demoCode;
+    } else if (this.nodeInfo.type === 'Mcp') {
+      // MCP 协议输出结构固定：content 数组 + isError
+      this.demoCode = JSON.stringify(
+        {
+          content: [{ type: 'text', text: '' }],
+          isError: true,
+        },
+        null,
+        2,
+      );
+      this.exception_process.default_outputs = this.demoCode;
     }
     this.monacoLoader.isMonacoLoaded$
       .pipe(
@@ -208,6 +225,11 @@ export class ExceptionHandlingComponent implements OnInit, OnDestroy {
                 2,
               );
             }
+          } else if (
+            this.exception_process.handle_type === ExceptionHandleType.DEFAULT_OUTPUTS
+          ) {
+            // 保存过但没有 default_outputs 值，补上默认模板
+            this.exception_process.default_outputs = this.demoCode;
           }
           if (
             this.exception_process.handle_type ===

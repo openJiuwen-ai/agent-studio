@@ -32,7 +32,7 @@ public class PromptTaskCreateReq implements Serializable {
 
     @JsonProperty("name")
     @NotBlank
-    @Length(min = 1, max = 64)
+    @Length(min = 1, max = 34)
     private String name = null;
 
     @JsonProperty("desc")

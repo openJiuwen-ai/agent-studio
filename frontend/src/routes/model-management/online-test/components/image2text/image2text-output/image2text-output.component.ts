@@ -60,6 +60,10 @@ export class Image2textOutputComponent {
     content: '',
   };
 
+  @Input() envVarValues: Record<string, string> = {};
+  /** 默认环境 id（占位符模型免填时由后端按默认环境解析真实地址） */
+  @Input() environmentId: string | undefined;
+
   @ViewChild('chatContainerRef') chatContainerRef!: ElementRef;
 
   public isShowStopIcon = false;
@@ -155,13 +159,7 @@ export class Image2textOutputComponent {
   private getChatParam(msg: any) {
     const messages = [];
     messages.push(msg);
-    let thinking = {type: ''}
-    if (this.settingInfo.thinking) {
-      thinking.type = 'enabled'
-    }else{
-      thinking.type = 'disabled'
-    }
-    const params:any = {
+    return {
       model: this.serviceInfo.id,
       stream: this.settingInfo.stream_val,
       messages,
@@ -170,11 +168,7 @@ export class Image2textOutputComponent {
         is_response_verify: this.settingInfo.securityVerify,
         is_request_verify: this.settingInfo.securityVerify,
       },
-    }
-    if(this.serviceInfo.is_reasoning){
-      params.thinking = thinking
-    }
-    return params;
+    };
   }
 
   private postChat(messages) {
@@ -198,10 +192,24 @@ export class Image2textOutputComponent {
       }, 0);
     }
   }
+
+  /**
+   * 切换"问题详情"展开/收起。
+   * 展开时需主动将新渲染的详情内容滚入可视区：当"展开问题详情"按钮位于滚动容器视口底部
+   * （如上传多张图片、错误内容较长时）时，详情按 *ngIf 渲染到按钮下方，会落到可视区之外，
+   * 且收起时浏览器钳回 scrollTop 已把 isUserScrolling 置为 true，故此处需重置后再滚动。
+   */
+  public toggleErrorDetail(open: boolean) {
+    this.errorIsOpen = open;
+    if (open) {
+      this.isUserScrolling = false;
+      this.scrollToBottom();
+    }
+  }
   private postMessage(param) {
     this.abortController = new AbortController();
     this.jiuwenModelServ
-      .modelTestChat(param, this.abortController?.signal)
+      .modelTestChat(param, this.abortController?.signal, this.envVarValues, this.environmentId)
       .then(({ content }) => {
         this.result = content;
         this.scrollToBottom();
@@ -308,7 +316,7 @@ export class Image2textOutputComponent {
           this.scrollToBottom();
           this.cdr.markForCheck();
         },
-      },
+      }, this.envVarValues, this.environmentId,
     );
   }
 

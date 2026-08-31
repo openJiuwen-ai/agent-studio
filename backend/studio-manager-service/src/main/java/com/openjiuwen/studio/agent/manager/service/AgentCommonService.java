@@ -16,6 +16,7 @@ import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.common.utils.UuidUtils;
 import com.openjiuwen.studio.agent.manager.constant.CommonConstant;
 import com.openjiuwen.studio.agent.manager.dto.AgentInfo;
+import com.openjiuwen.studio.agent.manager.dto.ControllerNodeVO;
 import com.openjiuwen.studio.agent.manager.dto.ControllerVO;
 import com.openjiuwen.studio.agent.manager.dto.CreateAgentReq;
 import com.openjiuwen.studio.agent.manager.dto.KnowledgeRepoReference;
@@ -51,11 +52,13 @@ import com.openjiuwen.studio.agent.manager.rce.models.assistant.KnowledgeRepoLis
 import com.openjiuwen.studio.agent.manager.service.plugin.IPlugin;
 import com.openjiuwen.studio.agent.manager.utils.IconNameCheckUtils;
 import com.openjiuwen.studio.agent.manager.utils.ImageBase64Utils;
+import com.openjiuwen.studio.agent.manager.utils.MapReadUtil;
 
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.BeanUtils;
@@ -270,7 +273,7 @@ public class AgentCommonService {
         agent.setIconName(iconName);
         agent.setWorkspaceId(workspaceId);
         agent.setDomainId(RequestContextUtils.getRequestUserDomainId());
-        agent.setDeleted(0);
+        agent.setDeleted(false);
 
         // 检查agent icon
         checkAgentIcon(agent.getIcon());
@@ -557,7 +560,7 @@ public class AgentCommonService {
         HistoryAgentEntity historyAgent = new HistoryAgentEntity();
         BeanUtils.copyProperties(agent, historyAgent);
         historyAgent.setHistoryId(UuidUtils.getUUID());
-        historyAgent.setDeleted(0);
+        historyAgent.setDeleted(false);
         historyAgentMapper.insert(historyAgent);
         agentMapper.deleteByPrimaryKey(agentId, projectId);
     }
@@ -688,7 +691,10 @@ public class AgentCommonService {
         // 设置controller details
         if (!StringUtils.isEmpty(agent.getDslPath())) {
             String controllerJson = mgObsService.downloadObsFile(agent.getDslPath());
-            agentInfo.setDetails(JSONObject.parseObject(controllerJson, ControllerVO.class));
+            ControllerVO controllerVO = JSONObject.parseObject(controllerJson, ControllerVO.class);
+            // 遍历节点，对引用共享资源的节点 configs 设 fromShare=true（用于前端只读控制）
+            markSharedNodes(controllerVO.getNodes(), agent.getWorkspaceId());
+            agentInfo.setDetails(controllerVO);
         }
         // 关联模型service_name
         ModelServiceBase modelServiceBase = modelServiceMapper.queryById(agent.getModelDeploymentId());
@@ -706,5 +712,26 @@ public class AgentCommonService {
         }
 
         return agentInfo;
+    }
+
+    /**
+     * 遍历 controller nodes，对引用共享资源的节点 configs 设 fromShare=true。
+     * 用于前端只读控制：共享子资源在目标空间不可编辑。仅对有 id 的节点校验，本地资源不误判。
+     */
+    public void markSharedNodes(List<ControllerNodeVO> nodes, String workspaceId) {
+        if (CollectionUtils.isEmpty(nodes)) {
+            return;
+        }
+        for (ControllerNodeVO node : nodes) {
+            Map<String, Object> configs = MapReadUtil.safeCastToMapWithStringKey(node.getConfigs());
+            if (MapUtils.isEmpty(configs) || configs.get("id") == null) {
+                continue;
+            }
+            if (shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId,
+                String.valueOf(configs.get("id")))) {
+                configs.put("fromShare", true);
+                node.setConfigs(configs);
+            }
+        }
     }
 }

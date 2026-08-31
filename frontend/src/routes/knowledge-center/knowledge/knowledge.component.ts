@@ -102,6 +102,7 @@ export class KnowledgeComponent implements OnInit, OnDestroy {
     },
   ];
   public kbId = '';
+  public isOpenJiuwen = false;
 
   public bytes = new BytesPipe();
 
@@ -184,27 +185,6 @@ export class KnowledgeComponent implements OnInit, OnDestroy {
     });
     this.route.queryParams.subscribe((params) => {
       this.isMarket = params?.isMarket === 'true';
-      if (this.configServ.faqEnable()) {
-        this.tabs.push(
-          ...[
-            {
-              title: 'faq_tab',
-              active: false,
-            },
-            {
-              title: 'faq_file',
-              active: false,
-            },
-          ],
-        );
-      }
-      if (!this.isMarket && this.configServ.faqEnable()) {
-        this.tabs.push({
-          title: 'task_manage',
-          active: false,
-        })
-      }
-      this.setCurrentActiveTab();
     }).unsubscribe();
     this.routeUnsub = this.route.queryParams.subscribe(() => {
       this.setCurrentActiveTab();
@@ -279,6 +259,25 @@ export class KnowledgeComponent implements OnInit, OnDestroy {
       if (this.configServ.knowledgeSource() === 'AgentBaseRag') {
         this.chunkMethod = this.kb?.rag_chunk_parser_conf?.chunk_method || '';
       }
+      // 判断是否为 OpenJiuwen 知识库
+      this.isOpenJiuwen = this.configServ.openjiuwenKbEnable() && this.kb?.source?.knowledge_base_connector_id === 'OpenjiuwenInside';
+      // 添加 FAQ问答对、FAQ文档、任务管理标签页（OpenJiuwen 不支持）
+      if (!this.isOpenJiuwen && this.configServ.faqEnable()) {
+        const hasFaqTab = this.tabs.some(tab => tab.title === 'faq_tab');
+        if (!hasFaqTab) {
+          this.tabs.push(
+            { title: 'faq_tab', active: false },
+            { title: 'faq_file', active: false },
+          );
+        }
+        if (!this.isMarket) {
+          const hasTaskTab = this.tabs.some(tab => tab.title === 'task_manage');
+          if (!hasTaskTab) {
+            this.tabs.push({ title: 'task_manage', active: false });
+          }
+        }
+      }
+      this.setCurrentActiveTab();
       const tagTab = this.tabs.find(item => item.title === 'kb_tag_management');
       if (!this.isMarket && this.kbAbilitiesService.isSupTag(this.kb) && !tagTab) {
         this.tabs.push({

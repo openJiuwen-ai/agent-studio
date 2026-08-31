@@ -384,23 +384,21 @@ public class AgentRuntimeService {
         executionInfo.setExecutionId(executeParams.getExecutionId());
         executionInfo.setMetaData(eventData.getMetaData());
         executionInfo.setInputs(executeParams.getQuery());
-        AgentInvokeInfo invokeInfo = convertAgentInvokeInfo(executionInfo, eventData, executeParams);
+        Optional<AgentInvokeInfo> invokeInfo = convertAgentInvokeInfo(executionInfo, eventData, executeParams);
         if (executionInfo.getInvokeList() == null) {
             executionInfo.setInvokeList(new ArrayList<>());
         }
-        if (invokeInfo != null) {
-            executionInfo.getInvokeList().add(invokeInfo);
-        }
+        invokeInfo.ifPresent(info -> executionInfo.getInvokeList().add(info));
         return executionInfo;
     }
 
     /**
      * event转换为invoke info
      */
-    public AgentInvokeInfo convertAgentInvokeInfo(AgentExecutionInfo executionInfo, JiuwenAgentEventData eventData,
+    public Optional<AgentInvokeInfo> convertAgentInvokeInfo(AgentExecutionInfo executionInfo, JiuwenAgentEventData eventData,
                                                   AgentExecuteParams executeParams) {
         if (StringUtils.isEmpty(eventData.getEndTime())) {
-            return null;
+            return Optional.empty();
         }
         AgentInvokeInfo agentInvokeInfo = new AgentInvokeInfo();
 
@@ -431,7 +429,7 @@ public class AgentRuntimeService {
                 executionInfo.setStartTime(startTime);
                 executionInfo.setEndTime(endTime);
             }
-            return null;
+            return Optional.empty();
         }
         if (PLUGIN_INVOKE_TYPE.equals(invokeType)) {
             JSONObject instanceAttributes = JSON.parseObject(
@@ -463,7 +461,7 @@ public class AgentRuntimeService {
         } else {
             agentInvokeInfo.setNodeStatus("succeeded");
         }
-        return agentInvokeInfo;
+        return Optional.of(agentInvokeInfo);
     }
 
     /**

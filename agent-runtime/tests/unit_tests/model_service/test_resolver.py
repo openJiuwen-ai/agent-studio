@@ -282,9 +282,10 @@ def test_resolve_strategy_router(mock_storage_fn, mock_svc_cache, mock_auth_cach
 
 def test_build_router_strategy_invalid_raises():
     """空 service_id_list → 抛 UNEXPECTED_ERROR（校验在 IO 之前，不需 mock）。"""
-    from model_service.resolver import _build_router_strategy
+    from model_service.resolver import _build_router_strategy, ResolveCtx
+    ctx = ResolveCtx(project_id="0", workspace_id="w", refresh=False)
     with pytest.raises(ModelServiceError) as exc:
-        asyncio.run(_build_router_strategy({"service_id_list": "", "auth_id_list": ""}, "0", "w", False))
+        asyncio.run(_build_router_strategy({"service_id_list": "", "auth_id_list": ""}, ctx))
     assert exc.value.code == "UNEXPECTED_ERROR"
 
 

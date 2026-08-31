@@ -5,6 +5,7 @@
 package com.openjiuwen.studio.agent.manager.saml;
 
 import org.apache.jcp.xml.dsig.internal.dom.DOMTransform;
+import org.apache.jcp.xml.dsig.internal.dom.XMLDSigRI;
 import org.dom4j.Document;
 import org.dom4j.DocumentHelper;
 import org.dom4j.Element;
@@ -16,7 +17,6 @@ import org.xml.sax.SAXException;
 import java.io.IOException;
 import java.io.Serializable;
 import java.io.StringReader;
-import java.lang.reflect.InvocationTargetException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.KeyStore.PrivateKeyEntry;
 import java.security.NoSuchAlgorithmException;
@@ -64,10 +64,9 @@ public class SAMLUtil {
 
     private static void signSignature(org.w3c.dom.Element element, PrivateKeyEntry privateKey, Node insertBefore,
         String digestAlgorithm, String signatureAlgorithm) throws SAMLException {
-        String jsr105Provider = "org.apache.jcp.xml.dsig.internal.dom.XMLDSigRI";
-        String providerName = System.getProperty("jsr105Provider", jsr105Provider);
         try {
-            Provider provider = (Provider) Class.forName(providerName).getDeclaredConstructor().newInstance();
+            // 直接实例化 JSR-105 provider（Apache Santuario XMLDSigRI），不再动态反射加载（S2658）
+            Provider provider = new XMLDSigRI();
 
             // 创建XML签名工厂
             XMLSignatureFactory factory = XMLSignatureFactory.getInstance("DOM", provider);
@@ -104,13 +103,9 @@ public class SAMLUtil {
             dsc.setNextSibling(insertBefore);
             XMLSignature signature = factory.newXMLSignature(signedInfo, keyInfo);
             signature.sign(dsc);
-        } catch (IllegalAccessException | MarshalException | XMLSignatureException | InstantiationException
-            | ClassNotFoundException | NoSuchAlgorithmException | InvalidAlgorithmParameterException e) {
+        } catch (MarshalException | XMLSignatureException | NoSuchAlgorithmException
+            | InvalidAlgorithmParameterException e) {
             throw new SAMLException("Error insertSignature:" + e.getMessage(), e);
-        } catch (InvocationTargetException e) {
-            throw new SAMLException("Invocation target error:", e);
-        } catch (NoSuchMethodException e) {
-            throw new SAMLException("Method not found:", e);
         }
     }
 

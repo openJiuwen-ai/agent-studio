@@ -9,6 +9,7 @@ import { ModelManagementService } from '@services/repositories/model-management-
 import { MarkdownComponent } from 'ngx-markdown';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CommonUtils } from '../../../utils/common.util';
+import { convertModelApiUrlToUserFormat, hasEnvPlaceholder } from '../../../utils/model-api-url.util';
 import { SetSidebarVisibilityService } from '@shared/services/set-sidebar-visibility.service';
 import { statusNewMap } from '@constants/status';
 import { DeleteModalComponent } from '@routes/model-management/delete-modal/delete-modal.component';
@@ -208,6 +209,8 @@ export class ModelDetailComponent {
       .subscribe(([res, modelList]) => {
         res.last_updated_date = CommonUtils.getDateToString(res.last_updated_date);
         res.created_date = CommonUtils.getDateToString(res.created_date);
+        // 将api_url转换为用户友好的{VAR}格式显示
+        res.api_url = convertModelApiUrlToUserFormat(res.api_url);
         this.infoDetail = res ?? {};
         const selectModel = modelList?.data?.find(item => item.id === this.modelId);
 
@@ -305,9 +308,8 @@ export class ModelDetailComponent {
   changeModelStatus(data) {
     let query = {};
     if (data.publish_status === 'offline') {
-      query = {
-        available_check: true,
-      };
+      // 带环境变量占位符的模型，URL 运行期才解析，发布期可用性探测无意义，跳过 available_check
+      query = hasEnvPlaceholder(data.api_url) ? {} : { available_check: true };
     }
     this.modelManagementService.publishModelInfo(data.id, data.publish_status === 'online' ? 'offline' : 'online', query).then((res: any) => {
       this.getDetail();

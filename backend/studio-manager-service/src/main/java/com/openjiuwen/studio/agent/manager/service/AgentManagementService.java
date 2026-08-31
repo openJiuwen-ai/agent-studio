@@ -44,6 +44,7 @@ import com.openjiuwen.studio.agent.manager.dto.AdditionalQuestionsConfig;
 import com.openjiuwen.studio.agent.manager.dto.AgentApplicationInfo;
 import com.openjiuwen.studio.agent.manager.dto.AgentApplicationListRsp;
 import com.openjiuwen.studio.agent.manager.dto.AgentInfo;
+import com.openjiuwen.studio.agent.manager.dto.ControllerNodeVO;
 import com.openjiuwen.studio.agent.manager.dto.AgentListRsp;
 import com.openjiuwen.studio.agent.manager.dto.AgentMcpDetail;
 import com.openjiuwen.studio.agent.manager.dto.AgentSkillDetail;
@@ -143,6 +144,7 @@ import com.openjiuwen.studio.agent.manager.service.asset.AssetFreeTrialMgmtServi
 import com.openjiuwen.studio.agent.manager.service.md.ModelServiceManager;
 import com.openjiuwen.studio.agent.manager.service.environment.EnvironmentServiceManagerService;
 import com.openjiuwen.studio.agent.manager.service.memory.AgentMemoryConfigService;
+import com.openjiuwen.studio.agent.manager.service.ShareResourceManagerService;
 import com.openjiuwen.studio.agent.manager.service.workspace.WorkspaceMemberService;
 import com.openjiuwen.studio.agent.manager.utils.CommonUtil;
 import com.openjiuwen.studio.agent.manager.utils.IconNameCheckUtils;
@@ -317,6 +319,9 @@ public class AgentManagementService implements IAgentManagementService {
 
     @Autowired
     private AgentSpaceService agentSpaceService;
+
+    @Autowired
+    private ShareResourceManagerService shareResourceManagerService;
 
     @Autowired
     private WorkflowValidationService workflowValidationService;
@@ -627,7 +632,7 @@ public class AgentManagementService implements IAgentManagementService {
         newAgent.setSchedulingMode(oldAgent.getSchedulingMode());
         newAgent.setDslPath(oldAgent.getDslPath());
         newAgent.setMemoryConfig(oldAgent.getMemoryConfig());
-        newAgent.setDeleted(0);
+        newAgent.setDeleted(false);
         AgentType agentType = AgentType.naValueOf(oldAgent.getType());
 
         if (workspaceId.equals(targetWorkspaceId)) {
@@ -1096,8 +1101,24 @@ public class AgentManagementService implements IAgentManagementService {
 
     @Override
     public AgentInfo retrieveAgent(String projectId, String agentId, String workspaceId) {
-        Agent agent = getAgent(projectId, workspaceId, agentId);
-        return agentCommonService.buildComplexAgentInfo(agent);
+        Agent agent = agentMapper.selectByProjectIdAndWorkspaceId(projectId, workspaceId, agentId);
+        boolean isShared = false;
+        if (agent == null) {
+            isShared = shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(workspaceId, agentId);
+            if (isShared) {
+                agent = agentMapper.selectById(agentId);
+            }
+        }
+        if (agent == null) {
+            log.error("agent does not exist, projectId = {}, workspaceId = {}, agentId = {}", projectId, workspaceId,
+                agentId);
+            throw new AgentStudioException(StudioError.AGENT_NOT_EXIST);
+        }
+        AgentInfo agentInfo = agentCommonService.buildComplexAgentInfo(agent);
+        if (isShared) {
+            agentInfo.setFromShare(true);
+        }
+        return agentInfo;
     }
 
     /**
@@ -2466,10 +2487,26 @@ public class AgentManagementService implements IAgentManagementService {
 
     public AgentInfo getAgentVersionInfo(String projectId, String agentId, String versionId,
         GetAgentVersionQo getAgentVersionQo) {
-        Agent agent = getAgent(projectId, getAgentVersionQo.getWorkspaceId(), agentId);
+        Agent agent = agentMapper.selectByProjectIdAndWorkspaceId(projectId, getAgentVersionQo.getWorkspaceId(),
+            agentId);
+        boolean isShared = false;
+        if (agent == null) {
+            isShared = shareResourceManagerService.checkWorkspaceAuthByResourceOrNot(
+                getAgentVersionQo.getWorkspaceId(), agentId);
+            if (isShared) {
+                agent = agentMapper.selectById(agentId);
+            }
+        }
+        if (agent == null) {
+            throw new AgentStudioException(StudioError.AGENT_NOT_EXIST);
+        }
         AgentType agentType = AgentType.naValueOf(agent.getType());
         if (StringUtils.isBlank(versionId)) {
-            return agentCommonService.buildComplexAgentInfo(agent);
+            AgentInfo info = agentCommonService.buildComplexAgentInfo(agent);
+            if (isShared) {
+                info.setFromShare(true);
+            }
+            return info;
         }
         ReleaseVersion releaseVersion = releaseVersionMapper.selectByAppIdAndVersionId(agent.getAgentId(), versionId);
         if (releaseVersion == null) {
@@ -2478,15 +2515,24 @@ public class AgentManagementService implements IAgentManagementService {
         if (Objects.requireNonNull(agentType) == AgentType.CONTROLLER) {
             String controllerJson = mgObsService.downloadObsFile(releaseVersion.getDslPath());
             ControllerVO releasedController = JSONObject.parseObject(controllerJson, ControllerVO.class);
+            // 遍历节点，对引用共享资源的节点 configs 设 fromShare=true（用于前端只读控制）
+            agentCommonService.markSharedNodes(releasedController.getNodes(), getAgentVersionQo.getWorkspaceId());
             AgentInfo agentInfo = agent.convertToDto(releasedController);
             agentInfo.setName(releasedController.getName());
             agentInfo.setDescription(releasedController.getDescription());
+            if (isShared) {
+                agentInfo.setFromShare(true);
+            }
             return agentInfo;
         }
         String agentDslJson = mgObsService.downloadObsFile(releaseVersion.getDslPath());
-        return JSON.parseObject(agentDslJson, AgentInfo.class)
+        AgentInfo result = JSON.parseObject(agentDslJson, AgentInfo.class)
             .setTriggerList(agent.getTriggerList())
             .setUpdateTime(agent.getUpdatedOn());
+        if (isShared) {
+            result.setFromShare(true);
+        }
+        return result;
     }
 
     @Override

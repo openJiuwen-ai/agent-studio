@@ -5,7 +5,7 @@
 package com.openjiuwen.studio.agent.common.security.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -32,6 +32,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * SsoAuthenticationService 单元测试
@@ -104,59 +105,59 @@ public class SsoAuthenticationServiceTest {
     void authenticate_success_shouldReturnUserInfo() {
         mockExchangeReturn(buildSsoResponse("user1", "Test User", "domain1", "proj1"), HttpStatus.OK);
 
-        SimpleUser result = service.authenticate("valid-token");
+        Optional<SimpleUser> result = service.authenticate("valid-token");
 
-        assert result != null;
-        assertEquals("user1", result.getUserId());
-        assertEquals("Test User", result.getUserName());
-        assertEquals("domain1", result.getDomainId());
-        assertEquals("proj1", result.getProjectId());
+        assertTrue(result.isPresent());
+        assertEquals("user1", result.get().getUserId());
+        assertEquals("Test User", result.get().getUserName());
+        assertEquals("domain1", result.get().getDomainId());
+        assertEquals("proj1", result.get().getProjectId());
     }
 
     @Test
     void authenticate_2xxStatus_shouldReturnUserInfo() {
         mockExchangeReturn(buildSsoResponse("user2", "User Two", "domain2", "proj2"), HttpStatus.CREATED);
 
-        SimpleUser result = service.authenticate("valid-token");
+        Optional<SimpleUser> result = service.authenticate("valid-token");
 
-        assert result != null;
-        assertEquals("user2", result.getUserId());
+        assertTrue(result.isPresent());
+        assertEquals("user2", result.get().getUserId());
     }
 
     @Test
-    void authenticate_nullBody_shouldReturnNull() {
+    void authenticate_nullBody_shouldReturnEmpty() {
         mockExchangeReturn(null, HttpStatus.OK);
 
-        SimpleUser result = service.authenticate("valid-token");
+        Optional<SimpleUser> result = service.authenticate("valid-token");
 
-        assertNull(result);
+        assertTrue(result.isEmpty());
     }
 
     @Test
-    void authenticate_httpClientError401_shouldReturnNull() {
+    void authenticate_httpClientError401_shouldReturnEmpty() {
         mockExchangeThrow(new HttpClientErrorException(HttpStatus.UNAUTHORIZED));
 
-        SimpleUser result = service.authenticate("expired-token");
+        Optional<SimpleUser> result = service.authenticate("expired-token");
 
-        assertNull(result);
+        assertTrue(result.isEmpty());
     }
 
     @Test
-    void authenticate_httpClientError403_shouldReturnNull() {
+    void authenticate_httpClientError403_shouldReturnEmpty() {
         mockExchangeThrow(new HttpClientErrorException(HttpStatus.FORBIDDEN));
 
-        SimpleUser result = service.authenticate("forbidden-token");
+        Optional<SimpleUser> result = service.authenticate("forbidden-token");
 
-        assertNull(result);
+        assertTrue(result.isEmpty());
     }
 
     @Test
-    void authenticate_generalException_shouldReturnNull() {
+    void authenticate_generalException_shouldReturnEmpty() {
         mockExchangeThrow(new RuntimeException("Connection refused"));
 
-        SimpleUser result = service.authenticate("error-token");
+        Optional<SimpleUser> result = service.authenticate("error-token");
 
-        assertNull(result);
+        assertTrue(result.isEmpty());
     }
 
     @Test
@@ -168,13 +169,13 @@ public class SsoAuthenticationServiceTest {
         ssoResponse.put("project_id", "  ");
         mockExchangeReturn(ssoResponse, HttpStatus.OK);
 
-        SimpleUser result = service.authenticate("valid-token");
+        Optional<SimpleUser> result = service.authenticate("valid-token");
 
-        assert result != null;
-        assertEquals("user1", result.getUserId());
-        assertEquals("unknown", result.getUserName());
-        assertEquals("0", result.getDomainId());
-        assertEquals("0", result.getProjectId());
+        assertTrue(result.isPresent());
+        assertEquals("user1", result.get().getUserId());
+        assertEquals("unknown", result.get().getUserName());
+        assertEquals("0", result.get().getDomainId());
+        assertEquals("0", result.get().getProjectId());
     }
 
     @Test
@@ -186,12 +187,12 @@ public class SsoAuthenticationServiceTest {
         ssoResponse.put("project_id", null);
         mockExchangeReturn(ssoResponse, HttpStatus.OK);
 
-        SimpleUser result = service.authenticate("valid-token");
+        Optional<SimpleUser> result = service.authenticate("valid-token");
 
-        assert result != null;
-        assertEquals("0", result.getDomainId());
-        assertEquals("0", result.getProjectId());
-        assertEquals("unknown", result.getUserName());
+        assertTrue(result.isPresent());
+        assertEquals("0", result.get().getDomainId());
+        assertEquals("0", result.get().getProjectId());
+        assertEquals("unknown", result.get().getUserName());
     }
 
     @Test
@@ -209,12 +210,12 @@ public class SsoAuthenticationServiceTest {
         ssoResponse.put("project_id", "");
         mockExchangeReturn(ssoResponse, HttpStatus.OK);
 
-        SimpleUser result = service.authenticate("valid-token");
+        Optional<SimpleUser> result = service.authenticate("valid-token");
 
-        assert result != null;
-        assertEquals("custom-domain", result.getDomainId());
-        assertEquals("custom-project", result.getProjectId());
-        assertEquals("unknown", result.getUserName());
+        assertTrue(result.isPresent());
+        assertEquals("custom-domain", result.get().getDomainId());
+        assertEquals("custom-project", result.get().getProjectId());
+        assertEquals("unknown", result.get().getUserName());
     }
 
     @Test
@@ -235,13 +236,13 @@ public class SsoAuthenticationServiceTest {
         ssoResponse.put("group", "custom-group");
         mockExchangeReturn(ssoResponse, HttpStatus.OK);
 
-        SimpleUser result = service.authenticate("valid-token");
+        Optional<SimpleUser> result = service.authenticate("valid-token");
 
-        assert result != null;
-        assertEquals("custom-user", result.getUserId());
-        assertEquals("Custom Name", result.getUserName());
-        assertEquals("custom-tenant", result.getDomainId());
-        assertEquals("custom-group", result.getProjectId());
+        assertTrue(result.isPresent());
+        assertEquals("custom-user", result.get().getUserId());
+        assertEquals("Custom Name", result.get().getUserName());
+        assertEquals("custom-tenant", result.get().getDomainId());
+        assertEquals("custom-group", result.get().getProjectId());
     }
 
     @Test
@@ -253,11 +254,11 @@ public class SsoAuthenticationServiceTest {
         ssoResponse.put("project_id", 200);
         mockExchangeReturn(ssoResponse, HttpStatus.OK);
 
-        SimpleUser result = service.authenticate("valid-token");
+        Optional<SimpleUser> result = service.authenticate("valid-token");
 
-        assert result != null;
-        assertEquals("12345", result.getUserId());
-        assertEquals("100", result.getDomainId());
-        assertEquals("200", result.getProjectId());
+        assertTrue(result.isPresent());
+        assertEquals("12345", result.get().getUserId());
+        assertEquals("100", result.get().getDomainId());
+        assertEquals("200", result.get().getProjectId());
     }
 }

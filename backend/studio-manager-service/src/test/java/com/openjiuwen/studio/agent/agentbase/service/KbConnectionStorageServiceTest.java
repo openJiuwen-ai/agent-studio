@@ -2,8 +2,12 @@
 package com.openjiuwen.studio.agent.agentbase.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 
 import com.openjiuwen.studio.agent.agentbase.entity.KnowledgeBaseConnectionEntity;
 import com.openjiuwen.studio.agent.agentbase.entity.KnowledgeBaseEntity;
@@ -15,9 +19,11 @@ import com.openjiuwen.studio.agent.foundation.base.utils.JacksonUtils;
 import com.openjiuwen.studio.agent.manager.obs.MgObsService;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -108,7 +114,71 @@ class KbConnectionStorageServiceTest {
         assertEquals("conn-2", json.get("connectionId").asText());
         assertTrue(json.has("knowledgeSource"));
         // null 字段被省略
-        org.junit.jupiter.api.Assertions.assertFalse(json.has("name"));
-        org.junit.jupiter.api.Assertions.assertFalse(json.has("status"));
+        assertFalse(json.has("name"));
+        assertFalse(json.has("status"));
+    }
+
+    @Test
+    void writeOpenJiuwenConnection_serializesModelConfigParams() {
+        MgObsService mockObs = Mockito.mock(MgObsService.class);
+        KbConnectionStorageService obsService =
+            new KbConnectionStorageService(mockObs);
+        ReflectionTestUtils.setField(obsService, "knowledgeSource", "CUSTOM");
+
+        KnowledgeBaseEntity kb = new KnowledgeBaseEntity();
+        kb.setId("kb-1");
+        kb.setEmbeddingModelServiceId("embed-ms-001");
+        kb.setWorkspaceId("ws-001");
+
+        obsService.writeOpenJiuwenConnectionToObs(
+            "default_lakesearch_inside_connection_id", kb);
+
+        ArgumentCaptor<String> contentCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockObs).uploadObsFile(anyString(), contentCaptor.capture(), anyInt());
+
+        JsonNode json = JacksonUtils.readValue(contentCaptor.getValue(), JsonNode.class);
+        assertEquals("default_lakesearch_inside_connection_id", json.get("connectionId").asText());
+        assertEquals("OpenJiuwen", json.get("connectorId").asText());
+        assertEquals("inside", json.get("connectorType").asText());
+        assertEquals("OpenJiuwen", json.get("knowledgeSource").asText());
+
+        ArrayNode params = (ArrayNode) json.get("params");
+        assertNotNull(params);
+        assertEquals(1, params.size());
+        assertEquals("model_config", params.get(0).get("code").asText());
+
+        JsonNode modelConfig = JacksonUtils.readValue(params.get(0).get("value").asText(), JsonNode.class);
+        assertEquals("embed-ms-001", modelConfig.get("model_service_id").asText());
+        assertEquals("ws-001", modelConfig.get("workspace_id").asText());
+        assertFalse(json.has("reranker_config"));
+    }
+
+    @Test
+    void writeOpenJiuwenConnection_includesRerankerWhenPresent() {
+        MgObsService mockObs = Mockito.mock(MgObsService.class);
+        KbConnectionStorageService obsService =
+            new KbConnectionStorageService(mockObs);
+        ReflectionTestUtils.setField(obsService, "knowledgeSource", "CUSTOM");
+
+        KnowledgeBaseEntity kb = new KnowledgeBaseEntity();
+        kb.setId("kb-1");
+        kb.setEmbeddingModelServiceId("embed-ms-001");
+        kb.setRerankModelServiceId("rerank-ms-001");
+        kb.setWorkspaceId("ws-002");
+
+        obsService.writeOpenJiuwenConnectionToObs("conn-1", kb);
+
+        ArgumentCaptor<String> contentCaptor = ArgumentCaptor.forClass(String.class);
+        verify(mockObs).uploadObsFile(anyString(), contentCaptor.capture(), anyInt());
+
+        JsonNode json = JacksonUtils.readValue(contentCaptor.getValue(), JsonNode.class);
+        ArrayNode params = (ArrayNode) json.get("params");
+        assertEquals(2, params.size());
+        assertEquals("model_config", params.get(0).get("code").asText());
+        assertEquals("reranker_config", params.get(1).get("code").asText());
+
+        JsonNode rerankerConfig = JacksonUtils.readValue(params.get(1).get("value").asText(), JsonNode.class);
+        assertEquals("rerank-ms-001", rerankerConfig.get("model_service_id").asText());
+        assertEquals("ws-002", rerankerConfig.get("workspace_id").asText());
     }
 }

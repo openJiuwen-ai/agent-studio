@@ -149,7 +149,7 @@ public class AsyncWorkflowListener extends WorkflowListener {
             // onFailure与onClosed互斥，必须在此保存调试记录，否则丢失
             saveInstance();
 
-            this.errorRsp = createErrorRsp(t, response);
+            this.errorRsp = createErrorRsp(t, response).orElse(null);
             this.openConnect = true;
         } catch (Exception e) {
             log.error("Fail handler response. {}", e.getMessage());

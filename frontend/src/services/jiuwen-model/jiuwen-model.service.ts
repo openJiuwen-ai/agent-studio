@@ -69,17 +69,25 @@ export class JiuwenModelService {
       onTimeout?: () => void;
       onDone?: () => void;
     } = {},
+    extraHeaders?: Record<string, string>,
   ): JiuwenSse {
     const nilFunc = () => void 0;
     const { stream_first_chunk_timeout, stream_interval_timeout } =
       this.configServ.getConfigs();
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      stream: 'true',
+      'X-Language': lang ?? 'zh-cn',
+    };
+    if (extraHeaders) {
+      Object.keys(extraHeaders).forEach(key => {
+        headers[key] = extraHeaders[key];
+      });
+    }
+
     const source = new JiuwenSse(seeUrl, {
-      headers: {
-        'Content-Type': 'application/json',
-        stream: 'true',
-        'X-Language': lang ?? 'zh-cn',
-      },
+      headers,
       payload: JSON.stringify({ ...params }),
       method: 'POST',
       withCsrf: true,
@@ -123,10 +131,18 @@ export class JiuwenModelService {
       onTimeout,
       onDone,
     }: any = {},
+    apiUrlEnvOverrides?: Record<string, string>,
+    environmentId?: string,
   ): any {
     let seeUrl = `${
       this.prefixChatSseManager
     }/chat/completions?workspace_id=${this.http.getWorkspaceId()}&refresh=true`;
+    if (apiUrlEnvOverrides && Object.keys(apiUrlEnvOverrides).length) {
+      seeUrl += `&api_url_env_vars=${encodeURIComponent(JSON.stringify(apiUrlEnvOverrides))}`;
+    }
+    const extraHeaders: Record<string, string> | undefined = environmentId
+      ? { 'X-Environment-Id': environmentId }
+      : undefined;
     return this.configureJiuwenSse(seeUrl, params, lang, {
       onStatus,
       onOpen,
@@ -137,20 +153,23 @@ export class JiuwenModelService {
       onModeration,
       onTimeout,
       onDone,
-    });
+    }, extraHeaders);
   }
 
   /** 非流式接口：调测模型  */
-  public modelTestChat(params: any, signal?: AbortSignal) {
+  public modelTestChat(params: any, signal?: AbortSignal, apiUrlEnvOverrides?: Record<string, string>, environmentId?: string) {
+    const query: any = { refresh: "true" }; //接口参数有更新
+    if (apiUrlEnvOverrides && Object.keys(apiUrlEnvOverrides).length) {
+      query.api_url_env_vars = JSON.stringify(apiUrlEnvOverrides);
+    }
     return this.http
       .postAsync({
         url: `${this.prefixChatManager}/chat/completions`,
-        query:{
-          refresh:"true" //接口参数有更新
-        },
+        query,
         params: params,
         signal,
         timeout: 120_000,
+        headers: environmentId ? { 'X-Environment-Id': environmentId } : undefined,
       })
       .then(async (res: any) => {
         if (!res?.choices) {
@@ -168,16 +187,19 @@ export class JiuwenModelService {
   }
 
   /** 非流式接口：文本向量化 */
-  public modelTestEmbedding(params: any, signal?: AbortSignal) {
+  public modelTestEmbedding(params: any, signal?: AbortSignal, apiUrlEnvOverrides?: Record<string, string>, environmentId?: string) {
+    const query: any = { refresh: "true" };
+    if (apiUrlEnvOverrides && Object.keys(apiUrlEnvOverrides).length) {
+      query.api_url_env_vars = JSON.stringify(apiUrlEnvOverrides);
+    }
     return this.http
       .postAsync({
         url: `${this.prefixChatManager}/embeddings`,
-        query:{
-          refresh:"true"
-        },
+        query,
         params: params,
         signal,
         timeout: 120_000,
+        headers: environmentId ? { 'X-Environment-Id': environmentId } : undefined,
       })
       .then(async (res: any) => {
         return res?.data ?? null;
@@ -185,16 +207,19 @@ export class JiuwenModelService {
   }
 
   /** 非流式接口：文本排序 */
-  public modelTestReRank(params: any, signal?: AbortSignal) {
+  public modelTestReRank(params: any, signal?: AbortSignal, apiUrlEnvOverrides?: Record<string, string>, environmentId?: string) {
+    const query: any = { refresh: "true" };
+    if (apiUrlEnvOverrides && Object.keys(apiUrlEnvOverrides).length) {
+      query.api_url_env_vars = JSON.stringify(apiUrlEnvOverrides);
+    }
     return this.http
       .postAsync({
         url: `${this.prefixChatManager}/rerank`,
-        query:{
-          refresh:"true"
-        },
+        query,
         params: params,
         signal,
         timeout: 120_000,
+        headers: environmentId ? { 'X-Environment-Id': environmentId } : undefined,
       })
       .then(async (res: any) => {
         return res?.results ?? null;

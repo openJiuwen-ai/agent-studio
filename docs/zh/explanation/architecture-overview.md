@@ -38,7 +38,7 @@ agent-studio/
 | `studio-runtime` | `agent-runtime/` | Agent/工作流执行、发布调用、LLM、MCP 与记忆运行时 |
 | `studio-builder` | `agent_builder/` | NL2、Prompt、模型调测及构建期存储 |
 
-Python 服务通过根目录 `packages/` 复用模型调用和存储能力。原 Java `studio-service` 已退出部署架构；`backend/studio-runtime*` 仅作为遗留源码保留，具体说明见 2.1 节。
+Python 服务通过根目录 `packages/` 复用模型调用和存储能力。原 Java `studio-service` 已在 Beta5 架构整改中从仓库彻底删除，其能力分别迁入 `studio-manager-service`、Python `agent-runtime/` 和 `agent_builder/`，具体说明见 2.1 节。
 
 ---
 
@@ -55,19 +55,20 @@ backend/
 │   ├── schema.sql                    # 数据库表结构定义
 │   ├── init.sql                      # 初始化数据
 │   └── data.sql                      # 业务测试数据
-├── studio/                           # 聚合模块
-├── studio-api/                       # API定义模块
 ├── studio-common/                    # 通用模块
 ├── studio-manager/                   # Manager服务启动模块
 ├── studio-manager-api/               # Manager API定义模块
 ├── studio-manager-service/           # Manager服务业务实现
-├── studio-runtime/                   # 原 Java studio-service 启动模块（遗留源码，不再部署）
-├── studio-runtime-api/               # 原 Java studio-service API（遗留源码）
-├── studio-runtime-service/           # 原 Java studio-service 实现（遗留源码）
-└── studio-space/                     # DeepResearch
+├── studio-storage/                   # 存储抽象层模块
+└── studio-space/                     # DeepResearch（独立聚合，未纳入父 POM <modules>）
 ```
 
-> **模块状态说明**：从 Beta5 开始，原 Java `studio-service` 已从部署架构中移除，其能力分别迁入 `studio-manager`、Python `agent-runtime` 和 `agent_builder`。上述 `backend/studio-runtime*` 模块暂时保留用于迁移追溯和兼容测试，不再构建为独立部署镜像。当前部署服务 `studio-runtime` 对应仓库根目录的 `agent-runtime/`，不要与这些 Java 遗留模块混淆。
+> **架构演进说明**：Beta5 架构整改已将原 Java `studio-service` 相关模块（`studio-runtime`、`studio-runtime-api`、`studio-runtime-service`、`studio-api` 及聚合模块 `studio`）从仓库中彻底删除，其能力分别迁入：
+> - 管理能力 → `studio-manager-service`
+> - 执行能力 → Python `agent-runtime/`
+> - 构建期能力 → Python `agent_builder/`
+>
+> 当前部署服务 `studio-runtime` 对应仓库根目录的 `agent-runtime/`，与上述已删除的 Java 模块无关。`backend/studio-space/` 物理存在但拥有独立聚合 POM，未纳入 `backend/pom.xml` 的 `<modules>`，可独立构建。
 
 ## 2.2 核心模块说明
 
@@ -153,33 +154,7 @@ studio-manager/
 - 包扫描路径：`com.openjiuwen.studio.agent.manager`
 - 提供Agent管理相关的REST API接口
 
-### 2.2.3 studio-runtime（原 Java studio-service 启动模块，遗留）
-
-**位置**：`backend/studio-runtime/`
-
-**功能说明**：该模块是原 Java `studio-service` 的启动模块。Beta5 后不再作为独立服务构建或部署；现役执行能力位于 Python `agent-runtime/`，管理代理能力位于 `studio-manager-service`，构建期能力位于 `agent_builder/`。
-
-**目录结构**：
-
-```
-studio-runtime/
-├── pom.xml
-└── src/
-    ├── main/
-    │   ├── java/
-    │   │   └── com/openjiuwen/studio/agent/runtime/
-    │   │       └── Application.java          # Spring Boot启动类
-    │   └── resources/                        # 资源文件
-    └── test/                                 # 测试代码
-```
-
-**遗留启动类信息**：
-
-- 使用`@SpringBootApplication`标注
-- 包扫描路径：`com.openjiuwen.studio.agent.runtime`
-- 保留原 Agent 运行时 REST API 入口，供迁移追溯和兼容测试使用
-
-### 2.2.4 studio-manager-service（Manager服务业务实现）
+### 2.2.3 studio-manager-service（Manager服务业务实现）
 
 **位置**：`backend/studio-manager-service/`
 
@@ -260,71 +235,7 @@ studio-manager-service/
 | **common/service** | 各模块共用的公共服务 |
 | **prompt/engineering** | 提示词生成、优化、测试功能 |
 
-### 2.2.5 studio-runtime-service（原 Java studio-service 业务实现，遗留）
-
-**位置**：`backend/studio-runtime-service/`
-
-**功能说明**：原 Java `studio-service` 的业务实现模块，当前不再对应任何部署容器。目录中的控制器、服务和配置属于迁移前实现，不能作为现役 Python `studio-runtime` 的部署或配置依据。
-
-**目录结构**：
-
-```
-studio-runtime-service/
-├── pom.xml
-└── src/
-    ├── main/
-    │   ├── java/
-    │   │   └── com/openjiuwen/studio/agent/runtime/
-    │   │       ├── alarm/                      # 告警模块
-    │   │       │   ├── aom/                    # AOM告警集成
-    │   │       │   └── app/                    # 应用告警
-    │   │       ├── annotation/                 # 自定义注解
-    │   │       ├── aop/                        # 切面编程
-    │   │       ├── bo/                         # 业务对象
-    │   │       ├── config/                     # 配置类
-    │   │       ├── constant/                   # 常量定义
-    │   │       ├── controller/                 # REST控制器
-    │   │       ├── datasource/                 # 数据源管理
-    │   │       ├── dto/                        # 数据传输对象
-    │   │       ├── entity/                     # 实体类
-    │   │       ├── enums/                      # 枚举定义
-    │   │       ├── event/                      # 事件处理
-    │   │       ├── exception/                  # 异常定义
-    │   │       ├── filter/                     # 请求过滤器
-    │   │       ├── http/                       # HTTP客户端
-    │   │       ├── mapper/                     # 数据库映射
-    │   │       ├── mcp/                        # MCP协议支持
-    │   │       ├── model/                      # 数据模型
-    │   │       ├── properties/                 # 配置属性
-    │   │       ├── rce/                        # 远程调用
-    │   │       ├── redis/                      # Redis缓存
-    │   │       ├── sensitive/                  # 敏感词过滤
-    │   │       ├── service/                    # 业务服务
-    │   │       ├── task/                       # 任务调度
-    │   │       ├── thread/                     # 线程管理
-    │   │       └── utils/                      # 工具类
-    │   └── resources/                          # 资源文件
-    └── test/                                   # 测试代码
-```
-
-**各包功能详解**：
-
-| 包名 | 功能说明 |
-|------|----------|
-| **alarm/aom** | 应用运维管理（AOM）告警集成，实现运行时告警上报 |
-| **alarm/app** | 应用层告警服务，提供应用级告警能力 |
-| **aop** | 面向切面编程，用于日志记录、性能监控、事务管理等 |
-| **controller** | 原 Java Service REST API控制器，仅用于遗留代码说明 |
-| **datasource** | 多数据源管理，支持运行时数据源切换和连接池管理 |
-| **event** | 事件处理机制，支持Agent运行过程中的事件订阅和分发 |
-| **mcp** | Model Context Protocol协议支持，实现与MCP服务器的通信 |
-| **service** | Agent执行相关的核心业务服务 |
-| **thread** | 线程池管理，控制并发执行 |
-| **task** | 定时任务调度，管理周期性任务 |
-| **sensitive** | 敏感词过滤，内容安全检查 |
-| **dto/entity** | 数据传输对象和实体类定义 |
-
-### 2.2.6 studio-space（DeepResearch）
+### 2.2.4 studio-space（DeepResearch）
 
 **位置**：`backend/studio-space/`
 

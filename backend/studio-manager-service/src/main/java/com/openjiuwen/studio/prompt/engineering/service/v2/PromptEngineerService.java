@@ -32,6 +32,7 @@ import com.openjiuwen.studio.prompt.engineering.mapper.v2.PromptTaskMapper;
 import com.openjiuwen.studio.prompt.engineering.service.IPromptEngineerService;
 import com.openjiuwen.studio.prompt.engineering.service.model.v2.jiuwen.JiuWenJobDeatails;
 import com.openjiuwen.studio.prompt.engineering.service.model.v2.jiuwen.JiuWenPromptDeatilRes;
+import com.openjiuwen.studio.prompt.engineering.service.model.v2.jiuwen.JiuWenProgress;
 import com.openjiuwen.studio.prompt.engineering.utils.StringUtil;
 
 import lombok.extern.slf4j.Slf4j;
@@ -264,7 +265,27 @@ public class PromptEngineerService implements IPromptEngineerService {
                 log.info("start to get task detail from external service, jiuwenTaskId: {}",
                         promptTaskDetailVo.getJiuwenTaskId());
 
-                JiuWenPromptDeatilRes jiuWenPromptDeatilRes = promptOptimizeTaskService.getTaskDetail(promptTaskDetailVo);
+                JiuWenPromptDeatilRes jiuWenPromptDeatilRes;
+                try {
+                    jiuWenPromptDeatilRes = promptOptimizeTaskService.getTaskDetail(promptTaskDetailVo);
+                } catch (AgentStudioException e) {
+                    // builder 侧 job 已丢失（清理/重启无 store 兜底）：降级为 FAILED + lostTaskMsg，
+                    // 不再冒泡到外层 catch 包成 02701185
+                    if (StudioError.JOB_NOT_FOUND_IN_BUILDER == e.getErrorCode()) {
+                        log.warn("prompt task {} (jiuwenTaskId={}) not found in builder, mark as FAILED",
+                            promptTaskDetailVo.getId(), promptTaskDetailVo.getJiuwenTaskId());
+                        String lostTaskMsg =
+                            "Task not found in execution engine, may have been cleaned up, please retry or delete.";
+                        promptTaskDetailVo.setMessage(lostTaskMsg);
+                        promptTaskDetailVo.setStatus(PromptTaskStatusEnum.FAILED);
+                        promptTaskMapper.updateMessageByPrimaryKey(promptTaskDetailVo.getId(),
+                            lostTaskMsg, projectId, workspaceId);
+                        promptTaskMapper.updateStatusByPrimaryKey(promptTaskDetailVo.getId(),
+                            PromptTaskStatusEnum.FAILED.getCode(), projectId, workspaceId);
+                        return new PromptBaseResp().setCode(200).setMessage("success").setData(promptTaskDetailVo);
+                    }
+                    throw e;
+                }
                 PromptTaskStatusEnum currentStatus = PromptTaskStatusEnum.getByJiuWenStatus(
                         jiuWenPromptDeatilRes.getProgress().getStatus());
 
@@ -287,6 +308,19 @@ public class PromptEngineerService implements IPromptEngineerService {
                     promptTaskDetailVo.setStatus(currentStatus);
                     promptTaskMapper.updateStatusByPrimaryKey(promptTaskDetailVo.getId(), currentStatus.getCode(),
                             projectId, workspaceId);
+                } else if (currentStatus == null
+                        && PromptTaskStatusEnum.statusMaybeChange(promptTaskDetailVo.getStatus().getCode())) {
+                    // 反向检查：builder 返回了响应但状态无效（任务信息缺失），
+                    // 对仍处于中间态(RUNNING/PAUSING)的任务标记为 FAILED，避免丢失后永久卡在执行中/暂停中
+                    log.warn("prompt task {} (jiuwenTaskId={}) got invalid status from builder, mark as FAILED",
+                            promptTaskDetailVo.getId(), promptTaskDetailVo.getJiuwenTaskId());
+                    String lostTaskMsg = "Task not found in execution engine, may have been cleaned up, please retry or delete.";
+                    promptTaskDetailVo.setMessage(lostTaskMsg);
+                    promptTaskDetailVo.setStatus(PromptTaskStatusEnum.FAILED);
+                    promptTaskMapper.updateMessageByPrimaryKey(promptTaskDetailVo.getId(), lostTaskMsg,
+                            projectId, workspaceId);
+                    promptTaskMapper.updateStatusByPrimaryKey(promptTaskDetailVo.getId(),
+                            PromptTaskStatusEnum.FAILED.getCode(), projectId, workspaceId);
                 }
 
                 PromptIterationResultVo promptIterationResultVo = PromptIterationResultVo.builder()
@@ -411,24 +445,54 @@ public class PromptEngineerService implements IPromptEngineerService {
         JiuWenJobDeatails jiuWenJobDetails = promptOptimizeTaskService.queryTaskDetailsByIds(
             new ArrayList<>(taskIdToEntityMap.values()));
 
-        jiuWenJobDetails.getData().forEach(jiuWenJobDetail -> {
-            PromptTaskEntity promptTaskEntity = taskIdToEntityMap.get(jiuWenJobDetail.getJobInfo().getId());
-            PromptTaskStatusEnum currentStatus = PromptTaskStatusEnum.getByJiuWenStatus(jiuWenJobDetail.getStatus());
-            if (currentStatus != null && currentStatus.getCode() != promptTaskEntity.getStatus()) {
-                promptTaskEntity.setStatus(currentStatus.getCode());
-                // 5. 更新状态变化
-                promptTaskMapper.updateStatusByPrimaryKey(promptTaskEntity.getId(), currentStatus.getCode(), projectId,
-                    listPromptTasksQo.getWorkspaceId());
-                if (currentStatus == PromptTaskStatusEnum.FAILED) {
-                    promptTaskEntity.setMessage(jiuWenJobDetail.getErrorMsg());
-                    promptTaskMapper.updateMessageByPrimaryKey(promptTaskEntity.getId(), jiuWenJobDetail.getErrorMsg(),
-                        projectId, listPromptTasksQo.getWorkspaceId());
+        // 收集九问实际返回的 jobId，用于反向检查缺失的任务
+        Set<String> returnedJiuwenIds = new HashSet<>();
+        List<JiuWenProgress> jiuWenProgressList = jiuWenJobDetails.getData();
+        if (jiuWenProgressList != null) {
+            for (JiuWenProgress jiuWenJobDetail : jiuWenProgressList) {
+                returnedJiuwenIds.add(jiuWenJobDetail.getJobInfo().getId());
+                PromptTaskEntity promptTaskEntity = taskIdToEntityMap.get(jiuWenJobDetail.getJobInfo().getId());
+                if (promptTaskEntity == null) {
+                    continue;
                 }
+                PromptTaskStatusEnum currentStatus = PromptTaskStatusEnum.getByJiuWenStatus(jiuWenJobDetail.getStatus());
+                if (currentStatus != null && currentStatus.getCode() != promptTaskEntity.getStatus()) {
+                    promptTaskEntity.setStatus(currentStatus.getCode());
+                    // 5. 更新状态变化
+                    promptTaskMapper.updateStatusByPrimaryKey(promptTaskEntity.getId(), currentStatus.getCode(),
+                        projectId, listPromptTasksQo.getWorkspaceId());
+                    if (currentStatus == PromptTaskStatusEnum.FAILED) {
+                        promptTaskEntity.setMessage(jiuWenJobDetail.getErrorMsg());
+                        promptTaskMapper.updateMessageByPrimaryKey(promptTaskEntity.getId(),
+                            jiuWenJobDetail.getErrorMsg(), projectId, listPromptTasksQo.getWorkspaceId());
+                    }
+                }
+                promptTaskEntity.setProgressRate(jiuWenJobDetail.getProgressRate());
+                promptTaskMapper.updateProgressRateByPrimaryKey(promptTaskEntity.getId(),
+                    jiuWenJobDetail.getProgressRate(), projectId, listPromptTasksQo.getWorkspaceId());
             }
-            promptTaskEntity.setProgressRate(jiuWenJobDetail.getProgressRate());
-            promptTaskMapper.updateProgressRateByPrimaryKey(promptTaskEntity.getId(), jiuWenJobDetail.getProgressRate(),
+        }
+
+        // 反向检查：查询了但九问未返回的任务（任务在执行引擎中已丢失），
+        // 对仍处于中间态(RUNNING/PAUSING)的任务标记为 FAILED，避免丢失后永久卡在执行中/暂停中
+        String lostTaskMsg = "Task not found in execution engine, may have been cleaned up, please retry or delete.";
+        for (Map.Entry<String, PromptTaskEntity> entry : taskIdToEntityMap.entrySet()) {
+            if (returnedJiuwenIds.contains(entry.getKey())) {
+                continue;
+            }
+            PromptTaskEntity lostEntity = entry.getValue();
+            if (!PromptTaskStatusEnum.statusMaybeChange(lostEntity.getStatus())) {
+                continue;
+            }
+            log.warn("prompt task {} (jiuwenTaskId={}) not found in builder, mark as FAILED",
+                lostEntity.getId(), entry.getKey());
+            lostEntity.setStatus(PromptTaskStatusEnum.FAILED.getCode());
+            lostEntity.setMessage(lostTaskMsg);
+            promptTaskMapper.updateStatusByPrimaryKey(lostEntity.getId(),
+                PromptTaskStatusEnum.FAILED.getCode(), projectId, listPromptTasksQo.getWorkspaceId());
+            promptTaskMapper.updateMessageByPrimaryKey(lostEntity.getId(), lostTaskMsg,
                 projectId, listPromptTasksQo.getWorkspaceId());
-        });
+        }
 
         List<PromptTaskDetailVo> detailVos = entityPage.getList()
             .stream()

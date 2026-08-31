@@ -121,7 +121,13 @@ export class WorkflowNodeComponent extends NodeBaseComponent implements OnInit {
 
     const parentId = this.getSourceNodeIdController(this.nodeInfo.id);
     const parentTypeIsSub = this.getParentInfoIsSub(parentId);
-    this.actions[0].disabled = (parentTypeIsSub && this.nodeInfo.configs?.fromShare) || this.activatedRoute.snapshot.queryParams.fromShare === 'true';
+    // 共享只读页面（URL 带 fromShare）中：节点自身被后端标记为共享资源（configs.fromShare）时
+    // 允许点击"详情"跳转只读页（跳转 URL 会携带 fromShare，目标页天然只读），仅禁用非共享节点；
+    // 本地可编辑页面行为保持不变（与原逻辑一致）
+    const pageFromShare = this.activatedRoute.snapshot.queryParams.fromShare === 'true';
+    this.actions[0].disabled = pageFromShare
+      ? !this.nodeInfo.configs?.fromShare
+      : (parentTypeIsSub && !!this.nodeInfo.configs?.fromShare);
   }
 
   private async processChildFlowUpdate() {

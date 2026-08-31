@@ -524,7 +524,7 @@ public class WorkflowRuntimeService implements IWorkflowRuntimeService {
             }
         }
         // 保留事件原始到达顺序，不按 startTime 排序。
-        // 对话型工作流中结束节点的 stream 路径会提前触发，导致其 node_started 事件可能先于后续节点到达，
+        // 对话型工作流中结束节点的 stream 路径会提前触发，导致其 node_started 事件可能在大模型_1 之前到达，
         // 按 startTime 排序或仅保留到达顺序都无法保证结束节点在最后。
         // 将结束节点事件移到列表末尾，确保调用链中结束节点始终排在最后。
         nodeRunInfos = reorderEndNodeToEnd(nodeRunInfos);

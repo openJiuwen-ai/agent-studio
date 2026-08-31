@@ -1056,12 +1056,17 @@ class ConvertToEicloud:
             "content-type": "application/json; charset=UTF-8",
             "X-Auth-Token": self.metadata.get("x_auth_token"),
         }
+        # FG_SSL_VERIFY=true 启用 FunctionGraph 出站 TLS 证书与主机名校验（默认
+        # false，对齐旧版不校验行为）；可用 FG_SSL_CA 指定内部 CA bundle 路径
+        # （不配则用系统信任库）。
+        ssl_verify = os.getenv("FG_SSL_VERIFY", "false").lower() == "true"
+        verify_arg = (os.getenv("FG_SSL_CA") or True) if ssl_verify else False
         try:
             response = requests.post(
                 url=functiongraph_url,
                 params=params,
                 json=payload,
-                verify=False,
+                verify=verify_arg,
                 headers=headers,
                 timeout=30,
             )

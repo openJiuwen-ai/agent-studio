@@ -10,7 +10,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
 
@@ -20,9 +19,7 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class OpenJiuwenSearchResp implements Serializable {
-
-    private static final long serialVersionUID = 1L;
+public class OpenJiuwenSearchResp {
 
     private List<SearchResultItem> results;
 
@@ -32,9 +29,7 @@ public class OpenJiuwenSearchResp implements Serializable {
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class SearchResultItem implements Serializable {
-
-        private static final long serialVersionUID = 1L;
+    public static class SearchResultItem {
 
         private String text;
 

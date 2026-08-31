@@ -59,4 +59,12 @@ public interface UserModelServiceProviderMapper {
      */
     List<ModelServiceProvider> selectByIds(@Param("ids") Collection<String> ids);
 
+    /**
+     * 在指定项目+工作空间内按 id 集合查询供应商（workspace-scoped，用于跨工作空间 COPY 存在性判定）。
+     */
+    List<ModelServiceProvider> selectByProjectIdAndWorkspaceId(
+        @Param("ids") Collection<String> ids,
+        @Param("projectId") String projectId,
+        @Param("workspaceId") String workspaceId);
+
 }

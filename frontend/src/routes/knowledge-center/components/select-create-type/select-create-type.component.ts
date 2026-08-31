@@ -124,24 +124,19 @@ export class SelectCreateTypeComponent implements OnInit {
   }
   show() {
     this.selectedType = this.typeItems[0];
-    if (this.isDoneDefaultConfig) {
-      this.knowledgeBaseService
-        .getKnowledgeDefaultConfigDetail(
-          'default_lakesearch_inside_connection_id',
-        )
-        .then((res) => {
-          if (res?.knowledge_base_connection_detail?.params?.length > 0) {
-            const params = res.knowledge_base_connection_detail.params;
-            const authMode = params.find((item) => item.code === 'auth_mode');
-            if (authMode.value) {
-              this.connectorId = 'default_lakesearch_inside_connection_id';
-            }
-          }
-          this.openSelectTypeModal();
-        });
-    } else {
-      this.openSelectTypeModal();
-    }
+    this.knowledgeBaseService
+      .getKnowledgeDefaultConfigDetail(
+        'default_lakesearch_inside_connection_id',
+      )
+      .then((res) => {
+        if (res?.knowledge_base_connection_detail?.params?.length > 0) {
+          this.connectorId = 'default_lakesearch_inside_connection_id';
+        }
+        this.openSelectTypeModal();
+      })
+      .catch(() => {
+        this.openSelectTypeModal();
+      });
   }
 
   private openSelectTypeModal() {

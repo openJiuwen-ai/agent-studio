@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agent_runtime.common.env_variables_loader import (
+from common_utils.env_variables_loader import (
     _parse_env_variables,
     load_environment_variables,
 )
@@ -47,7 +47,7 @@ class TestParseEnvVariables:
             {"name": "api_key", "value": {"content": "plaintext", "type": "string", "secret": True}}
         ])
         with patch(
-            "agent_runtime.common.env_variables_loader.decrypt",
+            "common_utils.env_variables_loader.decrypt",
             return_value="decrypted_val",
         ):
             result = _parse_env_variables(raw)
@@ -61,7 +61,7 @@ class TestParseEnvVariables:
             {"name": "key", "value": {"content": "secret_val", "type": "string", "secret": True}},
         ])
         with patch(
-            "agent_runtime.common.env_variables_loader.decrypt",
+            "common_utils.env_variables_loader.decrypt",
             return_value="decrypted",
         ):
             result = _parse_env_variables(raw)
@@ -127,7 +127,7 @@ class TestLoadEnvironmentVariables:
         mock_client.get = AsyncMock(return_value=raw_data)
 
         with patch(
-            "agent_runtime.common.env_variables_loader.get_redis_client",
+            "common_utils.env_variables_loader.get_redis_client",
             return_value=mock_client,
         ):
             result = await load_environment_variables("env-123", "ws-456")
@@ -140,7 +140,7 @@ class TestLoadEnvironmentVariables:
         mock_client.get = AsyncMock(return_value=None)
 
         with patch(
-            "agent_runtime.common.env_variables_loader.get_redis_client",
+            "common_utils.env_variables_loader.get_redis_client",
             return_value=mock_client,
         ):
             result = await load_environment_variables("env-123", "ws-456")
@@ -152,7 +152,7 @@ class TestLoadEnvironmentVariables:
         mock_client.get = AsyncMock(side_effect=Exception("redis down"))
 
         with patch(
-            "agent_runtime.common.env_variables_loader.get_redis_client",
+            "common_utils.env_variables_loader.get_redis_client",
             return_value=mock_client,
         ):
             result = await load_environment_variables("env-123", "ws-456")
@@ -167,7 +167,7 @@ class TestLoadEnvironmentVariables:
         mock_client.get = AsyncMock(return_value=raw_data)
 
         with patch(
-            "agent_runtime.common.env_variables_loader.get_redis_client",
+            "common_utils.env_variables_loader.get_redis_client",
             return_value=mock_client,
         ):
             result = await load_environment_variables("env-123", None)

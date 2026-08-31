@@ -75,7 +75,7 @@ public class WorkflowEntity implements Serializable {
     @JsonProperty("deploy_wf_version")
     private Long deployWfVersion;
 
-    private Integer deleted;
+    private Boolean deleted = false;
 
     @JsonProperty("workflow_type")
     private String workflowType;

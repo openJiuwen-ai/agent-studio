@@ -8,7 +8,6 @@
 - ``model-auth/auth/{projectId}/{providerId}/{authId}.json`` → ``ProviderAuth``
 - 三层缓存：L1 内存(60s) → L2 Redis → OBS；``refresh=True`` 时旁路缓存直读 OBS 并回填。
 - 平台模型（``project_id`` 属于 ``PLATFORM_PROJECT_IDS``）Redis 无 TTL；其余使用默认 TTL。
-- 加解密预留接口，当前明文直通（见 ``decrypt``）。
 """
 
 from __future__ import annotations
@@ -16,9 +15,11 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Optional
+
+from .env_resolver import has_env_placeholder, resolve_env_placeholders, ENV_PLACEHOLDER_PATTERN
 
 # OBS 对象 key 模板（对应 Java ModelStorageService / ModelAuthStorageService 的路径规则）。
 MODEL_PATH = "model-service/ir/%s.json"
@@ -98,9 +99,18 @@ class ModelStrategy:
     strategy_timeout_ms: int = 600_000          # 默认 10min，对应 Java defaultTimeout
 
 
-def decrypt(value: str) -> str:
-    """加解密预留接口：当前明文直通。接入真实加解密时替换此函数即可。"""
-    return value
+@dataclass(frozen=True)
+class ResolveCtx:
+    """单次策略解析的共享上下文（``project_id`` / ``workspace_id`` / ``refresh`` / ``env_vars``）。
+
+    将 ``_build_strategy`` / ``_build_detail`` 等 private 解析函数的关联参数收敛为一个具名对象，
+    降低参数个数（G.FNM.03）。``auth_id`` 因路由场景下逐子模型不同（取自 ``auth_id_list``），
+    不并入 ctx，仍作为独立参数传入。
+    """
+    project_id: str
+    workspace_id: str
+    refresh: bool = False
+    env_vars: Optional[dict] = None
 
 
 def _is_platform(project_id: str) -> bool:
@@ -130,6 +140,7 @@ async def resolve_strategy(
     auth_id: str,
     *,
     refresh: bool = False,
+    env_vars: Optional[dict] = None,
 ) -> Optional[ModelStrategy]:
     """解析模型服务策略（对应 Java ``ModelStorageService.queryModelStrategy``）。
 
@@ -139,6 +150,9 @@ async def resolve_strategy(
         workspace_id: 工作空间 ID。
         auth_id: auth ID；为空时不解析 auth。
         refresh: 是否旁路缓存、强制读 OBS 并回填。
+        env_vars: 环境变量 dict（``load_environment_variables`` 产出）。``api_url`` 含
+            ``${_env.plugin_url_params.VAR}`` 占位符时用于替换为真实值；``None`` 时跳过
+            解析（向后兼容，等价于历史 verbatim 行为）。
 
     Returns:
         ``ModelStrategy``；OBS 中不存在该对象时返回 None。
@@ -146,20 +160,26 @@ async def resolve_strategy(
     metadata = await _query_model_metadata(model_service_id, refresh)
     if metadata is None:
         return None
-    return await _build_strategy(metadata, project_id, workspace_id, auth_id, refresh)
+    ctx = ResolveCtx(project_id=project_id, workspace_id=workspace_id,
+                     refresh=refresh, env_vars=env_vars)
+    return await _build_strategy(metadata, ctx, auth_id)
 
 
-async def _build_strategy(metadata, project_id, workspace_id, auth_id, refresh) -> ModelStrategy:
+async def _build_strategy(
+    metadata: dict, ctx: ResolveCtx, auth_id: str = "",
+) -> ModelStrategy:
     mtype = metadata.get("type")
     data = metadata.get("data") or {}
     if mtype == "router":
-        return await _build_router_strategy(data, project_id, workspace_id, refresh)
+        return await _build_router_strategy(data, ctx)
     model = _model_from_data(data)
-    detail = await _build_detail(model, project_id, workspace_id, auth_id, refresh)
+    detail = await _build_detail(model, ctx, auth_id)
     return ModelStrategy(type=StrategyType.MODEL, name=model.model_name, models=[detail])
 
 
-async def _build_router_strategy(data, project_id, workspace_id, refresh) -> ModelStrategy:
+async def _build_router_strategy(
+    data: dict, ctx: ResolveCtx,
+) -> ModelStrategy:
     """构造 ROUTER 策略（对应 Java ``getRouterStrategy``）。
 
     拆分 ``service_id_list`` / ``auth_id_list``，逐子模型解析，并携带 ``strategy_timeout`` /
@@ -174,12 +194,12 @@ async def _build_router_strategy(data, project_id, workspace_id, refresh) -> Mod
 
     details: list[ModelServiceDetail] = []
     for idx, mid in enumerate(model_ids):
-        child = await _query_model_metadata(mid, refresh)
+        child = await _query_model_metadata(mid, ctx.refresh)
         if child is None:
             raise ModelServiceError("MD_MODEL_ROUTER_INVALID", f"router miss model {mid}")
         child_model = _model_from_data(child.get("data") or {})
         aid = auth_ids[min(idx, len(auth_ids) - 1)]
-        details.append(await _build_detail(child_model, project_id, workspace_id, aid, refresh))
+        details.append(await _build_detail(child_model, ctx, aid))
 
     return ModelStrategy(
         type=StrategyType.ROUTER,
@@ -190,19 +210,43 @@ async def _build_router_strategy(data, project_id, workspace_id, refresh) -> Mod
     )
 
 
-async def _build_detail(model, project_id, workspace_id, auth_id, refresh) -> ModelServiceDetail:
+async def _build_detail(
+    model: ModelServiceBase, ctx: ResolveCtx, auth_id: str = "",
+) -> ModelServiceDetail:
     """构造单模型 detail（对应 Java ``getModelServiceDetail``）。
 
     解析 auth；``available`` 取决于 auth 是否存在（free model 当前恒为 False）。
     authId 为空时回退到 V1 列举（对应 Java ``queryProviderAuth`` → ``queryProviderAuthV1``），
     按 workspace 匹配取 auth，与 Java 网关"不传 authId 也能用"的行为一致。
+
+    api_url 含 ``${_env.plugin_url_params.VAR}`` 占位符时，用 env_vars 替换为真实值
+    （跨环境迁移的字面量 apiUrl 在此解析，与管理侧 ``UrlCheckUtils.validateEnvVarPlaceholders``
+    校验同源）。用了占位符但未配置/加载全局环境（env_vars/plugin_url_params 为空）时，
+    fail-fast 抛 ``MD_ENV_VAR_UNRESOLVED``（对应 Java ``MODEL_ENV_VAR_UNRESOLVED`` / 1082，
+    消息说明「未配全局环境」）；环境已配置但缺对应变量时由 ``resolve_env_placeholders``
+    抛同 code（消息说明「环境无对应变量」）。无占位符时跳过、保持 verbatim。
     """
-    auth_proj = _auth_project_id(model.project_id, project_id)
+    if has_env_placeholder(model.api_url):
+        if not ctx.env_vars or not ctx.env_vars.get("plugin_url_params"):
+            names = ", ".join(ENV_PLACEHOLDER_PATTERN.findall(model.api_url or ""))
+            # 用户友好：占位符显示为 {ali} 而非后端格式 ${_env.plugin_url_params.ali}
+            user_friendly_url = ENV_PLACEHOLDER_PATTERN.sub(
+                lambda m: "{" + m.group(1) + "}", model.api_url or ""
+            )
+            raise ModelServiceError(
+                "MD_ENV_VAR_UNRESOLVED",
+                f"模型服务API地址配置有误：api_url 使用了环境变量占位符 {user_friendly_url!r}，"
+                f"但当前未加载/配置全局环境变量。请为当前环境配置所需的环境变量：{names}",
+            )
+        model = replace(
+            model, api_url=resolve_env_placeholders(model.api_url, ctx.env_vars),
+        )
+    auth_proj = _auth_project_id(model.project_id, ctx.project_id)
     if auth_id:
-        auth = await _query_auth(auth_proj, model.provider_id, auth_id, refresh)
+        auth = await _query_auth(auth_proj, model.provider_id, auth_id, ctx.refresh)
     else:
         auth = await _query_auth_v1(
-            auth_proj, model.provider_id, workspace_id, model.workspace_id, refresh
+            auth_proj, model.provider_id, ctx.workspace_id, model.workspace_id, ctx.refresh
         )
     available = auth is not None
     return ModelServiceDetail(model=model, auth=auth, available=available, is_free_model=False)
@@ -384,9 +428,9 @@ def _auth_from_data(auth_data: dict) -> Optional[ProviderAuth]:
     if auth_type == "API_KEY":
         info = json.loads(raw) if raw else {}
         return ProviderAuth(auth_id=auth_id, auth_type="API_KEY",
-                            auth_info={"api_key": decrypt(info.get("API Key", ""))})
+                            auth_info={"api_key": info.get("API Key", "")})
     if auth_type == "CUSTOM_APIKEY":
         info = json.loads(raw) if raw else {}
         return ProviderAuth(auth_id=auth_id, auth_type="CUSTOM_APIKEY",
-                            auth_info={k: decrypt(v) for k, v in info.items()})
+                            auth_info={k: v for k, v in info.items()})
     return ProviderAuth(auth_id=auth_id, auth_type=auth_type, auth_info={})

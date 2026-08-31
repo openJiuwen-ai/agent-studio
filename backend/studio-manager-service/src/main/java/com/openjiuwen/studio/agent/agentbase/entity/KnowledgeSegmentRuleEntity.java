@@ -13,6 +13,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.Arrays;
+import java.util.Date;
 
 /**
  * 知识文件分层规则实体类
@@ -42,10 +43,10 @@ public class KnowledgeSegmentRuleEntity {
     private String creatorId;
 
     @JsonProperty("created_on")
-    private Long createdOn;
+    private Date createdOn;
 
     @JsonProperty("updated_on")
-    private Long updatedOn;
+    private Date updatedOn;
 
     @JsonProperty("workspace_id")
     private String workspaceId;
@@ -65,8 +66,8 @@ public class KnowledgeSegmentRuleEntity {
         segmentRule.setRuleRegexs(Arrays.asList(rule.split(CommonConstant.ZERO_SPACE, -1)));
         segmentRule.setCreator(creator);
         segmentRule.setCreatorId(creatorId);
-        segmentRule.setCreateTime(createdOn);
-        segmentRule.setUpdateTime(updatedOn);
+        segmentRule.setCreateTime(createdOn != null ? createdOn.getTime() : null);
+        segmentRule.setUpdateTime(updatedOn != null ? updatedOn.getTime() : null);
         return segmentRule;
     }
 }

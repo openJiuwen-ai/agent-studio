@@ -104,7 +104,7 @@
       @if (!dependencyCollapsed) {
         <ng-container [formArrayName]="SCENARIO_FIELD_ID.DEPENDENCY_LIST">
           @for (item of dependencyFormListData; track trackById(item); let index = $index) {
-            <div [id]="'dependency' + index" class="mt-[12px]">
+            <div [id]="'dependency' + index" class="dependency-row-wrap mt-[12px]">
               <dependency-item
                 [dependencyDataItem]="item"
                 [formGroupItem]="dependencyFormList.controls[index]"

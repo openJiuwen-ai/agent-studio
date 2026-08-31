@@ -18,6 +18,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.manager.utils.JsonUtils;
 import com.openjiuwen.studio.prompt.engineering.entity.v2.ExecConfig;
@@ -55,6 +56,7 @@ import org.quartz.JobExecutionException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
 import java.util.ArrayList;
@@ -577,6 +579,40 @@ class JiuWenPromptTaskJobTest {
     }
 
     @Test
+    void test_delete_task_job_not_found() {
+        HttpServerErrorException notFoundEx = new HttpServerErrorException(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "Internal Server Error",
+            "{\"code\":102155,\"message\":\"Prompt optimize job not found.\"}".getBytes(),
+            java.nio.charset.StandardCharsets.UTF_8);
+
+        when(clientTemplate.deleteForEntity(anyString(), eq(TOKEN), eq(JIuWenPromptBaseRes.class))).thenThrow(
+            notFoundEx);
+
+        // 九问侧 job 不存在时不应抛异常，应正常返回
+        jiuWenPromptTaskJob.deleteTask(buildPromptTaskDetailVo(), TOKEN);
+
+        verify(clientTemplate).deleteForEntity(anyString(), eq(TOKEN), eq(JIuWenPromptBaseRes.class));
+    }
+
+    @Test
+    void test_delete_task_server_error_other_than_not_found() {
+        HttpServerErrorException serverErrorEx = new HttpServerErrorException(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "Internal Server Error",
+            "{\"code\":102099,\"message\":\"Some other server error.\"}".getBytes(),
+            java.nio.charset.StandardCharsets.UTF_8);
+
+        when(clientTemplate.deleteForEntity(anyString(), eq(TOKEN), eq(JIuWenPromptBaseRes.class))).thenThrow(
+            serverErrorEx);
+
+        // 非 job not found 的服务端错误仍应抛异常
+        assertThrows(AgentStudioException.class, () -> {
+            jiuWenPromptTaskJob.deleteTask(buildPromptTaskDetailVo(), TOKEN);
+        });
+    }
+
+    @Test
     void test_get_task_res_not_ok() {
         assertThrows(AgentStudioException.class, () -> {
             ResponseEntity<JiuWenPromptDeatilRes> mockResponse = mock(ResponseEntity.class);
@@ -599,5 +635,41 @@ class JiuWenPromptTaskJobTest {
                 mockResponse);
             jiuWenPromptTaskJob.getTaskDetail(buildPromptTaskDetailVo(), TOKEN);
         });
+    }
+
+    @Test
+    void test_get_task_detail_job_not_found() {
+        HttpServerErrorException notFoundEx = new HttpServerErrorException(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "Internal Server Error",
+            "{\"code\":102155,\"message\":\"Prompt optimize job not found.\"}".getBytes(),
+            java.nio.charset.StandardCharsets.UTF_8);
+
+        when(clientTemplate.getForEntity(anyString(), eq(TOKEN), eq(JiuWenPromptDeatilRes.class))).thenThrow(
+            notFoundEx);
+
+        // 九问侧 job 不存在时抛 JOB_NOT_FOUND_IN_BUILDER，由调用方降级处理
+        AgentStudioException thrown = assertThrows(AgentStudioException.class, () -> {
+            jiuWenPromptTaskJob.getTaskDetail(buildPromptTaskDetailVo(), TOKEN);
+        });
+        assertEquals(StudioError.JOB_NOT_FOUND_IN_BUILDER, thrown.getErrorCode());
+    }
+
+    @Test
+    void test_get_task_detail_server_error_other_than_not_found() {
+        HttpServerErrorException serverErrorEx = new HttpServerErrorException(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "Internal Server Error",
+            "{\"code\":102099,\"message\":\"Some other server error.\"}".getBytes(),
+            java.nio.charset.StandardCharsets.UTF_8);
+
+        when(clientTemplate.getForEntity(anyString(), eq(TOKEN), eq(JiuWenPromptDeatilRes.class))).thenThrow(
+            serverErrorEx);
+
+        // 非 job not found 的服务端错误仍应抛 GET_OPTIMIZATION_TASK
+        AgentStudioException thrown = assertThrows(AgentStudioException.class, () -> {
+            jiuWenPromptTaskJob.getTaskDetail(buildPromptTaskDetailVo(), TOKEN);
+        });
+        assertEquals(StudioError.GET_OPTIMIZATION_TASK, thrown.getErrorCode());
     }
 }

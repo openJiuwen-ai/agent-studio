@@ -184,7 +184,7 @@ export class ShareDetailBtnComponent {
   }
 
   editShare() {
-    const drawerRef = this.nzDrawerService.create({
+    const drawerRef = this.nzDrawerService.create<EditShareModalComponent, any>({
       nzTitle: "",
       nzFooter: null,
       nzWidth: 500,
@@ -198,8 +198,11 @@ export class ShareDetailBtnComponent {
         isEdit: true
       }
     });
-    drawerRef.afterClose.subscribe(() => {
-      // handle after close if needed
+    drawerRef.afterOpen.subscribe(() => {
+      const instance = drawerRef.getContentComponent();
+      instance.changeShearVersion.subscribe((id: string) => {
+        this.changeShearVersion.emit(id);
+      });
     });
   }
 

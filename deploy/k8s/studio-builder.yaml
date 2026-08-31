@@ -1,0 +1,221 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: studio-builder
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: studio-builder
+  template:
+    metadata:
+      labels:
+        app: studio-builder
+    spec:
+      volumes:
+        - name: shm-volume
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+      containers:
+        - name: container-studio-builder
+          image: studio-builder:1.0.0
+          env:
+            # ======== 服务监听 ========
+            - name: SERVER_HOST
+              value: '0.0.0.0'
+            - name: SERVER_PORT
+              value: '31015'
+            # ======== [必填] Redis ========
+            # 单机模式：配置 REDIS_HOST、REDIS_PORT、REDIS_PASSWORD
+            # 集群模式：配置 REDIS_CLUSTER_NODES、REDIS_PASSWORD、REDIS_MODE=cluster
+            # 哨兵模式：配置 REDIS_SENTINEL_MASTER、REDIS_SENTINEL_NODES、REDIS_PASSWORD、REDIS_MODE=sentinel
+            - name: REDIS_HOST
+              value: ''
+            - name: REDIS_PASSWORD
+              value: ''
+            - name: REDIS_PORT
+              value: '6379'
+            # 集群模式时填写，格式：host1:port1,host2:port2,host3:port3
+            - name: REDIS_CLUSTER_NODES
+              value: ''
+            # 哨兵模式时填写
+            - name: REDIS_SENTINEL_MASTER
+              value: ''
+            # 哨兵模式时填写，格式：host1:port1,host2:port2,host3:port3
+            - name: REDIS_SENTINEL_NODES
+              value: ''
+            # 单机填single，集群填cluster，哨兵填sentinel
+            - name: REDIS_MODE
+              value: 'single'
+            # Redis数据库编号，默认0
+            - name: REDIS_DATABASE
+              value: '0'
+            # Redis pipeline 事务开关，true 使用标准事务，false 不使用事务
+            - name: REDIS_TRANSACTION_ENABLED
+              value: 'true'
+            # ======== [选填] 提示词优化任务持久化存储（不填则仅存内存） ========
+            # STORE_DB_TYPE: mysql/gaussdb/postgresql
+            # STORE_DB_HOST: 单机一个IP，主备/集群逗号分隔(GaussDB/PG自动寻主，MySQL仅连首个)
+            - name: STORE_DB_TYPE
+              value: 'mysql'
+            - name: STORE_DB_HOST
+              value: ''
+            - name: STORE_DB_PORT
+              value: '3306'
+            - name: STORE_DB_USER
+              value: ''
+            - name: STORE_DB_PASSWORD
+              value: ''
+            - name: STORE_DB_DATABASE
+              value: 'agent-builder'
+            # GaussDB/PostgreSQL 生效
+            - name: STORE_DB_SCHEMA
+              value: ''
+            # disable/require/verify-ca/verify-full（GaussDB/PostgreSQL 生效）
+            - name: STORE_DB_SSLMODE
+              value: 'disable'
+            # ======== [选填] 日志 ========
+            - name: JIUWEN_LOG_FILE
+              value: '/opt/cloud/logs/tgf_python.log'
+            - name: JIUWEN_LOG_PATH
+              value: '/opt/cloud/logs/jiuwen.log'
+            - name: JIUWEN_LOGGING_LOG_FILE
+              value: '/opt/cloud/logs/jiuwen_python.log'
+            - name: LOGGING_LOG_PATH
+              value: '/opt/cloud/logs/'
+            - name: TGF_LOG_DIR
+              value: '/opt/cloud/logs/'
+            # 日志详细模式，设为true时显示完整错误信息
+            - name: LOG_VERBOSE
+              value: 'true'
+            # ======== [必填] 对象存储 ========
+            - name: DATASOURCE_OBS_SERVER
+              value: ''
+            - name: DATASOURCE_OBS_BUCKET
+              value: ''
+            - name: DATASOURCE_OBS_AK
+              value: ''
+            - name: DATASOURCE_OBS_SK
+              value: ''
+            - name: STORAGE_TYPE
+              value: 'OBS'
+            - name: STORAGE_CUSTOM_MODULE
+              value: ''
+            - name: STORAGE_CUSTOM_CLASS
+              value: ''
+            - name: DATASOURCE_PASSWORD_PROVIDER_TYPE
+              value: 'DEFAULT'
+            - name: DATASOURCE_PASSWORD_PROVIDER_MODULE
+              value: ''
+            - name: DATASOURCE_PASSWORD_PROVIDER_CLASS
+              value: ''
+            - name: STORAGE_LOCAL_BASE_PATH
+              value: ''
+            - name: STORAGE_LOCAL_BUCKET
+              value: ''
+            - name: DATASOURCE_OBS_ENABLE_SSL
+              value: 'false'
+            - name: MODEL_CONFIG_STRATEGY
+              value: 'obs'
+          resources:
+            limits:
+              cpu: '2'
+              memory: 4Gi
+            requests:
+              cpu: '2'
+              memory: 4Gi
+          volumeMounts:
+            - name: shm-volume
+              mountPath: /dev/shm
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: 31015
+              # https启动时，需要改成https
+              scheme: HTTP
+            initialDelaySeconds: 10
+            timeoutSeconds: 5
+            periodSeconds: 20
+            successThreshold: 1
+            failureThreshold: 5
+          startupProbe:
+            tcpSocket:
+              port: 31015
+            initialDelaySeconds: 10
+            timeoutSeconds: 30
+            periodSeconds: 20
+            successThreshold: 1
+            failureThreshold: 240
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Never
+          securityContext:
+            privileged: true
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: default-secret
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 60
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - studio-builder
+                topologyKey: failure-domain.beta.kubernetes.io/zone
+            - weight: 40
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - studio-builder
+                topologyKey: kubernetes.io/hostname
+      schedulerName: default-scheduler
+      tolerations:
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 30
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 30
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: studio-builder
+  namespace: default
+spec:
+  ports:
+    - name: cce-service-0
+      protocol: TCP
+      port: 31015
+      targetPort: 31015
+  selector:
+    app: studio-builder
+  type: ClusterIP

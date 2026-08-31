@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, ViewChild, OnInit, OnDestroy } from '@angular/core';
+import { Component, ViewChild, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { I18NEXT_NAMESPACE, I18NextEagerPipe } from 'angular-i18next';
 import { v4 as uuidV4 } from 'uuid';
@@ -11,6 +11,8 @@ import { Image2textOutputComponent } from '@routes/model-management/online-test/
 import { TextEmbeddingComponent } from '@routes/model-management/online-test/components/text-embedding/text-embedding.component';
 import { TextRerankComponent } from '@routes/model-management/online-test/components/text-rerank/text-rerank.component';
 import { getNewServiceKeyList } from "@routes/model-management/router-policy-detail/router-common";
+import { EnvManagementService } from '@routes/platform-management/environment-management/env-management.service';
+import { EnvironmentVariablesManagementService } from '@routes/platform-management/environment-variables-management/environment-variables-management.service';
 import { ModelManagementService } from "@services/repositories/model-management-new";
 import { ModelRouterStrategiesService } from '@services/repositories/model-router-strategies';
 import { JiuwenModelService } from '@services/jiuwen-model/jiuwen-model.service';
@@ -77,6 +79,9 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
     private sidebarVisibilityServ: SetSidebarVisibilityService,
     private modelManagementService: ModelManagementService,
     private message: NzMessageService,
+    private envManagementServ: EnvManagementService,
+    private envVariablesMgmtServ: EnvironmentVariablesManagementService,
+    private cdr: ChangeDetectorRef,
   ) {}
 
   public providerInfo: any = {};
@@ -114,6 +119,19 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
     { id: '1', label: this.i18n.transform('non_streaming'), value: false, disabled: false },
     { id: '2', label: this.i18n.transform('streaming'), value: true, disabled: false },
   ];
+  public envPlaceholderVars: Array<{name: string, value: string}> = [];
+  /** 缓存的环境变量值Map，避免每次变更检测都重新创建 */
+  public envVarValuesMap: Record<string, string> = {};
+  // 匹配后台返回格式${_env.plugin_url_params.VAR_NAME}提取变量名
+  private readonly ENV_PLACEHOLDER_REGEX = /\$\{_env\.plugin_url_params\.([a-zA-Z_$][a-zA-Z0-9_$]*)\}/g;
+
+  /** 默认环境 id（缓存，组件生命周期内复用）；undefined=无默认环境或未加载 */
+  public defaultEnvId: string | undefined;
+  /** 默认环境的变量名集合（缓存）；undefined=未加载，空 Set=已加载但无变量 */
+  public defaultEnvVarNames: Set<string> | undefined;
+  /** 是否正在加载/校验默认环境变量 */
+  public defaultEnvChecking = false;
+
   public mySelected: any;
   public selectedMap: any = {
     '0': { id: '' },
@@ -278,6 +296,7 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
           }
         }
         this.initThinking();
+        this.extractEnvPlaceholders();
       }
     });
   }
@@ -319,20 +338,15 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
 
   fileList: NzUploadFile[] = [];
 
-  /** 同步计数器：已通过 beforeUpload 校验但 FileReader.onload 尚未完成的图片数 */
-  pendingImageCount = 0;
-
-  /** 当前预览的图片 dataURL */
-  previewImageSrc = '';
-  /** 是否显示预览遮罩 */
-  previewVisible = false;
-
   image2textParam: any = {
     uploadData: [],
     content: '',
   };
 
   get Image2TextButtonTip(){
+    if(this.hasInvalidEnvVar()){
+      return this.i18n.transform('env_var_not_ready_tip')
+    }
     if(!this.mySelected?.id){
       return this.i18n.transform('select_model_first')
     }
@@ -347,6 +361,9 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   }
 
   get EmbeddingButtonTip(){
+    if(this.hasInvalidEnvVar()){
+      return this.i18n.transform('env_var_not_ready_tip')
+    }
     if(!this.mySelected?.id){
       return this.i18n.transform('select_model_first')
     }
@@ -357,6 +374,9 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   }
 
   get RerankButtonTip(){
+    if(this.hasInvalidEnvVar()){
+      return this.i18n.transform('env_var_not_ready_tip')
+    }
     if(!this.mySelected?.id){
       return this.i18n.transform('select_model_first')
     }
@@ -377,14 +397,14 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   }
 
   triggerImage2Text() {
+    if (this.hasInvalidEnvVar()) {
+      this.message.warning(this.i18n.transform('env_var_not_ready_tip'));
+      return;
+    }
     this.image2text.sendQuestion();
   }
 
   beforeUploadImage2Text = (file: NzUploadFile): boolean => {
-    if (this.image2textParam.uploadData.length + this.pendingImageCount >= 5) {
-      this.message.error(this.i18n.transform('image_upload_max_count_exceeded'));
-      return false;
-    }
     const isValidType = file.type === 'image/jpeg' || file.type === 'image/png';
     if (!isValidType) {
       this.message.error(this.i18n.transform("unsupported_file_type"));
@@ -396,24 +416,18 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       return false;
     }
 
-    this.pendingImageCount++;
     const reader = new FileReader();
     reader.readAsDataURL(file as any);
     reader.onload = () => {
-      this.pendingImageCount--;
       const url = reader.result;
       const uuid = uuidV4();
       file.uid = uuid;
-      file.url = url as string;
       this.image2textParam.uploadData.push({
         url,
         type: file.type,
         uuid,
       });
       this.fileList = [...this.fileList, file];
-    };
-    reader.onerror = () => {
-      this.pendingImageCount--;
     };
     return false;
   };
@@ -424,19 +438,6 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
       this.image2textParam.uploadData.splice(index, 1);
     }
     return true;
-  };
-
-  handlePreview = (file: NzUploadFile): void => {
-    // 使用组件内置遮罩预览，避免 window.open 被超长 base64 URL 截断
-    const src = file.url || file.thumbUrl;
-    if (src) {
-      this.previewImageSrc = src;
-      this.previewVisible = true;
-    }
-  };
-
-  closePreview = (): void => {
-    this.previewVisible = false;
   };
 
   changeValue(config) {
@@ -463,6 +464,10 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   textEmbeddingTips = this.i18n.transform('embedding_example');
 
   triggerTextEmbedding() {
+    if (this.hasInvalidEnvVar()) {
+      this.message.warning(this.i18n.transform('env_var_not_ready_tip'));
+      return;
+    }
     this.textEmbedding.sendQuestion();
   }
 
@@ -478,6 +483,10 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
   };
 
   triggerTextRerank() {
+    if (this.hasInvalidEnvVar()) {
+      this.message.warning(this.i18n.transform('env_var_not_ready_tip'));
+      return;
+    }
     this.textRerank.sendQuestion();
   }
 
@@ -532,7 +541,99 @@ export class OnlineTestComponent implements OnInit, OnDestroy {
     } else {
       this.mySelected = this.mySelected[0];
     }
+    this.extractEnvPlaceholders();
     this.initThinking();
+  }
+
+  /**
+   * 从选中的模型api_url中提取环境变量占位符
+   */
+  extractEnvPlaceholders() {
+    const varSet = new Set<string>();
+    const models = Array.isArray(this.mySelected) ? this.mySelected : (this.mySelected ? [this.mySelected] : []);
+
+    models.forEach(model => {
+      if (!model?.api_url) return;
+      let match;
+      const regex = new RegExp(this.ENV_PLACEHOLDER_REGEX.source, 'g');
+      while ((match = regex.exec(model.api_url)) !== null) {
+        varSet.add(match[1]);
+      }
+    });
+
+    this.envPlaceholderVars = Array.from(varSet).map(name => ({
+      name,
+      value: '',
+    }));
+    // 占位符变量值由后端按「默认环境」自动解析，前端不再收集手填值。
+    this.envVarValuesMap = {};
+
+    // 选中含占位符的模型时，异步加载默认环境上下文（取默认环境 id + 变量名集合），
+    // 完成后据变量名是否在默认环境，渲染「自动注入」或「未配置」提示。
+    if (this.envPlaceholderVars.length > 0) {
+      this.ensureDefaultEnvContext();
+    }
+  }
+
+  /**
+   * 懒加载默认环境上下文（幂等）：取默认环境 id → 取其变量名集合。
+   * 无默认环境时 defaultEnvId=undefined、defaultEnvVarNames=空 Set，不报错。
+   */
+  ensureDefaultEnvContext() {
+    // 已加载过则直接返回
+    if (this.defaultEnvVarNames !== undefined) {
+      return;
+    }
+    this.defaultEnvChecking = true;
+    this.envManagementServ.getEnvironmentList({ offset: 0, limit: 99 }).then((res: any) => {
+      const defaultEnv = (res?.env_info || []).find((e: any) => e.isDefault);
+      this.defaultEnvId = defaultEnv?.id;
+      if (!this.defaultEnvId) {
+        // 无默认环境：变量名集合置空 Set（已加载），所有占位符变量都判为「未配置」
+        this.defaultEnvVarNames = new Set<string>();
+        this.defaultEnvChecking = false;
+        this.cdr.markForCheck();
+        return;
+      }
+      // 取默认环境的变量名集合（name 不脱敏，可用于判断存在性）
+      this.envVariablesMgmtServ.getEnvVariablesDetail(this.defaultEnvId).then((varRes: any) => {
+        this.defaultEnvVarNames = new Set<string>((varRes?.variables || []).map((v: any) => v.name));
+        this.defaultEnvChecking = false;
+        this.cdr.markForCheck();
+      }).catch(() => {
+        this.defaultEnvVarNames = new Set<string>();
+        this.defaultEnvChecking = false;
+        this.cdr.markForCheck();
+      });
+    }).catch(() => {
+      this.defaultEnvVarNames = new Set<string>();
+      this.defaultEnvChecking = false;
+      this.cdr.markForCheck();
+    });
+  }
+
+  /**
+   * 占位符变量名是否在默认环境中配置（将由后端按默认环境自动解析）。
+   * defaultEnvVarNames 未加载完成时返回 false（保守，期间 hasMissingEnvVar 会判为缺失并禁用发送）。
+   */
+  isVarInDefaultEnv(name: string): boolean {
+    return this.defaultEnvVarNames?.has(name) ?? false;
+  }
+
+  /**
+   * 是否存在「未在默认环境配置」的占位符变量（任一缺失即禁用发送，引导用户去默认环境配置）。
+   */
+  hasMissingEnvVar(): boolean {
+    return this.envPlaceholderVars.length > 0 &&
+      this.envPlaceholderVars.some(item => !this.isVarInDefaultEnv(item.name));
+  }
+
+  /**
+   * 环境变量是否就绪（免填方案下的发送守卫）：存在缺失变量、或默认环境上下文仍在加载时为 true。
+   * 保留原方法名以复用现有发送守卫/按钮禁用/[envVarReady] 绑定，语义由「URL非法」改为「默认环境未就绪」。
+   */
+  hasInvalidEnvVar(): boolean {
+    return this.hasMissingEnvVar() || this.defaultEnvChecking;
   }
 
   initThinking(){

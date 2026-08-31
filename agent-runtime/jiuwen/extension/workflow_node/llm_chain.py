@@ -48,6 +48,17 @@ MESSAGE_TYPE_TO_ROLE = {"human": "user", "ai": "assistant", "system": "system"}
 _TYPE = "type"
 
 
+def _format_llm_error_detail(exc: Exception) -> str:
+    """格式化 LLM 调用异常详情用于用户可见错误信息。
+
+    统一委托 ``model_service.env_resolver.friendly_message``：对
+    ``ModelServiceError`` 取 ``.msg`` 剥 ``[code]`` 前缀（如「模型服务API地址配置有误：
+    ...未配置环境变量 ali」），其他异常保留 ``str(exc)``。
+    """
+    from model_service.env_resolver import friendly_message
+    return friendly_message(exc)
+
+
 class LLMChainModelConfig(BaseModel):
     model_name: StrictStr = Field(alias="modelName")
     model_type: StrictStr = Field(alias="modelType")
@@ -178,7 +189,7 @@ class LLMChain(WorkflowComponent):
         except Exception as e:
             raise build_error(
                 StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
-                error_msg=f"LLM invoke failed: {str(e)}",
+                error_msg=f"LLM invoke failed: {_format_llm_error_detail(e)}",
             ) from e
 
     def get_stream_output(self) -> dict | None:
@@ -268,7 +279,7 @@ class LLMChain(WorkflowComponent):
             except Exception as e:
                 raise build_error(
                     StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
-                    error_msg=f"LLM stream failed: {str(e)}",
+                    error_msg=f"LLM stream failed: {_format_llm_error_detail(e)}",
                 ) from e
 
     async def _process_thinking_stream(
@@ -312,7 +323,7 @@ class LLMChain(WorkflowComponent):
         except Exception as e:
             raise build_error(
                 StatusCode.COMPONENT_LLM_INVOKE_CALL_FAILED,
-                error_msg=f"LLM stream failed: {str(e)}",
+                error_msg=f"LLM stream failed: {_format_llm_error_detail(e)}",
             ) from e
 
         # 流消费完成，记录 total_token 性能指标

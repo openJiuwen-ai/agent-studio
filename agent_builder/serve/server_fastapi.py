@@ -90,16 +90,19 @@ def _register_model_service_ports() -> None:
     from model_service import ports
     from agent_builder.adapter.config_bridge import settings
     from agent_builder.adapter.request_context_bridge import (
-        get_request_headers, get_request_customer_headers,
+        get_env_variables, get_request_headers, get_request_customer_headers,
     )
 
     ports.set_storage_provider(storage.get_storage_provider)
     ports.set_llm_settings(lambda: settings.llm)
     ports.set_request_headers(get_request_headers)
+    ports.set_env_variables(get_env_variables)
     # 注册独立 customer Header provider（强类型，不退化为无 provenance 的 dict）
     ports.set_request_customer_headers(get_request_customer_headers)
     ports.set_cache_queues(None, None)
-    logger.info("[customer-header] model_service ports registered (storage/llm/request-headers/customer-headers)")
+    logger.info(
+        "model_service ports registered (storage/llm/request-headers/customer-headers/env-variables; cache disabled)"
+    )
 
 
 def _load_customer_header_profile() -> None:
@@ -183,14 +186,21 @@ def instance_app() -> FastAPI:
         from agent_builder.adapter.request_context_bridge import (
             RequestContext, _request_ctx,
         )
+        from common_utils import load_environment_variables
 
         def _h(name: str) -> str:
             return request.headers.get(name) or request.headers.get(name.lower(), "")
 
+        workspace_id = _h("X-Workspace-Id") or request.query_params.get("workspace_id", "")
+        environment_id = _h("X-Environment-Id")
+        # 按 environment_id 从 Redis 加载环境变量（缺省返回 {}，不查 Redis），供
+        # StudioModelClient 解析跨环境迁移模型 apiUrl 中的 ${_env.plugin_url_params.VAR} 占位符
+        env_vars = await load_environment_variables(environment_id, workspace_id)
+
         ctx = RequestContext(
             headers={
                 "X-Owner-Project-Id": _h("X-Owner-Project-Id"),
-                "X-Workspace-Id": _h("X-Workspace-Id"),
+                "X-Workspace-Id": workspace_id,
                 "X-Auth-Id": _h("X-Auth-Id"),
                 "X-Auth-Token": _h("X-Auth-Token"),
                 "X-Deployment-Id": _h("X-Deployment-Id"),
@@ -198,6 +208,7 @@ def instance_app() -> FastAPI:
             # 按 boundary.agent-builder-inbound.customer-passthrough 白名单捕获 cust-*
             # （不含 x-auth-token，平台认证 header 独立分仓）。供 invoke_one 做 BUILDER_LLM_CHAT rename。
             customer_headers=_capture_customer_headers(request),
+            env_variables=env_vars,
         )
         token = _request_ctx.set(ctx)
         try:

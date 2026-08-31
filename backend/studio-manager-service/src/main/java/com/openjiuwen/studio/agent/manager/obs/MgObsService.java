@@ -152,6 +152,15 @@ public class MgObsService implements CommonObsService {
         }
     }
 
+    public InputStream readObsFileStream(String relativePath) {
+        try {
+            return fileStore.readStream(path(relativePath));
+        } catch (Exception e) {
+            log.error("read obs file stream failed, path: {}", relativePath, e);
+            throw new AgentStudioException(StudioError.OBS_FAILED);
+        }
+    }
+
     public String downloadObsImageFile(String relativePath) {
         String iconPath = "icon/" + relativePath;
         try {

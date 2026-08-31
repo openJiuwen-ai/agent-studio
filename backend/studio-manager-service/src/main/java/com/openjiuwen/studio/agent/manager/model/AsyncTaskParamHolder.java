@@ -19,6 +19,11 @@ public class AsyncTaskParamHolder {
 
     private EventSource eventSource;
 
+    /**
+     * 协作式取消标志：cancelTask置位，轮询线程周期性检测到后主动清理并退出，不依赖线程中断
+     */
+    private volatile boolean cancelled;
+
     public AsyncTaskParamHolder(boolean isAsync, int timeout) {
         this.isAsync = isAsync;
         this.timeout = timeout;

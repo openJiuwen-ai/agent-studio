@@ -9,6 +9,7 @@ import { cdnAssetUrl } from 'src/single-spa/assets-url';
 import { ModelManagementService } from '@services/repositories/model-management-new';
 import { DeleteModalComponent } from './delete-modal/delete-modal.component';
 import { AddPublisherComponent } from '@routes/model-management/components/add-publisher/add-publisher.component';
+import { ModelImportModalComponent } from '@routes/model-management/components/import-modal/import-modal.component';
 import { CommonUtils } from '../../utils/common.util';
 import { DeleteRefsService } from '@shared/services/delete-refs.service';
 import { AuthModalComponent } from '@routes/model-management/components/auth-modal/auth-modal.component';
@@ -208,9 +209,9 @@ export class ModalManagementComponent implements OnInit, OnDestroy {
     if (item) item.isHovering = false;
   }
 
-  onHoverButtonClick(action: 'auth' | 'edit' | 'delete', item: any, event: Event): void {
+  onHoverButtonClick(action: 'auth' | 'edit' | 'delete' | 'export', item: any, event: Event): void {
     event.stopPropagation();
-    if (!this.subscribeBtnStatus || item.id?.startsWith('cdi-')) {
+    if (action !== 'export' && (!this.subscribeBtnStatus || item.id?.startsWith('cdi-'))) {
       return;
     }
     switch (action) {
@@ -225,10 +226,51 @@ export class ModalManagementComponent implements OnInit, OnDestroy {
       case 'delete':
         this.deleteModal(item);
         break;
+      case 'export':
+        this.exportByProvider(item);
+        break;
       default:
         break;
     }
     item.isHovering = false;
+  }
+
+  /** 供应商卡片导出（供应商+模型）：导出该供应商+其下全部模型。 */
+  public exportByProvider(item: any): void {
+    if (!this.subscribeBtnStatus || item.id?.startsWith('cdi-')) {
+      return;
+    }
+    this.modelManagementService
+      .exportModelsByProvider(item.id)
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'provider-models.jsonl';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        this.messageService.success(this.i18n.transform('export_model_success'));
+      })
+      .catch(() => {
+        this.messageService.error(this.i18n.transform('export_model_failed'));
+      });
+  }
+
+  /** 列表页导入（供应商+模型）：不传 targetProviderId，后端走供应商+模型 upsert 路径。 */
+  public openImportModal(): void {
+    const modalRef = this.modalService.create({
+      nzContent: ModelImportModalComponent,
+      nzTitle: this.i18n.transform('import_model_providers'),
+      nzWidth: '760px',
+      nzFooter: null,
+    });
+    modalRef.afterClose.subscribe((imported: boolean) => {
+      if (imported) {
+        this.getCustomData();
+      }
+    });
   }
 
   public authModal(item: any) {

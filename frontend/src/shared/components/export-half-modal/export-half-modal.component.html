@@ -27,11 +27,22 @@
     nzShowSizeChanger
     nzShowPagination
     [nzPageSizeOptions]="[10, 20, 50, 100]"
+    [nzShowTotal]="totalTemplate"
     (nzQueryParams)="onQueryParamsChange($event)"
     (nzPageIndexChange)="onPageIndexChange($event)"
     (nzPageSizeChange)="onPageSizeChange($event)"
     [nzScroll]="{ x: '500px', y: '400px' }"
   >
+    <ng-template #totalTemplate>
+      <div class="page-div">
+        <div class="page-div-span">
+          {{ ('count_num' | i18nextEager) + total }}
+        </div>
+        <div class="page-div-select">
+          {{ ('select_num' | i18nextEager) + setOfCheckedId.size }}
+        </div>
+      </div>
+    </ng-template>
     <thead>
       <tr>
         <th [(nzChecked)]="isAllChecked" [nzWidth]="'50px'" (nzCheckedChange)="onAllChecked($event)"></th>
@@ -55,7 +66,7 @@
     <button *nzSpaceItem type="button" nz-button (click)="dismiss()">
       {{ 'cancel' | i18nextEager }}
     </button>
-    <button *nzSpaceItem type="button" nz-button nzType="primary" [disabled]="!selectedRows.length" (click)="handleExport()">
+    <button *nzSpaceItem type="button" nz-button nzType="primary" [disabled]="!setOfCheckedId.size" (click)="handleExport()">
       {{ 'export' | i18nextEager }}
     </button>
   </nz-space>

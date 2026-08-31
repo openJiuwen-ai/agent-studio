@@ -1,5 +1,10 @@
 # 资产广场预置指导
 
+> **数据库兼容说明**：本文档中的 SQL 示例兼容 MySQL、GaussDB（MySQL 模式）和 PostgreSQL。部分函数在不同数据库中名称不同，使用时请注意：
+> - **UUID 生成**：MySQL/GaussDB 用 `UUID()`，PostgreSQL 用 `gen_random_uuid()`
+> - **时间戳**：MySQL/GaussDB 用 `UNIX_TIMESTAMP()`，PostgreSQL 用 `EXTRACT(EPOCH FROM NOW())::BIGINT`
+> - **布尔值**：`true`/`false` 关键字三库通用（MySQL 中 `TRUE=1, FALSE=0`）
+
 - [一、应用模板](#一应用模板)
 - [二、模型](#二模型)
 - [三、MCP](#三mcp)
@@ -19,14 +24,14 @@
 
 ```sql
 SELECT agent_id, project_id, workspace_id, name, description, icon, prologue, suggest_queries
-FROM t_agent WHERE (agent_id = '{agent_id}' OR name = '{agent_name}') AND deleted = 0;
+FROM t_agent WHERE (agent_id = '{agent_id}' OR name = '{agent_name}') AND deleted = false;
 ```
 
 **步骤二：查询已发布版本的 DSL/IR 路径**
 
 ```sql
 SELECT version_id, dsl_path, ir_path FROM t_release_version
-WHERE app_id = '{agent_id}' AND deleted = 0
+WHERE app_id = '{agent_id}' AND deleted = false
 ORDER BY released_on DESC LIMIT 1;
 ```
 
@@ -53,10 +58,10 @@ ORDER BY released_on DESC LIMIT 1;
 ```sql
 INSERT INTO t_agent_version (version_id, agent_id, project_id, ir_path, dsl_path, is_online, creator,
     created_on, updated_on, published_on)
-VALUES (UUID(), '{agent_id}', '{project_id}',
+VALUES ('{uuid}', '{agent_id}', '{project_id}',
     'agent/ir/{agent_id}/{agent_id}_published.json',
     'agent/dsl/{agent_id}/{agent_id}_published.json',
-    1, 'SYSTEM', NOW(), NOW(), NOW());
+    true, 'SYSTEM', NOW(), NOW(), NOW());
 ```
 
 > 路径以步骤三操作结果为准，上方SQL中为示例值。
@@ -76,8 +81,8 @@ VALUES (UUID(), '{agent_id}', '{project_id}',
 ```sql
 INSERT INTO t_app (app_id, project_id, workspace_id, name, description, icon, tags,
     app_type, resource_id, resource_type, creator, published_on, deleted)
-VALUES (UUID(), '{project_id}', '{workspace_id}', '{name}', '{description}', '{icon}',
-    '["tag_id_1","tag_id_2"]', 'chat', '{agent_id}', 'agent', 'SYSTEM', NOW(), 0);
+VALUES ('{uuid}', '{project_id}', '{workspace_id}', '{name}', '{description}', '{icon}',
+    '["tag_id_1","tag_id_2"]', 'chat', '{agent_id}', 'agent', 'SYSTEM', NOW(), false);
 ```
 
 ### 工作流
@@ -86,14 +91,14 @@ VALUES (UUID(), '{project_id}', '{workspace_id}', '{name}', '{description}', '{i
 
 ```sql
 SELECT id, project_id, workspace_id, name, description, avatar, workflow_type
-FROM t_agent_workflow WHERE (id = '{workflow_id}' OR name = '{workflow_name}') AND deleted = 0;
+FROM t_agent_workflow WHERE (id = '{workflow_id}' OR name = '{workflow_name}') AND deleted = false;
 ```
 
 **步骤二：查询已发布版本**
 
 ```sql
 SELECT version_id, version_name, dsl_path, ir_path FROM t_release_version
-WHERE app_id = '{workflow_id}' AND deleted = 0
+WHERE app_id = '{workflow_id}' AND deleted = false
 ORDER BY released_on DESC LIMIT 1;
 ```
 
@@ -119,7 +124,7 @@ ORDER BY released_on DESC LIMIT 1;
 ```sql
 INSERT INTO t_release_channel (id, app_id, app_type, version_id, version_name, channel_type,
     status, project_id, workspace_id)
-VALUES (UUID(), '{workflow_id}', 'workflow', '{version_id}', '{version_name}', 'app_store',
+VALUES ('{uuid}', '{workflow_id}', 'workflow', '{version_id}', '{version_name}', 'app_store',
     'released', '{project_id}', '{workspace_id}');
 ```
 
@@ -140,8 +145,8 @@ VALUES (UUID(), '{workflow_id}', 'workflow', '{version_id}', '{version_name}', '
 ```sql
 INSERT INTO t_app (app_id, project_id, workspace_id, name, description, icon, tags,
     app_type, resource_id, resource_type, workflow_type, creator, published_on, deleted)
-VALUES (UUID(), '{project_id}', '{workspace_id}', '{name}', '{description}', '{icon}',
-    '["tag_id_1","tag_id_2"]', 'scene', '{workflow_id}', 'workflow', '{workflow_type}', 'SYSTEM', NOW(), 0);
+VALUES ('{uuid}', '{project_id}', '{workspace_id}', '{name}', '{description}', '{icon}',
+    '["tag_id_1","tag_id_2"]', 'scene', '{workflow_id}', 'workflow', '{workflow_type}', 'SYSTEM', NOW(), false);
 ```
 
 ---
@@ -167,10 +172,15 @@ VALUES (UUID(), '{project_id}', '{workspace_id}', '{name}', '{description}', '{i
 | `MODEL_DESCRIPTION` | 模型描述，TEXT |
 | `MODEL_DESCRIPTION_EN` | 模型英文描述，TEXT |
 | `MODEL_TAGS` | 模型标签，TEXT，逗号分隔 |
-| `IS_REASONING` | 是否支持思考，TINYINT |
-| `IS_SUPPORT_CLOSE_REASONING` | 深度思考开关，TINYINT |
+| `IS_REASONING` | 是否支持思考，MySQL 为 TINYINT，PG 为 BOOLEAN，值用 `true`/`false` |
+| `IS_SUPPORT_CLOSE_REASONING` | 深度思考开关，MySQL 为 TINYINT，PG 为 BOOLEAN，值用 `true`/`false` |
+| `IS_SUPPORT_FUNCTION` | 是否支持 Function Call，MySQL 为 TINYINT，PG 为 BOOLEAN，值用 `true`/`false` |
+| `IS_SUPPORT_STREAM` | 是否支持流式输出，MySQL 为 TINYINT，PG 为 BOOLEAN，值用 `true`/`false` |
+| `IS_PUBLIC` | 是否公开，MySQL 为 TINYINT，PG 为 BOOLEAN，值用 `true`/`false` |
 | `CONTEXT_LENGTH` | 上下文长度，INT，大语言模型适用 |
 | `LOGO` | LOGO，LONGTEXT，Base64 |
+| `CREATED_DATE` | 创建时间，MySQL/GaussDB 为 BIGINT（毫秒时间戳），PG 为 BIGINT，值用 `{current_timestamp}` |
+| `LAST_UPDATED_DATE` | 更新时间，同上 |
 
 **预置SQL示例**：
 
@@ -183,13 +193,15 @@ INSERT INTO t_model_service (ID, PROVIDER_ID, SERVICE_NAME, SERVICE_KEY, MODEL_N
     CREATED_BY_USER, LAST_UPDATED_BY_USER, CREATED_DATE, LAST_UPDATED_DATE)
 VALUES ('{model_id}', '100', '{service_name}', '{service_key}', '{model_name}', '{model_version}',
     '{model_type}', 'PLATFORM-INTEGRATION', '{model_description}', '{model_description_en}', '{model_tags}',
-    '0', 'SYSTEM', 'SYSTEM', '{api_url}', 1, '{interface_protocol}',
-    1, '1022', 'online', 30, -1,
-    '{logo}', 'success', UUID(), 0, 'finish', {is_reasoning}, {is_support_close_reasoning},
-    'SYSTEM', 'SYSTEM', UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
+    '0', 'SYSTEM', 'SYSTEM', '{api_url}', true, '{interface_protocol}',
+    true, '1022', 'online', 30, -1,
+    '{logo}', 'success', '{uuid}', false, 'finish', {is_reasoning}, {is_support_close_reasoning},
+    'SYSTEM', 'SYSTEM', {current_timestamp}, {current_timestamp});
 ```
 
 > **重要**：数据库和OBS内容必须一致。`PROVIDER_ID` 标识模型所属供应商，设为 `platform_provider_id` 配置值（默认 `'100'`）时，模型被识别为平台免费模型，免鉴权即可使用；`AUTH_METADATA_ID` 关联 `t_provider_auth_metadata` 表的鉴权元数据定义，`'1022'` 是初始化SQL为供应商 `'100'` 预置的 `API_KEY` 类型鉴权定义，两者配套使用。
+>
+> **字段类型注意**：`IS_SUPPORT_FUNCTION`、`IS_SUPPORT_STREAM`、`IS_PUBLIC`、`IS_REASONING`、`IS_SUPPORT_CLOSE_REASONING` 在 PG 中为 BOOLEAN 类型，值必须用 `true`/`false`（三库兼容）；`CREATED_DATE`、`LAST_UPDATED_DATE` 为 BIGINT（毫秒时间戳），`{current_timestamp}` 为当前毫秒时间戳，MySQL 可用 `UNIX_TIMESTAMP()*1000`，PostgreSQL 可用 `EXTRACT(EPOCH FROM NOW())::BIGINT*1000`。
 
 ### 步骤二：OBS写入
 
@@ -224,7 +236,7 @@ VALUES ('{model_id}', '100', '{service_name}', '{service_key}', '{model_name}', 
 INSERT INTO ws_mcp_server_def (id, server_code, icon, name, name_en, description,
     description_en, readme, server_config, tools, type, org_type, url, category,
     tenant_id, created_date, last_updated_date)
-VALUES (UUID(), '{server_code}', '{icon_url}', '{name}', '{name_en}',
+VALUES ('{uuid}', '{server_code}', '{icon_url}', '{name}', '{name_en}',
     '{description}', '{description_en}',
     '{readme_content}', '{server_config_json}', '{tools_json}',
     'inner', '{org_type}', '{url}', '{category}',
@@ -261,7 +273,7 @@ VALUES (UUID(), '{server_code}', '{icon_url}', '{name}', '{name_en}',
 | `output_schema` | 出参JsonSchema，MEDIUMTEXT |
 | `intf_type` | 接口类型，MEDIUMTEXT，枚举值：`blocking`（默认）、`streaming` |
 | `call_mode` | 执行类型，VARCHAR(16)，枚举值：`api`（默认，API类型）、`functiongraph`（函数类型） |
-| `is_free` | 是否免费，TINYINT，枚举值：`0`（未知/非免费）、`1`（免费额度插件）、`2`（付费） |
+| `is_free` | 是否免费，SMALLINT，枚举值：`0`（未知/非免费）、`1`（免费额度插件）、`2`（付费），值用整数不用字符串 |
 | `last_version_id` | 最新版本号，VARCHAR(64)，与 `t_release_version.version_id` 一致 |
 | `category` | 分类ID，VARCHAR(36)，外键关联 `t_pe_industry.id` |
 | `label` | 插件类型标签，VARCHAR(32)，枚举值：`normal`（默认，普通插件）、`deepsearch`（深度搜索） |
@@ -270,9 +282,12 @@ VALUES (UUID(), '{server_code}', '{icon_url}', '{name}', '{name_en}',
 
 | 字段 | 说明 |
 |------|------|
+| `id` | 主键，VARCHAR(64)，UUID |
 | `version_id` | 版本ID，VARCHAR(64)，时间戳 |
-| `app_id` | 关联插件ID |
 | `version_name` | 版本名称，VARCHAR(64) |
+| `version_note` | 版本备注，VARCHAR(64)，**非空**，如 `'初始版本'` |
+| `app_id` | 关联插件ID |
+| `app_type` | 应用类型，VARCHAR(32)，**非空**，插件设为 `'tool'` |
 | `dsl_path` | OBS上版本DSL文件路径，即步骤一上传的路径，供 `getToolEntityByVersion` 等接口下载DSL |
 
 **预置SQL示例**：
@@ -282,16 +297,16 @@ INSERT INTO t_tool (tool_id, project_id, workspace_id, tool_display_name, tool_c
     tool_desc, icon, icon_name, visibility, request_info, auth_info,
     input_schema, output_schema, intf_type, type, published, call_mode,
     is_free, is_input_list, is_output_list, creator, last_version_id, category, label, is_share)
-VALUES (UUID(), '', 'default', '{tool_display_name}', '{tool_chinese_name}',
+VALUES ('{uuid}', '', 'default', '{tool_display_name}', '{tool_chinese_name}',
     '{tool_desc}', '{icon}', '{icon_name}', 'global', '{request_info}', '{auth_info}',
     '{input_schema}', '{output_schema}', '{intf_type}', 'inner', 1, '{call_mode}',
-    '{is_free}', '0', '0', 'SYSTEM', '{version_id}', '{category}', '{label}', 0);
+    {is_free}, '0', '0', 'SYSTEM', '{version_id}', '{category}', '{label}', 0);
 
-INSERT INTO t_release_version (version_id, app_id, version_name, dsl_path, status)
-VALUES ('{version_id}', '{plugin_id}', '{version_name}', 'plugin/dsl/{plugin_id}/{plugin_id}_{version_id}.json', 'released');
+INSERT INTO t_release_version (id, version_id, version_name, version_note, app_id, app_type, status, dsl_path)
+VALUES ('{uuid}', '{version_id}', '{version_name}', '初始版本', '{plugin_id}', 'tool', 'released', 'plugin/dsl/{plugin_id}/{plugin_id}_{version_id}.json');
 ```
 
-> **注意**：`published = 1` 是插件列表查询的必要条件；`t_release_version` 和 OBS 中的 DSL 文件为插件被智能体/工作流引用时提供版本定义，缺少则分享、关联、导入等功能会报错。
+> **注意**：`published = 1` 是插件列表查询的必要条件；`t_release_version` 的 `id`、`version_note`、`app_type` 为非空字段，必须赋值；`t_release_version` 和 OBS 中的 DSL 文件为插件被智能体/工作流引用时提供版本定义，缺少则分享、关联、导入等功能会报错。
 
 ---
 
@@ -316,7 +331,7 @@ VALUES ('{version_id}', '{plugin_id}', '{version_name}', 'plugin/dsl/{plugin_id}
 ```sql
 INSERT INTO t_pe_prompt_library (id, project_id, workspace_id, domain_id, name, content,
     description, source, industry_id, pt_type, variables, creator, updater, is_share)
-VALUES (UUID(), 'SYSTEM', 'SYSTEM', '0', '{name}', '{content}',
+VALUES ('{uuid}', 'SYSTEM', 'SYSTEM', '0', '{name}', '{content}',
     '{description}', 'PRESET', '{industry_id}', NULL, '[]', 'SYSTEM', 'SYSTEM', 0);
 ```
 
@@ -337,7 +352,7 @@ VALUES ('{template_id}', '{tag_id}', '{workspace_id}');
 
 ## 六、Skill
 
-预置 Skill 需写入OBS和数据库两处，查询时通过 `published_asset = 1` 筛选资产广场预置Skill。
+预置 Skill 需写入OBS和数据库两处，查询时通过 `published_asset = '1'` 筛选资产广场预置Skill。
 
 ### 步骤一：OBS写入
 
@@ -379,15 +394,17 @@ VALUES ('{template_id}', '{tag_id}', '{workspace_id}');
 INSERT INTO t_skill (skill_id, domain_id, name, icon, description, status, source,
     published_asset, project_id, workspace_id, latest_version, used_version, tag_id,
     creator_id, creator_name, created_at, updated_at)
-VALUES (UUID(), '0', '{name}', '{icon_base64}', '{description}',
+VALUES ('{uuid}', '0', '{name}', '{icon_base64}', '{description}',
     'developed', 'import', '1', '{project_id}', '{workspace_id}',
     '{version_id}', '{version_id}', '{tag_id}',
-    'SYSTEM', 'SYSTEM', UNIX_TIMESTAMP(), UNIX_TIMESTAMP());
+    'SYSTEM', 'SYSTEM', {current_timestamp}, {current_timestamp});
 
 INSERT INTO t_skill_version (id, skill_id, version_name, name, description,
     obs_path, used, creator_id, creator_name, created_at)
 VALUES ('{version_id}', '{skill_id}', '{version_name}', '{name}', '{description}',
-    'skill/{skill_id}/{version_id}/package.zip', 0, 'SYSTEM', 'SYSTEM', UNIX_TIMESTAMP());
+    'skill/{skill_id}/{version_id}/package.zip', 0, 'SYSTEM', 'SYSTEM', {current_timestamp});
 ```
 
-> **注意**：`obs_path` 中的路径需与步骤一实际上传路径一致。
+> **注意**：`obs_path` 中的路径需与步骤一实际上传路径一致。`{current_timestamp}` 为当前毫秒时间戳，MySQL 可用 `UNIX_TIMESTAMP()*1000`，PostgreSQL 可用 `EXTRACT(EPOCH FROM NOW())::BIGINT*1000`。
+>
+> **重要**：`project_id` 和 `workspace_id` 必须设为用户实际的项目ID和工作空间ID，否则前端按这两个字段过滤查询时无法返回预置数据。可通过查询 `t_agent` 或 `t_agent_workflow` 获取当前用户的 `project_id` 和 `workspace_id`。

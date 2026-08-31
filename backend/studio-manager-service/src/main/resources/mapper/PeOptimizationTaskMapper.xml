@@ -46,7 +46,7 @@
     </select>
 
     <insert id="insertOneOptimizationTask">
-        INSERT INTO t_pe_optimization_task(`id`, `project_id`, task_id, name, description, type, prompts,
+        INSERT INTO t_pe_optimization_task(id, project_id, task_id, name, description, type, prompts,
                                            test_set_id, model_config, assistant_config, num_iter,
                                            status, creator, created_on, workspace_id)
         VALUES (#{id}, #{projectId}, #{taskId}, #{name}, #{description}, #{type},

@@ -4,7 +4,6 @@
 
 package com.openjiuwen.studio.agent.manager.saml.impl;
 
-import com.openjiuwen.studio.agent.manager.saml.ConfigurationException;
 import com.openjiuwen.studio.agent.manager.saml.SAMLException;
 import com.openjiuwen.studio.agent.manager.saml.SAMLResponse;
 import com.openjiuwen.studio.agent.manager.saml.SAMLResponseValidator;
@@ -12,10 +11,9 @@ import com.openjiuwen.studio.agent.manager.saml.SAMLUtil;
 import com.openjiuwen.studio.agent.manager.saml.ServiceProvider;
 import com.openjiuwen.studio.agent.manager.saml.UserInfoBean;
 
+import org.apache.jcp.xml.dsig.internal.dom.XMLDSigRI;
 import org.w3c.dom.Node;
 
-import java.lang.reflect.InvocationTargetException;
-import java.security.Provider;
 import java.security.PublicKey;
 import java.security.cert.CertificateExpiredException;
 import java.security.cert.CertificateNotYetValidException;
@@ -30,7 +28,6 @@ import javax.xml.crypto.dsig.XMLSignatureFactory;
 import javax.xml.crypto.dsig.dom.DOMValidateContext;
 
 public class SAMLResponseValidatorImpl implements SAMLResponseValidator {
-    private static final String JSR_105_PROVIDER = "org.apache.jcp.xml.dsig.internal.dom.XMLDSigRI";
 
     private final SAMLResponse response;
 
@@ -91,16 +88,8 @@ public class SAMLResponseValidatorImpl implements SAMLResponseValidator {
     public boolean isValidXMLSign() throws SAMLException {
         boolean coreValidity;
         Node signatreuNode = response.getSignature();
-        String providerName = System.getProperty("jsr105Provider", JSR_105_PROVIDER);
-        XMLSignatureFactory fac;
-        try {
-            fac = XMLSignatureFactory.getInstance("DOM",
-                (Provider) Class.forName(providerName).getDeclaredConstructor().newInstance());
-        } catch (IllegalAccessException | InstantiationException | ClassNotFoundException | NoSuchMethodException e) {
-            throw new SAMLException("Cannot instance XMLSignatureFactory");
-        } catch (InvocationTargetException e) {
-            throw new ConfigurationException("Resource operation failed", e);
-        }
+        // 直接实例化 JSR-105 provider（Apache Santuario XMLDSigRI），不再动态反射加载（S2658）
+        XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM", new XMLDSigRI());
         X509Certificate x509Certificate = (X509Certificate) provider.getCertificate();
         PublicKey publicKey = x509Certificate.getPublicKey();
         DOMValidateContext valContext = new DOMValidateContext(publicKey, signatreuNode);

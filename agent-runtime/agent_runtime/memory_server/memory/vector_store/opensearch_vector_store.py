@@ -168,22 +168,25 @@ class OpenSearchVectorStore(BaseVectorStore):
 
                 if last_query_ids and doc_ids[0] == last_query_ids[0]:
                     # 如果查询出来的结果和上次查询结果一致，说明还没有完成删除，等到一段时间后再重新查询
-                    logger.info(
-                        f"Last query {len(last_query_ids)} document for delete not finished, wait for delete finished."
-                    )
+                    if logger.isEnabledFor(logging.INFO):
+                        logger.info(
+                            f"Last query {len(last_query_ids)} document for delete not finished, wait for delete finished."
+                        )
                     await asyncio.sleep(wait_delete_delay)
                     continue
 
                 last_query_ids = doc_ids.copy()
-                logger.info(f"Found {len(doc_ids)} documents to delete in openSearch")
+                if logger.isEnabledFor(logging.INFO):
+                    logger.info(f"Found {len(doc_ids)} documents to delete in openSearch")
 
                 # 直接删除本批次的文档
                 try:
                     await self.delete_docs_by_ids(collection_name, doc_ids)
                     total_deleted += len(doc_ids)
-                    logger.info(
-                        f"BATCH: Deleted {len(doc_ids)} documents in openSearch (total: {total_deleted})"
-                    )
+                    if logger.isEnabledFor(logging.INFO):
+                        logger.info(
+                            f"BATCH: Deleted {len(doc_ids)} documents in openSearch (total: {total_deleted})"
+                        )
 
                     # 添加短暂延迟，避免系统负载过高
                     await asyncio.sleep(short_delay)

@@ -209,14 +209,15 @@ class SubWorkflow(Invokable, InteractiveComponent):
                 self._workflow_instance.recover_chat_manager()
                 await self._workflow_instance.astream(query_, params_)
             except Exception as e:
+                from model_service.env_resolver import friendly_message
                 logger.error(
-                    f"Unexpected error encountered when stream running sub-workflow! Detail: {str(e)}",
+                    f"Unexpected error encountered when stream running sub-workflow! Detail: {friendly_message(e)}",
                     simple_log=f"Unexpected error "
                     f"encountered when stream running sub-workflow! Detail: {type(e).__name__}",
                 )
                 try:
                     await self._workflow_instance.stream_out_queue.put(
-                        ("ERROR", type(e).__name__)
+                        ("ERROR", friendly_message(e))
                     )
                 except Exception:
                     logger.error("Failed to enqueue ERROR event to stream_out_queue")
@@ -251,8 +252,9 @@ class SubWorkflow(Invokable, InteractiveComponent):
                 result_ = await self._workflow_instance.ainvoke(query_, params_)
                 return result_
             except Exception as e:
+                from model_service.env_resolver import friendly_message
                 logger.error(
-                    f"Unexpected error encountered when invoking sub-workflow! Detail: {str(e)}",
+                    f"Unexpected error encountered when invoking sub-workflow! Detail: {friendly_message(e)}",
                     simple_log=f"Unexpected error "
                     f"encountered when invoking sub-workflow! Detail: {type(e).__name__}",
                 )
@@ -406,8 +408,8 @@ class SubWorkflow(Invokable, InteractiveComponent):
             SubWorkflowConfig.model_validate(self._conf)
         except ValidationError as e:
             raise JiuWenBaseException(
-                error_code=StatusCode.SUB_WORKFLOW_CONFIGURATION_VALIDATION_FAILURE.code,
-                message=StatusCode.SUB_WORKFLOW_CONFIGURATION_VALIDATION_FAILURE.errmsg.format(
+                error_code=StatusCode.SUB_WORKFLOW_CONFIGURATION_VALIDATION_ERROR.code,
+                message=StatusCode.SUB_WORKFLOW_CONFIGURATION_VALIDATION_ERROR.errmsg.format(
                     msg=format_pydantic_validation_error_message(e)
                     if LOG_VERBOSE_MODE
                     else f"{type(e).__name__}"

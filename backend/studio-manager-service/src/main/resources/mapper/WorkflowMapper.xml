@@ -26,7 +26,7 @@
         <result column="workspace_id" jdbcType="VARCHAR" property="workspaceId"/>
         <result column="trace_id" jdbcType="VARCHAR" property="traceId"/>
         <result column="deploy_wf_version" jdbcType="BIGINT" property="deployWfVersion"/>
-        <result column="deleted" jdbcType="TINYINT" property="deleted"/>
+        <result column="deleted" jdbcType="BOOLEAN" property="deleted"/>
         <result column="workflow_type" jdbcType="VARCHAR" property="workflowType"/>
         <result column="last_version_id" jdbcType="VARCHAR" property="lastVersionId"/>
         <result column="test_status" jdbcType="TINYINT" property="testStatus"/>
@@ -75,12 +75,12 @@
         select
         <include refid="Base_Column_List"/>
         from t_agent_workflow
-        where deleted = 0
+        where deleted = false
     </select>
     <select id="findWorkflowToBeDeleted" resultType="java.lang.String">
         SELECT id
         FROM t_agent_workflow
-        WHERE deleted = 1
+        WHERE deleted = true
           AND updated_at IS NOT NULL
           AND updated_at &lt;= #{softDeleteTtl}
     </select>
@@ -105,14 +105,14 @@
         or project_id = #{opProjectId,jdbcType=VARCHAR}
         )
         and id = #{id,jdbcType=VARCHAR}
-        and deleted = 0
+        and deleted = false
     </select>
     <select id="getWorkflowEntityByWorkspaceId" parameterType="java.lang.String" resultMap="BaseResultMap">
         <!--@mbg.generated-->
         select
         <include refid="Base_Column_List"/>
         from t_agent_workflow
-        where project_id = #{projectId,jdbcType=VARCHAR} and id = #{id,jdbcType=VARCHAR} and deleted = 0
+        where project_id = #{projectId,jdbcType=VARCHAR} and id = #{id,jdbcType=VARCHAR} and deleted = false
         <if test="workspaceId != null and workspaceId != ''">
             and workspace_id = #{workspaceId,jdbcType=VARCHAR}
         </if>
@@ -129,14 +129,14 @@
         select
         <include refid="Base_Column_List"/>
         from t_agent_workflow
-        where status = #{status,jdbcType=VARCHAR} and id = #{id,jdbcType=VARCHAR} and deleted = 0
+        where status = #{status,jdbcType=VARCHAR} and id = #{id,jdbcType=VARCHAR} and deleted = false
     </select>
     <select id="getWorkflowEntityByIds" resultMap="BaseResultMap">
         <!--@mbg.generated-->
         select
         <include refid="Base_Column_List"/>
         from t_agent_workflow
-        where deleted = 0
+        where deleted = false
         <if test="projectId != null">
             and project_id = #{projectId,jdbcType=VARCHAR}
         </if>
@@ -166,8 +166,8 @@
                 #{publishedAt,jdbcType=BIGINT}, #{createdBy,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR},
                 #{updatedBy,jdbcType=VARCHAR}, #{updaterId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR},
                 #{domainId,jdbcType=VARCHAR}, #{workspaceId,jdbcType=INTEGER}, #{deployWfVersion,jdbcType=BIGINT},
-                #{deleted,jdbcType=TINYINT}, #{workflowType,jdbcType=VARCHAR}, #{lastVersionId,jdbcType=VARCHAR},
-                #{testStatus,jdbcType=VARCHAR}, #{iconName,jdbcType=VARCHAR}, #{traceId,jdbcType=VARCHAR})
+                #{deleted,jdbcType=BOOLEAN}, #{workflowType,jdbcType=VARCHAR}, #{lastVersionId,jdbcType=VARCHAR},
+                #{testStatus,jdbcType=TINYINT}, #{iconName,jdbcType=VARCHAR}, #{traceId,jdbcType=VARCHAR})
     </insert>
 
     <insert id="insertWorkflowEntity">
@@ -186,8 +186,8 @@
                 #{publishedAt,jdbcType=BIGINT}, #{createdBy,jdbcType=VARCHAR}, #{creatorId,jdbcType=VARCHAR},
                 #{updatedBy,jdbcType=VARCHAR}, #{updaterId,jdbcType=VARCHAR}, #{projectId,jdbcType=VARCHAR},
                 #{domainId,jdbcType=VARCHAR}, #{workspaceId,jdbcType=INTEGER}, #{deployWfVersion,jdbcType=BIGINT},
-                #{deleted,jdbcType=TINYINT}, #{workflowType,jdbcType=VARCHAR}, #{lastVersionId,jdbcType=VARCHAR},
-                #{testStatus,jdbcType=VARCHAR}, #{iconName,jdbcType=VARCHAR}, #{traceId,jdbcType=VARCHAR})
+                #{deleted,jdbcType=BOOLEAN}, #{workflowType,jdbcType=VARCHAR}, #{lastVersionId,jdbcType=VARCHAR},
+                #{testStatus,jdbcType=TINYINT}, #{iconName,jdbcType=VARCHAR}, #{traceId,jdbcType=VARCHAR})
     </insert>
 
     <update id="updateWorkflowEntity" parameterType="com.openjiuwen.studio.agent.manager.entity.WorkflowEntity">
@@ -363,7 +363,7 @@
         select
         <include refid="Base_Column_List"/>
         from t_agent_workflow
-        where project_id = #{projectId,jdbcType=VARCHAR} and deleted = 0
+        where project_id = #{projectId,jdbcType=VARCHAR} and deleted = false
         <if test="workflowSearchCriteria != null and workflowSearchCriteria.id != null">
             and id = #{workflowSearchCriteria.id,jdbcType=VARCHAR}
         </if>
@@ -371,7 +371,7 @@
             and workspace_id = #{workflowSearchCriteria.workspaceId,jdbcType=VARCHAR}
         </if>
         <if test="workflowSearchCriteria != null and workflowSearchCriteria.name != null">
-            and `name` like concat('%', #{workflowSearchCriteria.name,jdbcType=VARCHAR}, '%') escape '!'
+            and name like concat('%', #{workflowSearchCriteria.name,jdbcType=VARCHAR}, '%') escape '!'
         </if>
         <if test="workflowSearchCriteria != null and workflowSearchCriteria.description != null">
             and description like concat('%', #{workflowSearchCriteria.description,jdbcType=VARCHAR}, '%') escape '!'
@@ -405,7 +405,7 @@
         select
         <include refid="Base_Column_List"/>
         from t_agent_workflow
-        where project_id = #{projectId,jdbcType=VARCHAR} and deleted = 0
+        where project_id = #{projectId,jdbcType=VARCHAR} and deleted = false
         <if test="workflowSearchCriteria != null and workflowSearchCriteria.id != null">
             and id in
             <foreach collection="workflowSearchCriteria.id" item="workflow_id" index="index" open="(" close=")"
@@ -414,7 +414,7 @@
             </foreach>
         </if>
         <if test="workflowSearchCriteria != null and workflowSearchCriteria.name != null">
-            and `name` like concat('%', #{workflowSearchCriteria.name,jdbcType=VARCHAR}, '%') escape '!'
+            and name like concat('%', #{workflowSearchCriteria.name,jdbcType=VARCHAR}, '%') escape '!'
         </if>
         <if test="workflowSearchCriteria != null and workflowSearchCriteria.description != null">
             and description like concat('%', #{workflowSearchCriteria.description,jdbcType=VARCHAR}, '%') escape '!'
@@ -436,7 +436,7 @@
         select
         <include refid="Base_Column_List"/>
         from t_agent_workflow
-        where creator_id = #{creatorId,jdbcType=VARCHAR} and project_id = #{projectId,jdbcType=VARCHAR} and deleted = 0
+        where creator_id = #{creatorId,jdbcType=VARCHAR} and project_id = #{projectId,jdbcType=VARCHAR} and deleted = false
         <if test="workflowSearchCriteria != null and workflowSearchCriteria.id != null">
             and id = #{workflowSearchCriteria.id,jdbcType=VARCHAR}
         </if>
@@ -444,7 +444,7 @@
             and workspace_id = #{workflowSearchCriteria.workspaceId,jdbcType=VARCHAR}
         </if>
         <if test="workflowSearchCriteria != null and workflowSearchCriteria.name != null">
-            and `name` like concat('%', #{workflowSearchCriteria.name,jdbcType=VARCHAR}, '%')
+            and name like concat('%', #{workflowSearchCriteria.name,jdbcType=VARCHAR}, '%')
         </if>
         <if test="workflowSearchCriteria != null and workflowSearchCriteria.description != null">
             and description like concat('%', #{workflowSearchCriteria.description,jdbcType=VARCHAR}, '%')
@@ -472,21 +472,21 @@
         select
         <include refid="Base_Column_List"/>
         from t_agent_workflow
-        where creator_id = #{creatorId,jdbcType=VARCHAR} and project_id = #{projectId,jdbcType=VARCHAR} and workspace_id = #{workspaceId,jdbcType=VARCHAR} and deleted = 0
+        where creator_id = #{creatorId,jdbcType=VARCHAR} and project_id = #{projectId,jdbcType=VARCHAR} and workspace_id = #{workspaceId,jdbcType=VARCHAR} and deleted = false
         order by updated_at desc
     </select>
     <select id="getAvailableWorkflowEntityByWorkspaceId" parameterType="map" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
         from t_agent_workflow
-        where project_id = #{projectId,jdbcType=VARCHAR} and workspace_id = #{workspaceId,jdbcType=VARCHAR} and deleted = 0
+        where project_id = #{projectId,jdbcType=VARCHAR} and workspace_id = #{workspaceId,jdbcType=VARCHAR} and deleted = false
         order by updated_at desc
     </select>
     <select id="getWorkflowEntityByFilter" parameterType="map" resultMap="BaseResultMap">
         select
         <include refid="Base_Column_List"/>
         from t_agent_workflow
-        where deleted = 0
+        where deleted = false
         <if test="workflowEntity != null and workflowEntity.id != null">
             and id = #{workflowEntity.id,jdbcType=VARCHAR}
         </if>
@@ -628,7 +628,7 @@
         WHERE trace_id = #{traceId}
         AND project_id = #{projectId}
         AND workspace_id = #{workspaceId}
-        AND deleted = 0
+        AND deleted = false
     </select>
 
     <select id="selectByWorkflowId"
@@ -639,14 +639,14 @@
         WHERE id = #{id}
         AND workspace_id = #{workspaceId}
         AND project_id = #{projectId}
-        AND deleted = 0
+        AND deleted = false
     </select>
 
     <select id="countWorkflowCountByDomainId" resultType="java.lang.Integer">
         SELECT COUNT(*)
         FROM t_agent_workflow
         WHERE domain_id = #{domainId}
-          AND deleted = 0
+          AND deleted = false
     </select>
 
     <select id="selectByWorkflowIdList"
@@ -664,14 +664,14 @@
                 #{id}
             </foreach>
         </if>
-        AND deleted = 0
+        AND deleted = false
     </select>
 
 
     <select id="queryWorkflowList" resultType="com.openjiuwen.studio.agent.manager.entity.WorkflowEntity">
         select
         <include refid="Base_Column_List"/>
-        from t_agent_workflow where deleted =0 ORDER BY workspace_id,id limit #{limit} OFFSET #{offset}
+        from t_agent_workflow where deleted = false ORDER BY workspace_id,id limit #{limit} OFFSET #{offset}
     </select>
 
     <select id="countWorkflowIdInDb" resultType="java.lang.Integer">
@@ -696,7 +696,7 @@
     </update>
 
     <select id="countWorkflowMetric" resultType="double">
-        select count(*) from t_agent_workflow where deleted =0 AND workspace_id = #{workspaceId}
+        select count(*) from t_agent_workflow where deleted = false AND workspace_id = #{workspaceId}
         AND project_id = #{projectId}
         <if test="agentMetricRequest.agentStatus!=null and agentMetricRequest.agentStatus!=''">
             and status = #{agentMetricRequest.agentStatus}

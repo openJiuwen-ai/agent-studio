@@ -1,0 +1,123 @@
+<div class="import-modal-container">
+  <!-- Step 1: file upload -->
+  <div class="section">
+    <div class="section-title">{{ 'import_model_select_file' | i18nextEager }}</div>
+    <div class="upload-row">
+      <nz-upload
+        class="import-upload"
+        [nzShowUploadList]="false"
+        [nzBeforeUpload]="beforeUpload"
+        nzAccept=".jsonl"
+      >
+        <button nz-button nzType="default" [disabled]="importLoading || previewLoading">
+          <nz-icon nzType="upload" nzTheme="outline" />
+          {{ fileName || ('import_model_choose_file' | i18nextEager) }}
+        </button>
+      </nz-upload>
+      <span class="file-meta" *ngIf="fileName">{{ fileName }} ({{ fileSize | number }} bytes)</span>
+    </div>
+    <div class="hint">{{ 'import_model_file_hint' | i18nextEager }}</div>
+    <div class="hint warning">{{ 'import_model_auth_hint' | i18nextEager }}</div>
+  </div>
+
+  <!-- Step 2: preview -->
+  <div class="section" *ngIf="previewLoading || preview">
+    <div class="section-title">
+      {{ 'import_preview' | i18nextEager }}
+      <span class="preview-summary" *ngIf="preview">
+        （{{ 'import_preview_total' | i18nextEager }}: {{ preview.total_count }}，{{ 'import_preview_conflict' | i18nextEager }}: {{ preview.conflict_count }}）
+      </span>
+    </div>
+    <nz-spin *ngIf="previewLoading" nzSize="small"></nz-spin>
+    <nz-table *ngIf="preview" #previewTable [nzData]="preview.items || []" [nzPageSize]="5" nzSize="small">
+      <thead>
+        <tr>
+          <th>{{ previewFirstNameColKey | i18nextEager }}</th>
+          <th>{{ 'import_preview_conflict_desc' | i18nextEager }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of previewTable.data">
+          <td>{{ item.service_name || item.id || '-' }}</td>
+          <td>
+            <nz-tag *ngIf="!item.detail" nzColor="success">{{ 'import_preview_none' | i18nextEager }}</nz-tag>
+            <nz-tag *ngIf="item.detail"
+              [nzColor]="(item.line_valid && item.api_url_valid && item.env_var_valid) ? 'warning' : 'error'">
+              {{ item.detail }}
+            </nz-tag>
+          </td>
+        </tr>
+      </tbody>
+    </nz-table>
+  </div>
+
+  <!-- Step 3: conflict strategy -->
+  <div class="section" *ngIf="preview && !importRsp">
+    <div class="section-title">{{ 'conflict_strategy' | i18nextEager }}</div>
+    <nz-radio-group [(ngModel)]="conflictStrategy" class="strategy-group">
+      <label nz-radio-button nzValue="SKIP" class="strategy-btn">
+        <span class="strategy-text">{{ 'conflict_strategy_skip' | i18nextEager }}</span>
+        <span
+          class="strategy-help"
+          nz-tooltip
+          [nzTooltipTitle]="'conflict_strategy_skip_desc' | i18nextEager"
+          nzTooltipPlacement="top"
+          (click)="$event.stopPropagation(); $event.preventDefault()"
+        >
+          <nz-icon nzType="question-circle" nzTheme="outline" />
+        </span>
+      </label>
+      <label nz-radio-button nzValue="COVER" class="strategy-btn">
+        <span class="strategy-text">{{ 'conflict_strategy_cover' | i18nextEager }}</span>
+        <span
+          class="strategy-help"
+          nz-tooltip
+          [nzTooltipTitle]="'conflict_strategy_cover_desc' | i18nextEager"
+          nzTooltipPlacement="top"
+          (click)="$event.stopPropagation(); $event.preventDefault()"
+        >
+          <nz-icon nzType="question-circle" nzTheme="outline" />
+        </span>
+      </label>
+    </nz-radio-group>
+  </div>
+
+  <!-- Step 4: result -->
+  <div class="section" *ngIf="importRsp">
+    <div class="section-title">{{ 'import_result' | i18nextEager }}</div>
+    <div class="result-summary">
+      <nz-tag nzColor="success">{{ 'import_result_succeed' | i18nextEager }}: {{ importRsp.succeed_len }}</nz-tag>
+      <nz-tag nzColor="warning" *ngIf="(importRsp.skipped_len ?? 0) > 0">{{ 'import_result_skipped' | i18nextEager }}: {{ importRsp.skipped_len }}</nz-tag>
+      <nz-tag nzColor="error" *ngIf="(importRsp.failed_len ?? 0) > 0">{{ 'import_result_failed' | i18nextEager }}: {{ importRsp.failed_len }}</nz-tag>
+    </div>
+    <nz-table #resultTable [nzData]="importRsp.import_list || []" [nzPageSize]="5" nzSize="small">
+      <thead>
+        <tr>
+          <th>{{ resultFirstNameColKey | i18nextEager }}</th>
+          <th>{{ 'import_result_status' | i18nextEager }}</th>
+          <th>{{ 'import_preview_detail' | i18nextEager }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of resultTable.data">
+          <td>{{ item.name || item.id || '-' }}</td>
+          <td>
+            <nz-tag [nzColor]="item.status === 'SUCCESS' ? 'success' : (item.status === 'SKIPPED' ? 'warning' : 'error')">
+              {{ (item.status === 'SUCCESS' ? 'import_result_success' : (item.status === 'SKIPPED' ? 'import_result_skipped' : 'import_result_failed')) | i18nextEager }}
+            </nz-tag>
+          </td>
+          <td class="detail-cell" [title]="item.detail || ''">{{ item.detail || '-' }}</td>
+        </tr>
+      </tbody>
+    </nz-table>
+  </div>
+
+  <!-- footer -->
+  <div class="footer">
+    <button nz-button nzType="default" (click)="close()">{{ 'cancel' | i18nextEager }}</button>
+    <button *ngIf="!importRsp" nz-button nzType="primary" [nzLoading]="importLoading" [disabled]="!canConfirm" (click)="confirmImport()">
+      {{ 'import_model_confirm' | i18nextEager }}
+    </button>
+    <button *ngIf="importRsp" nz-button nzType="primary" (click)="close()">{{ 'ok' | i18nextEager }}</button>
+  </div>
+</div>

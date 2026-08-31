@@ -17,7 +17,7 @@
                  *ngFor="let st of serviceTypeOptions"
                  (click)="changeServiceType(st)"
                  [ngClass]="{ 'serviceType-item-selected': st.value === modelType}">
-              <img alt="" [src]="st.icon"/>
+              <img [src]="st.icon"/>
               <p>{{ st.text }}</p>
             </div>
           </div>
@@ -28,6 +28,36 @@
           <div>
             <llm-select [selectedModel]="selectedMap['0']?.id" [addRouterStrategies]="false" [filter]="filterInfo" panelAlign="left" [index]="0" [modelType]="modelType"
                         (update)="updateModel($event)"></llm-select>
+          </div>
+        </div>
+
+        <div class="item" *ngIf="envPlaceholderVars.length > 0">
+          <h3 class="title">{{ 'env_var_values' | i18nextEager }}
+            <span nz-icon nzType="question-circle" nzTheme="outline"
+                  nz-tooltip [nzTooltipTitle]="'env_var_values_tip'|i18nextEager"
+                  class="ml-1 text-gray-400 cursor-pointer text-[16px]"></span>
+          </h3>
+          <div class="flex flex-col gap-2">
+            <div *ngIf="defaultEnvChecking" class="flex items-center gap-2 py-1">
+              <nz-spin nzSize="small"></nz-spin>
+              <span class="text-[12px] text-gray-500">{{ 'env_var_checking_default_env' | i18nextEager }}</span>
+            </div>
+            <ng-container *ngIf="!defaultEnvChecking">
+              <div *ngFor="let varItem of envPlaceholderVars" class="flex flex-col gap-1">
+                <div class="flex items-start gap-2">
+                  <span class="w-24 flex-shrink-0 text-sm truncate" nz-tooltip [nzTooltipTitle]="varItem.name">{{ varItem.name }}</span>
+                  <span class="text-[12px] flex items-start gap-1 min-w-0 break-all"
+                        [ngClass]="isVarInDefaultEnv(varItem.name) ? 'text-green-600' : 'text-orange-500'">
+                    <span nz-icon [nzType]="isVarInDefaultEnv(varItem.name) ? 'check-circle' : 'exclamation-circle'"
+                          nzTheme="outline" class="mt-[2px] flex-shrink-0"></span>
+                    <span *ngIf="isVarInDefaultEnv(varItem.name)">{{ 'env_var_auto_injected_tip' | i18nextEager }}</span>
+                    <span *ngIf="!isVarInDefaultEnv(varItem.name)">
+                      {{ 'env_var_not_in_default_env_tip' | i18nextEager: { name: varItem.name } }}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            </ng-container>
           </div>
         </div>
 
@@ -60,7 +90,7 @@
           <div class="config" *ngFor="let config of configs" :key="config.name">
             <p class="config-name flex items-center">
               {{ config.title }}
-              <img alt=""
+              <img
                 style="margin-left: 4px"
                 [src]="changeUrl('assets/model/online-test-help.svg')"
                 nz-tooltip [nzTooltipTitle]="config.desc"
@@ -106,12 +136,11 @@
               [(nzFileList)]="fileList"
               [nzBeforeUpload]="beforeUploadImage2Text"
               [nzRemove]="onRemoveItemsNz"
-              [nzPreview]="handlePreview"
+              [nzLimit]="5"
               [nzMultiple]="true"
               nzAccept=".png,.jpg,.jpeg"
-              [nzShowButton]="image2textParam.uploadData.length + pendingImageCount < 5"
             >
-              <div class="flex flex-col items-center justify-center text-gray-400">
+              <div *ngIf="fileList.length < 5" class="flex flex-col items-center justify-center text-gray-400">
                 <span nz-icon nzType="plus" class="text-[20px]"></span>
               </div>
             </nz-upload>
@@ -129,8 +158,8 @@
             ></textarea>
           </div>
           <div class="item">
-            <button nz-button nzType="primary" nzSize="large" [disabled]="image2textParam.uploadData.length === 0"
-                    (click)="triggerImage2Text()"
+            <button nz-button nzType="primary" nzSize="large" (click)="triggerImage2Text()"
+                    [disabled]="hasInvalidEnvVar()"
                     nz-tooltip [nzTooltipTitle]="Image2TextButtonTip">
               {{ 'generate_image_understanding'|i18nextEager }}
             </button>
@@ -141,7 +170,7 @@
           <div class="item">
             <h3 class="title flex items-center">
               {{ 'text_input'|i18nextEager }}
-              <img alt=""
+              <img
                 style="margin-left: 4px"
                 [src]="changeUrl('assets/model/online-test-help.svg')"
                 nz-tooltip [nzTooltipTitle]="textEmbeddingTips"
@@ -160,6 +189,7 @@
             <button
               nz-button
               nzType="primary"
+              [disabled]="hasInvalidEnvVar()"
               (click)="triggerTextEmbedding()"
               nz-tooltip [nzTooltipTitle]="EmbeddingButtonTip"
             >
@@ -189,7 +219,7 @@
                 />
               </div>
               <div nz-col [nzSpan]="4" class="flex justify-end pr-[4px]">
-                <img alt="" [src]="changeUrl('assets/model/delete.svg')" class="cursor-pointer" (click)="removeTextToRerankItem(textIndex)"/>
+                <img [src]="changeUrl('assets/model/delete.svg')" class="cursor-pointer" (click)="removeTextToRerankItem(textIndex)"/>
               </div>
             </div>
             <div class="text-[12px] text-gray-500 mt-2">
@@ -221,6 +251,7 @@
             <button
               nz-button
               nzType="primary"
+              [disabled]="hasInvalidEnvVar()"
               nz-tooltip [nzTooltipTitle]="RerankButtonTip"
               (click)="triggerTextRerank()"
             >
@@ -233,33 +264,25 @@
       <div class="main-right relative w-full h-full">
         <ng-container *ngIf="modelType===ModelType.LLM">
           <model-service-compare-router [serviceInfo]="mySelected" [config]="configs" [modelType]="modelType"
-                                        [settingInfo]="settingInfo" *ngIf="toggleModel"></model-service-compare-router>
+                                        [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap"
+                                        [envVarReady]="!hasInvalidEnvVar()" [environmentId]="defaultEnvId" *ngIf="toggleModel"></model-service-compare-router>
           <model-service-compare-router [serviceInfo]="mySelected" [config]="configs" [modelType]="modelType"
-                                        [settingInfo]="settingInfo" *ngIf="!toggleModel"></model-service-compare-router>
+                                        [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap"
+                                        [envVarReady]="!hasInvalidEnvVar()" [environmentId]="defaultEnvId" *ngIf="!toggleModel"></model-service-compare-router>
         </ng-container>
         <ng-container *ngIf="modelType===ModelType.IMAGE_TO_TEXT">
           <image2text-output [serviceInfo]="mySelected" #image2text [param]="image2textParam"
-                             [settingInfo]="settingInfo"></image2text-output>
+                             [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap" [environmentId]="defaultEnvId"></image2text-output>
         </ng-container>
         <ng-container *ngIf="modelType===ModelType.Text_Embedding">
           <text-embedding [serviceInfo]="mySelected" #textEmbedding [param]="textEmbeddingParam"
-                          [settingInfo]="settingInfo"></text-embedding>
+                          [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap" [environmentId]="defaultEnvId"></text-embedding>
         </ng-container>
         <ng-container *ngIf="modelType===ModelType.RERANK">
           <text-rerank [serviceInfo]="mySelected" #textRerank [param]="textRerankParam"
-                       [settingInfo]="settingInfo"></text-rerank>
+                       [settingInfo]="settingInfo" [envVarValues]="envVarValuesMap" [environmentId]="defaultEnvId"></text-rerank>
         </ng-container>
       </div>
     </div>
-  </div>
-
-  <!-- 图片预览全屏遮罩：点击任何位置都关闭 -->
-  <div
-    *ngIf="previewVisible"
-    class="image-preview-mask"
-    (click)="closePreview()"
-  >
-    <img class="image-preview-img" [src]="previewImageSrc" alt="preview" />
-    <span class="image-preview-close" (click)="closePreview(); $event.stopPropagation()">×</span>
   </div>
 </div>

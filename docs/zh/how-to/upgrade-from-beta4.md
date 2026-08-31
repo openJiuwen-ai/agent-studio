@@ -2,7 +2,7 @@
 
 > 本文面向从 Beta4 及更早版本升级到 **Beta5** 的部署场景，重点说明本版本的**架构整改**与**环境变量变化**。新增部署可参考 [安装部署指南](./deploy-service.md)，本文不再重复通用步骤。
 >
-> 环境变量以源码 `docker/k8s/` 目录下的 YAML 为准（`studio-manager.yaml`、`studio-builder.yaml`、`studio-runtime.yaml`、`studio-console.yaml`）。
+> 环境变量以源码 `deploy/k8s/` 目录下的 YAML 为准（`studio-manager.yaml`、`studio-builder.yaml`、`studio-runtime.yaml`、`studio-console.yaml`）。
 
 ---
 
@@ -49,7 +49,7 @@ runtime → service（模型路由）   runtime → OBS 直连模型（默认）
 
 ## 二、环境变量变化
 
-> 标注说明：🆕 新增 · 🗑️ 移除 · 🔁 改名/改默认值。每个服务仅列出**变化项**，未列出的变量与 Beta4 保持一致，详见 `docker/k8s/<svc>.yaml`。
+> 标注说明：🆕 新增 · 🗑️ 移除 · 🔁 改名/改默认值。每个服务仅列出**变化项**，未列出的变量与 Beta4 保持一致，详见 `deploy/k8s/<svc>.yaml`。
 
 ### 2.1 studio-manager
 
@@ -73,7 +73,7 @@ runtime → service（模型路由）   runtime → OBS 直连模型（默认）
 
 ### 2.3 studio-builder（🆕 全新服务）
 
-完整变量见 `docker/k8s/studio-builder.yaml`，分组如下：
+完整变量见 `deploy/k8s/studio-builder.yaml`，分组如下：
 
 | 分组 | 变量 | 说明 |
 |------|------|------|
@@ -106,7 +106,7 @@ console 容器本身无新增环境变量，但其 nginx 上游（`backend.conf`
 | `manager_backend` | `studio-manager` | `studio-manager`（不变） |
 | `service_backend` | `studio-service:31113` | **需移除** |
 
-> 不要把旧 `$service_backend:31113` location 机械改成 Runtime。Beta5 标准路由中，`/v1/agent-builder/chat/completions`、`/v1/agent-builder/embeddings`、`/v1/agent-builder/rerank` 直达 Builder，`/v1/.*/agents/.*/conversations/.*/additional-questions`、`/v1/.*/agents/.*/conversations` 和 `/v1/.*/workflows/.*/conversations` 直达 studio-runtime，其余 `/v1`、`/v2` 请求默认进入 Manager，再由 Manager 按业务语义调用 Runtime 或 Builder。升级时应整体替换为发版包 `docker/compose/config/nginx.conf`（K8s 场景使用 `studio-console.yaml` 中对应配置），不要手工维护旧路由清单。
+> 不要把旧 `$service_backend:31113` location 机械改成 Runtime。Beta5 标准路由中，`/v1/agent-builder/chat/completions`、`/v1/agent-builder/embeddings`、`/v1/agent-builder/rerank` 直达 Builder，`/v1/.*/agents/.*/conversations/.*/additional-questions`、`/v1/.*/agents/.*/conversations` 和 `/v1/.*/workflows/.*/conversations` 直达 studio-runtime，其余 `/v1`、`/v2` 请求默认进入 Manager，再由 Manager 按业务语义调用 Runtime 或 Builder。升级时应整体替换为发版包 `deploy/config/nginx-https.conf`（K8s 场景使用 `studio-console.yaml` 中对应配置），不要手工维护旧路由清单。
 
 ---
 
@@ -120,7 +120,7 @@ console 容器本身无新增环境变量，但其 nginx 上游（`backend.conf`
 ```
 
 ```bash
-cd docker/k8s   # 或部署包的 k8s/ 目录
+cd deploy/k8s   # 或部署包的 k8s/ 目录
 
 # 1) 移除 studio-service（K8s 目录下已无 studio-service.yaml，直接删除旧资源）
 kubectl delete deployment studio-service -n default

@@ -184,10 +184,10 @@
         #{condition.workspaceId} or s.WORKSPACE_ID = 'SYSTEM')
         <include refid="conditionSql"></include>
         <if test="condition.freeProviderId != null">
-            and (s.PROVIDER_ID = #{condition.freeProviderId} or (a.ID is not null and a.AUTH_INFO is not null))
+            and (s.MODEL_DEPLOY_TYPE = 'PLATFORM-INTEGRATION' or s.PROVIDER_ID = #{condition.freeProviderId} or (a.ID is not null and a.AUTH_INFO is not null))
         </if>
         <if test="condition.freeProviderId == null">
-            and a.ID is not null and a.AUTH_INFO is not null
+            and (s.MODEL_DEPLOY_TYPE = 'PLATFORM-INTEGRATION' or (a.ID is not null and a.AUTH_INFO is not null))
         </if>
         order by s.MODEL_PRIORITY
     </select>
@@ -199,7 +199,7 @@
         on a.PROVIDER_ID = s.PROVIDER_ID
         and a.PROJECT_ID = s.PROJECT_ID and a.WORKSPACE_ID = s.WORKSPACE_ID
         where (s.WORKSPACE_ID !=
-        #{condition.workspaceId} and s.WORKSPACE_ID != 'SYSTEM') and (s.PROJECT_ID != 'SYSTEM') and s.IS_PUBLIC = '1'
+        #{condition.workspaceId} and s.WORKSPACE_ID != 'SYSTEM') and (s.PROJECT_ID != 'SYSTEM') and s.IS_PUBLIC = true
         <include refid="conditionSql"></include>
         and a.ID is not null and a.AUTH_INFO is not null
         order by s.MODEL_PRIORITY
@@ -379,6 +379,8 @@
         SELECT COUNT(*)
         FROM t_model_service
         WHERE provider_id = #{providerId}
+          AND project_id = #{projectId}
+          AND workspace_id = #{workspaceId}
     </select>
 
     <select id="queryByIdentityId" resultType="com.openjiuwen.studio.agent.manager.entity.md.ModelServiceBase">
