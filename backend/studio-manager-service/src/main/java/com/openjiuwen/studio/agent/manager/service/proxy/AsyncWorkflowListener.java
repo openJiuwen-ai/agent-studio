@@ -81,41 +81,65 @@ public class AsyncWorkflowListener extends WorkflowListener {
     }
 
     /**
-     * 从message类型的SSE事件中提取文本内容。
-     * 九问引擎的message事件结构：{"event":"message","data":{"text":"...","answer":"...",...},...}
+     * 从message/message_end类型的SSE事件中提取文本内容。
+     * 九问引擎的事件结构：
+     * - {"event":"message","data":{"text":"...","answer":"...",...}}
+     * - {"event":"message_end","data":{"answer":"...",...}}
      *
-     * 字段语义：
+     * 字段语义（message 事件）：
      * - text: 增量文本片段（流式LLM节点每帧推送一小段）
      * - answer: 完整累积文本（流式LLM节点包含截至当前帧的全部文本）
      *
      * 策略：
-     * - 优先使用answer字段（完整文本，直接替换）
-     * - 无answer时累积text字段（增量chunk，逐帧追加）
+     * - message 事件：优先用 answer 字段（完整文本，直接替换），无 answer 时累积 text 增量，
+     *   两者皆空时回退 summary（结构化信息场景：event_handler 把 message_end 转成 message 时 answer 落在 summary）
+     * - message_end 事件：answer 兜底（仅当 message 累积为空时用，覆盖 LLM 不发 message 事件 / END invoke 路径只产 message_end 的场景）
      */
     private void captureMessageContent(String eventStr) {
         try {
             JSONObject eventObj = JSONObject.parseObject(eventStr);
-            if (!"message".equals(eventObj.getString("event"))) {
-                return;
-            }
+            String event = eventObj.getString("event");
             JSONObject dataObj = eventObj.getJSONObject("data");
             if (dataObj == null) {
                 return;
             }
-            // answer字段存在时，包含完整累积文本，直接替换
-            Object answer = dataObj.get("answer");
-            if (answer != null) {
-                String answerStr = answer.toString();
-                if (!answerStr.isEmpty()) {
-                    messageContent.setLength(0);
-                    messageContent.append(answerStr);
+            // message 事件：累积 answer/text
+            if ("message".equals(event)) {
+                Object answer = dataObj.get("answer");
+                if (answer != null) {
+                    String answerStr = answer.toString();
+                    if (!answerStr.isEmpty()) {
+                        messageContent.setLength(0);
+                        messageContent.append(answerStr);
+                    }
+                    return;
+                }
+                String text = dataObj.getString("text");
+                if (text != null && !text.isEmpty()) {
+                    messageContent.append(text);
+                } else {
+                    // 结构化信息：event_handler 把 message_end 转成 message 时 answer 落在 summary
+                    Object summary = dataObj.get("summary");
+                    if (summary != null && !summary.toString().isEmpty()) {
+                        messageContent.setLength(0);
+                        messageContent.append(summary.toString());
+                    }
                 }
                 return;
             }
-            // 无answer字段时，text为增量内容，累积追加
-            String text = dataObj.getString("text");
-            if (text != null && !text.isEmpty()) {
-                messageContent.append(text);
+            // message_end 事件：answer 兜底（仅当 message 累积为空时用）
+            if ("message_end".equals(event) && messageContent.length() == 0) {
+                Object answer = dataObj.get("answer");
+                if (answer != null) {
+                    messageContent.append(answer.toString());
+                }
+            }
+            // workflow_finished 事件：answer 兜底（结构化 END 路径，answer 落在 summary 或 workflow_finished.data.answer）
+            if ("workflow_finished".equals(event) && messageContent.length() == 0) {
+                Object answer = dataObj.get("answer");
+                if (answer != null && !answer.toString().isEmpty()) {
+                    messageContent.append(answer.toString());
+                }
             }
         } catch (Exception e) {
             log.warn("Failed to capture message content from event", e);
