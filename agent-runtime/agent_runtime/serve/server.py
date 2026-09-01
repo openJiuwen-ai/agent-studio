@@ -4,6 +4,7 @@
 OLE FastAPI server — lightweight version of jiwen-server/serve/server.py
 """
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -56,6 +57,7 @@ from agent_runtime.event_handler.base.mappers import ErrorContextBuilder
 from agent_runtime.common.llm_call_logging import register_llm_call_logging_callbacks
 from agent_runtime.common.logging_context import COMMON_LOG_FORMAT
 from common_utils.redis_manager import RedisClientManager
+from agent_runtime.serve.execution_registry import get_execution_registry
 from agent_runtime.context.middleware import RequestContextMiddleware
 from agent_runtime.observability import setup_otel_tracer
 from agent_runtime.memory.adapter.ltm_manager import init_ltm
@@ -190,6 +192,12 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
     except Exception as e:
         raise RuntimeError(f"Redis connection check failed: {e}") from e
 
+    # 启动终止广播订阅（终止接口：多实例取消信令，持有实例本地 task.cancel 尽力即时取消）
+    cancel_subscriber_task = asyncio.create_task(
+        get_execution_registry().subscribe_runtime_cancel()
+    )
+    logger.info("Runtime cancel subscriber started")
+
     # Initialize memory library (LTM) — non-critical, degrades gracefully
     memory_ok = await init_ltm(redis_client)
     if memory_ok:
@@ -273,6 +281,14 @@ async def lifespan(app: FastAPI):  # noqa: redefined-outer-name
     try:
         yield
     finally:
+        # 停止终止广播订阅（先于 Redis 关闭）
+        cancel_subscriber_task.cancel()
+        try:
+            await cancel_subscriber_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("Runtime cancel subscriber stopped")
+
         # 关闭异步 S3 存储客户端
         try:
             s3_provider = S3StorageProvider.instance()
