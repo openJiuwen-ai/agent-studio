@@ -19,12 +19,12 @@
         <button
           *ngIf="isShowMultiBtn(inputItem)"
           nz-button
-          class="flex !w-[96px] ml-2"
+          class="flex !w-[96px] justify-center ml-2"
           nzSize="small"
           [disabled]="inputItem.uploadDatas?.length >= 20 || isUploading"
           (click)="addMultiFile(i)"
         >
-          <span class="flex items-center"><span nz-icon nzType="plus"></span> {{ 'add' | i18nextEager }}</span>
+          <span class="flex items-center gap-[4px]"><span nz-icon nzType="plus"></span> {{ 'add' | i18nextEager }}</span>
         </button>
       </nz-form-label>
       <nz-form-control>
