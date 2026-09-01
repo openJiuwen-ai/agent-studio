@@ -243,15 +243,17 @@ class TestFlowMcpConcurrentInit:
         assert all(r[USER_FIELDS]["isError"] is False for r in results)
 
 
+# pylint: disable=protected-access
+
 # ─── _format_api_inputs helpers ─────────────────────────────────────
 
 
 class _MockParam:
     """Mock tool parameter for _format_api_inputs tests"""
 
-    def __init__(self, name, type="string", method="Body", required=False, default_value=None):
+    def __init__(self, name, param_type="string", method="Body", required=False, default_value=None):
         self.name = name
-        self.type = type
+        self.type = param_type
         self.method = method
         self.required = required
         self.default_value = default_value
@@ -279,37 +281,42 @@ class TestFormatApiInputsNoneValue:
     导致 MCP server Pydantic 校验失败。修复后在 transform_type 之前拦截 None。
     """
 
-    def test_none_value_object_type_returns_empty_dict(self):
+    @staticmethod
+    def test_none_value_object_type_returns_empty_dict():
         """None + object type → {} (not str(None) → "None")"""
-        params = [_MockParam("arguments", type="object | null", method="Body")]
+        params = [_MockParam("arguments", param_type="object | null", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"arguments": None})
         assert result["arguments"] == {}
 
-    def test_none_value_array_type_returns_empty_list(self):
+    @staticmethod
+    def test_none_value_array_type_returns_empty_list():
         """None + array type → []"""
-        params = [_MockParam("items", type="array | null", method="Body")]
+        params = [_MockParam("items", param_type="array | null", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"items": None})
         assert result["items"] == []
 
-    def test_none_value_string_type_returns_none(self):
+    @staticmethod
+    def test_none_value_string_type_returns_none():
         """None + string type → None (not str(None) → "None")"""
-        params = [_MockParam("name", type="string", method="Body")]
+        params = [_MockParam("name", param_type="string", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"name": None})
         assert result["name"] is None
 
-    def test_none_value_integer_type_returns_none(self):
+    @staticmethod
+    def test_none_value_integer_type_returns_none():
         """None + integer type → None"""
-        params = [_MockParam("count", type="integer", method="Body")]
+        params = [_MockParam("count", param_type="integer", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"count": None})
         assert result["count"] is None
 
-    def test_none_value_boolean_type_returns_none(self):
+    @staticmethod
+    def test_none_value_boolean_type_returns_none():
         """None + boolean type → None"""
-        params = [_MockParam("flag", type="boolean", method="Body")]
+        params = [_MockParam("flag", param_type="boolean", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"flag": None})
         assert result["flag"] is None
@@ -321,23 +328,26 @@ class TestFormatApiInputsNoneValue:
 class TestFormatApiInputsEmptyString:
     """_format_api_inputs 对空字符串的处理"""
 
-    def test_empty_string_object_type_returns_empty_dict(self):
+    @staticmethod
+    def test_empty_string_object_type_returns_empty_dict():
         """'' + object type → {}"""
-        params = [_MockParam("arguments", type="object | null", method="Body")]
+        params = [_MockParam("arguments", param_type="object | null", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"arguments": ""})
         assert result["arguments"] == {}
 
-    def test_empty_string_array_type_returns_empty_list(self):
+    @staticmethod
+    def test_empty_string_array_type_returns_empty_list():
         """'' + array type → []"""
-        params = [_MockParam("items", type="array | null", method="Body")]
+        params = [_MockParam("items", param_type="array | null", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"items": ""})
         assert result["items"] == []
 
-    def test_empty_string_string_type_stays_empty(self):
+    @staticmethod
+    def test_empty_string_string_type_stays_empty():
         """'' + string type → '' (transform_type passes through)"""
-        params = [_MockParam("name", type="string", method="Body")]
+        params = [_MockParam("name", param_type="string", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"name": ""})
         assert result["name"] == ""
@@ -349,44 +359,50 @@ class TestFormatApiInputsEmptyString:
 class TestFormatApiInputsValidValue:
     """_format_api_inputs 对有效值的处理（含 JSON 字符串解析）"""
 
-    def test_valid_dict_for_object_type(self):
+    @staticmethod
+    def test_valid_dict_for_object_type():
         """Valid dict → dict (no transformation needed)"""
-        params = [_MockParam("arguments", type="object | null", method="Body")]
+        params = [_MockParam("arguments", param_type="object | null", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"arguments": {"key": "value"}})
         assert result["arguments"] == {"key": "value"}
 
-    def test_valid_list_for_array_type(self):
+    @staticmethod
+    def test_valid_list_for_array_type():
         """Valid list → list"""
-        params = [_MockParam("items", type="array | null", method="Body")]
+        params = [_MockParam("items", param_type="array | null", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"items": [1, 2, 3]})
         assert result["items"] == [1, 2, 3]
 
-    def test_json_string_for_object_type(self):
+    @staticmethod
+    def test_json_string_for_object_type():
         """JSON string → parsed dict (for object type that comes as string)"""
-        params = [_MockParam("arguments", type="object | null", method="Body")]
+        params = [_MockParam("arguments", param_type="object | null", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"arguments": '{"key": "value"}'})
         assert result["arguments"] == {"key": "value"}
 
-    def test_json_string_for_array_type(self):
+    @staticmethod
+    def test_json_string_for_array_type():
         """JSON string → parsed list"""
-        params = [_MockParam("items", type="array | null", method="Body")]
+        params = [_MockParam("items", param_type="array | null", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"items": "[1, 2, 3]"})
         assert result["items"] == [1, 2, 3]
 
-    def test_invalid_json_string_for_object_type_keeps_original(self):
+    @staticmethod
+    def test_invalid_json_string_for_object_type_keeps_original():
         """Invalid JSON string → kept as-is (no crash)"""
-        params = [_MockParam("arguments", type="object | null", method="Body")]
+        params = [_MockParam("arguments", param_type="object | null", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"arguments": "not valid json"})
         assert result["arguments"] == "not valid json"
 
-    def test_empty_json_string_for_object_type_returns_empty_dict(self):
+    @staticmethod
+    def test_empty_json_string_for_object_type_returns_empty_dict():
         """'' for object type → {}"""
-        params = [_MockParam("arguments", type="object | null", method="Body")]
+        params = [_MockParam("arguments", param_type="object | null", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"arguments": ""})
         assert result["arguments"] == {}
@@ -398,11 +414,12 @@ class TestFormatApiInputsValidValue:
 class TestFormatApiInputsHeadersAndErrors:
     """_format_api_inputs 的 Headers 提取和参数不存在的场景"""
 
-    def test_headers_extracted_separately(self):
+    @staticmethod
+    def test_headers_extracted_separately():
         """method=Headers → extracted to _header_params, not in api_inputs"""
         params = [
-            _MockParam("auth_token", type="string", method="Headers"),
-            _MockParam("query", type="string", method="Body"),
+            _MockParam("auth_token", param_type="string", method="Headers"),
+            _MockParam("query", param_type="string", method="Body"),
         ]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"auth_token": "my_token", "query": "hello world"})
@@ -410,9 +427,10 @@ class TestFormatApiInputsHeadersAndErrors:
         assert result["query"] == "hello world"
         assert mcp._header_params["auth_token"] == "my_token"
 
-    def test_unknown_param_raises_error(self):
+    @staticmethod
+    def test_unknown_param_raises_error():
         """Input param not found in tool_params → raises JiuWenBaseException"""
-        params = [_MockParam("query", type="string", method="Body")]
+        params = [_MockParam("query", param_type="string", method="Body")]
         mcp = _make_flow_mcp_for_format(params)
         with pytest.raises(Exception):
             mcp._format_api_inputs({"unknown_param": "value"})
@@ -424,34 +442,37 @@ class TestFormatApiInputsHeadersAndErrors:
 class TestFormatApiInputsRegression:
     """MCP oneOf object|null 完整场景回归"""
 
-    def test_mcp_oneof_object_null_full_scenario(self):
+    @staticmethod
+    def test_mcp_oneof_object_null_full_scenario():
         """MCP 工具 oneOf [object, null] 参数不填 → 不应产生 "None" 字符串"""
         params = [
-            _MockParam("query", type="string", method="Body", required=True),
-            _MockParam("arguments", type="object | null", method="Body", required=False),
+            _MockParam("query", param_type="string", method="Body", required=True),
+            _MockParam("arguments", param_type="object | null", method="Body", required=False),
         ]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"query": "hello", "arguments": None})
         assert result["arguments"] != "None"
         assert result["arguments"] == {}
 
-    def test_mcp_optional_string_param_with_none(self):
+    @staticmethod
+    def test_mcp_optional_string_param_with_none():
         """可选 string 参数为 None → None，不是 "None" 字符串"""
         params = [
-            _MockParam("query", type="string", method="Body", required=True),
-            _MockParam("optional_text", type="string", method="Body", required=False),
+            _MockParam("query", param_type="string", method="Body", required=True),
+            _MockParam("optional_text", param_type="string", method="Body", required=False),
         ]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({"query": "hello", "optional_text": None})
         assert result["optional_text"] is None
 
-    def test_multiple_none_params(self):
+    @staticmethod
+    def test_multiple_none_params():
         """多个不同类型的 None 参数"""
         params = [
-            _MockParam("query", type="string", method="Body"),
-            _MockParam("arguments", type="object | null", method="Body"),
-            _MockParam("items", type="array | null", method="Body"),
-            _MockParam("count", type="integer", method="Body"),
+            _MockParam("query", param_type="string", method="Body"),
+            _MockParam("arguments", param_type="object | null", method="Body"),
+            _MockParam("items", param_type="array | null", method="Body"),
+            _MockParam("count", param_type="integer", method="Body"),
         ]
         mcp = _make_flow_mcp_for_format(params)
         result = mcp._format_api_inputs({

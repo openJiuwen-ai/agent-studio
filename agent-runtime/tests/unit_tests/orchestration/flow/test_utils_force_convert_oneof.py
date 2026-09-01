@@ -23,7 +23,8 @@ from jiuwen.orchestration.flow.utils import force_convert
 class TestForceConvertNullType:
     """_convert 新增 "null" 类型支持"""
 
-    def test_null_type_with_none_input(self):
+    @staticmethod
+    def test_null_type_with_none_input():
         """null + None -> None"""
         inputs = {"field": None}
         definition = [{"id": "field", "type": "null"}]
@@ -31,7 +32,8 @@ class TestForceConvertNullType:
         assert result["field"] is None
         assert errors == []
 
-    def test_null_type_with_empty_string(self):
+    @staticmethod
+    def test_null_type_with_empty_string():
         """null + "" -> None"""
         inputs = {"field": ""}
         definition = [{"id": "field", "type": "null"}]
@@ -39,7 +41,8 @@ class TestForceConvertNullType:
         assert result["field"] is None
         assert errors == []
 
-    def test_null_type_with_non_empty_data(self):
+    @staticmethod
+    def test_null_type_with_non_empty_data():
         """null + non-empty data -> 原样返回"""
         inputs = {"field": "hello"}
         definition = [{"id": "field", "type": "null"}]
@@ -62,7 +65,8 @@ class TestForceConvertOneOfObjectNull:
     }
     """
 
-    def test_mcp_arguments_none(self):
+    @staticmethod
+    def test_mcp_arguments_none():
         """MCP arguments=None（用户不填可选 object 参数）-> None，无报错"""
         inputs = {"query": "hello", "arguments": None}
         definition = [
@@ -81,7 +85,8 @@ class TestForceConvertOneOfObjectNull:
         assert result["arguments"] is None
         assert errors == []
 
-    def test_mcp_arguments_with_value(self):
+    @staticmethod
+    def test_mcp_arguments_with_value():
         """MCP arguments 有值 -> 正常转换子属性类型"""
         inputs = {"query": "hello", "arguments": {"context": "test", "max_tokens": "100"}}
         definition = [
@@ -101,7 +106,8 @@ class TestForceConvertOneOfObjectNull:
         assert isinstance(result["arguments"]["max_tokens"], int)
         assert errors == []
 
-    def test_mcp_arguments_empty_string(self):
+    @staticmethod
+    def test_mcp_arguments_empty_string():
         """MCP arguments=""（空字符串）-> 尝试 object 解析失败后走 null 返回 None"""
         inputs = {"query": "hello", "arguments": ""}
         definition = [
@@ -123,7 +129,8 @@ class TestForceConvertOneOfObjectNull:
 class TestForceConvertOneOfStringNull:
     """string|null 联合类型"""
 
-    def test_string_null_with_none(self):
+    @staticmethod
+    def test_string_null_with_none():
         """string|null + None -> None 或 ""（取决于 string 子类型的 None 处理）"""
         inputs = {"field": None}
         definition = [{"id": "field", "type": "string | null"}]
@@ -138,7 +145,8 @@ class TestForceConvertOneOfStringNull:
 class TestForceConvertOneOfArrayNull:
     """array|null 联合类型"""
 
-    def test_array_null_with_none(self):
+    @staticmethod
+    def test_array_null_with_none():
         """array|null + None -> None"""
         inputs = {"field": None}
         definition = [{"id": "field", "type": "array | null", "schema": {"type": "integer"}}]
@@ -146,7 +154,8 @@ class TestForceConvertOneOfArrayNull:
         assert result["field"] is None
         assert errors == []
 
-    def test_array_null_with_valid_list(self):
+    @staticmethod
+    def test_array_null_with_valid_list():
         """array|null + [1, 2, 3] -> list"""
         inputs = {"field": [1, 2, 3]}
         definition = [{"id": "field", "type": "array | null", "schema": {"type": "integer"}}]
@@ -163,7 +172,8 @@ class TestForceConvertSubExpectedTypeFix:
     修复后传 sub_expected_type（如 "integer"），_convert_simple 能正确转换。
     """
 
-    def test_integer_null_with_string_number(self):
+    @staticmethod
+    def test_integer_null_with_string_number():
         """integer|null + "42" -> 42（integer 子类型正确转换）"""
         inputs = {"field": "42"}
         definition = [{"id": "field", "type": "integer | null"}]
@@ -176,7 +186,8 @@ class TestForceConvertSubExpectedTypeFix:
 class TestForceConvertRegression:
     """回归测试：修复前会崩溃的场景"""
 
-    def test_type_null_not_supported(self):
+    @staticmethod
+    def test_type_null_not_supported():
         """原 Error 2: "Type null is not supported for key: field"
         修复：_convert 增加 "null" 分支
         """
@@ -186,7 +197,8 @@ class TestForceConvertRegression:
         assert result["field"] is None
         assert errors == []
 
-    def test_unsupported_type_still_errors(self):
+    @staticmethod
+    def test_unsupported_type_still_errors():
         """非标准非 null 类型仍然报错"""
         inputs = {"field": "data"}
         definition = [{"id": "field", "type": "unknown_type"}]

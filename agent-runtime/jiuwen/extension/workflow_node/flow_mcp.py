@@ -361,7 +361,7 @@ class FlowMcp(WorkflowComponent):
                             else:
                                 try:
                                     converted = json.loads(converted)
-                                except (json.JSONDecodeError, ValueError):
+                                except ValueError:
                                     pass
                     api_inputs[name] = converted
             else:
