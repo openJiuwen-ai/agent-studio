@@ -49,7 +49,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        run: echo "build_ts=$(date +"%Y%m%d%H%M%S")" >> "$GITHUB_OUTPUT"
+        run: echo "build_ts=$(TZ=Asia/Shanghai date +"%Y%m%d%H%M%S")" >> "$GITHUB_OUTPUT"
 
       - name: Build backend with Maven
         run: |

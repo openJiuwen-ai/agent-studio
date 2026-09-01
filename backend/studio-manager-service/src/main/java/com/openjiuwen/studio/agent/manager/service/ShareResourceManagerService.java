@@ -260,6 +260,8 @@ public class ShareResourceManagerService implements IShareResourceManagerService
                 throw new AgentStudioException(StudioError.WORKSPACE_NOT_EXISTED, resourceId);
             }
 
+            // 列表卡片名称取活表现值，详情与其保持同源（活名优先，快照名仅作初始兜底）
+            shareResourceResp.setResourceName(workflowEntity.getName());
             shareResourceResp.setIcon(workflowEntity.getAvatar());
             shareResourceResp.setResourceDescription(workflowEntity.getDescription());
             String workflowDslJson = obsService.downloadObsFile(releaseVersion.getDslPath());
@@ -281,6 +283,8 @@ public class ShareResourceManagerService implements IShareResourceManagerService
                 throw new AgentStudioException(StudioError.AGENT_NOT_EXIST);
             }
 
+            // 列表卡片名称取活表现值，详情与其保持同源（活名优先，快照名仅作初始兜底）
+            shareResourceResp.setResourceName(agent.getName());
             shareResourceResp.setIcon(agent.getIcon());
             shareResourceResp.setResourceDescription(agent.getDescription());
             String controllerJson = obsService.downloadObsFile(releaseVersion.getDslPath());
