@@ -41,6 +41,64 @@
         update_time
     </sql>
 
+    <!--
+      卡片渲染同源过滤（与 queryWorkflowResource / queryControllerResource 的装配规则一致）：
+      1. 活表存在性过滤：活表无行的共享项在列表装配阶段会被跳过（卡片不渲染），
+         此处前置过滤使 count 与实际渲染的卡片数一致；
+      2. 活名搜索：卡片名称取活表现值，搜索也只认活名，保证"显示什么就能搜到什么"，
+         共享表快照名 resource_name 不再参与 controller/workflow 的搜索；
+      3. 存在性条件镜像装配阶段查询（selectByWorkflowIds / selectByAgentIds）：
+         workflow = t_agent_workflow（project_id + id，无 deleted 条件）；
+         controller = t_agent（project_id + agent_id + deleted = false + type = 'controller'）；
+      4. plugin/mcp/prompt 前端不会传入本查询（资产广场共享页仅 all/controller/workflow），
+         其名称依赖版本级查询无法在 SQL 表达，保持原快照搜索语义。
+    -->
+    <sql id="liveResourceFilter">
+        <choose>
+            <when test="resourceType == 'workflow'">
+                and exists (select 1 from t_agent_workflow w
+                where w.id = t_share_resource.resource_id and w.project_id = #{projectId})
+                <if test="resourceName != null and resourceName != ''">
+                    and exists (select 1 from t_agent_workflow w
+                    where w.id = t_share_resource.resource_id and w.project_id = #{projectId}
+                    and w.name like concat('%', trim(lower(#{resourceName})), '%'))
+                </if>
+            </when>
+            <when test="resourceType == 'controller'">
+                and exists (select 1 from t_agent a
+                where a.agent_id = t_share_resource.resource_id and a.project_id = #{projectId}
+                and a.deleted = false and a.type = 'controller')
+                <if test="resourceName != null and resourceName != ''">
+                    and exists (select 1 from t_agent a
+                    where a.agent_id = t_share_resource.resource_id and a.project_id = #{projectId}
+                    and a.deleted = false and a.type = 'controller'
+                    and a.name like concat('%', trim(lower(#{resourceName})), '%'))
+                </if>
+            </when>
+            <when test="resourceType == 'all'">
+                and (exists (select 1 from t_agent_workflow w
+                where w.id = t_share_resource.resource_id and w.project_id = #{projectId})
+                or exists (select 1 from t_agent a
+                where a.agent_id = t_share_resource.resource_id and a.project_id = #{projectId}
+                and a.deleted = false and a.type = 'controller'))
+                <if test="resourceName != null and resourceName != ''">
+                    and (exists (select 1 from t_agent_workflow w
+                    where w.id = t_share_resource.resource_id and w.project_id = #{projectId}
+                    and w.name like concat('%', trim(lower(#{resourceName})), '%'))
+                    or exists (select 1 from t_agent a
+                    where a.agent_id = t_share_resource.resource_id and a.project_id = #{projectId}
+                    and a.deleted = false and a.type = 'controller'
+                    and a.name like concat('%', trim(lower(#{resourceName})), '%')))
+                </if>
+            </when>
+            <otherwise>
+                <if test="resourceName != null and resourceName != ''">
+                    and resource_name like concat('%', trim(lower(#{resourceName})), '%')
+                </if>
+            </otherwise>
+        </choose>
+    </sql>
+
     <insert id="insert" parameterType="com.openjiuwen.studio.agent.manager.entity.ShareResourceEntity">
         insert into t_share_resource (resource_id, resource_name, resource_type, workspace_id, workspace_name, trace_id, version_list,
                                       project_id, tenant_id, creator, creator_id, create_time, updater, updater_id,
@@ -76,9 +134,7 @@
         <if test="resourceType != 'all'">
             and resource_type = #{resourceType}
         </if>
-        <if test="resourceName != null and resourceName != ''">
-            and resource_name like concat('%', trim(lower(#{resourceName})), '%')
-        </if>
+        <include refid="liveResourceFilter"/>
             and workspace_id != #{authWorkspaceId}
         order by update_time desc
     </select>
@@ -133,9 +189,7 @@
         <if test="resourceType != 'all'">
             and resource_type = #{resourceType}
         </if>
-        <if test="resourceName != null and resourceName != ''">
-            and resource_name like concat('%', trim(lower(#{resourceName})), '%')
-        </if>
+        <include refid="liveResourceFilter"/>
         order by update_time desc
     </select>
 
