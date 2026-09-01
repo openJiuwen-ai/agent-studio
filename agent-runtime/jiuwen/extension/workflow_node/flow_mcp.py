@@ -329,7 +329,41 @@ class FlowMcp(WorkflowComponent):
                     # method=Headers 的参数应该放到 HTTP 请求头
                     header_params[name] = transform_type(value, param.type, name)
                 else:
-                    api_inputs[name] = transform_type(value, param.type, name)
+                    is_object = "object" in param.type
+                    is_array = "array" in param.type
+                    # ⚠️ 必须在 transform_type 之前拦截 None/空值：
+                    # transform_type(None, "string") 会执行 str(None) 返回字符串 "None"，
+                    # 导致 MCP server 收到 arguments="None" 而 Pydantic 校验失败。
+                    if value is None:
+                        # None 直接透传（或对 object/array 转为 {}/[]）。
+                        # MCP server 的 oneOf: [object, null] schema 接受 null，
+                        # 但绝不能变成字符串 "None"。
+                        if is_object:
+                            converted = {}
+                        elif is_array:
+                            converted = []
+                        else:
+                            converted = None
+                    elif isinstance(value, str) and value == "":
+                        if is_object:
+                            converted = {}
+                        elif is_array:
+                            converted = []
+                        else:
+                            converted = transform_type(value, param.type, name)
+                    else:
+                        converted = transform_type(value, param.type, name)
+                        # force_convert / schema compaction / oneOf 类型丢失等原因，
+                        # object/array 类型的字符串值需要在此处做 json.loads 转换。
+                        if isinstance(converted, str) and (is_object or is_array):
+                            if converted == '':
+                                converted = {} if is_object else []
+                            else:
+                                try:
+                                    converted = json.loads(converted)
+                                except (json.JSONDecodeError, ValueError):
+                                    pass
+                    api_inputs[name] = converted
             else:
                 workflow_logger.error(
                     f"{TAG} _format_api_inputs error: param not found",

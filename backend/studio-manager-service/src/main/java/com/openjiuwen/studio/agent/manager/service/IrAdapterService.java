@@ -2039,11 +2039,21 @@ public class IrAdapterService {
             param.put(DEFAULT_VALUE,
                 convertDefaultValue(properties.getValue().getDefaultValue(), properties.getValue().getType()));
             String paramType = properties.getValue().getType();
+            if (paramType == null && properties.getValue().getOneOf() != null
+                && !properties.getValue().getOneOf().isEmpty()) {
+                // Handle oneOf/anyOf: join types with " | " (e.g., "object | null")
+                String oneOfType = properties.getValue().getOneOf().stream()
+                    .map(SchemaConfig::getType)
+                    .filter(java.util.Objects::nonNull)
+                    .distinct()
+                    .collect(java.util.stream.Collectors.joining(" | "));
+                paramType = oneOfType.isEmpty() ? "string" : oneOfType;
+            }
             if (paramType != null && paramType.startsWith(FILE_TYPE)) {
                 param.put(ACTUAL_TYPE, properties.getValue().getType());
                 param.put(TYPE, URL_TYPE);
             } else {
-                param.put(TYPE, properties.getValue().getType());
+                param.put(TYPE, paramType);
             }
             param.put(METHOD, properties.getValue().getLocation());
             if (schemaConfig.getRequired() != null && !schemaConfig.getRequired().isEmpty()) {

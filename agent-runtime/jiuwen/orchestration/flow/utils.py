@@ -259,6 +259,11 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
             return _convert_array(data, definition, current_path)
         if expected_type in [STRING, INTEGER, NUMBER, BOOLEAN]:
             return _convert_simple(data, expected_type, current_path)
+        if expected_type == "null":
+            # null 类型：接受 None、空字符串，其他值原样返回
+            if data is None or data == "":
+                return None
+            return data
         if "|" in expected_type:
             return _convert_one_of_type(data, expected_type, current_path, definition)
 
@@ -273,19 +278,33 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
         for sub_expected_type in expected_types:
             if sub_expected_type == OBJECT:
                 try:
-                    return _convert_object(data, definition, current_path)
+                    result = _convert_object(data, definition, current_path)
+                    # oneOf schema 可能包含无法解析的子 schema（如嵌套的 oneOf 列表），
+                    # 导致 _convert_object 返回非 dict 值（如原始字符串）。
+                    # 此时应视为 object 转换失败，继续尝试下一个类型。
+                    if isinstance(result, dict):
+                        return result
                 except JiuWenBaseException:
-                    continue
+                    pass
+                continue
             if sub_expected_type == ARRAY:
                 try:
-                    return _convert_array(data, definition, current_path)
+                    result = _convert_array(data, definition, current_path)
+                    if isinstance(result, list):
+                        return result
                 except JiuWenBaseException:
-                    continue
+                    pass
+                continue
             if sub_expected_type in [STRING, INTEGER, NUMBER, BOOLEAN]:
                 try:
-                    return _convert_simple(data, expected_type, current_path)
+                    return _convert_simple(data, sub_expected_type, current_path)
                 except JiuWenBaseException:
                     continue
+            if sub_expected_type == "null":
+                if data is None or data == "":
+                    return None
+                # 数据非空，尝试其他类型
+                continue
         return None
 
     def _convert_object(inputs, definition, current_path):
@@ -328,13 +347,25 @@ def force_convert(inputs: dict, inputs_definition: Union[list, dict]) -> (dict, 
             return TYPE_DEFAULT_VALUE_DICT.get(ERROR)
 
         # 遍历转换object中的每一个属性及其definition，递归调用_convert()，并将结果存在res中
+        # 防御性处理：oneOf/anyOf 类型（如 object|null）的 schema 中可能包含：
+        # 1. 非 dict 项（如嵌套的 oneOf 子 schema 列表）→ 跳过
+        # 2. dict 项但没有 "id" 字段（如 {"type": "null"}）→ 也要跳过
+        #    否则 attr_key 会变成空字符串 ""，产生 {"": None} 这样的脏数据
         converted_object = {}
         for attr_definition in object_schema:
-            attr_key = attr_definition.get("id", "")
+            if not isinstance(attr_definition, dict):
+                continue
+            if "id" not in attr_definition:
+                continue
+            attr_key = attr_definition["id"]
             attr_value = converted_value.get(attr_key)
             converted_object[attr_key] = _convert(
                 attr_value, attr_definition, current_path
             )
+        # 如果 schema 中没有任何可解析的属性定义（全是 oneOf 子 schema 之类），
+        # 直接返回原始输入，不做子属性转换
+        if not converted_object and object_schema:
+            return converted_value
         return converted_object
 
     def _convert_array(inputs, definition, current_path):
