@@ -152,14 +152,14 @@
           >
             <div
               *ngFor="let fileItem of inputItem.uploadDatas"
-              class="mb-[8px] flex w-[100%] items-center rounded-[8px] bg-[#fafafa] p-[16px] pb-[9px] pt-[9px]"
+              class="mb-[8px] flex w-[100%] min-w-[280px] items-center rounded-[8px] bg-[#fafafa] p-[16px] pb-[9px] pt-[9px]"
               (mouseenter)="fileItem.isHover = true"
               (mouseleave)="fileItem.isHover = false"
             >
               <nz-spin *ngIf="fileItem.progress === 'loading'" nzSimple [nzSize]="'small'"></nz-spin>
               <meta-upload-file-icon *ngIf="fileItem.progress !== 'loading'" [fileName]="fileItem.name"></meta-upload-file-icon>
               <span
-                class="ml-[12px]"
+                class="ml-[12px] min-w-0 flex-1 truncate"
                 [ngClass]="{
                   'text-[#F23030]': fileItem.progress === 'failed',
                 }"
@@ -177,7 +177,7 @@
                   'disabled-delete': disabled === 'confirmed' || (isUploading && inputIndex !== i),
                 }"
                 [ngStyle]="{
-                  display: fileItem.isHover && disabled !== 'confirmed' ? 'inline-block' : 'none',
+                  visibility: fileItem.isHover && disabled !== 'confirmed' ? 'visible' : 'hidden',
                 }"
               />
             </div>
