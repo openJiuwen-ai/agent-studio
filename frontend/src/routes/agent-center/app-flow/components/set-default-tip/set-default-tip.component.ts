@@ -292,9 +292,9 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     } else {
-      if (len + this.fileList.length > 10) {
+      if (len + this.fileList.length > 20) {
         this.nzMessage?.warning(
-          this.i18n.transform('upload_max_ten_files_tip'),
+          this.i18n.transform('upload_max_files_tip'),
         );
         return;
       }

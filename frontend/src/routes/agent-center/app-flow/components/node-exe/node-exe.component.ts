@@ -855,9 +855,9 @@ export class NodeExeComponent implements OnChanges {
       if (!inputItem.uploadDatas) {
         inputItem.uploadDatas = [];
       }
-      if (len + inputItem.uploadDatas.length > 10) {
+      if (len + inputItem.uploadDatas.length > 20) {
         this.nzMessage.warning(
-          this.i18n.transform('upload_max_ten_files_tip'),
+          this.i18n.transform('upload_max_files_tip'),
         );
         return;
       }
@@ -949,7 +949,7 @@ export class NodeExeComponent implements OnChanges {
     return (
       param.type?.includes('array<file') &&
       param?.uploadDatas?.length &&
-      param?.uploadDatas?.length < 10
+      param?.uploadDatas?.length < 20
     );
   }
 

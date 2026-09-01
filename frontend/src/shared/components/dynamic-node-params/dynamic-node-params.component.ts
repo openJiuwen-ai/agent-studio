@@ -654,9 +654,9 @@ export class DynamicNodeParamsComponent {
       if (!inputItem.uploadDatas) {
         inputItem.uploadDatas = [];
       }
-      if (fileLen + inputItem.uploadDatas.length > 10) {
+      if (fileLen + inputItem.uploadDatas.length > 20) {
         MessageComponent.showWarn(
-          this.i18n.transform('upload_max_ten_files_tip'),
+          this.i18n.transform('upload_max_files_tip'),
         );
         return;
       }

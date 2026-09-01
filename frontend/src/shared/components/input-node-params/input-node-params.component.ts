@@ -225,9 +225,9 @@ export class InputNodeParamsComponent {
       if (!inputItem.uploadDatas) {
         inputItem.uploadDatas = [];
       }
-      if (len + inputItem.uploadDatas.length > 10) {
+      if (len + inputItem.uploadDatas.length > 20) {
         MessageComponent.showWarn(
-          this.i18n.transform('upload_max_ten_files_tip'),
+          this.i18n.transform('upload_max_files_tip'),
         );
         return;
       }

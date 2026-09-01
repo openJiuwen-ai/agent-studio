@@ -114,9 +114,9 @@
              class="attachment-icon cursor-pointer text-[22px] text-[#595959]"
              nz-tooltip
              [nzTooltipTitle]="
-          uploadData.length < 10
+          uploadData.length < 20
             ? ('preview_debug_upload_support_type_vision' | i18nextEager) +
-              ('upload_max_ten_files' | i18nextEager)
+              ('upload_max_files' | i18nextEager)
             : ''
         "
              (click)="uploadFile()"

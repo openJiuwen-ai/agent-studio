@@ -142,7 +142,7 @@
               class="text-[20px] text-[#595959]"
               [isInline]="false"
               nz-tooltip
-              [nzTooltipTitle]="uploadData.length < 10 ? ('preview_debug_upload_support_type' | i18nextEager) + ('upload_max_ten_files' | i18nextEager) : ''"
+              [nzTooltipTitle]="uploadData.length < 20 ? ('preview_debug_upload_support_type' | i18nextEager) + ('upload_max_files' | i18nextEager) : ''"
               nzTooltipPlacement="top"
               (click)="uploadFile()"
             />

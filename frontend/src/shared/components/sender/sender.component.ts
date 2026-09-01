@@ -349,7 +349,7 @@ export class SenderComponent implements OnDestroy {
   }
 
   public uploadFile() {
-    if (this.uploadData.length >= 10) {
+    if (this.uploadData.length >= 20) {
       return;
     }
     this.fileInput.nativeElement.click();
@@ -362,9 +362,9 @@ export class SenderComponent implements OnDestroy {
     if (len <= 0) {
       return;
     }
-    if (len + this.uploadData.length > 10) {
+    if (len + this.uploadData.length > 20) {
       MessageComponent.showWarn(
-        this.i18n.transform('upload_max_ten_files_tip'),
+        this.i18n.transform('upload_max_files_tip'),
       );
       return;
     }
