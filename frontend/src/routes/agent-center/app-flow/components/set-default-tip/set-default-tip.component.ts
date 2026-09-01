@@ -316,11 +316,15 @@ export class SetDefaultTipComponent implements OnInit, OnDestroy {
           this.fileList = this.fileList.filter((f) => f.fileId !== fileItem.fileId);
           this.cdr.detectChanges();
         });
+        // 上传完成后显式刷新视图：popover overlay 中 Promise 回调可能不触发变更检测，
+        // 导致 progress 已变为 succeeded 但转圈不消失（点击才恢复）
+        this.cdr.detectChanges();
       }
     }
     this.isUploading = false;
     input.value = '';
     this.saveFile();
+    this.cdr.detectChanges();
   }
 
   saveFile() {
