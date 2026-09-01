@@ -150,8 +150,18 @@ spec:
             # LakeSearch 鉴权方式：basic（默认）/ none（无鉴权，如本地 mock）
             - name: knowledge_lakeSearch_auth_mode
               value: 'basic'
+            # Redisson codec 反序列化允许的最大字符串长度(字符数)，覆盖 Jackson 2.18 默认 20MB 限制，用于反序列化调用链缓存等大字符串值。默认 100MB
             - name: redis_max_string_length
-              value: '20000000'
+              value: '100000000'
+            # 写入 Redis 前对单条消息内容做截断的长度(字符数)，超过则截断并追加 [TRUNCATED] 标记。设为 -1 不截断。默认 -1
+            - name: redis_max_single_message_length
+              value: '-1'
+            # Redis 读取溢出时历史消息清理比例，保留最近指定比例的数据，清理最旧的部分。0.75 表示保留 75%。默认 0.75
+            - name: redis_history_eviction_threshold
+              value: '0.75'
+            # Jackson 全局反序列化最大字符串长度(字符数)，影响 RedisTemplate 等使用容器 ObjectMapper 的组件。默认 50MB
+            - name: jackson_max_string_length
+              value: '50000000'
             # 非图片文件上传大小上限（单位 KB，默认 131072 即 128MB）
             - name: agent_max_upload_file_size
               value: '131072'
