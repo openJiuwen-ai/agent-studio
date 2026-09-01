@@ -19,8 +19,8 @@
         <button
           *ngIf="isShowMultiBtn(inputItem)"
           nz-button
-          nzType="default"
-          [nzGhost]="true"
+          class="flex !w-[96px] ml-2"
+          nzSize="small"
           [disabled]="inputItem.uploadDatas?.length >= 20 || isUploading"
           (click)="addMultiFile(i)"
         >
