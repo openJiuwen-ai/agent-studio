@@ -22,6 +22,9 @@ import java.util.TimeZone;
  */
 @Configuration
 public class JacksonConfig {
+    @Value("${jackson.max-string-length:50000000}")
+    private int maxStringLength;
+
     @Value("${jackson.max-token-limit:10000000}")
     private long maxTokenLimit;
 
@@ -43,9 +46,12 @@ public class JacksonConfig {
     @Bean
     public ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();
-        // 使用 maxStringLength 限制，与 maxTokenLimit 保持一致的概念（Jackson 2.15兼容）
+        // 使用 maxStringLength 和 maxTokenCount 分别配置
         mapper.getFactory()
-            .setStreamReadConstraints(StreamReadConstraints.builder().maxStringLength((int) maxTokenLimit).build());
+            .setStreamReadConstraints(StreamReadConstraints.builder()
+                .maxStringLength(maxStringLength)
+                .maxTokenCount(maxTokenLimit)
+                .build());
         mapper.setDateFormat(new SimpleDateFormat(dateFormat));
         mapper.setTimeZone(TimeZone.getTimeZone(timeZone));
         // 配置序列化时将Date转换为时间戳
