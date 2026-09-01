@@ -23,9 +23,11 @@ import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.utils.RequestContextUtils;
 import com.openjiuwen.studio.agent.manager.bo.WfImportDataWrapper;
+import com.openjiuwen.studio.agent.manager.dto.QueryShareResourceInfoByResourceIdQo;
 import com.openjiuwen.studio.agent.manager.dto.QueryShareResourceListQo;
 import com.openjiuwen.studio.agent.manager.dto.QuerySharedResourceListQo;
 import com.openjiuwen.studio.agent.manager.dto.ShareResourceListRsp;
+import com.openjiuwen.studio.agent.manager.dto.ShareResourceResp;
 import com.openjiuwen.studio.agent.manager.dto.ShareResourceRequestInfo;
 import com.openjiuwen.studio.agent.manager.dto.WorkspaceInfo;
 import com.openjiuwen.studio.agent.manager.entity.Agent;
@@ -975,5 +977,91 @@ class ShareResourceManagerServiceTest {
         AgentStudioException ex = assertThrows(AgentStudioException.class, () ->
             shareResourceManagerService.checkVersionSharedOrNot(RESOURCE_ID, "v1"));
         assertEquals(StudioError.SHARE_RESOURCE_CANNOT_BE_DELETE_DIRECTLY, ex.getErrorCode());
+    }
+
+    // ==================== queryShareResourceInfoByResourceId 详情名与卡片同源 ====================
+
+    @Test
+    void testQueryShareResourceInfoByResourceId_WorkflowNameUsesLiveName() {
+        try (MockedStatic<RequestContextUtils> reqCtx = mockStatic(RequestContextUtils.class)) {
+            reqCtx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(WORKSPACE_ID);
+
+            ShareResourceEntity entity = new ShareResourceEntity()
+                .setResourceId(RESOURCE_ID)
+                .setResourceName("旧名快照")
+                .setResourceType("workflow")
+                .setWorkspaceId(WORKSPACE_ID)
+                .setVersionList("[{\"versionId\":\"v1\",\"versionName\":\"1.0\"}]");
+            when(shareResourceMapper.selectShareResourceEntityByResourceId(RESOURCE_ID)).thenReturn(entity);
+            when(shareScopeMapper.selectShareScopesByResourceId(RESOURCE_ID)).thenReturn(new ArrayList<>());
+            when(workspaceMapper.selectWorkspaceByWorkspaceIdList(anyList())).thenReturn(new ArrayList<>());
+
+            ReleaseVersion releaseVersion = new ReleaseVersion();
+            releaseVersion.setVersionId("v1");
+            releaseVersion.setDslPath("dsl/path.json");
+            when(releaseVersionMapper.selectByAppIdAndVersionId(RESOURCE_ID, "v1")).thenReturn(releaseVersion);
+
+            WorkflowEntity workflowEntity = new WorkflowEntity();
+            workflowEntity.setId(RESOURCE_ID);
+            workflowEntity.setName("工作流活名");
+            when(workflowMapper.selectByWorkflowId(PROJECT_ID, WORKSPACE_ID, RESOURCE_ID))
+                .thenReturn(workflowEntity);
+
+            // DSL 含 node_start 开始节点，规避 getWorkflowNodeID 对缺失节点的异常
+            when(obsService.downloadObsFile(any()))
+                .thenReturn("{\"nodes\":[{\"id\":\"node_start\",\"outputs\":[]}]}");
+
+            QueryShareResourceInfoByResourceIdQo qo = new QueryShareResourceInfoByResourceIdQo();
+            qo.setWorkspaceId(WORKSPACE_ID);
+            qo.setReleaseVersion("v1");
+
+            ShareResourceResp resp = shareResourceManagerService
+                .queryShareResourceInfoByResourceId(PROJECT_ID, RESOURCE_ID, qo);
+
+            assertNotNull(resp);
+            // 详情名取活表现值（与列表卡片一致），而非共享表快照名
+            assertEquals("工作流活名", resp.getResourceName());
+        }
+    }
+
+    @Test
+    void testQueryShareResourceInfoByResourceId_ControllerNameUsesLiveName() {
+        try (MockedStatic<RequestContextUtils> reqCtx = mockStatic(RequestContextUtils.class)) {
+            reqCtx.when(RequestContextUtils::getRequestWorkspaceId).thenReturn(WORKSPACE_ID);
+
+            ShareResourceEntity entity = new ShareResourceEntity()
+                .setResourceId(RESOURCE_ID)
+                .setResourceName("旧名快照")
+                .setResourceType("controller")
+                .setWorkspaceId(WORKSPACE_ID)
+                .setVersionList("[{\"versionId\":\"v1\",\"versionName\":\"1.0\"}]");
+            when(shareResourceMapper.selectShareResourceEntityByResourceId(RESOURCE_ID)).thenReturn(entity);
+            when(shareScopeMapper.selectShareScopesByResourceId(RESOURCE_ID)).thenReturn(new ArrayList<>());
+            when(workspaceMapper.selectWorkspaceByWorkspaceIdList(anyList())).thenReturn(new ArrayList<>());
+
+            ReleaseVersion releaseVersion = new ReleaseVersion();
+            releaseVersion.setVersionId("v1");
+            releaseVersion.setDslPath("dsl/path.json");
+            when(releaseVersionMapper.selectByAppIdAndVersionId(RESOURCE_ID, "v1")).thenReturn(releaseVersion);
+
+            Agent agent = new Agent();
+            agent.setAgentId(RESOURCE_ID);
+            agent.setName("智能体活名");
+            when(agentMapper.selectByProjectIdAndWorkspaceId(PROJECT_ID, WORKSPACE_ID, RESOURCE_ID))
+                .thenReturn(agent);
+
+            when(obsService.downloadObsFile(any())).thenReturn("{}");
+
+            QueryShareResourceInfoByResourceIdQo qo = new QueryShareResourceInfoByResourceIdQo();
+            qo.setWorkspaceId(WORKSPACE_ID);
+            qo.setReleaseVersion("v1");
+
+            ShareResourceResp resp = shareResourceManagerService
+                .queryShareResourceInfoByResourceId(PROJECT_ID, RESOURCE_ID, qo);
+
+            assertNotNull(resp);
+            // 详情名取活表现值（与列表卡片一致），而非共享表快照名
+            assertEquals("智能体活名", resp.getResourceName());
+        }
     }
 }
