@@ -49,6 +49,12 @@ public class RedisClientConfig {
     @Value("${redis.max-string-length}")
     private int jsonMaxStringLength;
 
+    @Value("${redis.max-single-message-length:-1}")
+    private int maxSingleMessageLength;
+
+    @Value("${redis.history-eviction-threshold:0.75}")
+    private double historyEvictionThreshold;
+
     private final Ciphers ciphers;
 
     @PostConstruct

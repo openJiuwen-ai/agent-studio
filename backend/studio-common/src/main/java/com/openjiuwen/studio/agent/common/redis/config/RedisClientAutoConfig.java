@@ -17,6 +17,7 @@ import com.openjiuwen.studio.agent.common.redis.impl.RedisClientRedisson;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
@@ -40,6 +41,9 @@ public class RedisClientAutoConfig {
 
     @Value("${redis.enable-log}")
     private boolean enableLog;
+
+    @Autowired(required = false)
+    private ObjectMapper objectMapper;
 
     /**
      * 加载Redission实现
@@ -92,18 +96,18 @@ public class RedisClientAutoConfig {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(redisConnectionFactory);
 
-        // 创建 ObjectMapper 并配置
-        ObjectMapper objectMapper = new ObjectMapper();
+        // 使用 Spring 容器中的 ObjectMapper（已配置 StreamReadConstraints），若不存在则新建
+        ObjectMapper redisObjectMapper = objectMapper != null ? objectMapper.copy() : new ObjectMapper();
 
-        objectMapper.registerModule(new JavaTimeModule());
-        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        redisObjectMapper.registerModule(new JavaTimeModule());
+        redisObjectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
         // 其他配置
-        objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
-        objectMapper.activateDefaultTyping(objectMapper.getPolymorphicTypeValidator(),
+        redisObjectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+        redisObjectMapper.activateDefaultTyping(redisObjectMapper.getPolymorphicTypeValidator(),
             ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
 
-        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
+        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(redisObjectMapper, Object.class);
 
         // 设置序列化器
         template.setKeySerializer(new StringRedisSerializer());

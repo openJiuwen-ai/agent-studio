@@ -6,6 +6,8 @@ package com.openjiuwen.studio.agent.common.redis;
 
 import lombok.extern.slf4j.Slf4j;
 
+import com.fasterxml.jackson.core.exc.StreamConstraintsException;
+
 import org.redisson.client.codec.Codec;
 import org.springframework.util.function.ThrowingSupplier;
 
@@ -36,7 +38,20 @@ public class RedisClientWrapper implements RedisClient {
 
     @Override
     public String get(String key) {
-        return run(() -> redisClient.get(key), "get");
+        long startTime = getStartTime();
+        try {
+            String result = redisClient.get(key);
+            redisCost(startTime, "get");
+            return result;
+        } catch (Exception e) {
+            redisCost(startTime, "get");
+            if (isStreamConstraintsException(e)) {
+                log.warn("Redis read overflow for key: {}", key, e);
+                throw new RedisReadOverflowException(key, e);
+            }
+            log.error("redis operation failed, method: get", e);
+            return null;
+        }
     }
 
     @Override
@@ -145,6 +160,16 @@ public class RedisClientWrapper implements RedisClient {
             return;
         }
         log.info("redis operation cost: {}ms, method: {}", System.currentTimeMillis() - startTime, method);
+    }
+
+    private boolean isStreamConstraintsException(Throwable e) {
+        while (e != null) {
+            if (e instanceof StreamConstraintsException) {
+                return true;
+            }
+            e = e.getCause();
+        }
+        return false;
     }
 
     @Override

@@ -8,10 +8,12 @@ import static java.time.temporal.ChronoUnit.DAYS;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
+import com.alibaba.fastjson2.JSONWriter;
 import com.openjiuwen.studio.agent.common.enums.StudioError;
 import com.openjiuwen.studio.agent.common.exception.AgentStudioException;
 import com.openjiuwen.studio.agent.common.redis.RedisClient;
 import com.openjiuwen.studio.agent.common.redis.RedisLock;
+import com.openjiuwen.studio.agent.common.redis.RedisReadOverflowException;
 import com.openjiuwen.studio.agent.common.dto.agent.ConversationInfo;
 import com.openjiuwen.studio.agent.manager.dto.ConversationInfoList;
 import com.openjiuwen.studio.agent.common.dto.agent.ExecutionInfo;
@@ -51,6 +53,9 @@ public class WorkflowInstanceService {
     @Autowired
     private RedisClient redisClient;
 
+    @Autowired
+    private RedisHistoryEvictionService redisHistoryEvictionService;
+
     @Value("${workflow.insight-exec-rel:}")
     private String insightExecRel;  // 一个conversation下的execution记录
 
@@ -85,15 +90,21 @@ public class WorkflowInstanceService {
     public WorkflowInstanceEntity get(String workflowInstanceId, String versionId, String userId) {
         String insightExecKey = getInsightExec(userId, workflowInstanceId, versionId);
 
-        String instStr = redisClient.get(insightExecKey);
-        if (StringUtils.isEmpty(instStr)) {
-            return null;
-        } else {
-            try {
-                return JSONObject.parseObject(instStr, WorkflowInstanceEntity.class);
-            } catch (Exception e) {
-                log.error("parse workflow instance error", e);
+        try {
+            String instStr = redisClient.get(insightExecKey);
+            if (StringUtils.isEmpty(instStr)) {
+                return null;
             }
+            return JSONObject.parseObject(instStr, WorkflowInstanceEntity.class);
+        } catch (RedisReadOverflowException e) {
+            log.warn("Redis read overflow, triggering history eviction for key: {}", e.getRedisKey());
+            String cleanedJson = redisHistoryEvictionService.handleReadOverflow(e.getRedisKey());
+            if (StringUtils.isNotEmpty(cleanedJson)) {
+                return JSONObject.parseObject(cleanedJson, WorkflowInstanceEntity.class);
+            }
+            return null;
+        } catch (Exception e) {
+            log.error("parse workflow instance error", e);
         }
         return null;
     }
@@ -177,7 +188,36 @@ public class WorkflowInstanceService {
     private void saveExecution(@NotNull WorkflowInstanceEntity workflowInstanceEntity, String versionId,
         String userId, Duration ttlDuration) {
         String insightExecKey = getInsightExec(userId, workflowInstanceEntity.getId(), versionId);
-        redisClient.set(insightExecKey, JSONObject.toJSONString(workflowInstanceEntity), ttlDuration);
+        truncateEntityIfNeeded(workflowInstanceEntity);
+        String json;
+        try {
+            json = JSON.toJSONString(workflowInstanceEntity, JSONWriter.Feature.LargeObject);
+        } catch (OutOfMemoryError e) {
+            log.error("serialize workflow instance OOM, fallback to summary. executionId={}, eventListSize={}",
+                workflowInstanceEntity.getId(),
+                workflowInstanceEntity.getEventList() == null ? 0 : workflowInstanceEntity.getEventList().size(), e);
+            WorkflowInstanceEntity summary = new WorkflowInstanceEntity();
+            summary.setId(workflowInstanceEntity.getId());
+            summary.setConversationId(workflowInstanceEntity.getConversationId());
+            summary.setWorkflowId(workflowInstanceEntity.getWorkflowId());
+            summary.setProjectId(workflowInstanceEntity.getProjectId());
+            summary.setStatus(workflowInstanceEntity.getStatus());
+            summary.setStartTime(workflowInstanceEntity.getStartTime());
+            summary.setEndTime(workflowInstanceEntity.getEndTime());
+            summary.setErrorInfo("serialize OOM, eventList truncated");
+            summary.setEventList(new ArrayList<>());
+            json = JSON.toJSONString(summary);
+        }
+        redisClient.set(insightExecKey, json, ttlDuration);
+    }
+
+    private void truncateEntityIfNeeded(WorkflowInstanceEntity entity) {
+        if (entity.getEventList() == null) {
+            return;
+        }
+        for (JiuwenEvent event : entity.getEventList()) {
+            JiuwenEventProcessor.messageContentClipping(event);
+        }
     }
 
     public void deleteExecution(String userId, WorkflowInstanceEntity workflowInstanceEntity, String versionId) {
@@ -239,6 +279,13 @@ public class WorkflowInstanceService {
             log.info("retrieve: workflowId={}, userId={}, conversationInfoSize={}", workflowId, userId,
                 conversationInfos.size());
             return conversationInfos;
+        } catch (RedisReadOverflowException e) {
+            log.warn("Redis read overflow in getConversationInfos, triggering eviction for key: {}", e.getRedisKey());
+            String cleanedJson = redisHistoryEvictionService.handleReadOverflow(e.getRedisKey());
+            if (StringUtils.isNotEmpty(cleanedJson)) {
+                return JSON.parseObject(cleanedJson, ConversationInfoList.class);
+            }
+            return new ConversationInfoList();
         } catch (Exception e) {
             log.error("redisson get bucket failed", e);
             throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);
@@ -269,6 +316,13 @@ public class WorkflowInstanceService {
             log.info("retrieve: workflowId={}, userId={}, executionInfoSize={}", workflowId, userId,
                 executionInfos.size());
             return executionInfos;
+        } catch (RedisReadOverflowException e) {
+            log.warn("Redis read overflow in getExecutionInfos, triggering eviction for key: {}", e.getRedisKey());
+            String cleanedJson = redisHistoryEvictionService.handleReadOverflow(e.getRedisKey());
+            if (StringUtils.isNotEmpty(cleanedJson)) {
+                return JSON.parseObject(cleanedJson, ExecutionInfoList.class);
+            }
+            return new ExecutionInfoList();
         } catch (Exception e) {
             log.error("redisson get bucket failed", e);
             throw new AgentStudioException(StudioError.REDISSON_GET_BUCKET_FAILED);
