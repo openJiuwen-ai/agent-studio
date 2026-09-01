@@ -369,12 +369,13 @@
                                 [fileName]="fileItem.name"
                               ></meta-upload-file-icon>
                               <span
-                                class="ml-[12px]"
+                                class="ml-[12px] min-w-0 flex-1 truncate"
                                 [ngClass]="{
                                   'text-[#F23030]':
                                     fileItem.progress === 'failed'
                                 }"
-                                nz-ellipsis
+                                nz-tooltip
+                                [nzTooltipTitle]="fileItem.name"
                               >
                                 {{ fileItem.name }}</span
                               >

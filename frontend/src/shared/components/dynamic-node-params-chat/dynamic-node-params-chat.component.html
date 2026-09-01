@@ -184,7 +184,7 @@
             >
               <nz-spin *ngIf="fileItem.progress === 'loading'" nzSimple [nzSize]="'small'"></nz-spin>
               <meta-upload-file-icon *ngIf="fileItem.progress !== 'loading'" [fileName]="fileItem.name"></meta-upload-file-icon>
-              <span class="ml-[12px]" [ngClass]="{ 'text-[#F23030]': fileItem.progress === 'failed' }" nz-tooltip [nzTooltipTitle]="fileItem.name"> {{ fileItem.name }}</span>
+              <span class="ml-[12px] min-w-0 flex-1 truncate" [ngClass]="{ 'text-[#F23030]': fileItem.progress === 'failed' }" nz-tooltip [nzTooltipTitle]="fileItem.name"> {{ fileItem.name }}</span>
               <nz-icon
                 nzType="delete"
                 nzTheme="outline"
