@@ -947,9 +947,7 @@ export class NodeExeComponent implements OnChanges {
 
   public isShowMultiBtn(param) {
     return (
-      param.type?.includes('array<file') &&
-      param?.uploadDatas?.length &&
-      param?.uploadDatas?.length < 20
+      param.type?.includes('array<file') && param?.uploadDatas?.length > 0
     );
   }
 

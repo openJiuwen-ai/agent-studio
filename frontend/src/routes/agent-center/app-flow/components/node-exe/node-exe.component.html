@@ -61,7 +61,7 @@
                     class="flex flex-col gap-[8px]"
                     *ngFor="let param of params; index as i"
                   >
-                    <div class="flex items-center justify-between gap-[8px]">
+                    <div class="flex items-center gap-[8px]">
                       <div class="flex items-center gap-2">
                         <div>{{ param.name }}{{ param.required === false ? ('optional'|i18nextEager) : '' }}</div>
 
@@ -72,12 +72,12 @@
                       <button
                         *ngIf="isShowMultiBtn(param)"
                         nz-button
-                        nzType="text"
-                        nzGhost
-                        [disabled]="isUploading"
+                        class="flex !w-[96px] justify-center ml-2"
+                        nzSize="small"
+                        [disabled]="isUploading || param.uploadDatas?.length >= 20"
                         (click)="addMultiFile(i)"
                       >
-                        <span class="flex items-center"
+                        <span class="flex items-center gap-[4px]"
                           ><nz-icon nzType="plus" nzTheme="outline"></nz-icon>
                           {{ 'add' | i18nextEager }}</span
                         >
