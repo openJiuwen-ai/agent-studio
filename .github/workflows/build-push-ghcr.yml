@@ -237,7 +237,7 @@ jobs:
           SERVICE: ${{ matrix.service }}
         run: |
           set -euo pipefail
-          BUILD_TS=$(date +"%Y%m%d%H%M%S")
+          BUILD_TS=$(TZ=Asia/Shanghai date +"%Y%m%d%H%M%S")
           SRC="${REPOSITORY}/${SERVICE}:latest"
           AMD64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="amd64") | .digest')
           ARM64_DIGEST=$(docker buildx imagetools inspect --raw "${SRC}" | jq -r '.manifests[] | select(.platform.architecture=="arm64") | .digest')
