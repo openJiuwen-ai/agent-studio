@@ -44,7 +44,7 @@
             #{deleted,jdbcType=BOOLEAN},
             #{workflowType,jdbcType=VARCHAR},
             #{lastVersionId,jdbcType=VARCHAR},
-            #{testStatus,jdbcType=VARCHAR},
+            #{testStatus,jdbcType=TINYINT},
             #{isShare,jdbcType=TINYINT}
         )
     </insert>

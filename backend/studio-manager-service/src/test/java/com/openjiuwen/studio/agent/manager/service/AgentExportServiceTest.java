@@ -436,7 +436,7 @@ class AgentExportServiceTest {
         when(strategyMgmtService.buildModelStrategyExport(anyString(), anyString(), anyList()))
             .thenReturn(Collections.emptyList());
 
-        List<ExportResp> result = agentExportService.buildExportResps("p1", "w1", "agent-1");
+        List<ExportResp> result = agentExportService.buildExportResps("p1", "w1", "agent-1", "agent");
 
         assertNotNull(result);
         assertTrue(result.isEmpty());
@@ -483,7 +483,7 @@ class AgentExportServiceTest {
         when(strategyMgmtService.buildModelStrategyExport(anyString(), anyString(), anyList()))
             .thenReturn(Collections.emptyList());
 
-        List<ExportResp> result = agentExportService.buildExportResps("p1", "w1", "agent-1");
+        List<ExportResp> result = agentExportService.buildExportResps("p1", "w1", "agent-1", "agent");
 
         assertNotNull(result);
         assertFalse(result.isEmpty());
@@ -504,13 +504,13 @@ class AgentExportServiceTest {
             .thenReturn(Collections.emptyList());
 
         assertThrows(AgentStudioException.class, () ->
-            agentExportService.buildExportResps("p1", "w1", "non-exist"));
+            agentExportService.buildExportResps("p1", "w1", "non-exist", "agent"));
     }
 
     /**
-     * 用例描述：buildExportResps 在 selectById 返回 null 时抛出 AgentStudioException
-     * 预制条件：agent 存在但 selectById 返回 null 导致 NPE，被包装为 AgentStudioException
-     * 输入参数：projectId="p1", workspaceId="w1", agentId="agent-1"
+     * 用例描述：buildExportResps 在 collectExportResps 内部异常时包装为 AgentStudioException
+     * 预制条件：agent 存在但 mappingMapper 抛异常
+     * 输入参数：projectId="p1", workspaceId="w1", agentId="agent-1", agentType="agent"
      * 预期结果：抛出 AgentStudioException
      */
     @Test
@@ -520,10 +520,12 @@ class AgentExportServiceTest {
         agent.setName("test-agent");
         when(agentMapper.selectByIdsAndProjectIdAndWorkspaceId("p1", "w1", List.of("agent-1")))
             .thenReturn(List.of(agent));
-        when(agentMapper.selectById("agent-1")).thenReturn(null);
+        when(agentMapper.selectById("agent-1")).thenReturn(agent);
+        when(mappingMapper.selectByAppIdAndAppVersion(eq("agent-1"), eq("latest"), isNull(), isNull()))
+            .thenThrow(new RuntimeException("DB error"));
 
         assertThrows(AgentStudioException.class, () ->
-            agentExportService.buildExportResps("p1", "w1", "agent-1"));
+            agentExportService.buildExportResps("p1", "w1", "agent-1", "agent"));
     }
 
     /**
